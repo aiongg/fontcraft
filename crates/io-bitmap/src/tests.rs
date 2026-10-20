@@ -307,7 +307,7 @@ fn read_tells_the_formats_apart() {
     let pcf = write_pcf(&font, PcfLayout::default()).unwrap();
     assert_eq!(read(&pcf).unwrap().font.glyphs, font.glyphs);
     assert_eq!(read(SAMPLE.as_bytes()).unwrap().font, font);
-    assert!(matches!(read(b"hello"), Err(BitmapError::NotBdf(_))));
+    assert!(matches!(read(b"hello"), Err(BitmapError::Unknown)));
 }
 
 #[test]

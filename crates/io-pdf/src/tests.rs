@@ -227,6 +227,11 @@ fn pdf_crop_box_rotation_and_fit_em_place_the_page() {
     let out = read_pdf(&cropped, TOP_200).unwrap();
     assert_eq!(out.page_box, Some([0.0, 0.0, 100.0, 100.0]));
     assert_eq!(nodes(&out.paths[0]), vec![(0.0, 100.0, Line), (10.0, 100.0, Line), (10.0, 110.0, Line), (0.0, 110.0, Line)]);
+
+    // Origin puts the frame's bottom-left corner at the glyph's origin.
+    let offset = save(document(&[b"60 30 10 10 re f"], Dictionary::new(), dictionary! { "CropBox" => ints(&[50, 20, 150, 120]) }, false));
+    let out = read_pdf(&offset, Placement::Origin).unwrap();
+    assert_eq!(nodes(&out.paths[0]), vec![(10.0, 10.0, Line), (20.0, 10.0, Line), (20.0, 20.0, Line), (10.0, 20.0, Line)]);
 }
 
 #[test]
@@ -271,4 +276,20 @@ fn pdf_page_renders_as_an_image() {
     // A page that would have more pixels than allowed is drawn at a lower resolution.
     let small = render_pdf(&bytes, 4.0, 200 * 100).unwrap();
     assert_eq!((small.image.width, small.image.height, small.pixels_per_point), (200, 100, 1.0));
+}
+
+#[test]
+fn pdf_page_drawn_smaller_keeps_its_bottom_edge_on_the_image_bottom() {
+    // 100.1 points tall at about half a pixel per point: 49.5 pixel rows in a 50-row image. The
+    // bottom 10 points are black and must reach the image's last row whole, as the traced or
+    // shown image is placed from its bottom-left corner.
+    let page = Object::Array(vec![Object::Integer(0), Object::Integer(0), Object::Integer(20), Object::Real(100.1)]);
+    let bytes = save(document(&["0 0 0 rg 0 0 20 10 re f".as_bytes()], Dictionary::new(), dictionary! { "MediaBox" => page }, false));
+    let out = render_pdf(&bytes, 4.0, 500).unwrap();
+    assert!(out.pixels_per_point < 0.5, "{}", out.pixels_per_point);
+    let (w, h) = (out.image.width as usize, out.image.height as usize);
+    let alpha = |row: usize| out.image.pixels[(row * w + w / 2) * 4 + 3];
+    assert!(alpha(h - 1) >= 250, "the last row is whole: {}", alpha(h - 1));
+    let top = (10.0 * out.pixels_per_point).ceil() as usize;
+    assert_eq!(alpha(h - 1 - top), 0, "nothing above 10 points");
 }

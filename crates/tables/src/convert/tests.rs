@@ -7,12 +7,12 @@ use super::outline::{Seg, TtContour, encode_simple};
 use super::*;
 use fontcraft_cff::PathOp;
 
-fn be16(v: u16) -> [u8; 2] {
+pub(super) fn be16(v: u16) -> [u8; 2] {
     v.to_be_bytes()
 }
 
 /// `head`, `hhea`, `maxp` and `hmtx` for `count` glyphs with these advances.
-fn common(font: &mut SfntFont, advances: &[u16], maxp_version: u32) {
+pub(super) fn common(font: &mut SfntFont, advances: &[u16], maxp_version: u32) {
     let count = advances.len() as u16;
     let mut head = vec![0u8; 54];
     head[0..4].copy_from_slice(&0x0001_0000u32.to_be_bytes());
@@ -36,7 +36,7 @@ fn common(font: &mut SfntFont, advances: &[u16], maxp_version: u32) {
     font.insert(*b"hmtx", hmtx);
 }
 
-fn post_v2(names: &[&str]) -> Vec<u8> {
+pub(super) fn post_v2(names: &[&str]) -> Vec<u8> {
     let (post, _) = post_table(None, PostFormat::Names, &names.iter().map(|s| s.to_string()).collect::<Vec<_>>()).unwrap();
     post
 }
@@ -58,7 +58,7 @@ fn composite(gid: u16, dx: i16, dy: i16, bbox: [i16; 4]) -> Vec<u8> {
 const A: [(i32, i32, bool); 5] = [(0, 0, true), (0, 700, true), (300, 900, false), (600, 700, true), (600, 0, true)];
 
 /// `.notdef` (empty), `A` (a clockwise arch) and `B` (A moved right by 50, as a component).
-fn truetype_font() -> SfntFont {
+pub(super) fn truetype_font() -> SfntFont {
     let mut font = SfntFont::new(Flavour::TrueType);
     common(&mut font, &[500, 600, 650], 0x0001_0000);
     let mut hmtx = font.get(*b"hmtx").unwrap().to_vec();
@@ -87,7 +87,7 @@ fn truetype_font() -> SfntFont {
 }
 
 /// A CFF-flavoured font of `.notdef` (empty) and `O` (the oracle's outline).
-fn cff_font() -> SfntFont {
+pub(super) fn cff_font() -> SfntFont {
     let mut font = SfntFont::new(Flavour::Cff);
     common(&mut font, &[500, 500], 0x5000);
     let o = vec![
@@ -138,7 +138,7 @@ fn polygon(points: &[(f64, f64)]) -> Contour {
     Contour { start: points[0], segs }
 }
 
-fn glyf_points(font: &SfntFont, gid: usize) -> Vec<TtContour> {
+pub(super) fn glyf_points(font: &SfntFont, gid: usize) -> Vec<TtContour> {
     let long = u16_at(font.get(*b"head").unwrap(), 50).unwrap() != 0;
     let n = num_glyphs(font).unwrap();
     let outlines = GlyfOutlines::new(font.get(*b"glyf").unwrap(), font.get(*b"loca").unwrap(), long, n).unwrap();
@@ -147,7 +147,7 @@ fn glyf_points(font: &SfntFont, gid: usize) -> Vec<TtContour> {
     outline::truetype_points(&contours).unwrap()
 }
 
-fn ps_contours(font: &SfntFont, tag: Tag, gid: usize) -> Vec<Contour> {
+pub(super) fn ps_contours(font: &SfntFont, tag: Tag, gid: usize) -> Vec<Contour> {
     let mut ps = PsOutlines::new(font.get(tag).unwrap(), 1000).unwrap();
     ps.contours(gid).unwrap()
 }
@@ -341,6 +341,35 @@ fn cff_to_cff2_writes_the_seac_base_and_accent_into_the_charstring() {
         vec![polygon(&[(10.5, 0.0), (310.5, 0.0), (310.5, 700.0), (10.5, 700.0)]), polygon(&[(250.5, 770.0), (300.5, 770.0), (300.5, 820.0)])];
     assert_eq!(drawn.contours, expected);
     assert_eq!(ps_contours(&seac_font(), CFF, 3), expected, "the CFF glyph drawn out gives the same");
+}
+
+/// A CID-keyed table has no charset names or StandardEncoding to find seac parts through, so
+/// CID keying draws the accented glyphs out; the width operand stays.
+#[test]
+fn cid_keying_draws_seac_glyphs_out() {
+    let mut font = seac_font();
+    let cs = cff_table::test_charstring;
+    let charstrings = vec![
+        cs(&[(&[], 14)]),
+        cs(&[(&[10.5, 0.0], 21), (&[300.0, 0.0, 0.0, 700.0, -300.0, 0.0], 5), (&[], 14)]),
+        // The accent's stem hint is dropped once it is drawn into Aacute.
+        cs(&[(&[750.0, 50.0], 1), (&[100.0, 750.0], 21), (&[50.0, 0.0, 0.0, 50.0], 5), (&[], 14)]),
+        cs(&[(&[100.0, 150.5, 20.0, 65.0, 194.0], 14)]),
+    ];
+    font.insert(CFF, cff_table::test_table(&[".notdef", "A", "acute", "Aacute"], charstrings, &[]));
+    let ros = fontcraft_cff::cid::Ros { registry: "Adobe".into(), ordering: "Identity".into(), supplement: 0 };
+    let result =
+        convert_with(&font, &ConvertOptions { cid_keyed: Some(ros), subroutinize: Some(false), ..ConvertOptions::new(ConvertTarget::Cff) }).unwrap();
+    let keyed = result.font.unwrap();
+    assert_eq!(glyph_cids(&keyed).unwrap(), Some(vec![0, 1, 2, 3]));
+    let programs = cff_table::Programs::read(keyed.get(CFF).unwrap(), false).unwrap();
+    assert!((0..4).all(|g| !programs.is_accented(g)), "no charstring ends in a four-operand endchar");
+    assert_eq!(programs.width(3), Some(100 << 16), "the width operand is kept");
+    let mut expected = ps_contours(&font, CFF, 1);
+    expected.extend(ps_contours(&font, CFF, 2).iter().map(|c| c.translated(150.5, 20.0)));
+    assert_eq!(ps_contours(&keyed, CFF, 3), expected, "base plus the accent moved by the seac offset");
+    assert_eq!(ps_contours(&keyed, CFF, 3), ps_contours(&font, CFF, 3));
+    assert!(result.left_behind.iter().any(|n| n.contains("accent hints")), "{:?}", result.left_behind);
 }
 
 /// Many accented glyphs, each with a contour of its own, naming one accent of 20,000 stem

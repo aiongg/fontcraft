@@ -1,5 +1,5 @@
 use super::*;
-use fontcraft_model::Transform;
+use fontcraft_model::{Orientation, Transform};
 
 const V3: &str = "{
 .appVersion = \"3343\";
@@ -1004,4 +1004,149 @@ fn a_value_kept_for_its_layout_is_left_out_once_the_field_changes() {
     font.source.glyphs_version = Some(4);
     let v4 = write(&font).unwrap();
     assert!(v4.contains("numbers = ({name = gap;});"), "{v4}");
+}
+
+// ── kept extras an edit makes stale ────────────────────────────────────────────────────────────
+
+/// The lines of glyph `name`'s dictionary in `text`, from its `glyphname` line to the next one.
+fn glyph_block<'a>(text: &'a str, name: &str) -> Vec<&'a str> {
+    let start = format!("glyphname = {name};");
+    text.lines().skip_while(|l| *l != start).skip(1).take_while(|l| !l.starts_with("glyphname = ")).collect()
+}
+
+#[test]
+fn a_kept_code_point_spelling_is_left_out_once_the_code_points_are_removed() {
+    for (text, spelling) in
+        [(V3.replace("unicode = 65;", "unicode = 0065;"), "unicode = 0065;"), (V2.replace("unicode = 0041;", "unicode = 41;"), "unicode = 41;")]
+    {
+        let mut font = read(&text).unwrap();
+        font.glyph_mut("A").unwrap().unicodes.clear();
+        let out = write(&font).unwrap();
+        assert!(!out.contains(spelling), "{out}");
+        let back = read(&out).unwrap();
+        assert!(back.glyph("A").unwrap().unicodes.is_empty());
+        assert_eq!(write(&back).unwrap(), out);
+        // The other glyphs are written as they were.
+        for other in ["B", "Aacute", "uni2000"].into_iter().filter(|g| font.glyph(g).is_some()) {
+            assert_eq!(glyph_block(&out, other), glyph_block(&text, other), "{other}");
+        }
+    }
+}
+
+#[test]
+fn a_kept_version_2_transform_spelling_is_left_out_once_the_component_is_reset() {
+    let text = V2.replace("{1, 0, 0, 1, 285, 232}", "{1.0, 0, 0, 1, 285, 232}");
+    let mut font = read(&text).unwrap();
+    let mut g = font.glyph_mut("Aacute").unwrap();
+    let Shape::Component(c) = &mut g.layers[0].shapes[1] else { panic!() };
+    c.transform = Transform::Matrix([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+    drop(g);
+    let out = write(&font).unwrap();
+    assert!(!out.contains("285"), "{out}");
+    let back = read(&out).unwrap();
+    let Shape::Component(c) = &back.glyph("Aacute").unwrap().layers[0].shapes[1] else { panic!() };
+    assert!(c.transform.is_identity());
+    assert_eq!(write(&back).unwrap(), out);
+    assert_eq!(glyph_block(&out, "A"), glyph_block(&text, "A"));
+}
+
+#[test]
+fn a_kept_version_2_master_name_is_left_out_once_the_name_is_cleared() {
+    let text = V2.replace("id = \"3FB85DAF-C7EF\";", "id = \"3FB85DAF-C7EF\";\nname = \"Bold\";");
+    let mut font = read(&text).unwrap();
+    assert_eq!(font.masters[0].name, "Bold");
+    assert_eq!(write(&font).unwrap(), text);
+    Arc::make_mut(&mut font.masters)[0].name.clear();
+    let out = write(&font).unwrap();
+    assert!(!out.contains("Bold"), "{out}");
+    assert_eq!(write(&read(&out).unwrap()).unwrap(), out);
+}
+
+#[test]
+fn a_kept_single_value_spelling_is_left_out_once_the_property_is_localized() {
+    let v4 = "{\n.appVersion = \"4004\";\n.formatVersion = 4;\nfontMaster = (\n{\nid = m01;\n},\n);\nglyphs = (\n);\nproperties = (\n{\nkey = vendorID;\nvalue = \"ABCD\";\n},\n);\nunitsPerEm = 1000;\nversionMajor = 1;\nversionMinor = 0;\n}\n";
+    let mut font = read(v4).unwrap();
+    let info = Arc::make_mut(&mut font.info);
+    let p = info.properties.0.iter_mut().find(|p| p.key == "vendorID").unwrap();
+    p.value = PropertyValue::Localized(vec![fontcraft_model::Localized { language: "dflt".into(), value: "WXYZ".into(), extra: Extra::new() }]);
+    let out = write(&font).unwrap();
+    assert!(!out.contains("ABCD"), "{out}");
+    let back = read(&out).unwrap();
+    let PropertyValue::Localized(values) = &back.info.properties.get("vendorID").unwrap().value else { panic!("{out}") };
+    assert_eq!(values[0].value, "WXYZ");
+}
+
+#[test]
+fn node_flags_kept_as_written_give_way_to_an_edited_lock() {
+    // `X` before `R`: locked and right, in an order the writer does not use.
+    let text = V3.replace("(300,700,l),", "(300,700,lXR),");
+    let mut font = read(&text).unwrap();
+    assert_eq!(write(&font).unwrap(), text, "kept while untouched");
+    let mut g = font.glyph_mut("A").unwrap();
+    let Shape::Path(p) = &mut g.layers[0].shapes[0] else { panic!() };
+    let n = p.nodes.iter_mut().find(|n| (n.x, n.y) == (300.0, 700.0)).unwrap();
+    assert!(n.locked && n.orientation == Orientation::Right, "read in any order");
+    n.locked = false;
+    drop(g);
+    let out = write(&font).unwrap();
+    assert!(out.contains("(300,700,lR),"), "the orientation survives the edit: {out}");
+    let back = read(&out).unwrap();
+    let Shape::Path(p) = &back.glyph("A").unwrap().layers[0].shapes[0] else { panic!() };
+    let n = p.nodes.iter().find(|n| (n.x, n.y) == (300.0, 700.0)).unwrap();
+    assert!(!n.locked && n.orientation == Orientation::Right && n.info.extra.is_empty());
+    assert_eq!(glyph_block(&out, "B"), glyph_block(&text, "B"));
+}
+
+#[test]
+fn unknown_node_flag_letters_survive_an_edited_lock() {
+    let text = V3.replace("(300,700,l),", "(300,700,lZ),");
+    let mut font = read(&text).unwrap();
+    assert_eq!(write(&font).unwrap(), text, "kept while untouched");
+    let mut g = font.glyph_mut("A").unwrap();
+    let Shape::Path(p) = &mut g.layers[0].shapes[0] else { panic!() };
+    let n = p.nodes.iter_mut().find(|n| (n.x, n.y) == (300.0, 700.0)).unwrap();
+    n.locked = true;
+    drop(g);
+    let out = write(&font).unwrap();
+    assert!(out.contains("(300,700,lXZ),"), "the unknown letter follows the lock: {out}");
+    let back = read(&out).unwrap();
+    assert_eq!(write(&back).unwrap(), out, "the edited flags read back the same");
+    let Shape::Path(p) = &back.glyph("A").unwrap().layers[0].shapes[0] else { panic!() };
+    assert!(p.nodes.iter().find(|n| (n.x, n.y) == (300.0, 700.0)).unwrap().locked);
+}
+
+/// Whether any extra data the font's objects hold (the font, glyph `A`'s layers) keeps a layout.
+fn keeps_layouts(font: &Font) -> (bool, bool) {
+    let has = |x: &Extra| x.iter().any(|e| e.key.as_str().starts_with(LAYOUT_KEY));
+    (has(&font.extra), font.glyph("A").unwrap().layers.iter().any(|l| has(&l.extra)))
+}
+
+#[test]
+fn kept_layouts_an_edit_made_stale_are_dropped_from_a_copy() {
+    let text = V3
+        .replace("unitsPerEm = 1000;", "numbers = ({name = gap;});\nunitsPerEm = 1000;")
+        .replace("associatedMasterId = m01;\n", "associatedMasterId = m01;\nattr = {axisRules = ({min = 600;});};\n")
+        .replace("layerId = m01;\nshapes", "guides = ({pos = (100,0);});\nlayerId = m01;\nshapes");
+    let font = read(&text).unwrap();
+    assert_eq!(keeps_layouts(&font), (true, true));
+    assert_eq!(font.glyph("A").unwrap().layers[0].info.guides.len(), 1);
+    assert!(without_stale_layouts(&font).is_none(), "nothing is stale before an edit");
+
+    // A font-level value: the numbers.
+    let mut edited = font.clone();
+    Arc::make_mut(&mut edited.numbers)[0].name = "space".into();
+    let pruned = without_stale_layouts(&edited).unwrap();
+    assert_eq!(keeps_layouts(&pruned), (false, true), "the glyph's layouts still hold");
+    assert_eq!(write(&pruned).unwrap(), write(&edited).unwrap());
+
+    // A layer's value: one guide more. The other layer's kept attributes stay.
+    let mut edited = font.clone();
+    edited.glyph_mut("A").unwrap().layers[0].info.guides.push(fontcraft_model::Guide { x: 200.0, ..Default::default() });
+    let pruned = without_stale_layouts(&edited).unwrap();
+    let layers = &pruned.glyph("A").unwrap().layers;
+    assert!(!layers[0].extra.iter().any(|e| e.key.as_str().starts_with(LAYOUT_KEY)));
+    assert!(layers[1].extra.iter().any(|e| e.key.as_str().starts_with(LAYOUT_KEY)));
+    assert!(pruned.extra.iter().any(|e| e.key.as_str().starts_with(LAYOUT_KEY)), "the numbers still hold");
+    assert_eq!(write(&pruned).unwrap(), write(&edited).unwrap());
+    assert!(Arc::ptr_eq(pruned.glyphs.get("B").unwrap(), font.glyphs.get("B").unwrap()), "untouched glyphs are shared");
 }

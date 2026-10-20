@@ -15,6 +15,7 @@
 //! | Feature variations | [`featvar`]: alternate layers as `GSUB` feature variations, merged into the feature code's `GSUB` by the layout stage | M9.8 |
 //! | Variable layout | `fontcraft_features::var_layout`: kerning and marks with deltas | M9.9 |
 //! | CFF2 | [`cff2`] | M9.13 |
+//! | Hinting variations | [`cvar`]: the masters' TrueType control values, once the table stage knows the `cvt ` | M10.19 |
 //!
 //! Contract: each table builder takes plain data ([`VarAxes`], per-glyph source outlines, per
 //! master values as [`VarValue`]s, a name allocator), not the font, so it can be tested alone.
@@ -26,6 +27,7 @@
 
 pub mod avar;
 pub mod cff2;
+pub mod cvar;
 pub mod decompose;
 pub mod featvar;
 pub mod fvar;
@@ -446,6 +448,8 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
             .map(|r| (NameId::new(r.id), r.text))
             .collect::<Vec<_>>()
     };
+    // The masters `cvar` varies with: each master source and its normalized location.
+    let cvar_masters: Vec<(String, Vec<f64>)> = sources.iter().filter_map(|s| Some((s.master.clone()?, s.normalized.clone()))).collect();
     let ctx = Outlines { designspace: &designspace, prepared, origin: &origin.id, sources: &sources, glyph_sources: &glyph_sources, flavour };
     let mut stage = |origin_resolved: &fontcraft_model::Resolved,
                      glyphs: &[ResolvedGlyph],
@@ -463,6 +467,7 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
             extra.cff2 = Some(cff2::write(&cff2_font, warnings)?);
         } else {
             let gvar = gvar::build_gvar(axis_count, &per_glyph, &gvar_options)?;
+            extra.cvar = Some(cvar::CvarMasters { axis_count, origin: origin_resolved.master.clone(), masters: cvar_masters.clone() });
             extra.tables.push((
                 Tag::new(b"gvar"),
                 write_fonts::dump_table(&gvar).map_err(|e| CompileError::Table { table: "gvar", message: e.to_string() })?,
@@ -534,6 +539,18 @@ struct Outlines<'a> {
 }
 
 impl Outlines<'_> {
+    /// The layer source `slot` of glyph `name` is drawn from (0 the origin, k + 1 source k), for
+    /// its hints.
+    fn source_layer(&self, name: &str, slot: usize) -> Option<cff2::SourceLayer> {
+        let Some(k) = slot.checked_sub(1) else { return Some(cff2::SourceLayer { master: self.origin.to_string(), intermediate: None }) };
+        let s = self.sources.get(k)?;
+        if let Some(m) = &s.master {
+            return Some(cff2::SourceLayer { master: m.clone(), intermediate: None });
+        }
+        let found = self.glyph_sources.get(name)?.main.iter().find(|x| !x.is_master && x.location == s.location)?;
+        Some(cff2::SourceLayer { master: found.master.clone(), intermediate: Some(found.layer_id.clone()) })
+    }
+
     /// The sources besides the origin that `name` has a layer for (indices into `sources`).
     fn own_sources(&self, name: &str, warnings: &mut Vec<String>) -> Vec<usize> {
         let Some(gs) = self.glyph_sources.get(name) else {
@@ -746,14 +763,8 @@ impl Outlines<'_> {
                     _ => Prepared::Empty,
                 });
                 per_glyph.push(gvar::SourceOutlines { glyph: g.name.clone(), locations: locations.clone(), points, contour_ends: Vec::new() });
-                let masters = slots
-                    .iter()
-                    .map(|&slot| match slot.checked_sub(1) {
-                        None => Some(self.origin.to_string()),
-                        Some(k) => self.sources.get(k).and_then(|s| s.master.clone()),
-                    })
-                    .collect();
-                cubic.push(cff2::CubicSources { glyph: g.name.clone(), locations, paths: contours, masters });
+                let layers = slots.iter().map(|&slot| self.source_layer(&g.name, slot)).collect();
+                cubic.push(cff2::CubicSources { glyph: g.name.clone(), locations, paths: contours, layers });
                 continue;
             }
             if contours.iter().all(|c| c.iter().all(|p| p.elements().is_empty())) {

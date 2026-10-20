@@ -430,6 +430,22 @@ guesses = [
 observe = ["T1: select a hint linked to two nodes, type a new origin in the Info box, then move one of the nodes; note whether the hint follows the node (link kept) or stays at the typed value (link broken)."]
 
 [[command]]
+id = "hint.ps.moveHints"
+label = "Move Hints"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id, hints: [hintIndex], dx?: number, dy?: number}"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Moves several hints across their edges at once: horizontal hints by dy, vertical ones by dx. This is what an arrow key does while hints are selected in Edit View."
+ref = "PostScript Hinting › Stem Hints"
+status = "inferred"
+notes = "X.ui3, crates/engine/src/cmd/hint_ps.rs: one undo step for all the listed hints; each moved hint keeps its size and its ends become numbers; a hint whose distance is missing or 0 stays, and a call that moves none is refused. The Select tool's arrow keys run it (crates/tools/src/hint_drag.rs). The handbook does not mention moving hints with the keyboard; inferred."
+guesses = ["Moving several hints with one arrow key press is one undo step, as moving several nodes is; pressing an arrow key with two hints selected in the reference app and then Undo once would settle it."]
+observe = ["T1: in n, select two horizontal hints, press Up, then choose Edit › Undo once; note whether both hints go back or only one."]
+
+[[command]]
 id = "hint.ps.attachHintToNode"
 label = "Attach Hint to Node"
 menu = []
@@ -593,9 +609,9 @@ milestone = "M10"
 summary = "Clicking a hint's number badge selects the hint; Shift+click adds to or removes from the hint selection. The selected hint's values appear in the Info box."
 ref = "PostScript Hinting › Stem Hints"
 status = "handbook"
-notes = "The hint selection is part of the Edit View selection (`hints`, by list position; crates/tools/src/selection.rs). A click on a badge or marker selects that hint alone, Shift+click toggles it, a click elsewhere replaces it; hiding hints deselects them. Delete removes the selected hints (hint.ps.deleteHints). The arrow keys move the selected hints across the arrow (Up and Down horizontal hints, Left and Right vertical ones) by the font's keyboard increments (plain, Shift, Cmd), one hint.ps.setHintValues each, and the hints stay selected (crates/tools/src/hint_drag.rs). Documented in the handbook, not yet observed; the handbook does not mention arrow keys for hints."
+notes = "The hint selection is part of the Edit View selection (`hints`, by list position; crates/tools/src/selection.rs). A click on a badge or marker selects that hint alone, Shift+click toggles it, a click elsewhere replaces it; hiding hints deselects them. Delete removes the selected hints (hint.ps.deleteHints). The arrow keys move the selected hints across the arrow (Up and Down horizontal hints, Left and Right vertical ones) by the font's keyboard increments (plain, Shift, Cmd), all of them in one hint.ps.moveHints, and the hints stay selected (crates/tools/src/hint_drag.rs). Documented in the handbook, not yet observed; the handbook does not mention arrow keys for hints."
 guesses = [
-  "The arrow keys move selected hints as they move selected nodes, the whole hint at once, so an end linked to a node becomes a number; an arrow along a hint's edges leaves it alone; with several hints selected each moves in its own undo step. The handbook says nothing about arrow keys and hints; pressing an arrow key with a linked hint selected in the reference app would settle it.",
+  "The arrow keys move selected hints as they move selected nodes, the whole hint at once, so an end linked to a node becomes a number; an arrow along a hint's edges leaves it alone; with several hints selected they move in one undo step. The handbook says nothing about arrow keys and hints; pressing an arrow key with a linked hint selected in the reference app would settle it.",
   "Tab after the last hint wraps to the first and Shift+Tab before the first wraps to the last; with several hints selected Tab moves on from the one latest in list order; trying it in the reference app would settle it.",
   "A click on a hint's marker selects the hint as a click on its badge does; the reference app would settle it.",
 ]
@@ -717,11 +733,12 @@ milestone = "M10"
 summary = "In a variable CFF2 font a glyph has one hint list and one set of hint masks for the whole design space; only the hint coordinates vary. Hints are therefore taken from the main master's structure and their edges become blended values from the linked nodes in every master, subject to the ordering and overlap rules in autohint.ps.variable.*. The handbook does not describe CFF2 output; this follows the otfautohint notes."
 ref = "AFDKO docs/otfautohint_Notes.md › Some notes on hinting glyphs in a variable font"
 status = "inferred"
-notes = "M12.25d (`fontcraft_cff::cff2::shared_hints`, `compile/src/var/cff2.rs`): per master, the hints the static CFF export of that master writes; they are merged as fontTools' varLib merges hinted CFF masters (same stem operators and stem counts, same masks, only the numbers differ) and written with blended stems, `hstemhm`/`vstemhm` and `hintmask` kept. Stems must also sort into the same order and keep their ghost kind in every master. Flex is dropped: the merge draws it as two curves. The Private DICT's zones and stems are blended (row hinting.ps.cff2.privateDictBlends)."
+notes = "M12.25d (`fontcraft_cff::cff2::shared_hints`, `compile/src/var/cff2.rs`): per master, the hints the static CFF export of that master writes; they are merged as fontTools' varLib merges hinted CFF masters (same stem operators and stem counts, same masks, only the numbers differ) and written with blended stems, `hstemhm`/`vstemhm` and `hintmask` kept. Stems must also sort into the same order and keep their ghost kind in every master. Flex is dropped: the merge draws it as two curves. The Private DICT's zones and stems are blended (row hinting.ps.cff2.privateDictBlends). M12.25e: intermediate and alternate layers are sources of the merge too: a sparse source adds its own region, as its outline does. An intermediate layer uses its own hints, else the hints its master uses, read through node links on the intermediate layer, as the handbook says hints transfer to compatible layers. When every source of a varying glyph is autohinted, the sources are hinted together (autohint.ps.variable.directCff2), without flex; if they cannot be (their paths differ for the hinter), each is hinted on its own, with a warning."
 guesses = [
-  "In variable CFF2 output the hints come from the main master's manual hints resolved through node links in every master, or else from the autohinter run on each master on its own; unlinked manual hints keep one value in every master; a variable export from the reference app would settle it.",
-  "A glyph whose masters' hints differ in structure (fontTools refuses the merge with VarLibCFFHintTypeMergeError or a hint mask error) is written without hints and with a warning, so the rest of the font still exports; autohinted masters differ often, as the autohinter does not yet hint the masters together (autohint.ps.variable.*).",
-  "A glyph that varies with an intermediate or alternate layer is written without hints, with a warning: its hints are read on master layers only; hinting the special layer through its own node links would be the next step.",
+  "In variable CFF2 output the hints come from the main master's manual hints resolved through node links in every source, or else from the autohinter run on all sources together; unlinked manual hints keep one value in every master; a variable export from the reference app would settle it.",
+  "A glyph whose sources' hints differ in structure (fontTools refuses the merge with VarLibCFFHintTypeMergeError or a hint mask error) is written without hints and with a warning, so the rest of the font still exports.",
+  "An intermediate layer without PostScript hints of its own takes the hints its master uses through node links, as master layers do, so a variable font keeps the glyph's hints; a variable export from the reference app of a glyph with an unhinted intermediate layer would settle it.",
+  "Autohinted CFF2 glyphs are hinted without flex, as the merge draws flex as two curves; static exports keep the autohinter's flex. Running otfautohint on a CFF2 font would show whether it adds flex there.",
 ]
 observe = ["T2: export as a variable CFF2 font and read the charstrings; note whether all masters share one hint structure and what happens to I's unlinked hint."]
 
@@ -1045,7 +1062,7 @@ milestone = "M10"
 summary = "The hinter can hint a variable CFF-based font, including an already built CFF2 font, in one pass: the default master decides the hint structure and the other masters supply the varying coordinates. Glyphs that still contain overlaps (normal in variable fonts) are hinted close to how their overlap-removed form would be."
 ref = "AFDKO docs/otfautohint_Notes.md › Changes Summary"
 status = "docs"
-notes = "FontCraft's port hints the masters of a glyph together (crates/autohint/src/masters.rs, hint_masters): the main master decides the stems and masks, every other master gets the same stems in the same order and the same masks, a master without the glyph is skipped, and masters whose contours differ are an error. Only the main master's overlap-free outline is used for segments."
+notes = "FontCraft's port hints the masters of a glyph together (crates/autohint/src/masters.rs, hint_masters): the main master decides the stems and masks, every other master gets the same stems in the same order and the same masks, a master without the glyph is skipped, and masters whose contours differ are an error. Only the main master's overlap-free outline is used for segments. M12.25e: the variable CFF2 export uses it for every glyph whose sources are all autohinted, the origin first and intermediate and alternate sources included, on the outlines as the CFF2 charstring draws them (coordinates rounded, no steps joined)."
 
 [[behavior]]
 id = "autohint.ps.parallelism"

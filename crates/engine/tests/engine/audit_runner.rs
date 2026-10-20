@@ -229,3 +229,49 @@ fn audit_folder_and_glyph_limits_refuse_the_run() {
     assert!(e.contains("more than 4096 entries"), "{e}");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn check_outlines_all_examines_every_glyph_again() {
+    let mut s = Session::with_document();
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": rect(0.0, 0.0, 100.0, 100.0)}));
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": rect(50.0, 50.0, 150.0, 150.0)}));
+    let select = json!({"glyphs": ["A"]});
+    let first = run(&mut s, "audit.checkOutlines", select.clone());
+    let at = fontcraft_audit::layers_examined();
+    let again = run(&mut s, "audit.checkOutlines", select);
+    assert_eq!(fontcraft_audit::layers_examined(), at, "an unchanged glyph keeps its results");
+    assert_eq!(results(&again).len(), results(&first).len());
+    let at = fontcraft_audit::layers_examined();
+    let all = run(&mut s, "audit.checkOutlines", json!({"glyphs": ["A"], "all": true}));
+    assert!(fontcraft_audit::layers_examined() > at, "`all` examines the glyph again");
+    assert_eq!(results(&all).len(), results(&first).len());
+}
+
+#[test]
+fn check_outlines_quiet_keeps_the_counts_only() {
+    let mut s = Session::with_document();
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": rect(0.0, 0.0, 100.0, 100.0)}));
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": rect(50.0, 50.0, 150.0, 150.0)}));
+    let loud = run(&mut s, "audit.checkOutlines", json!({}));
+    let quiet = run(&mut s, "audit.checkOutlines", json!({"quiet": true}));
+    assert!(!results(&loud).is_empty());
+    assert!(quiet.get("results").is_none(), "{quiet}");
+    assert_eq!(quiet["summary"], loud["summary"]);
+}
+
+#[test]
+fn compare_family_adds_the_reports_asked_for() {
+    let dir = scratch("compare-reports");
+    let (mut s, one) = exported(&dir, "One.ttf");
+    let two = dir.join("Two.ttf");
+    run(&mut s, "file.exportStatic", json!({"destination": two, "timestamp": 0}));
+    let r = run(&mut s, "audit.compareFamily", json!({"directory": dir, "familyTests": [3], "singleTests": [], "reports": ["menuNames", "panose"]}));
+    let names = run(&mut s, "audit.report.menuNames", json!({"directory": dir}));
+    assert_eq!(r["reports"]["menuNames"], names, "the same table as the report command");
+    assert!(r["reports"]["panose"]["families"].is_array(), "{r}");
+    assert!(r["reports"].get("metrics").is_none());
+    let plain = run(&mut s, "audit.compareFamily", json!({"fonts": [one, two], "familyTests": [3], "singleTests": []}));
+    assert!(plain.get("reports").is_none());
+    assert!(s.execute("audit.compareFamily", &json!({"directory": dir, "reports": ["glyphs"]})).is_err());
+    std::fs::remove_dir_all(&dir).unwrap();
+}

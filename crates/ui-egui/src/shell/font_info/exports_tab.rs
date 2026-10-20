@@ -21,18 +21,20 @@
 //!
 //! The preview line draws the first selected instance with [`fontcraft_render::render_line`]:
 //! the glyphs of `Aang126` the font has, or the glyph names of the instance's Instance Preview
-//! parameter. Only an instance at a master's location is drawn; an instance between masters
-//! shows a message, as nothing interpolates outlines yet.
+//! parameter. An instance at a master's location draws that master; one between masters draws
+//! its interpolated outlines, from the session's instance view (`Session::instance_view`).
 //!
 //! Rows: `fontInfo.exports`, `fontInfo.exports.selection`, `fontInfo.exports.inactiveGrayIcon`,
 //! `fontInfo.exports.instancePreview`, the `Instance Preview` parameter (M7.18).
 
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 use egui::{Align2, Color32, ColorImage, Id, Pos2, Rect, Sense, Stroke, StrokeKind, TextureHandle, TextureOptions, pos2, vec2};
 use fontcraft_engine::fontinfo::Scope;
 use fontcraft_engine::fontinfo::rows::RowKind;
 use fontcraft_engine::fontinfo::value as fv;
+use fontcraft_engine::interp_cache::view_master_id;
 use fontcraft_model::axes::design_value;
 use fontcraft_model::{Font, Instance, StyleClass};
 use fontcraft_render::{LineOptions, Style, render_line};
@@ -181,6 +183,15 @@ fn anchor_id() -> Id {
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let doc = app.session.active().map(|d| (d.id, d.revision));
     let FontcraftApp { session, state, tokens, .. } = app;
+    // An instance between masters is drawn from its interpolated view, built before the font is
+    // borrowed for the rest of the tab.
+    let between = {
+        let Ok(font) = session.font() else { return };
+        let fi = &state.panels.font_info;
+        let index = fi.target(font).map(|t| t.first());
+        index.and_then(|i| preview_glyphs(font, i).ok().filter(|(m, _)| *m == view_master_id(i)).map(|(_, names)| (i, names)))
+    };
+    let view = between.map(|(i, names)| session.instance_view(i, &names));
     let Ok(font) = session.font() else { return };
     let fi = &mut state.panels.font_info;
     let count = font.instances.len();
@@ -197,7 +208,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
                 ui.label(egui::RichText::new("This font has no exports. Add one with the plus button below the list.").color(tokens.text_dim));
                 return;
             };
-            preview(ui, tokens, font, target.first(), doc);
+            preview(ui, tokens, font, target.first(), doc, view.as_ref());
             general(ui, tokens, fi, font, &target, pending);
             super::rows::parameters_section(ui, tokens, fi, font, &target, pending);
         });
@@ -576,7 +587,8 @@ fn check(ui: &mut egui::Ui, id: Id, on: bool, mixed: bool, text: &str, hover: &s
 /// The glyphs are those of the instance's enabled Instance Preview parameter (glyph names
 /// separated by spaces or line breaks), else the glyphs mapped to the characters of
 /// [`DEFAULT_PREVIEW`]; names the font lacks are skipped, and at most [`MAX_PREVIEW_GLYPHS`]
-/// are drawn. The master is the only one, or the one at the instance's location.
+/// are drawn. The master is the only one, the one at the instance's location, or, for an instance
+/// between masters, the master of its interpolated view ([`view_master_id`]).
 pub fn preview_glyphs(font: &Font, index: usize) -> Result<(String, Vec<String>), &'static str> {
     let instance = font.instances.get(index).ok_or("There is no such export.")?;
     if is_variable(instance) {
@@ -586,10 +598,8 @@ pub fn preview_glyphs(font: &Font, index: usize) -> Result<(String, Vec<String>)
         |m: &&fontcraft_model::Master| (0..font.axes.len()).all(|i| design_value(&m.location, i) == design_value(&instance.location, i));
     let master = match font.masters.as_slice() {
         [] => return Err("The font has no master."),
-        [only] => only,
-        all => {
-            all.iter().find(at_location).ok_or("This instance lies between masters. Its preview needs interpolation, which is not available yet.")?
-        }
+        [only] => only.id.clone(),
+        all => all.iter().find(at_location).map_or_else(|| view_master_id(index), |m| m.id.clone()),
     };
     let parameter = instance.params.0.iter().find(|p| p.name == PREVIEW_PARAMETER && !p.disabled);
     let names: Vec<String> = match parameter {
@@ -608,7 +618,7 @@ pub fn preview_glyphs(font: &Font, index: usize) -> Result<(String, Vec<String>)
     if names.is_empty() {
         return Err("The font has none of the preview's glyphs.");
     }
-    Ok((master.id.clone(), names))
+    Ok((master, names))
 }
 
 /// The preview's texture and what it was drawn from.
@@ -619,8 +629,8 @@ struct PreviewTexture {
 }
 
 /// The preview line of the instance at `index`, redrawn only when the document, the instance or
-/// the size changes.
-fn preview(ui: &mut egui::Ui, tokens: &Tokens, font: &Font, index: usize, doc: Option<(u64, u64)>) {
+/// the size changes. `view` is the instance's interpolated view when it lies between masters.
+fn preview(ui: &mut egui::Ui, tokens: &Tokens, font: &Font, index: usize, doc: Option<(u64, u64)>, view: Option<&Result<Arc<Font>, String>>) {
     let height = tokens.list_row_height * PREVIEW_ROWS;
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width().max(1.0), height), Sense::hover());
     let _ = ui.interact(rect, preview_id(), Sense::hover());
@@ -636,6 +646,15 @@ fn preview(ui: &mut egui::Ui, tokens: &Tokens, font: &Font, index: usize, doc: O
         Ok(found) => found,
         Err(why) => return message(ui, why),
     };
+    let drawn: &Font = if master == view_master_id(index) {
+        match view {
+            Some(Ok(view)) => &**view,
+            Some(Err(e)) => return message(ui, &format!("The instance could not be interpolated: {e}")),
+            None => return message(ui, "The instance could not be interpolated."),
+        }
+    } else {
+        font
+    };
     let ppp = ui.ctx().pixels_per_point();
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     (doc, index, &master, &names, height.to_bits(), ppp.to_bits(), tokens.glyph_fill.to_array()).hash(&mut hasher);
@@ -646,7 +665,7 @@ fn preview(ui: &mut egui::Ui, tokens: &Tokens, font: &Font, index: usize, doc: O
         Some(k) => k.texture,
         None => {
             let max_side = ui.ctx().input(|i| i.max_texture_side);
-            let texture = render_preview(ui.ctx(), tokens, font, &master, &names, height * ppp, max_side);
+            let texture = render_preview(ui.ctx(), tokens, drawn, &master, &names, height * ppp, max_side);
             ui.ctx().data_mut(|d| d.insert_temp(cache, PreviewTexture { key, texture: texture.clone() }));
             texture
         }

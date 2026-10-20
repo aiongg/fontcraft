@@ -2,7 +2,7 @@
 //! Row: `glyph.autotraceImage`.
 //!
 //! The image file is read through the session's asset store and decoded within the trace's
-//! 64-megapixel limit. Its pixels map into the glyph through the image's transform, counted from
+//! 64-megapixel limit; a PDF's first page is drawn to pixels first. Its pixels map into the glyph through the image's transform, counted from
 //! the image's bottom-left corner, so the outline lands where the image is drawn; a crop limits
 //! the trace to the part shown. The contours are added after the layer's shapes, rounded to the
 //! font's grid. Images are decoded and traced before the edit, which then applies every glyph's
@@ -10,7 +10,6 @@
 
 use fontcraft_color::AssetStore;
 use fontcraft_geom::{Affine, Point, Vec2, round_point};
-use fontcraft_imagery as imagery;
 use fontcraft_model::{Image, Layer, MAX_COORDINATE, MAX_OUTLINE_ELEMENTS, Node, NodeKind, Path, Shape};
 use fontcraft_pathops::trace::{self, Bitmap, TraceOptions};
 use fontcraft_pathops::{Contour, contours_from_bez};
@@ -33,7 +32,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Autotrace Image",
             ["Glyph"],
             None,
-            "{glyphs?: [names] (default: every glyph whose layer has an image), layer?: id (default: the first master's layer), threshold?: number (above 0 and below 1, default 0.5), smoothness?: number (0 to 1, default 0.25), removeImage?: bool (default false)} trace the layer's placed image into outlines. A pixel darker than `threshold` is ink (0 is white, 1 black; transparent pixels count as white). Higher `smoothness` keeps fewer corners and fits curves more loosely. The contours are added to the layer's paths where the image is drawn, rounded to the grid; a crop limits the trace to the part shown, and specks under 2.5 square pixels are dropped. `removeImage` then removes each unlocked image. Images over 64 megapixels and traces of more than 100,000 contours are refused. Glyphs that cannot be traced are listed with the reason, and the call fails when none can → {traced: [{glyph, layer, contours, imageRemoved}], skipped: [{glyph, layer, reason}]}",
+            "{glyphs?: [names] (default: every glyph whose layer has an image), layer?: id (default: the first master's layer), threshold?: number (above 0 and below 1, default 0.5), smoothness?: number (0 to 1, default 0.25), removeImage?: bool (default false)} trace the layer's placed image into outlines. A pixel darker than `threshold` is ink (0 is white, 1 black; transparent pixels count as white). Higher `smoothness` keeps fewer corners and fits curves more loosely. The contours are added to the layer's paths where the image is drawn, rounded to the grid; a crop limits the trace to the part shown, and specks under 2.5 square pixels are dropped. `removeImage` then removes each unlocked image. A placed PDF's first page is drawn at 4 pixels per point, or fewer to stay within 64 megapixels; other images over 64 megapixels and traces of more than 100,000 contours are refused. Glyphs that cannot be traced are listed with the reason, and the call fails when none can → {traced: [{glyph, layer, contours, imageRemoved}], skipped: [{glyph, layer, reason}]}",
             has_doc,
             autotrace
         )
@@ -142,12 +141,15 @@ fn trace_layer(store: &dyn AssetStore, layer: &Layer, options: &TraceOptions, st
 fn trace_image(store: &dyn AssetStore, image: &Image, options: &TraceOptions, step: f64) -> std::result::Result<Vec<Path>, String> {
     let file = image.path.as_deref().ok_or("the image names no file")?;
     let bytes = store.read(file).map_err(|e| e.to_string())?;
-    let rgba = imagery::decode_rgba(&bytes, trace::MAX_PIXELS).map_err(|e| e.to_string())?;
+    let decoded = super::image::decode_pixels(&bytes, trace::MAX_PIXELS)?;
     drop(bytes);
+    let (rgba, unit) = (decoded.image, decoded.units_per_pixel);
     let mut bitmap = Bitmap::from_rgba(rgba.width, rgba.height, &rgba.pixels).map_err(|e| e.to_string())?;
     drop(rgba);
-    let mut place = image.transform.affine();
-    if let Some((x, y, w, h)) = image.crop.and_then(|c| crop_box(c, bitmap.width(), bitmap.height())) {
+    // A PDF is drawn at several pixels per point, and its crop is in points.
+    let mut place = image.transform.affine() * Affine::scale(unit);
+    let crop = image.crop.map(|c| c.map(|v| v / unit));
+    if let Some((x, y, w, h)) = crop.and_then(|c| crop_box(c, bitmap.width(), bitmap.height())) {
         bitmap = bitmap.cropped(x, y, w, h).map_err(|e| e.to_string())?;
         place *= Affine::translate((f64::from(x), f64::from(y)));
     }

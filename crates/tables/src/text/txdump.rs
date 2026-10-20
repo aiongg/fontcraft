@@ -22,6 +22,8 @@
 //! - Medium detail wraps the path tokens into lines of at most 78 characters, each token
 //!   preceded by a space.
 
+use std::collections::{HashMap, HashSet};
+
 use read_fonts::TableProvider;
 use read_fonts::ps::cff::CffFontRef;
 use read_fonts::ps::cs::CommandSink;
@@ -58,10 +60,11 @@ pub fn font_dict(font: &SfntFont) -> Result<String> {
 }
 
 /// `@glyphs`: the records of the glyphs named in `selection` (every glyph when empty), in the
-/// order given.
-pub fn glyphs(font: &SfntFont, selection: &[String], detail: GlyphDetail, hints: bool) -> Result<String> {
+/// order given, without those named in `excluded` (`tx -gx`).
+pub fn glyphs(font: &SfntFont, selection: &[String], excluded: &[String], detail: GlyphDetail, hints: bool) -> Result<String> {
     let src = Source::new(font)?;
-    let ids = src.select(selection)?;
+    let left_out: HashSet<usize> = if excluded.is_empty() { HashSet::new() } else { src.select(excluded)?.into_iter().collect() };
+    let ids: Vec<usize> = src.select(selection)?.into_iter().filter(|g| !left_out.contains(g)).collect();
     let mut out = Out::new();
     match detail {
         GlyphDetail::Short => out.line("## glyph[tag] {name,encoding}")?,
@@ -233,9 +236,14 @@ impl<'a> Source<'a> {
         if selection.is_empty() {
             return Ok((0..self.count).collect());
         }
+        // The first glyph of each name, as a search from the start finds it.
+        let mut by_name: HashMap<&str, usize> = HashMap::with_capacity(self.names.len());
+        for (g, n) in self.names.iter().enumerate() {
+            by_name.entry(n.as_str()).or_insert(g);
+        }
         let mut out = Vec::with_capacity(selection.len());
         for s in selection {
-            match self.names.iter().position(|n| n == s) {
+            match by_name.get(s.as_str()).copied() {
                 Some(g) => out.push(g),
                 None => return Err(TablesError::BadOptions(format!("the font has no glyph named `{s}`"))),
             }

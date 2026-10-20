@@ -282,6 +282,36 @@ fn each_document_keeps_and_saves_its_own_tabs() {
 }
 
 #[test]
+fn font_view_master_belongs_to_its_document_and_a_new_tab_follows_it() {
+    // Both documents have masters with the ids m01 and m02.
+    let second_master = |app: &mut FontcraftApp| {
+        app.session
+            .edit("second master", |font| {
+                let mut m = font.masters[0].clone();
+                m.id = "m02".into();
+                m.name = "Bold".into();
+                Arc::make_mut(&mut font.masters).push(m);
+                Ok(())
+            })
+            .unwrap();
+    };
+    let mut app = FontcraftApp::default();
+    second_master(&mut app);
+    app.run("view.selectMaster", &json!({"master": "m02"})).unwrap();
+    assert_eq!(app.run("view.newTab", &json!({"glyphs": ["A"]})).unwrap()["master"], "m02");
+    app.run("view.showTab", &json!({"index": 1})).unwrap();
+
+    app.run("file.new", &json!({})).unwrap();
+    second_master(&mut app);
+    assert_eq!(app.state.font_view.master, None, "the other document's choice does not carry over");
+    let first = app.session.font().unwrap().masters[0].id.clone();
+    assert_eq!(app.run("view.newTab", &json!({"glyphs": ["A"]})).unwrap()["master"], json!(first));
+
+    app.run("document.activate", &json!({"index": 0})).unwrap();
+    assert_eq!(app.state.font_view.master.as_deref(), Some("m02"), "the first document keeps its own");
+}
+
+#[test]
 fn closed_tabs_lose_removed_glyphs() {
     let mut app = FontcraftApp::default();
     app.run("view.newTab", &json!({"glyphs": ["A", "B"]})).unwrap();

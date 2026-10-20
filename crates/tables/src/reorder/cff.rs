@@ -23,6 +23,8 @@ const CHARSTRINGS: u16 = 17;
 const PRIVATE: u16 = 18;
 const SUBRS: u16 = 19;
 const ROS: u16 = 1230;
+const CID_COUNT: u16 = 1234;
+const FONT_NAME: u16 = 1238;
 const FDARRAY: u16 = 1236;
 const FDSELECT: u16 = 1237;
 /// Most font DICTs: FDSelect stores a font DICT index in one byte.
@@ -427,8 +429,13 @@ fn read_fd_select(d: Data<'_>, at: usize, n: usize) -> Result<Vec<u8>> {
             for r in 0..ranges {
                 let first = usize::from(d.u16(at + 3 + r * 3)?);
                 let fd = d.u8(at + 5 + r * 3)?;
-                let end = usize::from(d.u16(at + 6 + r * 3)?).min(n);
-                for slot in out.iter_mut().take(end).skip(first) {
+                let end = usize::from(d.u16(at + 6 + r * 3)?);
+                // In order, the ranges cover each glyph once; out of order they would cost
+                // ranges times glyphs.
+                if first > end {
+                    return Err(d.bad("has FDSelect ranges out of order"));
+                }
+                for slot in out.iter_mut().take(end.min(n)).skip(first) {
                     *slot = fd;
                 }
             }
@@ -469,6 +476,77 @@ impl<'a> Cff<'a> {
 
     pub(crate) fn is_cid(&self) -> bool {
         self.cid
+    }
+
+    /// The Font DICT of every glyph (all 0 in a name-keyed font) and the number of Font DICTs.
+    pub(crate) fn font_dict_of_glyphs(&self) -> (Vec<u16>, usize) {
+        if self.cid {
+            (self.fd_select.iter().map(|fd| u16::from(*fd)).collect(), self.font_dicts.len())
+        } else {
+            (vec![0; self.charstrings.len()], 1)
+        }
+    }
+
+    /// Registry, ordering and supplement of a CID-keyed font.
+    pub(crate) fn ros(&self) -> Option<(String, String, i64)> {
+        let ints = self.top_ints(ROS)?;
+        let sid = |v: i64| u16::try_from(v).ok().map(|s| self.sid_name(s));
+        Some((sid(*ints.first()?)?, sid(*ints.get(1)?)?, *ints.get(2)?))
+    }
+
+    /// The table made CID-keyed: CID n is glyph n, one Font DICT named `fd_name` takes the
+    /// Private DICT and its subroutines, the Top DICT gets `ROS` (first, as the specification
+    /// requires) and `CIDCount`, and the Encoding goes. Charstrings and subroutines are copied
+    /// byte for byte, but for the charstrings of `replace` (by glyph id).
+    pub(crate) fn to_cid_keyed(
+        &self,
+        registry: &str,
+        ordering: &str,
+        supplement: i64,
+        fd_name: &str,
+        replace: &HashMap<usize, Vec<u8>>,
+    ) -> Result<Vec<u8>> {
+        if self.cid {
+            return Err(TablesError::Unsupported("the CFF table is already CID-keyed".into()));
+        }
+        let n = self.charstrings.len();
+        let mut extra: Vec<Vec<u8>> = Vec::new();
+        let mut sid_of = |text: &str| -> Result<u16> {
+            let bytes = text.as_bytes();
+            if let Some(sid) = STANDARD_STRINGS.iter().position(|s| s.as_bytes() == bytes) {
+                return to_u16(sid, "a standard string id");
+            }
+            if let Some(i) = self.strings.iter().position(|s| *s == bytes) {
+                return to_u16(STANDARD_STRINGS.len() + i, "the CFF string count");
+            }
+            if let Some(i) = extra.iter().position(|s| s.as_slice() == bytes) {
+                return to_u16(STANDARD_STRINGS.len() + self.strings.len() + i, "the CFF string count");
+            }
+            extra.push(bytes.to_vec());
+            to_u16(STANDARD_STRINGS.len() + self.strings.len() + extra.len() - 1, "the CFF string count")
+        };
+        let ros = [i64::from(sid_of(registry)?), i64::from(sid_of(ordering)?), supplement];
+        let fd_name_sid = i64::from(sid_of(fd_name)?);
+        let ints_entry = |op: u16, values: &[i64]| -> Result<Entry> {
+            Ok(Entry { op, operands: values.iter().map(|v| dict_int(*v)).collect::<Result<_>>()?, ints: values.iter().map(|v| Some(*v)).collect() })
+        };
+        let mut top = vec![ints_entry(ROS, &ros)?];
+        top.extend(self.top.iter().filter(|e| !matches!(e.op, ENCODING | PRIVATE | CHARSET | ROS | CID_COUNT)).cloned());
+        top.push(ints_entry(CID_COUNT, &[i64::try_from(n).unwrap_or(0)])?);
+        let font_dict = vec![ints_entry(FONT_NAME, &[fd_name_sid])?];
+        let mut cid: Cff<'_> = self.clone();
+        cid.strings.extend(extra.iter().map(Vec::as_slice));
+        cid.top = top;
+        cid.cid = true;
+        cid.encoding = None;
+        cid.charset = (0..n).map(|g| to_u16(g, "a CID")).collect::<Result<_>>()?;
+        cid.font_dicts = vec![font_dict];
+        cid.fd_select = vec![0; n];
+        if cid.privates.is_empty() {
+            cid.privates.push(Private { dict: Vec::new(), subrs: None, subrs_at: None, local: None });
+        }
+        let identity: Vec<u16> = (0..n).map(|g| to_u16(g, "a glyph id")).collect::<Result<_>>()?;
+        cid.rebuild_with(&identity, None, replace, false)
     }
 
     /// Gives the Top DICT operator `op` the integer operands `values`, replacing its entry or
@@ -767,5 +845,15 @@ mod tests {
         // Offsets that go backwards.
         let bad = [0u8, 2, 1, 1, 3, 2, b'a', b'b'];
         assert!(index(Data::new(TAG, &bad), 0).is_err());
+    }
+
+    /// Ranges whose starts go back would each fill up to every glyph again.
+    #[test]
+    fn fd_select_ranges_out_of_order_are_refused() {
+        // Format 3, 2 ranges: glyphs 0-2 in Font DICT 0, 3 in 1; sentinel 4.
+        let good = [3u8, 0, 2, 0, 0, 0, 0, 3, 1, 0, 4];
+        assert_eq!(read_fd_select(Data::new(TAG, &good), 0, 4).unwrap(), [0, 0, 0, 1]);
+        let bad = [3u8, 0, 4, 0, 0, 0, 0, 3, 1, 0, 0, 0, 0, 3, 1, 0, 4];
+        assert!(read_fd_select(Data::new(TAG, &bad), 0, 4).is_err());
     }
 }

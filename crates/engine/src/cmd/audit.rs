@@ -122,6 +122,7 @@ const STRAIGHTEN_MARGIN: f64 = 1e-6;
 const FIX_LABEL: &str = "Fix Audit Results";
 const NO_RUN: &str = "no audit has run on this document since it was opened: run audit.run first";
 
+mod cache;
 mod font_steps;
 mod staged;
 
@@ -140,7 +141,7 @@ fn run_specs() -> Vec<CommandSpec> {
             "Run Audit",
             [],
             None,
-            "{target?: \"document\" | path | [paths] (default the open document; several files or a folder of compiled fonts are also one family), profile?: id (default the document's default profile, else the application's, else universal), checks?: [id | prefix*], exclude?: [id | prefix*], groups?: [group], scope?: [\"source\" | \"binary\" | \"family\"], glyphs?: [names, indexes, first-last ranges, /CID] (entries that match nothing are warned about), glyphFile?: path (the same entries in a file), masters?: [ids], layers?: [ids], minSeverity?: \"info\" | \"warn\" | \"fail\", config?: {checkId: {threshold: number}}, maxResults?: count = 100, includePassed?: bool = false, includeIgnored?: bool = false, network?: bool = false} runs the checks of every scope and changes nothing: layer checks on every layer of the selected glyphs except backup layers (or the layers in `layers`), glyph and source checks on the source, binary checks on each compiled font (a source's exporting instances and variable font are compiled in memory and their findings name the source field behind a compiled value), family checks on two or more fonts. Turned-on check modules (none in safe mode) run on the same layers under any profile with layer checks; their results have the check id check.plugin.<module>.<name>, group plugin and no fix, and a module that fails is listed once in checks with status error and a message. On a compiled font the outline checks read the decoded file and checks that need source data are skipped. A check whose preconditions do not hold is skipped with the reason. A pattern that matches no check is an error. A capped check with more than maxResults results in one font gives one info result with the count instead. Results on the source's ignore list are counted in summary.ignored and listed only with includeIgnored. A run on the open document is kept for audit.results and audit.fix. A result's fix gives the audit.fix call that carries it out: {results: [id]} on the open document, {checks, glyphs, layers} on a source file, {target, checks} on one compiled font file. Every run has a new runId, which audit.results, audit.fix and audit.export take to make sure the kept run is still that one → {schema, tool, runId, target: {kind, path, fonts: [{id, name, path, instance, format}]}, document?: {title, revision}, profile, config, summary: {fail, warn, info, passed, skipped, ignored, errors, truncated}, checks: [{id, status, results, reason?, message?}], results: [{id, check, code, severity, message, location: {font, glyph, master, layer, shapes?, points?, segments?, point?, bounds?, table?, field?, sourceField?, instance?, fonts?, masters?}, data, fix: {available, id?, safe?, description?, command?, params?, via?}, ignored, stale}], warnings?: [text]}",
+            "{target?: \"document\" | path | [paths] (default the open document; several files or a folder of compiled fonts are also one family), profile?: id (default the document's default profile, else the application's, else universal), checks?: [id | prefix*], exclude?: [id | prefix*], groups?: [group], scope?: [\"source\" | \"binary\" | \"family\"], glyphs?: [names, indexes, first-last ranges, /CID] (entries that match nothing are warned about), glyphFile?: path (the same entries in a file), masters?: [ids], layers?: [ids], minSeverity?: \"info\" | \"warn\" | \"fail\", config?: {checkId: {threshold: number}}, maxResults?: count = 100, includePassed?: bool = false, includeIgnored?: bool = false, network?: bool = false, all?: bool = false} runs the checks of every scope and changes nothing: layer checks on every layer of the selected glyphs except backup layers (or the layers in `layers`), glyph and source checks on the source, binary checks on each compiled font (a source's exporting instances and variable font are compiled in memory and their findings name the source field behind a compiled value), family checks on two or more fonts. Turned-on check modules (none in safe mode) run on the same layers under any profile with layer checks; their results have the check id check.plugin.<module>.<name>, group plugin and no fix, and a module that fails is listed once in checks with status error and a message. On a compiled font the outline checks read the decoded file and checks that need source data are skipped. A check whose preconditions do not hold is skipped with the reason. A pattern that matches no check is an error. A capped check with more than maxResults results in one font gives one info result with the count instead. Results on the source's ignore list are counted in summary.ignored and listed only with includeIgnored. A run on the open document is kept for audit.results and audit.fix; the next run on it reuses the layer-check results of each glyph that has not changed since, when the glyphs its components reach, the rest of the font, the layer checks and their settings have not changed either (all: true examines every glyph again). A result's fix gives the audit.fix call that carries it out: {results: [id]} on the open document, {checks, glyphs, layers} on a source file, {target, checks} on one compiled font file. Every run has a new runId, which audit.results, audit.fix and audit.export take to make sure the kept run is still that one → {schema, tool, runId, target: {kind, path, fonts: [{id, name, path, instance, format}]}, document?: {title, revision}, profile, config, summary: {fail, warn, info, passed, skipped, ignored, errors, truncated}, checks: [{id, status, results, reason?, message?}], results: [{id, check, code, severity, message, location: {font, glyph, master, layer, shapes?, points?, segments?, point?, bounds?, table?, field?, sourceField?, instance?, fonts?, masters?}, data, fix: {available, id?, safe?, description?, command?, params?, via?}, ignored, stale}], warnings?: [text]}",
             always,
             run
         )
@@ -218,6 +219,10 @@ struct Run {
     warnings: Vec<String>,
     /// The check modules that run on the same layers as the layer checks.
     modules: crate::extensions::ModuleChecks,
+    /// The layer reports of the document's kept run, reused where nothing they read changed.
+    cache: Option<Arc<cache::LayerCache>>,
+    /// Whether the run records layer reports for the next one: only a run on the open document.
+    keeps_cache: bool,
 }
 
 /// Only the open document can be audited so far.
@@ -393,6 +398,8 @@ fn read_run(p: &Params, s: &Session, font: &Font, settings: &DocumentSettings) -
         network: p.bool_or("network", false)?,
         warnings,
         modules,
+        cache: None,
+        keeps_cache: false,
     })
 }
 
@@ -466,6 +473,8 @@ struct Examined {
     hits: Vec<Hit>,
     tally: audit::run::Tally,
     modules: crate::extensions::ModuleRun,
+    /// The layer reports of the target's first font, for the next run.
+    cache: cache::LayerCache,
 }
 
 /// The layers a run examines, in font order.
@@ -545,8 +554,18 @@ fn examine_layers(
     let font = ctx.font;
     let place = places.entry(fi).or_default();
     if !layer_checks.is_empty() {
+        // Only the open document (the first and only font of its target) keeps a cache.
+        let keeps = run.keeps_cache && fi == 0;
+        let cached = run.cache.as_deref().filter(|c| keeps && c.key_matches(ctx, run, layer_checks));
+        if keeps {
+            ex.cache.start(ctx, run, layer_checks);
+        }
         for (_, g, li, layer) in chosen {
-            let report = audit::audit_layer(ctx, g, layer, layer_checks, &run.config);
+            let kept = cached.and_then(|c| c.reports(ctx, g)).and_then(|r| r.iter().find(|(id, _)| *id == layer.id)).map(|(_, r)| r.clone());
+            let report = kept.unwrap_or_else(|| audit::audit_layer(ctx, g, layer, layer_checks, &run.config));
+            if keeps {
+                ex.cache.record(font, g, &layer.id, &report);
+            }
             place.layers.insert((g.name.clone(), layer.id.clone()), (*li, layer.master.clone()));
             ex.tally.absorb(layer_checks, report);
         }
@@ -1215,6 +1234,8 @@ pub struct KeptRun {
     report: Value,
     refs: Vec<ResultRef>,
     run_id: String,
+    /// The layer reports, for the next run (`audit.glyphHashCache`).
+    cache: Option<Arc<cache::LayerCache>>,
 }
 
 fn kept_run(d: &DocState) -> Option<&KeptRun> {
@@ -1233,6 +1254,7 @@ fn glyph_changed(then: &Font, now: &Font, glyph: &str) -> bool {
 
 fn run(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("audit.run", v)?;
+    let all = p.bool_or("all", false)?;
     if let Some(paths) = target_paths(&p)? {
         let mut t = load_paths(&paths)?;
         let first = t.srcs.first().map(|s| s.model.clone()).unwrap_or_else(|| Arc::new(Font::new("")));
@@ -1249,9 +1271,13 @@ fn run(s: &mut Session, v: &Value) -> Result<Value> {
     let doc = s.doc()?;
     let mut t = document_target_of(doc);
     let font = doc.font.clone();
-    let run = read_run(&p, s, &font, &t.settings)?;
-    let ex = examine_target(&mut t, &run);
-    keep_run(s, &t, &run, &ex, font, next_run_id())
+    let mut run = read_run(&p, s, &font, &t.settings)?;
+    run.keeps_cache = true;
+    if !all {
+        run.cache = kept_run(doc).and_then(|k| k.cache.clone());
+    }
+    let mut ex = examine_target(&mut t, &run);
+    keep_run(s, &t, &run, &mut ex, font, next_run_id())
 }
 
 /// Ids of runs: unique for the life of the process, so a result list can tell whether the
@@ -1287,7 +1313,7 @@ pub(super) fn check_run_id(p: &Params, d: &DocState) -> Result<()> {
 
 /// Keeps the run `ex` of the open document (which examined `font`) for `audit.results` and
 /// `audit.fix` under `run_id`, and returns its result document.
-fn keep_run(s: &mut Session, t: &Target, run: &Run, ex: &Examined, font: Arc<Font>, run_id: String) -> Result<Value> {
+fn keep_run(s: &mut Session, t: &Target, run: &Run, ex: &mut Examined, font: Arc<Font>, run_id: String) -> Result<Value> {
     let mut kept = document(t, run, ex, FixParams::ById, true)?;
     set_run_id(&mut kept, &run_id);
     let report = if run.include_ignored {
@@ -1308,7 +1334,8 @@ fn keep_run(s: &mut Session, t: &Target, run: &Run, ex: &Examined, font: Arc<Fon
             layer: h.finding.location.layer.clone(),
         })
         .collect();
-    s.doc_mut()?.audit = Some(Arc::new(KeptRun { font, report: kept, refs, run_id }));
+    let cache = Some(Arc::new(std::mem::take(&mut ex.cache)));
+    s.doc_mut()?.audit = Some(Arc::new(KeptRun { font, report: kept, refs, run_id, cache }));
     Ok(report)
 }
 

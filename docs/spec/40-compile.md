@@ -213,7 +213,15 @@ Only when at least one axis has a range (`compile.variableOnlyTables`).
 - STAT (`compile.statDefaults`), also allowed in static fonts.
 - CFF2 instead of gvar for the cubic flavour, with its companion tables
   (`compile.cff2VariableBuild`, `compile.cff2CompanionTables`).
-- cvar when hinted control values vary (M10).
+- cvar when the masters' TrueType control values differ (M10.19, `var/cvar.rs`): each other
+  master's values are worked out as the default master's `cvt ` is, and their deltas are written
+  per master region, rounded half to even one region at a time, all-zero regions left out, as
+  fontTools' varLib does. A master with Dehint on has no `cvt `; as in fontTools, it is left out
+  (a sparse master) and the other masters still give their regions. A master at a location
+  another master already has adds no region and, when its values differ, gives a warning;
+  fontTools refuses two masters at one location. When the masters' values do not line up (count, zone and stem names, or
+  where they come from), fontTools drops the font's hinting; FontCraft writes no cvar, keeps the
+  default master's hinting and warns, since those programs still fit the default outlines.
 
 ### 1.8 Assemble and checksum
 
@@ -315,7 +323,7 @@ reference compilers.
 | glyf | S V | read-fonts | write-fonts | no instruction assembler; no cubic outlines |
 | loca | S V | read-fonts | write-fonts | none |
 | CFF  | O | read-fonts | none-yet | whole writer: DICTs, INDEXes, charsets, charstrings, specialiser, subroutiniser, CID structures |
-| CFF2 | C | read-fonts | own (M9.13, M12.25c, M12.25d) | FDSelect not written; hints only where every master's hints share one structure |
+| CFF2 | C | read-fonts | own (M9.13, M12.25c, M12.25d) | FDSelect not written; hints only where every source's hints share one structure |
 | vhea, vmtx | s o v c | read-fonts | write-fonts | none |
 | VORG | o c | read-fonts | none-yet | generated code exists in the repository but is not compiled into the crate |
 | GSUB | s o v c | read-fonts | write-fonts | none (contextual lookups assembled by fea-rs) |
@@ -421,14 +429,14 @@ FontCraft.
 subroutine INDEX, one Font DICT in the FDArray (no FDSelect), a Private DICT with `blend`, the
 charstrings with `blend` and `vsindex`, and the item variation store with no items. The
 charstrings are specialised as fontTools specialises a `CFF2` merge, and the export subroutinises
-the table when that makes it smaller (M12.25c). Not written: hints and FDSelect for CID-keyed
-fonts.
+the table when that makes it smaller (M12.25c), and writes blended hints (M12.25d, M12.25e). Not
+written: FDSelect for CID-keyed fonts.
 
 | What | fontmake `-o variable-cff2` | FontCraft |
 |---|---|---|
 | Charstrings | specialised (`hlineto`, `hvcurveto`…, fontTools `specializeCommands` with blended operands, up to 512 operands) and subroutinised by `tx` (cffsubr) | specialised the same way, byte for byte on the test glyphs; subroutinised by our port of compreffor's method, kept when smaller, off with Disable Subroutines or `subroutinize: false`. A subroutine may hold some operands of a `blend` while the call site holds the rest: the operand stack is shared across calls, and the call number never overflows it |
 | Blend runs | varying operands share a `blend` while the run stays below the 513-operand stack | the same; a run past the stack is split |
-| Hints | the hints of the masters' CFF tables, merged into blended stems and masks | none, with a warning when the source has manual PostScript hints |
+| Hints | the hints of the masters' CFF tables, merged into blended stems and masks | the same merge over every source of the glyph, intermediate and alternate layers included; autohinted sources are hinted together, so they share one structure; a glyph whose sources' hints still differ in structure is written without hints, with a warning |
 | Private DICT | blended where the masters differ; a list some master lacks keeps the default's | the same, with a warning; BlueScale, BlueShift and BlueFuzz blended too |
 | Composites | decomposed in each master; a composite follows its components' intermediate layers | the same: a decomposed composite gains its components' intermediate locations as sources |
 | `post` | 2.0 with names (varLib switches CFF2 fonts to it) | 2.0 with names |
@@ -688,13 +696,14 @@ causes; none comes from the handbook's keys, which no corpus instance at a maste
 | Family, style, PostScript and style-map names | the `<instance>` element; style-map names it leaves out are ufo2ft's fallbacks from the style name |
 | Names of one style in the masters' UFOs (PostScript, full, typographic, WWS, compatible, unique id, style-map) | left out, unless the source has one master and the instance sits at it |
 | Other font information | the default source's; numbers interpolated over the masters |
+| PostScript weight name, between masters | from the interpolated weight class, rounded to hundreds (fontMath's names, `Thin` to `Black`) |
+| PANOSE, between masters | the digits every source with PANOSE shares, 0 where they differ; none when all are 0 or the default source has none |
+| Embedding type, underline thickness and position | glyphsLib's `[3]`, 50 and -100 where no source states them |
 | `usWeightClass`, `usWidthClass` | the user location on a `wght` or `wdth` axis (weight truncated, width the nearest class), over the masters' classes; the instance's own parameters win |
-| `<rules>` the reader does not make alternate layers | glyphs swapped where a rule holds at the instance's design location; in a variable font, feature variations under the lib key's first tag, `rclt` for `processing="last"`, else `rvrn` |
+| `<rules>` the reader does not make alternate layers | glyphs swapped where a rule holds at the instance's design location; in a variable font, feature variations under each tag of the lib key, `rclt` for `processing="last"`, else `rvrn` |
 
 One case is known to differ: a single-source designspace whose instance states no style-map
-names takes ufo2ft's fallbacks, where fontmake keeps the UFO's own style-map names. A
-`featureVarsFeatureTag` lib key that lists several tags gives the first only; fontTools registers
-the rules under each.
+names takes ufo2ft's fallbacks, where fontmake keeps the UFO's own style-map names.
 
 **Against the handbook.** TrueType composites with overlapping or transformed components stay
 composites by default, as fontc and fontmake keep them. The texts of the Keep Overlapping
@@ -862,6 +871,7 @@ Differences kept:
 | A Type 1 glyph whose replacement hint set holds two overlapping stems | `tx` writes the hint masks and warns | the glyph's hints dropped, with a note | the CFF writer refuses overlapping stems in one hint mask, which the format forbids |
 | Charstring operators of a Type 1 glyph | `tx` chooses its own operators | the CFF writer's specialised operators, `hstemhm` when a counter mask is present | the drawn paths are the same; the operators are not compared |
 | CFF2 → CFF oracle | fontTools 4.66 `CFF2ToCFF` fails on a table with local subroutines, and on recalculating `hhea` after it renames the glyphs | — | the measure expands the subroutines first and keeps the stated bounds |
+| A `dotsection` in a `CFF2` charstring: instancing, expanding or subroutinising it | fontTools' instancer keeps it | left out | `CFF2` has no `dotsection`, and it draws nothing; CFF → CFF2 drops it the same way |
 
 ---
 

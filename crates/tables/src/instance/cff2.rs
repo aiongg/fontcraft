@@ -3,9 +3,15 @@
 //! (both MIT, Copyright (c) 2019 Google LLC, Behdad Esfahbod and the fontTools authors). Written
 //! anew here.
 //!
-//! - Every charstring is run with its subroutine calls followed, so the result has no
-//!   subroutines (fontTools desubroutinizes too). Each value a `blend` produces becomes an
-//!   [`Item`]: its default and one delta per region of its `vsindex`.
+//! - Every charstring has its subroutine calls expanded by the CFF crate's
+//!   [`fontcraft_cff::subr::Expander`], so the result has no subroutines (fontTools
+//!   desubroutinizes too). Each value a `blend` produces becomes an [`Item`]: its default and one
+//!   delta per region of its `vsindex`.
+//! - The byte-level pieces (INDEX, FDSelect, DICT and charstring numbers, runs of blended
+//!   operands, generic segments) are [`fontcraft_cff::raw`]'s and
+//!   [`fontcraft_cff::cff2::write_operands`]'s. This module keeps the blended values, their
+//!   resolution and the layout of the two tables. Charstring numbers are written exactly
+//!   (`encode_t2_number_exact`); blend runs fill the `maxstack` stack.
 //! - A full instance adds each item's delta at the location, rounded half to even as Python's
 //!   `round` does, and the variation store goes. A partial instance rebases the regions of each
 //!   variation-store subtable as any item variation store is rebased (see `partial.rs`), adds the
@@ -23,17 +29,25 @@
 //!
 //! Counts read from the table are capped (glyphs, Font DICTs, DICT entries, operators per glyph
 //! and per table, items and their deltas, subroutine nesting), and so is the memory the
-//! operators and items take ([`MAX_CHARSTRING_MEMORY`]). A path operator with an operand count
-//! the specification does not allow is refused.
+//! operators and items take ([`MAX_CHARSTRING_MEMORY`]); a charstring, as stored and with its
+//! calls expanded, is held to that memory too. Each charstring written is held to 65,535 bytes,
+//! and the stack to 513 values, read and written, whatever `maxstack` says. A `dotsection`, which
+//! `CFF2` does not have and which draws nothing, is left out.
+//! A path operator with an operand count the specification does not allow is refused.
 
 #[cfg(test)]
 #[path = "cff2_tests.rs"]
 mod tests;
 
+use fontcraft_cff::cff2::{Arg, Cff2Error, OperandStyle, write_operands};
+use fontcraft_cff::raw::{
+    self, FdSelectFormat, RelSeg, blob as raw_blob, index_len, operands_fit, operator_len as op_len, push_operator as put_op, read_u16, read_u32,
+};
+use fontcraft_cff::subr::{CharstringSet, Expander, SubrError};
 use read_fonts::tables::variations::ItemVariationStore as ReadStore;
 use read_fonts::{FontData, FontRead};
 
-use crate::limits::{CharstringMemory, MAX_CFF_STACK, MAX_CFF2_STACK, MAX_CHARSTRING, MAX_CHARSTRING_MEMORY, MAX_SFNT, MAX_SUBR_NESTING};
+use crate::limits::{CharstringMemory, MAX_CFF_STACK, MAX_CFF2_STACK, MAX_CHARSTRING, MAX_CHARSTRING_MEMORY, MAX_SFNT};
 use crate::metrics::{Contour, Pt, Seg, exact_bounds};
 use crate::sfnt::SfntFont;
 use crate::{Result, TablesError};
@@ -52,8 +66,6 @@ const MAX_DICT_ENTRIES: usize = 4_096;
 const MAX_FONT_DICTS: usize = 256;
 /// Most glyphs a CharStrings INDEX may hold.
 const MAX_GLYPHS: usize = 65_535;
-/// Most bytes one real number in a DICT may take.
-const MAX_REAL_BYTES: usize = 32;
 /// The CIDCount a CID-keyed CFF table implies when it states none.
 const DEFAULT_CID_COUNT: usize = 8_720;
 
@@ -79,6 +91,27 @@ const CFF2_ONLY_TOP: [u16; 1] = [OP_MAXSTACK];
 
 fn invalid(what: impl Into<String>) -> TablesError {
     TablesError::invalid(what)
+}
+
+/// A reader's or writer's error from the CFF crate, its message kept.
+fn cff(e: SubrError) -> TablesError {
+    match e {
+        SubrError::Invalid(m) => TablesError::Invalid(m),
+        SubrError::Unsupported(m) => TablesError::Unsupported(m),
+        SubrError::TooLarge { what, limit } => TablesError::TooLarge { what, limit },
+        other => invalid(other.to_string()),
+    }
+}
+
+fn number_err(e: fontcraft_cff::Error) -> TablesError {
+    invalid(e.to_string())
+}
+
+fn operands_err(e: Cff2Error, stack: usize) -> TablesError {
+    match e {
+        Cff2Error::StackOverflow { .. } => TablesError::TooLarge { what: "the operands of one blend", limit: stack },
+        other => invalid(other.to_string()),
+    }
 }
 
 fn in_glyph(e: TablesError, gid: usize) -> TablesError {
@@ -294,10 +327,9 @@ impl Table {
                 }
             }
         };
-        let stack_limit = match top.iter().find(|e| e.op == OP_MAXSTACK).and_then(|e| e.vals.first()) {
-            Some(v) if v.v.is_finite() && v.v > MAX_CFF2_STACK as f64 => (v.v as usize).min(u16::MAX as usize),
-            _ => MAX_CFF2_STACK,
-        };
+        // fontTools takes the stack as 513 values whatever `maxstack` says, and a blend run
+        // written deeper could not be read back, so `maxstack` is not read.
+        let stack_limit = MAX_CFF2_STACK;
 
         let (regions, datas) = match offset(OP_VSTORE)? {
             Some(at) => {
@@ -320,7 +352,7 @@ impl Table {
         }
         let mut font_dicts = Vec::with_capacity(fds.len());
         let mut privates = Vec::with_capacity(fds.len());
-        let mut local_subrs: Vec<Vec<&[u8]>> = Vec::with_capacity(fds.len());
+        let mut local_subrs: Vec<Vec<Vec<u8>>> = Vec::with_capacity(fds.len());
         for fd in fds {
             let entries = parse_dict(fd, None, &mut items, &mut budget)?;
             if entries.iter().any(|e| e.blended) {
@@ -348,27 +380,45 @@ impl Table {
                 if rel.v < 0.0 || rel.v > MAX_SFNT as f64 {
                     return Err(invalid("a Subrs offset is out of range"));
                 }
-                subrs = read_index(data, at + rel.v as usize, true)?.items;
+                subrs = read_index(data, at + rel.v as usize, true)?.items.into_iter().map(<[u8]>::to_vec).collect();
             }
             privates.push(Private { entries: entries_p, vsindex });
             local_subrs.push(subrs);
             font_dicts.push(entries);
         }
         let fd_select = match offset(OP_FDSELECT)? {
-            Some(at) => Some(read_fd_select(data, at, charstrings.len())?),
+            Some(at) => {
+                let f = raw::read_fd_select(data, at, charstrings.len(), true).map_err(cff)?;
+                Some((f.map, f.format))
+            }
             None => None,
         };
 
-        let mut glyphs = Vec::with_capacity(charstrings.len());
+        // Subroutine calls are expanded by the CFF crate, one glyph at a time; what comes back is
+        // decoded here, blends and all.
+        let glyph_count = charstrings.len();
+        let set = CharstringSet {
+            cff2: true,
+            charstrings: charstrings.into_iter().map(<[u8]>::to_vec).collect(),
+            global_subrs: global.into_iter().map(<[u8]>::to_vec).collect(),
+            local_subrs,
+            fd_select: fd_select.as_ref().map(|(m, _)| m.clone()).unwrap_or_default(),
+            fd_vsindex: privates.iter().map(|p| u16::try_from(p.vsindex).unwrap_or(u16::MAX)).collect(),
+            regions: region_counts.clone(),
+            max_stack: stack_limit,
+        };
+        // An expanded glyph may pass the 65,535 bytes a charstring holds: its instance resolves
+        // the blends and is checked as it is written. Its operators and items are charged to
+        // `limit` as they are read.
+        let mut expander = Expander::with_limits(&set, MAX_OPS_PER_TABLE, limit).map_err(cff)?;
+        let mut glyphs = Vec::with_capacity(glyph_count);
         let mut ops_total = 0usize;
-        for (gid, cs) in charstrings.iter().enumerate() {
+        for gid in 0..glyph_count {
             let fd = fd_select.as_ref().and_then(|(m, _)| m.get(gid).copied()).map_or(0, usize::from);
             let private = privates.get(fd).ok_or_else(|| invalid(format!("glyph {gid} names Font DICT {fd}, which does not exist")))?;
-            let local = local_subrs.get(fd).map(Vec::as_slice).unwrap_or_default();
+            let cs = expander.glyph(gid).map_err(cff)?;
             budget.memory.charge(std::mem::size_of::<Glyph>())?;
             let mut run = Run {
-                global: &global,
-                local,
                 region_counts: &region_counts,
                 vsindex: private.vsindex,
                 stack: Vec::new(),
@@ -379,7 +429,7 @@ impl Table {
                 items: &mut items,
                 budget: &mut budget,
             };
-            run.run(cs, 0).map_err(|e| in_glyph(e, gid))?;
+            run.run(&cs).map_err(|e| in_glyph(e, gid))?;
             if !run.stack.is_empty() {
                 return Err(in_glyph(invalid("operands are left at the end of the charstring"), gid));
             }
@@ -618,7 +668,7 @@ impl Table {
             _ => 255,
         };
         let fd_select = write_fd_select(&fd_map, format, false)?;
-        let charset = cid_charset(n);
+        let charset = raw::cid_charset(n);
         let strings: [&[u8]; 2] = [b"Adobe", b"Identity"]; // brand-ok: the CFF registry value
         let name: &[u8] = b"CFF2Font";
 
@@ -725,41 +775,22 @@ impl Table {
             put_cs_number(&mut out, m as f64)?;
             out.push(15);
         }
+        let style = OperandStyle { dict: false, max_stack: self.stack_limit, fill_stack: true, exact_numbers: true };
         for c in glyph.cmds() {
-            let mut depth = 0usize;
-            let mut i = 0usize;
-            while let Some(a) = c.args.get(i) {
-                let Some(item) = a.item else {
-                    put_cs_number(&mut out, a.v)?;
-                    depth += 1;
-                    i += 1;
-                    continue;
-                };
-                let k = self.items.get(item).map_or(0, |it| it.deltas.len());
-                let mut run: Vec<&Val> = vec![a];
-                while let Some(b) = c.args.get(i + run.len()).filter(|b| b.item.is_some()) {
-                    if depth + (run.len() + 1) * (k + 1) + 1 > self.stack_limit {
-                        break;
+            // Every blended operand of a glyph uses one subtable, so the first sets the delta count.
+            let k = c.args.iter().find_map(|a| a.item).and_then(|x| self.items.get(x)).map_or(0, |it| it.deltas.len());
+            let args: Vec<Arg> = c
+                .args
+                .iter()
+                .map(|a| match a.item {
+                    None => Arg::Plain(a.v),
+                    Some(x) => {
+                        let deltas = self.items.get(x).map(|it| it.deltas.as_slice()).unwrap_or_default();
+                        Arg::Blend(a.v, (0..k).map(|j| deltas.get(j).copied().unwrap_or(0.0)).collect())
                     }
-                    run.push(b);
-                }
-                if depth + run.len() * (k + 1) + 1 > self.stack_limit {
-                    return Err(TablesError::TooLarge { what: "the operands of one blend", limit: self.stack_limit });
-                }
-                for v in &run {
-                    put_cs_number(&mut out, v.v)?;
-                }
-                for v in &run {
-                    let deltas = v.item.and_then(|x| self.items.get(x)).map(|it| it.deltas.as_slice()).unwrap_or_default();
-                    for j in 0..k {
-                        put_cs_number(&mut out, deltas.get(j).copied().unwrap_or(0.0))?;
-                    }
-                }
-                put_cs_number(&mut out, run.len() as f64)?;
-                out.push(16);
-                depth += run.len();
-                i += run.len();
-            }
+                })
+                .collect();
+            write_operands(&args, k, style, "a charstring", &mut out).map_err(|e| operands_err(e, self.stack_limit))?;
             put_op(&mut out, c.op);
             out.extend_from_slice(c.mask);
             if out.len() > MAX_CHARSTRING {
@@ -778,9 +809,8 @@ struct ItemBudget {
     memory: CharstringMemory,
 }
 
+/// Decodes one charstring whose subroutine calls are expanded.
 struct Run<'a, 'b> {
-    global: &'a [&'a [u8]],
-    local: &'a [&'a [u8]],
     region_counts: &'a [usize],
     vsindex: usize,
     stack: Vec<Val>,
@@ -793,10 +823,7 @@ struct Run<'a, 'b> {
 }
 
 impl Run<'_, '_> {
-    fn run(&mut self, code: &[u8], level: usize) -> Result<()> {
-        if level > MAX_SUBR_NESTING {
-            return Err(invalid(format!("subroutines nest deeper than {MAX_SUBR_NESTING}")));
-        }
+    fn run(&mut self, code: &[u8]) -> Result<()> {
         let cut = || invalid("a charstring is cut short");
         let mut i = 0usize;
         while let Some(&b0) = code.get(i) {
@@ -805,32 +832,17 @@ impl Run<'_, '_> {
                 return Err(TablesError::TooLarge { what: "the operators one glyph runs", limit: MAX_OPS_PER_GLYPH });
             }
             match b0 {
-                28 => {
-                    let v = read_u16(code, i + 1).ok_or_else(cut)? as i16;
-                    self.push(f64::from(v))?;
-                    i += 3;
-                }
-                32..=246 => {
-                    self.push(f64::from(b0) - 139.0)?;
-                    i += 1;
-                }
-                247..=254 => {
-                    let b1 = f64::from(*code.get(i + 1).ok_or_else(cut)?);
-                    let v = if b0 <= 250 { (f64::from(b0) - 247.0) * 256.0 + b1 + 108.0 } else { -(f64::from(b0) - 251.0) * 256.0 - b1 - 108.0 };
+                28 | 32..=255 => {
+                    let (v, next) = raw::read_t2_number(code, i).ok_or_else(cut)?;
                     self.push(v)?;
-                    i += 2;
-                }
-                255 => {
-                    let v = read_u32(code, i + 1).ok_or_else(cut)? as i32;
-                    self.push(f64::from(v) / 65536.0)?;
-                    i += 5;
+                    i = next;
                 }
                 12 => {
                     let b1 = *code.get(i + 1).ok_or_else(cut)?;
                     i += 2;
                     match b1 {
-                        // dotsection and the flex operators
-                        0 | 34..=37 => self.emit(1200 + u16::from(b1), &[])?,
+                        // The flex operators; the expander leaves `dotsection` out.
+                        34..=37 => self.emit(1200 + u16::from(b1), &[])?,
                         3..=5 | 9..=12 | 14 | 15 | 18 | 20..=24 | 26..=30 => {
                             return Err(TablesError::Unsupported(format!("the charstring arithmetic operator 12 {b1}")));
                         }
@@ -848,21 +860,6 @@ impl Run<'_, '_> {
                     let mask = code.get(i + 1..i + 1 + n).ok_or_else(|| invalid("a hint mask is cut short"))?;
                     self.emit(u16::from(b0), mask)?;
                     i += 1 + n;
-                }
-                10 | 29 => {
-                    i += 1;
-                    let v = self.pop_int()?;
-                    let subrs = if b0 == 10 { self.local } else { self.global };
-                    let bias: i64 = match subrs.len() {
-                        0..1240 => 107,
-                        1240..33900 => 1131,
-                        _ => 32768,
-                    };
-                    let sub = usize::try_from(v + bias)
-                        .ok()
-                        .and_then(|k| subrs.get(k).copied())
-                        .ok_or_else(|| invalid(format!("subroutine {v} does not exist")))?;
-                    self.run(sub, level + 1)?;
                 }
                 15 => {
                     i += 1;
@@ -915,27 +912,6 @@ impl Run<'_, '_> {
     }
 }
 
-/// Whether path operator `op` (the operator byte, or 1200 plus the byte after the escape) can
-/// take `n` operands by the charstring specification; any other operator passes.
-fn operands_fit(op: u16, n: usize) -> bool {
-    match op {
-        21 => n == 2,
-        4 | 22 => n == 1,
-        5 => n >= 2 && n.is_multiple_of(2),
-        6 | 7 => n >= 1,
-        8 => n >= 6 && n.is_multiple_of(6),
-        24 => n >= 8 && (n - 2).is_multiple_of(6),
-        // One curve with no line before it is accepted, as fontTools' pen and the converter do.
-        25 => n >= 6 && n.is_multiple_of(2),
-        26 | 27 | 30 | 31 => n >= 4 && n % 4 <= 1,
-        1234 => n == 7,
-        1235 => n == 13,
-        1236 => n == 9,
-        1237 => n == 11,
-        _ => true,
-    }
-}
-
 /// Replaces the top `n * (k + 1)` operands (n defaults, then k deltas for each) by n blended
 /// values.
 fn blend(stack: &mut Vec<Val>, n: usize, k: usize, major: usize, items: &mut Vec<Item>, budget: &mut ItemBudget) -> Result<()> {
@@ -976,7 +952,7 @@ fn encode_cff_glyph(glyph: &Glyph, width: Option<f64>) -> Result<Vec<u8>> {
             if let Some(w) = width.take() {
                 put_cs_number(&mut out, w)?;
             }
-            write_segments(&mut out, &segs)?;
+            raw::write_segments(&mut out, &segs, MAX_CFF_STACK).map_err(number_err)?;
         } else {
             if let Some(w) = width.take() {
                 put_cs_number(&mut out, w)?;
@@ -998,188 +974,33 @@ fn encode_cff_glyph(glyph: &Glyph, width: Option<f64>) -> Result<Vec<u8>> {
     Ok(out)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum RelSeg {
-    Line(f64, f64),
-    Curve([f64; 6]),
-}
-
 /// The relative segments of a path operator; `None` for an operator that is not one.
 fn generalize(op: u16, args: &[Val]) -> Result<Option<Vec<RelSeg>>> {
     let a: Vec<f64> = args.iter().map(|v| v.v).collect();
-    let g = |i: usize| a.get(i).copied().unwrap_or(0.0);
-    let wrong = || invalid(format!("operator {op} has {} operands", a.len()));
-    let mut out = Vec::new();
-    match op {
-        5 => {
-            if !a.len().is_multiple_of(2) {
-                return Err(wrong());
-            }
-            out.extend(a.chunks(2).map(|c| RelSeg::Line(c.first().copied().unwrap_or(0.0), c.get(1).copied().unwrap_or(0.0))));
-        }
-        6 | 7 => {
-            let mut horizontal = op == 6;
-            for v in &a {
-                out.push(if horizontal { RelSeg::Line(*v, 0.0) } else { RelSeg::Line(0.0, *v) });
-                horizontal = !horizontal;
-            }
-        }
-        8 => {
-            if !a.len().is_multiple_of(6) {
-                return Err(wrong());
-            }
-            out.extend(a.chunks(6).map(|c| RelSeg::Curve(std::array::from_fn(|i| c.get(i).copied().unwrap_or(0.0)))));
-        }
-        24 => {
-            if a.len() < 8 || !(a.len() - 2).is_multiple_of(6) {
-                return Err(wrong());
-            }
-            let curves = (a.len() - 2) / 6;
-            for k in 0..curves {
-                out.push(RelSeg::Curve(std::array::from_fn(|i| g(6 * k + i))));
-            }
-            out.push(RelSeg::Line(g(a.len() - 2), g(a.len() - 1)));
-        }
-        25 => {
-            if a.len() < 6 || !(a.len() - 6).is_multiple_of(2) {
-                return Err(wrong());
-            }
-            let lines = (a.len() - 6) / 2;
-            for k in 0..lines {
-                out.push(RelSeg::Line(g(2 * k), g(2 * k + 1)));
-            }
-            out.push(RelSeg::Curve(std::array::from_fn(|i| g(2 * lines + i))));
-        }
-        26 | 27 => {
-            let (first, rest) = if a.len() % 4 == 1 { (g(0), 1) } else { (0.0, 0) };
-            if !(a.len() - rest).is_multiple_of(4) || a.len() < 4 {
-                return Err(wrong());
-            }
-            for (k, c) in a.get(rest..).unwrap_or_default().chunks(4).enumerate() {
-                let c = |i: usize| c.get(i).copied().unwrap_or(0.0);
-                let f = if k == 0 { first } else { 0.0 };
-                out.push(if op == 26 { RelSeg::Curve([f, c(0), c(1), c(2), 0.0, c(3)]) } else { RelSeg::Curve([c(0), f, c(1), c(2), c(3), 0.0]) });
-            }
-        }
-        30 | 31 => {
-            if a.len() < 4 || (!a.len().is_multiple_of(4) && a.len() % 4 != 1) {
-                return Err(wrong());
-            }
-            let m = a.len() / 4;
-            let tail = if a.len() % 4 == 1 { g(a.len() - 1) } else { 0.0 };
-            for k in 0..m {
-                let c = |i: usize| g(4 * k + i);
-                let extra = if k + 1 == m { tail } else { 0.0 };
-                let horizontal = (k % 2 == 0) == (op == 31);
-                out.push(if horizontal {
-                    RelSeg::Curve([c(0), 0.0, c(1), c(2), extra, c(3)])
-                } else {
-                    RelSeg::Curve([0.0, c(0), c(1), c(2), c(3), extra])
-                });
-            }
-        }
-        _ => return Ok(None),
-    }
-    Ok(Some(out))
-}
-
-/// Writes segments as `rlineto` and `rrcurveto` runs of at most 48 operands.
-fn write_segments(out: &mut Vec<u8>, segs: &[RelSeg]) -> Result<()> {
-    let mut i = 0usize;
-    while let Some(first) = segs.get(i) {
-        let is_line = matches!(first, RelSeg::Line(..));
-        let per = if is_line { 2 } else { 6 };
-        let mut count = 0usize;
-        while let Some(s) = segs.get(i) {
-            if matches!(s, RelSeg::Line(..)) != is_line || (count + 1) * per > MAX_CFF_STACK {
-                break;
-            }
-            match s {
-                RelSeg::Line(x, y) => {
-                    put_cs_number(out, *x)?;
-                    put_cs_number(out, *y)?;
-                }
-                RelSeg::Curve(c) => {
-                    for v in c {
-                        put_cs_number(out, *v)?;
-                    }
-                }
-            }
-            count += 1;
-            i += 1;
-        }
-        out.push(if is_line { 5 } else { 8 });
-    }
-    Ok(())
+    raw::generalize(op, &a).map_err(cff)
 }
 
 // ---------- numbers and DICTs ----------
 
+/// A charstring number, exactly as resolved (no rounding to the nearest 16.16 value first).
 pub(crate) fn put_cs_number(out: &mut Vec<u8>, v: f64) -> Result<()> {
-    if !v.is_finite() {
-        return Err(invalid("a charstring number is not finite"));
-    }
-    if v.fract() == 0.0 && (-32768.0..=32767.0).contains(&v) {
-        let n = v as i64;
-        match n {
-            -107..=107 => out.push((n + 139) as u8),
-            108..=1131 => {
-                let m = n - 108;
-                out.extend_from_slice(&[(m / 256 + 247) as u8, (m % 256) as u8]);
-            }
-            -1131..=-108 => {
-                let m = -n - 108;
-                out.extend_from_slice(&[(m / 256 + 251) as u8, (m % 256) as u8]);
-            }
-            _ => {
-                out.push(28);
-                out.extend_from_slice(&(n as i16).to_be_bytes());
-            }
-        }
-        return Ok(());
-    }
-    let fixed = (v * 65536.0).round();
-    if !(f64::from(i32::MIN)..=f64::from(i32::MAX)).contains(&fixed) {
-        return Err(invalid(format!("the number {v} does not fit in a charstring")));
-    }
-    out.push(255);
-    out.extend_from_slice(&(fixed as i32).to_be_bytes());
-    Ok(())
+    raw::encode_t2_number_exact(v, "a charstring number", out).map_err(number_err)
 }
 
+/// A DICT integer in its shortest form, clamped to 32 bits.
 fn dict_int(v: i64) -> Vec<u8> {
-    match v {
-        -107..=107 => vec![(v + 139) as u8],
-        108..=1131 => {
-            let m = v - 108;
-            vec![(m / 256 + 247) as u8, (m % 256) as u8]
-        }
-        -1131..=-108 => {
-            let m = -v - 108;
-            vec![(m / 256 + 251) as u8, (m % 256) as u8]
-        }
-        -32768..=32767 => {
-            let mut b = vec![28];
-            b.extend_from_slice(&(v as i16).to_be_bytes());
-            b
-        }
-        _ => {
-            let mut b = vec![29];
-            b.extend_from_slice(&(v.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32).to_be_bytes());
-            b
-        }
-    }
+    let mut out = Vec::new();
+    let v = v.clamp(i64::from(i32::MIN), i64::from(i32::MAX));
+    // Within 32 bits the encoding cannot fail.
+    let _ = raw::encode_dict_int(v, "a DICT integer", &mut out);
+    out
 }
 
 /// A DICT number: an integer in the shortest form, anything else as a real.
 pub(crate) fn dict_number(v: f64) -> Result<Vec<u8>> {
-    if !v.is_finite() {
-        return Err(invalid("a DICT number is not finite"));
-    }
-    if v.fract() == 0.0 && v.abs() <= f64::from(i32::MAX) {
-        return Ok(dict_int(v as i64));
-    }
-    dict_real(v)
+    let mut out = Vec::new();
+    raw::encode_dict_value(v, "a DICT number", &mut out).map_err(number_err)?;
+    Ok(out)
 }
 
 /// `v` as a DICT real number, also when it is whole, spelled as fontTools spells it (eight
@@ -1191,110 +1012,27 @@ pub(crate) fn dict_real(v: f64) -> Result<Vec<u8>> {
     Ok(out)
 }
 
-fn op_len(op: u16) -> usize {
-    if op >= 1200 { 2 } else { 1 }
-}
-
-fn put_op(out: &mut Vec<u8>, op: u16) {
-    if op >= 1200 {
-        out.extend_from_slice(&[12, (op - 1200) as u8]);
-    } else {
-        out.push(op as u8);
-    }
+/// A DICT number at `i`, reals included, and where the next token starts.
+pub(crate) fn read_dict_number(bytes: &[u8], i: usize) -> Result<(f64, usize)> {
+    raw::read_dict_number(bytes, i).map_err(cff)
 }
 
 fn put_offset(out: &mut Vec<u8>, v: usize) -> Result<()> {
-    let v = i32::try_from(v).map_err(|_| invalid("a CFF offset does not fit in 32 bits"))?;
-    out.push(29);
-    out.extend_from_slice(&v.to_be_bytes());
-    Ok(())
+    raw::push_offset(out, v).map_err(cff)
 }
 
 /// The `vsindex` of a Private DICT (0 when it states none).
 fn private_vsindex(bytes: &[u8]) -> Result<usize> {
-    let entries = parse_dict_skipping_blends(bytes)?;
-    match entries.iter().find(|e| e.op == OP_VSINDEX).and_then(|e| e.vals.first()) {
-        Some(v) if v.v >= 0.0 && v.v.fract() == 0.0 && v.v < 65_536.0 => Ok(v.v as usize),
-        Some(_) => Err(invalid("a Private DICT vsindex is not a small positive integer")),
-        None => Ok(0),
-    }
-}
-
-fn parse_dict_skipping_blends(bytes: &[u8]) -> Result<Vec<Entry>> {
-    let mut out = Vec::new();
-    let mut i = 0usize;
-    let mut vals: Vec<Val> = Vec::new();
-    while let Some(&b0) = bytes.get(i) {
-        let (v, next) = match b0 {
-            28 | 29 | 30 | 32..=254 => read_dict_number(bytes, i)?,
-            23 => {
-                vals.clear();
-                i += 1;
-                continue;
-            }
-            0..=27 => {
-                let (op, next) = if b0 == 12 {
-                    (1200 + u16::from(*bytes.get(i + 1).ok_or_else(|| invalid("a DICT is cut short"))?), i + 2)
-                } else {
-                    (u16::from(b0), i + 1)
-                };
-                if out.len() >= MAX_DICT_ENTRIES {
-                    return Err(TablesError::TooLarge { what: "a DICT's entry count", limit: MAX_DICT_ENTRIES });
-                }
-                out.push(Entry { op, raw: Vec::new(), vals: std::mem::take(&mut vals), blended: false });
-                i = next;
-                continue;
-            }
-            _ => return Err(invalid(format!("byte {b0} is reserved in a DICT"))),
-        };
-        vals.push(Val::plain(v));
-        if vals.len() > MAX_CFF2_STACK {
-            return Err(invalid("a DICT entry has too many operands"));
-        }
-        i = next;
-    }
-    Ok(out)
-}
-
-/// A DICT number at `i`, and where the next token starts.
-pub(crate) fn read_dict_number(bytes: &[u8], i: usize) -> Result<(f64, usize)> {
-    let cut = || invalid("a DICT is cut short");
-    let b0 = *bytes.get(i).ok_or_else(cut)?;
-    Ok(match b0 {
-        28 => (f64::from(read_u16(bytes, i + 1).ok_or_else(cut)? as i16), i + 3),
-        29 => (f64::from(read_u32(bytes, i + 1).ok_or_else(cut)? as i32), i + 5),
-        30 => {
-            let mut text = String::new();
-            let mut j = i + 1;
-            'outer: loop {
-                if j - i > MAX_REAL_BYTES {
-                    return Err(invalid("a DICT real number is too long"));
-                }
-                let b = *bytes.get(j).ok_or_else(cut)?;
-                j += 1;
-                for nib in [b >> 4, b & 0xF] {
-                    match nib {
-                        0..=9 => text.push(char::from(b'0' + nib)),
-                        0xA => text.push('.'),
-                        0xB => text.push('E'),
-                        0xC => text.push_str("E-"),
-                        0xE => text.push('-'),
-                        0xF => break 'outer,
-                        _ => return Err(invalid("a DICT real number holds a reserved nibble")),
-                    }
-                }
-            }
-            let v: f64 = text.parse().map_err(|_| invalid(format!("the DICT real number {text} cannot be read")))?;
-            if !v.is_finite() {
-                return Err(invalid("a DICT real number is not finite"));
-            }
-            (v, j)
-        }
-        32..=246 => (f64::from(b0) - 139.0, i + 1),
-        247..=250 => (f64::from((i32::from(b0) - 247) * 256 + i32::from(*bytes.get(i + 1).ok_or_else(cut)?) + 108), i + 2),
-        251..=254 => (f64::from(-(i32::from(b0) - 251) * 256 - i32::from(*bytes.get(i + 1).ok_or_else(cut)?) - 108), i + 2),
-        _ => return Err(invalid(format!("byte {b0} does not start a DICT number"))),
-    })
+    let entries = raw::parse_dict(bytes, true).map_err(cff)?;
+    let Some(e) = entries.iter().find(|e| e.op == OP_VSINDEX) else { return Ok(0) };
+    let not_small = || invalid("a Private DICT vsindex is not a small positive integer");
+    let v = match e.int(0) {
+        Some(v) => v as f64,
+        // A whole number may be spelled as a real.
+        None if !e.ints.is_empty() => read_dict_number(&e.raw, 0).map_err(|_| not_small())?.0,
+        None => return Err(not_small()),
+    };
+    if v >= 0.0 && v.fract() == 0.0 && v < 65_536.0 { Ok(v as usize) } else { Err(not_small()) }
 }
 
 /// The entries of a DICT. `blend_with` is the region count and the subtable a `blend` uses;
@@ -1375,34 +1113,22 @@ fn encode_dict_vals(vals: &[Val], items: &[Item]) -> Result<Vec<u8>> {
     let mut out = Vec::new();
     let deltas_of = |v: &Val| v.item.and_then(|i| items.get(i)).map(|it| it.deltas.as_slice()).unwrap_or_default();
     let k = vals.iter().map(|v| deltas_of(v).len()).max().unwrap_or(0);
-    if k == 0 {
-        for v in vals {
-            out.extend(dict_number(v.v)?);
-        }
-        return Ok(out);
-    }
-    let mut depth = 0usize;
-    let mut i = 0usize;
-    while i < vals.len() {
-        let room = MAX_CFF2_STACK.saturating_sub(depth + 1) / (k + 1);
-        if room == 0 {
-            return Err(TablesError::TooLarge { what: "the operands of one Private DICT blend", limit: MAX_CFF2_STACK });
-        }
-        let run = vals.get(i..(i + room).min(vals.len())).unwrap_or_default();
-        for v in run {
-            out.extend(dict_number(v.v)?);
-        }
-        for v in run {
-            let d = deltas_of(v);
-            for j in 0..k {
-                out.extend(dict_number(d.get(j).copied().unwrap_or(0.0))?);
+    let args: Vec<Arg> = vals
+        .iter()
+        .map(|v| {
+            if k == 0 {
+                Arg::Plain(v.v)
+            } else {
+                let d = deltas_of(v);
+                Arg::Blend(v.v, (0..k).map(|j| d.get(j).copied().unwrap_or(0.0)).collect())
             }
-        }
-        out.extend(dict_int(run.len() as i64));
-        out.push(23);
-        depth += run.len();
-        i += run.len();
-    }
+        })
+        .collect();
+    let style = OperandStyle { dict: true, max_stack: MAX_CFF2_STACK, fill_stack: true, exact_numbers: false };
+    write_operands(&args, k, style, "a Private DICT entry", &mut out).map_err(|e| match e {
+        Cff2Error::StackOverflow { .. } => TablesError::TooLarge { what: "the operands of one Private DICT blend", limit: MAX_CFF2_STACK },
+        other => invalid(other.to_string()),
+    })?;
     Ok(out)
 }
 
@@ -1425,207 +1151,31 @@ fn fd_dict(entries: &[Entry], size: usize, at: usize) -> Result<Vec<u8>> {
 // ---------- structures ----------
 
 fn blob(data: &[u8], at: usize, len: usize) -> Result<&[u8]> {
-    at.checked_add(len).and_then(|end| data.get(at..end)).ok_or_else(|| invalid("a CFF structure lies outside the table"))
+    raw_blob(data, at, len).map_err(cff)
 }
 
-struct Index<'a> {
-    items: Vec<&'a [u8]>,
+fn read_index(data: &[u8], at: usize, cff2: bool) -> Result<raw::Index<'_>> {
+    raw::read_index(data, at, cff2).map_err(cff)
 }
 
-fn read_index(data: &[u8], at: usize, cff2: bool) -> Result<Index<'_>> {
-    let cut = || invalid("an INDEX is cut short");
-    let (count, head) = if cff2 { (read_u32(data, at).ok_or_else(cut)? as usize, 4) } else { (usize::from(read_u16(data, at).ok_or_else(cut)?), 2) };
-    let start = at.checked_add(head).ok_or_else(cut)?;
-    if count == 0 {
-        return Ok(Index { items: Vec::new() });
-    }
-    let off_size = usize::from(*data.get(start).ok_or_else(cut)?);
-    if !(1..=4).contains(&off_size) {
-        return Err(invalid(format!("an INDEX has offset size {off_size}")));
-    }
-    let offsets_len = count.checked_add(1).and_then(|n| n.checked_mul(off_size)).filter(|n| *n <= data.len()).ok_or_else(cut)?;
-    let offsets_at = start + 1;
-    let base = (offsets_at + offsets_len).checked_sub(1).ok_or_else(cut)?;
-    let read_off = |i: usize| -> Result<usize> {
-        let p = offsets_at + i * off_size;
-        let bytes = data.get(p..p + off_size).ok_or_else(cut)?;
-        Ok(bytes.iter().fold(0usize, |acc, b| (acc << 8) | usize::from(*b)))
-    };
-    let mut items = Vec::with_capacity(count);
-    let mut prev = read_off(0)?;
-    if prev != 1 {
-        return Err(invalid("an INDEX does not start at offset 1"));
-    }
-    for i in 1..=count {
-        let next = read_off(i)?;
-        let (a, b) = (base.checked_add(prev).ok_or_else(cut)?, base.checked_add(next).ok_or_else(cut)?);
-        items.push(data.get(a..b).ok_or_else(|| invalid("an INDEX item lies outside the table"))?);
-        prev = next;
-    }
-    Ok(Index { items })
+fn write_index<I>(out: &mut Vec<u8>, items: I, cff2: bool) -> Result<()>
+where
+    I: IntoIterator + Clone,
+    I::Item: AsRef<[u8]>,
+{
+    raw::write_index(out, items, cff2).map_err(cff)
 }
 
-fn off_size(last: usize) -> usize {
-    match last {
-        0..=0xFF => 1,
-        0x100..=0xFFFF => 2,
-        0x1_0000..=0xFF_FFFF => 3,
-        _ => 4,
-    }
-}
-
-fn index_len(lens: impl Iterator<Item = usize> + Clone, cff2: bool) -> usize {
-    let head = if cff2 { 4 } else { 2 };
-    let count = lens.clone().count();
-    if count == 0 {
-        return head;
-    }
-    let total: usize = lens.sum();
-    head + 1 + (count + 1) * off_size(total + 1) + total
-}
-
-fn write_index<'b>(out: &mut Vec<u8>, items: impl Iterator<Item = &'b [u8]> + Clone, cff2: bool) -> Result<()> {
-    let count = items.clone().count();
-    if cff2 {
-        let c = u32::try_from(count).map_err(|_| TablesError::TooLarge { what: "an INDEX", limit: u32::MAX as usize })?;
-        out.extend_from_slice(&c.to_be_bytes());
-    } else {
-        let c = u16::try_from(count).map_err(|_| TablesError::TooLarge { what: "an INDEX", limit: 65_535 })?;
-        out.extend_from_slice(&c.to_be_bytes());
-    }
-    if count == 0 {
-        return Ok(());
-    }
-    let total: usize = items.clone().map(<[u8]>::len).sum();
-    let size = off_size(total + 1);
-    out.push(size as u8);
-    let put = |out: &mut Vec<u8>, v: usize| {
-        let bytes = (v as u32).to_be_bytes();
-        out.extend_from_slice(bytes.get(4 - size..).unwrap_or_default());
-    };
-    let mut offset = 1usize;
-    put(out, offset);
-    for item in items.clone() {
-        offset += item.len();
-        put(out, offset);
-    }
-    for item in items {
-        out.extend_from_slice(item);
-    }
-    Ok(())
-}
-
-/// The Font DICT of every glyph and the FDSelect format.
-fn read_fd_select(data: &[u8], at: usize, glyphs: usize) -> Result<(Vec<u16>, u8)> {
-    let cut = || invalid("the FDSelect is cut short");
-    let format = *data.get(at).ok_or_else(cut)?;
-    match format {
-        0 => Ok((data.get(at + 1..at + 1 + glyphs).ok_or_else(cut)?.iter().map(|b| u16::from(*b)).collect(), 0)),
-        3 | 4 => {
-            let wide = format == 4;
-            let (count, mut p) = if wide {
-                (read_u32(data, at + 1).ok_or_else(cut)? as usize, at + 5)
-            } else {
-                (usize::from(read_u16(data, at + 1).ok_or_else(cut)?), at + 3)
-            };
-            if count == 0 || count > glyphs {
-                return Err(invalid(format!("the FDSelect has {count} ranges for {glyphs} glyphs")));
-            }
-            let mut map = vec![0u16; glyphs];
-            let read_first = |p: usize| if wide { read_u32(data, p).map(|v| v as usize) } else { read_u16(data, p).map(usize::from) };
-            let mut first = read_first(p).ok_or_else(cut)?;
-            for _ in 0..count {
-                let fd = if wide { read_u16(data, p + 4).ok_or_else(cut)? } else { u16::from(*data.get(p + 2).ok_or_else(cut)?) };
-                p += if wide { 6 } else { 3 };
-                let next = read_first(p).ok_or_else(cut)?;
-                if next < first || next > glyphs {
-                    return Err(invalid("the FDSelect ranges are out of order"));
-                }
-                for slot in map.get_mut(first..next).ok_or_else(cut)? {
-                    *slot = fd;
-                }
-                first = next;
-            }
-            Ok((map, format))
-        }
-        other => Err(invalid(format!("FDSelect format {other}"))),
-    }
-}
-
-/// An FDSelect in `format` (0, 3 or, in CFF2, 4); any other value picks the smaller of 0 and 3
-/// (3 on a tie), as fontTools does for a table it builds.
+/// An FDSelect in the stored `format` (0, 3 or, in CFF2, 4); any other value picks the smaller of
+/// 0 and 3, 3 on a tie, as fontTools does for a table it builds.
 fn write_fd_select(map: &[u16], format: u8, cff2: bool) -> Result<Vec<u8>> {
-    let f0 = || {
-        let mut v = vec![0u8];
-        v.extend(map.iter().map(|f| *f as u8));
-        v
+    let format = match format {
+        0 => FdSelectFormat::Format0,
+        3 => FdSelectFormat::Format3,
+        4 if cff2 => FdSelectFormat::Format4,
+        _ => FdSelectFormat::Smaller { zero_on_tie: false },
     };
-    let mut ranges: Vec<(usize, u16)> = Vec::new();
-    for (g, fd) in map.iter().enumerate() {
-        if ranges.last().is_none_or(|(_, f)| f != fd) {
-            ranges.push((g, *fd));
-        }
-    }
-    if map.iter().any(|f| *f > 255) && (!cff2 || format != 4) {
-        return Err(TablesError::Unsupported("more than 256 Font DICTs in a CFF table".into()));
-    }
-    let f3 = || -> Result<Vec<u8>> {
-        let mut v = vec![3u8];
-        v.extend_from_slice(&u16::try_from(ranges.len()).map_err(|_| invalid("too many FDSelect ranges"))?.to_be_bytes());
-        for (first, fd) in &ranges {
-            v.extend_from_slice(&u16::try_from(*first).map_err(|_| invalid("an FDSelect glyph id does not fit 16 bits"))?.to_be_bytes());
-            v.push(*fd as u8);
-        }
-        v.extend_from_slice(&u16::try_from(map.len()).map_err(|_| invalid("too many glyphs for FDSelect"))?.to_be_bytes());
-        Ok(v)
-    };
-    match format {
-        0 => Ok(f0()),
-        3 => f3(),
-        4 if cff2 => {
-            let mut v = vec![4u8];
-            v.extend_from_slice(&(ranges.len() as u32).to_be_bytes());
-            for (first, fd) in &ranges {
-                v.extend_from_slice(&(*first as u32).to_be_bytes());
-                v.extend_from_slice(&fd.to_be_bytes());
-            }
-            v.extend_from_slice(&(map.len() as u32).to_be_bytes());
-            Ok(v)
-        }
-        _ => {
-            let (a, b) = (f0(), f3()?);
-            Ok(if a.len() < b.len() { a } else { b })
-        }
-    }
-}
-
-/// The charset of CIDs 1 to n−1 in order, the smaller of format 0 and one range, as fontTools
-/// packs it.
-fn cid_charset(n: usize) -> Vec<u8> {
-    let mut ranged = Vec::new();
-    if n >= 2 {
-        let left = n - 2;
-        let fmt = if left > 255 { 2u8 } else { 1 };
-        ranged.push(fmt);
-        ranged.extend_from_slice(&1u16.to_be_bytes());
-        if fmt == 1 {
-            ranged.push(left as u8);
-        } else {
-            ranged.extend_from_slice(&(left as u16).to_be_bytes());
-        }
-    } else {
-        ranged.push(1);
-    }
-    let format0_len = 1 + 2 * n.saturating_sub(1);
-    if format0_len < ranged.len() {
-        let mut v = vec![0u8];
-        for cid in 1..n {
-            v.extend_from_slice(&(cid as u16).to_be_bytes());
-        }
-        v
-    } else {
-        ranged
-    }
+    raw::write_fd_select(map, format, cff2).map_err(cff)
 }
 
 /// One region of a variation store: start, peak and end per axis.
@@ -1660,14 +1210,6 @@ fn read_store(data: &[u8], axis_count: usize) -> Result<(Vec<Region>, Vec<Vec<u1
         }
     }
     Ok((regions, datas))
-}
-
-fn read_u16(b: &[u8], at: usize) -> Option<u16> {
-    Some(u16::from_be_bytes(b.get(at..at.checked_add(2)?)?.try_into().ok()?))
-}
-
-fn read_u32(b: &[u8], at: usize) -> Option<u32> {
-    Some(u32::from_be_bytes(b.get(at..at.checked_add(4)?)?.try_into().ok()?))
 }
 
 // ---------- bounds ----------

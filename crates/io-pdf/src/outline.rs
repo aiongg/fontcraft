@@ -66,6 +66,7 @@ impl PageMap {
                 }
                 Ok(PageMap { scale: units_per_em / height, x0: llx, y1: ury, top: ascender })
             }
+            Placement::Origin => Ok(PageMap { scale: 1.0, x0: llx, y1: lly, top: 0.0 }),
         }
     }
 

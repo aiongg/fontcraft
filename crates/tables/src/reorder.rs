@@ -4,13 +4,15 @@
 //!
 //! The tables that index glyphs and are rewritten: `glyf` and `loca` (composite glyphs follow),
 //! `hmtx` and `vmtx` (with the long-metric counts of `hhea` and `vhea`), `cmap`, `post`,
-//! `CFF ` (charstrings, charset, FDSelect), `GDEF`, `GSUB`, `GPOS`, `kern`, `gvar`, `HVAR`,
+//! `CFF ` (charstrings, charset, FDSelect), `CFF2` (charstrings, FDSelect; the variation store
+//! is kept as it is), `GDEF`, `GSUB`, `GPOS`, `kern`, `gvar`, `HVAR`,
 //! `VVAR`, `VORG`, `hdmx` and `LTSH`. A font with another table known to index glyphs (colour,
-//! bitmap, `MATH`, `CFF2`, the Apple layout tables…) is refused; tables that do not index glyphs,
+//! bitmap, `MATH`, the Apple layout tables…) is refused; tables that do not index glyphs,
 //! and unknown tables, pass through byte for byte, as fontTools passes them.
 
 pub(crate) mod be;
 pub(crate) mod cff;
+pub(crate) mod cff2;
 pub(crate) mod cmap;
 pub(crate) mod layout;
 pub(crate) mod names;
@@ -36,9 +38,9 @@ pub struct ReorderOptions {
 }
 
 /// Tables that index glyphs and that [`reorder_glyphs`] does not rewrite.
-const REFUSED: [&[u8; 4]; 26] = [
-    b"CFF2", b"COLR", b"sbix", b"CBLC", b"CBDT", b"EBLC", b"EBDT", b"bloc", b"bdat", b"MATH", b"JSTF", b"SVG ", b"morx", b"mort", b"kerx", b"prop",
-    b"lcar", b"opbd", b"bsln", b"just", b"ankr", b"Zapf", b"gcid", b"VARC", b"TSI0", b"TSI1",
+const REFUSED: [&[u8; 4]; 25] = [
+    b"COLR", b"sbix", b"CBLC", b"CBDT", b"EBLC", b"EBDT", b"bloc", b"bdat", b"MATH", b"JSTF", b"SVG ", b"morx", b"mort", b"kerx", b"prop", b"lcar",
+    b"opbd", b"bsln", b"just", b"ankr", b"Zapf", b"gcid", b"VARC", b"TSI0", b"TSI1",
 ];
 
 /// The font with its glyphs in the new order.
@@ -175,6 +177,9 @@ fn outline_sizes(font: &SfntFont, n: usize) -> Result<Vec<usize>> {
     if let Some(bytes) = font.get(*b"CFF ") {
         return Ok(cff::parse(bytes, n)?.charstring_lengths());
     }
+    if let Some(bytes) = font.get(*b"CFF2") {
+        return Ok(cff2::parse(bytes, n)?.charstring_lengths());
+    }
     let (Some(loca), Some(head)) = (font.get(*b"loca"), font.get(*b"head")) else { return Ok(vec![0; n]) };
     let long = Data::new(*b"head", head).i16(50)? != 0;
     let l = Data::new(*b"loca", loca);
@@ -233,6 +238,9 @@ pub(crate) fn apply_order(font: SfntFont, new_to_old: &[u16]) -> Result<SfntFont
     }
     if let Some(bytes) = font.get(*b"CFF ") {
         out.insert(*b"CFF ", cff::parse(bytes, n)?.rebuild(new_to_old, None)?);
+    }
+    if let Some(bytes) = font.get(*b"CFF2") {
+        out.insert(*b"CFF2", cff2::parse(bytes, n)?.rebuild(new_to_old, &HashMap::new())?);
     }
     type Rewrite = fn(&[u8], &Order) -> Result<Vec<u8>>;
     let rewrites: [(Tag, Rewrite); 10] = [

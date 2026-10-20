@@ -13,8 +13,12 @@
 //! classes from the `wght` and `wdth` locations by the rule static export of a UFO-family source
 //! uses ([`fontcraft_model::strip_instance_info`], [`fontcraft_model::location_class`]), and
 //! the instance's custom parameters and properties as glyphsLib applies them to a UFO instance
-//! ([`custom_params`]). Of two instances with one output file, the later is kept, as fontmake
-//! writes each in turn.
+//! ([`custom_params`]). Between masters, the PostScript weight name follows the interpolated
+//! weight class and PANOSE keeps only the digits every source shares ([`shared_panose`]); every
+//! instance takes glyphsLib's embedding type and underline where no source states them
+//! ([`glyphs_defaults`]). A designspace without axes whose sources or instances state a location
+//! is refused, as fontTools' reader refuses it ([`refuse_without_axes`]).
+//! Of two instances with one output file, the later is kept, as fontmake writes each in turn.
 //!
 //! UFOs are staged in temporary folders beside their targets and swapped in once every instance
 //! is built ([`super::stage_folder`], [`super::commit`]), so a failure leaves existing files as
@@ -26,8 +30,9 @@ use std::path::{Component, Path, PathBuf};
 
 use fontcraft_interp::compat::{self, MasterPairs};
 use fontcraft_interp::{Designspace, GlyphSources, UserLocation};
+use fontcraft_model::plist::xml;
 use fontcraft_model::plist::{Number, Value as PValue};
-use fontcraft_model::{Font, Instance, SourceFormat};
+use fontcraft_model::{Family, Font, Instance, SourceFormat};
 use serde_json::{Map, Value, json};
 
 use super::super::file_io::{self, OutputRequest};
@@ -116,6 +121,7 @@ pub(super) fn instantiate(p: &Params<'_>, input: &Path, req: &OutputRequest) -> 
     if font.source.format == SourceFormat::Binary {
         return Err(EngineError::Unsupported(format!("instancing {}: it opens as a compiled font, not as a source", input.display())));
     }
+    refuse_without_axes(p, &font)?;
     let designspace = Designspace::new(&font).map_err(|e| p.bad(e.to_string()))?;
     let jobs = jobs(p, &mut font, &designspace, clamp)?;
     if jobs.len() > 1 && req.output.is_some() {
@@ -142,6 +148,42 @@ pub(super) fn instantiate(p: &Params<'_>, input: &Path, req: &OutputRequest) -> 
         }
     };
     Ok(json!({ "results": results, "warnings": warnings }))
+}
+
+/// Refuses a designspace without `<axes>` that states a location, as fontTools' reader does ("No
+/// axes defined"). That reader fails on the first `<location>` it reads: one in a location label,
+/// a source, an instance, or an instance's glyph or glyph master. Without axes those locations
+/// cannot be read, so the sources would all sit at one location. A document without axes and
+/// without any location loads in fontTools, and is not refused here. When the read document is
+/// not kept, any designspace without axes is refused.
+pub(super) fn refuse_without_axes(p: &Params<'_>, font: &Font) -> Result<()> {
+    if font.source.format != SourceFormat::Designspace || !font.axes.is_empty() {
+        return Ok(());
+    }
+    let document = font.extra.get(Family::Designspace, "document").and_then(PValue::as_str);
+    let states_location = match document.map(xml::parse) {
+        Some(Ok(doc)) => states_a_location(&doc.root),
+        _ => true,
+    };
+    if states_location {
+        return Err(p.bad("the designspace defines no axes, so its sources have no locations to interpolate between"));
+    }
+    Ok(())
+}
+
+/// Does the designspace `root` have a `<location>` where fontTools' reader reads one?
+fn states_a_location(root: &xml::Element) -> bool {
+    fn children<'a>(e: &'a xml::Element, list: &str, item: &'a str) -> impl Iterator<Item = &'a xml::Element> {
+        e.child(list).into_iter().flat_map(move |l| l.elements().filter(move |c| c.name() == item))
+    }
+    let instances = || children(root, "instances", "instance");
+    let glyphs = || instances().flat_map(|i| children(i, "glyphs", "glyph"));
+    let mut places = children(root, "labels", "label")
+        .chain(children(root, "sources", "source"))
+        .chain(instances())
+        .chain(glyphs())
+        .chain(glyphs().flat_map(|g| children(g, "masters", "master")));
+    places.any(|e| e.child("location").is_some())
 }
 
 /// `interpolateBinaryLayout`: `None` when off, else the folder of the compiled masters it names
@@ -543,6 +585,22 @@ fn finish(
     // The instance lists only the layers its glyphs use, not the ones the default source lists
     // without having them on disk.
     master.extra.remove(fontcraft_model::Family::Ufo, "missingLayers");
+    if !lone {
+        // Before the class is set from the location below.
+        let class = ["weightClass", "openTypeOS2WeightClass"]
+            .iter()
+            .find_map(|k| master.params.get(k).or_else(|| info.params.get(k)))
+            .and_then(PValue::as_num)
+            .map(|n| n.as_f64());
+        match class.and_then(postscript_weight_name) {
+            Some(name) => master.params.set("postscriptWeightName", PValue::String(name.into())),
+            None => {
+                master.params.remove("postscriptWeightName");
+            }
+        }
+        shared_panose(font, &mut info.params, &mut master.params);
+    }
+    glyphs_defaults(font, &mut info.params, master);
     let text = |s: &str| PValue::String(s.into());
     if let Some(ps) = &names.postscript {
         master.params.set("postscriptFontName", text(ps));
@@ -571,6 +629,93 @@ fn finish(
     }
     custom_params(&mut made, inst, label, warnings);
     Ok(made)
+}
+
+/// The PostScript weight name fontMath gives an interpolated OS/2 weight class: the class rounded
+/// to hundreds (halves away from zero), kept within 100 to 900.
+fn postscript_weight_name(class: f64) -> Option<&'static str> {
+    const NAMES: [&str; 9] = ["Thin", "Extra-light", "Light", "Normal", "Medium", "Semi-bold", "Bold", "Extra-bold", "Black"];
+    if !class.is_finite() {
+        return None;
+    }
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let index = ((class / 100.0).round().clamp(1.0, 9.0) as usize).saturating_sub(1);
+    NAMES.get(index).copied()
+}
+
+/// The PANOSE digits of an instance between masters, as ufo2ft's instantiator gives them: only
+/// when the default source has some, each digit the sources that have PANOSE share, 0 where they
+/// differ, and none when every digit is 0.
+#[allow(clippy::cast_possible_truncation)]
+fn shared_panose(font: &Font, info: &mut fontcraft_model::Params, own: &mut fontcraft_model::Params) {
+    const PANOSE: &str = "panose";
+    const DIGITS: usize = 10;
+    let has_default = own.get(PANOSE).or_else(|| info.get(PANOSE)).is_some();
+    info.remove(PANOSE);
+    own.remove(PANOSE);
+    if !has_default {
+        return;
+    }
+    let digits = |v: &PValue| -> Option<Vec<f64>> {
+        v.as_array().map(|a| a.items.iter().take(DIGITS).map(|d| d.as_num().map_or(f64::NAN, |n| n.as_f64())).collect())
+    };
+    let lists: Vec<Vec<f64>> =
+        font.masters.iter().filter_map(|m| m.params.get(PANOSE).or_else(|| font.info.params.get(PANOSE))).filter_map(digits).collect();
+    let len = lists.iter().map(Vec::len).min().unwrap_or(0);
+    let shared: Vec<i64> = (0..DIGITS)
+        .map(|i| {
+            let mut values = lists.iter().map(|l| l.get(i).copied().unwrap_or(f64::NAN));
+            let first = values.next().unwrap_or(f64::NAN);
+            if i < len && first.is_finite() && values.all(|v| v == first) { first.round() as i64 } else { 0 }
+        })
+        .collect();
+    if shared.iter().any(|d| *d != 0) {
+        let items = shared.into_iter().map(|d| PValue::Number(Number::int(d))).collect();
+        own.set(PANOSE, PValue::Array(fontcraft_model::plist::Array { items, ..Default::default() }));
+    }
+}
+
+/// glyphsLib's defaults where the font information states none (`DEFAULT_PARAMETERS`, which
+/// fontmake applies to every instance UFO): (parameter, UFO key, value).
+const GLYPHS_DEFAULTS: [(&str, &str, i64); 3] = [
+    ("fsType", "openTypeOS2Type", 3),
+    ("underlineThickness", "postscriptUnderlineThickness", 50),
+    ("underlinePosition", "postscriptUnderlinePosition", -100),
+];
+
+/// Gives the instance glyphsLib's defaults where its sources state none. A UFO-family source's
+/// reader fills these keys with ufo2ft's defaults, so there the sources' files decide: the
+/// default source's for the embedding type, which is copied from it, any source's for the
+/// underline, which is interpolated. Each value is put in the instance's font information as
+/// read, so that the UFO writer writes it even where it equals ufo2ft's default.
+fn glyphs_defaults(font: &Font, info: &mut fontcraft_model::Params, master: &mut fontcraft_model::Master) {
+    use fontcraft_model::Family;
+    const FONTINFO: &str = "fontinfo.plist";
+    let file_has =
+        |m: &fontcraft_model::Master, key: &str| m.extra.get(Family::Ufo, FONTINFO).and_then(PValue::as_dict).is_some_and(|d| d.get(key).is_some());
+    let ufo = fontcraft_model::is_ufo_family(font.source.format);
+    for (param, key, value) in GLYPHS_DEFAULTS {
+        let stated = if !ufo {
+            master.params.get(param).or_else(|| info.get(param)).is_some()
+        } else if param == "fsType" {
+            file_has(master, key)
+        } else {
+            font.masters.iter().any(|m| file_has(m, key))
+        };
+        if stated {
+            continue;
+        }
+        info.remove(param);
+        master.params.remove(param);
+        let value = if param == "fsType" {
+            PValue::Array(fontcraft_model::plist::Array { items: vec![PValue::Number(Number::int(value))], ..Default::default() })
+        } else {
+            PValue::Number(Number::int(value))
+        };
+        let mut read = master.extra.get(Family::Ufo, FONTINFO).and_then(PValue::as_dict).cloned().unwrap_or_default();
+        read.insert(key, value);
+        master.extra.insert(Family::Ufo, FONTINFO, PValue::Dict(read));
+    }
 }
 
 /// Instance parameters a UFO instance does not take: the ones interpolation and the names and
@@ -1195,6 +1340,84 @@ mod tests {
         std::fs::remove_dir_all(&target).unwrap();
         s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })).unwrap();
         assert!(s.execute("font.instantiate", &json!({ "input": ds, "noClobber": true })).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// An instance between masters takes the font information fontmake writes: the PostScript
+    /// weight name of the interpolated class, the PANOSE digits both sources share (0 where they
+    /// differ), and glyphsLib's embedding type and underline where no source states them.
+    /// Expected values from `fontmake -i` on the same two masters.
+    #[test]
+    fn instantiate_source_writes_the_font_info_fontmake_derives() {
+        let (dir, ds) = source("derived-info");
+        for (style, class, digit) in [("Light", 300, 5), ("Bold", 700, 8)] {
+            let info = dir.join(format!("{style}.ufo/fontinfo.plist"));
+            let text = std::fs::read_to_string(&info).unwrap();
+            let panose: String = [2, 11, digit, 2, 4, 5, 4, 2, 2, 4].iter().map(|d| format!("<integer>{d}</integer>")).collect();
+            let added = format!(
+                "<key>openTypeOS2WeightClass</key><integer>{class}</integer><key>openTypeOS2Panose</key><array>{panose}</array><key>unitsPerEm</key>"
+            );
+            std::fs::write(&info, text.replace("<key>unitsPerEm</key>", &added)).unwrap();
+        }
+        let mut s = Session::new();
+        s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })).unwrap();
+        let out: String = std::fs::read_to_string(dir.join("instances/Test-Regular.ufo/fontinfo.plist")).unwrap().split_whitespace().collect();
+        let shared: String = [2, 11, 0, 2, 4, 5, 4, 2, 2, 4].iter().map(|d| format!("<integer>{d}</integer>")).collect();
+        for want in [
+            "<key>postscriptWeightName</key><string>Medium</string>".to_string(),
+            format!("<key>openTypeOS2Panose</key><array>{shared}</array>"),
+            "<key>openTypeOS2Type</key><array><integer>3</integer></array>".to_string(),
+            "<key>postscriptUnderlineThickness</key><integer>50</integer>".to_string(),
+            "<key>postscriptUnderlinePosition</key><integer>-100</integer>".to_string(),
+        ] {
+            assert!(out.contains(&want), "{want} in {out}");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A designspace without `<axes>` (fontTools' InterpolateLayout3) puts every source at one
+    /// location: both instance paths refuse it as fontTools does, naming the missing axes rather
+    /// than two `.notdef` layers at one location.
+    #[test]
+    fn instantiate_source_refuses_a_designspace_without_axes() {
+        let (dir, ds) = source("no-axes");
+        let text = std::fs::read_to_string(&ds).unwrap();
+        let start = text.find("<axes>").unwrap();
+        let end = text.find("</axes>").unwrap() + "</axes>".len();
+        std::fs::write(&ds, format!("{}{}", &text[..start], &text[end..])).unwrap();
+        let mut s = Session::new();
+        let err = s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })).unwrap_err().to_string();
+        assert!(err.contains("defines no axes") && !err.contains(".notdef"), "{err}");
+        let out = dir.join("layout.ttf");
+        let err = s.execute("font.instantiate", &json!({ "input": ds, "layoutOnly": true, "output": out })).unwrap_err().to_string();
+        assert!(err.contains("defines no axes"), "{err}");
+        assert!(!dir.join("instances").exists() && !out.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// fontTools reads a designspace without axes when nothing in it states a location: such a
+    /// document is not refused for its missing axes.
+    #[test]
+    fn instantiate_source_reads_a_designspace_without_axes_or_locations() {
+        let (dir, ds) = source("no-axes-no-locations");
+        std::fs::write(
+            &ds,
+            r#"<?xml version='1.0' encoding='UTF-8'?>
+<designspace format="4.1">
+  <sources>
+    <source filename="Light.ufo" name="Light"/>
+  </sources>
+  <instances>
+    <instance familyname="Test" stylename="Regular" filename="instances/Test-Regular.ufo" postscriptfontname="Test-Regular"/>
+  </instances>
+</designspace>
+"#,
+        )
+        .unwrap();
+        let mut s = Session::new();
+        if let Err(e) = s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })) {
+            assert!(!e.to_string().contains("defines no axes"), "{e}");
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 

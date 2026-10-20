@@ -390,3 +390,66 @@ fn audit_fix_on_the_files_of_a_family_makes_their_family_values_equal() {
         }
     }
 }
+
+#[test]
+fn audit_fix_on_a_file_recompiles_the_cff_table_without_unique_ids() {
+    use fontcraft_tables::patch::{cff_top_ints, set_cff_top_ints};
+    let dir = scratch("recompile-cff");
+    let mut s = Session::with_document();
+    for (glyph, x) in [("A", 60.0), ("B", 80.0), ("C", 100.0)] {
+        run(&mut s, "path.addPath", json!({"glyph": glyph, "nodes": rect(x, 0.0, 500.0, 700.0)}));
+    }
+    let otf = dir.join("Font.otf");
+    run(&mut s, "file.exportStatic", json!({"outlines": "cff", "destination": otf, "timestamp": 0}));
+    let original = read(&otf);
+    save(&otf, &set_cff_top_ints(&original, 13, &[4_000_123]).unwrap());
+    let checks = json!(["check.tables.cffUniqueIds"]);
+    assert_eq!(fixable(&mut s, &otf, &["check.tables.cffUniqueIds"]), [("check.tables.cffUniqueIds".to_string(), "unique-id".to_string())]);
+
+    let r = run(&mut s, "audit.fix", json!({"target": otf, "profile": "strict", "checks": checks}));
+    let commands: Vec<&str> = r["applied"].as_array().unwrap().iter().map(|a| a["command"].as_str().unwrap()).collect();
+    assert_eq!(commands, ["tables.recompileCff"], "{r}");
+    assert_eq!(r["applied"][0]["result"]["removedKeys"], json!(["UniqueID"]), "{r}");
+    assert_eq!(pairs(&r["remaining"]), Vec::<(String, String)>::new());
+    let fixed = read(Path::new(r["output"].as_str().unwrap()));
+    assert_eq!(cff_top_ints(&fixed, 13).unwrap(), None);
+    // The outlines are those the compiler wrote.
+    #[derive(Default)]
+    struct Pen(Vec<String>);
+    impl skrifa::outline::OutlinePen for Pen {
+        fn move_to(&mut self, x: f32, y: f32) {
+            self.0.push(format!("M{x},{y}"));
+        }
+        fn line_to(&mut self, x: f32, y: f32) {
+            self.0.push(format!("L{x},{y}"));
+        }
+        fn quad_to(&mut self, x0: f32, y0: f32, x: f32, y: f32) {
+            self.0.push(format!("Q{x0},{y0},{x},{y}"));
+        }
+        fn curve_to(&mut self, x0: f32, y0: f32, x1: f32, y1: f32, x: f32, y: f32) {
+            self.0.push(format!("C{x0},{y0},{x1},{y1},{x},{y}"));
+        }
+        fn close(&mut self) {
+            self.0.push("Z".into());
+        }
+    }
+    let draw = |font: &SfntFont| -> Vec<Vec<String>> {
+        let bytes = fontcraft_tables::write(font, &WriteOptions { order: TableOrder::Keep }).unwrap();
+        let f = skrifa::FontRef::new(&bytes).unwrap();
+        let outlines = skrifa::MetadataProvider::outline_glyphs(&f);
+        (0..u32::from(u16::MAX))
+            .map_while(|g| outlines.get(skrifa::GlyphId::new(g)))
+            .map(|glyph| {
+                let mut pen = Pen::default();
+                glyph
+                    .draw(
+                        skrifa::outline::DrawSettings::unhinted(skrifa::instance::Size::unscaled(), skrifa::instance::LocationRef::default()),
+                        &mut pen,
+                    )
+                    .unwrap();
+                pen.0
+            })
+            .collect()
+    };
+    assert_eq!(draw(&fixed), draw(&original));
+}

@@ -297,6 +297,9 @@ fn key_typing(app: &mut FontcraftApp, ev: KeyEvent, types: bool) -> Option<Vec<S
     if let Some(errors) = crate::canvas::images::key(app, &ev) {
         return Some(errors);
     }
+    if let Some(errors) = crate::canvas::tt_badges::key(app, &ev) {
+        return Some(errors);
+    }
     let out = with_tool(app, |toolbox, cx| toolbox.key(cx, &ev)).ok();
     match out {
         Some(out) if out.handled => Some(apply(app, out)),

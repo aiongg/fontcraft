@@ -5,8 +5,10 @@
 //! is a UFO and one with `fontinfo.plist` a `.glyphspackage`, a file that starts with an sfnt,
 //! collection, WOFF or WOFF2 signature is a compiled font, a JSON file whose `format` is
 //! `fontcraft` is a native file, XML whose root is `<designspace>` a designspace (opened with the
-//! UFOs it names, relative to its folder), a ZIP archive a UFOZ, a BDF or PCF file a bitmap-only
-//! font (module `bitmap_font`), and other text that starts with `{` is a `.glyphs` file. Every read is bounded ([`MAX_PACKAGE_FILES`],
+//! UFOs it names, relative to its folder), a ZIP archive a UFOZ, a bitmap font file (BDF, PCF,
+//! Windows FNT or FON, TeX PK or GF, a Mac bitmap font, or a `.pcf.gz` or `.bdf.gz`) a
+//! bitmap-only font (module `bitmap_font`), and other text that starts with `{` is a `.glyphs`
+//! file. Every read is bounded ([`MAX_PACKAGE_FILES`],
 //! [`fontcraft_format::MAX_BYTES`] in all) and follows no symlinked folders, so a hostile folder
 //! can neither exhaust memory nor loop.
 
@@ -246,6 +248,9 @@ pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {
         let (mut font, warnings) = fontcraft_io_ufo::ufo::read_reporting(&files)?;
         font.source.format = SourceFormat::Ufoz;
         return Ok((font, warnings));
+    }
+    if bitmap_font::is_gzipped_bitmap_font(path, &bytes) {
+        return bitmap_font::open(path, &bytes);
     }
     if fontcraft_format::is_compressed(&bytes) {
         return Ok((fontcraft_format::load(&bytes)?, Vec::new()));
@@ -625,7 +630,13 @@ pub fn save(font: &Font, path: &Path, format: SaveFormat) -> Result<Saved> {
     }
     match format {
         SaveFormat::Native | SaveFormat::Glyphs => {
-            let bytes = if format == SaveFormat::Native { fontcraft_format::save(font)? } else { fontcraft_io_glyphs::write(font)?.into_bytes() };
+            let bytes = if format == SaveFormat::Native {
+                // Layouts the .glyphs reader kept for values an edit has since changed.
+                let pruned = fontcraft_io_glyphs::without_stale_layouts(font);
+                fontcraft_format::save(pruned.as_ref().unwrap_or(font))?
+            } else {
+                fontcraft_io_glyphs::write(font)?.into_bytes()
+            };
             fontcraft_format::write_atomic(path, &bytes)?;
             Ok(Saved { bytes: bytes.len(), files_written: 1, files_removed: 0, losses })
         }

@@ -10,7 +10,8 @@
 //! `fontView.image.batchByFileName` and `fontView.image.caseSensitivity`.
 //!
 //! A PDF has no pixel size. Its first page's size in points stands in for one: Add Image places
-//! it at one point per unit, and Edit View draws it at that size.
+//! it at one point per unit, and Edit View draws it at that size. [`decode_pixels`] draws the
+//! page to pixels for commands that read an image's pixels.
 //!
 //! The image a command addresses is the layer's placed image (`side: "background"`: the
 //! background's). Image shapes of the version 4 format are kept as read; these commands do not
@@ -39,6 +40,9 @@ const POINTS_PER_INCH: f64 = 72.0;
 const MAX_LISTED: usize = 10;
 /// Bytes of a file Add Image reads for its format, pixel size and resolution.
 const HEADER_BYTES: usize = 1 << 20;
+/// Pixels per point a placed PDF's page is drawn at by [`decode_pixels`], before it is lowered to
+/// fit the caller's pixel budget.
+pub(crate) const PDF_PIXELS_PER_POINT: f64 = 4.0;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -750,9 +754,70 @@ pub(crate) fn shown_box(s: &Session, p: &Params, t: &Targets) -> Result<Rect> {
     Ok(Rect::from_points(a, c).union_pt(b).union_pt(d))
 }
 
+/// A placed image's file decoded to pixels, rows top to bottom.
+pub(crate) struct Decoded {
+    pub image: imagery::Rgba8,
+    /// Units of the image's own space one pixel spans: 1 for pixel formats; for a PDF, whose
+    /// units are points, the inverse of the resolution the page was drawn at.
+    pub units_per_pixel: f64,
+}
+
+/// `bytes` decoded within `max_pixels`: PNG, JPEG and TIFF through `fontcraft_imagery`; a PDF's
+/// first page drawn by `fontcraft_io_pdf` at [`PDF_PIXELS_PER_POINT`], or lower when the page
+/// would take more than `max_pixels`.
+pub(crate) fn decode_pixels(bytes: &[u8], max_pixels: u64) -> std::result::Result<Decoded, String> {
+    let info = imagery::sniff(bytes).map_err(|e| e.to_string())?;
+    if info.format != ImageFormat::Pdf {
+        let image = imagery::decode_rgba(bytes, max_pixels).map_err(|e| e.to_string())?;
+        return Ok(Decoded { image, units_per_pixel: 1.0 });
+    }
+    let drawn = fontcraft_io_pdf::render_pdf(bytes, PDF_PIXELS_PER_POINT, max_pixels).map_err(|e| format!("the PDF page cannot be drawn: {e}"))?;
+    let ppp = drawn.pixels_per_point;
+    if !(ppp.is_finite() && ppp > 0.0) || drawn.image.width == 0 || drawn.image.height == 0 {
+        return Err("the PDF page has no size to draw".into());
+    }
+    Ok(Decoded { image: drawn.image, units_per_pixel: 1.0 / ppp })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_placed_pdf_decodes_to_the_pixels_of_its_page() {
+        let content = "0 0 0 rg 0 0 50 100 re f";
+        let objects = [
+            "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 100 100] >>".to_string(),
+            "<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>".to_string(),
+            format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()),
+        ];
+        let mut pdf = b"%PDF-1.5\n".to_vec();
+        let mut offsets = Vec::new();
+        for (i, body) in objects.iter().enumerate() {
+            offsets.push(pdf.len());
+            pdf.extend_from_slice(format!("{} 0 obj\n{body}\nendobj\n", i + 1).as_bytes());
+        }
+        let xref = pdf.len();
+        pdf.extend_from_slice(b"xref\n0 5\n0000000000 65535 f \n");
+        for o in offsets {
+            pdf.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+        }
+        pdf.extend_from_slice(format!("trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n").as_bytes());
+
+        let d = decode_pixels(&pdf, imagery::MAX_PIXELS).unwrap();
+        assert_eq!((d.image.width, d.image.height), (400, 400), "four pixels per point");
+        assert_eq!(d.units_per_pixel, 0.25);
+        let alpha = |x: usize, y: usize| d.image.pixels[(y * 400 + x) * 4 + 3];
+        assert_eq!(alpha(100, 200), 255, "the left half is painted");
+        assert_eq!(alpha(300, 200), 0, "the right half is transparent");
+
+        // A smaller budget lowers the resolution.
+        let d = decode_pixels(&pdf, 10_000).unwrap();
+        assert!(d.image.width <= 100 && d.units_per_pixel >= 1.0, "{} pixels wide", d.image.width);
+        // A PDF cut short is refused.
+        assert!(decode_pixels(b"%PDF-1.5\n1 0 obj", imagery::MAX_PIXELS).is_err());
+    }
 
     #[test]
     fn file_names_give_glyph_names() {

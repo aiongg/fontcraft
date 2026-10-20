@@ -90,7 +90,7 @@ pub fn encode_dict_number(n: Number, what: &str, out: &mut Vec<u8>) -> Result<()
 }
 
 /// Append a DICT integer in its shortest form (one, two, three or five bytes).
-pub(crate) fn encode_dict_int(v: i64, what: &str, out: &mut Vec<u8>) -> Result<(), Error> {
+pub fn encode_dict_int(v: i64, what: &str, out: &mut Vec<u8>) -> Result<(), Error> {
     if encode_short_int(v, out) {
         return Ok(());
     }
@@ -103,6 +103,18 @@ pub(crate) fn encode_dict_int(v: i64, what: &str, out: &mut Vec<u8>) -> Result<(
     out.push(29);
     out.extend_from_slice(&v32.to_be_bytes());
     Ok(())
+}
+
+/// Append a DICT number given as a float: an integer in its shortest form when `v` is whole and
+/// within 32 bits, otherwise a real spelled as [`encode_dict_number`] spells one.
+pub fn encode_dict_value(v: f64, what: &str, out: &mut Vec<u8>) -> Result<(), Error> {
+    if !v.is_finite() {
+        return Err(Error::NotFinite { what: what.to_string() });
+    }
+    if v.fract() == 0.0 && v.abs() <= f64::from(i32::MAX) {
+        return encode_dict_int(v as i64, what, out);
+    }
+    encode_dict_real(v, what, out)
 }
 
 /// The one- and two-byte integer forms shared by DICTs and charstrings; false when `v` needs a
@@ -150,6 +162,32 @@ pub(crate) fn encode_t2_number(v: f64, what: &str, out: &mut Vec<u8>) -> Result<
     let fixed = i32::try_from(fixed).map_err(|_| Error::OutOfRange { what: what.to_string(), value: v })?;
     out.push(255);
     out.extend_from_slice(&fixed.to_be_bytes());
+    Ok(())
+}
+
+/// Append a Type 2 charstring number without rounding it first: an integer only when `v` is
+/// exactly whole and within 16 bits, otherwise the five-byte 16.16 form rounded half away from
+/// zero. A value a fraction of a 16.16 unit off a whole number therefore stays fixed, where the
+/// static and `CFF2` builders write the integer. This is how the variable-font instancer writes the
+/// values it resolves.
+pub fn encode_t2_number_exact(v: f64, what: &str, out: &mut Vec<u8>) -> Result<(), Error> {
+    if !v.is_finite() {
+        return Err(Error::NotFinite { what: what.to_string() });
+    }
+    if v.fract() == 0.0 && (-32768.0..=32767.0).contains(&v) {
+        let n = v as i64;
+        if !encode_short_int(n, out) {
+            out.push(28);
+            out.extend_from_slice(&(n as i16).to_be_bytes());
+        }
+        return Ok(());
+    }
+    let fixed = (v * 65536.0).round();
+    if !(f64::from(i32::MIN)..=f64::from(i32::MAX)).contains(&fixed) {
+        return Err(Error::OutOfRange { what: what.to_string(), value: v });
+    }
+    out.push(255);
+    out.extend_from_slice(&(fixed as i32).to_be_bytes());
     Ok(())
 }
 

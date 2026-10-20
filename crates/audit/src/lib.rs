@@ -568,9 +568,21 @@ impl<'a> LayerInput<'a> {
     }
 }
 
+thread_local! {
+    static LAYERS_EXAMINED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// How many layers [`audit_layer`] has examined on this thread: a test hook for the runner's
+/// per-glyph cache.
+#[doc(hidden)]
+pub fn layers_examined() -> usize {
+    LAYERS_EXAMINED.try_with(std::cell::Cell::get).unwrap_or(0)
+}
+
 /// Runs `checks` on one layer of `glyph`. Never fails: a check that cannot run on this layer is
 /// listed in [`LayerReport::skipped`].
 pub fn audit_layer(ctx: &AuditContext<'_>, glyph: &Glyph, layer: &Layer, checks: &[&'static CheckSpec], config: &Config) -> LayerReport {
+    let _ = LAYERS_EXAMINED.try_with(|n| n.set(n.get().saturating_add(1)));
     let mut report = LayerReport::default();
     let nodes = layer
         .shapes

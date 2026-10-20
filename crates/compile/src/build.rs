@@ -526,6 +526,12 @@ pub fn assemble(
         }
         _ => None,
     };
+    let cvar = match (&tt_hinting, source, &extra.cvar) {
+        (Some(h), Some(source), Some(masters)) => {
+            crate::var::cvar::font_cvar(source, masters, &h.cvt, options, (m.win_ascent, m.win_descent), warnings)
+        }
+        _ => None,
+    };
     if let Some(suffix) = tt_hinting.as_ref().and_then(|h| h.version_suffix.as_deref()) {
         for r in info.names.iter_mut().filter(|r| r.id == 5) {
             if r.text.chars().count() + suffix.chars().count() <= info::MAX_NAME_CHARS {
@@ -681,6 +687,9 @@ pub fn assemble(
         set_program_limits(&mut maxp, h, outlines);
         if !h.cvt.is_empty() {
             builder.add_raw(Tag::new(b"cvt "), h.cvt.iter().flat_map(|v| v.to_be_bytes()).collect::<Vec<u8>>());
+            if let Some(cvar) = &cvar {
+                builder.add_raw(Tag::new(b"cvar"), cvar.as_slice());
+            }
         }
         if !h.fpgm.is_empty() {
             builder.add_raw(Tag::new(b"fpgm"), h.fpgm.clone());

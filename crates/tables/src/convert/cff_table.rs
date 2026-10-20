@@ -837,6 +837,11 @@ impl Programs {
         self.programs.len()
     }
 
+    /// The width operand of a CFF glyph (16.16, against its Private DICT's nominalWidthX).
+    pub(super) fn width(&self, gid: usize) -> Option<i64> {
+        self.programs.get(gid).and_then(|p| p.width)
+    }
+
     pub(super) fn is_accented(&self, gid: usize) -> bool {
         self.programs.get(gid).is_some_and(|p| p.seac.is_some())
     }
@@ -994,6 +999,47 @@ fn encode_parts<T: Copy + Into<i64>>(code: u16, args: &[T], mask: &[u8], out: &m
         return Err(TablesError::TooLarge { what: "an expanded charstring", limit: MAX_CHARSTRING });
     }
     Ok(())
+}
+
+/// An unhinted charstring that draws `path`: the width operand first when given, then
+/// `rmoveto`, `rlineto` and `rrcurveto`, and `endchar` in CFF (CFF2 has none). Coordinates are
+/// kept to 16.16 fixed point; whole numbers are written as integers.
+pub(super) fn path_charstring(width: Option<i64>, path: &[fontcraft_cff::PathOp], cff2: bool) -> Result<Vec<u8>> {
+    use fontcraft_cff::PathOp;
+    let fixed = |v: f64| -> Result<i64> {
+        let f = (v * ONE as f64).round();
+        if !f.is_finite() || f.abs() > f64::from(i32::MAX) {
+            return Err(invalid(format!("the coordinate {v} does not fit in a charstring")));
+        }
+        Ok(f as i64)
+    };
+    let mut out = Vec::new();
+    let mut width = if cff2 { None } else { width };
+    let mut at = (0i64, 0i64);
+    let mut rel = |p: (f64, f64)| -> Result<[i64; 2]> {
+        let q = (fixed(p.0)?, fixed(p.1)?);
+        let d = [q.0 - at.0, q.1 - at.1];
+        at = q;
+        Ok(d)
+    };
+    for op in path {
+        let (code, args): (u16, Vec<i64>) = match *op {
+            PathOp::MoveTo(p) => (21, rel(p)?.to_vec()),
+            PathOp::LineTo(p) => (5, rel(p)?.to_vec()),
+            PathOp::CurveTo(a, b, c) => (8, [rel(a)?, rel(b)?, rel(c)?].concat()),
+        };
+        if let Some(w) = width.take() {
+            encode_num(w, &mut out)?;
+        }
+        encode_parts(code, &args, &[], &mut out)?;
+    }
+    if !cff2 {
+        if let Some(w) = width {
+            encode_num(w, &mut out)?;
+        }
+        out.push(ENDCHAR as u8);
+    }
+    Ok(out)
 }
 
 /// `op` as operators of at most `limit` operands each, with the same drawing.
@@ -1398,6 +1444,48 @@ pub(super) fn cff_to_cff2(cff: &[u8], standard_glyph: &dyn Fn(u8) -> Option<usiz
         privates,
     };
     Ok((parts.write()?, dropped_dotsection))
+}
+
+/// The `seac` glyphs of a name-keyed `CFF ` table drawn out, by glyph id: each charstring holds
+/// the width operand, the glyph's own operators, the base and the accent as [`cff_to_cff2`]
+/// writes them (the base's hints kept when the glyph has none of its own, the accent's dropped),
+/// and `endchar`. A CID-keyed table has no charset names or StandardEncoding to find the parts
+/// through, so these replace the `seac` charstrings when a table is CID-keyed. Empty when no
+/// glyph uses `seac`.
+pub(super) fn seac_drawn_out(cff: &[u8], standard_glyph: &dyn Fn(u8) -> Option<usize>) -> Result<std::collections::HashMap<usize, Vec<u8>>> {
+    let (expanded, mut memory) = expand(cff, false, MAX_CHARSTRING_MEMORY)?;
+    let flat = Flat::read(&expanded, false)?;
+    let mut out = std::collections::HashMap::new();
+    let mut seac_parts = SeacParts::new();
+    let mut total = 0usize;
+    for (gid, code) in flat.charstrings.iter().enumerate() {
+        let program = parse_program(code, false, &mut memory.clone()).map_err(|e| in_glyph(e, gid))?;
+        let Some(seac) = program.seac else { continue };
+        let ops = flatten_seac(&flat.charstrings, &program, seac, standard_glyph, &mut seac_parts, &mut memory).map_err(|e| in_glyph(e, gid))?;
+        let mut bytes = Vec::new();
+        // The width goes with the first operator, which clears the stack.
+        let mut width = program.width;
+        for op in &ops {
+            match width.take() {
+                Some(w) => {
+                    let mut args = Vec::with_capacity(op.args.len() + 1);
+                    args.push(w);
+                    args.extend_from_slice(&op.args);
+                    encode_parts(op.code, &args, &op.mask, &mut bytes)
+                }
+                None => encode_op(op, &mut bytes),
+            }
+            .map_err(|e| in_glyph(e, gid))?;
+        }
+        encode_parts(ENDCHAR, width.as_slice(), &[], &mut bytes).map_err(|e| in_glyph(e, gid))?;
+        total = total.saturating_add(bytes.len());
+        if total > MAX_SFNT {
+            return Err(TablesError::TooLarge { what: "the drawn-out accented charstrings", limit: MAX_SFNT });
+        }
+        memory.charge(bytes.capacity())?;
+        out.insert(gid, bytes);
+    }
+    Ok(out)
 }
 
 /// The `CFF ` table for a static `CFF2` table: `advances` are the `hmtx` widths in glyph order.

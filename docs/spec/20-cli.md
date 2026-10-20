@@ -929,9 +929,30 @@ stay, only the representation changes. Operations that change content have their
 | CFF → CFF2 (static) | unchanged | kept | widths move to `hmtx`, names to `post` |
 | CFF2 → CFF | unchanged; a variable font must be pinned first | kept | glyph names from `post` |
 | any binary → bare `cff` / `pfa` / `pfb` | cubic | kept | only the font program: everything outside the outline table is left behind |
-| any binary → `ufo` | as in the font | PostScript hints kept in the AFDKO lib format | font info from the outline table only; layout is not decompiled (use `features decompile`) |
+| any binary → `ufo` | as in the font (TrueType curves stay quadratic, components stay) | kept in the glyph lib (`com.schriftgestaltung.hints`) | what `file.open` reads from a compiled font: font info, kerning and groups, feature code; a variable font is snapshotted at its default unless `--location` is given |
 | `.glyphs` / native ↔ UFO + designspace | unchanged | manual hints kept in lib data | everything the target format can express; the rest is kept in lib keys and reported |
 | TTX XML → binary | as written | as written | compiled table by table |
+
+**Steps around the conversion**, in the order `tx` runs its input options:
+
+1. `--location`: a variable font is snapshotted at the location (axes not named sit at their
+   default; values are clamped to the axis ranges, or refused outside them with `--no-clamp`).
+   Without `--location`, a variable font written as UFO or with another outline flavour is
+   snapshotted at its default; one that keeps its flavour keeps its variations.
+2. `--glyphs`, `--exclude-glyphs`, `--fd-select`, `--exclude-fd` and `--subset-to-goadb`: only
+   the selected glyphs and `.notdef` stay, in font order; with several selections, the glyphs
+   all of them select. `/CID` and `/CID-CID` items work in CID-keyed fonts; `--fd-select` works
+   in CID-keyed CFF and in CFF2 fonts.
+3. `--goadb`: glyphs are renamed from the second column to the first (not with `--no-rename`);
+   `--goadb-order` puts the listed glyphs first, in the file's order.
+4. The conversion.
+5. `--remove-overlaps`: overlapping contours are merged on TrueType outlines, before converting
+   a TrueType font or after converting to TrueType, and on CFF or CFF2 outlines before
+   converting them. A merged CFF glyph gets a new charstring without stem hints.
+6. `--cid-keyed[=R-O-S]`: a name-keyed CFF result becomes CID-keyed, CID n for glyph n, with one
+   Font DICT (Adobe-Identity-0 unless a collection is given), as makeotf `-cn` does.
+
+`tx` skips a glyph name `-g` gives that the font lacks; `convert` refuses it.
 
 **Type 1.** Reading accepts PFA, PFB and the decrypted text form. Writing produces ordinary host fonts
 only. Multiple-master Type 1 input is always snapshotted, at `--location` or at its default instance.

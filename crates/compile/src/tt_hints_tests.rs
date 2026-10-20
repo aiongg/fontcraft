@@ -251,10 +251,10 @@ fn a_variable_font_takes_the_main_master_s_programs_without_deltas() {
     let f = two_masters();
     let var = crate::var::compile_variable(&f, None, &Options::default(), &crate::var::VariableOptions::default()).unwrap();
     let out = &var.compiled;
-    assert!(out.warnings.iter().any(|w| w.contains("cvar")), "{:?}", out.warnings);
     assert!(out.warnings.iter().any(|w| w.contains("Delta instructions are not written")), "{:?}", out.warnings);
     let font = FontRef::new(&out.bytes).unwrap();
     assert!(font.table_data(skrifa::Tag::new(b"gvar")).is_some());
+    assert!(font.table_data(skrifa::Tag::new(b"cvar")).is_none(), "the masters' control values are the same");
     assert!(!program(&font, gid(out, "o")).is_empty(), "{:?}", out.warnings);
     runs_everywhere(&out.bytes);
 }

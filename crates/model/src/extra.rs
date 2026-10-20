@@ -93,6 +93,15 @@ impl Extra {
         }
         Some(value)
     }
+
+    /// Keeps only the entries for which `keep` is true.
+    pub fn retain(&mut self, keep: impl FnMut(&ExtraEntry) -> bool) {
+        let Some(entries) = self.0.as_mut() else { return };
+        entries.retain(keep);
+        if entries.is_empty() {
+            self.0 = None;
+        }
+    }
 }
 
 /// In the native file an entry is `{"family", "key", "value"}`, with the value as property-list

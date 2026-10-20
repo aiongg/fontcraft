@@ -16,6 +16,7 @@ mod cmap;
 mod fvar;
 mod layout;
 mod names;
+mod recompile_cff;
 #[cfg(test)]
 mod tests;
 
@@ -24,6 +25,7 @@ pub use cmap::{CmapConflict, CmapRebuild, rebuild_cmap};
 pub use fvar::{InstanceCleanup, clean_instances, drop_axis};
 pub use layout::recompile_layout;
 pub use names::{NameCleanup, NameOptions, clean_name_records};
+pub use recompile_cff::{CffRecompile, recompile_cff};
 
 use crate::sfnt::{SfntFont, Tag, tag_str};
 use crate::{Result, TablesError};

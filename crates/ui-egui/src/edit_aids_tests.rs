@@ -273,6 +273,65 @@ fn view_show_metrics_beam_prints_the_sidebearings_where_the_line_meets_the_outli
 }
 
 #[test]
+fn dragging_the_metrics_beam_beside_the_glyph_equals_view_show_metrics_beam() {
+    let mut app = FontcraftApp::default();
+    app.run("spacing.setWidth", &json!({"glyphs": ["A"], "value": 600})).unwrap();
+    app.run("view.editSelectedGlyphs", &json!({"glyphs": ["A"]})).unwrap();
+    app.run("view.setZoom", &json!({"size": 300, "center": [300, 300]})).unwrap();
+    app.run("view.showMetricsBeam", &json!({"y": 300})).unwrap();
+    let ctx = egui::Context::default();
+    settled(&ctx, &mut app);
+    let events = |ctx: &egui::Context, app: &mut FontcraftApp, events: Vec<egui::Event>| {
+        let input =
+            egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 800.0))), events, ..Default::default() };
+        let _ = ctx.run_ui(input, |ui| app.ui(ui));
+    };
+    let button = |pos, pressed| egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE };
+    // Left of the glyph's origin, where the beam can be grabbed.
+    let (from, to) = (screen(&app, -100.0, 300.0), screen(&app, -100.0, 400.0));
+    events(&ctx, &mut app, vec![egui::Event::PointerMoved(from)]);
+    events(&ctx, &mut app, vec![button(from, true)]);
+    events(&ctx, &mut app, vec![egui::Event::PointerMoved(from.lerp(to, 0.5))]);
+    events(&ctx, &mut app, vec![egui::Event::PointerMoved(to)]);
+    events(&ctx, &mut app, vec![button(to, false)]);
+    settled(&ctx, &mut app);
+    let beam = app.run("view.showMetricsBeam", &json!({"on": true})).unwrap();
+    assert_eq!(beam, json!({"on": true, "y": 400.0}), "the beam follows the pointer in whole units");
+    assert!(app.state.tab().unwrap().selection.is_empty(), "the drag selects nothing");
+}
+
+#[test]
+fn a_marquee_started_near_the_metrics_beam_selects_and_leaves_the_beam() {
+    let mut app = FontcraftApp::default();
+    app.run("path.addRectangle", &json!({"glyph": "A", "x": 100, "y": 100, "width": 100, "height": 100})).unwrap();
+    app.run("spacing.setWidth", &json!({"glyphs": ["A"], "value": 600})).unwrap();
+    app.run("view.editSelectedGlyphs", &json!({"glyphs": ["A"]})).unwrap();
+    app.run("view.setZoom", &json!({"size": 300, "center": [300, 300]})).unwrap();
+    app.run("view.showMetricsBeam", &json!({"y": 300})).unwrap();
+    let ctx = egui::Context::default();
+    settled(&ctx, &mut app);
+    let events = |ctx: &egui::Context, app: &mut FontcraftApp, events: Vec<egui::Event>| {
+        let input =
+            egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 800.0))), events, ..Default::default() };
+        let _ = ctx.run_ui(input, |ui| app.ui(ui));
+    };
+    let button = |pos, pressed| egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE };
+    // Left of the glyph's origin, within the node hit tolerance of the beam but not on it.
+    let near = app.tokens.hit_tolerance * 0.8;
+    let from = screen(&app, -100.0, 300.0) + egui::vec2(0.0, -near);
+    let to = screen(&app, 250.0, 50.0);
+    events(&ctx, &mut app, vec![egui::Event::PointerMoved(from)]);
+    events(&ctx, &mut app, vec![button(from, true)]);
+    events(&ctx, &mut app, vec![egui::Event::PointerMoved(from.lerp(to, 0.5))]);
+    events(&ctx, &mut app, vec![egui::Event::PointerMoved(to)]);
+    events(&ctx, &mut app, vec![button(to, false)]);
+    settled(&ctx, &mut app);
+    let beam = app.run("view.showMetricsBeam", &json!({"on": true})).unwrap();
+    assert_eq!(beam, json!({"on": true, "y": 300.0}), "the beam stays");
+    assert!(!app.state.tab().unwrap().selection.is_empty(), "the marquee selects the square's nodes");
+}
+
+#[test]
 fn the_aids_draw_in_their_own_theme_tokens() {
     let mut app = aids_app();
     let ctx = egui::Context::default();

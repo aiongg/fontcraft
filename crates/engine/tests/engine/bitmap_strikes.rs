@@ -185,6 +185,34 @@ fn an_imported_strike_exports_back_to_the_same_strike_as_bdf_and_pcf() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+/// A strike written as a TeX PK file reads back with the same bitmaps, by import and by open.
+#[test]
+fn a_strike_exports_as_pk_and_reads_back() {
+    let dir = temp("pk");
+    let path = bdf_file(&dir, "pixel.bdf", BDF);
+    let mut s = session();
+    run(&mut s, "bitmap.importStrikes", json!({ "paths": [path] }));
+    let mut expected = strikes(&s).remove(0);
+    expected.glyphs[2].code = Some(u32::from('c'));
+    let pk = dir.join("pixel.75pk");
+    let out = run(&mut s, "bitmap.exportStrikes", json!({ "path": pk }));
+    assert_eq!(out["format"], "pk");
+
+    let mut fresh = session();
+    run(&mut fresh, "bitmap.importStrikes", json!({ "paths": [pk] }));
+    let back = strikes(&fresh).remove(0);
+    assert_eq!((back.ppem, back.depth, back.resolution), (8, 1, [75, 75]));
+    assert_eq!(back.glyphs, expected.glyphs);
+
+    let mut opened = Session::new();
+    run(&mut opened, "file.open", json!({ "path": pk }));
+    let font = opened.font().unwrap();
+    let names: Vec<&str> = font.glyphs.iter().map(|g| g.name.as_str()).collect();
+    assert_eq!(names, ["A", "B", "c"]);
+    assert_eq!(font.bitmap_strikes.len(), 1);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 #[test]
 fn strikes_are_added_and_removed_with_undo_and_follow_renamed_glyphs() {
     let dir = temp("set");
@@ -233,7 +261,7 @@ fn hostile_or_unmatched_files_are_refused_and_change_nothing() {
         ("many.bdf", BDF.replace("STARTPROPERTIES 5", "STARTPROPERTIES 99999").into_bytes(), "limit"),
         ("none.bdf", unmatched.into_bytes(), "none of"),
         ("packed.pcf.gz", vec![0x1f, 0x8b, 8, 0, 0, 0, 0, 0], "gzip"),
-        ("text.bdf", b"hello".to_vec(), "neither"),
+        ("text.bdf", b"hello".to_vec(), "not a bitmap font"),
     ];
     for (name, bytes, words) in &cases {
         std::fs::write(dir.join(name), bytes).unwrap();
@@ -404,5 +432,168 @@ fn strikes_go_into_compiled_fonts_and_read_back_through_ttx() {
     let message = refused(&mut s, "bitmap.exportStrikes", json!({ "format": "embedded", "font": dir.join("text.ttf"), "path": dir.join("y.ttf") }));
     assert!(message.contains("not a TrueType"), "{message}");
     assert!(!dir.join("big.ttf").exists() && !dir.join("y.ttf").exists());
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Each bitmap of a strike by glyph name: its code, advance and lit pixels from the origin (x
+/// to the right, y up), so strikes whose bitmaps are boxed differently compare alike.
+fn shapes(strike: &BitmapStrike) -> Vec<(String, Option<u32>, i32, std::collections::BTreeSet<(i32, i32)>)> {
+    let mut out: Vec<_> = strike
+        .glyphs
+        .iter()
+        .map(|g| {
+            let stride = usize::from(g.width).div_ceil(8);
+            let mut ink = std::collections::BTreeSet::new();
+            for y in 0..usize::from(g.height) {
+                for x in 0..usize::from(g.width) {
+                    if g.data[y * stride + x / 8] & (0x80 >> (x % 8)) != 0 {
+                        ink.insert((g.left + x as i32, g.bottom + i32::from(g.height) - 1 - y as i32));
+                    }
+                }
+            }
+            (g.glyph.clone(), g.code, g.advance, ink)
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+#[test]
+fn a_strike_exports_as_pcf_gz_fnt_and_fon_and_reads_back() {
+    let dir = temp("windows");
+    let path = bdf_file(&dir, "pixel.bdf", BDF);
+    let mut s = session();
+    run(&mut s, "bitmap.importStrikes", json!({ "paths": [path] }));
+    let mut expected = strikes(&s).remove(0);
+    expected.glyphs[2].code = Some(u32::from('c'));
+
+    let gz = dir.join("out.pcf.gz");
+    let out = run(&mut s, "bitmap.exportStrikes", json!({ "path": gz }));
+    assert_eq!(out["format"], "pcf.gz");
+    let out = run(&mut s, "bitmap.exportStrikes", json!({ "format": "fnt", "destination": dir.join("fnt") }));
+    let fnt = PathBuf::from(out["files"][0]["path"].as_str().unwrap());
+    assert_eq!(fnt.file_name().unwrap(), "Pixel-Test-8.fnt");
+    assert!(out["files"][0].get("warnings").is_none(), "{out}");
+    let fon = dir.join("out.fon");
+    let out = run(&mut s, "bitmap.exportStrikes", json!({ "path": fon }));
+    assert_eq!((&out["format"], &out["files"][0]["strikes"]), (&json!("fon"), &json!(["8"])));
+
+    let mut fresh = session();
+    run(&mut fresh, "bitmap.importStrikes", json!({ "paths": [gz] }));
+    assert_eq!(strikes(&fresh)[0].glyphs, expected.glyphs, "a .pcf.gz reads back as the PCF it holds");
+    // FNT bitmaps are cells as wide as the advance and as tall as the strike; the pixels are the same.
+    for path in [&fnt, &fon] {
+        let mut fresh = session();
+        run(&mut fresh, "bitmap.importStrikes", json!({ "paths": [path] }));
+        let back = strikes(&fresh).remove(0);
+        assert_eq!((back.ppem, back.depth, back.ascent, back.descent), (8, 1, 7, 1), "{}", path.display());
+        assert_eq!(shapes(&back), shapes(&expected), "{}", path.display());
+    }
+    assert!(refused(&mut s, "bitmap.exportStrikes", json!({ "format": "fon", "destination": dir })).contains("path"));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_fon_opens_with_a_strike_per_size_and_a_pcf_gz_opens() {
+    use fontcraft_io_bitmap as io;
+    let dir = temp("open-windows");
+    let small = io::read_bdf(BDF.as_bytes()).unwrap().font;
+    let mut large = small.clone();
+    (large.pixel_size, large.ascent) = (10, 9);
+    let fon = dir.join("pair.fon");
+    let written = io::write_fon(&[small.clone(), large]).unwrap();
+    // `c` has no code and the private-use glyph none in code page 1252.
+    assert!(written.warnings.iter().any(|w| w.contains("2 glyphs have no code")), "{:?}", written.warnings);
+    std::fs::write(&fon, written.bytes).unwrap();
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": fon }));
+    let names: Vec<String> = s.font().unwrap().glyphs.iter().map(|g| g.name.clone()).collect();
+    assert_eq!(names, ["uni0041", "uni0042"]);
+    let got = strikes(&s);
+    let sizes: Vec<(u16, usize)> = got.iter().map(|s| (s.ppem, s.glyphs.len())).collect();
+    assert_eq!(sizes, [(8, 2), (10, 2)]);
+
+    let gz = dir.join("pixel.pcf.gz");
+    std::fs::write(&gz, io::write_pcf_gz(&small, io::PcfLayout::default()).unwrap()).unwrap();
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": gz }));
+    let font = s.font().unwrap();
+    assert_eq!((font.family_name.as_str(), font.glyphs.len()), ("pixel", 4));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Two fonts of one size in one FON file import as one strike, the first, with a warning; they
+/// are not merged.
+#[test]
+fn a_fon_with_two_fonts_of_one_size_imports_the_first() {
+    use fontcraft_io_bitmap as io;
+    let dir = temp("fon-one-size");
+    let regular = io::read_bdf(BDF.as_bytes()).unwrap().font;
+    let mut bold = regular.clone();
+    bold.name = "Pixel Bold".into();
+    bold.glyphs[0].bitmap.data = vec![0xF8; 4];
+    let both = dir.join("both.fon");
+    std::fs::write(&both, io::write_fon(&[regular.clone(), bold]).unwrap().bytes).unwrap();
+    let first = dir.join("first.fon");
+    std::fs::write(&first, io::write_fon(&[regular]).unwrap().bytes).unwrap();
+
+    let mut s = session();
+    let out = run(&mut s, "bitmap.importStrikes", json!({ "paths": [both] }));
+    assert_eq!(out["strikes"].as_array().unwrap().len(), 1, "{out}");
+    assert_eq!(out["strikes"][0]["replaced"], false);
+    let warnings = out["warnings"].as_array().unwrap();
+    assert!(warnings.iter().any(|w| w.as_str().unwrap().contains("a further strike of 8 was left out")), "{out}");
+    let mut alone = session();
+    run(&mut alone, "bitmap.importStrikes", json!({ "paths": [first] }));
+    assert_eq!(strikes(&s), strikes(&alone), "the first font's strike, untouched by the second");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A FON whose symbol font matches no glyph imports its other font, with a warning.
+#[test]
+fn a_fon_whose_symbol_font_matches_nothing_imports_the_other() {
+    use fontcraft_io_bitmap as io;
+    let dir = temp("fon-symbol");
+    let ansi = io::read_bdf(BDF.as_bytes()).unwrap().font;
+    let mut symbol = ansi.clone();
+    (symbol.pixel_size, symbol.ascent) = (10, 9);
+    for p in &mut symbol.properties {
+        match p.name.as_str() {
+            "CHARSET_REGISTRY" => p.value = io::PropertyValue::Text("MICROSOFT".into()),
+            "CHARSET_ENCODING" => p.value = io::PropertyValue::Text("CHARSET2".into()),
+            "PIXEL_SIZE" => p.value = io::PropertyValue::Integer(10),
+            _ => {}
+        }
+    }
+    let fon = dir.join("pair.fon");
+    std::fs::write(&fon, io::write_fon(&[ansi, symbol]).unwrap().bytes).unwrap();
+    let mut s = session();
+    let out = run(&mut s, "bitmap.importStrikes", json!({ "paths": [fon] }));
+    assert_eq!(out["strikes"].as_array().unwrap().len(), 1, "{out}");
+    assert_eq!(out["strikes"][0]["ppem"], 8);
+    let warnings = out["warnings"].as_array().unwrap();
+    assert!(warnings.iter().any(|w| w.as_str().unwrap().contains("strike was left out: none of its")), "{out}");
+    assert_eq!(strikes(&s).len(), 1);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// TeX codes are not Unicode: a PK character of code 123 (an en dash in cmr10) does not go to
+/// the font's `braceleft` (U+007B); letters still match by name.
+#[test]
+fn pk_codes_match_glyphs_by_name_only() {
+    use fontcraft_io_bitmap as io;
+    let dir = temp("pk-codes");
+    let mut tex = io::read_bdf(BDF.as_bytes()).unwrap().font;
+    tex.glyphs[1].encoding = Some(123);
+    let pk = dir.join("tex.72pk");
+    std::fs::write(&pk, io::write_pk(&tex).unwrap()).unwrap();
+    let mut s = session();
+    run(&mut s, "glyph.newGlyph", json!({ "name": "braceleft", "unicodes": [0x7B] }));
+    let out = run(&mut s, "bitmap.importStrikes", json!({ "paths": [pk] }));
+    let left_out = out["strikes"][0]["leftOut"].as_array().unwrap();
+    assert!(left_out.contains(&json!("char123")), "{out}");
+    let strike = strikes(&s).remove(0);
+    assert!(strike.glyph("braceleft").is_none());
+    assert_eq!(strike.glyph("A").unwrap().code, Some(65));
     std::fs::remove_dir_all(&dir).unwrap();
 }

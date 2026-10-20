@@ -344,8 +344,8 @@ pub fn key(cx: &Context<'_>, ev: &KeyEvent) -> Option<Output> {
     Some(Output::with(Action::Run { invocation }))
 }
 
-/// The arrow key `ev` on the `selected` hints: one `hint.ps.setHintValues` per hint across the
-/// arrow, then the selection again, since each command answers with a selection of no hints.
+/// The arrow key `ev` on the `selected` hints: one `hint.ps.moveHints` for all of them (one undo
+/// step), then the selection again, since the command answers with a selection of no hints.
 /// Hints along the arrow stay where they are; the key is used either way, so it does not move
 /// the hidden node selection.
 fn nudge(cx: &Context<'_>, ev: &KeyEvent, selected: &[usize]) -> Output {
@@ -367,21 +367,15 @@ fn nudge(cx: &Context<'_>, ev: &KeyEvent, selected: &[usize]) -> Output {
     if !by.is_finite() || by == 0.0 {
         return out;
     }
-    for &i in selected {
-        let Some(h) = cx.scene.ps_hints.get(i).filter(|h| h.horizontal == horizontal) else { continue };
-        let Some(origin) = h.origin.map(|o| o + by).filter(|o| o.is_finite()) else { continue };
-        let mut m = cx.scene.target();
-        m.insert("hint".into(), json!(i));
-        m.insert("origin".into(), json!(origin));
-        // A stem keeps its size; a ghost has none to give.
-        if let Some(size) = h.size.filter(|_| !h.kind.is_ghost()) {
-            m.insert("size".into(), json!(size));
-        }
-        out.push(Action::Run { invocation: Invocation::new("hint.ps.setHintValues", Value::Object(m)) });
+    let moving: Vec<usize> = selected.iter().copied().filter(|&i| cx.scene.ps_hints.get(i).is_some_and(|h| h.horizontal == horizontal)).collect();
+    if moving.is_empty() {
+        return out;
     }
-    if !out.actions.is_empty() {
-        out.push(Action::Select { selection: cx.selection.clone() });
-    }
+    let mut m = cx.scene.target();
+    m.insert("hints".into(), json!(moving));
+    m.insert(if horizontal { "dy" } else { "dx" }.into(), json!(by));
+    out.push(Action::Run { invocation: Invocation::new("hint.ps.moveHints", Value::Object(m)) });
+    out.push(Action::Select { selection: cx.selection.clone() });
     out
 }
 
@@ -706,20 +700,20 @@ mod tests {
         let both = Selection::from_items([Item::Hint(0), Item::Hint(1)]);
         shell.selection = both.clone();
         let mut tool = SelectTool::default();
-        // Up moves the horizontal hint 0 only, by the plain increment, keeping its size.
+        // Up moves the horizontal hint 0 only, by the plain increment, in one command.
         shell.run(|cx| tool.key(cx, &KeyEvent::press(Key::Up, NONE)));
         let runs = shell.runs();
         assert_eq!(runs.len(), 1, "{runs:?}");
         let (id, params) = &runs[0];
-        assert_eq!((id.as_str(), params["hint"].clone(), params["layer"].clone()), ("hint.ps.setHintValues", json!(0), json!("m01")));
-        assert_eq!((params["origin"].as_f64(), params["size"].as_f64()), (Some(1.0), Some(80.0)));
+        assert_eq!((id.as_str(), params["hints"].clone(), params["layer"].clone()), ("hint.ps.moveHints", json!([0]), json!("m01")));
+        assert_eq!((params["dy"].as_f64(), params.get("dx")), (Some(1.0), None));
         assert_eq!(shell.selection, both, "the hints stay selected");
-        // Shift+Left moves the vertical hint 1 by the big increment; its linked origin becomes a number.
+        // Shift+Left moves the vertical hint 1 by the big increment.
         shell.actions.clear();
         shell.run(|cx| tool.key(cx, &KeyEvent::press(Key::Left, SHIFT)));
         let runs = shell.runs();
         assert_eq!(runs.len(), 1, "{runs:?}");
-        assert_eq!((runs[0].1["hint"].clone(), runs[0].1["origin"].as_f64(), runs[0].1["size"].as_f64()), (json!(1), Some(90.0), Some(200.0)));
+        assert_eq!((runs[0].1["hints"].clone(), runs[0].1["dx"].as_f64()), (json!([1]), Some(-10.0)));
         // Without a selected hint the arrows are not the hints'.
         shell.selection = Selection::new();
         let scene_marks = shell.marks.clone();

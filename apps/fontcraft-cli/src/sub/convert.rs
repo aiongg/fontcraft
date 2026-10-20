@@ -23,32 +23,55 @@ const USAGE: &str = "\
       one static font (.ttf, .otf with CFF outlines, .woff, .woff2) of its first exportable
       instance. --smart-components: a UFO or designspace keeps smart components as components
       with their values (default) or holds them drawn as outlines.
-  fontcraft-cli convert FONT OUT | convert FONT... --to ttf|otf|otf-cff2|cff|cff2 [options]
+  fontcraft-cli convert FONT OUT | convert FONT... --to ttf|otf|otf-cff2|cff|cff2|ufo [options]
       Rewrite compiled fonts, TTX text, Type 1 fonts (.pfa, .pfb) and bare CFF tables with other
       outlines: CFF or CFF2 to TrueType (cubic curves become quadratic within one font unit or
       --max-error em, contours reversed), TrueType to CFF or
       CFF2 (components decomposed, instructions dropped), CFF to CFF2 and back with hints kept,
-      or only the CFF or CFF2 table (cff, cff2). With IN OUT the extension of OUT says what to
-      write; .woff and .woff2 keep the input's outlines. Each output is INPUT.EXT unless -o, --output-dir or
-      --in-place says otherwise.
+      only the CFF or CFF2 table (cff, cff2), or a UFO of the font as the editor opens it. With
+      IN OUT the extension of OUT says what to write; .woff and .woff2 keep the input's outlines.
+      Each output is INPUT.EXT unless -o, --output-dir or --in-place says otherwise.
+      A variable font written as UFO or with other outlines is snapshotted at its default
+      location unless --location says where. --cid-keyed makes a CFF result CID-keyed.
+      Before converting: --location snapshots a variable font, --glyphs and --exclude-glyphs
+      keep part of the glyph set (names, glyph ids, /CID in a CID-keyed font), --fd-select and
+      --exclude-fd keep the glyphs of some Font DICTs, --goadb renames, subsets or orders the
+      glyphs, and --remove-overlaps merges overlapping contours.
 ";
 
 const OPTIONS: &[OptSpec] = &[
-    OptSpec::value("to", "FORMAT", "", "ttf, otf, otf-cff2, cff or cff2"),
+    OptSpec::value("to", "FORMAT", "", "ttf, otf, otf-cff2, cff, cff2 or ufo"),
     OptSpec::value("container", "plain|woff|woff2", "plain", "wrap the result"),
     OptSpec::value("max-error", "EM", "", "largest curve conversion error, as a fraction of the em (default: one font unit)"),
     OptSpec::value(
         "curve-conversion",
         "optimized|exact",
-        "optimized",
-        "quadratic to cubic: merge curves within the error, or raise each one exactly",
+        "",
+        "quadratic to cubic: merge curves within the error (optimized, the default), or raise each one exactly",
     ),
     OptSpec::switch("keep-direction", false, "do not reverse contours when the curve degree changes"),
-    OptSpec::value("post-format", "2|3", "2", "keep glyph names in post (2) or drop them (3)"),
+    OptSpec::value("post-format", "2|3", "", "keep glyph names in post (2, the default) or drop them (3)"),
     OptSpec::switch("subroutinize", false, "subroutinise CFF and CFF2 results (default: sfnt results yes, bare tables no)"),
     OptSpec::value("max-subrs", "N", "", "most subroutines per INDEX"),
     OptSpec::switch("no-hints", false, "drop stem hints when CFF outlines stay CFF"),
+    OptSpec::optional_value(
+        "cid-keyed",
+        "R-O-S",
+        "make a name-keyed CFF result CID-keyed, CID n for glyph n (default Identity ordering, supplement 0); give a collection as --cid-keyed=R-O-S",
+    ),
     OptSpec::value("timestamp", "keep|now|SECONDS", "", "head.modified: keep it, the current time, or seconds since 1970"),
+    OptSpec::value("glyphs", "SELECTOR", "", "keep only these glyphs and .notdef: names, glyph ids, ranges (3-9), U+0041"),
+    OptSpec::value("exclude-glyphs", "SELECTOR", "", "leave these glyphs out"),
+    OptSpec::list("fd-select", "N,...", "", "keep only the glyphs of these Font DICTs (CID-keyed CFF or CFF2, numbered from 0)"),
+    OptSpec::list("exclude-fd", "N,...", "", "leave out the glyphs of these Font DICTs"),
+    OptSpec::value("goadb", "FILE", "", "rename glyphs from the GOADB's second column to its first"),
+    OptSpec::switch("no-rename", false, "use the GOADB without renaming"),
+    OptSpec::switch("subset-to-goadb", false, "keep only the glyphs the GOADB lists"),
+    OptSpec::switch("goadb-order", false, "order the glyphs as the GOADB lists them"),
+    OptSpec::list("location", "AXIS=VALUE", "", "snapshot a variable font at this location first (axis tags; others at their default)"),
+    OptSpec::switch("no-clamp", false, "refuse a location outside the axis ranges instead of clamping it"),
+    OptSpec::switch("remove-overlaps", false, "merge overlapping contours (a merged CFF glyph loses its stem hints)"),
+    OptSpec::switch("ignore-overlap-errors", false, "keep a glyph whose overlaps cannot be merged as it is"),
     OptSpec::value("smart-components", "components|outlines", "", "sources: how a UFO or designspace holds smart components"),
     OptSpec::value("output", "OUT", "", "the output file (one input only)").short('o'),
     OptSpec::value("output-dir", "DIR", "", "the folder outputs go into"),
@@ -70,6 +93,17 @@ fn convert(raw: &[String]) -> Outcome {
         return convert_fonts(&parsed, raw);
     }
     let [input, output] = parsed.positional.as_slice() else { return Err(usage("convert needs IN and OUT")) };
+    let given = ["glyphs", "exclude-glyphs", "goadb"].into_iter().find(|name| parsed.value(name).is_some_and(|v| !v.is_empty()));
+    let given = given.or_else(|| ["location", "fd-select", "exclude-fd"].into_iter().find(|name| !parsed.list(name).is_empty()));
+    let given = given.or_else(|| parsed.value("cid-keyed").is_some().then_some("cid-keyed"));
+    let given = given.or_else(|| {
+        ["no-rename", "subset-to-goadb", "goadb-order", "no-clamp", "remove-overlaps", "ignore-overlap-errors"]
+            .into_iter()
+            .find(|name| parsed.switch(name))
+    });
+    if let Some(name) = given {
+        return Err(usage(format!("--{name} applies to compiled fonts; a source is converted as it is (see instance and subset)")));
+    }
     let smart = parsed.value("smart-components").filter(|v| !v.is_empty());
     if let Some(v) = smart
         && !matches!(v, "components" | "outlines")
@@ -174,75 +208,7 @@ fn flavour_of(path: &str) -> Result<&'static str, Failure> {
 }
 
 fn convert_fonts(parsed: &args::Parsed, raw: &[String]) -> Outcome {
-    let mut params = Map::new();
-    let mut inputs: Vec<String> = parsed.positional.clone();
-    let mut container = parsed.value("container").unwrap_or("plain").to_string();
-    let to = match parsed.value("to") {
-        Some(to) => to.to_string(),
-        None => {
-            // IN OUT: the output's extension decides.
-            let [input, output] = parsed.positional.as_slice() else { return Err(usage("convert needs IN and OUT, or --to FORMAT")) };
-            if parsed.value("output").is_some() {
-                return Err(usage("give OUT or -o, not both"));
-            }
-            let extension = std::path::Path::new(output).extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-            let to = match extension.as_str() {
-                "ttf" => "ttf",
-                "otf" => "otf",
-                "cff" => "cff",
-                "cff2" => "cff2",
-                "woff" | "woff2" => {
-                    container = extension.clone();
-                    flavour_of(input)?
-                }
-                other => {
-                    return Err(usage(format!("cannot write `.{other}` from a compiled font (writable: .ttf, .otf, .cff, .cff2, .woff, .woff2)")));
-                }
-            };
-            params.insert("output".into(), json!(output));
-            inputs = vec![input.clone()];
-            to.to_string()
-        }
-    };
-    params.insert("inputs".into(), json!(inputs));
-    params.insert("to".into(), json!(to));
-    params.insert("container".into(), json!(container));
-    let mut curves = Map::new();
-    if let Some(v) = parsed.value("max-error").filter(|v| !v.is_empty()) {
-        let max_error = v.parse::<f64>().map_err(|_| usage("--max-error needs a number"))?;
-        curves.insert("maxError".into(), json!(max_error));
-    }
-    curves.insert("conversion".into(), json!(parsed.value("curve-conversion").unwrap_or("optimized")));
-    curves.insert("keepDirection".into(), json!(parsed.switch("keep-direction")));
-    params.insert("curves".into(), Value::Object(curves));
-    let post = parsed.value("post-format").unwrap_or("2").parse::<u64>().map_err(|_| usage("--post-format needs 2 or 3"))?;
-    params.insert("postFormat".into(), json!(post));
-    let mut cff = Map::new();
-    if raw.iter().any(|a| a == "--no-subroutinize") {
-        cff.insert("subroutinize".into(), json!(false));
-    } else if parsed.switch("subroutinize") {
-        cff.insert("subroutinize".into(), json!(true));
-    }
-    if let Some(n) = parsed.value("max-subrs").filter(|v| !v.is_empty()) {
-        cff.insert("maxSubrs".into(), json!(n.parse::<u64>().map_err(|_| usage("--max-subrs needs a number"))?));
-    }
-    if !cff.is_empty() {
-        params.insert("cff".into(), Value::Object(cff));
-    }
-    params.insert("hints".into(), json!(!parsed.switch("no-hints")));
-    if let Some(t) = parsed.value("timestamp").filter(|v| !v.is_empty()) {
-        params.insert("timestamp".into(), t.parse::<i64>().map(Value::from).unwrap_or_else(|_| json!(t)));
-    }
-    for (key, name) in [("output", "output"), ("outputDir", "output-dir")] {
-        if let Some(v) = parsed.value(name).filter(|v| !v.is_empty()) {
-            params.insert(key.into(), json!(v));
-        }
-    }
-    params.insert("inPlace".into(), json!(parsed.switch("in-place")));
-    params.insert("noClobber".into(), json!(parsed.switch("no-clobber")));
-    if let Some(face) = parsed.value("face").filter(|v| !v.is_empty()) {
-        params.insert("face".into(), face.parse::<u64>().map(Value::from).unwrap_or_else(|_| json!(face)));
-    }
+    let params = font_params(parsed, raw)?;
     let result = execute(&mut Session::new(), "font.convert", &Value::Object(params)).map_err(|f| match f {
         Failure::Failed(m) if m.contains("cannot open") || m.contains("cannot read") => Failure::Input(m),
         other => other,
@@ -263,4 +229,174 @@ fn convert_fonts(parsed: &args::Parsed, raw: &[String]) -> Outcome {
         }
     }
     Ok(())
+}
+
+/// The `font.convert` parameters of a command line. An option left out is left out of the
+/// parameters too, so the command's own defaults apply.
+fn font_params(parsed: &args::Parsed, raw: &[String]) -> Result<Map<String, Value>, Failure> {
+    let mut params = Map::new();
+    let mut inputs: Vec<String> = parsed.positional.clone();
+    let mut container = parsed.value("container").unwrap_or("plain").to_string();
+    let to = match parsed.value("to") {
+        Some(to) => to.to_string(),
+        None => {
+            // IN OUT: the output's extension decides.
+            let [input, output] = parsed.positional.as_slice() else { return Err(usage("convert needs IN and OUT, or --to FORMAT")) };
+            if parsed.value("output").is_some() {
+                return Err(usage("give OUT or -o, not both"));
+            }
+            let extension = std::path::Path::new(output).extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+            let to = match extension.as_str() {
+                "ttf" => "ttf",
+                "otf" => "otf",
+                "cff" => "cff",
+                "cff2" => "cff2",
+                "ufo" => "ufo",
+                "woff" | "woff2" => {
+                    container = extension.clone();
+                    flavour_of(input)?
+                }
+                other => {
+                    return Err(usage(format!(
+                        "cannot write `.{other}` from a compiled font (writable: .ttf, .otf, .cff, .cff2, .woff, .woff2, .ufo)"
+                    )));
+                }
+            };
+            params.insert("output".into(), json!(output));
+            inputs = vec![input.clone()];
+            to.to_string()
+        }
+    };
+    params.insert("inputs".into(), json!(inputs));
+    params.insert("to".into(), json!(to));
+    params.insert("container".into(), json!(container));
+    let mut curves = Map::new();
+    if let Some(v) = parsed.value("max-error").filter(|v| !v.is_empty()) {
+        let max_error = v.parse::<f64>().map_err(|_| usage("--max-error needs a number"))?;
+        curves.insert("maxError".into(), json!(max_error));
+    }
+    if let Some(v) = parsed.value("curve-conversion").filter(|v| !v.is_empty()) {
+        curves.insert("conversion".into(), json!(v));
+    }
+    if parsed.switch("keep-direction") {
+        curves.insert("keepDirection".into(), json!(true));
+    }
+    if !curves.is_empty() {
+        params.insert("curves".into(), Value::Object(curves));
+    }
+    if let Some(v) = parsed.value("post-format").filter(|v| !v.is_empty()) {
+        params.insert("postFormat".into(), json!(v.parse::<u64>().map_err(|_| usage("--post-format needs 2 or 3"))?));
+    }
+    let mut cff = Map::new();
+    if raw.iter().any(|a| a == "--no-subroutinize") {
+        cff.insert("subroutinize".into(), json!(false));
+    } else if parsed.switch("subroutinize") {
+        cff.insert("subroutinize".into(), json!(true));
+    }
+    if let Some(n) = parsed.value("max-subrs").filter(|v| !v.is_empty()) {
+        cff.insert("maxSubrs".into(), json!(n.parse::<u64>().map_err(|_| usage("--max-subrs needs a number"))?));
+    }
+    if !cff.is_empty() {
+        params.insert("cff".into(), Value::Object(cff));
+    }
+    if parsed.switch("no-hints") {
+        params.insert("hints".into(), json!(false));
+    }
+    if let Some(ros) = parsed.value("cid-keyed") {
+        let keyed = if ros.is_empty() {
+            json!(true)
+        } else {
+            let well_formed = ros.rsplit_once('-').is_some_and(|(rest, s)| rest.contains('-') && s.parse::<u32>().is_ok());
+            if !well_formed {
+                return Err(usage(format!(
+                    "--cid-keyed takes REGISTRY-ORDERING-SUPPLEMENT, not `{ros}` (write --cid-keyed=R-O-S, or put --cid-keyed after the inputs)"
+                )));
+            }
+            json!(ros)
+        };
+        params.insert("cid".into(), json!({ "keyed": keyed }));
+    }
+    for (key, name) in [("fdSelect", "fd-select"), ("excludeFd", "exclude-fd")] {
+        let items = parsed.list(name);
+        if items.is_empty() {
+            continue;
+        }
+        let mut fds = Vec::new();
+        for item in items.iter().flat_map(|l| l.split([' ', ','])).filter(|w| !w.is_empty()) {
+            fds.push(item.parse::<u64>().map_err(|_| usage(format!("--{name} takes Font DICT numbers, not {item}")))?);
+        }
+        params.insert(key.into(), json!(fds));
+    }
+    if let Some(t) = parsed.value("timestamp").filter(|v| !v.is_empty()) {
+        params.insert("timestamp".into(), t.parse::<i64>().map(Value::from).unwrap_or_else(|_| json!(t)));
+    }
+    for (key, name) in [("glyphs", "glyphs"), ("excludeGlyphs", "exclude-glyphs"), ("goadb", "goadb")] {
+        if let Some(v) = parsed.value(name).filter(|v| !v.is_empty()) {
+            params.insert(key.into(), json!(v));
+        }
+    }
+    if params.contains_key("goadb") {
+        params.insert("goadbRename".into(), json!(!parsed.switch("no-rename")));
+        params.insert("goadbSubset".into(), json!(parsed.switch("subset-to-goadb")));
+        params.insert("goadbOrder".into(), json!(parsed.switch("goadb-order")));
+    } else if ["no-rename", "subset-to-goadb", "goadb-order"].iter().any(|name| parsed.switch(name)) {
+        return Err(usage("--no-rename, --subset-to-goadb and --goadb-order need --goadb FILE"));
+    }
+    let location = parsed.list("location");
+    if !location.is_empty() {
+        let mut axes = Map::new();
+        for item in location.iter().flat_map(|l| l.split([' ', ','])).filter(|w| !w.is_empty()) {
+            let (axis, value) = item.split_once('=').ok_or_else(|| usage(format!("--location takes AXIS=VALUE, not {item}")))?;
+            let value: f64 =
+                value.parse().ok().filter(|v: &f64| v.is_finite()).ok_or_else(|| usage(format!("--location: {value} is not a number")))?;
+            if axes.insert(axis.to_string(), json!(value)).is_some() {
+                return Err(usage(format!("--location names the axis {axis} twice")));
+            }
+        }
+        params.insert("location".into(), Value::Object(axes));
+        params.insert("clamp".into(), json!(!parsed.switch("no-clamp")));
+    } else if parsed.switch("no-clamp") {
+        return Err(usage("--no-clamp needs --location"));
+    }
+    if parsed.switch("remove-overlaps") {
+        params.insert("removeOverlaps".into(), json!(true));
+        params.insert("ignoreOverlapErrors".into(), json!(parsed.switch("ignore-overlap-errors")));
+    } else if parsed.switch("ignore-overlap-errors") {
+        return Err(usage("--ignore-overlap-errors needs --remove-overlaps"));
+    }
+    for (key, name) in [("output", "output"), ("outputDir", "output-dir")] {
+        if let Some(v) = parsed.value(name).filter(|v| !v.is_empty()) {
+            params.insert(key.into(), json!(v));
+        }
+    }
+    params.insert("inPlace".into(), json!(parsed.switch("in-place")));
+    params.insert("noClobber".into(), json!(parsed.switch("no-clobber")));
+    if let Some(face) = parsed.value("face").filter(|v| !v.is_empty()) {
+        params.insert("face".into(), face.parse::<u64>().map(Value::from).unwrap_or_else(|_| json!(face)));
+    }
+    Ok(params)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn params(list: &[&str]) -> Result<Map<String, Value>, Failure> {
+        let raw: Vec<String> = list.iter().map(|s| s.to_string()).collect();
+        font_params(&args::parse(OPTIONS, &raw).unwrap(), &raw)
+    }
+
+    #[test]
+    fn convert_options_become_engine_parameters() {
+        let p = params(&["A.ttf", "--to", "ufo"]).unwrap();
+        for key in ["curves", "postFormat", "hints", "cff", "timestamp"] {
+            assert!(!p.contains_key(key), "{key}: options left out leave the command's defaults");
+        }
+        let p = params(&["A.ttf", "--to", "otf", "--no-hints", "--post-format", "3", "--keep-direction", "--location", "wght=300,wdth=80"]).unwrap();
+        assert_eq!(p["hints"], json!(false));
+        assert_eq!(p["postFormat"], json!(3));
+        assert_eq!(p["curves"], json!({ "keepDirection": true }));
+        assert_eq!(p["location"], json!({ "wght": 300.0, "wdth": 80.0 }));
+        assert!(params(&["A.ttf", "--to", "otf", "--location", "wght=1,wght=2"]).is_err(), "an axis given twice is refused");
+    }
 }

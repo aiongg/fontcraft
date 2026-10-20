@@ -550,7 +550,7 @@ guesses = [
 [[format]]
 id = "pcf"
 label = "Portable Compiled Format (X11 bitmap font)"
-extensions = ["pcf"]
+extensions = ["pcf", "pcf.gz"]
 read = true
 write = true
 spec = "https://fontforge.org/docs/techref/pcf-format.html"
@@ -560,10 +560,110 @@ summary = "Binary sibling of BDF with a table directory (properties, metrics, bi
 ref = "FontForge documentation › PCF format (public docs only)"
 status = "docs"
 origin = "fontforge"
-notes = "Reader and writer built (M13.55) in `crates/io-bitmap`, from FontForge's public PCF format page and the files the X.Org `bdftopcf` converter writes from BDF files of our own (every padding, scan unit, byte and bit order); no code that reads or writes PCF was consulted. Tables read: properties, metrics (compressed or not), bitmaps, BDF encodings, scalable widths, glyph names and either accelerators table; ink metrics are not kept. The result is the same strike `bdf` gives: ascent and descent from the BDF accelerators table, else the accelerators table, else `FONT_ASCENT`/`FONT_DESCENT`, else the glyphs' extent; name from `FONT`; point size from `POINT_SIZE` ÷ 10; resolution from `RESOLUTION_X`/`RESOLUTION_Y`. `write_pcf` writes black-and-white strikes in any layout (rows padded to 1, 2, 4 or 8 bytes, scan unit up to the padding, either byte and bit order, compressed metrics where they fit), adds `FONT`, `PIXEL_SIZE`, `POINT_SIZE` and the resolutions as properties when missing, and encodes codes up to 65,535. Gzip-compressed `.pcf.gz` files are refused with a message. Limits as for `bdf`, plus 64 tables; every offset and length is checked against its table, and glyphs that share bitmap data count once each against the 64 MiB pixel cap. Reachable through `bitmap.importStrikes` and `bitmap.exportStrikes`, and opened on its own by `file.open` as a bitmap-only font, as for `bdf`. Documented, not yet checked against files the reference writes."
+notes = "Reader and writer built (M13.55) in `crates/io-bitmap`, from FontForge's public PCF format page and the files the X.Org `bdftopcf` converter writes from BDF files of our own (every padding, scan unit, byte and bit order); no code that reads or writes PCF was consulted. Tables read: properties, metrics (compressed or not), bitmaps, BDF encodings, scalable widths, glyph names and either accelerators table; ink metrics are not kept. The result is the same strike `bdf` gives: ascent and descent from the BDF accelerators table, else the accelerators table, else `FONT_ASCENT`/`FONT_DESCENT`, else the glyphs' extent; name from `FONT`; point size from `POINT_SIZE` ÷ 10; resolution from `RESOLUTION_X`/`RESOLUTION_Y`. `write_pcf` writes black-and-white strikes in any layout (rows padded to 1, 2, 4 or 8 bytes, scan unit up to the padding, either byte and bit order, compressed metrics where they fit), adds `FONT`, `PIXEL_SIZE`, `POINT_SIZE` and the resolutions as properties when missing, and encodes codes up to 65,535. Gzip-compressed files (`.pcf.gz`, and `.bdf.gz` alike) are read and `.pcf.gz` written (M13.55e, `crates/io-bitmap/src/gz.rs`) through the gzip reader and writer of `crates/container`: every member's CRC and length is checked, and the inflated data is capped at 16 MiB, the uncompressed file limit, before the PCF or BDF reader runs; `file.open` takes gzip data as a bitmap font when the file name ends in `.pcf.gz` or `.bdf.gz`, else as a compressed FontCraft document. Limits as for `bdf`, plus 64 tables; every offset and length is checked against its table, and glyphs that share bitmap data count once each against the 64 MiB pixel cap. Reachable through `bitmap.importStrikes` and `bitmap.exportStrikes`, and opened on its own by `file.open` as a bitmap-only font, as for `bdf`. Documented, not yet checked against files the reference writes."
 guesses = [
   "A PCF file without a glyph names table names its glyphs `glyph0`, `glyph1`…; opening such a file in the reference app would show what it calls them.",
   "When several codes of the encodings table point at one glyph, the glyph keeps the lowest and a warning counts the rest; the reference may add copies instead. A PCF with a shared glyph opened in the reference app would settle it.",
+  "`.pcf.gz` is written as one gzip member at the best compression, with no file name and time 0. Whether the reference writes `.pcf.gz` at all is not documented; a font folder written by it would settle it.",
+]
+
+[[format]]
+id = "fnt"
+label = "Windows bitmap font (FNT)"
+extensions = ["fnt"]
+read = true
+write = true
+area = "import-export"
+milestone = "M13"
+summary = "The Windows 2 and 3 bitmap font file: a fixed header, a table of 8-bit codes with each glyph's width and offset, and the glyphs as column-major bitmaps one cell tall. One face at one size per file. Imported as a bitmap strike like `bdf`, and written from a strike."
+ref = "Microsoft's published Windows font file format (Windows 3 SDK reference; knowledge-base note on Windows 3.0 font files)"
+status = "docs"
+origin = "fontforge"
+notes = "Reader and writer built (M13.55e) in `crates/io-bitmap/src/fnt.rs`, from Microsoft's published description of the format and checked by rendering files built to the same layout through FreeType as a black box; no code that reads or writes FNT was consulted. `read_fnt` reads versions 2 (16-bit offsets) and 3 (32-bit offsets), raster fonts only: vector fonts, ABC spacing and colour fonts are refused. Each glyph becomes a bitmap as wide as its advance and as tall as the cell, its bottom at minus the descent (`dfPixHeight` − `dfAscent`); pixels per em are `dfPixHeight` − `dfInternalLeading`. The face name, copyright, weight, italic flag, character set, point size and resolutions become the X properties `FAMILY_NAME`, `COPYRIGHT`, `WEIGHT_NAME`, `SLANT`, `CHARSET_REGISTRY`/`CHARSET_ENCODING`, `POINT_SIZE`, `RESOLUTION_X`/`RESOLUTION_Y`, with `PIXEL_SIZE`, `SPACING`, `AVERAGE_WIDTH`, `FONT_ASCENT`, `FONT_DESCENT` and `DEFAULT_CHAR`. The ANSI character set is code page 1252, read as Unicode; the other character sets keep their 8-bit codes under registry `MICROSOFT` and encoding `CPnnnn` (or `CHARSETn`), and match glyphs by name. `write_fnt` writes version 3 from a black-and-white strike: the cell spans the strike's ascent and descent and every bitmap, each glyph is as wide as its advance, codes run from the lowest to the highest a glyph has, codes without a glyph show the default character (`DEFAULT_CHAR`, else `?`, else the first), and the table ends with a blank glyph of the average width. Glyphs without an 8-bit code, repeated codes and pixels outside the advance are left out with a warning; grey strikes, cells above 1,024 pixels and strikes with no 8-bit code are refused. Every count, offset and size read is checked against the file, widths and the cell height are capped at 1,024 pixels, and a point size above 32,767 is cut to 32,767 with a warning. Reachable through `bitmap.importStrikes`, `bitmap.exportStrikes` (format `fnt`) and `file.open`. Documented, not yet checked against files the reference writes."
+guesses = [
+  "Glyphs read from an FNT file are named `uniXXXX` from their code point in the ANSI character set, and `charNNN` from their 8-bit code in any other; opening an FNT in the secondary reference would show the names it picks.",
+  "Codes whose table entry repeats the default character's width and offset are read as missing, not as copies of it, and the writer fills codes without a glyph that way; an FNT written by the secondary reference with a gap in its codes would settle it.",
+  "Pixels per em are the cell height minus the internal leading, and the writer sets the internal leading to the cell height minus the strike's pixels per em; the format states only point size and resolution. An FNT the secondary reference writes from a known strike would settle it.",
+  "Character sets other than ANSI are kept as raw 8-bit codes under registry `MICROSOFT`; a strike in another X registry is written with the ANSI character set and its codes unchanged. A non-ANSI FNT exported by the secondary reference would settle it.",
+  "`WEIGHT_NAME` maps to and from the Windows weight through Thin 100, ExtraLight 200, Light 300, Medium or Regular 400, SemiBold 600, Bold 700, ExtraBold 800 and Black 900, and reading picks the nearest name.",
+]
+
+[[format]]
+id = "fon"
+label = "Windows bitmap font resource file (FON)"
+extensions = ["fon"]
+read = true
+write = true
+area = "import-export"
+milestone = "M13"
+summary = "A 16-bit Windows (NE) executable whose resources hold FNT fonts, usually one face at several sizes, with a font directory resource for the system's font loader. Every font is imported as a strike."
+ref = "Microsoft's published NE executable format and font directory resource (FONTDIRENTRY)"
+status = "docs"
+origin = "fontforge"
+notes = "Reader and writer built (M13.55e) in `crates/io-bitmap/src/fon.rs`, from Microsoft's published descriptions of the NE header, its resource table and the font directory, and checked by opening files built to the same layout in FreeType as a black box; no code that reads or writes FON was consulted. `read_fon` follows the DOS header to the NE header and its resource table, and reads every resource of type 0x8008 as an FNT font whose offsets count from the resource's start; a font that cannot be read is left out with a warning, and the file is refused when none can be read. 32-bit (PE) font files are refused with a message. Limits: 64 fonts, 256 resource types, an alignment shift of at most 15, every offset and length checked against the file, and the 64 MiB pixel cap shared by all fonts of the file. `write_fon` writes each strike as `write_fnt` does into one file: a 64-byte DOS header, an NE header for a Windows 3.0 library module, a resource table with the font directory (named `FONTDIR`) and one font per strike numbered from 1, the module name (the face name's letters and digits, upper case, at most 8) and the description `FONTRES aspect,x dpi,y dpi : Face sizes`. `bitmap.importStrikes` adds one strike per font; `bitmap.exportStrikes` with format `fon` writes every chosen strike into the one file `path` names; `file.open` takes the glyphs from the first font and makes each further font another strike, holding the bitmaps whose names the first font has (a second font of a size already present is left out with a warning). Documented, not yet checked against files the reference writes."
+guesses = [
+  "Opening a FON file gives one font whose glyphs come from its first font, with one strike per font; the secondary reference may open each font as its own document. Opening a two-size FON in the secondary reference would settle it.",
+  "The writer uses the smallest resource alignment, from 16 bytes up, that addresses every resource, a module name made from the face name, and resource flags moveable and preloaded for the directory and moveable, pure and discardable for the fonts; a FON written by the secondary reference would settle these.",
+]
+
+[[format]]
+id = "pk"
+label = "TeX packed font (PK)"
+extensions = ["pk"]
+read = true
+write = true
+spec = "https://ctan.org/pkg/pktype"
+area = "import-export"
+milestone = "M13"
+summary = "TeX's packed bitmap font: one font at one resolution, each character a run-length or bitmap raster with its TeX width and escapement. Imported as a bitmap strike, like `bdf`."
+ref = "PKtype documentation (T. Rokicki), in the TeX distribution"
+status = "docs"
+origin = "fontforge"
+notes = "Reader and writer built (M13.55f) in `crates/io-bitmap/src/pk.rs`, from the format description in the PKtype documentation and the files `gftopk` writes, and `pktype` prints, for METAFONT programs of our own; no code that reads or writes PK was consulted. Read: the preamble (design size, pixels per point), every character in the short, extended short and long preamble forms, rasters as a plain bitmap (`dyn_f` 14) or as run and repeat counts; specials and no-ops are skipped. A character's box is its width and height, its left edge `-hoff` and its bottom `voff - h + 1`; its advance is the escapement rounded to whole pixels and its scalable width the TeX width in thousandths of the design size. Ascent and descent are the glyphs' extent. The file has no glyph names or properties; the strike is marked `CHARSET_REGISTRY` `TeX`, `CHARSET_ENCODING` `FontSpecific`, so its codes are not taken for Unicode. A long-form character whose code is above 2,147,483,647 is left out with a warning. A run or repeat count that reaches past the last row of its box is refused with a message, as is a box above 1,024 pixels, a packet length that does not fit its preamble or the file, a run count beyond 32 bits, and two repeat counts for one row. Written: each character under its code in the smallest preamble form it fits, its raster run-coded with the `dyn_f` that packs it smallest, or as a plain bitmap when that is no larger; no repeat counts. Reachable through `bitmap.importStrikes`, `bitmap.exportStrikes` (format `pk`) and `file.open`. Documented, not yet checked against files the reference reads or writes."
+guesses = [
+  "A PK or GF strike is `design size × vertical pixels per point` pixels per em, rounded, and its resolution is the pixels per point times 72.27 (TeX points per inch), rounded; the format states no pixel size. Opening a PK file in the secondary reference would show the size it gives the strike.",
+  "A PK or GF glyph is named after its code: the character itself for an ASCII letter or digit, else `char` and the decimal code; the file has no names. Importing a PK font into the secondary reference would show the names it picks.",
+  "PK and GF codes are in the TeX font's own encoding (OT1, T1 and others; code 123 is an en dash in cmr10), so a PK or GF strike is marked `CHARSET_REGISTRY` `TeX`, `CHARSET_ENCODING` `FontSpecific` and its bitmaps match glyphs by name only, and opening one gives glyphs without code points; letters and digits still match by their names. A PK written from a Unicode strike reads back the same way. Importing a cmr10 PK into the secondary reference would show whether it maps TeX codes to Unicode.",
+  "Writing PK leaves out bitmaps without a code and bitmaps whose code an earlier bitmap has, and gives the file a design size that reads back at the strike's pixel size.",
+]
+
+[[format]]
+id = "gf"
+label = "METAFONT generic font (GF)"
+extensions = ["gf"]
+read = true
+write = false
+spec = "https://ctan.org/pkg/mfware"
+area = "import-export"
+milestone = "M13"
+summary = "The bitmap font METAFONT writes: each character painted row by row, with a postamble of escapements and TeX widths. Imported as a bitmap strike, like `bdf`."
+ref = "GFtype documentation (D. E. Knuth), in the TeX distribution"
+status = "docs"
+origin = "fontforge"
+notes = "Reader built (M13.55f) in `crates/io-bitmap/src/gf.rs`, from the format description in the GFtype documentation and the files METAFONT writes, and `gftype` prints, for programs of our own; no code that reads or writes GF was consulted. Every paint, skip, new-row, special and no-op command is read; `boc` and `boc1` start a character, whose columns run from `min_m` to `max_m` - 1 and rows from `max_n` down to `min_n` (pixel (m, n) is the unit square above and right of (m, n)). The postamble's design size and pixels per point give the strike's size, as for `pk`; its character locators give each character's advance (escapement rounded to pixels) and scalable width, by code modulo 256. A character without a locator advances by its bitmap's right edge, with a warning. A black paint outside the box its `boc` states is refused with a message, as is a box above 1,024 pixels or with coordinates beyond ±32,767, a negative code and a file cut short. Reachable through `bitmap.importStrikes` and `file.open`. Documented, not yet checked against files the reference reads."
+guesses = [
+  "GF codes are in the METAFONT program's own encoding, not Unicode, so a GF strike is marked `CHARSET_REGISTRY` `TeX`, `CHARSET_ENCODING` `FontSpecific` and its bitmaps match glyphs by name only, as for `pk`. Importing a GF font into the secondary reference would settle it.",
+]
+
+[[format]]
+id = "nfnt"
+label = "Mac OS bitmap font resources (NFNT, FONT)"
+extensions = ["dfont", "bin", "rsrc", "suit"]
+read = true
+write = false
+spec = "https://developer.apple.com/library/archive/documentation/mac/pdf/Text.pdf"
+area = "import-export"
+milestone = "M13"
+summary = "The bitmap fonts of classic Mac OS: one `NFNT` (or older `FONT`) resource per size and style, grouped by a font family (`FOND`) resource, kept in a file's resource fork. Imported as one bitmap strike per size."
+ref = "Inside Macintosh: Text › Font resources; More Macintosh Toolbox › Resource Manager"
+status = "docs"
+origin = "fontforge"
+notes = "Reader built (M13.55f) in `crates/io-bitmap/src/nfnt.rs`, from Inside Macintosh (Text: the font record and the font family record; More Macintosh Toolbox: the resource fork layout), Apple's AppleSingle/AppleDouble description and the MacBinary II and III header descriptions; no code that reads these formats was consulted. Containers read: a plain file holding a resource fork (a fork copied out, or a `.dfont`), an AppleSingle or AppleDouble file (entry 2), and a MacBinary II or III file whose header checksum matches or that carries the MacBinary III signature (MacBinary I is not recognised). The first `FOND` names the family (its resource name, kept as `FAMILY_NAME`) and lists the strikes by point size, style and resource id; the plain-style strikes are read, smallest first, and styled ones are left out with a warning. Entries that repeat a size or a resource are dropped before their records are read, sizes above 32,767 points are left out with a warning, and a `FOND` that lists bitmap strikes but no plain-style one the file holds is refused. Without a `FOND`, or when it lists no bitmap strike or cannot be read (with a warning), every `NFNT` and `FONT` resource is read, a `FONT` id's low seven bits giving its point size. A strike's pixel size is its point size (Mac bitmap fonts are drawn at 72 dpi). Each character's bitmap is its column range of the font's bit image, cut to its rows that hold pixels; its left edge is `kernMax` plus its offset and its advance is its width entry. Codes are Mac OS Roman, mapped to Unicode; glyphs are named by their character for ASCII letters and digits, else `uniXXXX`; the missing-character glyph becomes `.notdef` without a code. Grey and colour fonts (font type depth bits) are refused, and so are character ranges outside 0..255, font rectangles above 1,024 pixels, image locations past the bit image, and tables or resources past their data. Limits: 1,024 resource types, 4,096 font resources and 64 strike records read per file, counting those dropped as repeats after reading. Reachable through `bitmap.importStrikes` (every strike) and `file.open` (glyphs and metrics from the smallest strike; the other strikes hold the bitmaps whose names it has). Documented, not yet checked against files the reference reads."
+guesses = [
+  "Only the first font family of a Mac file, and only its plain style, is read; a family's bold or italic strikes are separate fonts, not strikes. Opening a Mac suitcase with several styles in the secondary reference would settle it.",
+  "A Mac strike without a font family record is taken to be its ascent plus descent pixels per em, with a warning; only the family record states the point size of an `NFNT`.",
+  "Mac codes below 32 map to the same code points; a font that draws symbols there (such as command-key glyphs) gets control-character code points for them.",
+  "Blank rows above and below a Mac character's bitmap are trimmed so its box is tight, as BDF and PCF boxes are; the record keeps every character as tall as the font rectangle.",
 ]
 
 [[format]]
@@ -626,7 +726,7 @@ milestone = "M13"
 summary = "Imports the path-construction operators of the first page's content stream as outlines; stroke width is kept as a stroke attribute on the path, while fill colour and other styling are dropped. Text, images, shadings and clipping are ignored."
 ref = "Import & Export › Importing Outlines"
 status = "handbook"
-notes = "Built (M13.58) in `crates/io-pdf` (`read_pdf`, `looks_like_pdf`) on the `lopdf` crate (MIT; docs/plans/M13.md § 7 question 7) for the file structure; the content stream is read by our own tokenizer. It runs path construction (m l c v y h re), painting (f F f* S s B B* b b* n), q Q cm w, `gs` (its LW line width), colours (read and dropped), and form XObjects through `Do` with their /Matrix and resources; text objects, inline images, image XObjects and shadings are skipped and counted. A filled path gives closed contours; a stroked one keeps its subpaths open unless closed, and its line width (scaled by the transform and the placement) becomes the path's stroke width; a path both filled and stroked is closed, with the stroke width and the fill flag. The frame is the crop box, else the media box (inherited through the page tree), else the drawing's bounds, and /Rotate turns the page first. Limits: 256 MiB file, 10,000 streams, each stream decoded to at most 100 times its size (64 KiB for short streams) and 256 MiB in all (object streams are charged while the file loads), 8 filters a stream, nesting 64 (page tree, saved states, forms), 100,000 page tree nodes, 10,000,000 operators, 1 GiB of content read, 10,000 operands, 1,000,000 segments, numbers within ±1e9, 10,000 paths and 200,000 nodes. `file.importOutlines` reads SVG and EPS; routing `.pdf` files to `read_pdf` is a change in `crates/engine/src/cmd/clipboard.rs` (and a dependency of the engine on `fontcraft-io-pdf`). The handbook documents PDF import and the stroke style; behaviour on real files from drawing applications is not yet observed."
+notes = "Built (M13.58) in `crates/io-pdf` (`read_pdf`, `looks_like_pdf`) on the `lopdf` crate (MIT; docs/plans/M13.md § 7 question 7) for the file structure; the content stream is read by our own tokenizer. It runs path construction (m l c v y h re), painting (f F f* S s B B* b b* n), q Q cm w, `gs` (its LW line width), colours (read and dropped), and form XObjects through `Do` with their /Matrix and resources; text objects, inline images, image XObjects and shadings are skipped and counted. A filled path gives closed contours; a stroked one keeps its subpaths open unless closed, and its line width (scaled by the transform and the placement) becomes the path's stroke width; a path both filled and stroked is closed, with the stroke width and the fill flag. The frame is the crop box, else the media box (inherited through the page tree), else the drawing's bounds, and /Rotate turns the page first. Limits: 256 MiB file, 10,000 streams, each stream decoded to at most 100 times its size (64 KiB for short streams) and 256 MiB in all (object streams are charged while the file loads), 8 filters a stream, nesting 64 (page tree, saved states, forms), 100,000 page tree nodes, 10,000,000 operators, 1 GiB of content read, 10,000 operands, 1,000,000 segments, numbers within ±1e9, 10,000 paths and 200,000 nodes. `file.importOutlines` reads PDF files by their header (unscaled or fitted to the em), and `edit.paste` reads a PDF clipboard flavour (`pdf`, base64) at one unit per point with the page's bottom-left corner on the origin (`Placement::Origin`). The handbook documents PDF import and the stroke style; behaviour on real files from drawing applications is not yet observed."
 guesses = [
   "The frame for placement is the crop box, else the media box, with one point per unit and its top edge at the given top, matching EPS and SVG import; importing a PDF of known geometry in the reference app would settle it.",
   "A hairline stroke (line width 0) is given a stroke width of one unit; a reference import of a hairline would settle it.",
@@ -785,7 +885,7 @@ milestone = "M13"
 summary = "The reference accepts every image type its operating system can draw, which includes PDF and PSD. We keep the reference for any file type, and render a PDF's first page as a template once a renderer is available; until then, and always for PSD, the missing-image marker is shown and the reference survives saving."
 ref = "Edit View › Images › Adding Images"
 status = "handbook"
-notes = "M13.58: `crates/io-pdf` draws a PDF's first page (`render_pdf`): its filled and stroked paths in their colours on a transparent background, anti-aliased, at a chosen resolution lowered to fit a pixel budget; text, images and shadings are not drawn. Edit View and Font View draw a placed PDF this way (M11.13, M11.16). The page size in points (`page_size`: the crop box, else the media box, turned by the page's rotation) stands in for a pixel size, so Add Image places the page at one point to one unit and the image commands size and crop it (M11.13b). Using it in bitmap exports is not built. The reference app's drawing of a placed PDF is documented but not yet observed."
+notes = "M13.58: `crates/io-pdf` draws a PDF's first page (`render_pdf`): its filled and stroked paths in their colours on a transparent background, anti-aliased, at a chosen resolution lowered to fit a pixel budget; text, images and shadings are not drawn. Edit View and Font View draw a placed PDF this way (M11.13, M11.16). The page size in points (`page_size`: the crop box, else the media box, turned by the page's rotation) stands in for a pixel size, so Add Image places the page at one point to one unit and the image commands size and crop it (M11.13b). `glyph.autotraceImage` traces a placed PDF from the page drawn at 4 pixels per point (`decode_pixels` in `crates/engine/src/cmd/image.rs`). Using it in bitmap exports is not built. The reference app's drawing of a placed PDF is documented but not yet observed."
 guesses = [
   "The page is drawn on a transparent background, not white, so the glyph shows through around the artwork; placing a PDF in the reference app would show which it uses.",
   "Text and images inside the PDF are not drawn; the reference draws them through the operating system, and a PDF with text placed in the reference app would show the difference.",
@@ -871,6 +971,8 @@ milestone = "M1"
 summary = "Changing one value changes only the lines that encode that value (plus timestamps the format requires). Lists keep their order, untouched glyphs keep their exact text, and no writer re-sorts, re-wraps or re-rounds data that was not edited."
 ref = "docs/spec/30-source-formats.md › Recommended model"
 status = "inferred"
+notes = "The .glyphs reader keeps some spellings and layouts beside the fields they describe: code points spelled otherwise (`0065`, version 2 `41`), version 2 component transforms and master names, a single property value in quotes it does not need, node flags the writer would spell otherwise (`R`, `C` and `X` in another order, repeated or unknown letters), and one-line values (`com.fontcraft.glyphsLayout.<key>` entries). Each is written only while its field still gives it. Once an edit changes the field, the .glyphs writer leaves the kept value out and writes the field, also where the field itself is left out (no code points, an identity transform, a cleared master name). A native save also drops the layouts an edit made stale (`fontcraft_io_glyphs::without_stale_layouts`), so they do not travel on. Not covered: layouts kept inside a node's attribute dictionary stay in the model (the writer still checks them), and a version 2 name kept at the top level of a version 3 file is still written beside an edited property of the same name."
+guesses = ["Node flags are read for `R`, `C` and `X` in any order (the first of `R` and `C` wins); when an edit changes the lock or orientation, the fields are written in the writer's order followed by the letters the model does not read, in their order. A file from the reference app with such flags would settle what it keeps."]
 
 [[behavior]]
 id = "roundtrip.stableKeyOrder"

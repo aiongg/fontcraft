@@ -15,10 +15,11 @@
 //! | Lock Outline badge | `aids.lock_badge` |
 //! | label text | `aids.label_size` |
 
-use egui::{Align2, Color32, FontId, Pos2, Stroke, StrokeKind};
+use egui::{Align2, Color32, CursorIcon, FontId, Pos2, Rect, Sense, Stroke, StrokeKind};
 use fontcraft_geom::{CubicBez, ParamCurveArclen, Piece, Point, Segment, Shape as _, segments};
 use fontcraft_model::{Font, Layer, Shape};
 use fontcraft_tools::View;
+use serde_json::json;
 
 use super::{Painting, Scene};
 use crate::panels::Pending;
@@ -29,6 +30,9 @@ use crate::shell::edit_aids::{EditAidsState, beam_height};
 const MAX_ACROSS: usize = 200;
 /// Most labels (indexes, tensions, lengths) drawn in one frame; a pathological glyph stops there.
 const MAX_LABELS: usize = 20_000;
+/// The share of the node hit tolerance within which the metrics beam is grabbed: narrower, so
+/// a drag that starts near the beam is a marquee.
+const BEAM_GRAB: f32 = 0.5;
 /// Accuracy of a curve length, in font units.
 const LENGTH_ACCURACY: f64 = 1e-3;
 
@@ -40,12 +44,12 @@ thread_local! {
 
 /// Draws this overlay for the edited layer.
 pub fn draw(ui: &egui::Ui, c: &Painting, scene: &Scene, pending: &mut Pending) {
-    let _ = (ui, pending);
     let aids = &scene.state.panels.edit_aids;
     ghost(c, scene);
     let beam = aids.beam.then(|| beam_height(aids, scene.font, scene.doc.0, scene.tab)).filter(|y| y.is_finite());
     if let Some(y) = beam {
         beam_line(c, y);
+        beam_drag(ui, c, scene, y, pending);
     }
     let mut budget = MAX_LABELS;
     if aids.details_across_glyphs {
@@ -211,6 +215,66 @@ fn beam_line(c: &Painting, y: f64) {
     let Some(at) = screen(c.view, Point::new(0.0, y)) else { return };
     let stroke = Stroke::new(c.tokens.aids.beam_width, c.tokens.aids.beam);
     c.painter.line_segment([Pos2::new(c.rect.left(), at.y), Pos2::new(c.rect.right(), at.y)], stroke);
+}
+
+/// Dragging the beam up or down runs `view.showMetricsBeam` with the height under the pointer, in
+/// whole units. The beam is grabbed only on the line itself, within [`BEAM_GRAB`] of the node hit
+/// tolerance, and only outside the advance boxes of the edited glyph and of the other glyphs on
+/// its line, so marquees and nodes near the beam stay with the tools.
+fn beam_drag(ui: &egui::Ui, c: &Painting, scene: &Scene, y: f64, pending: &mut Pending) {
+    let Some(at) = screen(c.view, Point::new(0.0, y)) else { return };
+    let reach = (c.tokens.hit_tolerance * BEAM_GRAB).max(c.tokens.aids.beam_width);
+    let (top, bottom) = (at.y - reach, at.y + reach);
+    // Nodes at the edges of an advance box stay clickable: keep a full hit tolerance from it.
+    let pad = c.tokens.hit_tolerance;
+    let mut boxes = advance_boxes(c, scene);
+    boxes.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut areas = Vec::with_capacity(boxes.len().saturating_add(1));
+    let mut left = c.rect.left();
+    for (from, to) in boxes {
+        if from - pad > left {
+            areas.push(Rect::from_min_max(Pos2::new(left, top), Pos2::new(from - pad, bottom)));
+        }
+        left = left.max(to + pad);
+    }
+    areas.push(Rect::from_min_max(Pos2::new(left, top), Pos2::new(c.rect.right(), bottom)));
+    for (k, area) in areas.into_iter().enumerate() {
+        let area = area.intersect(c.rect);
+        if !area.is_positive() {
+            continue;
+        }
+        let response = ui.interact(area, ui.id().with(("metrics-beam", k)), Sense::DRAG).on_hover_cursor(CursorIcon::ResizeVertical);
+        if response.dragged()
+            && let Some(p) = ui.input(|i| i.pointer.latest_pos())
+        {
+            let to = c.view.to_font(Point::new(f64::from(p.x), f64::from(p.y))).y.round();
+            if to.is_finite() && to != y {
+                pending.push(("view.showMetricsBeam", json!({"y": to})));
+            }
+        }
+    }
+}
+
+/// The advance boxes, as screen x ranges, of the edited glyph and of at most [`MAX_ACROSS`]
+/// other glyphs on its line.
+fn advance_boxes(c: &Painting, scene: &Scene) -> Vec<(f32, f32)> {
+    let span = |x: f64, width: f64| {
+        let width = if width.is_finite() { width } else { 0.0 };
+        let (a, b) = (screen(c.view, Point::new(x, 0.0))?, screen(c.view, Point::new(x + width, 0.0))?);
+        Some((a.x.min(b.x), a.x.max(b.x)))
+    };
+    let mut out: Vec<(f32, f32)> = span(0.0, scene.layer.width).into_iter().collect();
+    let Some(index) = scene.tab.edited_index() else { return out };
+    let Some(layout) = LAYOUTS.with(|cache| super::view::text_layout(scene.session, cache, scene.tab)) else { return out };
+    let Some(edited) = layout.placed.get(index) else { return out };
+    let Some(line) = layout.lines.iter().find(|l| l.items.contains(&index)) else { return out };
+    for i in line.items.clone().filter(|i| *i != index).take(MAX_ACROSS) {
+        let Some(placed) = layout.placed.get(i) else { continue };
+        let Some(name) = placed.glyph.as_deref() else { continue };
+        let Some(layer) = super::view::shown_layer(scene.font, scene.tab, name) else { continue };
+        out.extend(span(placed.x - edited.x, layer.width));
+    }
+    out
 }
 
 /// The sidebearings measured on the beam, each centred over its gap.

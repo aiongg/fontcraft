@@ -1,4 +1,5 @@
-//! A bitmap font file (BDF or PCF) opened on its own as a bitmap-only font (M13.55d).
+//! A bitmap font file (BDF, PCF, either gzip-compressed, Windows FNT or FON, TeX PK or GF, or a
+//! Mac bitmap font) opened on its own as a bitmap-only font (M13.55d, M13.55e, M13.55f).
 //!
 //! Every bitmap of the file becomes a glyph of the same name, in file order, with an empty
 //! outline. Its code becomes the glyph's code point when the file's codes are Unicode
@@ -8,14 +9,18 @@
 //! heights are the file's pixel values scaled by units per em ÷ pixels per em and rounded to
 //! whole units. The cap and x heights come from the `CAP_HEIGHT` and `X_HEIGHT` properties,
 //! else from the top of the `H` and `x` bitmaps. Like a compiled font, the document opens as
-//! [`SourceFormat::Binary`], so Save asks for a source format.
+//! [`SourceFormat::Binary`], so Save asks for a source format. A file of several strikes (the
+//! fonts of a FON file, the sizes of a Mac font family) opens with the glyphs and metrics of its
+//! first strike (for a Mac family, the smallest); each other strike holds the bitmaps whose names
+//! that strike has. A further strike of a size and depth the font already has is left out, and
+//! at most [`MAX_STRIKES`] strikes are kept.
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 
 use fontcraft_io_bitmap::{BitmapFont, BitmapGlyph, PropertyValue};
-use fontcraft_model::strike::{BitmapStrike, StrikeGlyph, StrikeProperty, StrikeValue};
+use fontcraft_model::strike::{BitmapStrike, MAX_STRIKES, StrikeGlyph, StrikeProperty, StrikeValue};
 use fontcraft_model::{Font, Glyph, GlyphTable, Layer, MAX_GLYPHS, MAX_NAME_LEN, SourceFormat, metric};
 
 use crate::{EngineError, Result};
@@ -26,15 +31,24 @@ pub const UNITS_PER_EM: u16 = 1000;
 /// Bytes kept free for a `.N` suffix when a name repeats: a dot and up to seven digits.
 const SUFFIX_ROOM: usize = 8;
 
-/// Whether `bytes` start like a BDF or PCF file.
+/// Whether `bytes` start like a bitmap font file (other than a gzip-compressed one).
 pub(super) fn is_bitmap_font(bytes: &[u8]) -> bool {
-    fontcraft_io_bitmap::is_bdf(bytes) || fontcraft_io_bitmap::is_pcf(bytes)
+    use fontcraft_io_bitmap as io;
+    io::is_bdf(bytes) || io::is_pcf(bytes) || io::is_pk(bytes) || io::is_gf(bytes) || io::is_fon(bytes) || io::is_mac_font(bytes) || io::is_fnt(bytes)
 }
 
-/// The font a BDF or PCF file holds, with what reading it passed over.
+/// Whether `bytes` are gzip data in a file named `.pcf.gz` or `.bdf.gz`. Other gzip data is a
+/// compressed FontCraft document.
+pub(super) fn is_gzipped_bitmap_font(path: &Path, bytes: &[u8]) -> bool {
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_ascii_lowercase();
+    fontcraft_io_bitmap::is_gzip(bytes) && (name.ends_with(".pcf.gz") || name.ends_with(".bdf.gz"))
+}
+
+/// The font a bitmap font file holds, with what reading it passed over.
 pub(super) fn open(path: &Path, bytes: &[u8]) -> Result<(Font, Vec<String>)> {
     let bad = |message: String| EngineError::Io(format!("cannot read the bitmap font {}: {message}", path.display()));
-    let import = fontcraft_io_bitmap::read(bytes).map_err(|e| bad(e.to_string()))?;
+    let mut imports = fontcraft_io_bitmap::read_all(bytes).map_err(|e| bad(e.to_string()))?.into_iter();
+    let import = imports.next().ok_or_else(|| bad("it holds no strike".into()))?;
     let mut warnings = import.warnings;
     let file = import.font;
     if file.glyphs.len() > MAX_GLYPHS {
@@ -47,6 +61,7 @@ pub(super) fn open(path: &Path, bytes: &[u8]) -> Result<(Font, Vec<String>)> {
     let units = |pixels: i32| (f64::from(pixels) * scale).round();
 
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
+    let stem = [".pcf", ".bdf", ".PCF", ".BDF"].iter().find_map(|x| stem.strip_suffix(x)).unwrap_or(stem);
     let family = [file.text_property("FAMILY_NAME").unwrap_or_default(), stem].into_iter().map(clean).find(|n| !n.trim().is_empty());
     let mut font = Font::new(family.unwrap_or_else(|| "Untitled".into()));
     font.source.format = SourceFormat::Binary;
@@ -58,12 +73,15 @@ pub(super) fn open(path: &Path, bytes: &[u8]) -> Result<(Font, Vec<String>)> {
     let mut codes = HashSet::new();
     let mut glyphs = Vec::with_capacity(file.glyphs.len());
     let mut strike = strike_of(&file);
+    // The glyph each file name went to, for the file's other strikes.
+    let mut glyph_of: HashMap<String, String> = HashMap::new();
     let (mut renamed, mut repeated_codes, mut other_depth) = (0usize, 0usize, 0usize);
     for (i, g) in file.glyphs.iter().enumerate() {
         let name = names.add(&g.name, i);
         if name != g.name {
             renamed += 1;
         }
+        glyph_of.entry(g.name.clone()).or_insert_with(|| name.clone());
         let mut glyph = Glyph::new(name.clone());
         if let Some(code) = g.encoding.filter(|c| unicode && char::from_u32(*c).is_some()) {
             if codes.insert(code) {
@@ -98,7 +116,39 @@ pub(super) fn open(path: &Path, bytes: &[u8]) -> Result<(Font, Vec<String>)> {
     if let Some(x) = height("X_HEIGHT", u32::from('x')) {
         font.set_metric_pos(&master, metric::X_HEIGHT, units(x))?;
     }
-    font.bitmap_strikes = Arc::new(vec![strike]);
+    let mut strikes = vec![strike];
+    let room = MAX_STRIKES.saturating_sub(1);
+    let others: Vec<_> = imports.collect();
+    let beyond = others.len().saturating_sub(room);
+    let mut unmatched = 0usize;
+    for other in others.into_iter().take(room) {
+        warnings.extend(other.warnings);
+        let file = other.font;
+        if file.pixel_size == 0 || strikes.iter().any(|s| s.ppem == file.pixel_size && s.depth == file.depth) {
+            warnings.push(format!("a further strike of {} pixels per em was left out: the font has a strike of that size", file.pixel_size));
+            continue;
+        }
+        let mut more = strike_of(&file);
+        for g in &file.glyphs {
+            match glyph_of.get(&g.name) {
+                Some(name) if g.bitmap.depth == file.depth && !more.glyphs.iter().any(|s| s.glyph == *name) => {
+                    more.glyphs.push(strike_glyph(name.clone(), g))
+                }
+                _ => unmatched += 1,
+            }
+        }
+        strikes.push(more);
+    }
+    if beyond > 0 {
+        warnings.push(format!("{beyond} further strikes were left out: a font holds at most {MAX_STRIKES} strikes"));
+    }
+    if unmatched > 0 {
+        warnings.push(format!(
+            "{unmatched} bitmaps of the file's further strikes match no glyph of its first strike, or have another depth, and are left out"
+        ));
+    }
+    strikes.sort_by_key(|s| (s.ppem, s.depth));
+    font.bitmap_strikes = Arc::new(strikes);
     font.check()?;
 
     if renamed > 0 {

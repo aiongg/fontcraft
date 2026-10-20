@@ -15,17 +15,22 @@
 //! Companion tables: `hmtx` with `HVAR`, `post` 2.0 with the glyph names, `maxp` 0.5; no `glyf`,
 //! `loca` or `gvar`.
 //!
-//! Hints: per master, the hints a static CFF export of that master writes (manual PostScript
-//! hints resolved through node links, else the autohinter's when Autohint is on), merged into one
-//! structure as fontTools merges hinted masters ([`fontcraft_cff::cff2::shared_hints`]), with
-//! the stem edges and widths blended over the glyph's model. Flex is dropped, as the merge draws
-//! it as two curves. A glyph whose masters' hints differ in structure, or that varies with an
-//! intermediate layer, is written without hints, with a warning; fontTools refuses such a merge.
-//! So is a glyph whose stem blends do not fit the charstring's operand stack ([`write`]).
+//! Hints: per source, the hints a static CFF export of its master writes: manual PostScript
+//! hints resolved through node links on the source's layer (an intermediate layer uses its own
+//! hints, else its master's), else the autohinter's when Autohint is on. They are merged into
+//! one structure as fontTools merges hinted masters ([`fontcraft_cff::cff2::shared_hints`]), with
+//! the stem edges and widths blended over the glyph's model, intermediate and alternate sources
+//! included. Flex is dropped, as the merge draws it as two curves. When every source of a
+//! varying glyph is autohinted, the sources are hinted together ([`autohinted_together`]): the
+//! origin decides the stems and masks and the other sources follow it, so they never differ in
+//! structure. A glyph whose sources' hints still differ in structure (manual hints that do not
+//! match, or sources that cannot be hinted together) is written without hints, with a warning;
+//! fontTools refuses such a merge. So is a glyph whose stem blends do not fit the charstring's
+//! operand stack ([`write`]).
 
 use std::collections::HashMap;
 
-use fontcraft_autohint::FdDict;
+use fontcraft_autohint::{FdDict, GlyphHints};
 use fontcraft_cff::cff2::{Blend, BlendOp, BlendStem, Cff2Built, Cff2Font, Cff2Glyph, Cff2Hints, Cff2Private, RegionAxis};
 use fontcraft_cff::{CharstringHints, Number, PathOp, PrivateDict, StemHint};
 use fontcraft_geom::BezPath;
@@ -48,9 +53,19 @@ pub struct CubicSources {
     pub locations: Vec<Vec<f64>>,
     /// Per source, the glyph's contours, the same structure in each.
     pub paths: Vec<Vec<BezPath>>,
-    /// Per source, its master; `None` for an intermediate layer. Hints are written only when
-    /// every source is a master.
-    pub masters: Vec<Option<String>>,
+    /// Per source, the layer it is drawn from, for its hints; `None` leaves the glyph unhinted.
+    pub layers: Vec<Option<SourceLayer>>,
+}
+
+/// The layer one source of a glyph is drawn from.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SourceLayer {
+    /// The source's master, or the master an intermediate layer belongs to: its hint settings
+    /// apply.
+    pub master: String,
+    /// The intermediate layer's id; `None` for a master's own layer (an alternate layer that
+    /// stands at a master is that master's layer of the alternate glyph).
+    pub intermediate: Option<String>,
 }
 
 /// What a static export of one master hints with.
@@ -102,20 +117,97 @@ fn push_unique(warnings: &mut Vec<String>, notes: Vec<String>) {
     }
 }
 
-/// The hints the static export of `master` writes for glyph `name` drawn as `path`, flex left
-/// out; masks name steps of `path`.
-fn master_hints(font: &Font, master: &MasterHinting, name: &str, path: &[PathOp], warnings: &mut Vec<String>) -> Option<CharstringHints> {
+/// How one source of a glyph is hinted.
+enum Plan<'c> {
+    /// Manual hints resolved on the source's layer, flex left out.
+    Manual(CharstringHints),
+    /// The autohinter, against these zones and stems.
+    Auto(&'c FdDict),
+    Unhinted,
+}
+
+/// How the source drawn from `layer` as `path` is hinted: as the static export of its master
+/// hints that master (manual hints, else the autohinter when Autohint is on); an intermediate
+/// layer takes its own manual hints, else its master's through node links.
+fn plan<'c>(ctx: &'c HintContext<'_>, layer: Option<&SourceLayer>, name: &str, path: &[PathOp], warnings: &mut Vec<String>) -> Plan<'c> {
+    let Some((layer, master)) = layer.and_then(|l| ctx.masters.get(&l.master).map(|m| (l, m))) else { return Plan::Unhinted };
     if !master.settings.export_ps_hints {
-        return None;
+        return Plan::Unhinted;
     }
-    if let Some(manual) = crate::cff_hints::manual_hints(font, &master.settings, name, path, warnings) {
-        return (!manual.is_empty()).then(|| CharstringHints { flex: Vec::new(), ..manual });
+    let manual = match &layer.intermediate {
+        None => crate::cff_hints::manual_hints(ctx.font, &master.settings, name, path, warnings),
+        Some(id) => crate::cff_hints::intermediate_manual_hints(ctx.font, &master.settings, name, id, path, warnings),
+    };
+    if let Some(manual) = manual {
+        return if manual.is_empty() { Plan::Unhinted } else { Plan::Manual(CharstringHints { flex: Vec::new(), ..manual }) };
     }
-    let dict = master.dict.as_ref().filter(|_| master.autohint)?;
-    if master.settings.disable_autohint_glyphs.iter().any(|n| n == name) {
-        return None;
+    match master.dict.as_ref() {
+        Some(dict) if master.autohint && !master.settings.disable_autohint_glyphs.iter().any(|n| n == name) => Plan::Auto(dict),
+        _ => Plan::Unhinted,
     }
-    crate::cff_hints::autohinted_on_steps(name, path, dict, &fontcraft_autohint::Options::default(), warnings)
+}
+
+/// The autohinter's options for a CFF2 glyph: no flex, which a CFF2 merge draws as two curves.
+fn cff2_autohint_options() -> fontcraft_autohint::Options {
+    fontcraft_autohint::Options { no_flex: true, ..fontcraft_autohint::Options::default() }
+}
+
+/// What hinting every source of a glyph together gave.
+enum Together {
+    /// One structure, per source its hints.
+    Hinted(Vec<CharstringHints>),
+    /// The autohinter found no stems on the origin, or its hints cannot be written (with a
+    /// warning): the glyph is unhinted.
+    Unhinted,
+    /// The sources cannot be hinted together (why); each is hinted on its own instead.
+    Incompatible(String),
+}
+
+/// The autohinter run on every source of glyph `name` at once (`paths`, the origin first, one
+/// dictionary each): the origin decides the stems and masks, and each other source gets the
+/// same stems, found on its own outline by point correspondence, in the same order
+/// ([`fontcraft_autohint::hint_masters`]). The paths are hinted as drawn, coordinates rounded,
+/// so masks name their steps directly.
+fn autohinted_together(name: &str, paths: &[Vec<PathOp>], dicts: &[&FdDict], warnings: &mut Vec<String>) -> Together {
+    let options = cff2_autohint_options();
+    let rounded: Vec<Vec<PathOp>> = paths.iter().map(|p| p.iter().map(round_op).collect()).collect();
+    let drawn: Vec<(Vec<BezPath>, Vec<usize>)> = rounded.iter().map(|p| crate::cff_hints::contours(p)).collect();
+    let inputs: Vec<fontcraft_autohint::HintInput> = drawn
+        .iter()
+        .zip(dicts)
+        .map(|((contours, _), dict)| fontcraft_autohint::HintInput { name, contours, without_overlap: None, dict, options: &options })
+        .collect();
+    let results = match fontcraft_autohint::hint_masters(&inputs) {
+        Ok(r) => r,
+        Err(e) => return Together::Incompatible(e.to_string()),
+    };
+    if results.first().is_none_or(GlyphHints::is_empty) {
+        return Together::Unhinted;
+    }
+    let mut out = Vec::with_capacity(results.len());
+    for ((hints, (_, starts)), path) in results.iter().zip(&drawn).zip(&rounded) {
+        let mut h = crate::cff_hints::charstring_hints(hints, starts, path.len());
+        h.flex.clear();
+        let writable = |s: &[StemHint]| fontcraft_cff::writable_stems(s, crate::cff::ROUND_TOLERANCE).into_iter().all(|ok| ok);
+        let checked = h.validate(name, path).map_err(|e| e.to_string()).and_then(|()| {
+            if writable(&h.h_stems) && writable(&h.v_stems) { Ok(()) } else { Err("a stem lies beyond the numbers a charstring can hold".into()) }
+        });
+        if let Err(e) = checked {
+            warnings.push(format!("glyph `{name}`: the PostScript autohinter's hints cannot be written ({e}); it was exported without hints"));
+            return Together::Unhinted;
+        }
+        out.push(h);
+    }
+    Together::Hinted(out)
+}
+
+fn round_op(op: &PathOp) -> PathOp {
+    let r = |(x, y): (f64, f64)| (ot_round(x), ot_round(y));
+    match *op {
+        PathOp::MoveTo(p) => PathOp::MoveTo(r(p)),
+        PathOp::LineTo(p) => PathOp::LineTo(r(p)),
+        PathOp::CurveTo(a, b, c) => PathOp::CurveTo(r(a), r(b), r(c)),
+    }
 }
 
 /// The blended hints of glyph `g`, whose sources draw `ops`, over `model` (`None` for a glyph
@@ -129,30 +221,58 @@ fn glyph_hints(
 ) -> Result<Option<Cff2Hints>, CompileError> {
     let name = g.glyph.as_str();
     let mut notes = Vec::new();
-    let found: Vec<Option<CharstringHints>> = ops
+    let plans: Vec<Plan> =
+        ops.iter().enumerate().map(|(slot, path)| plan(ctx, g.layers.get(slot).and_then(Option::as_ref), name, path, &mut notes)).collect();
+    let dicts: Vec<&FdDict> = plans
         .iter()
-        .enumerate()
-        .map(|(slot, path)| {
-            let master = g.masters.get(slot).and_then(Option::as_ref).and_then(|id| ctx.masters.get(id));
-            master.and_then(|m| master_hints(ctx.font, m, name, path, &mut notes))
+        .filter_map(|p| match p {
+            Plan::Auto(d) => Some(*d),
+            _ => None,
         })
         .collect();
+    // Autohinted sources are hinted together, so that they share one structure.
+    let mut together = None;
+    if plans.len() > 1 && dicts.len() == plans.len() {
+        match autohinted_together(name, ops, &dicts, &mut notes) {
+            Together::Hinted(list) => together = Some(list),
+            Together::Unhinted => {
+                push_unique(warnings, notes);
+                return Ok(None);
+            }
+            Together::Incompatible(why) => {
+                notes.push(format!("glyph `{name}`: its sources cannot be autohinted together ({why}); each was hinted on its own"))
+            }
+        }
+    }
+    let found: Vec<Option<CharstringHints>> = match together {
+        Some(list) => list.into_iter().map(Some).collect(),
+        None => plans
+            .into_iter()
+            .zip(ops)
+            .map(|(p, path)| match p {
+                Plan::Manual(h) => Some(h),
+                Plan::Auto(dict) => crate::cff_hints::autohinted_on_steps(name, path, dict, &cff2_autohint_options(), &mut notes),
+                Plan::Unhinted => None,
+            })
+            .collect(),
+    };
     push_unique(warnings, notes);
     if found.iter().all(Option::is_none) {
         return Ok(None);
     }
     let Some(list) = found.into_iter().collect::<Option<Vec<CharstringHints>>>() else {
         warnings.push(format!(
-            "glyph `{name}`: some of its sources have no PostScript hints (an intermediate layer, or a master left unhinted), so it was \
-             exported without hints"
+            "glyph `{name}`: some of its sources have no PostScript hints (a master or intermediate layer left unhinted), so it was exported \
+             without hints"
         ));
         return Ok(None);
     };
     let shared = match fontcraft_cff::cff2::shared_hints(&list, crate::cff::ROUND_TOLERANCE) {
         Ok(s) => s,
         Err(e) => {
-            warnings
-                .push(format!("glyph `{name}`: its PostScript hints differ in structure between masters ({e}), so it was exported without hints"));
+            warnings.push(format!(
+                "glyph `{name}`: its PostScript hints differ in structure between its sources ({e}), so it was exported without hints"
+            ));
             return Ok(None);
         }
     };

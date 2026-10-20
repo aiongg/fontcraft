@@ -683,3 +683,268 @@ fn text_past_its_limit_stops_with_an_error() {
     assert!(out.line("1234567").is_ok());
     assert!(matches!(out.line("x"), Err(TablesError::TooLarge { .. })));
 }
+
+// ── The spot listings and the CFF literal view (M12.10b) ───────────────────────────────────────
+
+/// A TrueType font for the spot listings: glyphs .notdef, A and V; 2048 units per em; two long
+/// metrics; cmap (1,0) format 6 and (3,1) format 4; a Mac and a Windows family name with an
+/// accented letter; A drawn with one off-curve point; a VORG and a Microsoft kern table.
+fn spot_font() -> SfntFont {
+    fn be(v: &[u16]) -> Vec<u8> {
+        v.iter().flat_map(|x| x.to_be_bytes()).collect()
+    }
+    let mut f = layout_font(&[".notdef", "A", "V"], vec![]);
+    let mut head = vec![0u8; 54];
+    head[18..20].copy_from_slice(&2048u16.to_be_bytes());
+    f.insert(*b"head", head);
+    let mut hhea = vec![0u8; 36];
+    hhea[34..36].copy_from_slice(&2u16.to_be_bytes());
+    f.insert(*b"hhea", hhea);
+    f.insert(*b"hmtx", be(&[1000, 50, 1200, 10, (-30i16) as u16]));
+    let mac = be(&[6, 14, 0, 0x41, 2, 1, 0]);
+    let win = be(&[4, 40, 0, 6, 4, 1, 2, 0x41, 0x56, 0xFFFF, 0, 0x41, 0x56, 0xFFFF, (-64i16) as u16, (-84i16) as u16, 1, 0, 0, 0]);
+    let mut cmap = be(&[0, 2, 1, 0, 0, 20, 3, 1, 0, 20 + mac.len() as u16]);
+    cmap.extend(mac);
+    cmap.extend(win);
+    f.insert(*b"cmap", cmap);
+    let mut name = be(&[0, 2, 30, 1, 0, 0, 1, 2, 0, 3, 1, 0x409, 1, 4, 2]);
+    name.extend([b'T', 0x8E, 0, b'T', 0, 0xE9]);
+    f.insert(*b"name", name);
+    let mut glyph = be(&[1, 0, 0, 200, 700, 2, 0]);
+    glyph.extend([1, 0, 1]);
+    glyph.extend(be(&[0, 100, 100, 0, 700, (-700i16) as u16, 0]));
+    f.insert(*b"glyf", glyph);
+    f.insert(*b"loca", be(&[0, 0, 15, 15]));
+    f.insert(*b"VORG", be(&[1, 0, 880, 1, 2, 900]));
+    f.insert(*b"kern", be(&[0, 1, 0, 20, 0x0001, 1, 6, 0, 0, 1, 2, (-50i16) as u16]));
+    f
+}
+
+fn listing(font: &SfntFont, tag: &[u8; 4], view: &str, options: ViewOptions) -> String {
+    super::view(font, &ViewOptions { view: view.into(), tables: vec![*tag], ..options }).unwrap()
+}
+
+/// The expected text is what AFDKO spot 5.0.1 prints for the same tables (`-ngid`), except
+/// `kern`, where spot crashes on this table after the listing; its pair lines are spot's on a
+/// corpus font.
+#[test]
+fn spot_listings_print_as_spot_does() {
+    let f = spot_font();
+    let o = ViewOptions::default;
+    assert_eq!(
+        listing(&f, b"cmap", "hex-name", o()),
+        "--- encoding[0]\nplatformId=1\nscriptId  =0\nlanguageId=0\n--- [code]=<name/CID>\n[41]=<A> \n[42]=<.notdef> \n\n\
+         --- encoding[1]\nplatformId=3\nscriptId  =1\nlanguageId=0\n--- [code]=<name/CID>\n[0041]=<A> \n[0056]=<V> \n\n"
+    );
+    assert_eq!(
+        listing(&f, b"cmap", "dec-gid", ViewOptions { cmap_subtable: Some(1), ..o() }),
+        "--- encoding[1]\nplatformId=3\nscriptId  =1\nlanguageId=0\n--- [code]=glyphId\n[65]=1 \n[86]=2 \n\n"
+    );
+    assert_eq!(
+        listing(&f, b"cmap", "summary", o()),
+        "--- encoding[index]={platform,script,language}\n[ 0]={Macintosh,Roman,Unspecific}\n[ 1]={Microsoft,Unicode BMP only,--vers--}\n"
+    );
+    assert_eq!(listing(&f, b"hmtx", "advances", o()), "--- [name]=width (2048 units/em)\n[.notdef]=1000 [A]=1200 [V]=1200 \n");
+    assert_eq!(
+        listing(&f, b"hmtx", "advances-lsb", ViewOptions { units_1000: true, ..o() }),
+        "--- [name]=advance width,left side bearing (1000 units/em)\n[.notdef]=488,24 [A]=586,5 [V]=586,-14 \n"
+    );
+    assert_eq!(
+        listing(&f, b"name", "lines", o()),
+        "### [name] \n--- record[index]={platformId,scriptId,languageId,nameId,length,offset} = <name value>\n\
+         [ 0]={ 1, 0,   0,   1,   2,0000} [0000]=<T\\8e>\n[ 1]={ 3, 1, 409,   1,   4,0002} [0002]=<T\\00e9>\n"
+    );
+    assert_eq!(
+        listing(&f, b"name", "described", ViewOptions { table_offsets: vec![(*b"name", 0x120)], ..o() }),
+        "### [name] (00000120)\nformat      =0\ncount       =2\nstringOffset=001e\n\
+         --- record[index]={platformId,scriptId,languageId,nameId,length,offset}\n\
+         [ 0]={ 1, 0,   0,   1,   2,0000} [Macintosh,Roman,English,Family]\n\
+         [ 1]={ 3, 1, 409,   1,   4,0002} [Microsoft,Unicode BMP only,English(American),Family]\n\
+         --- LangTag[index]={length,offset}\n--- string[name string offset]=<string>\n[0000]=<T\\8e>\n[0002]=<T\\00e9>\n\
+         --- string[lang tag string offset]=<string>\n"
+    );
+    assert!(listing(&f, b"name", "raw", o()).ends_with("[ 1]={ 3, 1, 409,   1,   4,0002} \n--- LangTag[index]={length,offset}\n--- string[name string offset]=<string>\n--- string[lang tag string offset]=<string>\n"));
+    assert_eq!(
+        listing(&f, b"glyf", "points", o()),
+        "--- glyph[1]\n--- contour[0]\n--- point[index]={off/on,x,y}\n[0]={on,0,0} [1]={off,100,700} [2]={on,200,0} \n"
+    );
+    assert_eq!(
+        listing(&f, b"VORG", "names", o()),
+        "### [VORG] (00000000)\nmajorVersion            = 1\nminorVersion            = 0\ndefaultVertOriginY     = 880\nnumVertOriginYMetrics  = 1\n--- glyphname @glyphID = vertOriginY\nV @2 = 900 \n\n"
+    );
+    assert_eq!(listing(&f, b"kern", "pairs", o()), "--- format 0 [left right value]\nA V -50\n");
+    assert_eq!(
+        listing(&gpos_font(), b"GPOS", "features", o()),
+        "GPOS Features:\nScript 'DFLT'\n\tDefault language system\n\t\t[ 0]='kern' LookupListIndex: 0 1 \n\t\t[ 1]='mark' LookupListIndex: 2 \n\
+         Script 'latn'\n\tDefault language system\n\t\t[ 0]='kern' LookupListIndex: 0 1 \n\t\t[ 1]='mark' LookupListIndex: 2 \n\
+         \tLanguage 'TRK '\n\t\t[ 0]='kern' LookupListIndex: 1 \n"
+    );
+    let missing = super::view(&f, &ViewOptions { view: "features".into(), tables: vec![*b"GSUB"], ..o() });
+    assert!(matches!(missing, Err(TablesError::MissingTable(_))), "{missing:?}");
+    let unknown = super::view(&f, &ViewOptions { view: "pairs".into(), tables: vec![*b"GPOS"], ..o() });
+    assert!(matches!(unknown, Err(TablesError::NotBuilt(_))), "{unknown:?}");
+}
+
+#[test]
+fn spot_listings_of_damaged_tables_fail_with_a_message() {
+    let f = spot_font();
+    let views: [(&[u8; 4], &str); 12] = [
+        (b"cmap", "hex-gid"),
+        (b"cmap", "dec-name"),
+        (b"cmap", "summary"),
+        (b"hmtx", "advances"),
+        (b"hmtx", "advances-lsb"),
+        (b"name", "raw"),
+        (b"name", "lines"),
+        (b"name", "described"),
+        (b"glyf", "points"),
+        (b"VORG", "names"),
+        (b"kern", "pairs"),
+        (b"loca", "points"),
+    ];
+    for (tag, view) in views {
+        let table = if view == "points" { *b"glyf" } else { *tag };
+        let data = f.get(*tag).unwrap().to_vec();
+        for len in 0..data.len() {
+            let mut g = f.clone();
+            g.insert(*tag, data[..len].to_vec());
+            let _ = super::view(&g, &ViewOptions { view: view.into(), tables: vec![table], ..Default::default() });
+        }
+    }
+    let gpos = gpos_font();
+    let data = gpos.get(*b"GPOS").unwrap().to_vec();
+    for len in 0..data.len() {
+        let mut g = gpos.clone();
+        g.insert(*b"GPOS", data[..len].to_vec());
+        let _ = super::view(&g, &ViewOptions { view: "features".into(), tables: vec![*b"GPOS"], ..Default::default() });
+    }
+}
+
+/// A CFF table: glyphs .notdef and A (hint mask, a local subroutine call), a BlueScale real and
+/// a fixed-point operand in the subroutine. `crosscheck/spot_tx.py --build-test-cff` writes the
+/// same bytes.
+fn literal_font() -> SfntFont {
+    fn index(items: &[&[u8]]) -> Vec<u8> {
+        if items.is_empty() {
+            return vec![0, 0];
+        }
+        let mut out = vec![0, items.len() as u8, 1, 1];
+        let mut at = 1u8;
+        for it in items {
+            at += it.len() as u8;
+            out.push(at);
+        }
+        for it in items {
+            out.extend_from_slice(it);
+        }
+        out
+    }
+    let int = |v: u32| -> Vec<u8> { [vec![29], v.to_be_bytes().to_vec()].concat() };
+    let g0: &[u8] = &[248, 136, 14];
+    let g1: &[u8] = &[248, 236, 139, 189, 18, 239, 189, 19, 0xC0, 149, 159, 21, 32, 10, 14];
+    let subr: &[u8] = &[255, 0, 1, 0x80, 0, 139, 5, 11];
+    let private: &[u8] = &[30, 0x0a, 0x03, 0x96, 0x25, 0xff, 12, 9, 149, 19];
+    let top = [vec![139, 139, 248, 236, 249, 80, 5], int(45), vec![15], int(48), vec![17, 149], int(72), vec![18]].concat();
+    let mut cff = vec![1, 0, 4, 1];
+    cff.extend(index(&[b"T".as_slice()]));
+    cff.extend(index(&[top.as_slice()]));
+    cff.extend(index(&[]));
+    cff.extend(index(&[]));
+    cff.extend([0, 0, 34]);
+    cff.extend(index(&[g0, g1]));
+    cff.extend_from_slice(private);
+    cff.extend(index(&[subr]));
+    let mut f = SfntFont::new(Flavour::Cff);
+    f.insert(*b"maxp", dump_table(&Maxp::new(2)).unwrap());
+    f.insert(*b"CFF ", cff);
+    f
+}
+
+/// The expected text is what `tx -dcf` of AFDKO 5.0.1 writes for the same table.
+#[test]
+fn cff_literal_view_writes_as_tx_does() {
+    let f = literal_font();
+    let o = ViewOptions::default;
+    let values = "### Header (00000000-00000003)\nmajor  =1\nminor  =0\nhdrSize=4\noffSize=1\n\
+        ### Name INDEX (00000004-00000009)\n--- object[index]={value}\n[0]={T}\n\
+        ### Top DICT INDEX (0000000a-00000028)\n--- object[index]={value}\n[0]={\n  0 0 600 700 FontBBox\n  45 charset\n  48 CharStrings\n  10 72 Private\n}\n\
+        ### String INDEX (00000029-0000002a)\nempty\n### GlobalSubrINDEX (0000002b-0000002c)\nempty\n### Encoding ........ (Standard)\n\
+        ### Charset (0000002d-0000002f)\nformat=0\n--- glyph[gid]=sid\n[1]=34\n\
+        ### CharStrings INDEX (00000030-00000047)\n--- object[index]={value}\n[0]={\n  500 endchar\n}\n\
+        [1]={\n  600 0 50 hstemhm\n  100 50 hintmask[C0]\n  10 20 rmoveto\n  -107 callsubr\n  endchar\n}\n\
+        ### Private DICT (00000048-00000051)\n  0.039625 BlueScale\n  10 Subrs\n\
+        ### Local Subr INDEX (00000052-0000005e)\n--- object[index]={value}\n[-107]={\n  1.5 0 rlineto\n  return\n}\n";
+    assert_eq!(listing(&f, b"CFF ", "literal", o()), values);
+    let offsets = "### Header .......... (00000010-00000013)\n### Name INDEX ...... (00000014-00000019)\n\
+        ### Top DICT INDEX .. (0000001a-00000038)\n### String INDEX .... (00000039-0000003a)\n### GlobalSubrINDEX . (0000003b-0000003c)\n\
+        ### Encoding ........ (Standard)\n### Charset ......... (0000003d-0000003f)\n### CharStrings INDEX (00000040-00000057)\n\
+        ### Private DICT .... (00000058-00000061)\n### Local Subr INDEX  (00000062-0000006e)\n";
+    let shifted = ViewOptions { cff_level: CffLevel::Offsets, table_offsets: vec![(*b"CFF ", 0x10)], ..o() };
+    assert_eq!(listing(&f, b"CFF ", "literal", shifted), offsets);
+    let bytes = "### GlobalSubrINDEX (0000002b-0000002c)\ncount  =0\n\
+        ### Local Subr INDEX (00000052-0000005e)\ncount  =1\noffSize=1\n--- offset[index]=value\n[0]=1\n[1]=9\n\
+        --- object[index]={value}\n[0]={\n  1.5 0 rlineto\n  return\n}\n";
+    assert_eq!(listing(&f, b"CFF ", "literal", ViewOptions { cff_level: CffLevel::Bytes, cff_parts: "gl".into(), ..o() }), bytes);
+    let flowed = "### Top DICT INDEX (0000000a-00000028)\n--- object[index]={value}\n[0]={0 0 600 700 FontBBox 45 charset 48 CharStrings 10 72 Private}\n\
+        ### Charset (0000002d-0000002f)\nformat=0\n--- glyph[gid]=sid\n[1]=34\n\
+        ### CharStrings INDEX (00000030-00000047)\n--- object[index]={value}\n[0]={500 endchar} [1]={600 0 50 hstemhm 100 50 hintmask[C0] 10 20 rmoveto -107 callsubr endchar}\n";
+    assert_eq!(listing(&f, b"CFF ", "literal", ViewOptions { no_wrap: true, cff_parts: "Cct".into(), ..o() }), flowed);
+    let bad = super::view(&f, &ViewOptions { view: "literal".into(), tables: vec![*b"CFF "], cff_parts: "z".into(), ..o() });
+    assert!(matches!(bad, Err(TablesError::BadOptions(_))), "{bad:?}");
+    let data = f.get(*b"CFF ").unwrap().to_vec();
+    for len in 0..data.len() {
+        let mut g = f.clone();
+        g.insert(*b"CFF ", data[..len].to_vec());
+        let _ = super::view(&g, &ViewOptions { view: "literal".into(), tables: vec![*b"CFF "], ..o() });
+    }
+}
+
+#[test]
+fn table_offsets_come_from_the_directory() {
+    let f = spot_font();
+    let bytes = crate::write(&f, &crate::WriteOptions::default()).unwrap();
+    let offsets = super::table_offsets(&bytes, 0);
+    let read = crate::read(&bytes, 0).unwrap();
+    assert_eq!(offsets.len(), read.tables.len());
+    for (tag, at) in offsets {
+        let at = at as usize;
+        assert_eq!(&bytes[at..at + read.get(tag).unwrap().len()], read.get(tag).unwrap());
+    }
+    assert!(super::table_offsets(b"wOFF and more", 0).is_empty());
+}
+
+#[test]
+fn glyphs_view_leaves_out_the_excluded_glyphs() {
+    let f = tt_font();
+    let all = view(&f, &ViewOptions { view: GLYPHS_VIEW.into(), ..Default::default() }).unwrap();
+    assert!(all.contains("glyph[0] {"), "{all}");
+    let first = all.lines().nth(1).and_then(|l| l.split_once('{')).and_then(|(_, r)| r.split(',').next()).unwrap().to_string();
+    let less = view(&f, &ViewOptions { view: GLYPHS_VIEW.into(), exclude_glyphs: vec![first], ..Default::default() }).unwrap();
+    assert_eq!(less.lines().count() + 1, all.lines().count(), "{less}");
+    assert!(!less.contains("glyph[0] {"), "{less}");
+    let unknown = view(&f, &ViewOptions { view: GLYPHS_VIEW.into(), exclude_glyphs: vec!["no such glyph".into()], ..Default::default() });
+    assert!(matches!(unknown, Err(TablesError::BadOptions(_))), "{unknown:?}");
+}
+
+#[test]
+fn excluding_every_glyph_of_a_full_font_is_quick() {
+    let mut f = SfntFont::new(Flavour::TrueType);
+    f.insert(*b"maxp", dump_table(&Maxp::new(65_535)).unwrap());
+    let names = crate::ttx::glyph_order(&f).unwrap();
+    assert_eq!(names.len(), 65_535);
+    let started = std::time::Instant::now();
+    let out = view(&f, &ViewOptions { view: GLYPHS_VIEW.into(), exclude_glyphs: names, ..Default::default() }).unwrap();
+    assert_eq!(out.lines().count(), 1, "only the header line: {out}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+}
+
+#[test]
+fn a_collection_face_past_the_address_space_has_no_offsets() {
+    // numFonts 0xFFFFFFFF: face 0x40000000 passes the count, and 4 × face overflows 32 bits.
+    let mut bytes = b"ttcf".to_vec();
+    bytes.extend(0x0001_0000u32.to_be_bytes());
+    bytes.extend(u32::MAX.to_be_bytes());
+    bytes.extend([0; 16]);
+    assert!(super::table_offsets(&bytes, 0x4000_0000).is_empty());
+    assert!(super::table_offsets(&bytes, u32::MAX - 1).is_empty());
+}

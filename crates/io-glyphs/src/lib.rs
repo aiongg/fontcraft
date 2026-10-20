@@ -30,11 +30,13 @@ mod design;
 mod glyph;
 mod groups;
 mod info;
+mod kept;
 mod layer;
 mod package;
 mod shape;
 mod v2;
 
+pub use kept::without_stale_layouts;
 pub use package::{Files, glyph_file_stem, read_package, write_package};
 
 #[derive(Debug, thiserror::Error)]
@@ -179,6 +181,17 @@ fn text_in(v: &Value, dialect: Dialect) -> String {
     let mut out = String::new();
     openstep::write_value(&mut out, v, dialect);
     out
+}
+
+/// `extra` without its `.glyphs` entry under `key` when `stale`: a spelling kept beside a field
+/// that no longer gives it, which [`finish`] would otherwise write where the field is left out.
+pub(crate) fn without_key<'a>(extra: &'a Extra, key: &str, stale: bool) -> std::borrow::Cow<'a, Extra> {
+    if !stale || extra.get(Family::Glyphs, key).is_none() {
+        return std::borrow::Cow::Borrowed(extra);
+    }
+    let mut out = extra.clone();
+    out.remove(Family::Glyphs, key);
+    std::borrow::Cow::Owned(out)
 }
 
 /// Keeps `source`, the value read under `key`, for its layout ([`LAYOUT_KEY`]).
@@ -987,14 +1000,17 @@ fn finish(mut entries: Vec<(Str, Value)>, extra: &Extra) -> Dict {
         .filter_map(|e| e.key.as_str().strip_prefix(LAYOUT_KEY).map(|k| (k, &e.value)))
         .collect();
     if !kept.is_empty() {
+        let mut written = Vec::new();
         for (k, v) in &mut entries {
-            if let Some(source) = kept.get(k.as_str()) {
+            if let Some((key, source)) = kept.get_key_value(k.as_str()) {
                 let relaid = relaid(v, source);
                 if [Dialect::Glyphs2, Dialect::Glyphs3, Dialect::Glyphs4].into_iter().all(|d| text_in(&relaid, d) == text_in(source, d)) {
                     *v = (*source).clone();
+                    written.push(*key);
                 }
             }
         }
+        kept::record(&kept, &written);
     }
     for e in extra.of(Family::Glyphs) {
         if !e.key.as_str().starts_with(LAYOUT_KEY) && !entries.iter().any(|(k, _)| k.as_str() == e.key.as_str()) {
@@ -1137,10 +1153,17 @@ fn write_master(m: &Master) -> Result<Value> {
 
 /// One glyph's dictionary in format version 3 or 4.
 fn write_glyph(g: &Glyph, version: u32) -> Result<Dict> {
+    kept::in_glyph(&g.name, || write_glyph_in(g, version))
+}
+
+fn write_glyph_in(g: &Glyph, version: u32) -> Result<Dict> {
     let at = format!("glyph `{}`", g.name);
     let mut e = vec![("glyphname".into(), string(&g.name))];
-    // A spelling kept from reading, while it still reads as the code points.
-    let kept = g.extra.get(Family::Glyphs, "unicode").filter(|v| code_points(v).as_deref() == Some(g.unicodes.as_slice())).cloned();
+    // A spelling kept from reading, while it still reads as the code points. One that reads as
+    // other code points is stale: with none left it would be written in place of the field.
+    let spelling = g.extra.get(Family::Glyphs, "unicode");
+    let kept = spelling.filter(|v| code_points(v).as_deref() == Some(g.unicodes.as_slice())).cloned();
+    let stale = kept.is_none() && spelling.and_then(code_points).is_some();
     if let Some(v) = kept.or_else(|| write_code_points(&g.unicodes)) {
         e.push(("unicode".into(), v));
     }
@@ -1150,7 +1173,7 @@ fn write_glyph(g: &Glyph, version: u32) -> Result<Dict> {
     push_kern_groups(&mut e, &g.kern_groups, KERN_GROUP_KEYS);
     glyph::push_glyph_info(&mut e, &g.info, version);
     e.push(("layers".into(), list(g.layers.iter().map(|l| write_layer(l, &at, version)).collect::<Result<_>>()?)));
-    Ok(finish(e, &g.extra))
+    Ok(finish(e, &without_key(&g.extra, "unicode", stale)))
 }
 
 fn write_layer(l: &Layer, at: &str, version: u32) -> Result<Value> {

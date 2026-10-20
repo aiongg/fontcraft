@@ -45,7 +45,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Clear Audit Cache",
             [],
             None,
-            "{target?: \"document\" (default) | path} discards the results kept from the last audit.run on the open document, so the next run examines every glyph again and audit.results has nothing until then. A file target keeps no cache: nothing is cleared → {cleared: bool}",
+            "{target?: \"document\" (default) | path} discards the results and the per-glyph layer-check results kept from the last audit.run on the open document, so the next run examines every glyph again and audit.results has nothing until then. A file target keeps no cache: nothing is cleared → {cleared: bool}",
             always,
             clear_cache
         ),

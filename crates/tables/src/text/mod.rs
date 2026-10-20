@@ -7,9 +7,12 @@
 //! | `@font`, `@glyphs` | [`txdump`] | `tx -dump` |
 //! | `GPOS=normalized`, `GDEF=normalized` | [`crate::normalize`] | otl-normalizer |
 //! | `GSUB=fea`, `GPOS=fea`, `GDEF=fea` | [`crate::fea_write`] | feaLib round trip |
+//! | the spot listings (`cmap=summary`, `name=lines`, `GPOS=features`…) | [`spot`] | AFDKO spot |
+//! | `CFF=literal` | [`cff_literal`] | `tx -dcf` |
 //!
-//! The spot table views of `docs/spec/20-cli.md` › dump (`raw` and the per-table listings) are
-//! not built: asking for one returns [`TablesError::NotBuilt`].
+//! Not built, and refused with [`TablesError::NotBuilt`]: `raw` for tables other than `name`,
+//! and the listings `BASE=list`, `BASE=friendly`, `GSUB=names`, `GPOS=pairs`, `kern=headers`,
+//! `kern=indices`, `kern=names` and `avar=designspace`.
 //!
 //! Every function here reads untrusted bytes: counts are capped by the limits of
 //! [`crate::limits`], the text by [`MAX_TEXT_OUTPUT`], and nothing panics.
@@ -17,9 +20,14 @@
 use crate::sfnt::{SfntFont, Tag};
 use crate::{Result, TablesError};
 
+pub mod cff_literal;
+mod spot;
+mod spot_desc;
 pub mod ttxn;
 pub mod ttxn_otl;
 pub mod txdump;
+
+pub use cff_literal::CffLevel;
 
 #[cfg(test)]
 mod tests;
@@ -52,8 +60,10 @@ pub struct ViewOptions {
     pub view: String,
     /// Tables the view covers; empty covers every table the view knows.
     pub tables: Vec<Tag>,
-    /// Glyphs the view covers (`@glyphs`); empty covers every glyph.
+    /// Glyphs the view covers (`@glyphs`, `glyf=points`); empty covers every glyph.
     pub glyphs: Vec<String>,
+    /// Glyphs `@glyphs` leaves out (`tx -gx`).
+    pub exclude_glyphs: Vec<String>,
     /// Print the normalised dump (ttxn's form): glyph ids as names, offsets and counts left out,
     /// lookups flattened.
     pub normalize: bool,
@@ -65,6 +75,19 @@ pub struct ViewOptions {
     pub show_extensions: bool,
     /// What `@glyphs` writes per glyph.
     pub glyph_detail: GlyphDetail,
+    /// The cmap encoding record the mapping listings write (spot `-C`); `None` writes all.
+    pub cmap_subtable: Option<usize>,
+    /// Scale the `hmtx` listings to 1000 units per em.
+    pub units_1000: bool,
+    /// Where each table starts in the font file, for the byte ranges and headers the listings
+    /// print; a table not listed starts at 0.
+    pub table_offsets: Vec<(Tag, u32)>,
+    /// The structures of the CFF literal view, by their `tx -dcf -T` letters; empty for all.
+    pub cff_parts: String,
+    /// How much the CFF literal view writes.
+    pub cff_level: CffLevel,
+    /// Keep the flowed data of the CFF literal view on one line (`tx -dcf -b`).
+    pub no_wrap: bool,
 }
 
 /// The view as text.
@@ -77,7 +100,7 @@ pub fn view(font: &SfntFont, options: &ViewOptions) -> Result<String> {
     }
     match options.view.as_str() {
         FONT_VIEW => txdump::font_dict(font),
-        GLYPHS_VIEW => txdump::glyphs(font, &options.glyphs, options.glyph_detail, !options.no_hints),
+        GLYPHS_VIEW => txdump::glyphs(font, &options.glyphs, &options.exclude_glyphs, options.glyph_detail, !options.no_hints),
         "normalized" => {
             check_tables(options, &[*b"GPOS", *b"GDEF"], "normalized")?;
             let opts = crate::normalize::NormalizeOptions { tables: options.tables.clone(), location: Vec::new() };
@@ -93,8 +116,51 @@ pub fn view(font: &SfntFont, options: &ViewOptions) -> Result<String> {
             };
             crate::fea_write::decompile(font, &opts)
         }
-        _ => Err(TablesError::NotBuilt("this table view")),
+        "literal" => {
+            check_tables(options, &[*b"CFF "], "literal")?;
+            let data = font.get(*b"CFF ").ok_or_else(|| TablesError::MissingTable("CFF ".into()))?;
+            if !options.glyphs.is_empty() {
+                return Err(TablesError::NotBuilt("the flattened charstrings of selected glyphs in the CFF literal view"));
+            }
+            let base = options.table_offsets.iter().find(|(t, _)| t == b"CFF ").map_or(0, |(_, o)| *o);
+            cff_literal::dump(data, base, &options.cff_parts, options.cff_level, !options.no_wrap)
+        }
+        name => {
+            let [tag] = options.tables.as_slice() else {
+                return Err(TablesError::BadOptions(format!("the `{name}` view needs one table")));
+            };
+            spot::listing(font, *tag, name, options)?.ok_or(TablesError::NotBuilt("this table view"))
+        }
     }
+}
+
+/// Where each table starts in a font file (an sfnt or a face of a collection), for
+/// [`ViewOptions::table_offsets`]; empty for other files.
+pub fn table_offsets(bytes: &[u8], face: u32) -> Vec<(Tag, u32)> {
+    let rd = |at: usize| -> Option<u32> { Some(u32::from_be_bytes(bytes.get(at..at.checked_add(4)?)?.try_into().ok()?)) };
+    let start = if bytes.get(..4) == Some(b"ttcf") {
+        let Some(n) = rd(8) else { return Vec::new() };
+        if face >= n {
+            return Vec::new();
+        }
+        let Some(at) = usize::try_from(face).ok().and_then(|f| f.checked_mul(4)?.checked_add(12)).and_then(rd) else { return Vec::new() };
+        let Ok(at) = usize::try_from(at) else { return Vec::new() };
+        at
+    } else {
+        0
+    };
+    if !matches!(rd(start), Some(0x0001_0000 | 0x4F54_544F | 0x7472_7565 | 0x7479_7031)) {
+        return Vec::new();
+    }
+    let Some(count) = start.checked_add(4).and_then(rd).map(|v| (v >> 16) as usize) else { return Vec::new() };
+    let mut out = Vec::with_capacity(count.min(1024));
+    for i in 0..count {
+        let Some(rec) = i.checked_mul(16).and_then(|r| r.checked_add(12)).and_then(|r| r.checked_add(start)) else { break };
+        let (Some(tag), Some(offset)) = (rec.checked_add(4).and_then(|end| bytes.get(rec..end)), rec.checked_add(8).and_then(rd)) else { break };
+        let Ok(tag) = <[u8; 4]>::try_from(tag) else { break };
+        out.push((tag, offset));
+    }
+    out
 }
 
 /// Refuses a view asked for a table it does not cover.

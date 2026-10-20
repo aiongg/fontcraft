@@ -287,28 +287,8 @@ fn font_dicts(names: &[u16], privates: &[Vec<u8>], at: &[usize]) -> Result<Vec<V
 
 /// The FDSelect: format 0 or format 3, whichever is smaller, format 0 on a tie.
 fn fd_select(font: &CidFont) -> Result<Vec<u8>, Error> {
-    let fds: Vec<u8> = font.glyphs.iter().map(|g| u8::try_from(g.fd).unwrap_or(u8::MAX)).collect();
-    let mut format0 = Vec::with_capacity(1 + fds.len());
-    format0.push(0);
-    format0.extend_from_slice(&fds);
-    let mut ranges: Vec<(u16, u8)> = Vec::new();
-    for (gid, &fd) in fds.iter().enumerate() {
-        if ranges.last().is_none_or(|&(_, last)| last != fd) {
-            let first = u16::try_from(gid).map_err(|_| Error::TooManyGlyphs(fds.len()))?;
-            ranges.push((first, fd));
-        }
-    }
-    let count = u16::try_from(ranges.len()).map_err(|_| Error::TooManyGlyphs(fds.len()))?;
-    let sentinel = u16::try_from(fds.len()).map_err(|_| Error::TooManyGlyphs(fds.len()))?;
-    let mut format3 = Vec::with_capacity(5 + 3 * ranges.len());
-    format3.push(3);
-    format3.extend_from_slice(&count.to_be_bytes());
-    for (first, fd) in ranges {
-        format3.extend_from_slice(&first.to_be_bytes());
-        format3.push(fd);
-    }
-    format3.extend_from_slice(&sentinel.to_be_bytes());
-    Ok(if format3.len() < format0.len() { format3 } else { format0 })
+    let fds: Vec<u16> = font.glyphs.iter().map(|g| u16::from(u8::try_from(g.fd).unwrap_or(u8::MAX))).collect();
+    crate::raw::write_fd_select(&fds, crate::raw::FdSelectFormat::Smaller { zero_on_tie: true }, false).map_err(|_| Error::TooManyGlyphs(fds.len()))
 }
 
 fn cid_error(message: String) -> Error {
