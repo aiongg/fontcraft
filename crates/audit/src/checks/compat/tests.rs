@@ -185,6 +185,7 @@ fn heuristic_tests_match_the_reference() {
     // The contour-order result proposes the swapped order and names both shapes as moving.
     let r = run_glyph(&font, "order", "check.variations.contourOrder", &Config::default());
     assert_eq!(r.findings[0].location.shapes, vec![1, 0]);
+    assert_eq!(r.findings[0].location.order, vec![1, 0], "the whole layer's proposed order");
     assert!(r.findings[0].message.contains("2, 1"), "{}", r.findings[0].message);
     // A tolerance of 0 reports nothing; a low kinkiness hides the kink.
     let mut config = Config::default();

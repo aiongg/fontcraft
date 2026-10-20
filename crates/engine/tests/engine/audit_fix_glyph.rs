@@ -198,3 +198,37 @@ fn audit_fix_zeroes_a_mark_width_reported_by_a_compiled_instance() {
     let again = run(&mut s, "audit.run", select);
     assert_eq!(count(&again, "check.metrics.markWidths"), 0, "{again}");
 }
+
+#[test]
+fn audit_fix_puts_the_shapes_of_a_master_in_the_proposed_contour_order() {
+    use fontcraft_engine::model::{Axis, Glyph, Layer, Master, Path};
+    use std::sync::Arc;
+    let mut s = Session::with_document();
+    let small = || Shape::Path(Path::rect(0.0, 0.0, 100.0, 100.0));
+    let big = |grow: f64| Shape::Path(Path::rect(200.0, 0.0, 500.0 + grow, 300.0 + grow));
+    s.edit("setup", |font| {
+        font.axes = Arc::new(vec![Axis { name: "Weight".into(), tag: "wght".into(), ..Default::default() }]);
+        let masters = Arc::make_mut(&mut font.masters);
+        masters.truncate(1);
+        masters[0].location = vec![400.0];
+        masters.push(Master { id: "m02".into(), name: "Bold".into(), location: vec![700.0], ..Default::default() });
+        let first = masters[0].id.clone();
+        let mut g = Glyph::new("oo");
+        let mut a = Layer::new(&first, 600.0);
+        a.shapes = vec![small(), big(0.0)];
+        let mut b = Layer::new("m02", 600.0);
+        b.shapes = vec![big(20.0), small()];
+        g.layers = vec![a, b];
+        font.glyphs.push(g);
+        Ok(())
+    })
+    .unwrap();
+    let before = s.font().unwrap().glyph("oo").unwrap().layers[0].clone();
+    let r = fix_one(&mut s, "check.variations.contourOrder", Some("oo"), "glyph.setShapeOrder");
+    assert_eq!(r["applied"][0]["params"]["order"], json!([1, 0]), "{r}");
+    let font = s.font().unwrap();
+    let g = font.glyph("oo").unwrap();
+    let bold = g.layers.iter().find(|l| l.id == "m02").unwrap();
+    assert_eq!(bold.shapes, vec![small(), big(20.0)], "the bold master follows the regular one");
+    assert_eq!(g.layers[0], before, "the reference master is left as it was");
+}

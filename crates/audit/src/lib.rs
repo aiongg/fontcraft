@@ -429,6 +429,10 @@ pub struct Location {
     /// The two masters an interpolation finding compares.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub masters: Vec<String>,
+    /// The shape order a contour-order finding proposes for its layer: every shape index of the
+    /// layer once, in the new order, as `glyph.setShapeOrder` takes it.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub order: Vec<usize>,
     /// The Font Info field or custom parameter that produces a compiled value, when known.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_field: Option<String>,
@@ -472,6 +476,7 @@ impl Location {
             pair,
             fonts,
             masters,
+            order,
             source_field,
         } = other;
         if !glyph.is_empty() {
@@ -502,6 +507,7 @@ impl Location {
         take(&mut self.pair, pair);
         take_vec(&mut self.fonts, fonts);
         take_vec(&mut self.masters, masters);
+        take_vec(&mut self.order, order);
         take(&mut self.source_field, source_field);
     }
 }

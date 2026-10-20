@@ -549,9 +549,28 @@ pub(super) fn step_calls(fix: &str, font: &Font, glyph: &Glyph, layer: &Layer, f
             }
         }
         "fixCompatibility" => {
-            for f in &findings {
+            // The shape order goes first; the start points the same check run proposed name
+            // shapes by their place before it, so they follow their shapes to the new place.
+            let mut moved_to: Option<Vec<usize>> = None;
+            for f in findings.iter().filter(|f| f.code == "contour-order") {
+                let order = &f.location.order;
+                if moved_to.is_some() || order.len() != layer.shapes.len() {
+                    out.skipped.push((f.check, "the result does not say how to make the masters compatible".to_string()));
+                    continue;
+                }
+                let mut inverse = vec![0; order.len()];
+                for (to, &from) in order.iter().enumerate() {
+                    if let Some(slot) = inverse.get_mut(from) {
+                        *slot = to;
+                    }
+                }
+                out.calls.push(("glyph.setShapeOrder", json!({"glyph": g, "layer": l, "order": order})));
+                moved_to = Some(inverse);
+            }
+            for f in findings.iter().filter(|f| f.code != "contour-order") {
                 match (f.code, f.location.points.first(), f.data.get("reverse").copied().unwrap_or(0.0)) {
                     ("wrong-start-point", Some(&[shape, node]), 0.0) => {
+                        let shape = moved_to.as_ref().and_then(|m| m.get(shape).copied()).unwrap_or(shape);
                         out.calls.push(("path.makeNodeFirst", json!({"glyph": g, "layer": l, "point": [shape, node]})));
                     }
                     _ => out.skipped.push((f.check, "the result does not say how to make the masters compatible".to_string())),

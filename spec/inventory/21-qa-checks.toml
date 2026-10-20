@@ -2164,7 +2164,7 @@ milestone = "M12"
 summary = "The contours of a glyph appear in a different order in two masters: a cheaper matching by shape exists than the stored order, by a margin above `tolerance` (default 0.95). The fix reorders the contours to the proposed matching."
 ref = "fontTools varLib.interpolatable contour_order (--tolerance); fontbakery interpolation_issues"
 status = "docs"
-notes = "Ported from fontTools 4.66.1 varLib.interpolatable: the same contour statistics, matching and score; on our test outlines the score equals the reference's. Components take part with the statistics of their outline. The fix command reorders the shapes."
+notes = "Ported from fontTools 4.66.1 varLib.interpolatable: the same contour statistics, matching and score; on our test outlines the score equals the reference's. Components take part with the statistics of their outline. The result carries the proposed order of the whole layer in `location.order` (shapes that are not matched keep their place), and audit.fix passes it to glyph.setShapeOrder on the second master's layer."
 
 [[check]]
 id = "check.variations.wrongStartPoint"
