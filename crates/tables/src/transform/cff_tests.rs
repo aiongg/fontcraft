@@ -9,8 +9,11 @@ use crate::instance::cff2::{dict_number, put_cs_number};
 use crate::sfnt::{Flavour, SfntFont};
 use crate::transform::{TransformOptions, transform, transform_with_report};
 
-const OPS: [(&str, &[u8]); 21] = [
+const OPS: [(&str, &[u8]); 24] = [
     ("hstem", &[1]),
+    ("vmoveto", &[4]),
+    ("hlineto", &[6]),
+    ("vlineto", &[7]),
     ("vstem", &[3]),
     ("rlineto", &[5]),
     ("callsubr", &[10]),
@@ -34,7 +37,7 @@ const OPS: [(&str, &[u8]); 21] = [
 ];
 
 /// A charstring from text: integers, operator names and `<hex>` mask bytes.
-fn cs(program: &str) -> Vec<u8> {
+pub(crate) fn cs(program: &str) -> Vec<u8> {
     let mut out = Vec::new();
     for word in program.split_whitespace() {
         if let Ok(n) = word.parse::<i32>() {
@@ -51,7 +54,7 @@ fn cs(program: &str) -> Vec<u8> {
     out
 }
 
-fn index(items: &[Vec<u8>], cff2: bool) -> Vec<u8> {
+pub(crate) fn index(items: &[Vec<u8>], cff2: bool) -> Vec<u8> {
     let mut out = if cff2 { (items.len() as u32).to_be_bytes().to_vec() } else { (items.len() as u16).to_be_bytes().to_vec() };
     if items.is_empty() {
         return out;
@@ -78,13 +81,13 @@ fn index(items: &[Vec<u8>], cff2: bool) -> Vec<u8> {
     out
 }
 
-fn di(v: i32) -> Vec<u8> {
+pub(crate) fn di(v: i32) -> Vec<u8> {
     let mut b = vec![29];
     b.extend_from_slice(&v.to_be_bytes());
     b
 }
 
-const CFF_GLYPHS: [&str; 4] = [
+pub(crate) const CFF_GLYPHS: [&str; 4] = [
     "300 endchar",
     "600 0 100 hstem 51 81 vstem 11 21 rmoveto hintmask <c0> 101 0 rlineto 0 101 rlineto -101 0 rlineto endchar",
     "-107 callsubr 31 41 hintmask <c0> 1 -1 rmoveto 11 0 11 11 11 0 11 0 11 -11 11 0 50 flex -107 callgsubr endchar",
@@ -94,7 +97,7 @@ const CFF_GLYPHS: [&str; 4] = [
 /// A name-keyed CFF table: one global and one local subroutine, stems and hint masks, flex, a
 /// Private DICT with blue zones, a stem snap, StdVW, BlueFuzz and both width defaults, a Top DICT
 /// with UnderlinePosition and a FontBBox, and optionally a FontMatrix.
-fn cff_table(glyphs: &[&str], matrix: Option<[f64; 6]>) -> Vec<u8> {
+pub(crate) fn cff_table(glyphs: &[&str], matrix: Option<[f64; 6]>) -> Vec<u8> {
     let glyphs: Vec<Vec<u8>> = glyphs.iter().map(|p| cs(p)).collect();
     let gsubrs = index(&[cs("0 101 rlineto return")], false);
     let lsubrs = index(&[cs("0 51 hstemhm return")], false);
@@ -137,7 +140,7 @@ fn cff_table(glyphs: &[&str], matrix: Option<[f64; 6]>) -> Vec<u8> {
     t
 }
 
-const CFF2_GLYPHS: [&str; 3] = [
+pub(crate) const CFF2_GLYPHS: [&str; 3] = [
     "",
     "0 101 50 51 2 blend hstem 11 21 rmoveto 101 3 1 blend 0 rlineto 0 101 rlineto -101 0 rlineto",
     "1 vsindex 0 51 hstemhm 31 41 -5 7 1 blend vstemhm hintmask <c0> 5 -7 rmoveto 11 0 11 11 11 0 11 0 11 -11 11 0 50 flex 21 3 5 -1 2 -3 2 blend rlineto",
@@ -146,7 +149,7 @@ const CFF2_GLYPHS: [&str; 3] = [
 /// A CFF2 table: two regions on one axis, item variation data 0 with one region and 1 with
 /// both, blends under both `vsindex` values, a hint mask, and a Private DICT with blue zones and
 /// StdHW.
-fn cff2_table(glyphs: &[&str]) -> Vec<u8> {
+pub(crate) fn cff2_table(glyphs: &[&str]) -> Vec<u8> {
     let glyphs: Vec<Vec<u8>> = glyphs.iter().map(|p| cs(p)).collect();
     let mut ivs = Vec::new();
     for v in [1u16] {
@@ -191,7 +194,7 @@ fn cff2_table(glyphs: &[&str]) -> Vec<u8> {
 
 /// The font around a CFF or CFF2 table: units per em `upem`, `hhea` ascender 800 and descender
 /// -200, the given metrics, `maxp` 0.5 and a version 3 `post` with underline -100 and 50.
-fn font(tag: [u8; 4], table: Vec<u8>, upem: u16, metrics: &[(u16, i16)]) -> SfntFont {
+pub(crate) fn font(tag: [u8; 4], table: Vec<u8>, upem: u16, metrics: &[(u16, i16)]) -> SfntFont {
     let n = metrics.len() as u16;
     let mut f = SfntFont::new(Flavour::Cff);
     let mut head = vec![0u8; 54];
@@ -216,11 +219,11 @@ fn font(tag: [u8; 4], table: Vec<u8>, upem: u16, metrics: &[(u16, i16)]) -> Sfnt
     f
 }
 
-fn cff_font(matrix: Option<[f64; 6]>, upem: u16) -> SfntFont {
+pub(crate) fn cff_font(matrix: Option<[f64; 6]>, upem: u16) -> SfntFont {
     font(*b"CFF ", cff_table(&CFF_GLYPHS, matrix), upem, &[(337, 0), (637, 11), (501, 1), (738, 51)])
 }
 
-fn cff2_font() -> SfntFont {
+pub(crate) fn cff2_font() -> SfntFont {
     font(*b"CFF2", cff2_table(&CFF2_GLYPHS), 1000, &[(500, 0), (600, 11), (700, 5)])
 }
 
@@ -228,17 +231,17 @@ fn upem(target: u16) -> TransformOptions {
     TransformOptions { units_per_em: Some(target), ..TransformOptions::default() }
 }
 
-fn i16_at(b: &[u8], at: usize) -> i16 {
+pub(crate) fn i16_at(b: &[u8], at: usize) -> i16 {
     i16::from_be_bytes([b[at], b[at + 1]])
 }
 
-fn u16_at(b: &[u8], at: usize) -> u16 {
+pub(crate) fn u16_at(b: &[u8], at: usize) -> u16 {
     u16::from_be_bytes([b[at], b[at + 1]])
 }
 
 /// `head` box, units per em; `hhea` largest advance, smallest side bearings, largest extent,
 /// ascender, descender; `post` underline position and thickness.
-fn metrics(f: &SfntFont) -> ([i16; 4], u16, [i16; 6], (i16, i16)) {
+pub(crate) fn metrics(f: &SfntFont) -> ([i16; 4], u16, [i16; 6], (i16, i16)) {
     let head = f.get(*b"head").unwrap();
     let hhea = f.get(*b"hhea").unwrap();
     let post = f.get(*b"post").unwrap();
@@ -250,16 +253,16 @@ fn metrics(f: &SfntFont) -> ([i16; 4], u16, [i16; 6], (i16, i16)) {
     )
 }
 
-fn hmtx(f: &SfntFont) -> Vec<(u16, i16)> {
+pub(crate) fn hmtx(f: &SfntFont) -> Vec<(u16, i16)> {
     f.get(*b"hmtx").unwrap().chunks(4).map(|c| (u16_at(c, 0), i16_at(c, 2))).collect()
 }
 
 /// Each entry of a DICT as its operator and operands.
-fn dict(entries: &[crate::dehint::cff::Entry]) -> Vec<(u16, Vec<f64>)> {
+pub(crate) fn dict(entries: &[crate::dehint::cff::Entry]) -> Vec<(u16, Vec<f64>)> {
     entries.iter().map(|e| (e.op, numbers(&e.raw).unwrap().unwrap())).collect()
 }
 
-fn top_value(t: &Table<'_>, op: u16) -> Option<Vec<f64>> {
+pub(crate) fn top_value(t: &Table<'_>, op: u16) -> Option<Vec<f64>> {
     dict(&t.top).into_iter().find(|(o, _)| *o == op).map(|(_, v)| v)
 }
 

@@ -37,7 +37,7 @@ const OP_STROKE_WIDTH: u16 = 1208;
 const PRIVATE_DELTA_OPS: [u16; 6] = [6, 7, 8, 9, 1212, 1213];
 /// Private DICT numbers scaled one by one: StdHW, StdVW, defaultWidthX, nominalWidthX.
 const PRIVATE_PLAIN_OPS: [u16; 4] = [10, 11, 20, 21];
-const DEFAULT_MATRIX: [f64; 6] = [0.001, 0.0, 0.0, 0.001, 0.0, 0.0];
+pub(super) const DEFAULT_MATRIX: [f64; 6] = [0.001, 0.0, 0.0, 0.001, 0.0, 0.0];
 
 /// A scaled table and what the rest of the font needs from it.
 pub(super) struct Scaled {
@@ -138,11 +138,11 @@ pub(super) fn scale_upem_within(data: &[u8], cff2: bool, factor: f64, max_bytes:
     Ok(Scaled { table, bounds, warnings })
 }
 
-fn invalid(what: impl Into<String>) -> TablesError {
+pub(super) fn invalid(what: impl Into<String>) -> TablesError {
     TablesError::Invalid(what.into())
 }
 
-fn in_glyph(e: TablesError, gid: usize) -> TablesError {
+pub(super) fn in_glyph(e: TablesError, gid: usize) -> TablesError {
     match e {
         TablesError::Invalid(m) => TablesError::Invalid(format!("glyph {gid}: {m}")),
         TablesError::Unsupported(m) => TablesError::Unsupported(format!("glyph {gid}: {m}")),
@@ -150,7 +150,7 @@ fn in_glyph(e: TablesError, gid: usize) -> TablesError {
     }
 }
 
-fn subr_error(e: fontcraft_cff::subr::SubrError) -> TablesError {
+pub(super) fn subr_error(e: fontcraft_cff::subr::SubrError) -> TablesError {
     use fontcraft_cff::subr::SubrError;
     match e {
         SubrError::Invalid(m) => TablesError::Invalid(format!("the CFF data is damaged: {m}")),
@@ -161,7 +161,7 @@ fn subr_error(e: fontcraft_cff::subr::SubrError) -> TablesError {
 }
 
 /// The operands of a DICT entry; `None` when a `blend` makes them vary.
-fn numbers(raw: &[u8]) -> Result<Option<Vec<f64>>> {
+pub(super) fn numbers(raw: &[u8]) -> Result<Option<Vec<f64>>> {
     let mut out = Vec::new();
     let mut i = 0usize;
     while let Some(&b) = raw.get(i) {
@@ -176,7 +176,7 @@ fn numbers(raw: &[u8]) -> Result<Option<Vec<f64>>> {
 }
 
 /// Gives the entry `op` these operands, adding it at the end when missing; `None` removes it.
-fn set_entry(entries: &mut Vec<Entry>, op: u16, values: Option<Vec<f64>>) -> Result<()> {
+pub(super) fn set_entry(entries: &mut Vec<Entry>, op: u16, values: Option<Vec<f64>>) -> Result<()> {
     let Some(values) = values else {
         entries.retain(|e| e.op != op);
         return Ok(());
@@ -372,4 +372,4 @@ impl Charstring<'_> {
 
 #[cfg(test)]
 #[path = "cff_tests.rs"]
-mod tests;
+pub(super) mod tests;
