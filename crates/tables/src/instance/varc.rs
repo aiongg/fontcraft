@@ -122,26 +122,15 @@ fn axis_records(data: &[u8]) -> Result<AxisRecords> {
 
 /// The packed value lists of the CFF2-style index at `at`.
 fn read_index(data: &[u8], at: usize) -> Result<Vec<Vec<i64>>> {
-    let count = u32_at(data, at)?;
-    if count == 0 {
-        return Ok(Vec::new());
+    // Every list counts at least one against the limit, so a larger count fails before its
+    // offsets are read.
+    if u32_at(data, at)? > MAX_AXIS_INDEXES {
+        return Err(TablesError::TooLarge { what: "the axis indexes of a VARC table", limit: MAX_AXIS_INDEXES });
     }
-    let size = u8_at(data, at + 4)?;
-    if !(1..=4).contains(&size) {
-        return Err(bad("the VARC axis index list has an offset size outside 1 to 4"));
-    }
-    let offset = |i: usize| -> Result<usize> {
-        let from = (at + 5).saturating_add(i.saturating_mul(size));
-        let to = from.saturating_add(size);
-        let bytes = data.get(from..to).ok_or_else(|| bad("the VARC axis index list is truncated"))?;
-        Ok(bytes.iter().fold(0usize, |acc, b| (acc << 8) | usize::from(*b)))
-    };
-    let base = (at + 4).saturating_add(count.saturating_add(1).saturating_mul(size));
+    let index = fontcraft_cff::raw::read_index(data, at, true).map_err(|e| bad(format!("the VARC axis index list cannot be read: {e}")))?;
     let mut lists = Vec::new();
     let mut total = 0usize;
-    for i in 0..count {
-        let (start, end) = (offset(i)?, offset(i + 1)?);
-        let item = data.get(base.saturating_add(start)..base.saturating_add(end)).ok_or_else(|| bad("the VARC axis index list is truncated"))?;
+    for item in index.items {
         let values = unpack(item)?;
         total = total.saturating_add(values.len().max(1));
         if total > MAX_AXIS_INDEXES {

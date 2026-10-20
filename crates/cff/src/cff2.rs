@@ -307,7 +307,7 @@ impl From<Error> for Cff2Error {
 
 /// An operand: a plain number, or a default with one delta per region.
 #[derive(Clone, Debug, PartialEq)]
-enum Arg {
+pub enum Arg {
     Plain(f64),
     Blend(f64, Vec<f64>),
 }
@@ -353,14 +353,40 @@ enum Context {
 /// subroutine call still fits; a DICT list fills the stack if it must, since readers take its
 /// operands as one blend.
 fn write_args(args: &[Arg], regions: usize, ctx: Context, what: &str, out: &mut Vec<u8>) -> Result<(), Cff2Error> {
+    let style = OperandStyle { dict: ctx == Context::Dict, max_stack: MAX_STACK, fill_stack: false, exact_numbers: false };
+    write_operands(args, regions, style, what, out)
+}
+
+/// How [`write_operands`] writes numbers and groups blended operands. The `CFF2` builder writes
+/// with `max_stack` at [`MAX_STACK`] and both switches off.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OperandStyle {
+    /// DICT operands (`blend` is operator 23, numbers in DICT form) rather than charstring ones.
+    pub dict: bool,
+    /// The operand stack the blends must fit.
+    pub max_stack: usize,
+    /// A run of blended charstring operands grows until it fills the stack, as a DICT run always
+    /// does; otherwise it stays one below the limit after its first value, so a subroutine call
+    /// still fits.
+    pub fill_stack: bool,
+    /// Charstring numbers through [`crate::raw::encode_t2_number_exact`] (no rounding to the
+    /// nearest 16.16 value first).
+    pub exact_numbers: bool,
+}
+
+/// Appends `args`, runs of blended ones as `blend` operators that fit `style.max_stack`.
+/// `regions` is the number of deltas each blended argument must have.
+pub fn write_operands(args: &[Arg], regions: usize, style: OperandStyle, what: &str, out: &mut Vec<u8>) -> Result<(), Cff2Error> {
     let number = |v: f64, out: &mut Vec<u8>| -> Result<(), Cff2Error> {
-        match ctx {
-            Context::Charstring => encode_t2_number(v, what, out)?,
-            Context::Dict if v.fract() == 0.0 && v.abs() < 2_147_483_648.0 => encode_dict_int(v as i64, what, out)?,
-            Context::Dict => encode_dict_number(Number::Real(v), what, out)?,
+        match (style.dict, style.exact_numbers) {
+            (false, false) => encode_t2_number(v, what, out)?,
+            (false, true) => crate::number::encode_t2_number_exact(v, what, out)?,
+            (true, _) if v.fract() == 0.0 && v.abs() < 2_147_483_648.0 => encode_dict_int(v as i64, what, out)?,
+            (true, _) => encode_dict_number(Number::Real(v), what, out)?,
         }
         Ok(())
     };
+    let max_stack = style.max_stack;
     let overflow = || Cff2Error::StackOverflow { glyph: what.to_string() };
     let per_value = regions.checked_add(1).ok_or_else(overflow)?;
     let mut depth = 0usize;
@@ -378,7 +404,7 @@ fn write_args(args: &[Arg], regions: usize, ctx: Context, what: &str, out: &mut 
                 while let Some(Arg::Blend(d, deltas)) = args.get(i + run.len()) {
                     let n = run.len() + 1;
                     let need = depth.saturating_add(n.saturating_mul(per_value)).saturating_add(1);
-                    let fits = if run.is_empty() || ctx == Context::Dict { need <= MAX_STACK } else { need < MAX_STACK };
+                    let fits = if run.is_empty() || style.dict || style.fill_stack { need <= max_stack } else { need < max_stack };
                     if !fits {
                         break;
                     }
@@ -399,7 +425,7 @@ fn write_args(args: &[Arg], regions: usize, ctx: Context, what: &str, out: &mut 
                     }
                 }
                 number(run.len() as f64, out)?;
-                out.push(if ctx == Context::Charstring { OP_BLEND } else { DICT_BLEND });
+                out.push(if style.dict { DICT_BLEND } else { OP_BLEND });
                 depth += run.len();
                 i += run.len();
             }

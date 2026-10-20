@@ -253,16 +253,37 @@ pub fn desubroutinize(set: &CharstringSet) -> Result<CharstringSet, SubrError> {
 /// together. Each glyph is expanded and charged before the next one is, so memory stays near
 /// the limit.
 pub fn desubroutinize_within(set: &CharstringSet, max_bytes: usize) -> Result<CharstringSet, SubrError> {
-    set.validate()?;
-    let mut budget = MAX_OPS_PER_SET;
+    let mut expander = Expander::new(set, MAX_OPS_PER_SET)?;
     let mut left = max_bytes;
     let mut charstrings = Vec::with_capacity(set.charstrings.len());
     for gid in 0..set.charstrings.len() {
-        let bytes = flat::flatten(set, gid, &mut budget).map_err(|e| in_glyph(e, gid))?.bytes;
+        let bytes = expander.glyph(gid)?;
         left = left.checked_sub(bytes.len()).ok_or(SubrError::TooLarge { what: "bytes in the expanded charstrings", limit: max_bytes })?;
         charstrings.push(bytes);
     }
     Ok(CharstringSet { charstrings, global_subrs: Vec::new(), local_subrs: vec![Vec::new(); set.fd_count()], ..set.clone() })
+}
+
+/// Expands the charstrings of a set one glyph at a time, so a caller that turns each into
+/// something else holds one expanded glyph at once ([`desubroutinize`] holds them all).
+pub struct Expander<'a> {
+    set: &'a CharstringSet,
+    ops_left: usize,
+}
+
+impl<'a> Expander<'a> {
+    /// Checks `set` once. `max_ops` is the most operators the glyphs may run together, calls
+    /// included; each glyph is also held to [`MAX_OPS_PER_GLYPH`].
+    pub fn new(set: &'a CharstringSet, max_ops: usize) -> Result<Self, SubrError> {
+        set.validate()?;
+        Ok(Expander { set, ops_left: max_ops })
+    }
+
+    /// Glyph `gid` with every subroutine call expanded: the same bytes without the calls and
+    /// their subroutine numbers (a `CFF ` `endchar` inside a subroutine ends the glyph).
+    pub fn glyph(&mut self, gid: usize) -> Result<Vec<u8>, SubrError> {
+        flat::flatten(self.set, gid, &mut self.ops_left).map(|f| f.bytes).map_err(|e| in_glyph(e, gid))
+    }
 }
 
 /// The set with repeated charstring fragments moved into subroutines. Existing subroutines are
