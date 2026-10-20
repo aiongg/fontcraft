@@ -350,16 +350,23 @@ fn strip_glyph(data: &[u8], gid: usize) -> Result<Option<Vec<u8>>> {
         return Err(cut());
     }
     if contours >= 0 {
-        let at = 10 + 2 * contours as usize;
+        let contours = contours as usize;
+        let at = 10 + 2 * contours;
         let length = usize::from(read_u16(data, at).ok_or_else(cut)?);
         if length == 0 {
             return Ok(None);
         }
-        let rest = at.checked_add(2 + length).filter(|end| *end <= data.len()).ok_or_else(cut)?;
-        let mut out = Vec::with_capacity(data.len() - length);
+        let points = match contours.checked_sub(1) {
+            Some(last) => usize::from(read_u16(data, 10 + 2 * last).ok_or_else(cut)?) + 1,
+            None => 0,
+        };
+        let flags_at = at.checked_add(2 + length).filter(|end| *end <= data.len()).ok_or_else(cut)?;
+        // Bytes after the coordinates are the input's padding; the table adds its own.
+        let end = simple_data_end(data, flags_at, points).ok_or_else(cut)?;
+        let mut out = Vec::with_capacity(end);
         out.extend_from_slice(data.get(..at).ok_or_else(cut)?);
         out.extend_from_slice(&[0, 0]);
-        out.extend_from_slice(data.get(rest..).ok_or_else(cut)?);
+        out.extend_from_slice(data.get(flags_at..end).ok_or_else(cut)?);
         return Ok(Some(out));
     }
     // Composite: walk the components; the program follows the last one.
@@ -386,12 +393,60 @@ fn strip_glyph(data: &[u8], gid: usize) -> Result<Option<Vec<u8>>> {
     if !has_program {
         return Ok(None);
     }
+    let length = usize::from(read_u16(data, at).ok_or_else(cut)?);
+    if at + 2 + length > data.len() {
+        return Err(cut());
+    }
+    // The output ends after the last component, which drops the program and any padding.
     let mut out = data.get(..at).ok_or_else(cut)?.to_vec();
     for pos in flag_positions {
         let flags = read_u16(&out, pos).ok_or_else(cut)?;
         put_u16(&mut out, pos, flags & !WE_HAVE_INSTRUCTIONS).ok_or_else(cut)?;
     }
     Ok(Some(out))
+}
+
+/// Simple glyph flag bits (OpenType `glyf`).
+const X_SHORT: u8 = 0x02;
+const Y_SHORT: u8 = 0x04;
+const REPEAT_FLAG: u8 = 0x08;
+const X_SAME_OR_POSITIVE: u8 = 0x10;
+const Y_SAME_OR_POSITIVE: u8 = 0x20;
+
+/// Where a simple glyph's coordinates end, given where its flags start and its point count
+/// (at most 65,536: the contour end points are 16-bit). `None` when the flags or coordinates
+/// run past the data, or a repeated flag covers more points than the glyph has.
+fn simple_data_end(data: &[u8], flags_at: usize, points: usize) -> Option<usize> {
+    let mut at = flags_at;
+    let mut seen = 0usize;
+    let mut coordinate_bytes = 0usize;
+    while seen < points {
+        let flag = *data.get(at)?;
+        at += 1;
+        let mut repeat = 1usize;
+        if flag & REPEAT_FLAG != 0 {
+            repeat += usize::from(*data.get(at)?);
+            at += 1;
+        }
+        let x = if flag & X_SHORT != 0 {
+            1
+        } else if flag & X_SAME_OR_POSITIVE != 0 {
+            0
+        } else {
+            2
+        };
+        let y = if flag & Y_SHORT != 0 {
+            1
+        } else if flag & Y_SAME_OR_POSITIVE != 0 {
+            0
+        } else {
+            2
+        };
+        coordinate_bytes += (x + y) * repeat;
+        seen += repeat;
+    }
+    let end = at.checked_add(coordinate_bytes)?;
+    (seen == points && end <= data.len()).then_some(end)
 }
 
 fn read_u16(b: &[u8], at: usize) -> Option<u16> {
