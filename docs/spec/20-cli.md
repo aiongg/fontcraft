@@ -937,13 +937,20 @@ stay, only the representation changes. Operations that change content have their
 
 1. `--location`: a variable font is snapshotted at the location (axes not named sit at their
    default; values are clamped to the axis ranges, or refused outside them with `--no-clamp`).
-2. `--glyphs`, `--exclude-glyphs` and `--subset-to-goadb`: only the selected glyphs and `.notdef`
-   stay, in font order; with both a selection and the GOADB, the glyphs both select.
+   Without `--location`, a variable font written as UFO or with another outline flavour is
+   snapshotted at its default; one that keeps its flavour keeps its variations.
+2. `--glyphs`, `--exclude-glyphs`, `--fd-select`, `--exclude-fd` and `--subset-to-goadb`: only
+   the selected glyphs and `.notdef` stay, in font order; with several selections, the glyphs
+   all of them select. `/CID` and `/CID-CID` items work in CID-keyed fonts; `--fd-select` works
+   in CID-keyed CFF and in CFF2 fonts.
 3. `--goadb`: glyphs are renamed from the second column to the first (not with `--no-rename`);
    `--goadb-order` puts the listed glyphs first, in the file's order.
 4. The conversion.
 5. `--remove-overlaps`: overlapping contours are merged on TrueType outlines, before converting
-   a TrueType font or after converting to TrueType. CFF to CFF is refused.
+   a TrueType font or after converting to TrueType, and on CFF or CFF2 outlines before
+   converting them. A merged CFF glyph gets a new charstring without stem hints.
+6. `--cid-keyed[=R-O-S]`: a name-keyed CFF result becomes CID-keyed, CID n for glyph n, with one
+   Font DICT (Adobe-Identity-0 unless a collection is given), as makeotf `-cn` does.
 
 `tx` skips a glyph name `-g` gives that the font lacks; `convert` refuses it.
 

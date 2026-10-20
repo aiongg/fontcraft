@@ -1,15 +1,17 @@
-//! The steps `font.convert` runs around a conversion (M12.30c), in the order AFDKO `tx` runs its
-//! input options: a snapshot of a variable font at a design location (`-U`), the glyph subset
-//! (`-g`, `-gx`) and the GOADB (`-gf`, `-gr`, `-gs`, `-go`), then overlap removal (`+V`).
+//! The steps `font.convert` runs around a conversion (M12.30c, M12.30d), in the order AFDKO `tx`
+//! runs its input options: a snapshot of a variable font at a design location (`-U`), the glyph
+//! subset (`-g`, `-gx`, `-fd`, `-fdx`) and the GOADB (`-gf`, `-gr`, `-gs`, `-go`), then overlap
+//! removal (`+V`).
 //!
 //! | Step | What it does |
 //! |---|---|
-//! | Location | Every `fvar` axis is pinned: the named ones at their value (clamped to the axis range, or refused outside it without `clamp`), the others at their default; the instancer makes the static font |
+//! | Location | Every `fvar` axis is pinned: the named ones at their value (clamped to the axis range, or refused outside it without `clamp`), the others at their default; the instancer makes the static font. Without a location, a variable font whose outline flavour changes is snapshotted at its default, as `tx` writes one |
 //! | Glyph subset | The glyphs kept, plus `.notdef`, in font order; the subsetter prunes the other tables, keeping every feature, script, name record and `cmap` subtable, with no layout closure |
+//! | Font DICT subset | In a CID-keyed CFF or a CFF2 font, only the glyphs of the Font DICTs kept (and not excluded) stay; a Font DICT the font lacks, or any other font, is refused |
 //! | GOADB subset | Only glyphs whose name is in the first or second column stay, together with the glyph subset when both are given |
 //! | GOADB rename | A glyph named in the second column takes the name in the first ([`crate::rename`]); the third column is not used, as in `tx` |
 //! | GOADB order | Glyphs listed come first in the file's order (by their final names when renamed, else by their source names), then the others in font order; `.notdef` stays first |
-//! | Overlaps | TrueType outlines only ([`crate::outlines`]): before the conversion when the input is TrueType and the target is not, after it when the target is TrueType |
+//! | Overlaps | TrueType outlines ([`crate::outlines`]) before the conversion when the input is TrueType and the target is not, after it when the target is TrueType; CFF and static CFF2 outlines ([`super::overlaps`]) before the conversion |
 //!
 //! Observed with `tx` (AFDKO 5.0.1) on a corpus font: `-g` keeps `.notdef` and the selection in
 //! font order and skips names the font lacks; `-gs` with `-g` keeps the glyphs both select;
@@ -17,7 +19,7 @@
 
 use std::collections::{BTreeSet, HashSet};
 
-use super::{ConvertOptions, ConvertTarget, Converted, convert_with};
+use super::{ConvertOptions, ConvertTarget, Converted, Outlines, convert_with};
 use crate::goadb::Goadb;
 use crate::instance::{AxisLimit, InstanceOptions, instantiate};
 use crate::outlines::{OutlineAction, OutlineOptions, repair_report};
@@ -50,7 +52,9 @@ pub struct PrepareOptions {
     /// Glyph ids to keep (`.notdef` is always kept); `None` keeps every glyph.
     pub glyphs: Option<BTreeSet<u16>>,
     pub goadb: Option<GoadbUse>,
-    /// Merge overlapping contours (TrueType outlines).
+    /// Keep only the glyphs drawn with some Font DICTs of a CID-keyed CFF or a CFF2 font.
+    pub font_dicts: Option<FontDictFilter>,
+    /// Merge overlapping contours.
     pub remove_overlaps: bool,
     /// A glyph whose overlaps cannot be merged is kept as it was, with a note, instead of failing.
     pub ignore_overlap_errors: bool,
@@ -58,15 +62,23 @@ pub struct PrepareOptions {
 
 impl Default for PrepareOptions {
     fn default() -> Self {
-        Self { location: None, clamp: true, glyphs: None, goadb: None, remove_overlaps: false, ignore_overlap_errors: false }
+        Self { location: None, clamp: true, glyphs: None, goadb: None, font_dicts: None, remove_overlaps: false, ignore_overlap_errors: false }
     }
 }
 
 impl PrepareOptions {
     /// Whether any step is asked for.
     pub fn is_empty(&self) -> bool {
-        self.location.is_none() && self.glyphs.is_none() && self.goadb.is_none() && !self.remove_overlaps
+        self.location.is_none() && self.glyphs.is_none() && self.goadb.is_none() && self.font_dicts.is_none() && !self.remove_overlaps
     }
+}
+
+/// Which Font DICTs' glyphs stay (`tx -fd` and `-fdx`); indexes are zero-based.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FontDictFilter {
+    /// `None` keeps every Font DICT not excluded.
+    pub keep: Option<BTreeSet<u16>>,
+    pub exclude: BTreeSet<u16>,
 }
 
 /// Converts `font` as `options` say, with the steps of `prepare` around the conversion. Data the
@@ -74,7 +86,16 @@ impl PrepareOptions {
 /// [`Converted::left_behind`].
 pub fn convert_prepared(font: &SfntFont, options: &ConvertOptions, prepare_options: &PrepareOptions) -> Result<Converted> {
     let to_truetype = matches!(options.target, ConvertTarget::TrueType { .. });
-    let (font, mut notes) = prepare(font, prepare_options, !to_truetype)?;
+    let mut snapshot_note = None;
+    let (font, mut notes) = if prepare_options.location.is_none() && font.get(*b"fvar").is_some() && changes_flavour(font, options.target) {
+        // The converters hold one master; `tx` writes the default instance of a variable font.
+        let steps = PrepareOptions { location: Some(Vec::new()), ..prepare_options.clone() };
+        snapshot_note = Some("the font's variations (it was snapshotted at its default location)".to_string());
+        prepare(font, &steps, !to_truetype)?
+    } else {
+        prepare(font, prepare_options, !to_truetype)?
+    };
+    notes.splice(0..0, snapshot_note);
     let mut converted = convert_with(&font, options)?;
     if to_truetype
         && prepare_options.remove_overlaps
@@ -87,6 +108,18 @@ pub fn convert_prepared(font: &SfntFont, options: &ConvertOptions, prepare_optio
     notes.append(&mut converted.left_behind);
     converted.left_behind = notes;
     Ok(converted)
+}
+
+/// Whether converting `font` to `target` changes its outline flavour.
+fn changes_flavour(font: &SfntFont, target: ConvertTarget) -> bool {
+    let from = if font.get(*b"glyf").is_some() {
+        Outlines::TrueType
+    } else if font.get(*b"CFF ").is_some() {
+        Outlines::Cff
+    } else {
+        Outlines::Cff2
+    };
+    from != target.outlines()
 }
 
 /// Runs the steps on `font`; overlaps are removed only when `overlaps_now` says so (the caller
@@ -169,7 +202,7 @@ fn snapshot(font: &SfntFont, location: &[(Tag, f64)], clamp: bool) -> Result<Sfn
 /// The glyph ids to keep, or `None` when every glyph stays.
 fn kept_glyphs(font: &SfntFont, options: &PrepareOptions) -> Result<Option<BTreeSet<u16>>> {
     let goadb = options.goadb.as_ref().filter(|g| g.subset);
-    if options.glyphs.is_none() && goadb.is_none() {
+    if options.glyphs.is_none() && goadb.is_none() && options.font_dicts.is_none() {
         return Ok(None);
     }
     let names = glyph_names(font)?;
@@ -182,8 +215,44 @@ fn kept_glyphs(font: &SfntFont, options: &PrepareOptions) -> Result<Option<BTree
         let listed: HashSet<&str> = g.goadb.entries.iter().flat_map(|e| [e.final_name.as_str(), e.source_name.as_str()]).collect();
         keep.retain(|gid| names.get(usize::from(*gid)).is_some_and(|n| listed.contains(n.as_str())));
     }
+    if let Some(filter) = &options.font_dicts {
+        let fds = font_dict_of_glyphs(font, filter, count)?;
+        keep.retain(|gid| {
+            fds.get(usize::from(*gid)).is_some_and(|fd| filter.keep.as_ref().is_none_or(|k| k.contains(fd)) && !filter.exclude.contains(fd))
+        });
+    }
     keep.insert(0);
     Ok((keep.len() < count).then_some(keep))
+}
+
+/// The CID of every glyph of a CID-keyed `CFF ` font, by glyph id; `None` for any other font.
+pub fn glyph_cids(font: &SfntFont) -> Result<Option<Vec<u16>>> {
+    let Some(bytes) = font.get(*b"CFF ") else { return Ok(None) };
+    let cff = crate::reorder::cff::parse(bytes, super::num_glyphs(font)?)?;
+    Ok(cff.is_cid().then(|| cff.charset().to_vec()))
+}
+
+/// The Font DICT of every glyph, after checking that every index `filter` names exists, as
+/// `tx -fd` checks it.
+fn font_dict_of_glyphs(font: &SfntFont, filter: &FontDictFilter, count: usize) -> Result<Vec<u16>> {
+    let (fds, dicts) = if let Some(bytes) = font.get(*b"CFF ") {
+        let cff = crate::reorder::cff::parse(bytes, count)?;
+        if !cff.is_cid() {
+            return Err(TablesError::BadOptions(
+                "selecting glyphs by Font DICT needs a CID-keyed CFF font or a CFF2 font; this CFF font is name-keyed".into(),
+            ));
+        }
+        cff.font_dict_of_glyphs()
+    } else if let Some(bytes) = font.get(*b"CFF2") {
+        let cff2 = crate::reorder::cff2::parse(bytes, count)?;
+        (cff2.font_dict_of_glyphs(), cff2.font_dict_count())
+    } else {
+        return Err(TablesError::BadOptions("selecting glyphs by Font DICT needs a CID-keyed CFF font or a CFF2 font".into()));
+    };
+    if let Some(fd) = filter.keep.iter().flatten().chain(&filter.exclude).find(|fd| usize::from(**fd) >= dicts) {
+        return Err(TablesError::BadOptions(format!("Font DICT {fd} does not exist: the font has {dicts} (numbered from 0)")));
+    }
+    Ok(fds)
 }
 
 /// The subsetter's settings for a conversion: only the glyph set changes.
@@ -231,10 +300,7 @@ fn goadb_order(font: &SfntFont, g: &GoadbUse) -> Result<Vec<String>> {
 
 fn remove_overlaps(font: &SfntFont, ignore_errors: bool, notes: &mut Vec<String>) -> Result<SfntFont> {
     if font.get(*b"glyf").is_none() {
-        return Err(TablesError::Unsupported(
-            "removing overlaps from CFF or CFF2 outlines: only TrueType outlines are merged (start from a TrueType font or convert to TrueType)"
-                .into(),
-        ));
+        return super::overlaps::remove_ps_overlaps(font, ignore_errors, notes);
     }
     let mut options = OutlineOptions::new(OutlineAction::RemoveOverlaps);
     options.ignore_errors = ignore_errors;
