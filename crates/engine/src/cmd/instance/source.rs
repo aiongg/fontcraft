@@ -51,13 +51,13 @@ enum Kind {
 }
 
 /// One instance to build.
-struct Job {
+pub(super) struct Job {
     /// Its index in the prepared font's instances.
-    index: usize,
+    pub(super) index: usize,
     /// Made from `location` rather than one of the source's instances.
-    from_location: bool,
+    pub(super) from_location: bool,
     /// Its location in user coordinates, by axis tag.
-    location: Value,
+    pub(super) location: Value,
 }
 
 /// What the steps after interpolation do.
@@ -83,8 +83,11 @@ pub(super) fn instantiate(p: &Params<'_>, input: &Path, req: &OutputRequest) -> 
     if p.get("face").is_some() {
         return Err(p.bad("`face` chooses a font of a collection, and the input is a source"));
     }
-    if p.bool_or("layoutOnly", false)? || p.get("masterFinder").is_some() {
-        return Err(EngineError::Unsupported("interpolating only the layout tables of compiled masters (`layoutOnly`)".into()));
+    if p.bool_or("layoutOnly", false)? {
+        return super::layout::instantiate(p, input, req);
+    }
+    if p.get("masterFinder").is_some() {
+        return Err(p.bad("`masterFinder` finds the compiled masters `layoutOnly` reads: give `layoutOnly` too"));
     }
     if req.in_place {
         return Err(p.bad("an instance never replaces its source: give `output` or `outputDir`"));
@@ -151,7 +154,7 @@ fn kind(p: &Params<'_>, req: &OutputRequest) -> Result<Kind> {
 /// The instances the parameters ask for. `location` (or `static` alone, for the default
 /// location) adds an instance to `font`; otherwise `named`, `all` or `indices` choose among the
 /// source's static instances, and nothing chooses every exporting one.
-fn jobs(p: &Params<'_>, font: &mut Font, ds: &Designspace, clamp: bool) -> Result<Vec<Job>> {
+pub(super) fn jobs(p: &Params<'_>, font: &mut Font, ds: &Designspace, clamp: bool) -> Result<Vec<Job>> {
     let pattern = p.opt_str("named")?;
     let all = p.bool_or("all", false)?;
     let indices = p.opt_array("indices")?;
@@ -1005,6 +1008,24 @@ mod tests {
         assert!(s.execute("font.instantiate", &json!({ "input": ds, "named": "Nothing" })).is_err());
         assert!(s.execute("font.instantiate", &json!({ "input": ds, "updateNameTable": true })).is_err(), "an option of compiled fonts");
         assert!(s.execute("font.instantiate", &json!({ "input": ds, "inPlace": true })).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn instantiate_source_writes_only_the_style_map_names_the_designspace_states() {
+        let (dir, ds) = source("stylemap");
+        let mut s = Session::new();
+        let out = dir.join("instances").join("Test-Regular.ufo");
+        s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })).unwrap();
+        let info = std::fs::read_to_string(out.join("fontinfo.plist")).unwrap();
+        assert!(!info.contains("styleMapFamilyName") && !info.contains("styleMapStyleName"), "fontmake leaves them to ufo2ft: {info}");
+
+        let text = std::fs::read_to_string(&ds).unwrap().replace("postscriptfontname=", "stylemapstylename=\"bold\" postscriptfontname=");
+        std::fs::write(&ds, text).unwrap();
+        s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })).unwrap();
+        let info = std::fs::read_to_string(out.join("fontinfo.plist")).unwrap();
+        assert!(info.contains("<key>styleMapStyleName</key>") && info.contains("<string>bold</string>"), "the stated style: {info}");
+        assert!(!info.contains("styleMapFamilyName"), "the family is still left out: {info}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

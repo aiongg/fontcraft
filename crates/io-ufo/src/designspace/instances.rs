@@ -15,7 +15,9 @@
 use std::collections::HashMap;
 
 use fontcraft_model::axes::{Mapping, number_value};
-use fontcraft_model::{DEFAULT_LANGUAGE, Font, Instance, Localized, Param, Params, Properties, Property, PropertyValue, StyleClass, UserData};
+use fontcraft_model::{
+    DEFAULT_LANGUAGE, Font, Instance, Localized, Param, Params, Properties, Property, PropertyValue, StyleClass, StyleMapStated, UserData,
+};
 use fontcraft_plist::xml::{self, Element, Node as XNode};
 use fontcraft_plist::{Array, Dict, Str, Value, xmlplist};
 
@@ -384,6 +386,11 @@ pub(super) fn read_static(el: &Element, ctx: &Ctx<'_>) -> Result<Instance> {
     }
     // Style-map names the element leaves out are the ones ufo2ft gives the instance's font.
     let stated_style = el.attr("stylemapstylename").map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty());
+    // fontTools' instantiator gives the instance's UFO only the names the element states.
+    let stated = StyleMapStated { family: el.attr("stylemapfamilyname").is_some_and(|s| !s.is_empty()), style: stated_style.is_some() };
+    if !(stated.family && stated.style) {
+        inst.style_map_stated = Some(stated);
+    }
     let (fallback_family, fallback_style) = style_map_fallback(&family, &inst.name, stated_style.as_deref());
     let map_style = stated_style.unwrap_or(fallback_style);
     inst.is_bold = map_style.contains("bold");

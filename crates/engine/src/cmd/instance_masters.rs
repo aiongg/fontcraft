@@ -487,6 +487,9 @@ pub(super) fn generated_font(p: &Params, font: &Font, index: usize) -> Result<(F
     kept.interpolation.clear();
     kept.params.0.retain(|prm| !INTERPOLATION_PARAMS.contains(&prm.name.as_str()));
     out.instances = Arc::new(vec![kept]);
+    if inst.style_map_stated.is_some() {
+        Arc::make_mut(&mut out.info).style_map_stated = inst.style_map_stated;
+    }
     if font.info.params.0.iter().any(|prm| MASTER_NAMING_FONT_PARAMS.contains(&prm.name.as_str())) {
         Arc::make_mut(&mut out.info).params.0.retain(|prm| !MASTER_NAMING_FONT_PARAMS.contains(&prm.name.as_str()));
     }

@@ -292,6 +292,7 @@ fn take_font_info(d: &mut Dict) -> Result<FontInfo> {
         settings: info::take_settings(d),
         date: take_plain_string(d, "date"),
         user_data: info::take_user_data(d),
+        style_map_stated: None,
     })
 }
 
