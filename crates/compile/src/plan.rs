@@ -59,7 +59,7 @@ fn plan_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour, op
     let glyphs = preflight::run(std::mem::take(&mut resolved.glyphs), &mut warnings)?;
     let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;
     let glyphs = match font {
-        Some(font) if flavour == Flavour::Cff => crate::cid::plan(font, glyphs, &options.cid, &mut warnings)?.0,
+        Some(font) if flavour == Flavour::Cff => crate::cid::plan(font, &resolved.params, glyphs, &options.cid, &mut warnings)?.0,
         _ => glyphs,
     };
     preflight::check_cmap(&glyphs)?;
