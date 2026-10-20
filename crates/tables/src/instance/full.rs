@@ -20,16 +20,18 @@
 //!    writes the table it loads to read the glyph order (`transform::post::recompile`).
 //! 6. `CFF2` outlines (see `cff2.rs`): every blend resolved after `HVAR` and `VVAR` moved the
 //!    advances, the variation store dropped, and with `downgrade_cff2` a `CFF ` table written
-//!    instead; `BASE` coordinates take their deltas (see `base.rs`).
+//!    instead; `BASE` coordinates take their deltas (see `base.rs`), and so do the varied fields
+//!    of a `COLR` table, whose variation data goes (see `colr.rs`; fontTools leaves `COLR` as
+//!    it is).
 //! 7. With `update_names`, the style names come from the `STAT` axis values at the location
 //!    before anything else changes, and the style bits follow them at the end (see `names.rs`).
 //!
-//! Refused: `VARC`.
+//! A `VARC` table stays as it is; refused when it uses an axis (every axis is pinned).
 
 use super::glyf::{self, Metrics};
 use super::ivs::StoreDeltas;
 use super::static_tables as st;
-use super::{InstanceOptions, cff2, names, otl, pin_location};
+use super::{InstanceOptions, cff2, colr, names, otl, pin_location, varc};
 use crate::sfnt::{SfntFont, Tag};
 use crate::{Result, TablesError};
 
@@ -49,10 +51,9 @@ pub fn full_instance_with(font: &SfntFont, location: &[(Tag, f64)], options: &In
     if font.get(*b"gvar").is_some() && font.get(*b"glyf").is_none() {
         return Err(TablesError::invalid("the font has a gvar table but no glyf table"));
     }
-    if font.get(*b"VARC").is_some() {
-        return Err(TablesError::Unsupported("instancing a VARC table".into()));
-    }
     let pinned = pin_location(font, location)?;
+    let tags: Vec<Tag> = pinned.axes.iter().map(|a| a.tag).collect();
+    varc::check_limits(font, &tags, &vec![true; tags.len()])?;
     let coords = pinned.normalized.as_slice();
     let axis_count = pinned.axes.len();
     let mut out = font.clone();
@@ -120,6 +121,10 @@ pub fn full_instance_with(font: &SfntFont, location: &[(Tag, f64)], options: &In
         }
     }
     otl::instantiate_layout(&mut out, coords)?;
+    if let Some(offset) = colr::store_offset(&out) {
+        let deltas = StoreDeltas::read(out.get(*b"COLR").unwrap_or_default(), offset, coords)?;
+        colr::apply(&mut out, &deltas, None)?;
+    }
     cff2::instance_full(&mut out, coords, options.downgrade_cff2, options.recalc_bounds)?;
 
     st::reduce_stat(&mut out, &pinned.user)?;

@@ -2,7 +2,8 @@
 //! `varLib.instancer` (MIT, Copyright (c) 2019 Google LLC and the fontTools authors): full
 //! instances ([`full`]), partial pinning and axis ranges ([`partial`]) with its region solver
 //! ([`solver`]). `CFF2` outlines, variable `BASE` tables and names from `STAT` (M12.20b) are
-//! the private modules `cff2`, `base` and `names`. Instances from sources (M12.22) are the
+//! the private modules `cff2`, `base` and `names`; variable `COLR`, `VARC` and `avar` version 2
+//! (M12.21b) are `colr`, `varc` and the partial path's `avar2`. Instances from sources (M12.22) are the
 //! engine's job.
 //!
 //! # API for the packages that build on this one
@@ -22,6 +23,7 @@
 
 mod base;
 pub(crate) mod cff2;
+mod colr;
 pub mod full;
 mod glyf;
 pub mod iup;
@@ -33,6 +35,7 @@ pub mod solver;
 mod static_tables;
 #[cfg(test)]
 mod tests;
+mod varc;
 
 use read_fonts::tables::fvar::Fvar;
 use read_fonts::tables::name::Name;

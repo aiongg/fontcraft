@@ -335,7 +335,7 @@ fn bad_ranges_are_refused_and_change_nothing() {
     let err = instantiate(&font, &options(vec![(*b"opsz", AxisLimit::Range { min: 8.0, default: None, max: 12.0 })])).unwrap_err();
     assert!(matches!(err, TablesError::BadOptions(_)), "{err}");
     let mut v2 = font.clone();
-    let mut avar = vec![0u8, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0];
+    let mut avar = vec![0u8, 3, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0];
     avar.extend_from_slice(&[0; 8]);
     v2.insert(*b"avar", avar);
     let err = instantiate(&v2, &options(vec![(WGHT, AxisLimit::Pin(500.0))])).unwrap_err();
@@ -386,4 +386,176 @@ fn a_cvar_too_large_to_hold_is_refused_before_its_deltas_are_made() {
     let limits = vec![(WGHT, AxisLimit::Range { min: 300.0, default: None, max: 900.0 })];
     let r = instantiate(&font, &options(limits));
     assert!(matches!(r, Err(TablesError::TooLarge { what: "the bytes of deltas one item holds while rebasing", .. })), "{r:?}");
+}
+
+/// [`variable_font`] with an `avar` version 2 table: the wdth coordinate moves by +0.5 at wght
+/// +1 (its row in the store), wght's row is empty; with `with_v1`, wght's segment map is the one
+/// of `variable_font(true)`.
+fn avar2_font(with_v1: bool) -> SfntFont {
+    let mut font = variable_font(false);
+    let map = |a: i16, b: i16| AxisValueMap::new(F2Dot14::from_bits(a), F2Dot14::from_bits(b));
+    let wght = if with_v1 { vec![map(-16384, -16384), map(0, 0), map(8192, 4096), map(16384, 16384)] } else { Vec::new() };
+    let mut builder = VariationStoreBuilder::new_with_implicit_indices(2);
+    builder.add_deltas::<i32>(Vec::new());
+    builder.add_deltas(vec![(region(UP, OFF), 8192)]);
+    let (store, _) = builder.build();
+    let avar = Avar {
+        axis_segment_maps: vec![SegmentMaps::new(wght), SegmentMaps::new(Vec::new())],
+        axis_index_map: NullableOffsetMarker::new(None),
+        var_store: NullableOffsetMarker::new(Some(store)),
+    };
+    font.insert(*b"avar", write_fonts::dump_table(&avar).unwrap());
+    font
+}
+
+fn fvar_flags(font: &SfntFont) -> Vec<u16> {
+    let fvar = read_fonts::tables::fvar::Fvar::read(FontData::new(font.get(*b"fvar").unwrap())).unwrap();
+    fvar.axes().unwrap().iter().map(|a| a.flags()).collect()
+}
+
+#[test]
+fn avar2_partial_instances_match_the_instancer() {
+    // fontTools 4.66.1 on the same font built with `fontBuilder`: each partial instance, and A's
+    // points and advance in the static instances of the original at the locations.
+    let a = |x0: f64, x1: f64, top: f64, advance: u16| (vec![(x0, 0.0), (x0, top), (x1, top), (x1, 0.0)], advance);
+    type Case = (bool, Vec<(Tag, AxisLimit)>, Vec<(Tag, f64, f64, f64)>, Vec<(Vec<(Tag, f64)>, (Vec<(f64, f64)>, u16))>);
+    let cases: Vec<Case> = vec![
+        // wght's row is empty: the pinned axis is self-contained and leaves the font.
+        (
+            false,
+            vec![(WGHT, AxisLimit::Pin(650.0))],
+            vec![(WDTH, 75.0, 100.0, 125.0)],
+            vec![
+                (vec![(WDTH, 75.0)], a(90.0, 473.0, 745.0, 583)),
+                (vec![(WDTH, 110.0)], a(90.0, 585.0, 748.0, 695)),
+                (vec![(WDTH, 125.0)], a(90.0, 625.0, 750.0, 735)),
+            ],
+        ),
+        // wdth's row varies with wght: the pinned axis stays, hidden.
+        (
+            false,
+            vec![(WDTH, AxisLimit::Pin(110.0))],
+            vec![(WGHT, 100.0, 400.0, 900.0), (WDTH, 110.0, 110.0, 110.0)],
+            vec![
+                (vec![(WGHT, 100.0)], a(110.0, 530.0, 670.0, 620)),
+                (vec![(WGHT, 650.0)], a(90.0, 585.0, 748.0, 695)),
+                (vec![(WGHT, 900.0)], a(80.0, 637.0, 759.0, 757)),
+            ],
+        ),
+        // A new default under a segment map with an interior point.
+        (
+            true,
+            vec![(WGHT, AxisLimit::Range { min: 300.0, default: Some(600.0), max: 900.0 })],
+            vec![(WGHT, 300.0, 600.0, 900.0), (WDTH, 75.0, 100.0, 125.0)],
+            vec![
+                (vec![(WGHT, 300.0), (WDTH, 75.0)], a(103.0, 447.0, 690.0, 543)),
+                (vec![(WGHT, 450.0), (WDTH, 110.0)], a(99.0, 544.0, 705.0, 645)),
+                (vec![(WGHT, 600.0), (WDTH, 100.0)], a(96.0, 515.0, 718.0, 619)),
+                (vec![(WGHT, 800.0), (WDTH, 125.0)], a(86.0, 635.0, 754.0, 749)),
+            ],
+        ),
+        (
+            false,
+            vec![(WDTH, AxisLimit::Range { min: 90.0, default: None, max: 120.0 })],
+            vec![(WGHT, 100.0, 400.0, 900.0), (WDTH, 90.0, 100.0, 120.0)],
+            vec![(vec![(WGHT, 900.0), (WDTH, 90.0)], a(80.0, 533.0, 751.0, 653)), (vec![(WGHT, 650.0), (WDTH, 120.0)], a(90.0, 625.0, 750.0, 735))],
+        ),
+    ];
+    for (with_v1, limits, axes, locations) in cases {
+        let font = avar2_font(with_v1);
+        let what = format!("{limits:?}");
+        let pins: Vec<(Tag, f64)> = limits.iter().filter_map(|(t, l)| if let AxisLimit::Pin(v) = l { Some((*t, *v)) } else { None }).collect();
+        let partial = instantiate(&font, &options(limits)).unwrap();
+        assert_eq!(axes_of(&partial), axes, "{what}");
+        assert_eq!(static_tables::u16_at(partial.get(*b"avar").unwrap(), 0), Some(2), "{what}: avar stays version 2");
+        let hidden: Vec<u16> = axes.iter().map(|(_, min, _, max)| u16::from(min == max)).collect();
+        assert_eq!(fvar_flags(&partial), hidden, "{what}");
+        let near = |x: f64, y: f64| (x - y).abs() <= 1.0;
+        for (location, (points, advance)) in locations {
+            let direct: Vec<(Tag, f64)> = location.iter().chain(&pins).copied().collect();
+            for (source, at, label) in [(&font, &direct, "the original"), (&partial, &location, "the partial instance")] {
+                let got = outline(&full::full_instance(source, at).unwrap());
+                let same = got.a.iter().zip(&points).all(|(g, w)| near(g.0, w.0) && near(g.1, w.1));
+                assert!(
+                    same && near(f64::from(got.advances[1]), f64::from(advance)),
+                    "{what}, {label} at {at:?}: {:?} {} != {points:?} {advance}",
+                    got.a,
+                    got.advances[1]
+                );
+            }
+        }
+    }
+}
+
+/// [`variable_font`] with a `COLR` table: A paints a variable solid whose alpha (0.5) gains
+/// 0.25 at wght +1, inside a variable clip box (0, 0, 500, 700) whose xMax gains 50 at wght +1
+/// and yMax 20 at wdth +1.
+fn colr_font() -> SfntFont {
+    let mut font = variable_font(false);
+    let mut builder = VariationStoreBuilder::new_with_implicit_indices(2);
+    builder.add_deltas(vec![(region(UP, OFF), 4096)]);
+    builder.add_deltas::<i32>(Vec::new());
+    builder.add_deltas::<i32>(Vec::new());
+    builder.add_deltas(vec![(region(UP, OFF), 50)]);
+    builder.add_deltas(vec![(region(OFF, UP), 20)]);
+    let (store, _) = builder.build();
+    let store = write_fonts::dump_table(&store).unwrap();
+    let mut t = Vec::new();
+    for v in [1u16, 0, 0, 0, 0, 0, 0] {
+        be16(&mut t, v);
+    }
+    for v in [34u32, 0, 53, 0, 78] {
+        t.extend_from_slice(&v.to_be_bytes());
+    }
+    // 34: the base glyph list, A's paint at +10.
+    t.extend_from_slice(&1u32.to_be_bytes());
+    be16(&mut t, 1);
+    t.extend_from_slice(&10u32.to_be_bytes());
+    // 44: a variable solid, palette entry 0, alpha 0.5, variation index 0.
+    t.push(3);
+    be16(&mut t, 0);
+    be16(&mut t, 0x2000);
+    t.extend_from_slice(&0u32.to_be_bytes());
+    // 53: the clip list, A's box at +12.
+    t.push(1);
+    t.extend_from_slice(&1u32.to_be_bytes());
+    be16(&mut t, 1);
+    be16(&mut t, 1);
+    t.extend_from_slice(&[0, 0, 12]);
+    // 65: a variable clip box, variation indexes 1 to 4.
+    t.push(2);
+    for v in [0u16, 0, 500, 700] {
+        be16(&mut t, v);
+    }
+    t.extend_from_slice(&1u32.to_be_bytes());
+    assert_eq!(t.len(), 78);
+    t.extend_from_slice(&store);
+    font.insert(*b"COLR", t);
+    font
+}
+
+#[test]
+fn variable_colr_fields_take_their_default_deltas() {
+    let font = colr_font();
+    let colr_store_axes = |f: &SfntFont| {
+        let data = f.get(*b"COLR").unwrap();
+        let offset = u32::from_be_bytes(data[30..34].try_into().unwrap()) as usize;
+        (offset != 0).then(|| {
+            let store = read_fonts::tables::variations::ItemVariationStore::read(FontData::new(&data[offset..])).unwrap();
+            store.variation_region_list().unwrap().axis_count()
+        })
+    };
+    // Static: wght 650 is 0.5 (alpha + 2048 units, xMax + 25), wdth 110 is 0.4 (yMax + 8).
+    let static_ = full::full_instance(&font, &[(WGHT, 650.0), (WDTH, 110.0)]).unwrap();
+    assert_eq!(
+        super::super::colr::varied_values(static_.get(*b"COLR").unwrap()),
+        vec![(vec![0x2800], 0xFFFF_FFFF), (vec![0, 0, 525, 708], 0xFFFF_FFFF)]
+    );
+    assert_eq!(colr_store_axes(&static_), None, "the variation data goes");
+    // Partial: wght pinned at 650; wdth keeps its region and the indexes stay.
+    let partial = instantiate(&font, &options(vec![(WGHT, AxisLimit::Pin(650.0))])).unwrap();
+    assert_eq!(super::super::colr::varied_values(partial.get(*b"COLR").unwrap()), vec![(vec![0x2800], 0), (vec![0, 0, 525, 700], 1)]);
+    assert_eq!(colr_store_axes(&partial), Some(1));
+    let wide = full::full_instance(&partial, &[(WDTH, 125.0)]).unwrap();
+    assert_eq!(super::super::colr::varied_values(wide.get(*b"COLR").unwrap())[1].0, vec![0, 0, 525, 720]);
 }

@@ -1141,6 +1141,27 @@ outlines varies. Two differences from varLib.instancer change no outline: the ch
 as they were (the instancer respecialises them), and a downgraded font has its `head` and `hhea` bounds and
 the CFF FontBBox recomputed (the instancer keeps the input's `head` and `hhea` values when it downgrades).
 
+**`avar` version 2.** A partial instance keeps the variation tables in the coordinates the input's
+`avar` table gives, as varLib.instancer does. The `avar` segment maps are rebased (a pinned axis's map
+becomes the identity map), its item variation store is rebased by the limits, and each limited axis gets
+deltas on its own row that map the new coordinates back to the old ones (for a moved default, also at the
+point where the old default lands and at the segment map's interior points, when that is closer). A
+pinned axis whose final coordinate no longer depends on another axis leaves `fvar` and `avar`, and the
+variation tables are instanced at that coordinate; any other pinned axis stays as a hidden axis whose
+range is the pinned value. The instancer also drops variation regions the new ranges cannot reach and
+re-packs the store; neither changes a value, and FontCraft does neither.
+
+**`VARC`.** An axis a `VARC` table uses (in its variation regions, its axis-range conditions or its axis
+index lists) cannot be pinned or limited; the instance is refused with a message, as varLib.instancer
+refuses it. Other axes can be, and the table's axis indexes are renumbered when axes leave `fvar`. Its
+variation data does not change.
+
+**Variable `COLR`.** varLib.instancer leaves `COLR` as it is. FontCraft instances it as the instancer
+instances `GDEF`: the store is rebased, and each varied field of a paint, colour stop or clip box takes
+the delta the location folds into the default, rounded, in the field's own units. A static instance, or
+a partial one that leaves no region, drops the store and the delta-set index map and sets every
+variation index to "no variation"; the paints keep their variable formats.
+
 **Tables recalculated on saving.** The instancer reads every font's glyph order, which loads `post`,
 so `post` is written again as fontTools writes it: version 2 names stored again (standard names by
 their index, unused strings past the last used one dropped), versions 1 and 3 as their header alone,
