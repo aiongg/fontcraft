@@ -64,3 +64,41 @@ fn font_convert_changes_the_outline_flavour_and_writes_nothing_on_failure() {
     assert!(s.execute("font.convert", &json!({ "input": ttf, "to": "otf", "glyphs": ["A"] })).is_err(), "options not built yet are refused");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn font_convert_reads_ttx_text_and_bare_cff_tables() {
+    let dir = std::env::temp_dir().join(format!("fontcraft-convert-programs-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut s = Session::with_document();
+    let square = json!([{"x": 60, "y": 0}, {"x": 560, "y": 0}, {"x": 560, "y": 700}, {"x": 60, "y": 700}]);
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": square}));
+    let ttf = dir.join("Font.ttf");
+    run(&mut s, "file.exportStatic", json!({ "destination": ttf, "timestamp": 0 }));
+    let cff_of = |path: PathBuf| fontcraft_tables::read(&std::fs::read(path).unwrap(), 0).unwrap().get(*b"CFF ").unwrap().to_vec();
+
+    // A TTX dump converts as the font it was dumped from.
+    let ttx = dir.join("Font.ttx");
+    run(&mut s, "font.dumpTables", json!({ "font": ttf, "output": ttx }));
+    run(&mut s, "font.convert", json!({ "input": ttf, "to": "otf", "output": dir.join("direct.otf") }));
+    run(&mut s, "font.convert", json!({ "input": ttx, "to": "otf", "output": dir.join("via-ttx.otf") }));
+    assert_eq!(cff_of(dir.join("via-ttx.otf")), cff_of(dir.join("direct.otf")));
+
+    // A bare CFF table becomes a whole font again, with TrueType or CFF outlines.
+    let bare = dir.join("Font.cff");
+    run(&mut s, "font.convert", json!({ "input": ttf, "to": "cff", "output": bare }));
+    let r = run(&mut s, "font.convert", json!({ "input": bare, "to": "ttf", "output": dir.join("from-cff.ttf") }));
+    let font = fontcraft_tables::read(&std::fs::read(dir.join("from-cff.ttf")).unwrap(), 0).unwrap();
+    assert!(font.get(*b"glyf").is_some() && font.get(*b"cmap").is_some() && font.get(*b"OS/2").is_some());
+    let direct = fontcraft_tables::read(&std::fs::read(dir.join("direct.otf")).unwrap(), 0).unwrap();
+    assert_eq!(r["results"][0]["glyphs"], json!(direct.get(*b"maxp").map(|m| u16::from_be_bytes([m[4], m[5]])).unwrap()));
+    // Through OpenType (subroutinised) and back to a bare table: the charstrings are kept.
+    run(&mut s, "font.convert", json!({ "input": bare, "to": "otf", "output": dir.join("from-cff.otf") }));
+    assert!(cff_of(dir.join("from-cff.otf")).len() > 4);
+    let back = dir.join("back.cff");
+    run(&mut s, "font.convert", json!({ "input": dir.join("from-cff.otf"), "to": "cff", "cff": {"subroutinize": false}, "output": back }));
+    run(&mut s, "font.convert", json!({ "input": bare, "to": "cff", "output": dir.join("again.cff") }));
+    assert_eq!(std::fs::read(&back).unwrap(), std::fs::read(dir.join("again.cff")).unwrap());
+    assert!(s.execute("font.convert", &json!({ "input": bare, "to": "otf", "face": 1, "output": dir.join("x.otf") })).is_err(), "one font: no face");
+    let _ = std::fs::remove_dir_all(&dir);
+}

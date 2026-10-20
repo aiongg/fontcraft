@@ -1,6 +1,7 @@
 //! Format conversion of compiled fonts (M12.30; rows `convert`, `font.convert`). Oracles: AFDKO
-//! otf2ttf and `tx`, fontTools `cffLib.CFFToCFF2` and `CFF2ToCFF`, `ttx`. Type 1 and bare CFF
-//! reading come from `fontcraft-decompile` (M12.31).
+//! otf2ttf and `tx`, fontTools `cffLib.CFFToCFF2` and `CFF2ToCFF`, `ttx`. Type 1 (PFA, PFB) and
+//! bare CFF inputs are read with `fontcraft-decompile` (M12.31) and wrapped in an sfnt first
+//! ([`read_postscript`], M12.30b).
 //!
 //! | From → to | Outlines | Other tables |
 //! |---|---|---|
@@ -19,6 +20,7 @@
 
 mod cff_table;
 mod outline;
+mod postscript;
 #[cfg(test)]
 mod tests;
 
@@ -33,6 +35,7 @@ use crate::sfnt::{Flavour, SfntFont, Tag, WriteOptions};
 use crate::{Result, TablesError};
 pub use outline::QuadToCubic;
 use outline::{Contour, GlyfOutlines, PsOutlines};
+pub use postscript::{PsInput, PsSource, convert_postscript, read_postscript};
 
 /// Largest error bound accepted, in font units.
 pub const MAX_ERROR_UNITS: f64 = 1_000.0;

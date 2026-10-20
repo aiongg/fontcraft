@@ -24,8 +24,9 @@ const USAGE: &str = "\
       instance. --smart-components: a UFO or designspace keeps smart components as components
       with their values (default) or holds them drawn as outlines.
   fontcraft-cli convert FONT OUT | convert FONT... --to ttf|otf|otf-cff2|cff|cff2 [options]
-      Rewrite compiled fonts with other outlines: CFF or CFF2 to TrueType (cubic curves become
-      quadratic within one font unit or --max-error em, contours reversed), TrueType to CFF or
+      Rewrite compiled fonts, TTX text, Type 1 fonts (.pfa, .pfb) and bare CFF tables with other
+      outlines: CFF or CFF2 to TrueType (cubic curves become quadratic within one font unit or
+      --max-error em, contours reversed), TrueType to CFF or
       CFF2 (components decomposed, instructions dropped), CFF to CFF2 and back with hints kept,
       or only the CFF or CFF2 table (cff, cff2). With IN OUT the extension of OUT says what to
       write; .woff and .woff2 keep the input's outlines. Each output is INPUT.EXT unless -o, --output-dir or
@@ -63,7 +64,8 @@ fn convert(raw: &[String]) -> Outcome {
         return out(&super::help(&SUBCOMMAND));
     }
     let Some(first) = parsed.positional.first() else { return Err(usage(super::help(&SUBCOMMAND))) };
-    let compiled = parsed.value("to").is_some() || is_compiled(first);
+    let second = parsed.positional.get(1).map(String::as_str);
+    let compiled = parsed.value("to").is_some() || is_compiled(first) || (program_kind(first).is_some() && second.is_some_and(writes_binary));
     if compiled {
         return convert_fonts(&parsed, raw);
     }
@@ -106,9 +108,55 @@ fn is_compiled(path: &str) -> bool {
     read.is_ok() && matches!(&head, [0, 1, 0, 0] | b"OTTO" | b"true" | b"ttcf" | b"wOFF" | b"wOF2")
 }
 
+/// Inputs `font.convert` reads besides compiled fonts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Program {
+    /// A PFA or PFB font, or a bare CFF table.
+    PostScript,
+    Ttx,
+}
+
+/// Whether the file at `path` starts like a Type 1 font, a bare CFF table or TTX text.
+fn program_kind(path: &str) -> Option<Program> {
+    use std::io::Read as _;
+    let mut head = Vec::new();
+    std::fs::File::open(path).and_then(|f| f.take(4096).read_to_end(&mut head)).ok()?;
+    if head.starts_with(&[0x80, 0x01]) || head.starts_with(b"%!PS-AdobeFont") || head.starts_with(b"%!FontType1") {
+        return Some(Program::PostScript);
+    }
+    if matches!(head.get(..4), Some(&[1, 0, h, off]) if h >= 4 && (1..=4).contains(&off)) {
+        return Some(Program::PostScript);
+    }
+    let text = String::from_utf8_lossy(&head);
+    let text = text.trim_start_matches('\u{feff}').trim_start();
+    (text.starts_with('<') && text.contains("<ttFont")).then_some(Program::Ttx)
+}
+
+/// Whether `output` names a file `font.convert` writes.
+fn writes_binary(output: &str) -> bool {
+    let extension = std::path::Path::new(output).extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    matches!(extension.as_str(), "ttf" | "otf" | "cff" | "cff2" | "woff" | "woff2")
+}
+
 /// The flavour already in a compiled font, for `IN OUT.woff`: from the sfnt version and, for
-/// `OTTO`, whether the table directory lists `CFF2`.
+/// `OTTO`, whether the table directory lists `CFF2`. A Type 1 font or bare CFF table keeps CFF
+/// outlines; TTX text the flavour its `sfntVersion` and tables name.
 fn flavour_of(path: &str) -> Result<&'static str, Failure> {
+    match program_kind(path) {
+        Some(Program::PostScript) => return Ok("otf"),
+        Some(Program::Ttx) => {
+            let bytes = crate::io::read_input(path)?;
+            let text = String::from_utf8_lossy(&bytes);
+            return Ok(if !text.contains("sfntVersion=\"OTTO\"") {
+                "ttf"
+            } else if text.contains("<CFF2>") {
+                "otf-cff2"
+            } else {
+                "otf"
+            });
+        }
+        None => {}
+    }
     let bytes = crate::io::read_input(path)?;
     let at = |i: usize| bytes.get(i..i + 4);
     let version = match at(0) {
