@@ -550,7 +550,7 @@ guesses = [
 [[format]]
 id = "pcf"
 label = "Portable Compiled Format (X11 bitmap font)"
-extensions = ["pcf"]
+extensions = ["pcf", "pcf.gz"]
 read = true
 write = true
 spec = "https://fontforge.org/docs/techref/pcf-format.html"
@@ -560,10 +560,50 @@ summary = "Binary sibling of BDF with a table directory (properties, metrics, bi
 ref = "FontForge documentation › PCF format (public docs only)"
 status = "docs"
 origin = "fontforge"
-notes = "Reader and writer built (M13.55) in `crates/io-bitmap`, from FontForge's public PCF format page and the files the X.Org `bdftopcf` converter writes from BDF files of our own (every padding, scan unit, byte and bit order); no code that reads or writes PCF was consulted. Tables read: properties, metrics (compressed or not), bitmaps, BDF encodings, scalable widths, glyph names and either accelerators table; ink metrics are not kept. The result is the same strike `bdf` gives: ascent and descent from the BDF accelerators table, else the accelerators table, else `FONT_ASCENT`/`FONT_DESCENT`, else the glyphs' extent; name from `FONT`; point size from `POINT_SIZE` ÷ 10; resolution from `RESOLUTION_X`/`RESOLUTION_Y`. `write_pcf` writes black-and-white strikes in any layout (rows padded to 1, 2, 4 or 8 bytes, scan unit up to the padding, either byte and bit order, compressed metrics where they fit), adds `FONT`, `PIXEL_SIZE`, `POINT_SIZE` and the resolutions as properties when missing, and encodes codes up to 65,535. Gzip-compressed `.pcf.gz` files are refused with a message. Limits as for `bdf`, plus 64 tables; every offset and length is checked against its table, and glyphs that share bitmap data count once each against the 64 MiB pixel cap. Reachable through `bitmap.importStrikes` and `bitmap.exportStrikes`, and opened on its own by `file.open` as a bitmap-only font, as for `bdf`. Documented, not yet checked against files the reference writes."
+notes = "Reader and writer built (M13.55) in `crates/io-bitmap`, from FontForge's public PCF format page and the files the X.Org `bdftopcf` converter writes from BDF files of our own (every padding, scan unit, byte and bit order); no code that reads or writes PCF was consulted. Tables read: properties, metrics (compressed or not), bitmaps, BDF encodings, scalable widths, glyph names and either accelerators table; ink metrics are not kept. The result is the same strike `bdf` gives: ascent and descent from the BDF accelerators table, else the accelerators table, else `FONT_ASCENT`/`FONT_DESCENT`, else the glyphs' extent; name from `FONT`; point size from `POINT_SIZE` ÷ 10; resolution from `RESOLUTION_X`/`RESOLUTION_Y`. `write_pcf` writes black-and-white strikes in any layout (rows padded to 1, 2, 4 or 8 bytes, scan unit up to the padding, either byte and bit order, compressed metrics where they fit), adds `FONT`, `PIXEL_SIZE`, `POINT_SIZE` and the resolutions as properties when missing, and encodes codes up to 65,535. Gzip-compressed files (`.pcf.gz`, and `.bdf.gz` alike) are read and `.pcf.gz` written (M13.55e, `crates/io-bitmap/src/gz.rs`) through the gzip reader and writer of `crates/container`: every member's CRC and length is checked, and the inflated data is capped at 16 MiB, the uncompressed file limit, before the PCF or BDF reader runs; `file.open` takes gzip data as a bitmap font when the file name ends in `.pcf.gz` or `.bdf.gz`, else as a compressed FontCraft document. Limits as for `bdf`, plus 64 tables; every offset and length is checked against its table, and glyphs that share bitmap data count once each against the 64 MiB pixel cap. Reachable through `bitmap.importStrikes` and `bitmap.exportStrikes`, and opened on its own by `file.open` as a bitmap-only font, as for `bdf`. Documented, not yet checked against files the reference writes."
 guesses = [
   "A PCF file without a glyph names table names its glyphs `glyph0`, `glyph1`…; opening such a file in the reference app would show what it calls them.",
   "When several codes of the encodings table point at one glyph, the glyph keeps the lowest and a warning counts the rest; the reference may add copies instead. A PCF with a shared glyph opened in the reference app would settle it.",
+  "`.pcf.gz` is written as one gzip member at the best compression, with no file name and time 0. Whether the reference writes `.pcf.gz` at all is not documented; a font folder written by it would settle it.",
+]
+
+[[format]]
+id = "fnt"
+label = "Windows bitmap font (FNT)"
+extensions = ["fnt"]
+read = true
+write = true
+area = "import-export"
+milestone = "M13"
+summary = "The Windows 2 and 3 bitmap font file: a fixed header, a table of 8-bit codes with each glyph's width and offset, and the glyphs as column-major bitmaps one cell tall. One face at one size per file. Imported as a bitmap strike like `bdf`, and written from a strike."
+ref = "Microsoft's published Windows font file format (Windows 3 SDK reference; knowledge-base note on Windows 3.0 font files)"
+status = "docs"
+origin = "fontforge"
+notes = "Reader and writer built (M13.55e) in `crates/io-bitmap/src/fnt.rs`, from Microsoft's published description of the format and checked by rendering files built to the same layout through FreeType as a black box; no code that reads or writes FNT was consulted. `read_fnt` reads versions 2 (16-bit offsets) and 3 (32-bit offsets), raster fonts only: vector fonts, ABC spacing and colour fonts are refused. Each glyph becomes a bitmap as wide as its advance and as tall as the cell, its bottom at minus the descent (`dfPixHeight` − `dfAscent`); pixels per em are `dfPixHeight` − `dfInternalLeading`. The face name, copyright, weight, italic flag, character set, point size and resolutions become the X properties `FAMILY_NAME`, `COPYRIGHT`, `WEIGHT_NAME`, `SLANT`, `CHARSET_REGISTRY`/`CHARSET_ENCODING`, `POINT_SIZE`, `RESOLUTION_X`/`RESOLUTION_Y`, with `PIXEL_SIZE`, `SPACING`, `AVERAGE_WIDTH`, `FONT_ASCENT`, `FONT_DESCENT` and `DEFAULT_CHAR`. The ANSI character set is code page 1252, read as Unicode; the other character sets keep their 8-bit codes under registry `MICROSOFT` and encoding `CPnnnn` (or `CHARSETn`), and match glyphs by name. `write_fnt` writes version 3 from a black-and-white strike: the cell spans the strike's ascent and descent and every bitmap, each glyph is as wide as its advance, codes run from the lowest to the highest a glyph has, codes without a glyph show the default character (`DEFAULT_CHAR`, else `?`, else the first), and the table ends with a blank glyph of the average width. Glyphs without an 8-bit code, repeated codes and pixels outside the advance are left out with a warning; grey strikes, cells above 1,024 pixels and strikes with no 8-bit code are refused. Every count, offset and size read is checked against the file, and widths and the cell height are capped at 1,024 pixels. Reachable through `bitmap.importStrikes`, `bitmap.exportStrikes` (format `fnt`) and `file.open`. Documented, not yet checked against files the reference writes."
+guesses = [
+  "Glyphs read from an FNT file are named `uniXXXX` from their code point in the ANSI character set, and `charNNN` from their 8-bit code in any other; opening an FNT in the secondary reference would show the names it picks.",
+  "Codes whose table entry repeats the default character's width and offset are read as missing, not as copies of it, and the writer fills codes without a glyph that way; an FNT written by the secondary reference with a gap in its codes would settle it.",
+  "Pixels per em are the cell height minus the internal leading, and the writer sets the internal leading to the cell height minus the strike's pixels per em; the format states only point size and resolution. An FNT the secondary reference writes from a known strike would settle it.",
+  "Character sets other than ANSI are kept as raw 8-bit codes under registry `MICROSOFT`; a strike in another X registry is written with the ANSI character set and its codes unchanged. A non-ANSI FNT exported by the secondary reference would settle it.",
+  "`WEIGHT_NAME` maps to and from the Windows weight through Thin 100, ExtraLight 200, Light 300, Medium or Regular 400, SemiBold 600, Bold 700, ExtraBold 800 and Black 900, and reading picks the nearest name.",
+]
+
+[[format]]
+id = "fon"
+label = "Windows bitmap font resource file (FON)"
+extensions = ["fon"]
+read = true
+write = true
+area = "import-export"
+milestone = "M13"
+summary = "A 16-bit Windows (NE) executable whose resources hold FNT fonts, usually one face at several sizes, with a font directory resource for the system's font loader. Every font is imported as a strike."
+ref = "Microsoft's published NE executable format and font directory resource (FONTDIRENTRY)"
+status = "docs"
+origin = "fontforge"
+notes = "Reader and writer built (M13.55e) in `crates/io-bitmap/src/fon.rs`, from Microsoft's published descriptions of the NE header, its resource table and the font directory, and checked by opening files built to the same layout in FreeType as a black box; no code that reads or writes FON was consulted. `read_fon` follows the DOS header to the NE header and its resource table, and reads every resource of type 0x8008 as an FNT font whose offsets count from the resource's start; a font that cannot be read is left out with a warning, and the file is refused when none can be read. 32-bit (PE) font files are refused with a message. Limits: 64 fonts, 256 resource types, an alignment shift of at most 15, every offset and length checked against the file, and the 64 MiB pixel cap shared by all fonts of the file. `write_fon` writes each strike as `write_fnt` does into one file: a 64-byte DOS header, an NE header for a Windows 3.0 library module, a resource table with the font directory (named `FONTDIR`) and one font per strike numbered from 1, the module name (the face name's letters and digits, upper case, at most 8) and the description `FONTRES aspect,x dpi,y dpi : Face sizes`. `bitmap.importStrikes` adds one strike per font; `bitmap.exportStrikes` with format `fon` writes every chosen strike into the one file `path` names; `file.open` takes the glyphs from the first font and makes each further font another strike, holding the bitmaps whose names the first font has (a second font of a size already present is left out with a warning). Documented, not yet checked against files the reference writes."
+guesses = [
+  "Opening a FON file gives one font whose glyphs come from its first font, with one strike per font; the secondary reference may open each font as its own document. Opening a two-size FON in the secondary reference would settle it.",
+  "The writer uses the smallest resource alignment, from 16 bytes up, that addresses every resource, a module name made from the face name, and resource flags moveable and preloaded for the directory and moveable, pure and discardable for the fonts; a FON written by the secondary reference would settle these.",
 ]
 
 [[format]]

@@ -406,3 +406,90 @@ fn strikes_go_into_compiled_fonts_and_read_back_through_ttx() {
     assert!(!dir.join("big.ttf").exists() && !dir.join("y.ttf").exists());
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// Each bitmap of a strike by glyph name: its code, advance and lit pixels from the origin (x
+/// to the right, y up), so strikes whose bitmaps are boxed differently compare alike.
+fn shapes(strike: &BitmapStrike) -> Vec<(String, Option<u32>, i32, std::collections::BTreeSet<(i32, i32)>)> {
+    let mut out: Vec<_> = strike
+        .glyphs
+        .iter()
+        .map(|g| {
+            let stride = usize::from(g.width).div_ceil(8);
+            let mut ink = std::collections::BTreeSet::new();
+            for y in 0..usize::from(g.height) {
+                for x in 0..usize::from(g.width) {
+                    if g.data[y * stride + x / 8] & (0x80 >> (x % 8)) != 0 {
+                        ink.insert((g.left + x as i32, g.bottom + i32::from(g.height) - 1 - y as i32));
+                    }
+                }
+            }
+            (g.glyph.clone(), g.code, g.advance, ink)
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+#[test]
+fn a_strike_exports_as_pcf_gz_fnt_and_fon_and_reads_back() {
+    let dir = temp("windows");
+    let path = bdf_file(&dir, "pixel.bdf", BDF);
+    let mut s = session();
+    run(&mut s, "bitmap.importStrikes", json!({ "paths": [path] }));
+    let mut expected = strikes(&s).remove(0);
+    expected.glyphs[2].code = Some(u32::from('c'));
+
+    let gz = dir.join("out.pcf.gz");
+    let out = run(&mut s, "bitmap.exportStrikes", json!({ "path": gz }));
+    assert_eq!(out["format"], "pcf.gz");
+    let out = run(&mut s, "bitmap.exportStrikes", json!({ "format": "fnt", "destination": dir.join("fnt") }));
+    let fnt = PathBuf::from(out["files"][0]["path"].as_str().unwrap());
+    assert_eq!(fnt.file_name().unwrap(), "Pixel-Test-8.fnt");
+    assert!(out["files"][0].get("warnings").is_none(), "{out}");
+    let fon = dir.join("out.fon");
+    let out = run(&mut s, "bitmap.exportStrikes", json!({ "path": fon }));
+    assert_eq!((&out["format"], &out["files"][0]["strikes"]), (&json!("fon"), &json!(["8"])));
+
+    let mut fresh = session();
+    run(&mut fresh, "bitmap.importStrikes", json!({ "paths": [gz] }));
+    assert_eq!(strikes(&fresh)[0].glyphs, expected.glyphs, "a .pcf.gz reads back as the PCF it holds");
+    // FNT bitmaps are cells as wide as the advance and as tall as the strike; the pixels are the same.
+    for path in [&fnt, &fon] {
+        let mut fresh = session();
+        run(&mut fresh, "bitmap.importStrikes", json!({ "paths": [path] }));
+        let back = strikes(&fresh).remove(0);
+        assert_eq!((back.ppem, back.depth, back.ascent, back.descent), (8, 1, 7, 1), "{}", path.display());
+        assert_eq!(shapes(&back), shapes(&expected), "{}", path.display());
+    }
+    assert!(refused(&mut s, "bitmap.exportStrikes", json!({ "format": "fon", "destination": dir })).contains("path"));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_fon_opens_with_a_strike_per_size_and_a_pcf_gz_opens() {
+    use fontcraft_io_bitmap as io;
+    let dir = temp("open-windows");
+    let small = io::read_bdf(BDF.as_bytes()).unwrap().font;
+    let mut large = small.clone();
+    (large.pixel_size, large.ascent) = (10, 9);
+    let fon = dir.join("pair.fon");
+    let written = io::write_fon(&[small.clone(), large]).unwrap();
+    // `c` has no code and the private-use glyph none in code page 1252.
+    assert!(written.warnings.iter().any(|w| w.contains("2 glyphs have no code")), "{:?}", written.warnings);
+    std::fs::write(&fon, written.bytes).unwrap();
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": fon }));
+    let names: Vec<String> = s.font().unwrap().glyphs.iter().map(|g| g.name.clone()).collect();
+    assert_eq!(names, ["uni0041", "uni0042"]);
+    let got = strikes(&s);
+    let sizes: Vec<(u16, usize)> = got.iter().map(|s| (s.ppem, s.glyphs.len())).collect();
+    assert_eq!(sizes, [(8, 2), (10, 2)]);
+
+    let gz = dir.join("pixel.pcf.gz");
+    std::fs::write(&gz, io::write_pcf_gz(&small, io::PcfLayout::default()).unwrap()).unwrap();
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": gz }));
+    let font = s.font().unwrap();
+    assert_eq!((font.family_name.as_str(), font.glyphs.len()), ("pixel", 4));
+    std::fs::remove_dir_all(&dir).unwrap();
+}

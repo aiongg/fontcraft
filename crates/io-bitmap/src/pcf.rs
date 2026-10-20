@@ -42,8 +42,8 @@ pub fn read_pcf(bytes: &[u8]) -> Result<Import> {
     if bytes.len() > MAX_FILE_BYTES {
         return Err(BitmapError::TooLarge(bytes.len()));
     }
-    if bytes.starts_with(&[0x1f, 0x8b]) {
-        return Err(BitmapError::NotPcf("the file is gzip-compressed; decompress it first".into()));
+    if crate::is_gzip(bytes) {
+        return crate::read_gz(bytes);
     }
     if !bytes.starts_with(MAGIC) {
         return Err(BitmapError::NotPcf("the file does not start with the PCF signature".into()));

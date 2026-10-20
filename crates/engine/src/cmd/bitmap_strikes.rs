@@ -1,6 +1,6 @@
-//! Bitmap strikes of the open font (M13.55b, M13.55c): `bitmap.importStrikes` reads BDF and PCF
-//! files into strikes, `bitmap.exportStrikes` writes strikes as BDF or PCF files, embeds them in a
-//! compiled font or writes a bitmap-only font, and `bitmap.setStrikes` adds strikes, empty or
+//! Bitmap strikes of the open font (M13.55b, M13.55c, M13.55e): `bitmap.importStrikes` reads BDF,
+//! PCF (plain or gzip-compressed), Windows FNT and FON files into strikes, `bitmap.exportStrikes`
+//! writes strikes as such files, embeds them in a compiled font or writes a bitmap-only font, and `bitmap.setStrikes` adds strikes, empty or
 //! rasterised from the outlines, and removes strikes.
 //!
 //! The files are read and checked by `fontcraft_io_bitmap`, whose limits bound every count and
@@ -40,7 +40,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Import Bitmap Strikes…",
             ["File", "Import"],
             None,
-            "{paths: [path of a .bdf or .pcf file], asBackground?: false} adds the strike each file holds to the font, as one undo step. A bitmap goes to the glyph whose code point is the file's code for it (when the file's codes are Unicode), else to the glyph of its name; bitmaps that match no glyph are left out and listed, and no glyph is created. A strike of the same size and depth as one the font has replaces that strike's name, metrics and properties and the bitmaps of the glyphs it holds; the strike's other bitmaps stay. Refused, changing nothing: a file that is not BDF or PCF, a gzip-compressed PCF, a file beyond the bitmap readers' limits, a file none of whose bitmaps match a glyph, asBackground (not built) → {strikes: [{path, ppem, depth, label, glyphs, replaced, leftOut: [name], leftOutCount}], warnings: [string]}",
+            "{paths: [path of a .bdf, .pcf, .pcf.gz, .bdf.gz, .fnt or .fon file], asBackground?: false} adds the strike each file holds (each font of a .fon file) to the font, as one undo step. A bitmap goes to the glyph whose code point is the file's code for it (when the file's codes are Unicode), else to the glyph of its name; bitmaps that match no glyph are left out and listed, and no glyph is created. A strike of the same size and depth as one the font has replaces that strike's name, metrics and properties and the bitmaps of the glyphs it holds; the strike's other bitmaps stay. Refused, changing nothing: a file of none of these kinds, gzip data that does not inflate to a PCF or BDF file, a file beyond the bitmap readers' limits, a file none of whose bitmaps match a glyph, asBackground (not built) → {strikes: [{path, ppem, depth, label, glyphs, replaced, leftOut: [name], leftOutCount}], warnings: [string]}",
             has_doc,
             import_strikes
         )
@@ -50,7 +50,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Export Bitmap Strikes…",
             ["File", "Export"],
             None,
-            "{strikes?: [{ppem: number, depth?: number}] (default: all; without depth, every depth of the size), format?: \"bdf\" | \"pcf\" | \"embedded\" | \"otb\" (default: pcf for a path ending in .pcf, otb for .otb, else bdf), path?: file, destination?: folder (bdf and pcf: one file per strike, named Family-12.bdf, or Family-12@4.bdf for a grey strike), font?: path of a compiled TrueType or OpenType font (embedded only; default: the open font compiled as TrueType)} writes strikes, atomically each file. bdf and pcf: one bitmap font file per strike; `path` takes exactly one strike. A bitmap's code is the one its file had, else the first code point of its glyph; a strike without a stated point size or resolution is written at 72 dpi, and one without a name takes the family name. PCF holds black-and-white strikes only. embedded: the chosen strikes as EBDT and EBLC tables in `font`, written to `path`, replacing the font's own bitmap tables. otb: a bitmap-only font at `path`: the open font compiled as TrueType, with its outlines emptied and the strikes added. A bitmap goes to the glyph of its name, else of its glyph's code point; bitmaps of glyphs the font lacks are left out and listed. Refused, writing nothing: a strike above 255 pixels per em, a bitmap larger than 255 pixels or offset beyond -128..127, strikes none of whose bitmaps has a glyph in the font, a collection or web font as `font` → {format, files: [{strike, path, glyphs, bytes}], replaced?, empty?: [label], leftOut?: [name], leftOutCount?}",
+            "{strikes?: [{ppem: number, depth?: number}] (default: all; without depth, every depth of the size), format?: \"bdf\" | \"pcf\" | \"pcf.gz\" | \"fnt\" | \"fon\" | \"embedded\" | \"otb\" (default: from a path ending in .pcf, .pcf.gz, .fnt, .fon or .otb, else bdf), path?: file, destination?: folder (bdf, pcf, pcf.gz and fnt: one file per strike, named Family-12.bdf, or Family-12@4.bdf for a grey strike), font?: path of a compiled TrueType or OpenType font (embedded only; default: the open font compiled as TrueType)} writes strikes, atomically each file. bdf and pcf: one bitmap font file per strike; `path` takes exactly one strike. A bitmap's code is the one its file had, else the first code point of its glyph; a strike without a stated point size or resolution is written at 72 dpi, and one without a name takes the family name. PCF, FNT and FON hold black-and-white strikes only. fnt: a Windows bitmap font, version 3; a bitmap's code goes through code page 1252 when the strike's codes are Unicode, and bitmaps without an 8-bit code, or with pixels outside their advance, are left out or cut and listed in the file's `warnings`. fon: every chosen strike as one font of the Windows font file at `path`. embedded: the chosen strikes as EBDT and EBLC tables in `font`, written to `path`, replacing the font's own bitmap tables. otb: a bitmap-only font at `path`: the open font compiled as TrueType, with its outlines emptied and the strikes added. A bitmap goes to the glyph of its name, else of its glyph's code point; bitmaps of glyphs the font lacks are left out and listed. Refused, writing nothing: a strike above 255 pixels per em, a bitmap larger than 255 pixels or offset beyond -128..127, strikes none of whose bitmaps has a glyph in the font, a collection or web font as `font` → {format, files: [{strike, path, glyphs, bytes}], replaced?, empty?: [label], leftOut?: [name], leftOutCount?}",
             has_doc,
             export_strikes
         )
@@ -153,9 +153,10 @@ fn import_strikes(s: &mut Session, v: &Value) -> Result<Value> {
         if input.bytes.len() > fontcraft_io_bitmap::MAX_FILE_BYTES {
             return Err(p.bad(format!("{path} is larger than {} bytes", fontcraft_io_bitmap::MAX_FILE_BYTES)));
         }
-        let import = fontcraft_io_bitmap::read(&input.bytes).map_err(|e| p.bad(format!("{path}: {e}")))?;
-        warnings.extend(import.warnings.into_iter().map(|w| format!("{path}: {w}")));
-        files.push((path.to_string(), import.font));
+        for import in fontcraft_io_bitmap::read_all(&input.bytes).map_err(|e| p.bad(format!("{path}: {e}")))? {
+            warnings.extend(import.warnings.into_iter().map(|w| format!("{path}: {w}")));
+            files.push((path.to_string(), import.font));
+        }
     }
     let font = s.font()?;
     let mut incoming = Vec::with_capacity(files.len());
@@ -279,6 +280,9 @@ fn to_value(v: &PropertyValue) -> StrikeValue {
 enum Format {
     Bdf,
     Pcf,
+    PcfGz,
+    Fnt,
+    Fon,
     Embedded,
     Otb,
 }
@@ -288,6 +292,9 @@ impl Format {
         match self {
             Format::Bdf => "bdf",
             Format::Pcf => "pcf",
+            Format::PcfGz => "pcf.gz",
+            Format::Fnt => "fnt",
+            Format::Fon => "fon",
             Format::Embedded => "embedded",
             Format::Otb => "otb",
         }
@@ -302,12 +309,20 @@ fn export_strikes(s: &mut Session, v: &Value) -> Result<Value> {
     let format = match p.opt_str("format")? {
         Some("bdf") => Format::Bdf,
         Some("pcf") => Format::Pcf,
+        Some("pcf.gz") => Format::PcfGz,
+        Some("fnt") => Format::Fnt,
+        Some("fon") => Format::Fon,
         Some("embedded") => Format::Embedded,
         Some("otb") => Format::Otb,
         Some(other) => {
-            return Err(p.bad(format!("`format` must be bdf, pcf, embedded or otb, got `{}`", other.chars().take(32).collect::<String>())));
+            return Err(
+                p.bad(format!("`format` must be bdf, pcf, pcf.gz, fnt, fon, embedded or otb, got `{}`", other.chars().take(32).collect::<String>()))
+            );
         }
         None if path.is_some_and(|x| x.to_ascii_lowercase().ends_with(".pcf")) => Format::Pcf,
+        None if path.is_some_and(|x| x.to_ascii_lowercase().ends_with(".pcf.gz")) => Format::PcfGz,
+        None if path.is_some_and(|x| x.to_ascii_lowercase().ends_with(".fnt")) => Format::Fnt,
+        None if path.is_some_and(|x| x.to_ascii_lowercase().ends_with(".fon")) => Format::Fon,
         None if path.is_some_and(|x| x.to_ascii_lowercase().ends_with(".otb")) => Format::Otb,
         None => Format::Bdf,
     };
@@ -338,6 +353,9 @@ fn export_strikes(s: &mut Session, v: &Value) -> Result<Value> {
     if p.opt_str("font")?.is_some() {
         return Err(p.bad("`font` goes with format embedded"));
     }
+    if format == Format::Fon {
+        return export_fon(font, &p, &chosen, path, destination);
+    }
     let targets: Vec<PathBuf> = match (path, destination) {
         (Some(_), Some(_)) => return Err(p.bad("give `path` or `destination`, not both")),
         (None, None) => return Err(p.bad("give `path` (one strike) or `destination` (a folder)")),
@@ -355,21 +373,49 @@ fn export_strikes(s: &mut Session, v: &Value) -> Result<Value> {
     let mut out = Vec::with_capacity(chosen.len());
     for strike in &chosen {
         let file = to_bitmap_font(font, strike);
+        let mut file_warnings = Vec::new();
         let bytes = match format {
             Format::Bdf => fontcraft_io_bitmap::write_bdf(&file).map(String::into_bytes),
             Format::Pcf => fontcraft_io_bitmap::write_pcf(&file, PcfLayout::default()),
-            // Written by `export_sfnt` above, as one font file.
-            Format::Embedded | Format::Otb => return Err(p.bad("embedded and otb strikes go into one font file")),
+            Format::PcfGz => fontcraft_io_bitmap::write_pcf_gz(&file, PcfLayout::default()),
+            Format::Fnt => fontcraft_io_bitmap::write_fnt(&file).map(|w| {
+                file_warnings = w.warnings;
+                w.bytes
+            }),
+            // Written by `export_sfnt` and `export_fon` above, as one font file.
+            Format::Embedded | Format::Otb | Format::Fon => return Err(p.bad("embedded, otb and fon strikes go into one font file")),
         }
         .map_err(|e| p.bad(format!("strike {}: {e}", strike.label())))?;
-        out.push((strike.label(), strike.glyphs.len(), bytes));
+        out.push((strike.label(), strike.glyphs.len(), bytes, file_warnings));
     }
     let mut files = Vec::with_capacity(out.len());
-    for ((label, glyphs, bytes), target) in out.into_iter().zip(targets) {
+    for ((label, glyphs, bytes, file_warnings), target) in out.into_iter().zip(targets) {
         write_file(&target, &bytes)?;
-        files.push(json!({"strike": label, "path": target.to_string_lossy(), "glyphs": glyphs, "bytes": bytes.len()}));
+        let mut entry = json!({"strike": label, "path": target.to_string_lossy(), "glyphs": glyphs, "bytes": bytes.len()});
+        if !file_warnings.is_empty() {
+            entry["warnings"] = json!(file_warnings);
+        }
+        files.push(entry);
     }
     Ok(json!({ "format": format.extension(), "files": files }))
+}
+
+/// The `fon` export: every chosen strike as one font of the Windows font file at `path`.
+fn export_fon(font: &Font, p: &Params<'_>, chosen: &[&BitmapStrike], path: Option<&str>, destination: Option<&str>) -> Result<Value> {
+    if destination.is_some() {
+        return Err(p.bad("`destination` goes with bdf, pcf, pcf.gz and fnt; give `path`, the .fon file to write"));
+    }
+    let Some(path) = path else { return Err(p.bad("give `path`, the .fon file to write")) };
+    let files: Vec<BitmapFont> = chosen.iter().map(|s| to_bitmap_font(font, s)).collect();
+    let written = fontcraft_io_bitmap::write_fon(&files).map_err(|e| p.bad(e.to_string()))?;
+    write_file(Path::new(path), &written.bytes)?;
+    let labels: Vec<String> = chosen.iter().map(|s| s.label()).collect();
+    let glyphs: usize = chosen.iter().map(|s| s.glyphs.len()).sum();
+    let mut entry = json!({"strike": labels.join(", "), "strikes": labels, "path": path, "glyphs": glyphs, "bytes": written.bytes.len()});
+    if !written.warnings.is_empty() {
+        entry["warnings"] = json!(written.warnings);
+    }
+    Ok(json!({ "format": "fon", "files": [entry] }))
 }
 
 /// The `embedded` and `otb` exports: the chosen strikes as `EBDT` and `EBLC` in a compiled font,

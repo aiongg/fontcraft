@@ -23,8 +23,10 @@
 //! | `BBX` and `BITMAP` | metrics and bitmaps tables | [`Bitmap`] |
 //!
 //! Not read: vertical metrics (`DWIDTH1`, `SWIDTH1`, `VVECTOR`), PCF ink metrics, and the
-//! second, non-standard code of `ENCODING -1 n`. Gzip-compressed PCF files (`.pcf.gz`) are
-//! refused with a message; the user decompresses them first.
+//! second, non-standard code of `ENCODING -1 n`.
+//!
+//! Further formats, each in its own module: gzip-compressed PCF and BDF (`gz`), Windows FNT
+//! fonts (`fnt`) and Windows FON files, which hold several FNT fonts (`fon`).
 //!
 //! The input is untrusted: the file size, the glyph and property counts, each bitmap's size and
 //! the decoded pixels of all glyphs together are capped by the limits below, every PCF offset is
@@ -32,11 +34,19 @@
 #![forbid(unsafe_code)]
 
 mod bdf;
+mod fnt;
+mod fon;
+mod gz;
 mod pcf;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_windows;
 
 pub use bdf::{read_bdf, write_bdf};
+pub use fnt::{Written, is_fnt, read_fnt, write_fnt};
+pub use fon::{MAX_FON_FONTS, is_fon, read_fon, write_fon};
+pub use gz::{MAX_GUNZIPPED_BYTES, is_gzip, read_gz, write_pcf_gz};
 pub use pcf::{PcfLayout, read_pcf, write_pcf};
 
 /// Largest file either reader accepts.
@@ -69,6 +79,12 @@ pub enum BitmapError {
     Bdf { line: usize, message: String },
     #[error("PCF {table} table: {message}")]
     Pcf { table: &'static str, message: String },
+    #[error("gzip data: {0}")]
+    Gzip(String),
+    #[error("Windows FNT font: {0}")]
+    Fnt(String),
+    #[error("Windows FON file: {0}")]
+    Fon(String),
     #[error("{what}: more than the limit of {limit}")]
     Limit { what: &'static str, limit: usize },
     #[error("cannot write the font: {0}")]
@@ -245,17 +261,34 @@ pub fn is_pcf(bytes: &[u8]) -> bool {
     bytes.starts_with(pcf::MAGIC)
 }
 
-/// Reads a BDF or PCF file, whichever `bytes` hold.
+/// Reads a BDF, PCF (plain or gzip-compressed) or FNT file, whichever `bytes` hold, or the
+/// first font of a FON file.
 pub fn read(bytes: &[u8]) -> Result<Import> {
     if is_pcf(bytes) {
         read_pcf(bytes)
     } else if is_bdf(bytes) {
         read_bdf(bytes)
-    } else if bytes.starts_with(&[0x1f, 0x8b]) {
-        Err(BitmapError::NotPcf("the file is gzip-compressed; decompress it first".into()))
+    } else if is_gzip(bytes) {
+        read_gz(bytes)
+    } else if is_fnt(bytes) {
+        read_fnt(bytes)
+    } else if is_fon(bytes) {
+        let mut fonts = read_fon(bytes)?.into_iter();
+        let mut first = fonts.next().ok_or_else(|| BitmapError::Fon("it holds no font resources".into()))?;
+        let more = fonts.len();
+        if more > 0 && first.warnings.len() < MAX_WARNINGS {
+            first.warnings.push(format!("the file holds {more} more fonts, which were left out"));
+        }
+        Ok(first)
     } else {
-        Err(BitmapError::NotBdf("neither a BDF nor a PCF file".into()))
+        Err(BitmapError::NotBdf("neither a BDF, PCF, FNT nor FON file".into()))
     }
+}
+
+/// Reads every strike a bitmap font file holds: each font of a FON file, the one font of any
+/// other.
+pub fn read_all(bytes: &[u8]) -> Result<Vec<Import>> {
+    if is_fon(bytes) { read_fon(bytes) } else { read(bytes).map(|import| vec![import]) }
 }
 
 /// The pixel size a font states: its `PIXEL_SIZE` property, else its point size at its vertical
