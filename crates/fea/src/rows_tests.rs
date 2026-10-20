@@ -1236,20 +1236,26 @@ fn indices_past_16_bits_are_refused() {
 
 #[test]
 fn rules_that_share_lookups_are_not_counted_as_many_lookups() {
+    // The guard must not refuse these. The contextual cases put 70,000 or more rules in one
+    // subtable, more than its 16-bit offsets can address, so the table writer may still fail:
+    // that failure is a message, and the lookup counts are checked only when it compiles.
+    let not_refused = |code: &str, table: fn(&Compiled) -> Vec<usize>| match run(code) {
+        Ok(c) => assert!(table(&c).len() <= 2, "{:?}", table(&c)),
+        Err(d) => assert!(!d.iter().any(|d| d.message.contains("the feature code makes more than")), "{d:#?}"),
+    };
+
     // `ignore sub` and contextual `sub` rules go into one contextual lookup, and their inline
     // substitutions into one anonymous lookup: two lookups, not 120,000.
     let mut calt = String::from("feature calt {\n");
     calt.extend((0..40_000).map(|_| "ignore sub a' b;\nsub a' c by d;\n"));
     calt.push_str("} calt;");
-    let c = ok(&calt);
-    assert!(gsub(&c).len() <= 2, "{:?}", gsub(&c));
+    not_refused(&calt, gsub);
 
     // Inline value records that agree share one anonymous single positioning lookup.
     let mut kern = String::from("feature kern {\n");
     kern.extend((0..70_000).map(|_| "pos a' -20 b;\n"));
     kern.push_str("} kern;");
-    let c = ok(&kern);
-    assert!(gpos(&c).len() <= 2, "{:?}", gpos(&c));
+    not_refused(&kern, gpos);
 
     // Lookup references and flags set again to the same value do not end a lookup.
     let mut mixed = String::from("lookup X { sub e by f; } X;\nfeature liga {\n");

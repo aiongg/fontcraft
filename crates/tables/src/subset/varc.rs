@@ -443,9 +443,12 @@ struct VarData<'a> {
     items: Vec<&'a [u8]>,
 }
 
-/// The store at `at` keeping the delta sets in `used`, written, and the old → new variation
-/// index map. `None` when no delta set is used.
-fn subset_store(d: &Data<'_>, at: usize, used: &BTreeSet<u32>) -> Result<(Option<Vec<u8>>, BTreeMap<u32, u32>)> {
+/// A written variation store (`None` when no delta set is used) and the old → new variation
+/// index map.
+type SubsetStore = (Option<Vec<u8>>, BTreeMap<u32, u32>);
+
+/// The store at `at` keeping the delta sets in `used`.
+fn subset_store(d: &Data<'_>, at: usize, used: &BTreeSet<u32>) -> Result<SubsetStore> {
     let mut by_major: BTreeMap<u16, BTreeSet<u16>> = BTreeMap::new();
     for v in used.iter().filter(|v| **v != NO_VARIATION) {
         by_major.entry((v >> 16) as u16).or_default().insert(*v as u16);

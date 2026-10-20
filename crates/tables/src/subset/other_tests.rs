@@ -368,7 +368,7 @@ fn subset_svg_refuses_many_lengths_over_one_large_document_quickly() {
     let started = std::time::Instant::now();
     let result = subset(&font, &SubsetOptions { text: "A".into(), ..SubsetOptions::default() });
     assert!(started.elapsed().as_secs() < 10, "took {:?}", started.elapsed());
-    let err = result.err().expect("the overlapping documents are refused");
+    let err = result.expect_err("the overlapping documents are refused");
     assert!(err.to_string().contains("SVG documents read"), "{err}");
 }
 

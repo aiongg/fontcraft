@@ -683,7 +683,7 @@ fn run(program: &Program, pen: &mut Collect) -> Result<(i64, i64)> {
             (21, [x, y]) => t.move_by(*x, *y),
             (22, [x]) => t.move_by(*x, 0),
             (4, [y]) => t.move_by(0, *y),
-            (5, _) if a.len() % 2 == 0 => {
+            (5, _) if a.len().is_multiple_of(2) => {
                 for [x, y] in a.as_chunks::<2>().0 {
                     t.line_by(*x, *y);
                 }
@@ -699,15 +699,15 @@ fn run(program: &Program, pen: &mut Collect) -> Result<(i64, i64)> {
                     horizontal = !horizontal;
                 }
             }
-            (8, _) if a.len() % 6 == 0 => curves(&mut t, a),
-            (24, _) if a.len() >= 8 && (a.len() - 2) % 6 == 0 => {
+            (8, _) if a.len().is_multiple_of(6) => curves(&mut t, a),
+            (24, _) if a.len() >= 8 && (a.len() - 2).is_multiple_of(6) => {
                 let (c, l) = a.split_at(a.len() - 2);
                 curves(&mut t, c);
                 if let [x, y] = l {
                     t.line_by(*x, *y);
                 }
             }
-            (25, _) if a.len() >= 6 && a.len() % 2 == 0 => {
+            (25, _) if a.len() >= 6 && a.len().is_multiple_of(2) => {
                 let (l, c) = a.split_at(a.len() - 6);
                 for [x, y] in l.as_chunks::<2>().0 {
                     t.line_by(*x, *y);

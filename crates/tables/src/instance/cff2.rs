@@ -166,12 +166,14 @@ impl Glyph {
             args: u16::try_from(args.len()).map_err(|_| invalid(format!("operator {op} has more than 65535 operands")))?,
             mask: u16::try_from(mask.len()).map_err(|_| invalid("a hint mask is longer than 65535 bytes"))?,
         };
-        if self.items.is_empty() && args.iter().any(|a| a.item.is_some()) {
+        // `items` is still empty when the first operator varies, so its length cannot decide.
+        let varies = !self.items.is_empty() || args.iter().any(|a| a.item.is_some());
+        if varies {
             self.items.resize(self.values.len(), NO_ITEM);
         }
         for a in args {
             self.values.push(a.v);
-            if !self.items.is_empty() {
+            if varies {
                 let item = match a.item {
                     Some(i) => u32::try_from(i).ok().filter(|i| *i != NO_ITEM).ok_or_else(|| invalid("too many blended values"))?,
                     None => NO_ITEM,

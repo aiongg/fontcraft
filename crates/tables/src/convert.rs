@@ -249,6 +249,9 @@ fn subroutinize_table(table: &[u8], cff2: bool, o: &ConvertOptions) -> Result<Ve
 /// A glyph's encoded `glyf` data and its bounds.
 type EncodedGlyph = (Vec<u8>, Option<[i16; 4]>);
 
+/// A component of a composite made from a seac glyph: glyph id, x and y offsets.
+type SeacPart = (usize, i32, i32);
+
 fn ps_to_truetype(font: &mut SfntFont, cff2: bool, max_error: f64, o: &ConvertOptions, left_behind: &mut Vec<String>) -> Result<()> {
     let upem = units_per_em(font)?;
     let n = num_glyphs(font)?;
@@ -289,7 +292,7 @@ fn ps_to_truetype(font: &mut SfntFont, cff2: bool, max_error: f64, o: &ConvertOp
     };
     // A seac glyph becomes a composite of its base and accent, as the reference draws seac as
     // two components; one with contours of its own, or whose parts are accented, is drawn out.
-    let mut composites: Vec<(usize, Vec<(usize, i32, i32)>)> = Vec::new();
+    let mut composites: Vec<(usize, Vec<SeacPart>)> = Vec::new();
     for gid in 0..n {
         let drawing = ps.draw(gid)?;
         let glyph = match drawing.seac {

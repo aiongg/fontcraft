@@ -312,12 +312,13 @@ fn font_view_colour_budget_holds_for_a_frame_of_two_passes() {
     app.run("fontView.setCellSize", &json!({"size": 40})).unwrap();
     let w = Window::sized(1920.0, 1200.0);
     let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, w.size)), ..egui::RawInput::default() };
-    let _ = w.ctx.run_ui(input, |ui| {
+    let mut output = w.ctx.run_ui(input, |ui| {
         if ui.ctx().current_pass_index() == 0 {
             ui.ctx().request_discard("a second layout pass");
         }
         app.ui(ui);
     });
+    output.textures_delta.clear();
     assert_eq!(app.font_view.art.sprites(), MAX_COLOR_PER_FRAME, "the second pass makes no more colour textures");
 }
 
