@@ -30,6 +30,8 @@ const MAX_LISTED: usize = 100;
 const DEFAULT_DPI: u32 = 72;
 /// Most pixels rasterised for one new strike.
 const MAX_RASTER_PIXELS: u64 = 64 << 20;
+/// Most pixels rasterised in one `bitmap.setStrikes` call, over every strike it adds.
+const MAX_CALL_RASTER_PIXELS: u64 = 256 << 20;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -59,7 +61,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Bitmap Strikes…",
             ["Font"],
             None,
-            "{add?: [{ppem: number, depth?: 1 | 2 | 4 | 8 (default 1)}], remove?: [{ppem: number, depth?: number (default: every depth of the size)}], rasterize?: bool (default true)} adds and removes the font's bitmap strikes as one undo step; removing a strike deletes its bitmaps. A new strike is filled from the outlines of the first master's exported glyphs, anti-aliased: at 1 bit a pixel is on when the outline covers at least half of it, at 2, 4 or 8 bits its grey level is the covered fraction; each bitmap spans the outline's pixel box, advances are the glyph widths scaled and rounded, and the strike's ascent and descent are the master's, scaled. rasterize: false gives an empty strike. Refused, changing nothing: neither list, a strike to add that the font has, a strike to remove that it lacks, a bitmap wider or taller than 1,024 pixels, more than 67,108,864 pixels for one strike → {added: [label], removed: [label], strikes: [label]}",
+            "{add?: [{ppem: number, depth?: 1 | 2 | 4 | 8 (default 1)}], remove?: [{ppem: number, depth?: number (default: every depth of the size)}], rasterize?: bool (default true)} adds and removes the font's bitmap strikes as one undo step; removing a strike deletes its bitmaps. A new strike is filled from the outlines of the first master's exported glyphs, anti-aliased: at 1 bit a pixel is on when the outline covers at least half of it, at 2, 4 or 8 bits its grey level is the covered fraction; each bitmap spans the outline's pixel box, advances are the glyph widths scaled and rounded, and the strike's ascent and descent are the master's, scaled. rasterize: false gives an empty strike. Refused, changing nothing: neither list, a strike to add that the font has, a strike to remove that it lacks, a bitmap wider or taller than 1,024 pixels, more than 67,108,864 pixels for one strike or 268,435,456 for all the strikes added, bitmaps over 64 MiB for one strike or over 256 MiB for all the font's strikes together → {added: [label], removed: [label], strikes: [label]}",
             has_doc,
             set_strikes
         ),
@@ -530,9 +532,22 @@ fn set_strikes(s: &mut Session, v: &Value) -> Result<Value> {
         added.push((spec.ppem, depth));
     }
     let removed: Vec<String> = font.bitmap_strikes.iter().filter(|s| remove.iter().any(|r| r.matches(s))).map(BitmapStrike::label).collect();
+    let kept = font.bitmap_strikes.iter().filter(|s| !remove.iter().any(|r| r.matches(s))).fold(0usize, |n, s| n.saturating_add(s.bytes()));
+    let mut budget = RasterBudget { pixels: MAX_CALL_RASTER_PIXELS, bytes: strike::MAX_ALL_STRIKES_BYTES.saturating_sub(kept) };
+    // Every strike is measured against the budget before any is drawn, so a refusal comes
+    // before the work.
+    if rasterize {
+        for (ppem, depth) in &added {
+            rasterize_strike(font, &p, *ppem, *depth, &mut budget, false)?;
+        }
+    }
     let mut new = Vec::with_capacity(added.len());
     for (ppem, depth) in &added {
-        new.push(if rasterize { rasterize_strike(font, &p, *ppem, *depth)? } else { BitmapStrike::new(*ppem, *depth) });
+        new.push(if rasterize {
+            rasterize_strike(font, &p, *ppem, *depth, &mut RasterBudget::unlimited(), true)?
+        } else {
+            BitmapStrike::new(*ppem, *depth)
+        });
     }
     let strikes = s.edit("Bitmap Strikes", |font| {
         let strikes = std::sync::Arc::make_mut(&mut font.bitmap_strikes);
@@ -545,9 +560,25 @@ fn set_strikes(s: &mut Session, v: &Value) -> Result<Value> {
     Ok(json!({ "added": added, "removed": removed, "strikes": strikes }))
 }
 
+/// What the rest of one `bitmap.setStrikes` call may rasterise: pixels to draw, and bytes of
+/// bitmaps the font can still hold beside the strikes it keeps.
+struct RasterBudget {
+    pixels: u64,
+    bytes: usize,
+}
+
+impl RasterBudget {
+    /// For drawing strikes already measured against the real budget.
+    fn unlimited() -> Self {
+        Self { pixels: u64::MAX, bytes: usize::MAX }
+    }
+}
+
 /// A strike of `ppem` pixels per em at `depth` bits per pixel, drawn from the outlines of the
-/// first master's exported glyphs (see `bitmap.setStrikes`).
-fn rasterize_strike(font: &Font, p: &Params<'_>, ppem: u16, depth: u8) -> Result<BitmapStrike> {
+/// first master's exported glyphs (see `bitmap.setStrikes`). Each bitmap is taken from `budget`
+/// before it is drawn; crossing it refuses the strike. Unless `draw`, the bitmaps are only
+/// measured and left empty.
+fn rasterize_strike(font: &Font, p: &Params<'_>, ppem: u16, depth: u8, budget: &mut RasterBudget, draw: bool) -> Result<BitmapStrike> {
     let master = font.default_master()?;
     let upm = f64::from(font.units_per_em.max(1));
     let em = f64::from(ppem);
@@ -563,6 +594,7 @@ fn rasterize_strike(font: &Font, p: &Params<'_>, ppem: u16, depth: u8) -> Result
     out.descent = whole(-font.metric_pos(master, metric::DESCENDER, -upm * 0.2));
     let style = fontcraft_render::Style { ink: [0, 0, 0, 255], background: [0, 0, 0, 0], anti_alias: true };
     let mut pixels = 0u64;
+    let mut bytes = 0usize;
     for glyph in font.glyphs.iter().filter(|g| g.export) {
         let Some(layer) = glyph.layer(&master.id) else { continue };
         let outline = fontcraft_render::closed_contours(&font.outline_of(glyph, &master.id)?);
@@ -587,9 +619,31 @@ fn rasterize_strike(font: &Font, p: &Params<'_>, ppem: u16, depth: u8) -> Result
                     glyph.name
                 )));
             }
-            pixels = pixels.saturating_add((w * h).unsigned_abs());
+            let area = (w * h).unsigned_abs();
+            pixels = pixels.saturating_add(area);
             if pixels > MAX_RASTER_PIXELS {
                 return Err(p.bad(format!("strike {}: more than {MAX_RASTER_PIXELS} pixels to draw", strike::label(ppem, depth))));
+            }
+            let Some(left) = budget.pixels.checked_sub(area) else {
+                return Err(p.bad(format!("more than {MAX_CALL_RASTER_PIXELS} pixels to draw for the strikes added together")));
+            };
+            budget.pixels = left;
+            // Rows of `w` pixels at `depth` bits, each padded to a whole byte, as the model stores them.
+            let size = usize::try_from((w * i64::from(depth) + 7) / 8 * h).unwrap_or(usize::MAX);
+            bytes = bytes.saturating_add(size);
+            if bytes > strike::MAX_STRIKE_BYTES {
+                return Err(p.bad(format!(
+                    "strike {}: the bitmaps would take more than {} bytes",
+                    strike::label(ppem, depth),
+                    strike::MAX_STRIKE_BYTES
+                )));
+            }
+            let Some(left) = budget.bytes.checked_sub(size) else {
+                return Err(p.bad(format!("the font's strikes would take more than {} bytes together", strike::MAX_ALL_STRIKES_BYTES)));
+            };
+            budget.bytes = left;
+            if !draw {
+                continue;
             }
             // `w` and `h` are 1..=1024 and the corners within the coordinate limit.
             let (w, h) = (w as u32, h as u32);

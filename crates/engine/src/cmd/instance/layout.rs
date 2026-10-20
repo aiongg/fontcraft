@@ -17,7 +17,9 @@
 //!   compiled as usual, then its `GPOS` is replaced by the interpolated one, and its `GDEF` and
 //!   `GSUB` by the base master's when the base master has them ([`BinaryLayout`]). Default
 //!   pattern `{DIR}/{stem}.{ext}`, `DIR` defaulting to `master_ttf` or `master_otf` as the
-//!   instances' format.
+//!   instances' format. The instances are compiled into a scratch folder inside the destination
+//!   and staged at their real paths only once every layout is replaced, so a run that fails
+//!   leaves the destination as it was.
 
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
@@ -249,9 +251,9 @@ impl BinaryLayout {
         Ok(Self { layouts })
     }
 
-    /// Replaces the layout of each compiled instance, given by instance index and file; every
-    /// file is rewritten only once all of them are built.
-    pub(super) fn apply(&self, p: &Params<'_>, outputs: &[(usize, PathBuf)]) -> Result<()> {
+    /// Replaces the layout of each compiled instance, given by instance index, the file it was
+    /// compiled to and the file to write; every file is written only once all of them are built.
+    pub(super) fn apply(&self, p: &Params<'_>, outputs: &[(usize, PathBuf, PathBuf)]) -> Result<()> {
         let mut staged: Vec<Staged> = Vec::with_capacity(outputs.len());
         match self.stage_all(p, outputs, &mut staged).and_then(|()| commit(&staged)) {
             Ok(()) => Ok(()),
@@ -262,15 +264,15 @@ impl BinaryLayout {
         }
     }
 
-    fn stage_all(&self, p: &Params<'_>, outputs: &[(usize, PathBuf)], staged: &mut Vec<Staged>) -> Result<()> {
-        for (index, path) in outputs {
+    fn stage_all(&self, p: &Params<'_>, outputs: &[(usize, PathBuf, PathBuf)], staged: &mut Vec<Staged>) -> Result<()> {
+        for (index, compiled, path) in outputs {
             let from = self
                 .layouts
                 .iter()
                 .find(|(i, _)| i == index)
                 .map(|(_, f)| f)
                 .ok_or_else(|| p.bad(format!("no layout was interpolated for {}", path.display())))?;
-            let read = file_io::read_input(path)?;
+            let read = file_io::read_input(compiled)?;
             let made = transfer_layout(from, fontcraft_tables::read(&read.bytes, 0)?)?;
             let bytes = fontcraft_tables::write(&made, &WriteOptions { order: TableOrder::Recommended })?;
             staged.push(stage(path, &bytes, staged.len())?);
@@ -541,6 +543,11 @@ mod tests {
     /// A two-master Glyphs source whose only kerning pair, A V, is `light` in the light master
     /// and `bold` in the bold one.
     fn glyphs_source(light: i32, bold: i32) -> String {
+        glyphs_source_with(light, bold, false)
+    }
+
+    /// [`glyphs_source`], with a glyph W kerned against A when `with_w`.
+    fn glyphs_source_with(light: i32, bold: i32, with_w: bool) -> String {
         let glyph = |name: &str, unicode: u32, light: i32, bold: i32| {
             let layer = |id: &str, w: i32| {
                 format!(
@@ -554,10 +561,12 @@ mod tests {
             "{{\n.appVersion = \"3260\";\n.formatVersion = 3;\naxes = (\n{{\nname = Weight;\ntag = wght;\n}}\n);\nfamilyName = \"Test Sans\";\n\
              fontMaster = (\n{{\naxesValues = (\n300\n);\nid = m01;\nname = \"Light Two\";\n}},\n{{\naxesValues = (\n700\n);\nid = m02;\nname = Bold;\n}}\n);\n\
              glyphs = (\n{},\n{}\n);\ninstances = (\n{{\naxesValues = (\n400\n);\nname = Regular;\n}}\n);\n\
-             kerningLTR = {{\nm01 = {{\nA = {{\nV = {light};\n}};\n}};\nm02 = {{\nA = {{\nV = {bold};\n}};\n}};\n}};\n\
+             kerningLTR = {{\nm01 = {{\nA = {{\nV = {light};{w_light}\n}};\n}};\nm02 = {{\nA = {{\nV = {bold};{w_bold}\n}};\n}};\n}};\n\
              unitsPerEm = 1000;\nversionMajor = 1;\nversionMinor = 0;\n}}\n",
             glyph("A", 65, 500, 600),
-            glyph("V", 86, 520, 640)
+            if with_w { format!("{},\n{}", glyph("V", 86, 520, 640), glyph("W", 87, 700, 800)) } else { glyph("V", 86, 520, 640) },
+            w_light = if with_w { "\nW = -30;" } else { "" },
+            w_bold = if with_w { "\nW = -70;" } else { "" },
         )
     }
 
@@ -635,6 +644,60 @@ mod tests {
             "no masters in that folder"
         );
         assert!(!dir.join("x.ttf").exists(), "a refused run writes nothing");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The compiled masters name a glyph, W, that the instance's source lacks, so the layout
+    /// cannot be moved into the compiled instance. The run fails after compiling, and must leave
+    /// the destination as it was: an existing file untouched, no folder made, no scratch left.
+    #[test]
+    fn interpolate_binary_layout_failing_after_compile_writes_nothing() {
+        let dir = std::env::temp_dir().join(format!("fontcraft-layout-fails-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("masters")).unwrap();
+        std::fs::create_dir_all(dir.join("master_ttf")).unwrap();
+        let masters_source = dir.join("masters/Test.glyphs");
+        std::fs::write(&masters_source, glyphs_source_with(-60, -140, true)).unwrap();
+        let input = dir.join("Test.glyphs");
+        std::fs::write(&input, glyphs_source(-50, -110)).unwrap();
+
+        let (font, _) = crate::io::open(&masters_source, None).unwrap();
+        let mut s = crate::Session::new();
+        s.push_document(font, Some(masters_source.clone()));
+        let built = s
+            .execute(
+                "font.compile",
+                &json!({ "formats": ["ttf"], "instances": false, "mastersAsInstances": true, "destination": dir.join("masters/ttf").display().to_string() }),
+            )
+            .unwrap();
+        for (label, stem) in [("Light Two", "TestSans-LightTwo"), ("Bold", "TestSans-Bold")] {
+            let f = built["fonts"].as_array().unwrap().iter().find(|f| f["instance"] == json!(label)).unwrap();
+            std::fs::rename(f["files"][0]["path"].as_str().unwrap(), dir.join("master_ttf").join(format!("{stem}.ttf"))).unwrap();
+        }
+
+        let out = dir.join("out.ttf");
+        std::fs::write(&out, b"earlier").unwrap();
+        let entries = || {
+            let mut names: Vec<String> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+            names.sort();
+            names
+        };
+        let before = entries();
+        let mut s = crate::Session::new();
+        let r = s.execute(
+            "font.instantiate",
+            &json!({ "input": input, "location": { "wght": 400 }, "to": "ttf", "interpolateBinaryLayout": true, "output": out }),
+        );
+        assert!(r.is_err(), "W is not in the instance's glyph order: {r:?}");
+        assert_eq!(std::fs::read(&out).unwrap(), b"earlier", "the existing file is untouched");
+        assert_eq!(entries(), before, "nothing else is left beside it");
+
+        let missing = dir.join("new/instances");
+        let r = s
+            .execute("font.instantiate", &json!({ "input": input, "all": true, "to": "ttf", "interpolateBinaryLayout": true, "outputDir": missing }));
+        assert!(r.is_err(), "W is not in the instance's glyph order: {r:?}");
+        assert!(!dir.join("new").exists(), "the folders made for the outputs are removed");
+        assert_eq!(entries(), before);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

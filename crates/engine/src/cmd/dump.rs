@@ -19,7 +19,7 @@ fn ttx_specs() -> Vec<CommandSpec> {
         "Dump Tables",
         [],
         None,
-        "{font: path, face?: number, tables?: [tag | {tag, view?}], excludeTables?: [tag], format?: \"ttx\"|\"json\"|\"hex\"|\"text\", split?: \"tables\"|\"glyphs\", output?: path, outputDir?: path, noClobber?: bool, disassemble?: bool, bitmapFormat?: \"raw\"|\"row\"|\"bitwise\"|\"extfile\", strict?: bool, newline?: \"lf\"|\"cr\"|\"crlf\", normalize?: bool, version?: bool, hints?: bool, showExtensions?: bool, glyphs?: [name] | string, glyphDetail?: \"short\"|\"medium\"|\"long\"} the tables of a compiled font, collection face, WOFF or WOFF2 file as TTX (the XML of the reference dump tool), the same tree as JSON, or hex; tables that cannot be read are written as hex unless strict; tables leaves the glyph order out; split writes one file per table beside the main file (glyphs also one file per glyph outline); bitmapFormat writes bitmap images as hex (raw, the default), hex per pixel row (row), a character per pixel (bitwise) or one file each under bitmaps/strikeN/ beside the dump (extfile, TTX with an output only; every file is written or none). Text views: a table with a view ({tag: \"GPOS\", view: \"fea\"|\"normalized\"}), the pseudo-tables @font (the font program's DICTs) and @glyphs (index, name, encoding and, with glyphDetail medium or long, the path with hints unless hints is false), written as text. normalize writes the normalised dump: tables sorted, values that always differ zeroed, outlines as text paths, GSUB and GPOS as rules (version false also blanks the version fields, showExtensions marks extension lookups) → {format, text} or {format, json} without an output, {format, paths, images} with one (images: how many bitmap images extfile wrote to files)",
+        "{font: path, face?: number, tables?: [tag | {tag, view?}], excludeTables?: [tag], format?: \"ttx\"|\"json\"|\"hex\"|\"text\", split?: \"tables\"|\"glyphs\", output?: path, outputDir?: path, noClobber?: bool, disassemble?: bool, bitmapFormat?: \"raw\"|\"row\"|\"bitwise\"|\"extfile\", strict?: bool, newline?: \"lf\"|\"cr\"|\"crlf\", normalize?: bool, version?: bool, hints?: bool, showExtensions?: bool, glyphs?: [name] | string, glyphDetail?: \"short\"|\"medium\"|\"long\"} the tables of a compiled font, collection face, WOFF or WOFF2 file as TTX (the XML of the reference dump tool), the same tree as JSON, or hex; tables that cannot be read are written as hex unless strict; tables leaves the glyph order out; split writes one file per table beside the main file (glyphs also one file per glyph outline); bitmapFormat writes bitmap images as hex (raw, the default), hex per pixel row (row), a character per pixel (bitwise) or one file each under bitmaps/strikeN/ beside the dump (extfile, TTX with an output only; the dump and its images are written to temporary files first and moved into place once all are written: a failure while writing them changes nothing, and a failure while moving them leaves the files moved before it in place and removes the rest). Text views: a table with a view ({tag: \"GPOS\", view: \"fea\"|\"normalized\"}), the pseudo-tables @font (the font program's DICTs) and @glyphs (index, name, encoding and, with glyphDetail medium or long, the path with hints unless hints is false), written as text. normalize writes the normalised dump: tables sorted, values that always differ zeroed, outlines as text paths, GSUB and GPOS as rules (version false also blanks the version fields, showExtensions marks extension lookups) → {format, text} or {format, json} without an output, {format, paths, images} with one (images: how many bitmap images extfile wrote to files)",
         super::always,
         ttx::run
     ).files(const { &[FileParam::read("font"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files()]
@@ -158,7 +158,8 @@ mod ttx {
 
     /// Writes the dump's files and the image files of its bitmap tables, which go below `dir`,
     /// the folder of the main file. Without images each file is written atomically on its own;
-    /// with them every file is staged first, so all are written or none.
+    /// with them every file is staged first and moved into place once all are written
+    /// ([`super::staged::write_all`]).
     fn written(format_name: &str, files: Vec<(PathBuf, Vec<u8>)>, dir: &Path, images: Vec<ImageFile>, request: &OutputRequest) -> Result<Value> {
         let paths: Vec<String> = files.iter().map(|(p, _)| p.display().to_string()).collect();
         let count = images.len();
@@ -463,7 +464,9 @@ mod staged {
     /// `ttx` overwrites an image two tables name. Every path must pass the automation write
     /// check (which refuses every path on the web, so nothing past it runs there), and with
     /// `noClobber` none may exist. When a file cannot be written, the temporary files and the
-    /// folders made for them are removed and nothing is replaced.
+    /// folders made for them are removed and nothing is replaced. When a temporary file cannot be
+    /// moved into place, the files moved before it stay; the other temporary files and the empty
+    /// folders made for them are removed.
     pub(super) fn write_all(files: Vec<(PathBuf, Vec<u8>)>, request: &OutputRequest) -> Result<()> {
         let mut unique: Vec<(PathBuf, Vec<u8>)> = Vec::with_capacity(files.len());
         let mut index: HashMap<PathBuf, usize> = HashMap::new();
@@ -512,6 +515,10 @@ mod staged {
             if let Err(e) = std::fs::rename(tmp, target) {
                 for (rest, _) in staged.iter().skip(i) {
                     let _ = std::fs::remove_file(rest);
+                }
+                // Deepest first; a folder that holds a file moved into place stays.
+                for dir in made.iter().rev() {
+                    let _ = std::fs::remove_dir(dir);
                 }
                 return Err(EngineError::Io(format!("cannot write {}: {e} ({i} of {} files were written)", target.display(), staged.len())));
             }

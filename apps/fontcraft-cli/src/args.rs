@@ -6,7 +6,9 @@
 //! against them and [`help`] prints them. Rules:
 //!
 //! - `--x` turns a switch on and `--no-x` off.
-//! - A value follows as `--opt=v` or `--opt v`; a list is comma-separated (`--opt=a,b`) and
+//! - A value follows as `--opt=v` or `--opt v`. An option whose value is optional
+//!   ([`OptSpec::optional_value`]) takes the next argument only when it does not start with `-`
+//!   and holds no `=`; given bare, its value is empty. A list is comma-separated (`--opt=a,b`) and
 //!   replaces the current list, unless every item starts with `+` or `-`, which adds or removes
 //!   items from it (`--opt=+c,-a`). `--opt+=a,b` adds items and `--opt-=a,b` removes them, and
 //!   `--opt=` empties the list. The current list starts as the default. Items that are numbers
@@ -39,6 +41,8 @@ pub enum Kind {
     Switch,
     /// One value.
     Value,
+    /// One value that may be left out: `--opt`, `--opt v`, `--opt=v` ([`OptSpec::optional_value`]).
+    OptionalValue,
     /// A comma-separated list with `+`/`-` edits.
     List,
 }
@@ -69,6 +73,10 @@ impl OptSpec {
     }
     pub const fn list(name: &'static str, value_name: &'static str, default: &'static str, help: &'static str) -> Self {
         OptSpec { name, short: None, kind: Kind::List, value_name, default, help, hex: false }
+    }
+    /// A value option whose value may be left out; given bare, its value is empty.
+    pub const fn optional_value(name: &'static str, value_name: &'static str, help: &'static str) -> Self {
+        OptSpec { name, short: None, kind: Kind::OptionalValue, value_name, default: "", help, hex: false }
     }
     pub const fn short(mut self, c: char) -> Self {
         self.short = Some(c);
@@ -152,13 +160,13 @@ fn parse_inner(specs: &[OptSpec], args: &[String], queries: bool) -> Result<Pars
     for spec in specs {
         let value = match spec.kind {
             Kind::Switch => OptValue::Switch(spec.default == "true"),
-            Kind::Value if spec.default.is_empty() => continue,
-            Kind::Value => OptValue::Value(spec.default.to_string()),
+            Kind::Value | Kind::OptionalValue if spec.default.is_empty() => continue,
+            Kind::Value | Kind::OptionalValue => OptValue::Value(spec.default.to_string()),
             Kind::List => OptValue::List(split_list(spec.default)),
         };
         parsed.values.insert(spec.name, value);
     }
-    let mut it = args.into_iter();
+    let mut it = args.into_iter().peekable();
     while let Some(arg) = it.next() {
         if arg == "--" {
             parsed.positional.extend(it.by_ref());
@@ -197,12 +205,13 @@ fn parse_inner(specs: &[OptSpec], args: &[String], queries: bool) -> Result<Pars
                     }
                     parsed.values.insert(spec.name, OptValue::Switch(on));
                 }
-                Kind::Value | Kind::List => {
+                Kind::Value | Kind::OptionalValue | Kind::List => {
                     if !on {
                         return Err(usage(format!("--no-{} is not an option: --{} takes a value", spec.name, spec.name)));
                     }
                     let value = match inline {
                         Some(v) => v,
+                        None if spec.kind == Kind::OptionalValue => optional_value(&mut it),
                         None => it.next().ok_or_else(|| usage(format!("--{} needs a value", spec.name)))?,
                     };
                     set_value(&mut parsed, spec, value, edit);
@@ -217,6 +226,10 @@ fn parse_inner(specs: &[OptSpec], args: &[String], queries: bool) -> Result<Pars
                 Kind::Switch => {
                     parsed.values.insert(spec.name, OptValue::Switch(true));
                 }
+                Kind::OptionalValue => {
+                    let value = optional_value(&mut it);
+                    set_value(&mut parsed, spec, value, Edit::Set);
+                }
                 Kind::Value | Kind::List => {
                     let value = it.next().ok_or_else(|| usage(format!("-{c} needs a value")))?;
                     set_value(&mut parsed, spec, value, Edit::Set);
@@ -229,6 +242,12 @@ fn parse_inner(specs: &[OptSpec], args: &[String], queries: bool) -> Result<Pars
     Ok(parsed)
 }
 
+/// The value of an option whose value may be left out: the next argument when it is not an
+/// option and not a `NAME=VALUE` argument, else empty.
+fn optional_value(it: &mut std::iter::Peekable<std::vec::IntoIter<String>>) -> String {
+    it.next_if(|next| !next.starts_with('-') && !next.contains('=')).unwrap_or_default()
+}
+
 /// How a list option's value changes the current list: `=`, `+=` or `-=`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Edit {
@@ -239,7 +258,7 @@ enum Edit {
 
 fn set_value(parsed: &mut Parsed, spec: &OptSpec, value: String, edit: Edit) {
     match spec.kind {
-        Kind::Value => {
+        Kind::Value | Kind::OptionalValue => {
             parsed.values.insert(spec.name, OptValue::Value(value));
         }
         Kind::List => {
@@ -436,7 +455,7 @@ pub fn help(usage_text: &str, specs: &[OptSpec]) -> String {
             let short = s.short.map(|c| format!("-{c}, ")).unwrap_or_default();
             let form = match s.kind {
                 Kind::Switch => format!("{short}--[no-]{}", s.name),
-                Kind::Value | Kind::List => format!("{short}--{} {}", s.name, s.value_name),
+                Kind::Value | Kind::OptionalValue | Kind::List => format!("{short}--{} {}", s.name, s.value_name),
             };
             let default = match (s.kind, s.default) {
                 (_, "") | (Kind::Switch, "false") => String::new(),

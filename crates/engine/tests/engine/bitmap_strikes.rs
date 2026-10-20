@@ -284,6 +284,40 @@ fn squares() -> Session {
     s
 }
 
+/// A document with `count` glyphs, each a 500-unit square: 1,024 × 1,024 pixels at 2,048 ppem.
+fn big_squares(count: usize) -> Session {
+    let mut s = Session::with_document();
+    for i in 0..count {
+        let name = format!("sq{i}");
+        run(&mut s, "glyph.newGlyph", json!({ "name": name }));
+        run(&mut s, "path.addPath", json!({"glyph": name, "nodes": fontcraft_testkit::rect(0.0, 0.0, 500.0, 500.0), "closed": true}));
+    }
+    s
+}
+
+/// Rasterising measures every new strike before drawing any, and refuses a bitmap over 1,024
+/// pixels a side, a strike over 64 Mi pixels and strikes over 256 Mi pixels together, changing
+/// nothing.
+#[test]
+fn rasterising_refuses_oversized_bitmaps_and_strikes_before_drawing() {
+    let mut s = squares();
+    let e = refused(&mut s, "bitmap.setStrikes", json!({ "add": [{"ppem": 2100}] }));
+    assert!(e.contains("would be 1050 × ") && e.contains("at most 1024 on a side"), "{e}");
+    assert!(strikes(&s).is_empty());
+
+    // 65 bitmaps of 1 Mi pixels each.
+    let mut s = big_squares(65);
+    let e = refused(&mut s, "bitmap.setStrikes", json!({ "add": [{"ppem": 2048, "depth": 8}] }));
+    assert!(e.contains("more than 67108864 pixels"), "{e}");
+
+    // Under the limit for each strike, over it for five together.
+    let mut s = big_squares(60);
+    let add: Vec<Value> = (0..5).map(|i| json!({ "ppem": 2048 - i })).collect();
+    let e = refused(&mut s, "bitmap.setStrikes", json!({ "add": add }));
+    assert!(e.contains("more than 268435456 pixels to draw for the strikes added together"), "{e}");
+    assert!(strikes(&s).is_empty());
+}
+
 #[test]
 fn a_new_strike_is_rasterised_from_the_outlines() {
     let mut s = squares();
