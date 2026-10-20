@@ -11,11 +11,15 @@ a `post` table that keeps the glyph names and a `name` table. fontTools compiles
 and writes it as TTX: that text is `<name>.ttx`, so every input is in the form `ttx` writes.
 `<name>.digest` holds the tag (`_` for a space), byte length and SHA-256 of each table of the
 case that fontTools compiles from `<name>.ttx`, one table a line.
+
+`python -I oracle.py forms` writes only the M12.7e cases, `forms_row` and `forms_bitwise`:
+bitmap tables of bit depths 1, 2 and 4 whose images `ttx -z row` and `ttx -z bitwise` write.
 """
 
 import hashlib
 import io
 import re
+import sys
 from pathlib import Path
 
 from fontTools.fontBuilder import FontBuilder
@@ -119,6 +123,63 @@ CMAP2 = """  <cmap>
 """
 
 
+def line_metrics(direction):
+    names = ["ascender", "descender", "widthMax", "caretSlopeNumerator", "caretSlopeDenominator", "caretOffset"]
+    names += ["minOriginSB", "minAdvanceSB", "maxBeforeBL", "minAfterBL", "pad1", "pad2"]
+    values = dict(ascender=8, descender=-2, widthMax=9, caretSlopeNumerator=1) if direction == "hori" else {}
+    body = "".join(f'      <{n} value="{values.get(n, 0)}"/>\n' for n in names)
+    return f'      <sbitLineMetrics direction="{direction}">\n{body}      </sbitLineMetrics>\n'
+
+
+def metrics(kind, height, width):
+    if kind == "small":
+        fields = [("height", height), ("width", width), ("BearingX", 0), ("BearingY", height), ("Advance", width + 1)]
+        name = "SmallGlyphMetrics"
+    else:
+        fields = [("height", height), ("width", width), ("horiBearingX", 0), ("horiBearingY", height), ("horiAdvance", width + 1)]
+        fields += [("vertBearingX", -1), ("vertBearingY", 0), ("vertAdvance", height + 1)]
+        name = "BigGlyphMetrics"
+    body = "".join(f'<{n} value="{v}"/>' for n, v in fields)
+    return f"<{name}>{body}</{name}>"
+
+
+# Strikes of bit depth 2, 4 and 1 whose rows do not end on a byte: (bit depth, glyphs, index
+# subtables). A glyph is (name, image format, metrics kind or None, height, width, raw hex); an
+# index subtable is (index format, image format, glyph ids, extra XML).
+FORM_STRIKES = [
+    (2, [("A", 2, "small", 3, 3, "b6db6f"), ("B", 7, "big", 2, 5, "9c3e5a"), ("C", 6, "big", 2, 3, "e418")],
+     [(1, 2, [1], ""), (3, 7, [2], ""), (1, 6, [3], "")]),
+    (4, [("A", 5, None, 2, 3, "123456"), ("B", 5, None, 2, 3, "abcdef"), ("C", 1, "small", 2, 3, "f0a05b70")],
+     [(2, 5, [1, 2], '<imageSize value="3"/>' + metrics("big", 2, 3)), (1, 1, [3], "")]),
+    (1, [(".notdef", 7, "big", 3, 5, "a5f3"), ("A", 2, "small", 2, 9, "ff80c0")],
+     [(3, 7, [0], ""), (1, 2, [1], "")]),
+]
+
+
+def forms_tables():
+    """EBDT and EBLC in the raw form, from `FORM_STRIKES`."""
+    data, loc = ['  <EBDT>\n    <header version="2.0"/>\n'], ['  <EBLC>\n    <header version="2.0"/>\n']
+    for i, (depth, glyphs, subtables) in enumerate(FORM_STRIKES):
+        data.append(f'    <strikedata index="{i}">\n')
+        for name, fmt, kind, height, width, raw in glyphs:
+            m = metrics(kind, height, width) if kind else ""
+            data.append(f'<ebdt_bitmap_format_{fmt} name="{name}">{m}<rawimagedata>{raw}</rawimagedata></ebdt_bitmap_format_{fmt}>\n')
+        data.append("    </strikedata>\n")
+        ids = [g for s in subtables for g in s[2]]
+        loc.append(f'    <strike index="{i}">\n      <bitmapSizeTable>\n')
+        loc.append(line_metrics("hori") + line_metrics("vert"))
+        for n, v in [("colorRef", 0), ("startGlyphIndex", min(ids)), ("endGlyphIndex", max(ids)), ("ppemX", 9), ("ppemY", 9), ("bitDepth", depth), ("flags", 1)]:
+            loc.append(f'        <{n} value="{v}"/>\n')
+        loc.append("      </bitmapSizeTable>\n")
+        for index_format, image_format, gids, extra in subtables:
+            locs = "".join(f'<glyphLoc id="{g}" name="{ORDER[g]}"/>' for g in gids)
+            loc.append(f'<eblc_index_sub_table_{index_format} imageFormat="{image_format}" firstGlyphIndex="{min(gids)}" lastGlyphIndex="{max(gids)}">{extra}{locs}</eblc_index_sub_table_{index_format}>\n')
+        loc.append("    </strike>\n")
+    data.append("  </EBDT>\n")
+    loc.append("  </EBLC>\n")
+    return "".join(data) + "".join(loc)
+
+
 def blocks(path, tags):
     text = path.read_text(encoding="utf-8")
     out = []
@@ -128,7 +189,7 @@ def blocks(path, tags):
     return "".join(out)
 
 
-def case(out_dir, name, text, tags):
+def case(out_dir, name, text, tags, image_form="raw"):
     fb = FontBuilder(1000, isTTF=True)
     fb.setupGlyphOrder(ORDER)
     fb.setupMaxp()
@@ -141,7 +202,7 @@ def case(out_dir, name, text, tags):
     font.save(data)
     back = TTFont(io.BytesIO(data.getvalue()))
     path = out_dir / f"{name}.ttx"
-    back.saveXML(str(path), tables=["GlyphOrder", "maxp", "post"] + tags, newlinestr="\n")
+    back.saveXML(str(path), tables=["GlyphOrder", "maxp", "post"] + tags, newlinestr="\n", bitmapGlyphDataFormat=image_form)
     again = TTFont()
     again.importXML(str(path))
     lines = []
@@ -152,6 +213,10 @@ def case(out_dir, name, text, tags):
 
 
 def main():
+    if sys.argv[1:] == ["forms"]:
+        for form in ["row", "bitwise"]:
+            case(OUT["bitmap"], f"forms_{form}", forms_tables(), ["EBDT", "EBLC"], form)
+        return
     color, misc = TTX / "color/testdata", TTX / "misc/testdata"
     case(OUT["bitmap"], "bitmap", blocks(color / "bitmap.ttx", ["EBDT", "EBLC", "bdat", "bloc"]), ["EBDT", "EBLC", "bdat", "bloc"])
     case(OUT["bitmap"], "cbdt", blocks(color / "cbdt.ttx", ["CBDT", "CBLC"]), ["CBDT", "CBLC"])
