@@ -495,10 +495,12 @@ fn fea_lookup_per_rule_type_ignores_a_repeated_script() {
 fn fea_lookup_per_rule_type_reports_a_message_in_an_included_file_where_it_is() {
     // The shadowed ligature is found while compiling the written-out code; the message names
     // the file two includes down and the rule's place in it, as an ordinary compile does.
+    // fea-rs parses an included file in the context of the include statement in its own file,
+    // so the feature block that holds `include(deeper.fea)` is in more.fea.
     let deeper = "sub f i by f_l;\n";
     let files = with_files(
-        "feature liga { sub a by b; include(more.fea); } liga;",
-        &[("more.fea", "sub f i by f_i;\ninclude(deeper.fea);\n"), ("deeper.fea", deeper)],
+        "include(more.fea);\n",
+        &[("more.fea", "feature liga {\n  sub a by b;\n  sub f i by f_i;\n  include(deeper.fea);\n} liga;\n"), ("deeper.fea", deeper)],
     );
     let order = order();
     let shadowed = |split| {

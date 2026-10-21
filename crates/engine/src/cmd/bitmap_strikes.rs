@@ -1090,7 +1090,7 @@ mod tests {
         let master = font.default_master().unwrap().id.clone();
         let glyphs = 40;
         for i in 0..glyphs {
-            let name = format!("g{i}");
+            let name = format!("pdf{i}");
             font.add_glyph(&name, Vec::new(), 600.0).unwrap();
             let mut glyph = font.glyph_mut(&name).unwrap();
             let layer = glyph.layer_mut(&master).unwrap();
@@ -1104,24 +1104,26 @@ mod tests {
         let mut warnings = Vec::new();
 
         // Measuring: one read of the file for the whole strike, not one per glyph.
-        let strike = rasterize_strike(&font, &store, &p, (100, 1), &mut RasterBudget::unlimited(), false, &mut warnings).unwrap();
+        rasterize_strike(&font, &store, &p, (100, 1), &mut RasterBudget::unlimited(), false, &mut warnings).unwrap();
         assert!(warnings.is_empty(), "{warnings:?}");
         assert_eq!(store.reads.load(Ordering::Relaxed), 1);
-        assert_eq!(strike.glyphs.iter().filter(|g| g.glyph.starts_with('g')).count(), glyphs);
 
         // Drawing reads it once more to draw the page, which every glyph then shares.
         store.reads.store(0, Ordering::Relaxed);
         let strike = rasterize_strike(&font, &store, &p, (100, 1), &mut RasterBudget::unlimited(), true, &mut warnings).unwrap();
+        assert!(warnings.is_empty(), "{warnings:?}");
         assert_eq!(store.reads.load(Ordering::Relaxed), 2);
-        assert!(strike.glyphs.iter().filter(|g| g.glyph.starts_with('g')).all(|g| (g.width, g.height) == (10, 10)));
+        let placed: Vec<_> = strike.glyphs.iter().filter(|g| g.glyph.starts_with("pdf")).collect();
+        assert_eq!(placed.len(), glyphs);
+        assert!(placed.iter().all(|g| (g.width, g.height) == (10, 10)));
     }
 
     #[test]
     fn each_pixel_of_a_placed_pdf_is_charged_as_its_samples() {
         let mut font = Font::new("Sheet");
         let master = font.default_master().unwrap().id.clone();
-        font.add_glyph("g", Vec::new(), 600.0).unwrap();
-        font.glyph_mut("g").unwrap().layer_mut(&master).unwrap().info.image = Some(Image { path: Some("sheet.pdf".into()), ..Image::default() });
+        font.add_glyph("pdf", Vec::new(), 600.0).unwrap();
+        font.glyph_mut("pdf").unwrap().layer_mut(&master).unwrap().info.image = Some(Image { path: Some("sheet.pdf".into()), ..Image::default() });
         let mut assets = MemoryAssets::new();
         assets.insert("sheet.pdf", corner_pdf());
         let value = json!({});
@@ -1132,7 +1134,7 @@ mod tests {
         // A 10 × 10 bitmap at 4 × 4 samples a pixel, and the page drawn at 40 × 40 pixels.
         let outline_glyphs = before - budget.pixels - 100 * 16 - 40 * 40;
         let mut plain = Font::new("Sheet");
-        plain.add_glyph("g", Vec::new(), 600.0).unwrap();
+        plain.add_glyph("pdf", Vec::new(), 600.0).unwrap();
         let mut budget = RasterBudget::unlimited();
         rasterize_strike(&plain, &assets, &p, (100, 1), &mut budget, false, &mut Vec::new()).unwrap();
         assert_eq!(before - budget.pixels, outline_glyphs, "the rest is the outlines' pixels");

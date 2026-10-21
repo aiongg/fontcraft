@@ -1148,7 +1148,8 @@ pub struct ColorUi {
     palette_stamp: Option<((u64, u64), String, u64)>,
     doc: Option<u64>,
     frame: u64,
-    /// Glyph drawings made, and svg files with filters drawn, since the start.
+    /// Glyph drawings made, and svg files with filters drawn (a file wholly outside the view
+    /// draws nothing and is not counted), since the start.
     made: u64,
     file_draws: u64,
     pub knobs: super::gradient_knobs::KnobUi,
@@ -1308,8 +1309,11 @@ pub fn draw(c: &Painting, ctx: &egui::Context, ui: &mut ColorUi, images: &mut su
                         rasterise(ctx, &outlines, scale, view, name, plain)
                     }
                     Some(Content::Filtered { file, plain: outlines, .. }) => {
-                        ui.file_draws += 1;
-                        match file.draw(scale, (0.0, 0.0), Some(view)) {
+                        let result = file.draw(scale, (0.0, 0.0), Some(view));
+                        if !matches!(result, Ok(FileRaster { raster: None, .. })) {
+                            ui.file_draws += 1;
+                        }
+                        match result {
                             Ok(f) => {
                                 note = f.raster.as_ref().and_then(|r| r.warnings.first().cloned());
                                 file_sprite(ctx, f, name)

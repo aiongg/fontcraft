@@ -558,7 +558,7 @@ mod tests {
             time: Some(time),
             ..Default::default()
         };
-        let _ = ctx.run_ui(input, |ui| app.ui(ui));
+        ctx.run_ui(input, |ui| app.ui(ui)).textures_delta.clear();
     }
 
     fn glyph_shapes(app: &FontcraftApp, glyph: &str) -> usize {
