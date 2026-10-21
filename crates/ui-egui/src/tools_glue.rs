@@ -539,7 +539,9 @@ pub fn keys(app: &mut FontcraftApp, ctx: &egui::Context) {
         let text = std::mem::take(&mut app.tools.pending_text);
         ctx.input_mut(|i| i.events.push(Event::Text(text)));
     }
-    if app.state.tab().is_none() || app.tools.text_focus || app.dialog.is_some() {
+    // The unsaved-changes question takes Return and Escape, and keys must not edit the glyph
+    // behind it.
+    if app.state.tab().is_none() || app.tools.text_focus || app.dialog.is_some() || app.close_prompt.is_open() {
         return;
     }
     let events = ctx.input(|i| i.events.clone());

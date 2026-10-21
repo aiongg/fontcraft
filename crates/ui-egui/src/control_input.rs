@@ -571,6 +571,26 @@ mod tests {
     }
 
     #[test]
+    fn modifiers_held_through_a_click_hold_a_tool_only_until_they_are_given_back() {
+        let mut app = FontcraftApp::default();
+        app.run("path.addRectangle", &json!({"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200})).unwrap();
+        app.run("view.editSelectedGlyphs", &json!({"glyphs": ["A"]})).unwrap();
+        let w = Window::new();
+        w.settle(&mut app, 2);
+        assert_eq!(app.tools.toolbox.active_id(), "select");
+        let p = crate::tools_glue::current_view(&app).unwrap().to_screen(Point::new(500.0, 500.0));
+        ok(call(&mut app, "ui.click", json!({"x": p.x, "y": p.y, "mods": ["cmd", "alt", "ctrl"]})));
+        // The move, the press and the release: Cmd+Alt+Ctrl holds the Measurement tool.
+        for _ in 0..3 {
+            w.frame(&mut app);
+        }
+        assert_eq!(app.tools.toolbox.active_id(), "measurement");
+        // The next frame gives back the window's own modifiers, and the tool goes with them.
+        w.settle(&mut app, 2);
+        assert_eq!(app.tools.toolbox.active_id(), "select");
+    }
+
+    #[test]
     fn input_over_the_limits_is_refused_before_anything_is_queued() {
         let mut app = FontcraftApp::default();
         for (method, params) in [

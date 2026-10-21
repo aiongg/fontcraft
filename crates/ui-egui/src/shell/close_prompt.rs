@@ -531,6 +531,27 @@ mod tests {
     }
 
     #[test]
+    fn in_edit_view_the_question_takes_its_keys_before_the_tools() {
+        let mut app = FontcraftApp::default();
+        edit(&mut app, "x.alt");
+        app.run("path.addRectangle", &json!({"glyph": "x.alt", "x": 0, "y": 0, "width": 100, "height": 100})).unwrap();
+        app.run("view.editSelectedGlyphs", &json!({"glyphs": ["x.alt"]})).unwrap();
+        frame(&mut app, false);
+        app.run("selection.set", &json!({"shapes": [0]})).unwrap();
+        assert!(app.state.tab().is_some());
+        assert!(cancels(&frame(&mut app, true)));
+        let shapes = |app: &FontcraftApp| app.session.font().unwrap().glyph("x.alt").unwrap().layers[0].shapes.len();
+        // Delete does not reach the selection behind the question; Escape cancels it rather than
+        // switching to text mode.
+        frame_with(&mut app, false, &[Key::Delete]);
+        assert_eq!(shapes(&app), 1);
+        assert_eq!(prompt(&mut app)["open"], true);
+        frame_with(&mut app, false, &[Key::Escape]);
+        assert_eq!(prompt(&mut app)["open"], false);
+        assert!(!crate::shell::text::in_text_mode(&app));
+    }
+
+    #[test]
     fn save_asks_about_each_document_in_turn_then_quits() {
         let dir = scratch("save");
         let named = dir.join("Named.fontcraft");
