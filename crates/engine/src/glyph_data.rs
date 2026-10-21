@@ -224,6 +224,7 @@ impl Session {
     pub fn set_user_groups(&mut self, files: &[(&str, &str)]) -> Vec<String> {
         let mut problems = Vec::new();
         self.user_groups = None;
+        self.glyph_data_revision += 1;
         let data = match self.glyph_data_without_document() {
             Ok(d) => d,
             Err(e) => {
@@ -238,5 +239,11 @@ impl Session {
     /// The Categories and Languages entries of the user's `Groups*.plist` files, if there are any.
     pub fn user_groups(&self) -> Option<Arc<Groups>> {
         self.user_groups.clone()
+    }
+
+    /// Goes up each time the user's glyph data, a document's source glyph data or the user's
+    /// groups are set, so a view built from them knows to read them again.
+    pub fn glyph_data_revision(&self) -> u64 {
+        self.glyph_data_revision
     }
 }

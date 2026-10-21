@@ -499,6 +499,130 @@ fn a_groups_file_entry_shows_in_the_categories_section() {
     let at = row(&app, "categories/Odd").rect.center();
     w.click(&mut app, at, Modifiers::NONE);
     assert_eq!(visible(&mut app), ["A"]);
+
+    // Files set again with other entries replace the section's entries and drop the selection of
+    // the one that went away.
+    let problems = app.session.set_user_groups(&[("Groups.plist", "{categories = ({name = Evn; list = (B, zz);});}")]);
+    assert!(problems.is_empty(), "{problems:?}");
+    w.frame(&mut app);
+    assert!(app.font_view.sidebar.laid_out.iter().all(|r| r.path.join("/") != "categories/Odd"));
+    row(&app, "categories/Evn");
+    assert!(entries(&mut app).is_empty(), "the removed entry is deselected");
+}
+
+#[test]
+fn return_with_the_save_question_open_saves_instead_of_renaming() {
+    let dir = std::env::temp_dir().join(format!("fontcraft-sidebar-return-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("Kept.fontcraft");
+    let mut app = FontcraftApp::default();
+    add_smart(&mut app, "Vowels", json!({"property": "glyphName", "op": "matches", "value": "[AEIOU]"}));
+    app.run("file.saveAs", &json!({"path": path.to_string_lossy()})).unwrap();
+    let w = Window::new();
+    w.frame(&mut app);
+    // The sidebar takes the keyboard with one filter selected.
+    let at = row(&app, "filters/Vowels").rect.center();
+    w.click(&mut app, at, Modifiers::NONE);
+    assert_eq!(entries(&mut app), ["filters/Vowels"]);
+    assert!(sidebar::has_keyboard(&app));
+
+    app.run("glyph.newGlyph", &json!({"name": "x.alt"})).unwrap();
+    app.run_menu_command("file.close", json!({})).unwrap();
+    assert!(app.close_prompt.is_open());
+    w.key(&mut app, Key::Enter);
+    assert!(app.font_view.sidebar.renaming.is_none());
+    assert!(!app.close_prompt.is_open());
+    assert!(app.session.documents().is_empty(), "Return is Save: the document is written, then closed");
+    assert!(std::fs::read_to_string(&path).unwrap().contains("x.alt"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn return_on_a_selected_filter_inside_a_closed_folder_renames_nothing() {
+    let mut app = FontcraftApp::default();
+    add_smart(&mut app, "A", json!({"property": "glyphName", "op": "is", "value": "A"}));
+    app.run("fontView.addFilterFolder", &json!({"name": "Work"})).unwrap();
+    app.run("fontView.moveFilter", &json!({"filter": "filters/A", "parent": "filters/Work", "index": 0})).unwrap();
+    app.run("fontView.selectSidebarEntries", &json!({"entries": ["filters/Work/A"]})).unwrap();
+    let w = Window::new();
+    w.frame(&mut app);
+    // A press on a section heading gives the sidebar the keyboard and keeps the selection.
+    let at = row(&app, "languages").rect.center();
+    w.click(&mut app, at, Modifiers::NONE);
+    assert!(sidebar::has_keyboard(&app));
+    assert_eq!(entries(&mut app), ["filters/Work/A"]);
+
+    w.key(&mut app, Key::Enter);
+    assert!(app.font_view.sidebar.renaming.is_none(), "the filter's row is not drawn");
+
+    // Opening the folder takes no keyboard; Return then opens the drawn row's name.
+    let chevron = row(&app, "filters/Work").chevron.unwrap().center();
+    w.click(&mut app, chevron, Modifiers::NONE);
+    row(&app, "filters/Work/A");
+    assert!(app.font_view.sidebar.renaming.is_none());
+    assert_ne!(w.ctx.memory(|m| m.focused()), Some(sidebar::rename_id()));
+    w.key(&mut app, Key::Enter);
+    assert_eq!(app.font_view.sidebar.renaming.as_ref().map(|r| r.path.join("/")), Some("filters/Work/A".to_string()));
+}
+
+#[test]
+fn a_drop_on_a_row_scrolled_out_of_view_does_nothing() {
+    let mut app = FontcraftApp::default();
+    for i in 0..60 {
+        add_smart(&mut app, &format!("F{i}"), json!({"property": "glyphName", "op": "is", "value": "A"}));
+    }
+    let w = Window::new();
+    w.frame(&mut app);
+    let clip = app.font_view.sidebar.rows_clip.unwrap();
+    // A filter row laid out below the part of the list shown, under the actions menu.
+    let hidden = app
+        .font_view
+        .sidebar
+        .laid_out
+        .iter()
+        .find(|r| {
+            r.path.len() == 2
+                && r.path.first().is_some_and(|p| p == "filters")
+                && r.rect.center().y > clip.bottom() + 1.0
+                && r.rect.center().y < 795.0
+        })
+        .cloned()
+        .expect("a filter row hidden below the list");
+    let source = row(&app, "filters/F0");
+    assert!(clip.contains(source.rect.center()));
+    let revision = app.session.settings().revision();
+
+    w.press_and_move(&mut app, source.rect.center(), hidden.rect.center());
+    assert!(app.font_view.sidebar.dragging.is_some());
+    assert_eq!(app.font_view.sidebar.drop, None);
+    w.release(&mut app, hidden.rect.center());
+    assert_eq!(app.session.settings().revision(), revision, "nothing moved");
+}
+
+#[test]
+fn a_right_button_drag_moves_no_filter() {
+    let mut app = FontcraftApp::default();
+    add_smart(&mut app, "A", json!({"property": "glyphName", "op": "is", "value": "A"}));
+    app.run("fontView.addFilterFolder", &json!({"name": "Work"})).unwrap();
+    let w = Window::new();
+    w.frame(&mut app);
+    let (a, work) = (row(&app, "filters/A"), row(&app, "filters/Work"));
+    let revision = app.session.settings().revision();
+    let right = |pos, pressed| Event::PointerButton { pos, button: PointerButton::Secondary, pressed, modifiers: Modifiers::NONE };
+    for _ in 0..40 {
+        w.frame(&mut app);
+    }
+    let (from, to) = (a.rect.center(), work.rect.center());
+    w.frame_with(&mut app, vec![Event::PointerMoved(from), right(from, true)], Modifiers::NONE);
+    for step in 1..=8 {
+        w.frame_with(&mut app, vec![Event::PointerMoved(from + (to - from) * (step as f32 / 8.0))], Modifiers::NONE);
+    }
+    assert!(app.font_view.sidebar.dragging.is_none());
+    assert_eq!(app.font_view.sidebar.drop, None);
+    w.frame_with(&mut app, vec![right(to, false)], Modifiers::NONE);
+    w.frame(&mut app);
+    assert_eq!(app.session.settings().revision(), revision, "nothing moved");
 }
 
 #[test]

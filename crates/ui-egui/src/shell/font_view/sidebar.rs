@@ -24,11 +24,11 @@
 //! | double-click a smart or list filter's icon | its editor (`fontView.editFilter`) |
 //! | drag a filter or folder: a line between rows, or a highlighted folder | `fontView.moveFilter` |
 //!
-//! A drop into the dragged folder itself or one of its folders shows no mark and runs nothing.
+//! A drop the engine would refuse (into the dragged folder or one of its folders, deeper than
+//! folders nest, or beside an entry of the same name) shows no mark and runs nothing.
 //! A renamed or moved entry stays selected.
 
 use std::collections::HashSet;
-use std::sync::Arc;
 
 use egui::{Align2, FontId, Pos2, Rect, Sense, Shape, Stroke, vec2};
 use serde::Deserialize;
@@ -52,8 +52,8 @@ const MAX_SEGMENT_BYTES: usize = 256;
 const MAX_FILTERS: usize = 1024;
 /// Deepest nesting the sidebar draws (folders and groups nest at most 8 deep in the engine).
 const MAX_DEPTH: usize = 24;
-/// Longest name the rename field takes, in characters (the engine counts at most 256 bytes).
-const NAME_CHARS: usize = 256;
+/// Longest name the rename field takes, in bytes (the engine's limit).
+const NAME_BYTES: usize = fontcraft_glyphquery::MAX_FILTER_NAME_BYTES;
 /// The scripts the Languages section lists until the user chooses others (the engine's
 /// default list).
 pub const DEFAULT_SCRIPTS: [&str; 3] = ["latin", "greek", "cyrillic"];
@@ -312,9 +312,9 @@ struct Key {
     doc: (u64, u64),
     settings: u64,
     master: String,
-    data: usize,
-    /// The user's `Groups*.plist` entries, which change without a new document or settings.
-    groups: usize,
+    /// The glyph data and the user's `Groups*.plist` entries, which change without a new
+    /// document or settings.
+    glyph_data: u64,
 }
 
 /// A row the last frame laid out: its entry, its rectangle, its disclosure triangle's and its
@@ -368,6 +368,9 @@ pub struct SidebarUi {
     pub typed: Option<String>,
     /// The rows of the last frame, for tests and clicks over the control channel.
     pub laid_out: Vec<Row>,
+    /// The part of the rows' scroll area the last frame showed: rows scrolled out of it take
+    /// no presses or drops.
+    pub rows_clip: Option<Rect>,
     /// The filter whose name is being edited in place.
     pub renaming: Option<Renaming>,
     /// The filter row being dragged.
@@ -401,10 +404,7 @@ pub fn refresh(app: &mut FontcraftApp) {
     };
     let doc = (doc.id, doc.revision);
     let master = super::master(app).unwrap_or_default();
-    let data = app.session.glyph_data().ok().map_or(0, |d| Arc::as_ptr(&d) as usize);
-    let groups = app.session.user_groups().map_or(0, |g| Arc::as_ptr(&g) as usize);
-    let key = Key { doc, settings: app.session.settings().revision(), master: master.clone(), data, groups };
-    // A rename or move that the engine refused changed nothing, so it has no path to follow.
+    let key = Key { doc, settings: app.session.settings().revision(), master: master.clone(), glyph_data: app.session.glyph_data_revision() };
     let follow = std::mem::take(&mut app.font_view.sidebar.follow);
     if app.font_view.sidebar.key.as_ref() == Some(&key) {
         return;
@@ -429,6 +429,8 @@ pub fn refresh(app: &mut FontcraftApp) {
     if sb.error.is_none() {
         let mut listed = Vec::new();
         flatten(&sb.items, &mut listed, 0);
+        // A rename or move the engine refused leaves its old path listed, so it is not followed.
+        let follow: Vec<_> = follow.into_iter().filter(|(old, new)| !listed.contains(old) && listed.contains(new)).collect();
         let entries = current_entries(app);
         let mut kept: Vec<Vec<String>> = entries.iter().map(|e| followed(e, &follow)).filter(|e| listed.contains(e)).collect();
         let mut seen = HashSet::new();
@@ -499,6 +501,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         let mut target = None;
         let mut follow = Vec::new();
         let mut laid_out = Vec::new();
+        let mut rows_clip = None;
         ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
             actions(app, ui, &items, &selected, pending);
             ui.separator();
@@ -522,11 +525,12 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
                     for item in &items {
                         row(ui, &mut cx, item, 0);
                     }
+                    rows_clip = Some(ui.clip_rect());
                     if let Some(source) = cx.drag_started.take() {
                         dragging = Some(source);
                     }
                     let Some(source) = dragging.clone() else { return };
-                    let at = ui.ctx().pointer_latest_pos();
+                    let at = ui.ctx().pointer_latest_pos().filter(|p| over_rows(ui.ctx(), ui.layer_id(), Some(ui.clip_rect()), *p));
                     target = at.and_then(|p| drop_target(&items, cx.laid_out, &source, p));
                     if let Some(d) = &target {
                         paint_mark(ui, cx.tokens, cx.laid_out, d);
@@ -545,9 +549,14 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
                 });
             });
         });
+        // A rename whose row is not drawn (its folder closed) ends, so Return works again.
+        if renaming.as_ref().is_some_and(|r| !laid_out.iter().any(|row| row.path == r.path)) {
+            renaming = None;
+        }
         let sb = &mut app.font_view.sidebar;
         sb.items = items;
         sb.laid_out = laid_out;
+        sb.rows_clip = rows_clip;
         sb.renaming = renaming;
         sb.dragging = dragging;
         sb.drop = target;
@@ -556,20 +565,46 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
 }
 
 /// Return with the sidebar holding the keyboard and one filter or folder selected opens its name
-/// for editing. The press that last went down decides whether the sidebar holds the keyboard.
+/// for editing, if its row is drawn. The press that last went down decides whether the sidebar
+/// holds the keyboard. The question about unsaved changes, the dialogs and the windows are drawn
+/// after Font View, so Return is left to them whenever one of them is showing or has the keyboard.
 fn keyboard(app: &mut FontcraftApp, ui: &egui::Ui, items: &[Item], selected: &[Vec<String>]) {
+    let ctx = ui.ctx();
+    let layer = ui.layer_id();
+    let elsewhere = app.close_prompt.is_open()
+        || app.dialog.is_some()
+        || crate::shell::font_info::has_keyboard(app)
+        || ctx.egui_wants_keyboard_input()
+        || !ctx.memory(|m| m.is_above_modal_layer(layer));
     let sb = &mut app.font_view.sidebar;
     if let Some(at) = ui.input(|i| if i.pointer.any_pressed() { i.pointer.press_origin() } else { None }) {
-        sb.has_keyboard = sb.laid_out.iter().any(|r| r.rect.contains(at));
+        sb.has_keyboard = over_rows(ctx, layer, sb.rows_clip, at) && sb.laid_out.iter().any(|r| r.rect.contains(at));
     }
-    if !sb.has_keyboard || sb.renaming.is_some() || ui.ctx().text_edit_focused() {
+    if !sb.has_keyboard || sb.renaming.is_some() || elsewhere {
         return;
     }
     let [only] = selected else { return };
     let Some(item) = find_item(items, only, 0).filter(|i| is_filter(i)) else { return };
-    if ui.ctx().input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter)) {
+    if !sb.laid_out.iter().any(|r| r.path == item.path) {
+        return;
+    }
+    if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter)) {
         sb.renaming = Some(Renaming { path: item.path.clone(), text: item.label.clone(), started: false });
     }
+}
+
+/// Whether a press or drop at `at` reaches the sidebar's rows: inside the part of the scroll area
+/// shown (`clip`), and not over a window, menu or popup drawn above the sidebar.
+fn over_rows(ctx: &egui::Context, layer: egui::LayerId, clip: Option<Rect>, at: Pos2) -> bool {
+    clip.is_some_and(|c| c.contains(at)) && ctx.layer_id_at(at).is_none_or(|l| l == layer)
+}
+
+/// How many folder levels `item` holds, itself included (a filter is 1).
+fn folder_depth(item: &Item, depth: usize) -> usize {
+    if depth > MAX_DEPTH || item.kind != "folder" {
+        return 1;
+    }
+    1 + item.children.iter().map(|c| folder_depth(c, depth + 1)).max().unwrap_or(0)
 }
 
 /// A smart filter, list filter or folder of the Filters section.
@@ -694,10 +729,10 @@ fn row(ui: &mut egui::Ui, cx: &mut Cx, item: &Item, depth: usize) {
         }
     }
     if filter {
-        if response.drag_started() {
+        if response.drag_started_by(egui::PointerButton::Primary) {
             cx.drag_started = Some(item.path.clone());
         }
-        if response.drag_stopped() {
+        if response.drag_stopped_by(egui::PointerButton::Primary) {
             cx.drag_stopped = true;
         }
     }
@@ -723,13 +758,18 @@ fn rename_field(ui: &mut egui::Ui, cx: &mut Cx, clip: Rect) {
     if !r.started {
         ui.memory_mut(|m| m.request_focus(id));
     }
-    let edit = egui::TextEdit::singleline(&mut r.text).id(id).char_limit(NAME_CHARS).margin(egui::Margin::ZERO).font(egui::TextStyle::Button);
+    let edit = egui::TextEdit::singleline(&mut r.text).id(id).margin(egui::Margin::ZERO).font(egui::TextStyle::Button);
     let layout = egui::Layout::centered_and_justified(egui::Direction::TopDown);
     let mut output = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(clip).layout(layout)));
     // The whole name starts selected, so typing replaces it.
     if !r.started && output.response.response.has_focus() {
         output.state.cursor.set_char_range(Some(egui::text::CCursorRange::select_all(&output.galley)));
         output.state.store(ui.ctx(), id);
+    }
+    // The engine counts a name's bytes; a longer one loses its last characters.
+    if r.text.len() > NAME_BYTES {
+        let end = (0..=NAME_BYTES).rev().find(|i| r.text.is_char_boundary(*i)).unwrap_or(0);
+        r.text.truncate(end);
     }
     let field = output.response.response;
     let committed = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -752,8 +792,9 @@ fn rename_field(ui: &mut egui::Ui, cx: &mut Cx, clip: Rect) {
 }
 
 /// Where the filter at `source` (a sidebar path) lands when let go at `at`, over the rows the
-/// frame laid out. `None` outside the Filters section, and for a drop into `source` itself or a
-/// folder inside it, or onto its own place.
+/// frame laid out. `None` outside the Filters section, and for a drop the engine refuses (into
+/// `source` itself or a folder inside it, deeper than folders nest, or beside an entry of the
+/// same name) or onto its own place.
 ///
 /// Over a folder's middle half the filter goes into the folder, at its end; over the top half
 /// of a row it goes before the row, over the bottom half after it, or first into an open folder
@@ -807,6 +848,13 @@ pub fn drop_target(items: &[Item], rows: &[Row], source: &[String], at: Pos2) ->
         }
     };
     if parent.starts_with(moving) {
+        return None;
+    }
+    let moved_item = find_item(items, source, 0)?;
+    if parent.len() + folder_depth(moved_item, 0) > fontcraft_glyphquery::MAX_FOLDER_DEPTH {
+        return None;
+    }
+    if parent.as_slice() != from_parent && siblings(&parent)?.iter().any(|n| n == from_name) {
         return None;
     }
     let mut index = index;

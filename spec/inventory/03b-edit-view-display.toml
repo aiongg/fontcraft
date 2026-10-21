@@ -2350,7 +2350,7 @@ milestone = "M3"
 summary = "Choosing a master layer in the Layers palette changes the master of only the glyph being edited, or of the glyphs selected in the text, so one tab can mix masters."
 ref = "Edit View › Previewing & Testing › Previewing Masters"
 status = "handbook"
-notes = "Built in M3.10 and M3.40 (`layers.select` with `glyphs`). In text mode, a click on a master row with glyphs selected in the text switches those glyphs that have that master's layer; with no text selection it switches the edited glyph."
+notes = "Built in M3.10 and M3.40 (`layers.select` with `glyphs`). In text mode, a click on a master row with glyphs selected in the text switches those glyphs and the edited glyph, each that has that master's layer; with no text selection it switches the edited glyph."
 
 [[panel]]
 id = "editView.featuresMenu"

@@ -170,13 +170,32 @@ fn a_master_row_click_switches_the_glyphs_selected_in_the_text() {
     w.click(&mut app, name_part("m02"));
     let tab = app.state.tab().unwrap();
     let switched: Vec<(&str, &str)> = tab.layers.iter().map(|(g, l)| (g.as_str(), l.as_str())).collect();
-    assert_eq!(switched, [("A", "m02"), ("B", "m02")], "C, outside the selection, keeps the tab's master");
+    assert_eq!(switched, [("A", "m02"), ("B", "m02"), ("C", "m02")], "C, after the selection, is the edited glyph and switches too");
 
     // Without a text selection the click switches the edited glyph only.
-    app.run("editView.setCursor", &json!({"index": 2})).unwrap();
+    app.run("editView.setCursor", &json!({"index": 1})).unwrap();
     w.settle(&mut app);
-    w.click(&mut app, name_part("m02"));
+    w.click(&mut app, name_part("m01"));
     let tab = app.state.tab().unwrap();
-    assert_eq!(tab.layers.get("C").map(String::as_str), Some("m02"));
-    assert_eq!(tab.layers.len(), 3);
+    let switched: Vec<(&str, &str)> = tab.layers.iter().map(|(g, l)| (g.as_str(), l.as_str())).collect();
+    assert_eq!(switched, [("A", "m02"), ("C", "m02")], "B goes back to the tab's master");
+}
+
+#[test]
+fn a_right_button_drag_moves_no_layer() {
+    let (mut app, [_, two, _, _]) = two_masters();
+    let w = Window::new();
+    w.settle(&mut app);
+    let (before, journal) = (rows(&mut app), app.session.journal().len());
+    let from = w.rect(name_part(&two)).center();
+    let to = w.rect(drop_zone("m01")).center();
+    let right = |pos, pressed| Event::PointerButton { pos, button: PointerButton::Secondary, pressed, modifiers: Modifiers::NONE };
+    w.frame(&mut app, vec![Event::PointerMoved(from)]);
+    w.frame(&mut app, vec![right(from, true)]);
+    w.frame(&mut app, vec![Event::PointerMoved(from + vec2(0.0, 12.0))]);
+    w.frame(&mut app, vec![Event::PointerMoved(to)]);
+    w.frame(&mut app, vec![right(to, false)]);
+    w.settle(&mut app);
+    assert_eq!(rows(&mut app), before);
+    assert_eq!(app.session.journal().len(), journal, "nothing ran");
 }

@@ -8,8 +8,8 @@
 //! as Master restores a selected backup (`layers.useAsMaster`). The filter menu runs
 //! `layers.onlyShowLayersFromCurrentMaster` and `layers.hideBackupLayers`. A right-click on a
 //! row opens its context menu: the commands whose row names `layers.row`, acting on that row.
-//! With glyphs selected in the text (text mode), a click on a master row switches those glyphs to
-//! that master (`layers.select` with `glyphs`).
+//! With glyphs selected in the text (text mode), a click on a master row switches those glyphs and
+//! the edited glyph to that master (`layers.select` with `glyphs`).
 //!
 //! A non-master row can be dragged by its name. Dropped on another row of the same master it moves
 //! there (`layers.reorder`); a line shows where it will land. A backup dropped on its master's row
@@ -353,8 +353,8 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let row_menu_sections = context_menu::sections(&app.session, &app.state, &[ROW_CONTEXT]);
     let colors = super::layers_color::ColorEntries::read(app, &glyph);
     // With glyphs selected in the text, a click on a master row switches those of them that have
-    // the master's layer.
-    let text_glyphs: Vec<String> = app
+    // the master's layer, and the edited glyph, whose rows these are.
+    let mut text_glyphs: Vec<String> = app
         .state
         .tab()
         .filter(|t| t.text_mode)
@@ -363,6 +363,9 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
             t.text.selection().filter_map(|i| t.item_glyph(i)).filter(|g| seen.insert(*g)).map(str::to_string).collect()
         })
         .unwrap_or_default();
+    if !text_glyphs.is_empty() && !text_glyphs.contains(&glyph) {
+        text_glyphs.push(glyph.clone());
+    }
     let master_targets: HashMap<String, Vec<String>> = match app.session.font() {
         Ok(font) if !text_glyphs.is_empty() => shown
             .iter()
@@ -431,7 +434,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
                 ui.label(egui::RichText::new(&row.kind).strong().color(if is_selected { tokens.selected_text } else { tokens.text_dim }));
             }
             for (response, part) in &parts {
-                if !master_row && response.drag_started() {
+                if !master_row && response.drag_started_by(egui::PointerButton::Primary) {
                     let dragged = Dragged { glyph: glyph.clone(), layer: row.id.clone(), master: row.master.clone(), backup: row.kind == "backup" };
                     response.dnd_set_drag_payload(dragged);
                 }
