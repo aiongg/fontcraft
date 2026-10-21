@@ -570,12 +570,14 @@ fn origins(tree: &ParseTree, root: &str, files: &Loaded, max_steps: usize) -> Op
     Some(out)
 }
 
+/// A file's include statements: their byte ranges and the files they name.
+type Includes = Rc<Vec<(Range<usize>, String)>>;
+
 /// The state of [`origins`]' joining.
 struct Join<'a> {
     files: &'a Loaded,
     resolver: MapResolver,
-    /// Each file's include statements: their byte ranges and the files they name.
-    found: HashMap<String, Rc<Vec<(Range<usize>, String)>>>,
+    found: HashMap<String, Includes>,
     chunks: Vec<Chunk>,
     /// The length of the code joined so far.
     at: usize,
@@ -613,7 +615,7 @@ impl Join<'_> {
     }
 
     /// The include statements of `path`, from a parse of the file alone.
-    fn includes(&mut self, path: &str) -> Option<Rc<Vec<(Range<usize>, String)>>> {
+    fn includes(&mut self, path: &str) -> Option<Includes> {
         if let Some(found) = self.found.get(path) {
             return Some(found.clone());
         }
