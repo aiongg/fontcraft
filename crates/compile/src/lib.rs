@@ -567,6 +567,7 @@ pub(crate) fn compile_stages_with(
         max_expanded: expansion.left,
         remove_overlap: options.remove_overlap,
         overlap_time_limit: options.overlap_time_limit,
+        single_precision: options.project.as_ref().is_some_and(|p| p.two_decimals),
     };
     let (outlines, mut extra, kern_table) = match var {
         Some(stage) => {
@@ -640,7 +641,9 @@ pub(crate) fn layout_tables(
         variable,
         feature_axes: options.feature_axes.as_ref(),
     };
-    layout::build(&input, &layout::LayoutOptions::default(), warnings)
+    // A project compile groups rules into lookups as the reference's feature compiler does.
+    let layout_options = layout::LayoutOptions { lookup_per_rule_type: options.project.is_some(), ..Default::default() };
+    layout::build(&input, &layout_options, warnings)
 }
 
 /// Fills what the glyphs do not store from the glyph database ([`Resolved::apply_glyph_data`])

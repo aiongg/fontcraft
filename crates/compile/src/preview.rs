@@ -157,7 +157,7 @@ impl Stages {
             variable: None,
             feature_axes: options.feature_axes.as_ref(),
         };
-        let layout_options = LayoutOptions { regenerate_automatic: false, gpos, implicit: true };
+        let layout_options = LayoutOptions { regenerate_automatic: false, gpos, implicit: true, lookup_per_rule_type: false };
         let layout = crate::layout::build(&input, &layout_options, &mut warnings)?;
         let sources = edits.source_names();
         let glyph_order = glyphs.iter().map(|g| sources.get(g.name.as_str()).map_or_else(|| g.name.clone(), |s| (*s).to_string())).collect();

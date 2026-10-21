@@ -103,6 +103,9 @@ pub struct Settings {
     pub remove_overlap: bool,
     /// How long one glyph's overlap removal may run.
     pub overlap_time_limit: Duration,
+    /// Components are drawn in with single-precision arithmetic, as the reference's UFO reader
+    /// places them (a project compile, [`decomposed_single`]).
+    pub single_precision: bool,
 }
 
 /// One glyph ready for its table.
@@ -138,7 +141,19 @@ pub fn prepare(glyphs: &[ResolvedGlyph], s: &Settings, warnings: &mut Vec<String
     let mut expansion = Expansion::new(s.max_expanded);
     let mut out = Vec::with_capacity(glyphs.len());
     for (i, g) in glyphs.iter().enumerate() {
-        let contours = if decompose.get(i) == Some(&true) {
+        let contours = if decompose.get(i) == Some(&true) && s.single_precision {
+            let mut out = Vec::new();
+            let mut budget = MAX_OUTLINE_ELEMENTS;
+            decomposed_single(
+                glyphs,
+                &index,
+                i,
+                None,
+                0,
+                &mut Walk { out: &mut out, budget: &mut budget, expansion: &mut expansion, name: &g.name },
+            )?;
+            out
+        } else if decompose.get(i) == Some(&true) {
             decomposed(glyphs, &index, &decompose, i, 0, &mut memo, &mut expansion)?
         } else if !g.components.is_empty() {
             out.push(composite(g)?);
@@ -209,6 +224,119 @@ pub(crate) fn decomposed(
     }
     memo.insert(i, out.clone());
     Ok(out)
+}
+
+/// A component transform in single precision, as AFDKO's UFO reader keeps it (`Transform`,
+/// `matMult` and `setPointKeyValue` in `c/shared/uforead.cpp`, Apache-2.0): coefficients
+/// `[xx, xy, yx, yy, dx, dy]` as `f32`, and whether it only moves.
+#[derive(Clone, Copy)]
+struct SingleTransform {
+    m: [f32; 6],
+    offset_only: bool,
+}
+
+impl SingleTransform {
+    /// `None` for the identity, which leaves points as they are read.
+    fn of(transform: Affine) -> Option<Self> {
+        let m = transform.as_coeffs().map(|v| v as f32);
+        let [xx, xy, yx, yy, dx, dy] = m;
+        let offset_only = xx == 1.0 && yy == 1.0 && xy == 0.0 && yx == 0.0;
+        (!offset_only || dx != 0.0 || dy != 0.0).then_some(Self { m, offset_only })
+    }
+
+    /// The transform of a component with `local` inside a glyph placed by `outer`. An outer
+    /// move adds to the inner offsets; anything else multiplies the matrices.
+    fn within(local: Option<Self>, outer: Option<Self>) -> Option<Self> {
+        match (local, outer) {
+            (None, outer) => outer,
+            (local, None) => local,
+            (Some(mut a), Some(b)) if b.offset_only => {
+                a.m[4] += b.m[4];
+                a.m[5] += b.m[5];
+                Some(a)
+            }
+            (Some(Self { m: a, .. }), Some(Self { m: b, .. })) => {
+                let [a0, a1, a2, a3, a4, a5] = a;
+                let [b0, b1, b2, b3, b4, b5] = b;
+                Some(Self {
+                    m: [a0 * b0 + a1 * b2, a0 * b1 + a1 * b3, a2 * b0 + a3 * b2, a2 * b1 + a3 * b3, a4 * b0 + a5 * b2 + b4, a4 * b1 + a5 * b3 + b5],
+                    offset_only: false,
+                })
+            }
+        }
+    }
+
+    fn apply(&self, p: Point) -> Point {
+        let (x, y) = (p.x as f32, p.y as f32);
+        let [xx, xy, yx, yy, dx, dy] = self.m;
+        Point::new(f64::from(xx * x + yx * y + dx), f64::from(xy * x + yy * y + dy))
+    }
+
+    fn mirrors(&self) -> bool {
+        let [xx, xy, yx, yy, ..] = self.m.map(f64::from);
+        xx * yy - xy * yx < 0.0
+    }
+}
+
+/// `contour` with every point read in single precision and placed by `t`.
+fn single_contour(contour: &BezPath, t: Option<SingleTransform>) -> BezPath {
+    let place = |p: Point| match &t {
+        Some(t) => t.apply(p),
+        None => Point::new(f64::from(p.x as f32), f64::from(p.y as f32)),
+    };
+    let path: BezPath = contour
+        .elements()
+        .iter()
+        .map(|el| match *el {
+            PathEl::MoveTo(p) => PathEl::MoveTo(place(p)),
+            PathEl::LineTo(p) => PathEl::LineTo(place(p)),
+            PathEl::QuadTo(a, p) => PathEl::QuadTo(place(a), place(p)),
+            PathEl::CurveTo(a, b, p) => PathEl::CurveTo(place(a), place(b), place(p)),
+            PathEl::ClosePath => PathEl::ClosePath,
+        })
+        .collect();
+    if t.is_some_and(|t| t.mirrors()) { path.reverse_subpaths() } else { path }
+}
+
+/// Where [`decomposed_single`] puts contours, and what it may still add.
+struct Walk<'a> {
+    out: &'a mut Vec<BezPath>,
+    budget: &'a mut usize,
+    expansion: &'a mut Expansion,
+    name: &'a str,
+}
+
+/// The contours of glyph `i` placed by `t`, then those of its components depth first, each
+/// placed by its transform within `t`, all in single precision: the reference's UFO reader
+/// reads coordinates and transforms as `f32` and combines them before placing a point, so a
+/// component's point can land a hundredth away from where double precision puts it once the
+/// charstring keeps two decimals.
+fn decomposed_single(
+    glyphs: &[ResolvedGlyph],
+    index: &HashMap<&str, usize>,
+    i: usize,
+    t: Option<SingleTransform>,
+    depth: usize,
+    walk: &mut Walk,
+) -> Result<(), CompileError> {
+    let Some(g) = glyphs.get(i) else { return Ok(()) };
+    let too_large = || CompileError::from(ModelError::OutlineTooLarge(walk.name.to_string()));
+    if depth > MAX_COMPONENT_DEPTH {
+        return Err(ModelError::ComponentCycle(walk.name.to_string()).into());
+    }
+    for c in &g.contours {
+        *walk.budget = walk.budget.checked_sub(c.elements().len()).ok_or_else(too_large)?;
+        if depth > 0 {
+            walk.expansion.take(c.elements().len(), walk.name)?;
+        }
+        walk.out.push(single_contour(c, t));
+    }
+    for c in &g.components {
+        *walk.budget = walk.budget.checked_sub(1).ok_or_else(too_large)?;
+        let Some(&j) = index.get(c.base.as_str()) else { continue };
+        decomposed_single(glyphs, index, j, SingleTransform::within(SingleTransform::of(c.transform), t), depth + 1, walk)?;
+    }
+    Ok(())
 }
 
 /// `contours` with their overlaps removed, or as they are, with a warning, when that fails or

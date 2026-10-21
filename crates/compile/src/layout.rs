@@ -60,11 +60,14 @@ pub struct LayoutOptions {
     pub gpos: bool,
     /// Add the generated kerning and mark attachment.
     pub implicit: bool,
+    /// Each run of substitutions of one type gets its own lookup
+    /// ([`fontcraft_fea::CompileRequest::lookup_per_rule_type`]; a project compile).
+    pub lookup_per_rule_type: bool,
 }
 
 impl Default for LayoutOptions {
     fn default() -> Self {
-        Self { regenerate_automatic: true, gpos: true, implicit: true }
+        Self { regenerate_automatic: true, gpos: true, implicit: true, lookup_per_rule_type: false }
     }
 }
 
@@ -273,6 +276,7 @@ pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<Strin
     // Step 3: what the writers read from the code.
     let mut request = CompileRequest::new(&files, &glyph_order);
     request.gpos = opts.gpos;
+    request.lookup_per_rule_type = opts.lookup_per_rule_type;
     request.first_name_id = input.first_name_id;
     request.variations = variable_features.as_ref().map(|v| v as &dyn fontcraft_fea::FeaVariations);
     let first = match &assembly {

@@ -780,6 +780,16 @@ makeotf in these points:
 - Charstring coordinates keep two decimals and every segment; overlaps stay; composites keep
   the advance and position the file gives (the command line opens the source without aligning
   its composites).
+- Components are drawn in with single-precision arithmetic, as AFDKO's UFO reader places them
+  (`uforead.cpp`): each coordinate and transform value is read as a 32-bit float, a component
+  inside a moved component adds the two offsets, any other nesting multiplies the matrices, and
+  each point is placed in 32-bit arithmetic before it is kept to two decimals. In double
+  precision, a point at 18.8049629256 in a component moved by 512 lands at 530.81 instead of
+  makeotf's 530.80.
+- Each run of a feature block's substitutions of one type gets its own lookup, as the feature
+  file specification groups rules and makeotf's feature compiler does (`FeatCtx::prepRule`). The
+  ordinary compile follows fea-rs and feaLib instead, where a single substitution joins a
+  neighbouring multiple or ligature substitution's lookup.
 
 The measure builds the first 10 corpus UFOs that makeotf can build with both tools and compares
 a normalised dump: glyph order, `cmap`, names (ID 3 left out, ID 5 up to the first `;`),
@@ -793,7 +803,7 @@ These differences are ours on purpose or not yet followed:
 | What | makeotf | FontCraft | Why |
 |---|---|---|---|
 | a negative advance | wrapped to a large unsigned number (-78 becomes 65458) | 0, with a warning | a negative advance is not a valid `hmtx` value |
-| `sub fi by fi;` in a ligature feature | a single substitution in its own lookup | a ligature of one glyph in the feature's ligature lookup | the feature compiler follows feaLib, the oracle of every other compile |
+| a contour that starts with a line, in a component drawn in after the reader's list of path operations has grown past a multiple of 50 | the contour's move is sometimes lost, which joins it to the contour before it (`threequarters` of `Oswald-Regular-Round.ufo`) | the contour as drawn | a fault in makeotf: in `parseXMLContour` of `uforead.cpp`, the closing line can move the list, and the move is then written into the old copy |
 | vendor id, unique ID version, Panose weight, xAvgCharWidth, strikeout position, fsType, GDEF | worked out by makeotf | the ordinary compile's values | not yet followed; the measure does not compare them |
 | CID-keyed project compile | fractions kept | integers | the CID-keyed build rounds as every CID-keyed build does |
 

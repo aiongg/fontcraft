@@ -26,6 +26,7 @@ struct Job<'a> {
     variations: Option<&'a dyn FeaVariations>,
     first_name_id: u16,
     gpos: bool,
+    lookup_per_rule_type: bool,
     limits: Limits,
     mode: Mode,
 }
@@ -70,6 +71,7 @@ pub(crate) fn run(req: &CompileRequest, mode: Mode) -> Result<Output, Vec<Diagno
         variations: req.variations,
         first_name_id: req.first_name_id,
         gpos: req.gpos,
+        lookup_per_rule_type: req.lookup_per_rule_type,
         limits,
         mode,
     };
@@ -126,6 +128,15 @@ impl Job<'_> {
         messages.truncate(max);
         if validated.has_errors() {
             return Err(messages);
+        }
+        // Checked and validated as written, so messages name the files; then compiled again
+        // from one file with the lookup breaks.
+        if self.lookup_per_rule_type
+            && self.mode != Mode::Validate
+            && let Some(text) = crate::split::split(tree.root()).filter(|t| t.len() <= self.limits.text_bytes)
+        {
+            let files = std::sync::Arc::new(std::collections::BTreeMap::from([(self.root.clone(), std::sync::Arc::<str>::from(text))]));
+            return Job { files, lookup_per_rule_type: false, ..self }.run();
         }
         match self.mode {
             Mode::Validate => return Ok(Output::Compiled(Box::new(Compiled { warnings: messages, ..Compiled::default() }))),

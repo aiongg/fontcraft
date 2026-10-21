@@ -505,6 +505,40 @@ fn a_project_compile_takes_metrics_names_and_outlines_as_the_reference_does() {
     assert_eq!(contours(&bytes, "bar").len(), 2);
 }
 
+/// The reference reads coordinates and component offsets as single-precision numbers and adds
+/// them before keeping two decimals: 18.8049629256 + 512 is 530.80 there, 530.81 in double
+/// precision. Its feature compiler also gives each run of one rule type its own lookup.
+#[test]
+fn a_project_compile_places_components_and_groups_lookups_as_the_reference_does() {
+    let dir = temp("single");
+    let ufo = write_metrics_ufo(&dir, "languagesystem DFLT dflt;\nfeature liga { sub d by O; sub d d by O; } liga;\n");
+    let glyphs = ufo.join("glyphs");
+    let j = r#"<contour><point x="18.8049629256" y="0" type="line"/><point x="18.8049629256" y="500" type="line"/><point x="100" y="500" type="line"/><point x="100" y="0" type="line"/></contour>"#;
+    for (name, outline) in [("j", j), ("ij", r#"<component base="j" xOffset="512"/>"#)] {
+        let glif = format!(
+            "<?xml version='1.0' encoding='UTF-8'?>\n<glyph name=\"{name}\" format=\"2\"><advance width=\"700\"/><outline>{outline}</outline></glyph>\n"
+        );
+        std::fs::write(glyphs.join(format!("{name}.glif")), glif).unwrap();
+    }
+    let contents = std::fs::read_to_string(glyphs.join("contents.plist")).unwrap();
+    let contents = contents.replacen("</dict>", "<key>j</key><string>j.glif</string><key>ij</key><string>ij.glif</string></dict>", 1);
+    std::fs::write(glyphs.join("contents.plist"), contents).unwrap();
+    let mut s = Session::new();
+    s.settings_mut().set("user.disableAutomaticAlignmentForImportedFiles", json!(true)).unwrap();
+    s.execute("file.open", &json!({ "path": ufo })).unwrap();
+    let out = dir.join("out.otf");
+    s.execute("font.compile", &json!({"formats": ["otf"], "destination": out, "timestamp": 0, "projectOptions": []})).unwrap();
+    let bytes = std::fs::read(&out).unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    let ij = contours(&bytes, "ij");
+    assert!(ij[0].iter().any(|(x, y)| (x - 530.8).abs() < 0.001 && *y == 0.0), "{ij:?}");
+    let font = FontRef::new(&bytes).unwrap();
+    let lookups = font.gsub().unwrap().lookup_list().unwrap();
+    let types: Vec<u16> = lookups.lookups().iter().map(|l| l.unwrap().lookup_type()).collect();
+    assert_eq!(types, [1, 4], "a single substitution keeps its own lookup beside a ligature");
+}
+
 #[test]
 fn the_feature_code_overrides_what_the_project_compile_works_out() {
     let code = "languagesystem DFLT dflt;\ntable head { FontRevision 2.5; } head;\ntable OS/2 { WeightClass 400; } OS/2;\ntable hhea { Ascender 900; } hhea;\n";

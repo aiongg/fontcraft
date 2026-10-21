@@ -435,6 +435,24 @@ fn fea_lookup_implicit() {
 }
 
 #[test]
+fn fea_lookup_per_rule_type() {
+    // A project compile keeps each run of one substitution type in its own lookup, as the
+    // reference's feature compiler does; an included file is written in place.
+    let files = with_files(
+        "feature liga { sub a by b; sub f i by f_i; include(more.fea); script latn; sub c by d; sub e by NULL; } liga;",
+        &[("more.fea", "sub c by d; sub e f by c;")],
+    );
+    let order = order();
+    let compiled = |split| {
+        let request = CompileRequest { lookup_per_rule_type: split, ..CompileRequest::new(&files, &order) };
+        compile(&request).unwrap_or_else(|d| panic!("{d:#?}"))
+    };
+    assert_eq!(gsub(&compiled(false)), [4, 1, 2]);
+    assert_eq!(gsub(&compiled(true)), [1, 4, 1, 4, 1, 2]);
+    assert_eq!(validate(&CompileRequest { lookup_per_rule_type: true, ..CompileRequest::new(&files, &order) }), []);
+}
+
+#[test]
 fn fea_languagesystem() {
     let c = ok("languagesystem DFLT dflt; languagesystem latn dflt; languagesystem latn DEU; feature ss01 { sub a by b; } ss01;");
     assert_eq!(langs(&c, b"ss01"), ["DFLT/dflt", "latn/dflt", "latn/DEU "]);

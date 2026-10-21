@@ -58,6 +58,7 @@ mod resolve;
 #[cfg(test)]
 mod rows_tests;
 mod run;
+mod split;
 mod variations;
 
 pub use diagnostic::{Diagnostic, Severity};
@@ -91,13 +92,26 @@ pub struct CompileRequest<'a> {
     /// `false` leaves `GPOS` out of the result (the Edit View preview font, which shapes with
     /// substitutions only).
     pub gpos: bool,
+    /// Each run of a feature block's substitutions of one type gets its own lookup, as the
+    /// feature file specification groups rules; `false` lets a single substitution join a
+    /// neighbouring multiple or ligature substitution's lookup, as fea-rs and feaLib do.
+    pub lookup_per_rule_type: bool,
     pub limits: Limits,
 }
 
 impl<'a> CompileRequest<'a> {
     /// A request for a static font with every table, no generated lookups and the default limits.
     pub fn new(files: &'a VirtualFiles, glyph_order: &'a GlyphOrder) -> Self {
-        Self { files, glyph_order, generated: None, variations: None, first_name_id: 256, gpos: true, limits: Limits::default() }
+        Self {
+            files,
+            glyph_order,
+            generated: None,
+            variations: None,
+            first_name_id: 256,
+            gpos: true,
+            lookup_per_rule_type: false,
+            limits: Limits::default(),
+        }
     }
 }
 

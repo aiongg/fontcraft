@@ -547,6 +547,7 @@ pub fn point_indexes(font: &Font, target: &Target, glyph: &str, options: &Option
         max_expanded: MAX_EXPANDED_ELEMENTS,
         remove_overlap: options.remove_overlap,
         overlap_time_limit: options.overlap_time_limit,
+        single_precision: false,
     };
     let outlines = outline::prepare(&subset, &settings, &mut warnings)?;
     let Some(prepared) = outlines.first() else { return Ok(None) };
@@ -590,6 +591,7 @@ mod tests {
             max_expanded: MAX_EXPANDED_ELEMENTS,
             remove_overlap,
             overlap_time_limit: std::time::Duration::from_secs(5),
+            single_precision: false,
         };
         outline::prepare(&[g], &s, &mut Vec::new()).unwrap().remove(0)
     }

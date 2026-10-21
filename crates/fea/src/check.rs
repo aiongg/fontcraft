@@ -556,7 +556,7 @@ fn number(token: &Token) -> Option<u32> {
     }
 }
 
-fn is_rule(kind: Kind) -> bool {
+pub(crate) fn is_rule(kind: Kind) -> bool {
     use Kind::*;
     matches!(
         kind,
@@ -631,7 +631,7 @@ fn flag_key(node: &Node) -> Option<String> {
 }
 
 /// The tag of a `script` or `language` statement.
-fn tag_text(node: &Node) -> Option<String> {
+pub(crate) fn tag_text(node: &Node) -> Option<String> {
     node.iter_children().filter_map(NodeOrToken::as_token).find(|t| t.kind == Kind::Tag).map(|t| t.text.to_string())
 }
 

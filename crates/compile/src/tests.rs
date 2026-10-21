@@ -779,6 +779,7 @@ fn settings() -> Settings {
         max_expanded: MAX_EXPANDED_ELEMENTS,
         remove_overlap: false,
         overlap_time_limit: fontcraft_pathops::TIME_LIMIT,
+        single_precision: false,
     }
 }
 
