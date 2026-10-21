@@ -232,3 +232,25 @@ fn an_export_that_would_replace_the_linked_font_is_refused() {
     assert_eq!(left, [std::ffi::OsString::from("Shared.ttf")], "no staged file is left behind");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn file_open_opens_a_project_file_as_a_project_and_activates_one_already_open() {
+    let dir = temp("file-open");
+    let font_path = saved_font(&dir);
+    let mut s = Session::new();
+    run(&mut s, "file.newProject", json!({}));
+    run(&mut s, "project.linkFont", json!({"font": font_path.to_string_lossy()}));
+    // Any case of the extension names a project file.
+    let project_path = dir.join("web.FontCraftProject");
+    run(&mut s, "project.save", json!({"path": project_path.to_string_lossy()}));
+    run(&mut s, "project.close", json!({}));
+
+    let opened = run(&mut s, "file.open", json!({"path": project_path.to_string_lossy()}));
+    assert_eq!(opened["alreadyOpen"], false);
+    assert_eq!(names(&opened["project"]), ["Regular", "Bold"]);
+    assert!(s.documents().is_empty(), "a project opens no font document");
+    let again = run(&mut s, "file.open", json!({"path": project_path.to_string_lossy()}));
+    assert_eq!(again["alreadyOpen"], true);
+    assert_eq!(s.projects().len(), 1);
+    let _ = std::fs::remove_dir_all(&dir);
+}

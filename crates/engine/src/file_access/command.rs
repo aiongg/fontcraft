@@ -97,7 +97,7 @@ pub fn check_files(s: &Session, id: &str, files: &[FileParam], params: &Value, r
         checker.reads.dedup();
         for path in &checker.reads {
             check_references(path, roots)?;
-            if id == "project.open" {
+            if id == "project.open" || (id == "file.open" && crate::project::is_project_file(path)) {
                 check_project_link(path, roots)?;
             }
         }

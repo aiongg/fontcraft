@@ -611,6 +611,33 @@ status = "handbook"
 notes = "FontCraft additions (M13.55d): a BDF or PCF bitmap font opens as a bitmap-only font whose glyphs come from the file and whose strike holds the bitmaps (formats `bdf`, `pcf`; gzip-compressed `.pcf.gz` and `.bdf.gz`, Windows `fnt` and `fon` added in M13.55e, TeX `pk` and `gf` and Mac `nfnt` in M13.55f; a FON file or a Mac family opens with one strike per font or size, its glyphs from the first strike, the smallest of a Mac family, and the other strikes holding the bitmaps whose names that strike has), and a compiled font's EBLC/EBDT (or bloc/bdat) strikes open as the font's bitmap strikes, so a bitmap-only `.otb` opens with its glyphs and strikes (table EBDT). The handbook says nothing about bitmap fonts."
 guesses = [
   "The menu label and place are our assumption, and the shortcut is the platform convention; the chapter states neither.",
+  "File › Open… without a path asks the system chooser for files with one filter, Fonts, that holds every extension file.open reads (gz standing for .pcf.gz and .bdf.gz); the reference app's chooser filter is not documented.",
+  "Several files chosen at once each open, the last one shown; when some fail, the status bar lists the failures.",
+  "A .fontcraftproject file given to file.open opens as a project, as project.open does, since the reference app's File › Open opens project files.",
+  "A font file dropped on the window opens as with File › Open…, recognised by its extension; an SVG file is left to the image drop, which places it on a glyph, so a dropped SVG font does not open.",
+]
+observe = [
+  "Drop a .glyphs file on an open font window and note whether it opens as a new document.",
+  "Drop a .ttf on an open font window and note whether it opens or is refused.",
+  "In File › Open…, note the file types the chooser offers and whether it allows choosing several files.",
+]
+
+[[command]]
+id = "file.openFolder"
+label = "Open Folder…"
+menu = ["File"]
+shortcut = ""
+kind = "ui"
+params = "{path?: string}"
+area = "import-export"
+milestone = "M1"
+summary = "Opens a font source kept as a folder (.ufo, .glyphspackage, .sfdir) as File › Open… does. Without a path the system folder chooser asks for it; a path that is not a folder is refused."
+ref = "FontCraft design"
+status = "inferred"
+own = true
+notes = "A FontCraft addition: on macOS the reference app's Open chooser picks these folders as files, but most other platforms' choosers pick either files or folders, never both."
+guesses = [
+  "The item has no shortcut, since the reference app has no such item to copy one from.",
 ]
 
 [[behavior]]
@@ -1245,7 +1272,7 @@ kind = "engine"
 params = '{path: path}'
 area = "font-info"
 milestone = "M7"
-summary = "Opens a saved project file in its own window. File › Open does this for a project file in the reference app; FontCraft gives it a command of its own until File › Open recognises project files."
+summary = "Opens a saved project file in its own window. File › Open does this for a project file in the reference app; file.open hands a .fontcraftproject file to this command."
 ref = "Import & Export › Projects"
 status = "inferred"
 notes = "Opening a project is implied by the handbook (a project is a file that is saved and exported later), not described. Reads the native project format only (M7 plan § 7, question 3). M7 plan § 4: M7.14."

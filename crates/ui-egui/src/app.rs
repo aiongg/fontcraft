@@ -353,6 +353,7 @@ impl FontcraftApp {
         tools_glue::keys(self, ui.ctx());
         let mut pending: Vec<(&'static str, Value)> = Vec::new();
         shell::extensions::dropped::take(ui.ctx(), &mut pending);
+        shell::open_chooser::take_dropped(ui.ctx(), &mut pending);
         shell::text_preview::find_shortcut(self, ui.ctx(), &mut pending);
         pending.extend(shell::keymap::pressed(ui.ctx(), self.tools.text_edit_at_end, shell::keymap::focused_panel(self)));
         pending.extend(shell::clipboard::events(self, ui.ctx()));
@@ -386,6 +387,9 @@ impl FontcraftApp {
             // Paste Special in text mode is refused before it asks for the clipboard.
             if shell::clipboard::wants_text(id, &params) && !(id == "edit.pasteSpecial" && shell::text::in_text_mode(self)) {
                 shell::clipboard::request_text(ui.ctx(), id);
+                continue;
+            }
+            if shell::open_chooser::from_menu(self, id, &params) {
                 continue;
             }
             if shell::pickers::wants_files(id, &params) {

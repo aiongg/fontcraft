@@ -32,6 +32,7 @@ pub mod masters;
 pub mod measurement;
 pub mod menus;
 pub mod menus_dynamic;
+pub mod open_chooser;
 pub mod palette;
 pub mod pickers;
 pub mod preview;
@@ -129,6 +130,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (font_audit::COMMANDS, font_audit::run),
     (crate::dialogs::audit_profile::COMMANDS, crate::dialogs::audit_profile::run),
     (table_viewer::COMMANDS, table_viewer::run),
+    (open_chooser::COMMANDS, open_chooser::run),
 ];
 
 /// The shell commands' parameters that name files, declared as engine commands declare theirs
@@ -136,6 +138,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
 /// (`fontcraft_engine::file_access`) check them. Every shell command whose parameters name a file is listed here.
 pub const UI_FILE_PARAMS: &[(&str, &[fontcraft_engine::cmd::FileParam])] = &[
     ("file.showInFinder", &[fontcraft_engine::cmd::FileParam::read("path")]),
+    ("file.openFolder", &[fontcraft_engine::cmd::FileParam::read("path")]),
     ("view.setReferenceFont", &[fontcraft_engine::cmd::FileParam::read("path")]),
     ("view.filterByEncodingFile", &[fontcraft_engine::cmd::FileParam::read("path")]),
     ("dialog.actions", &[fontcraft_engine::cmd::FileParam::read("openSet"), fontcraft_engine::cmd::FileParam::write("savePath")]),
