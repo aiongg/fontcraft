@@ -44,9 +44,13 @@ const FAMILY_NAMES: &str = "familyNames";
 /// The style-map family name an instance states when it is not the family name followed by a
 /// link style.
 const STYLE_MAP_FAMILY: &str = "styleMapFamilyName";
+/// The style-map style name an instance states when it is not one of the four (regular, bold,
+/// italic, bold italic). fontTools passes such a name through to the instance's UFO, and ufo2ft
+/// writes it, title-cased, as name ID 2.
+const STYLE_MAP_STYLE: &str = "styleMapStyleName";
 /// Parameters the instance's attributes hold; the lib leaves them out (glyphsLib's blacklist,
 /// except `fileName`, `weightClass` and `widthClass`, which no attribute holds exactly).
-const IN_ATTRIBUTES: [&str; 5] = [FAMILY_PARAM, PS_NAME, UFO_FILENAME, FULL_FILENAME, STYLE_MAP_FAMILY];
+const IN_ATTRIBUTES: [&str; 6] = [FAMILY_PARAM, PS_NAME, UFO_FILENAME, FULL_FILENAME, STYLE_MAP_FAMILY, STYLE_MAP_STYLE];
 
 /// The depth of an instance's `<dict>` inside `<lib>` in the document.
 const LIB_DICT_LEVEL: usize = 4;
@@ -125,14 +129,16 @@ fn implied_link(style: &str, bold: bool, italic: bool) -> String {
 }
 
 /// The style-map family and style names. A link style of `Regular`, or none, means the one the
-/// style name implies; an empty one (which glyphsLib cannot hold) links to the family alone.
-pub(super) fn stylemap(inst: &Instance, family: &str) -> (String, &'static str) {
-    let style = match (inst.is_bold, inst.is_italic) {
+/// style name implies; an empty one (which glyphsLib cannot hold) links to the family alone. The
+/// style is the one the instance states outside the four, else the one its flags give.
+pub(super) fn stylemap(inst: &Instance, family: &str) -> (String, String) {
+    let flagged = match (inst.is_bold, inst.is_italic) {
         (true, true) => "bold italic",
         (true, false) => "bold",
         (false, true) => "italic",
         (false, false) => "regular",
     };
+    let style = inst.params.get(STYLE_MAP_STYLE).and_then(Value::as_str).filter(|s| !s.trim().is_empty()).unwrap_or(flagged).to_string();
     let linked = match inst.link_style.as_deref() {
         Some(l) if l != "Regular" => l.to_string(),
         _ => implied_link(&inst.name, inst.is_bold, inst.is_italic),
@@ -385,7 +391,8 @@ pub(super) fn read_static(el: &Element, ctx: &Ctx<'_>) -> Result<Instance> {
         inst.params.set(UFO_FILENAME, text(f));
     }
     // Style-map names the element leaves out are the ones ufo2ft gives the instance's font.
-    let stated_style = el.attr("stylemapstylename").map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty());
+    let stated_raw = el.attr("stylemapstylename").map(str::trim).filter(|s| !s.is_empty());
+    let stated_style = stated_raw.map(str::to_lowercase);
     // fontTools' instantiator gives the instance's UFO only the names the element states.
     let stated = StyleMapStated { family: el.attr("stylemapfamilyname").is_some_and(|s| !s.is_empty()), style: stated_style.is_some() };
     if !(stated.family && stated.style) {
@@ -393,8 +400,14 @@ pub(super) fn read_static(el: &Element, ctx: &Ctx<'_>) -> Result<Instance> {
     }
     let (fallback_family, fallback_style) = style_map_fallback(&family, &inst.name, stated_style.as_deref());
     let map_style = stated_style.unwrap_or(fallback_style);
-    inst.is_bold = map_style.contains("bold");
-    inst.is_italic = map_style.contains("italic");
+    // ufo2ft sets the style bits only for the four names exactly; another stated name (`thin`)
+    // is kept as written and sets none.
+    let ribbi = RIBBI.contains(&map_style.as_str());
+    inst.is_bold = ribbi && map_style.contains("bold");
+    inst.is_italic = ribbi && map_style.contains("italic");
+    if let (false, Some(raw)) = (ribbi, stated_raw) {
+        inst.params.set(STYLE_MAP_STYLE, text(raw));
+    }
     let map_family = el.attr("stylemapfamilyname").filter(|s| !s.is_empty()).map_or(fallback_family, str::to_string);
     let implied = implied_link(&inst.name, inst.is_bold, inst.is_italic);
     let link =
@@ -672,12 +685,12 @@ mod tests {
     #[test]
     fn style_map_names_follow_glyphslib() {
         let i = |name: &str, bold: bool, italic: bool| Instance { name: name.into(), is_bold: bold, is_italic: italic, ..Default::default() };
-        assert_eq!(stylemap(&i("Regular", false, false), "Fam"), ("Fam".to_string(), "regular"));
-        assert_eq!(stylemap(&i("Bold Italic", true, true), "Fam"), ("Fam".to_string(), "bold italic"));
-        assert_eq!(stylemap(&i("Condensed Bold", true, false), "Fam"), ("Fam Condensed".to_string(), "bold"));
-        assert_eq!(stylemap(&i("Light", false, false), "Fam"), ("Fam Light".to_string(), "regular"));
+        assert_eq!(stylemap(&i("Regular", false, false), "Fam"), ("Fam".to_string(), "regular".to_string()));
+        assert_eq!(stylemap(&i("Bold Italic", true, true), "Fam"), ("Fam".to_string(), "bold italic".to_string()));
+        assert_eq!(stylemap(&i("Condensed Bold", true, false), "Fam"), ("Fam Condensed".to_string(), "bold".to_string()));
+        assert_eq!(stylemap(&i("Light", false, false), "Fam"), ("Fam Light".to_string(), "regular".to_string()));
         let linked = Instance { link_style: Some("Light".into()), ..i("Light Italic", false, true) };
-        assert_eq!(stylemap(&linked, "Fam"), ("Fam Light".to_string(), "italic"));
+        assert_eq!(stylemap(&linked, "Fam"), ("Fam Light".to_string(), "italic".to_string()));
     }
 
     #[test]

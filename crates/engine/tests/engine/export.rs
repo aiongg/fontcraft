@@ -422,6 +422,83 @@ fn a_glyphs_font_without_a_family_name_is_named_unnamed_font() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+/// A single-master `.glyphs` source whose instances use text tokens: Light in its PostScript
+/// name, Bold in its fileName parameter.
+const TOKENS: &str = r#"{
+.appVersion = "3151";
+.formatVersion = 3;
+familyName = Tokens;
+fontMaster = (
+{
+id = m01;
+name = Regular;
+}
+);
+glyphs = (
+{
+glyphname = space;
+layers = (
+{
+layerId = m01;
+width = 200;
+}
+);
+unicode = 0020;
+}
+);
+instances = (
+{
+instanceInterpolations = {
+m01 = 1;
+};
+name = Light;
+properties = (
+{
+key = postscriptFontName;
+value = "{{{familyName}}}PS-{{{name}}}";
+}
+);
+},
+{
+customParameters = (
+{
+name = fileName;
+value = "{{{familyName}}}-File-{{{name}}}";
+}
+);
+instanceInterpolations = {
+m01 = 1;
+};
+name = Bold;
+}
+);
+unitsPerEm = 1000;
+versionMajor = 1;
+versionMinor = 0;
+}
+"#;
+
+/// Files are named by the PostScript name with its text tokens expanded for the instance, as
+/// the name table has it; the fileName parameter is used as written, as fontmake writes it.
+#[test]
+fn file_names_expand_the_tokens_of_the_postscript_name() {
+    let dir = temp("tokens");
+    let path = dir.join("Tokens.glyphs");
+    std::fs::write(&path, TOKENS).unwrap();
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": path }));
+    let out_dir = dir.join("out");
+    let plan = run(&mut s, "font.compilePlan", json!({"destination": out_dir, "sections": ["outputs"]}));
+    assert!(plan.to_string().contains("TokensPS-Light.ttf"), "{plan}");
+    run(&mut s, "font.compile", json!({"destination": out_dir, "timestamp": 0}));
+    assert_eq!(names(&out_dir), ["TokensPS-Light.ttf", "{{{familyName}}}-File-{{{name}}}.ttf"]);
+    let bytes = std::fs::read(out_dir.join("TokensPS-Light.ttf")).unwrap();
+    let font = skrifa::FontRef::new(&bytes).unwrap();
+    let ps = font.localized_strings(skrifa::string::StringId::POSTSCRIPT_NAME).english_or_first().unwrap().to_string();
+    assert_eq!(ps, "TokensPS-Light");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 /// How many contours glyph `name` of a compiled font has.
 fn contours(bytes: &[u8], name: char) -> usize {
     struct Count(usize);
