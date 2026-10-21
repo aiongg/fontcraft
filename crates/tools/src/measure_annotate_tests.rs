@@ -254,3 +254,52 @@ fn runs_of(out: &Output) -> Vec<(&str, Value)> {
         })
         .collect()
 }
+
+#[test]
+fn modifiers_hold_the_measurement_and_select_tools_until_released() {
+    let mut shell = Shell::new(layer());
+    let mut tools = Toolbox::new();
+    let hold = Modifiers::CMD.with_alt().with_ctrl();
+    tools.select("draw").unwrap();
+    shell.run(|cx| tools.modifiers(cx, hold));
+    assert_eq!((tools.active_id(), tools.base_id()), ("measurement", "draw"));
+    // The held keys do not reach the ruler as Ctrl, so its press still snaps to the corner.
+    shell.run(|cx| tools.pointer(cx, &PointerEvent::new(Down, 102.0, 101.0, hold)));
+    shell.run(|cx| tools.pointer(cx, &PointerEvent::new(Drag, 250.0, 160.0, hold)));
+    // Let go during the drag: the tool stays until the button comes up.
+    shell.run(|cx| tools.modifiers(cx, NONE));
+    assert_eq!(tools.active_id(), "measurement");
+    let from = tools.overlays().iter().find_map(|o| match o {
+        Overlay::Line { kind: OverlayKind::Ruler, from, .. } => Some(*from),
+        _ => None,
+    });
+    assert_eq!(from, Some(Point::new(100.0, 100.0)));
+    shell.run(|cx| tools.pointer(cx, &PointerEvent::new(Up, 250.0, 160.0, NONE)));
+    assert_eq!(tools.active_id(), "draw", "the release returns to the chosen tool");
+    assert!(tools.overlays().is_empty(), "the ruler goes with the held tool");
+    assert!(shell.actions.is_empty(), "measuring changes nothing: {:?}", shell.actions);
+
+    // A press with the keys already down takes up the tool at once.
+    shell.run(|cx| tools.pointer(cx, &PointerEvent::new(Down, 300.0, 0.0, hold)));
+    assert_eq!(tools.active_id(), "measurement");
+    shell.run(|cx| tools.pointer(cx, &PointerEvent::new(Up, 300.0, 0.0, NONE)));
+    assert_eq!(tools.active_id(), "draw");
+
+    // Cmd in the Measurement tool holds the Select tool; Cmd+Alt+Ctrl there changes nothing.
+    tools.select("measurement").unwrap();
+    shell.run(|cx| tools.modifiers(cx, Modifiers::CMD));
+    assert_eq!(tools.active_id(), "select");
+    shell.run(|cx| tools.modifiers(cx, NONE));
+    assert_eq!(tools.active_id(), "measurement");
+    shell.run(|cx| tools.modifiers(cx, hold));
+    assert_eq!(tools.active_id(), "measurement");
+    // In the Text tool the keys move the measurement line instead.
+    tools.select("text").unwrap();
+    shell.run(|cx| tools.modifiers(cx, hold));
+    assert_eq!(tools.active_id(), "text");
+    // Choosing a tool drops a held one.
+    tools.select("draw").unwrap();
+    shell.run(|cx| tools.modifiers(cx, hold));
+    tools.select("select").unwrap();
+    assert_eq!(tools.active_id(), "select");
+}

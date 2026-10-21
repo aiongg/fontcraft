@@ -1603,11 +1603,18 @@ milestone = "M3"
 summary = "Read-only tool for coordinates and distances. It labels all points of every glyph visible in the tab and measures along a dragged ruler, showing the ruler's angle at its end."
 ref = "Edit View › Measuring › Measurement Tool"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 10:31 and 29:27: with the Measurement tool active, every node and handle is labelled with its X and Y, and the deltas between consecutive on-curve nodes appear in red as dx, dy pairs. Not shown: the ruler drag, Shift, G, the temporary-tool keys. Built in M3.9. The labels cover the edited glyph only, and Cmd and Cmd+Ctrl+Alt do not switch tools yet."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 10:31 and 29:27: with the Measurement tool active, every node and handle is labelled with its X and Y, and the deltas between consecutive on-curve nodes appear in red as dx, dy pairs. Not shown: the ruler drag, Shift, G, the temporary-tool keys. Built in M3.9; M3.21 added every glyph of the line and the temporary tools: Cmd held in the Measurement tool gives the Select tool and Cmd+Ctrl+Alt held in another tool gives the Measurement tool, as the handbook documents (not yet observed)."
 guesses = [
   "The ruler's ends snap unless Ctrl is held, and Shift keeps it horizontal or vertical, whichever is nearer.",
   "The ruler stays until the next press, Escape or a tool change (03b question 9).",
   "G with any modifiers adds the measurement guide.",
+  "A tool held with modifiers waits for a gesture in progress to end before it takes over or gives way, and its ruler goes when it gives way.",
+  "The held tool does not see the keys that hold it, so the held Measurement tool's ruler snaps and the held Select tool clicks as a plain click.",
+  "Cmd+Ctrl+Alt does not hold the Measurement tool in the Text tool, where the same keys move the measurement line.",
+]
+observe = [
+  "Hold Cmd+Alt+Ctrl in the Draw tool: the coordinates show; drag a ruler, let the keys go during the drag and see whether the ruler stays.",
+  "Hold Cmd in the Measurement tool and click a node: it is selected as with the Select tool.",
 ]
 
 [[command]]
@@ -1616,7 +1623,7 @@ label = "Measure Along Line"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer?: id, side?: foreground|background, from?: [x, y], to?: [x, y], guide?: {scope: local|global, index}} → {crossings, gaps, length?, angle?}"
+params = "{glyph: name, layer?: id, side?: foreground|background, from?: [x, y], to?: [x, y], guide?: {scope: local|global, index}, placements?: [{glyph, layer?, side?, x, y}]} → {crossings, gaps, length?, angle?}"
 area = "drawing"
 milestone = "M3"
 summary = "Query returning the points where a line segment, or the whole line of a guide, crosses the layer's outlines and components, the distances between consecutive crossings with X deltas also relative to the italic angle, and the line's angle. Headless form of dragging a ruler with the Measurement tool and of the numbers a measurement guide prints; overlapping regions are treated as merged."
@@ -1626,6 +1633,7 @@ notes = "Each gap says whether it lies inside the outline (a stem) or outside (a
 guesses = [
   "Crossings follow the nonzero winding rule, and a line that only touches a contour does not cross it; the handbook does not say how the reference merges overlapping contours.",
   "Components are measured like paths, and the ruler stays until the next click or tool change (03b question 10).",
+  "With placements, the outlines of all glyphs are merged together, so two glyphs that overlap measure as one shape; a ruler across two kerned glyphs that collide would settle it.",
 ]
 
 [[command]]
@@ -1634,7 +1642,7 @@ label = "List Point Coordinates"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer?: id, side?: foreground|background} → {points, deltas, anchors, italicAngle}"
+params = "{glyph: name, layer?: id, side?: foreground|background, placements?: [{glyph, layer?, side?, x, y}]} → {points, deltas, anchors, overlaps, italicAngle, placements?}"
 area = "drawing"
 milestone = "M3"
 summary = "Query returning every on-curve node, off-curve point and anchor of a layer with coordinates, plus the X and Y deltas between consecutive on-curve nodes with X corrected for the italic angle. Headless form of the labels the Measurement tool draws."
@@ -1715,7 +1723,7 @@ milestone = "M3"
 summary = "The ruler shows its angle at its end point in counterclockwise degrees, with 0 meaning a ruler dragged straight up."
 ref = "Edit View › Measuring › Measurement Tool"
 status = "handbook"
-notes = "Built in M3.9: the angle `measure.ruler` returns, printed at the ruler's end."
+notes = "Built in M3.9: the angle `measure.ruler` returns, printed at the ruler's end. Checked in M3.21 against the handbook: the label is that angle (0 for a ruler dragged straight up, 90 pointing left, 270 pointing right), not the angle of a guide laid along the ruler. Documented, not yet observed."
 
 [[behavior]]
 id = "measurement.allVisibleGlyphs"
@@ -1724,7 +1732,13 @@ milestone = "M3"
 summary = "Coordinates and rulers of the Measurement tool cover every glyph shown in the Edit View tab, not only the active one, and a ruler may cross several glyphs."
 ref = "Edit View › Measuring › Measurement Tool"
 status = "handbook"
-notes = "Not built in M3.9: the labels and the ruler cover the edited glyph only."
+notes = "Documented, not yet observed. Built in M3.21: `measure.ruler` and `measure.coordinates` take the tab's glyphs with their positions (`placements`, at most 200, the nearest to the edited glyph), so the labels show on every glyph in its own coordinates and a ruler measures across glyphs, gaps between them included."
+guesses = [
+  "When the text holds more than 200 glyphs, the 200 nearest the edited one in the text are measured.",
+]
+observe = [
+  "Type \"HO\", edit H, choose the Measurement tool and drag a ruler across both glyphs: the gap between H and O is labelled.",
+]
 
 [[behavior]]
 id = "measurement.overlapsIgnored"
@@ -1733,7 +1747,11 @@ milestone = "M3"
 summary = "Rulers and measurement guides measure the merged shape: crossings that lie inside an overlap of paths are skipped. Such overlapped stretches are drawn light grey to show they will vanish when overlaps are removed at export."
 ref = "Edit View › Measuring › Measurement Guides"
 status = "handbook"
-notes = "M3.9: crossings inside overlaps are skipped (`measure.ruler`); the overlapped stretches are not drawn grey yet."
+notes = "Documented, not yet observed. M3.9: crossings inside overlaps are skipped (`measure.ruler`). M3.21: while the Measurement tool is active, the stretches of outline inside an overlap are drawn light grey over the outline (`measure.coordinates` returns them as `overlaps`)."
+guesses = [
+  "The grey stretches show only while the Measurement tool is active; the handbook mentions them under measuring and does not say whether other tools show them.",
+  "A stretch counts as overlapped where the outline is filled on both sides of it, so two contours that share an edge exactly grey that edge.",
+]
 
 [[behavior]]
 id = "measurement.guidesAlwaysOn"

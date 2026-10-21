@@ -8,6 +8,9 @@
 //! | `Shift`+drag | the ruler stays horizontal or vertical, whichever is nearer |
 //! | `G` while dragging | a measurement guide along the ruler (`guide.add` and `guide.toggleMeasurement` as one step) |
 //! | `Escape` | removes the ruler |
+//! | `Cmd` held | the Select tool until it comes up ([`crate::toolbox`]) |
+//!
+//! `Cmd+Alt+Ctrl` held in another tool gives this tool until the keys come up.
 //!
 //! The ruler stays after the button comes up, until the next press or a tool change. The tool
 //! changes nothing but the guide `G` asks for.

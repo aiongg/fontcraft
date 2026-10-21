@@ -154,3 +154,67 @@ fn text_mode_glyph_commands_take_the_glyphs_of_the_text_selection() {
     let edited = app.state.tab().unwrap().edited_glyph().unwrap().to_string();
     assert_eq!(tools_glue::with_targets(&app, "glyph.toggleLocked", json!({})), json!({"glyphs": [edited]}));
 }
+
+/// The texts drawn in `color`, sorted.
+fn texts(shapes: &[Shape], color: egui::Color32) -> Vec<String> {
+    let mut out: Vec<String> = shapes
+        .iter()
+        .filter_map(|s| match s {
+            Shape::Text(text) if text.fallback_color == color => Some(text.galley.text().to_string()),
+            _ => None,
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+/// The Measurement tool in an Edit View tab on "AB", A edited: A is a square 0,0–100,100 and B
+/// two squares that overlap in 50,0–100,100. The tool labels B too, draws B's two overlapped
+/// edges light grey, and a ruler crosses both glyphs.
+#[test]
+fn the_measurement_tool_covers_every_glyph_of_the_line() {
+    let mut app = FontcraftApp::default();
+    let square = |x: f64| json!({"x": x, "y": 0, "width": 100, "height": 100});
+    for (glyph, x) in [("A", 0.0), ("B", 0.0), ("B", 50.0)] {
+        let mut p = square(x);
+        p["glyph"] = json!(glyph);
+        app.run("path.addRectangle", &p).unwrap();
+    }
+    app.run("view.newTab", &json!({"glyphs": ["A", "B"]})).unwrap();
+    app.run("tool.select", &json!({"tool": "measurement"})).unwrap();
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut app);
+    let tab = app.state.tab().unwrap();
+    assert_eq!(tab.edited_glyph(), Some("A"));
+    let layout = view::text_layout(&app.session, &app.layouts, tab).unwrap();
+    let b = layout.placed[1].x - layout.placed[0].x;
+    assert!(b >= 150.0, "B sits after A's advance: {b}");
+    app.run("view.setZoom", &json!({"size": 300, "center": [b / 2.0, 50.0]})).unwrap();
+    frame(&ctx, &mut app);
+    let shapes = frame(&ctx, &mut app);
+    let t = app.tokens.clone();
+    let on_curve = texts(&shapes, t.measure_on_curve);
+    assert!(on_curve.contains(&"150, 0".to_string()), "B's own coordinates: {on_curve:?}");
+    assert_eq!(on_curve.iter().filter(|l| *l == "0, 0").count(), 2, "both glyphs' first corner: {on_curve:?}");
+    let grey = shapes.iter().filter(|s| matches!(s, Shape::LineSegment { stroke, .. } if stroke.color == t.measure_overlap)).count();
+    assert_eq!(grey, 2, "B's two edges inside the overlap");
+
+    // Ctrl keeps the ends where they are put.
+    let mods = json!(["ctrl"]);
+    let end = b + 250.0;
+    pointer(
+        &mut app,
+        json!([
+            {"kind": "down", "x": -10, "y": 50, "mods": mods},
+            {"kind": "drag", "x": end / 2.0, "y": 50, "mods": mods},
+            {"kind": "drag", "x": end, "y": 50, "mods": mods},
+            {"kind": "up", "x": end, "y": 50, "mods": mods},
+        ]),
+    );
+    frame(&ctx, &mut app);
+    let shapes = frame(&ctx, &mut app);
+    let ruler = texts(&shapes, t.measure_ruler);
+    let mut want = vec!["100".to_string(), format_number(b - 100.0), "150".to_string(), "270°".to_string()];
+    want.sort();
+    assert_eq!(ruler, want, "A, the space to B, B as one shape, and the angle (0 is up)");
+}
