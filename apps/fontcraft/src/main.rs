@@ -18,6 +18,10 @@
 //! but runs none. Started without a file, it shows the Start Window unless the person
 //! turned that off. A document opens with one Edit View tab per display string it stores, and
 //! saving writes the open tabs back.
+//!
+//! Closing the window, the app menu's Quit and File › Quit ask about each document with unsaved
+//! changes first (`shell::close_prompt` in `fontcraft-ui-egui`); a close the app lets through
+//! quits the platform's way (`craft-quit`).
 #![forbid(unsafe_code)]
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -107,6 +111,20 @@ impl Shell {
 }
 
 impl eframe::App for Shell {
+    /// Runs before `ui`, and also while the window is minimized or hidden: the app's answer to a
+    /// close request comes first, then the platform's quit takes over a close the app let through.
+    fn logic(&mut self, ctx: &eframe::egui::Context, _frame: &mut eframe::Frame) {
+        if let Err(panic) = fontcraft_engine::guard::catch_panic(|| self.app.logic(ctx)) {
+            self.app.state.status = format!("internal error (please report it): {panic}");
+            // Without the app's answer, unsaved work could be lost: keep the window.
+            if ctx.input(|i| i.viewport().close_requested()) {
+                ctx.send_viewport_cmd(eframe::egui::ViewportCommand::CancelClose);
+            }
+        }
+        // macOS: quit through the platform instead of dropping the window (craft-quit).
+        craft_quit::on_close_request(ctx);
+    }
+
     fn ui(&mut self, ui: &mut eframe::egui::Ui, _frame: &mut eframe::Frame) {
         // Control requests run on the UI thread, between frames, like a click would.
         if let Some(inbox) = &mut self.control {
@@ -248,6 +266,14 @@ fn run() -> Result<(), String> {
         "FontCraft",
         options,
         Box::new(move |cc| {
+            // winit's own app menu quits without asking; this one's Quit closes the window, so the
+            // question about unsaved documents comes first.
+            #[cfg(target_os = "macos")]
+            {
+                if let Err(e) = craft_quit::install_app_menu(&cc.egui_ctx, "FontCraft") {
+                    eprintln!("fontcraft: the app menu could not be installed, so its Quit does not ask about unsaved documents: {e}");
+                }
+            }
             let control = match port {
                 Some(port) => match control_server::start(port, cc.egui_ctx.clone()) {
                     Ok(inbox) => {

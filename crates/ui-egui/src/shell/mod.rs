@@ -10,6 +10,7 @@ pub mod annotation;
 pub mod attach;
 pub mod audit;
 pub mod clipboard;
+pub mod close_prompt;
 pub mod command_console;
 pub mod compare_family;
 pub mod compare_fonts;
@@ -129,6 +130,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (font_audit::COMMANDS, font_audit::run),
     (crate::dialogs::audit_profile::COMMANDS, crate::dialogs::audit_profile::run),
     (table_viewer::COMMANDS, table_viewer::run),
+    (close_prompt::COMMANDS, close_prompt::run),
 ];
 
 /// The shell commands' parameters that name files, declared as engine commands declare theirs

@@ -60,6 +60,9 @@ craft-atomic = { git = "https://github.com/storytold/craft-libs", rev = "e9546e1
 # The system print spooler (CUPS on macOS and Linux, the XPS print API on Windows), for printing
 # PDF proofs (M12.36).
 craft-print = { git = "https://github.com/storytold/craft-libs", rev = "e9546e191dd62f2bc1d61eca45dbdc2f1b3c1d8e" }
+# The desktop shell's close and quit handling: on macOS the app quits through the platform's own
+# path, and the app menu's Quit asks about unsaved documents as the close box does.
+craft-quit = { git = "https://github.com/storytold/craft-libs", rev = "e9546e191dd62f2bc1d61eca45dbdc2f1b3c1d8e" }
 
 # foundation (all MIT OR Apache-2.0 unless noted)
 kurbo = { version = "0.13", features = ["serde"] }

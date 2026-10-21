@@ -18,3 +18,8 @@ rfd.workspace = true
 serde_json.workspace = true
 log.workspace = true
 ureq.workspace = true
+craft-quit = { workspace = true, features = ["egui"] }
+
+# The app menu whose Quit asks first.
+[target.'cfg(target_os = "macos")'.dependencies]
+craft-quit = { workspace = true, features = ["egui", "menu"] }

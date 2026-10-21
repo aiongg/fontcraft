@@ -102,6 +102,7 @@ milestone = "M0"
 summary = "Closes the active document. With unsaved changes the app asks Save, Don't Save or Cancel; headless, the command fails unless discard is true."
 ref = "platform convention"
 status = "memory"
+notes = "Window (M14.3): File › Close, Cmd+W and `ui.menu.invoke` on a modified document open window.closePrompt for it instead of failing. Save writes it (with the save chooser when it has no file) and closes it; Don't Save closes it with discard; Cancel, a cancelled chooser or a failed save keep it open. Run as a command (`engine.execute`, MCP, the CLI) it keeps refusing unsaved changes unless discard is true."
 guesses = [
   "The Save, Don't Save and Cancel question and Cmd+W are recalled from the reference, not read in a source.",
 ]
@@ -128,15 +129,59 @@ guesses = [
 [[command]]
 id = "app.quit"
 label = "Quit FontCraft"
-menu = ["FontCraft"]
+menu = ["File"]
 shortcut = "Cmd+Q"
 kind = "ui"
-params = "{discard?: bool} → {}"
+params = "{discard?: bool} → {quitting: true}"
 area = "ui-chrome"
 milestone = "M14"
 summary = "Quits after asking about each document with unsaved changes. Background saves and exports finish first."
 ref = "platform convention"
-status = "memory"
+status = "inferred"
+notes = "M14.3: the menu item (File › Quit FontCraft in the window's menu bar), Cmd+Q and `ui.menu.invoke` open window.closePrompt when a document or project has unsaved changes, and quit at once when none has. On macOS the app menu's Quit closes the window, which asks the same question (craft-quit's app menu); a close the app lets through quits through the platform. Run as a command, it refuses unsaved work unless discard is true, naming the documents. Saves and exports run on the window's thread, so none is running when the command runs."
+guesses = [
+  "Quit is listed at the end of the File menu in the window's own menu bar on every platform; on macOS it is also in the app menu.",
+]
+observe = [
+  "Open two new fonts, change both, press Cmd+Q: note whether one question per document appears or one list of all of them, and the order the documents are asked about.",
+  "In the question, note the buttons' labels and their order from left to right, and which one Return and Escape press.",
+]
+
+[[command]]
+id = "window.closePrompt"
+label = "Unsaved Changes"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{answer?: \"save\" | \"dontSave\" | \"cancel\"} → {open, purpose: \"close\" | \"quit\" | null, document, kind: \"font\" | \"project\" | null, remaining: [titles]}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "The question asked before unsaved work is closed: by the window's close box, by Quit, or by File › Close on a modified document. It asks about one document at a time and shows it, with Save, Don't Save and Cancel. Save writes the document (with the save chooser when it has no file) and Don't Save leaves its changes; both move to the next document with unsaved changes, fonts first, then projects. Once none is left the window closes, or for File › Close the document does. Cancel, a cancelled chooser or a failed save stop closing and keep everything open. Return is Save and Escape is Cancel. While it is open the app takes no other command. Without answer the command reports the question; the control channel answers it with answer."
+ref = "platform convention"
+status = "inferred"
+guesses = [
+  "One question per document, asked in turn, showing the document asked about; the reference may list every document in one question.",
+  "Don't Save sits on the left, Cancel and Save on the right with Save rightmost, as macOS document apps place them.",
+  "A failed or cancelled save stops the whole quit rather than moving on to the next document.",
+]
+observe = [
+  "Change a font, click the window's close box: note the question's text, its buttons and their order.",
+  "In the question, choose Save for a font never saved and cancel the file chooser: note whether the window stays open and the question closes.",
+]
+
+[[behavior]]
+id = "window.titleShowsDocument"
+area = "ui-chrome"
+milestone = "M14"
+summary = "The window title names the active document and says Edited while it has unsaved changes: \"Name — Edited\". Off macOS the app's name follows (\"Name — Edited — FontCraft\"); with no document open the title is \"FontCraft\"."
+ref = "platform convention"
+status = "inferred"
+guesses = [
+  "The edited mark is the word Edited after the name, as macOS document windows show it; off macOS the app's name follows because the taskbar shows only the title.",
+]
+observe = [
+  "Open a font, change it and note the window title before and after, and after saving.",
+]
 
 [[command]]
 id = "app.about"

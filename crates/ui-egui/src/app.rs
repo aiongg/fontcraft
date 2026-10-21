@@ -54,6 +54,8 @@ pub struct FontcraftApp {
     pub(crate) images: canvas::images::ImageUi,
     /// Colour glyphs in Edit View: their textures, the svg files read, the gradient knob drag.
     pub(crate) color_ui: canvas::color::ColorUi,
+    /// The question asked before unsaved work is closed, and the window title.
+    pub close_prompt: shell::close_prompt::ClosePrompt,
     themed: bool,
 }
 
@@ -88,6 +90,7 @@ impl FontcraftApp {
             font_view: Default::default(),
             images: Default::default(),
             color_ui: Default::default(),
+            close_prompt: Default::default(),
             themed: false,
         }
     }
@@ -213,6 +216,9 @@ impl FontcraftApp {
     /// parameters opens the dialog (the result is the dialog's state); any other runs on the
     /// selection's targets through [`Self::run_from_shell`].
     pub(crate) fn run_menu_command(&mut self, id: &str, params: Value) -> Result<Value, String> {
+        if let Some(result) = shell::close_prompt::menu_command(self, id, &params) {
+            return result;
+        }
         if let Some(result) = shell::clipboard::kerning_window_copy(self, id) {
             return result;
         }
@@ -338,6 +344,13 @@ impl FontcraftApp {
         json!({ "commands": list })
     }
 
+    /// The part of a frame that runs even while the window is minimized or hidden, before
+    /// [`Self::ui`]: a request to close the window with unsaved work is cancelled and asks first
+    /// ([`shell::close_prompt`]).
+    pub fn logic(&mut self, ctx: &egui::Context) {
+        shell::close_prompt::on_close_request(self, ctx);
+    }
+
     /// Draws one frame into `ui` (the root of a window or of a headless test context).
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         if !self.themed {
@@ -368,10 +381,15 @@ impl FontcraftApp {
         }
         shell::windows(self, ui, &mut pending);
         crate::dialogs::show(self, ui);
+        shell::close_prompt::show(self, ui, &mut pending);
         // Commands run after drawing, so a frame never sees a half-changed document. While a
         // dialog is open only view commands run. A menu item whose command has a dialog opens it.
         for (id, params) in pending {
             if self.dialog.is_some() && !is_ui_command(id) {
+                continue;
+            }
+            // The question about unsaved changes takes only its own answers.
+            if self.close_prompt.is_open() && id != "window.closePrompt" {
                 continue;
             }
             // Edit › Copy in a project window copies its selected instances.
@@ -413,6 +431,7 @@ impl FontcraftApp {
         }
         self.tools.text_focus_at_end = ui.ctx().egui_wants_keyboard_input();
         self.tools.text_edit_at_end = ui.ctx().text_edit_focused();
+        shell::close_prompt::end_frame(self, ui.ctx());
     }
 
     fn menu_bar(&mut self, ui: &mut egui::Ui, pending: &mut Vec<(&'static str, Value)>) {
