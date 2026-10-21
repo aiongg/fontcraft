@@ -104,6 +104,12 @@ pub const SETTINGS: &[SettingDef] = &[
     SettingDef { id: "export.ttfAutohintBinary", kind: Kind::Text, default: DefaultValue::Text("") },
     SettingDef { id: "start.showAtLaunch", kind: Kind::Bool, default: DefaultValue::Bool(true) },
     SettingDef { id: "user.disableAutomaticAlignmentForImportedFiles", kind: Kind::Bool, default: DefaultValue::Bool(false) },
+    SettingDef { id: "user.crashReportEmail", kind: Kind::Text, default: DefaultValue::Text("") },
+    SettingDef { id: "user.crashReportName", kind: Kind::Text, default: DefaultValue::Text("") },
+    SettingDef { id: "user.disableLocalization", kind: Kind::Bool, default: DefaultValue::Bool(false) },
+    SettingDef { id: "user.keepGlyphNamesFromImportedFiles", kind: Kind::Bool, default: DefaultValue::Bool(false) },
+    SettingDef { id: "user.sendCrashReports", kind: Kind::Bool, default: DefaultValue::Bool(false) },
+    SettingDef { id: "user.useVersions", kind: Kind::Bool, default: DefaultValue::Bool(false) },
 ];
 
 /// Ids that hold other commands' data. `settings.set` refuses them.

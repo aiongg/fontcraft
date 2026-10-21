@@ -38,6 +38,7 @@ pub mod preview;
 pub mod preview_panel;
 pub mod project_window;
 pub mod selection;
+pub mod settings_window;
 pub mod space_center;
 pub mod start_window;
 pub mod status_bar;
@@ -129,6 +130,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (font_audit::COMMANDS, font_audit::run),
     (crate::dialogs::audit_profile::COMMANDS, crate::dialogs::audit_profile::run),
     (table_viewer::COMMANDS, table_viewer::run),
+    (settings_window::COMMANDS, settings_window::run),
 ];
 
 /// The shell commands' parameters that name files, declared as engine commands declare theirs
@@ -185,6 +187,7 @@ pub fn windows(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'s
     font_audit::show(app, ui, pending);
     crate::dialogs::audit_profile::show(app, ui, pending);
     table_viewer::show(app, ui, pending);
+    settings_window::show(app, ui, pending);
 }
 
 pub fn is_ui_command(id: &str) -> bool {
