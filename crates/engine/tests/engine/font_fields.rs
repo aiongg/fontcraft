@@ -186,7 +186,18 @@ fn rows_paste_into_another_font_and_an_export() {
 
     refused(&mut d, "font.info.pasteRows", json!({"text": "not rows"}));
     refused(&mut d, "font.info.pasteRows", json!({"text": text, "mode": "merge"}));
-    refused(&mut d, "font.info.pasteRows", json!({"rows": [{"kind": "field", "key": "familyNames", "value": [{"language": "XYZ", "value": "?"}]}]}));
+    // A row whose value its check refuses is skipped and listed; the rest are pasted.
+    let rows = json!([
+        {"kind": "field", "key": "familyNames", "value": [{"language": "XYZ", "value": "?"}]},
+        {"kind": "param", "key": "gasp Table", "value": {"65536": 1}},
+        {"kind": "field", "key": "vendorID", "value": "ABCD"},
+    ]);
+    let r = run(&mut d, "font.info.pasteRows", json!({"rows": rows}));
+    let skipped: Vec<&str> = r["skipped"].as_array().unwrap().iter().map(|s| s["key"].as_str().unwrap()).collect();
+    assert_eq!(skipped, ["familyNames", "gasp Table"], "{r}");
+    assert!(r["skipped"][1]["reason"].as_str().unwrap().contains("65536"), "{r}");
+    assert_eq!(d.font().unwrap().info.properties.value("vendorID"), Some("ABCD"), "the good row is pasted");
+    assert!(d.font().unwrap().info.params.get("gasp Table").is_none());
     refused(&mut d, "font.info.copyRows", json!({"keys": ["nothingHere"]}));
 }
 

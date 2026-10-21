@@ -1110,6 +1110,10 @@ pub fn type_text(app: &mut FontcraftApp, text: &str) -> bool {
 /// The dialog's keys among this frame's events, taken before anything else sees them. `Tab`
 /// stays: egui moves the keyboard between the fields itself.
 pub fn frame_keys(app: &mut FontcraftApp, ctx: &egui::Context) {
+    // The question about unsaved changes, open in front, takes the keys.
+    if app.close_prompt.is_open() {
+        return;
+    }
     let Some(d) = &app.dialog else { return };
     // Cmd+A selects every row of the dialog's list while no text field takes the keyboard,
     // before the menu shortcuts see it.

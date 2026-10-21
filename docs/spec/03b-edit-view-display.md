@@ -309,7 +309,8 @@ How `measure.ruler` finds crossings (our design):
 How FontCraft's Measurement tool behaves (our decisions where the handbook is silent):
 
 - The labels and the ruler cover every glyph of the tab's text, at most the 200 nearest the edited
-  glyph. Each glyph is labelled in its own coordinates. A label shows at most two decimals.
+  glyph. Past 500,000 outline elements in all, the farthest glyphs are left out (`truncated`);
+  the overlap test also has one work limit for the line, spent on the nearest glyphs first. Each glyph is labelled in its own coordinates. A label shows at most two decimals.
   Deltas print `italicDx, dy`.
 - The ruler's ends snap like a dragged point (`Ctrl` turns it off). With `Shift`, the ruler is
   horizontal or vertical, whichever is nearer to the pointer; it does not snap then.
@@ -322,9 +323,11 @@ How FontCraft's Measurement tool behaves (our decisions where the handbook is si
   the outline in light grey (`measure_overlap`). A stretch is overlapped where the outline is
   filled on both sides of it (non-zero winding), which covers a contour crossing itself.
   `measure.coordinates` returns them as polylines (`overlaps`).
-- `Cmd` held in the Measurement tool gives the Select tool; `Cmd+Ctrl+Alt` held in any other tool
-  but the Text tool gives the Measurement tool. Off the Mac, Control counts as Cmd, so the keys
-  are `Ctrl` and `Ctrl+Alt`. The held tool takes over when no gesture is in progress, does not see
+- `Cmd` held in the Measurement tool gives the Select tool (with `Alt` too); `Cmd+Ctrl+Alt` held
+  in any other tool but the Text tool gives the Measurement tool. Off the Mac the Control key
+  reports Cmd as well, the Windows and Super keys do not reach the app, and `Ctrl+Alt` is also
+  AltGr and the Select tool's mirror drag. There the keys are `Ctrl` (without `Alt`) for the
+  Select tool and `Ctrl+Alt+Shift` for the Measurement tool. The held tool takes over when no gesture is in progress, does not see
   the keys that hold it (so the ruler still snaps), and gives way when they come up and its own
   gesture is over; its ruler goes with it. In the Text tool the keys move the measurement line.
 - Measurement guides print each gap's distance at its middle, in the guide's colour, with a dot

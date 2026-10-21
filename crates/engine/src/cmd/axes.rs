@@ -63,7 +63,15 @@ const PREDEFINED: [(&str, &str, bool); 14] = [
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
-        cmd!(query "font.axes.list", "List Axes", [], None, "{} the design axes in order → {axes: [{index, name, tag, hidden}]}", has_doc, list),
+        cmd!(
+            query "font.axes.list",
+            "List Axes",
+            [],
+            None,
+            "{} the design axes in order, each with what the tag rules say about its tag and whether another axis shares it → {axes: [{index, name, tag, hidden, warnings: [string]}]}",
+            has_doc,
+            list
+        ),
         cmd!(
             "font.axes.add",
             "Add Axis",
@@ -96,7 +104,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Reorder Axes",
             [],
             None,
-            "{order: [tag]} put the axes in this order, every tag once; every location, special-layer coordinate and range list is permuted with them, so no location changes → {axes: [tag]}",
+            "{order: [index|tag]} put the axes in this order, every axis once, each by its index or its tag (a tag two axes share is refused: give indexes); every location, special-layer coordinate and range list is permuted with them, so no location changes → {axes: [tag]}",
             has_doc,
             reorder
         ),
@@ -114,7 +122,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Master Axes Coordinates",
             [],
             None,
-            "{masters: [id|name|index], location: {tag: number}} place the masters in the designspace; axes not named keep their coordinates → {masters: [id], warnings: [string]}",
+            "{masters: [id|name|index], location: {tag: number} | [number|null]} place the masters in the designspace: by tag, or one entry per axis in order, null for an axis to leave (a tag two axes share is refused: give the list); axes not named keep their coordinates → {masters: [id], warnings: [string]}",
             has_doc,
             set_master_location
         ),
@@ -123,9 +131,18 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Instance Axes Coordinates",
             [],
             None,
-            "{instances: [id|name|index], location: {tag: number}} place the instances in the designspace; axes not named keep their coordinates. A location beyond the masters is extrapolated and named in the warnings → {instances: [index], warnings: [string]}",
+            "{instances: [id|name|index], location: {tag: number} | [number|null]} place the instances in the designspace: by tag, or one entry per axis in order, null for an axis to leave (a tag two axes share is refused: give the list); axes not named keep their coordinates. A location beyond the masters is extrapolated and named in the warnings, at most 10 by name → {instances: [index], warnings: [string]}",
             has_doc,
             set_instance_location
+        ),
+        cmd!(
+            query "font.instance.placement",
+            "Instance Placement",
+            [],
+            None,
+            "{instances?: [id|name|index] (default all)} where each instance lies against the masters: the tags of the axes on which a static export extrapolates it, and the warning font.instance.setAxisLocation gives for it. A variable font setting has none → {instances: [{index, outside: [tag], warning?: string}]}",
+            has_doc,
+            placement
         ),
     ]
 }
@@ -172,17 +189,21 @@ fn check_tag(p: &Params, tag: &str) -> Result<()> {
     Ok(())
 }
 
-/// Refuses a name or a tag another axis than `except` already has.
-fn check_unique(p: &Params, font: &Font, name: &str, tag: &str, except: Option<usize>) -> Result<()> {
-    let key = tag_key(tag);
+/// Refuses a name or a tag another axis than `except` already has; `None` checks nothing.
+fn check_unique(p: &Params, font: &Font, name: Option<&str>, tag: Option<&str>, except: Option<usize>) -> Result<()> {
+    let key = tag.map(tag_key);
     for (i, a) in font.axes.iter().enumerate() {
         if Some(i) == except {
             continue;
         }
-        if a.name == name {
+        if let Some(name) = name
+            && a.name == name
+        {
             return Err(p.bad(format!("the font already has an axis named `{name}`")));
         }
-        if tag_key(&a.tag) == key {
+        if let (Some(tag), Some(key)) = (tag, &key)
+            && tag_key(&a.tag) == *key
+        {
             return Err(p.bad(format!("the font already has an axis with tag `{tag}` (`{}`)", a.name)));
         }
     }
@@ -240,33 +261,68 @@ fn axis_index(p: &Params, font: &Font) -> Result<usize> {
             let i = p.opt_int("axis", 0, last)?.ok_or_else(|| p.bad("`axis` is required"))?;
             usize::try_from(i).map_err(|_| p.bad("`axis` must not be negative"))
         }
-        Value::String(key) => font
-            .axes
-            .iter()
-            .position(|a| a.tag == *key)
-            .or_else(|| font.axes.iter().position(|a| a.name == *key))
-            .ok_or_else(|| p.bad(format!("the font has no axis `{key}`"))),
+        Value::String(key) => match unique_position(p, font, |a| a.tag == *key, key)? {
+            Some(i) => Ok(i),
+            None => unique_position(p, font, |a| a.name == *key, key)?.ok_or_else(|| p.bad(format!("the font has no axis `{key}`"))),
+        },
         other => Err(p.bad(format!("`axis` must be an index, a tag or a name, got {}", kind(other)))),
     }
 }
 
-/// `location: {tag: number}` as (axis index, coordinate) pairs: at least one, every tag an axis
-/// of the font, every coordinate finite and within ±[`MAX_COORDINATE`].
+/// The one axis `matches` picks; a key two axes answer to is refused, since editing either could
+/// be the wrong one.
+fn unique_position(p: &Params, font: &Font, matches: impl Fn(&Axis) -> bool, key: &str) -> Result<Option<usize>> {
+    let mut found = font.axes.iter().enumerate().filter(|(_, a)| matches(a)).map(|(i, _)| i);
+    let first = found.next();
+    if first.is_some() && found.next().is_some() {
+        return Err(p.bad(format!("more than one axis is called `{key}`; name the axis by its index")));
+    }
+    Ok(first)
+}
+
+/// The axis whose tag is `tag`, refused when there is none or more than one.
+fn tag_position(p: &Params, font: &Font, tag: &str) -> Result<usize> {
+    unique_position(p, font, |a| a.tag == tag, tag)?.ok_or_else(|| p.bad(format!("the font has no axis `{tag}`")))
+}
+
+fn coordinate(p: &Params, what: &str, v: &Value) -> Result<f64> {
+    match v.as_f64() {
+        Some(n) if n.is_finite() && n.abs() <= MAX_COORDINATE => Ok(n),
+        _ => Err(p.bad(format!("`location{what}` must be a finite number within ±{MAX_COORDINATE}, got {}", kind(v)))),
+    }
+}
+
+/// `location` as (axis index, coordinate) pairs: `{tag: number}`, or `[number|null]` in axis
+/// order with null for an axis left alone. At least one coordinate, every tag one axis of the
+/// font, every coordinate finite and within ±[`MAX_COORDINATE`].
 fn read_location(p: &Params, font: &Font) -> Result<Vec<(usize, f64)>> {
-    let map: &Map<String, Value> = p.opt_object("location")?.ok_or_else(|| p.bad("`location` is required"))?;
-    if map.is_empty() {
-        return Err(p.bad("`location` names no axis"));
-    }
-    if map.len() > font.axes.len() {
-        return Err(p.bad(format!("`location` names {} axes; the font has {}", map.len(), font.axes.len())));
-    }
-    let mut out = Vec::with_capacity(map.len());
-    for (tag, v) in map {
-        let i = font.axes.iter().position(|a| a.tag == *tag).ok_or_else(|| p.bad(format!("the font has no axis `{tag}`")))?;
-        match v.as_f64() {
-            Some(n) if n.is_finite() && n.abs() <= MAX_COORDINATE => out.push((i, n)),
-            _ => return Err(p.bad(format!("`location.{tag}` must be a finite number within ±{MAX_COORDINATE}, got {}", kind(v)))),
+    let raw = p.get("location").ok_or_else(|| p.bad("`location` is required"))?;
+    let n = font.axes.len();
+    let mut out = Vec::new();
+    match raw {
+        Value::Object(map) => {
+            let map: &Map<String, Value> = map;
+            if map.len() > n {
+                return Err(p.bad(format!("`location` names {} axes; the font has {n}", map.len())));
+            }
+            for (tag, v) in map {
+                out.push((tag_position(p, font, tag)?, coordinate(p, &format!(".{tag}"), v)?));
+            }
         }
+        Value::Array(list) => {
+            if list.len() > n {
+                return Err(p.bad(format!("`location` has {} entries; the font has {n} axes", list.len())));
+            }
+            for (i, v) in list.iter().enumerate() {
+                if !v.is_null() {
+                    out.push((i, coordinate(p, &format!("[{i}]"), v)?));
+                }
+            }
+        }
+        other => return Err(p.bad(format!("`location` must be an object of tags or a list in axis order, got {}", kind(other)))),
+    }
+    if out.is_empty() {
+        return Err(p.bad("`location` names no axis"));
     }
     Ok(out)
 }
@@ -550,7 +606,24 @@ fn rewrite_params(font: &mut Font, edit: &ParamEdit) {
 fn list(s: &mut Session, v: &Value) -> Result<Value> {
     Params::new("font.axes.list", v)?;
     let font = s.font()?;
-    Ok(json!({"axes": font.axes.iter().enumerate().map(|(i, a)| axis_json(i, a)).collect::<Vec<_>>()}))
+    let axes: Vec<Value> = font
+        .axes
+        .iter()
+        .enumerate()
+        .map(|(i, a)| {
+            let mut out = axis_json(i, a);
+            let mut warnings = tag_warnings(&a.tag);
+            let key = tag_key(&a.tag);
+            if font.axes.iter().enumerate().any(|(k, b)| k != i && tag_key(&b.tag) == key) {
+                warnings.push(format!("another axis has the tag `{}`; a font exports only with every axis tag different", a.tag));
+            }
+            if let Some(o) = out.as_object_mut() {
+                o.insert("warnings".into(), json!(warnings));
+            }
+            out
+        })
+        .collect();
+    Ok(json!({"axes": axes}))
 }
 
 fn list_predefined(s: &mut Session, v: &Value) -> Result<Value> {
@@ -581,7 +654,7 @@ fn add(s: &mut Session, v: &Value) -> Result<Value> {
         (None, None) if !tag_taken(font, "wght") && !name_taken(font, "Weight") => ("Weight".to_string(), "wght".to_string()),
         (None, None) => (free_axis_name(font), free_private_tag(font)),
     };
-    check_unique(&p, font, &name, &tag, None)?;
+    check_unique(&p, font, Some(&name), Some(&tag), None)?;
     let warnings = tag_warnings(&tag);
     let index = font.axes.len();
     let axis = Axis { name: name.clone(), tag, hidden, ..Default::default() };
@@ -624,7 +697,11 @@ fn set(s: &mut Session, v: &Value) -> Result<Value> {
         (None, Some(t)) => t.to_string(),
         (None, None) => old.tag.clone(),
     };
-    check_unique(&p, font, &new_name, &new_tag, Some(i))?;
+    // Only what the edit changes must be unique, so an axis of a font that already has two
+    // with one tag can still be renamed or hidden.
+    let changed_name = (new_name != old.name).then_some(new_name.as_str());
+    let changed_tag = (new_tag != old.tag).then_some(new_tag.as_str());
+    check_unique(&p, font, changed_name, changed_tag, Some(i))?;
     let warnings = if new_tag == old.tag { Vec::new() } else { tag_warnings(&new_tag) };
     let (old_name, old_tag) = (old.name.clone(), old.tag.clone());
     let new_hidden = hidden.unwrap_or(old.hidden);
@@ -682,16 +759,27 @@ fn remove(s: &mut Session, v: &Value) -> Result<Value> {
 fn reorder(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("font.axes.reorder", v)?;
     let font = s.font()?;
-    let order = p.strings("order")?;
+    let order = match p.get("order") {
+        Some(Value::Array(list)) => list,
+        Some(other) => return Err(p.bad(format!("`order` must be a list of axis indexes or tags, got {}", kind(other)))),
+        None => return Err(p.bad("`order` is required")),
+    };
     let n = font.axes.len();
     if order.len() != n {
-        return Err(p.bad(format!("`order` must list each of the font's {n} axis tags once; it has {} entries", order.len())));
+        return Err(p.bad(format!("`order` must list each of the font's {n} axes once; it has {} entries", order.len())));
     }
     let mut perm: Vec<usize> = Vec::with_capacity(n);
-    for t in &order {
-        let i = font.axes.iter().position(|a| a.tag == *t).ok_or_else(|| p.bad(format!("the font has no axis `{t}`")))?;
+    for entry in order {
+        let (i, shown) = match entry {
+            Value::String(t) => (tag_position(&p, font, t)?, t.clone()),
+            Value::Number(k) => {
+                let i = k.as_u64().and_then(|k| usize::try_from(k).ok()).filter(|&k| k < n);
+                (i.ok_or_else(|| p.bad(format!("`order` holds {k}, which is not an axis index (0 to {})", n.saturating_sub(1))))?, k.to_string())
+            }
+            other => return Err(p.bad(format!("`order` entries are axis indexes or tags, got {}", kind(other)))),
+        };
         if perm.contains(&i) {
-            return Err(p.bad(format!("`order` names axis `{t}` twice")));
+            return Err(p.bad(format!("`order` names axis `{shown}` twice")));
         }
         perm.push(i);
     }
@@ -750,33 +838,60 @@ fn set_instance_location(s: &mut Session, v: &Value) -> Result<Value> {
         }
         Ok(())
     })?;
-    let font = s.font()?;
-    let warnings: Vec<String> = indices
-        .iter()
-        .filter_map(|&i| font.instances.get(i))
-        .filter(|inst| !is_setting(inst))
-        .filter_map(|inst| outside_warning(font, inst))
-        .collect();
+    let mut warnings: Vec<String> = placements(s.font()?, &indices).into_iter().filter_map(|pl| pl.warning).collect();
+    if warnings.len() > MAX_NAMED_IN_WARNING {
+        let more = warnings.len() - MAX_NAMED_IN_WARNING;
+        warnings.truncate(MAX_NAMED_IN_WARNING);
+        warnings.push(format!("and {more} more instances lie beyond the masters; they are extrapolated"));
+    }
     Ok(json!({"instances": indices, "warnings": warnings}))
 }
 
-/// A warning naming the axes on which `inst` lies beyond every master: the reference
-/// extrapolates such an instance.
-fn outside_warning(font: &Font, inst: &Instance) -> Option<String> {
-    let outside: Vec<&str> = font
-        .axes
+/// Where one instance lies against the masters.
+struct Placed {
+    index: usize,
+    /// The tags of the axes on which it lies beyond the masters.
+    outside: Vec<String>,
+    /// The warning that names them: the reference extrapolates such an instance.
+    warning: Option<String>,
+}
+
+/// The placement of each of `indices`, through the test a static export makes
+/// ([`fontcraft_interp::instance::instances_beyond_masters`]).
+fn placements(font: &Font, indices: &[usize]) -> Vec<Placed> {
+    let beyond = fontcraft_interp::instance::instances_beyond_masters(font, indices);
+    indices
         .iter()
-        .enumerate()
-        .filter(|(i, _)| {
-            let v = design_value(&inst.location, *i);
-            let (lo, hi) = font
-                .masters
-                .iter()
-                .map(|m| design_value(&m.location, *i))
-                .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), x| (lo.min(x), hi.max(x)));
-            lo <= hi && (v < lo || v > hi)
+        .zip(beyond)
+        .map(|(&index, axes)| {
+            let outside: Vec<String> = axes.iter().filter_map(|&k| font.axes.get(k).map(|a| a.tag.clone())).collect();
+            let name = font.instances.get(index).map_or("", |inst| inst.name.as_str());
+            let warning =
+                (!outside.is_empty()).then(|| format!("instance `{name}` lies beyond the masters on {}; it is extrapolated", outside.join(", ")));
+            Placed { index, outside, warning }
         })
-        .map(|(_, a)| a.tag.as_str())
+        .collect()
+}
+
+fn placement(s: &mut Session, v: &Value) -> Result<Value> {
+    let p = Params::new("font.instance.placement", v)?;
+    let font = s.font()?;
+    let indices: Vec<usize> = match p.get("instances") {
+        Some(raw) => {
+            let refs = target::parse_list(raw).map_err(|e| p.bad(e.to_string()))?;
+            target::instances(font, &refs).map_err(|e| p.bad(e.to_string()))?
+        }
+        None => (0..font.instances.len()).collect(),
+    };
+    let out: Vec<Value> = placements(font, &indices)
+        .into_iter()
+        .map(|pl| {
+            let mut entry = json!({"index": pl.index, "outside": pl.outside});
+            if let (Some(w), Some(o)) = (pl.warning, entry.as_object_mut()) {
+                o.insert("warning".into(), json!(w));
+            }
+            entry
+        })
         .collect();
-    (!outside.is_empty()).then(|| format!("instance `{}` lies beyond the masters on {}; it is extrapolated", inst.name, outside.join(", ")))
+    Ok(json!({"instances": out}))
 }

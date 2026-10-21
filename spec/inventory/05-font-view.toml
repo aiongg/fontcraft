@@ -1183,14 +1183,16 @@ milestone = "M4"
 summary = "User-defined filters: rule-based smart filters, fixed-name list filters and folders that group them. Managed from the actions menu in the window's bottom-left corner."
 ref = "Font View › Filtering Font View › Smart Filters; List Filters; Managing Filters"
 status = "handbook"
-notes = "A double-click on a filter's or folder's name, or Return while the sidebar has the keyboard and one filter is selected, opens a field over the name with the whole name selected; Return runs fontView.renameFilter, Escape or a click away runs nothing. A double-click on a smart or list filter's icon opens its editor. Dragging a filter or folder draws a line where it would go, or frames the folder it would go into, and the drop runs one fontView.moveFilter; a drop into the dragged folder or a folder inside it draws nothing and runs nothing. A renamed or moved entry stays selected. Documented, not yet observed."
+notes = "A double-click on a filter's or folder's name, or Return while the sidebar has the keyboard and one filter is selected, opens a field over the name with the whole name selected; Return runs fontView.renameFilter. A double-click on a smart or list filter's icon opens its editor. Dragging a filter or folder draws a line where it would go, or frames the folder it would go into, and the drop runs one fontView.moveFilter; a drop the engine would refuse (into the dragged folder or a folder inside it, deeper than folders nest, or beside an entry of the same name) draws nothing and runs nothing. A renamed or moved entry stays selected. Documented, not yet observed."
 guesses = [
   "A double-click anywhere on a filter's row except its icon and disclosure triangle renames it, the empty space after the name included. Settled by double-clicking right of a short filter name in the reference.",
   "Return renames only while the sidebar has the keyboard, which it takes when a row is pressed and gives up when anything else is pressed. Settled by selecting a filter, clicking a glyph cell and pressing Return in the reference.",
   "Over a folder's middle half a dragged filter goes into the folder, at its end; over the top or bottom quarter it goes before or after the folder, and below an open folder with entries it goes first inside it. Settled by observing the reference's drop feedback.",
   "An unchanged or empty name typed into the field runs no command. Settled by renaming a filter to its own name in the reference.",
+  "Escape or a click away from the name field ends the edit and renames nothing; macOS lists often keep the typed name on a click away. Settled by typing a new name and clicking a glyph cell in the reference.",
 ]
 observe = [
+  "Double-click a filter's name, type a new name, click a glyph cell; note whether the filter keeps the new name. Repeat with Escape instead of the click.",
   "In Font View, add three smart filters and a folder; drag a filter slowly over the folder's row from top to bottom and note where the drop line or folder highlight appears.",
   "Drag a folder holding a filter onto that filter's row and note whether the reference shows a drop mark and what the drop does.",
   "Select a filter, click a glyph cell, press Return; note whether the filter's name opens for editing.",

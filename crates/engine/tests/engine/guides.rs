@@ -323,3 +323,34 @@ fn the_ruler_and_the_coordinates_cover_every_placed_glyph() {
     let many: Vec<Value> = (0..201).map(|_| json!({"glyph": "A"})).collect();
     refused(&mut s, "measure.coordinates", json!({"glyph": "A", "placements": many}));
 }
+
+#[test]
+fn a_long_line_of_large_glyphs_is_measured_up_to_the_element_limit() {
+    use fontcraft_engine::model::Path;
+    let mut s = Session::with_document();
+    // `A`: 700 squares apart, about 3,500 outline elements, so 200 of them pass the 500,000
+    // element limit of one measurement.
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": rect(0.0, 0.0, 10.0, 10.0)}));
+    s.edit("squares", |font| {
+        let mut g = font.glyph_mut("A")?;
+        for i in 1..700 {
+            let (x, y) = (f64::from(i % 30) * 20.0, f64::from(i / 30) * 20.0);
+            g.layers[0].shapes.push(Shape::Path(Path::rect(x, y, x + 10.0, y + 10.0)));
+        }
+        Ok(())
+    })
+    .unwrap();
+    let placements: Vec<Value> = (0..200).map(|i| json!({"glyph": "A", "x": 700 * i, "y": 0})).collect();
+    let out = run(&mut s, "measure.coordinates", json!({"glyph": "A", "placements": placements}));
+    assert_eq!(out["truncated"], true);
+    let each = out["placements"].as_array().unwrap();
+    assert!(!each.is_empty() && each.len() < 200, "the first glyphs: {}", each.len());
+    assert_eq!(each[0]["points"].as_array().unwrap().len(), 2800);
+    assert!(out.get("points").is_none(), "the target is measured once, as a placement");
+    assert_eq!(each[0]["overlapsTruncated"], true, "the squares spend the overlap test's work limit");
+
+    let ruler = run(&mut s, "measure.ruler", json!({"glyph": "A", "from": [-10, 5], "to": [140_000, 5], "placements": placements}));
+    assert_eq!(ruler["truncated"], true);
+    let last = ruler["crossings"].as_array().unwrap().last().map(|c| c["placement"].as_u64().unwrap());
+    assert_eq!(last, Some(each.len() as u64 - 1), "the ruler crosses the same glyphs");
+}

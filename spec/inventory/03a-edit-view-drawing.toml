@@ -986,6 +986,7 @@ notes = "Documented, not yet observed. M3.19: a drag of handles only with Ctrl+A
 guesses = [
   "On a corner node, Ctrl+Alt moves the handle as a plain drag would; observing a corner's handle under Ctrl+Option would settle it.",
   "When the other side of the smooth node is a straight segment, the handle slides along that line as in a plain drag, since mirroring would bend the line; observing such a node would settle it.",
+  "A handle dragged onto its node leaves the opposite handle where it is, since it has no direction to mirror; observing that drag would settle it.",
 ]
 observe = [
   "Ctrl+Option-drag a handle of a smooth node whose two handles differ in length: note whether the opposite handle takes the dragged handle's length during the drag or only on release.",
@@ -1001,8 +1002,9 @@ ref = "Edit View › Moving Selected Nodes and Paths"
 status = "handbook"
 notes = "Documented, not yet observed. M3.19: an Alt-drag that starts on a cubic segment selected alone runs path.reshapeSegment as one interaction; the segment's point under the pointer at the press follows the pointer. An Alt-drag on a line segment copies it (duplicate.optionDrag); an Alt-drag on a segment of a larger selection copies the selection."
 guesses = [
-  "The two handle lengths are solved so the grabbed point of the curve lands on the pointer (a 2x2 linear system; with parallel handles, the smallest change that gets nearest); observing the curve under the pointer during an Option-drag would settle it.",
-  "A handle is held between 1 unit and 10 times the larger of the end nodes' distance and the current handle lengths, so it never turns through its node; observing an Option-drag past the chord would settle it.",
+  "The two handle lengths are solved so the grabbed point of the curve lands on the pointer (a 2x2 least-squares problem; with parallel handles, the smallest change that gets nearest); observing the curve under the pointer during an Option-drag would settle it.",
+  "With nearly parallel handles the solve is damped, so the lengths change smoothly and the point may stop short of the pointer instead of the handles swinging by thousands of units; observing an Option-drag on a segment with almost parallel handles would settle it.",
+  "A handle is held between 1 unit (or the grid step, if larger) and 10 times the larger of the end nodes' distance and the current handle lengths, and within the coordinate limit, so it never turns through its node; a retracted handle stays on its node unless the drag lengthens it. When both lengths reach a limit, their change is scaled back together. Observing an Option-drag past the chord would settle it.",
   "An Alt-drag on a segment that is part of a larger selection duplicates the selection instead of reshaping; observing that case would settle it.",
 ]
 observe = [

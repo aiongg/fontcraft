@@ -127,7 +127,10 @@ fn font_axes_list_and_list_predefined() {
     let out = run(&mut s, "font.axes.list", json!({}));
     assert_eq!(
         out["axes"],
-        json!([{"index": 0, "name": "Weight", "tag": "wght", "hidden": false}, {"index": 1, "name": "Width", "tag": "wdth", "hidden": false}])
+        json!([
+            {"index": 0, "name": "Weight", "tag": "wght", "hidden": false, "warnings": []},
+            {"index": 1, "name": "Width", "tag": "wdth", "hidden": false, "warnings": []}
+        ])
     );
     let out = run(&mut s, "font.axes.listPredefined", json!({}));
     let axes = out["axes"].as_array().unwrap();
@@ -258,6 +261,13 @@ fn font_axes_reorder_permutes_every_list() {
     let entries: Vec<String> = axis_location(&font(&s).masters[0].params).unwrap().unwrap().into_iter().map(|e| e.axis).collect();
     assert_eq!(entries, ["Width", "Weight"]);
 
+    // Indexes name the same axes as tags.
+    let mut by_index = two_axes();
+    run(&mut by_index, "font.axes.reorder", json!({"order": [1, 0]}));
+    assert_eq!(font(&by_index), font(&s), "an index permutation reorders as the tags do");
+    refused(&mut s, "font.axes.reorder", json!({"order": [0, 0]}), "twice");
+    refused(&mut s, "font.axes.reorder", json!({"order": [0, 2]}), "not an axis index");
+
     refused(&mut s, "font.axes.reorder", json!({"order": ["wght"]}), "each of");
     refused(&mut s, "font.axes.reorder", json!({"order": ["wght", "wght"]}), "twice");
     refused(&mut s, "font.axes.reorder", json!({"order": ["wght", "slnt"]}), "no axis `slnt`");
@@ -324,4 +334,88 @@ fn font_instance_set_axis_location_names_extrapolated_instances() {
 
     refused(&mut s, "font.instance.setAxisLocation", json!({"instances": ["Nope"], "location": {"wght": 400}}), "Nope");
     refused(&mut s, "font.instance.setAxisLocation", json!({"instances": [0]}), "`location` is required");
+}
+
+#[test]
+fn font_instance_placement_names_the_axes_an_export_extrapolates_on() {
+    let mut s = two_axes();
+    let out = run(&mut s, "font.instance.placement", json!({}));
+    assert_eq!(out, json!({"instances": [{"index": 0, "outside": []}]}));
+    let set = run(&mut s, "font.instance.setAxisLocation", json!({"instances": [0], "location": [1000, 50]}));
+    assert_eq!(font(&s).instances[0].location, [1000.0, 50.0], "the list form sets the axes in order");
+    let out = run(&mut s, "font.instance.placement", json!({"instances": ["Medium"]}));
+    assert_eq!(out["instances"][0]["outside"], json!(["wght", "wdth"]));
+    assert_eq!(out["instances"][0]["warning"], set["warnings"][0], "the query and the command give one warning");
+
+    // A setting is never extrapolated; warnings past ten are counted.
+    s.edit("more instances", |font| {
+        let list = Arc::make_mut(&mut font.instances);
+        list.push(Instance { name: "VF".into(), kind: Some("variable".into()), ..Default::default() });
+        for k in 0..12 {
+            list.push(Instance { name: format!("Far {k}"), location: vec![400.0, 100.0], ..Default::default() });
+        }
+        Ok(())
+    })
+    .unwrap();
+    let out = run(&mut s, "font.instance.placement", json!({"instances": [1]}));
+    assert_eq!(out, json!({"instances": [{"index": 1, "outside": []}]}));
+    let all: Vec<Value> = (2..14).map(|i| json!(i)).collect();
+    let out = run(&mut s, "font.instance.setAxisLocation", json!({"instances": all, "location": {"wght": 2000}}));
+    let w = warnings(&out);
+    assert_eq!(w.len(), 11, "{out}");
+    assert!(w[10].starts_with("and 2 more"), "{out}");
+    refused(&mut s, "font.instance.setAxisLocation", json!({"instances": [0], "location": [1, 2, 3]}), "3 entries");
+    refused(&mut s, "font.instance.setAxisLocation", json!({"instances": [0], "location": [null]}), "names no axis");
+    refused(&mut s, "font.instance.setAxisLocation", json!({"instances": [0], "location": "wght"}), "object of tags or a list");
+}
+
+/// Two axes with one tag, as a file can hold them: Weight and Weight Too, both `wght`; masters
+/// at 400/10 and 700/90, an instance at 550/50.
+fn shared_tag() -> Session {
+    let mut s = Session::with_document();
+    s.edit("setup", |font| {
+        *Arc::make_mut(&mut font.axes) = vec![
+            Axis { name: "Weight".into(), tag: "wght".into(), ..Default::default() },
+            Axis { name: "Weight Too".into(), tag: "wght".into(), ..Default::default() },
+        ];
+        let masters = Arc::make_mut(&mut font.masters);
+        masters[0].location = vec![400.0, 10.0];
+        let metric_values = masters[0].metric_values.clone();
+        masters.push(Master { id: "m02".into(), name: "Bold".into(), location: vec![700.0, 90.0], metric_values, ..Default::default() });
+        Arc::make_mut(&mut font.instances).push(Instance { name: "Medium".into(), location: vec![550.0, 50.0], ..Default::default() });
+        Ok(())
+    })
+    .unwrap();
+    s
+}
+
+#[test]
+fn two_axes_with_one_tag_are_edited_by_index_and_a_shared_tag_is_refused() {
+    let mut s = shared_tag();
+    let out = run(&mut s, "font.axes.list", json!({}));
+    for axis in out["axes"].as_array().unwrap() {
+        assert!(axis["warnings"].as_array().unwrap().iter().any(|w| w.as_str().unwrap().contains("another axis has the tag")), "{out}");
+    }
+
+    run(&mut s, "font.master.setAxisLocation", json!({"masters": ["Bold"], "location": [null, 80]}));
+    assert_eq!(font(&s).masters[1].location, [700.0, 80.0], "the second axis changes, the first keeps its value");
+    refused(&mut s, "font.master.setAxisLocation", json!({"masters": ["Bold"], "location": {"wght": 600}}), "more than one axis");
+    refused(&mut s, "font.axes.set", json!({"axis": "wght", "hidden": true}), "more than one axis");
+
+    run(&mut s, "font.axes.set", json!({"axis": 1, "hidden": true}));
+    run(&mut s, "font.axes.set", json!({"axis": 1, "name": "Weight Again"}));
+    assert_eq!(font(&s).axes[1].name, "Weight Again");
+    assert!(font(&s).axes[1].hidden && !font(&s).axes[0].hidden);
+    refused(&mut s, "font.axes.set", json!({"axis": 1, "name": "Weight"}), "already has an axis named");
+
+    run(&mut s, "font.axes.reorder", json!({"order": [1, 0]}));
+    let names: Vec<&str> = font(&s).axes.iter().map(|a| a.name.as_str()).collect();
+    assert_eq!(names, ["Weight Again", "Weight"]);
+    assert_eq!(font(&s).masters[1].location, [80.0, 700.0], "locations move with their axes");
+    refused(&mut s, "font.axes.reorder", json!({"order": ["wght", "wght"]}), "more than one axis");
+
+    // The designspace refuses the shared tag; the placement still compares with the masters.
+    run(&mut s, "font.instance.setAxisLocation", json!({"instances": [0], "location": [95, 1000]}));
+    let out = run(&mut s, "font.instance.placement", json!({}));
+    assert_eq!(out["instances"][0]["outside"], json!(["wght", "wght"]), "{out}");
 }

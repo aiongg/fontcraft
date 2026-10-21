@@ -3,14 +3,21 @@
 //! direction; only the two handle lengths change.
 //!
 //! The solve: with the handles at `p0 + a·u1` and `p3 + b·u2`, the segment's point at `t` is
-//! linear in `a` and `b`, so landing it on `to` is a 2×2 linear system. When the two directions
-//! are parallel the system is singular and the smallest change of lengths that gets nearest to
-//! `to` is taken instead. Lengths are held between [`MIN_HANDLE_LENGTH`] and
-//! [`MAX_HANDLE_RATIO`] times the segment's span; when one length is held, the other is solved
-//! again with it fixed.
+//! linear in `a` and `b`, so landing it on `to` is a 2×2 least-squares problem. It is solved
+//! through the eigenvectors of its normal matrix. Along the weaker one the step is damped once its
+//! singular value falls below [`MIN_SPREAD`] times the stronger one's: as the two directions
+//! approach parallel, an exact solve would swing the lengths by thousands of units for a small
+//! move, and the damped one changes them smoothly and leaves the point near `to`. Parallel
+//! directions take the smallest change of lengths that gets nearest.
+//!
+//! Lengths are held between [`MIN_HANDLE_LENGTH`] (or the grid step, if larger, so rounding does
+//! not put a handle on its node) and [`MAX_HANDLE_RATIO`] times the segment's span, and within
+//! the coordinate limit. A length already below the minimum may stay there. When one length is
+//! held, the other is solved again with it fixed; when both are, the change of both is scaled
+//! back together to where the first reaches its limit.
 
 use fontcraft_geom::{Point, Vec2, round_point};
-use fontcraft_model::{NodeKind, Path};
+use fontcraft_model::{MAX_COORDINATE, NodeKind, Path};
 use serde_json::{Value, json};
 
 use super::common::{grid, in_range};
@@ -27,6 +34,9 @@ pub const MAX_HANDLE_RATIO: f64 = 10.0;
 /// `t` must lie this far inside the segment: at its ends the point does not depend on the
 /// handles.
 pub const MIN_T: f64 = 0.01;
+/// The ratio of the solve's weaker to its stronger singular value below which the step along the
+/// weaker one is damped.
+pub const MIN_SPREAD: f64 = 0.1;
 
 const EPS: f64 = 1e-9;
 
@@ -37,7 +47,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Reshape Segment",
             [],
             None,
-            "{glyph: name, layer?: id, side?, segment: [shape, node], t: number, to: [x, y]} changes the lengths of the two handles of the cubic segment that ends at `node`, keeping both end nodes and each handle's direction, so that the segment's point at `t` (0.01 to 0.99, from the start node) lands on `to`, or as near as the directions allow. Each handle stays between 1 unit and 10 times the larger of the end nodes' distance and the current handle lengths. A straight segment is left as it is and returns `changed: false`; a quadratic segment is refused. The selection afterwards is the segment's two end nodes → {changed, selection}",
+            "{glyph: name, layer?: id, side?, segment: [shape, node], t: number, to: [x, y]} changes the lengths of the two handles of the cubic segment that ends at `node`, keeping both end nodes and each handle's direction, so that the segment's point at `t` (0.01 to 0.99, from the start node) lands on `to`, or as near as the directions allow. Each handle stays between 1 unit (or the grid step, if larger) and 10 times the larger of the end nodes' distance and the current handle lengths, and within the coordinate limit; a handle already shorter may stay so. With nearly parallel handles the point moves only as far as moderate length changes take it. A straight segment is left as it is and returns `changed: false`; a quadratic segment is refused. The selection afterwards is the segment's two end nodes → {changed, selection}",
             has_doc,
             reshape_segment
         )
@@ -80,7 +90,7 @@ fn reshape_segment(s: &mut Session, v: &Value) -> Result<Value> {
             let (Some(p0), Some(p1), Some(p2), Some(p3)) = (point(start), point(h1), point(h2), point(end)) else {
                 return Err(p.bad("the segment's points do not resolve"));
             };
-            let (n1, n2) = solve([p0, p1, p2, p3], at, to).ok_or_else(|| p.bad("the segment has no handle directions to keep"))?;
+            let (n1, n2) = solve([p0, p1, p2, p3], at, to, step).ok_or_else(|| p.bad("the segment has no handle directions to keep"))?;
             let (n1, n2) = (round_point(n1, step), round_point(n2, step));
             if ![n1.x, n1.y, n2.x, n2.y].into_iter().all(in_range) {
                 return Err(p.bad("the reshaped handles would lie beyond the coordinate limit"));
@@ -125,10 +135,19 @@ fn direction(candidates: [Vec2; 3]) -> Option<Vec2> {
     })
 }
 
-/// The new handles of the cubic `[p0, p1, p2, p3]` that put its point at `t` on `to`, keeping
-/// each handle's direction. A handle that lies on its node takes the direction towards the other
-/// handle, else towards the other end. `None` when no direction exists (all four points equal).
-pub(crate) fn solve([p0, p1, p2, p3]: [Point; 4], t: f64, to: Point) -> Option<(Point, Point)> {
+/// The longest handle from `from` along the unit vector `u` whose end stays `margin` inside the
+/// coordinate limit.
+fn room(from: Point, u: Vec2, margin: f64) -> f64 {
+    let limit = (MAX_COORDINATE - margin).max(0.0);
+    let axis = |p: f64, d: f64| if d.abs() <= EPS { f64::INFINITY } else { ((limit - p * d.signum()) / d.abs()).max(0.0) };
+    axis(from.x, u.x).min(axis(from.y, u.y))
+}
+
+/// The new handles of the cubic `[p0, p1, p2, p3]` that put its point at `t` on `to` (or near
+/// it), keeping each handle's direction, for a grid of `step`. A handle that lies on its node
+/// takes the direction towards the other handle, else towards the other end. `None` when no
+/// direction exists (all four points equal).
+pub(crate) fn solve([p0, p1, p2, p3]: [Point; 4], t: f64, to: Point, step: f64) -> Option<(Point, Point)> {
     let u1 = direction([p1 - p0, p2 - p0, p3 - p0])?;
     let u2 = direction([p2 - p3, p1 - p3, p0 - p3])?;
     let (a0, b0) = ((p1 - p0).hypot(), (p2 - p3).hypot());
@@ -136,26 +155,68 @@ pub(crate) fn solve([p0, p1, p2, p3]: [Point; 4], t: f64, to: Point) -> Option<(
     let (m1, m2) = (u1 * (3.0 * mt * mt * t), u2 * (3.0 * mt * t * t));
     let current = p0.to_vec2() * (mt * mt * mt) + p1.to_vec2() * (3.0 * mt * mt * t) + p2.to_vec2() * (3.0 * mt * t * t) + p3.to_vec2() * (t * t * t);
     let r = to.to_vec2() - current;
-    let det = m1.x * m2.y - m1.y * m2.x;
-    let (da, db) = if det.abs() > 1e-6 * m1.hypot() * m2.hypot() {
-        ((r.x * m2.y - r.y * m2.x) / det, (m1.x * r.y - m1.y * r.x) / det)
-    } else {
-        let n = m1.hypot2() + m2.hypot2();
-        if n <= EPS {
-            return None;
-        }
-        (m1.dot(r) / n, m2.dot(r) / n)
-    };
-    let max = MAX_HANDLE_RATIO * (p3 - p0).hypot().max(a0).max(b0).max(MIN_HANDLE_LENGTH);
-    let hold = |l: f64| if l.is_finite() { l.clamp(MIN_HANDLE_LENGTH, max) } else { MIN_HANDLE_LENGTH };
-    let (a, b) = (a0 + da, b0 + db);
-    let (mut ha, mut hb) = (hold(a), hold(b));
-    // One length held at a limit: solve the other alone, nearest to `to`.
-    if ha != a && hb == b && m2.hypot2() > EPS {
-        hb = hold(b0 + m2.dot(r - m1 * (ha - a0)) / m2.hypot2());
-    } else if hb != b && ha == a && m1.hypot2() > EPS {
-        ha = hold(a0 + m1.dot(r - m2 * (hb - b0)) / m1.hypot2());
+    let moved = r.hypot();
+    if moved.is_nan() || moved <= EPS {
+        return Some((p1, p2));
     }
+    // The normal matrix [[m1·m1, m1·m2], [m1·m2, m2·m2]], its eigenvalues (the squared singular
+    // values) and unit eigenvectors.
+    let (s11, s12, s22) = (m1.hypot2(), m1.dot(m2), m2.hypot2());
+    let half = (s11 + s22) / 2.0;
+    let spread = (((s11 - s22) / 2.0).powi(2) + s12 * s12).sqrt();
+    let (strong, weak) = (half + spread, (half - spread).max(0.0));
+    if strong.is_nan() || strong <= EPS {
+        return None;
+    }
+    let v1 = if s12.abs() > EPS * strong {
+        let v = Vec2::new(strong - s22, s12);
+        v / v.hypot()
+    } else if s11 >= s22 {
+        Vec2::new(1.0, 0.0)
+    } else {
+        Vec2::new(0.0, 1.0)
+    };
+    let v2 = Vec2::new(-v1.y, v1.x);
+    let g = Vec2::new(m1.dot(r), m2.dot(r));
+    // Along the weaker eigenvector, weak / (weak² + damping²) instead of 1 / weak: the same while
+    // the two singular values are of a size, bounded as the weaker one goes to zero.
+    let damping = MIN_SPREAD * MIN_SPREAD * strong;
+    let d = v1 * (v1.dot(g) / strong) + v2 * (v2.dot(g) * weak / (weak * weak + damping * damping));
+    let (da, db) = (d.x, d.y);
+    let shortest = MIN_HANDLE_LENGTH.max(if step.is_finite() { step } else { 0.0 });
+    let longest = MAX_HANDLE_RATIO * (p3 - p0).hypot().max(a0).max(b0).max(MIN_HANDLE_LENGTH);
+    let margin = if step.is_finite() { step.max(0.0) } else { 0.0 };
+    let bounds = |l0: f64, from: Point, u: Vec2| {
+        let hi = longest.min(room(from, u, margin));
+        (shortest.min(l0).min(hi), hi)
+    };
+    let ((alo, ahi), (blo, bhi)) = (bounds(a0, p0, u1), bounds(b0, p3, u2));
+    let (a, b) = (a0 + da, b0 + db);
+    let fits = |l: f64, (lo, hi): (f64, f64)| l.is_finite() && l >= lo && l <= hi;
+    let hold = |l: f64, (lo, hi): (f64, f64)| if l.is_finite() { l.clamp(lo, hi) } else { lo };
+    let (ha, hb) = match (fits(a, (alo, ahi)), fits(b, (blo, bhi))) {
+        (true, true) => (a, b),
+        // One length held at a limit: solve the other alone, nearest to `to`.
+        (false, true) => {
+            let ha = hold(a, (alo, ahi));
+            let hb = if s22 > EPS { b0 + m2.dot(r - m1 * (ha - a0)) / s22 } else { b };
+            (ha, hold(hb, (blo, bhi)))
+        }
+        (true, false) => {
+            let hb = hold(b, (blo, bhi));
+            let ha = if s11 > EPS { a0 + m1.dot(r - m2 * (hb - b0)) / s11 } else { a };
+            (hold(ha, (alo, ahi)), hb)
+        }
+        // Both held: scale the change back together to where the first one reaches its limit.
+        (false, false) => {
+            let reach = |l0: f64, dl: f64, (lo, hi): (f64, f64)| {
+                let limit = if dl > 0.0 { hi } else { lo };
+                if dl.abs() <= EPS { 1.0 } else { ((limit - l0) / dl).clamp(0.0, 1.0) }
+            };
+            let k = reach(a0, da, (alo, ahi)).min(reach(b0, db, (blo, bhi)));
+            (hold(a0 + da * k, (alo, ahi)), hold(b0 + db * k, (blo, bhi)))
+        }
+    };
     Some((p0 + u1 * ha, p3 + u2 * hb))
 }
 
@@ -238,6 +299,31 @@ mod tests {
         run(&mut s, "path.reshapeSegment", json!({"glyph": "A", "segment": [0, 3], "t": 0.5, "to": [150, -400]}));
         let p = points(&s);
         assert_eq!((p[1], p[2]), (Point::new(0.0, MIN_HANDLE_LENGTH), Point::new(300.0, MIN_HANDLE_LENGTH)));
+    }
+
+    #[test]
+    fn nearly_parallel_handles_change_smoothly_and_the_point_stays_near_to() {
+        // Both handles point up; the second leans 1 unit in 100 (sin θ ≈ 0.01). A sideways move
+        // asks for lengths an exact solve would swing by thousands of units.
+        let pts = [Point::new(0.0, 0.0), Point::new(0.0, 100.0), Point::new(301.0, 100.0), Point::new(300.0, 0.0)];
+        let at = eval(&pts, 0.5);
+        let mut last: Option<(f64, f64)> = None;
+        for k in 0..=10 {
+            let to = at + Vec2::new(f64::from(k), 0.0);
+            let (n1, n2) = solve(pts, 0.5, to, 1.0).unwrap();
+            let (a, b) = ((n1 - pts[0]).hypot(), (n2 - pts[3]).hypot());
+            assert!((a - 100.0).abs() < 50.0 && (b - 100.0).abs() < 50.0, "{k}: {a}, {b}");
+            let hit = eval(&[pts[0], n1, n2, pts[3]], 0.5);
+            assert!((hit - to).hypot() <= f64::from(k) + 1e-6, "{k}: the point moved away from `to`: {hit:?}");
+            if let Some((pa, pb)) = last {
+                assert!((a - pa).abs() < 10.0 && (b - pb).abs() < 10.0, "{k}: a jump from {pa}, {pb} to {a}, {b}");
+            }
+            last = Some((a, b));
+        }
+        // Along the handles the point follows.
+        let to = at + Vec2::new(0.0, 30.0);
+        let (n1, n2) = solve(pts, 0.5, to, 1.0).unwrap();
+        assert!((eval(&[pts[0], n1, n2, pts[3]], 0.5) - to).hypot() < 0.5);
     }
 
     #[test]

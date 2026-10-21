@@ -37,8 +37,8 @@ enum Rule {
     Tag,
     /// Feature tags, one per entry or separated by commas.
     TagList,
-    /// `name; code`; with `true`, the name is a feature tag.
-    NameAndCode(bool),
+    /// `name; code`, the name of the given sort.
+    NameAndCode(Name),
     VendorId,
     Panose,
     UnicodeRanges,
@@ -57,6 +57,17 @@ enum Rule {
     AxisLocation,
 }
 
+/// What stands before the semicolon of a `name; code` value.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Name {
+    /// A feature tag.
+    Tag,
+    /// One word: a class name.
+    Word,
+    /// Any text: a prefix's name as the Features tab shows it.
+    Text,
+}
+
 /// The parameters with a rule, by catalogue name.
 const RULES: &[(&str, Rule)] = &[
     ("vendorID", Rule::VendorId),
@@ -72,12 +83,12 @@ const RULES: &[(&str, Rule)] = &[
     ("Elidable STAT Axis Value Name", Rule::Tag),
     ("Feature for Feature Variations", Rule::Tag),
     ("Remove Features", Rule::TagList),
-    ("Add Class", Rule::NameAndCode(false)),
-    ("Add Prefix", Rule::NameAndCode(false)),
-    ("Add Feature", Rule::NameAndCode(true)),
-    ("Replace Class", Rule::NameAndCode(false)),
-    ("Replace Prefix", Rule::NameAndCode(false)),
-    ("Replace Feature", Rule::NameAndCode(true)),
+    ("Add Class", Rule::NameAndCode(Name::Word)),
+    ("Add Prefix", Rule::NameAndCode(Name::Text)),
+    ("Add Feature", Rule::NameAndCode(Name::Tag)),
+    ("Replace Class", Rule::NameAndCode(Name::Word)),
+    ("Replace Prefix", Rule::NameAndCode(Name::Text)),
+    ("Replace Feature", Rule::NameAndCode(Name::Tag)),
     ("Optical Size", Rule::OpticalSize),
     ("Local Interpolation", Rule::LocalInterpolation),
     ("Master Color", Rule::Color),
@@ -264,7 +275,7 @@ pub fn check(spec: &ParamSpec, value: Value) -> Result<Value, String> {
             }
             Ok(value)
         }
-        Rule::NameAndCode(is_tag) => name_and_code(&text()?, is_tag).map(|()| value),
+        Rule::NameAndCode(sort) => name_and_code(&text()?, sort).map(|()| value),
         Rule::VendorId => vendor_id(&text()?).map(|()| value),
         Rule::Panose => {
             let digits = whole_list(&value, 0, LAST_PANOSE_DIGIT, "a PANOSE digit")?;
@@ -319,17 +330,19 @@ fn tag(text: &str) -> Result<(), String> {
     }
 }
 
-/// `name; code`: a name (a feature tag when `is_tag`) without spaces before the first semicolon.
-fn name_and_code(text: &str, is_tag: bool) -> Result<(), String> {
+/// `name; code`, split at the first semicolon: a feature tag, one word, or any text that is not
+/// empty, as `sort` says.
+fn name_and_code(text: &str, sort: Name) -> Result<(), String> {
     let (name, _) = text.split_once(';').ok_or("the value is a name, a semicolon and the code")?;
     let name = name.trim();
-    if is_tag {
-        return tag(name);
+    match sort {
+        Name::Tag => tag(name),
+        Name::Word if name.is_empty() || name.chars().any(char::is_whitespace) => {
+            Err(format!("`{name}` is not a name: one word before the semicolon"))
+        }
+        Name::Text if name.is_empty() => Err("the value starts with a name before the semicolon".into()),
+        Name::Word | Name::Text => Ok(()),
     }
-    if name.is_empty() || name.chars().any(char::is_whitespace) {
-        return Err(format!("`{name}` is not a name: one word before the semicolon"));
-    }
-    Ok(())
 }
 
 /// One to four printable ASCII characters (a shorter id is padded with spaces), or nothing.
@@ -426,7 +439,8 @@ fn optical_size(text: &str) -> Result<(), String> {
 fn local_interpolation(text: &str) -> Result<(), String> {
     let parts: Vec<&str> = text.split(';').map(str::trim).filter(|p| !p.is_empty()).collect();
     let (last, values) = parts.split_last().ok_or("the value is axis values and `include:` with glyph names, separated by semicolons")?;
-    let names = last.strip_prefix("include:").ok_or("the value ends with `include:` and the glyph names")?;
+    // The interpolation reads `include:` exactly so, in lowercase with the colon right after it.
+    let names = last.strip_prefix("include:").ok_or("the value ends with `include:` (in lowercase, the colon right after it) and the glyph names")?;
     if names.split(',').all(|n| n.trim().is_empty()) {
         return Err("`include:` names no glyph".into());
     }
@@ -624,9 +638,13 @@ mod tests {
         for p in catalog::all().iter().filter(|p| rule(p.name).is_some() || !p.choices.is_empty()) {
             assert!(cases.iter().any(|(n, _, _)| *n == p.name), "{} has no case", p.name);
         }
-        for (name, _) in RULES {
+        for name in RULES.iter().map(|(n, _)| n).chain(VALUE_SYNTAXES) {
             assert!(catalog::lookup(name).is_some_and(|p| p.name == *name), "{name} is not a catalogue name");
         }
+        // A prefix's name is free text; a class's is one word.
+        assert!(checked_json("Add Prefix", &json!("Language Systems; languagesystem DFLT dflt;")).is_ok());
+        assert!(checked_json("Replace Prefix", &json!(" ; languagesystem DFLT dflt;")).is_err());
+        assert!(checked_json("Add Class", &json!("small caps; A")).is_err());
         assert_eq!((UPM_MIN, UPM_MAX), (i64::from(*crate::UPM_RANGE.start()), i64::from(*crate::UPM_RANGE.end())));
         // The measure of the package: at least 40 parameters check more than their kind.
         assert!(checked().len() >= 40, "{}", checked().len());

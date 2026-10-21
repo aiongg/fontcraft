@@ -311,9 +311,32 @@ fn exports_tab_coordinates_act_through_set_axis_location_and_warn_of_extrapolati
     let reply = direct.run("font.instance.setAxisLocation", &json!({"instances": [1], "location": {"wght": 150}})).unwrap();
     assert_eq!(instances(&app), instances(&direct));
     assert!(w.ctx.read_response(extrapolation_id(0)).is_some(), "the extrapolated instance is marked");
-    let font = app.session.font().unwrap();
-    let warning = font.instances.get(1).and_then(|i| extrapolation_warning(font, i));
-    assert_eq!(warning.as_deref(), reply.get("warnings").and_then(|w| w.get(0)).and_then(Value::as_str), "the command's warning");
+    assert!(w.ctx.read_response(extrapolation_id(1)).is_none(), "one selected instance, one warning");
+    let placement = app.run("font.instance.placement", &json!({})).unwrap();
+    assert_eq!(placement["instances"][0], json!({"index": 0, "outside": []}));
+    assert_eq!(placement["instances"][1]["outside"], json!(["wght"]));
+    let warning = placement["instances"][1]["warning"].as_str();
+    assert_eq!(warning, reply.get("warnings").and_then(|w| w.get(0)).and_then(Value::as_str), "the query's warning is the command's");
+    let kept = placement_warnings(&w.ctx, &mut app.session);
+    assert_eq!(kept.as_slice(), [None, warning.map(str::to_string)], "the tab shows the query's warnings");
     w.click(&mut app, entry_id(0), Modifiers::NONE);
     assert!(w.ctx.read_response(extrapolation_id(0)).is_none(), "the entry inside the masters has none");
+}
+
+#[test]
+fn a_mixed_selection_edits_the_static_fields_of_its_static_entries_only() {
+    let mut app = exports_app(&["Regular", "Bold"]);
+    app.run("font.axes.add", &json!({"name": "Weight"})).unwrap();
+    app.run("font.instance.addVariableFontSetting", &json!({"name": "VF"})).unwrap();
+    let mut direct = exports_app(&["Regular", "Bold"]);
+    direct.run("font.axes.add", &json!({"name": "Weight"})).unwrap();
+    direct.run("font.instance.addVariableFontSetting", &json!({"name": "VF"})).unwrap();
+    let w = open(&mut app);
+    w.click(&mut app, entry_id(0), Modifiers::NONE);
+    w.click(&mut app, entry_id(2), Modifiers::COMMAND);
+    w.pick(&mut app, class_menu_id("weightClass"), class_item_id("weightClass", 700));
+    w.click(&mut app, field_id("isBold"), Modifiers::NONE);
+    direct.run("font.instance.setWeightClass", &json!({"instances": [0], "weightClass": 700})).unwrap();
+    direct.run("font.instance.setStyleLinking", &json!({"instances": [0], "isBold": true})).unwrap();
+    assert_eq!(instances(&app), instances(&direct), "the variable font setting is left alone");
 }

@@ -189,8 +189,9 @@ fn font_files_dropped_on_the_window_open_and_images_are_left_for_the_image_drop(
     let ctx = egui::Context::default();
     let mut pending = Vec::new();
     let mut left = Vec::new();
+    let mut app = FontcraftApp::default();
     ctx.run_ui(input(Vec::new(), &[png.clone(), ufo.clone(), svg.clone()]), |ui| {
-        take_dropped(ui.ctx(), &mut pending);
+        take_dropped(&mut app, ui.ctx(), &mut pending);
         left = ui.ctx().input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).collect::<Vec<_>>());
     })
     .textures_delta
@@ -219,4 +220,26 @@ fn a_drop_opens_files_named_as_fonts() {
     for name in ["outline.svg", "sketch.png", "notes.txt", "archive.tar.gz", "README", "x.pk.png", "cmr10.abcpk", "macro.fcmacro"] {
         assert!(!opens_on_drop(name), "{name}");
     }
+}
+
+#[test]
+fn dropped_fonts_that_cannot_open_are_reported_not_dropped_silently() {
+    let ctx = egui::Context::default();
+    let drop_files = |app: &mut FontcraftApp, files: &[PathBuf]| {
+        let mut pending = Vec::new();
+        let _ = ctx.run_ui(input(Vec::new(), files), |ui| take_dropped(app, ui.ctx(), &mut pending));
+        pending
+    };
+    // A file with no path on disk, as on the web.
+    let mut app = FontcraftApp::default();
+    assert!(drop_files(&mut app, &[PathBuf::from("G.ufo")]).is_empty());
+    assert!(app.state.status.contains("no path on disk"), "{}", app.state.status);
+
+    // While the question about unsaved changes is open.
+    let mut app = FontcraftApp::default();
+    app.run("glyph.newGlyph", &json!({"name": "x.alt"})).unwrap();
+    app.run_menu_command("app.quit", json!({})).unwrap();
+    assert!(app.close_prompt.is_open());
+    assert!(drop_files(&mut app, &[temp_dir("drop-blocked").join("H.ufo")]).is_empty());
+    assert!(app.state.status.contains("not opened"), "{}", app.state.status);
 }

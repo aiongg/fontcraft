@@ -88,7 +88,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Paste Rows",
             [],
             None,
-            "{scope: 'font'|'master'|'instance', targets?: [id|name|index] (required below the font), rows?: [row] | {fontcraftRows, rows}, text?: string (either clipboard form), mode?: 'replace'|'append'|'skip' (default replace)} paste rows into each target as one undo step. replace: a field or a parameter the target has takes the pasted value, except a parameter that may repeat, which is appended; append: parameters are added after the others; skip: rows the target already has are left out. A field cannot repeat, so append replaces it. A parameter matches the target's row under any spelling of it; a name parameter (designers, familyNames…) is written as the name property, as font.customParameters.add does. A row the scope does not allow is skipped and listed; a value that fails its check refuses the whole paste → {added, replaced, skipped: [{target?, key, reason}]}",
+            "{scope: 'font'|'master'|'instance', targets?: [id|name|index] (required below the font), rows?: [row] | {fontcraftRows, rows}, text?: string (either clipboard form), mode?: 'replace'|'append'|'skip' (default replace)} paste rows into each target as one undo step. replace: a field or a parameter the target has takes the pasted value, except a parameter that may repeat, which is appended; append: parameters are added after the others; skip: rows the target already has are left out. A field cannot repeat, so append replaces it. A parameter matches the target's row under any spelling of it; a name parameter (designers, familyNames…) is written as the name property, as font.customParameters.add does. A row the scope does not allow, and a row whose value fails its check, is skipped and listed with the reason; the other rows are pasted. A target already holding the most fields or parameters refuses the whole paste → {added, replaced, skipped: [{target?, key, reason}]}",
             has_doc,
             paste_rows
         ),
@@ -716,14 +716,26 @@ fn paste_row(font: &mut Font, scope: Scope, i: usize, row: &Row, mode: PasteMode
                 let json = match &row.value {
                     PlistValue::String(t) => json!(t.as_str()),
                     PlistValue::Number(n) => json!(n.value().as_f64()),
-                    _ => return Err(format!("`{}` takes a text or a number", spec.key)),
+                    _ => {
+                        report.skip(scope, i, &row.key, format!("`{}` takes a text or a number", spec.key));
+                        return Ok(());
+                    }
                 };
                 let mut ignored = Vec::new();
-                set_field(font, scope, i, spec.key, &json, &mut ignored)?;
-                report.replaced += 1;
+                // A built-in field checks its value before it writes anything.
+                match set_field(font, scope, i, spec.key, &json, &mut ignored) {
+                    Ok(()) => report.replaced += 1,
+                    Err(reason) => report.skip(scope, i, &row.key, reason),
+                }
                 return Ok(());
             }
-            let value = rows::property_from_value(spec.key, &row.value, spec.localizable).map_err(|e| e.to_string())?;
+            let value = match rows::property_from_value(spec.key, &row.value, spec.localizable) {
+                Ok(v) => v,
+                Err(e) => {
+                    report.skip(scope, i, &row.key, e.to_string());
+                    return Ok(());
+                }
+            };
             let props = properties(font, scope, i).ok_or_else(|| format!("there is no {} #{i}", scope.name()))?;
             let present = props.get(spec.key).is_some();
             if present && mode == PasteMode::Skip {
@@ -751,7 +763,13 @@ fn paste_row(font: &mut Font, scope: Scope, i: usize, row: &Row, mode: PasteMode
                         report.skip(scope, i, &row.key, "a name property, which masters do not hold".into());
                         return Ok(());
                     }
-                    let value = rows::property_from_value(spec.name, &row.value, localized).map_err(|e| e.to_string())?;
+                    let value = match rows::property_from_value(spec.name, &row.value, localized) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            report.skip(scope, i, &row.key, e.to_string());
+                            return Ok(());
+                        }
+                    };
                     let props = properties(font, scope, i).ok_or_else(|| format!("there is no {} #{i}", scope.name()))?;
                     let present = props.get(spec.name).is_some();
                     if present && mode == PasteMode::Skip {
@@ -770,17 +788,25 @@ fn paste_row(font: &mut Font, scope: Scope, i: usize, row: &Row, mode: PasteMode
                     return Ok(());
                 }
             }
-            let (name, value, repeatable) = match spec {
+            // A value its check refuses (one stored before the check existed, say) is left out
+            // and listed, so it does not keep the other rows out.
+            let checked = match spec {
                 Some(spec) => {
                     if param_value::check_scope(spec, scope).is_err() {
                         report.skip(scope, i, &row.key, format!("cannot be set on the {}", scope.name()));
                         return Ok(());
                     }
-                    (spec.name.to_string(), param_value::check(spec, &row.value).map_err(|e| e.to_string())?, spec.repeatable)
+                    param_value::check(spec, &row.value).map(|v| (spec.name.to_string(), v, spec.repeatable)).map_err(|e| e.to_string())
                 }
                 None => {
-                    param_value::check_limits(&row.key, &row.value).map_err(|e| e.to_string())?;
-                    (row.key.clone(), row.value.clone(), false)
+                    param_value::check_limits(&row.key, &row.value).map(|()| (row.key.clone(), row.value.clone(), false)).map_err(|e| e.to_string())
+                }
+            };
+            let (name, value, repeatable) = match checked {
+                Ok(c) => c,
+                Err(reason) => {
+                    report.skip(scope, i, &row.key, reason);
+                    return Ok(());
                 }
             };
             let list = params_mut(font, scope, i).ok_or_else(|| format!("there is no {} #{i}", scope.name()))?;

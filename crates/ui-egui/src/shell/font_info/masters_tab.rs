@@ -12,7 +12,8 @@
 //! `font.metrics.add/set/remove` (through [`crate::dialogs::metric_editor`]),
 //! `font.master.setStem`, `font.stems.add/set/remove`, `font.customParameters.*`,
 //! `font.master.add/duplicate/remove/reorder`, `font.master.setAxisLocation` (one number field
-//! per axis, keyed by the axis's tag). The tab keeps only view state: the selection in
+//! per axis, sent as a location list that sets that axis alone, so the right axis changes even
+//! when two share a tag). The tab keeps only view state: the selection in
 //! [`super::FontInfoState`], the open icon picker and metric editor in egui's memory.
 //!
 //! Number Values are shown read-only until their commands exist.
@@ -383,8 +384,7 @@ fn axes(ui: &mut egui::Ui, tokens: &Tokens, font: &Font, target: &Target, pendin
         ui.horizontal(|ui| {
             label_cell(ui, tokens, &axis.name, None);
             if let Some(v) = number_field(ui, axis_id(at), location(font, target, at), tokens.field_width) {
-                let mut location = serde_json::Map::new();
-                location.insert(axis.tag.clone(), json!(v));
+                let location = super::exports_tab::location_list(at, v);
                 pending.push(("font.master.setAxisLocation", json!({"masters": target.indices, "location": location})));
             }
         });

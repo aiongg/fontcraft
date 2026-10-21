@@ -38,7 +38,7 @@ use std::time::{Duration, Instant};
 
 use fontcraft_engine::Session;
 use fontcraft_ui_egui::FontcraftApp;
-use fontcraft_ui_egui::shell::start_window;
+use fontcraft_ui_egui::shell::{close_prompt, start_window};
 use serde_json::json;
 
 const USAGE: &str = "\
@@ -116,9 +116,11 @@ impl eframe::App for Shell {
     fn logic(&mut self, ctx: &eframe::egui::Context, _frame: &mut eframe::Frame) {
         if let Err(panic) = fontcraft_engine::guard::catch_panic(|| self.app.logic(ctx)) {
             self.app.state.status = format!("internal error (please report it): {panic}");
-            // Without the app's answer, unsaved work could be lost: keep the window.
-            if ctx.input(|i| i.viewport().close_requested()) {
+            // Without the app's answer, unsaved work could be lost: keep the window while there
+            // is any. With none the close goes through, so a repeated bug cannot hold the window.
+            if ctx.input(|i| i.viewport().close_requested()) && close_prompt::has_unsaved(&self.app.session) {
                 ctx.send_viewport_cmd(eframe::egui::ViewportCommand::CancelClose);
+                self.app.close_prompt.keep_window();
             }
         }
         // macOS: quit through the platform instead of dropping the window (craft-quit).
@@ -126,8 +128,11 @@ impl eframe::App for Shell {
     }
 
     fn ui(&mut self, ui: &mut eframe::egui::Ui, _frame: &mut eframe::Frame) {
-        // Control requests run on the UI thread, between frames, like a click would.
-        if let Some(inbox) = &mut self.control {
+        // Control requests run on the UI thread, between frames, like a click would. Once the
+        // app decided to quit they wait: an edit made now would close with the window unasked.
+        if let Some(inbox) = &mut self.control
+            && !self.app.close_prompt.quitting()
+        {
             inbox.deliver_screenshots(ui.ctx());
             inbox.drain(&mut self.app);
         }
@@ -144,9 +149,11 @@ impl eframe::App for Shell {
     }
 
     /// The control channel's window input (`ui.click`, `ui.drag`, `ui.wheel`, `ui.move`) joins the
-    /// window's own, one event per frame.
+    /// main window's own, one event per drawn frame: `ui` draws it, confined as its request.
     fn raw_input_hook(&mut self, _ctx: &eframe::egui::Context, raw_input: &mut eframe::egui::RawInput) {
-        self.app.raw_input_hook(raw_input);
+        if raw_input.viewport_id == eframe::egui::ViewportId::ROOT {
+            self.app.raw_input_hook(raw_input);
+        }
     }
 }
 

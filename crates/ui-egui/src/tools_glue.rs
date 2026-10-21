@@ -21,6 +21,7 @@ use fontcraft_engine::params::TargetKind;
 use fontcraft_engine::{CommandSpec, Session};
 use fontcraft_geom::Point;
 use fontcraft_model::{Font, LayerSide};
+use fontcraft_tools::toolbox::Keyboard;
 use fontcraft_tools::{
     Action, Context, HitResult, Key, KeyEvent, Modifiers, Output, PointerEvent, PointerKind, Scene, Selection, ToolSettings, Toolbox, View,
     ViewChange, hit_test,
@@ -82,7 +83,7 @@ fn target(app: &FontcraftApp) -> Option<Target> {
 
 /// The tools' side of the shell. Not part of [`crate::state::UiState`]: tools are state
 /// machines, not data.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ToolsState {
     pub toolbox: Toolbox,
     /// The canvas at the last frame, in window points.
@@ -115,6 +116,36 @@ pub struct ToolsState {
     pub(crate) context_menu: Option<ContextMenu>,
     /// A press on the text in text mode, while the button is down.
     pub(crate) text_drag: crate::canvas::text::TextDrag,
+}
+
+impl Default for ToolsState {
+    fn default() -> Self {
+        let mut toolbox = Toolbox::new();
+        // Each frame sets it again from the system egui reports (a web page knows it only then).
+        toolbox.set_keyboard(keyboard(cfg!(target_os = "macos")));
+        Self {
+            toolbox,
+            canvas: None,
+            pressed: false,
+            mods: Modifiers::NONE,
+            running: None,
+            queued: Vec::new(),
+            target: None,
+            checked: None,
+            text_focus: false,
+            text_focus_at_end: false,
+            text_edit_at_end: false,
+            pending_text: String::new(),
+            ctrl_press: None,
+            context_menu: None,
+            text_drag: Default::default(),
+        }
+    }
+}
+
+/// The keyboard of a Mac or of another system.
+pub fn keyboard(mac: bool) -> Keyboard {
+    if mac { Keyboard::Mac } else { Keyboard::Other }
 }
 
 impl ToolsState {
@@ -273,6 +304,10 @@ pub fn modifiers(app: &mut FontcraftApp, mods: Modifiers) -> Vec<String> {
         return Vec::new();
     }
     app.tools.mods = mods;
+    // Building the tools' context costs a scene and the suggestions; most changes need neither.
+    if !app.tools.toolbox.reacts_to(mods) {
+        return Vec::new();
+    }
     match with_tool(app, |toolbox, cx| toolbox.modifiers(cx, mods)) {
         Ok(out) => apply(app, out),
         Err(e) => vec![e],
@@ -283,6 +318,9 @@ pub fn modifiers(app: &mut FontcraftApp, mods: Modifiers) -> Vec<String> {
 /// D1). `None` when the key is not theirs, so it goes on to the menu shortcuts.
 /// In text mode the Text tool's keys come first, and a character key types itself.
 pub fn key(app: &mut FontcraftApp, ev: KeyEvent) -> Option<Vec<String>> {
+    if app.close_prompt.is_open() {
+        return None;
+    }
     key_typing(app, ev, true)
 }
 
@@ -424,7 +462,9 @@ fn view_change(app: &mut FontcraftApp, change: ViewChange) -> Result<(), String>
 }
 
 /// The modifiers of a pointer event. egui reports Control as `ctrl` on every system (and also
-/// as `command` off the Mac), so `Ctrl`+drag suspends snapping everywhere.
+/// as `command` off the Mac), so `Ctrl`+drag suspends snapping everywhere. Off the Mac the
+/// Windows and Super keys do not reach egui at all; [`Keyboard`] tells the toolbox which keys
+/// hold a tool.
 pub fn pointer_mods(m: egui::Modifiers) -> Modifiers {
     Modifiers { shift: m.shift, alt: m.alt, cmd: m.command, ctrl: m.ctrl }
 }
@@ -443,6 +483,7 @@ pub fn collect(tools: &mut ToolsState, ui: &egui::Ui, response: &egui::Response,
     tools.canvas = Some(rect);
     let over = response.hovered();
     let mac = ui.ctx().os() == egui::os::OperatingSystem::Mac;
+    tools.toolbox.set_keyboard(keyboard(mac));
     let (events, mods, double, dragging) = ui.input(|i| {
         let double = i.pointer.button_double_clicked(PointerButton::Primary).then(|| i.pointer.interact_pos()).flatten();
         (i.events.clone(), i.modifiers, double, i.pointer.is_decidedly_dragging())
@@ -508,18 +549,23 @@ pub fn collect(tools: &mut ToolsState, ui: &egui::Ui, response: &egui::Response,
 /// Hands the pointer input collected during the frame to the tools. `true` when there was any.
 pub fn dispatch_queued(app: &mut FontcraftApp) -> bool {
     let queued = std::mem::take(&mut app.tools.queued);
-    if app.dialog.is_some() {
-        // The canvas takes no pointer input while a dialog is open.
+    if app.dialog.is_some() || app.close_prompt.is_open() {
+        // The canvas takes no pointer input while a dialog or the question about unsaved
+        // changes is open.
         return false;
     }
     let any = !queued.is_empty();
     for q in queued {
         match q {
             Queued::Pointer(p) => {
-                pointer(app, p);
+                if let Some(e) = pointer(app, p).pop() {
+                    app.state.status = e;
+                }
             }
             Queued::Modifiers(m) => {
-                modifiers(app, m);
+                if let Some(e) = modifiers(app, m).pop() {
+                    app.state.status = e;
+                }
             }
             Queued::Context(at) => {
                 if let Err(e) = context_menu::open(app, at, Space::Screen) {
@@ -535,13 +581,16 @@ pub fn dispatch_queued(app: &mut FontcraftApp) -> bool {
 /// the text `ui.text` left for a focused text field.
 pub fn keys(app: &mut FontcraftApp, ctx: &egui::Context) {
     app.tools.text_focus = ctx.egui_wants_keyboard_input() || app.tools.text_focus_at_end;
+    if app.close_prompt.is_open() {
+        // The question about unsaved changes takes the keyboard; nothing types behind it.
+        app.tools.pending_text.clear();
+        return;
+    }
     if !app.tools.pending_text.is_empty() {
         let text = std::mem::take(&mut app.tools.pending_text);
         ctx.input_mut(|i| i.events.push(Event::Text(text)));
     }
-    // The unsaved-changes question takes Return and Escape, and keys must not edit the glyph
-    // behind it.
-    if app.state.tab().is_none() || app.tools.text_focus || app.dialog.is_some() || app.close_prompt.is_open() {
+    if app.state.tab().is_none() || app.tools.text_focus || app.dialog.is_some() {
         return;
     }
     let events = ctx.input(|i| i.events.clone());
