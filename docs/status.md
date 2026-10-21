@@ -2,29 +2,34 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-21, after the fourteenth batch: 2 follow-up packages (M12.40c, M11.17e) and five small tasks (X.glyphs4, X.audit4, X.ttx4, X.inst4, X.pdf2), with the integration rounds X.integ21 and X.integ22, the review fixes X.fix67 to X.fix72 and the gate X.gate18, integrated and gated on `master`; and the second planning pass, whose packages are in `docs/plans/depth.md`._
+_Updated: 2026-10-21, after the fifteenth batch: wave 1 of the depth plans (`docs/plans/depth.md`), ten packages (the builder M14.3 and the writers M1.8, M9.27, M13.78, M3.19, M7.21, M4.17, M3.40, M14.1 and M3.21), with the integration rounds X.integ23 and X.integ24, the review fixes X.fix73 to X.fix77 and the gate X.gate19, integrated and gated on `master`._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all eleven steps (4,682 tests passed, 0 failed, 49 skipped). The test step runs on cargo
-  nextest. Built and run on Linux x86-64 with Rust 1.97.
-- `master` holds 29 commits on top of `6d311e7` (X.docs17, the last pushed commit), plus the two documentation
-  commits of X.docs18: the packages and tasks of this batch, their merges, X.integ21 and X.integ22, the review fixes
-  X.fix67 to X.fix72 and X.gate18 (the package lists are in ROADMAP.md › Shipped so far). The gate X.gate18 ran at
-  `601ebf0`. The tests honour `TMPDIR`; point it at a disk with room when the system's
-  temporary directory is full. The batch is pushed with
+- `cargo xtask ci` passes all eleven steps (4,767 tests passed, 0 failed, 49 skipped). The test step runs on cargo
+  nextest. Built and run on Linux x86-64 with Rust 1.97. macOS and Windows were not compiled: the macOS quit path
+  that M14.3 adds through `craft-quit` waits for the owner's build on a Mac (see "Where to start").
+- `master` holds 34 commits on top of `f9628ec` (X.docs18, the last pushed commit), plus the documentation commit
+  X.docs19: the ten packages, their merges, X.integ23, X.integ24, the review fixes X.fix73 to X.fix77 and X.gate19
+  (the package lists are in ROADMAP.md › Shipped so far). The gate X.gate19 ran at `29f2eee`. The tests honour
+  `TMPDIR`; point it at a disk with room when the system's temporary directory is full. The batch is pushed with
   these commits.
-- 920 of the 1,006 inventory commands exist (`docs/parity.md`; unchanged: this batch extended existing commands).
-  Per milestone: M3, M4, M5, M6 (47), M7 (66), M8 (41), M10 (59), M11 (41) and M12 (99) are all live; M9 51 of 52,
-  M13 153 of 200. M14 has 0 of 34. The inventory has 3,740 rows. Feature parity is about 36% (ROADMAP.md › Parity
-  estimate; 36.0, was 35.9: colour fonts and images 34% → 39%). 2,658 guesses on 1,463 rows are listed in
-  `docs/guesses.md`; `docs/observe.md` lists 1,380 rows.
-- Packages built (done of total, counted from commit subjects): M6 19 of 20, M7 19 of 21, M8 23 of
-  25, M9 25 of 27, M10 31 of 33, M11 19 of 21, M12 63 of 68, M13 56 of 62; 255 of 277 in all (unchanged: both
-  packages of this batch are follow-ups). The follow-ups M8.20b, M8.20c, M8.23b, M10.19b, M10.21b, M11.5b, M11.5c,
+- 926 of the 1,009 inventory commands exist (`docs/parity.md`; new: `app.quit`, `window.closePrompt`,
+  `app.settings`, `file.openFolder`, `path.reshapeSegment` and the query `font.instance.placement`). Per milestone:
+  M1 (11), M3 (185), M4, M5, M6 (47), M7 (66), M8 (41), M10 (59), M11 (41) and M12 (99) are all live; M9 52 of 53,
+  M13 153 of 200, M14 3 of 34. The inventory has 3,744 rows. Feature parity is about 37% (ROADMAP.md › Parity
+  estimate; 37.2, was 36.0: Font Info 33% → 38%, Window 24% → 28%, Agent surfaces 55% → 60%, Font View 42% → 45%,
+  Source formats 67% → 70%, Layers 37% → 40%, Drawing 31% → 33%, Interpolation 29% → 30%; the depth plan expected
+  38.1%). 2,738 guesses on 1,504 rows are listed in `docs/guesses.md`; `docs/observe.md` lists 1,418 rows.
+- Packages built (done of total, counted from commit subjects; the totals include the depth packages that carry a
+  new number): M6 19 of 26, M7 20 of 24, M8 23 of 36, M9 26 of 40, M10 31 of 42, M11 19 of 22, M12 63 of 87, M13 57
+  of 83; 258 of 360 in all. Depth packages (`docs/plans/depth.md`): 10 of 167, all of wave 1; this line leaves
+  out the seven of them in M1, M3, M4 and M14 (M1.8, M3.19, M3.21, M3.40, M4.17, M14.1, M14.3). The follow-ups
+  M8.20b, M8.20c, M8.23b, M10.19b, M10.21b, M11.5b, M11.5c,
   M11.7b, M11.13b, M11.14b, M11.17b to M11.17e, M12.7b to M12.7f, M12.10b, M12.13b, M12.18b, M12.18c, M12.19b to
   M12.19d, M12.20b, M12.21b, M12.22b to M12.22e, M12.23b, M12.23c, M12.24b, M12.24c, M12.25b to M12.25e, M12.30b to
-  M12.30d, M12.40b to M12.40d, M12.41b, M12.64b, M13.15b, M13.15c, M13.23b and M13.55b to M13.55f are not counted.
+  M12.30d, M12.40b to M12.40d, M12.41b, M12.64b, M13.15b, M13.15c, M13.23b and M13.55b to M13.55f are not counted;
+  nor are the lettered depth packages (M10.21c, M13.20b, M13.21b, M13.21c, M13.23c) and X.pdf3, X.suite3.
 - **Baselines after this batch** (a later change that moves one of these numbers needs a reason):
 
   | Measure | Result |
@@ -97,8 +102,11 @@ _Updated: 2026-10-21, after the fourteenth batch: 2 follow-up packages (M12.40c,
   | Static oracle against fontc, TrueType | 63 of 354 sources differ (unchanged) |
   | Variable fonts against fontc and fontmake | fontc 103 equal, 35 different, 20 failed (was 101, 37, 20); fontmake 106, 36, 16 (was 104, 38, 16) |
   | Feature automation | unchanged from the sections below |
+  | Measurement over a heavy line (M3.21, X.fix73) | 200 large glyphs measured up to the element limit, the rest left out, not refused; an edit to one glyph measures that glyph again only |
+  | Custom parameter value checks (M7.21) | 64 parameters checked (10 before); every corpus value passes but three in fontc's test sources (`docs/spec/18-custom-parameters.md` › What FontCraft checks) |
 
-  The fourteenth batch ran every AFDKO measure again at `601ebf0` (tx, makeotf, CID keys, rotatefont, cffsubr, the
+  The fifteenth batch (depth wave 1) changed no compile output, so no oracle or AFDKO measure ran again; the
+  `.glyphs` native round trip stays 122/1/118/4. The fourteenth batch ran every AFDKO measure again at `601ebf0` (tx, makeotf, CID keys, rotatefont, cffsubr, the
   CFF2 compile and its size on Oswald): none moved, and the 3 makeotf differences are now written down as makeotf
   faults. Times of the twelfth batch were
   taken at a load of 19 to 20 on 16 cores (the preview font build also at 8); earlier rows at 7 to 18. All are
@@ -323,8 +331,24 @@ _Updated: 2026-10-21, after the fourteenth batch: 2 follow-up packages (M12.40c,
     (M11.17e, X.fix71).
   - Project-compile feature code has one lookup per rule type, as makeotf does; its messages keep the file and
     position of included code, mapped through the include table of the files (M12.40c, X.fix67).
+  - Closing and quitting ask about one document at a time, fonts first, then projects. A failed or cancelled save
+    stops the quit; a document edited while the question is open is asked about again. `window.closePrompt` with
+    `save` from automation on a document without a file returns an error instead of opening a chooser. While the
+    question is open only Return and Escape reach it (M14.3, X.fix76).
+  - Off the Mac the Measurement tool is held with Ctrl+Alt+Shift, because Ctrl+Alt is AltGr there and the Select
+    tool's mirror chord; on the Mac with Cmd+Alt+Ctrl, as the handbook says (M3.21, X.fix73).
+  - A master-row click in the Layers section with text selected switches every selected glyph and the edited glyph
+    (M3.40, X.fix75; a guess).
+  - Axes are addressed by index where two share a tag; a shared tag in a command is refused as ambiguous (M9.27,
+    X.fix74).
+  - Settings… is in the Edit menu on every platform; the User Settings switches are off by default (M14.1).
+  - Control-channel input is applied one event per drawn frame, inside the confinement of input frames; the
+    person's own press or the save question drops waiting synthetic input; `ui.resize` clamps to the monitor and
+    the GPU's texture size (M13.78, X.fix77). The `ui.set` key names are our own, listed in
+    `docs/control-protocol.md` › View switches.
 - **New dependencies between crates:** `engine` and `textlayout` depend on `shaping`, `ui-egui` on `io-pdf` (all internal); `hinting` re-exports `ttasm`; `engine` re-exports `fea`. This batch: `engine` depends on `io-pdf` (PDF page sizes), `io-bitmap` (strikes); `render` on `container`, which holds the gzip reader; `textlayout` on `icu_properties` (line breaking); `tables` takes `miniz_oxide` as a dev-dependency. `io-bitmap` depends on `container` for gzip (`.pcf.gz`, `.bdf.gz`). The fourteenth batch: `sha2` is a workspace dependency (the PDF cache key; it was in the lock through lopdf); the desktop app starts the platform's clipboard tools.
-- **New crates and dependencies:** `crates/shaping` (harfrust), `crates/io-bitmap` (BDF and PCF),
+- **New crates and dependencies:** `craft-quit` from the suite's craft-libs, pinned by git commit, with its
+  `egui` feature, and its `menu` feature on macOS for the app menu's Quit (M14.3). `crates/shaping` (harfrust), `crates/io-bitmap` (BDF and PCF),
   `crates/io-pdf` (lopdf, with a hand-written reader and rasteriser under limits). `ureq` with rustls serves
   HTTPS downloads in the desktop app only. `craft-print` is a workspace dependency and is not in the
   lock file until M12.36 uses it (that needs network).
@@ -464,27 +488,29 @@ linked file is checked against it, and a linked file outside the read root reads
 
 ## Where to start
 
-1. **The depth waves of `docs/plans/depth.md`, wave 1 first.** The second planning pass graded every area by
-   behaviour and wrote 167 packages into the milestone plans (`docs/plans/M<n>.md`, section "Depth packages").
-   Wave 1: the builder M14.3 (save prompts on close and quit, `app.quit`, the document name in the title, with the
-   suite's `craft-quit`; closing the window loses unsaved work today) and the writers M1.8 (an Open chooser, Open
-   Folder and drop to open; `file.open` without a path fails today), M9.27, M13.78, M3.19, M7.21, M4.17, M3.40,
-   M14.1 and M3.21. Integrate in the listed order; M14.3 and M1.8 both touch `app.rs`. Then wave 2 and on, with the
-   builder queue beside the writers. The builder queue is the longest path; measure-only builders (M12.71,
-   M12.72, M12.83, M8.34, M2.11, M10.39) can run in a second lane with their own clone and target directory. Check
-   the disk: build output is large (`cargo clean` or delete the target directory when the disk passes about 75%;
-   incremental builds are off, `CARGO_INCREMENTAL=0`).
-2. **Open decisions** (`docs/plans/depth.md` › Open decisions): eight questions for the owner. The packages that
+1. **The owner's check on a Mac, before wave 2.** Pull `master` on the Mac and build the app: macOS was not
+   compiled for wave 1, as it needs the platform SDK. Check with unsaved work: Cmd+Q, the app menu's Quit and the
+   window's close box each ask about every unsaved document and Cancel keeps the window; then File › Open… shows
+   the chooser, and a font file dropped on the window opens. Report a failure as a fix task before wave 2.
+2. **Wave 2 of `docs/plans/depth.md`.** Wave 1 is built (ten packages, gated at `29f2eee`). Wave 2: the builder
+   M8.25 and the writers M12.67 (first), M7.22, M3.23, M13.80, M5.29, M4.18, M3.22, M9.29 and M12.36; integrate in
+   that order. Each package is written out in its milestone plan's section "Depth packages" (`docs/plans/M<n>.md`);
+   built packages say "built" in their headings. Then wave 3 and on, with the builder queue beside the writers. The
+   builder queue is the longest path; measure-only builders (M12.71, M12.72, M12.83, M8.34, M2.11, M10.39) can run
+   in a second lane with their own clone and target directory. Check the disk: build output is large (`cargo clean`
+   or delete the target directory when the disk passes about 75%; incremental builds are off,
+   `CARGO_INCREMENTAL=0`).
+3. **Open decisions** (`docs/plans/depth.md` › Open decisions): eight questions for the owner. The packages that
    wait on them sit at the end of the waves (M3.27, M3.28, M3.38, M4.22, M4.23, M5.31, M5.32, M13.72 to M13.77,
    M14.7, M14.8); the auto-spacing and auto-kerning targets do not hold up M13.20b or M13.21c.
-3. **The measures that missed** have depth packages: M10.21c (the TrueType autohinter's misses and a measure over
+4. **The measures that missed** have depth packages: M10.21c (the TrueType autohinter's misses and a measure over
    more than 7 sources) and M13.20b (auto-spacing by shape classes). Detect Composites on Inter stays at 78.1%
    against 95% (M13.15c); the rest needs anchor or source hints, and no package is queued. Measure: `cargo test
    --release -p fontcraft-engine --test engine detect:: -- --ignored --nocapture`.
-4. **The close builders, last:** M6.19 (after M6.24), M7.20, M8.24, M9.26, M10.32, M11.20, M12.65, M13.61. The
+5. **The close builders, last:** M6.19 (after M6.24), M7.20, M8.24, M9.26, M10.32, M11.20, M12.65, M13.61. The
    other packages the first plans left are in the waves: M12.36 (wave 2), M13.40 to M13.42 (waves 4 to 6), and
    M13.59 in a spare slot of wave 11 or 12. M12.1a to M12.1c are built.
-5. **Follow-up packages the writers named:**
+6. **Follow-up packages the writers named:**
    - TTX: the TrueType `post` table compiled again when a dump lacks it; glyph-order renames in a TTX import into a
      CFF font (X.ttx4).
    - Instances: the file names of masters exported as instances, against fontmake's (`FontInfo-Thin.ttf`).
@@ -498,17 +524,25 @@ linked file is checked against it, and a linked file outside the read root reads
      at both canvas edges runs its filters again on every frame). Colour drawing: screenshots.
    - Table Viewer (M12.38): the source of the last export, a control-channel measure and screenshots.
    - Small UI leftovers: the Exports tab's aliases (not yet defined).
-6. **The suite libraries:** `craft-quit` comes with M14.3; X.suite3 (`craft-settings`, settings in `config.toml`
+   - Wave 1: the project asked about in the save question is not brought forward; `ui.text` can type into a
+     dialog behind the question, and Tab does not move focus inside it; check that tool letters stay blocked while
+     it is open (M14.3). `ui.contextMenu.invoke` does not notice a master switch since the menu opened, and a
+     multi-step item is not one transaction (M13.78). The Text tool moves the measurement line with Cmd+Ctrl+Alt,
+     which is AltGr off the Mac (`canvas/text.rs`); off the Mac a Ctrl-drag also turns on the lever, as Ctrl reports
+     as Cmd (M3.19, M3.21). Cmd+Delete on an axis row; command warnings do not reach the panels (M9.27). The
+     extrapolation audit check (`instanceOutsideAxisRange`) keeps its own tolerance rule: decide whether it shares
+     the placement helper (X.fix74). A corpus listing of the values the new parameter checks refuse (M7.21).
+7. **The suite libraries:** `craft-quit` is adopted (M14.3); X.suite3 (`craft-settings`, settings in `config.toml`
    with backup and recovery and a one-time import of the JSON settings file) is the wave 12 builder; `craft-ui`
    is M14.9; `craft-keymap` (M14.7, M14.8) waits on two upstream pull requests. Watch item: the suite's proposed
    shared control-port authentication (`craft-control`); adopt it for the control channel once it exists. Pin
    each crate to a git commit; bumping a pin is its own commit with the full gate.
-7. **Smaller follow-ups:** an intermediate layer's own TrueType instructions and the variation of composites with
+8. **Smaller follow-ups:** an intermediate layer's own TrueType instructions and the variation of composites with
    intermediate layers (M10.19, M10.19b); variable values in table blocks (`fea.var.tableValues`: `BASE`, `GDEF`
    carets, `hhea`, `OS/2`, `vmtx`; fea-rs rejects them); the layout of InterpolateLayout3 (two `.notdef`
    glyphs), fontc's combinatorial bracket kerning and decreasing-axis tables, and brace sources for composites of
    non-exported brace glyphs (with M9.39); subsetting sources (M12.74).
-8. **The measures not yet run:** ttxn and tx for the normalised dump, sfntdiff, cu2qu, ttfcomponentizer,
+9. **The measures not yet run:** ttxn and tx for the normalised dump, sfntdiff, cu2qu, ttfcomponentizer,
    otfautohint for the `autohint` shell and over the corpus (M10.33), FontBakery over the corpus (M12.81), and the
    § 5 measures of M6 (M6.22; mark attachment is run), M7 (names are run) and M8 (M8.34). M6's commands:
    `cargo test -p fontcraft-oracle --features oracle --test marks -- --ignored`;
@@ -576,7 +610,7 @@ Requests the integrations left for the builder packages:
 | M9.4, M9.5 | vertical phantom points and `VVAR`; `OVERLAP_COMPOUND`; the avar version 2 build (M12.33) |
 | M10.2 | the Alignment Zones master parameter is not read |
 | M10.19 | the hinted-preview measures of the M10 plan (§ 5) can run against instructed exports; they have not been run. Left in M10.19: `cvar` and deltas for variable fonts, `showPointIndexes` drawing, special layers' own instructions |
-| X.suite2, X.suite3 | `craft-quit` (native macOS quit and window-close handling; the save prompts stay ours) and `craft-settings` (`config.toml` with backup and recovery, one-time import of the JSON settings file; pairs with the settings window), after the builder packages above (decision 0008) |
+| X.suite2, X.suite3 | `craft-quit` is adopted with M14.3 (native macOS quit and window-close handling; the save prompts are ours); `craft-settings` (`config.toml` with backup and recovery, one-time import of the JSON settings file; pairs with the settings window), after the builder packages above (decision 0008) |
 | craft-control | watch the suite's open proposal for shared control-port authentication; adopt it for the control channel once it exists (decision 0008) |
 | M12.36 | the PDF proof prints through the suite's `craft-print` (decision 0008) |
 | M14 | adopt the suite's `craft-ui` (docking, tabs, icon buttons, widget-state theme; decision 0008) |
@@ -727,8 +761,8 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
   (209 handbook rows re-read by a second reader: 1 wrong, 14 imprecise, all corrected; patterns in
   `docs/spec/README.md`). Duplicated meaning across files is likely (open decision D2 lists known
   pairs).
-- **8 rows are from memory** (`docs/parity.md` › By source): 4 in `00-…`, 2 in `90-…`, 1 each
-  in `07-…` and `16-…`. Verify or drop them before implementing.
+- **6 rows are from memory** (`docs/parity.md` › By source): 3 in `00-…`, 2 in `90-…` and 1 in
+  `07-…`. Verify or drop them before implementing.
 - **The reference app has not been run.** 61 rows are `observed`: 56 compiled-output rows
   checked against fontc, fontmake and makeotf, and 5 editor rows confirmed by public tutorial videos.
   About 450 open questions are listed at the ends of the notes.
@@ -782,6 +816,9 @@ packages that wait on them are listed there).
 `docs/spec/00-open-decisions.md` › For the owner: the name (O2), access to the sibling apps' shared
 standards (O3), the application id (rest of O4), FontLab (O5), platforms (O6). O1 is answered (no
 licence; tutorial videos watched by the owner) and so is the repository's home.
+
+Wave 1 needs a build on the Mac: Cmd+Q and the app menu's Quit with unsaved work, the File › Open… chooser and
+dropping a file on the window (see "Where to start", item 1).
 
 MCP and the control channel are unrestricted unless `--automation-read-root` and
 `--automation-write-root` are given, as in the sibling apps (owner's decision).
@@ -1455,3 +1492,15 @@ Append one terse entry per session: what landed, numbers, what is still open.
   failed, 49 skipped. The second planning pass graded the 22 areas and wrote 167 packages in 13 waves plus a builder
   tail (`docs/plans/depth.md`), from 36% to about 51% parity. Open: everything under "Where to start", wave 1
   first.
+- **2026-10-21, depth wave 1 (the fifteenth batch).** Landed: save prompts on close, quit and File › Close,
+  `app.quit`, `window.closePrompt` and the window title with the suite's `craft-quit` (M14.3); the Open chooser,
+  Open Folder, drop to open and project routing (M1.8); the settings window with User Settings and Extensions
+  (M14.1); axes and coordinates in Font Info (M9.27); value lists and checks for 64 custom parameters (M7.21);
+  filter rename, drag and Alt groups in the sidebar (M4.17); Layers drag reorder, backup to master and a master per
+  glyph in text (M3.40); the Select tool's Alt and Ctrl+Alt drags and `path.reshapeSegment` (M3.19); the
+  Measurement tool over the whole line with held tools (M3.21); pointer, wheel, `ui.set`, resize, focus and context
+  menus over the control channel (M13.78). The reviews found a measurement that failed on long lines and recomputed
+  every frame, keys that reached the canvas behind the save question, and input applied before the frame that draws
+  it (X.fix73 to X.fix77). Numbers: 926 of 1,009 commands live; feature parity about 37% (37.2, was 36.0; the plan
+  expected 38.1); depth packages 10 of 167; round trips and compile output unchanged. Gate: 4,767 tests passed, 0
+  failed, 49 skipped. Open: the owner's Mac check, then wave 2.

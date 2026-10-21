@@ -51,7 +51,7 @@ command-line tools reach about 58%. The table keeps 41% so that the gain is not 
 | Point | Parity |
 |---|---:|
 | Now | 36.0% |
-| After wave 1 | 38.1% |
+| After wave 1 | 38.1% (graded 37.2% once built) |
 | After wave 2 | 39.8% |
 | After waves 1 to 13 (13 builders) | 48.6% |
 | After every package and the builder tail | 51.3% |
@@ -59,7 +59,8 @@ command-line tools reach about 58%. The table keeps 41% so that the gain is not 
 
 ## 3. Packages
 
-167 packages: 110 writers, 49 builders and 8 close builders. Each milestone plan lists its own:
+167 packages: 110 writers, 49 builders and 8 close builders; 10 are built (wave 1). Each milestone plan lists its own, and
+marks the built ones "built" in their headings:
 
 | Plan | Packages |
 |---|---|
@@ -83,12 +84,12 @@ first plans. M13.59 (Glyphs project files) can take a spare writer slot in wave 
 
 ## 4. Waves
 
-Up to nine writers and one builder per wave. Integrate in the listed order. Lines that only register a
+Up to nine writers and one builder per wave. Integrate in the listed order. Wave 1 is built; wave 2 is next. Lines that only register a
 command, dialog, panel, setting or UI command merge easily.
 
 | Wave | Writers | Builder | Parity after |
 |---|---|---|---:|
-| 1 | M1.8, M9.27, M13.78, M3.19, M7.21, M4.17, M3.40, M14.1, M3.21 | M14.3 | 38.1% |
+| 1 (built) | M1.8, M9.27, M13.78, M3.19, M7.21, M4.17, M3.40, M14.1, M3.21 | M14.3 | 38.1% (graded 37.2%) |
 | 2 | M12.67 (first), M7.22, M3.23, M13.80, M5.29, M4.18, M3.22, M9.29, M12.36 | M8.25 | 39.8% |
 | 3 | M6.25 (first), M14.2, M8.26, M8.30, M6.20, M6.21, M12.66, M12.69, M4.19 | M2.10 | 41.2% |
 | 4 | M3.39, M8.27, M2.8, M9.30, M3.24, M3.20, M4.21, M13.81, M5.20 | M13.40 | 42.4% |
@@ -106,6 +107,11 @@ Wave 1 starts with the two gaps that lose or block work: closing a window with u
 (M14.3), and File › Open… has no file chooser (M1.8). Only `app.rs` is shared between them. The rest of wave
 1 gives the most parity per package.
 
+Wave 1 was built, integrated and gated as one batch. Graded by behaviour once built, it moved parity from 36.0% to
+37.2%, below the 38.1% planned: the grades err low while nothing is observed, and the gain went to Font Info (33% to
+38%), Window (24% to 28%), Agent surfaces (55% to 60%), Font View (42% to 45%), Source formats (67% to 70%), Layers (37%
+to 40%), Drawing (31% to 33%) and Interpolation (29% to 30%). Its follow-ups are in ROADMAP.md › What to build next.
+
 ## 5. Builder queue
 
 Builders run one at a time in the main checkout, so the queue is the longest path. The measure-only builders
@@ -114,7 +120,7 @@ directory.
 
 | Step | Builders, in order |
 |---|---|
-| Waves 1 to 13 | M14.3, M8.25, M2.10, M13.40, M12.81, M12.71, M13.79, M3.30, M13.20b, M10.33, M10.21c, X.suite3, M6.22 |
+| Waves 1 to 13 | M14.3 (built), M8.25, M2.10, M13.40, M12.81, M12.71, M13.79, M3.30, M13.20b, M10.33, M10.21c, X.suite3, M6.22 |
 | Tail (to 51.3%) | M12.72, M3.25, M14.9, M13.67, M13.82, M12.82, M1.10, M12.83, M3.31, M9.31, M1.12, M8.34, M3.32, M5.23, M9.38, M9.39, M14.10, M9.28, M9.33, M9.37, M9.35, M3.34, M3.35, M2.9, M2.11, M5.21, M13.21c, M6.23 (then the writer M6.24), M10.38, M10.39, M8.33 |
 | Waiting | M14.7, M14.8 (upstream); M3.27, M3.38, M5.32 (decisions); then the writer M13.75 |
 | Closes | M6.19, M7.20, M8.24, M9.26, M10.32, M11.20, M12.65, M13.61 |

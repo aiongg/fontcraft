@@ -492,6 +492,17 @@ Nothing here reaches the exported font.
 
 Syntaxes too long for the inventory summaries.
 
+### What FontCraft checks
+
+- 64 parameters have a value list or a syntax check beyond their kind (`crates/fontinfo/src/syntax.rs`): whole
+  numbers in a range, positive numbers, angles, insets, OpenType tags and tag lists, named codes and similar.
+  A value list comes from the row's `values`; a choice matches in any case and is stored as the list spells it.
+- Adding, setting and pasting a parameter run the checks; a refused value changes nothing, and a pasted row with a
+  refused value is skipped and reported. Values read from a file are not checked when the file opens.
+- A value that names a master or a palette the font does not have is kept, with a warning.
+- Every corpus value passes but three in fontc's test sources: an Elidable STAT Axis Value Name of `Regular`, a
+  `gasp` range of 65536 and a PostScript font name with a space.
+
 ### `Filter` and `PreFilter`
 
 Value: filter name, then arguments separated by semicolons. `Filter` runs after components are

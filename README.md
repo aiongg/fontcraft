@@ -5,7 +5,7 @@ Rust, and drivable by AI agents as fully as by people. It follows the convention
 Crafting Apps (VectorCraft, PhotoCraft and their siblings) and aims at parity with the leading
 commercial font editor and with the standard open font-engineering tools.
 
-**Status: `.glyphs`, UFO and designspace sources open and save, compiled fonts open, and static fonts and variable TrueType and CFF2 fonts compile with overlaps removed. Edit View, Font View, spacing, kerning and text mode (M3 to M5) are built, and the first waves of M6 to M13 add components, Font Info, feature code (compiled into exported fonts), variable-font tables, hinting, colour layers, command-line table tools, quality checks, font subsetting, a plug-in module runtime, a command console and macros, though much of that does not yet reach exported fonts. 920 of 1006 commands run and feature parity is about 36% by our own grading; nothing is yet compared with the reference app.** See
+**Status: `.glyphs`, UFO and designspace sources open and save, compiled fonts open, and static fonts and variable TrueType and CFF2 fonts compile with overlaps removed. Edit View, Font View, spacing, kerning and text mode (M3 to M5) are built, and the first waves of M6 to M13 add components, Font Info, feature code (compiled into exported fonts), variable-font tables, hinting, colour layers, command-line table tools, quality checks, font subsetting, a plug-in module runtime, a command console and macros, though much of that does not yet reach exported fonts. The first depth wave adds save prompts on close and quit, an Open chooser and the settings window. 926 of 1009 commands run and feature parity is about 37% by our own grading; nothing is yet compared with the reference app.** See
 [ROADMAP.md](ROADMAP.md) for the honest assessment.
 
 ## What is here
@@ -13,7 +13,7 @@ commercial font editor and with the standard open font-engineering tools.
 | | |
 |---|---|
 | **The plan** | [charter](docs/charter.md) · [architecture](docs/architecture.md) · [decisions](docs/decisions/) · [execution plan](docs/execution-plan.md) · [testing and oracles](docs/testing.md) · [clean-room policy](docs/clean-room.md) · [references](docs/references.md) |
-| **The specification** | [`spec/inventory/`](spec/): 3,618 machine-readable rows covering every command, tool, panel, setting, custom parameter, quality check, CLI subcommand, file format and OpenType table we mean to support. [`docs/spec/`](docs/spec/README.md): 22 behaviour notes written from public documentation, each ending with its open questions |
+| **The specification** | [`spec/inventory/`](spec/): 3,744 machine-readable rows covering every command, tool, panel, setting, custom parameter, quality check, CLI subcommand, file format and OpenType table we mean to support. [`docs/spec/`](docs/spec/README.md): 22 behaviour notes written from public documentation, each ending with its open questions |
 | **The skeleton** | A Rust workspace that passes its own gate: the font model, the native file format, a static TrueType compiler, the engine with its command registry and undo, a CLI, a JSON control channel, an MCP server and an egui desktop shell |
 | **The gate** | `cargo xtask ci`: formatting, lints that forbid panics, tests, the inventory check, the parity report, asset and vendor-name checks, crate layering, a WebAssembly build |
 
