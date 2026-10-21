@@ -309,14 +309,14 @@ Nodes:
 Handles (`move.handles`, `move.mirrorHandleAcrossSmoothNode`):
 
 - Drag or arrow keys; all selected handles move together.
-- `Alt`: angle preserved, only length changes.
+- `Alt`: angle preserved, only length changes (`mode: pointsOnly`).
 - `Ctrl+Alt` on a handle of a smooth node: the opposite handle takes the same length and the
-  matching angle.
+  matching angle (`mode: mirror`).
 
 Segments (`move.dragSegment`):
 
 - Drag: both end nodes and their handles move.
-- `Alt`+drag: handle lengths change along their existing angles.
+- `Alt`+drag: handle lengths change along their existing angles (`path.reshapeSegment`).
 
 Dragging is subject to magnetic guides and snapping (section 20); `Ctrl` suspends both.
 
@@ -331,6 +331,19 @@ Construction details where the handbook is silent (our design, `inferred`):
 - Moved points are rounded to the grid; points that do not move keep their coordinates.
 - `duplicate` with part of a path selected copies the segments whose two end nodes are selected,
   as open paths. A copied anchor gets the first free name of the form `top.1`.
+- The Select tool reads `Alt` at mouse-down by what is selected. Something to copy (a whole
+  path, a segment with both end nodes selected, a component, an anchor, a guide): a duplicate.
+  Lone nodes with nothing to copy: `pointsOnly`. Handles only: `pointsOnly` while `Alt` is held,
+  `mirror` while `Ctrl+Alt` is held. A cubic segment pressed on its own: `path.reshapeSegment`.
+- `mirror` puts the opposite handle of a smooth node at the moved handle's mirror image through
+  the node. A corner node's other handle stays. When the other side is straight, the handle
+  slides along that line as in `normal`.
+- `path.reshapeSegment {segment, t, to}` keeps the end nodes and both handle directions. The
+  point at `t` is linear in the two handle lengths, so it solves a 2×2 system for them; with
+  parallel handles it takes the smallest change that gets nearest to `to`. Each length stays
+  between 1 unit and 10 times the larger of the end nodes' distance and the current lengths;
+  when one is held, the other is solved again with it fixed. The tool keeps `t` from 0.01 to
+  0.99, where the point depends on the handles.
 - `selection.setPosition` and `selection.getInfo` measure a whole path (every point named) and a
   component by their outlines, and anything else by its points.
 

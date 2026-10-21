@@ -116,6 +116,8 @@ mod preview_tests;
 #[cfg(test)]
 mod sample_strings_tests;
 #[cfg(test)]
+mod select_modifiers_tests;
+#[cfg(test)]
 mod sidebar_tests;
 #[cfg(test)]
 mod smart_settings_tests;

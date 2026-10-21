@@ -9,7 +9,11 @@
 //! | drag on empty canvas | marquee: nodes, handles and anchors inside; `Shift` toggles them, `Alt` takes on-curve nodes only and components too, `Ctrl` turns the marquee |
 //! | drag an object | `selection.move` in one interaction; snapping unless `Ctrl` is held |
 //! | `Alt` held at mouse-down | the drag moves a copy (`duplicate: true`) |
+//! | `Alt` held at mouse-down, with nothing to copy (lone nodes, no whole segment) | only the selected points move (`mode: pointsOnly`) |
 //! | `Ctrl+Alt` at mouse-down, or `Alt` pressed during the drag | nudge (`mode: nudge`) |
+//! | drag handles only, `Alt` held | each handle keeps its angle (`mode: pointsOnly`) |
+//! | drag handles only, `Ctrl+Alt` held | the opposite handle of a smooth node mirrors the moved one (`mode: mirror`) |
+//! | `Alt`+drag a curve segment, selected alone | `path.reshapeSegment`: the handle lengths change, the nodes stay |
 //! | an open end dropped on another open end | the move and `path.connectNodes` as one step |
 //! | `Alt`+click a line segment | `path.convertSegmentToCurve` |
 //! | double-click a node | `path.toggleNodeType` (`Alt`: `path.toggleNodeTypeKeepingOutline`) |
@@ -44,6 +48,7 @@ pub enum MoveMode {
     Normal,
     PointsOnly,
     Nudge,
+    Mirror,
 }
 
 impl MoveMode {
@@ -52,6 +57,7 @@ impl MoveMode {
             MoveMode::Normal => "normal",
             MoveMode::PointsOnly => "pointsOnly",
             MoveMode::Nudge => "nudge",
+            MoveMode::Mirror => "mirror",
         }
     }
 }
@@ -94,6 +100,10 @@ struct Drag {
     alt_at_start: bool,
     nudge_at_start: bool,
     duplicate: bool,
+    /// `Alt` at mouse-down with nothing to copy: only the selected points move.
+    points_only: bool,
+    /// Only handles are dragged: `Alt` keeps their angles, `Ctrl+Alt` mirrors them.
+    handles_only: bool,
     last_pos: Point,
     last_sent: Option<(f64, f64, MoveMode)>,
     snap: Option<Snap>,
@@ -176,6 +186,55 @@ enum State {
     Guide(Box<GuideDrag>),
     Smart(Box<SmartDrag>),
     Hint(Box<HintDrag>),
+    Reshape(Box<Reshape>),
+}
+
+/// `t` is held this far inside a segment being reshaped (the command's range).
+const RESHAPE_MIN_T: f64 = 0.01;
+
+/// An `Alt`-drag on a curve segment: `path.reshapeSegment` previews in one interaction, the
+/// segment's point at `t` following the pointer.
+#[derive(Clone, Debug)]
+struct Reshape {
+    shape: usize,
+    node: usize,
+    t: f64,
+    down: Point,
+    /// The segment's point at `t` when the drag began.
+    grab: Point,
+    last: Option<Point>,
+}
+
+impl Reshape {
+    /// The reshape for a press on `hit`, when it is an unlocked cubic segment.
+    fn press(scene: &Scene, hit: &HitResult, down: Point) -> Option<Self> {
+        let Hit::Segment { shape, node, t, line: false, .. } = hit.hit else { return None };
+        if hit.locked || scene.locked {
+            return None;
+        }
+        let path = scene.path(shape)?;
+        let seg = path.segment_ending_at(node)?;
+        let cubic = seg.handles.len() == 2 && path.nodes.get(node).is_some_and(|n| n.kind == fontcraft_model::NodeKind::Curve);
+        if !cubic || !t.is_finite() {
+            return None;
+        }
+        let t = t.clamp(RESHAPE_MIN_T, 1.0 - RESHAPE_MIN_T);
+        let grab = seg.eval(t).filter(|p| finite(*p)).unwrap_or(hit.at);
+        Some(Self { shape, node, t, down, grab, last: None })
+    }
+
+    fn update(&mut self, cx: &Context<'_>, pos: Point) -> Option<Invocation> {
+        let to = Point::new(self.grab.x + pos.x - self.down.x, self.grab.y + pos.y - self.down.y);
+        if !finite(to) || self.last == Some(to) {
+            return None;
+        }
+        self.last = Some(to);
+        let mut params = Selection::new().targets(cx.scene);
+        params.insert("segment".into(), json!([self.shape, self.node]));
+        params.insert("t".into(), json!(self.t));
+        params.insert("to".into(), json!([to.x, to.y]));
+        Some(Invocation::new("path.reshapeSegment", Value::Object(params)))
+    }
 }
 
 /// A smart handle being dragged: `smartComponent.setValue` previews in one interaction.
@@ -309,8 +368,24 @@ impl SelectTool {
                     return out;
                 }
                 let mods = press.mods;
-                let duplicate = mods.alt && !mods.ctrl && press.selection.has_structure(cx.scene);
+                let alone = press.selection == Selection::from_items(press.hit.items());
+                if mods.alt
+                    && !mods.ctrl
+                    && alone
+                    && let Some(mut reshape) = Reshape::press(cx.scene, &press.hit, press.down)
+                {
+                    out.push(Action::Begin { label: "Reshape Segment".into() });
+                    if let Some(inv) = reshape.update(cx, ev.pos) {
+                        out.push(Action::Preview { invocation: inv });
+                    }
+                    self.state = State::Reshape(Box::new(reshape));
+                    return out;
+                }
+                let copyable = press.selection.has_copyable_part(cx.scene);
+                let duplicate = mods.alt && !mods.ctrl && copyable;
                 let nudge_at_start = mods.alt && mods.ctrl;
+                let handles_only = press.selection.is_handles_only(cx.scene);
+                let points_only = mods.alt && !mods.ctrl && !copyable && !handles_only;
                 let only = press.selection.points.iter().next().copied().filter(|_| press.selection.len() == 1);
                 let end = only.filter(|&(s, n)| !duplicate && cx.scene.is_open_end(s, n));
                 let followers = if duplicate {
@@ -326,6 +401,8 @@ impl SelectTool {
                     alt_at_start: mods.alt,
                     nudge_at_start,
                     duplicate,
+                    points_only,
+                    handles_only,
                     last_pos: ev.pos,
                     last_sent: None,
                     snap: None,
@@ -360,6 +437,11 @@ impl SelectTool {
             }
             State::Smart(smart) => out.actions.extend(smart.update(cx, ev.pos).actions),
             State::Hint(hint) => out.extend(hint.drag(cx, ev)),
+            State::Reshape(reshape) => {
+                if let Some(inv) = reshape.update(cx, ev.pos) {
+                    out.push(Action::Preview { invocation: inv });
+                }
+            }
         }
         out
     }
@@ -427,6 +509,12 @@ impl SelectTool {
                 }
             }
             State::Hint(hint) => out.extend(hint.release(cx, ev)),
+            State::Reshape(mut reshape) => {
+                if let Some(inv) = reshape.update(cx, ev.pos) {
+                    out.push(Action::Preview { invocation: inv });
+                }
+                out.push(Action::Commit);
+            }
         }
         out
     }
@@ -483,7 +571,19 @@ impl Drag {
         if !(dx.is_finite() && dy.is_finite()) {
             return None;
         }
-        let mode = if self.nudge_at_start || (!self.alt_at_start && mods.alt) { MoveMode::Nudge } else { MoveMode::Normal };
+        let mode = if self.handles_only {
+            match (mods.alt, mods.ctrl) {
+                (true, true) => MoveMode::Mirror,
+                (true, false) => MoveMode::PointsOnly,
+                _ => MoveMode::Normal,
+            }
+        } else if self.points_only {
+            MoveMode::PointsOnly
+        } else if self.nudge_at_start || (!self.alt_at_start && mods.alt) {
+            MoveMode::Nudge
+        } else {
+            MoveMode::Normal
+        };
         let sent = (dx, dy, mode);
         if self.last_sent == Some(sent) {
             return None;
@@ -571,7 +671,7 @@ impl Tool for SelectTool {
         out.extend(crate::drag_aids::cancel(&mut self.aid));
         self.hover = None;
         match std::mem::take(&mut self.state) {
-            State::Dragging(_) | State::Guide(_) => out.push(Action::Cancel),
+            State::Dragging(_) | State::Guide(_) | State::Reshape(_) => out.push(Action::Cancel),
             State::Smart(smart) if smart.begun => out.push(Action::Cancel),
             State::Hint(hint) => out.extend(hint.cancel()),
             State::Marquee(m) => {
@@ -599,7 +699,7 @@ impl Tool for SelectTool {
                 None => Vec::new(),
             },
             State::Hint(hint) => hint.overlays(),
-            State::Pressed(_) | State::Smart(_) => Vec::new(),
+            State::Pressed(_) | State::Smart(_) | State::Reshape(_) => Vec::new(),
         }
     }
 }

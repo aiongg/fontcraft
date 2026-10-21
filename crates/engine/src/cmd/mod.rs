@@ -155,6 +155,7 @@ mod plugin_manager;
 mod power_guides;
 pub mod related;
 mod script;
+mod segment_reshape;
 mod selections;
 pub mod status;
 mod stem_filters;
@@ -345,6 +346,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(measure_line::specs());
         v.extend(dimensions::specs());
         v.extend(node::specs());
+        v.extend(segment_reshape::specs());
         v.extend(fit_curve::specs());
         v.extend(filter::specs());
         v.extend(stroke::specs());
