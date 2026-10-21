@@ -39,6 +39,9 @@ pub struct FontcraftApp {
     pub automation_roots: Option<std::sync::Arc<fontcraft_engine::file_access::AutomationRoots>>,
     /// Text for the system clipboard, handed to the platform at the end of the frame.
     pub(crate) clipboard_out: Option<String>,
+    /// Reads what the system clipboard holds beside text (a drawing app's PDF); `None` where
+    /// there is no reader (the browser, MCP, tests).
+    pub clipboard_flavours: Option<Box<dyn shell::clipboard::ClipboardFlavours>>,
     /// Where the menu bar was drawn in the last frame.
     pub(crate) menu_bar_rect: egui::Rect,
     pub(crate) menu_cache: MenuCache,
@@ -77,6 +80,7 @@ impl FontcraftApp {
             preview_address: Default::default(),
             automation_roots: None,
             clipboard_out: None,
+            clipboard_flavours: None,
             menu_bar_rect: egui::Rect::NOTHING,
             menu_cache: MenuCache::default(),
             fill_cache: FillCache::default(),

@@ -14,6 +14,13 @@
 //! the glyph can open. Edit › Paste from the menu carries no text: it asks the platform for the
 //! clipboard first ([`request_text`]), and the text arrives as a paste event in the next frame.
 //!
+//! Drawing apps put a PDF on the clipboard, which egui does not carry. In Edit View the desktop
+//! app's [`ClipboardFlavours`] reads it: a paste whose text is neither our fragment nor SVG, Edit ›
+//! Paste with no text on the clipboard (the text request answers nothing in the next frame), and
+//! the paste key with no text (the platform then sends no paste event, only the key's release)
+//! run `edit.paste {pdf}` with the PDF as base64. Without a reader (the browser, tests) only text
+//! is pasted.
+//!
 //! Paste Special (Option held with the paste key, or Edit › Paste Special, which asks for the
 //! text the same way) opens `dialog.pasteSpecial` on copied glyphs, with the selected glyphs as
 //! its `targets` and the master shown.
@@ -32,6 +39,7 @@
 //! Nothing here runs while a text field has the keyboard (it copies and pastes text itself) or a
 //! dialog is open.
 
+use base64::Engine as _;
 use serde_json::{Map, Value, json};
 
 use crate::app::FontcraftApp;
@@ -46,6 +54,19 @@ const GLYPHS_FORMAT: &str = "fontcraft-glyphs";
 
 /// Longest clipboard text a paste takes.
 pub const MAX_PASTE_BYTES: usize = 16 * 1024 * 1024;
+/// Largest PDF a paste takes from the clipboard: `edit.paste`'s limit.
+pub const MAX_PASTE_PDF_BYTES: usize = 64 << 20;
+/// Seconds after a paste in which the paste key's release pastes nothing more: the key's press
+/// either pasted text or asked for the clipboard already.
+const PASTE_KEY_SECONDS: f64 = 1.0;
+
+/// Clipboard data that egui does not carry. The desktop app gives
+/// [`FontcraftApp::clipboard_flavours`] one; without it (the browser, tests) only text is pasted.
+pub trait ClipboardFlavours: Send {
+    /// The PDF on the system clipboard, `None` when it holds none. `Err` says why it could not be
+    /// read, and is given for data larger than `max_bytes`.
+    fn pdf(&mut self, max_bytes: usize) -> Result<Option<Vec<u8>>, String>;
+}
 
 /// The egui memory key under which Paste Special's request for the clipboard keeps the frame it
 /// was made in: the text arrives in the next frame or not at all.
@@ -53,10 +74,33 @@ fn special_key() -> egui::Id {
     egui::Id::new("fontcraft-paste-special")
 }
 
+/// The egui memory key under which Edit › Paste's request for the clipboard keeps the frame it was
+/// made in: with no text arriving in the next frame, the clipboard's PDF is pasted.
+fn paste_key() -> egui::Id {
+    egui::Id::new("fontcraft-paste-request")
+}
+
+/// The egui memory key holding the input time of the last paste.
+fn last_paste_key() -> egui::Id {
+    egui::Id::new("fontcraft-last-paste")
+}
+
 /// This frame's Copy, Cut and Paste events, as the commands they run.
 pub fn events(app: &mut FontcraftApp, ctx: &egui::Context) -> Vec<(&'static str, Value)> {
+    let frame = ctx.cumulative_frame_nr();
     let asked = ctx.data_mut(|d| d.remove_temp::<u64>(special_key()));
-    let special_asked = asked.is_some_and(|frame| ctx.cumulative_frame_nr() <= frame.saturating_add(1));
+    let special_asked = asked.is_some_and(|f| frame <= f.saturating_add(1));
+    let asked = ctx.data_mut(|d| d.remove_temp::<u64>(paste_key()));
+    let paste_asked = asked.is_some_and(|f| frame <= f.saturating_add(1));
+    let (now, text_pasted, key_released) = ctx.input(|i| {
+        let released =
+            i.events.iter().any(|e| matches!(e, egui::Event::Key { key: egui::Key::V, pressed: false, modifiers, .. } if modifiers.command));
+        (i.time, i.events.iter().any(|e| matches!(e, egui::Event::Paste(_))), released)
+    });
+    let last_paste = ctx.data_mut(|d| d.get_temp::<f64>(last_paste_key()));
+    if text_pasted {
+        ctx.data_mut(|d| d.insert_temp(last_paste_key(), now));
+    }
     if app.dialog.is_some()
         || ctx.text_edit_focused()
         || super::kerning_window::takes_clipboard(app)
@@ -76,6 +120,14 @@ pub fn events(app: &mut FontcraftApp, ctx: &egui::Context) -> Vec<(&'static str,
     }
     let font_view = app.state.tab().is_none();
     let mut out = Vec::new();
+    // No text came for Edit › Paste, or the paste key gave none: the clipboard may hold a PDF.
+    let key_without_text = key_released && last_paste.is_none_or(|t| now - t > PASTE_KEY_SECONDS);
+    if !font_view && !text_pasted && (paste_asked || key_without_text) {
+        if let Some(params) = pdf_paste(app) {
+            out.push((PASTE, params));
+        }
+        ctx.data_mut(|d| d.insert_temp(last_paste_key(), now));
+    }
     for event in events {
         match event {
             egui::Event::Copy if font_view => {
@@ -99,6 +151,10 @@ pub fn events(app: &mut FontcraftApp, ctx: &egui::Context) -> Vec<(&'static str,
                     } else {
                         app.state.status = "Paste: the clipboard holds no copied glyphs; open a glyph to paste an outline into it".into();
                     }
+                } else if !pasteable(&text)
+                    && let Some(params) = pdf_paste(app)
+                {
+                    out.push((PASTE, params));
                 } else {
                     let mut params = tools_glue::with_targets(app, PASTE, Value::Null);
                     if let Some(m) = params.as_object_mut() {
@@ -126,6 +182,35 @@ pub fn font_view_params(app: &FontcraftApp, id: &str, params: Value) -> Value {
         m.insert("master".into(), json!(master));
     }
     Value::Object(m)
+}
+
+/// Whether `edit.paste` can read clipboard text: JSON (our fragment or copied glyphs) or an SVG
+/// document. Other text gives way to the clipboard's PDF.
+fn pasteable(text: &str) -> bool {
+    let t = text.trim_start_matches('\u{feff}').trim_start();
+    t.starts_with('{') || (t.starts_with('<') && t.contains("<svg"))
+}
+
+/// `edit.paste`'s parameters for the PDF on the clipboard, with the edited glyph as its target;
+/// `None` when there is no reader or no PDF. A PDF that cannot be read leaves a message in the
+/// status bar.
+fn pdf_paste(app: &mut FontcraftApp) -> Option<Value> {
+    let read = app.clipboard_flavours.as_mut()?.pdf(MAX_PASTE_PDF_BYTES);
+    let bytes = match read {
+        Ok(Some(bytes)) if bytes.len() > MAX_PASTE_PDF_BYTES => {
+            app.state.status = format!("Paste: the clipboard's PDF is larger than {} MiB", MAX_PASTE_PDF_BYTES >> 20);
+            return None;
+        }
+        Ok(Some(bytes)) => bytes,
+        Ok(None) => return None,
+        Err(e) => {
+            app.state.status = format!("Paste: the clipboard's PDF cannot be read: {e}");
+            return None;
+        }
+    };
+    let mut params = tools_glue::with_targets(app, PASTE, Value::Null);
+    params.as_object_mut()?.insert("pdf".into(), json!(base64::engine::general_purpose::STANDARD.encode(bytes)));
+    Some(params)
 }
 
 /// Whether clipboard text holds copied glyphs rather than a drawing.
@@ -169,17 +254,21 @@ pub fn kerning_window_copy(app: &mut FontcraftApp, id: &str) -> Option<Result<Va
 /// A run of `id` with `params` that needs the clipboard's text first: Paste or Paste Special
 /// with nothing to paste.
 pub fn wants_text(id: &str, params: &Value) -> bool {
-    (id == PASTE || id == PASTE_SPECIAL) && ["json", "svg", "text"].iter().all(|k| params.get(k).is_none_or(Value::is_null))
+    (id == PASTE || id == PASTE_SPECIAL) && ["json", "svg", "pdf", "text"].iter().all(|k| params.get(k).is_none_or(Value::is_null))
 }
 
 /// Asks the platform for the clipboard's text for a run of `id` that [`wants_text`]; it arrives
-/// as a paste event in the next frame, which Paste Special's run marks as its own.
+/// as a paste event in the next frame, which Paste Special's run marks as its own. Paste marks
+/// the frame too, so that the clipboard's PDF is pasted when no text arrives.
 pub fn request_text(ctx: &egui::Context, id: &str) {
+    let frame = ctx.cumulative_frame_nr();
     if id == PASTE_SPECIAL {
-        let frame = ctx.cumulative_frame_nr();
         ctx.data_mut(|d| d.insert_temp(special_key(), frame));
+    } else if id == PASTE {
+        ctx.data_mut(|d| d.insert_temp(paste_key(), frame));
     }
     ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+    ctx.request_repaint();
 }
 
 /// After the person's run of `id`: Copy and Cut put their `json` text on the system clipboard
@@ -214,6 +303,7 @@ fn text_mode_events(app: &mut FontcraftApp, events: Vec<egui::Event>, special: b
 
 #[cfg(test)]
 mod tests {
+    use base64::Engine as _;
     use egui::{Event, OutputCommand, Pos2, ViewportCommand, ViewportId};
     use serde_json::json;
 
@@ -281,6 +371,85 @@ mod tests {
         );
         let commands = output.viewport_output.get(&ViewportId::ROOT).map(|v| v.commands.clone()).unwrap_or_default();
         assert!(commands.contains(&ViewportCommand::RequestPaste), "{commands:?}");
+    }
+
+    /// A one-page PDF with a 100-point page drawing a 50-point black square.
+    fn square_pdf() -> Vec<u8> {
+        let content = "0 0 0 rg 0 0 50 50 re f";
+        let objects = [
+            "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 100 100] >>".to_string(),
+            "<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>".to_string(),
+            format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()),
+        ];
+        let mut out = b"%PDF-1.5\n".to_vec();
+        let mut offsets = Vec::new();
+        for (i, body) in objects.iter().enumerate() {
+            offsets.push(out.len());
+            out.extend_from_slice(format!("{} 0 obj\n{body}\nendobj\n", i + 1).as_bytes());
+        }
+        let xref = out.len();
+        out.extend_from_slice(b"xref\n0 5\n0000000000 65535 f \n");
+        for o in offsets {
+            out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+        }
+        out.extend_from_slice(format!("trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n").as_bytes());
+        out
+    }
+
+    /// A clipboard holding a PDF beside whatever text the test sends, counting the reads.
+    struct PdfClipboard {
+        pdf: Vec<u8>,
+        reads: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl super::ClipboardFlavours for PdfClipboard {
+        fn pdf(&mut self, _: usize) -> Result<Option<Vec<u8>>, String> {
+            self.reads.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            Ok(Some(self.pdf.clone()))
+        }
+    }
+
+    #[test]
+    fn edit_view_pastes_the_clipboards_pdf_when_no_readable_text_comes() {
+        use std::sync::atomic::Ordering;
+
+        let mut app = square_app();
+        let reads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        app.clipboard_flavours = Some(Box::new(PdfClipboard { pdf: square_pdf(), reads: reads.clone() }));
+        let ctx = egui::Context::default();
+        frame(&ctx, &mut app, Vec::new());
+        let key = |pressed| Event::Key { key: egui::Key::V, physical_key: None, pressed, repeat: false, modifiers: egui::Modifiers::COMMAND };
+
+        // The paste key with no text on the clipboard: the platform sends only the key's release.
+        frame(&ctx, &mut app, vec![key(false)]);
+        assert_eq!(shapes(&app), 2, "the PDF's square was pasted");
+        let pasted = app.session.font().unwrap().glyph("A").unwrap().layers.first().unwrap().shapes.last().cloned();
+        let mut direct = square_app();
+        direct.run("edit.paste", &json!({"glyph": "A", "pdf": base64::engine::general_purpose::STANDARD.encode(square_pdf())})).unwrap();
+        assert_eq!(
+            pasted,
+            direct.session.font().unwrap().glyph("A").unwrap().layers.first().unwrap().shapes.last().cloned(),
+            "as edit.paste with the PDF"
+        );
+
+        // Text that is neither our fragment nor SVG gives way to the PDF.
+        frame(&ctx, &mut app, vec![Event::Paste("a caption".into())]);
+        assert_eq!(shapes(&app), 3);
+
+        // Edit › Paste (the key as a plain key press) asks for text; none comes, so the PDF is
+        // pasted in the next frame, and the key's release pastes nothing more.
+        frame(&ctx, &mut app, vec![key(true)]);
+        frame(&ctx, &mut app, Vec::new());
+        assert_eq!(shapes(&app), 4);
+        frame(&ctx, &mut app, vec![key(false)]);
+        assert_eq!(shapes(&app), 4, "one paste per key stroke");
+        let before = reads.load(Ordering::Relaxed);
+
+        // Our own fragment wins without reading the PDF.
+        let copied = app.run("edit.copy", &json!({"glyph": "A"})).unwrap()["json"].as_str().unwrap().to_string();
+        frame(&ctx, &mut app, vec![Event::Paste(copied)]);
+        assert_eq!(reads.load(Ordering::Relaxed), before, "the fragment is pasted without asking for the PDF");
     }
 
     #[test]

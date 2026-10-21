@@ -1,6 +1,6 @@
 //! PDF outlines and images in the engine: `edit.paste` of the PDF clipboard flavour,
-//! `file.importOutlines` of a PDF file and `glyph.autotraceImage` of a placed PDF. The PDFs are
-//! written in code.
+//! `file.importOutlines` of a PDF file, and `glyph.autotraceImage` and `bitmap.setStrikes` of a
+//! placed PDF. The PDFs are written in code.
 // Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
@@ -181,5 +181,41 @@ fn autotrace_traces_a_placed_pdf_from_its_drawn_page() {
     let cropped = &paths(&s, "A")[before];
     let right = cropped.nodes.iter().map(|n| n.x).fold(f64::NEG_INFINITY, f64::max);
     assert!((right - 100.0).abs() <= 1.0, "{right}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_new_strike_draws_the_placed_pdf_of_a_glyph_without_outlines() {
+    let dir = temp_dir("clipboard_pdf").join("strike");
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("corner.pdf");
+    // A 100-point page, black in its bottom-left quarter.
+    std::fs::write(&file, one_page("0 0 100 100", "0 0 0 rg 0 0 50 50 re f")).unwrap();
+    let mut s = Session::with_document();
+    run(&mut s, "glyph.addImage", json!({"files": [file.to_string_lossy()], "glyphs": ["A"]}));
+
+    // One point per unit at 100 pixels per em of 1000 units: the page is 10 pixels square.
+    let r = run(&mut s, "bitmap.setStrikes", json!({"add": [{"ppem": 100}]}));
+    assert!(r.get("warnings").is_none(), "{r}");
+    let font = s.font().unwrap();
+    let a = font.bitmap_strikes[0].glyph("A").unwrap();
+    assert_eq!((a.width, a.height, a.left, a.bottom), (10, 10, 0, 0));
+    // Rows top to bottom, two bytes each: the bottom five rows have their left five pixels on.
+    let rows: Vec<&[u8]> = a.data.chunks(2).collect();
+    assert_eq!(rows.len(), 10);
+    for (i, row) in rows.iter().enumerate() {
+        assert_eq!(*row, if i < 5 { &[0u8, 0][..] } else { &[0xF8, 0][..] }, "row {i}");
+    }
+    // A glyph with an outline keeps the outline's bitmap, and glyphs without either stay empty.
+    let notdef = font.bitmap_strikes[0].glyph(".notdef").unwrap();
+    assert_eq!((notdef.width, notdef.left), (40, 5));
+    assert!(font.bitmap_strikes[0].glyph("B").unwrap().data.is_empty());
+
+    // A placed PDF too large for a bitmap is left out with a warning; the strike is still added.
+    run(&mut s, "image.setTransform", json!({"glyph": "A", "x": 0, "y": 0, "width": 20000, "height": 20000}));
+    let r = run(&mut s, "bitmap.setStrikes", json!({"add": [{"ppem": 101}]}));
+    let warning = r["warnings"][0].as_str().unwrap_or_default().to_string();
+    assert!(warning.contains("glyph `A`") && warning.contains("at most 1024"), "{r}");
+    assert!(s.font().unwrap().bitmap_strikes.iter().find(|st| st.ppem == 101).unwrap().glyph("A").unwrap().data.is_empty());
     let _ = std::fs::remove_dir_all(&dir);
 }
