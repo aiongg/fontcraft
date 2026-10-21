@@ -715,6 +715,8 @@ fn rasterize_strike(
     // and its pixels are charged once.
     let mut drawn: Option<((String, u64), fontcraft_io_pdf::PdfRaster)> = None;
     let mut charged: Option<(String, u64)> = None;
+    // Each placed file is read and measured once per strike, however many glyphs place it.
+    let mut page_sizes = PageSizes::new();
     for glyph in font.glyphs.iter().filter(|g| g.export) {
         let Some(layer) = glyph.layer(&master.id) else { continue };
         let outline = fontcraft_render::closed_contours(&font.outline_of(glyph, &master.id)?);
@@ -732,7 +734,7 @@ fn rasterize_strike(
         let mut placed = None;
         let found = match pixel_box(&outline, &px) {
             Some(b) => Some(b),
-            None if layer.shapes.is_empty() => match placed_pdf(assets, layer, em / upm) {
+            None if layer.shapes.is_empty() => match placed_pdf(assets, layer, em / upm, &mut page_sizes) {
                 Ok(Some(pdf)) => {
                     let b = pdf.pixel_box;
                     placed = Some(pdf);
@@ -769,9 +771,11 @@ fn rasterize_strike(
                     glyph.name
                 )));
             }
-            // A placed PDF's page is drawn whole before its shown part is sampled.
+            // A placed PDF's page is drawn whole before its shown part is sampled, and each
+            // bitmap pixel takes `PDF_SAMPLES`² samples of it.
             let mut area = (w * h).unsigned_abs();
             if let Some(pdf) = &placed {
+                area = area.saturating_mul(u64::from(PDF_SAMPLES * PDF_SAMPLES));
                 let page = (pdf.file.clone(), pdf.pixels_per_point.to_bits());
                 if charged.as_ref() != Some(&page) {
                     area = area.saturating_add(pdf.page_pixels);
@@ -846,10 +850,19 @@ struct PlacedPdf {
     pixel_box: (i64, i64, i64, i64),
 }
 
+/// The page size of each placed PDF file measured so far, by stored path, or why it cannot be
+/// measured. Measuring hashes the whole file, so a file placed on many glyphs is measured once.
+type PageSizes = HashMap<String, std::result::Result<(f64, f64), String>>;
+
 /// The PDF placed on `layer`, measured at `pixels_per_unit`: `None` when the layer has no image
 /// or its file is not a PDF (a missing file not named `.pdf` included); `Err` says why a PDF
 /// cannot be used.
-fn placed_pdf(assets: &dyn AssetStore, layer: &Layer, pixels_per_unit: f64) -> std::result::Result<Option<PlacedPdf>, String> {
+fn placed_pdf(
+    assets: &dyn AssetStore,
+    layer: &Layer,
+    pixels_per_unit: f64,
+    page_sizes: &mut PageSizes,
+) -> std::result::Result<Option<PlacedPdf>, String> {
     let Some(image) = layer.info.image.as_ref() else { return Ok(None) };
     let Some(file) = image.path.as_deref() else { return Ok(None) };
     let named_pdf = Path::new(file).extension().is_some_and(|e| e.eq_ignore_ascii_case("pdf"));
@@ -861,8 +874,18 @@ fn placed_pdf(assets: &dyn AssetStore, layer: &Layer, pixels_per_unit: f64) -> s
     if !head.starts_with(b"%PDF-") {
         return Ok(None);
     }
-    let bytes = assets.read(file).map_err(|e| format!("`{file}` cannot be read: {e}"))?;
-    let (pw, ph) = fontcraft_io_pdf::page_size(&bytes).map_err(|e| format!("the page cannot be read: {e}"))?;
+    let measured = match page_sizes.get(file) {
+        Some(known) => known.clone(),
+        None => {
+            let measured = assets
+                .read(file)
+                .map_err(|e| format!("`{file}` cannot be read: {e}"))
+                .and_then(|bytes| fontcraft_io_pdf::page_size(&bytes).map_err(|e| format!("the page cannot be read: {e}")));
+            page_sizes.insert(file.to_string(), measured.clone());
+            measured
+        }
+    };
+    let (pw, ph) = measured?;
     let [x0, y0, x1, y1] = match image.crop {
         Some([x, y, w, h]) => [x.max(0.0), y.max(0.0), (x + w).min(pw), (y + h).min(ph)],
         None => [0.0, 0.0, pw, ph],
@@ -1002,4 +1025,114 @@ fn pack(image: &fontcraft_render::Image, depth: u8) -> Vec<u8> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use fontcraft_color::{AssetError, AssetStore, MemoryAssets};
+    use fontcraft_model::{Font, Image};
+    use serde_json::json;
+
+    use super::{RasterBudget, rasterize_strike};
+    use crate::params::Params;
+
+    /// A store that counts whole-file reads.
+    struct Counting {
+        inner: MemoryAssets,
+        reads: AtomicUsize,
+    }
+
+    impl AssetStore for Counting {
+        fn read(&self, path: &str) -> Result<Arc<[u8]>, AssetError> {
+            self.reads.fetch_add(1, Ordering::Relaxed);
+            self.inner.read(path)
+        }
+        fn exists(&self, path: &str) -> bool {
+            self.inner.exists(path)
+        }
+        fn read_head(&self, path: &str, _: usize) -> Result<Arc<[u8]>, AssetError> {
+            self.inner.read(path)
+        }
+    }
+
+    /// A one-page PDF, 100 points square, black in its bottom-left quarter.
+    fn corner_pdf() -> Vec<u8> {
+        let content = "0 0 0 rg 0 0 50 50 re f";
+        let objects = [
+            "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 100 100] >>".to_string(),
+            "<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>".to_string(),
+            format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()),
+        ];
+        let mut out = b"%PDF-1.5\n".to_vec();
+        let mut offsets = Vec::new();
+        for (i, body) in objects.iter().enumerate() {
+            offsets.push(out.len());
+            out.extend_from_slice(format!("{} 0 obj\n{body}\nendobj\n", i + 1).as_bytes());
+        }
+        let xref = out.len();
+        out.extend_from_slice(b"xref\n0 5\n0000000000 65535 f \n");
+        for o in offsets {
+            out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+        }
+        out.extend_from_slice(format!("trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n").as_bytes());
+        out
+    }
+
+    #[test]
+    fn a_pdf_placed_on_many_glyphs_is_read_and_measured_once_per_strike() {
+        let mut font = Font::new("Sheet");
+        let master = font.default_master().unwrap().id.clone();
+        let glyphs = 40;
+        for i in 0..glyphs {
+            let name = format!("g{i}");
+            font.add_glyph(&name, Vec::new(), 600.0).unwrap();
+            let mut glyph = font.glyph_mut(&name).unwrap();
+            let layer = glyph.layer_mut(&master).unwrap();
+            layer.info.image = Some(Image { path: Some("sheet.pdf".into()), ..Image::default() });
+        }
+        let mut inner = MemoryAssets::new();
+        inner.insert("sheet.pdf", corner_pdf());
+        let store = Counting { inner, reads: AtomicUsize::new(0) };
+        let value = json!({});
+        let p = Params::new("bitmap.setStrikes", &value).unwrap();
+        let mut warnings = Vec::new();
+
+        // Measuring: one read of the file for the whole strike, not one per glyph.
+        let strike = rasterize_strike(&font, &store, &p, (100, 1), &mut RasterBudget::unlimited(), false, &mut warnings).unwrap();
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(store.reads.load(Ordering::Relaxed), 1);
+        assert_eq!(strike.glyphs.iter().filter(|g| g.glyph.starts_with('g')).count(), glyphs);
+
+        // Drawing reads it once more to draw the page, which every glyph then shares.
+        store.reads.store(0, Ordering::Relaxed);
+        let strike = rasterize_strike(&font, &store, &p, (100, 1), &mut RasterBudget::unlimited(), true, &mut warnings).unwrap();
+        assert_eq!(store.reads.load(Ordering::Relaxed), 2);
+        assert!(strike.glyphs.iter().filter(|g| g.glyph.starts_with('g')).all(|g| (g.width, g.height) == (10, 10)));
+    }
+
+    #[test]
+    fn each_pixel_of_a_placed_pdf_is_charged_as_its_samples() {
+        let mut font = Font::new("Sheet");
+        let master = font.default_master().unwrap().id.clone();
+        font.add_glyph("g", Vec::new(), 600.0).unwrap();
+        font.glyph_mut("g").unwrap().layer_mut(&master).unwrap().info.image = Some(Image { path: Some("sheet.pdf".into()), ..Image::default() });
+        let mut assets = MemoryAssets::new();
+        assets.insert("sheet.pdf", corner_pdf());
+        let value = json!({});
+        let p = Params::new("bitmap.setStrikes", &value).unwrap();
+        let mut budget = RasterBudget::unlimited();
+        let before = budget.pixels;
+        rasterize_strike(&font, &assets, &p, (100, 1), &mut budget, false, &mut Vec::new()).unwrap();
+        // A 10 × 10 bitmap at 4 × 4 samples a pixel, and the page drawn at 40 × 40 pixels.
+        let outline_glyphs = before - budget.pixels - 100 * 16 - 40 * 40;
+        let mut plain = Font::new("Sheet");
+        plain.add_glyph("g", Vec::new(), 600.0).unwrap();
+        let mut budget = RasterBudget::unlimited();
+        rasterize_strike(&plain, &assets, &p, (100, 1), &mut budget, false, &mut Vec::new()).unwrap();
+        assert_eq!(before - budget.pixels, outline_glyphs, "the rest is the outlines' pixels");
+    }
 }

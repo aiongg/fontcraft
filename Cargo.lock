@@ -1313,6 +1313,7 @@ dependencies = [
  "fontcraft-imagery",
  "fontcraft-model",
  "lopdf",
+ "sha2",
 ]
 
 [[package]]

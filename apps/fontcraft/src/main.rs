@@ -226,7 +226,7 @@ fn run() -> Result<(), String> {
     #[cfg(not(target_arch = "wasm32"))]
     {
         app.preview_address.host = Some(Box::new(preview_server::Host::default()));
-        app.clipboard_flavours = Some(Box::new(clipboard::SystemClipboard));
+        app.clipboard_flavours = Some(Box::new(clipboard::SystemClipboard::default()));
     }
     app.state.start.reveal = start_window::Reveal(Some(pickers::reveal));
     app.state.panels.extensions.manager.platform =
