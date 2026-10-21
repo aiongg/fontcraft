@@ -228,3 +228,29 @@ fn the_metric_editor_gives_the_font_the_metric_commands_give_and_cancel_changes_
     run(&mut direct, "font.metrics.remove", json!({"metric": 0}));
     assert_eq!(definitions(&app), definitions(&direct));
 }
+
+#[test]
+fn a_coordinate_typed_for_two_masters_goes_to_both_as_set_axis_location_does() {
+    let setup = || {
+        let mut app = two_masters();
+        run(&mut app, "font.axes.add", json!({"name": "Weight"}));
+        run(&mut app, "font.axes.add", json!({"name": "Width"}));
+        run(&mut app, "font.master.setAxisLocation", json!({"masters": [0], "location": {"wght": 300}}));
+        run(&mut app, "font.master.setAxisLocation", json!({"masters": [1], "location": {"wght": 700}}));
+        app
+    };
+    let mut app = setup();
+    let t = TabUi::new();
+    t.click(&mut app, master_id(0), Modifiers::NONE);
+    t.click(&mut app, master_id(1), Modifiers::COMMAND);
+    let target = Target { scope: fontcraft_engine::fontinfo::Scope::Master, indices: vec![0, 1] };
+    let font = app.session.font().unwrap();
+    assert_eq!(location(font, &target, 0), None, "the weights differ: Multiple Values");
+    assert_eq!(location(font, &target, 1), Some(0.0), "both masters are at width 0");
+    t.type_into(&mut app, axis_id(1), "100");
+    let mut direct = setup();
+    run(&mut direct, "font.master.setAxisLocation", json!({"masters": [0, 1], "location": {"wdth": 100}}));
+    assert_eq!(masters(&app), masters(&direct), "the field gives both masters what the command gives");
+    let locations: Vec<Vec<f64>> = app.session.font().unwrap().masters.iter().map(|m| m.location.clone()).collect();
+    assert_eq!(locations, [vec![300.0, 100.0], vec![700.0, 100.0]], "the weights keep their values");
+}

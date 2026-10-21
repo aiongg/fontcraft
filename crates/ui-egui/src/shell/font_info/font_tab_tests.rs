@@ -209,3 +209,85 @@ fn the_version_row_selects_both_parts_and_the_plus_opens_the_field_picker() {
     let shown: Vec<String> = app.state.panels.font_info.shown_rows.iter().map(|r| r.key.clone()).collect();
     assert_eq!(shown, ["familyName", "unitsPerEm", "versionMajor", "versionMinor", "designers"]);
 }
+
+/// Drags the handle `from` onto the row `to`; the commands the frames queued.
+fn drag(tab: &Tab, app: &mut FontcraftApp, from: egui::Id, to: egui::Id) -> Pending {
+    tab.frame(app, Vec::new());
+    let center = |id: egui::Id| tab.ctx.read_response(id).unwrap_or_else(|| panic!("{id:?} is drawn")).rect.center();
+    let (from, to) = (center(from), center(to));
+    let press = |pressed: bool, pos: Pos2| Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+    let mut pending = Vec::new();
+    for events in [
+        vec![Event::PointerMoved(from)],
+        vec![press(true, from)],
+        vec![Event::PointerMoved(from + egui::vec2(0.0, 10.0))],
+        vec![Event::PointerMoved(to)],
+        vec![Event::PointerMoved(to)],
+        vec![press(false, to)],
+        Vec::new(),
+    ] {
+        pending.extend(tab.frame(app, events));
+    }
+    pending
+}
+
+fn axes(f: &Font) -> Vec<(String, String, bool)> {
+    f.axes.iter().map(|a| (a.name.clone(), a.tag.clone(), a.hidden)).collect()
+}
+
+#[test]
+fn axes_plus_predefined_menu_fields_hidden_drag_and_minus_give_the_font_the_axis_commands_give() {
+    let mut app = app();
+    let tab = Tab::new(super::show);
+    let pending = tab.click(&mut app, super::axes_plus_id());
+    let f = same_as_command(&mut app, pending, "font.axes.add", json!({}));
+    assert_eq!(axes(&f), [("Weight".to_string(), "wght".to_string(), false)], "the first axis is Weight");
+    let pending = tab.click(&mut app, super::axes_plus_id());
+    same_as_command(&mut app, pending, "font.axes.add", json!({}));
+
+    // A predefined name from the menu sets the tag too.
+    assert!(tab.click(&mut app, super::axis_id(1, "menu")).is_empty(), "the button only opens the menu");
+    let pending = tab.click(&mut app, super::predefined_item_id(1, "wdth"));
+    let f = same_as_command(&mut app, pending, "font.axes.set", json!({"axis": 1, "name": "Width"}));
+    assert_eq!(f.axes.get(1).map(|a| (a.name.as_str(), a.tag.as_str())), Some(("Width", "wdth")));
+
+    let pending = tab.click(&mut app, super::axis_id(1, "hidden"));
+    let f = same_as_command(&mut app, pending, "font.axes.set", json!({"axis": 1, "hidden": true}));
+    assert!(f.axes.get(1).is_some_and(|a| a.hidden));
+
+    // Dropping Width onto Weight's row moves it first.
+    let pending = drag(&tab, &mut app, super::axis_id(1, "handle"), super::axis_id(0, "row"));
+    let f = same_as_command(&mut app, pending, "font.axes.reorder", json!({"order": ["wdth", "wght"]}));
+    let tags: Vec<&str> = f.axes.iter().map(|a| a.tag.as_str()).collect();
+    assert_eq!(tags, ["wdth", "wght"]);
+
+    // A private axis: its name and tag fields; a lowercase private tag gets the hint.
+    let pending = tab.enter(&mut app, super::axis_id(1, "name"), "Swash Length");
+    same_as_command(&mut app, pending, "font.axes.set", json!({"axis": 1, "name": "Swash Length"}));
+    let pending = tab.enter(&mut app, super::axis_id(1, "tag"), "swln");
+    let f = same_as_command(&mut app, pending, "font.axes.set", json!({"axis": 1, "tag": "swln"}));
+    assert_eq!(f.axes.get(1).map(|a| (a.name.as_str(), a.tag.as_str())), Some(("Swash Length", "swln")));
+    tab.frame(&mut app, Vec::new());
+    assert!(tab.ctx.read_response(super::axis_id(1, "hint")).is_some(), "a lowercase private tag gets the hint");
+    assert!(tab.ctx.read_response(super::axis_id(0, "hint")).is_none(), "a registered tag gets none");
+
+    let pending = tab.click(&mut app, super::axis_id(0, "minus"));
+    let f = same_as_command(&mut app, pending, "font.axes.remove", json!({"axis": 0}));
+    assert_eq!(axes(&f), [("Swash Length".to_string(), "swln".to_string(), false)]);
+}
+
+#[test]
+fn the_private_tag_hint_matches_the_commands_tag_warning() {
+    let mut app = app();
+    let predefined = super::predefined_axes(&egui::Context::default(), &mut app.session);
+    assert!(predefined.iter().any(|p| p.name == "Weight" && p.tag == "wght" && p.registered));
+    app.run("font.axes.add", &json!({"name": "Weight"})).unwrap();
+    for tag in ["GRAD", "SWLN", "swln", "Ab", "wdth", "opsz"] {
+        let r = app.run("font.axes.set", &json!({"axis": 0, "tag": tag})).unwrap();
+        let warned = r
+            .get("warnings")
+            .and_then(Value::as_array)
+            .is_some_and(|w| w.iter().filter_map(Value::as_str).any(|w| w.contains("not a registered axis tag")));
+        assert_eq!(super::tag_needs_hint(tag, &predefined), warned, "`{tag}`");
+    }
+}

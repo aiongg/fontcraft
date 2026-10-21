@@ -63,6 +63,10 @@ ref = "Interpolation › Setting up Axes"
 status = "handbook"
 guesses = [
   "A tag of fewer than four printable ASCII characters is padded with spaces and a longer one exports its first four; settle by typing a three- and a five-character tag in the reference app's axis dialog and exporting.",
+  "Font Info › Font shows a hint under an axis whose tag is neither registered nor four capital letters, the same test as the axis commands' warning; typing `swln` as a tag in the reference app settles whether it says anything.",
+]
+observe = [
+  "In any font, give an axis the tag `swln` in Font Info › Font: note any hint or warning the app shows.",
 ]
 
 [[behavior]]
