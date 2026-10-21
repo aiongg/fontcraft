@@ -295,9 +295,10 @@ pub(super) fn jobs(font: &Font, pick: &Pick, masters: bool, p: &Params) -> Resul
         jobs.extend(font.masters.iter().map(|m| Job { label: m.name.clone(), source: "master", target: Target::Master(m.id.clone()) }));
     }
     // As fontmake: a designspace without axes that states a location is refused; otherwise its
-    // masters build, and its instances only when it has one source.
+    // masters build, and its instances only when it has one source. A font saved as a
+    // designspace from another format keeps no document and states no location.
     let interpolates = jobs.iter().any(|j| j.source == "instance");
-    if let Some(why) = super::instance::without_axes(font, interpolates) {
+    if let Some(why) = super::instance::without_axes(font, interpolates, false) {
         return Err(p.bad(why));
     }
     Ok(jobs)
@@ -355,8 +356,9 @@ fn stem(font: &Font, resolved: &Resolved, options: &Options, source: &str) -> St
         .filter(|s| !s.trim().is_empty())
         .or_else(|| fontcraft_compile::plan::file_stem(Some(font), resolved, options, source))
         .unwrap_or_else(|| {
-            let family = if resolved.family_name.trim().is_empty() { source } else { resolved.family_name.as_str() };
-            format!("{family}-{}", resolved.style_name)
+            let named = fontcraft_compile::plan::with_expanded_names(Some(font), resolved);
+            let family = if named.family_name.trim().is_empty() { source } else { named.family_name.as_str() };
+            format!("{family}-{}", named.style_name)
         });
     let clean: String =
         wanted.chars().filter(|c| !c.is_control() && !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')).take(MAX_STEM).collect();

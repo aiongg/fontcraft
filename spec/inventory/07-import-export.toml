@@ -35,6 +35,7 @@ milestone = "M2"
 summary = "Exports every open document in one go without showing the export dialog; the menu item replaces Export… while Option is held. Each document is exported with its last-used export settings. FontCraft has no remembered settings yet, so the command takes them as parameters: every exportable instance of each chosen document, in each outline flavour and container asked for, into one destination folder, reporting what it wrote and what it skipped."
 ref = "Import & Export › Exporting Font Files"
 status = "handbook"
+notes = "A designspace without axes is refused when it states a location, or when it has two or more sources and instances to build, as fontmake refuses it (docs/spec/40-compile.md)."
 guesses = [
   "The reference's settings for Export All are not documented; using each document's last-used export settings is our assumption, and until FontCraft remembers settings the command takes them as parameters.",
 ]
@@ -51,6 +52,7 @@ milestone = "M2"
 summary = "Compiles one static font per export instance (or one default instance derived from the first master when the font defines none) in the chosen outline flavour, writing each requested container format. Existing files with the same name are replaced. This is the headless form of the dialog's OTF tab."
 ref = "Import & Export › Exporting Font Files › OpenType Export"
 status = "handbook"
+notes = "A designspace without axes is refused when it states a location, or when it has two or more sources and instances to build, as fontmake refuses it (docs/spec/40-compile.md)."
 
 [[command]]
 id = "file.exportVariable"

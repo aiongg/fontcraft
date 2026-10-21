@@ -693,7 +693,7 @@ causes; none comes from the handbook's keys, which no corpus instance at a maste
 
 | What | Where it comes from |
 |---|---|
-| Family, style, PostScript and style-map names | the `<instance>` element; style-map names it leaves out are ufo2ft's fallbacks from the style name. A stated style-map style other than the four (`thin`) is kept as written; compiled, it is name ID 2 title-cased (`Thin`) with no REGULAR, BOLD or ITALIC bit |
+| Family, style, PostScript and style-map names | the `<instance>` element; style-map names it leaves out are ufo2ft's fallbacks from the style name. A stated style-map style is lower-cased, as fontTools' instantiator writes it, so `Bold` is bold. One other than the four (`thin`) is kept; compiled, it is name ID 2 title-cased (`Thin`) with no REGULAR, BOLD or ITALIC bit. Bold or Italic set on the instance later wins over it |
 | Names of one style in the masters' UFOs (PostScript, full, typographic, WWS, compatible, unique id, style-map) | left out, unless the source has one master and the instance sits at it |
 | Other font information | the default source's; numbers interpolated over the masters |
 | PostScript weight name, between masters | from the interpolated weight class, rounded to hundreds (fontMath's names, `Thin` to `Black`) |
@@ -705,11 +705,20 @@ causes; none comes from the handbook's keys, which no corpus instance at a maste
 One case is known to differ: a single-source designspace whose instance states no style-map
 names takes ufo2ft's fallbacks, where fontmake keeps the UFO's own style-map names.
 
+A UFO instance with a style-map style other than the four holds it in `fontinfo.plist`, as
+fontmake writes it. fontmake reads such a UFO back and compiles it to the same names as the
+instance; ufoLib's validating reader, and fontc, refuse it.
+
+A UFO's own `styleMapStyleName` is compared with the four lower-case names exactly, as ufo2ft
+compares it: `Bold` sets no style bit, and any stated value is name ID 2 title-cased. fontc
+refuses a UFO whose `styleMapStyleName` is not one of the four.
+
 A designspace without `<axes>` builds as fontmake builds it. One that states a `<location>`
 anyway is refused, as fontTools' reader refuses it ("No axes defined"). Otherwise every source
 sits at one location: the masters build one by one, and instances build only when there is one
 source; with two or more, interpolation is refused, as fontTools refuses it ("Locations must be
-unique"). A variable export needs at least one axis.
+unique"). An open document saved as a designspace from another format holds no designspace text, so
+nothing in it states a location: it builds as a designspace without locations does. A variable export needs at least one axis.
 
 **Against the handbook.** TrueType composites with overlapping or transformed components stay
 composites by default, as fontc and fontmake keep them. The texts of the Keep Overlapping

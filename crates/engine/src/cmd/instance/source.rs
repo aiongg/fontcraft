@@ -152,7 +152,7 @@ pub(super) fn instantiate(p: &Params<'_>, input: &Path, req: &OutputRequest) -> 
 
 /// Refuses a designspace without `<axes>` that fontTools cannot interpolate ([`without_axes`]).
 pub(super) fn refuse_without_axes(p: &Params<'_>, font: &Font) -> Result<()> {
-    match without_axes(font, true) {
+    match without_axes(font, true, true) {
         Some(why) => Err(p.bad(why)),
         None => Ok(()),
     }
@@ -166,15 +166,20 @@ pub(super) fn refuse_without_axes(p: &Params<'_>, font: &Font) -> Result<()> {
 /// those locations cannot be read. A document without axes and without any location loads, with
 /// every source at one location: its sources can be built one by one, but interpolating
 /// (`interpolates`) between two or more of them fails ("Locations must be unique"); a single
-/// source is its own instance. When the read document is not kept, a location is assumed.
-pub(in crate::cmd) fn without_axes(font: &Font, interpolates: bool) -> Option<String> {
+/// source is its own instance.
+///
+/// A font without a kept document states a location when `unkept_states_location`: a source
+/// file just read always keeps its document, while a font saved as a designspace from another
+/// format has none, and its sources state no location for fontTools to refuse.
+pub(in crate::cmd) fn without_axes(font: &Font, interpolates: bool, unkept_states_location: bool) -> Option<String> {
     if font.source.format != SourceFormat::Designspace || !font.axes.is_empty() {
         return None;
     }
     let document = font.extra.get(Family::Designspace, "document").and_then(PValue::as_str);
     let states_location = match document.map(xml::parse) {
         Some(Ok(doc)) => states_a_location(&doc.root),
-        _ => true,
+        Some(Err(_)) => true,
+        None => unkept_states_location,
     };
     if states_location {
         return Some("the designspace defines no axes, so its sources have no locations to interpolate between".into());
@@ -620,7 +625,8 @@ fn finish(
         master.params.set("postscriptFontName", text(ps));
     }
     master.params.set("styleMapFamilyName", text(&names.style_map_family));
-    master.params.set("styleMapStyleName", text(&names.style_map_style));
+    // fontTools' instantiator writes the stated style-map style in lower case.
+    master.params.set("styleMapStyleName", text(&names.style_map_style.to_lowercase()));
     // fontmake sets the classes from the location on a wght or wdth axis whatever the masters
     // state (glyphsLib's apply_instance_data after the instantiator); without the axis, from the
     // instance's own class when the masters state none.
@@ -1479,10 +1485,10 @@ mod tests {
     /// fontc's fontinfo_var.designspace states the style-map style `thin`, which is not one of
     /// the four. fontTools' instantiator keeps it in the UFO instance; ufo2ft writes it
     /// title-cased as name ID 2 with no REGULAR, BOLD or ITALIC bit; and the style-map family,
-    /// stated as the family alone, stays name ID 1 (checked with fontmake 3.12.1).
+    /// stated as the family alone, stays name ID 1 (checked with fontmake 3.12.1). fontmake
+    /// compiles the instance UFO to the same names, though ufoLib's validating reader refuses it.
     #[test]
     fn a_thin_style_map_style_is_kept_as_fontmake_keeps_it() {
-        use skrifa::raw::TableProvider;
         let (dir, ds) = source("thin");
         let text = std::fs::read_to_string(&ds).unwrap().replace(
             r#"stylename="Regular" filename="instances/Test-Regular.ufo" postscriptfontname="Test-Regular"><location><dimension name="Weight" xvalue="500"/>"#,
@@ -1498,7 +1504,71 @@ mod tests {
         s.execute("file.open", &json!({ "path": ds })).unwrap();
         let out = dir.join("Thin.ttf");
         s.execute("font.compile", &json!({ "instances": ["Thin"], "destination": out })).unwrap();
-        let bytes = std::fs::read(&out).unwrap();
+        let direct = style_names(&out);
+        assert_eq!(direct, (Some("Test".into()), Some("Thin".into()), None, None, 0), "IDs 16 and 17 equal 1 and 2; no ITALIC, BOLD or REGULAR bit");
+
+        // The instance UFO compiles to the same names and bits as the instance itself.
+        s.execute("file.open", &json!({ "path": dir.join("instances").join("Test-Thin.ufo") })).unwrap();
+        let via_ufo = dir.join("Thin-ufo.ttf");
+        s.execute("font.compile", &json!({ "destination": via_ufo })).unwrap();
+        assert_eq!(style_names(&via_ufo), direct);
+
+        // Bold set on the instance afterwards wins over the stated `thin`.
+        s.execute("file.open", &json!({ "path": ds })).unwrap();
+        s.execute("font.instance.setStyleLinking", &json!({ "instances": ["Thin"], "isBold": true })).unwrap();
+        let bold = dir.join("Thin-bold.ttf");
+        s.execute("font.compile", &json!({ "instances": ["Thin"], "destination": bold })).unwrap();
+        let (_, id2, _, _, bits) = style_names(&bold);
+        assert_eq!((id2.as_deref(), bits), (Some("Bold"), 0x20));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// ufo2ft compares a UFO's style-map style with the four lower-case names exactly: `Bold`
+    /// sets no style bit and is written title-cased as name ID 2 (checked with fontmake 3.12.1).
+    #[test]
+    fn a_ufo_style_map_style_is_compared_exactly() {
+        let dir = std::env::temp_dir().join(format!("fontcraft-instance-source-boldcap-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("Bold.ufo");
+        ufo(&path, "Bold", (100, 400, 500), &rect(100, 400));
+        let info = path.join("fontinfo.plist");
+        let text = std::fs::read_to_string(&info)
+            .unwrap()
+            .replace("<key>styleName</key>", "<key>styleMapStyleName</key><string>Bold</string><key>styleName</key>");
+        std::fs::write(&info, text).unwrap();
+        let mut s = Session::new();
+        s.execute("file.open", &json!({ "path": path })).unwrap();
+        let out = dir.join("Bold.ttf");
+        s.execute("font.compile", &json!({ "destination": out })).unwrap();
+        let (_, id2, _, _, bits) = style_names(&out);
+        assert_eq!((id2.as_deref(), bits), (Some("Bold"), 0));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A font saved as a designspace from another format keeps no designspace document: it
+    /// states no location, so it compiles as a designspace without axes and one source does.
+    #[test]
+    fn a_font_saved_as_a_designspace_compiles() {
+        let dir = std::env::temp_dir().join(format!("fontcraft-instance-source-saved-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("Light.ufo");
+        ufo(&path, "Light", (100, 400, 500), &rect(100, 400));
+        let mut s = Session::new();
+        s.execute("file.open", &json!({ "path": path })).unwrap();
+        s.execute("file.saveAs", &json!({ "path": dir.join("FromUfo.designspace") })).unwrap();
+        s.execute("font.compile", &json!({ "destination": dir.join("FromUfo.ttf") })).unwrap();
+
+        s.execute("file.new", &json!({ "familyName": "Fresh" })).unwrap();
+        s.execute("file.saveAs", &json!({ "path": dir.join("Fresh.designspace") })).unwrap();
+        s.execute("font.compile", &json!({ "destination": dir.join("Fresh.ttf") })).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Name IDs 1, 2, 16 and 17 of the compiled font at `path`, and its ITALIC, BOLD and
+    /// REGULAR selection bits.
+    fn style_names(path: &Path) -> (Option<String>, Option<String>, Option<String>, Option<String>, u16) {
+        use skrifa::raw::TableProvider;
+        let bytes = std::fs::read(path).unwrap();
         let font = skrifa::FontRef::new(&bytes).unwrap();
         let name = font.name().unwrap();
         let text = |id: u16| {
@@ -1507,10 +1577,7 @@ mod tests {
                 .find(|r| r.platform_id() == 3 && r.name_id().to_u16() == id)
                 .map(|r| r.string(name.string_data()).unwrap().chars().collect::<String>())
         };
-        assert_eq!((text(1).as_deref(), text(2).as_deref()), (Some("Test"), Some("Thin")));
-        assert_eq!((text(16), text(17)), (None, None), "IDs 16 and 17 equal 1 and 2");
-        assert_eq!(font.os2().unwrap().fs_selection().bits() & 0x61, 0, "no ITALIC, BOLD or REGULAR bit");
-        let _ = std::fs::remove_dir_all(&dir);
+        (text(1), text(2), text(16), text(17), font.os2().unwrap().fs_selection().bits() & 0x61)
     }
 
     /// Points the designspace's instance at `filename` (or at none) and gives it `style`.

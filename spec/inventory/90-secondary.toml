@@ -2129,7 +2129,7 @@ summary = "Exports every listed open font through every listed export profile in
 ref = "FontLab 8 What's new › Formats › File › Export Font As"
 status = "docs"
 origin = "fontlab"
-notes = "Documented, not yet observed. Each profile builds the exportable instances as file.exportAll does, with the profile's overlap removal and autohint setting passed to the compiler as file.exportStatic passes its own, and the CBDT and CBLC tables when its cbdt setting is on. installTemporarily is refused as not supported yet: installing fonts for the session needs the desktop app's platform code (M14). All files are staged and moved into place only when every font was built."
+notes = "A designspace without axes is refused when it states a location, or when it has two or more sources and instances to build, as fontmake refuses it (docs/spec/40-compile.md). Documented, not yet observed. Each profile builds the exportable instances as file.exportAll does, with the profile's overlap removal and autohint setting passed to the compiler as file.exportStatic passes its own, and the CBDT and CBLC tables when its cbdt setting is on. installTemporarily is refused as not supported yet: installing fonts for the session needs the desktop app's platform code (M14). All files are staged and moved into place only when every font was built."
 guesses = [
   "Without `fonts` the active document is exported, not every open one; the reference's Export Fonts As dialog would settle the default.",
   "A profile's subfolder may not climb out of the destination with `..`, for any caller; the reference's profile settings would settle whether it can.",
