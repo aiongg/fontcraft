@@ -130,6 +130,28 @@ fn filters_live_in_the_settings_and_change_no_document() {
 }
 
 #[test]
+fn move_filter_counts_the_index_without_the_moved_entry_and_rename_keeps_names_unique() {
+    let mut s = Session::with_document();
+    for name in ["A", "B", "C"] {
+        run(&mut s, "fontView.addListFilter", json!({"name": name}));
+    }
+    let stored = |s: &Session| -> Value { s.settings().reserved(Reserved::Filters).unwrap().unwrap() };
+    let top = |s: &Session| -> Vec<String> { stored(s).as_array().unwrap().iter().map(|f| f["name"].as_str().unwrap().to_string()).collect() };
+    let base = top(&s).iter().position(|n| n == "A").unwrap();
+    // The sidebar drops A below C: C is at base + 2, and at base + 1 once A is taken out, so A
+    // goes to base + 2.
+    run(&mut s, "fontView.moveFilter", json!({"filter": "filters/A", "index": base + 2}));
+    assert_eq!(top(&s)[base..], ["B", "C", "A"]);
+    // A filter's own name is accepted; a sibling's is refused, as is an index past the end, and
+    // neither changes anything.
+    run(&mut s, "fontView.renameFilter", json!({"filter": "B", "name": "B"}));
+    let before = stored(&s);
+    refused(&mut s, "fontView.renameFilter", json!({"filter": "B", "name": "C"}), "already");
+    refused(&mut s, "fontView.moveFilter", json!({"filter": "A", "index": base + 3}), "index");
+    assert_eq!(stored(&s), before);
+}
+
+#[test]
 fn set_visible_scripts_chooses_the_languages_list() {
     let mut s = Session::with_document();
     assert_eq!(

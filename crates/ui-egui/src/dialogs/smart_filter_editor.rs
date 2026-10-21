@@ -6,7 +6,7 @@
 //! The rules are a rule tree drawn as rows ([`super::rule_tree`]): a Match row per group (all,
 //! any or none), a row per rule with its property, comparison and value, nested groups indented
 //! under their own Match row, and `+`, `…` and `−` buttons to add rules, add groups and remove
-//! either.
+//! either. With Alt held, `+` adds a group too.
 //!
 //! The editor of a stored filter opens with its `filter` path and reads the stored name and
 //! rules itself; `name` and `rules` given with it take their place.
