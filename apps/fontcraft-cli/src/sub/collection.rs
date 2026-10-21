@@ -35,7 +35,7 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::value("output-dir", "DIR", "", "the folder unpacked fonts go into (default: beside the collection)"),
     OptSpec::switch("no-clobber", false, "refuse to replace an existing file"),
     OptSpec::value("face", "N|NAME", "", "unpack only this member, by index or PostScript name"),
-    OptSpec::list("share-table", "TAG=INDEX", "", "pack: every member uses table TAG of input font INDEX (zero-based); repeatable"),
+    OptSpec::list("share-table", "TAG=INDEX", "", "pack: every member uses table TAG of input font INDEX (zero-based); repeatable").repeat(),
     OptSpec::switch("share", true, "pack: store identical tables once (--no-share stores every table separately)"),
     OptSpec::value("container", "plain|woff2", "plain", "pack: write a plain collection or a WOFF2 collection"),
     OptSpec::value("name-by", "postscript-name|index", "postscript-name", "unpack: name files by PostScript name or as STEM-fontN"),
