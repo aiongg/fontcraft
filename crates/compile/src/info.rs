@@ -332,6 +332,23 @@ fn ribbi_flags(style: &str) -> Option<SelectionFlags> {
     }
 }
 
+/// The flags of a UFO's stated `styleMapStyleName`, which ufo2ft compares with the four
+/// lower-case names exactly: another value (`thin`, `Bold`) sets no style bit.
+fn stated_ribbi_flags(style: &str) -> SelectionFlags {
+    match style {
+        "regular" => SelectionFlags::REGULAR,
+        "italic" => SelectionFlags::ITALIC,
+        "bold" => SelectionFlags::BOLD,
+        "bold italic" => SelectionFlags::BOLD | SelectionFlags::ITALIC,
+        _ => SelectionFlags::empty(),
+    }
+}
+
+/// A UFO's stated `styleMapStyleName`, when not empty.
+fn stated_map_style(params: &Params) -> Option<&str> {
+    params.get("styleMapStyleName").and_then(Value::as_str).filter(|s| !s.is_empty())
+}
+
 /// Collects the names by id, then fills what is missing as fontc's `NameBuilder` does.
 #[derive(Default)]
 struct NameBuilder {
@@ -538,7 +555,7 @@ pub(crate) fn derive_with_family(font: &Resolved, family: &str, style: &str, war
                 None if l.flags.is_empty() => SelectionFlags::REGULAR,
                 None => l.flags,
             })
-            .or_else(|| param(params, &["styleMapStyleName"], |v| v.as_str().and_then(ribbi_flags)))
+            .or_else(|| stated_map_style(params).map(stated_ribbi_flags))
             .or_else(|| {
                 text(font, "preferredSubfamilyNames", &["preferredSubfamilyName", "openTypeNamePreferredSubfamilyName"]).and_then(ribbi_flags)
             })
@@ -739,6 +756,9 @@ fn linked_names(font: &Resolved, family: &str, style: &str, warnings: &mut Vec<S
     if let Some(v) = default_language(font, "styleMapStyleNames", &["styleMapStyleName"]) {
         match ribbi_flags(v) {
             Some(f) => flags = f & (SelectionFlags::BOLD | SelectionFlags::ITALIC),
+            // Bold or Italic set on the instance after reading a style outside the four (which
+            // reads as neither) win over it.
+            None if ufo && (link.is_bold || link.is_italic) => {}
             None if ufo => {
                 flags = SelectionFlags::empty();
                 map_style = Some(title_case(v));
@@ -948,8 +968,9 @@ fn names(
         if let Some(v) = font.params.get("styleMapFamilyName").and_then(Value::as_str) {
             b.add(1, v);
         }
-        if let Some(flags) = font.params.get("styleMapStyleName").and_then(Value::as_str).and_then(ribbi_flags) {
-            b.add(2, ribbi_name(flags));
+        // ufo2ft writes the stated style-map style title-cased, whether or not it is one of the four.
+        if let Some(v) = stated_map_style(&font.params) {
+            b.add(2, &title_case(v));
         }
         if b.get(16).is_none() && !family.is_empty() {
             b.add(16, family);
