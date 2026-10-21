@@ -1,4 +1,4 @@
-//! The Masters tab: the master list (drag to reorder, multiple selection, the plus menu, minus), the General, Metrics & Alignment Zones, Stems and Custom Parameters sections, Multiple Values placeholders, the read-only Axes Coordinates and Number Values.
+//! The Masters tab: the master list (drag to reorder, multiple selection, the plus menu, minus), the General, Metrics & Alignment Zones, Stems and Custom Parameters sections, Multiple Values placeholders, the Axes Coordinates and the read-only Number Values.
 //!
 //! The list on the left shows each master with its icon ([`crate::master_icons`]). A click
 //! selects one master, Cmd-click adds or drops one, Shift-click selects a range; the sections on
@@ -11,19 +11,22 @@
 //! (through [`crate::dialogs::master_icon_picker`]), `font.master.setMetric`,
 //! `font.metrics.add/set/remove` (through [`crate::dialogs::metric_editor`]),
 //! `font.master.setStem`, `font.stems.add/set/remove`, `font.customParameters.*`,
-//! `font.master.add/duplicate/remove/reorder`. The tab keeps only view state: the selection in
+//! `font.master.add/duplicate/remove/reorder`, `font.master.setAxisLocation` (one number field
+//! per axis, keyed by the axis's tag). The tab keeps only view state: the selection in
 //! [`super::FontInfoState`], the open icon picker and metric editor in egui's memory.
 //!
-//! Axes Coordinates and Number Values are shown read-only until their commands exist.
+//! Number Values are shown read-only until their commands exist.
 //!
 //! Rows: `fontInfo.masters`, `fontInfo.masterIconPicker`, `fontInfo.metricEditor`,
-//! `fontInfo.masters.multipleValues` (M7.17).
+//! `fontInfo.masters.multipleValues` (M7.17); `master.axesValues`,
+//! `font.master.setAxisLocation` (M9.27).
 
 #[cfg(test)]
 mod tests;
 
 use egui::{Align2, Id, RichText, Sense};
 use fontcraft_engine::fontinfo::{MAX_MASTERS, MAX_METRIC_DEFS, MAX_STEM_DEFS};
+use fontcraft_model::axes::design_value;
 use fontcraft_model::{Font, metric};
 use serde_json::json;
 
@@ -41,6 +44,8 @@ use crate::theme::Tokens;
 const LIST_COLUMNS: f32 = 4.0;
 /// The label column of the sections, in list columns of the theme (as the shared rows).
 const LABEL_COLUMNS: f32 = 4.0;
+/// Most axes the Axes Coordinates list.
+const MAX_AXES_SHOWN: usize = 64;
 
 /// Draws the tab's contents inside the Font Info window.
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
@@ -61,7 +66,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         ui.separator();
         ui.vertical(|ui| {
             general(ui, tokens, fi, font, &target, pending);
-            axes(ui, tokens, font, &target);
+            axes(ui, tokens, font, &target, pending);
             metrics(ui, tokens, font, &target, pending);
             stems(ui, tokens, font, &target, pending);
             rows::parameters_section(ui, tokens, fi, font, &target, pending);
@@ -102,6 +107,11 @@ pub fn minus_id() -> Id {
 /// The id of the icon button of the General section.
 pub fn icon_id() -> Id {
     widgets::id(("fontInfo.masters", "icon"))
+}
+
+/// The id of the coordinate field of axis `at`.
+pub fn axis_id(at: usize) -> Id {
+    widgets::id(("fontInfo.masters", "axis", at))
 }
 
 /// The id of the plus button beside the Metrics heading.
@@ -168,11 +178,12 @@ pub fn stem_value(font: &Font, target: &Target, at: usize) -> Option<f64> {
     shared(target.indices.iter().map(|i| font.masters.get(*i).and_then(|m| m.stem_values.get(at)).copied().unwrap_or_default()))
 }
 
-/// The coordinate on axis `at`, or the number value `at`, the targets share.
-fn location(font: &Font, target: &Target, at: usize) -> Option<f64> {
-    shared(target.indices.iter().map(|i| font.masters.get(*i).and_then(|m| m.location.get(at)).copied().unwrap_or_default()))
+/// The coordinate on axis `at` the targets share; a short location reads the model's default.
+pub fn location(font: &Font, target: &Target, at: usize) -> Option<f64> {
+    shared(target.indices.iter().filter_map(|i| font.masters.get(*i)).map(|m| design_value(&m.location, at)))
 }
 
+/// The number value `at` the targets share.
 fn number_value(font: &Font, target: &Target, at: usize) -> Option<f64> {
     shared(target.indices.iter().map(|i| font.masters.get(*i).and_then(|m| m.number_values.get(at)).copied().unwrap_or_default()))
 }
@@ -318,7 +329,7 @@ fn label_cell(ui: &mut egui::Ui, tokens: &Tokens, text: &str, id: Option<Id>) ->
 }
 
 /// A number field showing `value`, or Multiple Values when it is `None`. The committed number.
-fn number_field(ui: &mut egui::Ui, id: Id, value: Option<f64>, width: f32) -> Option<f64> {
+pub(super) fn number_field(ui: &mut egui::Ui, id: Id, value: Option<f64>, width: f32) -> Option<f64> {
     let shown = value.map(widgets::format_number).unwrap_or_default();
     let look = widgets::Look { color: None, placeholder: value.is_none().then(|| RichText::new(MULTIPLE_VALUES)) };
     let parse = |text: &str| text.trim().parse::<f64>().ok().filter(|n| n.is_finite());
@@ -362,16 +373,20 @@ fn general(ui: &mut egui::Ui, tokens: &Tokens, fi: &mut FontInfoState, font: &Fo
     });
 }
 
-/// Axes Coordinates, read-only.
-fn axes(ui: &mut egui::Ui, tokens: &Tokens, font: &Font, target: &Target) {
+/// Axes Coordinates: one number field per axis; a typed value goes to every selected master.
+fn axes(ui: &mut egui::Ui, tokens: &Tokens, font: &Font, target: &Target, pending: &mut Pending) {
     if font.axes.is_empty() {
         return;
     }
     plain_heading(ui, tokens, "Axes Coordinates");
-    for (at, axis) in font.axes.iter().enumerate() {
+    for (at, axis) in font.axes.iter().enumerate().take(MAX_AXES_SHOWN) {
         ui.horizontal(|ui| {
             label_cell(ui, tokens, &axis.name, None);
-            read_only(ui, tokens, location(font, target, at));
+            if let Some(v) = number_field(ui, axis_id(at), location(font, target, at), tokens.field_width) {
+                let mut location = serde_json::Map::new();
+                location.insert(axis.tag.clone(), json!(v));
+                pending.push(("font.master.setAxisLocation", json!({"masters": target.indices, "location": location})));
+            }
         });
     }
 }

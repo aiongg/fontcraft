@@ -6,7 +6,7 @@ use std::sync::Arc;
 use egui::{Event, Key, Modifiers, PointerButton, Pos2};
 use fontcraft_engine::fontinfo::Scope;
 use fontcraft_model::{Axis, Font, Glyph, GlyphTable, Instance, Layer, Master, Path, Shape};
-use serde_json::json;
+use serde_json::{Value, json};
 
 use super::*;
 use crate::FontcraftApp;
@@ -277,4 +277,43 @@ fn a_preview_wider_than_the_largest_texture_is_drawn_smaller_to_fit() {
     let short = names.get(..30).unwrap();
     let full = render_preview(&ctx, &app.tokens, font, &master, short, 60.0, 2048).unwrap();
     assert!(full.size()[0] > 256, "a large enough texture keeps the asked size");
+}
+
+#[test]
+fn exports_tab_coordinates_act_through_set_axis_location_and_warn_of_extrapolation() {
+    let setup = || {
+        let mut app = exports_app(&["Light", "Bold"]);
+        app.run("font.master.add", &json!({"name": "Bold"})).unwrap();
+        app.run("font.axes.add", &json!({"name": "Weight"})).unwrap();
+        app.run("font.master.setAxisLocation", &json!({"masters": [1], "location": {"wght": 100}})).unwrap();
+        app
+    };
+    let type_into = |w: &Window, app: &mut FontcraftApp, text: &str| {
+        w.click(app, axis_field_id(0), Modifiers::NONE);
+        w.frame(app, vec![Event::Text(text.into())]);
+        w.frame(app, vec![Event::Key { key: Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE }]);
+        w.frame(app, Vec::new());
+    };
+    let mut app = setup();
+    let mut direct = setup();
+    let w = open(&mut app);
+    // Both entries take one typed coordinate; between the masters there is no warning.
+    w.click(&mut app, entry_id(0), Modifiers::NONE);
+    w.click(&mut app, entry_id(1), Modifiers::COMMAND);
+    type_into(&w, &mut app, "50");
+    direct.run("font.instance.setAxisLocation", &json!({"instances": [0, 1], "location": {"wght": 50}})).unwrap();
+    assert_eq!(instances(&app), instances(&direct));
+    assert!(w.ctx.read_response(extrapolation_id(0)).is_none(), "an instance between the masters is interpolated");
+
+    // Beyond the masters: the tab shows the warning the command gives.
+    w.click(&mut app, entry_id(1), Modifiers::NONE);
+    type_into(&w, &mut app, "150");
+    let reply = direct.run("font.instance.setAxisLocation", &json!({"instances": [1], "location": {"wght": 150}})).unwrap();
+    assert_eq!(instances(&app), instances(&direct));
+    assert!(w.ctx.read_response(extrapolation_id(0)).is_some(), "the extrapolated instance is marked");
+    let font = app.session.font().unwrap();
+    let warning = font.instances.get(1).and_then(|i| extrapolation_warning(font, i));
+    assert_eq!(warning.as_deref(), reply.get("warnings").and_then(|w| w.get(0)).and_then(Value::as_str), "the command's warning");
+    w.click(&mut app, entry_id(0), Modifiers::NONE);
+    assert!(w.ctx.read_response(extrapolation_id(0)).is_none(), "the entry inside the masters has none");
 }
