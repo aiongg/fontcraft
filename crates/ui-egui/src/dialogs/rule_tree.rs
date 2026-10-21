@@ -5,12 +5,15 @@
 //! |---|---|
 //! | Match pop-up of a group | the glyph must match all, any or none of the rows under it |
 //! | `+` on a group | adds a rule at the end of the group |
-//! | `…` on a group | adds a nested group at the end of the group |
+//! | `…` on a group, or `+` with Alt held | adds a nested group at the end of the group |
 //! | `−` on a nested group | removes the group and its rows |
 //! | property, comparison and value of a rule | edit the rule |
 //! | `+` on a rule | adds a rule after it |
-//! | `…` on a rule | adds a nested group after it |
+//! | `…` on a rule, or `+` with Alt held | adds a nested group after it |
 //! | `−` on a rule | removes it |
+//!
+//! While Alt is held every `+` shows `…` and adds a group, as the reference's plus button does
+//! with Option; the separate `…` buttons stay.
 //!
 //! The field's value is the tree in the shape `fontView.addSmartFilter` takes,
 //! `{all | any | none: [rule or group]}` with rules `{property, op, value}`. Each change makes a
@@ -351,6 +354,16 @@ fn small(ui: &mut egui::Ui, id: egui::Id, text: &str, hint: &str) -> bool {
     crate::panels::widgets::button(ui, id, text, hint, true, false)
 }
 
+/// A `+` button that adds a rule at `at` in the group at `group`, or a nested group there while
+/// Alt is held.
+fn plus(ui: &mut egui::Ui, id: egui::Id, hint: &str, group: &[usize], at: usize) -> Option<Edit> {
+    if ui.input(|i| i.modifiers.alt) {
+        small(ui, id, "…", "Add a nested group").then(|| Edit::AddGroup(group.to_vec(), at))
+    } else {
+        small(ui, id, "+", hint).then(|| Edit::AddRule(group.to_vec(), at))
+    }
+}
+
 fn group_ui(ui: &mut egui::Ui, field: &Field, group: &Value, path: &[usize], depth: usize, tokens: &Tokens, edits: &mut Vec<Edit>) {
     let Some((kind, nodes)) = group_of(group) else {
         ui.colored_label(tokens.error_text, "not a rule group");
@@ -363,8 +376,8 @@ fn group_ui(ui: &mut egui::Ui, field: &Field, group: &Value, path: &[usize], dep
             edits.push(Edit::Match(path.to_vec(), k));
         }
         ui.label(if depth == 0 { "of the following rules" } else { "of these rules" });
-        if small(ui, control_id(&field.key, path, "add"), "+", "Add a rule") {
-            edits.push(Edit::AddRule(path.to_vec(), nodes.len()));
+        if let Some(edit) = plus(ui, control_id(&field.key, path, "add"), "Add a rule", path, nodes.len()) {
+            edits.push(edit);
         }
         if small(ui, control_id(&field.key, path, "addGroup"), "…", "Add a nested group") {
             edits.push(Edit::AddGroup(path.to_vec(), nodes.len()));
@@ -476,8 +489,8 @@ fn rule_ui(ui: &mut egui::Ui, field: &Field, rule: &Value, path: &[usize], depth
         if small(ui, control_id(&field.key, path, "remove"), "−", "Remove this rule") {
             edits.push(Edit::Remove(path.to_vec()));
         }
-        if small(ui, control_id(&field.key, path, "add"), "+", "Add a rule after this one") {
-            edits.push(Edit::AddRule(parent.to_vec(), last + 1));
+        if let Some(edit) = plus(ui, control_id(&field.key, path, "add"), "Add a rule after this one", parent, last + 1) {
+            edits.push(edit);
         }
         if small(ui, control_id(&field.key, path, "addGroup"), "…", "Add a nested group after this rule") {
             edits.push(Edit::AddGroup(parent.to_vec(), last + 1));

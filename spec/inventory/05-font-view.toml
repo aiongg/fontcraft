@@ -916,7 +916,7 @@ milestone = "M4"
 summary = "Renames a filter or folder in place without opening its editor: double-click the name, or select the entry and press Return."
 ref = "Font View › Filtering Font View › Managing Filters"
 status = "handbook"
-notes = "Kind `engine`: filters and the scripts the Languages section lists live in the user settings (the owner's decision, docs/plans/M4.md § 7 question 4), which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
+notes = "Kind `engine`: filters and the scripts the Languages section lists live in the user settings (the owner's decision, docs/plans/M4.md § 7 question 4), which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step. In the window it runs when Return confirms the name field that a double-click on the name, or Return, opens in the sidebar."
 
 [[command]]
 id = "fontView.removeFilter"
@@ -944,7 +944,7 @@ milestone = "M4"
 summary = "Reorders a filter within the Filters list or moves it into or out of a folder (drag and drop in the UI)."
 ref = "Font View › Filtering Font View › Managing Filters"
 status = "handbook"
-notes = "Kind `engine`: filters and the scripts the Languages section lists live in the user settings (the owner's decision, docs/plans/M4.md § 7 question 4), which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
+notes = "Kind `engine`: filters and the scripts the Languages section lists live in the user settings (the owner's decision, docs/plans/M4.md § 7 question 4), which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step. In the window one drop of a dragged filter or folder runs it once; `index` counts the entries of `parent` without the moved one."
 
 # ───────────────────────────── Images ─────────────────────────────
 
@@ -1183,7 +1183,18 @@ milestone = "M4"
 summary = "User-defined filters: rule-based smart filters, fixed-name list filters and folders that group them. Managed from the actions menu in the window's bottom-left corner."
 ref = "Font View › Filtering Font View › Smart Filters; List Filters; Managing Filters"
 status = "handbook"
-notes = "Renaming in place and dragging are not built yet: the name is edited in the filter's editor, and fontView.renameFilter and fontView.moveFilter work headless."
+notes = "A double-click on a filter's or folder's name, or Return while the sidebar has the keyboard and one filter is selected, opens a field over the name with the whole name selected; Return runs fontView.renameFilter, Escape or a click away runs nothing. A double-click on a smart or list filter's icon opens its editor. Dragging a filter or folder draws a line where it would go, or frames the folder it would go into, and the drop runs one fontView.moveFilter; a drop into the dragged folder or a folder inside it draws nothing and runs nothing. A renamed or moved entry stays selected. Documented, not yet observed."
+guesses = [
+  "A double-click anywhere on a filter's row except its icon and disclosure triangle renames it, the empty space after the name included. Settled by double-clicking right of a short filter name in the reference.",
+  "Return renames only while the sidebar has the keyboard, which it takes when a row is pressed and gives up when anything else is pressed. Settled by selecting a filter, clicking a glyph cell and pressing Return in the reference.",
+  "Over a folder's middle half a dragged filter goes into the folder, at its end; over the top or bottom quarter it goes before or after the folder, and below an open folder with entries it goes first inside it. Settled by observing the reference's drop feedback.",
+  "An unchanged or empty name typed into the field runs no command. Settled by renaming a filter to its own name in the reference.",
+]
+observe = [
+  "In Font View, add three smart filters and a folder; drag a filter slowly over the folder's row from top to bottom and note where the drop line or folder highlight appears.",
+  "Drag a folder holding a filter onto that filter's row and note whether the reference shows a drop mark and what the drop does.",
+  "Select a filter, click a glyph cell, press Return; note whether the filter's name opens for editing.",
+]
 
 [[panel]]
 id = "fontView.searchField"
@@ -1371,10 +1382,13 @@ milestone = "M4"
 summary = "Window editing the name and the rule tree of a smart filter. A new filter starts with one rule."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
-notes = "The rules show as rows: a Match row per group (all, any or none of the rows under it), a row per rule with its property, comparison and value, and nested groups indented under their own Match row. `+` adds a rule, `…` adds a nested group (an Any group with one rule), `−` removes a rule or a nested group. Yes/no, case and colour rules take their value from a pop-up menu; the others from a text field. The editor of a stored filter opens with its `filter` path and reads the stored name and rules itself. Over the control channel the rules are one field, `rules`, in the shape fontView.addSmartFilter takes. Documented, not yet observed."
+notes = "The rules show as rows: a Match row per group (all, any or none of the rows under it), a row per rule with its property, comparison and value, and nested groups indented under their own Match row. `+` adds a rule, `…` adds a nested group (an Any group with one rule), `−` removes a rule or a nested group; while Alt is held each `+` shows `…` and adds a group too. Yes/no, case and colour rules take their value from a pop-up menu; the others from a text field. The editor of a stored filter opens with its `filter` path and reads the stored name and rules itself. Over the control channel the rules are one field, `rules`, in the shape fontView.addSmartFilter takes. Documented, not yet observed."
 guesses = [
-  "Adding a nested group is a `…` button on each row, standing in for Option-click on plus. Settled by observing the reference's editor.",
+  "Besides Alt turning each `+` into `…`, every row keeps a separate `…` button that adds a group without Alt. Settled by observing whether the reference's editor shows a dots button while Option is up.",
   "A new smart filter is named New Filter, or New Filter 2 and so on when the name is taken. Settled by adding a smart filter in the reference.",
+]
+observe = [
+  "In a smart filter's editor, hold Option over a rule's plus button; note what the button shows, and what clicking it adds and where.",
 ]
 
 [[panel]]
@@ -3168,6 +3182,7 @@ milestone = "M4"
 summary = "Rules can be nested in groups of three kinds: All (every nested rule must match), Any (at least one must match), None (no nested rule may match). A group is added by holding Option, which turns the plus button into a dots button, and groups may contain groups."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
+notes = "In the editor, Alt held turns each `+` into `…`, which adds an Any group with one rule (at the end of a group, or after a rule); the Match pop-up of the new group picks All, Any or None. Documented, not yet observed."
 
 [[behavior]]
 id = "smartFilter.evaluationLayer"
