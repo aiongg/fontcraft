@@ -693,7 +693,7 @@ causes; none comes from the handbook's keys, which no corpus instance at a maste
 
 | What | Where it comes from |
 |---|---|
-| Family, style, PostScript and style-map names | the `<instance>` element; style-map names it leaves out are ufo2ft's fallbacks from the style name. A stated style-map style other than the four (`thin`) is kept as written; compiled, it is name ID 2 title-cased (`Thin`) with no REGULAR, BOLD or ITALIC bit |
+| Family, style, PostScript and style-map names | the `<instance>` element; style-map names it leaves out are ufo2ft's fallbacks from the style name. A stated style-map style is lower-cased, as fontTools' instantiator writes it, so `Bold` is bold. One other than the four (`thin`) is kept; compiled, it is name ID 2 title-cased (`Thin`) with no REGULAR, BOLD or ITALIC bit. Bold or Italic set on the instance later wins over it |
 | Names of one style in the masters' UFOs (PostScript, full, typographic, WWS, compatible, unique id, style-map) | left out, unless the source has one master and the instance sits at it |
 | Other font information | the default source's; numbers interpolated over the masters |
 | PostScript weight name, between masters | from the interpolated weight class, rounded to hundreds (fontMath's names, `Thin` to `Black`) |
@@ -705,11 +705,25 @@ causes; none comes from the handbook's keys, which no corpus instance at a maste
 One case is known to differ: a single-source designspace whose instance states no style-map
 names takes ufo2ft's fallbacks, where fontmake keeps the UFO's own style-map names.
 
+A UFO instance with a style-map style other than the four differs from fontmake's. fontmake
+writes the style into `fontinfo.plist`, and ufoLib's validating reader and fontc refuse that
+file. FontCraft never writes a file the common tools refuse, so any UFO it writes keeps such a
+style in its lib, under `com.fontcraft.styleMapStyleName`, and leaves the key out of
+`fontinfo.plist`. Reading the UFO puts the style back, so the instance UFO compiles to the same
+names as the instance. Other tools read that UFO with the style-map style left out.
+
+A UFO's own `styleMapStyleName` is compared with the four lower-case names exactly, as ufo2ft
+compares it: `Bold` sets no style bit, and any stated value is name ID 2 title-cased. fontc
+refuses a UFO whose `styleMapStyleName` is not one of the four.
+
 A designspace without `<axes>` builds as fontmake builds it. One that states a `<location>`
 anyway is refused, as fontTools' reader refuses it ("No axes defined"). Otherwise every source
 sits at one location: the masters build one by one, and instances build only when there is one
 source; with two or more, interpolation is refused, as fontTools refuses it ("Locations must be
-unique"). A variable export needs at least one axis.
+unique"). An open document saved as a designspace from another format holds no designspace text, so
+nothing in it states a location: it builds as a designspace without locations does. A variable export needs at least one axis.
+A designspace FontCraft writes for a font without axes has no `<location>` elements, and each
+`<variable-font>` has an empty `<axis-subsets/>`, so fontTools opens it.
 
 **Against the handbook.** TrueType composites with overlapping or transformed components stay
 composites by default, as fontc and fontmake keep them. The texts of the Keep Overlapping
@@ -958,6 +972,18 @@ widths policy: multiplied by `a` when the widths are transformed, 0 when they ar
 they are kept. `HVAR` is scaled when every glyph takes one positive horizontal scale with no turn
 or shear, kept when the widths are kept, and dropped otherwise. No reference has a matrix on
 `gvar`; the tests check that transforming and instancing commute within two units.
+
+## 4e. TTX import against ttx -m
+
+`tables import` (`fontcraft_tables::ttx::import`) compiles each table of a dump as fontTools'
+`ttx -m` does. The cases around the font's own outline table, with bounds recalculation on:
+
+| Case | fontTools | FontCraft |
+|---|---|---|
+| A dump with `head` or `OS/2` but no `hhea`, `vhea` or outline table, read into a CFF font | compiling `head` reads the Top DICT's FontBBox; no charstring is drawn | the same: charstrings that cannot be drawn do not stop the import |
+| The same with `hhea` or `vhea`, or into a CFF2 font | the extremes (and a CFF2 font's `head` box) draw every charstring; one that cannot be drawn fails the save | the import fails with the reason and changes nothing |
+| A font with `maxp`, `post` and `CFF `, and a dump without `CFF ` | loading the glyph order decompiles `CFF `; the save compiles it again, its FontBBox recalculated | the table is written as TTX and read back. When a name or string holds a control character (TTX text writes it as `?`), or the round trip fails, the table keeps its bytes and the result has a warning with the reason, since going through text would change the strings |
+| A font without `maxp` or `post` | `CFF ` is loaded only when `head` is compiled, after `CFF ` was written, so its bytes stay | the bytes stay; `head` and the extremes read them |
 
 ## 5. Commands and data touched
 

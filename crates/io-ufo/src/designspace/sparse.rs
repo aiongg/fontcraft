@@ -91,8 +91,8 @@ pub(crate) fn source_name(master_source: &str, layer: &str) -> String {
 pub(crate) fn element(b: &Brace, filename: &str, names: &[String]) -> Element {
     let mut el =
         Element::new("source").with_attr("filename", filename).with_attr("name", source_name(&b.master, &b.layer)).with_attr("layer", &b.layer);
-    if !names.is_empty() {
-        el.children.push(XNode::Element(super::location_element(names, &b.location)));
+    if let Some(l) = super::location_element(names, &b.location) {
+        el.children.push(XNode::Element(l));
     }
     el
 }

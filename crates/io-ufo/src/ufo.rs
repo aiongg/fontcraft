@@ -18,6 +18,7 @@
 //! |---|---|
 //! | family name, units per em, version, note | `fontinfo.plist` `familyName`, `unitsPerEm`, `versionMajor`, `versionMinor`, `note` |
 //! | the font's properties, parameters and date; a master's where its file differs from the default master's | the other `fontinfo.plist` keys, through [`crate::fontinfo`] |
+//! | a `styleMapStyleName` parameter other than `regular`, `italic`, `bold` and `bold italic`, which ufoLib and fontc refuse in `fontinfo.plist` | `lib.plist` `com.fontcraft.styleMapStyleName` |
 //! | the master's user data | `lib.plist`, except the keys below |
 //! | the font's settings, app version, edit-tab texts and parameters with no `fontinfo.plist` key; a master's icon, name parts and such parameters; in a single UFO the font's user data and the master id | glyphsLib's `lib.plist` keys ([`crate::libkeys`]): `com.schriftgestaltung.*`, `com.github.googlei18n.ufo2ft.colorPalettes`… |
 //! | master name; metrics `ascender`, `cap height`, `x-height`, `descender`, `italic angle` | `styleName`; `ascender`, `capHeight`, `xHeight`, `descender`, `italicAngle` (counter-clockwise, so the sign is flipped) |
@@ -77,7 +78,14 @@ const DEFAULT_DIR: &str = "glyphs";
 const KERN1: &str = "public.kern1.";
 const KERN2: &str = "public.kern2.";
 /// `lib.plist` keys that are model fields of their own rather than user data.
-const TYPED_LIB: [&str; 4] = ["public.glyphOrder", "public.skipExportGlyphs", POSTSCRIPT_NAMES, OPENTYPE_CATEGORIES];
+const TYPED_LIB: [&str; 5] = ["public.glyphOrder", "public.skipExportGlyphs", POSTSCRIPT_NAMES, OPENTYPE_CATEGORIES, STYLE_MAP_STYLE_LIB];
+const STYLE_MAP_STYLE: &str = "styleMapStyleName";
+/// The four style-map styles a UFO's `fontinfo.plist` may state; ufoLib and fontc refuse a file
+/// with any other.
+const STYLE_MAP_STYLES: [&str; 4] = ["regular", "italic", "bold", "bold italic"];
+/// Where the lib keeps a stated style-map style outside [`STYLE_MAP_STYLES`] (fontTools'
+/// instantiator writes such a style, `thin` say, into an instance UFO's `fontinfo.plist`).
+pub const STYLE_MAP_STYLE_LIB: &str = "com.fontcraft.styleMapStyleName";
 /// The font lib's production names, by glyph name.
 const POSTSCRIPT_NAMES: &str = "public.postscriptNames";
 /// The font lib's `GDEF` classes, by glyph name.
@@ -357,6 +365,18 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
         info = (info.is_some() || !converted.is_empty()).then_some(converted);
         ufo1_lib = Some(lib);
     }
+    // A lib that is not a well-formed property list (some old tools wrote keys without values)
+    // is kept as a file and written back as it is.
+    let lib = match ufo1_lib {
+        Some(lib) => lib,
+        None => plists.dict(LIB).ok().flatten(),
+    };
+    // A style-map style outside the four that the writer moved to the lib ([`write_master`]).
+    if let (Some(info), Some(v)) = (&mut info, lib.as_ref().and_then(|d| d.get(STYLE_MAP_STYLE_LIB)))
+        && info.get(STYLE_MAP_STYLE).is_none()
+    {
+        patch(info, STYLE_MAP_STYLE, Some(v.clone()));
+    }
     let get = |k: &str| info.as_ref().and_then(|d| d.get(k));
     let family_name = get("familyName").and_then(Value::as_str).map(str::to_string);
     master.name = get("styleName").and_then(Value::as_str).unwrap_or("").to_string();
@@ -382,12 +402,6 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
     }
 
     // lib.plist
-    // A lib that is not a well-formed property list (some old tools wrote keys without values)
-    // is kept as a file and written back as it is.
-    let lib = match ufo1_lib {
-        Some(lib) => lib,
-        None => plists.dict(LIB).ok().flatten(),
-    };
     let order = strings(lib.as_ref().and_then(|d| d.get("public.glyphOrder")));
     let skip: HashSet<String> = strings(lib.as_ref().and_then(|d| d.get("public.skipExportGlyphs"))).into_iter().collect();
     let glyph_map = |key: &str| lib.as_ref().and_then(|d| d.get(key)).and_then(Value::as_dict).cloned();
@@ -1235,6 +1249,10 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
             patch(&mut info, "styleMapStyleName", None);
         }
     }
+    let off_list = info.get(STYLE_MAP_STYLE).filter(|v| !v.as_str().is_some_and(|s| STYLE_MAP_STYLES.contains(&s))).cloned();
+    if off_list.is_some() {
+        patch(&mut info, STYLE_MAP_STYLE, None);
+    }
     if had_info || !info.is_empty() {
         out.insert(FONTINFO.into(), plist(FONTINFO, &Value::Dict(info)));
     }
@@ -1343,6 +1361,7 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
     for k in stale {
         patch(&mut lib, &k, None);
     }
+    patch(&mut lib, STYLE_MAP_STYLE_LIB, off_list);
     for (k, v) in &master.user_data.0.entries {
         if !TYPED_LIB.contains(&k.as_str()) && !in_layer(k.as_str()) && !(k.as_str() == crate::colorkeys::COLOR_LAYERS && writes_list) {
             patch(&mut lib, k.as_str(), Some(v.without_spellings()));
@@ -3135,5 +3154,27 @@ mod tests {
         let groups = s(&out[GROUPS]);
         assert!(groups.contains("<key>public.kern1.A</key>") && !groups.contains("@MMK_L_A"), "{groups}");
         same_model(&read(&out).unwrap(), &font);
+    }
+
+    /// ufoLib and fontc refuse a `fontinfo.plist` whose style-map style is not one of the four
+    /// lower-case names; the lib keeps such a style, and reading puts it back.
+    #[test]
+    fn a_style_map_style_outside_the_four_is_kept_in_the_lib() {
+        let stated = |font: &Font| {
+            let m = &font.masters[0];
+            m.params.get(STYLE_MAP_STYLE).or_else(|| font.info.params.get(STYLE_MAP_STYLE)).and_then(Value::as_str).map(str::to_string)
+        };
+        for (style, in_info) in [("thin", false), ("Bold", false), ("bold", true)] {
+            let mut font = Font::new("Solo");
+            Arc::make_mut(&mut font.masters)[0].params.set(STYLE_MAP_STYLE, str_value(style));
+            let out = write(&font).unwrap();
+            let (info, lib) = (s(&out[FONTINFO]), out.get(LIB).map_or("", |b| s(b)));
+            assert_eq!(info.contains("<key>styleMapStyleName</key>"), in_info, "{info}");
+            assert_eq!(lib.contains(STYLE_MAP_STYLE_LIB), !in_info, "{lib}");
+            let back = read(&out).unwrap();
+            assert_eq!(stated(&back).as_deref(), Some(style));
+            assert!(back.masters[0].user_data.get(STYLE_MAP_STYLE_LIB).is_none(), "the key is not user data");
+            assert_eq!(write(&back).unwrap(), out, "{style}");
+        }
     }
 }

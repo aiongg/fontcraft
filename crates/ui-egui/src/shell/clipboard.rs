@@ -15,11 +15,15 @@
 //! clipboard first ([`request_text`]), and the text arrives as a paste event in the next frame.
 //!
 //! Drawing apps put a PDF on the clipboard, which egui does not carry. In Edit View the desktop
-//! app's [`ClipboardFlavours`] reads it: a paste whose text is neither our fragment nor SVG, Edit ›
-//! Paste with no text on the clipboard (the text request answers nothing in the next frame), and
-//! the paste key with no text (the platform then sends no paste event, only the key's release)
-//! run `edit.paste {pdf}` with the PDF as base64. Without a reader (the browser, tests) only text
-//! is pasted.
+//! app's [`ClipboardFlavours`] reads it off the window's thread. A paste whose text is neither our
+//! fragment nor SVG, Edit › Paste with no text on the clipboard (the text request answers nothing
+//! in the next frame), and the paste key with no text (the platform then sends no paste event,
+//! only the key's release) start the read, and take the edited glyph and document as they are
+//! then. When the read ends, a later frame runs `edit.paste {pdf}` on that glyph with the PDF as
+//! base64, or with the text when the clipboard holds no PDF. One stroke of the paste key pastes
+//! once, however long the key is held or the read takes, and the command key may be let go before
+//! the paste key. Paste Special, and Option held with the paste key, never read the PDF. Without
+//! a reader (the browser, tests) only text is pasted.
 //!
 //! Paste Special (Option held with the paste key, or Edit › Paste Special, which asks for the
 //! text the same way) opens `dialog.pasteSpecial` on copied glyphs, with the selected glyphs as
@@ -56,16 +60,41 @@ const GLYPHS_FORMAT: &str = "fontcraft-glyphs";
 pub const MAX_PASTE_BYTES: usize = 16 * 1024 * 1024;
 /// Largest PDF a paste takes from the clipboard: `edit.paste`'s limit.
 pub const MAX_PASTE_PDF_BYTES: usize = 64 << 20;
-/// Seconds after a paste in which the paste key's release pastes nothing more: the key's press
-/// either pasted text or asked for the clipboard already.
-const PASTE_KEY_SECONDS: f64 = 1.0;
+/// How often a frame looks for the end of a clipboard read, should the reader not ask for one.
+const READ_POLL: std::time::Duration = std::time::Duration::from_millis(100);
+
+/// What reading the clipboard's PDF gave: the PDF, `None` when the clipboard holds none, or why
+/// it could not be read (data larger than the limit included).
+pub type PdfRead = Result<Option<Vec<u8>>, String>;
 
 /// Clipboard data that egui does not carry. The desktop app gives
 /// [`FontcraftApp::clipboard_flavours`] one; without it (the browser, tests) only text is pasted.
 pub trait ClipboardFlavours: Send {
-    /// The PDF on the system clipboard, `None` when it holds none. `Err` says why it could not be
-    /// read, and is given for data larger than `max_bytes`.
-    fn pdf(&mut self, max_bytes: usize) -> Result<Option<Vec<u8>>, String>;
+    /// Starts reading the PDF on the system clipboard, refusing more than `max_bytes`, unless a
+    /// read is running already. The read must not hold up the caller: the desktop app runs it on
+    /// a thread of its own and asks `ctx` for a repaint when it ends.
+    fn request_pdf(&mut self, max_bytes: usize, ctx: &egui::Context);
+    /// The result of the read started last, once it has ended; `None` while it runs, and after
+    /// its result was taken.
+    fn take_pdf(&mut self) -> Option<PdfRead>;
+}
+
+/// A clipboard read under way: `edit.paste`'s parameters with the targets of the moment it
+/// started, the document they are in, and the text to paste when the clipboard holds no PDF.
+#[derive(Clone)]
+struct PendingPdf {
+    params: Value,
+    document: Option<u64>,
+    text: Option<String>,
+}
+
+/// The paste key's stroke from its press to its release.
+#[derive(Clone, Copy)]
+struct Stroke {
+    /// The key went down without the command key: a plain V, not the paste key.
+    plain: bool,
+    /// The stroke has pasted, or asked for the clipboard, already.
+    pasted: bool,
 }
 
 /// The egui memory key under which Paste Special's request for the clipboard keeps the frame it
@@ -80,9 +109,60 @@ fn paste_key() -> egui::Id {
     egui::Id::new("fontcraft-paste-request")
 }
 
-/// The egui memory key holding the input time of the last paste.
-fn last_paste_key() -> egui::Id {
-    egui::Id::new("fontcraft-last-paste")
+/// The egui memory key holding the paste key's [`Stroke`] while the key is down.
+fn stroke_key() -> egui::Id {
+    egui::Id::new("fontcraft-paste-stroke")
+}
+
+/// The egui memory key holding the [`PendingPdf`] of a running clipboard read.
+fn pending_key() -> egui::Id {
+    egui::Id::new("fontcraft-paste-pending-pdf")
+}
+
+/// Follows the paste key through this frame's events: whether it was let go without having
+/// pasted. `asked`: this frame answers the stroke's request for the clipboard, which pastes.
+///
+/// The platform takes the paste key's press for its paste command: it sends the clipboard's text
+/// as a paste event, or nothing when there is no text, never the key press. So a release with no
+/// press seen is the paste key's, whether or not the command key is still down. A press seen
+/// with the command key comes from a platform that sends it (the browser, tests) and is the paste
+/// key too; a press seen without it is a plain V.
+fn paste_key_released(ctx: &egui::Context, asked: bool) -> bool {
+    let mut stroke = ctx.data_mut(|d| d.get_temp::<Stroke>(stroke_key()));
+    if asked && let Some(s) = stroke.as_mut() {
+        s.pasted = true;
+    }
+    let mut released = false;
+    ctx.input(|i| {
+        for event in &i.raw.events {
+            match event {
+                // A press while the stroke is down repeats the key.
+                egui::Event::Key { key: egui::Key::V, pressed: true, modifiers, .. } if stroke.is_none() => {
+                    stroke = Some(Stroke { plain: !modifiers.command, pasted: false });
+                }
+                egui::Event::Paste(_) if !asked => stroke.get_or_insert(Stroke { plain: false, pasted: false }).pasted = true,
+                egui::Event::Key { key: egui::Key::V, pressed: false, modifiers, .. } => {
+                    let ended = stroke.take();
+                    let paste_key = ended.is_none_or(|s| !s.plain) || modifiers.command;
+                    released = paste_key && !ended.is_some_and(|s| s.pasted);
+                }
+                // The paste command's other keys end their stroke; a window that loses the
+                // keyboard never sees the release.
+                egui::Event::Key { key: egui::Key::Paste | egui::Key::Insert, pressed: false, .. } | egui::Event::WindowFocused(false) => {
+                    stroke = None;
+                }
+                _ => {}
+            }
+        }
+    });
+    ctx.data_mut(|d| {
+        if let Some(s) = stroke {
+            d.insert_temp(stroke_key(), s);
+        } else {
+            d.remove::<Stroke>(stroke_key());
+        }
+    });
+    released
 }
 
 /// This frame's Copy, Cut and Paste events, as the commands they run.
@@ -92,14 +172,17 @@ pub fn events(app: &mut FontcraftApp, ctx: &egui::Context) -> Vec<(&'static str,
     let special_asked = asked.is_some_and(|f| frame <= f.saturating_add(1));
     let asked = ctx.data_mut(|d| d.remove_temp::<u64>(paste_key()));
     let paste_asked = asked.is_some_and(|f| frame <= f.saturating_add(1));
-    let (now, text_pasted, key_released) = ctx.input(|i| {
-        let released =
-            i.events.iter().any(|e| matches!(e, egui::Event::Key { key: egui::Key::V, pressed: false, modifiers, .. } if modifiers.command));
-        (i.time, i.events.iter().any(|e| matches!(e, egui::Event::Paste(_))), released)
-    });
-    let last_paste = ctx.data_mut(|d| d.get_temp::<f64>(last_paste_key()));
-    if text_pasted {
-        ctx.data_mut(|d| d.insert_temp(last_paste_key(), now));
+    let key_released = paste_key_released(ctx, paste_asked || special_asked);
+    let (text_pasted, alt) = ctx.input(|i| (i.events.iter().any(|e| matches!(e, egui::Event::Paste(_))), i.modifiers.alt));
+    let special = special_asked || alt;
+    let mut out = Vec::new();
+    // A read started in an earlier frame pastes into the glyph it was started for; it waits
+    // while a dialog is open or the Kerning window would take the paste.
+    if app.dialog.is_none()
+        && !super::kerning_window::takes_clipboard(app)
+        && let Some(params) = finish_pdf(app, ctx)
+    {
+        out.push((PASTE, params));
     }
     if app.dialog.is_some()
         || ctx.text_edit_focused()
@@ -107,26 +190,20 @@ pub fn events(app: &mut FontcraftApp, ctx: &egui::Context) -> Vec<(&'static str,
         || super::font_info::has_keyboard(app)
         || super::project_window::has_keyboard(app, ctx).is_some()
     {
-        return Vec::new();
+        return out;
     }
-    let (events, alt) = ctx.input(|i| {
-        let events =
-            i.events.iter().filter(|e| matches!(e, egui::Event::Copy | egui::Event::Cut | egui::Event::Paste(_))).cloned().collect::<Vec<_>>();
-        (events, i.modifiers.alt)
+    let events = ctx.input(|i| {
+        i.events.iter().filter(|e| matches!(e, egui::Event::Copy | egui::Event::Cut | egui::Event::Paste(_))).cloned().collect::<Vec<_>>()
     });
     if super::text::in_text_mode(app) {
-        text_mode_events(app, events, special_asked || alt);
-        return Vec::new();
+        text_mode_events(app, events, special);
+        return out;
     }
     let font_view = app.state.tab().is_none();
-    let mut out = Vec::new();
     // No text came for Edit › Paste, or the paste key gave none: the clipboard may hold a PDF.
-    let key_without_text = key_released && last_paste.is_none_or(|t| now - t > PASTE_KEY_SECONDS);
+    let key_without_text = key_released && !special;
     if !font_view && !text_pasted && (paste_asked || key_without_text) {
-        if let Some(params) = pdf_paste(app) {
-            out.push((PASTE, params));
-        }
-        ctx.data_mut(|d| d.insert_temp(last_paste_key(), now));
+        start_pdf(app, ctx, None);
     }
     for event in events {
         match event {
@@ -151,10 +228,8 @@ pub fn events(app: &mut FontcraftApp, ctx: &egui::Context) -> Vec<(&'static str,
                     } else {
                         app.state.status = "Paste: the clipboard holds no copied glyphs; open a glyph to paste an outline into it".into();
                     }
-                } else if !pasteable(&text)
-                    && let Some(params) = pdf_paste(app)
-                {
-                    out.push((PASTE, params));
+                } else if !special && !pasteable(&text) && app.clipboard_flavours.is_some() {
+                    start_pdf(app, ctx, Some(text));
                 } else {
                     let mut params = tools_glue::with_targets(app, PASTE, Value::Null);
                     if let Some(m) = params.as_object_mut() {
@@ -191,25 +266,60 @@ fn pasteable(text: &str) -> bool {
     t.starts_with('{') || (t.starts_with('<') && t.contains("<svg"))
 }
 
-/// `edit.paste`'s parameters for the PDF on the clipboard, with the edited glyph as its target;
-/// `None` when there is no reader or no PDF. A PDF that cannot be read leaves a message in the
-/// status bar.
-fn pdf_paste(app: &mut FontcraftApp) -> Option<Value> {
-    let read = app.clipboard_flavours.as_mut()?.pdf(MAX_PASTE_PDF_BYTES);
-    let bytes = match read {
+/// Starts reading the clipboard's PDF for a paste into the edited glyph, with `text` to paste
+/// should the clipboard hold no PDF; nothing without a reader. While another read runs, this
+/// paste is dropped with a message.
+fn start_pdf(app: &mut FontcraftApp, ctx: &egui::Context, text: Option<String>) {
+    let params = tools_glue::with_targets(app, PASTE, Value::Null);
+    let document = app.session.active().map(|d| d.id);
+    let pending = PendingPdf { params, document, text };
+    let Some(reader) = app.clipboard_flavours.as_mut() else { return };
+    if ctx.data_mut(|d| d.get_temp::<PendingPdf>(pending_key())).is_some() {
+        app.state.status = "Paste: the clipboard is still being read for the last paste".into();
+        return;
+    }
+    reader.request_pdf(MAX_PASTE_PDF_BYTES, ctx);
+    ctx.data_mut(|d| d.insert_temp(pending_key(), pending));
+    ctx.request_repaint_after(READ_POLL);
+}
+
+/// `edit.paste`'s parameters once the running clipboard read has ended: the PDF with the targets
+/// taken when the read started, or the text when the clipboard holds no PDF. `None` while the
+/// read runs or when there is nothing to paste; a PDF that cannot be read, or a document closed
+/// or switched meanwhile, leaves a message in the status bar.
+fn finish_pdf(app: &mut FontcraftApp, ctx: &egui::Context) -> Option<Value> {
+    let pending = ctx.data_mut(|d| d.get_temp::<PendingPdf>(pending_key()))?;
+    let read = match app.clipboard_flavours.as_mut() {
+        Some(reader) => match reader.take_pdf() {
+            Some(read) => read,
+            None => {
+                ctx.request_repaint_after(READ_POLL);
+                return None;
+            }
+        },
+        None => Ok(None),
+    };
+    ctx.data_mut(|d| d.remove::<PendingPdf>(pending_key()));
+    let PendingPdf { mut params, document, text } = pending;
+    let flavour = match read {
         Ok(Some(bytes)) if bytes.len() > MAX_PASTE_PDF_BYTES => {
             app.state.status = format!("Paste: the clipboard's PDF is larger than {} MiB", MAX_PASTE_PDF_BYTES >> 20);
             return None;
         }
-        Ok(Some(bytes)) => bytes,
-        Ok(None) => return None,
+        Ok(Some(bytes)) => ("pdf", Value::String(base64::engine::general_purpose::STANDARD.encode(bytes))),
+        Ok(None) => ("text", Value::String(text?)),
+        // The text, if any, is neither our fragment nor SVG, so the reason the PDF failed is
+        // the one worth showing.
         Err(e) => {
             app.state.status = format!("Paste: the clipboard's PDF cannot be read: {e}");
             return None;
         }
     };
-    let mut params = tools_glue::with_targets(app, PASTE, Value::Null);
-    params.as_object_mut()?.insert("pdf".into(), json!(base64::engine::general_purpose::STANDARD.encode(bytes)));
+    if app.session.active().map(|d| d.id) != document {
+        app.state.status = "Paste: the document changed while the clipboard was read; nothing was pasted".into();
+        return None;
+    }
+    params.as_object_mut()?.insert(flavour.0.into(), flavour.1);
     Some(params)
 }
 
@@ -397,32 +507,78 @@ mod tests {
         out
     }
 
-    /// A clipboard holding a PDF beside whatever text the test sends, counting the reads.
+    /// A clipboard holding `pdf` beside whatever text the test sends. A read ends once `delay`
+    /// frames have looked for it, as a read on another thread would; `requests` counts the reads
+    /// started.
     struct PdfClipboard {
-        pdf: Vec<u8>,
-        reads: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        pdf: Option<Vec<u8>>,
+        delay: usize,
+        waiting: Option<usize>,
+        requests: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     }
 
     impl super::ClipboardFlavours for PdfClipboard {
-        fn pdf(&mut self, _: usize) -> Result<Option<Vec<u8>>, String> {
-            self.reads.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            Ok(Some(self.pdf.clone()))
+        fn request_pdf(&mut self, _: usize, _: &egui::Context) {
+            if self.waiting.is_none() {
+                self.requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                self.waiting = Some(self.delay);
+            }
         }
+
+        fn take_pdf(&mut self) -> Option<super::PdfRead> {
+            let left = self.waiting?;
+            if left > 0 {
+                self.waiting = Some(left - 1);
+                return None;
+            }
+            self.waiting = None;
+            Some(Ok(self.pdf.clone()))
+        }
+    }
+
+    /// `square_app` with a clipboard holding the square PDF, read in `delay` frames; and the
+    /// count of reads started.
+    fn pdf_app(delay: usize) -> (FontcraftApp, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        let mut app = square_app();
+        let requests = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        app.clipboard_flavours = Some(Box::new(PdfClipboard { pdf: Some(square_pdf()), delay, waiting: None, requests: requests.clone() }));
+        (app, requests)
+    }
+
+    fn v(pressed: bool, modifiers: egui::Modifiers) -> Event {
+        Event::Key { key: egui::Key::V, physical_key: None, pressed, repeat: false, modifiers }
+    }
+
+    /// A frame at input time `time` with `modifiers` held (from this frame on).
+    fn frame_at(ctx: &egui::Context, app: &mut FontcraftApp, events: Vec<Event>, time: f64, modifiers: egui::Modifiers) {
+        let events = std::iter::once(Event::ModifiersChanged(modifiers)).chain(events).collect();
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 800.0))),
+            events,
+            time: Some(time),
+            ..Default::default()
+        };
+        let _ = ctx.run_ui(input, |ui| app.ui(ui));
+    }
+
+    fn glyph_shapes(app: &FontcraftApp, glyph: &str) -> usize {
+        app.session.font().unwrap().glyph(glyph).unwrap().layers.first().unwrap().shapes.len()
     }
 
     #[test]
     fn edit_view_pastes_the_clipboards_pdf_when_no_readable_text_comes() {
         use std::sync::atomic::Ordering;
 
-        let mut app = square_app();
-        let reads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        app.clipboard_flavours = Some(Box::new(PdfClipboard { pdf: square_pdf(), reads: reads.clone() }));
+        let (mut app, requests) = pdf_app(0);
         let ctx = egui::Context::default();
         frame(&ctx, &mut app, Vec::new());
-        let key = |pressed| Event::Key { key: egui::Key::V, physical_key: None, pressed, repeat: false, modifiers: egui::Modifiers::COMMAND };
+        let key = |pressed| v(pressed, egui::Modifiers::COMMAND);
 
         // The paste key with no text on the clipboard: the platform sends only the key's release.
+        // The read ends off the window's thread, and a later frame pastes.
         frame(&ctx, &mut app, vec![key(false)]);
+        assert_eq!(shapes(&app), 1, "nothing is pasted before the read ends");
+        frame(&ctx, &mut app, Vec::new());
         assert_eq!(shapes(&app), 2, "the PDF's square was pasted");
         let pasted = app.session.font().unwrap().glyph("A").unwrap().layers.first().unwrap().shapes.last().cloned();
         let mut direct = square_app();
@@ -433,23 +589,96 @@ mod tests {
             "as edit.paste with the PDF"
         );
 
-        // Text that is neither our fragment nor SVG gives way to the PDF.
-        frame(&ctx, &mut app, vec![Event::Paste("a caption".into())]);
+        // Text that is neither our fragment nor SVG gives way to the PDF; the key's release
+        // pastes nothing more.
+        frame(&ctx, &mut app, vec![Event::Paste("a caption".into()), key(false)]);
+        frame(&ctx, &mut app, Vec::new());
         assert_eq!(shapes(&app), 3);
 
         // Edit › Paste (the key as a plain key press) asks for text; none comes, so the PDF is
-        // pasted in the next frame, and the key's release pastes nothing more.
+        // read in the next frame and pasted in the one after, and the key's release pastes
+        // nothing more.
         frame(&ctx, &mut app, vec![key(true)]);
+        frame(&ctx, &mut app, Vec::new());
         frame(&ctx, &mut app, Vec::new());
         assert_eq!(shapes(&app), 4);
         frame(&ctx, &mut app, vec![key(false)]);
+        frame(&ctx, &mut app, Vec::new());
         assert_eq!(shapes(&app), 4, "one paste per key stroke");
-        let before = reads.load(Ordering::Relaxed);
+        assert_eq!(requests.load(Ordering::Relaxed), 3);
 
-        // Our own fragment wins without reading the PDF.
+        // Our own fragment wins without reading the PDF, and Paste Special never reads it.
         let copied = app.run("edit.copy", &json!({"glyph": "A"})).unwrap()["json"].as_str().unwrap().to_string();
         frame(&ctx, &mut app, vec![Event::Paste(copied)]);
-        assert_eq!(reads.load(Ordering::Relaxed), before, "the fragment is pasted without asking for the PDF");
+        frame_at(&ctx, &mut app, vec![Event::Paste("a caption".into()), v(false, egui::Modifiers::NONE)], 100.0, egui::Modifiers::ALT);
+        frame_at(&ctx, &mut app, vec![v(false, egui::Modifiers::NONE)], 100.1, egui::Modifiers::ALT);
+        assert_eq!(requests.load(Ordering::Relaxed), 3, "no PDF read for the fragment or with Option held");
+    }
+
+    #[test]
+    fn a_slow_clipboard_read_pastes_later_into_the_glyph_edited_at_the_stroke() {
+        use std::sync::atomic::Ordering;
+
+        let (mut app, requests) = pdf_app(3);
+        let ctx = egui::Context::default();
+        frame(&ctx, &mut app, Vec::new());
+        frame(&ctx, &mut app, vec![v(false, egui::Modifiers::COMMAND)]);
+        assert_eq!(requests.load(Ordering::Relaxed), 1);
+        // The person moves on to B while the clipboard is read.
+        app.run("view.editSelectedGlyphs", &json!({"glyphs": ["B"]})).unwrap();
+        let b = glyph_shapes(&app, "B");
+        for _ in 0..3 {
+            frame(&ctx, &mut app, Vec::new());
+            assert_eq!(glyph_shapes(&app, "A"), 1, "the read has not ended");
+        }
+        frame(&ctx, &mut app, Vec::new());
+        assert_eq!(glyph_shapes(&app, "A"), 2, "pasted into A, edited when the key was pressed");
+        assert_eq!(glyph_shapes(&app, "B"), b);
+        assert_eq!(requests.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn one_stroke_pastes_once_however_long_the_key_is_held() {
+        use std::sync::atomic::Ordering;
+
+        let (mut app, requests) = pdf_app(2);
+        let ctx = egui::Context::default();
+        frame_at(&ctx, &mut app, Vec::new(), 0.0, egui::Modifiers::NONE);
+        // Text that gives way to the PDF, the key let go five seconds later.
+        frame_at(&ctx, &mut app, vec![Event::Paste("a caption".into())], 0.1, egui::Modifiers::COMMAND);
+        for i in 0..5 {
+            frame_at(&ctx, &mut app, Vec::new(), 1.0 + f64::from(i), egui::Modifiers::COMMAND);
+        }
+        frame_at(&ctx, &mut app, vec![v(false, egui::Modifiers::COMMAND)], 6.0, egui::Modifiers::COMMAND);
+        for i in 0..4 {
+            frame_at(&ctx, &mut app, Vec::new(), 7.0 + f64::from(i), egui::Modifiers::NONE);
+        }
+        assert_eq!(requests.load(Ordering::Relaxed), 1, "the release does not read again");
+        assert_eq!(shapes(&app), 2, "one paste");
+        // The next stroke reads again.
+        frame_at(&ctx, &mut app, vec![v(false, egui::Modifiers::COMMAND)], 12.0, egui::Modifiers::COMMAND);
+        assert_eq!(requests.load(Ordering::Relaxed), 2);
+    }
+
+    #[test]
+    fn the_paste_key_counts_when_the_command_key_is_let_go_first() {
+        use std::sync::atomic::Ordering;
+
+        let (mut app, requests) = pdf_app(0);
+        let ctx = egui::Context::default();
+        frame(&ctx, &mut app, Vec::new());
+        // The platform swallowed the paste key's press (no text), and the command key was let go
+        // before V.
+        frame(&ctx, &mut app, vec![v(false, egui::Modifiers::NONE)]);
+        frame(&ctx, &mut app, Vec::new());
+        assert_eq!(requests.load(Ordering::Relaxed), 1);
+        assert_eq!(shapes(&app), 2);
+        // A plain V (a tool's key) is no paste.
+        frame(&ctx, &mut app, vec![v(true, egui::Modifiers::NONE)]);
+        frame(&ctx, &mut app, vec![v(false, egui::Modifiers::NONE)]);
+        frame(&ctx, &mut app, Vec::new());
+        assert_eq!(requests.load(Ordering::Relaxed), 1);
+        assert_eq!(shapes(&app), 2);
     }
 
     #[test]

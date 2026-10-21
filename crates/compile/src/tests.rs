@@ -954,6 +954,42 @@ fn decomposition_over_the_whole_font_is_bounded() {
     preflight::flatten_non_export_components(&mut glyphs, MAX_EXPANDED_ELEMENTS).unwrap();
 }
 
+#[test]
+fn a_shared_tree_of_empty_composites_is_charged_to_the_font() {
+    // Seventeen levels of glyphs without contours, each using the one below twice: every glyph
+    // that uses the top visits about 260,000 components, under the per-glyph limit, and
+    // nothing is drawn. Two thousand such glyphs are refused once the visits pass the font's
+    // limit, instead of walking the tree for each of them.
+    let mut glyphs = vec![rg("n0", vec![], vec![])];
+    for level in 1..=17 {
+        let below = format!("n{}", level - 1);
+        glyphs.push(rg(&format!("n{level}"), vec![], vec![(&below, Affine::IDENTITY), (&below, Affine::translate((1.0, 0.0)))]));
+    }
+    for i in 0..2_000 {
+        glyphs.push(rg(&format!("t{i}"), vec![square(0.0, 0.0, 1.0)], vec![("n17", Affine::IDENTITY)]));
+    }
+    for s in [settings(), Settings { flavour: Flavour::Cff, single_precision: true, ..settings() }] {
+        let s = Settings { max_expanded: 1_000_000, ..s };
+        let result = outline::prepare(&glyphs, &s, &mut Vec::new());
+        assert!(matches!(&result, Err(CompileError::Glyph { message, .. }) if message.contains("decomposed")), "{:?}", result.err());
+    }
+}
+
+#[test]
+fn a_component_past_the_single_precision_range_is_refused() {
+    let glyphs = [rg("a", vec![square(0.0, 0.0, 10.0)], vec![]), rg("b", vec![], vec![("a", Affine::scale(1e39))])];
+    let s = Settings { flavour: Flavour::Cff, single_precision: true, ..settings() };
+    let result = outline::prepare(&glyphs, &s, &mut Vec::new());
+    assert!(
+        matches!(&result, Err(CompileError::Glyph { glyph, message }) if glyph == "b" && message.contains("single precision")),
+        "{:?}",
+        result.err()
+    );
+    // A transform within range that puts points too far out is refused the same way.
+    let glyphs = [rg("a", vec![square(0.0, 0.0, 10.0)], vec![]), rg("b", vec![], vec![("a", Affine::translate((2e6, 0.0)))])];
+    assert!(outline::prepare(&glyphs, &s, &mut Vec::new()).is_err());
+}
+
 // --- Core tables as fontc derives them (M2.2) -----------------------------------------------
 
 fn int_param(f: &mut Font, name: &str, v: i64) {

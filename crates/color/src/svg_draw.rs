@@ -579,4 +579,22 @@ mod tests {
         let deep = format!("<svg xmlns=\"http://www.w3.org/2000/svg\">{}{}</svg>", "<g>".repeat(10_000), "</g>".repeat(10_000));
         assert!(shapes(deep.as_bytes(), Affine::IDENTITY).is_err());
     }
+
+    #[test]
+    fn a_convolution_order_past_the_parsed_limit_is_refused_before_usvg_reads_it() {
+        // usvg multiplies the two orders in 32 bits: 65,536 squared overflows.
+        let file = |order: &str| {
+            format!(
+                r##"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><filter id="f"><feConvolveMatrix order="{order}" kernelMatrix="1"/></filter><rect width="10" height="10" filter="url(#f)"/></svg>"##
+            )
+        };
+        for order in ["65536", "65536 65536", "3,1e10", "4294967296", "NaN", "65536-1"] {
+            let refused = drawing(file(order).as_bytes(), |_, _| Affine::IDENTITY);
+            assert!(matches!(&refused, Err(ColorError::BadSvg(m)) if m.contains("order")), "{order}: {refused:?}");
+            assert!(shapes(file(order).as_bytes(), Affine::IDENTITY).is_err(), "{order}");
+        }
+        // Orders within the parsed limit reach usvg.
+        assert!(drawing(file("65535").as_bytes(), |_, _| Affine::IDENTITY).is_ok());
+        assert!(drawing(file("3 3").as_bytes(), |_, _| Affine::IDENTITY).is_ok());
+    }
 }

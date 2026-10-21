@@ -578,6 +578,14 @@ fn family(argv: &[String]) -> Outcome {
     if log_path.is_some() {
         o.log = Some(String::new());
     }
+    // The log holds what was printed before a failure too, as standard output would.
+    let result = family_run(&p, &mut o);
+    write_log(log_path.as_deref(), &o)?;
+    result
+}
+
+/// The work of `check family` once the output is set up.
+fn family_run(p: &args::Parsed, o: &mut Output) -> Outcome {
     let mut s = Session::new();
     let mut fonts: Vec<String> = p.positional.clone();
     if let Some(dir) = p.value("directory").filter(|v| !v.is_empty()) {
@@ -598,7 +606,7 @@ fn family(argv: &[String]) -> Outcome {
             q.insert(key.into(), json!(numbers));
         }
     }
-    if let Some(t) = number(&p, "tolerance")? {
+    if let Some(t) = number(p, "tolerance")? {
         q.insert("tolerance".into(), json!(t));
     }
     if !p.switch("hints") {
@@ -618,12 +626,10 @@ fn family(argv: &[String]) -> Outcome {
         }
     }
     if asked == ["audit.report.featureLanguages"] {
-        return write_log(log_path.as_deref(), &o);
+        return Ok(());
     }
     let doc = exec(&mut s, "audit.compareFamily", &Value::Object(q))?;
-    let result = finish(&mut s, doc, &mut o);
-    write_log(log_path.as_deref(), &o)?;
-    result
+    finish(&mut s, doc, o)
 }
 
 /// Writes the text kept for `-l` to its file.

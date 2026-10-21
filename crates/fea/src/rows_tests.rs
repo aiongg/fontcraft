@@ -437,10 +437,11 @@ fn fea_lookup_implicit() {
 #[test]
 fn fea_lookup_per_rule_type() {
     // A project compile keeps each run of one substitution type in its own lookup, as the
-    // reference's feature compiler does; an included file is written in place.
+    // reference's feature compiler does; an included file is written in place, and a comment
+    // at its end does not take in the code after the include statement.
     let files = with_files(
         "feature liga { sub a by b; sub f i by f_i; include(more.fea); script latn; sub c by d; sub e by NULL; } liga;",
-        &[("more.fea", "sub c by d; sub e f by c;")],
+        &[("more.fea", "sub c by d; sub e f by c; # the end")],
     );
     let order = order();
     let compiled = |split| {
@@ -450,6 +451,75 @@ fn fea_lookup_per_rule_type() {
     assert_eq!(gsub(&compiled(false)), [4, 1, 2]);
     assert_eq!(gsub(&compiled(true)), [1, 4, 1, 4, 1, 2]);
     assert_eq!(validate(&CompileRequest { lookup_per_rule_type: true, ..CompileRequest::new(&files, &order) }), []);
+}
+
+/// `code` with `files` compiled as a project compile.
+fn per_rule_type(code: &str, others: &[(&str, &str)]) -> Result<Compiled, Vec<Diagnostic>> {
+    let files = with_files(code, others);
+    let order = order();
+    compile(&CompileRequest { lookup_per_rule_type: true, ..CompileRequest::new(&files, &order) })
+}
+
+#[test]
+fn fea_lookup_per_rule_type_keeps_a_marker_at_the_end_of_an_include() {
+    // The insertion marker ends the included file without a line break; the rule after the
+    // include statement is still compiled.
+    let c = per_rule_type("feature liga { sub a by b; include(more.fea); sub f i by f_i; } liga;", &[("more.fea", "sub c by d; # Automatic Code")])
+        .unwrap_or_else(|d| panic!("{d:#?}"));
+    assert_eq!(gsub(&c), [1, 4]);
+}
+
+#[test]
+fn fea_lookup_per_rule_type_keeps_the_lookup_flags_across_a_break() {
+    let c = per_rule_type("feature liga { lookupflag IgnoreMarks; sub a by b; sub f i by f_i; } liga;", &[]).unwrap_or_else(|d| panic!("{d:#?}"));
+    assert_eq!(gsub(&c), [1, 4]);
+    let bytes = c.gsub.as_deref().unwrap();
+    let list = be16(bytes, 8);
+    let flags: Vec<usize> = (0..be16(bytes, list)).map(|i| be16(bytes, list + be16(bytes, list + 2 + 2 * i) + 2)).collect();
+    assert_eq!(flags, [8, 8]);
+}
+
+#[test]
+fn fea_lookup_per_rule_type_ignores_a_repeated_script() {
+    // A second `script latn` while latn with the default language is in force does not end the
+    // lookup, so the ligature still needs its break.
+    let c = per_rule_type(
+        "languagesystem DFLT dflt; languagesystem latn dflt; feature liga { script latn; sub a by b; script latn; sub f i by f_i; } liga;",
+        &[],
+    )
+    .unwrap_or_else(|d| panic!("{d:#?}"));
+    assert_eq!(gsub(&c), [1, 4]);
+}
+
+#[test]
+fn fea_lookup_per_rule_type_reports_a_message_in_an_included_file_where_it_is() {
+    // The shadowed ligature is found while compiling the written-out code; the message names
+    // the file two includes down and the rule's place in it, as an ordinary compile does.
+    let deeper = "sub f i by f_l;\n";
+    let files = with_files(
+        "feature liga { sub a by b; include(more.fea); } liga;",
+        &[("more.fea", "sub f i by f_i;\ninclude(deeper.fea);\n"), ("deeper.fea", deeper)],
+    );
+    let order = order();
+    let shadowed = |split| {
+        let request = CompileRequest { lookup_per_rule_type: split, ..CompileRequest::new(&files, &order) };
+        let errors = compile(&request).err().unwrap();
+        let d = errors.into_iter().find(|d| d.message.contains("shadows")).unwrap();
+        (d.file, d.span)
+    };
+    let (file, span) = shadowed(true);
+    assert_eq!(file, "deeper.fea");
+    assert!(deeper.get(span.clone()).unwrap().trim_start().starts_with("sub f i by f_l"), "{span:?}");
+    assert_eq!((file, span), shadowed(false));
+}
+
+#[test]
+fn fea_lookup_per_rule_type_warns_when_it_cannot_keep_types_apart() {
+    // Every name tried for the break lookups is taken: the rules share a lookup, with a warning.
+    let c = per_rule_type("@fcTypeBreak_____________________ = [a]; feature liga { sub a by b; sub f i by f_i; } liga;", &[])
+        .unwrap_or_else(|d| panic!("{d:#?}"));
+    assert_eq!(gsub(&c), [4]);
+    assert!(c.warnings.iter().any(|d| d.message.contains("may share a lookup")), "{:?}", c.warnings);
 }
 
 #[test]

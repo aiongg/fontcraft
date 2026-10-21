@@ -9,7 +9,7 @@
 use super::{encode_float, format_g8};
 use crate::sfnt::{Flavour, SfntFont};
 use crate::ttx::oracle_digest::{assert_table, expected};
-use crate::ttx::{DumpOptions, ImportOptions, dump, import};
+use crate::ttx::{DumpOptions, ImportOptions, dump, import, import_tree_with_warnings, parse};
 
 const CFF1_TTX: &str = include_str!("../cff/testdata/cff1.ttx");
 const CID_TTX: &str = include_str!("../cff/testdata/cid.ttx");
@@ -175,4 +175,24 @@ fn ttx_read_into_a_cff_font_recalculates_the_fonts_bounds() {
     let font = read_bounds(base, &document(&elements(BOUNDS_TTX, &["GlyphOrder", "head", "hhea", "hmtx"])), false);
     assert_eq!(head_box(&font), BOUNDS);
     assert_eq!(hhea_extremes(&font), HHEA);
+}
+
+/// A name or string with a control character, which TTX text writes as `?`, keeps its byte: the
+/// font's own `CFF ` table is not compiled again through text, and the caller is told why.
+#[test]
+fn ttx_read_keeps_a_cff_table_whose_strings_text_cannot_carry() {
+    let metrics = parse(&document(&elements(BOUNDS_TTX, &["head", "hhea", "hmtx"]))).unwrap();
+    let base = read_bounds(SfntFont::new(Flavour::Cff), BOUNDS_TTX, true);
+    let (font, warnings) = import_tree_with_warnings(base.clone(), &metrics, &ImportOptions::default()).unwrap();
+    assert_cff(&font, CFF_RECALCULATED);
+    assert!(warnings.is_empty(), "{warnings:?}");
+
+    let mut cff = base.get(*b"CFF ").unwrap().to_vec();
+    let at = cff.windows(7).position(|w| w == b"one\ntwo").unwrap();
+    cff[at + 3] = 0x01;
+    let mut base = base;
+    base.insert(*b"CFF ", cff.clone());
+    let (font, warnings) = import_tree_with_warnings(base, &metrics, &ImportOptions::default()).unwrap();
+    assert_eq!(font.get(*b"CFF ").unwrap(), cff.as_slice(), "the control byte and the rest of the table are kept");
+    assert!(warnings.iter().any(|w| w.contains("control character")), "{warnings:?}");
 }

@@ -9,6 +9,8 @@
 //! (BSD 3-Clause, Copyright 2005-2026 Erik van Blokland, Tal Leming, Just van Rossum) and
 //! fontTools' point-to-segment conversion.
 
+use std::collections::HashMap;
+
 use fontcraft_model::{Layer, Node, NodeKind, Path, Shape};
 
 /// A segment whose end lies closer than this to the point before it is dropped.
@@ -167,10 +169,22 @@ fn restore_order(paths: Vec<Path>, original: &[&Path]) -> Vec<Path> {
         })
         .collect();
     new.sort_by(|(a, am), (b, bm)| am.1.total_cmp(&bm.1).then(am.0.total_cmp(&bm.0)).then(a.nodes.len().cmp(&b.nodes.len())));
+    // The first original contour with each node count, and the first with an on-curve node at
+    // each point, looked up in constant time so a layer of many contours stays linear.
+    let mut by_count: HashMap<usize, usize> = HashMap::new();
+    let mut by_point: HashMap<(u64, u64), usize> = HashMap::new();
+    for (j, o) in original.iter().enumerate() {
+        by_count.entry(o.nodes.len()).or_insert(j);
+        for n in o.nodes.iter().filter(|n| n.on_curve()) {
+            if let Some(key) = point_key(n.x, n.y) {
+                by_point.entry(key).or_insert(j);
+            }
+        }
+    }
     let mut order: Vec<(usize, usize)> = Vec::with_capacity(new.len());
     let mut matched = vec![false; new.len()];
     for (i, (path, _)) in new.iter().enumerate() {
-        if let Some(j) = original.iter().position(|o| o.nodes.len() == path.nodes.len()) {
+        if let Some(&j) = by_count.get(&path.nodes.len()) {
             order.push((j, i));
             if let Some(m) = matched.get_mut(i) {
                 *m = true;
@@ -181,8 +195,7 @@ fn restore_order(paths: Vec<Path>, original: &[&Path]) -> Vec<Path> {
         if matched.get(i).copied().unwrap_or(true) {
             continue;
         }
-        let found = original.iter().position(|o| o.nodes.iter().any(|n| n.on_curve() && n.x == max.0 && n.y == max.1));
-        let Some(j) = found else { continue };
+        let Some(&j) = point_key(max.0, max.1).and_then(|key| by_point.get(&key)) else { continue };
         order.push((j, i));
         if let Some(m) = matched.get_mut(i) {
             *m = true;
@@ -204,6 +217,12 @@ fn restore_order(paths: Vec<Path>, original: &[&Path]) -> Vec<Path> {
     order.sort_unstable();
     let mut slots: Vec<Option<Path>> = new.into_iter().map(|(p, _)| Some(p)).collect();
     order.into_iter().filter_map(|(_, i)| slots.get_mut(i).and_then(Option::take)).collect()
+}
+
+/// A point as a map key that matches as `==` on its coordinates does: zero and negative zero are
+/// one key, and a point with a NaN coordinate has none.
+fn point_key(x: f64, y: f64) -> Option<(u64, u64)> {
+    (!x.is_nan() && !y.is_nan()).then(|| ((x + 0.0).to_bits(), (y + 0.0).to_bits()))
 }
 
 #[cfg(test)]
@@ -241,5 +260,32 @@ mod tests {
         let original = [&top, &a, &b, &low];
         let fixed = restore_order(vec![top.clone(), union.clone(), low.clone()], &original);
         assert_eq!(fixed.iter().map(xy).collect::<Vec<_>>(), [xy(&low), xy(&top), xy(&union)]);
+    }
+
+    /// Contours whose node count matches no original contour fall back to the top-point match;
+    /// on a layer of many of them that lookup stays linear (it compared every pair of contours
+    /// once, which hung on a crafted layer).
+    #[test]
+    fn many_contours_are_matched_in_linear_time() {
+        const N: usize = 60_000;
+        let original: Vec<Path> = (0..N)
+            .map(|k| {
+                let x = k as f64 * 10.0;
+                closed(&[(x, 0.0), (x + 5.0, 0.0), (x + 5.0, 5.0), (x, 5.0)])
+            })
+            .collect();
+        let fixed: Vec<Path> = (0..N)
+            .rev()
+            .map(|k| {
+                let x = k as f64 * 10.0;
+                closed(&[(x, 0.0), (x + 2.0, 0.0), (x + 5.0, 0.0), (x + 5.0, 5.0), (x, 5.0)])
+            })
+            .collect();
+        let refs: Vec<&Path> = original.iter().collect();
+        let out = restore_order(fixed, &refs);
+        assert_eq!(out.len(), N);
+        for (k, path) in out.iter().enumerate() {
+            assert_eq!(path.nodes.first().map(|n| n.x), Some(k as f64 * 10.0), "contour {k}");
+        }
     }
 }

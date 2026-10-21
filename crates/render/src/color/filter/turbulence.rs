@@ -1,8 +1,11 @@
-//! `feTurbulence` (M11.17e): Perlin noise as the reference code of the SVG 1.1 specification
-//! (§ 15.24) computes it, written again in Rust: the same lattice from the same seed, the same
-//! gradients, stitching and octave sums, so a document gives the noise it gives elsewhere.
-//! The algorithm follows that reference code, Copyright 2011 World Wide Web Consortium, W3C
-//! Software and Document License (see `NOTICE`).
+//! `feTurbulence` (M11.17e): Perlin noise as the reference code of Filter Effects Module
+//! Level 1 (§ feTurbulence, the same code as SVG 1.1 § 15.24) computes it, written again in
+//! Rust: the same lattice from the same seed, the same gradients, stitching and octave sums, so a
+//! document gives the noise it gives elsewhere.
+//!
+//! This software includes material derived from Filter Effects Module Level 1
+//! (https://www.w3.org/TR/filter-effects-1/). Copyright © 2018 W3C® (MIT, ERCIM, Keio, Beihang).
+//! Used under the W3C Software and Document License (`LICENSE-W3C.txt`, `NOTICE`).
 //!
 //! - Each pixel takes the noise at its top left corner's position in the filter's user space.
 //! - With `stitchTiles`, the primitive's subregion is the tile: the frequency is adjusted to a

@@ -130,7 +130,8 @@ fn implied_link(style: &str, bold: bool, italic: bool) -> String {
 
 /// The style-map family and style names. A link style of `Regular`, or none, means the one the
 /// style name implies; an empty one (which glyphsLib cannot hold) links to the family alone. The
-/// style is the one the instance states outside the four, else the one its flags give.
+/// style is the one the instance states outside the four, else the one its flags give. A style
+/// outside the four reads with neither flag, so Bold or Italic set on the instance later wins.
 pub(super) fn stylemap(inst: &Instance, family: &str) -> (String, String) {
     let flagged = match (inst.is_bold, inst.is_italic) {
         (true, true) => "bold italic",
@@ -138,7 +139,8 @@ pub(super) fn stylemap(inst: &Instance, family: &str) -> (String, String) {
         (false, true) => "italic",
         (false, false) => "regular",
     };
-    let style = inst.params.get(STYLE_MAP_STYLE).and_then(Value::as_str).filter(|s| !s.trim().is_empty()).unwrap_or(flagged).to_string();
+    let stated = inst.params.get(STYLE_MAP_STYLE).and_then(Value::as_str).filter(|s| !s.trim().is_empty());
+    let style = stated.filter(|_| !inst.is_bold && !inst.is_italic).unwrap_or(flagged).to_string();
     let linked = match inst.link_style.as_deref() {
         Some(l) if l != "Regular" => l.to_string(),
         _ => implied_link(&inst.name, inst.is_bold, inst.is_italic),
@@ -400,8 +402,9 @@ pub(super) fn read_static(el: &Element, ctx: &Ctx<'_>) -> Result<Instance> {
     }
     let (fallback_family, fallback_style) = style_map_fallback(&family, &inst.name, stated_style.as_deref());
     let map_style = stated_style.unwrap_or(fallback_style);
-    // ufo2ft sets the style bits only for the four names exactly; another stated name (`thin`)
-    // is kept as written and sets none.
+    // fontTools' instantiator lower-cases the stated name, and ufo2ft sets the style bits only
+    // for the four lower-case names: `Bold` is bold, and another name (`thin`) is kept as written
+    // and sets none.
     let ribbi = RIBBI.contains(&map_style.as_str());
     inst.is_bold = ribbi && map_style.contains("bold");
     inst.is_italic = ribbi && map_style.contains("italic");
@@ -480,9 +483,9 @@ pub(super) fn static_element(font: &Font, inst: &Instance, names: &[String], axe
     let family = family_of(inst, &font.family_name);
     let mut el = Element::new("instance").with_attr("name", format!("{family} {}", inst.name)).with_attr("familyname", &family);
     el.set_attr("stylename", &inst.name);
-    if !names.is_empty() {
-        let loc: Vec<f64> = (0..names.len()).map(|i| fontcraft_model::axes::design_value(&inst.location, i)).collect();
-        el = el.with_child(location_element(names, &loc));
+    let loc: Vec<f64> = (0..names.len()).map(|i| fontcraft_model::axes::design_value(&inst.location, i)).collect();
+    if let Some(l) = location_element(names, &loc) {
+        el = el.with_child(l);
     }
     el.set_attr("filename", filename_of(inst, &family));
     if let Some(p) = ps_name_of(inst) {
@@ -502,13 +505,12 @@ pub(super) fn static_element(font: &Font, inst: &Instance, names: &[String], axe
 pub(super) fn variable_element(font: &Font, inst: &Instance, names: &[String]) -> Element {
     let filename = inst.params.get(FILE_NAME).and_then(Value::as_str).map_or_else(|| default_vf_filename(inst, &font.family_name), str::to_string);
     let mut el = Element::new("variable-font").with_attr("name", &inst.name).with_attr("filename", filename);
-    if !names.is_empty() {
-        let mut subsets = Element::new("axis-subsets");
-        for n in names {
-            subsets = subsets.with_child(Element::new("axis-subset").with_attr("name", n));
-        }
-        el = el.with_child(subsets);
+    // fontTools refuses a variable font without the list; an empty one passes.
+    let mut subsets = Element::new("axis-subsets");
+    for n in names {
+        subsets = subsets.with_child(Element::new("axis-subset").with_attr("name", n));
     }
+    el = el.with_child(subsets);
     let mut bare = inst.clone();
     bare.params.remove(FILE_NAME);
     let lib = new_lib(&bare, &(None, None));
@@ -691,6 +693,12 @@ mod tests {
         assert_eq!(stylemap(&i("Light", false, false), "Fam"), ("Fam Light".to_string(), "regular".to_string()));
         let linked = Instance { link_style: Some("Light".into()), ..i("Light Italic", false, true) };
         assert_eq!(stylemap(&linked, "Fam"), ("Fam Light".to_string(), "italic".to_string()));
+        // A stated style outside the four is kept until Bold or Italic is set on the instance.
+        let mut thin = i("Thin", false, false);
+        thin.params.set(STYLE_MAP_STYLE, text("thin"));
+        assert_eq!(stylemap(&thin, "Fam").1, "thin");
+        thin.is_bold = true;
+        assert_eq!(stylemap(&thin, "Fam").1, "bold");
     }
 
     #[test]
