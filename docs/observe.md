@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1414 rows to check: 2342 guesses and 547 observe steps.**
+**1418 rows to check: 2357 guesses and 553 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 45 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **902** |
+| **Later milestones (after M6)** | all | **906** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 86 |
 | Later milestones (after M6) | Edit View: text mode and preview | 26 |
 | Later milestones (after M6) | Components and anchors | 39 |
@@ -56,7 +56,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Spacing and metrics keys | 12 |
 | Later milestones (after M6) | Kerning and the Kerning window | 12 |
 | Later milestones (after M6) | Font View | 19 |
-| Later milestones (after M6) | Font Info and features | 286 |
+| Later milestones (after M6) | Font Info and features | 290 |
 | Later milestones (after M6) | Interpolation | 72 |
 | Later milestones (after M6) | Hinting | 108 |
 | Later milestones (after M6) | Colour fonts | 60 |
@@ -104,11 +104,13 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `move.mirrorHandleAcrossSmoothNode` (behavior, M3, handbook): While a handle of a smooth node is being moved with Ctrl…
   - Guess: On a corner node, Ctrl+Alt moves the handle as a plain drag would; observing a corner's handle under Ctrl+Option would settle it.
   - Guess: When the other side of the smooth node is a straight segment, the handle slides along that line as in a plain drag, since mirroring would bend the line; observing such a node would settle it.
+  - Guess: A handle dragged onto its node leaves the opposite handle where it is, since it has no direction to mirror; observing that drag would settle it.
   - Observe: Ctrl+Option-drag a handle of a smooth node whose two handles differ in length: note whether the opposite handle takes the dragged handle's length during the drag or only on release.
   - Observe: Ctrl+Option-drag a handle of a corner node: note whether the opposite handle changes.
 - [ ] `move.dragSegment` (behavior, M3, handbook): Dragging a segment moves its two end nodes together with their handles
-  - Guess: The two handle lengths are solved so the grabbed point of the curve lands on the pointer (a 2x2 linear system; with parallel handles, the smallest change that gets nearest); observing the curve under the pointer during an Option-drag would settle it.
-  - Guess: A handle is held between 1 unit and 10 times the larger of the end nodes' distance and the current handle lengths, so it never turns through its node; observing an Option-drag past the chord would settle it.
+  - Guess: The two handle lengths are solved so the grabbed point of the curve lands on the pointer (a 2x2 least-squares problem; with parallel handles, the smallest change that gets nearest); observing the curve under the pointer during an Option-drag would settle it.
+  - Guess: With nearly parallel handles the solve is damped, so the lengths change smoothly and the point may stop short of the pointer instead of the handles swinging by thousands of units; observing an Option-drag on a segment with almost parallel handles would settle it.
+  - Guess: A handle is held between 1 unit (or the grid step, if larger) and 10 times the larger of the end nodes' distance and the current handle lengths, and within the coordinate limit, so it never turns through its node; a retracted handle stays on its node unless the drag lengthens it. When both lengths reach a limit, their change is scaled back together. Observing an Option-drag past the chord would settle it.
   - Guess: An Alt-drag on a segment that is part of a larger selection duplicates the selection instead of reshaping; observing that case would settle it.
   - Observe: Option-drag a curve segment at its middle and then near one end: note whether the point under the pointer stays under it and whether both handles change or only the nearer one.
   - Observe: Option-drag a curve segment across its chord: note whether the handles shrink to zero, stop, or turn round.
@@ -262,8 +264,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A tool held with modifiers waits for a gesture in progress to end before it takes over or gives way, and its ruler goes when it gives way.
   - Guess: The held tool does not see the keys that hold it, so the held Measurement tool's ruler snaps and the held Select tool clicks as a plain click.
   - Guess: Cmd+Ctrl+Alt does not hold the Measurement tool in the Text tool, where the same keys move the measurement line.
+  - Guess: Off the Mac the Measurement tool is held with Ctrl+Alt+Shift: the Control key there also reports Command, the Windows and Super keys do not reach the app, and Ctrl+Alt alone is AltGr and the Select tool's mirror drag. The held ruler then cannot be constrained with Shift. The reference app runs only on the Mac, so no source settles it.
+  - Guess: Off the Mac, Ctrl+Alt in the Measurement tool holds nothing, since it may be AltGr; on the Mac Cmd+Alt there keeps the Select tool held, and the held Select tool still sees Ctrl.
   - Observe: Hold Cmd+Alt+Ctrl in the Draw tool: the coordinates show; drag a ruler, let the keys go during the drag and see whether the ruler stays.
   - Observe: Hold Cmd in the Measurement tool and click a node: it is selected as with the Select tool.
+  - Observe: Hold Cmd in the Measurement tool, add Option, and Option-drag a node: note whether the Select tool stays and copies the node.
+  - Observe: Hold Cmd+Alt+Ctrl+Shift in the Draw tool and drag a ruler: note whether the ruler is constrained, which tells whether an extra Shift belongs to the held tool.
 - [ ] `annotation` (tool, M3, handbook): Annotation
   - Guess: Each annotation sub-tool is a tool of its own, and A returns to the sub-tool used last (Annotation Selection before any).
   - Guess: Handles show and work on selected annotations only.
@@ -320,7 +326,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Dropping on a row's upper half puts the dragged row above it, on its lower half below it.
   - Guess: A row that is not a backup, dropped on its own master's row, moves to the top of that master's rows.
   - Guess: A backup dropped on another master's row is refused, as Use as Master restores a backup only into its own master.
+  - Guess: In text mode, a click on a master row with glyphs selected in the text switches those glyphs and the edited glyph (the one after the cursor, whose rows the section shows) when it has that master's layer. Settled by selecting the first two letters of a three-letter text and clicking another master's row in the reference.
   - Observe: Drag a backup layer of F4's first master onto the second master's row: note whether it is refused or becomes that master's layer.
+  - Observe: In text mode, type ABC, select A and B with the cursor ending before C, click the second master's row: note which of A, B and C switch.
   - Observe: Drag a layer within its master: note how the drop position is shown.
 - [ ] `guides.globalScopeFilter` (behavior, M4, handbook): A global guide appears on all glyphs by default
   - Guess: A filter that does not read as a predicate leaves the guide shown in every glyph. Settled by opening a file whose guide filter the reference cannot read.
@@ -1191,6 +1199,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Return renames only while the sidebar has the keyboard, which it takes when a row is pressed and gives up when anything else is pressed. Settled by selecting a filter, clicking a glyph cell and pressing Return in the reference.
   - Guess: Over a folder's middle half a dragged filter goes into the folder, at its end; over the top or bottom quarter it goes before or after the folder, and below an open folder with entries it goes first inside it. Settled by observing the reference's drop feedback.
   - Guess: An unchanged or empty name typed into the field runs no command. Settled by renaming a filter to its own name in the reference.
+  - Guess: Escape or a click away from the name field ends the edit and renames nothing; macOS lists often keep the typed name on a click away. Settled by typing a new name and clicking a glyph cell in the reference.
+  - Observe: Double-click a filter's name, type a new name, click a glyph cell; note whether the filter keeps the new name. Repeat with Escape instead of the click.
   - Observe: In Font View, add three smart filters and a folder; drag a filter slowly over the folder's row from top to bottom and note where the drop line or folder highlight appears.
   - Observe: Drag a folder holding a filter onto that filter's row and note whether the reference shows a drop mark and what the drop does.
   - Observe: Select a filter, click a glyph cell, press Return; note whether the filter's name opens for editing.
@@ -1491,7 +1501,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (902)
+## Later milestones (after M6) (906)
 
 ### Edit View: drawing, guides, layers and the Palette (86)
 
@@ -2232,7 +2242,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.
   - Guess: Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.
 
-### Font Info and features (286)
+### Font Info and features (290)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
@@ -2302,6 +2312,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `font.info.pasteRows` (M7, handbook, live): Paste Rows
   - Guess: The mode append adds parameters after the others and, since a field cannot repeat, replaces a field the target has; skip leaves out every row the target already has; pasting in the reference app settles both.
   - Guess: A pasted row whose field or single-valued parameter is already present replaces its value, a repeatable parameter is appended, a row not allowed in the target scope is skipped and listed, and pasting between tabs and between documents is allowed; pasting in the reference app settles all four.
+  - Guess: A pasted row whose value its check refuses (one stored before the check existed, say) is skipped and listed with the reason, and the other rows are pasted; pasting such a row in the reference app settles it.
   - Observe: In font A (m7-one), copy a field row and a parameter row, then paste them into the Exports tab, into font B (m7-two)'s Font tab, and back into font A (m7-one)'s Font tab where they already exist: note for each whether the rows are added, replaced, duplicated or refused.
 - [ ] `font.info.scaleToUnitsPerEm` (M7, handbook, live): Scale Font to Units per Em
   - Guess: Scaling by new/old covers every layer of every glyph (paths, component offsets but not component scales, anchors, guides, hints, backgrounds, special layers), the advance widths and vertical metrics, master metric positions and zone sizes, stems, kerning, global guides, and the custom parameters whose catalogue entry is measured in units (typoAscender, hheaAscender, winAscent, underlinePosition and the like); metrics keys, italic angles and percentages are kept; the reference app on a font holding all of these settles the list.
@@ -2898,6 +2909,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The glyph is drawn as it is in the master of the active Edit View tab, else the master Font View shows; Option-clicking a glyph name with another master active in the reference app settles it.
 - [ ] `Add Class` (parameter, M8, handbook): Adds an OpenType glyph class at export
   - Guess: A leading @ on the class name is dropped, and the white space after the semicolon is not part of the code (glyphsLib's split); exporting with the parameter in the reference app settles it.
+- [ ] `Add Prefix` (parameter, M8, handbook): Adds a feature-code prefix at export
+  - Guess: A prefix name may hold spaces, as prefix names in the Features tab are free text; adding `Language Systems; languagesystem DFLT dflt;` in the reference app settles it.
+  - Observe: In any font, add the parameter Add Prefix with the value `Language Systems; languagesystem DFLT dflt;` and export: note whether it is accepted and the prefix exported.
 - [ ] `Keep UI-Font Bounding Box` (parameter, M8, handbook): Changes the generated cjct feature so conjuncts do not stack vertically, for…
   - Guess: The parameter has no effect because the generated cjct never stacks conjuncts; Update in the reference app on an Oriya font with and without the parameter would show what it changes.
 - [ ] `Optical Size` (parameter, M8, handbook): Five semicolon-separated values: design size in decipoints; subfamily identifier (integer shared by…
@@ -2908,6 +2922,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `Replace Feature` (parameter, M8, handbook): Value is the four-letter feature tag, a semicolon, then the new code
   - Guess: Only the first feature of that tag is replaced, its labels are kept and it counts as hand-written from then on, so a replaced `kern` still gets the generated kerning after it; exporting a font with a stylistic-set name and a replaced `kern` in the reference app settles it.
   - Guess: A Replace parameter that names no entry does nothing, without a message, as the handbook limits these parameters to existing entries and glyphsLib skips them; the reference app's export report settles it.
+- [ ] `Replace Prefix` (parameter, M8, handbook): Value is the prefix name exactly as written in the Features tab,…
+  - Guess: A prefix name may hold spaces, since it is written as in the Features tab, where prefix names are free text; replacing a prefix called `Language Systems` in the reference app settles it.
 - [ ] `Update Features` (parameter, M8, handbook): When on, all automatic feature code is regenerated, which helps while the…
   - Guess: Export regenerates only the automatic entries the font already has and adds none of the entries Update would add; an export of a font whose Features list lacks an automatic feature its glyphs call for would settle it.
   - Observe: In F1 (Latin features), add a glyph with `.sc` after the last Update and export without pressing Update, then export again with Update Features off: read GSUB each time and note whether export regenerated smcp.
@@ -2926,6 +2942,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In F3 (irregular two axes), export the instance at (650, 60) with Font Type Default, then with Font Type Variable: compare the two outlines.
 - [ ] `font.axes.list` (M9, inferred, live): List Axes
   - Guess: A query of ours: the reply lists each axis's index, name, tag and hidden flag in Font Info order; the reference app shows the same facts only in its Axes list.
+  - Guess: An axis whose tag another axis shares (possible in a file opened from disk) gets a warning that the font exports only with every tag different, and stays editable by index; opening such a file in the reference app settles what it shows.
 - [ ] `font.axes.add` (M9, handbook, live): Add Axis
   - Guess: A new axis is named Weight with tag wght when the font has no such axis, else a private axis `Axis N` (N its place in the list) with the first free tag of AXSA, AXSB…; settle by pressing the plus button in the reference app.
   - Guess: Existing masters, instances and virtual masters get coordinate 0 on the new axis, and intermediate layers inherit it from their master; settle in the reference app's Masters tab after adding an axis.
@@ -2957,6 +2974,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In F1 (two masters), select the Regular instance and choose Instance as Master: note the new master's name and position, and which instances now use it.
 - [ ] `font.instance.addVariableFontSetting` (M9, handbook, live): Add Variable Font Setting
   - Guess: A new setting is called Regular and stores no coordinates; settle by adding one in the reference app.
+- [ ] `font.instance.placement` (M9, inferred, live): Instance Placement
+  - Guess: A query of ours: the reference app shows extrapolation only in the Exports tab and in the export; the reply's shape is ours.
 - [ ] `fontInfo.addOtherFont` (panel, M9, handbook): Add Other Font
   - Guess: The list includes the masters of the active font as well as the other open fonts, as the handbook's wording says; opening the sheet in the reference app would show whether the active font is left out.
 - [ ] `token.numberValue.variable` (behavior, M9, docs): For a variable font a number token becomes a value that varies…
@@ -2975,6 +2994,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A number that ends a glyph name (`a1 (wght:700) 5`) is not read as a value, where glyphsLib reads it; a reference export would settle which the reference does.
 - [ ] `Decompose Brace Layers` (parameter, M9, handbook): For variable-font export: components whose base glyph has intermediate (brace) layers are…
   - Observe: In F2 (special layers), export the variable font with no Decompose Brace Layers parameter and read `glyf`: note whether `Hcomp` is a composite or contours.
+- [ ] `Elidable STAT Axis Value Name` (parameter, M9, handbook): The value is a four-letter axis tag; the instance's style name is…
+  - Guess: Only an axis tag is accepted when the parameter is added or set, as the handbook describes the value; a style name such as `Regular`, which some sources hold, is refused. Typing `Regular` as the value in the reference app settles whether it accepts a name.
+  - Observe: In F1 (two masters), add Elidable STAT Axis Value Name to the Regular instance with the value `Regular`, then with `wght`, and export a variable font: note whether each value is accepted and which STAT entry is marked elidable.
 - [ ] `Export STAT Table` (parameter, M9, handbook): A STAT table is written by default; setting this off suppresses it
   - Guess: The parameter is read from the variable font setting first and from the font when the setting has none; exporting a font with it only in Font Info settles whether the reference reads it there.
 - [ ] `Feature for Feature Variations` (parameter, M9, handbook): Feature tag into which the conditional glyph substitutions generated from alternate (bracket)…
@@ -2985,6 +3007,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `Italic Style Linking` (parameter, M9, handbook): Controls whether a variable font's STAT table gets a format 3 axis…
   - Guess: On links the value at 0 on the ital axis (the font's own or the table-only one) to 1 when it has no link; off removes every link on that axis; read from the variable font setting, else from the font. Exporting an upright and an italic family with the parameter on and off and reading STAT settles it.
 - [ ] `Local Interpolation` (parameter, M9, handbook): Value: one interpolation value per axis separated by semicolons, then a semicolon,…
+  - Guess: `Include:` or `include :` is refused, since the interpolation would not find the glyph list; typing them in the reference app settles whether it reads them.
   - Guess: The listed glyphs are interpolated at the given location with every other part of the instance unchanged, including their widths; settle with an instance that sets it in the reference app.
   - Observe: In F1 (two masters), put Local Interpolation `700; include: o` on Regular, export and measure `o`: note whether o is drawn as at 700 while the other glyphs stay at 400.
 - [ ] `Optimize Variable Deltas` (parameter, M9, handbook): On by default: a contour whose nodes all move by half a…
@@ -3138,7 +3161,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The model keeps one number per master; an x/y pair keeps its first number, so horizontal and vertical factors are the same; settle with an instance whose factors are pairs in the reference app.
 - [ ] `axes.tagRules` (behavior, M9, handbook): Axis tags are four characters
   - Guess: A tag of fewer than four printable ASCII characters is padded with spaces and a longer one exports its first four; settle by typing a three- and a five-character tag in the reference app's axis dialog and exporting.
-  - Guess: Font Info › Font shows a hint under an axis whose tag is neither registered nor four capital letters, the same test as the axis commands' warning; typing `swln` as a tag in the reference app settles whether it says anything.
+  - Guess: Font Info › Font shows under each axis the warnings font.axes.list gives for its tag (not registered and not four capital letters, shorter than four characters, shared with another axis); typing `swln` as a tag in the reference app settles whether it says anything.
   - Observe: In any font, give an axis the tag `swln` in Font Info › Font: note any hint or warning the app shows.
 - [ ] `axes.unusedAxesDropped` (behavior, M9, handbook): When masters are disabled for a variable-font export, any axis on which…
   - Guess: An axis is dropped only when Disable Masters removes a master, and an axis a virtual master still varies is kept; settle by exporting F1 with a third axis all masters share, without Disable Masters, and again with a virtual master on that axis.
@@ -3213,6 +3236,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `font.axes.reorder` (M9, inferred, live): Reorder Axes
   - Guess: Reordering permutes every master, instance, virtual master and special-layer coordinate list with the axes, so no location changes; settle by dragging axes in the reference app's Font Info, if it allows it.
   - Guess: The entries of Axis Location, Virtual Master and Axis Mappings are put in the new axis order too; settle by reordering axes in a font with those parameters in the reference app and saving.
+  - Guess: `order` takes axis indexes as well as tags, so a font with two axes of one tag can be reordered; Font Info sends indexes. A tag two axes share is refused.
   - Observe: In F2 (special layers) with two axes, try to reorder the axes: note whether a drag or a button does it, and how the layer labels read afterwards.
 - [ ] `file.generateInstances` (M9, handbook, live): Generate Instances
   - Guess: Without a list, every active static instance is generated; settle with an inactive instance in F1 in the reference app.
@@ -4234,6 +4258,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: One question per document, asked in turn, showing the document asked about; the reference may list every document in one question.
   - Guess: Don't Save sits on the left, Cancel and Save on the right with Save rightmost, as macOS document apps place them.
   - Guess: A failed or cancelled save stops the whole quit rather than moving on to the next document.
+  - Guess: A document changed after the question about it was answered with Save is asked about again before the window closes; one answered Don't Save is not.
   - Observe: Change a font, click the window's close box: note the question's text, its buttons and their order.
   - Observe: In the question, choose Save for a font never saved and cancel the file chooser: note whether the window stays open and the question closes.
 - [ ] `settings.menuItemNameOnOlderSystem` (behavior, M14, handbook): On macOS 12 the menu item that opens the window is labelled…
