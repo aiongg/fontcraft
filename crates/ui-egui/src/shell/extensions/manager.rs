@@ -1,8 +1,8 @@
 //! The Extension Manager (`window.pluginManager`): the extensions the user's indexes offer, the
 //! installed modules and the macros, with the install-state and type filters, the search field,
 //! Install, Update, Remove and an on/off switch per module; and an Indexes tab with the list of
-//! indexes, an automatic-updates switch per index and the extension folders (the Settings ›
-//! Extensions section until the Settings window exists).
+//! indexes, an automatic-updates switch per index and the extension folders. The Settings
+//! window's Extensions section draws the same body ([`indexes_section`]).
 //!
 //! The window reads engine state and acts through engine commands: `pluginManager.list`,
 //! `pluginManager.reloadIndexes`, `pluginManager.install`, `pluginManager.remove`,
@@ -566,23 +566,9 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     if !state(app).open {
         return;
     }
-    poll(app);
-    let (text, revision) = (sources_setting(app), app.session.extensions().revision());
-    let st = &app.state.panels.extensions.manager;
-    if st.seen_sources.as_deref() != Some(text.as_str()) {
-        reload(app);
-    } else if st.seen_revision != Some(revision) {
-        refresh(app);
-    }
-    if state(app).downloads.busy() {
-        ui.ctx().request_repaint_after(std::time::Duration::from_millis(DOWNLOAD_POLL_MS));
-    }
+    sync(app, ui.ctx());
     let sources = parse_sources(&sources_setting(app));
-    let folders = {
-        let ext = app.session.extensions();
-        let shown = |p: &Option<std::path::PathBuf>| p.as_ref().map_or_else(|| "none in this session".to_string(), |p| p.display().to_string());
-        (shown(&ext.modules_dir), shown(&ext.macros_dir), ext.safe_mode)
-    };
+    let folders = folders(app);
     let log_to_stderr = app.session.settings().get_bool("addons.useSystemConsoleForScriptOutput").unwrap_or(false);
     let FontcraftApp { state: ui_state, tokens, .. } = app;
     let st = &mut ui_state.panels.extensions.manager;
@@ -642,6 +628,51 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         st.open = false;
         st.preview = None;
     }
+    apply(app, events, pending);
+}
+
+/// Takes finished downloads, and reads the indexes or lists the extensions again after changes
+/// made elsewhere (an install from the command line, a changed index list).
+fn sync(app: &mut FontcraftApp, ctx: &egui::Context) {
+    poll(app);
+    let (text, revision) = (sources_setting(app), app.session.extensions().revision());
+    let st = &app.state.panels.extensions.manager;
+    if st.seen_sources.as_deref() != Some(text.as_str()) {
+        reload(app);
+    } else if st.seen_revision != Some(revision) {
+        refresh(app);
+    }
+    if state(app).downloads.busy() {
+        ctx.request_repaint_after(std::time::Duration::from_millis(DOWNLOAD_POLL_MS));
+    }
+}
+
+/// The modules folder, the macros folder (as shown) and whether extensions run in safe mode.
+fn folders(app: &FontcraftApp) -> (String, String, bool) {
+    let ext = app.session.extensions();
+    let shown = |p: &Option<std::path::PathBuf>| p.as_ref().map_or_else(|| "none in this session".to_string(), |p| p.display().to_string());
+    (shown(&ext.modules_dir), shown(&ext.macros_dir), ext.safe_mode)
+}
+
+/// The body of the Indexes tab on its own, for the Settings window's Extensions section: the
+/// folders, the standard-error switch and the index list, acting as the tab does.
+pub fn indexes_section(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
+    sync(app, ui.ctx());
+    let sources = parse_sources(&sources_setting(app));
+    let folders = folders(app);
+    let log_to_stderr = app.session.settings().get_bool("addons.useSystemConsoleForScriptOutput").unwrap_or(false);
+    let FontcraftApp { state: ui_state, tokens, .. } = app;
+    let st = &mut ui_state.panels.extensions.manager;
+    let mut events = Vec::new();
+    indexes_tab(ui, st, tokens, &sources, (&folders.0, &folders.1), log_to_stderr, &mut events);
+    if let Some(note) = &st.note {
+        ui.add_space(tokens.dialog_spacing);
+        ui.label(RichText::new(note.as_str()).color(tokens.error_text));
+    }
+    apply(app, events, pending);
+}
+
+fn apply(app: &mut FontcraftApp, events: Vec<Event>, pending: &mut Pending) {
     for event in events {
         match event {
             Event::Run(id, params) | Event::Engine(id, params) => pending.push((id, params)),

@@ -5,9 +5,13 @@ Source: Glyphs 4 Handbook, chapter "Settings". Inventory: `spec/inventory/16-set
 ## Settings window
 
 - Opened with `app.settings` (application menu › Settings…, Cmd+Comma). On macOS 12 the item is
-  named Preferences.
+  named Preferences. FontCraft draws its own menu bar, so the item is the last one of the Edit
+  menu on every platform.
 - Seven sections (`window.settings` and one `settings.*` panel each): Updates, Appearance, User
-  Settings, Sample Strings, Sharing, Addons, Shortcuts.
+  Settings, Sample Strings, Sharing, Addons, Shortcuts. In FontCraft a section that is not built
+  yet stays in the switcher, greyed with the reason, and `app.settings` refuses to open it. Each
+  section is an entry in `SECTIONS` (`crates/ui-egui/src/shell/settings_window`) whose body a
+  package fills; a body changes settings only through `settings.set` or its own commands.
 - Preferences persist across installing a newer or older version (`settings.surviveVersionChange`).
 - Headless access is our addition: `settings.get {id?}` and `settings.set {id, value}` address any
   `[[setting]]` row by id. Button actions have their own commands.
@@ -65,7 +69,9 @@ Colours: nine colours, each stored for the light and for the dark appearance
 | Send Crash Reports | `user.sendCrashReports` | send diagnostics after a crash |
 | name, email | `user.crashReportName`, `user.crashReportEmail` | contact details attached to crash reports |
 
-`settings.resetWarnings` is listed with status `memory`: the chapter does not mention it.
+FontCraft stores Disable Localization, Use Versions, Send Crash Reports and the two contact fields
+without effect: there are no translations, no version history and no crash-report service. The
+line under each checkbox says so.
 
 ## Sample Strings
 
