@@ -32,23 +32,23 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1380 rows to check: 2278 guesses and 514 observe steps.**
+**1414 rows to check: 2342 guesses and 547 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **493** |
-| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 101 |
+| **Built milestones (M0 to M6)** | all | **512** |
+| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 108 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
 | Built milestones (M0 to M6) | Filters | 36 |
 | Built milestones (M0 to M6) | Spacing and metrics keys | 23 |
 | Built milestones (M0 to M6) | Kerning and the Kerning window | 42 |
-| Built milestones (M0 to M6) | Font View | 108 |
-| Built milestones (M0 to M6) | Font Info and features | 9 |
+| Built milestones (M0 to M6) | Font View | 109 |
+| Built milestones (M0 to M6) | Font Info and features | 20 |
 | Built milestones (M0 to M6) | Files: open, import, export | 45 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **887** |
+| **Later milestones (after M6)** | all | **902** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 86 |
 | Later milestones (after M6) | Edit View: text mode and preview | 26 |
 | Later milestones (after M6) | Components and anchors | 39 |
@@ -56,18 +56,18 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Spacing and metrics keys | 12 |
 | Later milestones (after M6) | Kerning and the Kerning window | 12 |
 | Later milestones (after M6) | Font View | 19 |
-| Later milestones (after M6) | Font Info and features | 279 |
+| Later milestones (after M6) | Font Info and features | 286 |
 | Later milestones (after M6) | Interpolation | 72 |
 | Later milestones (after M6) | Hinting | 108 |
 | Later milestones (after M6) | Colour fonts | 60 |
 | Later milestones (after M6) | Files: open, import, export | 68 |
-| Later milestones (after M6) | Settings and the window | 13 |
+| Later milestones (after M6) | Settings and the window | 21 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
-## Built milestones (M0 to M6) (493)
+## Built milestones (M0 to M6) (512)
 
-### Edit View: drawing, guides, layers and the Palette (101)
+### Edit View: drawing, guides, layers and the Palette (108)
 
 - [ ] `dialog.fieldKeys` (behavior, M3, inferred): In a dialog's number field, Return takes the typed value, Escape drops…
   - Guess: Dialog number fields follow the Info box's editing and arrow-key rules (infoBox.fieldEditing, infoBox.arrowKeyStepping); the handbook documents them for the Info box only.
@@ -99,12 +99,27 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Alt with an arrow key moves only the selected points (03a question 1).
 - [ ] `move.nudge` (behavior, M3, handbook): Nudging (Ctrl+Option while moving nodes, or Option pressed after a drag has…
   - Guess: Ctrl+Alt with an arrow key nudges, by the arrow increments 1, 10 and 100 (03a question 2).
+- [ ] `move.handles` (behavior, M3, handbook): A handle moves by dragging or with the arrow keys (Shift 10,…
+  - Observe: Option-drag a handle of a smooth node, then press Option halfway through a plain handle drag: note whether the angle is kept in both cases and whether the opposite handle turns.
+- [ ] `move.mirrorHandleAcrossSmoothNode` (behavior, M3, handbook): While a handle of a smooth node is being moved with Ctrl…
+  - Guess: On a corner node, Ctrl+Alt moves the handle as a plain drag would; observing a corner's handle under Ctrl+Option would settle it.
+  - Guess: When the other side of the smooth node is a straight segment, the handle slides along that line as in a plain drag, since mirroring would bend the line; observing such a node would settle it.
+  - Observe: Ctrl+Option-drag a handle of a smooth node whose two handles differ in length: note whether the opposite handle takes the dragged handle's length during the drag or only on release.
+  - Observe: Ctrl+Option-drag a handle of a corner node: note whether the opposite handle changes.
+- [ ] `move.dragSegment` (behavior, M3, handbook): Dragging a segment moves its two end nodes together with their handles
+  - Guess: The two handle lengths are solved so the grabbed point of the curve lands on the pointer (a 2x2 linear system; with parallel handles, the smallest change that gets nearest); observing the curve under the pointer during an Option-drag would settle it.
+  - Guess: A handle is held between 1 unit and 10 times the larger of the end nodes' distance and the current handle lengths, so it never turns through its node; observing an Option-drag past the chord would settle it.
+  - Guess: An Alt-drag on a segment that is part of a larger selection duplicates the selection instead of reshaping; observing that case would settle it.
+  - Observe: Option-drag a curve segment at its middle and then near one end: note whether the point under the pointer stays under it and whether both handles change or only the nearer one.
+  - Observe: Option-drag a curve segment across its chord: note whether the handles shrink to zero, stop, or turn round.
 - [ ] `nodes.metricLineHighlight` (behavior, M3, handbook): A beige diamond is drawn behind any node that sits precisely on…
   - Guess: "Vertical metric lines" are read as the master's height lines: ascender, cap height, x-height, baseline, descender and any other metric but the italic angle.
 - [ ] `infoBox.selectionGeometryFields` (behavior, M3, handbook): With several nodes selected the Info box shows X, Y, width and…
   - Guess: The width and height lock starts open; the handbook gives no default.
 - [ ] `duplicate.optionDrag` (behavior, M3, handbook): Dragging a selection with Option held leaves the original in place and…
   - Guess: Alt held at mouse-down on a selection drags a copy, and Alt pressed after the drag started switches to nudge (03a question 1).
+  - Guess: Alt held at mouse-down on lone nodes, with no whole segment, path or other object to copy, moves only the selected points (selection.move mode pointsOnly), as for nodes moved with Option; observing an Option-drag of one node would settle it.
+  - Observe: Option-drag one selected node of a path: note whether a copy appears, or the node moves without its handles.
 - [ ] `stroke.joinsAndCaps` (behavior, M3, handbook): A stroke has one join style out of four, and open paths…
   - Guess: Every join and cap shape is our construction on offset curves (docs/spec/03a § 17): miter up to 4 half widths, then bevel.
   - Guess: Round full is round on the outer side and fills the inner corner with an arc of half the stroke width; round inset is a round cap that ends at the end node.
@@ -128,6 +143,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The last 32 closed tabs are kept for Reopen Last Closed Tab.
 - [ ] `selection.selectNext` (M3, handbook, live): Select Next
   - Guess: Tab steps through nodes in path order, then the next path, then anchors, then guides, then back to the start (03a question 8).
+- [ ] `path.reshapeSegment` (M3, handbook, live): Reshape Segment
+  - Guess: A handle that lies on its node takes the direction towards the other handle, else towards the other end node.
 - [ ] `path.toggleNodeType` (M3, handbook, live): Toggle Node Type
   - Guess: Turning a corner smooth adds missing handles a third of the way along the segment and turns handles that are not collinear to the bisector of their directions, keeping their lengths (03a question 9).
 - [ ] `path.tidyUpPaths` (M3, handbook, live): Tidy up Paths
@@ -205,6 +222,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The canvas context menu's sections, item targets and what a right-click selects first are our design (docs/spec/03a § 6).
 - [ ] `background.snapping` (behavior, M3, handbook): While the background is displayed, its nodes and outlines are snapping targets…
   - Guess: The background's nodes, then its handles, are snap targets after the edited layer's nodes and handles and before guides; its outlines between nodes are not targets.
+- [ ] `measurement.allVisibleGlyphs` (behavior, M3, handbook): Coordinates and rulers of the Measurement tool cover every glyph shown in…
+  - Guess: When the text holds more than 200 glyphs, the 200 nearest the edited one in the text are measured.
+  - Observe: Type "HO", edit H, choose the Measurement tool and drag a ruler across both glyphs: the gap between H and O is labelled.
+- [ ] `measurement.overlapsIgnored` (behavior, M3, handbook): Rulers and measurement guides measure the merged shape: crossings that lie inside…
+  - Guess: The grey stretches show only while the Measurement tool is active; the handbook mentions them under measuring and does not say whether other tools show them.
+  - Guess: A stretch counts as overlapped where the outline is filled on both sides of it, so two contours that share an edge exactly grey that edge.
 - [ ] `infoBox.setReferencePoint` (M3, handbook, live): Set Info Box Reference Point
   - Guess: The reference point starts at bottom left; the handbook gives no default.
 - [ ] `view.zoomIn` (M3, handbook, live): Zoom In
@@ -229,12 +252,18 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `measure.ruler` (M3, inferred, live): Measure Along Line
   - Guess: Crossings follow the nonzero winding rule, and a line that only touches a contour does not cross it; the handbook does not say how the reference merges overlapping contours.
   - Guess: Components are measured like paths, and the ruler stays until the next click or tool change (03b question 10).
+  - Guess: With placements, the outlines of all glyphs are merged together, so two glyphs that overlap measure as one shape; a ruler across two kerned glyphs that collide would settle it.
 - [ ] `annotation.add` (M3, inferred, live): Add Annotation
   - Guess: New annotations get a text box 200 units wide, an arrow at 45° and a circle 100 units across; the handbook gives no defaults (03b question 11).
 - [ ] `measurement` (tool, M3, handbook): Measurement
   - Guess: The ruler's ends snap unless Ctrl is held, and Shift keeps it horizontal or vertical, whichever is nearer.
   - Guess: The ruler stays until the next press, Escape or a tool change (03b question 9).
   - Guess: G with any modifiers adds the measurement guide.
+  - Guess: A tool held with modifiers waits for a gesture in progress to end before it takes over or gives way, and its ruler goes when it gives way.
+  - Guess: The held tool does not see the keys that hold it, so the held Measurement tool's ruler snaps and the held Select tool clicks as a plain click.
+  - Guess: Cmd+Ctrl+Alt does not hold the Measurement tool in the Text tool, where the same keys move the measurement line.
+  - Observe: Hold Cmd+Alt+Ctrl in the Draw tool: the coordinates show; drag a ruler, let the keys go during the drag and see whether the ruler stays.
+  - Observe: Hold Cmd in the Measurement tool and click a node: it is selected as with the Select tool.
 - [ ] `annotation` (tool, M3, handbook): Annotation
   - Guess: Each annotation sub-tool is a tool of its own, and A returns to the sub-tool used last (Annotation Selection before any).
   - Guess: Handles show and work on selected annotations only.
@@ -286,6 +315,13 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `transform.setSettings` (M3, inferred, live): Set Transformation Values
   - Guess: The defaults, scale 110 % with the lock closed, rotation 90° and slant 10°, are ours; the tutorial video named in palette.transformations shows the second scale field greyed, which suggests a closed lock.
   - Guess: The limits are ours: a scale is non-zero and within ±1000000 %, a rotation within ±3600°, a slant strictly between -90° and 90°.
+- [ ] `palette.layers` (panel, M3, handbook): Layers
+  - Guess: While a row is dragged, an accent-coloured line between rows shows where it will land, and the master row is outlined when a backup dropped there would replace the master layer.
+  - Guess: Dropping on a row's upper half puts the dragged row above it, on its lower half below it.
+  - Guess: A row that is not a backup, dropped on its own master's row, moves to the top of that master's rows.
+  - Guess: A backup dropped on another master's row is refused, as Use as Master restores a backup only into its own master.
+  - Observe: Drag a backup layer of F4's first master onto the second master's row: note whether it is refused or becomes that master's layer.
+  - Observe: Drag a layer within its master: note how the drop position is shown.
 - [ ] `guides.globalScopeFilter` (behavior, M4, handbook): A global guide appears on all glyphs by default
   - Guess: A filter that does not read as a predicate leaves the guide shown in every glyph. Settled by opening a file whose guide filter the reference cannot read.
 - [ ] `view.editSelectedGlyphs` (M4, handbook, live): Edit Selected Glyphs
@@ -916,7 +952,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Overwrite is the default button that Return presses; the warning in the reference app settles it.
   - Guess: The warning lists the conflicting pairs with the pasted and the current value; the handbook names no list, and a screenshot of the warning settles it.
 
-### Font View (108)
+### Font View (109)
 
 - [ ] `path.convertToCubic` (M3, handbook, live): Convert to Cubic
   - Guess: New handles are not rounded to the grid, so the outline stays exact; the handbook does not say whether the reference rounds them.
@@ -1150,6 +1186,14 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: CLDR lists letters in lowercase, so each character's single-character uppercase form is added (ß gets none; Georgian gets no Mtavruli capitals). Settled by observing whether the reference's badge for a Latin-script language counts capitals.
   - Guess: A language is listed under the glyph database's script that most of its exemplar characters belong to, ignoring Common and Inherited characters (Japanese falls under han, Korean under hangul). Settled by observing where the reference lists Japanese and other mixed-script languages.
   - Guess: Every CLDR locale with its own main exemplar set is a language entry, regional and script variants included (de-CH, sr-Latn); those that inherit their parent's set are left out. Settled by observing which entries the reference lists under one script.
+- [ ] `fontView.sidebar.filters` (panel, M4, handbook): Filters
+  - Guess: A double-click anywhere on a filter's row except its icon and disclosure triangle renames it, the empty space after the name included. Settled by double-clicking right of a short filter name in the reference.
+  - Guess: Return renames only while the sidebar has the keyboard, which it takes when a row is pressed and gives up when anything else is pressed. Settled by selecting a filter, clicking a glyph cell and pressing Return in the reference.
+  - Guess: Over a folder's middle half a dragged filter goes into the folder, at its end; over the top or bottom quarter it goes before or after the folder, and below an open folder with entries it goes first inside it. Settled by observing the reference's drop feedback.
+  - Guess: An unchanged or empty name typed into the field runs no command. Settled by renaming a filter to its own name in the reference.
+  - Observe: In Font View, add three smart filters and a folder; drag a filter slowly over the folder's row from top to bottom and note where the drop line or folder highlight appears.
+  - Observe: Drag a folder holding a filter onto that filter's row and note whether the reference shows a drop mark and what the drop does.
+  - Observe: Select a filter, click a glyph cell, press Return; note whether the filter's name opens for editing.
 - [ ] `fontView.searchField` (panel, M4, handbook): Glyph Search Field
   - Guess: The magnifier menu offers All Fields, Name Only, Unicode Value Only and Note Only as one choice, then Match Case and Regex. Settled by opening the reference's magnifier menu.
 - [ ] `fontView.statusBar` (panel, M4, handbook): Font View Status Area
@@ -1168,8 +1212,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A Match Case checkbox, on by default, as names are case-sensitive; the handbook names only Find, Replace and Regex. Settled by observation.
   - Guess: Nothing is renamed until Replace; there is no live preview. Settled by observation.
 - [ ] `dialog.smartFilterEditor` (panel, M4, handbook): Smart Filter Editor
-  - Guess: Adding a nested group is a `…` button on each row, standing in for Option-click on plus. Settled by observing the reference's editor.
+  - Guess: Besides Alt turning each `+` into `…`, every row keeps a separate `…` button that adds a group without Alt. Settled by observing whether the reference's editor shows a dots button while Option is up.
   - Guess: A new smart filter is named New Filter, or New Filter 2 and so on when the name is taken. Settled by adding a smart filter in the reference.
+  - Observe: In a smart filter's editor, hold Option over a rule's plus button; note what the button shows, and what clicking it adds and where.
 - [ ] `dialog.listFilterEditor` (panel, M4, handbook): List Filter Editor
   - Guess: A new list filter is named New List, or New List 2 and so on when the name is taken. Settled by adding a list filter in the reference.
 - [ ] `dialog.languagesList` (panel, M4, handbook): Languages List
@@ -1214,8 +1259,33 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The shortcut is Cmd+Alt+Shift+D, Decompose with Option added as for the other Option variants; the Glyph menu of the reference app with Option held settles it.
   - Guess: Only master layers are decomposed; intermediate and alternate layers keep their components. A composite with a brace layer in the reference app settles it.
 
-### Font Info and features (9)
+### Font Info and features (20)
 
+- [ ] `codePageRanges` (parameter, M2, handbook): List of code pages whose bits are set in OS/2.ulCodePageRange1 and ulCodePageRange2
+  - Guess: Any other number is refused; the reference app's code page dialog shows which values it stores.
+- [ ] `Export Folder` (parameter, M2, handbook): Name of a subfolder appended to the normal export destination
+  - Guess: Nested folders separated by `/` are accepted and a path that leaves the export folder is refused; typing `a/b` and `../a` in the reference app settles it.
+- [ ] `fsType` (parameter, M2, handbook): List of bit numbers set in OS/2.fsType
+  - Guess: Only one of the usage levels 1 (restricted), 2 (preview and print) and 3 (editable) may be set, as the handbook says of restricted and the OS/2 specification of all three; ticking two levels in the reference app's dialog settles it.
+  - Guess: Bit 9 (bitmap embedding only) is offered though the handbook names only installable, restricted, editable, preview and print, and no subsetting; the reference app's dialog settles it.
+- [ ] `italicAngle` (parameter, M2, handbook): Replaces the master's italic angle, in degrees clockwise from vertical; a `script:…
+  - Guess: Angles of 90 degrees or more either way are refused; the handbook gives no range.
+- [ ] `panose` (parameter, M2, handbook): Ten numbers, one per PANOSE category, written to OS/2.panose and edited through…
+  - Guess: Digits above 15 are refused, following the handbook's sixteen variations per category; a value of 16 typed into a copy of a file and opened in the reference app settles it.
+  - Observe: In a text-editor copy of font A (m7-one), give panose nine numbers, open it and click the value: note whether the value is refused, kept, or kept with a warning, and where the message shows.
+- [ ] `Post Table Type` (parameter, M2, handbook): Integer choosing the post table version for the instance
+  - Guess: Only 2 and 3 are accepted, the two versions the handbook names; versions 1, 2.5 and 4 are refused. Typing 4 in the reference app settles it.
+- [ ] `unicodeRanges` (parameter, M2, handbook): List of Unicode ranges whose bits are set in OS/2.ulUnicodeRange1 to ulUnicodeRange4,…
+  - Guess: Bits 123 to 127, which the OS/2 table reserves, are refused; the reference app's ranges dialog shows whether it offers them.
+- [ ] `vendorID` (parameter, M2, handbook): Four printable ASCII characters written to OS/2.achVendID
+  - Guess: An id of one to three characters is accepted (export pads it with spaces) and an empty one means none; entering `ABC` in the reference app settles it.
+  - Observe: In font A (m7-one), set vendorID to `ABCDE` in Font Info: note whether the value is refused, kept, or kept with a warning, and where the message shows.
+- [ ] `Webfont Formats` (parameter, M2, handbook): List drawn from TTF, EOT, WOFF and WOFF2; the instance carrying it…
+  - Guess: A format matches in any case and is stored as the handbook spells it (`woff2` becomes `WOFF2`); a lowercase entry in the reference app settles it.
+- [ ] `CJK Grid` (parameter, M3, handbook): Integer giving both the number of rows and of columns of a…
+  - Guess: A grid has 1 to 100 rows or columns; the handbook gives no range.
+- [ ] `CJK Guide` (parameter, M3, handbook): For CJK glyphs, shows one more guide, a square marking the virtual…
+  - Guess: An inset of 50 percent or more, which leaves no square, is refused; the handbook gives no range.
 - [ ] `glyph.updateGlyphInfo` (M4, handbook, live): Update Glyph Info
   - Guess: Stored overrides of category, subcategory, script, production name, case and direction are dropped, so those properties follow the database again; the sort name, tags, colour labels, note and export flag stay. Settled by observing a glyph with a custom category before and after the command (05 question 5).
   - Guess: With Use Custom Naming on, names are kept and only the other properties are updated. Settled by observation.
@@ -1249,6 +1319,13 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Save As offers one filter with every source extension and no format or version pop-up, so the extension picks the format; the reference's save sheet picks the format from a pop-up, which observing it would let us match.
 - [ ] `file.open` (M1, handbook, live): Open…
   - Guess: The menu label and place are our assumption, and the shortcut is the platform convention; the chapter states neither.
+  - Guess: File › Open… without a path asks the system chooser for files with one filter, Fonts, that holds every extension file.open reads (gz standing for .pcf.gz and .bdf.gz); the reference app's chooser filter is not documented.
+  - Guess: Several files chosen at once each open, the last one shown; when some fail, the status bar lists the failures.
+  - Guess: A .fontcraftproject file given to file.open opens as a project, as project.open does, since the reference app's File › Open opens project files.
+  - Guess: A font file dropped on the window opens as with File › Open…, recognised by its extension; an SVG file is left to the image drop, which places it on a glyph, so a dropped SVG font does not open.
+  - Observe: Drop a .glyphs file on an open font window and note whether it opens as a new document.
+  - Observe: Drop a .ttf on an open font window and note whether it opens or is refused.
+  - Observe: In File › Open…, note the file types the chooser offers and whether it allows choosing several files.
 - [ ] `roundtrip.editsAreLocal` (behavior, M1, inferred): Changing one value changes only the lines that encode that value (plus…
   - Guess: Version 2 settings keys at the top level of a version 3 file move into the `settings` dictionary once any setting is edited, since the dictionary written after them would override them on reading; a file from the reference app with such keys, saved after an edit, would settle what it writes.
   - Guess: Node flags are read for `R`, `C` and `X` in any order (the first of `R` and `C` wins); when an edit changes the lock or orientation, the fields are written in the writer's order followed by the letters the model does not read, in their order. A file from the reference app with such flags would settle what it keeps.
@@ -1414,7 +1491,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (887)
+## Later milestones (after M6) (902)
 
 ### Edit View: drawing, guides, layers and the Palette (86)
 
@@ -2155,7 +2232,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.
   - Guess: Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.
 
-### Font Info and features (279)
+### Font Info and features (286)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
@@ -2249,9 +2326,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A parameter whose appendix entry names its scopes is refused in other scopes; one whose entry names none is allowed in all three.
   - Guess: A name the catalogue does not know is added as given, its value checked only against the size limits, and listed with the unknown mark; whether the reference app's picker accepts a typed free name settles it.
   - Guess: A name property (designers, versionString and the others the format keeps as properties) added here is written to the General fields, refused on masters and refused where the field is already set; adding one from the reference app's picker settles where it goes.
+  - Guess: A value naming a missing master warns and keeps the value; typing an unknown master name in the reference app settles it.
   - Observe: In font A (m7-one), add typoAscender twice, then add a yes-or-no parameter and a list parameter: note whether the duplicate is allowed or refused and the empty value each new row gets.
+  - Observe: In font A (m7-one), add vendorID `ABCDE` and panose with nine numbers: note whether each is refused, kept, or kept with a warning, and where the message shows.
 - [ ] `font.customParameters.set` (M7, inferred, live): Set Custom Parameter
   - Guess: A value is checked against the catalogue's kind before it is stored, and an unknown name is refused rather than stored as is; editing a row in the running app's Font Info would settle it.
+  - Observe: In font A (m7-one), set Get Hints From Master to a name no master has: note whether the value is refused, kept, or kept with a warning, and where the message shows.
 - [ ] `font.master.list` (M7, inferred, live): List Masters
   - Guess: The list gives id, name, icon and axis coordinates only, our choice of the fields a script needs to pick a master; the reference app's scripting access to masters would settle it.
 - [ ] `font.master.get` (M7, inferred, live): Get Master
@@ -2325,9 +2405,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The minor version shows three digits, and its stepper is a plus and a minus button after the field; the reference app's Version field settles the look.
   - Guess: The Creation Date is shown and typed as the file stores it (`2026-10-11 12:00:00 +0000`), next to an Update button; the reference app's date field settles the display.
   - Guess: The Version row stands for both version parts, so selecting it selects and copies versionMajor and versionMinor together; copying the Version row in the reference app settles it.
-  - Guess: Until axes can be edited (M9), the Axes section lists the stored axes without a plus button, their names, tags and Hidden boxes read-only.
+  - Guess: Each axis row starts with a drag handle; dropping it on another axis row moves the axis there (font.axes.reorder). Dragging axes in the reference app, if it allows it, settles it.
+  - Guess: The predefined menu lists the registered axes, a separator, then the proposed ones, each as `Name (tag)`; opening the menu in the reference app settles the look.
   - Observe: In font A (m7-one), look at the Version and Creation Date rows: note how the minor version and the date are shown and what the stepper and the update button look like.
   - Observe: In font A (m7-one), click the double arrow beside Units per Em: note what asks for the new value and which buttons it has.
+  - Observe: In F1 (two masters) with two axes, try to drag the second axis row above the first: note whether the order changes and what the row shows while dragging.
 - [ ] `fontInfo.fieldPicker` (panel, M7, handbook): Add Field
   - Guess: The picker lists only the fields not yet present on the selected font, masters or exports, in the order of font.info.listFields, and allows several to be selected; the picker of each tab in the reference app settles it.
   - Guess: A click selects one field and Cmd-click or Shift-click adds or removes one more; Add adds them in list order, each as an undo step of its own; using the picker in the reference app settles both.
@@ -2352,7 +2434,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A stem's actions button opens the same editor with only the scope field; the reference app's stem scope popover settles its fields.
   - Observe: In font B (m7-two), click the name of x-Height on the Masters tab: write down the items and labels of the category menu.
 - [ ] `fontInfo.exports` (panel, M7, handbook): Exports
-  - Guess: Active, Style Name, Weight Class, Width Class, the read-only Axes Coordinates and Style Linking sit under the General heading, above the added fields; the Exports tab of the reference app settles the order.
+  - Guess: Active, Style Name, Weight Class, Width Class, the Axes Coordinates and Style Linking sit under the General heading, above the added fields; the Exports tab of the reference app settles the order.
   - Guess: A variable font setting shows Active, its name and its custom parameters, without classes, axes or style linking; selecting a variable font setting in the reference app settles it.
   - Guess: The class menus list each standard value with its OpenType name (400 Regular, 5 Medium (normal)); the disclosure menus of the reference app settle the labels.
   - Observe: In font B (m7-two), select two instances with Cmd-click and look at a field where they differ: note what it shows.
@@ -2418,6 +2500,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The master's parameter wins over the font's, and a ratio that is not a number from 0.001 to 1,000,000 is ignored; copying from a font with the parameter on a master in the reference app settles it.
   - Guess: Only the SVG flavour is scaled: the clipboard fragment that edit.paste reads keeps font units, so copy and paste inside the app keeps the size; pasting a drawing copied from the reference app back into it settles what its own paste does.
   - Observe: In font A (m7-one), set Point To Unit Ratio 10, copy glyph A and paste into a drawing application: note the pasted size.
+- [ ] `postscriptFontName` (parameter, M7, handbook): Sets name ID 6
+  - Guess: A name over 63 bytes is refused (the OpenType limit) while the handbook only recommends under 30 characters; a 40-character name in the reference app settles whether it warns.
 - [ ] `PreFilter` (parameter, M7, handbook): Same value syntax as Filter, applied before decomposition
   - Guess: On a variable font setting PreFilter is skipped with a warning, not an error; the reference app settles it.
   - Observe: In font C (m7-export), put PreFilter `RemoveOverlap` on a variable font setting and export the variable font: note whether it is refused, ignored or applied.
@@ -2834,7 +2918,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A parameter that is a whole number on every weighted master stays whole, rounded half up as fontmake rounds font info; the origin master's parameters are the ones the instance has, so one missing from the origin is left out. Settle with a parameter set only on the second master in the reference app.
   - Observe: In F1 (two masters), set a custom parameter to a number on Thin and to text on Black, export Regular and read the value written: note whether it was interpolated, taken from one master, or dropped.
 - [ ] `fontInfo.instance.extrapolation` (behavior, M9, handbook): An instance whose coordinates lie inside the range covered by masters is…
+  - Guess: Font Info › Exports shows the extrapolation warning, in the warning colour, under the Axes Coordinates of each selected instance beyond the masters, and the list entry is not marked; selecting an extrapolated instance in the reference app settles it.
   - Observe: In F1 (two masters), export ExtraBlack (1000, outside the masters) as a static font and as part of a variable font: note whether the outlines are extrapolated, any warning, and whether `fvar` lists it.
+  - Observe: In F1 (two masters), type a weight beyond the Bold master into an instance's Axes Coordinates in Font Info › Exports: note whether the field, the list entry or anything else marks the instance as extrapolated.
 - [ ] `fontInfo.fontType` (behavior, M9, handbook): Font Type picks the interpolation model for static instances
   - Guess: Default and Variable both use the variable-font model (fontTools' VariationModel); they agree on one axis and on full grids, and the Multiple Master model of the reference is not documented for other setups. Settle by comparing an instance of an irregular two-axis setup under both settings in the reference app (docs/plans/M9.md § 8).
   - Observe: In F3 (irregular two axes), export the instance at (650, 60) with Font Type Default, then with Font Type Variable: compare the two outlines.
@@ -2912,6 +2998,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `Variable Font Optimize Deltas` (parameter, M9, handbook): Described identically to Optimize Variable Deltas: on by default, drops the deltas…
   - Guess: Treated as a second name of Optimize Variable Deltas, as the appendix describes both alike; settle by setting one of them off in the reference app and comparing the exported gvar.
   - Observe: In F1 (two masters), export the variable font with Variable Font Optimize Deltas off and on: compare the `gvar` point counts.
+- [ ] `Variable Font Origin` (parameter, M9, handbook): Names the master stored as the default outlines of the variable font;…
+  - Guess: A value naming a missing master warns and keeps the value, since the master may be added or renamed later; typing an unknown name in the reference app settles it.
 - [ ] `Variable Font Style Name` (parameter, M9, handbook): By its key a style name for the variable font, but the…
   - Guess: Read as a style name, not a family name as its description says: on a setting or the font the variable font's default style, on a static instance its `fvar` name; settle by exporting with it set in each place.
 - [ ] `Variable SubfamilyName` (parameter, M9, handbook): Style name given to the default outlines of the exported variable font,…
@@ -2928,6 +3016,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In F1 (two masters), set Variation Font Origin naming Black and export the variable font: note whether the default outlines and the `fvar` default are Black's.
 - [ ] `variationsPostScriptNamePrefix` (parameter, M9, handbook): Sets name ID 25, the family prefix used when PostScript names of…
   - Guess: Without it no name ID 25 is written, as both oracles do; the typographic family fallback the description names is what a consumer computes. Settle by exporting without it and listing the name records.
+  - Guess: The prefix is limited to 63 letters and digits; the handbook gives the characters but no length.
 - [ ] `filter.customParameter.autohinting` (behavior, M10, handbook): Export string: Autohinting (no arguments) runs the autohinter as if it were…
   - Guess: Autohinting turns autohinting on even when the instance's Autohint parameter is off: the string asks for the autohinter to run; a reference export of an instance with both would settle it.
   - Guess: Arguments after `Autohinting` are ignored with a warning, since the handbook lists none.
@@ -2948,6 +3037,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The built-in autohinter keeps nodir points out of every instruction, and reads the style forms (script feature @ glyphs, script feature width) and leaves them out.
 - [ ] `export.ttfAutohintBinary` (setting, M10, inferred): Trusted ttfautohint program
   - Guess: A document may only ask for the user's trusted ttfautohint program, unlike the reference app, which runs the program the parameter names; we chose this for safety because a document from elsewhere could otherwise run any program on the user's machine.
+- [ ] `blueShift` (parameter, M10, handbook): Integer written to the Type 1/CFF BlueShift entry, default 7
+  - Guess: Negative and fractional values are refused, as the handbook gives an integer; typing -1 in the reference app settles it.
+- [ ] `gasp Table` (parameter, M10, handbook): Writes the gasp table for TrueType fonts from two PPM thresholds, default…
+  - Guess: Flags above 15, which the table does not define, are refused rather than dropped at export; the reference app's gasp editor settles it.
 - [ ] `Ignore Vertical Hints` (parameter, M10, handbook): In TrueType export, leaves out every manual stem hint linked to a…
   - Guess: A horizontal Stem instruction set to No Stem stays under Ignore Vertical Hints, since it is linked to no stem definition; the reference app would settle it.
 - [ ] `TTFAutohint binary path` (parameter, M10, handbook): File path of a precompiled ttfautohint binary to run in place of…
@@ -2973,15 +3066,20 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `color.export.glyphFilterTokens` (behavior, M11, handbook): Export glyph filters can test colour properties: colorIndex (palette index of layers),…
   - Guess: `isAnyColorGlyph` also holds for a glyph whose only colour layer is an svg layer, which the handbook's list (COLR/CPAL, sbix, full colour) leaves out. Settled by exporting a font with Remove Glyphs `isAnyColorGlyph=1` and a glyph that has only an svg layer.
   - Observe: Remove Glyphs `colorIndex=1` on a palette font: export and read COLR with fontTools; note whether the base glyphs, their layer records for entry 1 or only the layer glyphs are gone.
+- [ ] `Color Palette for CPAL` (parameter, M11, handbook): Integer index into the Color Palettes parameter choosing which palette the CPAL…
+  - Guess: An index past the palettes warns and keeps the value, since the palettes may be added later; setting 5 on a font with two palettes in the reference app settles it.
 - [ ] `Color Palettes` (parameter, M11, handbook): List of colour palettes exported as the CPAL table of a COLR/CPAL…
   - Guess: An edited Color Palettes keeps the form it was stored in; a new one is written as version 3 integer lists, or as the version 4 dictionary in a document read from version 4. Settled by editing the palettes in the reference and reading the saved file.
   - Guess: A CMYK palette colour is converted to RGB without a colour profile, as (1 − c)(1 − k) and so on. Settled by exporting a CMYK palette from the reference and reading CPAL.
   - Observe: Palette font: edit a colour in the Color Palettes editor, press OK and save; note how the stored value is written in the file (version 3 integer lists or the version 4 dictionary).
+- [ ] `SBIX to SVG` (parameter, M11, handbook): When set, the bitmaps prepared for sbix are also written as bitmap…
+  - Guess: The value is taken as a whole number from 0 to 65535; the handbook does not say what the number means.
 - [ ] `fontInfo.styleLinking.recommendedScheme` (behavior, M12, handbook): Recommended scheme, usable as a lint: Bold, Italic and Bold Italic link…
   - Observe: Style font (instances Light, Regular, Semibold and Bold, each with an Italic): in the Exports tab link Semibold as the bold of Light; note whether the app warns, then export and read name IDs 1, 2, 16 and 17 and fsSelection of both.
 - [ ] `ROS` (parameter, M12, handbook): One of Adobe-CNS1-6, Adobe-GB1-5, Adobe-Japan1-3, Adobe-Japan1-6, Adobe-Korea1-2 or Adobe-Identity-0
   - Guess: Any well-formed Registry-Ordering-Supplement is accepted, not only the six the handbook lists; entering another value in the reference app would settle whether it is refused.
   - Guess: On a source that already holds CID-keyed data, the parameter's collection replaces the stored one and the stored CID map and sub-fonts are kept, with a warning when they differ; no source settles it, as the reference app has no stored CID-keyed data.
+  - Guess: Any well-formed Registry-Ordering-Supplement is accepted, not only the six public ones the handbook lists; choosing a value in the reference app shows whether it offers a menu or a text field.
 - [ ] `layout.decompileFeatures` (M12, docs, live): Decompile Layout to Feature Code
   - Guess: A lookup a feature uses is named feature_script_language_index after the first language system that uses it, and any other lookup GSUB_index or GPOS_index; the round-trip measure on the corpus would show whether stabler names are needed.
   - Guess: Glyph sets of two or more glyphs used at least twice become named classes (@first_last); sets used once stay inline. Reading the decompiled text of a few corpus fonts would settle the threshold.
@@ -3027,6 +3125,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: postscriptOtherBlues, the family blues, the stem snaps and postscriptForceBold use the same naming as the keys seen in tx output; a CID-keyed font with those values converted by tx would settle it.
 - [ ] `dialog.mathTable` (panel, M13, docs): Math Table
   - Guess: The dialog edits the first master and one glyph at a time, with the data as text fields rather than a table per glyph; the reference's math dialog would settle the layout.
+- [ ] `Master Background Color` (parameter, M14, handbook): Colour of the Edit View canvas whenever the master carrying the parameter…
+  - Guess: The background and stroke colours take Master Color's forms (`R,G,B[,A]` or `#RRGGBB[AA]`); the handbook gives no syntax for them, and a value saved by the reference app settles it.
 - [ ] `proof-pdf` (format, M14, inferred): PDF proof sheet
   - Open (our design, not confirmed): Vector PDF of an Edit View text, a glyph overview or a waterfall, drawn straight from the source outlines of the current master or instance so no font has to be installed. Scale follows the font's units-per-point setting; nodes, guides and annotations are included only when asked for.
 
@@ -3038,6 +3138,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The model keeps one number per master; an x/y pair keeps its first number, so horizontal and vertical factors are the same; settle with an instance whose factors are pairs in the reference app.
 - [ ] `axes.tagRules` (behavior, M9, handbook): Axis tags are four characters
   - Guess: A tag of fewer than four printable ASCII characters is padded with spaces and a longer one exports its first four; settle by typing a three- and a five-character tag in the reference app's axis dialog and exporting.
+  - Guess: Font Info › Font shows a hint under an axis whose tag is neither registered nor four capital letters, the same test as the axis commands' warning; typing `swln` as a tag in the reference app settles whether it says anything.
+  - Observe: In any font, give an axis the tag `swln` in Font Info › Font: note any hint or warning the app shows.
 - [ ] `axes.unusedAxesDropped` (behavior, M9, handbook): When masters are disabled for a variable-font export, any axis on which…
   - Guess: An axis is dropped only when Disable Masters removes a master, and an axis a virtual master still varies is kept; settle by exporting F1 with a third axis all masters share, without Disable Masters, and again with a virtual master on that axis.
 - [ ] `masters.originAutomaticForStatic` (behavior, M9, handbook): The origin master is a designer's choice only for variable fonts
@@ -4102,7 +4204,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Every item starts ticked, so Accept Selected with no change of the ticks takes everything; the reference's manual does not say which state the ticks start in, and opening the window there settles it.
   - Guess: The stored-text view on double-click shows the glyph in FontCraft's native JSON form rather than as a .glif file, since the comparison is between models; the reference shows the file text, and a file-per-glyph text view would follow it more closely.
 
-### Settings and the window (13)
+### Settings and the window (21)
 
 - [ ] `addons.repo.httpBasicAuth` (behavior, M13, handbook): An alternate repository URL may require a user name and password, sent…
   - Guess: Credentials are taken from the URL itself and stored with the setting, not in the operating system's keychain; the reference's storage is not described.
@@ -4121,20 +4223,47 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `window.macroPanel` (panel, M13, inferred): Macro Panel
   - Guess: The console's input is one line with a history, not a multi-line editor, because commands are one line of JSON; the reference's panel layout is not described (open question).
   - Guess: Tab takes the first completion suggestion and Up and Down stay with the history, because the history is the row's documented use of those keys; nothing describes completion keys in the reference.
-- [ ] `app.quit` (M14, memory): Quit FontCraft
-  - Open (recalled, not confirmed): Quits after asking about each document with unsaved changes. Background saves and exports finish first.
+- [ ] `window.titleShowsDocument` (behavior, M14, inferred): The window title names the active document and says Edited while it…
+  - Guess: The edited mark is the word Edited after the name, as macOS document windows show it; off macOS the app's name follows because the taskbar shows only the title.
+  - Observe: Open a font, change it and note the window title before and after, and after saving.
+- [ ] `app.quit` (M14, inferred, live): Quit FontCraft
+  - Guess: Quit is listed at the end of the File menu in the window's own menu bar on every platform; on macOS it is also in the app menu.
+  - Observe: Open two new fonts, change both, press Cmd+Q: note whether one question per document appears or one list of all of them, and the order the documents are asked about.
+  - Observe: In the question, note the buttons' labels and their order from left to right, and which one Return and Escape press.
+- [ ] `window.closePrompt` (M14, inferred, live): Unsaved Changes
+  - Guess: One question per document, asked in turn, showing the document asked about; the reference may list every document in one question.
+  - Guess: Don't Save sits on the left, Cancel and Save on the right with Save rightmost, as macOS document apps place them.
+  - Guess: A failed or cancelled save stops the whole quit rather than moving on to the next document.
+  - Observe: Change a font, click the window's close box: note the question's text, its buttons and their order.
+  - Observe: In the question, choose Save for a font never saved and cancel the file chooser: note whether the window stays open and the question closes.
+- [ ] `settings.menuItemNameOnOlderSystem` (behavior, M14, handbook): On macOS 12 the menu item that opens the window is labelled…
+  - Guess: One label and place on every platform, Settings… in the Edit menu, as many Linux and Windows applications do; a native macOS menu bar would move it to the application menu.
 - [ ] `sharing.fontcraftEquivalent` (behavior, M14, inferred): FontCraft has no companion app planned; the same need can be met…
   - Open (our design, not confirmed): FontCraft has no companion app planned; the same need can be met by a read-only preview stream over the control channel that any browser on the network can open after confirmation on the host.
 - [ ] `shortcuts.oneRegistry` (behavior, M14, inferred): FontCraft derives the action list from the command registry: every command with…
   - Open (our design, not confirmed): FontCraft derives the action list from the command registry: every command with a label is listed under its menu or noun prefix, and the stored override map is keyed by command id.
-- [ ] `settings.resetWarnings` (M14, memory): Reset Warnings
-  - Open (recalled, not confirmed): Makes every warning dialog that was silenced with a do-not-show-again choice appear again. This chapter does not mention it; recalled from earlier versions of the reference and to be confirmed.
+- [ ] `app.settings` (M14, handbook, live): Settings…
+  - Guess: Settings… is the last item of the Edit menu on every platform, because FontCraft draws its own menu bar and has no application menu; the reference puts it in the application menu on macOS.
+  - Guess: The window reopens on the section last shown; the handbook does not say which section it opens on.
 - [ ] `settings.setSampleStrings` (M14, inferred): Set Sample Strings
   - Open (our design, not confirmed): Replaces the strings of one group; the UI equivalent is editing the text field. Proposed for headless use.
 - [ ] `settings.resetShortcut` (M14, inferred): Reset Shortcut
   - Open (our design, not confirmed): Drops the user's override for one action, or for all when no id is given, restoring built-in shortcuts. Not described in the source; proposed because Customized filtering implies a way back.
 - [ ] `settings.listShortcuts` (M14, inferred): List Shortcuts
   - Open (our design, not confirmed): Read-only query returning each action with its section, default shortcut and current shortcut. Proposed for agents; equals the content of the list.
+- [ ] `window.settings` (panel, M14, handbook): Settings
+  - Guess: Sections that are not built yet stay in the switcher, greyed with the reason, so the order matches the reference; the reference has no such state.
+  - Observe: Open Settings and note the order of the sections in the switcher and which section shows first.
+- [ ] `settings.userSettings` (panel, M14, handbook): User Settings
+  - Guess: Every checkbox is off by default; the handbook gives no defaults.
+  - Observe: On a fresh install, open Settings › User Settings and note which checkboxes are on.
+  - Observe: Note the labels of the two crash-report contact fields.
+- [ ] `user.disableLocalization` (setting, M14, handbook): Disable Localization
+  - Guess: Disable Localization is stored and does nothing, because FontCraft has no translations yet.
+- [ ] `user.useVersions` (setting, M14, handbook): Use Versions
+  - Guess: Use Versions is stored and does nothing, because the system's version browser is a macOS service FontCraft does not use.
+- [ ] `user.sendCrashReports` (setting, M14, handbook): Send Crash Reports
+  - Guess: Send Crash Reports and its two contact fields are stored and do nothing, because FontCraft has no crash-report service.
 
 ### Scripts, plug-ins and URLs (62)
 
