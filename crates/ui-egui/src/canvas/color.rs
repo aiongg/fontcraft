@@ -38,7 +38,12 @@
 //! the palettes, the mode and the zoom are unchanged, so scrolling and edits to other glyphs draw
 //! textures only. A glyph's texture is clipped to the canvas with a margin when it is larger.
 //! iColor images use the placed-image cache ([`super::images`]); svg files are read once per file
-//! revision ([`SvgCache`]). One glyph's drawing has a work budget ([`MAX_PAINT_WORK`]); a glyph
+//! revision ([`SvgCache`]). An svg file with SVG filters is drawn as Text Preview draws an `SVG `
+//! glyph (`fontcraft_render::color::svg_file`, M11.17e): with its filters, and with its clip
+//! paths, masks, patterns and embedded images, rasterised whole at the zoom rather than clipped
+//! to the canvas. When that drawing is refused (past its size or work limits) the file is drawn
+//! from its outlines, unfiltered. The previews draw it the same way when their placement is an
+//! upright, uniform scale, else from its outlines. One glyph's drawing has a work budget ([`MAX_PAINT_WORK`]); a glyph
 //! that needs more is drawn as one plain fill of its outlines in the text colour. The fills of a
 //! referenced glyph count towards the budget of the glyph that refers to it, and following
 //! references visits at most [`MAX_PAINT_VISITS`] paint nodes per glyph.
@@ -52,11 +57,12 @@ use fontcraft_engine::Session;
 use fontcraft_engine::cmd::stroke::{layer_outline, shapes_outline};
 use fontcraft_engine::color::layers::{self as kinds, ColorLayerKind};
 use fontcraft_engine::color::paint::{self, ColorLine, ColorRef, Paint, ShapeRef};
-use fontcraft_engine::color::svg_draw::{self, SvgShape};
+use fontcraft_engine::color::svg_draw::{self, SvgItem, SvgShape};
 use fontcraft_engine::color::{AssetStore, MAX_PAINT_DEPTH, Rgba, export, palette};
 use fontcraft_engine::imagery;
 use fontcraft_geom::{Affine, BezPath, Point, Shape as _};
 use fontcraft_model::{Extend, Font, Glyph, Image, Layer, Master, Shape};
+use fontcraft_render::color::{GlyphRaster, svg_file};
 use fontcraft_render::{Style, render_path};
 use fontcraft_textlayout::Layout;
 
@@ -243,6 +249,13 @@ enum Content {
     Vector(Vec<Drawable>),
     /// An iColor layer's image, drawn whole.
     Bitmap(Image),
+    /// An svg file with filters, placed by `place`; `plain` is its outlines, drawn when the file
+    /// itself is not.
+    Filtered {
+        file: Arc<[u8]>,
+        place: Affine,
+        plain: Vec<Drawable>,
+    },
 }
 
 /// Where colours and files come from.
@@ -255,26 +268,42 @@ pub struct Sources<'a> {
     pub text: Color32,
 }
 
+/// An svg file as Edit View keeps it: its outlines, and the file itself when it has filters.
+type SvgEntry = (Arc<Vec<SvgShape>>, Option<Arc<[u8]>>);
+
 /// The outlines of svg files, by stored path, file revision and placement.
 #[derive(Default)]
 pub struct SvgCache {
-    entries: HashMap<(String, u64, [u64; 6]), Arc<Vec<SvgShape>>>,
+    entries: HashMap<(String, u64, [u64; 6]), SvgEntry>,
+}
+
+/// Whether `items` hold a group with filters.
+fn has_filters(items: &[SvgItem]) -> bool {
+    items.iter().any(|i| match i {
+        SvgItem::Group(g) => !g.filters.is_empty() || has_filters(&g.items),
+        SvgItem::Shape(_) | SvgItem::Image(_) => false,
+    })
 }
 
 impl SvgCache {
-    /// The outlines of the svg file at `path` placed by `transform`; empty when it cannot be read.
-    fn get(&mut self, assets: &dyn AssetStore, path: &str, revision: u64, transform: Affine) -> Arc<Vec<SvgShape>> {
+    /// The outlines of the svg file at `path` placed by `transform`, empty when it cannot be
+    /// read, and the file when it has filters that can be drawn.
+    fn get(&mut self, assets: &dyn AssetStore, path: &str, revision: u64, transform: Affine) -> SvgEntry {
         let key = (path.to_string(), revision, transform.as_coeffs().map(f64::to_bits));
         if let Some(found) = self.entries.get(&key) {
             return found.clone();
         }
-        let shapes = assets.read(path).ok().and_then(|bytes| svg_draw::shapes(&bytes, transform).ok()).unwrap_or_default();
+        let bytes = assets.read(path).ok();
+        let shapes = bytes.as_ref().and_then(|b| svg_draw::shapes(b, transform).ok()).unwrap_or_default();
+        // Only a file that names a filter is read a second time, for its groups.
+        let filtered =
+            bytes.filter(|b| b.windows(6).any(|w| w == b"filter") && svg_draw::drawing(b, |_, _| transform).is_ok_and(|d| has_filters(&d.items)));
         if self.entries.len() >= MAX_SVG_FILES {
             self.entries.clear();
         }
-        let shapes = Arc::new(shapes);
-        self.entries.insert(key, shapes.clone());
-        shapes
+        let entry = (Arc::new(shapes), filtered);
+        self.entries.insert(key, entry.clone());
+        entry
     }
 
     pub fn clear(&mut self) {
@@ -529,14 +558,18 @@ fn vector(font: &Font, glyph: &Glyph, master: &str, text: [f32; 4]) -> Option<Co
 fn svg(layer: &Layer, src: &mut Sources) -> Option<Content> {
     let image = layer.info.image.as_ref()?;
     let path = image.path.as_deref()?;
-    let shapes = src.svgs.get(src.assets, path, src.revision, image.transform.affine());
+    let place = image.transform.affine();
+    let (shapes, file) = src.svgs.get(src.assets, path, src.revision, place);
     let text = color32_straight(src.text);
     let out = shapes
         .iter()
         .take(MAX_DRAWABLES)
         .filter_map(|s| leaf(&s.paint, &[], text).map(|l| Drawable { clips: vec![s.outline.clone()], leaf: l }))
         .collect();
-    Some(Content::Vector(out))
+    Some(match file {
+        Some(file) => Content::Filtered { file, place, plain: out },
+        None => Content::Vector(out),
+    })
 }
 
 fn bitmap(layer: &Layer) -> Option<Content> {
@@ -916,6 +949,11 @@ pub fn paint_preview_glyph(font: &Font, name: &str, layer: &Layer, src: &mut Sou
     let mode = Mode::Layers { master: layer.master.clone(), kind };
     match content(font, glyph, &mode, Some(layer), src) {
         Some(Content::Vector(list)) => paint_drawables(px, &list, to_pixels, color32_straight(src.text)),
+        Some(Content::Filtered { file, place, plain }) => {
+            if !paint_svg_file(px, &file, place, to_pixels) {
+                paint_drawables(px, &plain, to_pixels, color32_straight(src.text));
+            }
+        }
         Some(Content::Bitmap(image)) => {
             let Some(path) = image.path.as_deref() else { return };
             let Ok(bytes) = src.assets.read(path) else { return };
@@ -941,10 +979,63 @@ pub fn glyph_image(
     to_pixels: Affine,
 ) -> Option<ColorImage> {
     let g = font.glyph(glyph)?;
-    let Content::Vector(list) = content(font, g, mode, exact, src)? else { return None };
     let mut data = vec![0u8; width as usize * height as usize * 4];
-    paint_drawables(&mut Pixels { data: &mut data, width, height }, &list, to_pixels, color32_straight(src.text));
+    let mut px = Pixels { data: &mut data, width, height };
+    match content(font, g, mode, exact, src)? {
+        Content::Vector(list) => paint_drawables(&mut px, &list, to_pixels, color32_straight(src.text)),
+        Content::Filtered { file, place, plain } => {
+            if !paint_svg_file(&mut px, &file, place, to_pixels) {
+                paint_drawables(&mut px, &plain, to_pixels, color32_straight(src.text));
+            }
+        }
+        Content::Bitmap(_) => return None,
+    }
     Some(ColorImage::from_rgba_premultiplied([width as usize, height as usize], &data))
+}
+
+/// The pixels per font unit and the pixel of the glyph origin of `to_pixels` when it is an
+/// upright uniform scale with y flipped, the placement an svg file's raster can be laid with.
+fn upright(to_pixels: Affine) -> Option<(f64, f64, f64)> {
+    let [a, b, c, d, e, f] = to_pixels.as_coeffs();
+    let upright = b == 0.0 && c == 0.0 && a > 0.0 && (a + d).abs() <= a * 1e-9;
+    (upright && [a, e, f].iter().all(|v| v.is_finite())).then_some((a, e, f))
+}
+
+/// Lays `raster` (premultiplied) over `px` with the glyph origin at pixel corner `(x, y)`.
+fn lay(px: &mut Pixels, raster: &GlyphRaster, x: i64, y: i64) {
+    let image = &raster.image;
+    for row in 0..image.height {
+        let ty = y + i64::from(raster.top) + i64::from(row);
+        if ty < 0 || ty >= i64::from(px.height) {
+            continue;
+        }
+        for col in 0..image.width {
+            let tx = x + i64::from(raster.left) + i64::from(col);
+            if tx < 0 || tx >= i64::from(px.width) {
+                continue;
+            }
+            let Some([r, g, b, a]) = image.pixel(col, row) else { continue };
+            if a == 0 {
+                continue;
+            }
+            let at = (ty as usize * px.width as usize + tx as usize) * 4;
+            let keep = 255 - u32::from(a);
+            if let Some(d) = px.data.get_mut(at..at + 4) {
+                for (d, s) in d.iter_mut().zip([r, g, b, a]) {
+                    *d = (u32::from(s) + (u32::from(*d) * keep + 127) / 255).min(255) as u8;
+                }
+            }
+        }
+    }
+}
+
+/// Paints the svg file `file` placed by `place` into `px` through `to_pixels` with its filters;
+/// false when it is not drawn that way (a placement that is not upright, or a refused drawing).
+fn paint_svg_file(px: &mut Pixels, file: &[u8], place: Affine, to_pixels: Affine) -> bool {
+    let Some((scale, ox, oy)) = upright(to_pixels) else { return false };
+    let Ok(raster) = svg_file(file, place, scale) else { return false };
+    lay(px, &raster, ox.round().clamp(-1e12, 1e12) as i64, oy.round().clamp(-1e12, 1e12) as i64);
+    true
 }
 
 // ── Edit View ───────────────────────────────────────────────────────────────────────────────────
@@ -958,6 +1049,8 @@ enum Drawn {
         bounds: [i64; 4],
         region: [i64; 4],
         bytes: usize,
+        /// Rasterised whole (`region` is `bounds`), so scrolling never makes it again.
+        whole: bool,
     },
     Bitmap(Image),
 }
@@ -1099,7 +1192,7 @@ pub fn draw(c: &Painting, ctx: &egui::Context, ui: &mut ColorUi, images: &mut su
                     && e.scale == scale.to_bits()
                     && (e.doc == s.doc || (e.doc.0 == s.doc.0 && Arc::ptr_eq(&e.glyph, glyph) && !e.components))
                     && match &e.drawn {
-                        Drawn::Sprite { bounds, region, .. } => *region == clip(*bounds, view) || clip(*bounds, view) == [0; 4],
+                        Drawn::Sprite { bounds, region, whole, .. } => *whole || *region == clip(*bounds, view) || clip(*bounds, view) == [0; 4],
                         Drawn::Bitmap(_) => true,
                     }
             });
@@ -1107,7 +1200,11 @@ pub fn draw(c: &Painting, ctx: &egui::Context, ui: &mut ColorUi, images: &mut su
                 let drawn = match content(s.font, glyph, &mode, exact, &mut src) {
                     Some(Content::Bitmap(image)) => Drawn::Bitmap(image),
                     Some(Content::Vector(list)) => rasterise(ctx, &list, scale, view, name, color32_straight(tokens.text_color)),
-                    None => Drawn::Sprite { texture: None, bounds: [0; 4], region: [0; 4], bytes: 0 },
+                    Some(Content::Filtered { file, place, plain }) => match svg_file(&file, place, scale) {
+                        Ok(raster) => whole_sprite(ctx, &raster, name),
+                        Err(_) => rasterise(ctx, &plain, scale, view, name, color32_straight(tokens.text_color)),
+                    },
+                    None => Drawn::Sprite { texture: None, bounds: [0; 4], region: [0; 4], bytes: 0, whole: false },
                 };
                 let components = glyph.layers.iter().any(|l| l.shapes.iter().any(|s| matches!(s, Shape::Component(_))));
                 ui.sprites
@@ -1154,14 +1251,16 @@ fn rasterise(ctx: &egui::Context, list: &[Drawable], scale: f64, view: [f64; 4],
             bounds = Some(bounds.map_or(b, |o| o.union(b)));
         }
     }
-    let empty = Drawn::Sprite { texture: None, bounds: [0; 4], region: [0; 4], bytes: 0 };
+    let empty = Drawn::Sprite { texture: None, bounds: [0; 4], region: [0; 4], bytes: 0, whole: false };
     let Some(b) = bounds.filter(|b| b.x0.is_finite() && b.y0.is_finite() && b.x1.is_finite() && b.y1.is_finite()) else { return empty };
     let bounds = [b.x0.floor() - 1.0, b.y0.floor() - 1.0, b.x1.ceil() + 1.0, b.y1.ceil() + 1.0].map(|v| v.clamp(-1.0e12, 1.0e12) as i64);
     let region = clip(bounds, view);
     let (w, h) = (region[2] - region[0], region[3] - region[1]);
-    let (Ok(width), Ok(height)) = (u32::try_from(w), u32::try_from(h)) else { return Drawn::Sprite { texture: None, bounds, region, bytes: 0 } };
+    let (Ok(width), Ok(height)) = (u32::try_from(w), u32::try_from(h)) else {
+        return Drawn::Sprite { texture: None, bounds, region, bytes: 0, whole: false };
+    };
     if width == 0 || height == 0 || u64::from(width) * u64::from(height) * 4 > MAX_SPRITE_BYTES as u64 {
-        return Drawn::Sprite { texture: None, bounds, region, bytes: 0 };
+        return Drawn::Sprite { texture: None, bounds, region, bytes: 0, whole: false };
     }
     let mut data = vec![0u8; width as usize * height as usize * 4];
     let to_pixels = Affine::translate((-(region[0] as f64), -(region[1] as f64))) * to_px;
@@ -1169,7 +1268,20 @@ fn rasterise(ctx: &egui::Context, list: &[Drawable], scale: f64, view: [f64; 4],
     let bytes = data.len();
     let image = ColorImage::from_rgba_premultiplied([width as usize, height as usize], &data);
     let texture = ctx.load_texture(format!("color-glyph:{name}"), image, TextureOptions::LINEAR);
-    Drawn::Sprite { texture: Some(texture), bounds, region, bytes }
+    Drawn::Sprite { texture: Some(texture), bounds, region, bytes, whole: false }
+}
+
+/// An svg file's raster as a texture: its pixels from the glyph's origin, x right and y down.
+fn whole_sprite(ctx: &egui::Context, raster: &GlyphRaster, name: &str) -> Drawn {
+    let (w, h) = (raster.image.width, raster.image.height);
+    let (left, top) = (i64::from(raster.left), i64::from(raster.top));
+    let bounds = [left, top, left + i64::from(w), top + i64::from(h)];
+    if w == 0 || h == 0 {
+        return Drawn::Sprite { texture: None, bounds, region: bounds, bytes: 0, whole: true };
+    }
+    let image = ColorImage::from_rgba_premultiplied([w as usize, h as usize], &raster.image.pixels);
+    let texture = ctx.load_texture(format!("color-glyph:{name}"), image, TextureOptions::LINEAR);
+    Drawn::Sprite { texture: Some(texture), bounds, region: bounds, bytes: raster.image.pixels.len(), whole: true }
 }
 
 #[cfg(test)]

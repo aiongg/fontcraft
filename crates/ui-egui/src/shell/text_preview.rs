@@ -1440,7 +1440,11 @@ fn area(
         (shaped_key, drawn.shaped, tp.cache.color.key()).hash(&mut th);
         fill(ui, &painter, &mut tp.cache, tokens, &outline, place, visible, ppp, th.finish());
         tp.cache.color.paint(ui.ctx(), &painter, visible, ppp);
-        // Why the text is not shaped, over the bottom of the area.
+        if drawn.message.is_none() {
+            drawn.message = tp.cache.color.warning();
+        }
+        // Why the text is not shaped, or what of the colour glyphs is drawn plainer, over the
+        // bottom of the area.
         if let Some(note) = &drawn.message {
             let at = visible.left_bottom() + vec2(pad, -pad);
             painter.text(at, Align2::LEFT_BOTTOM, note, egui::TextStyle::Small.resolve(ui.style()), tokens.text_dim);

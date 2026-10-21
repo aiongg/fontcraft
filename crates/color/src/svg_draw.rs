@@ -549,20 +549,24 @@ mod tests {
 
     #[test]
     fn filtered_elements_become_groups_and_unsupported_filters_warn() {
-        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+        // The second filter's kernel is past the limit on a side.
+        let kernel = vec!["1"; 17 * 17].join(" ");
+        let svg = format!(
+            r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
             <filter id="b" x="0" y="0" width="100" height="100" filterUnits="userSpaceOnUse"><feGaussianBlur stdDeviation="2"/></filter>
-            <filter id="t"><feTurbulence baseFrequency="0.1"/></filter>
+            <filter id="t"><feConvolveMatrix order="17" kernelMatrix="{kernel}"/></filter>
             <rect width="50" height="50" fill="#ff0000" opacity="0.5" filter="url(#b)"/>
             <rect x="50" width="50" height="50" fill="#0000ff" filter="url(#t)"/>
-        </svg>"##;
-        let d = drawing(svg, |_, _| Affine::IDENTITY).unwrap();
+        </svg>"##
+        );
+        let d = drawing(svg.as_bytes(), |_, _| Affine::IDENTITY).unwrap();
         let [SvgItem::Group(blurred), SvgItem::Shape(plain)] = d.items.as_slice() else { panic!("{:?}", d.items) };
         assert_eq!((blurred.filters.len(), blurred.opacity), (1, 0.5), "the opacity applies after the filter");
         let [SvgItem::Shape(inside)] = blurred.items.as_slice() else { panic!("{:?}", blurred.items) };
         assert_eq!(inside.paint, Paint::Solid(ColorRef::Rgba([1.0, 0.0, 0.0, 1.0])));
         assert_eq!(plain.paint, Paint::Solid(ColorRef::Rgba([0.0, 0.0, 1.0, 1.0])), "drawn unfiltered");
         assert_eq!(d.warnings.len(), 1, "{:?}", d.warnings);
-        assert!(d.warnings[0].contains("feTurbulence"), "{:?}", d.warnings);
+        assert!(d.warnings[0].contains("kernel"), "{:?}", d.warnings);
         // The filter region maps to font units, y up, with the file's bottom left at the origin.
         let region = blurred.filters[0].to_font.transform_rect_bbox(blurred.filters[0].region);
         assert!(region.y0.abs() < 1e-6 && (region.y1 - 100.0).abs() < 1e-6, "{region:?}");
