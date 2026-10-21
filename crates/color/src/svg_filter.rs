@@ -20,6 +20,8 @@
 //! - At most [`MAX_FILTER_PRIMITIVES`] primitives for one element, its filters together, each
 //!   `feMerge` input counting as one more. Filtered elements nest at most [`MAX_FILTER_DEPTH`]
 //!   deep; a deeper one is drawn unfiltered.
+//! - A file in which an `feConvolveMatrix` gives an `order` past [`MAX_PARSED_ORDER`], or one
+//!   that is not a number, is refused before usvg reads it ([`check_orders`]).
 
 use fontcraft_geom::{Affine, Rect};
 
@@ -38,9 +40,29 @@ pub const MAX_TRANSFER_VALUES: usize = 1_024;
 /// many pixels squared.
 pub const MAX_CONVOLVE_ORDER: u32 = 16;
 
+/// Largest number an `feConvolveMatrix` element's `order` may give before the file reaches the
+/// SVG parser, which multiplies the two orders in 32 bits: 65,535 squared still fits.
+pub const MAX_PARSED_ORDER: f64 = 65_535.0;
+
 /// Most `feTurbulence` octaves run. Octave `k` adds at most 2⁻ᵏ of the full range, so the
 /// octaves past ten together add less than half of one 8-bit step.
 pub const MAX_TURBULENCE_OCTAVES: u32 = 10;
+
+/// Refuses a document with an `feConvolveMatrix` whose `order` gives, in its first two numbers
+/// (the two usvg reads), one that is not a number of at most [`MAX_PARSED_ORDER`]: usvg
+/// multiplies them in 32 bits before it applies any limit.
+pub(crate) fn check_orders(xml: &usvg::roxmltree::Document) -> Result<(), crate::ColorError> {
+    for node in xml.descendants().filter(|n| n.is_element() && n.tag_name().name() == "feConvolveMatrix") {
+        let Some(order) = node.attribute("order") else { continue };
+        for token in order.split(|c: char| c.is_ascii_whitespace() || c == ',').filter(|t| !t.is_empty()).take(2) {
+            if !token.parse::<f64>().is_ok_and(|v| v.is_finite() && v.abs() <= MAX_PARSED_ORDER) {
+                let shown: String = token.chars().take(24).collect();
+                return Err(crate::ColorError::BadSvg(format!("an feConvolveMatrix has an order of `{shown}`; at most {MAX_PARSED_ORDER} is read")));
+            }
+        }
+    }
+    Ok(())
+}
 
 /// One `filter` of an element.
 #[derive(Clone, Debug, PartialEq)]
@@ -213,7 +235,7 @@ pub enum TransferFunction {
 impl TransferFunction {
     /// The function at `c`, from 0 to 1, clamped to 0 to 1.
     pub fn apply(&self, c: f64) -> f64 {
-        let c = if c.is_finite() { c.clamp(0.0, 1.0) } else { 0.0 };
+        let c = if c.is_nan() { 0.0 } else { c.clamp(0.0, 1.0) };
         let v = match self {
             TransferFunction::Identity => c,
             TransferFunction::Table(v) => match v.len() {
@@ -233,7 +255,7 @@ impl TransferFunction {
             TransferFunction::Linear { slope, intercept } => slope * c + intercept,
             TransferFunction::Gamma { amplitude, exponent, offset } => amplitude * c.powf(*exponent) + offset,
         };
-        if v.is_finite() { v.clamp(0.0, 1.0) } else { 0.0 }
+        if v.is_nan() { 0.0 } else { v.clamp(0.0, 1.0) }
     }
 }
 
@@ -608,6 +630,15 @@ mod tests {
 
     fn tree(svg: &str) -> usvg::Tree {
         usvg::Tree::from_str(svg, &usvg::Options::default()).unwrap()
+    }
+
+    #[test]
+    fn transfer_functions_that_overflow_clamp_to_the_end_they_pass() {
+        let up = TransferFunction::Linear { slope: f64::MAX, intercept: f64::MAX };
+        let down = TransferFunction::Linear { slope: -f64::MAX, intercept: -f64::MAX };
+        assert_eq!((up.apply(1.0), down.apply(1.0)), (1.0, 0.0), "+∞ is 1 and −∞ is 0");
+        let nan = TransferFunction::Linear { slope: f64::INFINITY, intercept: f64::NEG_INFINITY };
+        assert_eq!(nan.apply(1.0), 0.0, "∞ − ∞ is not a number");
     }
 
     fn first_group(t: &usvg::Tree) -> &usvg::Group {

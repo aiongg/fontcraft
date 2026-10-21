@@ -255,6 +255,80 @@ fn color_svg_layer_draws_its_filters() {
     assert_eq!(at(&image, 20, 50).a(), 0, "and not left where it was");
 }
 
+/// An app whose glyphs `names` each have an svg layer drawing `svg`, the first glyph's selected.
+fn svg_app(tag: &str, names: &[&str], svg: &str) -> FontcraftApp {
+    let file = folder(tag).join("F.svg");
+    std::fs::write(&file, svg).unwrap();
+    let mut app = colour_app(names, "layer.convertToSvg");
+    for name in names {
+        let layer = colour_layer(&app, name);
+        app.run("layer.setSvgImage", &json!({"glyph": name, "layer": layer, "path": file.to_string_lossy()})).unwrap();
+    }
+    select_colour_layer(&mut app, names[0]);
+    app
+}
+
+const OFFSET_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><filter id="f" filterUnits="userSpaceOnUse" x="0" y="0" width="100" height="100"><feOffset dx="50" dy="0"/></filter><rect width="40" height="100" fill="#00FF00" filter="url(#f)"/></svg>"##;
+
+#[test]
+fn color_svg_filtered_glyphs_along_a_long_line_stay_within_the_texture_limit() {
+    // At 10 pixels a unit each file is a texture of a million pixels: 80 of them would hold
+    // 320 MB, past the limit. Only the files on the canvas are drawn, and a still frame draws
+    // nothing again.
+    let names: Vec<String> = (0..80).map(|i| format!("f{i}")).collect();
+    let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+    let mut app = svg_app("svg-filter-line", &refs, OFFSET_SVG);
+    app.run("view.setZoom", &json!({"size": 10_000, "center": [50, 50]})).unwrap();
+    let w = Window::new();
+    w.settle(&mut app);
+    let (made, drawn) = app.color_ui.made();
+    assert!((1..=3).contains(&drawn), "the files on the canvas only: {drawn}");
+    let bytes = app.color_ui.sprite_bytes();
+    assert!(bytes <= 3 * 4 * 1_100_000, "{bytes} bytes");
+    let shapes = w.frame(&mut app);
+    assert_eq!(app.color_ui.made(), (made, drawn), "a still frame makes nothing");
+    assert!(textured(&app, &shapes) >= 1);
+    // A glyph further along the line comes into view: its file is drawn, and the sprites stay
+    // within the limit.
+    let m = master(&app);
+    let advance = app.session.font().unwrap().glyph("f0").unwrap().layer(&m).unwrap().width;
+    app.run("view.scrollTo", &json!({"x": advance * 10.0 + 50.0, "y": 50})).unwrap();
+    w.settle(&mut app);
+    let (_, later) = app.color_ui.made();
+    assert!(later > drawn && later <= drawn + 3, "{drawn} then {later}");
+    assert!(app.color_ui.sprite_bytes() <= crate::canvas::color::MAX_SPRITE_BYTES);
+    let still = app.color_ui.made();
+    w.frame(&mut app);
+    assert_eq!(app.color_ui.made(), still);
+}
+
+#[test]
+fn color_svg_file_refused_at_a_zoom_is_not_drawn_again_while_scrolling() {
+    // Masks nested ten deep take more layers than a drawing may: the file is refused and drawn
+    // from its outlines, and the canvas says why.
+    let svg = format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><defs><mask id="m"><rect width="100" height="100" fill="#FFFFFF"/></mask><filter id="f" filterUnits="userSpaceOnUse" x="0" y="0" width="100" height="100"><feOffset dx="10" dy="0"/></filter></defs>{}<rect width="50" height="100" fill="#00FF00" filter="url(#f)"/>{}</svg>"##,
+        r#"<g mask="url(#m)">"#.repeat(10),
+        "</g>".repeat(10)
+    );
+    let mut app = svg_app("svg-filter-refused", &["F"], &svg);
+    // 6,400 pixels across: larger than the canvas, so a long scroll draws the outlines again.
+    app.run("view.setZoom", &json!({"size": 64_000, "center": [50, 50]})).unwrap();
+    let w = Window::new();
+    let shapes = w.settle(&mut app);
+    let (made, drawn) = app.color_ui.made();
+    assert_eq!(drawn, 1, "the file is tried once");
+    let said = shapes.iter().any(|s| matches!(s, Shape::Text(t) if t.galley.text().contains("without its filters")));
+    assert!(said, "the canvas says why the file is drawn without its filters");
+    for _ in 0..3 {
+        app.run("view.scrollTo", &json!({"dx": 600, "dy": 0})).unwrap();
+        w.frame(&mut app);
+    }
+    let (remade, redrawn) = app.color_ui.made();
+    assert!(remade > made, "the outlines are drawn again for the new part of the canvas");
+    assert_eq!(redrawn, 1, "the refused file is not tried again");
+}
+
 #[test]
 fn color_layered_masters_draw_in_their_master_color_first_master_on_top() {
     let mut app = FontcraftApp::default();
