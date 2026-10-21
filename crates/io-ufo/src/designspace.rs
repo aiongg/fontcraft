@@ -561,7 +561,7 @@ pub struct InstanceNames {
     /// `filename` is built from the family and instance names, the instance stating none.
     pub filename_from_names: bool,
     pub style_map_family: String,
-    pub style_map_style: &'static str,
+    pub style_map_style: String,
 }
 
 /// The names of a static instance as a designspace states them.

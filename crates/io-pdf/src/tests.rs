@@ -293,3 +293,48 @@ fn pdf_page_drawn_smaller_keeps_its_bottom_edge_on_the_image_bottom() {
     let top = (10.0 * out.pixels_per_point).ceil() as usize;
     assert_eq!(alpha(h - 1 - top), 0, "nothing above 10 points");
 }
+
+#[test]
+fn pdf_parsed_once_for_drawing_and_measuring_and_the_cache_is_bounded() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+
+    use crate::cache::{self, PageCache};
+
+    // The shared cache: drawing a page and measuring it parse the bytes once.
+    let bytes =
+        save(document(&["0 0 0 rg 3 7 11 13 re f".as_bytes()], Dictionary::new(), dictionary! { "MediaBox" => ints(&[0, 0, 37, 41]) }, false));
+    render_pdf(&bytes, 1.0, 1 << 20).unwrap();
+    assert!(cache::lock(&cache::SHARED).holds(&bytes), "the parsed page is kept");
+    let first = cache::first_page(&bytes).unwrap();
+    assert!(Arc::ptr_eq(&first, &cache::first_page(&bytes).unwrap()), "a second use takes the kept parse");
+    assert_eq!(page_size(&bytes).unwrap(), (37.0, 41.0));
+
+    // A cache of its own counts the parses.
+    let mine = Mutex::new(PageCache::new());
+    let parses = AtomicUsize::new(0);
+    let get = |data: &[u8]| {
+        PageCache::get(&mine, data, |d| {
+            parses.fetch_add(1, Ordering::Relaxed);
+            crate::load::first_page_drawing(d)
+        })
+    };
+    let pdfs: Vec<Vec<u8>> = (0..=MAX_PDF_CACHE_ENTRIES).map(|i| one_page(&format!("0 0 {} 10 re f", i + 1))).collect();
+    let a = get(&pdfs[0]).unwrap();
+    let b = get(&pdfs[0]).unwrap();
+    assert!(Arc::ptr_eq(&a, &b));
+    assert_eq!(parses.load(Ordering::Relaxed), 1, "the same bytes are parsed once");
+    // A failure is kept too.
+    assert!(get(b"%PDF-1.5\n1 0 obj").is_err());
+    assert!(get(b"%PDF-1.5\n1 0 obj").is_err());
+    assert_eq!(parses.load(Ordering::Relaxed), 2);
+    // Two more files than the cache holds drop the two least recently used.
+    for pdf in &pdfs {
+        get(pdf).unwrap();
+    }
+    let held = cache::lock(&mine);
+    assert_eq!(held.len(), MAX_PDF_CACHE_ENTRIES);
+    assert!(!held.holds(b"%PDF-1.5\n1 0 obj") && !held.holds(&pdfs[0]));
+    assert!(pdfs[1..].iter().all(|pdf| held.holds(pdf)));
+    assert_eq!(parses.load(Ordering::Relaxed), 2 + MAX_PDF_CACHE_ENTRIES);
+}

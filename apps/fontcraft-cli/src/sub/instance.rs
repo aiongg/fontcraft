@@ -26,7 +26,7 @@ const USAGE: &str = "\
 /// The options, as data (M12.20–M12.22).
 const OPTIONS: &[OptSpec] = &[
     // M12.20
-    OptSpec::list("location", "AXIS=LOC", "", "the same as a positional location (a value, MIN:MAX, MIN:DEFAULT:MAX or drop); repeatable"),
+    OptSpec::list("location", "AXIS=LOC", "", "the same as a positional location (a value, MIN:MAX, MIN:DEFAULT:MAX or drop); repeatable").repeat(),
     OptSpec::switch("static", false, "pin every axis not mentioned at its default"),
     OptSpec::value("named", "REGEX", "", "build the named instances whose name matches"),
     OptSpec::switch("all", false, "build every named instance"),

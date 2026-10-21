@@ -2,7 +2,8 @@
 //! reads BDF, PCF (plain or gzip-compressed), Windows FNT and FON, TeX PK and GF and Mac bitmap
 //! font files into strikes, `bitmap.exportStrikes` writes strikes as BDF, PCF, FNT, FON or PK
 //! files, embeds them in a compiled font or writes a bitmap-only font, and `bitmap.setStrikes`
-//! adds strikes, empty or rasterised from the outlines, and removes strikes.
+//! adds strikes, empty or rasterised from the outlines (and from the placed PDF of a glyph without
+//! outlines), and removes strikes.
 //!
 //! The files are read and checked by `fontcraft_io_bitmap`, whose limits bound every count and
 //! size; the model's own check ([`fontcraft_model::strike`]) then runs on the edited font, so a
@@ -19,10 +20,11 @@ use super::file_io::read_input_up_to;
 use super::{CommandSpec, FileParam, cmd, has_doc};
 use crate::params::Params;
 use crate::{EngineError, Result, Session};
-use fontcraft_geom::{Affine, Shape as _};
+use fontcraft_color::AssetStore;
+use fontcraft_geom::{Affine, Point, Shape as _};
 use fontcraft_io_bitmap::{Bitmap, BitmapFont, BitmapGlyph, PcfLayout, Property, PropertyValue};
 use fontcraft_model::strike::{self, BitmapStrike, StrikeGlyph, StrikeProperty, StrikeValue};
-use fontcraft_model::{Font, MAX_NAME_LEN, metric};
+use fontcraft_model::{Font, Layer, MAX_NAME_LEN, metric};
 use fontcraft_tables::embedded_bitmaps::{self as embedded, GlyphIds};
 
 /// Most glyph names a result lists as left out, per file.
@@ -33,6 +35,10 @@ const DEFAULT_DPI: u32 = 72;
 const MAX_RASTER_PIXELS: u64 = 64 << 20;
 /// Most pixels rasterised in one `bitmap.setStrikes` call, over every strike it adds.
 const MAX_CALL_RASTER_PIXELS: u64 = 256 << 20;
+/// Most pixels a placed PDF's page is drawn at for one bitmap.
+const MAX_PDF_PAGE_PIXELS: u64 = 16 << 20;
+/// Samples taken across each side of a bitmap pixel when a placed PDF is drawn into it.
+const PDF_SAMPLES: u32 = 4;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -62,7 +68,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Bitmap Strikes…",
             ["Font"],
             None,
-            "{add?: [{ppem: number, depth?: 1 | 2 | 4 | 8 (default 1)}], remove?: [{ppem: number, depth?: number (default: every depth of the size)}], rasterize?: bool (default true)} adds and removes the font's bitmap strikes as one undo step; removing a strike deletes its bitmaps. A new strike is filled from the outlines of the first master's exported glyphs, anti-aliased: at 1 bit a pixel is on when the outline covers at least half of it, at 2, 4 or 8 bits its grey level is the covered fraction; each bitmap spans the outline's pixel box, advances are the glyph widths scaled and rounded, and the strike's ascent and descent are the master's, scaled. rasterize: false gives an empty strike. Refused, changing nothing: neither list, a strike to add that the font has, a strike to remove that it lacks, a bitmap wider or taller than 1,024 pixels, more than 67,108,864 pixels for one strike or 268,435,456 for all the strikes added, bitmaps over 64 MiB for one strike or over 256 MiB for all the font's strikes together → {added: [label], removed: [label], strikes: [label]}",
+            "{add?: [{ppem: number, depth?: 1 | 2 | 4 | 8 (default 1)}], remove?: [{ppem: number, depth?: number (default: every depth of the size)}], rasterize?: bool (default true)} adds and removes the font's bitmap strikes as one undo step; removing a strike deletes its bitmaps. A new strike is filled from the outlines of the first master's exported glyphs, anti-aliased: at 1 bit a pixel is on when the outline covers at least half of it, at 2, 4 or 8 bits its grey level is the covered fraction; each bitmap spans the outline's pixel box, advances are the glyph widths scaled and rounded, and the strike's ascent and descent are the master's, scaled. A glyph with no paths and no components whose layer has a placed PDF gets the PDF's first page as its bitmap, drawn where and as large as the image is placed (crop included): a pixel's level is how dark it is, transparent counting as white; a placed PDF that cannot be read or drawn, or would be wider or taller than 1,024 pixels, is left out and named in `warnings`. rasterize: false gives an empty strike. Refused, changing nothing: neither list, a strike to add that the font has, a strike to remove that it lacks, a bitmap wider or taller than 1,024 pixels, more than 67,108,864 pixels for one strike or 268,435,456 for all the strikes added, bitmaps over 64 MiB for one strike or over 256 MiB for all the font's strikes together → {added: [label], removed: [label], strikes: [label], warnings?: [string]}",
             has_doc,
             set_strikes
         ),
@@ -604,6 +610,7 @@ fn set_strikes(s: &mut Session, v: &Value) -> Result<Value> {
         return Err(p.bad("give `add` or `remove`"));
     }
     let rasterize = p.bool_or("rasterize", true)?;
+    let assets = s.assets();
     let font = s.font()?;
     for spec in &remove {
         if !font.bitmap_strikes.iter().any(|s| spec.matches(s)) {
@@ -625,15 +632,16 @@ fn set_strikes(s: &mut Session, v: &Value) -> Result<Value> {
     let mut budget = RasterBudget { pixels: MAX_CALL_RASTER_PIXELS, bytes: strike::MAX_ALL_STRIKES_BYTES.saturating_sub(kept) };
     // Every strike is measured against the budget before any is drawn, so a refusal comes
     // before the work.
+    let mut warnings = Vec::new();
     if rasterize {
         for (ppem, depth) in &added {
-            rasterize_strike(font, &p, *ppem, *depth, &mut budget, false)?;
+            rasterize_strike(font, assets.as_ref(), &p, (*ppem, *depth), &mut budget, false, &mut warnings)?;
         }
     }
     let mut new = Vec::with_capacity(added.len());
     for (ppem, depth) in &added {
         new.push(if rasterize {
-            rasterize_strike(font, &p, *ppem, *depth, &mut RasterBudget::unlimited(), true)?
+            rasterize_strike(font, assets.as_ref(), &p, (*ppem, *depth), &mut RasterBudget::unlimited(), true, &mut warnings)?
         } else {
             BitmapStrike::new(*ppem, *depth)
         });
@@ -646,7 +654,11 @@ fn set_strikes(s: &mut Session, v: &Value) -> Result<Value> {
         Ok(labels(strikes))
     })?;
     let added: Vec<String> = added.iter().map(|(ppem, depth)| strike::label(*ppem, *depth)).collect();
-    Ok(json!({ "added": added, "removed": removed, "strikes": strikes }))
+    let mut out = json!({ "added": added, "removed": removed, "strikes": strikes });
+    if !warnings.is_empty() {
+        out["warnings"] = json!(warnings);
+    }
+    Ok(out)
 }
 
 /// What the rest of one `bitmap.setStrikes` call may rasterise: pixels to draw, and bytes of
@@ -664,10 +676,19 @@ impl RasterBudget {
 }
 
 /// A strike of `ppem` pixels per em at `depth` bits per pixel, drawn from the outlines of the
-/// first master's exported glyphs (see `bitmap.setStrikes`). Each bitmap is taken from `budget`
-/// before it is drawn; crossing it refuses the strike. Unless `draw`, the bitmaps are only
-/// measured and left empty.
-fn rasterize_strike(font: &Font, p: &Params<'_>, ppem: u16, depth: u8, budget: &mut RasterBudget, draw: bool) -> Result<BitmapStrike> {
+/// first master's exported glyphs, and from the placed PDFs of those without outlines (see
+/// `bitmap.setStrikes`). Each bitmap is taken from `budget` before it is drawn; crossing it
+/// refuses the strike. Unless `draw`, the bitmaps are only measured and left empty. Placed PDFs
+/// left out are named in `warnings` while measuring, and those that fail to draw while drawing.
+fn rasterize_strike(
+    font: &Font,
+    assets: &dyn AssetStore,
+    p: &Params<'_>,
+    (ppem, depth): (u16, u8),
+    budget: &mut RasterBudget,
+    draw: bool,
+    warnings: &mut Vec<String>,
+) -> Result<BitmapStrike> {
     let master = font.default_master()?;
     let upm = f64::from(font.units_per_em.max(1));
     let em = f64::from(ppem);
@@ -684,6 +705,16 @@ fn rasterize_strike(font: &Font, p: &Params<'_>, ppem: u16, depth: u8, budget: &
     let style = fontcraft_render::Style { ink: [0, 0, 0, 255], background: [0, 0, 0, 0], anti_alias: true };
     let mut pixels = 0u64;
     let mut bytes = 0usize;
+    let label = strike::label(ppem, depth);
+    let mut warn = |why: String| {
+        if warnings.len() < MAX_LISTED {
+            warnings.push(why);
+        }
+    };
+    // The last page drawn: a sheet of drawings placed on many glyphs in a row is drawn once,
+    // and its pixels are charged once.
+    let mut drawn: Option<((String, u64), fontcraft_io_pdf::PdfRaster)> = None;
+    let mut charged: Option<(String, u64)> = None;
     for glyph in font.glyphs.iter().filter(|g| g.export) {
         let Some(layer) = glyph.layer(&master.id) else { continue };
         let outline = fontcraft_render::closed_contours(&font.outline_of(glyph, &master.id)?);
@@ -698,17 +729,55 @@ fn rasterize_strike(font: &Font, p: &Params<'_>, ppem: u16, depth: u8, budget: &
             bottom: 0,
             data: Vec::new(),
         };
-        if let Some((x0, y0, x1, y1)) = pixel_box(&outline, &px) {
+        let mut placed = None;
+        let found = match pixel_box(&outline, &px) {
+            Some(b) => Some(b),
+            None if layer.shapes.is_empty() => match placed_pdf(assets, layer, em / upm) {
+                Ok(Some(pdf)) => {
+                    let b = pdf.pixel_box;
+                    placed = Some(pdf);
+                    Some(b)
+                }
+                Ok(None) => None,
+                Err(why) => {
+                    if !draw {
+                        warn(format!("strike {label}: glyph `{}`: the placed PDF is left out: {why}", glyph.name));
+                    }
+                    None
+                }
+            },
+            None => None,
+        };
+        if let Some((x0, y0, x1, y1)) = found {
             let side = i64::from(strike::MAX_STRIKE_BITMAP_SIDE);
             let (w, h) = (x1 - x0, y1 - y0);
-            if w > side || h > side || [x0, y0].iter().any(|v| v.abs() > i64::from(strike::MAX_STRIKE_COORDINATE)) {
+            let beyond = w > side || h > side || [x0, y0].iter().any(|v| v.abs() > i64::from(strike::MAX_STRIKE_COORDINATE));
+            if beyond && placed.is_some() {
+                if !draw {
+                    warn(format!(
+                        "strike {label}: glyph `{}`: the placed PDF is left out: it would be {w} × {h} pixels; a bitmap is at most {side} on a side",
+                        glyph.name
+                    ));
+                }
+                out.glyphs.push(bitmap);
+                continue;
+            }
+            if beyond {
                 return Err(p.bad(format!(
                     "strike {}: glyph `{}` would be {w} × {h} pixels; a bitmap is at most {side} on a side",
                     strike::label(ppem, depth),
                     glyph.name
                 )));
             }
-            let area = (w * h).unsigned_abs();
+            // A placed PDF's page is drawn whole before its shown part is sampled.
+            let mut area = (w * h).unsigned_abs();
+            if let Some(pdf) = &placed {
+                let page = (pdf.file.clone(), pdf.pixels_per_point.to_bits());
+                if charged.as_ref() != Some(&page) {
+                    area = area.saturating_add(pdf.page_pixels);
+                    charged = Some(page);
+                }
+            }
             pixels = pixels.saturating_add(area);
             if pixels > MAX_RASTER_PIXELS {
                 return Err(p.bad(format!("strike {}: more than {MAX_RASTER_PIXELS} pixels to draw", strike::label(ppem, depth))));
@@ -736,9 +805,21 @@ fn rasterize_strike(font: &Font, p: &Params<'_>, ppem: u16, depth: u8, budget: &
             }
             // `w` and `h` are 1..=1024 and the corners within the coordinate limit.
             let (w, h) = (w as u32, h as u32);
-            let scale = em / upm;
-            let at = Affine::new([scale, 0.0, 0.0, -scale, -(x0 as f64), y1 as f64]);
-            let image = fontcraft_render::render_path(&outline, at, w, h, &style).map_err(|e| p.bad(format!("glyph `{}`: {e}", glyph.name)))?;
+            let image = match &placed {
+                None => {
+                    let scale = em / upm;
+                    let at = Affine::new([scale, 0.0, 0.0, -scale, -(x0 as f64), y1 as f64]);
+                    fontcraft_render::render_path(&outline, at, w, h, &style).map_err(|e| p.bad(format!("glyph `{}`: {e}", glyph.name)))?
+                }
+                Some(pdf) => match draw_placed_pdf(assets, pdf, &mut drawn, (x0, y1), (w, h)) {
+                    Ok(image) => image,
+                    Err(why) => {
+                        warn(format!("strike {label}: glyph `{}`: the placed PDF is left out: {why}", glyph.name));
+                        out.glyphs.push(bitmap);
+                        continue;
+                    }
+                },
+            };
             bitmap.width = w as u16;
             bitmap.height = h as u16;
             bitmap.left = x0 as i32;
@@ -748,6 +829,141 @@ fn rasterize_strike(font: &Font, p: &Params<'_>, ppem: u16, depth: u8, budget: &
         out.glyphs.push(bitmap);
     }
     Ok(out)
+}
+
+/// A glyph's placed PDF, measured for a strike.
+struct PlacedPdf {
+    file: String,
+    /// The image's own space (points from the page's bottom-left corner) to strike pixels, y up.
+    to_pixels: Affine,
+    /// The part of the page shown, `[x0, y0, x1, y1]` in points.
+    shown: [f64; 4],
+    /// Pixels per point the page is drawn at: [`PDF_SAMPLES`] samples across a bitmap pixel.
+    pixels_per_point: f64,
+    /// At most the pixels the page takes drawn.
+    page_pixels: u64,
+    /// The bitmap's box, `(left, bottom, right, top)` in pixels up from the baseline.
+    pixel_box: (i64, i64, i64, i64),
+}
+
+/// The PDF placed on `layer`, measured at `pixels_per_unit`: `None` when the layer has no image
+/// or its file is not a PDF (a missing file not named `.pdf` included); `Err` says why a PDF
+/// cannot be used.
+fn placed_pdf(assets: &dyn AssetStore, layer: &Layer, pixels_per_unit: f64) -> std::result::Result<Option<PlacedPdf>, String> {
+    let Some(image) = layer.info.image.as_ref() else { return Ok(None) };
+    let Some(file) = image.path.as_deref() else { return Ok(None) };
+    let named_pdf = Path::new(file).extension().is_some_and(|e| e.eq_ignore_ascii_case("pdf"));
+    let head = match assets.read_head(file, 8) {
+        Ok(head) => head,
+        Err(e) if named_pdf => return Err(format!("`{file}` cannot be read: {e}")),
+        Err(_) => return Ok(None),
+    };
+    if !head.starts_with(b"%PDF-") {
+        return Ok(None);
+    }
+    let bytes = assets.read(file).map_err(|e| format!("`{file}` cannot be read: {e}"))?;
+    let (pw, ph) = fontcraft_io_pdf::page_size(&bytes).map_err(|e| format!("the page cannot be read: {e}"))?;
+    let [x0, y0, x1, y1] = match image.crop {
+        Some([x, y, w, h]) => [x.max(0.0), y.max(0.0), (x + w).min(pw), (y + h).min(ph)],
+        None => [0.0, 0.0, pw, ph],
+    };
+    if !([x0, y0, x1, y1].iter().all(|v| v.is_finite()) && x1 > x0 && y1 > y0) {
+        return Err("its crop shows nothing of the page".into());
+    }
+    let to_pixels = Affine::scale(pixels_per_unit) * image.transform.affine();
+    let [a, b, c, d, _, _] = to_pixels.as_coeffs();
+    let det = to_pixels.determinant();
+    if !(det.is_finite() && det.abs() > 1e-12) {
+        return Err("the image is placed with no size".into());
+    }
+    let corners = [(x0, y0), (x1, y0), (x0, y1), (x1, y1)].map(|(x, y)| to_pixels * Point::new(x, y));
+    let snap = |v: f64| if (v - v.round()).abs() < 1e-6 { v.round() } else { v };
+    let (xs, ys) = (corners.map(|p| p.x), corners.map(|p| p.y));
+    let low = |v: [f64; 4]| snap(v.into_iter().fold(f64::INFINITY, f64::min)).floor();
+    let high = |v: [f64; 4]| snap(v.into_iter().fold(f64::NEG_INFINITY, f64::max)).ceil();
+    let (left, right, bottom, top) = (low(xs), high(xs), low(ys), high(ys));
+    let limit = 1e9;
+    if ![left, right, bottom, top].iter().all(|v| v.is_finite() && v.abs() < limit) || right <= left || top <= bottom {
+        return Err("the image is placed beyond what a bitmap can hold".into());
+    }
+    // Bitmap pixels per point along the image's longer-stretched axis, sampled several times.
+    let stretch = a.hypot(b).max(c.hypot(d));
+    let pixels_per_point = stretch * f64::from(PDF_SAMPLES);
+    let page = (pw * pixels_per_point).ceil() * (ph * pixels_per_point).ceil();
+    let page_pixels = if page.is_finite() { (page as u64).min(MAX_PDF_PAGE_PIXELS) } else { MAX_PDF_PAGE_PIXELS };
+    Ok(Some(PlacedPdf {
+        file: file.to_string(),
+        to_pixels,
+        shown: [x0, y0, x1, y1],
+        pixels_per_point,
+        page_pixels,
+        pixel_box: (left as i64, bottom as i64, right as i64, top as i64),
+    }))
+}
+
+/// The bitmap of a placed PDF: `size` pixels whose top-left corner is at `top_left` (pixels up
+/// from the baseline), each as dark as the page's shown part is there on average, over
+/// [`PDF_SAMPLES`]² samples. `drawn` keeps the last page drawn, by file and resolution.
+fn draw_placed_pdf(
+    assets: &dyn AssetStore,
+    pdf: &PlacedPdf,
+    drawn: &mut Option<((String, u64), fontcraft_io_pdf::PdfRaster)>,
+    (left, top): (i64, i64),
+    (w, h): (u32, u32),
+) -> std::result::Result<fontcraft_render::Image, String> {
+    let key = (pdf.file.clone(), pdf.pixels_per_point.to_bits());
+    if drawn.as_ref().is_none_or(|(k, _)| *k != key) {
+        *drawn = None;
+        let bytes = assets.read(&pdf.file).map_err(|e| format!("`{}` cannot be read: {e}", pdf.file))?;
+        let raster =
+            fontcraft_io_pdf::render_pdf(&bytes, pdf.pixels_per_point, MAX_PDF_PAGE_PIXELS).map_err(|e| format!("the page cannot be drawn: {e}"))?;
+        *drawn = Some((key, raster));
+    }
+    let Some((_, raster)) = drawn.as_ref() else { return Err("the page cannot be drawn".into()) };
+    let page = &raster.image;
+    let scale = raster.pixels_per_point;
+    if !(scale.is_finite() && scale > 0.0) {
+        return Err("the page has no size to draw".into());
+    }
+    let back = pdf.to_pixels.inverse();
+    let [sx0, sy0, sx1, sy1] = pdf.shown;
+    // How dark the page is at a point of its own space: 0 off the shown part and where nothing
+    // is painted, up to 255 for opaque black.
+    let ink = |at: Point| -> u32 {
+        if !(at.x >= sx0 && at.x < sx1 && at.y >= sy0 && at.y < sy1) {
+            return 0;
+        }
+        // Rows run top to bottom, with the page's bottom edge on the image's.
+        let (col, row) = ((at.x * scale).floor(), (f64::from(page.height) - at.y * scale).floor());
+        if !(col >= 0.0 && row >= 0.0 && col < f64::from(page.width) && row < f64::from(page.height)) {
+            return 0;
+        }
+        let i = (row as usize).saturating_mul(page.width as usize).saturating_add(col as usize).saturating_mul(4);
+        let Some(&[r, g, b, a]) = page.pixels.get(i..i.saturating_add(4)).and_then(|p| <&[u8; 4]>::try_from(p).ok()) else { return 0 };
+        let light = (2126 * u32::from(r) + 7152 * u32::from(g) + 722 * u32::from(b)) / 10_000;
+        u32::from(a) * (255 - light.min(255)) / 255
+    };
+    let n = PDF_SAMPLES;
+    let step = 1.0 / f64::from(n);
+    let mut pixels = vec![0u8; (w as usize) * (h as usize) * 4];
+    for y in 0..h {
+        for x in 0..w {
+            let mut sum = 0u32;
+            for sy in 0..n {
+                for sx in 0..n {
+                    let px = left as f64 + f64::from(x) + (f64::from(sx) + 0.5) * step;
+                    let py = top as f64 - f64::from(y) - (f64::from(sy) + 0.5) * step;
+                    sum += ink(back * Point::new(px, py));
+                }
+            }
+            let level = (sum + n * n / 2) / (n * n);
+            let at = ((y as usize) * (w as usize) + x as usize) * 4 + 3;
+            if let Some(alpha) = pixels.get_mut(at) {
+                *alpha = level.min(255) as u8;
+            }
+        }
+    }
+    fontcraft_render::Image::from_rgba_premultiplied(w, h, pixels).map_err(|e| e.to_string())
 }
 
 /// The pixel box of an outline, `(left, bottom, right, top)` in pixels up from the baseline;

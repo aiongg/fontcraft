@@ -20,6 +20,8 @@
 //! saving writes the open tabs back.
 #![forbid(unsafe_code)]
 
+#[cfg(not(target_arch = "wasm32"))]
+mod clipboard;
 mod control_server;
 mod net;
 mod pickers;
@@ -224,6 +226,7 @@ fn run() -> Result<(), String> {
     #[cfg(not(target_arch = "wasm32"))]
     {
         app.preview_address.host = Some(Box::new(preview_server::Host::default()));
+        app.clipboard_flavours = Some(Box::new(clipboard::SystemClipboard));
     }
     app.state.start.reveal = start_window::Reveal(Some(pickers::reveal));
     app.state.panels.extensions.manager.platform =

@@ -17,6 +17,10 @@
 //!   shows under the text, as it does when the preview's own font cannot be built.
 //! - The glyphs drawn in colour are laid onto one texture of the area in view, made again only
 //!   when what is drawn changes.
+//! - What a glyph's colour drawing leaves out or draws plainer (an SVG filter drawn unfiltered,
+//!   an image left out) and why a colour glyph is drawn as its outline show under the text, the
+//!   first of them with the glyph's name and a count of the others ([`ColorPreview::warning`]),
+//!   unless a build error or a shaping note shows there.
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -34,6 +38,9 @@ use super::text_preview::{REBUILD_PAUSE, build_options};
 
 /// Seconds between looks at a build under way.
 const BUILD_POLL: f64 = 0.03;
+
+/// Most colour warnings kept in one frame, each glyph and reason once.
+const MAX_WARNINGS: usize = 64;
 
 /// What a colour font is built for: the document's id and revision, and the style compiled.
 type Key = (u64, u64, String);
@@ -64,6 +71,8 @@ pub struct ColorPreview {
     budget: FrameBudget,
     frame: Vec<(Arc<GlyphRaster>, Pos2)>,
     names: Vec<Arc<str>>,
+    /// This frame's warnings, one per glyph and reason, at most [`MAX_WARNINGS`].
+    warnings: Vec<(Arc<str>, String)>,
     hasher: DefaultHasher,
     texture_key: Option<u64>,
     texture: Option<TextureHandle>,
@@ -152,6 +161,7 @@ impl ColorPreview {
     ) {
         self.frame.clear();
         self.names.clear();
+        self.warnings.clear();
         self.hasher = DefaultHasher::new();
         self.budget = FrameBudget::frame();
         self.options = None;
@@ -241,6 +251,9 @@ impl ColorPreview {
         let Some(gid) = renderer.glyph_id(name) else { return false };
         match renderer.glyph(gid, options, &mut self.budget) {
             Painted::Color(raster) => {
+                for w in &raster.warnings {
+                    self.note(name, w);
+                }
                 (gid, at.x.to_bits(), at.y.to_bits()).hash(&mut self.hasher);
                 self.frame.push((raster, at));
                 self.names.push(Arc::from(name));
@@ -250,8 +263,29 @@ impl ColorPreview {
                 (gid, u32::MAX).hash(&mut self.hasher);
                 false
             }
-            Painted::Plain | Painted::Refused(_) => false,
+            Painted::Refused(why) => {
+                self.note(name, &format!("drawn as its outline: {why}"));
+                false
+            }
+            Painted::Plain => false,
         }
+    }
+
+    fn note(&mut self, glyph: &str, warning: &str) {
+        if self.warnings.len() < MAX_WARNINGS && !self.warnings.iter().any(|(g, w)| &**g == glyph && w == warning) {
+            self.warnings.push((Arc::from(glyph), warning.to_string()));
+        }
+    }
+
+    /// The first warning of this frame's colour glyphs, with the glyph's name and how many more
+    /// there are (each glyph and reason once); Text Preview shows it under the text.
+    pub fn warning(&self) -> Option<String> {
+        let (glyph, first) = self.warnings.first()?;
+        Some(match self.warnings.len() - 1 {
+            0 => format!("{glyph}: {first}"),
+            1 => format!("{glyph}: {first} (and 1 more colour warning)"),
+            more => format!("{glyph}: {first} (and {more} more colour warnings)"),
+        })
     }
 
     /// A hash of what this frame draws in colour, for the outline texture's key: a glyph that
@@ -573,6 +607,33 @@ mod tests {
         assert!(tp.cache.color.drawn().is_empty(), "{:?}", tp.cache.color.drawn());
         assert!(tp.cache.color.page().is_none());
         assert_eq!(tp.cache.drawn.glyphs.len(), 3, "the glyphs are still drawn, as outlines");
+    }
+
+    #[test]
+    fn color_preview_text_preview_shows_what_a_colour_glyph_draws_plainer() {
+        // An svg file whose filter has a kernel past the limit: drawn in colour, unfiltered, with
+        // the reason under the text once although the glyph shows twice.
+        let dir = folder("warnings");
+        let svg = dir.join("F.svg");
+        let kernel = vec!["1"; 17 * 17].join(" ");
+        std::fs::write(
+            &svg,
+            format!(
+                r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><filter id="f"><feConvolveMatrix order="17" kernelMatrix="{kernel}"/></filter><rect width="100" height="100" fill="#00FF00" filter="url(#f)"/></svg>"##
+            ),
+        )
+        .unwrap();
+        let mut app = FontcraftApp::default();
+        let f = add_colour_glyph(&mut app, "F", "layer.convertToSvg");
+        exec(&mut app, "layer.setSvgImage", json!({"glyph": "F", "layer": f, "path": svg.to_string_lossy()}));
+        exec(&mut app, "window.textPreview", json!({}));
+        exec(&mut app, "textPreview.setText", json!({"text": "FF"}));
+        let w = Window::new();
+        w.settle(&mut app);
+        let tp = &app.state.panels.text_preview;
+        assert_eq!(tp.cache.color.drawn().len(), 2, "{:?}", tp.cache.color.error());
+        let message = tp.cache.drawn.message.as_deref().unwrap_or_default();
+        assert!(message.starts_with("F: ") && message.contains("kernel") && !message.contains("more"), "{message}");
     }
 
     #[test]

@@ -154,6 +154,44 @@ fn check_outlines_takes_the_reference_options() {
     }
 }
 
+/// After a fix, each changed layer is rounded half to even (three decimals with `decimal`) and
+/// its contours go back in the reference's order: AFDKO 5.0.1's checkoutlinesufo -e on the same
+/// outline gives the low square, the top square, then the union of the two rectangles.
+#[test]
+fn check_outlines_fix_rounds_and_restores_the_contour_order() {
+    for decimal in [false, true] {
+        let mut s = Session::with_document();
+        for nodes in
+            [rect(400.2, 600.0, 500.4, 700.6), rect(100.3, 100.0, 300.5, 300.25), rect(200.7, 200.0, 350.5, 400.5), rect(10.0, 10.0, 60.0, 60.5)]
+        {
+            run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": nodes}));
+        }
+        let r = run(&mut s, "audit.checkOutlines", json!({"glyphs": ["A"], "fix": true, "keepOriginal": "none", "decimal": decimal}));
+        assert_eq!(r["cleanup"][0]["glyph"], "A", "{}", r["cleanup"]);
+        let font = s.font().unwrap();
+        let master = font.default_master().unwrap().id.clone();
+        let layer = font.glyph("A").unwrap().layer(&master).unwrap();
+        let paths: Vec<Vec<(f64, f64)>> = layer
+            .shapes
+            .iter()
+            .filter_map(|x| match x {
+                fontcraft_model::Shape::Path(p) => Some(p.nodes.iter().map(|n| (n.x, n.y)).collect()),
+                _ => None,
+            })
+            .collect();
+        let (low, top) = if decimal { ((60.0, 60.5), (500.4, 700.6)) } else { ((60.0, 60.0), (500.0, 701.0)) };
+        assert_eq!(paths.len(), 3, "{paths:?}");
+        assert!(paths[0].contains(&low) && paths[0].len() == 4, "decimal {decimal}: {paths:?}");
+        assert!(paths[1].contains(&top) && paths[1].len() == 4, "decimal {decimal}: {paths:?}");
+        assert_eq!(paths[2].len(), 8, "{paths:?}");
+        let fractional = paths.iter().flatten().any(|(x, y)| x.fract() != 0.0 || y.fract() != 0.0);
+        assert_eq!(fractional, decimal, "{paths:?}");
+        assert_eq!(run(&mut s, "edit.undo", json!({}))["undone"], "Check Outlines");
+        let back = s.font().unwrap().glyph("A").unwrap().layer(&master).unwrap().shapes.len();
+        assert_eq!(back, 4, "the fix and the clean-up are one undo step");
+    }
+}
+
 #[test]
 fn check_interpolation_keeps_the_problem_order() {
     let mut s = Session::with_document();

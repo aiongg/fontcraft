@@ -11,7 +11,8 @@
 //!   and holds no `=`; given bare, its value is empty. A list is comma-separated (`--opt=a,b`) and
 //!   replaces the current list, unless every item starts with `+` or `-`, which adds or removes
 //!   items from it (`--opt=+c,-a`). `--opt+=a,b` adds items and `--opt-=a,b` removes them, and
-//!   `--opt=` empties the list. The current list starts as the default. Items that are numbers
+//!   `--opt=` empties the list. A repeatable list ([`OptSpec::repeat`]) given again with a plain
+//!   value adds its items (`--check a --check b`). The current list starts as the default. Items that are numbers
 //!   compare by value when removed (`0x409` removes `1033`); in a list of hexadecimal code
 //!   points ([`OptSpec::hex`]) they are read as hexadecimal (`E9` removes `U+00E9`).
 //! - `@FILE` and `--options FILE` are replaced by the arguments the file holds (whitespace
@@ -62,21 +63,33 @@ pub struct OptSpec {
     pub help: &'static str,
     /// The list's items are hexadecimal code points or ranges (`41`, `U+0041`, `41-5A`).
     pub hex: bool,
+    /// A list option that may be given several times: each plain value after the first adds its
+    /// items instead of replacing the list ([`OptSpec::repeat`]).
+    pub repeat: bool,
 }
 
 impl OptSpec {
     pub const fn switch(name: &'static str, default: bool, help: &'static str) -> Self {
-        OptSpec { name, short: None, kind: Kind::Switch, value_name: "", default: if default { "true" } else { "false" }, help, hex: false }
+        OptSpec {
+            name,
+            short: None,
+            kind: Kind::Switch,
+            value_name: "",
+            default: if default { "true" } else { "false" },
+            help,
+            hex: false,
+            repeat: false,
+        }
     }
     pub const fn value(name: &'static str, value_name: &'static str, default: &'static str, help: &'static str) -> Self {
-        OptSpec { name, short: None, kind: Kind::Value, value_name, default, help, hex: false }
+        OptSpec { name, short: None, kind: Kind::Value, value_name, default, help, hex: false, repeat: false }
     }
     pub const fn list(name: &'static str, value_name: &'static str, default: &'static str, help: &'static str) -> Self {
-        OptSpec { name, short: None, kind: Kind::List, value_name, default, help, hex: false }
+        OptSpec { name, short: None, kind: Kind::List, value_name, default, help, hex: false, repeat: false }
     }
     /// A value option whose value may be left out; given bare, its value is empty.
     pub const fn optional_value(name: &'static str, value_name: &'static str, help: &'static str) -> Self {
-        OptSpec { name, short: None, kind: Kind::OptionalValue, value_name, default: "", help, hex: false }
+        OptSpec { name, short: None, kind: Kind::OptionalValue, value_name, default: "", help, hex: false, repeat: false }
     }
     pub const fn short(mut self, c: char) -> Self {
         self.short = Some(c);
@@ -84,6 +97,11 @@ impl OptSpec {
     }
     pub const fn hex(mut self) -> Self {
         self.hex = true;
+        self
+    }
+    /// Marks a list option as repeatable (`--check a --check b` keeps both).
+    pub const fn repeat(mut self) -> Self {
+        self.repeat = true;
         self
     }
 }
@@ -166,6 +184,8 @@ fn parse_inner(specs: &[OptSpec], args: &[String], queries: bool) -> Result<Pars
         };
         parsed.values.insert(spec.name, value);
     }
+    // The list options given so far on the line, for repeatable lists.
+    let mut given: Vec<&'static str> = Vec::new();
     let mut it = args.into_iter().peekable();
     while let Some(arg) = it.next() {
         if arg == "--" {
@@ -214,7 +234,7 @@ fn parse_inner(specs: &[OptSpec], args: &[String], queries: bool) -> Result<Pars
                         None if spec.kind == Kind::OptionalValue => optional_value(&mut it),
                         None => it.next().ok_or_else(|| usage(format!("--{} needs a value", spec.name)))?,
                     };
-                    set_value(&mut parsed, spec, value, edit);
+                    set_value(&mut parsed, spec, value, edit, &mut given);
                 }
             }
             continue;
@@ -228,11 +248,11 @@ fn parse_inner(specs: &[OptSpec], args: &[String], queries: bool) -> Result<Pars
                 }
                 Kind::OptionalValue => {
                     let value = optional_value(&mut it);
-                    set_value(&mut parsed, spec, value, Edit::Set);
+                    set_value(&mut parsed, spec, value, Edit::Set, &mut given);
                 }
                 Kind::Value | Kind::List => {
                     let value = it.next().ok_or_else(|| usage(format!("-{c} needs a value")))?;
-                    set_value(&mut parsed, spec, value, Edit::Set);
+                    set_value(&mut parsed, spec, value, Edit::Set, &mut given);
                 }
             }
             continue;
@@ -256,7 +276,8 @@ enum Edit {
     Remove,
 }
 
-fn set_value(parsed: &mut Parsed, spec: &OptSpec, value: String, edit: Edit) {
+/// Sets option `spec` to `value`. `given` lists the list options already set on this line.
+fn set_value(parsed: &mut Parsed, spec: &OptSpec, value: String, edit: Edit, given: &mut Vec<&'static str>) {
     match spec.kind {
         Kind::Value | Kind::OptionalValue => {
             parsed.values.insert(spec.name, OptValue::Value(value));
@@ -265,6 +286,11 @@ fn set_value(parsed: &mut Parsed, spec: &OptSpec, value: String, edit: Edit) {
             let items = split_list(&value);
             let mut current = parsed.list(spec.name).to_vec();
             let edits = !items.is_empty() && items.iter().all(|i| i.len() > 1 && (i.starts_with('+') || i.starts_with('-')));
+            let again = spec.repeat && given.contains(&spec.name) && !items.is_empty();
+            if !given.contains(&spec.name) {
+                given.push(spec.name);
+            }
+            let edit = if again && edit == Edit::Set && !edits { Edit::Add } else { edit };
             let list = match edit {
                 Edit::Add => {
                     for item in items {
@@ -517,6 +543,16 @@ mod tests {
         assert_eq!(p.list("unicodes"), ["0x10"], "code points compare as hexadecimal: 16 is U+0016");
         assert!(parse(SPECS, &args(&["--output+=x"])).is_err(), "+= edits lists only");
         assert!(parse(SPECS, &args(&["--hinting-=x"])).is_err());
+    }
+
+    #[test]
+    fn a_repeatable_list_keeps_every_value() {
+        const SPECS: &[OptSpec] = &[OptSpec::list("check", "ID", "", "checks").repeat(), OptSpec::list("drop", "TAG", "", "tables")];
+        let p = parse(SPECS, &args(&["--check", "a", "--check=b,c", "--check", "a", "--drop", "x", "--drop", "y"])).unwrap();
+        assert_eq!(p.list("check"), ["a", "b", "c"], "each value adds its items once");
+        assert_eq!(p.list("drop"), ["y"], "a list that is not repeatable is replaced");
+        let p = parse(SPECS, &args(&["--check", "a", "--check=", "--check", "b"])).unwrap();
+        assert_eq!(p.list("check"), ["b"], "an empty value still empties the list");
     }
 
     #[test]

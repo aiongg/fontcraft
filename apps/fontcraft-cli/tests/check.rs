@@ -132,3 +132,33 @@ fn the_shortcuts_take_the_reference_option_names() {
     assert_eq!(cli(&["check", "interpolation", source.as_str(), ttf.as_str()]).0, 2);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// A repeated --check runs every check it names, and `check family -l FILE` writes what it would
+/// print to FILE instead of standard output.
+#[test]
+fn repeated_checks_add_up_and_family_logs_to_a_file() {
+    let dir = scratch("repeat-log");
+    let (source, ttf) = fixtures(&dir);
+    let (_, stdout, stderr) = cli(&[
+        "check",
+        source.as_str(),
+        "--json",
+        "--profile",
+        "strict",
+        "--check",
+        "check.outlines.overlap",
+        "--check",
+        "check.outlines.tinyContour",
+    ]);
+    let doc: Value = serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("{e}: {stderr}"));
+    let ran: Vec<&str> = doc["checks"].as_array().unwrap().iter().filter_map(|c| c["id"].as_str()).collect();
+    assert!(ran.contains(&"check.outlines.overlap") && ran.contains(&"check.outlines.tinyContour"), "{ran:?}");
+
+    let log = dir.join("family.log");
+    let (code, stdout, stderr) = cli(&["check", "family", ttf.as_str(), "--family", "3", "--single", "5", "-l", log.to_str().unwrap()]);
+    assert!(code == 0 || code == 1, "{stderr}");
+    assert!(stdout.is_empty(), "-l keeps standard output empty: {stdout}");
+    let text = std::fs::read_to_string(&log).unwrap();
+    assert!(text.trim_end().ends_with("errors"), "the log ends with the summary line: {text}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

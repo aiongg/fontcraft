@@ -338,6 +338,7 @@ bundled, the file says so in its header and the project is listed here with its 
   The project compile of crates/compile/src/makeotf.rs (M12.40) is ported from makeotf.py in AFDKO 5.0.1, Apache License 2.0, Copyright 2014-2023 Adobe: its option words, their order of precedence, the project file and fontinfo keywords and the FontMenuNameDB made from a UFO; its glyph-name table (crates/compile/src/makeotf/names.rs) is the Adobe Glyph List (BSD 3-Clause, Copyright 2002-2019 Adobe, LICENSE-AGL.txt) as that compiler uses it.
   The single-precision placement of components in a project compile (SingleTransform in crates/compile/src/outline.rs, M12.40c) follows Transform, matMult and setPointKeyValue in c/shared/uforead.cpp of AFDKO, Apache License 2.0, Copyright 2014 Adobe; the lookup per rule type (crates/fea/src/split.rs) follows FeatCtx::prepRule in c/addfeatures/hotconv/FeatCtx.cpp.
   The project compile's metrics and outlines (crates/compile/src/makeotf/metrics.rs and the two-decimal coordinates of crates/compile/src/cff.rs, M12.40b) are ported from AFDKO 5.0.1, Apache License 2.0, Copyright 2014-2023 Adobe: c/addfeatures/hotconv/hot.cpp, OS_2.cpp, hmtx.cpp and name.cpp, c/shared/absfont/absfont_metrics.cpp and c/shared/cffwrite/cffwrite_t2cstr.cpp.
+  The clean-up after an outline fix (crates/engine/src/cmd/audit_services/outline_cleanup.rs, X.audit4) is ported from checkoutlinesufo.py and ufotools.py in AFDKO 5.0.1, Apache License 2.0, Copyright 2015 Adobe: the rounding, the contour matching that restores contour order and start points, and the threshold pen of fontPens (BSD 3-Clause License, Copyright 2005-2026 Erik van Blokland, Tal Leming, Just van Rossum) that drops segments shorter than one unit.
   The CID-keyed build of crates/compile/src/cid.rs (M12.41) follows makeotf.py in AFDKO 5.0.1, Apache License 2.0, Copyright 2014-2023 Adobe: its CMap options and the Macintosh cmap script it picks from a character collection's ordering.
   The project compile's OS/2 bits and version, licence code and project file paths (crates/compile/src/makeotf.rs, M12.40d) are ported from makeotf.py and c/addfeatures/main.cpp, hotconv/OS_2.cpp and hotconv/name.cpp in AFDKO 5.0.1, and the Unicode Variation Sequences file and cmap format 14 subtable (crates/compile/src/cid/uvs.rs) from c/addfeatures/hotconv/map.cpp and cmap.cpp, Apache License 2.0, Copyright 2014-2023 Adobe.
   The glyph selectors of fontcraft-cli autohint and stems (apps/fontcraft-cli/src/sub/autohint.rs, M12.39) follow otfautohint's __main__.py and autohint.py, and the stems report files (sub/stems.rs) follow its report.py, in AFDKO 5.0.1, Apache License 2.0, Copyright 2014, 2016, 2022 Adobe.
@@ -427,6 +428,11 @@ bundled, the file says so in its header and the project is listed here with its 
   The VORG and meta tables of crates/compile/src/extras.rs (M12.42) follow ufo2ft's
   outlineCompiler.py (setupTable_VORG, setupTable_meta) and glyphsLib's meta Table conversion
   (MIT License and Apache License 2.0).
+
+  crates/render/src/color/filter/turbulence.rs (M11.17e) follows the feTurbulence reference code
+  of Scalable Vector Graphics (SVG) 1.1 (Second Edition), section 15.24
+  (https://www.w3.org/TR/SVG11/filters.html#feTurbulenceElement), Copyright 2011 World Wide Web
+  Consortium, under the W3C Software and Document License.
 
 Product names mentioned in the documentation are trademarks of their owners and are used only to
 identify the products FontCraft is compared with or interoperates with.

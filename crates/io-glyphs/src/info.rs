@@ -256,6 +256,42 @@ pub(crate) fn take_settings_keys(d: &mut Dict, s: &mut Settings) {
     }
 }
 
+/// Version 2's top-level settings keys that glyphsLib also reads at the top level of a version 3
+/// or 4 file, unless a `settings` dictionary follows them there (it reads that dictionary as
+/// replacing them all). It does not read `gridSubDivision` there.
+pub(crate) const V2_SETTINGS: [&str; 5] =
+    ["disablesAutomaticAlignment", "disablesNiceNames", "gridLength", "keepAlternatesTogether", "keyboardIncrement"];
+
+/// Takes the version 2 settings keys in `found` into `s`; the keys taken.
+pub(crate) fn take_v2_settings(mut found: Dict, s: &mut Settings) -> Vec<String> {
+    let before: Vec<String> = found.entries.iter().map(|(k, _)| k.as_str().to_string()).collect();
+    take_settings_keys(&mut found, s);
+    before.into_iter().filter(|k| found.get(k).is_none()).collect()
+}
+
+/// Clears the setting `key` in `s` when `value`, read at the top level, gives the same setting;
+/// whether it did.
+pub(crate) fn clear_if_same(s: &mut Settings, key: &str, value: &Value) -> bool {
+    let mut theirs = Settings::default();
+    take_settings_keys(&mut Dict { entries: vec![(key.into(), value.clone())], ..Default::default() }, &mut theirs);
+    if let Some(slot) = bool_slot(s, key) {
+        let other = bool_slot(&mut theirs, key).and_then(|v| *v);
+        if slot.is_some() && *slot == other {
+            *slot = None;
+            return true;
+        }
+        return false;
+    }
+    if let Some(slot) = number_slot(s, key) {
+        let other = number_slot(&mut theirs, key).and_then(|v| *v);
+        if slot.is_some() && *slot == other {
+            *slot = None;
+            return true;
+        }
+    }
+    false
+}
+
 /// The `settings` dictionary of version 3 and later, when it has anything in it.
 pub(crate) fn take_settings(d: &mut Dict) -> Settings {
     let mut s = Settings::default();

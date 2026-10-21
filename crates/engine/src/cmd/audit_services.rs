@@ -21,6 +21,8 @@ use super::*;
 use crate::EngineError;
 use crate::params::Params;
 
+mod outline_cleanup;
+
 /// The services the engine gives the audit.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct EngineServices;
@@ -215,7 +217,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Check Outlines",
             [],
             None,
-            "{target?: \"document\" | path | [paths] (default the open document), glyphs?: [names, indexes, first-last ranges, /CID], glyphFile?: path, fix?: bool = false, minArea?: number = 25, tolerance?: number = 0, decimal?: bool, overlapChecks?: bool = true, basicChecks?: bool = true, keepContourOrder?: bool = true, keepOriginal?: \"backupLayer\" | \"none\" = \"backupLayer\", all?: bool = false, quiet?: bool = false} the classic outline audit: overlapping contours, coincident points, flat curves, collinear lines, tiny contours and glyphs without contours. With `fix` the open document's reported layers are repaired as one undo step (every repair, not only the safe ones). A run on the open document reuses the results of glyphs unchanged since the last run; `all` examines every glyph again. `quiet` leaves out the list of results and keeps the counts → the result document of audit.run (without `results` when quiet), with `fix`: the audit.fix result when fixing",
+            "{target?: \"document\" | path | [paths] (default the open document), glyphs?: [names, indexes, first-last ranges, /CID], glyphFile?: path, fix?: bool = false, minArea?: number = 25, tolerance?: number = 0, decimal?: bool = false, overlapChecks?: bool = true, basicChecks?: bool = true, keepContourOrder?: bool = true, keepOriginal?: \"backupLayer\" | \"none\" = \"backupLayer\", all?: bool = false, quiet?: bool = false} the classic outline audit: overlapping contours, coincident points, flat curves, collinear lines, tiny contours and glyphs without contours. With `fix` the open document's reported layers are repaired as one undo step (every repair, not only the safe ones); each layer the repair changed then has every point rounded half to even (to integers, or to three decimals with `decimal`), segments shorter than one unit merged into the point before them and, with keepContourOrder, its contours put back in the original order with their original start points where they can be matched. A run on the open document reuses the results of glyphs unchanged since the last run; `all` examines every glyph again. `quiet` leaves out the list of results and keeps the counts → the result document of audit.run (without `results` when quiet), with `fix`: the audit.fix result and `cleanup`: [{glyph, layer, merged}] when fixing",
             always,
             check_outlines
         )
@@ -279,9 +281,8 @@ fn check_outlines(s: &mut Session, v: &Value) -> Result<Value> {
     let fix = p.bool_or("fix", false)?;
     let basic = p.bool_or("basicChecks", true)?;
     let overlap = p.bool_or("overlapChecks", true)?;
-    for key in ["decimal", "keepContourOrder"] {
-        p.bool_or(key, false)?;
-    }
+    let decimal = p.bool_or("decimal", false)?;
+    let keep_order = p.bool_or("keepContourOrder", true)?;
     let all = p.bool_or("all", false)?;
     let quiet = p.bool_or("quiet", false)?;
     let min_area = number(&p, "minArea", 0.0, 1_000_000.0)?.unwrap_or(25.0);
@@ -328,9 +329,15 @@ fn check_outlines(s: &mut Session, v: &Value) -> Result<Value> {
             let names = glyphs_of(&report);
             f.insert("glyphs".into(), json!(names));
         }
-        let fixed = s.execute("audit.fix", &Value::Object(f))?;
+        let (fixed, cleanup) = as_one_step(s, |s| {
+            let before = s.doc()?.font.clone();
+            let fixed = s.execute("audit.fix", &Value::Object(f))?;
+            let cleanup = clean_up_fixed(s, &before, &fixed, decimal, keep_order)?;
+            Ok((fixed, cleanup))
+        })?;
         if let Some(o) = report.as_object_mut() {
             o.insert("fix".into(), fixed);
+            o.insert("cleanup".into(), Value::Array(cleanup));
         }
     }
     // Quiet: the counts without a line per glyph, as the reference prints only its summary.
@@ -338,6 +345,52 @@ fn check_outlines(s: &mut Session, v: &Value) -> Result<Value> {
         o.remove("results");
     }
     Ok(report)
+}
+
+/// Runs `f` as one undo step labelled with the command's name: the steps it runs record no
+/// undo steps of their own.
+fn as_one_step<T>(s: &mut Session, f: impl FnOnce(&mut Session) -> Result<T>) -> Result<T> {
+    if s.batch.is_some() {
+        return f(s);
+    }
+    s.batch = Some(crate::Batch { label: "Check Outlines".into(), before: Vec::new() });
+    let out = f(s);
+    if let (Ok(_), Some(batch)) = (&out, s.batch.take()) {
+        for (id, before) in batch.before {
+            let Some(i) = s.position_of(id) else { continue };
+            if let Some(doc) = s.docs_mut().get_mut(i)
+                && !doc.font.same_as(&before)
+            {
+                crate::push_undo(doc, batch.label.clone(), before);
+            }
+        }
+    }
+    s.batch = None;
+    out
+}
+
+/// The reference's clean-up of each glyph its fix changed, on every layer audit.fix changed
+/// (`fixed` is its result; `before` the font before it): see [`outline_cleanup`].
+fn clean_up_fixed(s: &mut Session, before: &Font, fixed: &Value, decimal: bool, keep_order: bool) -> Result<Vec<Value>> {
+    let mut layers: Vec<(String, String)> = Vec::new();
+    for a in fixed.get("applied").and_then(Value::as_array).into_iter().flatten() {
+        if let (Some(g), Some(l)) = (a.get("glyph").and_then(Value::as_str), a.get("layer").and_then(Value::as_str))
+            && !layers.iter().any(|(x, y)| x == g && y == l)
+        {
+            layers.push((g.to_string(), l.to_string()));
+        }
+    }
+    s.edit("Check Outlines", |font| {
+        let mut out = Vec::with_capacity(layers.len());
+        for (g, l) in &layers {
+            let original = before.glyph(g).and_then(|x| x.layers.iter().find(|x| &x.id == l));
+            let Ok(mut glyph) = font.glyph_mut(g) else { continue };
+            let Some(layer) = glyph.layers.iter_mut().find(|x| &x.id == l) else { continue };
+            let merged = outline_cleanup::clean_up(layer, original, decimal, keep_order);
+            out.push(json!({"glyph": g, "layer": l, "merged": merged}));
+        }
+        Ok(out)
+    })
 }
 
 /// The glyphs a result document's results name.

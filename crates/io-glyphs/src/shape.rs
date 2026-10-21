@@ -113,10 +113,33 @@ pub(crate) fn write_flags(out: &mut String, n: &Node, version: u32) {
 
 /// A node's attributes (the fourth item of a node, a version 2 node's dictionary): the name, the
 /// user data and (version 4) the higher-order interpolation data as fields; other keys stay under
-/// `attr`. `None` when the dictionary is empty or would not be written back the same; the caller
-/// then keeps it whole.
+/// `attr`. A dictionary the writer would lay out otherwise (on one line) stays beside the fields
+/// for its layout ([`crate::LAYOUT_KEY`]). `None` when the dictionary is empty or would not be
+/// written back the same in any layout; the caller then keeps it whole.
 pub(crate) fn read_node_attr(v: &Value, version: u32) -> Option<NodeInfo> {
-    node_attr_fields(v, version).filter(|info| write_node_attr(info, version).is_some_and(|w| same_text(&w, v, version)))
+    let mut info = node_attr_fields(v, version)?;
+    let w = write_node_attr(&info, version)?;
+    if !same_text(&w, v, version) {
+        if !same_text(&crate::relaid(&w, v), v, version) {
+            return None;
+        }
+        info.extra.push(Family::Native, NODE_ATTR_LAYOUT, v.clone());
+    }
+    Some(info)
+}
+
+/// The key under which a node keeps its attribute dictionary as read, for its layout.
+const NODE_ATTR_LAYOUT: &str = "com.fontcraft.glyphsLayout.attr";
+
+/// `written`, a node's attribute dictionary, or the dictionary as read while it still gives the
+/// same text ([`crate::still_laid_out`]).
+fn node_attr_as_read(written: Value, extra: &fontcraft_model::Extra) -> Value {
+    let Some(source) = extra.get(Family::Native, NODE_ATTR_LAYOUT) else { return written };
+    let same = crate::still_laid_out(&written, source);
+    let kept = std::collections::HashMap::from([("attr", source)]);
+    let used: &[&str] = if same { &["attr"] } else { &[] };
+    crate::kept::record(&kept, used);
+    if same { source.clone() } else { written }
 }
 
 /// [`read_node_attr`] without the check that it writes back the same (version 2 checks the whole
@@ -204,7 +227,7 @@ fn write_node(n: &Node, at: &str, version: u32) -> Result<Value> {
     write_flags(&mut flags, n, version);
     let mut items = vec![num(n.x, at)?, num(n.y, at)?, string(&flags)];
     if let Some(attr) = write_node_attr(&n.info, version) {
-        items.push(attr);
+        items.push(node_attr_as_read(attr, &n.info.extra));
     }
     Ok(Value::Array(Array { items, layout: Layout::Compact, ..Default::default() }))
 }

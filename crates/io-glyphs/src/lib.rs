@@ -199,6 +199,13 @@ pub(crate) fn keep_layout(d: &mut Dict, key: &str, source: Value) {
     d.entries.push((format!("{LAYOUT_KEY}{key}").as_str().into(), source));
 }
 
+/// Whether `source`, a value kept for its layout, still stands for `written`: the two give the
+/// same text in every dialect once `written` takes the layout of `source`.
+pub(crate) fn still_laid_out(written: &Value, source: &Value) -> bool {
+    let relaid = relaid(written, source);
+    [Dialect::Glyphs2, Dialect::Glyphs3, Dialect::Glyphs4].into_iter().all(|d| text_in(&relaid, d) == text_in(source, d))
+}
+
 /// `written` with the layout of `source` wherever the two have the same shape: dictionary
 /// entries and list items matched by position (an entry whose key differs keeps its own
 /// layout, so the texts differ anyway).
@@ -311,14 +318,78 @@ fn take_font_info(d: &mut Dict) -> Result<FontInfo> {
 
 /// Version 2's top-level names that a version 3 or 4 file holds (hand-written files do): each
 /// fills its property when the file has none, as fontc reads them. The key stays in the font's
-/// extra data, and [`without_kept_v2_names`] keeps the writer from writing the name twice.
-fn v2_names_as_properties(root: &Dict, properties: &mut fontcraft_model::Properties) {
+/// extra data, and [`without_kept_v2_names`] keeps the writer from writing the name twice. The
+/// keys taken.
+fn v2_names_as_properties(root: &Dict, properties: &mut fontcraft_model::Properties) -> Vec<String> {
+    let mut taken = Vec::new();
     for (key, property, localized) in v2::NAMES {
         if properties.get(property).is_none()
             && let Some(text) = root.get(key).and_then(Value::as_str)
         {
             properties.set(property, text, localized);
+            taken.push(key.to_string());
         }
+    }
+    taken
+}
+
+/// The native entry of the font's extra data that lists the version 2 top-level keys of a version
+/// 3 or 4 file the reader took a value from (a name's property, a setting). It starts with
+/// [`LAYOUT_KEY`], as it records where the file had those values, but [`finish`] never writes it.
+pub(crate) const V2_KEYS: &str = "com.fontcraft.glyphsLayout.#v2TopLevel";
+
+/// The version 2 top-level keys the reader took a value from ([`V2_KEYS`]).
+fn taken_v2_keys(extra: &Extra) -> Vec<String> {
+    let Some(Value::Array(a)) = extra.get(Family::Native, V2_KEYS) else { return Vec::new() };
+    a.items.iter().filter_map(Value::as_str).map(str::to_string).collect()
+}
+
+/// The version 2 settings keys at the top level of `root` that glyphsLib reads there: those
+/// without a `settings` dictionary after them ([`info::V2_SETTINGS`]).
+fn top_level_v2_settings(root: &Dict) -> Dict {
+    let settings_at = root.entries.iter().position(|(k, _)| k.as_str() == "settings");
+    let entries = root
+        .entries
+        .iter()
+        .enumerate()
+        .filter(|(i, (k, _))| info::V2_SETTINGS.contains(&k.as_str()) && settings_at.is_none_or(|s| s < *i))
+        .map(|(_, e)| e.clone())
+        .collect();
+    Dict { entries, ..Default::default() }
+}
+
+/// The settings for the `settings` dictionary of a font whose version 2 top-level settings keys
+/// the reader took ([`V2_KEYS`]). While the settings hold nothing but those keys' values,
+/// unchanged, the keys are written back at the top level as read and the dictionary is left out.
+/// Otherwise every setting goes into the dictionary (which, after them in the file, would
+/// override them on reading), and the keys are dropped from `extra`, as is a key whose setting
+/// was cleared.
+fn v2_settings_to_write<'a>(
+    settings: &'a fontcraft_model::Settings,
+    extra: &mut std::borrow::Cow<'_, Extra>,
+) -> std::borrow::Cow<'a, fontcraft_model::Settings> {
+    let keys: Vec<String> =
+        taken_v2_keys(extra).into_iter().filter(|k| info::V2_SETTINGS.contains(&k.as_str()) && extra.get(Family::Glyphs, k).is_some()).collect();
+    if keys.is_empty() {
+        return std::borrow::Cow::Borrowed(settings);
+    }
+    let mut rest = settings.clone();
+    let unchanged: Vec<&String> =
+        keys.iter().filter(|k| extra.get(Family::Glyphs, k).is_some_and(|v| info::clear_if_same(&mut rest, k, v))).collect();
+    let top = rest.is_empty() && extra.get(Family::Glyphs, "settings").is_none();
+    for k in &keys {
+        if !(top && unchanged.contains(&k)) {
+            extra.to_mut().remove(Family::Glyphs, k);
+        }
+    }
+    if top { std::borrow::Cow::Owned(rest) } else { std::borrow::Cow::Borrowed(settings) }
+}
+
+/// Whether the property holds `text` and nothing else, as a version 2 top-level name gives it.
+fn holds_v2_name(p: &fontcraft_model::Property, text: &str) -> bool {
+    match &p.value {
+        PropertyValue::Single(s) => s == text,
+        PropertyValue::Localized(v) => matches!(v.as_slice(), [only] if only.language == fontcraft_model::DEFAULT_LANGUAGE && only.value == text),
     }
 }
 
@@ -327,13 +398,7 @@ fn v2_names_as_properties(root: &Dict, properties: &mut fontcraft_model::Propert
 fn without_kept_v2_names<'a>(properties: &'a fontcraft_model::Properties, extra: &Extra) -> std::borrow::Cow<'a, fontcraft_model::Properties> {
     let kept = |p: &fontcraft_model::Property| {
         v2::NAMES.iter().any(|(key, property, _)| {
-            p.key == *property
-                && extra.get(Family::Glyphs, key).and_then(Value::as_str).is_some_and(|text| match &p.value {
-                    PropertyValue::Single(s) => s == text,
-                    PropertyValue::Localized(v) => {
-                        matches!(v.as_slice(), [only] if only.language == fontcraft_model::DEFAULT_LANGUAGE && only.value == text)
-                    }
-                })
+            p.key == *property && extra.get(Family::Glyphs, key).and_then(Value::as_str).is_some_and(|text| holds_v2_name(p, text))
         })
     };
     if properties.0.iter().any(kept) {
@@ -343,14 +408,19 @@ fn without_kept_v2_names<'a>(properties: &'a fontcraft_model::Properties, extra:
     }
 }
 
-/// The font's extra data without the version 2 names whose property was deleted: the reader made
-/// a property from each, so writing the key back would bring the property back on reopening.
-pub(crate) fn without_deleted_v2_names<'a>(properties: &fontcraft_model::Properties, extra: &'a Extra) -> std::borrow::Cow<'a, Extra> {
-    let deleted: Vec<&str> = v2::NAMES
-        .iter()
-        .filter(|(key, property, _)| properties.get(property).is_none() && extra.get(Family::Glyphs, key).and_then(Value::as_str).is_some())
-        .map(|(key, _, _)| *key)
-        .collect();
+/// The font's extra data without the version 2 names whose property was deleted, or edited after
+/// the reader made it from the key: writing the key back would bring the property back on
+/// reopening, or leave a stale name beside the edited one.
+pub(crate) fn without_stale_v2_names<'a>(properties: &fontcraft_model::Properties, extra: &'a Extra) -> std::borrow::Cow<'a, Extra> {
+    let taken = taken_v2_keys(extra);
+    let stale = |key: &str, property: &str| {
+        let Some(text) = extra.get(Family::Glyphs, key).and_then(Value::as_str) else { return false };
+        match properties.get(property) {
+            None => true,
+            Some(p) => taken.iter().any(|k| k == key) && !holds_v2_name(p, text),
+        }
+    };
+    let deleted: Vec<&str> = v2::NAMES.iter().filter(|(key, property, _)| stale(key, property)).map(|(key, _, _)| *key).collect();
     if deleted.is_empty() {
         return std::borrow::Cow::Borrowed(extra);
     }
@@ -391,8 +461,10 @@ fn read_font(mut root: Dict) -> Result<Font> {
         return Err(GlyphsError::Unsupported(format!("format version {version}")));
     }
     let app_version = take_app_version(&mut root);
+    let v2_settings = top_level_v2_settings(&root);
     let mut font_info = take_font_info(&mut root)?;
-    v2_names_as_properties(&root, &mut font_info.properties);
+    let mut v2_keys = v2_names_as_properties(&root, &mut font_info.properties);
+    v2_keys.extend(info::take_v2_settings(v2_settings, &mut font_info.settings));
     let family_name = if version >= 4 {
         v4_family_name(&font_info.properties).unwrap_or_default()
     } else {
@@ -467,8 +539,17 @@ fn read_font(mut root: Dict) -> Result<Font> {
         kerning: Arc::new(kerning),
         files: Arc::default(),
         bitmap_strikes: Arc::default(),
-        extra: Arc::new(into_extra(root)),
+        extra: Arc::new(with_v2_keys(into_extra(root), v2_keys)),
     })
+}
+
+/// `extra` with the list of version 2 top-level keys the reader took a value from ([`V2_KEYS`]).
+fn with_v2_keys(mut extra: Extra, keys: Vec<String>) -> Extra {
+    if !keys.is_empty() {
+        let items = keys.iter().map(|k| string(k)).collect();
+        extra.push(Family::Native, V2_KEYS, Value::Array(Array { items, ..Default::default() }));
+    }
+    extra
 }
 
 /// A kerning table `{master: {first: {second: value}}}`, taken out of `d` when every value in it
@@ -996,15 +1077,14 @@ fn pair(a: f64, b: f64, at: &str) -> Result<Value> {
 fn finish(mut entries: Vec<(Str, Value)>, extra: &Extra) -> Dict {
     let kept: HashMap<&str, &Value> = extra
         .iter()
-        .filter(|e| matches!(e.family, Family::Native | Family::Glyphs))
+        .filter(|e| matches!(e.family, Family::Native | Family::Glyphs) && e.key.as_str() != V2_KEYS)
         .filter_map(|e| e.key.as_str().strip_prefix(LAYOUT_KEY).map(|k| (k, &e.value)))
         .collect();
     if !kept.is_empty() {
         let mut written = Vec::new();
         for (k, v) in &mut entries {
             if let Some((key, source)) = kept.get_key_value(k.as_str()) {
-                let relaid = relaid(v, source);
-                if [Dialect::Glyphs2, Dialect::Glyphs3, Dialect::Glyphs4].into_iter().all(|d| text_in(&relaid, d) == text_in(source, d)) {
+                if still_laid_out(v, source) {
                     *v = (*source).clone();
                     written.push(*key);
                 }
@@ -1048,7 +1128,7 @@ fn sync_v4_family_name(props: &fontcraft_model::Properties, family: &str) -> fon
 
 fn write_font(font: &Font, version: u32) -> Result<Dict> {
     let mut e: Vec<(Str, Value)> = vec![(".formatVersion".into(), int(version))];
-    let mut extra = without_deleted_v2_names(&font.info.properties, &font.extra);
+    let mut extra = without_stale_v2_names(&font.info.properties, &font.extra);
     // Left-to-right kerning read from the version 2 key is written back as kept while the table
     // is unchanged. A changed table, empty included, goes under the version 3 key, and the stale
     // version 2 table is dropped so that reopening the file does not bring it back. A version 2
@@ -1062,6 +1142,7 @@ fn write_font(font: &Font, version: u32) -> Result<Dict> {
     if kept.is_some() && ltr_key.is_some() {
         extra.to_mut().remove(Family::Glyphs, V2_KERNING);
     }
+    let settings = v2_settings_to_write(&font.info.settings, &mut extra);
     let extra: &Extra = &extra;
     if version < 4 && !font.family_name.is_empty() {
         e.push(("familyName".into(), string(&font.family_name)));
@@ -1074,7 +1155,7 @@ fn write_font(font: &Font, version: u32) -> Result<Dict> {
     } else {
         info::push_properties(&mut e, &properties);
     }
-    info::push_settings(&mut e, &font.info.settings)?;
+    info::push_settings(&mut e, &settings)?;
     e.push(("unitsPerEm".into(), int(font.units_per_em)));
     e.push(("versionMajor".into(), int(font.version_major)));
     e.push(("versionMinor".into(), int(font.version_minor)));

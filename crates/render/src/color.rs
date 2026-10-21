@@ -46,9 +46,9 @@
 //! - A group with filters is drawn on a layer of its own too, without the clips of enclosing
 //!   groups; its filters run on that layer (module `filter`), then its clips, masks and opacity
 //!   apply, and last the clips of enclosing groups. The sprite covers what the filters can
-//!   paint: what the group draws grown by how far its blurs and offsets reach, or the whole
-//!   filter region when a primitive paints where its input is clear (a flood), within the
-//!   filter regions. Filters that can paint more than [`MAX_FILTER_PIXELS`] pixels, that cannot
+//!   paint: what the group draws grown by how far its blurs, offsets, dilations, convolutions
+//!   and displacements reach, or the whole filter region when a primitive paints where its
+//!   input is clear (a flood, a tile, a turbulence or a light), within the filter regions. Filters that can paint more than [`MAX_FILTER_PIXELS`] pixels, that cannot
 //!   be drawn, or that would take the glyph past its work leave the group unfiltered, with a
 //!   line in [`GlyphRaster::warnings`]; the glyph is not refused for them.
 //! - A document whose root slices its viewport (`preserveAspectRatio` with `slice`) is clipped
@@ -113,6 +113,8 @@ const MAX_BITMAP_SAMPLES: u32 = 4;
 pub const MAX_FILTER_PIXELS: u64 = 1 << 20;
 /// Largest blur standard deviation in sprite pixels; a larger one blurs by this much.
 pub const MAX_BLUR_SIGMA: f64 = 256.0;
+/// Largest `feMorphology` radius in sprite pixels; a larger one counts as this.
+pub const MAX_MORPHOLOGY_RADIUS: f64 = 256.0;
 
 mod filter;
 
@@ -545,13 +547,18 @@ impl OutlinePen for PathPen {
 
 /// The outlines of the glyphs a colour glyph clips by, read once per drawing.
 struct Outlines<'a> {
-    glyphs: OutlineGlyphCollection<'a>,
+    /// `None` for an SVG file drawn outside a font, which has no glyphs.
+    glyphs: Option<OutlineGlyphCollection<'a>>,
     kept: HashMap<u32, Arc<BezPath>>,
 }
 
 impl<'a> Outlines<'a> {
     fn new(font: &FontRef<'a>) -> Self {
-        Self { glyphs: font.outline_glyphs(), kept: HashMap::new() }
+        Self { glyphs: Some(font.outline_glyphs()), kept: HashMap::new() }
+    }
+
+    fn none() -> Self {
+        Self { glyphs: None, kept: HashMap::new() }
     }
 
     fn get(&mut self, gid: GlyphId) -> Arc<BezPath> {
@@ -559,7 +566,7 @@ impl<'a> Outlines<'a> {
             return p.clone();
         }
         let mut pen = PathPen::default();
-        if let Some(glyph) = self.glyphs.get(gid)
+        if let Some(glyph) = self.glyphs.as_ref().and_then(|g| g.get(gid))
             && glyph.draw(DrawSettings::unhinted(Size::unscaled(), LocationRef::default()), &mut pen).is_err()
         {
             pen.path = BezPath::new();
@@ -2046,13 +2053,36 @@ fn svg_leaf(paint: &ColorPaint) -> Option<Leaf> {
 }
 
 fn draw_svg(font: &FontRef, source: &Source, options: &ColorOptions) -> Result<Done, Refusal> {
+    paint_svg(&mut Outlines::new(font), source, options)
+}
+
+fn paint_svg(outlines: &mut Outlines, source: &Source, options: &ColorOptions) -> Result<Done, Refusal> {
     let Some(rect) = extent(&source.items, options.scale) else { return blank(ColorKind::Svg) };
     let sprite = sprite(rect, options.scale)?;
-    let mut outlines = Outlines::new(font);
-    let mut raster = Raster::new(&sprite, &mut outlines, &[], options.text_color);
+    let mut raster = Raster::new(&sprite, outlines, &[], options.text_color);
     raster.warnings.clone_from(&source.warnings);
     raster.draw_items(&source.items);
     raster.finish(sprite.left, sprite.top, ColorKind::Svg)
+}
+
+/// An SVG file drawn in colour outside a font (M11.17e), as Edit View draws an svg layer whose
+/// file has filters: `svg` placed by `place` (from the file's viewport, y up with its bottom left
+/// at the origin, to font units, as [`svg_draw::drawing`] takes it) at `scale` pixels per font
+/// unit, with what an `SVG ` table's glyph is drawn with: paints, images, clip paths, masks,
+/// patterns and filters, the same limits and the same warnings. `Err` with the reason when it is
+/// not drawn.
+pub fn svg_file(svg: &[u8], place: Affine, scale: f64) -> Result<GlyphRaster, String> {
+    if !(scale.is_finite() && scale > 0.0 && scale <= MAX_SCALE) {
+        return Err("the scale must be a positive number of at most 64 pixels per unit".into());
+    }
+    if !finite_affine(place) {
+        return Err("the SVG file cannot be placed".into());
+    }
+    let drawing = svg_draw::drawing(svg, |_, _| place).map_err(|e| format!("the SVG file cannot be drawn: {e}"))?;
+    let mut images = Images { decoded: HashMap::new(), pixels_left: MAX_BITMAP_PIXELS, work: 0 };
+    let source = Source { items: images.drawables(drawing.items), warnings: drawing.warnings };
+    let options = ColorOptions { scale, palette: 0, text_color: [0, 0, 0, 255] };
+    paint_svg(&mut Outlines::none(), &source, &options).map(|(raster, _)| raster).map_err(|r| r.reason)
 }
 
 /// The `sbix` record drawn for glyph `gid` at `ppem` pixels per em: the strike's size, the
@@ -2534,10 +2564,12 @@ mod tests {
     #[test]
     fn svg_filters_that_cannot_be_drawn_leave_the_element_unfiltered() {
         let square = r##"<rect x="200" y="-300" width="100" height="100" fill="#FF0000"/>"##;
-        let raster = filtered(r#"<feTurbulence baseFrequency="0.05"/>"#, square);
+        // A convolution kernel past the limit on a side.
+        let kernel = vec!["1"; 17 * 17].join(" ");
+        let raster = filtered(&format!(r#"<feConvolveMatrix order="17" kernelMatrix="{kernel}"/>"#), square);
         assert_eq!(colour_at(&raster, 25, 25), [255, 0, 0, 255]);
         assert_eq!(raster.warnings.len(), 1, "{:?}", raster.warnings);
-        assert!(raster.warnings[0].contains("feTurbulence"), "{:?}", raster.warnings);
+        assert!(raster.warnings[0].contains("kernel"), "{:?}", raster.warnings);
 
         // A blur in a region of 1,200 × 1,200 sprite pixels runs over the part its square can
         // reach.
@@ -2575,6 +2607,123 @@ mod tests {
         assert_eq!(colour_at(&raster, 250, 250), [255, 0, 0, 255]);
         assert_eq!(alpha_at(&raster, 320, 180), 0, "no shadow");
         assert!(raster.warnings.iter().any(|w| w.contains("more work")), "{:?}", raster.warnings);
+    }
+
+    /// `filtered` with `color-interpolation-filters="sRGB"`, so colours keep their values.
+    fn filtered_srgb(filter: &str, body: &str) -> Arc<GlyphRaster> {
+        svg_glyph(&format!(
+            r#"<defs><filter id="f" filterUnits="userSpaceOnUse" x="0" y="-500" width="500" height="500" color-interpolation-filters="sRGB">{filter}</filter></defs><g filter="url(#f)">{body}</g>"#
+        ))
+    }
+
+    #[test]
+    fn svg_filters_transfer_convolve_dilate_erode_displace_and_tile() {
+        // A red square over pixels 10 to 20 right of the origin and 30 to 40 above it.
+        let square = r##"<rect x="100" y="-400" width="100" height="100" fill="#FF0000"/>"##;
+        fn clean(r: &GlyphRaster) {
+            assert!(r.warnings.is_empty(), "{:?}", r.warnings);
+        }
+
+        // Red inverted by a table, green set by a linear function; clear pixels stay clear.
+        let r = filtered_srgb(
+            r#"<feComponentTransfer><feFuncR type="table" tableValues="1 0"/><feFuncG type="linear" slope="0" intercept="1"/></feComponentTransfer>"#,
+            square,
+        );
+        assert_eq!(colour_at(&r, 15, 35), [0, 255, 0, 255]);
+        assert_eq!(alpha_at(&r, 25, 35), 0);
+        clean(&r);
+
+        // A kernel whose one weight is in its bottom right corner moves the image a pixel right
+        // and a pixel down.
+        let r = filtered(r#"<feConvolveMatrix order="3" kernelMatrix="0 0 0 0 0 0 0 0 1"/>"#, square);
+        assert_eq!(colour_at(&r, 20, 35), [255, 0, 0, 255]);
+        assert_eq!(colour_at(&r, 15, 29), [255, 0, 0, 255]);
+        assert_eq!((alpha_at(&r, 10, 35), alpha_at(&r, 15, 39)), (0, 0));
+        clean(&r);
+
+        // Dilated by 2 pixels: 8 to 22; eroded by 3: 13 to 17.
+        let r = filtered(r#"<feMorphology operator="dilate" radius="20"/>"#, square);
+        assert_eq!((colour_at(&r, 8, 35), colour_at(&r, 21, 35)), ([255, 0, 0, 255], [255, 0, 0, 255]));
+        assert_eq!((alpha_at(&r, 7, 35), alpha_at(&r, 22, 35)), (0, 0));
+        let r = filtered(r#"<feMorphology operator="erode" radius="30"/>"#, square);
+        assert_eq!(colour_at(&r, 15, 35), [255, 0, 0, 255]);
+        assert_eq!((alpha_at(&r, 12, 35), alpha_at(&r, 17, 35)), (0, 0));
+        clean(&r);
+
+        // A map whose red is full reads each pixel from half the scale (5 pixels) to its right,
+        // so the square moves 5 pixels left; green at the middle leaves y as it is.
+        let r = filtered_srgb(
+            r#"<feFlood flood-color="rgb(255,128,0)" result="m"/><feDisplacementMap in="SourceGraphic" in2="m" scale="100" xChannelSelector="R" yChannelSelector="G"/>"#,
+            square,
+        );
+        assert_eq!((colour_at(&r, 5, 35), colour_at(&r, 14, 35)), ([255, 0, 0, 255], [255, 0, 0, 255]));
+        assert_eq!((alpha_at(&r, 4, 35), alpha_at(&r, 15, 35)), (0, 0));
+        clean(&r);
+
+        // A 5-pixel square in the top left of a 10-pixel tile, repeated over the region.
+        let small = r##"<rect x="100" y="-400" width="50" height="50" fill="#FF0000"/>"##;
+        let r = filtered(r#"<feOffset dx="0" dy="0" x="100" y="-400" width="100" height="100" result="t"/><feTile in="t"/>"#, small);
+        for (x, y) in [(12, 37), (22, 37), (2, 37), (12, 27), (42, 7)] {
+            assert_eq!(colour_at(&r, x, y), [255, 0, 0, 255], "({x}, {y})");
+        }
+        assert_eq!((alpha_at(&r, 17, 37), alpha_at(&r, 12, 32)), (0, 0));
+        clean(&r);
+
+        // A dilation by a billion units dilates by the limit, which fills the region.
+        let r = filtered(r#"<feMorphology operator="dilate" radius="1000000000"/>"#, square);
+        assert_eq!((colour_at(&r, 0, 0), colour_at(&r, 49, 49)), ([255, 0, 0, 255], [255, 0, 0, 255]));
+        clean(&r);
+    }
+
+    #[test]
+    fn svg_filters_make_noise_and_light() {
+        let square = r##"<rect x="100" y="-400" width="100" height="100" fill="#FF0000"/>"##;
+        // Turbulence fills the region, the same way each time, and nothing outside it.
+        let noise = r#"<feTurbulence baseFrequency="0.05" numOctaves="2" seed="4" type="fractalNoise"/>"#;
+        let a = filtered(noise, square);
+        let b = filtered(noise, square);
+        assert_eq!(a.image.pixels, b.image.pixels);
+        assert!(a.warnings.is_empty(), "{:?}", a.warnings);
+        let (x0, x1, y0, y1) = ink(&a);
+        assert!(x0 >= 0 && x1 <= 50 && y0 >= 0 && y1 <= 50, "{:?}", ink(&a));
+        assert!((0..50).any(|x| alpha_at(&a, x, 5) != alpha_at(&a, 25, 5)), "the noise varies");
+        // A billion octaves run as ten, in time.
+        let many = filtered(r#"<feTurbulence baseFrequency="0.05" numOctaves="1000000000"/>"#, square);
+        assert!(many.warnings.is_empty(), "{:?}", many.warnings);
+
+        // A light straight above a flat surface: white and opaque over the whole region.
+        let r = filtered_srgb(
+            r##"<feDiffuseLighting lighting-color="#FFFFFF"><feDistantLight azimuth="0" elevation="90"/></feDiffuseLighting>"##,
+            square,
+        );
+        assert_eq!((colour_at(&r, 40, 10), colour_at(&r, 2, 47)), ([255; 4], [255; 4]));
+
+        // A point light over the middle shines brightest there; a spot light aimed away leaves
+        // the middle dark.
+        let r = filtered_srgb(
+            r##"<feSpecularLighting lighting-color="#00FF00" specularExponent="40"><fePointLight x="250" y="-250" z="1000"/></feSpecularLighting>"##,
+            square,
+        );
+        let mid = colour_at(&r, 25, 25);
+        assert!(mid[0] == 0 && mid[1] > 250 && mid[3] == mid[1], "{mid:?}");
+        assert!(alpha_at(&r, 1, 1) < mid[3] - 50, "{}", alpha_at(&r, 1, 1));
+        let r = filtered_srgb(
+            r##"<feSpecularLighting lighting-color="#00FF00"><feSpotLight x="250" y="-250" z="1000" pointsAtX="5000" pointsAtY="-250" pointsAtZ="0" limitingConeAngle="10"/></feSpecularLighting><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>"##,
+            square,
+        );
+        assert_eq!(alpha_at(&r, 25, 25), 0);
+        assert_eq!(colour_at(&r, 15, 35), [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn an_svg_file_outside_a_font_draws_its_filters() {
+        // The file's bottom left at the origin, a pixel per unit; a 20-unit square moved 30 right.
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><filter id="f" filterUnits="userSpaceOnUse" x="0" y="0" width="100" height="100"><feOffset dx="30" dy="0"/></filter><rect x="0" y="80" width="20" height="20" fill="#0000FF" filter="url(#f)"/></svg>"##;
+        let r = svg_file(svg, Affine::IDENTITY, 1.0).unwrap();
+        assert_eq!(ink(&r), (30, 50, 0, 20));
+        assert!(r.warnings.is_empty(), "{:?}", r.warnings);
+        assert!(svg_file(svg, Affine::IDENTITY, f64::NAN).is_err());
+        assert!(svg_file(b"<svg", Affine::IDENTITY, 1.0).is_err());
     }
 
     #[test]

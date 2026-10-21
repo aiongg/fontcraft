@@ -1,17 +1,22 @@
-//! The filters of an SVG file as data for a raster drawing (M11.17d): each `filter` usvg resolved
-//! on a group, its region and primitives in the group's user space, with the affine from that
-//! space to font units. `fontcraft_render::color` runs them on pixels.
+//! The filters of an SVG file as data for a raster drawing (M11.17d, M11.17e): each `filter`
+//! usvg resolved on a group, its region and primitives in the group's user space, with the affine
+//! from that space to font units. `fontcraft_render::color` runs them on pixels.
 //!
-//! Rows: `color.preview.textPreview`.
+//! Rows: `color.preview.textPreview`, `color.preview.editViewOtherGlyphs`.
 //!
 //! Contract:
 //! - Drawn primitives: `feGaussianBlur`, `feOffset`, `feFlood`, `feColorMatrix` (every type, each
-//!   given as a 4 × 5 matrix), `feComposite` (every operator), `feMerge`, `feBlend` (every mode)
-//!   and `feDropShadow`; CSS filter functions reach here as these primitives. Inputs are
-//!   `SourceGraphic`, `SourceAlpha` and earlier results; usvg already sends a missing or unknown
-//!   `in` to the previous result (or `SourceGraphic` for the first primitive), and a region in
-//!   `objectBoundingBox` units to user space.
-//! - A filter with any other primitive is [`Unsupported`], and the element is drawn unfiltered.
+//!   given as a 4 × 5 matrix), `feComposite` (every operator), `feMerge`, `feBlend` (every mode),
+//!   `feDropShadow`, `feComponentTransfer` (every function type), `feConvolveMatrix`,
+//!   `feMorphology`, `feDisplacementMap`, `feTile`, `feTurbulence`, and `feDiffuseLighting` and
+//!   `feSpecularLighting` with a distant, point or spot light. CSS filter functions reach here as
+//!   these primitives. Inputs are `SourceGraphic`, `SourceAlpha` and earlier results; usvg
+//!   already sends a missing or unknown `in` to the previous result (or `SourceGraphic` for the
+//!   first primitive), and a region in `objectBoundingBox` units to user space.
+//! - A filter with an `feImage`, a transfer function of more than [`MAX_TRANSFER_VALUES`]
+//!   values, or a convolution kernel more than [`MAX_CONVOLVE_ORDER`] on a side is
+//!   [`Unsupported`], and the element is drawn unfiltered. `numOctaves` past
+//!   [`MAX_TURBULENCE_OCTAVES`] counts as that many: further octaves change no 8-bit value.
 //! - At most [`MAX_FILTER_PRIMITIVES`] primitives for one element, its filters together, each
 //!   `feMerge` input counting as one more. Filtered elements nest at most [`MAX_FILTER_DEPTH`]
 //!   deep; a deeper one is drawn unfiltered.
@@ -25,6 +30,17 @@ pub const MAX_FILTER_PRIMITIVES: usize = 32;
 /// Deepest nesting of filtered elements: a filtered element inside this many filtered elements
 /// is drawn unfiltered.
 pub const MAX_FILTER_DEPTH: usize = 4;
+
+/// Most values of one `feFuncX` table or discrete function.
+pub const MAX_TRANSFER_VALUES: usize = 1_024;
+
+/// Most columns, and most rows, of an `feConvolveMatrix` kernel; each output pixel reads that
+/// many pixels squared.
+pub const MAX_CONVOLVE_ORDER: u32 = 16;
+
+/// Most `feTurbulence` octaves run. Octave `k` adds at most 2⁻ᵏ of the full range, so the
+/// octaves past ten together add less than half of one 8-bit step.
+pub const MAX_TURBULENCE_OCTAVES: u32 = 10;
 
 /// One `filter` of an element.
 #[derive(Clone, Debug, PartialEq)]
@@ -101,6 +117,166 @@ pub enum FilterKind {
         dy: f64,
         std_dev: (f64, f64),
         color: [f64; 4],
+    },
+    /// Each channel through its function, on straight values from 0 to 1: R, G, B, A.
+    ComponentTransfer {
+        input: FilterInput,
+        functions: [TransferFunction; 4],
+    },
+    /// Each output pixel the sum of the input pixels under the kernel (rows top to bottom, the
+    /// kernel's cell `(column, row)` at index `row · columns + column`) with the target cell
+    /// over it, divided by `divisor`, plus `bias`. Kernel cells are sprite pixels.
+    ConvolveMatrix {
+        input: FilterInput,
+        columns: u32,
+        rows: u32,
+        kernel: Vec<f64>,
+        target: (u32, u32),
+        divisor: f64,
+        bias: f64,
+        edge: EdgeMode,
+        /// The kernel runs on straight colour and alpha is kept; else on premultiplied RGBA.
+        preserve_alpha: bool,
+    },
+    /// Each output pixel the least (`erode`) or greatest (`dilate`) of the input's channels
+    /// within the radius, user space.
+    Morphology {
+        input: FilterInput,
+        dilate: bool,
+        radius: (f64, f64),
+    },
+    /// `input`'s pixels moved by `scale · (C − ½)` user units along x and along y, `C` the
+    /// channels of `input2` that `channels` names, straight values from 0 to 1.
+    DisplacementMap {
+        input: FilterInput,
+        input2: FilterInput,
+        scale: f64,
+        channels: (ColorChannel, ColorChannel),
+    },
+    /// The input's subregion repeated over the primitive's subregion.
+    Tile {
+        input: FilterInput,
+    },
+    /// Perlin turbulence, as the SVG specification's reference code computes it, at the user
+    /// space position of each pixel.
+    Turbulence {
+        base_frequency: (f64, f64),
+        /// At most [`MAX_TURBULENCE_OCTAVES`].
+        octaves: u32,
+        seed: i32,
+        stitch: bool,
+        /// `fractalNoise`; else `turbulence`.
+        fractal: bool,
+    },
+    /// The input's alpha as a height map lit by `light`: `constant · N·L` times the colour,
+    /// opaque.
+    DiffuseLighting {
+        input: FilterInput,
+        surface_scale: f64,
+        constant: f64,
+        /// Straight sRGB.
+        color: [f64; 3],
+        light: LightSource,
+    },
+    /// The input's alpha as a height map lit by `light`: `constant · (N·H)^exponent` times the
+    /// colour, its alpha the largest colour channel.
+    SpecularLighting {
+        input: FilterInput,
+        surface_scale: f64,
+        constant: f64,
+        exponent: f64,
+        /// Straight sRGB.
+        color: [f64; 3],
+        light: LightSource,
+    },
+}
+
+/// An `feFuncR`, `feFuncG`, `feFuncB` or `feFuncA`.
+#[derive(Clone, Debug, PartialEq)]
+pub enum TransferFunction {
+    Identity,
+    /// Linear between the values, spread evenly from 0 to 1; no values is the identity.
+    Table(Vec<f64>),
+    /// Steps of the values, spread evenly from 0 to 1; no values is the identity.
+    Discrete(Vec<f64>),
+    Linear {
+        slope: f64,
+        intercept: f64,
+    },
+    Gamma {
+        amplitude: f64,
+        exponent: f64,
+        offset: f64,
+    },
+}
+
+impl TransferFunction {
+    /// The function at `c`, from 0 to 1, clamped to 0 to 1.
+    pub fn apply(&self, c: f64) -> f64 {
+        let c = if c.is_finite() { c.clamp(0.0, 1.0) } else { 0.0 };
+        let v = match self {
+            TransferFunction::Identity => c,
+            TransferFunction::Table(v) => match v.len() {
+                0 => c,
+                1 => v.first().copied().unwrap_or(c),
+                len => {
+                    let n = (len - 1) as f64;
+                    let k = ((c * n).floor() as usize).min(len - 2);
+                    let (a, b) = (v.get(k).copied().unwrap_or(0.0), v.get(k + 1).copied().unwrap_or(0.0));
+                    a + (c * n - k as f64) * (b - a)
+                }
+            },
+            TransferFunction::Discrete(v) => match v.len() {
+                0 => c,
+                len => v.get(((c * len as f64).floor() as usize).min(len - 1)).copied().unwrap_or(c),
+            },
+            TransferFunction::Linear { slope, intercept } => slope * c + intercept,
+            TransferFunction::Gamma { amplitude, exponent, offset } => amplitude * c.powf(*exponent) + offset,
+        };
+        if v.is_finite() { v.clamp(0.0, 1.0) } else { 0.0 }
+    }
+}
+
+/// How `feConvolveMatrix` reads past the input's edges.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EdgeMode {
+    /// Transparent.
+    None,
+    /// The nearest edge pixel.
+    Duplicate,
+    /// From the opposite edge.
+    Wrap,
+}
+
+/// A channel `feDisplacementMap` reads.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColorChannel {
+    R,
+    G,
+    B,
+    A,
+}
+
+/// The light of `feDiffuseLighting` and `feSpecularLighting`. Positions are user space; angles
+/// degrees.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum LightSource {
+    /// From infinitely far: `azimuth` clockwise from the x axis (user space, y down), `elevation`
+    /// up from the surface.
+    Distant {
+        azimuth: f64,
+        elevation: f64,
+    },
+    Point {
+        position: [f64; 3],
+    },
+    Spot {
+        position: [f64; 3],
+        points_at: [f64; 3],
+        /// Focus: the light falls off as the cosine to the axis to this power.
+        exponent: f64,
+        /// No light beyond this angle from the axis.
+        cone: Option<f64>,
     },
 }
 
@@ -230,24 +406,122 @@ fn kind(k: &usvg::filter::Kind, names: &[&str]) -> Result<FilterKind, Unsupporte
             std_dev: (finite(d.std_dev_x().get())?, finite(d.std_dev_y().get())?),
             color: color(d.color(), d.opacity().get()),
         },
-        other => return Err(Unsupported(format!("the SVG filter primitive {} is not drawn", element_name(other)))),
+        K::ComponentTransfer(c) => FilterKind::ComponentTransfer {
+            input: input(c.input(), names)?,
+            functions: [transfer(c.func_r())?, transfer(c.func_g())?, transfer(c.func_b())?, transfer(c.func_a())?],
+        },
+        K::ConvolveMatrix(c) => {
+            let m = c.matrix();
+            if m.columns() > MAX_CONVOLVE_ORDER || m.rows() > MAX_CONVOLVE_ORDER {
+                return Err(Unsupported(format!(
+                    "an SVG convolution kernel is {} × {}; at most {MAX_CONVOLVE_ORDER} × {MAX_CONVOLVE_ORDER} is drawn",
+                    m.columns(),
+                    m.rows()
+                )));
+            }
+            let kernel = m.data().iter().map(|v| finite(*v)).collect::<Result<Vec<_>, _>>()?;
+            if kernel.len() != m.columns() as usize * m.rows() as usize {
+                return Err(Unsupported("an SVG convolution kernel does not have one value per cell".into()));
+            }
+            FilterKind::ConvolveMatrix {
+                input: input(c.input(), names)?,
+                columns: m.columns(),
+                rows: m.rows(),
+                kernel,
+                target: (m.target_x(), m.target_y()),
+                divisor: finite(c.divisor().get())?,
+                bias: finite(c.bias())?,
+                edge: match c.edge_mode() {
+                    usvg::filter::EdgeMode::None => EdgeMode::None,
+                    usvg::filter::EdgeMode::Duplicate => EdgeMode::Duplicate,
+                    usvg::filter::EdgeMode::Wrap => EdgeMode::Wrap,
+                },
+                preserve_alpha: c.preserve_alpha(),
+            }
+        }
+        K::Morphology(m) => FilterKind::Morphology {
+            input: input(m.input(), names)?,
+            dilate: m.operator() == usvg::filter::MorphologyOperator::Dilate,
+            radius: (finite(m.radius_x().get())?, finite(m.radius_y().get())?),
+        },
+        K::DisplacementMap(d) => FilterKind::DisplacementMap {
+            input: input(d.input1(), names)?,
+            input2: input(d.input2(), names)?,
+            scale: finite(d.scale())?,
+            channels: (channel(d.x_channel_selector()), channel(d.y_channel_selector())),
+        },
+        K::Tile(t) => FilterKind::Tile { input: input(t.input(), names)? },
+        K::Turbulence(t) => FilterKind::Turbulence {
+            base_frequency: (finite(t.base_frequency_x().get())?, finite(t.base_frequency_y().get())?),
+            octaves: t.num_octaves().min(MAX_TURBULENCE_OCTAVES),
+            seed: t.seed(),
+            stitch: t.stitch_tiles(),
+            fractal: t.kind() == usvg::filter::TurbulenceKind::FractalNoise,
+        },
+        K::DiffuseLighting(l) => FilterKind::DiffuseLighting {
+            input: input(l.input(), names)?,
+            surface_scale: finite(l.surface_scale())?,
+            constant: finite(l.diffuse_constant())?,
+            color: rgb(l.lighting_color()),
+            light: light(l.light_source())?,
+        },
+        K::SpecularLighting(l) => FilterKind::SpecularLighting {
+            input: input(l.input(), names)?,
+            surface_scale: finite(l.surface_scale())?,
+            constant: finite(l.specular_constant())?,
+            exponent: finite(l.specular_exponent())?,
+            color: rgb(l.lighting_color()),
+            light: light(l.light_source())?,
+        },
+        K::Image(_) => return Err(Unsupported("the SVG filter primitive feImage is not drawn".into())),
     })
 }
 
-fn element_name(k: &usvg::filter::Kind) -> &'static str {
-    use usvg::filter::Kind as K;
-    match k {
-        K::ComponentTransfer(_) => "feComponentTransfer",
-        K::ConvolveMatrix(_) => "feConvolveMatrix",
-        K::DiffuseLighting(_) => "feDiffuseLighting",
-        K::DisplacementMap(_) => "feDisplacementMap",
-        K::Image(_) => "feImage",
-        K::Morphology(_) => "feMorphology",
-        K::SpecularLighting(_) => "feSpecularLighting",
-        K::Tile(_) => "feTile",
-        K::Turbulence(_) => "feTurbulence",
-        _ => "of this kind",
+fn rgb(c: usvg::Color) -> [f64; 3] {
+    [f64::from(c.red) / 255.0, f64::from(c.green) / 255.0, f64::from(c.blue) / 255.0]
+}
+
+fn channel(c: usvg::filter::ColorChannel) -> ColorChannel {
+    match c {
+        usvg::filter::ColorChannel::R => ColorChannel::R,
+        usvg::filter::ColorChannel::G => ColorChannel::G,
+        usvg::filter::ColorChannel::B => ColorChannel::B,
+        usvg::filter::ColorChannel::A => ColorChannel::A,
     }
+}
+
+fn values(v: &[f32]) -> Result<Vec<f64>, Unsupported> {
+    if v.len() > MAX_TRANSFER_VALUES {
+        return Err(Unsupported(format!("an SVG transfer function has more than {MAX_TRANSFER_VALUES} values")));
+    }
+    v.iter().map(|v| finite(*v)).collect()
+}
+
+fn transfer(f: &usvg::filter::TransferFunction) -> Result<TransferFunction, Unsupported> {
+    use usvg::filter::TransferFunction as T;
+    Ok(match f {
+        T::Identity => TransferFunction::Identity,
+        T::Table(v) => TransferFunction::Table(values(v)?),
+        T::Discrete(v) => TransferFunction::Discrete(values(v)?),
+        T::Linear { slope, intercept } => TransferFunction::Linear { slope: finite(*slope)?, intercept: finite(*intercept)? },
+        T::Gamma { amplitude, exponent, offset } => {
+            TransferFunction::Gamma { amplitude: finite(*amplitude)?, exponent: finite(*exponent)?, offset: finite(*offset)? }
+        }
+    })
+}
+
+fn light(l: usvg::filter::LightSource) -> Result<LightSource, Unsupported> {
+    use usvg::filter::LightSource as L;
+    Ok(match l {
+        L::DistantLight(d) => LightSource::Distant { azimuth: finite(d.azimuth)?, elevation: finite(d.elevation)? },
+        L::PointLight(p) => LightSource::Point { position: [finite(p.x)?, finite(p.y)?, finite(p.z)?] },
+        L::SpotLight(s) => LightSource::Spot {
+            position: [finite(s.x)?, finite(s.y)?, finite(s.z)?],
+            points_at: [finite(s.points_at_x)?, finite(s.points_at_y)?, finite(s.points_at_z)?],
+            exponent: finite(s.specular_exponent.get())?,
+            cone: s.limiting_cone_angle.map(finite).transpose()?,
+        },
+    })
 }
 
 fn blend_mode(m: usvg::BlendMode) -> BlendMode {
@@ -363,9 +637,57 @@ mod tests {
 
         let t = tree(
             r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
-            <filter id="f"><feTurbulence baseFrequency="0.05"/></filter>
+            <rect id="r" width="5" height="5"/>
+            <filter id="f"><feImage href="#r"/></filter>
             <rect width="50" height="50" filter="url(#f)"/></svg>"##,
         );
-        assert!(filters(first_group(&t), Affine::IDENTITY).is_err());
+        let e = filters(first_group(&t), Affine::IDENTITY).unwrap_err();
+        assert!(e.0.contains("feImage"), "{e:?}");
+    }
+
+    fn one_kind(primitive: &str) -> Result<FilterKind, Unsupported> {
+        let t = tree(&format!(
+            r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+            <filter id="f">{primitive}</filter><rect width="50" height="50" filter="url(#f)"/></svg>"##
+        ));
+        let f = filters(first_group(&t), Affine::IDENTITY)?;
+        Ok(f.first().and_then(|f| f.primitives.first()).map(|p| p.kind.clone()).unwrap())
+    }
+
+    #[test]
+    fn the_remaining_primitives_become_data() {
+        let k = one_kind(r#"<feComponentTransfer><feFuncR type="table" tableValues="1 0"/><feFuncA type="linear" slope="0.5" intercept="0.25"/></feComponentTransfer>"#).unwrap();
+        let FilterKind::ComponentTransfer { functions, .. } = &k else { panic!("{k:?}") };
+        assert_eq!(functions[0], TransferFunction::Table(vec![1.0, 0.0]));
+        assert_eq!(functions[1], TransferFunction::Identity);
+        assert!((functions[3].apply(1.0) - 0.75).abs() < 1e-9);
+        assert!((functions[0].apply(0.25) - 0.75).abs() < 1e-9, "a table interpolates");
+        assert_eq!(TransferFunction::Discrete(vec![0.2, 0.8]).apply(0.6), 0.8);
+
+        let k = one_kind(r#"<feConvolveMatrix order="3" kernelMatrix="0 0 0 0 1 0 0 0 0" edgeMode="wrap"/>"#).unwrap();
+        assert!(matches!(k, FilterKind::ConvolveMatrix { columns: 3, rows: 3, target: (1, 1), edge: EdgeMode::Wrap, .. }), "{k:?}");
+        let k = one_kind(r#"<feSpecularLighting specularExponent="20"><fePointLight x="1" y="2" z="3"/></feSpecularLighting>"#).unwrap();
+        assert!(matches!(k, FilterKind::SpecularLighting { light: LightSource::Point { position: [1.0, 2.0, 3.0] }, exponent: 20.0, .. }), "{k:?}");
+        let k = one_kind(r#"<feTurbulence baseFrequency="0.05 0.1" numOctaves="3" seed="7" type="fractalNoise"/>"#).unwrap();
+        assert_eq!(k, FilterKind::Turbulence { base_frequency: (0.05, 0.1), octaves: 3, seed: 7, stitch: false, fractal: true });
+    }
+
+    #[test]
+    fn hostile_kernels_tables_and_octaves_are_capped() {
+        // A 17 × 17 kernel is refused; 16 × 16 is drawn.
+        let kernel = |n: u32| {
+            let values = vec!["1"; (n * n) as usize].join(" ");
+            format!(r#"<feConvolveMatrix order="{n}" kernelMatrix="{values}"/>"#)
+        };
+        let e = one_kind(&kernel(MAX_CONVOLVE_ORDER + 1)).unwrap_err();
+        assert!(e.0.contains("kernel"), "{e:?}");
+        assert!(one_kind(&kernel(MAX_CONVOLVE_ORDER)).is_ok());
+
+        let table = vec!["0.5"; MAX_TRANSFER_VALUES + 1].join(" ");
+        let e = one_kind(&format!(r#"<feComponentTransfer><feFuncG type="discrete" tableValues="{table}"/></feComponentTransfer>"#)).unwrap_err();
+        assert!(e.0.contains("transfer function"), "{e:?}");
+
+        let k = one_kind(r#"<feTurbulence baseFrequency="0.05" numOctaves="2000000000"/>"#).unwrap();
+        assert!(matches!(k, FilterKind::Turbulence { octaves: MAX_TURBULENCE_OCTAVES, .. }), "{k:?}");
     }
 }

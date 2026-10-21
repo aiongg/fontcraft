@@ -1,5 +1,6 @@
-//! SVG filters run on a glyph's sprite (M11.17d): the filters `fontcraft_color::svg_filter`
-//! reads from an `SVG ` document, applied to the layer a filtered group is drawn on.
+//! SVG filters run on a glyph's sprite (M11.17d, M11.17e): the filters
+//! `fontcraft_color::svg_filter` reads from an `SVG ` document, applied to the layer a filtered
+//! group is drawn on.
 //!
 //! Contract:
 //! - A filter works on the pixels of its region's bounding box on the sprite, within the box its
@@ -14,16 +15,26 @@
 //! - `feGaussianBlur` follows the Filter Effects specification: a Gaussian kernel below a
 //!   standard deviation of 2 pixels, three box blurs from 2 on, which costs the same whatever
 //!   the deviation. Deviations past [`MAX_BLUR_SIGMA`] pixels blur at that deviation.
+//! - `feMorphology` radii scale like blur deviations and round to whole pixels; past
+//!   [`MAX_MORPHOLOGY_RADIUS`] pixels they count as that. `feConvolveMatrix` kernel cells and the
+//!   lighting primitives' Sobel kernels are sprite pixels. `feDisplacementMap` moves pixels by
+//!   whole pixels. `feTile` repeats its input's subregion. Module `effects` runs the
+//!   neighbourhood primitives, `lighting` the lights and `turbulence` the noise.
 //! - Work is the region's pixels times a weight per primitive ([`Plan::cost`]), counted against
-//!   the glyph's budget before the filter runs.
+//!   the glyph's budget before the filter runs: a convolution weighs its kernel's cells, a
+//!   turbulence its octaves.
 
 use std::borrow::Cow;
 
-use fontcraft_color::svg_filter::{BlendMode, CompositeOperator, FilterInput, FilterKind, SvgFilter};
-use fontcraft_geom::{Affine, Point};
+use fontcraft_color::svg_filter::{BlendMode, CompositeOperator, EdgeMode, FilterInput, FilterKind, SvgFilter};
+use fontcraft_geom::{Affine, Point, Rect};
 use skrifa::color::CompositeMode;
 
-use super::{MAX_BLUR_SIGMA, MAX_FILTER_PIXELS, PixBox, composite_px};
+use super::{MAX_BLUR_SIGMA, MAX_FILTER_PIXELS, MAX_MORPHOLOGY_RADIUS, PixBox, composite_px};
+
+mod effects;
+mod lighting;
+mod turbulence;
 
 /// A filter ready to run on a sprite.
 pub(super) struct Plan {
@@ -48,9 +59,13 @@ pub(super) fn plan(filter: &SvgFilter, to_pixels: Affine, width: u32, height: u3
         .map(|p| match &p.kind {
             FilterKind::Blur { .. } | FilterKind::DropShadow { .. } => 16,
             FilterKind::Merge { inputs } => 4 + 2 * inputs.len() as u64,
+            FilterKind::ConvolveMatrix { columns, rows, .. } => 4 + 4 * u64::from(*columns) * u64::from(*rows),
+            FilterKind::Morphology { .. } => 32,
+            FilterKind::Turbulence { octaves, .. } => 4 + 32 * u64::from(*octaves),
+            FilterKind::DiffuseLighting { .. } | FilterKind::SpecularLighting { .. } => 32,
             _ => 6,
         })
-        .sum();
+        .fold(0u64, u64::saturating_add);
     let sprite = u64::from(width) * u64::from(height);
     let cost = region.area().saturating_mul(weight.saturating_add(2)).saturating_add(sprite);
     Ok(Plan { region, to_pixels, cost })
@@ -59,8 +74,9 @@ pub(super) fn plan(filter: &SvgFilter, to_pixels: Affine, width: u32, height: u3
 /// How far `filter` can move or spread what it reads, font units along x and along y, at
 /// `scale` sprite pixels per font unit: the sum over its primitives, as primitives can read each
 /// other's results, with two pixels for each to cover rounding. `None` when a primitive can paint
-/// where everything it reads is clear: a flood, a colour matrix adding alpha, or an arithmetic
-/// composite with a positive `k4`.
+/// where everything it reads is clear: a flood, a colour matrix adding alpha, an arithmetic
+/// composite with a positive `k4`, a transfer function lifting zero alpha, a convolution with a
+/// positive bias or wrapping edges, a tile, a turbulence or a light.
 pub(super) fn reach(filter: &SvgFilter, scale: f64) -> Option<(f64, f64)> {
     let pixel = if scale.is_finite() && scale > 0.0 { 1.0 / scale } else { return None };
     let [a, b, c, d, _, _] = filter.to_font.as_coeffs();
@@ -80,6 +96,22 @@ pub(super) fn reach(filter: &SvgFilter, scale: f64) -> Option<(f64, f64)> {
             FilterKind::Flood { .. } => return None,
             FilterKind::ColorMatrix { matrix, .. } if matrix.get(19).is_none_or(|v| v.is_nan() || *v > 0.0) => return None,
             FilterKind::Composite { operator: CompositeOperator::Arithmetic([_, _, _, k4]), .. } if k4.is_nan() || *k4 > 0.0 => return None,
+            FilterKind::ComponentTransfer { functions: [_, _, _, alpha], .. } if alpha.apply(0.0) > 0.0 => return None,
+            FilterKind::ConvolveMatrix { edge: EdgeMode::Wrap, .. } => return None,
+            FilterKind::ConvolveMatrix { bias, preserve_alpha: false, .. } if bias.is_nan() || *bias > 0.0 => return None,
+            FilterKind::Tile { .. } | FilterKind::Turbulence { .. } | FilterKind::DiffuseLighting { .. } | FilterKind::SpecularLighting { .. } => {
+                return None;
+            }
+            FilterKind::ConvolveMatrix { columns, rows, .. } => (f64::from(*columns) * pixel, f64::from(*rows) * pixel),
+            FilterKind::Morphology { dilate: true, radius: (rx, ry), .. } => {
+                let most = MAX_MORPHOLOGY_RADIUS * pixel;
+                ((rx.abs() * axis_x).min(most) + pixel, (ry.abs() * axis_y).min(most) + pixel)
+            }
+            FilterKind::DisplacementMap { scale, .. } => {
+                // Each of x and y moves by up to half the scale, user space.
+                let half = scale.abs() / 2.0;
+                (half * (a.abs() + c.abs()), half * (b.abs() + d.abs()))
+            }
             FilterKind::Blur { std_dev, .. } => blur(*std_dev),
             FilterKind::Offset { dx, dy, .. } => shift(*dx, *dy),
             FilterKind::DropShadow { dx, dy, std_dev, .. } => {
@@ -182,13 +214,23 @@ pub(super) fn run(filter: &SvgFilter, plan: &Plan, layer: &mut [u8], width: u32)
             dst.copy_from_slice(src);
         }
     }
-    let mut run = Run { w, h, spaces: Spaces::new(), source: Img { px: source, linear: false }, results: Vec::new(), to_pixels: plan.to_pixels };
+    let subregions = filter.primitives.iter().map(|p| PixBox::of(p.subregion, plan.to_pixels, u32::MAX, u32::MAX).intersect(r)).collect();
+    let mut run = Run {
+        w,
+        h,
+        spaces: Spaces::new(),
+        source: Img { px: source, linear: false },
+        results: Vec::new(),
+        to_pixels: plan.to_pixels,
+        region: r,
+        subregions,
+    };
     let last_use = last_uses(filter);
     for (i, p) in filter.primitives.iter().enumerate() {
         // A result nothing reads is not made.
         let out = (last_use.get(i).copied().flatten() != Some(i)).then(|| {
-            let sub = PixBox::of(p.subregion, plan.to_pixels, u32::MAX, u32::MAX).intersect(r);
-            let mut out = run.primitive(&p.kind, p.linear_rgb);
+            let sub = run.subregions.get(i).copied().unwrap_or(PixBox::EMPTY);
+            let mut out = run.primitive(&p.kind, p.linear_rgb, p.subregion);
             clear_outside(&mut out.px, w, sub, r);
             out
         });
@@ -242,7 +284,14 @@ fn inputs(kind: &FilterKind) -> Vec<FilterInput> {
         | FilterKind::DropShadow { input, .. } => vec![*input],
         FilterKind::Composite { input, input2, .. } | FilterKind::Blend { input, input2, .. } => vec![*input, *input2],
         FilterKind::Merge { inputs } => inputs.clone(),
-        FilterKind::Flood { .. } => Vec::new(),
+        FilterKind::ComponentTransfer { input, .. }
+        | FilterKind::ConvolveMatrix { input, .. }
+        | FilterKind::Morphology { input, .. }
+        | FilterKind::Tile { input }
+        | FilterKind::DiffuseLighting { input, .. }
+        | FilterKind::SpecularLighting { input, .. } => vec![*input],
+        FilterKind::DisplacementMap { input, input2, .. } => vec![*input, *input2],
+        FilterKind::Flood { .. } | FilterKind::Turbulence { .. } => Vec::new(),
     }
 }
 
@@ -267,6 +316,10 @@ struct Run {
     /// Each primitive's result so far; `None` once nothing later reads it.
     results: Vec<Option<Img>>,
     to_pixels: Affine,
+    /// The region's pixels on the sprite.
+    region: PixBox,
+    /// Each primitive's subregion on the sprite, within the region.
+    subregions: Vec<PixBox>,
 }
 
 impl Run {
@@ -308,7 +361,21 @@ impl Run {
         (round(v.x), round(v.y))
     }
 
-    fn primitive(&self, kind: &FilterKind, linear: bool) -> Img {
+    /// From the filter's user space to the pixels of the region's image.
+    fn to_image(&self) -> Affine {
+        Affine::translate((-f64::from(self.region.x0), -f64::from(self.region.y0))) * self.to_pixels
+    }
+
+    /// The pixels of `input`'s subregion in the region's image, `[x0, y0, x1, y1)`.
+    fn input_box(&self, input: FilterInput) -> [usize; 4] {
+        let whole = [0, 0, self.w, self.h];
+        let FilterInput::Result(k) = input else { return whole };
+        let Some(b) = self.subregions.get(k) else { return whole };
+        let (x0, y0) = (self.region.x0, self.region.y0);
+        [b.x0.saturating_sub(x0), b.y0.saturating_sub(y0), b.x1.saturating_sub(x0), b.y1.saturating_sub(y0)].map(|v| v as usize)
+    }
+
+    fn primitive(&self, kind: &FilterKind, linear: bool, subregion: Rect) -> Img {
         match kind {
             FilterKind::Blur { input, std_dev } => {
                 let mut img = self.input(*input, linear);
@@ -399,6 +466,74 @@ impl Run {
                 let mut out = shifted(&shadow, self.w, self.h, dx, dy);
                 over(&img.px, &mut out);
                 Img { px: out, linear }
+            }
+            FilterKind::ComponentTransfer { input, functions } => {
+                let mut img = self.input(*input, linear);
+                effects::transfer(&mut img.px, functions);
+                img
+            }
+            FilterKind::ConvolveMatrix { input, columns, rows, kernel, target, divisor, bias, edge, preserve_alpha } => {
+                let img = self.input(*input, linear);
+                let c = effects::Convolution {
+                    columns: *columns as usize,
+                    rows: *rows as usize,
+                    kernel,
+                    target: (target.0 as usize, target.1 as usize),
+                    divisor: *divisor,
+                    bias: *bias,
+                    edge: *edge,
+                    preserve_alpha: *preserve_alpha,
+                };
+                Img { px: effects::convolve(&img.px, self.w, self.h, &c), linear }
+            }
+            FilterKind::Morphology { input, dilate, radius } => {
+                let mut img = self.input(*input, linear);
+                // A zero radius leaves the input as it is.
+                if radius.0 > 0.0 && radius.1 > 0.0 {
+                    let (rx, ry) = self.scale(*radius);
+                    let whole = |r: f64| if r.is_finite() { r.round().clamp(0.0, MAX_MORPHOLOGY_RADIUS) as usize } else { 0 };
+                    effects::morphology(&mut img.px, self.w, self.h, (whole(rx), whole(ry)), *dilate);
+                }
+                img
+            }
+            FilterKind::DisplacementMap { input, input2, scale, channels } => {
+                let (img, map) = (self.input(*input, linear), self.input(*input2, linear));
+                let [a, b, c, d, _, _] = self.to_pixels.as_coeffs();
+                let linear_part = Affine::new([a, b, c, d, 0.0, 0.0]);
+                Img { px: effects::displace(&img.px, &map.px, self.w, self.h, *scale, *channels, linear_part), linear }
+            }
+            FilterKind::Tile { input } => {
+                let img = self.input(*input, linear);
+                Img { px: effects::tile(&img.px, self.w, self.h, self.input_box(*input)), linear }
+            }
+            FilterKind::Turbulence { base_frequency, octaves, seed, stitch, fractal } => {
+                let to_image = self.to_image();
+                let [a, b, c, d, _, _] = to_image.as_coeffs();
+                let det = a * d - b * c;
+                let to_user =
+                    (det.is_finite() && det.abs() > 1e-12).then(|| to_image.inverse()).filter(|t| t.as_coeffs().iter().all(|v| v.is_finite()));
+                let t = turbulence::Turbulence {
+                    base_frequency: *base_frequency,
+                    octaves: (*octaves).min(fontcraft_color::svg_filter::MAX_TURBULENCE_OCTAVES),
+                    seed: *seed,
+                    stitch: stitch.then_some(subregion),
+                    fractal: *fractal,
+                };
+                Img { px: turbulence::turbulence(self.w, self.h, to_user, &t), linear }
+            }
+            FilterKind::DiffuseLighting { input, surface_scale, constant, color, light } => {
+                let img = self.input(*input, linear);
+                let color = color.map(|c| self.spaces.channel(c, linear));
+                let placed = lighting::place(light, self.to_image());
+                let shading = lighting::Shading::Diffuse { constant: *constant };
+                Img { px: lighting::light(&img.px, self.w, self.h, *surface_scale, color, &placed, &shading), linear }
+            }
+            FilterKind::SpecularLighting { input, surface_scale, constant, exponent, color, light } => {
+                let img = self.input(*input, linear);
+                let color = color.map(|c| self.spaces.channel(c, linear));
+                let placed = lighting::place(light, self.to_image());
+                let shading = lighting::Shading::Specular { constant: *constant, exponent: *exponent };
+                Img { px: lighting::light(&img.px, self.w, self.h, *surface_scale, color, &placed, &shading), linear }
             }
         }
     }

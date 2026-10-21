@@ -15,8 +15,10 @@
 //! (`loca` from `glyf`, `head.indexToLocFormat`, `maxp.numGlyphs`, the metric counts of `hhea`
 //! and `vhea`, `OS/2.usFirstCharIndex` and `usLastCharIndex`, and with bounds recalculation the
 //! glyph and font bounding boxes, the `maxp` maxima, `head.flags` bit 1 and the `hhea` and
-//! `vhea` extremes). Ported from fontTools' `ttLib.ttFont`, `misc.xmlReader`,
-//! `misc.textTools`, `misc.timeTools` and `misc.fixedTools` (MIT).
+//! `vhea` extremes). A font with `maxp`, `post` and `CFF ` gets its `CFF ` table compiled again
+//! when the text holds none, as fontTools compiles the table it loaded for the glyph order.
+//! Ported from fontTools' `ttLib.ttFont`, `misc.xmlReader`, `misc.textTools`, `misc.timeTools`
+//! and `misc.fixedTools` (MIT).
 
 use std::collections::{BTreeSet, HashMap};
 use std::rc::Rc;
@@ -701,6 +703,17 @@ pub(crate) fn import_tree(mut font: SfntFont, root: &Element, options: &ImportOp
     let mut loaded: BTreeSet<Tag> = BTreeSet::new();
     let mut glyf: Option<read_core::Glyf> = None;
     let mut metrics: [Option<Vec<(i64, i64)>>; 2] = [None, None];
+    // fontTools' `importXML` reads the glyph order of a font with `maxp` and `post` before the
+    // text, which loads a CFF font's `CFF ` table; the save then compiles that table again, its
+    // FontBBox recalculated, although the text holds no `CFF ` element. A call that picks its
+    // tables (the internal copies of layout tables) changes only those.
+    if options.tables.is_empty()
+        && !elements.iter().any(|(tag, _)| tag == b"CFF ")
+        && let Some(data) = reload_cff(&font, ctx.recalc)
+    {
+        font.insert(*b"CFF ", data);
+        loaded.insert(*b"CFF ");
+    }
     for (tag, element) in &elements {
         let tag = *tag;
         let raw = element.attribute("ERROR").is_some() || truthy(element, "raw");
@@ -745,6 +758,55 @@ pub(crate) fn import_tree(mut font: SfntFont, root: &Element, options: &ImportOp
     }
     recalculate(&mut font, &ctx, &mut loaded, glyf.as_ref(), &metrics)?;
     Ok(font)
+}
+
+/// The font's own `CFF ` table compiled again as fontTools compiles a table it has decompiled:
+/// written as TTX and read back. `None` when the font lacks `maxp`, `post` or `CFF `, or when the
+/// table cannot be written or read; its bytes then stay as they are.
+fn reload_cff(font: &SfntFont, recalc: bool) -> Option<Vec<u8>> {
+    if font.get(*b"maxp").is_none() || font.get(*b"post").is_none() || font.get(*b"CFF ").is_none() {
+        return None;
+    }
+    let options = super::DumpOptions { tables: vec![*b"CFF "], strict: true, ..Default::default() };
+    let text = super::dump(font, &options).ok()?;
+    let root = parse(&attribute_breaks_as_references(&text)).ok()?;
+    let element = root.children.iter().find(|c| xml_to_tag(&c.name).ok() == Some(*b"CFF "))?;
+    let ctx = ReadContext::new(glyph_order(font), font.tables.keys().copied().collect(), recalc);
+    read_cff::read_table_with(element, &ctx).ok().flatten().map(|(_, data)| data)
+}
+
+/// `text` with the line ends and tabs inside attribute values written as character references,
+/// which the parser keeps (a literal one reads as a space). The writer escapes `"`, `<` and `>`
+/// in values, so a quote inside a tag always opens or closes a value.
+fn attribute_breaks_as_references(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let (mut in_tag, mut in_value) = (false, false);
+    let mut skip_to = 0usize;
+    for (i, c) in text.char_indices() {
+        if i < skip_to {
+            continue;
+        }
+        if !in_tag && c == '<' && text.get(i..).is_some_and(|rest| rest.starts_with("<!--")) {
+            let end = text.get(i..).and_then(|rest| rest.find("-->")).map_or(text.len(), |e| i + e + 3);
+            out.push_str(text.get(i..end).unwrap_or_default());
+            skip_to = end;
+            continue;
+        }
+        match c {
+            '\n' if in_value => out.push_str("&#10;"),
+            '\t' if in_value => out.push_str("&#9;"),
+            _ => {
+                match c {
+                    '<' if !in_tag => in_tag = true,
+                    '>' if in_tag && !in_value => in_tag = false,
+                    '"' if in_tag => in_value = !in_value,
+                    _ => {}
+                }
+                out.push(c);
+            }
+        }
+    }
+    out
 }
 
 fn read_known(element: &Element, ctx: &ReadContext, font: &SfntFont) -> Result<Option<(Tag, Vec<u8>)>> {
@@ -884,6 +946,19 @@ fn recalculate(
             put(font, *b"maxp", 0, &0x0001_0000u32.to_be_bytes())?;
         }
     }
+    // head is compiled before hhea and vhea. Compiling OS/2 reads head, which loads it; with
+    // bounds recalculation, compiling head loads `CFF ` (else `CFF2`), so hhea and vhea then
+    // recalculate their extremes from it.
+    if loaded.contains(b"OS/2") && font.get(*b"head").is_some() {
+        loaded.insert(*b"head");
+    }
+    if loaded.contains(b"head") && ctx.recalc && font.get(*b"head").is_some() {
+        if font.get(*b"CFF ").is_some() {
+            loaded.insert(*b"CFF ");
+        } else if font.get(*b"CFF2").is_some() {
+            loaded.insert(*b"CFF2");
+        }
+    }
     // Glyph bounds for the hhea and vhea extremes.
     let outlines_loaded = loaded.contains(b"glyf") || loaded.contains(b"CFF ") || loaded.contains(b"CFF2");
     let bounds: Option<Vec<Option<[f64; 4]>>> = if !ctx.recalc || !outlines_loaded {
@@ -930,13 +1005,10 @@ fn recalculate(
         put_i16(font, header, 14, min_second, "the smallest side bearing")?;
         put_i16(font, header, 16, max_extent, "the largest extent")?;
     }
-    // head: the font bounding box of CFF fonts. Compiling OS/2 reads head, which loads it.
-    if loaded.contains(b"OS/2") && font.get(*b"head").is_some() {
-        loaded.insert(*b"head");
-    }
+    // head: the font bounding box of CFF fonts; a Top DICT without FontBBox has the default, zeros.
     if loaded.contains(b"head") && ctx.recalc && font.get(*b"head").is_some() {
         let bbox = if let Some(data) = font.get(*b"CFF ") {
-            read_cff::font_bbox(data)?
+            Some(read_cff::font_bbox(data)?.unwrap_or_default())
         } else if let Some(data) = font.get(*b"CFF2") {
             read_cff::glyph_bounds(data)?.into_iter().flatten().reduce(|a, b| [a[0].min(b[0]), a[1].min(b[1]), a[2].max(b[2]), a[3].max(b[3])])
         } else {
