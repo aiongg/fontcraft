@@ -494,9 +494,12 @@ fn fea_lookup_per_rule_type_ignores_a_repeated_script() {
 #[test]
 fn fea_lookup_per_rule_type_reports_a_message_in_an_included_file_where_it_is() {
     // The shadowed ligature is found while compiling the written-out code; the message names
-    // the included file and the rule's place in it, as an ordinary compile does.
-    let more = "sub f i by f_i;\nsub f i by f_l;\n";
-    let files = with_files("feature liga { sub a by b; include(more.fea); } liga;", &[("more.fea", more)]);
+    // the file two includes down and the rule's place in it, as an ordinary compile does.
+    let deeper = "sub f i by f_l;\n";
+    let files = with_files(
+        "feature liga { sub a by b; include(more.fea); } liga;",
+        &[("more.fea", "sub f i by f_i;\ninclude(deeper.fea);\n"), ("deeper.fea", deeper)],
+    );
     let order = order();
     let shadowed = |split| {
         let request = CompileRequest { lookup_per_rule_type: split, ..CompileRequest::new(&files, &order) };
@@ -505,8 +508,8 @@ fn fea_lookup_per_rule_type_reports_a_message_in_an_included_file_where_it_is() 
         (d.file, d.span)
     };
     let (file, span) = shadowed(true);
-    assert_eq!(file, "more.fea");
-    assert!(more.get(span.clone()).unwrap().trim_start().starts_with("sub f i by f_l"), "{span:?}");
+    assert_eq!(file, "deeper.fea");
+    assert!(deeper.get(span.clone()).unwrap().trim_start().starts_with("sub f i by f_l"), "{span:?}");
     assert_eq!((file, span), shadowed(false));
 }
 
