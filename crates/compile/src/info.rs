@@ -533,7 +533,11 @@ pub(crate) fn derive_with_family(font: &Resolved, family: &str, style: &str, war
         }
         let implicit = linked
             .as_ref()
-            .map(|l| if l.flags.is_empty() { SelectionFlags::REGULAR } else { l.flags })
+            .map(|l| match l.map_style {
+                Some(_) => SelectionFlags::empty(),
+                None if l.flags.is_empty() => SelectionFlags::REGULAR,
+                None => l.flags,
+            })
             .or_else(|| param(params, &["styleMapStyleName"], |v| v.as_str().and_then(ribbi_flags)))
             .or_else(|| {
                 text(font, "preferredSubfamilyNames", &["preferredSubfamilyName", "openTypeNamePreferredSubfamilyName"]).and_then(ribbi_flags)
@@ -702,6 +706,9 @@ pub(crate) struct Linked {
     map_family: String,
     /// Bold and italic: name ID 2, `fsSelection` and `head.macStyle`.
     flags: SelectionFlags,
+    /// Name ID 2 when a UFO-family instance states a style-map style other than the four: the
+    /// stated name title-cased, as ufo2ft writes it. No style bit is set then.
+    map_style: Option<String>,
 }
 
 /// [`Linked`] for a static instance of a `.glyphs` source; `None` for a master. Ported from
@@ -714,7 +721,10 @@ fn linked_names(font: &Resolved, family: &str, style: &str, warnings: &mut Vec<S
     let link = font.style.as_ref()?;
     let family = default_language(font, "familyNames", &["familyName"]).map_or_else(|| family.to_string(), str::to_string);
     let style = default_language(font, "styleNames", &[]).map_or_else(|| style.to_string(), str::to_string);
-    let base = link.link_style.as_deref().filter(|l| !l.is_empty() && *l != "Regular");
+    let ufo = is_ufo_family(font.format);
+    // In a designspace an empty link style links to the family alone (its style-map family
+    // name is the family); glyphsLib reads an empty one in a `.glyphs` source as none.
+    let base = link.link_style.as_deref().filter(|l| *l != "Regular" && (ufo || !l.is_empty()));
     let words = base.map_or_else(|| linked_style_words(&style, link.is_bold, link.is_italic), str::to_string);
     let derived = if words.is_empty() { family.clone() } else { format!("{family} {words}") };
     let map_family = default_language(font, "styleMapFamilyNames", &["styleMapFamilyName"]).map_or(derived, str::to_string);
@@ -725,13 +735,39 @@ fn linked_names(font: &Resolved, family: &str, style: &str, warnings: &mut Vec<S
     if link.is_italic {
         flags |= SelectionFlags::ITALIC;
     }
+    let mut map_style = None;
     if let Some(v) = default_language(font, "styleMapStyleNames", &["styleMapStyleName"]) {
         match ribbi_flags(v) {
             Some(f) => flags = f & (SelectionFlags::BOLD | SelectionFlags::ITALIC),
+            None if ufo => {
+                flags = SelectionFlags::empty();
+                map_style = Some(title_case(v));
+            }
             None => warnings.push(format!("the style-map style name `{v}` is not regular, italic, bold or bold italic and was ignored")),
         }
     }
-    Some(Linked { family, style, map_family, flags })
+    Some(Linked { family, style, map_family, flags, map_style })
+}
+
+/// `text` as Python's `str.title` gives it: the first letter of each run of letters upper case,
+/// the others lower case.
+fn title_case(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut in_word = false;
+    for c in text.chars() {
+        if c.is_alphabetic() {
+            if in_word {
+                out.extend(c.to_lowercase());
+            } else {
+                out.extend(c.to_uppercase());
+            }
+            in_word = true;
+        } else {
+            out.push(c);
+            in_word = false;
+        }
+    }
+    out
 }
 
 /// The words of `style` left once the last `Regular` (when neither bold nor italic), `Bold` (when
@@ -898,7 +934,7 @@ fn names(
         // A static instance: its style-map names, as fontmake's instancer gives them.
         b.names.remove(&1);
         b.add(1, &l.map_family);
-        b.add(2, ribbi_name(l.flags));
+        b.add(2, l.map_style.as_deref().unwrap_or_else(|| ribbi_name(l.flags)));
         if b.get(16).is_none() && !l.family.is_empty() {
             b.add(16, &l.family);
         }

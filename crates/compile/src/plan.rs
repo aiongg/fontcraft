@@ -5,7 +5,9 @@
 //! would fail in those stages, so a plan that succeeds names the glyphs and tables the build
 //! writes.
 
-use fontcraft_model::{Font, Resolved, Target};
+use std::borrow::Cow;
+
+use fontcraft_model::{Font, PropertyValue, Resolved, Target};
 
 use crate::{CompileError, Flavour, Options, fill_glyph_data, info, names, order, preflight};
 
@@ -103,17 +105,73 @@ fn plan_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour, op
     })
 }
 
-/// The PostScript name (name ID 6) a compile of `resolved` writes; `None` when it writes none.
+/// The PostScript name (name ID 6) a compile of `resolved` alone writes, its names taken as they
+/// stand; `None` when it writes none. [`postscript_name_from`] expands their text tokens.
 pub fn postscript_name(resolved: &Resolved, options: &Options) -> Option<String> {
-    info::derive(resolved, &options.style_name, &mut Vec::new()).name(6)
+    postscript_name_from(None, resolved, options)
 }
 
-/// The PostScript name an exported file of `resolved` is named by. A font with no family name
-/// takes `source` (the source file's name without its extension) as the family here, so its
-/// files are not called `-Bold.ttf`; the `name` table keeps the empty family.
-pub fn file_stem(resolved: &Resolved, options: &Options, source: &str) -> Option<String> {
-    let family = if resolved.family_name.trim().is_empty() { source.trim() } else { resolved.family_name.as_str() };
-    info::derive_with_family(resolved, family, &options.style_name, &mut Vec::new()).name(6)
+/// The PostScript name (name ID 6) a compile of `resolved` writes; `None` when it writes none.
+/// `font` is the source `resolved` was resolved from: the text tokens of the names are expanded
+/// in its context, as the compile expands them ([`with_expanded_names`]).
+pub fn postscript_name_from(font: Option<&Font>, resolved: &Resolved, options: &Options) -> Option<String> {
+    let named = with_expanded_names(font, resolved);
+    info::derive(&named, &options.style_name, &mut Vec::new()).name(6)
+}
+
+/// The PostScript name an exported file of `resolved` is named by, its tokens expanded as in
+/// [`postscript_name_from`]. A font with no family name takes `source` (the source file's name
+/// without its extension) as the family here, so its files are not called `-Bold.ttf`; the
+/// `name` table keeps the empty family.
+pub fn file_stem(font: Option<&Font>, resolved: &Resolved, options: &Options, source: &str) -> Option<String> {
+    let named = with_expanded_names(font, resolved);
+    let family = if named.family_name.trim().is_empty() { source.trim() } else { named.family_name.as_str() };
+    info::derive_with_family(&named, family, &options.style_name, &mut Vec::new()).name(6)
+}
+
+/// `resolved` with the text tokens (`{{{key}}}`) of its family and style names, properties and
+/// text parameters expanded in the context of `font`, the source it was resolved from, as the
+/// compile expands them. Borrowed when there is no source or nothing to expand. The copy holds
+/// no glyphs: no name depends on them.
+pub fn with_expanded_names<'a>(font: Option<&Font>, resolved: &'a Resolved) -> Cow<'a, Resolved> {
+    use fontcraft_fontinfo::tokens::has_tokens;
+    let in_properties = || {
+        resolved.properties.0.iter().any(|p| match &p.value {
+            PropertyValue::Single(v) => has_tokens(v),
+            PropertyValue::Localized(values) => values.iter().any(|l| has_tokens(&l.value)),
+        })
+    };
+    let in_params = || resolved.params.0.iter().any(|p| p.value.as_str().is_some_and(has_tokens));
+    let tokens = has_tokens(&resolved.family_name) || has_tokens(&resolved.style_name) || in_properties() || in_params();
+    if font.is_none() || !tokens {
+        return Cow::Borrowed(resolved);
+    }
+    let mut named = Resolved {
+        format: resolved.format,
+        units_per_em: resolved.units_per_em,
+        family_name: resolved.family_name.clone(),
+        style_name: resolved.style_name.clone(),
+        version_major: resolved.version_major,
+        version_minor: resolved.version_minor,
+        master: resolved.master.clone(),
+        location: resolved.location.clone(),
+        axes: resolved.axes.clone(),
+        metrics: resolved.metrics,
+        zones: resolved.zones.clone(),
+        stems_h: resolved.stems_h.clone(),
+        stems_v: resolved.stems_v.clone(),
+        properties: resolved.properties.clone(),
+        params: resolved.params.clone(),
+        date: resolved.date.clone(),
+        style: resolved.style.clone(),
+        instance: resolved.instance,
+        instance_classes: resolved.instance_classes,
+        production_names: resolved.production_names,
+        glyphs: Vec::new(),
+        notes: Vec::new(),
+    };
+    info::expand_tokens(font, &mut named, &mut Vec::new());
+    Cow::Owned(named)
 }
 
 /// The tables `build::assemble` writes for `flavour`, sorted by tag as the table directory is.

@@ -496,6 +496,7 @@ pub(super) fn discard(_: &[Staged]) {}
 #[cfg(not(target_arch = "wasm32"))]
 pub(super) mod layout;
 mod source;
+pub(super) use source::without_axes;
 
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]

@@ -16,8 +16,8 @@
 //! ([`custom_params`]). Between masters, the PostScript weight name follows the interpolated
 //! weight class and PANOSE keeps only the digits every source shares ([`shared_panose`]); every
 //! instance takes glyphsLib's embedding type and underline where no source states them
-//! ([`glyphs_defaults`]). A designspace without axes whose sources or instances state a location
-//! is refused, as fontTools' reader refuses it ([`refuse_without_axes`]).
+//! ([`glyphs_defaults`]). A designspace without axes whose sources or instances state a location,
+//! or that has two or more sources, is refused, as fontTools refuses it ([`without_axes`]).
 //! Of two instances with one output file, the later is kept, as fontmake writes each in turn.
 //!
 //! UFOs are staged in temporary folders beside their targets and swapped in once every instance
@@ -150,15 +150,26 @@ pub(super) fn instantiate(p: &Params<'_>, input: &Path, req: &OutputRequest) -> 
     Ok(json!({ "results": results, "warnings": warnings }))
 }
 
-/// Refuses a designspace without `<axes>` that states a location, as fontTools' reader does ("No
-/// axes defined"). That reader fails on the first `<location>` it reads: one in a location label,
-/// a source, an instance, or an instance's glyph or glyph master. Without axes those locations
-/// cannot be read, so the sources would all sit at one location. A document without axes and
-/// without any location loads in fontTools, and is not refused here. When the read document is
-/// not kept, any designspace without axes is refused.
+/// Refuses a designspace without `<axes>` that fontTools cannot interpolate ([`without_axes`]).
 pub(super) fn refuse_without_axes(p: &Params<'_>, font: &Font) -> Result<()> {
+    match without_axes(font, true) {
+        Some(why) => Err(p.bad(why)),
+        None => Ok(()),
+    }
+}
+
+/// Why a designspace without `<axes>` cannot be built as fontmake builds it; `None` when it can,
+/// or when the font is not such a designspace.
+///
+/// fontTools' reader fails on the first `<location>` it reads ("No axes defined"): one in a
+/// location label, a source, an instance, or an instance's glyph or glyph master. Without axes
+/// those locations cannot be read. A document without axes and without any location loads, with
+/// every source at one location: its sources can be built one by one, but interpolating
+/// (`interpolates`) between two or more of them fails ("Locations must be unique"); a single
+/// source is its own instance. When the read document is not kept, a location is assumed.
+pub(in crate::cmd) fn without_axes(font: &Font, interpolates: bool) -> Option<String> {
     if font.source.format != SourceFormat::Designspace || !font.axes.is_empty() {
-        return Ok(());
+        return None;
     }
     let document = font.extra.get(Family::Designspace, "document").and_then(PValue::as_str);
     let states_location = match document.map(xml::parse) {
@@ -166,9 +177,12 @@ pub(super) fn refuse_without_axes(p: &Params<'_>, font: &Font) -> Result<()> {
         _ => true,
     };
     if states_location {
-        return Err(p.bad("the designspace defines no axes, so its sources have no locations to interpolate between"));
+        return Some("the designspace defines no axes, so its sources have no locations to interpolate between".into());
     }
-    Ok(())
+    let sources = font.masters.len();
+    (interpolates && sources > 1).then(|| {
+        format!("the designspace defines no axes, so its {sources} sources sit at one location and no instance can be interpolated between them")
+    })
 }
 
 /// Does the designspace `root` have a `<location>` where fontTools' reader reads one?
@@ -606,7 +620,7 @@ fn finish(
         master.params.set("postscriptFontName", text(ps));
     }
     master.params.set("styleMapFamilyName", text(&names.style_map_family));
-    master.params.set("styleMapStyleName", text(names.style_map_style));
+    master.params.set("styleMapStyleName", text(&names.style_map_style));
     // fontmake sets the classes from the location on a wght or wdth axis whatever the masters
     // state (glyphsLib's apply_instance_data after the instantiator); without the axis, from the
     // instance's own class when the masters state none.
@@ -1418,6 +1432,84 @@ mod tests {
         if let Err(e) = s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })) {
             assert!(!e.to_string().contains("defines no axes"), "{e}");
         }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// fontmake builds each master of a designspace without axes, and its instances only from a
+    /// single source: two sources sit at one location and cannot be interpolated ("Locations
+    /// must be unique"). font.compile and font.compilePlan follow it.
+    #[test]
+    fn compile_of_a_designspace_without_axes_builds_as_fontmake_does() {
+        let (dir, ds) = source("compile-no-axes");
+        let write = |sources: &str| {
+            std::fs::write(
+                &ds,
+                format!(
+                    r#"<?xml version='1.0' encoding='UTF-8'?>
+<designspace format="4.1">
+  <sources>{sources}</sources>
+  <instances>
+    <instance familyname="Test" stylename="Regular" filename="instances/Test-Regular.ufo" postscriptfontname="Test-Regular"/>
+  </instances>
+</designspace>
+"#
+                ),
+            )
+            .unwrap()
+        };
+        let light = r#"<source filename="Light.ufo" name="Light"/>"#;
+        write(&format!(r#"{light}<source filename="Bold.ufo" name="Bold"/>"#));
+        let mut s = Session::new();
+        s.execute("file.open", &json!({ "path": ds })).unwrap();
+        let err = s.execute("font.compile", &json!({})).unwrap_err().to_string();
+        assert!(err.contains("defines no axes") && err.contains("2 sources"), "{err}");
+        let err = s.execute("font.compilePlan", &json!({})).unwrap_err().to_string();
+        assert!(err.contains("defines no axes"), "{err}");
+        let r = s.execute("font.compile", &json!({ "instances": false, "mastersAsInstances": true })).unwrap();
+        assert_eq!(r["fonts"].as_array().map(Vec::len), Some(2), "each master builds: {r}");
+
+        write(light);
+        let mut s = Session::new();
+        s.execute("file.open", &json!({ "path": ds })).unwrap();
+        let r = s.execute("font.compile", &json!({})).unwrap();
+        assert_eq!(r["fonts"][0]["instance"], json!("Regular"), "one source is its own instance: {r}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// fontc's fontinfo_var.designspace states the style-map style `thin`, which is not one of
+    /// the four. fontTools' instantiator keeps it in the UFO instance; ufo2ft writes it
+    /// title-cased as name ID 2 with no REGULAR, BOLD or ITALIC bit; and the style-map family,
+    /// stated as the family alone, stays name ID 1 (checked with fontmake 3.12.1).
+    #[test]
+    fn a_thin_style_map_style_is_kept_as_fontmake_keeps_it() {
+        use skrifa::raw::TableProvider;
+        let (dir, ds) = source("thin");
+        let text = std::fs::read_to_string(&ds).unwrap().replace(
+            r#"stylename="Regular" filename="instances/Test-Regular.ufo" postscriptfontname="Test-Regular"><location><dimension name="Weight" xvalue="500"/>"#,
+            r#"stylename="Thin" filename="instances/Test-Thin.ufo" postscriptfontname="Test-Thin" stylemapfamilyname="Test" stylemapstylename="thin"><location><dimension name="Weight" xvalue="300"/>"#,
+        );
+        assert!(text.contains("stylemapstylename"));
+        std::fs::write(&ds, text).unwrap();
+        let mut s = Session::new();
+        s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })).unwrap();
+        let info = std::fs::read_to_string(dir.join("instances").join("Test-Thin.ufo").join("fontinfo.plist")).unwrap();
+        assert!(info.contains("<key>styleMapStyleName</key>") && info.contains("<string>thin</string>"), "{info}");
+
+        s.execute("file.open", &json!({ "path": ds })).unwrap();
+        let out = dir.join("Thin.ttf");
+        s.execute("font.compile", &json!({ "instances": ["Thin"], "destination": out })).unwrap();
+        let bytes = std::fs::read(&out).unwrap();
+        let font = skrifa::FontRef::new(&bytes).unwrap();
+        let name = font.name().unwrap();
+        let text = |id: u16| {
+            name.name_record()
+                .iter()
+                .find(|r| r.platform_id() == 3 && r.name_id().to_u16() == id)
+                .map(|r| r.string(name.string_data()).unwrap().chars().collect::<String>())
+        };
+        assert_eq!((text(1).as_deref(), text(2).as_deref()), (Some("Test"), Some("Thin")));
+        assert_eq!((text(16), text(17)), (None, None), "IDs 16 and 17 equal 1 and 2");
+        assert_eq!(font.os2().unwrap().fs_selection().bits() & 0x61, 0, "no ITALIC, BOLD or REGULAR bit");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

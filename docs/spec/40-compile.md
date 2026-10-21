@@ -293,7 +293,7 @@ writing fonts; `font.compilePlan` describes the same choices without building.
 |---|---|---|
 | Which fonts | The exportable static instances; the first master when the font has no static instance. Named instances are built whether they export or not. `font.compile` can add each master | `export.staticUsesInstancesOrDefault` |
 | Instances between masters | Skipped with a reason in the result until interpolation (M9). An export that builds nothing fails | `export.instancesBetweenMasters` |
-| File name | The instance's `fileName` parameter, else the PostScript name (name ID 6, as the compiler derives it), plus `.ttf`, `.otf`, `.woff` or `.woff2`; characters a file name cannot hold are dropped. A font with no family name takes the family `Unnamed font` for the file name when its source is a .glyphs file or package, as fontmake does (`Unnamedfont-Bold.ttf`), and the source file's name without its extension when it is any other (`Draft.ufo` gives `Draft-Bold.ttf`, where fontc writes `-Bold.ttf`); the `name` table keeps the empty family | `export.fileNaming`, `compile.outputNaming` |
+| File name | The instance's `fileName` parameter as written, else the PostScript name (name ID 6, as the compiler derives it, with the text tokens of the names expanded for the instance), plus `.ttf`, `.otf`, `.woff` or `.woff2`; characters a file name cannot hold are dropped. A font with no family name takes the family `Unnamed font` for the file name when its source is a .glyphs file or package, as fontmake does (`Unnamedfont-Bold.ttf`), and the source file's name without its extension when it is any other (`Draft.ufo` gives `Draft-Bold.ttf`, where fontc writes `-Bold.ttf`); the `name` table keeps the empty family | `export.fileNaming`, `compile.outputNaming` |
 | Both flavours at once | Each into a `ttf` or `otf` subfolder; a repeated file name keeps the later font, with a warning | `export.flavourSubfolders` |
 | One file as destination | Its extension sets the flavour and container; it receives the first font that can be built | `export.singleFileDestination` |
 | Failure | Files are staged under temporary names and renamed only when every font is built; a failure leaves the destination as it was | `export.failingExportWritesNothing` |
@@ -693,7 +693,7 @@ causes; none comes from the handbook's keys, which no corpus instance at a maste
 
 | What | Where it comes from |
 |---|---|
-| Family, style, PostScript and style-map names | the `<instance>` element; style-map names it leaves out are ufo2ft's fallbacks from the style name |
+| Family, style, PostScript and style-map names | the `<instance>` element; style-map names it leaves out are ufo2ft's fallbacks from the style name. A stated style-map style other than the four (`thin`) is kept as written; compiled, it is name ID 2 title-cased (`Thin`) with no REGULAR, BOLD or ITALIC bit |
 | Names of one style in the masters' UFOs (PostScript, full, typographic, WWS, compatible, unique id, style-map) | left out, unless the source has one master and the instance sits at it |
 | Other font information | the default source's; numbers interpolated over the masters |
 | PostScript weight name, between masters | from the interpolated weight class, rounded to hundreds (fontMath's names, `Thin` to `Black`) |
@@ -704,6 +704,12 @@ causes; none comes from the handbook's keys, which no corpus instance at a maste
 
 One case is known to differ: a single-source designspace whose instance states no style-map
 names takes ufo2ft's fallbacks, where fontmake keeps the UFO's own style-map names.
+
+A designspace without `<axes>` builds as fontmake builds it. One that states a `<location>`
+anyway is refused, as fontTools' reader refuses it ("No axes defined"). Otherwise every source
+sits at one location: the masters build one by one, and instances build only when there is one
+source; with two or more, interpolation is refused, as fontTools refuses it ("Locations must be
+unique"). A variable export needs at least one axis.
 
 **Against the handbook.** TrueType composites with overlapping or transformed components stay
 composites by default, as fontc and fontmake keep them. The texts of the Keep Overlapping
