@@ -25,6 +25,11 @@
 //! size and the [`MAX_PDF_DECOMPRESSED`] bytes the whole file may decode to; nesting, operators,
 //! operands, segments, paths and pixels each have a limit below. The functions work on file
 //! contents; reading files is the caller's job, so they also run in the browser.
+//!
+//! [`render_pdf`] and [`page_size`] parse a file once for the whole process: the parsed first
+//! page is kept in a small cache keyed by a hash of the file's contents (see
+//! [`MAX_PDF_CACHE_ENTRIES`]), so the engine and the window drawing the same placed PDF share
+//! one parse. [`read_pdf`] reads pasted and imported files, which come once, without the cache.
 #![forbid(unsafe_code)]
 
 use std::collections::BTreeMap;
@@ -33,10 +38,13 @@ use std::fmt;
 use fontcraft_imagery::Rgba8;
 use fontcraft_model::{MAX_COORDINATE, Path};
 
+mod cache;
 mod content;
 mod load;
 mod outline;
 mod raster;
+
+pub use cache::{MAX_PDF_CACHE_BYTES, MAX_PDF_CACHE_ENTRIES};
 
 /// Largest PDF input, in bytes.
 pub const MAX_PDF_BYTES: usize = 256 << 20;
@@ -249,7 +257,7 @@ pub fn read_pdf(data: &[u8], placement: Placement) -> Result<PdfOutlines, PdfErr
 /// `max_pixels` pixels (itself capped at the image limit of `fontcraft_imagery`); a page that
 /// would be larger is drawn at a lower resolution.
 pub fn render_pdf(data: &[u8], pixels_per_point: f64, max_pixels: u64) -> Result<PdfRaster, PdfError> {
-    let page = load::first_page_drawing(data)?;
+    let page = cache::first_page(data)?;
     let (image, pixels_per_point) = raster::render(&page, pixels_per_point, max_pixels)?;
     let mut dropped = Dropped::default();
     for (what, n) in &page.dropped.elements {
@@ -265,7 +273,7 @@ pub fn render_pdf(data: &[u8], pixels_per_point: f64, max_pixels: u64) -> Result
 /// bounds of its drawing. A PDF placed as an image maps one point to one unit of its own space,
 /// so this is the size such an image has where other formats have a pixel size.
 pub fn page_size(data: &[u8]) -> Result<(f64, f64), PdfError> {
-    let page = load::first_page_drawing(data)?;
+    let page = cache::first_page(data)?;
     let [x0, y0, x1, y1] = page.frame.or_else(|| outline::bounds(&page.painted)).ok_or(PdfError::NoPage)?;
     let (w, h) = (x1 - x0, y1 - y0);
     if w.is_finite() && h.is_finite() && w > 0.0 && h > 0.0 { Ok((w, h)) } else { Err(PdfError::NoPage) }
