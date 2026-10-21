@@ -14,3 +14,4 @@ workspace = true
 fontcraft-imagery.workspace = true
 fontcraft-model.workspace = true
 lopdf.workspace = true
+sha2.workspace = true

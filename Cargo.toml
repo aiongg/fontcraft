@@ -107,6 +107,8 @@ pdf-writer = "0.15"
 # its default features: no rayon, no clock. `wasm_js` lets its random-number source build for the
 # browser and does nothing on native targets.
 lopdf = { version = "0.45", default-features = false, features = ["wasm_js"] }
+# SHA-256 (MIT OR Apache-2.0), which lopdf uses too: the key of io-pdf's cache of parsed pages.
+sha2 = "0.11"
 
 # Rasterising for `render` (BSD-3-Clause): nonzero fills, anti-aliased, PNG output. Builds for wasm.
 tiny-skia = "0.12"

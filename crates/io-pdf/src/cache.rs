@@ -2,13 +2,14 @@
 //! or measures a placed PDF (the engine's image commands, the strike rasteriser, Edit View and
 //! Font View), so the same bytes are parsed once.
 //!
-//! Entries are keyed by the file's length and a 64-bit hash of its contents, never by a path: the
-//! same file under two paths is one entry, and a changed file is a new one. A failed parse is
+//! Entries are keyed by the file's length and the SHA-256 of its contents, never by a path: the
+//! same file under two paths is one entry, and a changed file is a new one. A cryptographic hash
+//! keeps a file made to collide with another from being drawn as the other. A failed parse is
 //! kept too, so a file that cannot be read is not parsed again on every frame. The cache holds
 //! at most [`MAX_PDF_CACHE_ENTRIES`] entries and [`MAX_PDF_CACHE_BYTES`] of parsed drawings,
 //! least recently used dropped first; a drawing larger than that is returned without being kept.
 
-use std::hash::Hasher;
+use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use crate::PdfError;
@@ -21,19 +22,17 @@ pub const MAX_PDF_CACHE_BYTES: usize = 64 << 20;
 
 pub(crate) type Parsed = Result<Arc<PageDrawing>, PdfError>;
 
-/// Which file: its length and the hash of its bytes.
+/// Which file: its length and the SHA-256 of its bytes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Key {
     len: usize,
-    hash: u64,
+    hash: [u8; 32],
 }
 
 impl Key {
     pub(crate) fn of(data: &[u8]) -> Self {
-        // `DefaultHasher::new` uses fixed keys, so equal bytes hash equally within the process.
-        let mut h = std::hash::DefaultHasher::new();
-        h.write(data);
-        Self { len: data.len(), hash: h.finish() }
+        let digest = Sha256::digest(data);
+        Self { len: data.len(), hash: <[u8; 32]>::try_from(digest.as_slice()).unwrap_or_default() }
     }
 }
 

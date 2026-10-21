@@ -301,14 +301,13 @@ fn pdf_parsed_once_for_drawing_and_measuring_and_the_cache_is_bounded() {
 
     use crate::cache::{self, PageCache};
 
-    // The shared cache: drawing a page and measuring it parse the bytes once.
+    // Drawing and measuring go through the process's cache, which other tests fill at the same
+    // time, so only their agreement is checked here.
     let bytes =
         save(document(&["0 0 0 rg 3 7 11 13 re f".as_bytes()], Dictionary::new(), dictionary! { "MediaBox" => ints(&[0, 0, 37, 41]) }, false));
-    render_pdf(&bytes, 1.0, 1 << 20).unwrap();
-    assert!(cache::lock(&cache::SHARED).holds(&bytes), "the parsed page is kept");
-    let first = cache::first_page(&bytes).unwrap();
-    assert!(Arc::ptr_eq(&first, &cache::first_page(&bytes).unwrap()), "a second use takes the kept parse");
+    let drawn = render_pdf(&bytes, 1.0, 1 << 20).unwrap();
     assert_eq!(page_size(&bytes).unwrap(), (37.0, 41.0));
+    assert_eq!((drawn.image.width, drawn.image.height), (37, 41), "drawn at the size measured");
 
     // A cache of its own counts the parses.
     let mine = Mutex::new(PageCache::new());
