@@ -16,22 +16,23 @@
 //! The lines, crossings and coordinates come from engine queries (`guide.displayLines`,
 //! `measure.ruler`, `measure.coordinates`), run once per frame by [`Extras::query`] before the
 //! frame borrows the font. The Measurement tool covers every glyph of the tab's text
-//! (`measurement.allVisibleGlyphs`), at most `MAX_PLACEMENTS` of them nearest the edited one; its
-//! coordinates are kept until the document or the line changes, as the overlap test is slow.
+//! (`measurement.allVisibleGlyphs`), at most `MAX_PLACEMENTS` of them nearest the edited one. As
+//! the overlap test is slow, each glyph's coordinates are kept until that glyph, a glyph it uses
+//! or the masters change, and the last line's answer and ruler until the document changes.
 //!
 //! A global guide with a filter (a glyph predicate) shows only in the glyphs it matches
 //! (`guides.globalScopeFilter`, evaluated by `fontcraft_glyphquery::guide_in_scope`). A filter
 //! that does not read as a predicate leaves the guide shown everywhere.
 
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use egui::{Align2, Color32, FontId, Pos2, Rect, Shape, Stroke};
 use fontcraft_engine::Session;
 use fontcraft_geom::Point;
 use fontcraft_model::glyphdata::GlyphData;
-use fontcraft_model::{Font, Glyph, Guide, Layer};
+use fontcraft_model::{Axis, Font, Glyph, Guide, Layer, Master, MetricDef, Shape as ModelShape};
 use fontcraft_tools::{GuideRef, GuideScope, Overlay, OverlayKind, Selection};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -47,6 +48,11 @@ const MAX_MEASURED_GUIDES: usize = 64;
 const MAX_LABELS: usize = 5_000;
 /// Most glyphs of the line the Measurement tool covers (the limit of `measure.ruler`).
 const MAX_PLACEMENTS: usize = 200;
+/// Most segments of overlapped stretches the Measurement tool draws per frame.
+const MAX_OVERLAP_SEGMENTS: usize = 20_000;
+/// Most glyphs one glyph's kept coordinates may depend on (itself and its components, nested);
+/// a glyph with more is measured again after every edit.
+const MAX_SOURCE_GLYPHS: usize = 64;
 /// Most lines one grid draws in each direction.
 const MAX_GRID_LINES: usize = 2_000;
 /// Gap between the dots of a dotted line, and their radius, in points.
@@ -145,73 +151,247 @@ struct AnchorPoint {
     y: f64,
 }
 
-/// `measure.coordinates` of one glyph, which sits at `x`, `y` from the edited glyph's origin.
+/// `measure.coordinates` of one glyph, in its own coordinates.
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(default)]
 struct Coordinates {
-    x: f64,
-    y: f64,
     points: Vec<CoordPoint>,
     deltas: Vec<Delta>,
     anchors: Vec<AnchorPoint>,
     /// Stretches of outline inside an overlap, as polylines.
     overlaps: Vec<Vec<[f64; 2]>>,
+    /// The overlap test stopped at the query's work limit, so `overlaps` may miss some.
+    #[serde(rename = "overlapsTruncated")]
+    overlaps_truncated: bool,
 }
 
-/// What the last `measure.coordinates` was asked for, and its answer per glyph.
-type CachedCoordinates = ((u64, u64, usize), Value, Arc<Vec<Coordinates>>);
+/// A glyph of the line with its coordinates; it sits at `x`, `y` from the edited glyph's origin.
+#[derive(Clone, Debug)]
+struct Placed {
+    x: f64,
+    y: f64,
+    coords: Arc<Coordinates>,
+}
+
+/// A glyph of the line to measure: which layer and side, where it sits, and how far it is from
+/// the edited glyph in the text.
+#[derive(Clone, Debug, PartialEq)]
+struct Entry {
+    glyph: String,
+    layer: String,
+    background: bool,
+    x: f64,
+    y: f64,
+    distance: usize,
+}
+
+impl Entry {
+    fn key(&self) -> GlyphKey {
+        (self.glyph.clone(), self.layer.clone(), self.background)
+    }
+
+    /// The entry as one of the queries' `placements`, at its place in the line or (`at` false)
+    /// at the origin.
+    fn placement(&self, at: bool) -> Value {
+        let mut v = json!({"glyph": self.glyph, "layer": self.layer});
+        if let Some(o) = v.as_object_mut() {
+            if at {
+                o.insert("x".into(), json!(self.x));
+                o.insert("y".into(), json!(self.y));
+            }
+            if self.background {
+                o.insert("side".into(), json!("background"));
+            }
+        }
+        v
+    }
+}
+
+/// The cache key of one glyph's coordinates: glyph, layer and side.
+type GlyphKey = (String, String, bool);
+
+/// The glyphs one glyph's measurement reads (itself and those its components use, by name; `None`
+/// for a name that was missing), as they were. Holding the `Arc`s keeps them comparable by
+/// pointer: a glyph that changes gets a new one.
+type Sources = Vec<(String, Option<Arc<Glyph>>)>;
+
+/// The font-level lists a measurement reads (the italic angle, smart components), as they were.
+type FontLevel = (Arc<Vec<Master>>, Arc<Vec<MetricDef>>, Arc<Vec<Axis>>);
+
+/// The Measurement tool's answers, kept across frames because the overlap test is slow.
+#[derive(Default)]
+struct MeasureCache {
+    /// The document the entries belong to.
+    doc: Option<u64>,
+    level: Option<FontLevel>,
+    /// Each glyph's coordinates and what they were measured from. Only complete answers are
+    /// kept here, so an edit that leaves a glyph alone does not measure it again.
+    glyphs: HashMap<GlyphKey, (Sources, Arc<Coordinates>)>,
+    /// The last frame's line and answer, failures and partial answers included, so a line that
+    /// cannot be measured in full is not measured again every frame.
+    last: Option<(DocKey, Vec<Entry>, Arc<Vec<Placed>>)>,
+    /// The last ruler query and its answer (`None` when it failed).
+    ruler: Option<(DocKey, Value, Option<Arc<Ruler>>)>,
+}
+
+/// The active document, its revision and its font.
+type DocKey = (u64, u64, usize);
 
 thread_local! {
-    static COORDINATES: RefCell<Option<CachedCoordinates>> = const { RefCell::new(None) };
+    static MEASURED: RefCell<MeasureCache> = RefCell::new(MeasureCache::default());
+    /// How many glyphs `measure.coordinates` was asked to measure, for tests.
+    static MEASURED_GLYPHS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
-/// `measure.coordinates` for `params`, per glyph, kept while the document and the parameters
-/// stay the same.
-fn coordinates(session: &mut Session, params: Value) -> Option<Arc<Vec<Coordinates>>> {
-    let doc = session.active().map(|d| (d.id, d.revision, Arc::as_ptr(&d.font) as usize))?;
-    let hit = COORDINATES.with(|c| c.borrow().as_ref().filter(|(k, p, _)| *k == doc && *p == params).map(|(_, _, v)| v.clone()));
+/// How many glyphs this thread has asked `measure.coordinates` to measure.
+#[cfg(test)]
+pub(crate) fn measured_glyphs() -> usize {
+    MEASURED_GLYPHS.with(std::cell::Cell::get)
+}
+
+fn doc_key(session: &Session) -> Option<DocKey> {
+    session.active().map(|d| (d.id, d.revision, Arc::as_ptr(&d.font) as usize))
+}
+
+/// [`Sources`] of glyph `name` in `font`. `None` when it uses more than [`MAX_SOURCE_GLYPHS`]
+/// glyphs: such a glyph is measured again after every edit.
+fn sources(font: &Font, name: &str) -> Option<Sources> {
+    let mut out: Sources = Vec::new();
+    let mut todo = vec![name.to_string()];
+    while let Some(n) = todo.pop() {
+        if out.iter().any(|(seen, _)| *seen == n) {
+            continue;
+        }
+        if out.len() >= MAX_SOURCE_GLYPHS || todo.len() > MAX_SOURCE_GLYPHS {
+            return None;
+        }
+        let glyph = font.glyphs.get(&n).cloned();
+        for layer in glyph.iter().flat_map(|g| g.layers.iter()) {
+            let background = layer.info.background.iter().flat_map(|b| b.shapes.iter());
+            for shape in layer.shapes.iter().chain(background) {
+                if let ModelShape::Component(c) = shape {
+                    todo.push(c.glyph.clone());
+                }
+            }
+        }
+        out.push((n, glyph));
+    }
+    Some(out)
+}
+
+/// Whether `font` still has the glyphs of `sources` as they were.
+fn unchanged(font: &Font, sources: &Sources) -> bool {
+    sources.iter().all(|(name, was)| match (font.glyphs.get(name), was) {
+        (Some(now), Some(was)) => Arc::ptr_eq(now, was),
+        (None, None) => true,
+        _ => false,
+    })
+}
+
+/// The coordinates of every glyph of `line`, measured as layers of `target`'s document. Each
+/// glyph's answer is kept until it, a glyph it uses or the masters change; the glyphs not kept
+/// are measured in one query, nearest the edited glyph first, as its limits leave room.
+fn coordinates(session: &mut Session, target: &Map<String, Value>, line: Vec<Entry>) -> Option<Arc<Vec<Placed>>> {
+    let doc = doc_key(session)?;
+    let hit = MEASURED.with(|m| m.borrow().last.as_ref().filter(|(k, l, _)| *k == doc && *l == line).map(|(_, _, v)| v.clone()));
     if hit.is_some() {
         return hit;
     }
-    let value = session.execute("measure.coordinates", &params).ok()?;
-    let list: Vec<Coordinates> = match value.get("placements") {
-        Some(list) => serde_json::from_value(list.clone()).ok()?,
-        None => vec![serde_json::from_value(value).ok()?],
+    let missing: Vec<Entry> = {
+        let font = session.font().ok()?;
+        let level: FontLevel = (font.masters.clone(), font.metrics.clone(), font.axes.clone());
+        MEASURED.with(|m| {
+            let mut m = m.borrow_mut();
+            let same_level =
+                m.level.as_ref().is_some_and(|(a, b, c)| Arc::ptr_eq(a, &level.0) && Arc::ptr_eq(b, &level.1) && Arc::ptr_eq(c, &level.2));
+            if m.doc != Some(doc.0) || !same_level {
+                m.glyphs.clear();
+                m.doc = Some(doc.0);
+                m.level = Some(level);
+            }
+            m.glyphs.retain(|_, (sources, _)| unchanged(font, sources));
+            let mut nearest: Vec<&Entry> = line.iter().collect();
+            nearest.sort_by_key(|e| e.distance);
+            let mut seen: HashSet<GlyphKey> = HashSet::new();
+            nearest.into_iter().filter(|e| !m.glyphs.contains_key(&e.key()) && seen.insert(e.key())).cloned().collect()
+        })
     };
-    let list = Arc::new(list);
-    COORDINATES.with(|c| *c.borrow_mut() = Some((doc, params, list.clone())));
-    Some(list)
+    let mut fresh: HashMap<GlyphKey, Arc<Coordinates>> = HashMap::new();
+    if !missing.is_empty() {
+        let list: Vec<Value> = missing.iter().map(|e| e.placement(false)).collect();
+        MEASURED_GLYPHS.with(|c| c.set(c.get().saturating_add(list.len())));
+        let answer = session.execute("measure.coordinates", &with(target, "placements", Value::Array(list))).ok();
+        let measured: Vec<Coordinates> =
+            answer.and_then(|v| v.get("placements").cloned()).and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default();
+        let font = session.font().ok()?;
+        for (e, coords) in missing.iter().zip(measured) {
+            let key = e.key();
+            let coords = Arc::new(coords);
+            if !coords.overlaps_truncated
+                && let Some(sources) = sources(font, &e.glyph)
+            {
+                MEASURED.with(|m| m.borrow_mut().glyphs.insert(key.clone(), (sources, coords.clone())));
+            }
+            fresh.insert(key, coords);
+        }
+    }
+    let placed: Vec<Placed> = MEASURED.with(|m| {
+        let mut m = m.borrow_mut();
+        let used: Vec<GlyphKey> = line.iter().map(Entry::key).collect();
+        let keep: HashSet<&GlyphKey> = used.iter().collect();
+        m.glyphs.retain(|k, _| keep.contains(k));
+        line.iter()
+            .zip(used.iter())
+            .filter_map(|(e, key)| {
+                let coords = fresh.get(key).or_else(|| m.glyphs.get(key).map(|(_, c)| c))?.clone();
+                Some(Placed { x: e.x, y: e.y, coords })
+            })
+            .collect()
+    });
+    let placed = Arc::new(placed);
+    MEASURED.with(|m| m.borrow_mut().last = Some((doc, line, placed.clone())));
+    Some(placed)
+}
+
+/// `measure.ruler` for `params`, kept while the document and the parameters stay the same.
+fn ruler_crossings(session: &mut Session, params: Value) -> Option<Arc<Ruler>> {
+    let doc = doc_key(session)?;
+    let hit = MEASURED.with(|m| m.borrow().ruler.as_ref().filter(|(k, p, _)| *k == doc && *p == params).map(|(_, _, r)| r.clone()));
+    if let Some(r) = hit {
+        return r;
+    }
+    let r: Option<Arc<Ruler>> = query_as(session, "measure.ruler", params.clone()).map(Arc::new);
+    MEASURED.with(|m| m.borrow_mut().ruler = Some((doc, params, r.clone())));
+    r
 }
 
 /// The glyphs of the tab's text nearest the edited one, at most [`MAX_PLACEMENTS`], with their
-/// layers and their positions from the edited glyph's origin: `measure.ruler`'s `placements`.
-fn placements(session: &Session, layouts: &LayoutCache, tab: &Tab) -> Option<Value> {
-    let font = session.font().ok()?;
-    let layout = super::view::text_layout(session, layouts, tab)?;
-    let edited = tab.edited_index()?;
-    let origin = layout.placed.get(edited)?;
+/// layers and their positions from the edited glyph's origin, in text order. Without a layout,
+/// the edited glyph alone.
+fn line(session: &Session, layouts: &LayoutCache, tab: &Tab, layer: &str) -> Vec<Entry> {
+    let alone = || {
+        let glyph = tab.edited_glyph().unwrap_or_default().to_string();
+        vec![Entry { glyph, layer: layer.to_string(), background: tab.edit_background, x: 0.0, y: 0.0, distance: 0 }]
+    };
+    let (Ok(font), Some(layout), Some(edited)) = (session.font(), super::view::text_layout(session, layouts, tab), tab.edited_index()) else {
+        return alone();
+    };
+    let Some(origin) = layout.placed.get(edited) else { return alone() };
     let (ox, oy) = (origin.x, origin.y);
     let mut items: Vec<(usize, &Arc<str>, f64, f64)> =
         layout.placed.iter().enumerate().filter_map(|(i, p)| p.glyph.as_ref().map(|g| (i, g, p.x - ox, p.y - oy))).collect();
     items.sort_by_key(|(i, ..)| i.abs_diff(edited));
     items.truncate(MAX_PLACEMENTS);
     items.sort_by_key(|(i, ..)| *i);
-    let list: Vec<Value> = items
+    items
         .into_iter()
         .filter(|(_, _, x, y)| x.is_finite() && y.is_finite())
         .filter_map(|(i, glyph, x, y)| {
             let layer = super::view::shown_layer(font, tab, glyph)?;
-            let mut entry = json!({"glyph": glyph.as_ref(), "layer": layer.id, "x": x, "y": y});
-            if i == edited
-                && tab.edit_background
-                && let Some(o) = entry.as_object_mut()
-            {
-                o.insert("side".into(), json!("background"));
-            }
-            Some(entry)
+            let background = i == edited && tab.edit_background;
+            Some(Entry { glyph: glyph.to_string(), layer: layer.id.clone(), background, x, y, distance: i.abs_diff(edited) })
         })
-        .collect();
-    Some(Value::Array(list))
+        .collect()
 }
 
 /// What this module draws, read from the engine once per frame.
@@ -221,9 +401,9 @@ pub struct Extras {
     /// Measurement guides and where they cross the outline.
     guide_rulers: Vec<(GuideRef, Ruler)>,
     /// The Measurement tool's labels for each glyph of the line, while it is the active tool.
-    coordinates: Option<Arc<Vec<Coordinates>>>,
+    coordinates: Option<Arc<Vec<Placed>>>,
     /// The Measurement tool's ruler and where it crosses the outline.
-    ruler: Option<(Point, Point, Ruler)>,
+    ruler: Option<(Point, Point, Arc<Ruler>)>,
     /// The global guides, by index, whose filter leaves out the edited glyph.
     pub(crate) out_of_scope: Vec<usize>,
 }
@@ -284,10 +464,13 @@ impl Extras {
             }
         }
         if tool == "measurement" {
-            if let Some(placed) = placements(session, layouts, tab) {
-                target.insert("placements".into(), placed);
-            }
-            out.coordinates = coordinates(session, Value::Object(target.clone()));
+            let glyphs = line(session, layouts, tab, &layer);
+            // Nearest first, so that a line past the element limit loses its farthest glyphs.
+            let mut nearest: Vec<&Entry> = glyphs.iter().collect();
+            nearest.sort_by_key(|e| e.distance);
+            let placements: Vec<Value> = nearest.into_iter().map(|e| e.placement(true)).collect();
+            out.coordinates = coordinates(session, &target, glyphs);
+            target.insert("placements".into(), Value::Array(placements));
             let ruler = overlays.iter().find_map(|o| match o {
                 Overlay::Line { kind: OverlayKind::Ruler, from, to } => Some((*from, *to)),
                 _ => None,
@@ -296,7 +479,7 @@ impl Extras {
                 let mut params = target.clone();
                 params.insert("from".into(), json!([from.x, from.y]));
                 params.insert("to".into(), json!([to.x, to.y]));
-                if let Some(r) = query_as(session, "measure.ruler", Value::Object(params)) {
+                if let Some(r) = ruler_crossings(session, Value::Object(params)) {
                     out.ruler = Some((from, to, r));
                 }
             }
@@ -575,10 +758,15 @@ pub fn draw_measurement(c: &Painting, extras: &Extras) {
     let font = FontId::proportional(tokens.measure_label_size);
     if let Some(list) = &extras.coordinates {
         let overlap = Stroke::new(tokens.outline_width, tokens.measure_overlap);
-        for coords in list.iter() {
-            for line in coords.overlaps.iter().take(MAX_LABELS) {
-                let pts: Vec<Pos2> = line.iter().map(|[x, y]| screen(c, x + coords.x, y + coords.y)).collect();
+        let mut segments = 0usize;
+        'lines: for placed in list.iter() {
+            for line in &placed.coords.overlaps {
+                let pts: Vec<Pos2> = line.iter().take(MAX_OVERLAP_SEGMENTS).map(|[x, y]| screen(c, x + placed.x, y + placed.y)).collect();
                 for pair in pts.windows(2) {
+                    segments = segments.saturating_add(1);
+                    if segments > MAX_OVERLAP_SEGMENTS {
+                        break 'lines;
+                    }
                     if let [a, b] = pair
                         && usable(*a)
                         && usable(*b)
@@ -589,11 +777,11 @@ pub fn draw_measurement(c: &Painting, extras: &Extras) {
             }
         }
         let mut labels = 0usize;
-        for coords in list.iter() {
+        for placed in list.iter() {
             if labels >= MAX_LABELS {
                 break;
             }
-            labels = labels.saturating_add(draw_coordinates(c, coords, MAX_LABELS.saturating_sub(labels), &font));
+            labels = labels.saturating_add(draw_coordinates(c, placed, MAX_LABELS.saturating_sub(labels), &font));
         }
     }
     if let Some((from, to, ruler)) = &extras.ruler {
@@ -616,9 +804,9 @@ pub fn draw_measurement(c: &Painting, extras: &Extras) {
 }
 
 /// One glyph's coordinates, anchors and deltas, at most `limit` labels. Returns how many it drew.
-fn draw_coordinates(c: &Painting, coords: &Coordinates, limit: usize, font: &FontId) -> usize {
+fn draw_coordinates(c: &Painting, placed: &Placed, limit: usize, font: &FontId) -> usize {
     let tokens = c.tokens;
-    let (ox, oy) = (coords.x, coords.y);
+    let (ox, oy, coords) = (placed.x, placed.y, &placed.coords);
     let mut drawn = 0usize;
     let mut at: BTreeMap<(usize, usize), Pos2> = BTreeMap::new();
     for p in coords.points.iter().take(limit) {

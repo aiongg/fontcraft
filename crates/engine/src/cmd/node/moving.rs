@@ -179,7 +179,8 @@ fn keep_smooth(path: &Path, j: usize, old: &[Point], new: &mut [Point], moved: &
 
 /// After handle `j` moved: when its node is smooth and stays, the opposite handle becomes the
 /// mirror image of `j` through the node. A straight other side cannot turn, so there `j` behaves
-/// as in [`keep_smooth`].
+/// as in [`keep_smooth`]. A handle moved onto its node has no direction to mirror: the opposite
+/// one stays.
 fn mirror(path: &Path, j: usize, old: &[Point], new: &mut [Point], moved: &mut [bool]) {
     let Some((k, Some(o))) = handle_owner(path, j) else { return };
     let is_moved = |i: usize| moved.get(i).copied().unwrap_or(false);
@@ -191,7 +192,11 @@ fn mirror(path: &Path, j: usize, old: &[Point], new: &mut [Point], moved: &mut [
         return;
     }
     let pk = at(old, k);
-    let to = pk - (at(new, j) - pk);
+    let arm = at(new, j) - pk;
+    if arm.hypot() <= EPS {
+        return;
+    }
+    let to = pk - arm;
     if let (Some(p), Some(m)) = (new.get_mut(o), moved.get_mut(o)) {
         *p = to;
         *m = true;

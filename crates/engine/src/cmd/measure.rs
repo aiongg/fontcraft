@@ -5,7 +5,9 @@
 //!
 //! Both take `placements`, the glyphs of a line with their positions, so the tool covers every
 //! glyph shown (`measurement.allVisibleGlyphs`): the ruler then crosses all of them, and the
-//! coordinates come per glyph.
+//! coordinates come per glyph. The placed outlines share one element budget: once it is spent the
+//! remaining placements are left out and the answer says `truncated`, so a long line of large
+//! glyphs measures its first glyphs instead of failing.
 //!
 //! X deltas are also given relative to the master's italic angle: `italicDx = dx − dy·tan(angle)`,
 //! so a step that follows the italic angle has an `italicDx` of 0.
@@ -36,10 +38,11 @@ const SIDE_STEP: f64 = 0.01;
 const OVERLAP_SAMPLES: usize = 8;
 /// Halvings that place the end of an overlapped stretch between two samples.
 const OVERLAP_BISECT: usize = 12;
-/// Most contour elements the overlap test of one query reads, summed over every winding query
-/// and every placed glyph. Past it the test stops and keeps the stretches found so far.
+/// Most contour elements and bounding-box tests the overlap test of one query spends, summed over
+/// every winding query and every placed glyph. Past it the test stops and keeps the stretches
+/// found so far.
 const MAX_OVERLAP_WORK: usize = 20_000_000;
-/// Most points in the overlapped stretches of one layer.
+/// Most points in the overlapped stretches of one query, over every placed glyph.
 const MAX_OVERLAP_POINTS: usize = 50_000;
 /// Points a curved piece of an overlapped stretch is drawn with.
 const CURVE_STEPS: usize = 8;
@@ -51,7 +54,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Measure Along Line",
             [],
             None,
-            "{glyph: name, layer?: id, side?: \"foreground\" | \"background\", from?: [x, y], to?: [x, y], guide?: {scope: \"local\" | \"global\", index}, placements?: [{glyph, layer?: id, side?, x, y}] (at most 200)} where a line crosses the layer's paths and components: the segment from `from` to `to`, or the whole line of a guide. With `placements`, the line crosses those glyphs instead, each moved by its x and y (positions relative to the target glyph's origin, as in a line of text). Overlapping paths are measured as merged: crossings inside an overlap are skipped → {glyph, layer, italicAngle, length?, angle?: degrees counter-clockwise, 0 pointing up (with from and to), crossings: [{x, y, distance: along the line from `from` or from the guide's point, placement?: index}], gaps: [{from, to: crossing indices, distance, dx, dy, italicDx, inside: bool (inside the outline)}]}",
+            "{glyph: name, layer?: id, side?: \"foreground\" | \"background\", from?: [x, y], to?: [x, y], guide?: {scope: \"local\" | \"global\", index}, placements?: [{glyph, layer?: id, side?, x, y}] (at most 200)} where a line crosses the layer's paths and components: the segment from `from` to `to`, or the whole line of a guide. With `placements`, the line crosses those glyphs instead, each moved by its x and y (positions relative to the target glyph's origin, as in a line of text); once the placed outlines reach the element limit the rest are left out and `truncated` is set. Overlapping paths are measured as merged: crossings inside an overlap are skipped → {glyph, layer, italicAngle, length?, angle?: degrees counter-clockwise, 0 pointing up (with from and to), crossings: [{x, y, distance: along the line from `from` or from the guide's point, placement?: index}], gaps: [{from, to: crossing indices, distance, dx, dy, italicDx, inside: bool (inside the outline)}], truncated?: true}",
             has_doc,
             ruler
         )
@@ -61,7 +64,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "List Point Coordinates",
             [],
             None,
-            "{glyph: name, layer?: id, side?: \"foreground\" | \"background\", placements?: [{glyph, layer?: id, side?, x, y}] (at most 200)} every node, handle and anchor of the layer with its coordinates, the X and Y deltas between neighbouring on-curve nodes of each path, and the stretches of outline that lie inside an overlap (they vanish when overlaps are removed). With `placements`, the same for each placed glyph, in its own coordinates → {glyph, layer, italicAngle, points: [{shape, node, x, y, onCurve: bool}], deltas: [{shape, from, to: node indices, dx, dy, italicDx}], anchors: [{name, x, y}], overlaps: [[[x, y]…]], placements?: [{glyph, layer, x, y, italicAngle, points, deltas, anchors, overlaps}]}",
+            "{glyph: name, layer?: id, side?: \"foreground\" | \"background\", placements?: [{glyph, layer?: id, side?, x, y}] (at most 200)} every node, handle and anchor of the layer with its coordinates, the X and Y deltas between neighbouring on-curve nodes of each path, and the stretches of outline that lie inside an overlap (they vanish when overlaps are removed). With `placements`, the same for each placed glyph, in its own coordinates, and not for the target outside them; once the placed outlines reach the element limit the rest are left out and `truncated` is set. `overlapsTruncated` marks a glyph whose overlap test stopped at the query's work limit → {glyph, layer, italicAngle, points: [{shape, node, x, y, onCurve: bool}], deltas: [{shape, from, to: node indices, dx, dy, italicDx}], anchors: [{name, x, y}], overlaps: [[[x, y]…]], overlapsTruncated?: true (these five without placements), placements?: [{glyph, layer, x, y, italicAngle, points, deltas, anchors, overlaps, overlapsTruncated?}], truncated?: true}",
             has_doc,
             coordinates
         )
@@ -149,8 +152,11 @@ struct Contour {
 
 /// The contours of one side of a layer with components resolved. Paths that do not make a
 /// valid outline and components of missing glyphs are left out. `budget` is the number of path
-/// elements still allowed; it shrinks by what this layer adds.
-fn contours(font: &Font, parts: LayerParts, master: &str, p: &Params, owner: usize, budget: &mut usize, out: &mut Vec<Contour>) -> Result<()> {
+/// elements still allowed; it shrinks by what this layer adds. Returns `false`, adding nothing,
+/// when the layer does not fit in it.
+fn contours(font: &Font, parts: LayerParts, master: &str, owner: usize, budget: &mut usize, out: &mut Vec<Contour>) -> Result<bool> {
+    let start = out.len();
+    let mut left = *budget;
     for shape in parts.shapes {
         let part = match shape {
             Shape::Path(path) => match path.to_bez() {
@@ -165,10 +171,20 @@ fn contours(font: &Font, parts: LayerParts, master: &str, p: &Params, owner: usi
             }
             Shape::Image(_) | Shape::Raw(_) => continue,
         };
-        *budget = budget.checked_sub(part.elements().len()).ok_or_else(|| p.bad("the outline is too large to measure"))?;
+        let Some(rest) = left.checked_sub(part.elements().len()) else {
+            out.truncate(start);
+            return Ok(false);
+        };
+        left = rest;
         split(&part, owner, out);
     }
-    Ok(())
+    *budget = left;
+    Ok(true)
+}
+
+/// The error of a target layer whose outline alone is over the element budget.
+fn too_large(p: &Params) -> crate::EngineError {
+    p.bad("the outline is too large to measure")
 }
 
 /// Splits a path into its contours.
@@ -355,8 +371,10 @@ impl<'a> Winding<'a> {
         Self { closed, work }
     }
 
-    /// The winding number at `q`; `None` once the work limit is reached.
+    /// The winding number at `q`; `None` once the work limit is reached. Each bounding box it
+    /// tests counts as work, so many small contours cannot make it slow either.
     fn at(&mut self, q: Point) -> Option<i64> {
+        self.work = self.work.checked_add(self.closed.len()).filter(|w| *w <= MAX_OVERLAP_WORK)?;
         let mut w: i64 = 0;
         for (path, bbox, elements) in &self.closed {
             if !bbox.contains(q) {
@@ -421,18 +439,28 @@ fn classify(w: &mut Winding<'_>, seg: &PathSeg) -> Option<Vec<(f64, f64, bool)>>
     Some(out)
 }
 
+/// What the overlap tests of one query have spent so far.
+#[derive(Clone, Copy, Debug, Default)]
+struct Spent {
+    /// Contour elements read and bounding boxes tested ([`MAX_OVERLAP_WORK`]).
+    work: usize,
+    /// Points of overlapped stretches returned ([`MAX_OVERLAP_POINTS`]).
+    points: usize,
+}
+
 /// The stretches of closed contours that lie inside an overlap of the outline (of other
-/// contours, or of the contour with itself), as polylines. `work` counts the contour elements
-/// read so far in this query. Work and size are capped: past the caps the stretches found so far
+/// contours, or of the contour with itself), as polylines, and whether the test finished. Work
+/// and size are capped for the whole query (`spent`): past the caps the stretches found so far
 /// are returned.
-fn overlaps(contours: &[Contour], work: &mut usize) -> Vec<Vec<Point>> {
-    let mut w = Winding::new(contours, *work);
+fn overlaps(contours: &[Contour], spent: &mut Spent) -> (Vec<Vec<Point>>, bool) {
+    let mut w = Winding::new(contours, spent.work);
     let mut out: Vec<Vec<Point>> = Vec::new();
-    let mut count = 0usize;
+    let mut complete = true;
     'contours: for contour in contours.iter().filter(|c| c.closed) {
         let mut open: Vec<Point> = Vec::new();
         for seg in contour.path.segments() {
             let Some(ranges) = classify(&mut w, &seg) else {
+                complete = false;
                 break 'contours;
             };
             for (a, b, inside) in ranges {
@@ -455,8 +483,9 @@ fn overlaps(contours: &[Contour], work: &mut usize) -> Vec<Vec<Point>> {
                 for k in usize::from(joins)..=steps {
                     open.push(piece.eval(k as f64 / steps as f64));
                 }
-                count = count.saturating_add(steps.saturating_add(1));
-                if count > MAX_OVERLAP_POINTS {
+                spent.points = spent.points.saturating_add(steps.saturating_add(1));
+                if spent.points > MAX_OVERLAP_POINTS {
+                    complete = false;
                     break 'contours;
                 }
             }
@@ -465,8 +494,8 @@ fn overlaps(contours: &[Contour], work: &mut usize) -> Vec<Vec<Point>> {
             out.push(open);
         }
     }
-    *work = w.work.max(*work);
-    out
+    spent.work = w.work.max(spent.work);
+    (out, complete)
 }
 
 fn ruler(s: &mut Session, p: &Value) -> Result<Value> {
@@ -506,12 +535,20 @@ fn ruler(s: &mut Session, p: &Value) -> Result<Value> {
     let tan = italic_tan(font, r.master);
     let mut shapes = Vec::new();
     let mut budget = MAX_OUTLINE_ELEMENTS;
+    let mut truncated = false;
     match &placed {
-        None => contours(font, r.parts, &r.layer.master, &p, 0, &mut budget, &mut shapes)?,
+        None => {
+            if !contours(font, r.parts, &r.layer.master, 0, &mut budget, &mut shapes)? {
+                return Err(too_large(&p));
+            }
+        }
         Some(list) => {
             for (i, pl) in list.iter().enumerate() {
                 let start = shapes.len();
-                contours(font, pl.parts, &pl.layer.master, &p, i, &mut budget, &mut shapes)?;
+                if !contours(font, pl.parts, &pl.layer.master, i, &mut budget, &mut shapes)? {
+                    truncated = true;
+                    break;
+                }
                 let shift = Affine::translate(pl.offset);
                 for c in shapes.iter_mut().skip(start) {
                     c.path.apply_affine(shift);
@@ -551,19 +588,27 @@ fn ruler(s: &mut Session, p: &Value) -> Result<Value> {
         o.insert("length".into(), json!(len));
         o.insert("angle".into(), json!((-dir.x).atan2(dir.y).to_degrees().rem_euclid(360.0)));
     }
+    if let (true, Some(o)) = (truncated, out.as_object_mut()) {
+        o.insert("truncated".into(), json!(true));
+    }
     Ok(out)
 }
 
-/// The coordinates, deltas, anchors and overlapped stretches of one side of a layer.
-/// `budget` holds the path elements and the overlap work still allowed in this query.
+/// The coordinates, deltas, anchors and overlapped stretches of one side of a layer. `budget`
+/// holds the path elements still allowed in this query, and `spent` what its overlap tests have
+/// used. `None` when the layer's outline does not fit in the budget.
 fn layer_coordinates(
     font: &Font,
-    p: &Params,
     master: &Master,
     layer: &Layer,
     parts: LayerParts,
-    budget: &mut (usize, usize),
-) -> Result<Map<String, Value>> {
+    budget: &mut usize,
+    spent: &mut Spent,
+) -> Result<Option<Map<String, Value>>> {
+    let mut shapes = Vec::new();
+    if !contours(font, parts, &layer.master, 0, budget, &mut shapes)? {
+        return Ok(None);
+    }
     let tan = italic_tan(font, master);
     let mut points = Vec::new();
     let mut deltas = Vec::new();
@@ -585,17 +630,18 @@ fn layer_coordinates(
         }
     }
     let anchors: Vec<Value> = parts.anchors.iter().map(|a| json!({"name": a.name, "x": a.x, "y": a.y})).collect();
-    let mut shapes = Vec::new();
-    contours(font, parts, &layer.master, p, 0, &mut budget.0, &mut shapes)?;
-    let overlapped: Vec<Value> =
-        overlaps(&shapes, &mut budget.1).into_iter().map(|line| json!(line.iter().map(|q| [q.x, q.y]).collect::<Vec<_>>())).collect();
+    let (lines, complete) = overlaps(&shapes, spent);
+    let overlapped: Vec<Value> = lines.into_iter().map(|line| json!(line.iter().map(|q| [q.x, q.y]).collect::<Vec<_>>())).collect();
     let mut out = Map::new();
     out.insert("italicAngle".into(), json!(font.metric_pos(master, metric::ITALIC_ANGLE, 0.0)));
     out.insert("points".into(), Value::Array(points));
     out.insert("deltas".into(), Value::Array(deltas));
     out.insert("anchors".into(), Value::Array(anchors));
     out.insert("overlaps".into(), Value::Array(overlapped));
-    Ok(out)
+    if !complete {
+        out.insert("overlapsTruncated".into(), json!(true));
+    }
+    Ok(Some(out))
 }
 
 fn coordinates(s: &mut Session, p: &Value) -> Result<Value> {
@@ -607,14 +653,26 @@ fn coordinates(s: &mut Session, p: &Value) -> Result<Value> {
     let font = s.font()?;
     let r = t.resolve(font)?;
     let placed = placements(&p, font)?;
-    let mut budget = (MAX_OUTLINE_ELEMENTS, 0);
-    let mut out = layer_coordinates(font, &p, r.master, r.layer, r.parts, &mut budget)?;
+    let mut budget = MAX_OUTLINE_ELEMENTS;
+    let mut spent = Spent::default();
+    // With placements the target is measured as one of them, if it is placed at all.
+    let mut out = match &placed {
+        None => layer_coordinates(font, r.master, r.layer, r.parts, &mut budget, &mut spent)?.ok_or_else(|| too_large(&p))?,
+        Some(_) => {
+            let mut m = Map::new();
+            m.insert("italicAngle".into(), json!(font.metric_pos(r.master, metric::ITALIC_ANGLE, 0.0)));
+            m
+        }
+    };
     out.insert("glyph".into(), json!(r.glyph.name));
     out.insert("layer".into(), json!(r.layer.id));
     if let Some(list) = placed {
         let mut each = Vec::with_capacity(list.len());
         for pl in &list {
-            let mut one = layer_coordinates(font, &p, pl.master, pl.layer, pl.parts, &mut budget)?;
+            let Some(mut one) = layer_coordinates(font, pl.master, pl.layer, pl.parts, &mut budget, &mut spent)? else {
+                out.insert("truncated".into(), json!(true));
+                break;
+            };
             one.insert("glyph".into(), json!(pl.glyph.name));
             one.insert("layer".into(), json!(pl.layer.id));
             one.insert("x".into(), json!(pl.offset.x));
@@ -644,7 +702,7 @@ mod tests {
     fn overlapped_stretches_are_the_parts_inside_another_contour() {
         // Two squares that overlap in 50,0–100,100: the right edge of the first and the left
         // edge of the second lie inside the other.
-        let found = overlaps(&[rect(0.0, 0.0, 100.0, 100.0), rect(50.0, 0.0, 150.0, 100.0)], &mut 0);
+        let found = overlaps(&[rect(0.0, 0.0, 100.0, 100.0), rect(50.0, 0.0, 150.0, 100.0)], &mut Spent::default()).0;
         let mut xs: Vec<(f64, f64)> = found
             .iter()
             .map(|line| {
@@ -657,10 +715,26 @@ mod tests {
         assert!((xs[0].0 - 50.0).abs() < 0.01 && (xs[1].0 - 100.0).abs() < 0.01, "{found:?}");
         assert!(xs.iter().all(|(_, h)| (h - 100.0).abs() < 0.1), "whole edges: {found:?}");
         // Apart, nothing is overlapped.
-        assert!(overlaps(&[rect(0.0, 0.0, 100.0, 100.0), rect(200.0, 0.0, 300.0, 100.0)], &mut 0).is_empty());
+        assert!(overlaps(&[rect(0.0, 0.0, 100.0, 100.0), rect(200.0, 0.0, 300.0, 100.0)], &mut Spent::default()).0.is_empty());
         // A counter is not an overlap.
         let mut counter = rect(25.0, 25.0, 75.0, 75.0);
         counter.path = counter.path.reverse_subpaths();
-        assert!(overlaps(&[rect(0.0, 0.0, 100.0, 100.0), counter], &mut 0).is_empty());
+        assert!(overlaps(&[rect(0.0, 0.0, 100.0, 100.0), counter], &mut Spent::default()).0.is_empty());
+    }
+
+    #[test]
+    fn many_small_contours_stop_at_the_work_limit() {
+        // Every winding query tests the bounding box of each of the 20,000 squares: without
+        // counting those tests the overlap test would make about 1e10 of them.
+        let squares: Vec<Contour> = (0..20_000)
+            .map(|i| {
+                let (x, y) = (f64::from(i % 200) * 20.0, f64::from(i / 200) * 20.0);
+                rect(x, y, x + 10.0, y + 10.0)
+            })
+            .collect();
+        let mut spent = Spent::default();
+        let (found, complete) = overlaps(&squares, &mut spent);
+        assert!(found.is_empty() && !complete);
+        assert!(spent.work <= MAX_OVERLAP_WORK, "{spent:?}");
     }
 }

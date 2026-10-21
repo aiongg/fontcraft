@@ -3,12 +3,17 @@
 //! | Held | Tool while held |
 //! |---|---|
 //! | `Space` | Hand (`Cmd+Space`: Zoom) |
-//! | `Cmd` in the Measurement tool | Select |
-//! | `Cmd+Alt+Ctrl` in any other tool but Text | Measurement (coordinates and ruler) |
+//! | `Cmd` in the Measurement tool (off the Mac: `Ctrl` without `Alt`) | Select |
+//! | `Cmd+Alt+Ctrl` (off the Mac: `Ctrl+Alt+Shift`) in any tool but Measurement and Text | Measurement (coordinates and ruler) |
 //!
 //! A tool held with modifiers takes over when the modifiers go down and no gesture is in
 //! progress, and gives way when they come up and its own gesture is over. The modifiers that
 //! hold it are taken out of the events it sees.
+//!
+//! Off the Mac the Control key reports both `cmd` and `ctrl`, the Windows and Super keys do not
+//! reach the app, and `Ctrl+Alt` is also what AltGr reports. So `Ctrl+Alt` there stays with the
+//! tools (the Select tool's mirror and nudge drags) and holds nothing; the Measurement tool takes
+//! `Ctrl+Alt+Shift`, which no tool reads, since on the Mac it is the Measurement keys plus Shift.
 
 use std::fmt;
 
@@ -30,6 +35,16 @@ pub struct Switch {
     pub output: Output,
 }
 
+/// Where the modifier keys come from, which decides the keys that hold a tool ([`held_tool`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Keyboard {
+    /// Command and Control are separate keys.
+    #[default]
+    Mac,
+    /// The Control key reports both `cmd` and `ctrl`, and AltGr reports `Ctrl+Alt`.
+    Other,
+}
+
 /// The tools of one Edit View: the active one, and a temporary one while `Space` is held.
 pub struct Toolbox {
     active: Box<dyn Tool>,
@@ -39,31 +54,49 @@ pub struct Toolbox {
     temporary: Option<Box<dyn Tool>>,
     /// The tool held with modifiers ([`held_tool`]), under a `Space` one.
     held: Option<Box<dyn Tool>>,
+    keyboard: Keyboard,
 }
 
-/// The tool modifiers `mods` hold while `base` is the chosen tool, if any. Off the Mac the
-/// Control key reports both `cmd` and `ctrl`, so `Ctrl+Alt` there is `Cmd+Alt+Ctrl`.
-fn held_tool(base: &str, mods: Modifiers) -> Option<&'static str> {
-    if mods.cmd && mods.alt && mods.ctrl && !matches!(base, "measurement" | "text") {
-        Some("measurement")
-    } else if base == "measurement" && mods.cmd && !mods.alt {
-        Some("select")
-    } else {
-        None
+/// The modifiers that hold the Measurement tool are all down.
+fn measurement_keys(keyboard: Keyboard, mods: Modifiers) -> bool {
+    match keyboard {
+        Keyboard::Mac => mods.cmd && mods.alt && mods.ctrl,
+        Keyboard::Other => mods.cmd && mods.alt && mods.ctrl && mods.shift,
     }
 }
 
+/// The tool modifiers `mods` hold while `base` is the chosen tool, if any.
+fn held_tool(keyboard: Keyboard, base: &str, mods: Modifiers) -> Option<&'static str> {
+    let measuring = measurement_keys(keyboard, mods);
+    if measuring && !matches!(base, "measurement" | "text") {
+        return Some("measurement");
+    }
+    // In the Measurement tool, Cmd holds Select, with Alt too on the Mac. Off the Mac `Ctrl+Alt`
+    // may be AltGr, so it holds nothing.
+    let select = match keyboard {
+        Keyboard::Mac => mods.cmd && !measuring,
+        Keyboard::Other => mods.cmd && !mods.alt,
+    };
+    (base == "measurement" && select).then_some("select")
+}
+
 /// `mods` without the keys that hold `tool`.
-fn without_hold(tool: &str, mut mods: Modifiers) -> Modifiers {
+fn without_hold(keyboard: Keyboard, tool: &str, mut mods: Modifiers) -> Modifiers {
     match tool {
         "measurement" => {
             mods.cmd = false;
             mods.alt = false;
             mods.ctrl = false;
+            if keyboard == Keyboard::Other {
+                mods.shift = false;
+            }
         }
         "select" => {
             mods.cmd = false;
-            mods.ctrl = false;
+            // On the Mac, Control is a key of its own that the Select tool reads.
+            if keyboard == Keyboard::Other {
+                mods.ctrl = false;
+            }
         }
         _ => {}
     }
@@ -89,7 +122,13 @@ impl Default for Toolbox {
 impl Toolbox {
     /// A toolbox with the Select tool active.
     pub fn new() -> Self {
-        Self { active: Box::new(SelectTool::default()), recent: vec!["select"], temporary: None, held: None }
+        Self { active: Box::new(SelectTool::default()), recent: vec!["select"], temporary: None, held: None, keyboard: Keyboard::Mac }
+    }
+
+    /// Sets where the modifier keys come from. A tool held with the old keys stays until its keys
+    /// are next checked.
+    pub fn set_keyboard(&mut self, keyboard: Keyboard) {
+        self.keyboard = keyboard;
     }
 
     /// The tool that receives events now: the temporary one while `Space` is held, else the one
@@ -151,7 +190,7 @@ impl Toolbox {
     /// Takes up or puts down the tool modifiers hold ([`held_tool`]). Nothing changes while a
     /// `Space` tool is held or a gesture is in progress.
     fn hold(&mut self, mods: Modifiers) -> Output {
-        let want = held_tool(self.active.id(), mods);
+        let want = held_tool(self.keyboard, self.active.id(), mods);
         if want == self.held.as_ref().map(|t| t.id()) || self.temporary.is_some() {
             return Output::default();
         }
@@ -170,7 +209,7 @@ impl Toolbox {
     /// `mods` as the current tool sees them: without the keys that hold it.
     fn seen(&self, mods: Modifiers) -> Modifiers {
         match (&self.temporary, &self.held) {
-            (None, Some(t)) => without_hold(t.id(), mods),
+            (None, Some(t)) => without_hold(self.keyboard, t.id(), mods),
             _ => mods,
         }
     }
@@ -193,6 +232,12 @@ impl Toolbox {
             out.extend(self.hold(ev.mods));
         }
         out
+    }
+
+    /// Whether [`Toolbox::modifiers`] has anything to do for `mods`: a gesture is in progress, or
+    /// a held tool would come or go.
+    pub fn reacts_to(&self, mods: Modifiers) -> bool {
+        self.busy() || (self.temporary.is_none() && held_tool(self.keyboard, self.active.id(), mods) != self.held.as_ref().map(|t| t.id()))
     }
 
     /// The modifier keys changed without the pointer moving: a held tool may come or go, and a

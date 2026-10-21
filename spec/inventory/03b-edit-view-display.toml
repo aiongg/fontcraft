@@ -1597,6 +1597,7 @@ gestures = [
   "drag in text mode with the measurement line shown: move the measurement line to that height",
   "hold Cmd: temporary Select tool",
   "hold Cmd+Ctrl+Alt with any other tool: temporary Measurement tool (coordinates and ruler)",
+  "off the Mac, hold Ctrl+Alt+Shift with any other tool: temporary Measurement tool",
 ]
 area = "drawing"
 milestone = "M3"
@@ -1611,10 +1612,14 @@ guesses = [
   "A tool held with modifiers waits for a gesture in progress to end before it takes over or gives way, and its ruler goes when it gives way.",
   "The held tool does not see the keys that hold it, so the held Measurement tool's ruler snaps and the held Select tool clicks as a plain click.",
   "Cmd+Ctrl+Alt does not hold the Measurement tool in the Text tool, where the same keys move the measurement line.",
+  "Off the Mac the Measurement tool is held with Ctrl+Alt+Shift: the Control key there also reports Command, the Windows and Super keys do not reach the app, and Ctrl+Alt alone is AltGr and the Select tool's mirror drag. The held ruler then cannot be constrained with Shift. The reference app runs only on the Mac, so no source settles it.",
+  "Off the Mac, Ctrl+Alt in the Measurement tool holds nothing, since it may be AltGr; on the Mac Cmd+Alt there keeps the Select tool held, and the held Select tool still sees Ctrl.",
 ]
 observe = [
   "Hold Cmd+Alt+Ctrl in the Draw tool: the coordinates show; drag a ruler, let the keys go during the drag and see whether the ruler stays.",
   "Hold Cmd in the Measurement tool and click a node: it is selected as with the Select tool.",
+  "Hold Cmd in the Measurement tool, add Option, and Option-drag a node: note whether the Select tool stays and copies the node.",
+  "Hold Cmd+Alt+Ctrl+Shift in the Draw tool and drag a ruler: note whether the ruler is constrained, which tells whether an extra Shift belongs to the held tool.",
 ]
 
 [[command]]

@@ -4,6 +4,9 @@
 use fontcraft_model::{Path, Shape};
 use serde_json::{Value, json};
 
+use fontcraft_tools::PointerKind;
+
+use crate::tools_glue::{self, RawPointer, Space};
 use crate::{FontcraftApp, control};
 
 /// A corner (0,0), handles (0,100) (100,200), a smooth node (200,200), handles (300,200)
@@ -72,6 +75,30 @@ fn gesture(app: &mut FontcraftApp, from: (f64, f64), to: (f64, f64), mods: &[&st
     app.session.journal().last().cloned().expect("the gesture committed a command")
 }
 
+/// The egui modifiers egui-winit reports while `keys` are down. `cmd` is the Command key on the
+/// Mac; elsewhere it stands for the Windows or Super key, which egui-winit leaves out.
+fn native(mac: bool, keys: &[&str]) -> egui::Modifiers {
+    let has = |k: &str| keys.contains(&k);
+    let ctrl = has("ctrl");
+    let command_key = has("cmd");
+    egui::Modifiers { alt: has("alt"), ctrl, shift: has("shift"), mac_cmd: mac && command_key, command: if mac { command_key } else { ctrl } }
+}
+
+/// [`gesture`] as real input gives it: the keys of `keys` on a Mac (`mac`) or another system,
+/// through the same modifier mapping the canvas uses. Returns the undo steps it added.
+fn native_gesture(app: &mut FontcraftApp, from: (f64, f64), to: (f64, f64), mac: bool, keys: &[&str]) -> usize {
+    app.tools.toolbox.set_keyboard(tools_glue::keyboard(mac));
+    let steps = undo_steps(app);
+    let mods = tools_glue::pointer_mods(native(mac, keys));
+    let mid = ((from.0 + to.0) / 2.0, (from.1 + to.1) / 2.0);
+    let events = [(PointerKind::Down, from), (PointerKind::Drag, mid), (PointerKind::Drag, to), (PointerKind::Up, to)];
+    for (kind, (x, y)) in events {
+        let errors = tools_glue::pointer(app, RawPointer { kind, at: fontcraft_geom::Point::new(x, y), space: Space::Font, mods });
+        assert!(errors.is_empty(), "{errors:?}");
+    }
+    undo_steps(app) - steps
+}
+
 /// The outline `command` gives when run headless on a fresh copy of `nodes`.
 fn replay(nodes: &Value, (id, params): &(String, Value)) -> Path {
     let mut fresh = edit_app(nodes);
@@ -102,6 +129,38 @@ fn ctrl_alt_dragging_a_smooth_nodes_handle_mirrors_the_other() {
     let p = path(&app);
     assert_eq!((at(&p, 4), at(&p, 2)), ((340.0, 263.0), (60.0, 137.0)), "the opposite handle mirrors through (200,200)");
     assert_eq!(p, replay(&nodes, &command));
+    // The same keys from a real keyboard: off the Mac Control also reports `command` (which
+    // slows the drag with the lever there), and the drag must still mirror rather than hold the
+    // Measurement tool.
+    for mac in [true, false] {
+        let mut app = edit_app(&nodes);
+        assert_eq!(native_gesture(&mut app, (300.0, 200.0), (340.0, 263.0), mac, &["ctrl", "alt"]), 1, "mac {mac}: one undo step");
+        let command = app.session.journal().last().cloned().expect("the drag committed a command");
+        assert_eq!((command.0.as_str(), &command.1["mode"]), ("selection.move", &json!("mirror")), "mac {mac}");
+        let q = path(&app);
+        let (moved, opposite) = (at(&q, 4), at(&q, 2));
+        assert_ne!(moved, (300.0, 200.0), "mac {mac}: the handle moved");
+        assert!((moved.0 + opposite.0 - 400.0).abs() <= 1.0 && (moved.1 + opposite.1 - 400.0).abs() <= 1.0, "mac {mac}: {moved:?} {opposite:?}");
+        assert_eq!(q, replay(&nodes, &command), "mac {mac}");
+    }
+}
+
+#[test]
+fn the_measurement_keys_of_each_system_hold_the_measurement_tool_for_a_drag() {
+    let nodes = smooth_nodes();
+    for (mac, keys) in [(true, &["cmd", "alt", "ctrl"][..]), (false, &["ctrl", "alt", "shift"][..])] {
+        let mut app = edit_app(&nodes);
+        app.tools.toolbox.set_keyboard(tools_glue::keyboard(mac));
+        let mods = tools_glue::pointer_mods(native(mac, keys));
+        let down = RawPointer { kind: PointerKind::Down, at: fontcraft_geom::Point::new(300.0, 200.0), space: Space::Font, mods };
+        tools_glue::pointer(&mut app, down);
+        assert_eq!(app.tools.toolbox.active_id(), "measurement", "{keys:?}");
+        let up = RawPointer { kind: PointerKind::Up, mods: fontcraft_tools::Modifiers::NONE, ..down };
+        tools_glue::pointer(&mut app, up);
+        assert_eq!(app.tools.toolbox.active_id(), "select", "{keys:?}: the release gives way");
+        assert_eq!(native_gesture(&mut app, (300.0, 200.0), (340.0, 263.0), mac, keys), 0, "{keys:?}: measuring changes nothing");
+        assert_eq!(path(&app), path(&edit_app(&nodes)), "{keys:?}: the outline stays");
+    }
 }
 
 #[test]

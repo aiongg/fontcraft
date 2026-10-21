@@ -303,3 +303,34 @@ fn modifiers_hold_the_measurement_and_select_tools_until_released() {
     tools.select("select").unwrap();
     assert_eq!(tools.active_id(), "select");
 }
+
+#[test]
+fn off_the_mac_ctrl_alt_holds_nothing_and_ctrl_alt_shift_holds_the_measurement_tool() {
+    use crate::toolbox::Keyboard;
+    let mut shell = Shell::new(layer());
+    let mut tools = Toolbox::new();
+    tools.set_keyboard(Keyboard::Other);
+    // Off the Mac the Control key reports both `cmd` and `ctrl`; AltGr reports Ctrl+Alt.
+    let ctrl = Modifiers::CMD.with_ctrl();
+    let ctrl_alt = ctrl.with_alt();
+    shell.run(|cx| tools.modifiers(cx, ctrl_alt));
+    assert_eq!(tools.active_id(), "select", "Ctrl+Alt (or AltGr) stays with the Select tool");
+    shell.run(|cx| tools.modifiers(cx, ctrl_alt.with_shift()));
+    assert_eq!(tools.active_id(), "measurement");
+    shell.run(|cx| tools.modifiers(cx, ctrl_alt));
+    assert_eq!(tools.active_id(), "select", "letting go of Shift gives way");
+
+    tools.select("measurement").unwrap();
+    shell.run(|cx| tools.modifiers(cx, ctrl));
+    assert_eq!(tools.active_id(), "select", "Ctrl holds the Select tool");
+    shell.run(|cx| tools.modifiers(cx, ctrl_alt));
+    assert_eq!(tools.active_id(), "measurement", "Ctrl+Alt may be AltGr: nothing is held");
+
+    // On the Mac, Cmd+Alt in the Measurement tool keeps the Select tool held.
+    tools.set_keyboard(Keyboard::Mac);
+    shell.run(|cx| tools.modifiers(cx, Modifiers::CMD));
+    shell.run(|cx| tools.modifiers(cx, Modifiers::CMD.with_alt()));
+    assert_eq!(tools.active_id(), "select");
+    shell.run(|cx| tools.modifiers(cx, NONE));
+    assert_eq!(tools.active_id(), "measurement");
+}
