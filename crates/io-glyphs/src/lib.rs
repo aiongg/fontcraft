@@ -1083,11 +1083,11 @@ fn finish(mut entries: Vec<(Str, Value)>, extra: &Extra) -> Dict {
     if !kept.is_empty() {
         let mut written = Vec::new();
         for (k, v) in &mut entries {
-            if let Some((key, source)) = kept.get_key_value(k.as_str()) {
-                if still_laid_out(v, source) {
-                    *v = (*source).clone();
-                    written.push(*key);
-                }
+            if let Some((key, source)) = kept.get_key_value(k.as_str())
+                && still_laid_out(v, source)
+            {
+                *v = (*source).clone();
+                written.push(*key);
             }
         }
         kept::record(&kept, &written);

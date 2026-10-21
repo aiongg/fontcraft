@@ -655,8 +655,10 @@ fn set_strikes(s: &mut Session, v: &Value) -> Result<Value> {
     })?;
     let added: Vec<String> = added.iter().map(|(ppem, depth)| strike::label(*ppem, *depth)).collect();
     let mut out = json!({ "added": added, "removed": removed, "strikes": strikes });
-    if !warnings.is_empty() {
-        out["warnings"] = json!(warnings);
+    if !warnings.is_empty()
+        && let Some(o) = out.as_object_mut()
+    {
+        o.insert("warnings".into(), json!(warnings));
     }
     Ok(out)
 }

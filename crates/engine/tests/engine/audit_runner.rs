@@ -161,6 +161,12 @@ fn check_outlines_takes_the_reference_options() {
 fn check_outlines_fix_rounds_and_restores_the_contour_order() {
     for decimal in [false, true] {
         let mut s = Session::with_document();
+        // path.addPath rounds to the grid; the fix must see the fractional coordinates.
+        s.edit("grid", |font| {
+            std::sync::Arc::make_mut(&mut font.info).settings.grid_length = Some(0.0);
+            Ok(())
+        })
+        .unwrap();
         for nodes in
             [rect(400.2, 600.0, 500.4, 700.6), rect(100.3, 100.0, 300.5, 300.25), rect(200.7, 200.0, 350.5, 400.5), rect(10.0, 10.0, 60.0, 60.5)]
         {

@@ -669,7 +669,10 @@ mod tests {
         let k = one_kind(r#"<feSpecularLighting specularExponent="20"><fePointLight x="1" y="2" z="3"/></feSpecularLighting>"#).unwrap();
         assert!(matches!(k, FilterKind::SpecularLighting { light: LightSource::Point { position: [1.0, 2.0, 3.0] }, exponent: 20.0, .. }), "{k:?}");
         let k = one_kind(r#"<feTurbulence baseFrequency="0.05 0.1" numOctaves="3" seed="7" type="fractalNoise"/>"#).unwrap();
-        assert_eq!(k, FilterKind::Turbulence { base_frequency: (0.05, 0.1), octaves: 3, seed: 7, stitch: false, fractal: true });
+        assert_eq!(
+            k,
+            FilterKind::Turbulence { base_frequency: (f64::from(0.05f32), f64::from(0.1f32)), octaves: 3, seed: 7, stitch: false, fractal: true }
+        );
     }
 
     #[test]
