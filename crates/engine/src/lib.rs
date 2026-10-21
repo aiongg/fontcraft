@@ -296,6 +296,9 @@ pub struct Session {
     user_glyph_data: glyph_data::CustomData,
     /// The entries of the user's `Groups*.plist` files.
     user_groups: Option<Arc<fontcraft_glyphquery::Groups>>,
+    /// Counts the changes to the user's glyph data, the glyph data beside a source and the
+    /// user's groups, which change what the sidebar lists without a new document revision.
+    glyph_data_revision: u64,
     /// What [`Session::edit`] stamps on changed glyphs; `None` stamps nothing.
     clock: Option<Clock>,
     /// Each open document's effective glyph properties, by document id.
@@ -621,6 +624,7 @@ impl Session {
         let parsed = glyph_data::parse_files(files, &mut problems);
         let merged = glyph_data::merge(&[&parsed], &mut problems);
         self.user_glyph_data = glyph_data::CustomData { files: Arc::new(parsed), merged };
+        self.glyph_data_revision += 1;
         for i in 0..self.docs.len() {
             self.remerge_doc(i, &mut problems);
         }
@@ -637,6 +641,7 @@ impl Session {
         if let Some(doc) = self.docs.get_mut(i) {
             doc.glyph_data.files = Arc::new(parsed);
         }
+        self.glyph_data_revision += 1;
         self.remerge_doc(i, &mut problems);
         Ok(problems)
     }

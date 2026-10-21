@@ -345,9 +345,11 @@ guesses = [
   "Dropping on a row's upper half puts the dragged row above it, on its lower half below it.",
   "A row that is not a backup, dropped on its own master's row, moves to the top of that master's rows.",
   "A backup dropped on another master's row is refused, as Use as Master restores a backup only into its own master.",
+  "In text mode, a click on a master row with glyphs selected in the text switches those glyphs and the edited glyph (the one after the cursor, whose rows the section shows) when it has that master's layer. Settled by selecting the first two letters of a three-letter text and clicking another master's row in the reference.",
 ]
 observe = [
   "Drag a backup layer of F4's first master onto the second master's row: note whether it is refused or becomes that master's layer.",
+  "In text mode, type ABC, select A and B with the cursor ending before C, click the second master's row: note which of A, B and C switch.",
   "Drag a layer within its master: note how the drop position is shown.",
 ]
 
