@@ -539,6 +539,49 @@ fn a_project_compile_places_components_and_groups_lookups_as_the_reference_does(
     assert_eq!(types, [1, 4], "a single substitution keeps its own lookup beside a ligature");
 }
 
+/// Nested components are placed as the reference composes them: the outer transform times the
+/// inner one in single precision, then applied to each point. `jjm` scales by 0.75 a mirrored
+/// `j` moved by 512, which puts x = 50.673362988 at 484 - 0.75x: 446.00 there, 445.99 in double
+/// precision. The mirrored contour is reversed, so it keeps its direction.
+#[test]
+fn a_project_compile_places_nested_scaled_and_mirrored_components_in_single_precision() {
+    let dir = temp("nested");
+    let ufo = write_metrics_ufo(&dir, "languagesystem DFLT dflt;\n");
+    let glyphs = ufo.join("glyphs");
+    let j = r#"<contour><point x="50.673362988" y="0" type="line"/><point x="50.673362988" y="500" type="line"/><point x="100" y="500" type="line"/><point x="100" y="0" type="line"/></contour>"#;
+    let parts = [
+        ("j", j),
+        ("jm", r#"<component base="j" xScale="-1" xOffset="512"/>"#),
+        ("jjm", r#"<component base="jm" xScale="0.75" yScale="0.75" xOffset="100"/>"#),
+    ];
+    let mut entries = String::new();
+    for (name, outline) in parts {
+        let glif = format!(
+            "<?xml version='1.0' encoding='UTF-8'?>\n<glyph name=\"{name}\" format=\"2\"><advance width=\"700\"/><outline>{outline}</outline></glyph>\n"
+        );
+        std::fs::write(glyphs.join(format!("{name}.glif")), glif).unwrap();
+        entries.push_str(&format!("<key>{name}</key><string>{name}.glif</string>"));
+    }
+    let contents = std::fs::read_to_string(glyphs.join("contents.plist")).unwrap();
+    std::fs::write(glyphs.join("contents.plist"), contents.replacen("</dict>", &format!("{entries}</dict>"), 1)).unwrap();
+    let mut s = Session::new();
+    s.settings_mut().set("user.disableAutomaticAlignmentForImportedFiles", json!(true)).unwrap();
+    s.execute("file.open", &json!({ "path": ufo })).unwrap();
+    let out = dir.join("out.otf");
+    s.execute("font.compile", &json!({"formats": ["otf"], "destination": out, "timestamp": 0, "projectOptions": []})).unwrap();
+    let bytes = std::fs::read(&out).unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    let jjm = contours(&bytes, "jjm");
+    assert_eq!(jjm.len(), 1, "{jjm:?}");
+    let points = &jjm[0];
+    let near = |x: f32, y: f32| points.iter().any(|(px, py)| (px - x).abs() < 0.001 && (py - y).abs() < 0.001);
+    assert!(near(446.0, 0.0) && near(446.0, 375.0) && near(409.0, 375.0) && near(409.0, 0.0), "{points:?}");
+    // `j` runs clockwise; so does its mirrored, reversed copy.
+    let area: f32 = points.iter().zip(points.iter().cycle().skip(1)).map(|((x0, y0), (x1, y1))| x0 * y1 - x1 * y0).sum();
+    assert!(area < 0.0, "{points:?}");
+}
+
 #[test]
 fn the_feature_code_overrides_what_the_project_compile_works_out() {
     let code = "languagesystem DFLT dflt;\ntable head { FontRevision 2.5; } head;\ntable OS/2 { WeightClass 400; } OS/2;\ntable hhea { Ascender 900; } hhea;\n";

@@ -44,7 +44,7 @@ use std::collections::{HashMap, VecDeque};
 use std::time::Duration;
 
 use fontcraft_geom::{Affine, BezPath, CubicBez, PathEl, Point, cubics_to_quadratic_splines};
-use fontcraft_model::{MAX_COMPONENT_DEPTH, MAX_OUTLINE_ELEMENTS, ModelError, ResolvedComponent, ResolvedGlyph};
+use fontcraft_model::{MAX_COMPONENT_DEPTH, MAX_COORDINATE, MAX_OUTLINE_ELEMENTS, ModelError, ResolvedComponent, ResolvedGlyph};
 use fontcraft_pathops::{OpenPaths, OverlapOptions, PathOpError, contours_from_bez, remove_overlap, run_with_time_limit};
 
 use crate::{CompileError, Expansion, MAX_COMPONENTS, MAX_TT_COORDINATE, preflight::transformed};
@@ -104,7 +104,7 @@ pub struct Settings {
     /// How long one glyph's overlap removal may run.
     pub overlap_time_limit: Duration,
     /// Components are drawn in with single-precision arithmetic, as the reference's UFO reader
-    /// places them (a project compile, [`decomposed_single`]).
+    /// places them (a project compile writing CFF, [`decomposed_single`]).
     pub single_precision: bool,
 }
 
@@ -205,6 +205,9 @@ pub(crate) fn decomposed(
     let mut frontier: VecDeque<(&str, Affine)> = g.components.iter().map(|c| (c.base.as_str(), c.transform)).collect();
     while let Some((base, affine)) = frontier.pop_front() {
         budget = budget.checked_sub(1).ok_or_else(too_large)?;
+        // Charged to the font as well: a shared tree of composites without contours costs
+        // every glyph that uses it a visit per path through it.
+        expansion.take(1, &g.name)?;
         let Some(&j) = index.get(base) else { continue };
         let Some(r) = glyphs.get(j) else { continue };
         if decompose.get(j) == Some(&true) {
@@ -244,6 +247,12 @@ impl SingleTransform {
         (!offset_only || dx != 0.0 || dy != 0.0).then_some(Self { m, offset_only })
     }
 
+    /// Whether every coefficient is finite: a value past the `f32` range, or a product of two
+    /// large ones, is not.
+    fn is_finite(&self) -> bool {
+        self.m.iter().all(|v| v.is_finite())
+    }
+
     /// The transform of a component with `local` inside a glyph placed by `outer`. An outer
     /// move adds to the inner offsets; anything else multiplies the matrices.
     fn within(local: Option<Self>, outer: Option<Self>) -> Option<Self> {
@@ -278,24 +287,30 @@ impl SingleTransform {
     }
 }
 
-/// `contour` with every point read in single precision and placed by `t`.
-fn single_contour(contour: &BezPath, t: Option<SingleTransform>) -> BezPath {
-    let place = |p: Point| match &t {
-        Some(t) => t.apply(p),
-        None => Point::new(f64::from(p.x as f32), f64::from(p.y as f32)),
+/// `contour` with every point read in single precision and placed by `t`; `None` when a point
+/// lands past ±[`MAX_COORDINATE`] or is not a number.
+fn single_contour(contour: &BezPath, t: Option<SingleTransform>) -> Option<BezPath> {
+    let place = |p: Point| {
+        let q = match &t {
+            Some(t) => t.apply(p),
+            None => Point::new(f64::from(p.x as f32), f64::from(p.y as f32)),
+        };
+        (q.is_finite() && q.x.abs() <= MAX_COORDINATE && q.y.abs() <= MAX_COORDINATE).then_some(q)
     };
     let path: BezPath = contour
         .elements()
         .iter()
-        .map(|el| match *el {
-            PathEl::MoveTo(p) => PathEl::MoveTo(place(p)),
-            PathEl::LineTo(p) => PathEl::LineTo(place(p)),
-            PathEl::QuadTo(a, p) => PathEl::QuadTo(place(a), place(p)),
-            PathEl::CurveTo(a, b, p) => PathEl::CurveTo(place(a), place(b), place(p)),
-            PathEl::ClosePath => PathEl::ClosePath,
+        .map(|el| {
+            Some(match *el {
+                PathEl::MoveTo(p) => PathEl::MoveTo(place(p)?),
+                PathEl::LineTo(p) => PathEl::LineTo(place(p)?),
+                PathEl::QuadTo(a, p) => PathEl::QuadTo(place(a)?, place(p)?),
+                PathEl::CurveTo(a, b, p) => PathEl::CurveTo(place(a)?, place(b)?, place(p)?),
+                PathEl::ClosePath => PathEl::ClosePath,
+            })
         })
-        .collect();
-    if t.is_some_and(|t| t.mirrors()) { path.reverse_subpaths() } else { path }
+        .collect::<Option<_>>()?;
+    Some(if t.is_some_and(|t| t.mirrors()) { path.reverse_subpaths() } else { path })
 }
 
 /// Where [`decomposed_single`] puts contours, and what it may still add.
@@ -321,6 +336,10 @@ fn decomposed_single(
 ) -> Result<(), CompileError> {
     let Some(g) = glyphs.get(i) else { return Ok(()) };
     let too_large = || CompileError::from(ModelError::OutlineTooLarge(walk.name.to_string()));
+    let out_of_range = || CompileError::Glyph {
+        glyph: walk.name.to_string(),
+        message: format!("a component places points beyond ±{MAX_COORDINATE} in single precision"),
+    };
     if depth > MAX_COMPONENT_DEPTH {
         return Err(ModelError::ComponentCycle(walk.name.to_string()).into());
     }
@@ -329,12 +348,19 @@ fn decomposed_single(
         if depth > 0 {
             walk.expansion.take(c.elements().len(), walk.name)?;
         }
-        walk.out.push(single_contour(c, t));
+        walk.out.push(single_contour(c, t).ok_or_else(out_of_range)?);
     }
     for c in &g.components {
         *walk.budget = walk.budget.checked_sub(1).ok_or_else(too_large)?;
+        // Charged to the font as well: a shared tree of composites without contours costs
+        // every glyph that uses it a visit per path through it.
+        walk.expansion.take(1, walk.name)?;
         let Some(&j) = index.get(c.base.as_str()) else { continue };
-        decomposed_single(glyphs, index, j, SingleTransform::within(SingleTransform::of(c.transform), t), depth + 1, walk)?;
+        let placed = SingleTransform::within(SingleTransform::of(c.transform), t);
+        if placed.is_some_and(|p| !p.is_finite()) {
+            return Err(out_of_range());
+        }
+        decomposed_single(glyphs, index, j, placed, depth + 1, walk)?;
     }
     Ok(())
 }

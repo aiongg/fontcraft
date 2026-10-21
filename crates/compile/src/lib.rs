@@ -567,7 +567,7 @@ pub(crate) fn compile_stages_with(
         max_expanded: expansion.left,
         remove_overlap: options.remove_overlap,
         overlap_time_limit: options.overlap_time_limit,
-        single_precision: options.project.as_ref().is_some_and(|p| p.two_decimals),
+        single_precision: flavour == Flavour::Cff && options.project.as_ref().is_some_and(|p| p.two_decimals),
     };
     let (outlines, mut extra, kern_table) = match var {
         Some(stage) => {

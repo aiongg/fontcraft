@@ -1,7 +1,10 @@
 //! One compile: the request's checks, then fea-rs on a thread with a large stack, then the
 //! tables written to bytes.
 
+use std::cell::OnceCell;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use fea_rs::compile::Compilation;
 use fea_rs::typed::{self, AstNode};
@@ -103,18 +106,7 @@ impl Job<'_> {
         let max = self.limits.diagnostics.max(1);
         let glyph_map = GlyphMap::new(self.names.iter().map(String::as_str))
             .map_err(|e| vec![Diagnostic::request(Severity::Error, format!("the glyph order cannot be used: {e}"))])?;
-        let root_dir = self.root.rsplit_once('/').map_or("", |(d, _)| d).to_string();
-        let resolver = MapResolver { files: self.files.clone(), root_dir };
-        let (tree, parsed) = fea_rs::parse::parse_root(PathBuf::from(&self.root), Some(&glyph_map), Box::new(resolver))
-            .map_err(|e| vec![Diagnostic::at(self.root.clone(), 0..0, Severity::Error, e.to_string())])?;
-        let mut messages = convert(&tree, &parsed, max);
-        if parsed.has_errors() {
-            return Err(messages);
-        }
-        let refusals = crate::check::tree(tree.root(), self.names.len(), &self.limits, &self.files);
-        if !refusals.is_empty() {
-            return Err(refusals);
-        }
+        let (tree, mut messages) = self.parse(&self.files, &glyph_map, max)?;
         let generated_axes = self.generated.map_or(&[][..], |g| g.axes.as_slice());
         let info = Info::new(self.variations, generated_axes).map_err(|d| vec![d])?;
         if let Some(info) = &info
@@ -129,31 +121,88 @@ impl Job<'_> {
         if validated.has_errors() {
             return Err(messages);
         }
-        // Checked and validated as written, so messages name the files; then compiled again
-        // from one file with the lookup breaks.
-        if self.lookup_per_rule_type
-            && self.mode != Mode::Validate
-            && let Some(text) = crate::split::split(tree.root()).filter(|t| t.len() <= self.limits.text_bytes)
-        {
-            let files = std::sync::Arc::new(std::collections::BTreeMap::from([(self.root.clone(), std::sync::Arc::<str>::from(text))]));
-            return Job { files, lookup_per_rule_type: false, ..self }.run();
+        // Checked and validated as written, so messages name the files; then compiled from one
+        // file with the lookup breaks, its messages put back where they came from.
+        if self.lookup_per_rule_type && self.mode != Mode::Validate {
+            let why = match crate::split::split(tree.root()) {
+                Ok(None) => None,
+                Ok(Some(split)) => match self.reparse(split.text, &glyph_map, info.as_ref(), max) {
+                    Ok(rewritten) => {
+                        let remap = Remap::new(&tree, &self.files, split.inserts);
+                        return self.finish(&rewritten, &glyph_map, info.as_ref(), max, messages, &|set: &DiagnosticSet| remap.convert(set, max));
+                    }
+                    Err(why) => Some(why),
+                },
+                Err(why) => Some(why),
+            };
+            if let Some(why) = why {
+                messages.push(Diagnostic::request(Severity::Warning, format!("rules of different types may share a lookup: {why}")));
+                messages.truncate(max);
+            }
         }
+        self.finish(&tree, &glyph_map, info.as_ref(), max, messages, &|set: &DiagnosticSet| convert(&tree, set, max))
+    }
+
+    /// `files` parsed from the root file and checked against the limits.
+    fn parse(&self, files: &Loaded, glyph_map: &GlyphMap, max: usize) -> Result<(ParseTree, Vec<Diagnostic>), Vec<Diagnostic>> {
+        let root_dir = self.root.rsplit_once('/').map_or("", |(d, _)| d).to_string();
+        let resolver = MapResolver { files: files.clone(), root_dir };
+        let (tree, parsed) = fea_rs::parse::parse_root(PathBuf::from(&self.root), Some(glyph_map), Box::new(resolver))
+            .map_err(|e| vec![Diagnostic::at(self.root.clone(), 0..0, Severity::Error, e.to_string())])?;
+        let messages = convert(&tree, &parsed, max);
+        if parsed.has_errors() {
+            return Err(messages);
+        }
+        let refusals = crate::check::tree(tree.root(), self.names.len(), &self.limits, files);
+        if !refusals.is_empty() {
+            return Err(refusals);
+        }
+        Ok((tree, messages))
+    }
+
+    /// The code [`crate::split`] wrote out, parsed, checked and validated; why it cannot be
+    /// used when it cannot.
+    fn reparse(&self, text: String, glyph_map: &GlyphMap, info: Option<&Info>, max: usize) -> Result<ParseTree, String> {
+        if text.len() > self.limits.text_bytes {
+            return Err(format!("with the lookup breaks the code is larger than {} bytes", self.limits.text_bytes));
+        }
+        let first = |d: Vec<Diagnostic>| d.into_iter().next().map_or_else(String::new, |d| d.message);
+        let files = Arc::new(BTreeMap::from([(self.root.clone(), Arc::<str>::from(text))]));
+        let (tree, _) = self.parse(&files, glyph_map, max).map_err(first)?;
+        let validated = fea_rs::compile::validate(&tree, glyph_map, info);
+        if validated.has_errors() {
+            return Err(first(convert(&tree, &validated, 1)));
+        }
+        Ok(tree)
+    }
+
+    /// The run from validated code on: `GSUB` alone for the first pass, every table for a build.
+    /// `convert` turns fea-rs's messages about `tree` into ours.
+    fn finish(
+        &self,
+        tree: &ParseTree,
+        glyph_map: &GlyphMap,
+        info: Option<&Info>,
+        max: usize,
+        mut messages: Vec<Diagnostic>,
+        convert: &dyn Fn(&DiagnosticSet) -> Vec<Diagnostic>,
+    ) -> Result<Output, Vec<Diagnostic>> {
         match self.mode {
             Mode::Validate => return Ok(Output::Compiled(Box::new(Compiled { warnings: messages, ..Compiled::default() }))),
-            Mode::FirstPass => return first_pass(&tree, &glyph_map, info.as_ref(), max, messages).map(|f| Output::FirstPass(Box::new(f))),
+            Mode::FirstPass => return first_pass(tree, glyph_map, info, max, messages, convert).map(|f| Output::FirstPass(Box::new(f))),
             Mode::Build => {}
         }
         let opts = Opts::new().compile_gpos(self.gpos).max_error_messages(max);
         let provider = self.generated.map(|generated| Provider { generated });
         // One variation store for the code's variable values and the generated deltas.
-        match fea_rs::compile::compile::<Info, Provider>(&tree, &glyph_map, info.as_ref(), provider.as_ref(), opts) {
+        match fea_rs::compile::compile::<Info, Provider>(tree, glyph_map, info, provider.as_ref(), opts) {
             Ok((compilation, warnings)) => {
-                messages.extend(convert(&tree, &warnings, max));
+                messages.extend(convert(&warnings));
                 messages.truncate(max);
-                self.output(&tree, compilation, messages).map(|c| Output::Compiled(Box::new(c)))
+                self.output(tree, compilation, messages).map(|c| Output::Compiled(Box::new(c)))
             }
             Err(errors) => {
-                messages.extend(convert(&tree, &errors, max));
+                messages.extend(convert(&errors));
                 messages.truncate(max);
                 Err(messages)
             }
@@ -259,16 +308,17 @@ fn first_pass(
     info: Option<&Info>,
     max: usize,
     mut messages: Vec<Diagnostic>,
+    convert: &dyn Fn(&DiagnosticSet) -> Vec<Diagnostic>,
 ) -> Result<FirstPass, Vec<Diagnostic>> {
     let opts = Opts::new().compile_gpos(false).max_error_messages(max);
     let compilation = match fea_rs::compile::compile::<Info, Provider>(tree, glyph_map, info, None, opts) {
         Ok((compilation, warnings)) => {
-            messages.extend(convert(tree, &warnings, max));
+            messages.extend(convert(&warnings));
             messages.truncate(max);
             compilation
         }
         Err(errors) => {
-            messages.extend(convert(tree, &errors, max));
+            messages.extend(convert(&errors));
             messages.truncate(max);
             return Err(messages);
         }
@@ -373,4 +423,127 @@ fn convert(tree: &ParseTree, set: &DiagnosticSet, max: usize) -> Vec<Diagnostic>
             Diagnostic::at(file, d.span(), severity, d.text())
         })
         .collect()
+}
+
+/// The most bytes [`Remap`] compares while it works out which file each part of the code came
+/// from.
+const MAX_SOURCE_MATCH_BYTES: usize = 1 << 28;
+
+/// Puts fea-rs's messages about the code [`crate::split`] wrote out back at the place in the
+/// files the code came from.
+struct Remap<'a> {
+    tree: &'a ParseTree,
+    files: &'a Loaded,
+    /// [`crate::split::Split::inserts`].
+    inserts: Vec<(usize, usize)>,
+    /// Worked out on the first message; `None` when it cannot be.
+    chunks: OnceCell<Option<Vec<Chunk>>>,
+}
+
+/// A stretch of the code as written out, from `start` to `end`, that comes from `file` at
+/// `local`.
+struct Chunk {
+    start: usize,
+    end: usize,
+    file: String,
+    local: usize,
+}
+
+impl<'a> Remap<'a> {
+    fn new(tree: &'a ParseTree, files: &'a Loaded, inserts: Vec<(usize, usize)>) -> Self {
+        Self { tree, files, inserts, chunks: OnceCell::new() }
+    }
+
+    /// The messages in `set` at their places in the files. A message about an inserted lookup
+    /// break is left out; one whose place cannot be worked out is about the request.
+    fn convert(&self, set: &DiagnosticSet, max: usize) -> Vec<Diagnostic> {
+        set.diagnostics()
+            .iter()
+            .take(max)
+            .filter_map(|d| {
+                let severity = if d.is_error() { Severity::Error } else { Severity::Warning };
+                let span = d.span();
+                let start = self.original(span.start, false)?;
+                let end = self.original(span.end, true).unwrap_or(start).max(start);
+                Some(match self.locate(start, end) {
+                    Some((file, range)) => Diagnostic::at(file, range, severity, d.text()),
+                    None => Diagnostic::request(severity, d.text()),
+                })
+            })
+            .collect()
+    }
+
+    /// The offset in the original code of `pos` in the written-out code; for a start (not
+    /// `end`) inside inserted text, `None`.
+    fn original(&self, pos: usize, end: bool) -> Option<usize> {
+        let mut shift = 0usize;
+        for &(at, len) in &self.inserts {
+            let start = at.saturating_add(shift);
+            if pos < start || (end && pos == start) {
+                break;
+            }
+            if pos < start.saturating_add(len) {
+                return end.then_some(at);
+            }
+            shift = shift.saturating_add(len);
+        }
+        pos.checked_sub(shift)
+    }
+
+    /// The file and range of `start..end` in the original code.
+    fn locate(&self, start: usize, end: usize) -> Option<(String, std::ops::Range<usize>)> {
+        let chunks = self.chunks.get_or_init(|| source_chunks(self.tree, self.files)).as_ref()?;
+        let chunk = chunks.get(chunks.partition_point(|c| c.end <= start))?;
+        let from = start.checked_sub(chunk.start)?;
+        let to = end.min(chunk.end).checked_sub(chunk.start)?;
+        Some((chunk.file.clone(), chunk.local.saturating_add(from)..chunk.local.saturating_add(to)))
+    }
+}
+
+/// Which file each stretch of `tree`'s code comes from. fea-rs keeps this in the tree's source
+/// map, whose lookup it does not make public (fea-rs 1.0.0), so the map is read from its debug
+/// form: `(start..end, (FileId(n), offset))` for each stretch. The file behind each id is the one
+/// whose text holds every stretch with that id at its offset. `None` when the form is not that
+/// or no file matches.
+fn source_chunks(tree: &ParseTree, files: &Loaded) -> Option<Vec<Chunk>> {
+    let code: String = tree.root().iter_tokens().map(|t| t.as_str()).collect();
+    let numbers = format!("{:?}", tree.source_map())
+        .split(|c: char| !c.is_ascii_digit())
+        .filter(|s| !s.is_empty())
+        .map(str::parse::<usize>)
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
+    if numbers.len() % 4 != 0 {
+        return None;
+    }
+    let mut budget = MAX_SOURCE_MATCH_BYTES;
+    let mut candidates: std::collections::HashMap<usize, Vec<&str>> = std::collections::HashMap::new();
+    for group in numbers.chunks_exact(4) {
+        let &[start, end, id, local] = group else { return None };
+        let text = code.get(start..end)?;
+        let paths = candidates.entry(id).or_insert_with(|| files.keys().map(String::as_str).collect());
+        let mut out_of_budget = false;
+        paths.retain(|path| {
+            let Some(held) = files.get(*path).and_then(|t| t.get(local..local.saturating_add(text.len()))) else { return false };
+            // Most files differ early; only those that match the start are compared in full.
+            let head = text.len().min(64);
+            let cost = if held.as_bytes().get(..head) == text.as_bytes().get(..head) { text.len() } else { head };
+            match budget.checked_sub(cost) {
+                Some(left) => budget = left,
+                None => out_of_budget = true,
+            }
+            cost == text.len() && held == text
+        });
+        if out_of_budget || paths.is_empty() {
+            return None;
+        }
+    }
+    let mut chunks = Vec::with_capacity(numbers.len() / 4);
+    for group in numbers.chunks_exact(4) {
+        let &[start, end, id, local] = group else { return None };
+        let file = candidates.get(&id).and_then(|p| p.first())?.to_string();
+        chunks.push(Chunk { start, end, file, local });
+    }
+    chunks.sort_by_key(|c| c.start);
+    Some(chunks)
 }
