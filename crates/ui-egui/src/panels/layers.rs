@@ -8,6 +8,14 @@
 //! as Master restores a selected backup (`layers.useAsMaster`). The filter menu runs
 //! `layers.onlyShowLayersFromCurrentMaster` and `layers.hideBackupLayers`. A right-click on a
 //! row opens its context menu: the commands whose row names `layers.row`, acting on that row.
+//! With glyphs selected in the text (text mode), a click on a master row switches those glyphs to
+//! that master (`layers.select` with `glyphs`).
+//!
+//! A non-master row can be dragged by its name. Dropped on another row of the same master it moves
+//! there (`layers.reorder`); a line shows where it will land. A backup dropped on its master's row
+//! takes the master's place (`layers.useAsMaster`), and the master row is outlined while it
+//! hovers; any other row dropped on its master row moves to the top of that master. A drop under
+//! another master is refused: the cursor shows it and nothing runs.
 //!
 //! Special layers (`mastersAsLayers.paletteListing`) show their label in bold in place of the
 //! name: `[…]` for an alternate layer, `{…}` for an intermediate one, both for a layer that is
@@ -141,11 +149,13 @@ impl Special {
 }
 
 /// A clickable part of a row's label: the text with a button's padding, under the stable `id`.
-fn label_part(ui: &mut egui::Ui, id: egui::Id, text: egui::RichText) -> egui::Response {
+/// `drag`: the part can also be dragged (the row's drag handle).
+fn label_part(ui: &mut egui::Ui, id: egui::Id, text: egui::RichText, drag: bool) -> egui::Response {
     let galley = egui::WidgetText::from(text).into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, egui::TextStyle::Button);
     let padding = ui.spacing().button_padding;
     let (rect, _) = ui.allocate_exact_size(galley.size() + 2.0 * padding, egui::Sense::hover());
-    let response = ui.interact(rect, id, egui::Sense::click());
+    let sense = if drag { egui::Sense::click_and_drag() } else { egui::Sense::click() };
+    let response = ui.interact(rect, id, sense);
     if ui.is_rect_visible(rect) {
         if response.hovered() {
             let visuals = ui.style().interact(&response);
@@ -154,6 +164,96 @@ fn label_part(ui: &mut egui::Ui, id: egui::Id, text: egui::RichText) -> egui::Re
         ui.painter().galley(rect.min + padding, galley, ui.visuals().text_color());
     }
     response
+}
+
+/// The name part of row `layer`: the text a click selects and a drag picks up.
+pub fn name_part(layer: &str) -> egui::Id {
+    widgets::id(("layers.name", layer))
+}
+
+/// The drop zone of row `layer`: the row across the section's width, down to half the gap to its
+/// neighbours.
+pub fn drop_zone(layer: &str) -> egui::Id {
+    widgets::id(("layers.drop", layer))
+}
+
+/// What a dragged row carries.
+#[derive(Clone, Debug)]
+struct Dragged {
+    glyph: String,
+    layer: String,
+    master: String,
+    backup: bool,
+}
+
+/// What dropping a dragged row on a row does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DropAction {
+    /// `layers.reorder` to `to`; the line goes above the row (`above`) or below it.
+    Reorder { to: usize, above: bool },
+    /// `layers.useAsMaster`: a backup dropped on its master's row.
+    UseAsMaster,
+    /// A drop under another master (or from another glyph's rows).
+    Refused,
+    /// Dropped where it already is.
+    Nothing,
+}
+
+/// What dropping `dragged` on `target` does, with the pointer in the row's upper half (`upper`)
+/// or its lower half. `all` is every row of `glyph`, unfiltered: `layers.reorder` counts its index
+/// among all the non-master layers of the master, hidden ones included.
+fn drop_action(all: &[Row], glyph: &str, dragged: &Dragged, target: &Row, upper: bool) -> DropAction {
+    if dragged.glyph != glyph || target.master != dragged.master {
+        return DropAction::Refused;
+    }
+    if target.id == dragged.layer {
+        return DropAction::Nothing;
+    }
+    let siblings: Vec<&str> = all.iter().filter(|r| r.master == dragged.master && r.kind != "master").map(|r| r.id.as_str()).collect();
+    let Some(from) = siblings.iter().position(|id| *id == dragged.layer) else { return DropAction::Refused };
+    let (slot, above) = if target.kind == "master" {
+        if dragged.backup {
+            return DropAction::UseAsMaster;
+        }
+        (0, false)
+    } else {
+        let Some(at) = siblings.iter().position(|id| *id == target.id) else { return DropAction::Refused };
+        (if upper { at } else { at + 1 }, upper)
+    };
+    // `slot` counts the dragged row; the command's index counts the rows without it.
+    let to = if from < slot { slot - 1 } else { slot };
+    if to == from { DropAction::Nothing } else { DropAction::Reorder { to, above } }
+}
+
+/// The drop zone of `row` (drawn in `row_rect`): shows what a drop there would do while a row is
+/// held over it, and queues the command when it is dropped.
+fn drop_target(ui: &mut egui::Ui, row: &Row, row_rect: egui::Rect, all: &[Row], glyph: &str, tokens: &crate::theme::Tokens, pending: &mut Pending) {
+    let zone = row_rect.expand2(egui::vec2(0.0, ui.spacing().item_spacing.y / 2.0));
+    let response = ui.interact(zone, drop_zone(&row.id), egui::Sense::hover());
+    let ctx = ui.ctx().clone();
+    let upper = ctx.pointer_interact_pos().is_some_and(|p| p.y < zone.center().y);
+    if let Some(dragged) = response.dnd_hover_payload::<Dragged>() {
+        let stroke = egui::Stroke::new(tokens.selection_width, tokens.accent);
+        match drop_action(all, glyph, &dragged, row, upper) {
+            DropAction::Reorder { above, .. } => {
+                ui.painter().hline(zone.x_range(), if above { zone.top() } else { zone.bottom() }, stroke);
+                ctx.set_cursor_icon(egui::CursorIcon::Grabbing);
+            }
+            DropAction::UseAsMaster => {
+                ui.painter().rect_stroke(row_rect, f32::from(tokens.radius), stroke, egui::StrokeKind::Inside);
+                ctx.set_cursor_icon(egui::CursorIcon::Grabbing);
+            }
+            DropAction::Refused => ctx.set_cursor_icon(egui::CursorIcon::NoDrop),
+            DropAction::Nothing => ctx.set_cursor_icon(egui::CursorIcon::Grabbing),
+        }
+    }
+    if let Some(dragged) = response.dnd_release_payload::<Dragged>() {
+        match drop_action(all, glyph, &dragged, row, upper) {
+            DropAction::Reorder { to, .. } => pending.push(("layers.reorder", json!({"glyph": glyph, "layer": dragged.layer, "toIndex": to}))),
+            DropAction::UseAsMaster => pending.push(("layers.useAsMaster", json!({"glyphs": [glyph], "layer": dragged.layer}))),
+            DropAction::Refused | DropAction::Nothing => {}
+        }
+    }
 }
 
 /// The context menu of `row`: the items of `sections`, acting on that row.
@@ -252,6 +352,29 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let tokens = app.tokens.clone();
     let row_menu_sections = context_menu::sections(&app.session, &app.state, &[ROW_CONTEXT]);
     let colors = super::layers_color::ColorEntries::read(app, &glyph);
+    // With glyphs selected in the text, a click on a master row switches those of them that have
+    // the master's layer.
+    let text_glyphs: Vec<String> = app
+        .state
+        .tab()
+        .filter(|t| t.text_mode)
+        .map(|t| {
+            let mut seen = HashSet::new();
+            t.text.selection().filter_map(|i| t.item_glyph(i)).filter(|g| seen.insert(*g)).map(str::to_string).collect()
+        })
+        .unwrap_or_default();
+    let master_targets: HashMap<String, Vec<String>> = match app.session.font() {
+        Ok(font) if !text_glyphs.is_empty() => shown
+            .iter()
+            .filter(|r| r.kind == "master")
+            .map(|r| {
+                let has = |g: &&String| font.glyph(g).is_some_and(|g| g.layer(&r.id).is_some());
+                (r.id.clone(), text_glyphs.iter().filter(has).cloned().collect::<Vec<_>>())
+            })
+            .filter(|(_, glyphs)| !glyphs.is_empty())
+            .collect(),
+        _ => HashMap::new(),
+    };
     for row in &shown {
         // A selected row is filled across the section's full width, behind the eye and the kind.
         let fill = ui.painter().add(egui::Shape::Noop);
@@ -295,25 +418,30 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
                 if master_row {
                     text = text.strong();
                 }
-                parts.push((ui.add(egui::Button::selectable(false, style(text))), None));
+                parts.push((label_part(ui, name_part(&row.id), style(text), !master_row), None));
             }
             if let Some(s) = special {
                 for (label, key, part) in [(&s.bracket, "layers.bracket", "alternate"), (&s.brace, "layers.brace", "intermediate")] {
                     if let Some(label) = label {
                         let id = widgets::id((key, &row.id));
-                        parts.push((label_part(ui, id, style(egui::RichText::new(label).strong())), Some(part)));
+                        parts.push((label_part(ui, id, style(egui::RichText::new(label).strong()), !master_row), Some(part)));
                     }
                 }
             } else if !master_row && row.kind != "backup" && !colors.show(ui, &tokens, &row.id, is_selected, pending) {
                 ui.label(egui::RichText::new(&row.kind).strong().color(if is_selected { tokens.selected_text } else { tokens.text_dim }));
             }
             for (response, part) in &parts {
+                if !master_row && response.drag_started() {
+                    let dragged = Dragged { glyph: glyph.clone(), layer: row.id.clone(), master: row.master.clone(), backup: row.kind == "backup" };
+                    response.dnd_set_drag_payload(dragged);
+                }
                 if response.clicked() {
                     if editing {
                         let m = ui.input(|i| i.modifiers);
-                        let params = match (m.shift, m.command) {
-                            (true, _) => json!({"layer": row.id, "extend": "range"}),
-                            (false, true) => json!({"layer": row.id, "extend": "toggle"}),
+                        let params = match (m.shift, m.command, master_targets.get(&row.id)) {
+                            (true, _, _) => json!({"layer": row.id, "extend": "range"}),
+                            (false, true, _) => json!({"layer": row.id, "extend": "toggle"}),
+                            (false, false, Some(glyphs)) => json!({"layer": row.id, "glyphs": glyphs}),
                             _ => json!({"layer": row.id}),
                         };
                         pending.push(("layers.select", params));
@@ -331,10 +459,11 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
                 response.context_menu(|ui| row_menu(ui, &row_menu_sections, row, special, &glyph, &ctx, pending));
             }
         });
+        let row_rect = egui::Rect::from_x_y_ranges(full_width, drawn.response.rect.y_range());
         if is_selected {
-            let rect = egui::Rect::from_x_y_ranges(full_width, drawn.response.rect.y_range());
-            ui.painter().set(fill, egui::Shape::rect_filled(rect, f32::from(tokens.radius), tokens.row_selected));
+            ui.painter().set(fill, egui::Shape::rect_filled(row_rect, f32::from(tokens.radius), tokens.row_selected));
         }
+        drop_target(ui, row, row_rect, &all, &glyph, &tokens, pending);
     }
     let selected_rows: Vec<&Row> = all.iter().filter(|r| selected.contains(&r.id)).collect();
     let deletable: Vec<&str> = selected_rows.iter().filter(|r| r.kind != "master").map(|r| r.id.as_str()).collect();

@@ -339,7 +339,17 @@ milestone = "M3"
 summary = "Lists every layer of the current glyph: one master layer per font master plus any backup and special layers beneath it. It is where layers are switched, shown, added, renamed, reordered and promoted."
 ref = "Palette › Layers"
 status = "handbook"
-notes = "Built in M3.15 and M3.10 without dragging to reorder or to use as master. In Edit View a click runs `layers.select`; in Font View, where no layer is active, a click picks the row the buttons act on. Documented, not yet observed: the minus button deletes every selected row that is not a master layer."
+notes = "Built in M3.15, M3.10 and M3.40. In Edit View a click runs `layers.select`; in Font View, where no layer is active, a click picks the row the buttons act on. A non-master row is dragged by its name: dropped on a row of the same master it runs `layers.reorder`, a backup dropped on its master's row runs `layers.useAsMaster`, and a drop under another master is refused (the cursor shows it, nothing runs). The section's resize handle is not built. Documented, not yet observed: the minus button deletes every selected row that is not a master layer."
+guesses = [
+  "While a row is dragged, an accent-coloured line between rows shows where it will land, and the master row is outlined when a backup dropped there would replace the master layer.",
+  "Dropping on a row's upper half puts the dragged row above it, on its lower half below it.",
+  "A row that is not a backup, dropped on its own master's row, moves to the top of that master's rows.",
+  "A backup dropped on another master's row is refused, as Use as Master restores a backup only into its own master.",
+]
+observe = [
+  "Drag a backup layer of F4's first master onto the second master's row: note whether it is refused or becomes that master's layer.",
+  "Drag a layer within its master: note how the drop position is shown.",
+]
 
 [[command]]
 id = "layers.select"
@@ -427,6 +437,7 @@ milestone = "M3"
 summary = "Moves a layer to another position among the layers of the same master. A move that would take it under a different master is not allowed."
 ref = "Palette › Layers"
 status = "handbook"
+notes = "Dragging a row of the Layers section within its master runs this command (M3.40). `toIndex` counts the master's non-master layers, those the filters hide included, with the moved layer taken out."
 
 [[command]]
 id = "layers.useAsMaster"
@@ -441,6 +452,7 @@ milestone = "M3"
 summary = "Restores a backup layer: its content becomes the master layer's content, the previous master content is saved to a newly created backup layer, and the restored backup is removed. Dragging a backup row onto a master row does the same."
 ref = "Palette › Layers › Backup Layers"
 status = "handbook"
+notes = "Dropping a backup row on its own master's row runs this command (M3.40)."
 guesses = [
   "Use as Master takes backup layers only (Palette question 4).",
 ]

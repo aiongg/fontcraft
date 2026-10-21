@@ -98,6 +98,8 @@ mod kerning_review_tests;
 #[cfg(test)]
 mod kerning_window_tests;
 #[cfg(test)]
+mod layers_drag_tests;
+#[cfg(test)]
 mod math_base_dialog_tests;
 #[cfg(test)]
 mod measurement_tests;
