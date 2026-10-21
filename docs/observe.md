@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1380 rows to check: 2273 guesses and 508 observe steps.**
+**1380 rows to check: 2278 guesses and 514 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -80,6 +80,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A pasted PDF keeps one font unit per point with its page's bottom-left corner on the glyph's origin, as a pasted SVG keeps its own coordinates; pasting a PDF of known geometry from a drawing app into the reference would settle it.
   - Guess: When several flavours are given, JSON is read first, then SVG, then PDF, and one that cannot be read gives way to the next; which flavour the reference prefers when a drawing app offers both SVG and PDF is not documented.
   - Guess: The desktop shell passes the clipboard's PDF only when its text cannot be pasted, so readable text wins over a PDF; copying a shape from a drawing app that offers both and pasting it into the reference would settle it.
+  - Guess: A paste made while the clipboard's PDF is still being read for the previous one is dropped with a message in the status bar; pasting twice quickly from a drawing app into the reference would settle what it does.
 - [ ] `menus.switchCheckMarks` (behavior, M3, handbook): A menu item that switches something on and off shows a check…
   - Guess: Every on/off switch shows a check mark, including Lock Outline, Power Nudge, Edit Background, Palette, Preview Panel and Font Audit; opening the reference app's View, Path and Window menus with each switch on and off settles which ones do.
   - Guess: View › Show Indexes shows a check mark while any kind of index is shown. Settled by turning on a single kind in the reference app and opening the View menu.
@@ -3628,6 +3629,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Another glyph of the tab shows the colour kind of the active layer when it has it, else palette and full-colour layers, then its svg layer, then its iColor layer of the active layer's size or else its largest. Settled by a tab of glyphs with mixed colour kinds in the reference.
   - Guess: A palette index the palette does not have is drawn in the text colour. Settled by setting a palette layer's index past the last row in the reference.
   - Guess: An svg layer's SVG filters are drawn in Edit View, as the compiled font shows them; a file without filters keeps the plainer drawing of paths and strokes. Settled by selecting an svg layer whose file has a drop shadow in the reference and looking at the canvas.
+  - Guess: Edit View runs an svg file's filters only on the part of the drawing within the canvas and a 256-pixel margin, so a blur reaching further than the margin fades towards the margin's edge, and says at the canvas's bottom left why a file is drawn without some or all of its filters. Settled by zooming into an svg layer with a large blur in the reference and scrolling it to the canvas edge.
   - Observe: Palette font: select a palette layer of A and type AB in the Edit View tab; note whether B is drawn in colour and with which palette.
   - Observe: svg layer whose file has an feDropShadow: select the layer and note whether Edit View draws the shadow.
 - [ ] `color.preview.previewArea` (behavior, M11, handbook): Two previews, the strip that the eye button opens below the Edit…
@@ -3644,12 +3646,20 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: An SVG document fitted to the em square with preserveAspectRatio slice is clipped to the em square unless its root's overflow (its style property, else its attribute) is visible or auto; a document fitted with meet is not clipped. Settled by previewing such a glyph whose content overflows the em in the reference.
   - Guess: SVG filters work on 8-bit premultiplied pixels in linear RGB unless color-interpolation-filters says sRGB; blur deviations and offsets scale by the lengths of the transform's axes, so a rotated element's blur is not rotated, and offsets round to whole pixels. Settled by previewing an SVG glyph with a blur and an offset shadow in the reference.
   - Guess: An SVG element whose filters use feImage, a transfer function of more than 1,024 values or a convolution kernel more than 16 cells on a side, hold more than 32 primitives (each feMerge input counting as one), nest inside 4 filtered elements, could paint more than 1,048,576 sprite pixels (what the element draws grown by its blurs, offsets, dilations, convolutions and displacements, or the whole filter region when a flood, tile, turbulence or light paints where its input is clear), or would take the glyph past its work budget is drawn unfiltered with a warning, and the glyph is still drawn in colour; blurs past a deviation of 256 pixels blur by 256, dilations and erosions past a radius of 256 pixels reach 256, and turbulence runs at most 10 octaves. Settled by previewing an SVG glyph with feImage in the reference.
-  - Guess: feTurbulence takes the noise at each pixel's top left corner in user space; feConvolveMatrix adds its bias as SVG 1.1 writes it (to premultiplied values, or to straight colour with preserveAlpha) and its kernel cells are sprite pixels; feMorphology radii and feDisplacementMap moves round to whole pixels. Settled by previewing an SVG glyph with each primitive at two text sizes in the reference.
+  - Guess: feTurbulence takes the noise at each pixel's top left corner in user space; feConvolveMatrix adds its bias by the Filter Effects formula (the bias to the alpha, the bias times that alpha to each premultiplied colour, or the bias to straight colour with preserveAlpha), ignores kernelUnitLength and reads its kernel cells as sprite pixels; feMorphology radii and feDisplacementMap moves round to whole pixels. Settled by previewing an SVG glyph with each primitive at two text sizes in the reference.
+  - Guess: feDisplacementMap converts only its map (in2) to the color-interpolation-filters space and moves the in image's pixels in the space they are in, as the Filter Effects specification says. Settled by previewing an SVG glyph displaced by a gradient map in linearRGB and in sRGB in the reference.
+  - Guess: A negative diffuseConstant or specularConstant lights nothing, so the lit result is black; the specification calls such a value an error. Settled by previewing an SVG glyph lit with diffuseConstant=-1 in the reference.
   - Guess: Lighting takes light positions through the filter's transform, z scaled by the square root of its determinant, uses the Filter Effects specification's Sobel kernels with its edge kernels, clamps specularExponent to 1 to 128 and gives a spot light's cone a hard edge. Settled by previewing an SVG glyph lit by a point and a spot light in the reference.
   - Guess: An SVG glyph whose masks and clip paths nest more than 8 layers deep, or that uses more than 4,096 pattern tiles, is drawn as its outline. Settled by previewing such a glyph in the reference.
   - Observe: Palette font with an instance whose Export COLR Table is off: open Text Preview, choose the instance in the style pop-up and note whether the glyphs show as plain outlines.
   - Observe: SVG font with a glyph filtered by feGaussianBlur and one by feImage: open Text Preview and note whether each filter shows, and whether the second glyph draws unfiltered.
   - Observe: SVG font with glyphs filtered by feTurbulence, feDiffuseLighting and feConvolveMatrix: open Text Preview at two sizes and compare the noise, the lighting and the convolution with FontCraft's.
+  - Observe: SVG font with a half-transparent glyph filtered by feConvolveMatrix with bias=0.5: note whether the colour gains half the bias where the glyph is half transparent.
+  - Observe: SVG font with a glyph filtered by feConvolveMatrix with kernelUnitLength=4: note whether the kernel cells grow with the text size.
+  - Observe: SVG font with a glyph lit by feSpotLight with limitingConeAngle=20: note whether the cone's edge is hard or soft.
+  - Observe: SVG font with a glyph lit by feDiffuseLighting with diffuseConstant=-1: note whether the glyph shows black, unfiltered or not at all.
+  - Observe: SVG font with a glyph displaced by feDisplacementMap in linearRGB: compare its colours with the same glyph in sRGB.
+  - Observe: SVG font with a glyph dilated by feMorphology radius=400 at a large text size: note whether the dilation stops growing.
 - [ ] `color.layered.masterColor` (behavior, M11, handbook): The Master Color parameter on a master sets the colour its filled…
   - Guess: The other glyphs of the tab are filled in the same masters' colours as the edited glyph. Settled by typing several glyphs in a tab of a layered font with all masters shown in the reference.
   - Observe: Layered font: show all masters in Edit View; note whether each master is drawn in its Master Color with its opacity, and whether Master Color Dark is used in dark appearance.
@@ -3871,6 +3881,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: Open a new project, link font B, right-click an instance in the sidebar: note the context menu's items.
   - Observe: Edit an instance in an unsaved project and close the window: note whether a prompt appears and what it offers.
 - [ ] `compile.styleLinking` (behavior, M7, docs): Style-linked groups hold at most four fonts (Regular, Italic, Bold, Bold Italic)…
+  - Guess: Bold or Italic set on a designspace instance whose stated style-map style is outside the four (which reads as neither) wins over that style: it compiles with the flags' bits and name, and the designspace is written with the flags' style. No source covers editing such an instance; the reference app's handling of a stated style it does not know would settle it.
   - Guess: A single-source designspace whose instance states no style-map names takes ufo2ft's fallbacks from the instance's style, where fontmake keeps the source UFO's style-map names; a fontmake build of such a source with style-map names in its UFO would settle it.
 - [ ] `open.reconstructsFeatures` (behavior, M8, handbook): OpenType layout from a compiled font is turned back into feature code…
   - Guess: Lookups that must come before a shared lookup to keep the lookup order go into Prefix as well; opening a font with a shared lookup in the middle of its lookup list in the reference app would settle it.
@@ -4316,7 +4327,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.checkOutlines` (M12, docs, live): Check Outlines
   - Guess: A fix of a file given by path is refused; the command line opens the source, fixes it and saves it, so the engine command only fixes the open document.
   - Guess: The clean-up keeps node types, smooth flags and node names; the reference redraws the glyph through a segment pen, which loses smooth flags and point names. Running it on a UFO with smooth points would show whether that matters to users.
-  - Guess: Only paths are cleaned up and reordered; components keep their places in the shape list. The reference decomposes components before testing, so a fixed glyph never has any.
+  - Guess: Only paths are cleaned up and reordered; components keep their places in the shape list and their offsets, fractional ones included. The reference decomposes components before testing, so a fixed glyph never has any.
   - Guess: `quiet` drops the results list and keeps the counts; the reference's quiet mode still prints how many glyphs it skipped, which the summary covers.
 - [ ] `audit.checkInterpolation` (M12, docs, live): Check Interpolation
   - Guess: `showAll` lists the glyphs without problems in `glyphsWithoutProblems` instead of one line per glyph as the reference prints; its JSON output would settle the shape.
