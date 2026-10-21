@@ -5,7 +5,8 @@
 //! An entry gives what the Custom Parameter picker lists and what the value checks
 //! ([`crate::value::check`]) need: the name, its other spellings, the value kind, where the
 //! parameter may be set, what it affects, the milestone that makes it work, whether it is
-//! measured in font units (scaled by [`crate::scale`]) and whether it may repeat.
+//! measured in font units (scaled by [`crate::scale`]), whether it may repeat and the values it
+//! takes when the row lists them.
 //!
 //! Name properties (`familyNames`, `designers`…) are entries too: commands that add one through
 //! `font.customParameters.add` write the property instead (`docs/plans/M7.md` § 3).
@@ -37,12 +38,15 @@ pub struct ParamSpec {
     pub units: bool,
     /// May appear more than once in one list (Name Table Entry, Filter…).
     pub repeatable: bool,
+    /// The values the parameter takes, from the row's `values`: the one value of a number or text,
+    /// each item of a list, the `tag` of each meta Table entry. Empty for a free value.
+    pub choices: &'static [&'static str],
     /// One line for the picker, in our own words, naming no vendor.
     pub summary: &'static str,
 }
 
-/// The kind of value a parameter takes. The inventory's `choice` rows are [`ParamKind::String`]
-/// with their choices checked by [`crate::value::check`].
+/// The kind of value a parameter takes. The inventory's `choice` rows are [`ParamKind::String`];
+/// a row's `values` become [`ParamSpec::choices`], checked by [`crate::value::check`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ParamKind {
     Bool,

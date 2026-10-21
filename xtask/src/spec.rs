@@ -289,6 +289,19 @@ pub fn load(root: &Path) -> Result<Inventory, Vec<String>> {
                 if fields.contains_key("picker") && (kind != "parameter" || s("picker").trim().is_empty()) {
                     err("only a parameter has `picker`, a non-empty string".into());
                 }
+                // The values a parameter takes: distinct, non-empty texts (a setting's `values` is
+                // free text).
+                if kind == "parameter" && fields.contains_key("values") {
+                    let values: Option<Vec<&str>> =
+                        fields.get("values").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).collect());
+                    let len = fields.get("values").and_then(Value::as_array).map_or(0, Vec::len);
+                    let ok = values.is_some_and(|v| {
+                        !v.is_empty() && v.len() == len && v.iter().all(|x| !x.trim().is_empty()) && v.iter().collect::<HashSet<_>>().len() == v.len()
+                    });
+                    if !ok {
+                        err("a parameter's `values` is a non-empty list of distinct non-empty strings".into());
+                    }
+                }
                 if fields.contains_key("context") && kind != "command" {
                     err("only a command has `context`".into());
                 }

@@ -2,8 +2,9 @@
 //!
 //! Rules (`docs/plans/M7.md` § 3, rows in `spec/inventory/06-font-info.toml` and
 //! `18-custom-parameters.toml`):
-//! - A known parameter's value is checked against its kind and syntax and stored normalised; a
-//!   parameter whose entry names its scopes cannot be added elsewhere (rows read from files stay editable). A name the catalogue does not
+//! - A known parameter's value is checked against its kind, its value list and its syntax and
+//!   stored normalised (`fontcraft_fontinfo::syntax`); a value naming a master or a palette the
+//!   font lacks is kept and reported under `warnings`. A parameter whose entry names its scopes cannot be added elsewhere (rows read from files stay editable). A name the catalogue does not
 //!   know is kept as given, within the size limits, and listed as unknown.
 //! - A name property (`designers`, `versionString`…) added here is written to the target's
 //!   properties, not to its parameter list. Masters hold no name properties.
@@ -17,7 +18,7 @@ use std::sync::Arc;
 
 use fontcraft_fontinfo::catalog::{self, Effect, ParamSpec};
 use fontcraft_fontinfo::value as fv;
-use fontcraft_fontinfo::{Scope, target};
+use fontcraft_fontinfo::{Scope, syntax, target};
 use fontcraft_model::plist::Value as Plist;
 use fontcraft_model::{Extra, Font, Localized, Param, Params, Properties, PropertyValue};
 use serde_json::{Value, json};
@@ -41,7 +42,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Describe Custom Parameters",
             [],
             None,
-            "{scope?: \"font\"|\"master\"|\"instance\", query?: string} search the catalogue of known custom parameters: names and other spellings first, then descriptions, any case; with scope, only the parameters allowed there → {count, parameters: [{name, aliases, kind: \"bool\"|\"number\"|\"string\"|\"list\"|\"dict\"|\"localized\", scopes: [scope], scopesStated, effect, milestone, units, repeatable, property (a name property: written to the General fields), summary}]}",
+            "{scope?: \"font\"|\"master\"|\"instance\", query?: string} search the catalogue of known custom parameters: names and other spellings first, then descriptions, any case; with scope, only the parameters allowed there → {count, parameters: [{name, aliases, kind: \"bool\"|\"number\"|\"string\"|\"list\"|\"dict\"|\"localized\", scopes: [scope], scopesStated, effect, milestone, units, repeatable, property (a name property: written to the General fields), choices: [string] (the values it takes; empty for a free value), checked (the value has a value list, syntax or range beyond its kind), summary}]}",
             always,
             describe
         ),
@@ -50,7 +51,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Add Custom Parameter",
             [],
             None,
-            "{scope: \"font\"|\"master\"|\"instance\", targets?: id|name|index or a list of them (needed when the font has more than one master or instance), name: string, value?: any} add a parameter row at the end of each target's list, as one undo step. A known parameter's value is checked against its kind and syntax and stored normalised (numbers in text read as numbers, a text for a list is split into lines); without value it gets its kind's empty value. Another spelling is stored under the catalogue's name. A name property (designers, versionString…) is written to the target's properties instead and refused on masters and where it is already set. An unknown name is kept as given and needs a value → {scope, targets, name, property, value}",
+            "{scope: \"font\"|\"master\"|\"instance\", targets?: id|name|index or a list of them (needed when the font has more than one master or instance), name: string, value?: any} add a parameter row at the end of each target's list, as one undo step. A known parameter's value is checked against its kind and syntax and stored normalised (numbers in text read as numbers, a text for a list is split into lines); without value it gets its kind's empty value. Another spelling is stored under the catalogue's name. A name property (designers, versionString…) is written to the target's properties instead and refused on masters and where it is already set. An unknown name is kept as given and needs a value. A value naming a master or palette the font lacks is kept with a warning → {scope, targets, name, property, value, warnings?: [string]}",
             has_doc,
             add
         ),
@@ -59,7 +60,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Custom Parameter",
             [],
             None,
-            "{scope: \"font\"|\"master\"|\"instance\", targets?: id|name|index or a list, name: string, index?: integer (which of the rows called name, from 0; needed when there are several), value?: any, enabled?: bool} change the value and/or the checkbox of an existing row on each target, as one undo step; the value is checked as for add. A name property that is not a row changes the property's value → {scope, targets, name, property, value?, enabled?}",
+            "{scope: \"font\"|\"master\"|\"instance\", targets?: id|name|index or a list, name: string, index?: integer (which of the rows called name, from 0; needed when there are several), value?: any, enabled?: bool} change the value and/or the checkbox of an existing row on each target, as one undo step; the value is checked as for add. A name property that is not a row changes the property's value. A value naming a master or palette the font lacks is kept with a warning → {scope, targets, name, property, value?, enabled?, warnings?: [string]}",
             has_doc,
             set
         ),
@@ -320,6 +321,8 @@ fn describe(_: &mut Session, p: &Value) -> Result<Value> {
                 "units": spec.units,
                 "repeatable": spec.repeatable,
                 "property": catalog::property(spec).is_some(),
+                "choices": spec.choices,
+                "checked": syntax::has_check(spec),
                 "summary": spec.summary,
             })
         })
@@ -371,13 +374,27 @@ fn add(s: &mut Session, p: &Value) -> Result<Value> {
         Ok(())
     })?;
     let font = s.font()?;
-    Ok(json!({
+    let mut out = json!({
         "scope": scope.name(),
         "targets": indexes.iter().map(|i| describe_target(font, scope, *i)).collect::<Vec<_>>(),
         "name": name,
         "property": property.is_some(),
         "value": prop_value.as_ref().map_or_else(|| fv::to_json(&value), property_json),
-    }))
+    });
+    add_warnings(&mut out, font, spec, Some(&value));
+    Ok(out)
+}
+
+/// The warnings of a stored value (a master or palette the font lacks), in `out` when there are
+/// any.
+fn add_warnings(out: &mut Value, font: &Font, spec: Option<&ParamSpec>, value: Option<&Plist>) {
+    let (Some(spec), Some(value)) = (spec, value) else { return };
+    let warnings = syntax::warnings(font, spec, value);
+    if !warnings.is_empty()
+        && let Some(obj) = out.as_object_mut()
+    {
+        obj.insert("warnings".into(), json!(warnings));
+    }
 }
 
 fn set(s: &mut Session, p: &Value) -> Result<Value> {
@@ -442,6 +459,7 @@ fn set(s: &mut Session, p: &Value) -> Result<Value> {
             obj.insert("enabled".into(), json!(on));
         }
     }
+    add_warnings(&mut out, font, spec, value.as_ref());
     Ok(out)
 }
 

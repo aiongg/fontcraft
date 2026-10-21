@@ -3,8 +3,9 @@
 //! Reads every `[[parameter]]` row of `spec/inventory/*.toml` that is a custom parameter (not the
 //! `font.`, `master.` and `instance.` built-in fields), fails on duplicate names, and writes
 //! `crates/fontinfo/src/catalog_data.rs`: one `ParamSpec` per row, with the aliases (UFO long
-//! names, format 2 singular spellings), the `units` and `repeatable` flags and the summary (or the
-//! row's `picker` text where the summary names a vendor). `--check` fails when the file differs.
+//! names, format 2 singular spellings), the `units` and `repeatable` flags, the row's `values` as
+//! the entry's choices, and the summary (or the row's `picker` text where the summary names a
+//! vendor). `--check` fails when the file differs.
 //!
 //! Kinds: the inventory's `choice` is a text; a `dict` that sets a name (`effect = "naming"`) is
 //! one text per language, the localizable name properties (`designers`, `familyNames`…).
@@ -169,6 +170,7 @@ struct Entry {
     milestone: String,
     units: bool,
     repeatable: bool,
+    choices: Vec<String>,
     summary: String,
 }
 
@@ -240,6 +242,12 @@ fn entries(inv: &spec::Inventory) -> Result<Vec<Entry>, Vec<String>> {
             milestone: row.milestone.clone(),
             units: UNITS.contains(&row.key.as_str()),
             repeatable: REPEATABLE.contains(&row.key.as_str()),
+            choices: row
+                .fields
+                .get("values")
+                .and_then(toml::Value::as_array)
+                .map(|a| a.iter().filter_map(toml::Value::as_str).map(str::to_string).collect())
+                .unwrap_or_default(),
             summary: summary.split_whitespace().collect::<Vec<_>>().join(" "),
         });
     }
@@ -267,10 +275,11 @@ fn render(entries: &[Entry]) -> String {
     let mut out = format!("{HEADER}\n#[rustfmt::skip]\npub(crate) static PARAMS: &[ParamSpec] = &[\n");
     for e in entries {
         let aliases: Vec<String> = e.aliases.iter().map(|a| format!("{a:?}")).collect();
+        let choices: Vec<String> = e.choices.iter().map(|c| format!("{c:?}")).collect();
         let vendor = std::iter::once(e.name.as_str()).chain(e.aliases.iter().copied()).any(|s| crate::brands::find_term(s).is_some());
         let _ = writeln!(
             out,
-            "    ParamSpec {{ name: {:?}, aliases: &[{}], kind: ParamKind::{}, scopes: {}, effect: Effect::{}, milestone: {:?}, units: {}, repeatable: {}, summary: {:?} }},{}",
+            "    ParamSpec {{ name: {:?}, aliases: &[{}], kind: ParamKind::{}, scopes: {}, effect: Effect::{}, milestone: {:?}, units: {}, repeatable: {}, choices: &[{}], summary: {:?} }},{}",
             e.name,
             aliases.join(", "),
             e.kind,
@@ -279,6 +288,7 @@ fn render(entries: &[Entry]) -> String {
             e.milestone,
             e.units,
             e.repeatable,
+            choices.join(", "),
             e.summary,
             if vendor { " // brand-ok: the file-format key" } else { "" }
         );
@@ -319,6 +329,8 @@ mod tests {
         assert_eq!(find("descriptions").aliases, ["description", "openTypeNameDescription"]);
         assert!(find("typoAscender").units && !find("typoAscender").repeatable);
         assert!(find("Name Table Entry").repeatable);
+        assert_eq!(find("Webfont Formats").choices, ["TTF", "EOT", "WOFF", "WOFF2"]);
+        assert!(find("typoAscender").choices.is_empty());
         assert_eq!(find("Axis Mappings").scopes, "Scopes::FONT.with(Scopes::INSTANCE)");
         let text = render(&entries);
         assert!(text.contains("// brand-ok"), "the key with a vendor's name is marked");

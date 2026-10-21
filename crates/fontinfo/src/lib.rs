@@ -8,6 +8,7 @@
 //! |---|---|---|
 //! | [`catalog`] | M7.2 | every known custom parameter: name, aliases, value kind, scopes, effect, units flag |
 //! | [`value`] | M7.2 | value checks per kind and per parameter syntax, JSON ↔ property-list values, typed readers |
+//! | [`syntax`] | M7.21 | value lists, syntaxes and ranges from the handbook; warnings for values naming a missing master or palette |
 //! | [`fields`] | M7.3 | the General fields (properties) each scope offers |
 //! | [`target`] | M7.3 | scopes, and masters and instances addressed by id, name or index |
 //! | [`rows`] | M7.3 | Font Info rows and their clipboard text (JSON and property list) |
@@ -32,6 +33,7 @@ pub mod fields;
 pub mod glyphset;
 pub mod rows;
 pub mod scale;
+pub mod syntax;
 pub mod target;
 pub mod tokens;
 pub mod value;

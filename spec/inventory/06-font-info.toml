@@ -770,7 +770,7 @@ milestone = "M7"
 summary = "Searches the catalogue of known custom parameters and returns name, value type, valid scopes and description, the data behind the picker's list and description pane."
 ref = "Font Info › Font › Custom Parameters"
 status = "inferred"
-notes = "The catalogue is generated from the rows of spec/inventory/18-custom-parameters.toml (name, kind, scopes, our own summary) and the parameter rows of the other chapters. M7 plan § 4: M7.2."
+notes = "The catalogue is generated from the rows of spec/inventory/18-custom-parameters.toml (name, kind, scopes, our own summary) and the parameter rows of the other chapters. M7 plan § 4: M7.2. Each entry also gives `choices` (the row's `values`, empty for a free value) and `checked` (whether the value gets a value list, syntax or range check beyond its kind); M7.21."
 guesses = [
   "The search matches the query against names, aliases and summaries, case ignored; the Font Info parameter picker's filter in the running app would settle it.",
 ]
@@ -787,16 +787,18 @@ milestone = "M7"
 summary = "Adds a custom parameter row to the font, to masters or to exports. Whether the same parameter may be added twice to one scope is not stated in this chapter."
 ref = "Font Info › Font › Custom Parameters; Masters › Custom Parameters; Exports › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.2."
+notes = "Documented, not yet observed. M7 plan § 4: M7.2. M7.21: a known parameter's value is also checked against the row's value list and, for about fifty parameters, a syntax or range from the handbook (`crates/fontinfo/src/syntax.rs`); a refused value adds nothing. A value naming a master or a palette the font lacks is kept and listed under `warnings` in the result."
 guesses = [
   "One scope may hold the same parameter more than once; for a parameter that takes one value the first enabled row counts and the list marks the others; adding a duplicate in the reference app settles whether it is refused.",
   "Without a value the new row holds the kind's empty value (off, 0, empty text, empty list); the new rows of the reference app settle it.",
   "A parameter whose appendix entry names its scopes is refused in other scopes; one whose entry names none is allowed in all three.",
   "A name the catalogue does not know is added as given, its value checked only against the size limits, and listed with the unknown mark; whether the reference app's picker accepts a typed free name settles it.",
   "A name property (designers, versionString and the others the format keeps as properties) added here is written to the General fields, refused on masters and refused where the field is already set; adding one from the reference app's picker settles where it goes.",
+  "A value naming a missing master warns and keeps the value; typing an unknown master name in the reference app settles it.",
 ]
 observe = [
   "In font A (m7-one), add typoAscender twice, then add a yes-or-no parameter and a list parameter: note whether the duplicate is allowed or refused and the empty value each new row gets.",
+  "In font A (m7-one), add vendorID `ABCDE` and panose with nine numbers: note whether each is refused, kept, or kept with a warning, and where the message shows.",
 ]
 
 [[command]]
@@ -811,9 +813,12 @@ milestone = "M7"
 summary = "Changes the value of an existing custom parameter row."
 ref = "Font Info › Font › Custom Parameters"
 status = "inferred"
-notes = "`enabled` is the row's checkbox (customParameters.enableCheckbox); the value is checked against the catalogue's kind for the name. `index` picks one of several rows of the same name. M7 plan § 4: M7.2."
+notes = "`enabled` is the row's checkbox (customParameters.enableCheckbox); the value is checked against the catalogue's kind for the name. `index` picks one of several rows of the same name. M7 plan § 4: M7.2. M7.21: the value lists, syntaxes and ranges of `crates/fontinfo/src/syntax.rs` apply as for add, and a refused value changes nothing; a value naming a missing master or palette is kept and listed under `warnings`."
 guesses = [
   "A value is checked against the catalogue's kind before it is stored, and an unknown name is refused rather than stored as is; editing a row in the running app's Font Info would settle it.",
+]
+observe = [
+  "In font A (m7-one), set Get Hints From Master to a name no master has: note whether the value is refused, kept, or kept with a warning, and where the message shows.",
 ]
 
 [[command]]
