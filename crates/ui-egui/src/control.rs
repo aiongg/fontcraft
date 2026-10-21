@@ -440,8 +440,12 @@ enum KeyAction {
 }
 
 /// A key for `ui.key` and `ui.text`: an open dialog's keys first, then the tools' keys, then
-/// the menu shortcuts. While a dialog is open nothing else takes a key.
+/// the menu shortcuts. While a dialog is open nothing else takes a key; while the question about
+/// unsaved changes is open nothing takes one.
 fn key(app: &mut FontcraftApp, name: &str, mods: Modifiers, action: KeyAction) -> Value {
+    if app.close_prompt.is_open() {
+        return json!({"handled": false, "error": "the question about unsaved changes is open: answer it with window.closePrompt"});
+    }
     if app.dialog.is_some() {
         let result = match DialogKey::parse(name) {
             Some(k) if action != KeyAction::Release && !mods.cmd && !mods.ctrl && !mods.alt => dialogs::key(app, k, mods.shift),

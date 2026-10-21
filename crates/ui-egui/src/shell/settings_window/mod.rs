@@ -230,10 +230,9 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
             });
         });
     if !open {
-        let st = &mut app.state.panels.settings_window;
-        st.open = false;
-        for (id, text) in std::mem::take(&mut st.drafts) {
-            pending.push(("settings.set", json!({"id": id, "value": text})));
-        }
+        app.state.panels.settings_window.open = false;
+        // Written now: a queued command would be skipped while a dialog or the question about
+        // unsaved changes is open, and the typing lost.
+        write_drafts(app);
     }
 }

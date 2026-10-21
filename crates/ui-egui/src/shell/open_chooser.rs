@@ -167,9 +167,11 @@ fn is_font(file: &DroppedFileHandle) -> bool {
 }
 
 /// Takes the dropped font files out of this frame's input and queues a `file.open` for each one
-/// that has a path on disk. On the web a dropped file has no path, only a name, and its bytes
-/// arrive asynchronously, so it is not opened from a drop there.
-pub fn take_dropped(ctx: &egui::Context, pending: &mut Vec<(&'static str, Value)>) {
+/// that has a path on disk, at most [`MAX_OPENED`]. On the web a dropped file has no path, only a
+/// name, and its bytes arrive asynchronously, so it is not opened from a drop there. While a
+/// dialog or the question about unsaved changes is open nothing opens. The status bar says what
+/// was not opened.
+pub fn take_dropped(app: &mut FontcraftApp, ctx: &egui::Context, pending: &mut Vec<(&'static str, Value)>) {
     let files: Vec<DroppedFileHandle> = ctx.input_mut(|i| {
         if !i.raw.dropped_files.iter().any(is_font) {
             return Vec::new();
@@ -178,11 +180,31 @@ pub fn take_dropped(ctx: &egui::Context, pending: &mut Vec<(&'static str, Value)
         i.raw.dropped_files = rest;
         ours
     });
+    if files.is_empty() {
+        return;
+    }
+    if app.dialog.is_some() || app.close_prompt.is_open() {
+        app.state.status = format!("Dropped font files not opened ({}): close the open dialog or question first", files.len());
+        return;
+    }
+    let mut no_path = 0usize;
     for file in files.iter().take(MAX_OPENED) {
         let path = file.path();
         if path.is_absolute() {
             pending.push((OPEN, json!({ "path": path.to_string_lossy() })));
+        } else {
+            no_path += 1;
         }
+    }
+    let mut notes = Vec::new();
+    if no_path > 0 {
+        notes.push(format!("dropped font files with no path on disk not opened ({no_path})"));
+    }
+    if files.len() > MAX_OPENED {
+        notes.push(format!("opened the first {MAX_OPENED} of {} dropped font files", files.len()));
+    }
+    if !notes.is_empty() {
+        app.state.status = notes.join("; ");
     }
 }
 

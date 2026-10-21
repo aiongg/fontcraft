@@ -283,6 +283,9 @@ pub fn modifiers(app: &mut FontcraftApp, mods: Modifiers) -> Vec<String> {
 /// D1). `None` when the key is not theirs, so it goes on to the menu shortcuts.
 /// In text mode the Text tool's keys come first, and a character key types itself.
 pub fn key(app: &mut FontcraftApp, ev: KeyEvent) -> Option<Vec<String>> {
+    if app.close_prompt.is_open() {
+        return None;
+    }
     key_typing(app, ev, true)
 }
 
@@ -508,8 +511,9 @@ pub fn collect(tools: &mut ToolsState, ui: &egui::Ui, response: &egui::Response,
 /// Hands the pointer input collected during the frame to the tools. `true` when there was any.
 pub fn dispatch_queued(app: &mut FontcraftApp) -> bool {
     let queued = std::mem::take(&mut app.tools.queued);
-    if app.dialog.is_some() {
-        // The canvas takes no pointer input while a dialog is open.
+    if app.dialog.is_some() || app.close_prompt.is_open() {
+        // The canvas takes no pointer input while a dialog or the question about unsaved
+        // changes is open.
         return false;
     }
     let any = !queued.is_empty();
@@ -535,6 +539,11 @@ pub fn dispatch_queued(app: &mut FontcraftApp) -> bool {
 /// the text `ui.text` left for a focused text field.
 pub fn keys(app: &mut FontcraftApp, ctx: &egui::Context) {
     app.tools.text_focus = ctx.egui_wants_keyboard_input() || app.tools.text_focus_at_end;
+    if app.close_prompt.is_open() {
+        // The question about unsaved changes takes the keyboard; nothing types behind it.
+        app.tools.pending_text.clear();
+        return;
+    }
     if !app.tools.pending_text.is_empty() {
         let text = std::mem::take(&mut app.tools.pending_text);
         ctx.input_mut(|i| i.events.push(Event::Text(text)));
