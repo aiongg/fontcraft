@@ -302,11 +302,15 @@ How `measure.ruler` finds crossings (our design):
   master's italic angle) and whether it lies inside the outline (a stem) or outside (a counter).
 - With `guide` instead of `from` and `to`, the whole line of the guide is measured; this is what a
   measurement guide prints.
+- With `placements` (glyph, layer, side and position of each glyph of a line, at most 200), the
+  line crosses all of them. Their outlines are merged together, so glyphs that touch or overlap
+  measure as one shape. Each crossing names the placement it belongs to.
 
 How FontCraft's Measurement tool behaves (our decisions where the handbook is silent):
 
-- The labels cover the edited glyph only; the other glyphs of the tab are not labelled yet. A
-  label shows at most two decimals. Deltas print `italicDx, dy`.
+- The labels and the ruler cover every glyph of the tab's text, at most the 200 nearest the edited
+  glyph. Each glyph is labelled in its own coordinates. A label shows at most two decimals.
+  Deltas print `italicDx, dy`.
 - The ruler's ends snap like a dragged point (`Ctrl` turns it off). With `Shift`, the ruler is
   horizontal or vertical, whichever is nearer to the pointer; it does not snap then.
 - The ruler stays after the button comes up, until the next press, `Escape` or a tool change. A
@@ -314,8 +318,15 @@ How FontCraft's Measurement tool behaves (our decisions where the handbook is si
 - `G` during the drag, with any modifiers, adds a local guide from the ruler's start along the
   ruler and turns it into a measurement guide, as one undo step (`command.batch` of `guide.add`
   and `guide.toggleMeasurement`). The guide's position is rounded to the grid like any new guide.
-- Overlapped stretches are not drawn grey yet. Cmd for the Select tool and Cmd+Ctrl+Alt for a
-  temporary Measurement tool are not built yet.
+- While the tool is active, the stretches of outline that lie inside an overlap are drawn over
+  the outline in light grey (`measure_overlap`). A stretch is overlapped where the outline is
+  filled on both sides of it (non-zero winding), which covers a contour crossing itself.
+  `measure.coordinates` returns them as polylines (`overlaps`).
+- `Cmd` held in the Measurement tool gives the Select tool; `Cmd+Ctrl+Alt` held in any other tool
+  but the Text tool gives the Measurement tool. Off the Mac, Control counts as Cmd, so the keys
+  are `Ctrl` and `Ctrl+Alt`. The held tool takes over when no gesture is in progress, does not see
+  the keys that hold it (so the ruler still snaps), and gives way when they come up and its own
+  gesture is over; its ruler goes with it. In the Text tool the keys move the measurement line.
 - Measurement guides print each gap's distance at its middle, in the guide's colour, with a dot
   at each crossing.
 

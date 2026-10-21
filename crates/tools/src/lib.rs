@@ -22,7 +22,7 @@
 //! | [`draw`], [`pencil`], [`primitives`], [`rapid`], [`spiro`], [`pixel`] | the drawing tools |
 //! | [`cycling`] | tool letters, and the tools that share a toolbar button |
 //! | [`keymap`] | the Edit View keys these tools answer |
-//! | [`toolbox`] | the active tool, temporary tools (Space, Cmd+Space) and key routing |
+//! | [`toolbox`] | the active tool, temporary tools (Space, Cmd+Space, the modifier-held tools) and key routing |
 //! | [`hint_drag`] | the Select tool's PostScript hint drags (M10.24) |
 //! | [`drag_aids`] | the Select tool's Tunni line drags, slides, the lever, and the points that follow a move |
 //! | [`tt_instructor`] | the TrueType Instructor tool (M10.25) |

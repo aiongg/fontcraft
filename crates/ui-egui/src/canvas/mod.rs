@@ -113,7 +113,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
     egui::CentralPanel::default().frame(frame).show(ui, |ui| {
         let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
         state.canvas_size = [f64::from(rect.width()), f64::from(rect.height())];
-        let extras = guides::Extras::query(session, &tab, &state.display, tools.toolbox.active_id(), &tools.toolbox.overlays());
+        let extras = guides::Extras::query(session, &tab, &state.display, tools.toolbox.active_id(), &tools.toolbox.overlays(), layouts);
         let hints = hints_ps::marks(session, state, tokens);
         let Ok(font) = session.font() else { return };
         let Some(master) = view::active_master(font, &tab) else { return };

@@ -266,15 +266,13 @@ pub fn pointer(app: &mut FontcraftApp, ev: RawPointer) -> Vec<String> {
     }
 }
 
-/// The modifier keys changed while the pointer stood still.
+/// The modifier keys changed while the pointer stood still: a tool held with modifiers comes
+/// or goes, and a tool in a gesture hears of it.
 pub fn modifiers(app: &mut FontcraftApp, mods: Modifiers) -> Vec<String> {
     if app.tools.mods == mods {
         return Vec::new();
     }
     app.tools.mods = mods;
-    if !app.tools.toolbox.busy() {
-        return Vec::new();
-    }
     match with_tool(app, |toolbox, cx| toolbox.modifiers(cx, mods)) {
         Ok(out) => apply(app, out),
         Err(e) => vec![e],
@@ -502,7 +500,7 @@ pub fn collect(tools: &mut ToolsState, ui: &egui::Ui, response: &egui::Response,
         queue(tools, PointerKind::DoubleClick, at, mods);
     }
     let m = pointer_mods(mods);
-    if m != tools.mods && tools.toolbox.busy() {
+    if m != tools.mods {
         tools.queued.push(Queued::Modifiers(m));
     }
 }

@@ -11,17 +11,21 @@
 //! | grid | lines every grid step, `grid_line`, once the step is `grid_min_spacing` points on screen |
 //! | metric line a parameter sets (shoulder height, small-cap height, per-script values) | like a metric line |
 //! | CJK grid, design grid | dotted lines, `cjk_grid`; the CJK guide as a box |
-//! | Measurement tool | each point's coordinates, the deltas between on-curve nodes, the ruler |
+//! | Measurement tool | each point's coordinates, the deltas between on-curve nodes, the ruler, the overlapped stretches of outline in `measure_overlap` |
 //!
 //! The lines, crossings and coordinates come from engine queries (`guide.displayLines`,
 //! `measure.ruler`, `measure.coordinates`), run once per frame by [`Extras::query`] before the
-//! frame borrows the font.
+//! frame borrows the font. The Measurement tool covers every glyph of the tab's text
+//! (`measurement.allVisibleGlyphs`), at most `MAX_PLACEMENTS` of them nearest the edited one; its
+//! coordinates are kept until the document or the line changes, as the overlap test is slow.
 //!
 //! A global guide with a filter (a glyph predicate) shows only in the glyphs it matches
 //! (`guides.globalScopeFilter`, evaluated by `fontcraft_glyphquery::guide_in_scope`). A filter
 //! that does not read as a predicate leaves the guide shown everywhere.
 
+use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use egui::{Align2, Color32, FontId, Pos2, Rect, Shape, Stroke};
 use fontcraft_engine::Session;
@@ -34,12 +38,15 @@ use serde::de::DeserializeOwned;
 use serde_json::{Map, Value, json};
 
 use super::Painting;
+use super::view::LayoutCache;
 use crate::state::{DisplayOptions, Tab};
 
 /// Most measurement guides measured per frame.
 const MAX_MEASURED_GUIDES: usize = 64;
-/// Most labels the Measurement tool draws per frame; a larger glyph shows the first ones.
+/// Most labels the Measurement tool draws per frame; a larger line shows the first ones.
 const MAX_LABELS: usize = 5_000;
+/// Most glyphs of the line the Measurement tool covers (the limit of `measure.ruler`).
+const MAX_PLACEMENTS: usize = 200;
 /// Most lines one grid draws in each direction.
 const MAX_GRID_LINES: usize = 2_000;
 /// Gap between the dots of a dotted line, and their radius, in points.
@@ -109,7 +116,7 @@ struct Ruler {
     angle: Option<f64>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(default)]
 struct CoordPoint {
     shape: usize,
@@ -120,7 +127,7 @@ struct CoordPoint {
     on_curve: bool,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(default)]
 struct Delta {
     shape: usize,
@@ -131,20 +138,80 @@ struct Delta {
     italic_dx: f64,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(default)]
 struct AnchorPoint {
     x: f64,
     y: f64,
 }
 
-/// `measure.coordinates`.
-#[derive(Debug, Default, Deserialize)]
+/// `measure.coordinates` of one glyph, which sits at `x`, `y` from the edited glyph's origin.
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(default)]
 struct Coordinates {
+    x: f64,
+    y: f64,
     points: Vec<CoordPoint>,
     deltas: Vec<Delta>,
     anchors: Vec<AnchorPoint>,
+    /// Stretches of outline inside an overlap, as polylines.
+    overlaps: Vec<Vec<[f64; 2]>>,
+}
+
+/// What the last `measure.coordinates` was asked for, and its answer per glyph.
+type CachedCoordinates = ((u64, u64, usize), Value, Arc<Vec<Coordinates>>);
+
+thread_local! {
+    static COORDINATES: RefCell<Option<CachedCoordinates>> = const { RefCell::new(None) };
+}
+
+/// `measure.coordinates` for `params`, per glyph, kept while the document and the parameters
+/// stay the same.
+fn coordinates(session: &mut Session, params: Value) -> Option<Arc<Vec<Coordinates>>> {
+    let doc = session.active().map(|d| (d.id, d.revision, Arc::as_ptr(&d.font) as usize))?;
+    let hit = COORDINATES.with(|c| c.borrow().as_ref().filter(|(k, p, _)| *k == doc && *p == params).map(|(_, _, v)| v.clone()));
+    if hit.is_some() {
+        return hit;
+    }
+    let value = session.execute("measure.coordinates", &params).ok()?;
+    let list: Vec<Coordinates> = match value.get("placements") {
+        Some(list) => serde_json::from_value(list.clone()).ok()?,
+        None => vec![serde_json::from_value(value).ok()?],
+    };
+    let list = Arc::new(list);
+    COORDINATES.with(|c| *c.borrow_mut() = Some((doc, params, list.clone())));
+    Some(list)
+}
+
+/// The glyphs of the tab's text nearest the edited one, at most [`MAX_PLACEMENTS`], with their
+/// layers and their positions from the edited glyph's origin: `measure.ruler`'s `placements`.
+fn placements(session: &Session, layouts: &LayoutCache, tab: &Tab) -> Option<Value> {
+    let font = session.font().ok()?;
+    let layout = super::view::text_layout(session, layouts, tab)?;
+    let edited = tab.edited_index()?;
+    let origin = layout.placed.get(edited)?;
+    let (ox, oy) = (origin.x, origin.y);
+    let mut items: Vec<(usize, &Arc<str>, f64, f64)> =
+        layout.placed.iter().enumerate().filter_map(|(i, p)| p.glyph.as_ref().map(|g| (i, g, p.x - ox, p.y - oy))).collect();
+    items.sort_by_key(|(i, ..)| i.abs_diff(edited));
+    items.truncate(MAX_PLACEMENTS);
+    items.sort_by_key(|(i, ..)| *i);
+    let list: Vec<Value> = items
+        .into_iter()
+        .filter(|(_, _, x, y)| x.is_finite() && y.is_finite())
+        .filter_map(|(i, glyph, x, y)| {
+            let layer = super::view::shown_layer(font, tab, glyph)?;
+            let mut entry = json!({"glyph": glyph.as_ref(), "layer": layer.id, "x": x, "y": y});
+            if i == edited
+                && tab.edit_background
+                && let Some(o) = entry.as_object_mut()
+            {
+                o.insert("side".into(), json!("background"));
+            }
+            Some(entry)
+        })
+        .collect();
+    Some(Value::Array(list))
 }
 
 /// What this module draws, read from the engine once per frame.
@@ -153,8 +220,8 @@ pub struct Extras {
     lines: Option<DisplayLines>,
     /// Measurement guides and where they cross the outline.
     guide_rulers: Vec<(GuideRef, Ruler)>,
-    /// The Measurement tool's labels, while it is the active tool.
-    coordinates: Option<Coordinates>,
+    /// The Measurement tool's labels for each glyph of the line, while it is the active tool.
+    coordinates: Option<Arc<Vec<Coordinates>>>,
     /// The Measurement tool's ruler and where it crosses the outline.
     ruler: Option<(Point, Point, Ruler)>,
     /// The global guides, by index, whose filter leaves out the edited glyph.
@@ -175,8 +242,9 @@ fn with(target: &Map<String, Value>, key: &str, value: Value) -> Value {
 impl Extras {
     /// Runs the queries the frame draws from: the display lines of the edited layer, the
     /// crossings of its measurement guides (while guides show), and, while `tool` is the
-    /// Measurement tool, the coordinates and the crossings of its ruler (from `overlays`).
-    pub fn query(session: &mut Session, tab: &Tab, display: &DisplayOptions, tool: &str, overlays: &[Overlay]) -> Extras {
+    /// Measurement tool, the coordinates and the crossings of its ruler (from `overlays`) over
+    /// every glyph of the line `layouts` holds for the tab.
+    pub fn query(session: &mut Session, tab: &Tab, display: &DisplayOptions, tool: &str, overlays: &[Overlay], layouts: &LayoutCache) -> Extras {
         let mut out = Extras::default();
         let Some(glyph) = tab.edited_glyph() else { return out };
         let data = session.glyph_data().ok();
@@ -216,7 +284,10 @@ impl Extras {
             }
         }
         if tool == "measurement" {
-            out.coordinates = query_as(session, "measure.coordinates", Value::Object(target.clone()));
+            if let Some(placed) = placements(session, layouts, tab) {
+                target.insert("placements".into(), placed);
+            }
+            out.coordinates = coordinates(session, Value::Object(target.clone()));
             let ruler = overlays.iter().find_map(|o| match o {
                 Overlay::Line { kind: OverlayKind::Ruler, from, to } => Some((*from, *to)),
                 _ => None,
@@ -502,40 +573,27 @@ fn draw_crossings(c: &Painting, ruler: &Ruler, color: Color32) {
 pub fn draw_measurement(c: &Painting, extras: &Extras) {
     let tokens = c.tokens;
     let font = FontId::proportional(tokens.measure_label_size);
-    if let Some(coords) = &extras.coordinates {
-        let mut at: BTreeMap<(usize, usize), Pos2> = BTreeMap::new();
-        for p in coords.points.iter().take(MAX_LABELS) {
-            let s = screen(c, p.x, p.y);
-            at.insert((p.shape, p.node), s);
-            if usable(s) {
-                let color = if p.on_curve { tokens.measure_on_curve } else { tokens.measure_off_curve };
-                c.painter.text(
-                    Pos2::new(s.x + LABEL_OFFSET, s.y - LABEL_OFFSET),
-                    Align2::LEFT_BOTTOM,
-                    format!("{}, {}", num(p.x), num(p.y)),
-                    font.clone(),
-                    color,
-                );
+    if let Some(list) = &extras.coordinates {
+        let overlap = Stroke::new(tokens.outline_width, tokens.measure_overlap);
+        for coords in list.iter() {
+            for line in coords.overlaps.iter().take(MAX_LABELS) {
+                let pts: Vec<Pos2> = line.iter().map(|[x, y]| screen(c, x + coords.x, y + coords.y)).collect();
+                for pair in pts.windows(2) {
+                    if let [a, b] = pair
+                        && usable(*a)
+                        && usable(*b)
+                    {
+                        c.painter.line_segment([*a, *b], overlap);
+                    }
+                }
             }
         }
-        for a in coords.anchors.iter().take(MAX_LABELS) {
-            let s = screen(c, a.x, a.y);
-            if usable(s) {
-                c.painter.text(
-                    Pos2::new(s.x + LABEL_OFFSET, s.y - LABEL_OFFSET),
-                    Align2::LEFT_BOTTOM,
-                    format!("{}, {}", num(a.x), num(a.y)),
-                    font.clone(),
-                    tokens.measure_on_curve,
-                );
+        let mut labels = 0usize;
+        for coords in list.iter() {
+            if labels >= MAX_LABELS {
+                break;
             }
-        }
-        for d in coords.deltas.iter().take(MAX_LABELS) {
-            let (Some(a), Some(b)) = (at.get(&(d.shape, d.from)), at.get(&(d.shape, d.to))) else { continue };
-            let mid = Pos2::new((a.x + b.x) / 2.0, (a.y + b.y) / 2.0);
-            if usable(mid) {
-                c.painter.text(mid, Align2::CENTER_CENTER, format!("{}, {}", num(d.italic_dx), num(d.dy)), font.clone(), tokens.measure_delta);
-            }
+            labels = labels.saturating_add(draw_coordinates(c, coords, MAX_LABELS.saturating_sub(labels), &font));
         }
     }
     if let Some((from, to, ruler)) = &extras.ruler {
@@ -555,4 +613,49 @@ pub fn draw_measurement(c: &Painting, extras: &Extras) {
         }
         draw_crossings(c, ruler, tokens.measure_ruler);
     }
+}
+
+/// One glyph's coordinates, anchors and deltas, at most `limit` labels. Returns how many it drew.
+fn draw_coordinates(c: &Painting, coords: &Coordinates, limit: usize, font: &FontId) -> usize {
+    let tokens = c.tokens;
+    let (ox, oy) = (coords.x, coords.y);
+    let mut drawn = 0usize;
+    let mut at: BTreeMap<(usize, usize), Pos2> = BTreeMap::new();
+    for p in coords.points.iter().take(limit) {
+        let s = screen(c, p.x + ox, p.y + oy);
+        at.insert((p.shape, p.node), s);
+        if usable(s) {
+            let color = if p.on_curve { tokens.measure_on_curve } else { tokens.measure_off_curve };
+            c.painter.text(
+                Pos2::new(s.x + LABEL_OFFSET, s.y - LABEL_OFFSET),
+                Align2::LEFT_BOTTOM,
+                format!("{}, {}", num(p.x), num(p.y)),
+                font.clone(),
+                color,
+            );
+        }
+        drawn = drawn.saturating_add(1);
+    }
+    for a in coords.anchors.iter().take(limit.saturating_sub(drawn)) {
+        let s = screen(c, a.x + ox, a.y + oy);
+        if usable(s) {
+            c.painter.text(
+                Pos2::new(s.x + LABEL_OFFSET, s.y - LABEL_OFFSET),
+                Align2::LEFT_BOTTOM,
+                format!("{}, {}", num(a.x), num(a.y)),
+                font.clone(),
+                tokens.measure_on_curve,
+            );
+        }
+        drawn = drawn.saturating_add(1);
+    }
+    for d in coords.deltas.iter().take(limit.saturating_sub(drawn)) {
+        drawn = drawn.saturating_add(1);
+        let (Some(a), Some(b)) = (at.get(&(d.shape, d.from)), at.get(&(d.shape, d.to))) else { continue };
+        let mid = Pos2::new((a.x + b.x) / 2.0, (a.y + b.y) / 2.0);
+        if usable(mid) {
+            c.painter.text(mid, Align2::CENTER_CENTER, format!("{}, {}", num(d.italic_dx), num(d.dy)), font.clone(), tokens.measure_delta);
+        }
+    }
+    drawn
 }
