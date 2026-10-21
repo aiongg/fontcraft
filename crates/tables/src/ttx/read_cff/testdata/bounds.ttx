@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ttFont sfntVersion="OTTO" ttLibVersion="4.66">
+
+  <GlyphOrder>
+    <GlyphID id="0" name=".notdef"/>
+    <GlyphID id="1" name="a"/>
+    <GlyphID id="2" name="b"/>
+    <GlyphID id="3" name="space"/>
+  </GlyphOrder>
+
+  <maxp>
+    <tableVersion value="0x5000"/>
+    <numGlyphs value="4"/>
+  </maxp>
+
+  <post>
+    <formatType value="3.0"/>
+    <italicAngle value="0.0"/>
+    <underlinePosition value="-100"/>
+    <underlineThickness value="50"/>
+    <isFixedPitch value="0"/>
+    <minMemType42 value="0"/>
+    <maxMemType42 value="0"/>
+    <minMemType1 value="0"/>
+    <maxMemType1 value="0"/>
+  </post>
+
+
+
+  <head>
+    <tableVersion value="1.0"/>
+    <fontRevision value="1.0"/>
+    <checkSumAdjustment value="0x0"/>
+    <magicNumber value="0x5f0f3cf5"/>
+    <flags value="00000000 00000011"/>
+    <unitsPerEm value="1000"/>
+    <created value="Thu Jun  4 14:29:11 2015"/>
+    <modified value="Thu Jun  4 14:29:11 2015"/>
+    <xMin value="1"/>
+    <yMin value="2"/>
+    <xMax value="3"/>
+    <yMax value="4"/>
+    <macStyle value="00000000 00000000"/>
+    <lowestRecPPEM value="9"/>
+    <fontDirectionHint value="2"/>
+    <indexToLocFormat value="0"/>
+    <glyphDataFormat value="0"/>
+  </head>
+
+  <hhea>
+    <tableVersion value="0x00010000"/>
+    <ascent value="900"/>
+    <descent value="-300"/>
+    <lineGap value="0"/>
+    <advanceWidthMax value="1"/>
+    <minLeftSideBearing value="2"/>
+    <minRightSideBearing value="3"/>
+    <xMaxExtent value="4"/>
+    <caretSlopeRise value="1"/>
+    <caretSlopeRun value="0"/>
+    <caretOffset value="0"/>
+    <reserved0 value="0"/>
+    <reserved1 value="0"/>
+    <reserved2 value="0"/>
+    <reserved3 value="0"/>
+    <metricDataFormat value="0"/>
+    <numberOfHMetrics value="4"/>
+  </hhea>
+
+  <hmtx>
+    <mtx name=".notdef" width="500" lsb="0"/>
+    <mtx name="a" width="600" lsb="100"/>
+    <mtx name="b" width="560" lsb="-20"/>
+    <mtx name="space" width="250" lsb="0"/>
+  </hmtx>
+
+
+
+  <CFF>
+    <major value="1"/>
+    <minor value="0"/>
+    <CFFFont name="Test-Bounds">
+      <Notice value="one&#10;two"/>
+      <FullName value="Test Bounds"/>
+      <FontBBox value="1 2 3 4"/>
+      <Private>
+        <defaultWidthX value="0"/>
+        <nominalWidthX value="0"/>
+      </Private>
+      <CharStrings>
+        <CharString name=".notdef">
+          endchar
+        </CharString>
+        <CharString name="a">
+          100 0 rmoveto 0 1001 400 0 0 -1001 rrcurveto endchar
+        </CharString>
+        <CharString name="b">
+          -20 -150 rmoveto 600 hlineto 900 vlineto -600 hlineto endchar
+        </CharString>
+        <CharString name="space">
+          endchar
+        </CharString>
+      </CharStrings>
+    </CFFFont>
+
+    <GlobalSubrs>
+    </GlobalSubrs>
+  </CFF>
+
+</ttFont>

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ttFont sfntVersion="OTTO" ttLibVersion="4.66">
+
+  <CFF2>
+    <major value="2"/>
+    <minor value="0"/>
+    <CFFFont name="CFF2Font">
+      <FontMatrix value="0.001 0 0 0.001 0 0"/>
+      <FDArray>
+        <FontDict index="0">
+          <Private>
+          </Private>
+        </FontDict>
+      </FDArray>
+      <CharStrings>
+        <CharString name=".notdef">
+        </CharString>
+        <CharString name="a">
+          100 0 rmoveto 0 1001 400 0 0 -1001 rrcurveto
+        </CharString>
+        <CharString name="b">
+          -20 -150 rmoveto 600 hlineto 900 vlineto -600 hlineto
+        </CharString>
+        <CharString name="space">
+        </CharString>
+      </CharStrings>
+    </CFFFont>
+
+    <GlobalSubrs>
+    </GlobalSubrs>
+  </CFF2>
+
+</ttFont>
