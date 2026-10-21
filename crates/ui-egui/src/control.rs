@@ -17,6 +17,7 @@ use fontcraft_tools::{Key, KeyEvent, Modifiers, PointerKind};
 use serde_json::{Value, json};
 
 use crate::app::FontcraftApp;
+use crate::control_input;
 use crate::dialogs::{self, DialogKey};
 use crate::shell::{keymap, menus};
 use crate::tools_glue::{self, MAX_POINTER_EVENTS, RawPointer, Space};
@@ -60,8 +61,28 @@ pub const METHODS: &[(&str, &str)] = &[
     ("ui.dialog.cancel", "{} Cancel: the font as it was when the dialog opened; returns {cancelled}"),
     (
         "ui.click",
-        "{id} press a control of the open dialog: `ok`, `cancel`, a third button by the id `buttons` lists (`replace`, `decompose`), a tab by its dialog id (shows it), an action of the \"…\" menu by its id (runs it: {action, command, text, result}, the text also goes to the system clipboard), or a field by its parameter's key (a checkbox toggles, a number field takes the keyboard for ui.text and ui.key, a folder field opens the folder chooser or, without one, takes the keyboard)",
+        "{id} press a control of the open dialog: `ok`, `cancel`, a third button by the id `buttons` lists (`replace`, `decompose`), a tab by its dialog id (shows it), an action of the \"…\" menu by its id (runs it: {action, command, text, result}, the text also goes to the system clipboard), or a field by its parameter's key (a checkbox toggles, a number field takes the keyboard for ui.text and ui.key, a folder field opens the folder chooser or, without one, takes the keyboard). {x, y, button?: left | right | middle, count? (at most 16), mods?, shift?, alt?, cmd?, ctrl?} instead clicks at a window point, in points from the top left, at the next frames: it reaches any widget (a Font View cell, a panel field, the canvas, where a right-click opens the context menu); returns {queued, pending}",
     ),
+    (
+        "ui.drag",
+        "{x, y, toX, toY, steps? (≤ 256, default 8), count?, button?, mods?} press at (x, y), move in steps to (toX, toY), release; returns {queued, pending}",
+    ),
+    ("ui.move", "{x, y} the pointer moves to a window point (hover); returns {queued, pending}"),
+    (
+        "ui.wheel",
+        "{x, y, dy?, dx?, unit?: line | point, mods?} a wheel turn over a window point: dy notches up (+) or down (-), dx right (+) or left (-), each at most 100; returns {queued, pending}",
+    ),
+    (
+        "ui.set",
+        "{key: bool, …} turn view switches on or off with their menu commands: a switch's command id or its short key (boundingBox, nodes, metrics, fillPreview, outline, palette, hints…); returns each key's value",
+    ),
+    ("ui.resize", "{width, height} the window's inner size in points (200 to 16384), at the next frame"),
+    ("ui.focus", "{} bring the window to the front with the keyboard, at the next frame"),
+    (
+        "ui.contextMenu.list",
+        "{x?, y?, space?: font | screen} the open canvas context menu: {open, glyph, screen, at, hit, sections: [{context, items: [{command, label, enabled, disabled_reason?, checked?}]}]}, {open: false} when none is; with a position, open it there first",
+    ),
+    ("ui.contextMenu.invoke", "{command} run an item of the open canvas context menu as a click on it does"),
     ("control.methods", "{} this list"),
 ];
 
@@ -265,6 +286,7 @@ fn dispatch(app: &mut FontcraftApp, method: &str, params: &Value) -> Result<Valu
             set(&mut state, "tool", json!(app.tools.toolbox.active_id()));
             set(&mut state, "interaction", json!(app.session.interaction()));
             set(&mut state, "dialog", json!(app.dialog.as_ref().map(|d| d.id.as_str())));
+            set(&mut state, "pendingInput", json!(app.input.pending()));
             Ok(state)
         }
         "ui.menu.list" => serde_json::to_value(menus::menu_tree_for(&app.session, &app.state)).map_err(|e| e.to_string()),
@@ -282,14 +304,7 @@ fn dispatch(app: &mut FontcraftApp, method: &str, params: &Value) -> Result<Valu
         "ui.key" => {
             let name =
                 params.get("key").and_then(Value::as_str).ok_or("ui.key: `key` (a key name such as `v`, `ArrowLeft`, `Escape`) is required")?;
-            let mut mods = modifiers("ui.key", params.get("mods"))?;
-            for (key, slot) in [("shift", &mut mods.shift), ("alt", &mut mods.alt), ("cmd", &mut mods.cmd), ("ctrl", &mut mods.ctrl)] {
-                match params.get(key) {
-                    None | Some(Value::Null) => {}
-                    Some(Value::Bool(b)) => *slot |= *b,
-                    Some(_) => return Err(format!("ui.key: `{key}` must be true or false")),
-                }
-            }
+            let mods = modifiers_and_flags("ui.key", params)?;
             let action = match params.get("action").and_then(Value::as_str) {
                 None => KeyAction::Tap,
                 Some("tap") => KeyAction::Tap,
@@ -327,13 +342,42 @@ fn dispatch(app: &mut FontcraftApp, method: &str, params: &Value) -> Result<Valu
         }
         "ui.dialog.confirm" => dialogs::confirm(app).map_err(|e| format!("ui.dialog.confirm: {e}")),
         "ui.dialog.cancel" => dialogs::cancel(app).map_err(|e| format!("ui.dialog.cancel: {e}")),
-        "ui.click" => {
-            let id = params.get("id").and_then(Value::as_str).ok_or("ui.click: `id` (a control id) is required")?;
-            dialogs::click(app, id).map_err(|e| format!("ui.click: {e}"))
-        }
+        "ui.click" => match params.get("id") {
+            Some(Value::String(id)) if params.get("x").is_none() && params.get("y").is_none() => {
+                dialogs::click(app, id).map_err(|e| format!("ui.click: {e}"))
+            }
+            Some(Value::String(_)) => Err("ui.click: give `id` or `x` and `y`, not both".into()),
+            Some(_) => Err("ui.click: `id` must be a control id".into()),
+            None if params.get("x").is_none() && params.get("y").is_none() => {
+                Err("ui.click: `id` (a dialog control) or `x` and `y` (a window point) is required".into())
+            }
+            None => control_input::click_or_drag(app, method, params),
+        },
+        "ui.drag" => control_input::click_or_drag(app, method, params),
+        "ui.move" => control_input::move_pointer(app, params),
+        "ui.wheel" => control_input::wheel(app, params),
+        "ui.set" => control_input::set(app, params),
+        "ui.resize" => control_input::resize(app, params),
+        "ui.focus" => control_input::focus(app),
+        "ui.contextMenu.list" => control_input::context_menu_list(app, params),
+        "ui.contextMenu.invoke" => control_input::context_menu_invoke(app, params),
         "control.methods" => Ok(json!(METHODS.iter().map(|(m, doc)| json!({"method": m, "params": doc})).collect::<Vec<_>>())),
         other => Err(format!("unknown method `{other}` (see control.methods)")),
     }
+}
+
+/// The modifiers of a request: its `mods` (see [`modifiers`]) plus the flags `shift`, `alt`, `cmd`
+/// and `ctrl` set to true.
+pub(crate) fn modifiers_and_flags(method: &str, params: &Value) -> Result<Modifiers, String> {
+    let mut mods = modifiers(method, params.get("mods"))?;
+    for (key, slot) in [("shift", &mut mods.shift), ("alt", &mut mods.alt), ("cmd", &mut mods.cmd), ("ctrl", &mut mods.ctrl)] {
+        match params.get(key) {
+            None | Some(Value::Null) => {}
+            Some(Value::Bool(b)) => *slot |= *b,
+            Some(_) => return Err(format!("{method}: `{key}` must be true or false")),
+        }
+    }
+    Ok(mods)
 }
 
 /// Modifiers given as a list of names (`["shift", "alt"]`) or as `{shift, alt, cmd, ctrl}`.

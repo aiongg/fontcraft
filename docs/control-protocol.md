@@ -52,7 +52,9 @@ requests read and write. They are the same flags as `fontcraft-cli mcp` takes, a
 - Macros, recent documents and URLs (`script.run`, `file.openRecent`, `url.open`, `url.show`…) are
   refused while a root is set: the steps they run cannot be checked first.
 - Only requests are confined, together with everything they run, including the keys, pointer
-  events and dialog buttons they inject. The person at the keyboard is not: files opened from the
+  events and dialog buttons they inject, and the frames that carry their window input
+  (`ui.click`, `ui.drag`, `ui.wheel`, `ui.move`), so a menu item an agent clicks is confined too.
+  The person at the keyboard is not: files opened from the
   command line or a file dialog, and everything done with the mouse and keyboard, work as usual.
 - A link in an open document that points outside the read root is treated as a missing file when
   a request reads it.
@@ -67,7 +69,7 @@ is checked for.
 | `engine.execute` | `{command, params?}` | runs any engine or UI command; the command's own result |
 | `engine.commands` | | `{commands: [{id, label, menu, shortcut, params, query, enabled, disabled_reason?}]}`; UI commands carry `ui: true` |
 | `document.inspect` | | `{documents: [{index, active, title, path, modified, revision, familyName, glyphs, masters, undo, redo}], active}` |
-| `ui.inspect` | | the UI state: `selected_glyphs`, `tabs` (each `{id, glyphs, edited, view: {scale, center}, selection, focus, selection_glyph}`: `selection` and the path `focus` belong to the glyph `selection_glyph`), `active_tab` (an index into `tabs`; `null` while Font View shows), `editing` (the edited glyph's name), `closed_tabs`, `display` (the View toggles), `show_palette`, `canvas_size`, `status` |
+| `ui.inspect` | | the UI state: `selected_glyphs`, `tabs` (each `{id, glyphs, edited, view: {scale, center}, selection, focus, selection_glyph}`: `selection` and the path `focus` belong to the glyph `selection_glyph`), `active_tab` (an index into `tabs`; `null` while Font View shows), `editing` (the edited glyph's name), `closed_tabs`, `display` (the View toggles), `show_palette`, `canvas_size`, `status`, `pendingInput` (window input events not yet handed to the window) |
 | `ui.menu.list` | | the menu tree: `[{title, items: [{command, label, path, shortcut, enabled, disabled_reason?}]}]` |
 | `ui.menu.invoke` | `{command, params?}` | runs a menu item as a click on it does: the follow-up question its result asks (a pasted outline outside the glyph, imported files without a glyph) opens as a dialog; an id that is in no menu is an error |
 | `ui.screenshot` | `{path?}` | captures the window as PNG, written to `path` or returned as base64 `png`; `{width, height, pixelsPerPoint, path?, png?}`. Sizes are in pixels. The reply comes after the next frame is drawn. Headless hosts (tests, MCP) answer with an error |
@@ -82,6 +84,15 @@ is checked for.
 | `ui.dialog.confirm` | | OK: the preview becomes one undo step, `{confirmed, changed, command, params}`; in a `runOnOk` dialog the command runs once, `{confirmed, command, params, result}`, and a failure keeps the dialog open |
 | `ui.dialog.cancel` | | Cancel: the font as it was when the dialog opened; `{cancelled}` |
 | `ui.click` | `{id}` | presses a control of the open dialog: `ok`, `cancel`, a third button by its id (`replace`, `decompose`), a tab by its dialog id (shows that tab), an action by its id (runs it: `{action, command, text, result}`; `text` also goes to the system clipboard), or a field by its key (a checkbox or lock toggles; a number field takes the keyboard, its text selected, for `ui.text` and `ui.key`; a folder field opens the folder chooser, or without one takes the keyboard) |
+| `ui.click` | `{x, y, button?, count?, mods?}` | a mouse click at a window point; see [Window input](#window-input) |
+| `ui.drag` | `{x, y, toX, toY, steps?, count?, button?, mods?}` | press, move in steps, release; see [Window input](#window-input) |
+| `ui.move` | `{x, y}` | the pointer moves to a window point (hover) |
+| `ui.wheel` | `{x, y, dy?, dx?, unit?, mods?}` | a wheel turn over a window point |
+| `ui.set` | `{key: bool, …}` | turns view switches on or off with their menu commands; see [View switches](#view-switches) |
+| `ui.resize` | `{width, height}` | the window's inner size in points, 200 to 16,384, at the next frame; `{width, height}` |
+| `ui.focus` | | brings the window to the front with the keyboard, at the next frame; `{focus: true}` |
+| `ui.contextMenu.list` | `{x?, y?, space?}` | the open canvas context menu: `{open, glyph, screen, at, hit, sections: [{context, items: [{command, label, enabled, disabled_reason?, checked?, alternate?}]}]}`; `{open: false}` when none is. With `x` and `y` it first opens the menu there, as a right-click does (`space` as in `ui.pointer`, default `font`) |
+| `ui.contextMenu.invoke` | `{command}` | runs an item of the open canvas context menu as a click on it does, and closes the menu; the item's result |
 | `control.methods` | | this table |
 
 `ui.inspect` also names the active pointer tool (`tool`), the running interaction
@@ -125,6 +136,58 @@ the keyboard does: characters, `Space`, `Return`, `Backspace`, `Delete` and the 
 leaves text mode. The spacing and kerning shortcuts act on the glyphs at the cursor in the
 tab's master. A character with `cmd` or `ctrl` goes to the menu shortcuts; `Cmd+A`, and
 `ui.menu.invoke` of `edit.copy`, `edit.cut` and `edit.selectAll`, act on the text.
+
+### Window input
+
+`ui.click {x, y}`, `ui.drag`, `ui.wheel` and `ui.move` act on the window as the mouse does. They
+reach every widget: Font View cells and list rows, panel fields and lists, the tab strip, menus,
+and the canvas, where a right-click (`button: "right"`) opens the context menu that
+`ui.contextMenu.list` reads. `ui.pointer` stays the way to drive a tool in font units.
+
+| Field | Values |
+|---|---|
+| `x`, `y` (`toX`, `toY`) | window points from the top left, as `ui.screenshot` divided by `pixelsPerPoint` shows them; at most 100,000 either way |
+| `button` | `left` (default), `right`, `middle` |
+| `count` | clicks, 1 (default) to 16; `2` is a double click. On a drag the extra clicks come at the end point |
+| `steps` | moves of a drag between press and release, 1 to 256 (default 8) |
+| `dy`, `dx` | wheel notches: `dy` up (+) or down (−), `dx` right (+) or left (−); at most 100 each. `unit: "point"` makes them points |
+| `mods` | as in `ui.pointer`; the flags `shift`, `alt`, `cmd` and `ctrl` (true) add to it |
+
+The reply is `{queued, pending}`: the events this request added and the events waiting in all.
+The events are handed to the window one per frame (each press and release after a move to its
+position), so egui sees hover, clicks, double clicks and drags as it does from a mouse. Read the
+result once `pending` has drained: `ui.inspect` reports it as `pendingInput`. The modifiers a
+request names are held for the frames its input spans, from the press through every move to the
+release; the keyboard's own come back after.
+
+Limits, as in the sibling apps: at most 256 `steps` and 16 `count`; 1,024 events waiting across
+all requests. A request that breaks a limit, or does not fit in the queue, is refused whole
+before any of its events is queued; retry once the waiting input has drained. Counts must be
+non-negative integers; `0` acts as `1`.
+
+`ui.click {id}` presses a dialog control (below); give `id` or `x` and `y`, not both.
+
+### View switches
+
+`ui.set` takes switches by key, each `true` or `false`, and runs the menu command of each switch
+whose state differs, so the result is what the View or Window menu item gives. The reply has each
+key's state afterwards. Every key is checked before the first switch moves; if a command fails,
+the switches already moved are put back.
+
+A key is a switch's command id (`view.showTunniLines`) or its short key: the id after its area,
+without a leading `show`, `set` or `toggle`, first letter lower case.
+
+| Keys | Switch |
+|---|---|
+| `nodes`, `nodesInForeground`, `nodesInBackground`, `extraNodes` | Show Nodes and its submenu |
+| `metrics`, `metricsNames`, `info`, `background`, `guides`, `boundingBox`, `annotations`, `anchors`, `hints`, `image`, `groupMembers`, `masterCompatibility` | the View menu's Show items |
+| `fillPreview`; `outline` | Fill Preview; `outline: true` is Fill Preview off |
+| `tunniLines`, `curveTension`, `curveLength`, `indexes`, `detailsAcrossGlyphs`, `lockOutline`, `metricsBeam`, `stemWidths`, `counterWidths`, `cornerAngles`, `quickMeasurement`, `measurementLine`, `spacingCutOff` | the editing aids |
+| `suggestHandles`, `suggestLines`, `suggestDistance`, `suggestStems` | the suggestions |
+| `keepLayerSelectionInSync`, `editBackground`, `powerNudge` | Edit and Path switches |
+| `palette`, `previewPanel`, `auditPanel` | the Palette, the Preview panel, the Audit panel |
+
+The list follows the menus' switches; an unknown key is an error that lists them all.
 
 ### Dialogs
 
@@ -324,9 +387,7 @@ The names and shapes follow the sibling apps so their agents' habits carry over.
 
 | Method | Params | Milestone |
 |---|---|---|
-| `ui.click` beyond dialogs | `{id}` press any control with a stable id (`ui-design.md`) | M3 |
-| `ui.set` | `{panel?, theme?, …}` | M3 |
-| `ui.resize` / `ui.focus` | | M3 |
+| `ui.click` beyond dialogs | `{element}` press any control by its id in the accessibility tree | M13 |
 | `app.open` / `app.save` / `app.export` / `app.quit` | `{path}` … through the host (file dialogs, the browser's download) | M1 |
 
 Check drawing with `ui.screenshot` on the running app, or with a headless frame test

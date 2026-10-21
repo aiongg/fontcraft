@@ -54,6 +54,8 @@ pub struct FontcraftApp {
     pub(crate) images: canvas::images::ImageUi,
     /// Colour glyphs in Edit View: their textures, the svg files read, the gradient knob drag.
     pub(crate) color_ui: canvas::color::ColorUi,
+    /// Control-channel window input waiting for the next frames (`control_input`).
+    pub(crate) input: crate::control_input::SyntheticInput,
     themed: bool,
 }
 
@@ -88,6 +90,7 @@ impl FontcraftApp {
             font_view: Default::default(),
             images: Default::default(),
             color_ui: Default::default(),
+            input: Default::default(),
             themed: false,
         }
     }

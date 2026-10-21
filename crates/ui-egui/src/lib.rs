@@ -5,7 +5,8 @@
 //!   Font View, and the shell commands, one list per module.
 //! - [`panels`]: the Palette sections, the Info box and the Edit View bottom bar.
 //! - [`canvas`]: Edit View: the camera, metric lines, filled glyphs, outlines, nodes.
-//! - [`control`]: the JSON control protocol agents drive the running app with.
+//! - [`control`]: the JSON control protocol agents drive the running app with;
+//!   [`control_input`] its window input (clicks, drags, the wheel at window points).
 //! - [`tools_glue`]: the pointer tools: canvas and control input in, interactions out.
 //! - [`dialogs`]: forms over a command's parameters with a live preview.
 //! - [`theme`]: design tokens.
@@ -19,6 +20,7 @@
 pub mod app;
 pub mod canvas;
 pub mod control;
+pub mod control_input;
 pub mod dialogs;
 pub mod icons;
 pub mod master_icons;
