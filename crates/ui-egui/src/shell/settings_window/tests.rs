@@ -99,7 +99,8 @@ fn user_settings_controls_write_their_settings_and_a_refused_value_changes_nothi
     w.type_into(&mut app, "user.crashReportName", "Ada");
     assert_eq!(stored(&app, "user.crashReportName"), "Ada");
 
-    // Text over the limit is refused by settings.set: the setting and the field keep their value.
+    // Text over the limit is refused by settings.set: the setting keeps its value and the field
+    // shows it again.
     let long = "x".repeat(fontcraft_engine::settings::MAX_TEXT_BYTES + 1);
     w.type_into(&mut app, "user.crashReportEmail", &long);
     assert_eq!(stored(&app, "user.crashReportEmail"), "");

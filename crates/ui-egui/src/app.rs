@@ -363,13 +363,15 @@ impl FontcraftApp {
         self.follow_document();
         shell::extensions::external_changes::on_focus(self, ui.ctx());
         tools_glue::sync(self);
+        // The question about unsaved changes takes the keyboard before anything behind it.
+        shell::close_prompt::take_keys(self, ui.ctx());
         crate::dialogs::frame_keys(self, ui.ctx());
         // The tools take their keys first (the Edit View keys have a `when`); the rest go to
         // the menu shortcuts.
         tools_glue::keys(self, ui.ctx());
         let mut pending: Vec<(&'static str, Value)> = Vec::new();
         shell::extensions::dropped::take(ui.ctx(), &mut pending);
-        shell::open_chooser::take_dropped(ui.ctx(), &mut pending);
+        shell::open_chooser::take_dropped(self, ui.ctx(), &mut pending);
         shell::text_preview::find_shortcut(self, ui.ctx(), &mut pending);
         pending.extend(shell::keymap::pressed(ui.ctx(), self.tools.text_edit_at_end, shell::keymap::focused_panel(self)));
         pending.extend(shell::clipboard::events(self, ui.ctx()));

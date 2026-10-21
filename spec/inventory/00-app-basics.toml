@@ -138,7 +138,7 @@ milestone = "M14"
 summary = "Quits after asking about each document with unsaved changes. Background saves and exports finish first."
 ref = "platform convention"
 status = "inferred"
-notes = "M14.3: the menu item (File › Quit FontCraft in the window's menu bar), Cmd+Q and `ui.menu.invoke` open window.closePrompt when a document or project has unsaved changes, and quit at once when none has. On macOS the app menu's Quit closes the window, which asks the same question (craft-quit's app menu); a close the app lets through quits through the platform. Run as a command, it refuses unsaved work unless discard is true, naming the documents. Saves and exports run on the window's thread, so none is running when the command runs."
+notes = "M14.3: the menu item (File › Quit FontCraft in the window's menu bar), Cmd+Q and `ui.menu.invoke` open window.closePrompt when a document or project has unsaved changes, and quit at once when none has. On macOS the app menu's Quit closes the window, which asks the same question (craft-quit's app menu); a close the app lets through quits through the platform. Run as a command, it refuses unsaved work unless discard is true, naming the documents; discard leaves only the work unsaved at that moment, and work changed before the window closes is asked about. Once the app decided to quit, control requests wait, so none changes a document the window then closes with. Saves and exports run on the window's thread, so none is running when the command runs."
 guesses = [
   "Quit is listed at the end of the File menu in the window's own menu bar on every platform; on macOS it is also in the app menu.",
 ]
@@ -156,13 +156,14 @@ kind = "ui"
 params = "{answer?: \"save\" | \"dontSave\" | \"cancel\"} → {open, purpose: \"close\" | \"quit\" | null, document, kind: \"font\" | \"project\" | null, remaining: [titles]}"
 area = "ui-chrome"
 milestone = "M14"
-summary = "The question asked before unsaved work is closed: by the window's close box, by Quit, or by File › Close on a modified document. It asks about one document at a time and shows it, with Save, Don't Save and Cancel. Save writes the document (with the save chooser when it has no file) and Don't Save leaves its changes; both move to the next document with unsaved changes, fonts first, then projects. Once none is left the window closes, or for File › Close the document does. Cancel, a cancelled chooser or a failed save stop closing and keep everything open. Return is Save and Escape is Cancel. While it is open the app takes no other command. Without answer the command reports the question; the control channel answers it with answer."
+summary = "The question asked before unsaved work is closed: by the window's close box, by Quit, or by File › Close on a modified document. It asks about one document at a time and shows it, with Save, Don't Save and Cancel. Save writes the document (with the save chooser when it has no file) and Don't Save leaves its changes; both move to the next document with unsaved changes, fonts first, then projects. Once none is left the window closes, or for File › Close the document does. Cancel, a cancelled chooser or a failed save stop closing and keep everything open. Return is Save and Escape is Cancel. While it is open the app takes no other command and nothing behind it sees a key: not the Edit View, its text mode or a selected image, not a dialog behind it, and not `ui.key`. Without answer the command reports the question; the control channel answers it with answer. A save answer from the control channel never opens the save chooser: for a document or project without a file it is an error and the question stays open, so the client gives it a file (file.saveAs, project.save with path) and answers again. A document changed while the question is open, other than one answered Don't Save, is asked about before the window closes. File › Close is refused while the question is open."
 ref = "platform convention"
 status = "inferred"
 guesses = [
   "One question per document, asked in turn, showing the document asked about; the reference may list every document in one question.",
   "Don't Save sits on the left, Cancel and Save on the right with Save rightmost, as macOS document apps place them.",
   "A failed or cancelled save stops the whole quit rather than moving on to the next document.",
+  "A document changed after the question about it was answered with Save is asked about again before the window closes; one answered Don't Save is not.",
 ]
 observe = [
   "Change a font, click the window's close box: note the question's text, its buttons and their order.",

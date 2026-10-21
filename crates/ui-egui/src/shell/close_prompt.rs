@@ -3,7 +3,11 @@
 //! document at a time and shows it: Save, Don't Save or Cancel. Save and Don't Save move to the
 //! next document with unsaved changes. Once every one is answered the window closes, or for File
 //! › Close the document does. Cancel, a cancelled save chooser and a failed save stop there and
-//! keep everything open.
+//! keep everything open. Work changed while the question is open (by the control channel) is
+//! asked about before the window closes.
+//!
+//! While the question is open it takes the keyboard: Return is Save, Escape is Cancel, and
+//! nothing behind it sees a key ([`take_keys`]).
 //!
 //! What the person asks for in the window (a menu item, a shortcut, `ui.menu.invoke`) opens the
 //! question ([`menu_command`]). Run as commands, `app.quit` and `file.close` refuse unsaved work
@@ -45,7 +49,7 @@ pub const COMMANDS: &[UiCommand] = &[
         "Unsaved Changes",
         &[],
         "",
-        "{answer?: \"save\" | \"dontSave\" | \"cancel\"} the question asked before unsaved work is closed (the window's close box, Quit, File › Close on a modified document). With answer, answers it as its buttons do: save writes the document asked about (with the save chooser when it has no file), dontSave leaves its changes unsaved, and both move to the next document with unsaved changes; once none is left the window closes (File › Close: the document closes). cancel stops closing. A save that fails or whose chooser is cancelled also stops closing, and the answer is an error → {open, purpose: \"close\" | \"quit\" | null, document, kind: \"font\" | \"project\" | null, remaining: [titles]}",
+        "{answer?: \"save\" | \"dontSave\" | \"cancel\"} the question asked before unsaved work is closed (the window's close box, Quit, File › Close on a modified document). With answer, answers it as its buttons do: save writes the document asked about (the question's own Save button opens the save chooser for one without a file; a save answer from anywhere else is refused for it and the question stays open: give it a file with file.saveAs or project.save and a path, then answer again), dontSave leaves its changes unsaved, and both move to the next document with unsaved changes; once none is left, and nothing else changed meanwhile, the window closes (File › Close: the document closes). cancel stops closing. A save that fails or whose chooser is cancelled also stops closing, and the answer is an error → {open, purpose: \"close\" | \"quit\" | null, document, kind: \"font\" | \"project\" | null, remaining: [titles]}",
     ),
 ];
 
@@ -76,8 +80,17 @@ struct Asking {
 pub struct ClosePrompt {
     asking: Option<Asking>,
     /// Every document was answered, or `app.quit` was told to discard: the next close request of
-    /// the window goes through.
+    /// the window goes through, unless something outside `discarded` has unsaved changes by then.
     approved: bool,
+    /// The documents answered Don't Save before quitting, or left unsaved by `app.quit` with
+    /// `discard`: closing the window does not ask about them again.
+    discarded: Vec<Item>,
+    /// The answer run this frame came from the question's own buttons or keys, so its Save may
+    /// open the save chooser. An answer from anywhere else never does: a chooser would hold the
+    /// window, and a control request with it, until someone answers it.
+    from_window: bool,
+    /// The question's key this frame, taken before anything else sees the keyboard.
+    key: Option<&'static str>,
     /// Ask the window to close at the end of the frame.
     close_window: bool,
     /// The title last given to the window.
@@ -94,6 +107,14 @@ impl ClosePrompt {
     pub fn quitting(&self) -> bool {
         self.approved
     }
+
+    /// The window stays open: the next close asks about every document with unsaved changes.
+    /// For a close cancelled outside the question (a bug in its handling).
+    pub fn keep_window(&mut self) {
+        self.approved = false;
+        self.close_window = false;
+        self.discarded.clear();
+    }
 }
 
 pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, String> {
@@ -104,6 +125,7 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
             if !discard && !unsaved.is_empty() {
                 return Err(args.err(format!("{} unsaved changes: save first, or pass discard: true", named(&app.session, &unsaved))));
             }
+            app.close_prompt.discarded = unsaved;
             quit(app);
             Ok(json!({ "quitting": true }))
         }
@@ -139,6 +161,9 @@ pub fn menu_command(app: &mut FontcraftApp, id: &str, params: &Value) -> Option<
                 return None;
             }
             let item = Item::Font(doc.id);
+            if app.close_prompt.is_open() {
+                return Some(Err("file.close: the question about unsaved changes is open: answer it first (window.closePrompt)".into()));
+            }
             start(app, Purpose::Close, vec![item]);
         }
         _ => return None,
@@ -150,10 +175,13 @@ pub fn menu_command(app: &mut FontcraftApp, id: &str, params: &Value) -> Option<
 /// work the close is cancelled and the question asks about each document. Runs before the
 /// shell's platform quit, which leaves a cancelled close alone.
 pub fn on_close_request(app: &mut FontcraftApp, ctx: &egui::Context) {
-    if ctx.viewport_id() != ViewportId::ROOT || !ctx.input(|i| i.viewport().close_requested()) || app.close_prompt.approved {
+    if ctx.viewport_id() != ViewportId::ROOT || !ctx.input(|i| i.viewport().close_requested()) {
         return;
     }
-    let unsaved = unsaved(&app.session);
+    let prompt = &app.close_prompt;
+    // Once every document is answered, only work changed since (a control request run while the
+    // question was open, or after it) is asked about.
+    let unsaved: Vec<Item> = unsaved(&app.session).into_iter().filter(|i| !(prompt.approved && prompt.discarded.contains(i))).collect();
     if unsaved.is_empty() {
         return;
     }
@@ -163,7 +191,13 @@ pub fn on_close_request(app: &mut FontcraftApp, ctx: &egui::Context) {
         ctx.send_viewport_cmd(ViewportCommand::Minimized(false));
     }
     ctx.send_viewport_cmd(ViewportCommand::Focus);
-    start(app, Purpose::Quit, unsaved);
+    if app.close_prompt.approved {
+        app.close_prompt.approved = false;
+        app.close_prompt.close_window = false;
+        ask(app, Purpose::Quit, unsaved);
+    } else {
+        start(app, Purpose::Quit, unsaved);
+    }
     ctx.request_repaint();
 }
 
@@ -200,24 +234,54 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
             });
         });
     });
-    if choice.is_none() {
-        let (enter, escape) = ui.input(|i| (i.key_pressed(egui::Key::Enter), i.key_pressed(egui::Key::Escape)));
-        choice = if escape {
-            Some("cancel")
-        } else if enter {
-            Some("save")
-        } else {
-            None
-        };
-    }
-    if let Some(answer) = choice {
+    let key = app.close_prompt.key.take();
+    if let Some(answer) = choice.or(key) {
+        app.close_prompt.from_window = true;
         pending.push(("window.closePrompt", json!({ "answer": answer })));
     }
+}
+
+/// Start of a frame while the question is open: it takes Return (Save) and Escape (Cancel), and
+/// no other part of the window sees a key press, typed text or a paste, so nothing behind the
+/// question changes. Key releases stay, so nothing is left held down.
+pub fn take_keys(app: &mut FontcraftApp, ctx: &egui::Context) {
+    app.close_prompt.key = None;
+    if !app.close_prompt.is_open() {
+        return;
+    }
+    let (enter, escape) = ctx.input_mut(|i| {
+        let pressed = (i.key_pressed(egui::Key::Enter), i.key_pressed(egui::Key::Escape));
+        i.events.retain(|e| {
+            !matches!(
+                e,
+                egui::Event::Key { pressed: true, .. }
+                    | egui::Event::Text(_)
+                    | egui::Event::Paste(_)
+                    | egui::Event::Copy
+                    | egui::Event::Cut
+                    | egui::Event::Ime(_)
+            )
+        });
+        pressed
+    });
+    app.close_prompt.key = if escape {
+        Some("cancel")
+    } else if enter {
+        Some("save")
+    } else {
+        None
+    };
+}
+
+/// Whether a document or project has unsaved changes.
+pub fn has_unsaved(session: &Session) -> bool {
+    session.documents().iter().any(|d| d.modified()) || session.projects().iter().any(|p| p.modified())
 }
 
 /// End of a frame: asks the window to close when the app decided to quit, and keeps the window
 /// title up to date.
 pub fn end_frame(app: &mut FontcraftApp, ctx: &egui::Context) {
+    app.close_prompt.from_window = false;
     if std::mem::take(&mut app.close_prompt.close_window) {
         ctx.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close);
         ctx.request_repaint();
@@ -284,11 +348,21 @@ fn start(app: &mut FontcraftApp, purpose: Purpose, queue: Vec<Item>) {
     if app.close_prompt.asking.as_ref().is_some_and(|a| a.purpose == Purpose::Quit) && purpose == Purpose::Quit {
         return;
     }
+    // A new question: earlier answers and a quit decided before it no longer count.
+    if !app.close_prompt.is_open() {
+        app.close_prompt.keep_window();
+    }
+    ask(app, purpose, queue);
+}
+
+/// Asks about `queue` for `purpose`, from its first document.
+fn ask(app: &mut FontcraftApp, purpose: Purpose, queue: Vec<Item>) {
     app.close_prompt.asking = Some(Asking { purpose, queue });
     show_first(app);
 }
 
-/// Shows the document the question asks about now.
+/// Shows the document the question asks about now. A project's window shows while the project
+/// is open, so a project needs nothing more.
 fn show_first(app: &mut FontcraftApp) {
     let Some(Item::Font(id)) = app.close_prompt.asking.as_ref().and_then(|a| a.queue.first().copied()) else { return };
     // A failure is in the status bar; the question still asks.
@@ -317,8 +391,20 @@ fn prune(app: &mut FontcraftApp) {
         let purpose = asking.purpose;
         app.close_prompt.asking = None;
         if purpose == Purpose::Quit {
-            quit(app);
+            quit_or_ask(app);
         }
+    }
+}
+
+/// Every document asked about before quitting is answered: the window closes, unless a document
+/// not answered Don't Save has unsaved changes by now (it changed while the question was open),
+/// which is asked about next.
+fn quit_or_ask(app: &mut FontcraftApp) {
+    let left: Vec<Item> = unsaved(&app.session).into_iter().filter(|i| !app.close_prompt.discarded.contains(i)).collect();
+    if left.is_empty() {
+        quit(app);
+    } else {
+        ask(app, Purpose::Quit, left);
     }
 }
 
@@ -330,31 +416,51 @@ fn quit(app: &mut FontcraftApp) {
     prompt.close_window = true;
 }
 
+/// Stops closing: nothing closes, and the next close asks about everything again.
+fn cancel(app: &mut FontcraftApp) {
+    app.close_prompt.asking = None;
+    app.close_prompt.keep_window();
+}
+
 fn answer(app: &mut FontcraftApp, answer: Answer) -> Result<Value, String> {
+    let from_window = std::mem::take(&mut app.close_prompt.from_window);
+    let was_open = app.close_prompt.is_open();
     prune(app);
     let Some((purpose, item)) = app.close_prompt.asking.as_ref().and_then(|a| Some((a.purpose, *a.queue.first()?))) else {
+        // Every document was saved or closed meanwhile, which ended the question.
+        if was_open {
+            return Ok(state(app));
+        }
         return Err("window.closePrompt: no question about unsaved changes is open".into());
     };
     match answer {
         Answer::Cancel => {
-            app.close_prompt.asking = None;
+            cancel(app);
             app.state.status = "Nothing was closed.".into();
             return Ok(state(app));
         }
         Answer::Save => {
-            if let Err(e) = save(app, item) {
-                app.close_prompt.asking = None;
+            if !from_window && let Some(how) = needs_file(app, item) {
+                let name = title(&app.session, item).unwrap_or_default();
+                return Err(format!("window.closePrompt: `{name}` has no file: save it with {how} and a `path`, then answer again"));
+            }
+            if let Err(e) = save(app, item, from_window) {
+                cancel(app);
                 return Err(e);
             }
         }
-        Answer::DontSave => {}
+        Answer::DontSave => {
+            if purpose == Purpose::Quit && !app.close_prompt.discarded.contains(&item) {
+                app.close_prompt.discarded.push(item);
+            }
+        }
     }
     if purpose == Purpose::Close
         && let Item::Font(id) = item
     {
         let closed = activate(app, id).and_then(|()| app.run("file.close", &json!({ "discard": answer == Answer::DontSave })).map(|_| ()));
         if let Err(e) = closed {
-            app.close_prompt.asking = None;
+            cancel(app);
             return Err(e);
         }
     }
@@ -366,7 +472,7 @@ fn answer(app: &mut FontcraftApp, answer: Answer) -> Result<Value, String> {
     if app.close_prompt.asking.as_ref().is_some_and(|a| a.queue.is_empty()) {
         app.close_prompt.asking = None;
         if purpose == Purpose::Quit {
-            quit(app);
+            quit_or_ask(app);
         }
     }
     prune(app);
@@ -374,22 +480,32 @@ fn answer(app: &mut FontcraftApp, answer: Answer) -> Result<Value, String> {
     Ok(state(app))
 }
 
-/// Saves `item` as File › Save does; `Err` when it is still unsaved afterwards (the save failed
-/// or its chooser was cancelled), with the save's message when it gave one.
-fn save(app: &mut FontcraftApp, item: Item) -> Result<(), String> {
+/// The command that gives `item` a file, when it has none: saving it would need the save
+/// chooser.
+fn needs_file(app: &FontcraftApp, item: Item) -> Option<&'static str> {
+    match item {
+        Item::Font(id) => app.session.documents().iter().any(|d| d.id == id && d.path.is_none()).then_some("file.saveAs"),
+        Item::Project(id) => app.session.projects().iter().any(|p| p.id == id && p.path.is_none()).then_some("project.save"),
+    }
+}
+
+/// Saves `item` as File › Save does, with the save chooser when `chooser` is true and it needs
+/// one; `Err` when it is still unsaved afterwards (the save failed or its chooser was cancelled),
+/// with the save's message when it gave one.
+fn save(app: &mut FontcraftApp, item: Item, chooser: bool) -> Result<(), String> {
     let name = title(&app.session, item).unwrap_or_default();
     let before = std::mem::take(&mut app.state.status);
     let saved = match item {
         Item::Font(id) => activate(app, id).and_then(|()| {
             let params = json!({});
-            if pickers::wants_save_path(app, "file.save", &params) {
+            if chooser && pickers::wants_save_path(app, "file.save", &params) {
                 pickers::save_with_chooser(app, "file.save", params);
                 Ok(())
             } else {
                 app.run_from_shell("file.save", &params).map(|_| ())
             }
         }),
-        Item::Project(id) => save_project(app, id),
+        Item::Project(id) => save_project(app, id, chooser),
     };
     if let Err(e) = saved {
         return Err(format!("`{name}` was not saved, so nothing was closed: {e}"));
@@ -405,14 +521,15 @@ fn save(app: &mut FontcraftApp, item: Item) -> Result<(), String> {
     Ok(())
 }
 
-/// Saves the project `id` to its file, or to the file the save chooser gives for one never saved.
-fn save_project(app: &mut FontcraftApp, id: u64) -> Result<(), String> {
+/// Saves the project `id` to its file, or, with `chooser`, to the file the save chooser gives for
+/// one never saved.
+fn save_project(app: &mut FontcraftApp, id: u64, chooser: bool) -> Result<(), String> {
     let Some(project) = app.session.projects().iter().find(|p| p.id == id) else { return Ok(()) };
     let mut params = serde_json::Map::new();
     params.insert("project".into(), json!(id));
     if project.path.is_none() {
         let suggested = format!("{}.{PROJECT_EXTENSION}", project.title);
-        let picker = app.picker.as_mut().ok_or("the project was never saved and this window has no file chooser")?;
+        let picker = app.picker.as_mut().filter(|_| chooser).ok_or("the project was never saved and this window has no file chooser")?;
         let path = picker.save("Save Project", "Project", &[PROJECT_EXTENSION], &suggested).ok_or("the chooser was cancelled")?;
         let path = pickers::with_extension(path, &[PROJECT_EXTENSION], PROJECT_EXTENSION)?;
         params.insert("path".into(), json!(path.to_string_lossy()));
@@ -452,16 +569,17 @@ mod tests {
     use crate::FontcraftApp;
     use crate::shell::pickers::stub::SavePicker;
 
-    /// One frame of the window, its close box pressed or not, with `keys` pressed; the root
+    fn press(key: Key) -> Event {
+        Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }
+    }
+
+    /// One frame of the window in `ctx`, its close box pressed or not, with `events`; the root
     /// window's commands.
-    fn frame_with(app: &mut FontcraftApp, close: bool, keys: &[Key]) -> Vec<ViewportCommand> {
-        let ctx = egui::Context::default();
-        let mut input = RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0))), ..Default::default() };
+    fn run_frame(ctx: &egui::Context, app: &mut FontcraftApp, close: bool, events: Vec<Event>) -> Vec<ViewportCommand> {
+        let mut input =
+            RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0))), events, ..Default::default() };
         if close {
             input.viewports.entry(ViewportId::ROOT).or_default().events.push(ViewportEvent::Close);
-        }
-        for key in keys {
-            input.events.push(Event::Key { key: *key, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() });
         }
         let mut out = ctx.run_ui(input, |ui| {
             app.logic(ui.ctx());
@@ -469,6 +587,11 @@ mod tests {
         });
         out.textures_delta.clear(); // not painted
         out.viewport_output.remove(&ViewportId::ROOT).map(|o| o.commands).unwrap_or_default()
+    }
+
+    /// One frame of a new window, its close box pressed or not, with `keys` pressed.
+    fn frame_with(app: &mut FontcraftApp, close: bool, keys: &[Key]) -> Vec<ViewportCommand> {
+        run_frame(&egui::Context::default(), app, close, keys.iter().map(|k| press(*k)).collect())
     }
 
     fn frame(app: &mut FontcraftApp, close: bool) -> Vec<ViewportCommand> {
@@ -569,12 +692,12 @@ mod tests {
 
     #[test]
     fn a_failed_or_cancelled_save_keeps_the_window() {
-        // No chooser and no file: the save fails.
+        // No chooser and no file: Save in the question fails.
         let mut app = FontcraftApp::default();
         edit(&mut app, "x.alt");
         frame(&mut app, true);
-        let err = answer(&mut app, "save").unwrap_err();
-        assert!(err.contains("not saved"), "{err}");
+        assert!(!closes(&frame_with(&mut app, false, &[Key::Enter])));
+        assert!(app.state.status.contains("not saved"), "{}", app.state.status);
         assert_eq!(prompt(&mut app)["open"], false);
         assert!(!app.close_prompt.quitting());
         assert!(!closes(&frame(&mut app, false)));
@@ -583,10 +706,167 @@ mod tests {
         // The chooser is cancelled.
         let asked = Arc::new(Mutex::new(Vec::new()));
         app.picker = Some(Box::new(SavePicker { path: None, asked: asked.clone() }));
-        assert!(answer(&mut app, "save").is_err());
+        assert!(!closes(&frame_with(&mut app, false, &[Key::Enter])));
         assert_eq!(asked.lock().unwrap().len(), 1);
+        assert_eq!(prompt(&mut app)["open"], false);
         assert!(!closes(&frame(&mut app, false)));
         assert!(app.session.active().is_some_and(|d| d.modified()));
+    }
+
+    #[test]
+    fn a_save_answer_from_the_control_channel_never_opens_the_chooser() {
+        let dir = scratch("control-save");
+        let path = dir.join("Given.fontcraft");
+        let mut app = FontcraftApp::default();
+        let asked = Arc::new(Mutex::new(Vec::new()));
+        app.picker = Some(Box::new(SavePicker { path: Some(dir.join("Chosen.fontcraft")), asked: asked.clone() }));
+        edit(&mut app, "x.alt");
+        app.run_menu_command("app.quit", json!({})).unwrap();
+        let call =
+            |app: &mut FontcraftApp, method: &str, params: Value| crate::control::handle(app, &json!({"id": 1, "method": method, "params": params}));
+        let reply = call(&mut app, "engine.execute", json!({ "command": "window.closePrompt", "params": { "answer": "save" } }));
+        let err = reply["error"].as_str().unwrap_or_default();
+        assert!(err.contains("`Untitled` has no file") && err.contains("file.saveAs"), "{reply}");
+        assert!(asked.lock().unwrap().is_empty(), "no chooser");
+        assert_eq!(prompt(&mut app)["open"], true, "the question stays open");
+        assert!(!app.close_prompt.quitting());
+
+        // File › Close cannot start a second question meanwhile.
+        assert!(app.run_menu_command("file.close", json!({})).is_err());
+        assert_eq!(prompt(&mut app)["purpose"], "quit");
+
+        // Given a file, the document is saved, which answers the question: the window closes.
+        app.run("file.saveAs", &json!({ "path": path.to_string_lossy() })).unwrap();
+        let state = answer(&mut app, "save").unwrap();
+        assert_eq!(state["open"], false);
+        assert!(app.close_prompt.quitting());
+        assert!(closes(&frame(&mut app, false)));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn work_changed_while_the_question_is_open_is_asked_about_before_quitting() {
+        let mut app = FontcraftApp::default();
+        edit(&mut app, "x.alt");
+        assert!(cancels(&frame(&mut app, true)));
+        // A control client changes another font while the question is open.
+        app.run("file.new", &json!({})).unwrap();
+        edit(&mut app, "y.alt");
+        let state = answer(&mut app, "dontSave").unwrap();
+        assert_eq!((&state["open"], &state["document"]), (&json!(true), &json!("Untitled 2")), "{state}");
+        assert!(!app.close_prompt.quitting());
+        answer(&mut app, "dontSave").unwrap();
+        assert!(app.close_prompt.quitting());
+
+        // A font changed after the last answer stops the close and is asked about; the fonts
+        // answered Don't Save are not.
+        app.run("file.new", &json!({})).unwrap();
+        edit(&mut app, "z.alt");
+        assert!(closes(&frame(&mut app, false)));
+        assert!(cancels(&frame(&mut app, true)));
+        assert!(!app.close_prompt.quitting(), "the cancelled close is no longer approved");
+        let state = prompt(&mut app);
+        assert_eq!((&state["document"], &state["remaining"]), (&json!("Untitled 3"), &json!([])), "{state}");
+
+        // Cancel: the next close asks about every font again.
+        answer(&mut app, "cancel").unwrap();
+        assert!(!app.close_prompt.quitting());
+        assert!(cancels(&frame(&mut app, true)));
+        let state = prompt(&mut app);
+        assert_eq!((&state["document"], &state["remaining"]), (&json!("Untitled"), &json!(["Untitled 2", "Untitled 3"])), "{state}");
+    }
+
+    #[test]
+    fn save_writes_a_modified_font_and_a_modified_project_then_quits() {
+        let dir = scratch("project");
+        let mut app = FontcraftApp::default();
+        let asked = Arc::new(Mutex::new(Vec::new()));
+        // A name without an extension: each save adds its own.
+        app.picker = Some(Box::new(SavePicker { path: Some(dir.join("Chosen")), asked: asked.clone() }));
+        edit(&mut app, "x.alt");
+        app.run("file.newProject", &json!({})).unwrap();
+        app.run("project.addInstance", &json!({ "styleName": "Bold" })).unwrap();
+        assert!(app.session.projects().iter().all(|p| p.modified()));
+
+        assert!(cancels(&frame(&mut app, true)));
+        let state = prompt(&mut app);
+        assert_eq!((&state["document"], &state["kind"]), (&json!("Untitled"), &json!("font")), "{state}");
+        assert_eq!(state["remaining"].as_array().map(Vec::len), Some(1), "{state}");
+        assert!(!closes(&frame_with(&mut app, false, &[Key::Enter])));
+        assert!(dir.join("Chosen.fontcraft").exists());
+        assert_eq!(prompt(&mut app)["kind"], "project");
+
+        assert!(closes(&frame_with(&mut app, false, &[Key::Enter])));
+        assert!(dir.join("Chosen.fontcraftproject").exists());
+        assert_eq!(asked.lock().unwrap().len(), 2);
+        assert!(app.session.projects().iter().all(|p| !p.modified() && p.path.is_some()));
+        assert!(app.close_prompt.quitting());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Glyph A with a square and a 100 × 50 image at the origin, open in Edit View at actual size.
+    fn image_app(dir: &std::path::Path) -> FontcraftApp {
+        use fontcraft_engine::imagery::{Rgba8, to_png};
+        let png = to_png(&Rgba8 { width: 100, height: 50, pixels: [255, 0, 0, 255].repeat(100 * 50) }).unwrap();
+        let file = dir.join("A.png");
+        std::fs::write(&file, png).unwrap();
+        let mut app = FontcraftApp::default();
+        app.run("path.addRectangle", &json!({"glyph": "A", "x": 300, "y": 300, "width": 100, "height": 100})).unwrap();
+        app.run("glyph.addImage", &json!({"files": [file.to_string_lossy()], "glyphs": ["A"]})).unwrap();
+        app.run("view.editSelectedGlyphs", &json!({"glyphs": ["A"]})).unwrap();
+        app.run("view.setZoom", &json!({"size": 1000, "center": [200, 200]})).unwrap();
+        app
+    }
+
+    #[test]
+    fn while_the_question_is_open_no_key_reaches_the_edit_view_or_a_dialog() {
+        let dir = scratch("keys");
+        let mut app = image_app(&dir);
+        let ctx = egui::Context::default();
+        for _ in 0..5 {
+            run_frame(&ctx, &mut app, false, Vec::new());
+        }
+        let call =
+            |app: &mut FontcraftApp, method: &str, params: Value| crate::control::handle(app, &json!({"id": 1, "method": method, "params": params}));
+        let clicked = call(&mut app, "ui.pointer", json!({"events": [{"kind": "down", "x": 50, "y": 25}, {"kind": "up", "x": 50, "y": 25}]}));
+        assert_eq!(clicked["ok"], true, "{clicked}");
+        assert!(crate::canvas::images::is_selected(&app), "the click selects the image");
+        let font = app.session.font().unwrap().clone();
+        let text_mode = |app: &FontcraftApp| app.state.tab().map(|t| t.text_mode);
+
+        // A selected image: Delete, the arrows and typing change nothing, nor does ui.key.
+        assert!(cancels(&run_frame(&ctx, &mut app, true, Vec::new())));
+        run_frame(&ctx, &mut app, false, vec![press(Key::Delete), press(Key::ArrowRight), Event::Text("a".into())]);
+        let reply = call(&mut app, "ui.key", json!({"key": "Delete"}));
+        assert_eq!(reply["result"]["handled"], false, "{reply}");
+        assert!(app.session.font().unwrap().same_as(&font), "nothing behind the question changed");
+        assert_eq!(prompt(&mut app)["open"], true);
+        // Escape cancels the question and does nothing else.
+        run_frame(&ctx, &mut app, false, vec![press(Key::Escape)]);
+        assert_eq!(prompt(&mut app)["open"], false);
+        assert!(crate::canvas::images::is_selected(&app), "the image stays selected");
+        assert_eq!(text_mode(&app), Some(false), "Escape did not switch to text mode");
+
+        // Text mode: typing, Backspace and Escape reach only the question.
+        app.run("editView.toggleTextMode", &json!({ "mode": "text" })).unwrap();
+        let text = app.run("editView.getText", &json!({})).unwrap()["text"].clone();
+        assert!(cancels(&run_frame(&ctx, &mut app, true, Vec::new())));
+        run_frame(&ctx, &mut app, false, vec![Event::Text("b".into()), press(Key::Backspace)]);
+        run_frame(&ctx, &mut app, false, vec![press(Key::Escape)]);
+        assert_eq!(prompt(&mut app)["open"], false);
+        assert_eq!(text_mode(&app), Some(true), "still in text mode");
+        assert_eq!(app.run("editView.getText", &json!({})).unwrap()["text"], text);
+        assert!(app.session.font().unwrap().same_as(&font));
+
+        // A dialog behind the question keeps its Return and Escape.
+        app.run("editView.toggleTextMode", &json!({ "mode": "edit" })).unwrap();
+        let opened = call(&mut app, "engine.execute", json!({"command": "dialog.open", "params": {"dialog": "dialog.filterRoundCorners"}}));
+        assert_eq!(opened["ok"], true, "{opened}");
+        assert!(cancels(&run_frame(&ctx, &mut app, true, Vec::new())));
+        run_frame(&ctx, &mut app, false, vec![press(Key::Escape)]);
+        assert_eq!(prompt(&mut app)["open"], false);
+        assert!(app.dialog.is_some(), "Escape went to the question, not the dialog");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
