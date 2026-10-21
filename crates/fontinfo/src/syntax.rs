@@ -279,7 +279,7 @@ pub fn check(spec: &ParamSpec, value: Value) -> Result<Value, String> {
             let t = text()?;
             fontcraft_model::cid::Ros::parse(&t)
                 .map(|_| value)
-                .ok_or_else(|| format!("`{t}` is not Registry-Ordering-Supplement, such as Adobe-Japan1-6"))
+                .ok_or_else(|| format!("`{t}` is not Registry-Ordering-Supplement (three parts joined by hyphens, the last a number)"))
         }
         Rule::OpticalSize => optical_size(&text()?).map(|()| value),
         Rule::LocalInterpolation => local_interpolation(&text()?).map(|()| value),

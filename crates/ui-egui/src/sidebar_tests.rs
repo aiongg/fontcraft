@@ -368,8 +368,9 @@ fn alt_on_a_plus_button_adds_a_nested_group_as_the_command_takes_it() {
     set(&mut app, "name", json!("Grouped"));
     let w = Window::new();
     let alt_press = |app: &mut FontcraftApp, path: &[usize]| {
-        // With Alt held each + shows …, which can widen the rows; the dialog settles first.
-        for _ in 0..3 {
+        // With Alt held each + shows …, which can widen the rows; the dialog takes a few frames
+        // to size and centre itself again.
+        for _ in 0..8 {
             w.frame_with(app, Vec::new(), Modifiers::ALT);
         }
         let at = w.ctx.read_response(control_id("rules", path, "add")).unwrap_or_else(|| panic!("{path:?} + was not drawn")).rect.center();

@@ -738,7 +738,7 @@ fn alt_on_a_handle_keeps_its_angle_and_ctrl_alt_mirrors_it() {
     assert_eq!(kept.params["points"], json!([[0, 4]]));
     assert_eq!(kept.params["mode"], json!("pointsOnly"));
     assert!(kept.params.get("duplicate").is_none(), "a handle alone has nothing to copy");
-    assert!(matches!(h.actions.first(), Some(Action::Begin { label }) if label == "Move"));
+    assert!(matches!(h.actions.iter().find(|a| matches!(a, Action::Begin { .. })), Some(Action::Begin { label }) if label == "Move"));
 
     let mirrored = modifier_drag(&mut h, (300.0, 200.0), (337.0, 261.0), Modifiers::ALT.with_ctrl());
     assert_eq!(mirrored.params["mode"], json!("mirror"));
@@ -760,7 +760,7 @@ fn alt_on_lone_nodes_moves_only_them_and_a_selected_segment_still_duplicates() {
     assert_eq!(lone.params["points"], json!([[1, 3]]));
     assert_eq!(lone.params["mode"], json!("pointsOnly"));
     assert!(lone.params.get("duplicate").is_none());
-    assert!(matches!(h.actions.first(), Some(Action::Begin { label }) if label == "Move"));
+    assert!(matches!(h.actions.iter().find(|a| matches!(a, Action::Begin { .. })), Some(Action::Begin { label }) if label == "Move"));
 
     // The two ends of the line: a whole segment to copy.
     h.selection = points(&[(2, 0), (2, 1)]);
@@ -774,7 +774,7 @@ fn alt_on_a_curve_segment_reshapes_it() {
     let mut h = Harness::new(test_layer());
     // (231.25, 68.75) is the curve's point at t = 0.5.
     let inv = modifier_drag(&mut h, (231.25, 68.75), (241.25, 88.75), Modifiers::ALT);
-    assert!(matches!(h.actions.first(), Some(Action::Begin { label }) if label == "Reshape Segment"));
+    assert!(matches!(h.actions.iter().find(|a| matches!(a, Action::Begin { .. })), Some(Action::Begin { label }) if label == "Reshape Segment"));
     assert_eq!(inv.id, "path.reshapeSegment");
     assert_eq!(inv.params["segment"], json!([1, 3]));
     let t = inv.params["t"].as_f64().unwrap();

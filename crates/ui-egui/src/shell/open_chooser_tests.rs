@@ -189,10 +189,12 @@ fn font_files_dropped_on_the_window_open_and_images_are_left_for_the_image_drop(
     let ctx = egui::Context::default();
     let mut pending = Vec::new();
     let mut left = Vec::new();
-    let _ = ctx.run_ui(input(Vec::new(), &[png.clone(), ufo.clone(), svg.clone()]), |ui| {
+    ctx.run_ui(input(Vec::new(), &[png.clone(), ufo.clone(), svg.clone()]), |ui| {
         take_dropped(ui.ctx(), &mut pending);
         left = ui.ctx().input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).collect::<Vec<_>>());
-    });
+    })
+    .textures_delta
+    .clear();
     assert_eq!(pending, [("file.open", json!({"path": ufo.to_string_lossy()}))]);
     assert_eq!(left, [png.clone(), svg]);
 
@@ -203,7 +205,7 @@ fn font_files_dropped_on_the_window_open_and_images_are_left_for_the_image_drop(
     w.frame(&mut app, Vec::new(), &[ufo.clone(), native.clone(), png]);
     assert_eq!(app.session.documents().len(), 3, "{}", app.state.status);
     assert_eq!(active_path(&app), Some(native));
-    w.frame(&mut app, Vec::new(), &[ufo.clone()]);
+    w.frame(&mut app, Vec::new(), std::slice::from_ref(&ufo));
     assert_eq!(app.session.documents().len(), 3);
     assert_eq!(active_path(&app), Some(ufo));
     let _ = std::fs::remove_dir_all(&dir);

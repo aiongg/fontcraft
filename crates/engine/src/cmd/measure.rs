@@ -43,6 +43,10 @@ const MAX_OVERLAP_WORK: usize = 20_000_000;
 const MAX_OVERLAP_POINTS: usize = 50_000;
 /// Points a curved piece of an overlapped stretch is drawn with.
 const CURVE_STEPS: usize = 8;
+/// Shortest overlapped stretch kept, in font units. At a corner the side probe lands on the
+/// neighbouring edge, where the winding number is ambiguous, which gives stretches about
+/// `SIDE_STEP` long that are not overlaps.
+const MIN_OVERLAP_LENGTH: f64 = 4.0 * SIDE_STEP;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -437,20 +441,14 @@ fn overlaps(contours: &[Contour], work: &mut usize) -> Vec<Vec<Point>> {
             };
             for (a, b, inside) in ranges {
                 if !inside || b - a <= 0.0 {
-                    if open.len() > 1 {
-                        out.push(std::mem::take(&mut open));
-                    }
-                    open.clear();
+                    keep_stretch(&mut out, &mut open);
                     continue;
                 }
                 let piece = seg.subsegment(a..b);
                 let steps = if matches!(piece, PathSeg::Line(_)) { 1 } else { CURVE_STEPS };
                 let joins = open.last().is_some_and(|l| (*l - piece.start()).hypot() < 1e-6);
                 if !joins {
-                    if open.len() > 1 {
-                        out.push(std::mem::take(&mut open));
-                    }
-                    open.clear();
+                    keep_stretch(&mut out, &mut open);
                 }
                 for k in usize::from(joins)..=steps {
                     open.push(piece.eval(k as f64 / steps as f64));
@@ -461,12 +459,19 @@ fn overlaps(contours: &[Contour], work: &mut usize) -> Vec<Vec<Point>> {
                 }
             }
         }
-        if open.len() > 1 {
-            out.push(open);
-        }
+        keep_stretch(&mut out, &mut open);
     }
     *work = w.work.max(*work);
     out
+}
+
+/// Moves the stretch in `open` to `out` when it is long enough to be a real overlap.
+fn keep_stretch(out: &mut Vec<Vec<Point>>, open: &mut Vec<Point>) {
+    let length: f64 = open.windows(2).filter_map(|p| Some((*p.get(1)? - *p.first()?).hypot())).sum();
+    let stretch = std::mem::take(open);
+    if stretch.len() > 1 && length >= MIN_OVERLAP_LENGTH {
+        out.push(stretch);
+    }
 }
 
 fn ruler(s: &mut Session, p: &Value) -> Result<Value> {
