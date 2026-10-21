@@ -254,3 +254,26 @@ fn a_coordinate_typed_for_two_masters_goes_to_both_as_set_axis_location_does() {
     let locations: Vec<Vec<f64>> = app.session.font().unwrap().masters.iter().map(|m| m.location.clone()).collect();
     assert_eq!(locations, [vec![300.0, 100.0], vec![700.0, 100.0]], "the weights keep their values");
 }
+
+#[test]
+fn a_coordinate_typed_for_the_second_of_two_axes_with_one_tag_changes_that_axis() {
+    // Files can hold two axes with one tag; the font is built as such a file opens.
+    let mut app = two_masters();
+    app.session
+        .edit("two wght axes", |font| {
+            *std::sync::Arc::make_mut(&mut font.axes) = vec![
+                fontcraft_model::Axis { name: "Weight".into(), tag: "wght".into(), ..Default::default() },
+                fontcraft_model::Axis { name: "Weight Too".into(), tag: "wght".into(), ..Default::default() },
+            ];
+            for m in std::sync::Arc::make_mut(&mut font.masters).iter_mut() {
+                m.location = vec![400.0, 10.0];
+            }
+            Ok(())
+        })
+        .unwrap();
+    let t = TabUi::new();
+    t.click(&mut app, master_id(1), Modifiers::NONE);
+    t.type_into(&mut app, axis_id(1), "90");
+    let locations: Vec<Vec<f64>> = app.session.font().unwrap().masters.iter().map(|m| m.location.clone()).collect();
+    assert_eq!(locations, [vec![400.0, 10.0], vec![400.0, 90.0]], "the second axis of Bold changes, the first keeps its value");
+}

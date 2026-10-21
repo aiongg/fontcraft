@@ -257,7 +257,7 @@ fn axes_plus_predefined_menu_fields_hidden_drag_and_minus_give_the_font_the_axis
 
     // Dropping Width onto Weight's row moves it first.
     let pending = drag(&tab, &mut app, super::axis_id(1, "handle"), super::axis_id(0, "row"));
-    let f = same_as_command(&mut app, pending, "font.axes.reorder", json!({"order": ["wdth", "wght"]}));
+    let f = same_as_command(&mut app, pending, "font.axes.reorder", json!({"order": [1, 0]}));
     let tags: Vec<&str> = f.axes.iter().map(|a| a.tag.as_str()).collect();
     assert_eq!(tags, ["wdth", "wght"]);
 
@@ -268,8 +268,8 @@ fn axes_plus_predefined_menu_fields_hidden_drag_and_minus_give_the_font_the_axis
     let f = same_as_command(&mut app, pending, "font.axes.set", json!({"axis": 1, "tag": "swln"}));
     assert_eq!(f.axes.get(1).map(|a| (a.name.as_str(), a.tag.as_str())), Some(("Swash Length", "swln")));
     tab.frame(&mut app, Vec::new());
-    assert!(tab.ctx.read_response(super::axis_id(1, "hint")).is_some(), "a lowercase private tag gets the hint");
-    assert!(tab.ctx.read_response(super::axis_id(0, "hint")).is_none(), "a registered tag gets none");
+    assert!(tab.ctx.read_response(super::axis_hint_id(1, 0)).is_some(), "a lowercase private tag gets the hint");
+    assert!(tab.ctx.read_response(super::axis_hint_id(0, 0)).is_none(), "a registered tag gets none");
 
     let pending = tab.click(&mut app, super::axis_id(0, "minus"));
     let f = same_as_command(&mut app, pending, "font.axes.remove", json!({"axis": 0}));
@@ -277,17 +277,64 @@ fn axes_plus_predefined_menu_fields_hidden_drag_and_minus_give_the_font_the_axis
 }
 
 #[test]
-fn the_private_tag_hint_matches_the_commands_tag_warning() {
+fn the_axes_show_exactly_the_warnings_font_axes_list_gives() {
     let mut app = app();
-    let predefined = super::predefined_axes(&egui::Context::default(), &mut app.session);
-    assert!(predefined.iter().any(|p| p.name == "Weight" && p.tag == "wght" && p.registered));
+    let tab = Tab::new(super::show);
     app.run("font.axes.add", &json!({"name": "Weight"})).unwrap();
-    for tag in ["GRAD", "SWLN", "swln", "Ab", "wdth", "opsz"] {
-        let r = app.run("font.axes.set", &json!({"axis": 0, "tag": tag})).unwrap();
-        let warned = r
-            .get("warnings")
-            .and_then(Value::as_array)
-            .is_some_and(|w| w.iter().filter_map(Value::as_str).any(|w| w.contains("not a registered axis tag")));
-        assert_eq!(super::tag_needs_hint(tag, &predefined), warned, "`{tag}`");
-    }
+    app.run("font.axes.add", &json!({"name": "Swash", "tag": "Ab"})).unwrap();
+    app.run("font.axes.add", &json!({"name": "Grade", "tag": "GRAD"})).unwrap();
+    let check = |app: &mut FontcraftApp| {
+        tab.frame(app, Vec::new());
+        let reply = app.run("font.axes.list", &json!({})).unwrap();
+        let listed: Vec<Vec<String>> = reply["axes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| a["warnings"].as_array().unwrap().iter().map(|w| w.as_str().unwrap().to_string()).collect())
+            .collect();
+        assert_eq!(*super::axis_warnings(&tab.ctx, &mut app.session), listed, "the tab keeps the query's warnings");
+        for (at, warnings) in listed.iter().enumerate() {
+            for n in 0..warnings.len() {
+                assert!(tab.ctx.read_response(super::axis_hint_id(at, n)).is_some(), "axis {at} shows warning {n}");
+            }
+            assert!(tab.ctx.read_response(super::axis_hint_id(at, warnings.len())).is_none(), "axis {at} shows no more");
+        }
+        listed
+    };
+    let listed = check(&mut app);
+    assert!(listed[0].is_empty(), "a registered tag has none: {listed:?}");
+    assert_eq!(listed[1].len(), 2, "a short private tag is padded and not four capitals: {listed:?}");
+    assert!(listed[2].is_empty(), "four capitals make a good private tag: {listed:?}");
+    // An edit is a new revision: the tab asks again.
+    app.run("font.axes.set", &json!({"axis": 1, "tag": "SWSH"})).unwrap();
+    let listed = check(&mut app);
+    assert!(listed[1].is_empty(), "{listed:?}");
+}
+
+#[test]
+fn two_axes_with_one_tag_are_hidden_reordered_and_warned_by_index() {
+    // Files can hold two axes with one tag; the font is built as such a file opens.
+    let mut app = app();
+    app.session
+        .edit("two wght axes", |font| {
+            *Arc::make_mut(&mut font.axes) = vec![
+                fontcraft_model::Axis { name: "Weight".into(), tag: "wght".into(), ..Default::default() },
+                fontcraft_model::Axis { name: "Weight Too".into(), tag: "wght".into(), ..Default::default() },
+            ];
+            Ok(())
+        })
+        .unwrap();
+    let tab = Tab::new(super::show);
+    tab.frame(&mut app, Vec::new());
+    assert!(tab.ctx.read_response(super::axis_hint_id(1, 0)).is_some(), "the shared tag is warned of");
+
+    let pending = tab.click(&mut app, super::axis_id(1, "hidden"));
+    let f = same_as_command(&mut app, pending, "font.axes.set", json!({"axis": 1, "hidden": true}));
+    let hidden: Vec<bool> = f.axes.iter().map(|a| a.hidden).collect();
+    assert_eq!(hidden, [false, true], "the second axis is hidden, not the first");
+
+    let pending = drag(&tab, &mut app, super::axis_id(1, "handle"), super::axis_id(0, "row"));
+    let f = same_as_command(&mut app, pending, "font.axes.reorder", json!({"order": [1, 0]}));
+    let names: Vec<&str> = f.axes.iter().map(|a| a.name.as_str()).collect();
+    assert_eq!(names, ["Weight Too", "Weight"]);
 }

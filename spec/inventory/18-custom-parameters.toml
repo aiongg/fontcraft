@@ -83,7 +83,13 @@ effect = "features"
 summary = "Adds a feature-code prefix at export. The value is the prefix name, a semicolon, then the prefix code."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. Checked when added or set (M7.21): one word (the prefix name), a semicolon, then the code."
+notes = "Documented, not yet observed. Checked when added or set (M7.21): a prefix name (any text that is not empty), a semicolon, then the code. The value is split at its first semicolon."
+guesses = [
+  "A prefix name may hold spaces, as prefix names in the Features tab are free text; adding `Language Systems; languagesystem DFLT dflt;` in the reference app settles it.",
+]
+observe = [
+  "In any font, add the parameter Add Prefix with the value `Language Systems; languagesystem DFLT dflt;` and export: note whether it is accepted and the prefix exported.",
+]
 
 [[parameter]]
 name = "ascender"
@@ -583,7 +589,13 @@ effect = "interpolation"
 summary = "The value is a four-letter axis tag; the instance's style name is then flagged in STAT as elidable for that axis, meaning it is dropped when combined with other names (as with Regular). Typically added to the regular instance once per axis for which its name is the default."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. The value is matched against the axis tags; the derivation (crates/compile/src/var/stat.rs, M9.7) follows fontc's, which also marks a default name elidable without the parameter. Checked when added or set (M7.21): an axis tag, four printable ASCII characters with spaces only at the end."
+notes = "Documented, not yet observed. The value is matched against the axis tags; the derivation (crates/compile/src/var/stat.rs, M9.7) follows fontc's, which also marks a default name elidable without the parameter. Checked when added or set (M7.21): an axis tag, four printable ASCII characters with spaces only at the end. fontc stores any text, and sources in the corpus give a style name such as `Regular`; such a value read from a file is kept, and pasting it as a row skips it."
+guesses = [
+  "Only an axis tag is accepted when the parameter is added or set, as the handbook describes the value; a style name such as `Regular`, which some sources hold, is refused. Typing `Regular` as the value in the reference app settles whether it accepts a name.",
+]
+observe = [
+  "In F1 (two masters), add Elidable STAT Axis Value Name to the Regular instance with the value `Regular`, then with `wght`, and export a variable font: note whether each value is accepted and which STAT entry is marked elidable.",
+]
 
 [[parameter]]
 name = "Enforce Compatibility Check"
@@ -1282,8 +1294,9 @@ effect = "interpolation"
 summary = "Value: one interpolation value per axis separated by semicolons, then a semicolon, `include:` and a comma-separated glyph list (for example `95; include: e, o, c`). The listed glyphs are interpolated at those values, the rest at the instance's own position."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Checked when added or set (M7.21): one or more numbers, then `include:` and at least one glyph name, separated by semicolons."
+notes = "Checked when added or set (M7.21): one or more numbers, then `include:` and at least one glyph name, separated by semicolons. `include:` must be in lowercase with the colon right after it, as the interpolation reads it."
 guesses = [
+  "`Include:` or `include :` is refused, since the interpolation would not find the glyph list; typing them in the reference app settles whether it reads them.",
   "The listed glyphs are interpolated at the given location with every other part of the instance unchanged, including their widths; settle with an instance that sets it in the reference app.",
 ]
 observe = [
@@ -1821,7 +1834,10 @@ effect = "features"
 summary = "Value is the prefix name exactly as written in the Features tab, a semicolon, then the replacement code."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. Checked when added or set (M7.21): one word (the prefix name), a semicolon, then the code."
+notes = "Documented, not yet observed. Checked when added or set (M7.21): a prefix name (any text that is not empty), a semicolon, then the code. The value is split at its first semicolon."
+guesses = [
+  "A prefix name may hold spaces, since it is written as in the Features tab, where prefix names are free text; replacing a prefix called `Language Systems` in the reference app settles it.",
+]
 
 [[parameter]]
 name = "ROS"

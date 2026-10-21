@@ -242,6 +242,7 @@ notes = "Documented, not yet observed. M7 plan § 4: M7.3."
 guesses = [
   "The mode append adds parameters after the others and, since a field cannot repeat, replaces a field the target has; skip leaves out every row the target already has; pasting in the reference app settles both.",
   "A pasted row whose field or single-valued parameter is already present replaces its value, a repeatable parameter is appended, a row not allowed in the target scope is skipped and listed, and pasting between tabs and between documents is allowed; pasting in the reference app settles all four.",
+  "A pasted row whose value its check refuses (one stored before the check existed, say) is skipped and listed with the reason, and the other rows are pasted; pasting such a row in the reference app settles it.",
 ]
 observe = [
   "In font A (m7-one), copy a field row and a parameter row, then paste them into the Exports tab, into font B (m7-two)'s Font tab, and back into font A (m7-one)'s Font tab where they already exist: note for each whether the rows are added, replaced, duplicated or refused.",
@@ -611,9 +612,10 @@ milestone = "M9"
 summary = "Returns the design axes in order, each with name, tag and hidden flag."
 ref = "Font Info › Font › Axes"
 status = "inferred"
-notes = "A query of ours for the Axes list in Font Info › Font."
+notes = "A query of ours for the Axes list in Font Info › Font. Each axis's `warnings` are the tag rules' warnings (axes.tagRules) and one when another axis shares its tag; Font Info › Font shows them under the axis."
 guesses = [
   "A query of ours: the reply lists each axis's index, name, tag and hidden flag in Font Info order; the reference app shows the same facts only in its Axes list.",
+  "An axis whose tag another axis shares (possible in a file opened from disk) gets a warning that the font exports only with every tag different, and stays editable by index; opening such a file in the reference app settles what it shows.",
 ]
 
 [[command]]
@@ -1095,13 +1097,13 @@ label = "Set Master Axes Coordinates"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{masters: [id|name|index], location: {tag: number}}"
+params = "{masters: [id|name|index], location: {tag: number} | [number|null]}"
 area = "interpolation"
 milestone = "M9"
 summary = "Places a master in the designspace by giving it one coordinate per font axis. Axes not named in the call keep their current coordinate."
 ref = "Font Info › Masters › Axes Coordinates"
 status = "handbook"
-notes = "Documented, not yet observed. The result warns when masters end up sharing a location."
+notes = "Documented, not yet observed. The result warns when masters end up sharing a location. A location given as a list is in axis order, null for an axis left alone; Font Info sends that form, so a font with two axes of one tag edits the right one. A tag two axes share is refused in the object form."
 
 [[parameter]]
 name = "master.name"
@@ -1837,13 +1839,30 @@ label = "Set Instance Axes Coordinates"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{instances: [id|name|index], location: {tag: number}}"
+params = "{instances: [id|name|index], location: {tag: number} | [number|null]}"
 area = "interpolation"
 milestone = "M9"
 summary = "Places an instance in the designspace with one coordinate per font axis. Locations between masters are interpolated; locations beyond the masters are extrapolated."
 ref = "Font Info › Exports › Axes Coordinates"
 status = "handbook"
-notes = "Documented, not yet observed. The result names each instance placed beyond the masters, which a static export extrapolates."
+notes = "Documented, not yet observed. The result names each instance placed beyond the masters, which a static export extrapolates: the test is the export's own (outside an axis range, or inside a range an axis mapping widened past the masters), shared with font.instance.placement. At most 10 instances are named, then a count. The location's list form is as in font.master.setAxisLocation."
+
+[[command]]
+id = "font.instance.placement"
+label = "Instance Placement"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{instances?: [id|name|index]}"
+area = "interpolation"
+milestone = "M9"
+summary = "Returns, for each instance, the tags of the axes on which it lies beyond the masters and the extrapolation warning font.instance.setAxisLocation gives for it."
+ref = "Font Info › Exports › Axes Coordinates"
+status = "inferred"
+notes = "A query of ours for the warning under the Axes Coordinates in Font Info › Exports. It makes the static export's test, so the panel, the command's warnings and the export report agree. A variable font setting has no placement."
+guesses = [
+  "A query of ours: the reference app shows extrapolation only in the Exports tab and in the export; the reply's shape is ours.",
+]
 
 [[command]]
 id = "font.instance.setStyleLinking"

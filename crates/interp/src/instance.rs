@@ -290,12 +290,65 @@ pub fn instance_font_with_notes(font: &Font, instance: usize, options: &InterpOp
 /// Whether `location` lies beyond the masters on some axis: outside the axis ranges, or inside a
 /// range an axis mapping widened past the masters. Either way the model extrapolates there.
 fn beyond_masters(designspace: &Designspace, location: &Location) -> bool {
-    designspace.classify(location) == Placement::Outside
-        || location.0.iter().enumerate().any(|(i, v)| {
-            let values = designspace.masters().iter().filter_map(|m| m.location.0.get(i).copied());
-            let (lo, hi) = values.fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), x| (lo.min(x), hi.max(x)));
-            lo <= hi && (*v < lo || *v > hi)
+    designspace.classify(location) == Placement::Outside || !axes_beyond_masters(designspace, location).is_empty()
+}
+
+/// The smallest and the largest of `values`; the minimum is above the maximum when there are none.
+fn span(values: impl Iterator<Item = f64>) -> (f64, f64) {
+    values.fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), x| (lo.min(x), hi.max(x)))
+}
+
+/// The axes (indexes into the designspace's axes) on which `location` lies beyond the masters:
+/// outside the axis range, or inside a range an axis mapping widened past the masters.
+pub fn axes_beyond_masters(designspace: &Designspace, location: &Location) -> Vec<usize> {
+    // One axis's range is tested by moving the origin along that axis alone, which needs an
+    // origin inside every range.
+    let origin = designspace.origin().map(|m| &m.location).filter(|o| designspace.classify(o) == Placement::Inside);
+    location
+        .0
+        .iter()
+        .enumerate()
+        .filter(|&(i, &v)| {
+            let off_range = origin.is_some_and(|o| {
+                let mut probe = o.clone();
+                let Some(slot) = probe.0.get_mut(i) else { return false };
+                *slot = v;
+                designspace.classify(&probe) == Placement::Outside
+            });
+            let (lo, hi) = span(designspace.masters().iter().filter_map(|m| m.location.0.get(i).copied()));
+            off_range || (lo <= hi && (v < lo || v > hi))
         })
+        .map(|(i, _)| i)
+        .collect()
+}
+
+/// For each of `instances` (indexes into `Font::instances`), the axes (indexes into `Font::axes`)
+/// on which it lies beyond the masters, so that a static export extrapolates it; the test
+/// [`instance_font_with_notes`] makes. A variable font setting and an unknown index have none.
+/// When the font's designspace cannot be built (two axes with one tag, an unusable mapping) or
+/// the instance's location cannot be read, each coordinate is compared with the masters' range
+/// on its axis.
+pub fn instances_beyond_masters(font: &Font, instances: &[usize]) -> Vec<Vec<usize>> {
+    let designspace = Designspace::new(font).ok();
+    instances
+        .iter()
+        .map(|&i| {
+            let Some(inst) = font.instances.get(i).filter(|inst| inst.kind.as_deref() != Some("variable")) else { return Vec::new() };
+            let modelled = designspace.as_ref().and_then(|ds| {
+                let location = ds.instance_location(font, i).ok()?;
+                Some(axes_beyond_masters(ds, &location).into_iter().filter_map(|k| ds.axes().get(k).map(|a| a.font_axis)).collect())
+            });
+            modelled.unwrap_or_else(|| {
+                (0..font.axes.len())
+                    .filter(|&k| {
+                        let (lo, hi) = span(font.masters.iter().map(|m| fontcraft_model::axes::design_value(&m.location, k)));
+                        let v = fontcraft_model::axes::design_value(&inst.location, k);
+                        lo <= hi && (v < lo || v > hi)
+                    })
+                    .collect()
+            })
+        })
+        .collect()
 }
 
 /// An internal location for horizontal values and, with InterpolationWeightY, another for

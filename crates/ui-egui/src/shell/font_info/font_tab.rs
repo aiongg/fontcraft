@@ -13,19 +13,22 @@
 //! | Control | Does |
 //! |---|---|
 //! | plus beside the heading | `font.axes.add` |
-//! | handle: drag onto another axis | `font.axes.reorder` |
+//! | handle: drag onto another axis | `font.axes.reorder` with axis indexes |
 //! | name field | `font.axes.set` with `name` (a predefined name also sets the tag) |
 //! | disclosure menu of predefined axes (`font.axes.listPredefined`) | `font.axes.set` with that `name` |
 //! | tag field | `font.axes.set` with `tag` |
 //! | Hidden | `font.axes.set` with `hidden` |
 //! | minus | `font.axes.remove` |
 //!
-//! A tag that is neither registered nor four capital letters gets a hint under its row.
+//! Under each axis go the warnings `font.axes.list` gives for it (a tag neither registered nor
+//! four capital letters, a short tag, a tag another axis shares), asked once per document
+//! revision. Every control addresses its axis by index, so a font with two axes of one tag edits
+//! the right one.
 //!
 //! Rows: `fontInfo.font`, `fontInfo.familyName.allowedCharacters` (the warning under the field)
 //! (M7.16); `font.axes.add`, `font.axes.set`, `font.axes.remove`, `font.axes.reorder`,
 //! `font.axes.listPredefined`, `fontInfo.axes.predefinedNameSetsTag`, `fontInfo.axes.hidden`,
-//! `axes.tagRules` (M9.27).
+//! `axes.tagRules` (M9.27); `font.axes.list` (the warnings).
 
 use std::sync::Arc;
 
@@ -50,9 +53,6 @@ const LABEL_COLUMNS: f32 = 4.0;
 const MAX_AXES_SHOWN: usize = 256;
 /// Most predefined axes the name menu lists.
 const MAX_PREDEFINED: usize = 64;
-/// The hint under an axis tag that is neither registered nor four capital letters.
-pub const PRIVATE_TAG_HINT: &str =
-    "A private axis should have a tag of four capital letters (A–Z), so that it cannot clash with an axis registered later.";
 /// The family name warning, under the field.
 pub const FAMILY_NAME_WARNING: &str = "Only ASCII letters, digits and spaces are safe in a family name: other characters can keep the fonts from exporting or installing. Add a Family Names field for names in other scripts or languages.";
 
@@ -138,6 +138,16 @@ pub fn predefined_item_id(at: usize, tag: &str) -> Id {
     axis_id(at, "menu").with(("item", tag))
 }
 
+/// The id of the `n`th warning under axis `at`.
+pub fn axis_hint_id(at: usize, n: usize) -> Id {
+    axis_id(at, "hint").with(n)
+}
+
+/// Where egui's memory keeps the axes' warnings, with the document revision they were asked at.
+fn axis_warnings_memory() -> Id {
+    widgets::id(("fontInfo.font", "axisWarnings"))
+}
+
 /// Where egui's memory keeps the predefined axes.
 fn predefined_memory() -> Id {
     widgets::id(("fontInfo.font", "predefinedAxes"))
@@ -178,12 +188,24 @@ fn predefined_axes(ctx: &egui::Context, session: &mut Session) -> Arc<Vec<Predef
     list
 }
 
-/// Whether the tag gets [`PRIVATE_TAG_HINT`]: it is not a registered tag, and not four capital
-/// letters (`axes.tagRules`).
-pub fn tag_needs_hint(tag: &str, predefined: &[PredefinedAxis]) -> bool {
-    let registered = predefined.iter().any(|p| p.registered && p.tag == tag);
-    let capitals = tag.len() == 4 && tag.chars().all(|c| c.is_ascii_uppercase());
-    !registered && !capitals
+/// The warnings of each axis, in axis order, as `font.axes.list` gives them; asked once per
+/// document revision and kept in egui's memory.
+pub fn axis_warnings(ctx: &egui::Context, session: &mut Session) -> Arc<Vec<Vec<String>>> {
+    let Some(key) = session.active().map(|d| (d.id, d.revision)) else { return Arc::default() };
+    if let Some((at, kept)) = ctx.data(|d| d.get_temp::<((u64, u64), Arc<Vec<Vec<String>>>)>(axis_warnings_memory()))
+        && at == key
+    {
+        return kept;
+    }
+    let reply = session.query("font.axes.list", &json!({})).unwrap_or_default();
+    let read = |a: &Value| -> Vec<String> {
+        a.get("warnings").and_then(Value::as_array).map(|w| w.iter().filter_map(Value::as_str).map(str::to_string).collect()).unwrap_or_default()
+    };
+    let list: Vec<Vec<String>> =
+        reply.get("axes").and_then(Value::as_array).map(|axes| axes.iter().take(MAX_AXES_SHOWN).map(read).collect()).unwrap_or_default();
+    let list = Arc::new(list);
+    ctx.data_mut(|d| d.insert_temp(axis_warnings_memory(), (key, Arc::clone(&list))));
+    list
 }
 
 /// Whether `name` holds a character other than an ASCII letter, a digit or a space, the test
@@ -196,6 +218,7 @@ pub fn family_name_needs_warning(name: &str) -> bool {
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let FontcraftApp { session, state, tokens, .. } = app;
     let predefined = predefined_axes(ui.ctx(), session);
+    let warnings = axis_warnings(ui.ctx(), session);
     let Ok(font) = session.font() else { return };
     let fi = &mut state.panels.font_info;
     let target = Target::font();
@@ -212,7 +235,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     version(ui, tokens, fi, font, pending);
     date(ui, tokens, fi, font, pending);
     added_fields(ui, tokens, fi, font, &target, pending);
-    axes(ui, tokens, font, &predefined, pending);
+    axes(ui, tokens, font, &predefined, &warnings, pending);
     rows::parameters_section(ui, tokens, fi, font, &target, pending);
 }
 
@@ -357,8 +380,8 @@ fn added_fields(ui: &mut egui::Ui, tokens: &Tokens, fi: &mut FontInfoState, font
 }
 
 /// The font's axes: per axis a drag handle, the name with the predefined menu, the tag, Hidden
-/// and minus; the plus beside the heading adds one.
-fn axes(ui: &mut egui::Ui, tokens: &Tokens, font: &Font, predefined: &[PredefinedAxis], pending: &mut Pending) {
+/// and minus, then its warnings; the plus beside the heading adds one.
+fn axes(ui: &mut egui::Ui, tokens: &Tokens, font: &Font, predefined: &[PredefinedAxis], warnings: &[Vec<String>], pending: &mut Pending) {
     if heading(ui, tokens, axes_plus_id(), "Axes", "Add an axis") {
         pending.push(("font.axes.add", json!({})));
     }
@@ -420,15 +443,18 @@ fn axes(ui: &mut egui::Ui, tokens: &Tokens, font: &Font, predefined: &[Predefine
             && from.0 != at
             && from.0 < count
         {
-            let mut order: Vec<&str> = font.axes.iter().map(|a| a.tag.as_str()).collect();
+            let mut order: Vec<usize> = (0..count).collect();
             let moved = order.remove(from.0);
             order.insert(at.min(order.len()), moved);
             pending.push(("font.axes.reorder", json!({"order": order})));
         }
-        if !predefined.is_empty() && tag_needs_hint(&axis.tag, predefined) {
+        let shown = warnings.get(at).map_or(&[][..], Vec::as_slice);
+        if !shown.is_empty() {
             under_label(ui, tokens, |ui| {
-                let hint = ui.add(Label::new(RichText::new(PRIVATE_TAG_HINT).color(tokens.text_dim)).wrap());
-                ui.interact(hint.rect, axis_id(at, "hint"), Sense::hover());
+                for (n, warning) in shown.iter().enumerate() {
+                    let hint = ui.add(Label::new(RichText::new(super::exports_tab::sentence(warning)).color(tokens.text_dim)).wrap());
+                    ui.interact(hint.rect, axis_hint_id(at, n), Sense::hover());
+                }
             });
         }
     }

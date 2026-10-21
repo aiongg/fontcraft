@@ -12,15 +12,16 @@
 //! | Style Name | `font.instance.set` with `styleName` |
 //! | Weight Class, Width Class, and their menus of standard values | `font.instance.setWeightClass`, `font.instance.setWidthClass` |
 //! | Style Linking: Bold, Italic, base style name | `font.instance.setStyleLinking` |
-//! | Axes Coordinates: one number field per axis | `font.instance.setAxisLocation` with that axis's tag |
+//! | Axes Coordinates: one number field per axis | `font.instance.setAxisLocation` with a location list that sets that axis alone |
 //! | General plus, added fields | the field picker; `font.info.*` through the shared rows |
 //! | Custom Parameters | [`super::rows::parameters_section`] |
 //!
 //! Every edit goes to all selected entries at once; a field whose entries differ shows
 //! "Multiple Values" or a dash. Inactive entries have a grey icon. A selected instance that lies
-//! beyond the masters on some axis gets the extrapolation warning under the Axes Coordinates,
-//! the one `font.instance.setAxisLocation` gives. Variable font settings show only Active, the
-//! name and the parameters.
+//! beyond the masters on some axis gets the extrapolation warning under the Axes Coordinates, as
+//! `font.instance.placement` gives it (asked once per document revision). Variable font settings
+//! show only Active, the name and the parameters; the static-only fields edit only the selected
+//! static instances.
 //!
 //! The preview line draws the first selected instance with [`fontcraft_render::render_line`]:
 //! the glyphs of `Aang126` the font has, or the glyph names of the instance's Instance Preview
@@ -30,10 +31,12 @@
 //! Rows: `fontInfo.exports`, `fontInfo.exports.selection`, `fontInfo.exports.inactiveGrayIcon`,
 //! `fontInfo.exports.instancePreview`, the `Instance Preview` parameter (M7.18);
 //! `instance.axesValues`, `font.instance.setAxisLocation`, `fontInfo.instance.extrapolation`
-//! (M9.27).
+//! (M9.27); `font.instance.placement`.
 
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
+
+use fontcraft_engine::Session;
 
 use egui::{Align2, Color32, ColorImage, Id, Pos2, Rect, Sense, Stroke, StrokeKind, TextureHandle, TextureOptions, pos2, vec2};
 use fontcraft_engine::fontinfo::Scope;
@@ -191,6 +194,35 @@ pub fn preview_id() -> Id {
     widgets::id(("fontInfo.exports", "preview"))
 }
 
+/// Where egui's memory keeps the instances' extrapolation warnings, with the document revision
+/// they were asked at.
+fn placement_memory() -> Id {
+    widgets::id(("fontInfo.exports", "placement"))
+}
+
+/// The extrapolation warning of each instance, by index, as `font.instance.placement` gives it;
+/// asked once per document revision and kept in egui's memory.
+pub fn placement_warnings(ctx: &egui::Context, session: &mut Session) -> Arc<Vec<Option<String>>> {
+    let Some(key) = session.active().map(|d| (d.id, d.revision)) else { return Arc::default() };
+    if let Some((at, kept)) = ctx.data(|d| d.get_temp::<((u64, u64), Arc<Vec<Option<String>>>)>(placement_memory()))
+        && at == key
+    {
+        return kept;
+    }
+    let count = session.font().map_or(0, |f| f.instances.len());
+    let reply = session.query("font.instance.placement", &json!({})).unwrap_or_default();
+    let mut list: Vec<Option<String>> = vec![None; count];
+    for entry in reply.get("instances").and_then(Value::as_array).into_iter().flatten() {
+        let index = entry.get("index").and_then(Value::as_u64).and_then(|i| usize::try_from(i).ok());
+        if let (Some(slot), Some(warning)) = (index.and_then(|i| list.get_mut(i)), entry.get("warning").and_then(Value::as_str)) {
+            *slot = Some(warning.to_string());
+        }
+    }
+    let list = Arc::new(list);
+    ctx.data_mut(|d| d.insert_temp(placement_memory(), (key, Arc::clone(&list))));
+    list
+}
+
 /// The entry a Shift-click selects from, kept in the context's memory.
 fn anchor_id() -> Id {
     widgets::id(("fontInfo.exports", "anchor"))
@@ -209,6 +241,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         index.and_then(|i| preview_glyphs(font, i).ok().filter(|(m, _)| *m == view_master_id(i)).map(|(_, names)| (i, names)))
     };
     let view = between.map(|(i, names)| session.instance_view(i, &names));
+    let placement = placement_warnings(ui.ctx(), session);
     let Ok(font) = session.font() else { return };
     let fi = &mut state.panels.font_info;
     let count = font.instances.len();
@@ -226,7 +259,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
                 return;
             };
             preview(ui, tokens, font, target.first(), doc, view.as_ref());
-            general(ui, tokens, fi, font, &target, pending);
+            general(ui, tokens, fi, font, &target, &placement, pending);
             super::rows::parameters_section(ui, tokens, fi, font, &target, pending);
         });
     });
@@ -424,7 +457,15 @@ fn differs<T: PartialEq>(all: &[&Instance], f: impl Fn(&Instance) -> T) -> bool 
 }
 
 /// The General heading, the built-in fields of the selected entries, and their added fields.
-fn general(ui: &mut egui::Ui, tokens: &Tokens, fi: &mut FontInfoState, font: &Font, target: &Target, pending: &mut Pending) {
+fn general(
+    ui: &mut egui::Ui,
+    tokens: &Tokens,
+    fi: &mut FontInfoState,
+    font: &Font,
+    target: &Target,
+    placement: &[Option<String>],
+    pending: &mut Pending,
+) {
     if heading(ui, tokens, plus_id(Scope::Instance, "general"), "General", "Add a field") {
         fi.picker = Some(Picker::Field(FieldPicker::new(target.clone())));
     }
@@ -432,6 +473,11 @@ fn general(ui: &mut egui::Ui, tokens: &Tokens, fi: &mut FontInfoState, font: &Fo
     let Some(first) = all.first().copied() else { return };
     let instances = json!(target.indices);
     let command = |id: &'static str, key: &str, value: Value| (id, json!({"instances": instances, key: value}));
+    // The fields only static instances have edit only those of the selection.
+    let statics: Vec<usize> = target.indices.iter().copied().filter(|i| font.instances.get(*i).is_some_and(|x| !is_variable(x))).collect();
+    let static_all: Vec<&Instance> = statics.iter().filter_map(|i| font.instances.get(*i)).collect();
+    let static_instances = json!(statics);
+    let static_command = |id: &'static str, key: &str, value: Value| (id, json!({"instances": static_instances, key: value}));
 
     field_row(ui, tokens, "Active", |ui| {
         if check(ui, field_id("active"), first.exports, differs(&all, |i| i.exports), "", "Export this entry with File › Export") {
@@ -447,29 +493,30 @@ fn general(ui: &mut egui::Ui, tokens: &Tokens, fi: &mut FontInfoState, font: &Fo
         }
     });
     if !is_variable(first) {
+        let all = &static_all;
         let weight = |i: &Instance| class_value(i.weight_class.as_ref(), WEIGHT_NAMES, DEFAULT_WEIGHT_CLASS);
-        if let Some(v) = class_row(ui, tokens, "Weight Class", "weightClass", &all, weight, &WEIGHT_CLASSES) {
-            pending.push(command("font.instance.setWeightClass", "weightClass", class_json(v)));
+        if let Some(v) = class_row(ui, tokens, "Weight Class", "weightClass", all, weight, &WEIGHT_CLASSES) {
+            pending.push(static_command("font.instance.setWeightClass", "weightClass", class_json(v)));
         }
         let width = |i: &Instance| class_value(i.width_class.as_ref(), WIDTH_NAMES, DEFAULT_WIDTH_CLASS);
-        if let Some(v) = class_row(ui, tokens, "Width Class", "widthClass", &all, width, &WIDTH_CLASSES) {
-            pending.push(command("font.instance.setWidthClass", "widthClass", class_json(v)));
+        if let Some(v) = class_row(ui, tokens, "Width Class", "widthClass", all, width, &WIDTH_CLASSES) {
+            pending.push(static_command("font.instance.setWidthClass", "widthClass", class_json(v)));
         }
-        axes_rows(ui, tokens, font, &all, first, &target.indices, pending);
+        axes_rows(ui, tokens, font, all, first, &statics, placement, pending);
         field_row(ui, tokens, "Style Linking", |ui| {
-            if check(ui, field_id("isBold"), first.is_bold, differs(&all, |i| i.is_bold), "Bold", "The bold style of the base instance") {
-                let on = differs(&all, |i| i.is_bold) || !first.is_bold;
-                pending.push(command("font.instance.setStyleLinking", "isBold", json!(on)));
+            if check(ui, field_id("isBold"), first.is_bold, differs(all, |i| i.is_bold), "Bold", "The bold style of the base instance") {
+                let on = differs(all, |i| i.is_bold) || !first.is_bold;
+                pending.push(static_command("font.instance.setStyleLinking", "isBold", json!(on)));
             }
-            if check(ui, field_id("isItalic"), first.is_italic, differs(&all, |i| i.is_italic), "Italic", "The italic style of the base instance") {
-                let on = differs(&all, |i| i.is_italic) || !first.is_italic;
-                pending.push(command("font.instance.setStyleLinking", "isItalic", json!(on)));
+            if check(ui, field_id("isItalic"), first.is_italic, differs(all, |i| i.is_italic), "Italic", "The italic style of the base instance") {
+                let on = differs(all, |i| i.is_italic) || !first.is_italic;
+                pending.push(static_command("font.instance.setStyleLinking", "isItalic", json!(on)));
             }
-            let mixed = differs(&all, |i| i.link_style.clone());
+            let mixed = differs(all, |i| i.link_style.clone());
             let shown = if mixed { "" } else { first.link_style.as_deref().unwrap_or("") };
             let width = param_value::field_width(ui, tokens);
             if let Some(text) = param_value::text_field(ui, field_id("linkStyle"), shown, width, mixed) {
-                pending.push(command("font.instance.setStyleLinking", "linkStyle", json!(text.trim())));
+                pending.push(static_command("font.instance.setStyleLinking", "linkStyle", json!(text.trim())));
             }
         });
     }
@@ -544,7 +591,17 @@ fn class_json(n: f64) -> Value {
 
 /// The Axes Coordinates rows: one number field per font axis, Multiple Values where the
 /// entries differ, then the extrapolation warnings of the entries beyond the masters.
-fn axes_rows(ui: &mut egui::Ui, tokens: &Tokens, font: &Font, all: &[&Instance], first: &Instance, indices: &[usize], pending: &mut Pending) {
+#[allow(clippy::too_many_arguments)]
+fn axes_rows(
+    ui: &mut egui::Ui,
+    tokens: &Tokens,
+    font: &Font,
+    all: &[&Instance],
+    first: &Instance,
+    indices: &[usize],
+    placement: &[Option<String>],
+    pending: &mut Pending,
+) {
     if font.axes.is_empty() {
         return;
     }
@@ -554,13 +611,11 @@ fn axes_rows(ui: &mut egui::Ui, tokens: &Tokens, font: &Font, all: &[&Instance],
         let value = (!mixed).then(|| design_value(&first.location, i));
         field_row(ui, tokens, &axis.name, |ui| {
             if let Some(v) = super::masters_tab::number_field(ui, axis_field_id(i), value, tokens.field_width) {
-                let mut location = serde_json::Map::new();
-                location.insert(axis.tag.clone(), json!(v));
-                pending.push(("font.instance.setAxisLocation", json!({"instances": indices, "location": location})));
+                pending.push(("font.instance.setAxisLocation", json!({"instances": indices, "location": location_list(i, v)})));
             }
         });
     }
-    let warnings: Vec<String> = all.iter().filter_map(|inst| extrapolation_warning(font, inst)).collect();
+    let warnings: Vec<&String> = indices.iter().filter_map(|i| placement.get(*i).and_then(Option::as_ref)).collect();
     for (n, warning) in warnings.iter().enumerate().take(MAX_WARNINGS_SHOWN) {
         ui.horizontal_top(|ui| {
             field_label(ui, tokens, "");
@@ -578,31 +633,15 @@ fn axes_rows(ui: &mut egui::Ui, tokens: &Tokens, font: &Font, all: &[&Instance],
     }
 }
 
-/// The warning `font.instance.setAxisLocation` gives for `instance`: the tags of the axes on
-/// which it lies beyond every master (`fontInfo.instance.extrapolation`). `None` for an
-/// instance inside the masters, a font without masters, and a variable font setting.
-pub fn extrapolation_warning(font: &Font, instance: &Instance) -> Option<String> {
-    if is_variable(instance) {
-        return None;
-    }
-    let outside: Vec<&str> = font
-        .axes
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| {
-            let mut coordinates = font.masters.iter().map(|m| design_value(&m.location, *i));
-            let Some(start) = coordinates.next() else { return false };
-            let (lo, hi) = coordinates.fold((start, start), |(lo, hi), x| (lo.min(x), hi.max(x)));
-            let v = design_value(&instance.location, *i);
-            v < lo || v > hi
-        })
-        .map(|(_, a)| a.tag.as_str())
-        .collect();
-    (!outside.is_empty()).then(|| format!("instance `{}` lies beyond the masters on {}; it is extrapolated", instance.name, outside.join(", ")))
+/// A `location` in the list form the axis-location commands take: `v` on the axis at `at`, the
+/// axes before it left alone. The list addresses the axis by index, so it is the right one even
+/// when two axes share a tag.
+pub(super) fn location_list(at: usize, v: f64) -> Value {
+    Value::Array((0..=at).map(|k| if k == at { json!(v) } else { Value::Null }).collect())
 }
 
 /// `text` with its first letter capitalised, as a line on its own reads.
-fn sentence(text: &str) -> String {
+pub(super) fn sentence(text: &str) -> String {
     let mut chars = text.chars();
     chars.next().map(|c| c.to_uppercase().chain(chars).collect()).unwrap_or_default()
 }
