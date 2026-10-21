@@ -9,15 +9,20 @@
 [[command]]
 id = "app.settings"
 label = "Settings…"
-menu = ["FontCraft"]
+menu = ["Edit"]
 shortcut = "Cmd+Comma"
 kind = "ui"
-params = "{section?: \"updates\"|\"appearance\"|\"userSettings\"|\"sampleStrings\"|\"sharing\"|\"addons\"|\"shortcuts\"}"
+params = "{section?: \"updates\"|\"appearance\"|\"userSettings\"|\"sampleStrings\"|\"sharing\"|\"addons\"|\"shortcuts\", open?: bool}"
 area = "ui-chrome"
 milestone = "M14"
 summary = "Opens the settings window, optionally on a given section. In the reference it sits in the application menu."
 ref = "Settings (chapter introduction)"
 status = "handbook"
+notes = "FontCraft (M14.1, crates/ui-egui/src/shell/settings_window): with no section the window opens on the section last shown, else on User Settings. A section that is not built yet is refused with its reason and changes nothing. open: false closes the window and first writes any text still being typed in a field. The result lists the sections in order with whether each is available."
+guesses = [
+  "Settings… is the last item of the Edit menu on every platform, because FontCraft draws its own menu bar and has no application menu; the reference puts it in the application menu on macOS.",
+  "The window reopens on the section last shown; the handbook does not say which section it opens on.",
+]
 
 [[command]]
 id = "settings.get"
@@ -66,6 +71,13 @@ milestone = "M14"
 summary = "Application-wide preferences window with seven sections, shown in the order listed."
 ref = "Settings (chapter introduction)"
 status = "handbook"
+notes = "FontCraft (M14.1): a section switcher on the left in the handbook's order and the chosen section's body on the right. Sections that are not built yet (Updates, Appearance, Sample Strings, Sharing, Shortcuts) are greyed, with the reason as hover text. Each section is a Section entry whose body other packages fill; a body reads settings and changes them only through settings.set or its own commands. FontCraft labels the Addons section Extensions (see settings.addons). The order is documented but not yet observed."
+guesses = [
+  "Sections that are not built yet stay in the switcher, greyed with the reason, so the order matches the reference; the reference has no such state.",
+]
+observe = [
+  "Open Settings and note the order of the sections in the switcher and which section shows first.",
+]
 
 [[behavior]]
 id = "settings.menuItemNameOnOlderSystem"
@@ -74,6 +86,10 @@ milestone = "M14"
 summary = "On macOS 12 the menu item that opens the window is labelled Preferences instead of Settings…; the shortcut is the same. On other platforms FontCraft follows the platform's convention for the item name and place."
 ref = "Settings (chapter introduction)"
 status = "handbook"
+notes = "FontCraft (M14.1) labels the item Settings… on every platform and puts it at the end of the Edit menu (app.settings): the menu bar is drawn by the app, not by the system, so there is no application menu and no macOS 12 label."
+guesses = [
+  "One label and place on every platform, Settings… in the Edit menu, as many Linux and Windows applications do; a native macOS menu bar would move it to the application menu.",
+]
 
 [[behavior]]
 id = "settings.surviveVersionChange"
@@ -528,6 +544,14 @@ milestone = "M14"
 summary = "Section with import behaviour, interface language, file-saving and crash-report preferences."
 ref = "Settings › User Settings"
 status = "handbook"
+notes = "FontCraft (M14.1, settings_window/user.rs): the five checkboxes and the Name and Email fields in this order, each writing its user.* setting with settings.set. A field writes its text when it loses focus (Return, a click elsewhere) or the window closes; a refused value leaves the setting as it was. A dim line under each control says what it does in FontCraft. Every checkbox is off by default."
+guesses = [
+  "Every checkbox is off by default; the handbook gives no defaults.",
+]
+observe = [
+  "On a fresh install, open Settings › User Settings and note which checkboxes are on.",
+  "Note the labels of the two crash-report contact fields.",
+]
 
 [[setting]]
 id = "user.keepGlyphNamesFromImportedFiles"
@@ -540,6 +564,7 @@ milestone = "M14"
 summary = "When on, glyphs keep the names found in an opened file; when off, names are converted to the app's default naming scheme on import. Intended for round trips with other tools."
 ref = "Settings › User Settings"
 status = "handbook"
+notes = "FontCraft (M14.1): a live setting (settings.set, default off) with its checkbox in Settings › User Settings. Opening a file does not rename glyphs yet, so the setting has no effect until renaming on import is built (M1.9)."
 
 [[setting]]
 id = "user.disableAutomaticAlignmentForImportedFiles"
@@ -552,7 +577,7 @@ milestone = "M6"
 summary = "When on, components in an imported font are not put under automatic alignment, so they stay where the file places them."
 ref = "Settings › User Settings"
 status = "handbook"
-notes = "Moved from M14 to M6 by the M6 planning pass: components.importedFilesDisableAutoAlignSetting and open.alignsCompositeMetrics read it in M6. Built in M6.15 as a live setting of the user settings store (`settings.set`, default off); file.open reads it. The Settings window stays M14."
+notes = "Moved from M14 to M6 by the M6 planning pass: components.importedFilesDisableAutoAlignSetting and open.alignsCompositeMetrics read it in M6. Built in M6.15 as a live setting of the user settings store (`settings.set`, default off); file.open reads it. Its checkbox is in Settings › User Settings (M14.1)."
 
 [[setting]]
 id = "user.disableLocalization"
@@ -565,6 +590,10 @@ milestone = "M14"
 summary = "Forces the interface to English regardless of the system language. Takes effect after the app is restarted."
 ref = "Settings › User Settings"
 status = "handbook"
+notes = "FontCraft (M14.1): a live setting (settings.set, default off) with its checkbox. The interface is English only, so the setting is stored without effect."
+guesses = [
+  "Disable Localization is stored and does nothing, because FontCraft has no translations yet.",
+]
 
 [[setting]]
 id = "user.useVersions"
@@ -577,6 +606,10 @@ milestone = "M14"
 summary = "Turns on the system's versioned-document saving: documents are saved automatically on close and earlier versions can be browsed. Off means a file is only written on an explicit save, so opening and closing never modifies it."
 ref = "Settings › User Settings"
 status = "handbook"
+notes = "FontCraft (M14.1): a live setting (settings.set, default off) with its checkbox. FontCraft has no version history, so files are written only on an explicit save whatever the setting says."
+guesses = [
+  "Use Versions is stored and does nothing, because the system's version browser is a macOS service FontCraft does not use.",
+]
 
 [[setting]]
 id = "user.sendCrashReports"
@@ -589,6 +622,10 @@ milestone = "M14"
 summary = "When on, diagnostic data is sent to the developers after a crash."
 ref = "Settings › User Settings"
 status = "handbook"
+notes = "FontCraft (M14.1): a live setting (settings.set, default off) with its checkbox. FontCraft sends no crash reports (that needs a hosted service), so the setting is stored without effect."
+guesses = [
+  "Send Crash Reports and its two contact fields are stored and do nothing, because FontCraft has no crash-report service.",
+]
 
 [[setting]]
 id = "user.crashReportName"
@@ -601,6 +638,7 @@ milestone = "M14"
 summary = "Name attached to crash reports so the developers can reply. Exact field label not confirmed."
 ref = "Settings › User Settings"
 status = "handbook"
+notes = "FontCraft (M14.1): a live text setting (settings.set, at most 4,096 bytes, default empty) with its field. Stored without effect, as user.sendCrashReports."
 
 [[setting]]
 id = "user.crashReportEmail"
@@ -613,19 +651,7 @@ milestone = "M14"
 summary = "Email address attached to crash reports so the developers can reply. Exact field label not confirmed."
 ref = "Settings › User Settings"
 status = "handbook"
-
-[[command]]
-id = "settings.resetWarnings"
-label = "Reset Warnings"
-menu = []
-shortcut = ""
-kind = "ui"
-params = "{}"
-area = "ui-chrome"
-milestone = "M14"
-summary = "Makes every warning dialog that was silenced with a do-not-show-again choice appear again. This chapter does not mention it; recalled from earlier versions of the reference and to be confirmed."
-ref = "Settings › User Settings"
-status = "memory"
+notes = "FontCraft (M14.1): a live text setting (settings.set, at most 4,096 bytes, default empty) with its field labelled Email. The address is not checked. Stored without effect, as user.sendCrashReports."
 
 [[behavior]]
 id = "user.localizationNeedsRestart"
@@ -634,6 +660,7 @@ milestone = "M14"
 summary = "Changing Disable Localization shows no effect until the next launch; the UI should say so next to the option."
 ref = "Settings › User Settings"
 status = "handbook"
+notes = "FontCraft (M14.1): the line under the checkbox says the change takes effect after FontCraft restarts."
 
 [[behavior]]
 id = "user.versionsAutosaveOnClose"
@@ -883,7 +910,7 @@ milestone = "M13"
 summary = "Section that configures how scripts, plug-ins and modules run and where the Plugin Manager finds them."
 ref = "Settings › Addons"
 status = "handbook"
-notes = "FontCraft (docs/plans/M13.md, M13.10): a Settings › Extensions section with the paths of the Macros and Modules folders, the list of extension indexes, an automatic-updates switch per index and the standard-error log switch. There is no Python version field. Until the Settings window exists (M14), the Extension Manager's Indexes tab shows the folders, the index list with its switches and the standard-error log switch."
+notes = "FontCraft (docs/plans/M13.md, M13.10; M14.1): a Settings › Extensions section (app.settings {section: \"addons\"}) with the paths of the Macros and Modules folders, the standard-error log switch, the list of extension indexes with an automatic-updates switch per index, and a button that opens the Extension Manager. There is no Python version field. The Extension Manager's Indexes tab draws the same body."
 guesses = [
   "The section is called Extensions, because FontCraft has no add-on kinds that need Python; the reference calls it Addons.",
 ]

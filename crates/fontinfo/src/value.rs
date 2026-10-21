@@ -2,8 +2,9 @@
 //! commands take and the property-list values the model stores, and typed readers.
 //!
 //! A value is checked against its parameter's kind ([`crate::ParamKind`]) and, where the catalogue
-//! names one, the parameter's own syntax (Name Table Entry, Remove Glyphs, Rename Glyphs, Reencode
-//! Glyphs, Filter, versionString). A wrong value is refused and nothing changes. Values read from
+//! names one, the parameter's own syntax: here for Name Table Entry, the glyph lists, Filter and
+//! versionString, in [`crate::syntax`] for the value lists and the other syntaxes and ranges. A
+//! wrong value is refused and nothing changes. Values read from
 //! files are not checked when the file opens; export reports the ones it cannot use
 //! (`docs/plans/M7.md` § 3 › Value checks). Every value, known parameter or not, stays within
 //! [`crate::MAX_VALUE_BYTES`], [`crate::MAX_VALUE_ITEMS`] and [`crate::MAX_VALUE_DEPTH`].
@@ -67,7 +68,9 @@ pub fn check(spec: &ParamSpec, value: &Value) -> Result<Value, ValueError> {
         ParamKind::Localized => localized_value(spec.name, value)?,
     };
     syntax(spec, &checked)?;
-    Ok(checked)
+    let refused = |message: String| ValueError::Syntax { name: spec.name.to_string(), message };
+    let checked = crate::syntax::choices(spec, checked).map_err(refused)?;
+    crate::syntax::check(spec, checked).map_err(refused)
 }
 
 /// A number parameter's value: `None` when it is not a number at all; an error when it is one
@@ -101,7 +104,7 @@ fn number_of(n: f64) -> Value {
 }
 
 /// `[script:] number`: the script (empty when none) and the number.
-fn per_script(text: &str) -> Option<(&str, f64)> {
+pub(crate) fn per_script(text: &str) -> Option<(&str, f64)> {
     let (script, n) = match text.split_once(':') {
         Some((s, n)) => (s.trim(), n),
         None => ("", text),
@@ -469,6 +472,7 @@ mod tests {
             milestone: "M7",
             units: false,
             repeatable: false,
+            choices: &[],
             summary: "",
         }
     }

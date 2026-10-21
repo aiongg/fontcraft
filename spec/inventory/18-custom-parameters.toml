@@ -56,7 +56,7 @@ effect = "features"
 summary = "Adds an OpenType glyph class at export. The value is the class name without the leading @, then a semicolon, then the class contents."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Checked when added or set (M7.21): one word (the class name, with or without @), a semicolon, then the code."
 guesses = [
   "A leading @ on the class name is dropped, and the white space after the semicolon is not part of the code (glyphsLib's split); exporting with the parameter in the reference app settles it.",
 ]
@@ -71,7 +71,7 @@ effect = "features"
 summary = "Adds an OpenType feature at export. The value is the feature tag, a semicolon, then the feature code; the new feature goes to the end of the feature list, so its position among the other features may be wrong."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Checked when added or set (M7.21): a feature tag, a semicolon, then the code."
 
 [[parameter]]
 name = "Add Prefix"
@@ -83,7 +83,7 @@ effect = "features"
 summary = "Adds a feature-code prefix at export. The value is the prefix name, a semicolon, then the prefix code."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Checked when added or set (M7.21): one word (the prefix name), a semicolon, then the code."
 
 [[parameter]]
 name = "ascender"
@@ -117,6 +117,7 @@ effect = "interpolation"
 summary = "Gives a master or instance its external (user-facing) coordinate on each axis, separate from the internal design-space coordinate. Used when internal coordinates do not follow the value scales the OpenType spec recommends; these values also define the external range that Axis Mappings works within."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): each entry is `{Axis, Location}` with an axis name, each once, and a number."
 
 [[parameter]]
 name = "Axis Mappings"
@@ -139,7 +140,7 @@ effect = "hinting"
 summary = "Integer written to the Type 1/CFF BlueFuzz entry: a horizontal stem edge within this many units outside a zone is treated as inside it. Default 1; zones must then lie at least 2 x BlueFuzz + 1 units apart, and the recommended practice is to fix the zones and set the value to 0."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "M10 planning pass: glyphsLib passes the short name blueFuzz through as a raw lib key, so fontmake ignores it; FontCraft reads it as the handbook says and writes it, a difference from fontmake recorded in docs/spec/40-compile.md § 4a by M10.14."
+notes = "M10 planning pass: glyphsLib passes the short name blueFuzz through as a raw lib key, so fontmake ignores it; FontCraft reads it as the handbook says and writes it, a difference from fontmake recorded in docs/spec/40-compile.md § 4a by M10.14. Checked when added or set (M7.21): a whole number from 0 to 32767."
 
 [[parameter]]
 name = "blueScale"
@@ -151,6 +152,7 @@ effect = "hinting"
 summary = "Float written to the Type 1/CFF BlueScale entry, computed as (point size at 300 dpi - 0.49) / 240; default 0.037 (overshoots appear from 40 pixels per em). The largest usable value is limited by the tallest zone: (maximum point size - 0.49) x tallest zone height must stay below 240, i.e. maximum PPM = 2.04 + 1000 / tallest zone."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): a number above 0."
 
 [[parameter]]
 name = "blueShift"
@@ -162,6 +164,10 @@ effect = "hinting"
 summary = "Integer written to the Type 1/CFF BlueShift entry, default 7. Above the blueScale size, an overshoot inside a zone is rendered when it is at least this deep, or when it is shallower but still covers more than half a pixel."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): a whole number from 0 to 32767."
+guesses = [
+  "Negative and fractional values are refused, as the handbook gives an integer; typing -1 in the reference app settles it.",
+]
 
 [[parameter]]
 name = "capHeight"
@@ -184,6 +190,10 @@ effect = "ui"
 summary = "Integer giving both the number of rows and of columns of a dotted grid drawn while editing CJK glyphs. No grid is drawn unless this or one of the two directional variants is set; it can be limited to a script with the same prefix syntax as CJK Guide."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): a whole number from 1 to 100, with or without a script prefix."
+guesses = [
+  "A grid has 1 to 100 rows or columns; the handbook gives no range.",
+]
 
 [[parameter]]
 name = "CJK Grid Horizontal"
@@ -195,6 +205,7 @@ effect = "ui"
 summary = "Integer number of columns of the dotted grid drawn while editing CJK glyphs. Accepts the same script prefix as CJK Guide."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): a whole number from 1 to 100, with or without a script prefix."
 
 [[parameter]]
 name = "CJK Grid Vertical"
@@ -206,6 +217,7 @@ effect = "ui"
 summary = "Integer number of rows of the dotted grid drawn while editing CJK glyphs. Accepts the same script prefix as CJK Guide."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): a whole number from 1 to 100, with or without a script prefix."
 
 [[parameter]]
 name = "CJK Guide"
@@ -217,6 +229,10 @@ effect = "ui"
 summary = "For CJK glyphs, shows one more guide, a square marking the virtual body, inset by the given percentage (`12` means 12 percent). A script name and colon before the number limits it to that script (`han:6`); add one parameter per script."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): a percentage from 0 to below 50, with or without a script prefix."
+guesses = [
+  "An inset of 50 percent or more, which leaves no square, is refused; the handbook gives no range.",
+]
 
 [[parameter]]
 name = "codePageRanges"
@@ -228,6 +244,10 @@ effect = "table-value"
 summary = "List of code pages whose bits are set in OS/2.ulCodePageRange1 and ulCodePageRange2. Each listed code page is an independent flag declaring that the font works for that Windows code page."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): a Windows code page number the compiler maps to a bit (1252, 932…), a bit from 0 to 63, or `bit N`."
+guesses = [
+  "Any other number is refused; the reference app's code page dialog shows which values it stores.",
+]
 
 [[parameter]]
 name = "Color Layers to COLR"
@@ -261,6 +281,10 @@ effect = "table-value"
 summary = "Integer index into the Color Palettes parameter choosing which palette the CPAL table is built from."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): a whole number from 0 to 65535. An index past the font's Color Palettes gives a warning; the value is kept."
+guesses = [
+  "An index past the palettes warns and keeps the value, since the palettes may be added later; setting 5 on a font with two palettes in the reference app settles it.",
+]
 
 [[parameter]]
 name = "Color Palette for SVG"
@@ -272,6 +296,7 @@ effect = "table-value"
 summary = "Integer index into the Color Palettes parameter choosing the palette used for the SVG table. Only meaningful together with Color Layers to SVG."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): a whole number from 0 to 65535. An index past the font's Color Palettes gives a warning; the value is kept."
 
 [[parameter]]
 name = "Color Palettes"
@@ -499,7 +524,7 @@ effect = "interpolation"
 summary = "List of masters to ignore. Meant for special production setups and for testing, such as checking how interpolation behaves without an in-between master."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Neither oracle reads it and no corpus source sets it (M9 planning pass)."
+notes = "Neither oracle reads it and no corpus source sets it (M9 planning pass). An entry matching no master id or name gives a warning when added or set; the value is kept (M7.21)."
 
 [[parameter]]
 name = "Disable Subroutines"
@@ -546,7 +571,7 @@ effect = "ui"
 summary = "Float setting the distance between lines of text in Edit View, for fonts whose vertical metrics make the default leading unsuitable. Never affects the exported font."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. Read by `textlayout::line_height` for the master a tab draws in; without it, lines are the master's ascender minus its descender plus a tenth of the em apart (docs/plans/M5.md § 3)."
+notes = "Documented, not yet observed. Read by `textlayout::line_height` for the master a tab draws in; without it, lines are the master's ascender minus its descender plus a tenth of the em apart (docs/plans/M5.md § 3). Checked when added or set (M7.21): a number above 0."
 
 [[parameter]]
 name = "Elidable STAT Axis Value Name"
@@ -558,7 +583,7 @@ effect = "interpolation"
 summary = "The value is a four-letter axis tag; the instance's style name is then flagged in STAT as elidable for that axis, meaning it is dropped when combined with other names (as with Regular). Typically added to the regular instance once per axis for which its name is the default."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. The value is matched against the axis tags; the derivation (crates/compile/src/var/stat.rs, M9.7) follows fontc's, which also marks a default name elidable without the parameter."
+notes = "Documented, not yet observed. The value is matched against the axis tags; the derivation (crates/compile/src/var/stat.rs, M9.7) follows fontc's, which also marks a default name elidable without the parameter. Checked when added or set (M7.21): an axis tag, four printable ASCII characters with spaces only at the end."
 
 [[parameter]]
 name = "Enforce Compatibility Check"
@@ -604,6 +629,10 @@ effect = "other"
 summary = "Name of a subfolder appended to the normal export destination. Must contain only characters valid in folder names."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): folder names separated by `/`, none empty, `.` or `..`, none holding \\ : * ? \" < > | or a control character."
+guesses = [
+  "Nested folders separated by `/` are accepted and a path that leaves the export folder is refused; typing `a/b` and `../a` in the reference app settles it.",
+]
 
 [[parameter]]
 name = "Export Glyphs"
@@ -786,7 +815,7 @@ effect = "features"
 summary = "Feature tag into which the conditional glyph substitutions generated from alternate (bracket) layers are written in a variable font. Default `rvrn`."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "The Switching Shapes page gives `rlig` as the default and the appendix `rvrn`; both oracles use `rvrn`. FontCraft's default is `rvrn`, as the appendix and both oracles (docs/plans/M9.md § 7, question 2 (a), decided by the orchestrator on the owner's behalf); it departs from the Switching Shapes page."
+notes = "The Switching Shapes page gives `rlig` as the default and the appendix `rvrn`; both oracles use `rvrn`. FontCraft's default is `rvrn`, as the appendix and both oracles (docs/plans/M9.md § 7, question 2 (a), decided by the orchestrator on the owner's behalf); it departs from the Switching Shapes page. Checked when added or set (M7.21): a feature tag, four printable ASCII characters with spaces only at the end."
 guesses = [
   "A value that is not a feature tag puts the substitutions in `rvrn` with a warning, as fontc does; exporting with such a value from the reference app would settle it.",
 ]
@@ -801,6 +830,7 @@ effect = "other"
 summary = "File name without extension. Lets two exports with the same style name coexist without one overwriting the other."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): a name without slashes, \\ : * ? \" < > | or control characters, not `.` or `..`, at most 255 bytes."
 
 [[parameter]]
 name = "Filter"
@@ -849,12 +879,18 @@ status = "handbook"
 name = "fsType"
 scope = []
 kind = "list"
+values = ["1", "2", "3", "8", "9"]
 area = "compile"
 milestone = "M2"
 effect = "table-value"
 summary = "List of bit numbers set in OS/2.fsType. The offered states are installable, restricted (forbidden; only valid as the sole level), editable, preview and print, plus the no-subsetting flag."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): bit numbers from the row's values, stored as numbers; installable embedding is the empty list."
+guesses = [
+  "Only one of the usage levels 1 (restricted), 2 (preview and print) and 3 (editable) may be set, as the handbook says of restricted and the OS/2 specification of all three; ticking two levels in the reference app's dialog settles it.",
+  "Bit 9 (bitmap embedding only) is offered though the handbook names only installable, restricted, editable, preview and print, and no subsetting; the reference app's dialog settles it.",
+]
 
 [[parameter]]
 name = "gasp Table"
@@ -866,7 +902,10 @@ effect = "hinting"
 summary = "Writes the gasp table for TrueType fonts from two PPM thresholds, default 8 and 20. Up to the first: no grid-fitting, symmetric smoothing; between them: grid-fitting with asymmetric (ClearType) rendering; above: grid-fitting with symmetric smoothing. The source gives no value type."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. Sources store the value as a dictionary from the largest PPM of each range to its flag bits, under this name or as GASP Table; M10.20 writes those records (crates/compile/src/gasp.rs, the gasp row in 40-tables.toml)."
+notes = "Documented, not yet observed. Sources store the value as a dictionary from the largest PPM of each range to its flag bits, under this name or as GASP Table; M10.20 writes those records (crates/compile/src/gasp.rs, the gasp row in 40-tables.toml). Checked when added or set (M7.21): sizes are whole numbers from 0 to 65535, each once; flags are whole numbers from 0 to 15, stored as numbers."
+guesses = [
+  "Flags above 15, which the table does not define, are refused rather than dropped at export; the reference app's gasp editor settles it.",
+]
 
 [[parameter]]
 name = "Get Hints From Master"
@@ -878,6 +917,7 @@ effect = "hinting"
 summary = "Chooses the master that supplies manual PostScript and TrueType hints; hints in other masters are ignored. Defaults to the first master. Only that master's TTFStems and TTFZones editors offer the delta and scope controls."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "A value matching no master id or name gives a warning when added or set; the value is kept (M7.21)."
 
 [[parameter]]
 name = "glyphOrder"
@@ -901,6 +941,7 @@ effect = "export-filter"
 summary = "Corresponds to grid spacing divided by subdivision from Other Settings. At export any value below 1 gives coordinates with hundredth-unit precision and any value of 1 or more gives whole-unit rounding; TrueType outlines are unaffected."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): a number of 0 or more."
 
 [[parameter]]
 name = "Hangul Composition Groups"
@@ -1105,6 +1146,10 @@ effect = "table-value"
 summary = "Replaces the master's italic angle, in degrees clockwise from vertical; a `script: value` form (for example `cyrillic: 9`) limits it to one script. It feeds post.italicAngle, CFF ItalicAngle, the hhea caret slope and, in OS/2, the horizontal offsets for subscript and superscript."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): an angle above -90 and below 90 degrees, with or without a script prefix."
+guesses = [
+  "Angles of 90 degrees or more either way are refused; the handbook gives no range.",
+]
 
 [[parameter]]
 name = "Keep Glyphs"
@@ -1225,7 +1270,7 @@ effect = "other"
 summary = "Like Link Metrics With First Master, but the value names the master to follow. Master names should be unique when this is used."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "fontc and glyphsLib take a linked master advance widths (horizontal, vertical width and vertical origin) and its kerning from the master it follows, for master layers only, not intermediate layers (fontc `glyphs2fontir/src/source.rs` and `glyphs-reader/src/font.rs`, glyphsLib `builder/kerning.py`). A staff answer on the reference forum says metrics and kerning cannot be linked separately (thread \"Link Metrics With Master but not the kerning\"). The value is a master id or name; fontc tries the id first. With both parameters on a master, Link Metrics With First Master wins (fontc). The source master's own link parameters are not followed (fontc). Documented, not yet observed. Export follows fontc: a glyph with no layer in the followed master keeps its own width, and a vertical width or origin the followed layer does not state falls back to the glyph's own."
+notes = "fontc and glyphsLib take a linked master advance widths (horizontal, vertical width and vertical origin) and its kerning from the master it follows, for master layers only, not intermediate layers (fontc `glyphs2fontir/src/source.rs` and `glyphs-reader/src/font.rs`, glyphsLib `builder/kerning.py`). A staff answer on the reference forum says metrics and kerning cannot be linked separately (thread \"Link Metrics With Master but not the kerning\"). The value is a master id or name; fontc tries the id first. With both parameters on a master, Link Metrics With First Master wins (fontc). The source master's own link parameters are not followed (fontc). Documented, not yet observed. Export follows fontc: a glyph with no layer in the followed master keeps its own width, and a vertical width or origin the followed layer does not state falls back to the glyph's own. A value matching no master id or name gives a warning when added or set; the value is kept (M7.21)."
 
 [[parameter]]
 name = "Local Interpolation"
@@ -1237,6 +1282,7 @@ effect = "interpolation"
 summary = "Value: one interpolation value per axis separated by semicolons, then a semicolon, `include:` and a comma-separated glyph list (for example `95; include: e, o, c`). The listed glyphs are interpolated at those values, the rest at the instance's own position."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): one or more numbers, then `include:` and at least one glyph name, separated by semicolons."
 guesses = [
   "The listed glyphs are interpolated at the given location with every other part of the instance unchanged, including their widths; settle with an instance that sets it in the reference app.",
 ]
@@ -1291,6 +1337,10 @@ effect = "ui"
 summary = "Colour of the Edit View canvas whenever the master carrying the parameter is the active one."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): the forms Master Color takes."
+guesses = [
+  "The background and stroke colours take Master Color's forms (`R,G,B[,A]` or `#RRGGBB[AA]`); the handbook gives no syntax for them, and a value saved by the reference app settles it.",
+]
 
 [[parameter]]
 name = "Master Background Color Dark"
@@ -1302,6 +1352,7 @@ effect = "ui"
 summary = "Dark-mode counterpart of Master Background Color."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): the forms Master Color takes."
 
 [[parameter]]
 name = "Master Color"
@@ -1313,7 +1364,7 @@ effect = "ui"
 summary = "Colour used to display the filled outlines of the master, also handy for previewing layered fonts meant to be stacked in different colours. Display only: it is never written to the font, although the Color Layers parameters use its presence to pick colour masters."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented in the handbook; not yet observed in the reference app. Read as `R,G,B,A` or `R,G,B` from 0 to 255, a list of numbers, or `#RRGGBB(AA)`; Edit View fills the master's glyphs in it (`color.layered.masterColor`)."
+notes = "Documented in the handbook; not yet observed in the reference app. Read as `R,G,B,A` or `R,G,B` from 0 to 255, a list of numbers, or `#RRGGBB(AA)`; Edit View fills the master's glyphs in it (`color.layered.masterColor`). Checked when added or set (M7.21): `R,G,B` or `R,G,B,A` with components from 0 to 255, or `#RRGGBB` or `#RRGGBBAA`."
 
 [[parameter]]
 name = "Master Color Dark"
@@ -1325,7 +1376,7 @@ effect = "ui"
 summary = "Dark-mode counterpart of Master Color."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented in the handbook; not yet observed in the reference app. Read like Master Color; used in place of it while the app's theme is dark, and Master Color is used when it is missing or cannot be read."
+notes = "Documented in the handbook; not yet observed in the reference app. Read like Master Color; used in place of it while the app's theme is dark, and Master Color is used when it is missing or cannot be read. Checked when added or set (M7.21): the forms Master Color takes."
 
 [[parameter]]
 name = "Master Icon Glyph Name"
@@ -1348,6 +1399,7 @@ effect = "ui"
 summary = "With the Select All Layers tool (Shift+V) in use, this master's outlines are drawn in this colour. Display only, never exported."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): the forms Master Color takes."
 
 [[parameter]]
 name = "Master Stroke Color Dark"
@@ -1359,17 +1411,20 @@ effect = "ui"
 summary = "Dark-mode counterpart of Master Stroke Color."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): the forms Master Color takes."
 
 [[parameter]]
 name = "meta Table"
 scope = []
 kind = "list"
+values = ["dlng", "slng"]
 area = "compile"
 milestone = "M2"
 effect = "table-value"
 summary = "Adds a meta table with `dlng` (languages or scripts the font was designed for) and `slng` (those it can support, a superset of dlng). Each entry is a comma-separated list of BCP 47 style tags `language-Script-REGION` in which only the script part is required, e.g. `Cyrl`, `sr-Cyrl`, `sr-Cyrl-BA`."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): each entry is `{tag, data}` with the tag dlng or slng and the data language tags separated by commas, each subtags of 1 to 8 letters or digits joined by hyphens."
 
 [[parameter]]
 name = "Name Table Entry"
@@ -1405,7 +1460,7 @@ effect = "features"
 summary = "Five semicolon-separated values: design size in decipoints; subfamily identifier (integer shared by fonts to be grouped); range start (exclusive) and range end (inclusive) in decipoints; size menu name. Example `180; 2; 139; 240; Eighteen` declares an 18 pt design for use above 13.9 pt up to and including 24 pt, named Eighteen."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Checked when added or set (M7.21): five parts separated by semicolons, the first four whole decipoints from 0 to 65535, as the feature builder reads it."
 guesses = [
   "The values are whole decipoints from 0 to 65535 and the code is a `size` feature added at the end of the list, replacing the code of a `size` feature the font already has; exporting with the parameter in the reference app and reading GPOS settles it.",
   "The menu name is written for Windows (English) and, when it is plain ASCII, for the Mac (Roman, English); a subfamily of 0 writes no range and no name, as the feature file specification asks; the exported name table of the reference app settles it.",
@@ -1436,6 +1491,13 @@ effect = "table-value"
 summary = "Ten numbers, one per PANOSE category, written to OS/2.panose and edited through a dialog with one choice per category. Symbol fonts must set the first value (family type) to pictorial."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): exactly ten whole numbers from 0 to 15 (each category has at most sixteen values); numbers in text are stored as numbers."
+guesses = [
+  "Digits above 15 are refused, following the handbook's sixteen variations per category; a value of 16 typed into a copy of a file and opened in the reference app settles it.",
+]
+observe = [
+  "In a text-editor copy of font A (m7-one), give panose nine numbers, open it and click the value: note whether the value is refused, kept, or kept with a warning, and where the message shows.",
+]
 
 [[parameter]]
 name = "Point To Unit Ratio"
@@ -1447,7 +1509,7 @@ effect = "other"
 summary = "Number of font units equal to one point, which sets the scale of exported PDFs and of artwork copied to the clipboard for use in drawing applications. The source labels it a float but describes an integer."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. FontCraft has no PDF export; the ratio scales the SVG flavour that edit.copy and edit.cut return. M7 plan § 4: M7.11. 2 corpus sources use it."
+notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. FontCraft has no PDF export; the ratio scales the SVG flavour that edit.copy and edit.cut return. M7 plan § 4: M7.11. 2 corpus sources use it. Checked when added or set (M7.21): a number above 0."
 guesses = [
   "The copied SVG gives coordinates in points, font units divided by the ratio, and declares its width and height in pt; without the parameter the SVG keeps one font unit per user unit with no unit on its size; copying into a drawing application from the reference app settles the scale.",
   "The master's parameter wins over the font's, and a ratio that is not a number from 0.001 to 1,000,000 is ignored; copying from a font with the parameter on a master in the reference app settles it.",
@@ -1461,12 +1523,17 @@ observe = [
 name = "Post Table Type"
 scope = []
 kind = "number"
+values = ["2", "3"]
 area = "compile"
 milestone = "M2"
 effect = "table-value"
 summary = "Integer choosing the post table version for the instance. Default 2 for TrueType and 3 for CFF fonts."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): one of the row's values, stored as a number."
+guesses = [
+  "Only 2 and 3 are accepted, the two versions the handbook names; versions 1, 2.5 and 4 are refused. Typing 4 in the reference app settles it.",
+]
 
 [[parameter]]
 name = "postscriptFontName"
@@ -1479,7 +1546,10 @@ summary = "Sets name ID 6. Must be ASCII without spaces and, for compatibility, 
 picker = "Sets name ID 6: ASCII without spaces and under 30 characters, built as family name, hyphen and style words; long names use the standard PostScript style abbreviations."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Written to name ID 6 since M2, at all levels as fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) does; fontc reads the font's only. M7 plan § 4: M7.8."
+notes = "Written to name ID 6 since M2, at all levels as fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) does; fontc reads the font's only. M7 plan § 4: M7.8. Checked when added or set (M7.21): 1 to 63 printable ASCII characters without spaces or [](){}<>/%, as the OpenType name ID 6 rules give."
+guesses = [
+  "A name over 63 bytes is refused (the OpenType limit) while the handbook only recommends under 30 characters; a 40-character name in the reference app settles whether it warns.",
+]
 
 [[parameter]]
 name = "postscriptFullNames"
@@ -1645,7 +1715,7 @@ effect = "features"
 summary = "List of feature tags not to export, for an unwanted auto-generated feature or to switch a manual feature off in one instance. Automatic features already disappear when the glyphs that trigger them are gone."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Checked when added or set (M7.21): every entry is a feature tag; one entry may hold several separated by commas."
 guesses = [
   "Besides a list, one text with the names separated by commas or line breaks is accepted, and every entry of a listed name is left out; the reference app's parameter editor settles which forms it stores.",
 ]
@@ -1723,7 +1793,7 @@ effect = "features"
 summary = "Value is the class name without @, a semicolon, then the new contents. Only works for a class that exists in the Features tab and is only needed for manual classes."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Checked when added or set (M7.21): one word (the class name, with or without @), a semicolon, then the code."
 
 [[parameter]]
 name = "Replace Feature"
@@ -1735,7 +1805,7 @@ effect = "features"
 summary = "Value is the four-letter feature tag, a semicolon, then the new code. Only works when that feature exists in the Features tab."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Checked when added or set (M7.21): a feature tag, a semicolon, then the code."
 guesses = [
   "Only the first feature of that tag is replaced, its labels are kept and it counts as hand-written from then on, so a replaced `kern` still gets the generated kerning after it; exporting a font with a stylistic-set name and a replaced `kern` in the reference app settles it.",
   "A Replace parameter that names no entry does nothing, without a message, as the handbook limits these parameters to existing entries and glyphsLib skips them; the reference app's export report settles it.",
@@ -1751,7 +1821,7 @@ effect = "features"
 summary = "Value is the prefix name exactly as written in the Features tab, a semicolon, then the replacement code."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Checked when added or set (M7.21): one word (the prefix name), a semicolon, then the code."
 
 [[parameter]]
 name = "ROS"
@@ -1764,10 +1834,11 @@ summary = "One of Adobe-CNS1-6, Adobe-GB1-5, Adobe-Japan1-3, Adobe-Japan1-6, Ado
 picker = "The registry, ordering and supplement of a CID-keyed font, one of the six standard character collections (CNS1, GB1, Japan1-3, Japan1-6, Korea1, Identity). Identity builds GSUB from the font's own features; the others use the collection's cmap and GSUB resources."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Moved from M7 to M12 by the M7 planning pass, with export.cidMapping: CID-keyed output is M12's (compile.cidKeyedFonts, compile.cidCmapResources), where the AFDKO tools are the oracle; neither fontc nor fontmake reads the parameter. FontCraft ships no CMap or GSUB resources for the standard collections: they come from files the user gives by path (docs/plans/M12.md § 7, question 6 (a)), which departs from the handbook until bundled data is decided with export.cidMapping. The CID-keyed CFF build (M12.41) reads the collection from the source's CID-keyed data (fontcraft_model::cid). Built in M12.41b (crates/compile/src/cid.rs): the parameter, at font, master or instance level as the resolved parameters give it, makes a CFF export CID-keyed with its collection in the Top DICT ROS; the CIDs come as export.cidMapping describes. Documented, not yet observed. Any well-formed Registry-Ordering-Supplement is accepted, not only the six the handbook lists; a value that is not one is reported and left out, and the export stays name-keyed. GSUB is compiled from the font's own features for every collection: the collections' GSUB resources are not bundled."
+notes = "Moved from M7 to M12 by the M7 planning pass, with export.cidMapping: CID-keyed output is M12's (compile.cidKeyedFonts, compile.cidCmapResources), where the AFDKO tools are the oracle; neither fontc nor fontmake reads the parameter. FontCraft ships no CMap or GSUB resources for the standard collections: they come from files the user gives by path (docs/plans/M12.md § 7, question 6 (a)), which departs from the handbook until bundled data is decided with export.cidMapping. The CID-keyed CFF build (M12.41) reads the collection from the source's CID-keyed data (fontcraft_model::cid). Built in M12.41b (crates/compile/src/cid.rs): the parameter, at font, master or instance level as the resolved parameters give it, makes a CFF export CID-keyed with its collection in the Top DICT ROS; the CIDs come as export.cidMapping describes. Documented, not yet observed. Any well-formed Registry-Ordering-Supplement is accepted, not only the six the handbook lists; a value that is not one is reported and left out, and the export stays name-keyed. GSUB is compiled from the font's own features for every collection: the collections' GSUB resources are not bundled. Checked when added or set (M7.21): Registry-Ordering-Supplement, as the compiler reads it."
 guesses = [
   "Any well-formed Registry-Ordering-Supplement is accepted, not only the six the handbook lists; entering another value in the reference app would settle whether it is refused.",
   "On a source that already holds CID-keyed data, the parameter's collection replaces the stored one and the stored CID map and sub-fonts are kept, with a warning when they differ; no source settles it, as the reference app has no stored CID-keyed data.",
+  "Any well-formed Registry-Ordering-Supplement is accepted, not only the six public ones the handbook lists; choosing a value in the reference app shows whether it offers a menu or a text field.",
 ]
 
 [[parameter]]
@@ -1803,6 +1874,10 @@ effect = "other"
 summary = "When set, the bitmaps prepared for sbix are also written as bitmap images in an SVG table for wider compatibility. Combine with Export sbix Table set to off to get SVG only. The source types it as an integer without saying what the number means."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): a whole number from 0 to 65535."
+guesses = [
+  "The value is taken as a whole number from 0 to 65535; the handbook does not say what the number means.",
+]
 
 [[parameter]]
 name = "Scale to UPM"
@@ -1814,7 +1889,7 @@ effect = "export-filter"
 summary = "Integer target UPM; everything in the font is scaled to it at export, for example to 2048 (or another power of two from 16 to 16384) for TrueType."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. The scaling is font.info.scaleToUnitsPerEm's, run on a copy of the font before the instance is built. M7 plan § 4: M7.4 (scaling), M7.10 (the export step)."
+notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. The scaling is font.info.scaleToUnitsPerEm's, run on a copy of the font before the instance is built. M7 plan § 4: M7.4 (scaling), M7.10 (the export step). Checked when added or set: a whole number from 16 to 16384."
 guesses = [
   "The instance's value wins over the master's and the font's; a value that is not a whole number from 16 to 16384 is skipped with a warning, and a scaling that cannot be done refuses the export; a Scale to UPM on a master and another on its instance in the reference app settle the first part.",
 ]
@@ -2027,6 +2102,7 @@ effect = "export-filter"
 summary = "Float, default 0.6: the largest distance in units the quadratic approximation may deviate from the cubic outline. A larger value needs fewer quadratic segments and gives a smaller glyf table."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): a number above 0."
 
 [[parameter]]
 name = "TrueType Keep GlyphOrder"
@@ -2089,6 +2165,7 @@ effect = "hinting"
 summary = "Integer, default and fallback 1, extending each zone defined in TTFZones by that many units up and down, like the PostScript BlueFuzz."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): a whole number from 0 to 32767."
 
 [[parameter]]
 name = "TTFDontPreserveDiagonals"
@@ -2113,7 +2190,7 @@ effect = "hinting"
 summary = "Integer PPM limit for applying family zones in TrueType hinting. Family zones are given by a TTFZones parameter on the font rather than on a master, with the same number of zones in both places."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "M10.17: up to and including the given PPM, prep rounds each master zone from the family zone at the same index instead of its own position. Tested in skrifa at a size below and above the threshold. Documented, not yet observed."
+notes = "M10.17: up to and including the given PPM, prep rounds each master zone from the family zone at the same index instead of its own position. Tested in skrifa at a size below and above the threshold. Documented, not yet observed. Checked when added or set (M7.21): a whole number of pixels per em from 0 to 65535."
 guesses = ["Family zones apply up to and including the threshold PPM, are matched to the master's zones by index, are left out with a warning when the counts differ, and are not applied without the parameter; a reference export with family zones at the threshold size would settle it."]
 
 [[parameter]]
@@ -2126,6 +2203,7 @@ effect = "hinting"
 summary = "Float, default 0.25: any stem with a stem hint is rendered at least this thick at every PPM size, so thin parts do not vanish at small sizes."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): a number of 0 or more."
 
 [[parameter]]
 name = "TTFOvershootSuppressionBelowPPM"
@@ -2137,6 +2215,7 @@ effect = "hinting"
 summary = "Integer PPM limit below which overshoots are reliably suppressed. Applies to manual TrueType hinting only, not to the autohinter."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): a whole number of pixels per em from 0 to 65535."
 
 [[parameter]]
 name = "TTFStems"
@@ -2236,6 +2315,10 @@ effect = "table-value"
 summary = "List of Unicode ranges whose bits are set in OS/2.ulUnicodeRange1 to ulUnicodeRange4, each an independent flag. The editing dialog has a search field to filter the range list."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): whole bit numbers from 0 to 122, stored as numbers."
+guesses = [
+  "Bits 123 to 127, which the OS/2 table reserves, are refused; the reference app's ranges dialog shows whether it offers them.",
+]
 
 [[parameter]]
 name = "uniqueID"
@@ -2259,6 +2342,7 @@ effect = "table-value"
 summary = "Integer UPM value; default 1000 for CFF-flavoured fonts, and normally a power of two from 16 to 16384 (usually 2048) for TrueType. It changes only the declared value, not coordinates or measurements; use Scale to UPM to rescale."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set: a whole number from 16 to 16384."
 
 [[parameter]]
 name = "Update Features"
@@ -2358,7 +2442,7 @@ effect = "other"
 summary = "Replaces the default variable-font file name, which ends in `VF.ttf`."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. Read by `var::names::variable_names` (M9.6) on the setting (also under the key `fileName`, which glyphsLib reads), then on the font. Path separators and characters file systems refuse become hyphens."
+notes = "Documented, not yet observed. Read by `var::names::variable_names` (M9.6) on the setting (also under the key `fileName`, which glyphsLib reads), then on the font. Path separators and characters file systems refuse become hyphens. Checked when added or set (M7.21): a name without slashes, \\ : * ? \" < > | or control characters, not `.` or `..`, at most 255 bytes."
 guesses = [
   "Without it the file is named as glyphsLib names it: the font's family name, a hyphen and the setting's name unless that is Regular, then `VF`, spaces removed (the default font of a source without settings: family name and `VF`); an export from the reference app would settle it.",
 ]
@@ -2393,7 +2477,10 @@ effect = "interpolation"
 summary = "Names the master stored as the default outlines of the variable font; every other master and instance is reached by deltas from it."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Read by both oracles as a master id; without it they choose by master names, the handbook by order. FontCraft follows the handbook (docs/plans/M9.md § 7, question 3 (a), decided by the orchestrator on the owner's behalf; docs/spec/40-compile.md § 4a). 22 corpus sources set it, Inter among them."
+notes = "Read by both oracles as a master id; without it they choose by master names, the handbook by order. FontCraft follows the handbook (docs/plans/M9.md § 7, question 3 (a), decided by the orchestrator on the owner's behalf; docs/spec/40-compile.md § 4a). 22 corpus sources set it, Inter among them. A value matching no master id or name gives a warning when added or set; the value is kept (M7.21)."
+guesses = [
+  "A value naming a missing master warns and keeps the value, since the master may be added or renamed later; typing an unknown name in the reference app settles it.",
+]
 
 [[parameter]]
 name = "Variable Font Style Name"
@@ -2481,6 +2568,7 @@ effect = "interpolation"
 summary = "Described identically to Variable Font Origin: names the master stored as the variable font's default outlines."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "A value matching no master id or name gives a warning when added or set; the value is kept (M7.21)."
 guesses = [
   "Treated as an older name of Variable Font Origin naming the master by name, as glyphsLib reads it; settle in the reference app.",
 ]
@@ -2498,9 +2586,10 @@ effect = "naming"
 summary = "Sets name ID 25, the family prefix used when PostScript names of arbitrary variable instances are generated (limit 127 characters); only ASCII letters and digits. Without it, the typographic family name stripped to those characters is used."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. Read by `var::names::variable_names` (M9.6) on the setting, then the font (parameter or font property, as fontc reads it); characters other than ASCII letters and digits are dropped and at most 63 are kept, as name ID 25 allows."
+notes = "Documented, not yet observed. Read by `var::names::variable_names` (M9.6) on the setting, then the font (parameter or font property, as fontc reads it); characters other than ASCII letters and digits are dropped and at most 63 are kept, as name ID 25 allows. Checked when added or set (M7.21): ASCII letters and digits only, at most 63."
 guesses = [
   "Without it no name ID 25 is written, as both oracles do; the typographic family fallback the description names is what a consumer computes. Settle by exporting without it and listing the name records.",
+  "The prefix is limited to 63 letters and digits; the handbook gives the characters but no length.",
 ]
 
 [[parameter]]
@@ -2513,6 +2602,13 @@ effect = "table-value"
 summary = "Four printable ASCII characters written to OS/2.achVendID. Defaults to `UKWN` when not set."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): at most four printable ASCII characters, U+0020 to U+007E."
+guesses = [
+  "An id of one to three characters is accepted (export pads it with spaces) and an empty one means none; entering `ABC` in the reference app settles it.",
+]
+observe = [
+  "In font A (m7-one), set vendorID to `ABCDE` in Font Info: note whether the value is refused, kept, or kept with a warning, and where the message shows.",
+]
 
 [[parameter]]
 name = "versionString"
@@ -2580,12 +2676,17 @@ status = "handbook"
 name = "Webfont Formats"
 scope = ["instance"]
 kind = "list"
+values = ["TTF", "EOT", "WOFF", "WOFF2"]
 area = "compile"
 milestone = "M2"
 effect = "other"
 summary = "List drawn from TTF, EOT, WOFF and WOFF2; the instance carrying it is exported in exactly those web formats, overriding the export dialog."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Checked when added or set (M7.21): each entry is one of the row's values."
+guesses = [
+  "A format matches in any case and is stored as the handbook spells it (`woff2` becomes `WOFF2`); a lowercase entry in the reference app settles it.",
+]
 
 [[parameter]]
 name = "Webfont Only"
@@ -2673,7 +2774,7 @@ milestone = "M7"
 summary = "A custom parameter whose name the catalogue does not know (an older spelling such as Master Name, UFO Filename or Disable Last Change, or a plug-in's own) is kept with its value, listed in Font Info with an unknown-parameter mark, written back unchanged, and ignored by export."
 ref = "Appendix › Custom Parameters"
 status = "inferred"
-notes = "The corpus holds such parameters (Axes in 44 sources, Master Name, UFO Filename, Alignment Zones, localizedFamilyName, Disable Last Change). M7 plan § 4: M7.2."
+notes = "The corpus holds such parameters (Axes in 44 sources, Master Name, UFO Filename, Alignment Zones, localizedFamilyName, Disable Last Change). M7 plan § 4: M7.2. An unknown name gets no value-list or syntax check, only the size limits (M7.21)."
 guesses = [
   "Unknown parameters are shown and kept, not hidden or dropped; opening a file with an unknown parameter in the reference app settles it.",
 ]

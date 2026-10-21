@@ -204,3 +204,32 @@ fn precedence_export_over_master_over_font_and_the_checkbox() {
     run(&mut s, "font.customParameters.remove", json!({"scope": "master", "name": "typoAscender"}));
     assert_eq!(typo_ascender(&mut s), 700);
 }
+
+#[test]
+fn value_lists_syntaxes_and_missing_master_warnings() {
+    let mut s = Session::with_document();
+    let add = |name: &str, value: Value| json!({"scope": "font", "name": name, "value": value});
+    // A value list: describe reports it, a choice is stored as the list spells it, others are refused.
+    let found = run(&mut s, "font.customParameters.describe", json!({"query": "Post Table Type"}));
+    let entry = found["parameters"].as_array().unwrap().iter().find(|p| p["name"] == json!("Post Table Type")).unwrap().clone();
+    assert_eq!((entry["choices"].clone(), entry["checked"].clone()), (json!(["2", "3"]), json!(true)));
+    assert_eq!(run(&mut s, "font.customParameters.add", add("Post Table Type", json!("3")))["value"], json!(3));
+    let message = refused(&mut s, "font.customParameters.set", json!({"scope": "font", "name": "Post Table Type", "value": 4}));
+    assert!(message.contains("2, 3"), "{message}");
+    assert_eq!(font_params(&mut s)[0]["value"], json!(3));
+
+    // Syntaxes and ranges from the handbook: a refused set changes nothing.
+    run(&mut s, "font.customParameters.add", add("panose", json!([2, 0, 5, 3, 0, 0, 0, 2, 0, 4])));
+    let message = refused(&mut s, "font.customParameters.set", json!({"scope": "font", "name": "panose", "value": [2, 0, 5]}));
+    assert!(message.contains("ten"), "{message}");
+    assert!(refused(&mut s, "font.customParameters.add", add("vendorID", json!("ABCDE"))).contains("vendor id"));
+    assert!(refused(&mut s, "font.customParameters.add", add("gasp Table", json!({"8": 99}))).contains("flags"));
+
+    // A value naming a master the font lacks is kept, with a warning; a known master gives none.
+    let out = run(&mut s, "font.customParameters.add", add("Get Hints From Master", json!("Nowhere")));
+    assert!(out["warnings"][0].as_str().unwrap().contains("Nowhere"), "{out}");
+    assert_eq!(s.font().unwrap().info.params.get("Get Hints From Master").and_then(|v| v.as_str()), Some("Nowhere"));
+    let master = s.font().unwrap().masters[0].name.clone();
+    let out = run(&mut s, "font.customParameters.set", json!({"scope": "font", "name": "Get Hints From Master", "value": master}));
+    assert!(out.get("warnings").is_none(), "{out}");
+}

@@ -15,6 +15,17 @@
 //!
 //! Filters are added, edited and removed through the actions menu at the sidebar's foot and the
 //! entries' context menus, with the M4.5 filter commands; the filters live in the user settings.
+//! Each gesture on a filter row runs one command:
+//!
+//! | Gesture | Runs |
+//! |---|---|
+//! | double-click a filter's or folder's name, or Return with one filter selected, then Return | `fontView.renameFilter` |
+//! | Escape or a click away from the name field | nothing |
+//! | double-click a smart or list filter's icon | its editor (`fontView.editFilter`) |
+//! | drag a filter or folder: a line between rows, or a highlighted folder | `fontView.moveFilter` |
+//!
+//! A drop into the dragged folder itself or one of its folders shows no mark and runs nothing.
+//! A renamed or moved entry stays selected.
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -41,6 +52,8 @@ const MAX_SEGMENT_BYTES: usize = 256;
 const MAX_FILTERS: usize = 1024;
 /// Deepest nesting the sidebar draws (folders and groups nest at most 8 deep in the engine).
 const MAX_DEPTH: usize = 24;
+/// Longest name the rename field takes, in characters (the engine counts at most 256 bytes).
+const NAME_CHARS: usize = 256;
 /// The scripts the Languages section lists until the user chooses others (the engine's
 /// default list).
 pub const DEFAULT_SCRIPTS: [&str; 3] = ["latin", "greek", "cyrillic"];
@@ -300,14 +313,46 @@ struct Key {
     settings: u64,
     master: String,
     data: usize,
+    /// The user's `Groups*.plist` entries, which change without a new document or settings.
+    groups: usize,
 }
 
-/// A row the last frame laid out: its entry, its rectangle, and its disclosure triangle's.
+/// A row the last frame laid out: its entry, its rectangle, its disclosure triangle's and its
+/// kind icon's, and how deep it is nested (a section is 0).
 #[derive(Clone, Debug)]
 pub struct Row {
     pub path: Vec<String>,
     pub rect: Rect,
     pub chevron: Option<Rect>,
+    pub icon: Option<Rect>,
+    pub depth: usize,
+}
+
+/// The name field of the filter being renamed in place.
+#[derive(Clone, Debug)]
+pub struct Renaming {
+    pub path: Vec<String>,
+    pub text: String,
+    /// The field has been drawn once, so a frame without the keyboard means it lost it.
+    started: bool,
+}
+
+/// Where a dragged filter would land: `index` among the entries of the folder `parent` (a path
+/// inside the Filters section; empty for the top level), as `fontView.moveFilter` takes them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DropTarget {
+    pub parent: Vec<String>,
+    pub index: usize,
+    pub mark: Mark,
+}
+
+/// What the sidebar draws for a drop target.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Mark {
+    /// A line at `y`, indented as a row `depth` deep.
+    Line { y: f32, depth: usize },
+    /// The folder row the filter would go into.
+    Into(Rect),
 }
 
 /// The sidebar's state that is not data.
@@ -323,6 +368,27 @@ pub struct SidebarUi {
     pub typed: Option<String>,
     /// The rows of the last frame, for tests and clicks over the control channel.
     pub laid_out: Vec<Row>,
+    /// The filter whose name is being edited in place.
+    pub renaming: Option<Renaming>,
+    /// The filter row being dragged.
+    pub dragging: Option<Vec<String>>,
+    /// Where the dragged filter would land, as the last frame showed it.
+    pub drop: Option<DropTarget>,
+    /// The last pointer press was on a sidebar row, so Return renames the selected filter.
+    pub has_keyboard: bool,
+    /// Entries renamed or moved by the commands this sidebar ran last frame (old path, new
+    /// path), so the selection follows them.
+    follow: Vec<(Vec<String>, Vec<String>)>,
+}
+
+/// The id of the rename field.
+pub fn rename_id() -> egui::Id {
+    widgets::id("fontView.sidebar.rename")
+}
+
+/// Whether Font View's sidebar has the keyboard: the last pointer press was on one of its rows.
+pub fn has_keyboard(app: &FontcraftApp) -> bool {
+    app.font_view.sidebar.has_keyboard
 }
 
 /// Reads the entries again when something they depend on changed, and deselects entries that
@@ -336,7 +402,10 @@ pub fn refresh(app: &mut FontcraftApp) {
     let doc = (doc.id, doc.revision);
     let master = super::master(app).unwrap_or_default();
     let data = app.session.glyph_data().ok().map_or(0, |d| Arc::as_ptr(&d) as usize);
-    let key = Key { doc, settings: app.session.settings().revision(), master: master.clone(), data };
+    let groups = app.session.user_groups().map_or(0, |g| Arc::as_ptr(&g) as usize);
+    let key = Key { doc, settings: app.session.settings().revision(), master: master.clone(), data, groups };
+    // A rename or move that the engine refused changed nothing, so it has no path to follow.
+    let follow = std::mem::take(&mut app.font_view.sidebar.follow);
     if app.font_view.sidebar.key.as_ref() == Some(&key) {
         return;
     }
@@ -361,8 +430,10 @@ pub fn refresh(app: &mut FontcraftApp) {
         let mut listed = Vec::new();
         flatten(&sb.items, &mut listed, 0);
         let entries = current_entries(app);
-        let kept: Vec<Vec<String>> = entries.iter().filter(|e| listed.contains(e)).cloned().collect();
-        if kept.len() != entries.len()
+        let mut kept: Vec<Vec<String>> = entries.iter().map(|e| followed(e, &follow)).filter(|e| listed.contains(e)).collect();
+        let mut seen = HashSet::new();
+        kept.retain(|e| seen.insert(e.clone()));
+        if kept != entries
             && let Some(Value::Object(q)) = app.state.font_view.query.as_mut()
         {
             if kept.is_empty() {
@@ -377,6 +448,18 @@ pub fn refresh(app: &mut FontcraftApp) {
     }
 }
 
+/// `entry` with the path of a renamed or moved filter or folder replaced by its new one.
+fn followed(entry: &[String], follow: &[(Vec<String>, Vec<String>)]) -> Vec<String> {
+    for (old, new) in follow {
+        if let Some(rest) = entry.strip_prefix(old.as_slice()) {
+            let mut out = new.clone();
+            out.extend(rest.iter().cloned());
+            return out;
+        }
+    }
+    entry.to_vec()
+}
+
 // ── Drawing ─────────────────────────────────────────────────────────────────────────────────────
 
 /// What drawing the rows needs besides the rows.
@@ -386,6 +469,13 @@ struct Cx<'a> {
     mods: egui::Modifiers,
     pending: &'a mut Pending,
     laid_out: &'a mut Vec<Row>,
+    renaming: &'a mut Option<Renaming>,
+    /// Entries renamed or moved by the commands queued this frame (old path, new path).
+    follow: &'a mut Vec<(Vec<String>, Vec<String>)>,
+    /// A filter row whose drag began this frame.
+    drag_started: Option<Vec<String>>,
+    /// The dragged row was let go this frame.
+    drag_stopped: bool,
 }
 
 /// Draws the sidebar at Font View's left: the search field, the entries, and the actions menu.
@@ -403,6 +493,11 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         ui.separator();
         let selected = current_entries(app);
         let items = std::mem::take(&mut app.font_view.sidebar.items);
+        keyboard(app, ui, &items, &selected);
+        let mut renaming = app.font_view.sidebar.renaming.take();
+        let mut dragging = app.font_view.sidebar.dragging.take();
+        let mut target = None;
+        let mut follow = Vec::new();
         let mut laid_out = Vec::new();
         ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
             actions(app, ui, &items, &selected, pending);
@@ -412,17 +507,92 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
                     ui.colored_label(app.tokens.error_text, e);
                 }
                 let mods = ui.input(|i| i.modifiers);
-                let mut cx = Cx { tokens: &app.tokens, selected: &selected, mods, pending, laid_out: &mut laid_out };
+                let mut cx = Cx {
+                    tokens: &app.tokens,
+                    selected: &selected,
+                    mods,
+                    pending,
+                    laid_out: &mut laid_out,
+                    renaming: &mut renaming,
+                    follow: &mut follow,
+                    drag_started: None,
+                    drag_stopped: false,
+                };
                 egui::ScrollArea::vertical().id_salt("fontView.sidebar.rows").auto_shrink([false, false]).show(ui, |ui| {
                     for item in &items {
                         row(ui, &mut cx, item, 0);
                     }
+                    if let Some(source) = cx.drag_started.take() {
+                        dragging = Some(source);
+                    }
+                    let Some(source) = dragging.clone() else { return };
+                    let at = ui.ctx().pointer_latest_pos();
+                    target = at.and_then(|p| drop_target(&items, cx.laid_out, &source, p));
+                    if let Some(d) = &target {
+                        paint_mark(ui, cx.tokens, cx.laid_out, d);
+                    }
+                    if cx.drag_stopped {
+                        if let Some(d) = &target {
+                            let entry = moved(cx.pending, &source, d);
+                            cx.follow.push(entry);
+                        }
+                        dragging = None;
+                        target = None;
+                    } else if ui.ctx().dragged_id().is_none() {
+                        dragging = None;
+                        target = None;
+                    }
                 });
             });
         });
-        app.font_view.sidebar.items = items;
-        app.font_view.sidebar.laid_out = laid_out;
+        let sb = &mut app.font_view.sidebar;
+        sb.items = items;
+        sb.laid_out = laid_out;
+        sb.renaming = renaming;
+        sb.dragging = dragging;
+        sb.drop = target;
+        sb.follow = follow;
     });
+}
+
+/// Return with the sidebar holding the keyboard and one filter or folder selected opens its name
+/// for editing. The press that last went down decides whether the sidebar holds the keyboard.
+fn keyboard(app: &mut FontcraftApp, ui: &egui::Ui, items: &[Item], selected: &[Vec<String>]) {
+    let sb = &mut app.font_view.sidebar;
+    if let Some(at) = ui.input(|i| if i.pointer.any_pressed() { i.pointer.press_origin() } else { None }) {
+        sb.has_keyboard = sb.laid_out.iter().any(|r| r.rect.contains(at));
+    }
+    if !sb.has_keyboard || sb.renaming.is_some() || ui.ctx().text_edit_focused() {
+        return;
+    }
+    let [only] = selected else { return };
+    let Some(item) = find_item(items, only, 0).filter(|i| is_filter(i)) else { return };
+    if ui.ctx().input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter)) {
+        sb.renaming = Some(Renaming { path: item.path.clone(), text: item.label.clone(), started: false });
+    }
+}
+
+/// A smart filter, list filter or folder of the Filters section.
+fn is_filter(item: &Item) -> bool {
+    matches!(item.kind.as_str(), "smart" | "list" | "folder")
+}
+
+/// Queues the `fontView.moveFilter` of a drop; returns the old and new path of the entry.
+fn moved(pending: &mut Pending, source: &[String], drop: &DropTarget) -> (Vec<String>, Vec<String>) {
+    // The sidebar's form of the paths, with the section first, so a folder named `filters` is
+    // not taken for the section.
+    let mut parent = vec!["filters".to_string()];
+    parent.extend(drop.parent.iter().cloned());
+    let mut params = Map::new();
+    params.insert("filter".into(), path_value(source));
+    if !drop.parent.is_empty() {
+        params.insert("parent".into(), path_value(&parent));
+    }
+    params.insert("index".into(), json!(drop.index));
+    pending.push(("fontView.moveFilter", Value::Object(params)));
+    let mut new = parent;
+    new.extend(source.last().cloned());
+    (source.to_vec(), new)
 }
 
 /// Rows with children open by default only for the sections.
@@ -442,7 +612,9 @@ fn row(ui: &mut egui::Ui, cx: &mut Cx, item: &Item, depth: usize) {
     let tokens = cx.tokens;
     let height = ui.spacing().interact_size.y;
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::hover());
-    let response = ui.interact(rect, widgets::id(("fontView.sidebar.row", &item.path)), Sense::click());
+    let filter = is_filter(item);
+    let sense = if filter { Sense::click_and_drag() } else { Sense::click() };
+    let response = ui.interact(rect, row_id(&item.path), sense);
     let response = match &item.problem {
         Some(problem) => response.on_hover_text(problem),
         None => response,
@@ -464,8 +636,10 @@ fn row(ui: &mut egui::Ui, cx: &mut Cx, item: &Item, depth: usize) {
         painter.add(triangle(c.center(), height * 0.2, open, color));
     }
     let mut x = left + height;
+    let mut icon = None;
     if let Some(shape) = kind_icon(&item.kind, Pos2::new(x + height * 0.4, rect.center().y), height * 0.3, tokens.text_dim) {
         painter.extend(shape);
+        icon = Some(Rect::from_min_size(Pos2::new(x, rect.top()), vec2(height, height)));
         x += height;
     }
     let text_color = match (&item.problem, selected) {
@@ -476,8 +650,12 @@ fn row(ui: &mut egui::Ui, cx: &mut Cx, item: &Item, depth: usize) {
     let font = if section { FontId::proportional(tokens.font_size) } else { egui::TextStyle::Button.resolve(ui.style()) };
     let label_end = badge(&painter, tokens, item, rect, section);
     let clip = Rect::from_min_max(Pos2::new(x, rect.top()), Pos2::new(label_end, rect.bottom()));
-    ui.painter_at(clip).text(Pos2::new(x, rect.center().y), Align2::LEFT_CENTER, &item.label, font, text_color);
-    cx.laid_out.push(Row { path: item.path.clone(), rect, chevron });
+    if cx.renaming.as_ref().is_some_and(|r| r.path == item.path) {
+        rename_field(ui, cx, clip);
+    } else {
+        ui.painter_at(clip).text(Pos2::new(x, rect.center().y), Align2::LEFT_CENTER, &item.label, font, text_color);
+    }
+    cx.laid_out.push(Row { path: item.path.clone(), rect, chevron, icon, depth });
 
     if section && item.path.first().is_some_and(|p| p == "languages") {
         let plus = Rect::from_min_size(Pos2::new(rect.right() - height, rect.top()), vec2(height, height));
@@ -492,8 +670,9 @@ fn row(ui: &mut egui::Ui, cx: &mut Cx, item: &Item, depth: usize) {
         }
     }
 
+    let on = |part: Option<Rect>| response.interact_pointer_pos().is_some_and(|p| part.is_some_and(|r| r.contains(p)));
     if response.clicked() {
-        let on_chevron = response.interact_pointer_pos().is_some_and(|p| chevron.is_some_and(|c| c.contains(p)));
+        let on_chevron = on(chevron);
         if on_chevron || section {
             ui.ctx().data_mut(|d| d.insert_temp(open_key, !open));
         } else {
@@ -507,11 +686,20 @@ fn row(ui: &mut egui::Ui, cx: &mut Cx, item: &Item, depth: usize) {
             cx.pending.push(("fontView.selectSidebarEntries", json!({"entries": [path_value(&item.path)], "mode": mode})));
         }
     }
-    if response.double_clicked()
-        && !section
-        && let Some(open_editor) = editor(item)
-    {
-        cx.pending.push(open_editor);
+    // A double-click on a filter's icon opens its editor; on the rest of the row, its name.
+    if response.double_clicked() && filter && !on(chevron) {
+        match editor(item) {
+            Some(open_editor) if on(icon) => cx.pending.push(open_editor),
+            _ => *cx.renaming = Some(Renaming { path: item.path.clone(), text: item.label.clone(), started: false }),
+        }
+    }
+    if filter {
+        if response.drag_started() {
+            cx.drag_started = Some(item.path.clone());
+        }
+        if response.drag_stopped() {
+            cx.drag_stopped = true;
+        }
     }
     if !section && item.kind != "all" {
         response.context_menu(|ui| context_menu(ui, cx, item));
@@ -519,6 +707,132 @@ fn row(ui: &mut egui::Ui, cx: &mut Cx, item: &Item, depth: usize) {
     if open {
         for child in &item.children {
             row(ui, cx, child, depth + 1);
+        }
+    }
+}
+
+fn row_id(path: &[String]) -> egui::Id {
+    widgets::id(("fontView.sidebar.row", path))
+}
+
+/// The name field over a filter's label: Return runs `fontView.renameFilter` with the new name;
+/// Escape, a click away or an unchanged name run nothing.
+fn rename_field(ui: &mut egui::Ui, cx: &mut Cx, clip: Rect) {
+    let Some(r) = cx.renaming.as_mut() else { return };
+    let id = rename_id();
+    if !r.started {
+        ui.memory_mut(|m| m.request_focus(id));
+    }
+    let edit = egui::TextEdit::singleline(&mut r.text).id(id).char_limit(NAME_CHARS).margin(egui::Margin::ZERO).font(egui::TextStyle::Button);
+    let layout = egui::Layout::centered_and_justified(egui::Direction::TopDown);
+    let mut output = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(clip).layout(layout)));
+    // The whole name starts selected, so typing replaces it.
+    if !r.started && output.response.response.has_focus() {
+        output.state.cursor.set_char_range(Some(egui::text::CCursorRange::select_all(&output.galley)));
+        output.state.store(ui.ctx(), id);
+    }
+    let field = output.response.response;
+    let committed = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+    let done = field.lost_focus() || (r.started && !field.has_focus());
+    r.started = true;
+    if committed {
+        let old = r.path.last().map(String::as_str).unwrap_or_default();
+        let name = r.text.trim();
+        if !name.is_empty() && name != old {
+            let mut new = r.path.clone();
+            new.pop();
+            new.push(name.to_string());
+            cx.pending.push(("fontView.renameFilter", json!({"filter": path_value(&r.path), "name": name})));
+            cx.follow.push((r.path.clone(), new));
+        }
+    }
+    if done {
+        *cx.renaming = None;
+    }
+}
+
+/// Where the filter at `source` (a sidebar path) lands when let go at `at`, over the rows the
+/// frame laid out. `None` outside the Filters section, and for a drop into `source` itself or a
+/// folder inside it, or onto its own place.
+///
+/// Over a folder's middle half the filter goes into the folder, at its end; over the top half
+/// of a row it goes before the row, over the bottom half after it, or first into an open folder
+/// with entries showing. Over the section's heading it goes first, below the last row last.
+pub fn drop_target(items: &[Item], rows: &[Row], source: &[String], at: Pos2) -> Option<DropTarget> {
+    let rows: Vec<&Row> = rows.iter().filter(|r| r.path.first().is_some_and(|p| p == "filters")).collect();
+    let heading = rows.first().filter(|r| r.path.len() == 1)?;
+    if at.y < heading.rect.top() || at.x < heading.rect.left() || at.x > heading.rect.right() {
+        return None;
+    }
+    let section = items.iter().find(|i| i.path == heading.path)?;
+    let moving = source.get(1..).filter(|p| !p.is_empty())?;
+    let (from_name, from_parent) = moving.split_last()?;
+    let siblings = |parent: &[String]| -> Option<Vec<String>> {
+        let level = if parent.is_empty() {
+            &section.children
+        } else {
+            let mut path = heading.path.clone();
+            path.extend(parent.iter().cloned());
+            &find_item(items, &path, 0)?.children
+        };
+        Some(level.iter().filter_map(|i| i.path.last().cloned()).collect())
+    };
+    let over = rows.iter().position(|r| at.y >= r.rect.top() && at.y < r.rect.bottom());
+    let (parent, index, mark) = match over.and_then(|i| rows.get(i).map(|r| (i, *r))) {
+        None => {
+            let last = rows.last()?;
+            if at.y < last.rect.bottom() {
+                return None;
+            }
+            (Vec::new(), section.children.len(), Mark::Line { y: last.rect.bottom(), depth: 1 })
+        }
+        Some((_, r)) if r.path.len() == 1 => (Vec::new(), 0, Mark::Line { y: r.rect.bottom(), depth: 1 }),
+        Some((i, r)) => {
+            let inside = r.path.get(1..).unwrap_or_default();
+            let (name, parent) = inside.split_last()?;
+            let item = find_item(items, &r.path, 0)?;
+            let folder = item.kind == "folder";
+            let open = rows.get(i + 1).is_some_and(|next| next.path.len() > r.path.len() && next.path.starts_with(&r.path));
+            let place = siblings(parent)?.iter().position(|n| n == name)?;
+            let part = (at.y - r.rect.top()) / r.rect.height().max(1.0);
+            if folder && (0.25..0.75).contains(&part) {
+                (inside.to_vec(), item.children.len(), Mark::Into(r.rect))
+            } else if part < 0.5 {
+                (parent.to_vec(), place, Mark::Line { y: r.rect.top(), depth: r.depth })
+            } else if folder && open {
+                (inside.to_vec(), 0, Mark::Line { y: r.rect.bottom(), depth: r.depth + 1 })
+            } else {
+                (parent.to_vec(), place + 1, Mark::Line { y: r.rect.bottom(), depth: r.depth })
+            }
+        }
+    };
+    if parent.starts_with(moving) {
+        return None;
+    }
+    let mut index = index;
+    if parent.as_slice() == from_parent {
+        let from = siblings(from_parent)?.iter().position(|n| n == from_name)?;
+        if from < index {
+            index -= 1;
+        }
+        if from == index {
+            return None;
+        }
+    }
+    Some(DropTarget { parent, index, mark })
+}
+
+/// Draws a drop target: a line between rows, or a frame around the folder.
+fn paint_mark(ui: &egui::Ui, tokens: &Tokens, rows: &[Row], drop: &DropTarget) {
+    let stroke = Stroke::new(2.0, tokens.accent);
+    let Some(heading) = rows.iter().find(|r| r.path.len() == 1 && r.path.first().is_some_and(|p| p == "filters")) else { return };
+    match &drop.mark {
+        Mark::Line { y, depth } => {
+            let left = heading.rect.left() + *depth as f32 * tokens.layers_indent;
+            ui.painter().line_segment([Pos2::new(left, *y), Pos2::new(heading.rect.right(), *y)], stroke);
+        }
+        Mark::Into(rect) => {
+            ui.painter().rect_stroke(*rect, tokens.radius, stroke, egui::StrokeKind::Inside);
         }
     }
 }

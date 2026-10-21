@@ -5,7 +5,8 @@
 //!   Font View, and the shell commands, one list per module.
 //! - [`panels`]: the Palette sections, the Info box and the Edit View bottom bar.
 //! - [`canvas`]: Edit View: the camera, metric lines, filled glyphs, outlines, nodes.
-//! - [`control`]: the JSON control protocol agents drive the running app with.
+//! - [`control`]: the JSON control protocol agents drive the running app with;
+//!   [`control_input`] its window input (clicks, drags, the wheel at window points).
 //! - [`tools_glue`]: the pointer tools: canvas and control input in, interactions out.
 //! - [`dialogs`]: forms over a command's parameters with a live preview.
 //! - [`theme`]: design tokens.
@@ -19,6 +20,7 @@
 pub mod app;
 pub mod canvas;
 pub mod control;
+pub mod control_input;
 pub mod dialogs;
 pub mod icons;
 pub mod master_icons;
@@ -98,6 +100,8 @@ mod kerning_review_tests;
 #[cfg(test)]
 mod kerning_window_tests;
 #[cfg(test)]
+mod layers_drag_tests;
+#[cfg(test)]
 mod math_base_dialog_tests;
 #[cfg(test)]
 mod measurement_tests;
@@ -115,6 +119,8 @@ mod preview_instance_tests;
 mod preview_tests;
 #[cfg(test)]
 mod sample_strings_tests;
+#[cfg(test)]
+mod select_modifiers_tests;
 #[cfg(test)]
 mod sidebar_tests;
 #[cfg(test)]

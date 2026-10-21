@@ -132,14 +132,21 @@ impl eframe::App for Shell {
             inbox.drain(&mut self.app);
         }
         self.poll_extensions(ui.ctx());
-        // A bug in drawing costs one frame, not the session.
-        if let Err(panic) = fontcraft_engine::guard::catch_panic(|| self.app.ui(ui)) {
+        // A bug in drawing costs one frame, not the session. A frame that carries control-channel
+        // input is confined as the request that queued it.
+        if let Err(panic) = self.app.ui_with_control_input(ui) {
             self.app.state.status = format!("internal error (please report it): {panic}");
         }
         if let Some(problem) = self.user_files.save_if_changed(self.app.session.settings()) {
             eprintln!("fontcraft: {problem}");
             self.app.state.status = problem;
         }
+    }
+
+    /// The control channel's window input (`ui.click`, `ui.drag`, `ui.wheel`, `ui.move`) joins the
+    /// window's own, one event per frame.
+    fn raw_input_hook(&mut self, _ctx: &eframe::egui::Context, raw_input: &mut eframe::egui::RawInput) {
+        self.app.raw_input_hook(raw_input);
     }
 }
 

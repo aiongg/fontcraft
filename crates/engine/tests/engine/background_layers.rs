@@ -255,6 +255,35 @@ fn backup_layers_are_added_listed_renamed_reordered_and_deleted() {
 }
 
 #[test]
+fn reorder_moves_a_layer_among_its_own_masters_layers() {
+    let mut s = session();
+    s.edit("second master", |font| {
+        let mut m = font.default_master()?.clone();
+        m.id = "m02".into();
+        m.name = "Bold".into();
+        std::sync::Arc::make_mut(&mut font.masters).push(m);
+        font.glyph_mut("A")?.layers.push(Layer::new("m02", 600.0));
+        Ok(())
+    })
+    .unwrap();
+    let mut add = |master: &str, name: &str| {
+        run(&mut s, "layers.addBackupLayer", json!({"glyphs": ["A"], "master": master, "name": name}))["layer"].as_str().unwrap().to_string()
+    };
+    let (one, other, two, three) = (add("m01", "one"), add("m02", "other"), add("m01", "two"), add("m01", "three"));
+    let list = |s: &mut Session| -> Vec<String> {
+        run(s, "layers.list", json!({"glyph": "A"}))["layers"].as_array().unwrap().iter().map(|r| r["id"].as_str().unwrap().to_string()).collect()
+    };
+    // The index counts the master's other layers; the second master's backup sits between them
+    // in the glyph and stays where it is.
+    for (layer, to, expected) in [(&three, 0, [&three, &one, &two]), (&three, 2, [&one, &two, &three]), (&one, 1, [&two, &one, &three])] {
+        run(&mut s, "layers.reorder", json!({"glyph": "A", "layer": layer, "toIndex": to}));
+        let ids = list(&mut s);
+        assert_eq!(ids, ["m01", expected[0].as_str(), expected[1].as_str(), expected[2].as_str(), "m02", other.as_str()], "{layer} to {to}");
+    }
+    assert!(s.execute("layers.reorder", &json!({"glyph": "A", "layer": other, "toIndex": 1})).is_err(), "m02 has one backup");
+}
+
+#[test]
 fn use_as_master_swaps_the_backup_in_and_keeps_the_old_master_content() {
     let mut s = session();
     let backup = run(&mut s, "layers.addBackupLayer", json!({"glyphs": ["A"]}))["layer"].as_str().unwrap().to_string();

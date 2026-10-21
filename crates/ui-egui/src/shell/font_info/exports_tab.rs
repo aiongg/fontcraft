@@ -12,12 +12,15 @@
 //! | Style Name | `font.instance.set` with `styleName` |
 //! | Weight Class, Width Class, and their menus of standard values | `font.instance.setWeightClass`, `font.instance.setWidthClass` |
 //! | Style Linking: Bold, Italic, base style name | `font.instance.setStyleLinking` |
+//! | Axes Coordinates: one number field per axis | `font.instance.setAxisLocation` with that axis's tag |
 //! | General plus, added fields | the field picker; `font.info.*` through the shared rows |
 //! | Custom Parameters | [`super::rows::parameters_section`] |
 //!
 //! Every edit goes to all selected entries at once; a field whose entries differ shows
-//! "Multiple Values" or a dash. Inactive entries have a grey icon. Axes Coordinates are shown
-//! read-only. Variable font settings show only Active, the name and the parameters.
+//! "Multiple Values" or a dash. Inactive entries have a grey icon. A selected instance that lies
+//! beyond the masters on some axis gets the extrapolation warning under the Axes Coordinates,
+//! the one `font.instance.setAxisLocation` gives. Variable font settings show only Active, the
+//! name and the parameters.
 //!
 //! The preview line draws the first selected instance with [`fontcraft_render::render_line`]:
 //! the glyphs of `Aang126` the font has, or the glyph names of the instance's Instance Preview
@@ -25,7 +28,9 @@
 //! its interpolated outlines, from the session's instance view (`Session::instance_view`).
 //!
 //! Rows: `fontInfo.exports`, `fontInfo.exports.selection`, `fontInfo.exports.inactiveGrayIcon`,
-//! `fontInfo.exports.instancePreview`, the `Instance Preview` parameter (M7.18).
+//! `fontInfo.exports.instancePreview`, the `Instance Preview` parameter (M7.18);
+//! `instance.axesValues`, `font.instance.setAxisLocation`, `fontInfo.instance.extrapolation`
+//! (M9.27).
 
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -56,6 +61,8 @@ pub const PREVIEW_PARAMETER: &str = "Instance Preview";
 pub const MAX_PREVIEW_GLYPHS: usize = 64;
 /// Most axes the Axes Coordinates rows list.
 const MAX_AXES_SHOWN: usize = 64;
+/// Most extrapolation warnings the Axes Coordinates show.
+const MAX_WARNINGS_SHOWN: usize = 8;
 /// The list's width, in list columns of the theme.
 const LIST_COLUMNS: f32 = 4.0;
 /// The preview's height, in list rows of the theme.
@@ -167,6 +174,16 @@ pub fn class_menu_id(key: &str) -> Id {
 /// The id of the entry `value` in the class menu of `key`.
 pub fn class_item_id(key: &str, value: u16) -> Id {
     field_id(key).with(("item", value))
+}
+
+/// The id of the coordinate field of axis `at`.
+pub fn axis_field_id(at: usize) -> Id {
+    field_id("axis").with(at)
+}
+
+/// The id of the `n`th extrapolation warning under the Axes Coordinates.
+pub fn extrapolation_id(n: usize) -> Id {
+    field_id("extrapolation").with(n)
 }
 
 /// The id of the preview line.
@@ -369,7 +386,7 @@ fn entry(ui: &mut egui::Ui, tokens: &Tokens, index: usize, instance: &Instance, 
 }
 
 /// A small button that opens a menu: `label`, or a downward triangle without one.
-fn trigger(ui: &mut egui::Ui, id: Id, label: Option<&str>, hover: &str) -> egui::Response {
+pub(super) fn trigger(ui: &mut egui::Ui, id: Id, label: Option<&str>, hover: &str) -> egui::Response {
     let side = ui.spacing().interact_size.y;
     let (rect, _) = ui.allocate_exact_size(vec2(side, side), Sense::hover());
     let response = ui.interact(rect, id, Sense::click());
@@ -438,7 +455,7 @@ fn general(ui: &mut egui::Ui, tokens: &Tokens, fi: &mut FontInfoState, font: &Fo
         if let Some(v) = class_row(ui, tokens, "Width Class", "widthClass", &all, width, &WIDTH_CLASSES) {
             pending.push(command("font.instance.setWidthClass", "widthClass", class_json(v)));
         }
-        axes_rows(ui, tokens, font, &all, first);
+        axes_rows(ui, tokens, font, &all, first, &target.indices, pending);
         field_row(ui, tokens, "Style Linking", |ui| {
             if check(ui, field_id("isBold"), first.is_bold, differs(&all, |i| i.is_bold), "Bold", "The bold style of the base instance") {
                 let on = differs(&all, |i| i.is_bold) || !first.is_bold;
@@ -525,21 +542,69 @@ fn class_json(n: f64) -> Value {
     if n.fract() == 0.0 && n.abs() < 1.0e15 { json!(n as i64) } else { json!(n) }
 }
 
-/// The Axes Coordinates rows: one read-only value per font axis.
-fn axes_rows(ui: &mut egui::Ui, tokens: &Tokens, font: &Font, all: &[&Instance], first: &Instance) {
+/// The Axes Coordinates rows: one number field per font axis, Multiple Values where the
+/// entries differ, then the extrapolation warnings of the entries beyond the masters.
+fn axes_rows(ui: &mut egui::Ui, tokens: &Tokens, font: &Font, all: &[&Instance], first: &Instance, indices: &[usize], pending: &mut Pending) {
     if font.axes.is_empty() {
         return;
     }
-    field_row(ui, tokens, "Axes Coordinates", |ui| {
-        ui.label(egui::RichText::new("Read-only").color(tokens.text_dim));
-    });
+    field_row(ui, tokens, "Axes Coordinates", |_| {});
     for (i, axis) in font.axes.iter().enumerate().take(MAX_AXES_SHOWN) {
         let mixed = differs(all, |inst| design_value(&inst.location, i).to_bits());
-        let text = if mixed { MULTIPLE_VALUES.to_string() } else { widgets::format_number(design_value(&first.location, i)) };
+        let value = (!mixed).then(|| design_value(&first.location, i));
         field_row(ui, tokens, &axis.name, |ui| {
-            ui.label(egui::RichText::new(text).color(tokens.text_dim));
+            if let Some(v) = super::masters_tab::number_field(ui, axis_field_id(i), value, tokens.field_width) {
+                let mut location = serde_json::Map::new();
+                location.insert(axis.tag.clone(), json!(v));
+                pending.push(("font.instance.setAxisLocation", json!({"instances": indices, "location": location})));
+            }
         });
     }
+    let warnings: Vec<String> = all.iter().filter_map(|inst| extrapolation_warning(font, inst)).collect();
+    for (n, warning) in warnings.iter().enumerate().take(MAX_WARNINGS_SHOWN) {
+        ui.horizontal_top(|ui| {
+            field_label(ui, tokens, "");
+            ui.vertical(|ui| {
+                let text = egui::RichText::new(sentence(warning)).color(tokens.audit_warn);
+                let label = ui.add(egui::Label::new(text).wrap());
+                ui.interact(label.rect, extrapolation_id(n), Sense::hover());
+            });
+        });
+    }
+    if warnings.len() > MAX_WARNINGS_SHOWN {
+        field_row(ui, tokens, "", |ui| {
+            ui.label(egui::RichText::new(format!("and {} more extrapolated", warnings.len() - MAX_WARNINGS_SHOWN)).color(tokens.audit_warn));
+        });
+    }
+}
+
+/// The warning `font.instance.setAxisLocation` gives for `instance`: the tags of the axes on
+/// which it lies beyond every master (`fontInfo.instance.extrapolation`). `None` for an
+/// instance inside the masters, a font without masters, and a variable font setting.
+pub fn extrapolation_warning(font: &Font, instance: &Instance) -> Option<String> {
+    if is_variable(instance) {
+        return None;
+    }
+    let outside: Vec<&str> = font
+        .axes
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| {
+            let mut coordinates = font.masters.iter().map(|m| design_value(&m.location, *i));
+            let Some(start) = coordinates.next() else { return false };
+            let (lo, hi) = coordinates.fold((start, start), |(lo, hi), x| (lo.min(x), hi.max(x)));
+            let v = design_value(&instance.location, *i);
+            v < lo || v > hi
+        })
+        .map(|(_, a)| a.tag.as_str())
+        .collect();
+    (!outside.is_empty()).then(|| format!("instance `{}` lies beyond the masters on {}; it is extrapolated", instance.name, outside.join(", ")))
+}
+
+/// `text` with its first letter capitalised, as a line on its own reads.
+fn sentence(text: &str) -> String {
+    let mut chars = text.chars();
+    chars.next().map(|c| c.to_uppercase().chain(chars).collect()).unwrap_or_default()
 }
 
 /// The fields added under General (familyNames, styleNames…), drawn with the shared row: they
@@ -550,7 +615,7 @@ fn added_fields(ui: &mut egui::Ui, tokens: &Tokens, fi: &mut FontInfoState, font
 
 /// A checkbox with a stable id: a check mark when `on`, a dash when the entries differ. True
 /// when clicked.
-fn check(ui: &mut egui::Ui, id: Id, on: bool, mixed: bool, text: &str, hover: &str) -> bool {
+pub(super) fn check(ui: &mut egui::Ui, id: Id, on: bool, mixed: bool, text: &str, hover: &str) -> bool {
     let side = ui.spacing().interact_size.y;
     let font = egui::TextStyle::Body.resolve(ui.style());
     let galley = (!text.is_empty()).then(|| ui.painter().layout_no_wrap(text.to_string(), font, ui.visuals().text_color()));

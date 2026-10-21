@@ -56,6 +56,8 @@ pub struct FontcraftApp {
     pub(crate) color_ui: canvas::color::ColorUi,
     /// The question asked before unsaved work is closed, and the window title.
     pub close_prompt: shell::close_prompt::ClosePrompt,
+    /// Control-channel window input waiting for the next frames (`control_input`).
+    pub(crate) input: crate::control_input::SyntheticInput,
     themed: bool,
 }
 
@@ -91,6 +93,7 @@ impl FontcraftApp {
             images: Default::default(),
             color_ui: Default::default(),
             close_prompt: Default::default(),
+            input: Default::default(),
             themed: false,
         }
     }
@@ -366,6 +369,7 @@ impl FontcraftApp {
         tools_glue::keys(self, ui.ctx());
         let mut pending: Vec<(&'static str, Value)> = Vec::new();
         shell::extensions::dropped::take(ui.ctx(), &mut pending);
+        shell::open_chooser::take_dropped(ui.ctx(), &mut pending);
         shell::text_preview::find_shortcut(self, ui.ctx(), &mut pending);
         pending.extend(shell::keymap::pressed(ui.ctx(), self.tools.text_edit_at_end, shell::keymap::focused_panel(self)));
         pending.extend(shell::clipboard::events(self, ui.ctx()));
@@ -404,6 +408,9 @@ impl FontcraftApp {
             // Paste Special in text mode is refused before it asks for the clipboard.
             if shell::clipboard::wants_text(id, &params) && !(id == "edit.pasteSpecial" && shell::text::in_text_mode(self)) {
                 shell::clipboard::request_text(ui.ctx(), id);
+                continue;
+            }
+            if shell::open_chooser::from_menu(self, id, &params) {
                 continue;
             }
             if shell::pickers::wants_files(id, &params) {

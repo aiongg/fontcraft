@@ -34,7 +34,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Open…",
             ["File"],
             Some("Cmd+O"),
-            "{path: string, face?: number} open a font as a new document, recognising it by content: a .fontcraft file, a .glyphs file (format versions 2 to 4), a .glyphspackage folder, a UFO folder (versions 2 and 3), a .designspace file with the UFOs it names (one document, a master per source), or a compiled font (TrueType, OpenType with CFF, a collection member chosen by face, WOFF, WOFF2). A compiled font opens view-only: save it with Save As to a source format. GlyphData*.xml files beside the source and in an Info folder beside it add to the glyph data for this document, unless the font's Ignore custom GlyphData file parameter is on. A UFO or designspace has its composites aligned automatically as it opens, so their metrics follow their bases (aligned counts the glyphs that changed); with the user setting user.disableAutomaticAlignmentForImportedFiles on, the font's Disable Automatic Alignment option is switched on instead. warnings lists what reading a compiled font left out and the glyph data files that could not be used → {title, path, format, version?, glyphs, masters, viewOnly, aligned, warnings}",
+            "{path: string, face?: number} open a font as a new document, recognising it by content: a .fontcraft file, a .glyphs file (format versions 2 to 4), a .glyphspackage folder, a UFO folder (versions 2 and 3), a .designspace file with the UFOs it names (one document, a master per source), or a compiled font (TrueType, OpenType with CFF, a collection member chosen by face, WOFF, WOFF2). A compiled font opens view-only: save it with Save As to a source format. GlyphData*.xml files beside the source and in an Info folder beside it add to the glyph data for this document, unless the font's Ignore custom GlyphData file parameter is on. A UFO or designspace has its composites aligned automatically as it opens, so their metrics follow their bases (aligned counts the glyphs that changed); with the user setting user.disableAutomaticAlignmentForImportedFiles on, the font's Disable Automatic Alignment option is switched on instead. warnings lists what reading a compiled font left out and the glyph data files that could not be used. A .fontcraftproject file opens as a project, as project.open does, with its reply → {title, path, format, version?, glyphs, masters, viewOnly, aligned, warnings}",
             always,
             open
         ).files(const { &[FileParam::read("path")] }),
@@ -109,7 +109,11 @@ fn new(s: &mut Session, p: &Value) -> Result<Value> {
 #[cfg(not(target_arch = "wasm32"))]
 fn open(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("file.open", p)?;
-    let path = std::path::PathBuf::from(p.str("path")?);
+    let text = p.str("path")?;
+    let path = std::path::PathBuf::from(text);
+    if crate::project::is_project_file(&path) {
+        return super::project::open_project(s, &json!({ "path": text }));
+    }
     let face = p.opt_int("face", 0, i64::from(u16::MAX))?.map(|f| f as u32);
     // A file that is already open is shown, not opened a second time (`file.openTwiceActivates`).
     if let Some(i) = super::session::find_open(s, &path) {

@@ -924,10 +924,10 @@ label = "Move"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer?: id, side?: foreground|background, points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: local|global, index}], annotations?: [index], image?: bool, dx: number, dy: number, mode?: normal|pointsOnly|nudge, duplicate?: bool} → {selection}"
+params = "{glyph: name, layer?: id, side?: foreground|background, points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: local|global, index}], annotations?: [index], image?: bool, dx: number, dy: number, mode?: normal|pointsOnly|nudge|mirror, duplicate?: bool} → {selection}"
 area = "drawing"
 milestone = "M3"
-summary = "Moves the selected nodes, handles, anchors or guides by an offset in font units. It is what the arrow keys run: one unit per press, 10 with Shift, 100 with Cmd; the mode mirrors the Option (points only) and Ctrl+Option (nudge) modifiers."
+summary = "Moves the selected nodes, handles, anchors or guides by an offset in font units. It is what the arrow keys run: one unit per press, 10 with Shift, 100 with Cmd; the mode follows the Option (points only) and Ctrl+Option (nudge) modifiers, and Ctrl+Option on a dragged handle of a smooth node (mirror)."
 ref = "Edit View › Moving Selected Nodes and Paths"
 status = "handbook"
 notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 13:42–13:45: dragging the two selected top nodes of a rectangle moves only them, which slants the stem. Arrow-key steps: see move.arrowKeyIncrements. `image: true` moves the layer's placed image too (M11.13b); the arrow keys send it while an image is selected, with the same steps (image.directManipulation)."
@@ -970,6 +970,10 @@ milestone = "M3"
 summary = "A handle moves by dragging or with the arrow keys (Shift 10, Cmd 100); several selected handles move together. With Option held the handle keeps its angle and only its length changes."
 ref = "Edit View › Moving Selected Nodes and Paths"
 status = "handbook"
+notes = "Documented, not yet observed. M3.19: a drag of handles only (nothing else selected) runs selection.move with mode pointsOnly while Alt is held, whether Alt went down before or during the drag; a handle alone has nothing to copy, so Alt never duplicates it."
+observe = [
+  "Option-drag a handle of a smooth node, then press Option halfway through a plain handle drag: note whether the angle is kept in both cases and whether the opposite handle turns.",
+]
 
 [[behavior]]
 id = "move.mirrorHandleAcrossSmoothNode"
@@ -978,6 +982,15 @@ milestone = "M3"
 summary = "While a handle of a smooth node is being moved with Ctrl and Option held, the opposite handle of that node is given the same length and the matching (opposite) angle, making the node symmetric."
 ref = "Edit View › Moving Selected Nodes and Paths"
 status = "handbook"
+notes = "Documented, not yet observed. M3.19: a drag of handles only with Ctrl+Alt held runs selection.move with mode mirror: each moved handle of a smooth node that stays puts the opposite handle at the moved handle's mirror image through the node. Ctrl also suspends snapping, as in every drag."
+guesses = [
+  "On a corner node, Ctrl+Alt moves the handle as a plain drag would; observing a corner's handle under Ctrl+Option would settle it.",
+  "When the other side of the smooth node is a straight segment, the handle slides along that line as in a plain drag, since mirroring would bend the line; observing such a node would settle it.",
+]
+observe = [
+  "Ctrl+Option-drag a handle of a smooth node whose two handles differ in length: note whether the opposite handle takes the dragged handle's length during the drag or only on release.",
+  "Ctrl+Option-drag a handle of a corner node: note whether the opposite handle changes.",
+]
 
 [[behavior]]
 id = "move.dragSegment"
@@ -986,6 +999,33 @@ milestone = "M3"
 summary = "Dragging a segment moves its two end nodes together with their handles. Option-dragging a curve segment instead lengthens or shortens its handles along their existing angles, leaving the nodes in place."
 ref = "Edit View › Moving Selected Nodes and Paths"
 status = "handbook"
+notes = "Documented, not yet observed. M3.19: an Alt-drag that starts on a cubic segment selected alone runs path.reshapeSegment as one interaction; the segment's point under the pointer at the press follows the pointer. An Alt-drag on a line segment copies it (duplicate.optionDrag); an Alt-drag on a segment of a larger selection copies the selection."
+guesses = [
+  "The two handle lengths are solved so the grabbed point of the curve lands on the pointer (a 2x2 linear system; with parallel handles, the smallest change that gets nearest); observing the curve under the pointer during an Option-drag would settle it.",
+  "A handle is held between 1 unit and 10 times the larger of the end nodes' distance and the current handle lengths, so it never turns through its node; observing an Option-drag past the chord would settle it.",
+  "An Alt-drag on a segment that is part of a larger selection duplicates the selection instead of reshaping; observing that case would settle it.",
+]
+observe = [
+  "Option-drag a curve segment at its middle and then near one end: note whether the point under the pointer stays under it and whether both handles change or only the nearer one.",
+  "Option-drag a curve segment across its chord: note whether the handles shrink to zero, stop, or turn round.",
+]
+
+[[command]]
+id = "path.reshapeSegment"
+label = "Reshape Segment"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id, side?, segment: [shape, node], t: number, to: [x, y]} → {changed, selection}"
+area = "drawing"
+milestone = "M3"
+summary = "Changes the lengths of a cubic segment's two handles, keeping both end nodes and each handle's direction, so that the segment's point at t lands on a given position. It is what an Option-drag on a curve segment runs."
+ref = "Edit View › Moving Selected Nodes and Paths"
+status = "handbook"
+notes = "Documented gesture (move.dragSegment), not yet observed; the construction is ours. t runs from 0.01 to 0.99. A line segment is left as it is and returns changed: false; a quadratic segment is refused. The selection afterwards is the segment's two end nodes, as the press selected them."
+guesses = [
+  "A handle that lies on its node takes the direction towards the other handle, else towards the other end node.",
+]
 
 # ───────────────────────────── Converting nodes and segments ─────────────────────────────
 
@@ -1340,6 +1380,10 @@ status = "handbook"
 notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 6:42–6:44 and 18:36–18:38: dragging a selected shape leaves the original and moves a copy, drawn darker during the drag, with a badge showing the offset. The modifier key is not visible."
 guesses = [
   "Alt held at mouse-down on a selection drags a copy, and Alt pressed after the drag started switches to nudge (03a question 1).",
+  "Alt held at mouse-down on lone nodes, with no whole segment, path or other object to copy, moves only the selected points (selection.move mode pointsOnly), as for nodes moved with Option; observing an Option-drag of one node would settle it.",
+]
+observe = [
+  "Option-drag one selected node of a path: note whether a copy appears, or the node moves without its handles.",
 ]
 
 [[command]]

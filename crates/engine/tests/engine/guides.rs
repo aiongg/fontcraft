@@ -288,3 +288,38 @@ fn background_guides_are_their_own() {
     let bg = run(&mut s, "guide.list", json!({"glyph": "A", "side": "background"}));
     assert_eq!(bg["guides"].as_array().unwrap().len(), 1);
 }
+
+#[test]
+fn the_ruler_and_the_coordinates_cover_every_placed_glyph() {
+    let mut s = Session::with_document();
+    // `A` is a square 0,0–100,100 and `B` two squares that overlap in 250,0–300,100; in the line
+    // `A B` the second glyph sits 200 units to the right.
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": rect(0.0, 0.0, 100.0, 100.0)}));
+    run(&mut s, "path.addPath", json!({"glyph": "B", "nodes": rect(0.0, 0.0, 100.0, 100.0)}));
+    run(&mut s, "path.addPath", json!({"glyph": "B", "nodes": rect(50.0, 0.0, 150.0, 100.0)}));
+    let placements = json!([{"glyph": "A", "x": 0, "y": 0}, {"glyph": "B", "x": 200, "y": 0}]);
+    let out = run(&mut s, "measure.ruler", json!({"glyph": "A", "from": [-10, 50], "to": [400, 50], "placements": placements}));
+    let crossings = out["crossings"].as_array().unwrap();
+    let xs: Vec<f64> = crossings.iter().map(|c| c["x"].as_f64().unwrap()).collect();
+    let owners: Vec<u64> = crossings.iter().map(|c| c["placement"].as_u64().unwrap()).collect();
+    assert_eq!(xs.len(), 4, "A's two sides and the merged outline of B: {out}");
+    assert!(xs.iter().zip([0.0, 100.0, 200.0, 350.0]).all(|(x, w)| (x - w).abs() < 1e-6), "{out}");
+    assert_eq!(owners, [0, 0, 1, 1]);
+    let gaps = out["gaps"].as_array().unwrap();
+    assert!(close(&gaps[1]["distance"], 100.0) && gaps[1]["inside"] == false, "the space between the glyphs: {out}");
+    // Without placements only the target glyph is measured.
+    let alone = run(&mut s, "measure.ruler", json!({"glyph": "A", "from": [-10, 50], "to": [400, 50]}));
+    assert_eq!(alone["crossings"].as_array().unwrap().len(), 2, "{alone}");
+
+    let out = run(&mut s, "measure.coordinates", json!({"glyph": "A", "placements": placements}));
+    let each = out["placements"].as_array().unwrap();
+    assert_eq!(each.len(), 2);
+    assert_eq!((&each[1]["glyph"], &each[1]["x"]), (&json!("B"), &json!(200.0)));
+    assert_eq!(each[1]["points"].as_array().unwrap().len(), 8, "B's own coordinates: {out}");
+    assert!(each[0]["overlaps"].as_array().unwrap().is_empty());
+    assert_eq!(each[1]["overlaps"].as_array().unwrap().len(), 2, "the two edges inside the overlap: {out}");
+
+    refused(&mut s, "measure.ruler", json!({"glyph": "A", "from": [0, 0], "to": [1, 1], "placements": [{"glyph": "nope"}]}));
+    let many: Vec<Value> = (0..201).map(|_| json!({"glyph": "A"})).collect();
+    refused(&mut s, "measure.coordinates", json!({"glyph": "A", "placements": many}));
+}

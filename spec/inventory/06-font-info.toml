@@ -322,17 +322,19 @@ milestone = "M7"
 summary = "First tab of Font Info: metadata shared by every exported font file, the design axes, and the font-level custom parameters."
 ref = "Font Info › Font"
 status = "handbook"
-notes = "Documented, not yet observed. The Axes rows are M9's (font.axes.*); until M9 the tab shows the stored axes read-only. M7 plan § 4: M7.16 (`crates/ui-egui/src/shell/font_info/font_tab.rs`)."
+notes = "Documented, not yet observed. The Axes rows act through font.axes.add, .set, .remove and .reorder; the name's disclosure menu lists font.axes.listPredefined (M9.27). M7 plan § 4: M7.16 (`crates/ui-egui/src/shell/font_info/font_tab.rs`)."
 guesses = [
   "The double-arrow button opens a prompt under the field that asks for the new units per em, starting at the current value, with Scale and Cancel buttons; clicking the button in the reference app settles the prompt's form.",
   "The minor version shows three digits, and its stepper is a plus and a minus button after the field; the reference app's Version field settles the look.",
   "The Creation Date is shown and typed as the file stores it (`2026-10-11 12:00:00 +0000`), next to an Update button; the reference app's date field settles the display.",
   "The Version row stands for both version parts, so selecting it selects and copies versionMajor and versionMinor together; copying the Version row in the reference app settles it.",
-  "Until axes can be edited (M9), the Axes section lists the stored axes without a plus button, their names, tags and Hidden boxes read-only.",
+  "Each axis row starts with a drag handle; dropping it on another axis row moves the axis there (font.axes.reorder). Dragging axes in the reference app, if it allows it, settles it.",
+  "The predefined menu lists the registered axes, a separator, then the proposed ones, each as `Name (tag)`; opening the menu in the reference app settles the look.",
 ]
 observe = [
   "In font A (m7-one), look at the Version and Creation Date rows: note how the minor version and the date are shown and what the stepper and the update button look like.",
   "In font A (m7-one), click the double arrow beside Units per Em: note what asks for the new value and which buttons it has.",
+  "In F1 (two masters) with two axes, try to drag the second axis row above the first: note whether the order changes and what the row shows while dragging.",
 ]
 
 [[panel]]
@@ -770,7 +772,7 @@ milestone = "M7"
 summary = "Searches the catalogue of known custom parameters and returns name, value type, valid scopes and description, the data behind the picker's list and description pane."
 ref = "Font Info › Font › Custom Parameters"
 status = "inferred"
-notes = "The catalogue is generated from the rows of spec/inventory/18-custom-parameters.toml (name, kind, scopes, our own summary) and the parameter rows of the other chapters. M7 plan § 4: M7.2."
+notes = "The catalogue is generated from the rows of spec/inventory/18-custom-parameters.toml (name, kind, scopes, our own summary) and the parameter rows of the other chapters. M7 plan § 4: M7.2. Each entry also gives `choices` (the row's `values`, empty for a free value) and `checked` (whether the value gets a value list, syntax or range check beyond its kind); M7.21."
 guesses = [
   "The search matches the query against names, aliases and summaries, case ignored; the Font Info parameter picker's filter in the running app would settle it.",
 ]
@@ -787,16 +789,18 @@ milestone = "M7"
 summary = "Adds a custom parameter row to the font, to masters or to exports. Whether the same parameter may be added twice to one scope is not stated in this chapter."
 ref = "Font Info › Font › Custom Parameters; Masters › Custom Parameters; Exports › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.2."
+notes = "Documented, not yet observed. M7 plan § 4: M7.2. M7.21: a known parameter's value is also checked against the row's value list and, for about fifty parameters, a syntax or range from the handbook (`crates/fontinfo/src/syntax.rs`); a refused value adds nothing. A value naming a master or a palette the font lacks is kept and listed under `warnings` in the result."
 guesses = [
   "One scope may hold the same parameter more than once; for a parameter that takes one value the first enabled row counts and the list marks the others; adding a duplicate in the reference app settles whether it is refused.",
   "Without a value the new row holds the kind's empty value (off, 0, empty text, empty list); the new rows of the reference app settle it.",
   "A parameter whose appendix entry names its scopes is refused in other scopes; one whose entry names none is allowed in all three.",
   "A name the catalogue does not know is added as given, its value checked only against the size limits, and listed with the unknown mark; whether the reference app's picker accepts a typed free name settles it.",
   "A name property (designers, versionString and the others the format keeps as properties) added here is written to the General fields, refused on masters and refused where the field is already set; adding one from the reference app's picker settles where it goes.",
+  "A value naming a missing master warns and keeps the value; typing an unknown master name in the reference app settles it.",
 ]
 observe = [
   "In font A (m7-one), add typoAscender twice, then add a yes-or-no parameter and a list parameter: note whether the duplicate is allowed or refused and the empty value each new row gets.",
+  "In font A (m7-one), add vendorID `ABCDE` and panose with nine numbers: note whether each is refused, kept, or kept with a warning, and where the message shows.",
 ]
 
 [[command]]
@@ -811,9 +815,12 @@ milestone = "M7"
 summary = "Changes the value of an existing custom parameter row."
 ref = "Font Info › Font › Custom Parameters"
 status = "inferred"
-notes = "`enabled` is the row's checkbox (customParameters.enableCheckbox); the value is checked against the catalogue's kind for the name. `index` picks one of several rows of the same name. M7 plan § 4: M7.2."
+notes = "`enabled` is the row's checkbox (customParameters.enableCheckbox); the value is checked against the catalogue's kind for the name. `index` picks one of several rows of the same name. M7 plan § 4: M7.2. M7.21: the value lists, syntaxes and ranges of `crates/fontinfo/src/syntax.rs` apply as for add, and a refused value changes nothing; a value naming a missing master or palette is kept and listed under `warnings`."
 guesses = [
   "A value is checked against the catalogue's kind before it is stored, and an unknown name is refused rather than stored as is; editing a row in the running app's Font Info would settle it.",
+]
+observe = [
+  "In font A (m7-one), set Get Hints From Master to a name no master has: note whether the value is refused, kept, or kept with a warning, and where the message shows.",
 ]
 
 [[command]]
@@ -877,7 +884,7 @@ milestone = "M7"
 summary = "Second tab of Font Info: the list of masters on the left and the properties of the selected master or masters on the right."
 ref = "Font Info › Masters"
 status = "handbook"
-notes = "Documented, not yet observed. Axes Coordinates (font.master.setAxisLocation) are M9's and Number Values (font.numbers.*) M8's; until then the tab shows them read-only. Add Other Font is shown disabled until its dialog exists (M9). M7 plan § 4: M7.17 (`ui-egui/src/shell/font_info/masters_tab.rs`)."
+notes = "Documented, not yet observed. Axes Coordinates act through font.master.setAxisLocation on every selected master (M9.27); Number Values (font.numbers.*) are M8's and read-only until then. Add Other Font is shown disabled until its dialog exists (M9). M7 plan § 4: M7.17 (`ui-egui/src/shell/font_info/masters_tab.rs`)."
 guesses = [
   "A master made with Add Master becomes the selection, and a dragged master stays selected at its new place; the list's selection in the reference app after each action settles it.",
   "The minus button is disabled while every master is selected, because a font keeps at least one master; whether the reference app disables it or refuses with a message settles it.",
@@ -1641,9 +1648,9 @@ milestone = "M7"
 summary = "Third tab of Font Info: the list of fonts that File > Export produces, static instances and variable font settings, with the properties of the selected entries."
 ref = "Font Info › Exports"
 status = "handbook"
-notes = "Documented, not yet observed. The preview control comes from the Instance Preview parameter's description. Add Instance for Each Master, Instance as Master, Add Variable Font Setting and Axes Coordinates are M9's rows; until M9 those menu items are disabled and the coordinates read-only. M7 plan § 4: M7.18."
+notes = "Documented, not yet observed. The preview control comes from the Instance Preview parameter's description. Add Instance for Each Master, Instance as Master, Add Variable Font Setting are M9's rows; until M9 those menu items are disabled. Axes Coordinates act through font.instance.setAxisLocation on every selected entry (M9.27). M7 plan § 4: M7.18."
 guesses = [
-  "Active, Style Name, Weight Class, Width Class, the read-only Axes Coordinates and Style Linking sit under the General heading, above the added fields; the Exports tab of the reference app settles the order.",
+  "Active, Style Name, Weight Class, Width Class, the Axes Coordinates and Style Linking sit under the General heading, above the added fields; the Exports tab of the reference app settles the order.",
   "A variable font setting shows Active, its name and its custom parameters, without classes, axes or style linking; selecting a variable font setting in the reference app settles it.",
   "The class menus list each standard value with its OpenType name (400 Regular, 5 Medium (normal)); the disclosure menus of the reference app settle the labels.",
 ]
@@ -2107,8 +2114,12 @@ summary = "An instance whose coordinates lie inside the range covered by masters
 ref = "Font Info › Exports › Axes Coordinates"
 status = "handbook"
 notes = "fontmake does not extrapolate: ufo2ft's instantiator normalises the location with fontTools' `normalizeLocation`, which clamps to the axis range. FontCraft follows the handbook (docs/plans/M9.md § 7, question 6 (a), decided by the orchestrator on the owner's behalf): static instances outside the masters are extrapolated, named in the export report, and left out of variable fonts. The difference from fontmake is in docs/spec/40-compile.md § 4a."
+guesses = [
+  "Font Info › Exports shows the extrapolation warning, in the warning colour, under the Axes Coordinates of each selected instance beyond the masters, and the list entry is not marked; selecting an extrapolated instance in the reference app settles it.",
+]
 observe = [
   "In F1 (two masters), export ExtraBlack (1000, outside the masters) as a static font and as part of a variable font: note whether the outlines are extrapolated, any warning, and whether `fvar` lists it.",
+  "In F1 (two masters), type a weight beyond the Bold master into an instance's Axes Coordinates in Font Info › Exports: note whether the field, the list entry or anything else marks the instance as extrapolated.",
 ]
 
 [[behavior]]

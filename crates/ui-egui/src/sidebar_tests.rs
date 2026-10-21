@@ -64,6 +64,42 @@ impl Window {
     }
 }
 
+impl Window {
+    /// Presses at `from` after a pause and moves to `to` in steps, holding the button.
+    fn press_and_move(&self, app: &mut FontcraftApp, from: Pos2, to: Pos2) {
+        for _ in 0..40 {
+            self.frame(app);
+        }
+        self.frame_with(app, vec![Event::PointerMoved(from), button(from, true, Modifiers::NONE)], Modifiers::NONE);
+        for step in 1..=8 {
+            let at = from + (to - from) * (step as f32 / 8.0);
+            self.frame_with(app, vec![Event::PointerMoved(at)], Modifiers::NONE);
+        }
+    }
+
+    fn release(&self, app: &mut FontcraftApp, at: Pos2) {
+        self.frame_with(app, vec![button(at, false, Modifiers::NONE)], Modifiers::NONE);
+        self.frame(app);
+        self.frame(app);
+    }
+
+    fn drag(&self, app: &mut FontcraftApp, from: Pos2, to: Pos2) {
+        self.press_and_move(app, from, to);
+        self.release(app, to);
+    }
+
+    fn key(&self, app: &mut FontcraftApp, key: Key) {
+        let event = Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE };
+        self.frame_with(app, vec![event], Modifiers::NONE);
+        self.frame(app);
+    }
+
+    fn type_text(&self, app: &mut FontcraftApp, text: &str) {
+        self.frame_with(app, vec![Event::Text(text.into())], Modifiers::NONE);
+        self.frame(app);
+    }
+}
+
 fn button(pos: Pos2, pressed: bool, modifiers: Modifiers) -> Event {
     Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers }
 }
@@ -258,10 +294,10 @@ fn the_smart_filter_editor_gives_the_settings_its_commands_give() {
     direct.run("fontView.addSmartFilter", &json!({"name": "Vowels", "rules": rules})).unwrap();
     assert_eq!(setting(&app, "fontView.filters"), setting(&direct, "fontView.filters"));
 
-    // A double-click on the filter opens its editor, which reads the stored name and rules.
+    // A double-click on the filter's icon opens its editor, which reads the stored name and rules.
     let w = Window::new();
     w.frame(&mut app);
-    let at = row(&app, "filters/Vowels").rect.center();
+    let at = row(&app, "filters/Vowels").icon.unwrap().center();
     w.double_click(&mut app, at);
     let shown = call(&mut app, "ui.dialog.inspect", json!({}));
     assert_eq!((shown["open"].as_bool(), shown["command"].as_str()), (Some(true), Some("fontView.editFilter")));
@@ -322,6 +358,147 @@ fn the_rule_rows_build_a_nested_group_as_the_command_takes_it() {
     let mut direct = FontcraftApp::default();
     direct.run("fontView.addSmartFilter", &json!({"name": "Nested", "rules": expected})).unwrap();
     assert_eq!(setting(&app, "fontView.filters"), setting(&direct, "fontView.filters"));
+}
+
+#[test]
+fn alt_on_a_plus_button_adds_a_nested_group_as_the_command_takes_it() {
+    use crate::dialogs::rule_tree::control_id;
+    let mut app = FontcraftApp::default();
+    open(&mut app, json!({"command": "fontView.addSmartFilter"}));
+    set(&mut app, "name", json!("Grouped"));
+    let w = Window::new();
+    let alt_press = |app: &mut FontcraftApp, path: &[usize]| {
+        // With Alt held each + shows …, which can widen the rows; the dialog settles first.
+        for _ in 0..3 {
+            w.frame_with(app, Vec::new(), Modifiers::ALT);
+        }
+        let at = w.ctx.read_response(control_id("rules", path, "add")).unwrap_or_else(|| panic!("{path:?} + was not drawn")).rect.center();
+        w.click(app, at, Modifiers::ALT);
+    };
+    // Alt on the top group's + adds a group at its end; on the first rule's +, a group after it.
+    alt_press(&mut app, &[]);
+    alt_press(&mut app, &[0]);
+    let starter = json!({"property": "glyphName", "op": "contains", "value": ""});
+    let expected = json!({"all": [starter, {"any": [starter]}, {"any": [starter]}]});
+    let shown = call(&mut app, "ui.dialog.inspect", json!({}));
+    assert_eq!(field(&shown, "rules")["value"], expected);
+    call(&mut app, "ui.dialog.confirm", json!({}));
+    let mut direct = FontcraftApp::default();
+    direct.run("fontView.addSmartFilter", &json!({"name": "Grouped", "rules": expected})).unwrap();
+    assert_eq!(setting(&app, "fontView.filters"), setting(&direct, "fontView.filters"));
+}
+
+/// The names of the top-level filters, in order.
+fn top_filters(app: &FontcraftApp) -> Vec<String> {
+    setting(app, "fontView.filters").as_array().unwrap().iter().map(|f| f["name"].as_str().unwrap().to_string()).collect()
+}
+
+#[test]
+fn renaming_a_filter_in_place_gives_the_settings_rename_filter_gives() {
+    let mut app = FontcraftApp::default();
+    let mut direct = FontcraftApp::default();
+    let rule = json!({"property": "glyphName", "op": "matches", "value": "[AEIOU]"});
+    add_smart(&mut app, "Vowels", rule.clone());
+    add_smart(&mut direct, "Vowels", rule);
+    let w = Window::new();
+    w.frame(&mut app);
+
+    // A double-click on the name opens a field holding it, all selected; Return renames.
+    let r = row(&app, "filters/Vowels");
+    let at = Pos2::new(r.icon.unwrap().right() + 12.0, r.rect.center().y);
+    w.double_click(&mut app, at);
+    w.frame(&mut app);
+    assert_eq!(w.ctx.memory(|m| m.focused()), Some(sidebar::rename_id()));
+    w.type_text(&mut app, "Open");
+    w.key(&mut app, Key::Enter);
+    assert!(app.font_view.sidebar.renaming.is_none());
+    direct.run("fontView.renameFilter", &json!({"filter": "filters/Vowels", "name": "Open"})).unwrap();
+    assert_eq!(setting(&app, "fontView.filters"), setting(&direct, "fontView.filters"));
+    assert_eq!(entries(&mut app), ["filters/Open"], "the renamed filter stays selected");
+
+    // Return with the filter selected opens the field again; Escape changes nothing.
+    let revision = app.session.settings().revision();
+    w.key(&mut app, Key::Enter);
+    assert_eq!(app.font_view.sidebar.renaming.as_ref().map(|r| r.path.join("/")), Some("filters/Open".to_string()));
+    w.frame(&mut app);
+    w.type_text(&mut app, "Shut");
+    w.key(&mut app, Key::Escape);
+    assert!(app.font_view.sidebar.renaming.is_none());
+    assert_eq!(app.session.settings().revision(), revision, "Escape renames nothing");
+
+    // Return again, a new name, Return.
+    w.key(&mut app, Key::Enter);
+    w.frame(&mut app);
+    w.type_text(&mut app, "Shut");
+    w.key(&mut app, Key::Enter);
+    direct.run("fontView.renameFilter", &json!({"filter": "filters/Open", "name": "Shut"})).unwrap();
+    assert_eq!(setting(&app, "fontView.filters"), setting(&direct, "fontView.filters"));
+
+    // After a press outside the sidebar, Return leaves the filter's name alone.
+    w.click(&mut app, Pos2::new(1000.0, 600.0), Modifiers::NONE);
+    assert!(!sidebar::has_keyboard(&app));
+    w.key(&mut app, Key::Enter);
+    assert!(app.font_view.sidebar.renaming.is_none());
+}
+
+#[test]
+fn dragging_a_filter_gives_the_settings_move_filter_gives() {
+    let mut app = FontcraftApp::default();
+    let mut direct = FontcraftApp::default();
+    for a in [&mut app, &mut direct] {
+        for name in ["A", "B", "C"] {
+            add_smart(a, name, json!({"property": "glyphName", "op": "is", "value": name}));
+        }
+        a.run("fontView.addFilterFolder", &json!({"name": "Work"})).unwrap();
+    }
+    let base = top_filters(&app).iter().position(|n| n == "A").unwrap();
+    let w = Window::new();
+    w.frame(&mut app);
+
+    // Onto a folder's middle: into the folder, which is framed while the filter is over it.
+    let (a, work) = (row(&app, "filters/A"), row(&app, "filters/Work"));
+    w.press_and_move(&mut app, a.rect.center(), work.rect.center());
+    assert_eq!(app.font_view.sidebar.drop, Some(sidebar::DropTarget { parent: vec!["Work".into()], index: 0, mark: sidebar::Mark::Into(work.rect) }));
+    w.release(&mut app, work.rect.center());
+    direct.run("fontView.moveFilter", &json!({"filter": "filters/A", "parent": "filters/Work", "index": 0})).unwrap();
+    assert_eq!(setting(&app, "fontView.filters"), setting(&direct, "fontView.filters"));
+
+    // Onto the top of a row: before it.
+    let (b, c) = (row(&app, "filters/B"), row(&app, "filters/C"));
+    w.drag(&mut app, c.rect.center(), Pos2::new(b.rect.center().x, b.rect.top() + 2.0));
+    direct.run("fontView.moveFilter", &json!({"filter": "filters/C", "index": base})).unwrap();
+    assert_eq!(setting(&app, "fontView.filters"), setting(&direct, "fontView.filters"));
+
+    // Onto the bottom of a row further down: after it, counted without the dragged filter.
+    let (b, c) = (row(&app, "filters/B"), row(&app, "filters/C"));
+    w.drag(&mut app, c.rect.center(), Pos2::new(b.rect.center().x, b.rect.bottom() - 2.0));
+    direct.run("fontView.moveFilter", &json!({"filter": "filters/C", "index": base + 1})).unwrap();
+    assert_eq!(setting(&app, "fontView.filters"), setting(&direct, "fontView.filters"));
+    assert_eq!(top_filters(&app).get(base..), Some(&["B".to_string(), "C".into(), "Work".into()][..]));
+
+    // A folder dragged onto an entry inside itself shows no mark, and its drop runs nothing.
+    let chevron = row(&app, "filters/Work").chevron.unwrap().center();
+    w.click(&mut app, chevron, Modifiers::NONE);
+    let (work, inner) = (row(&app, "filters/Work"), row(&app, "filters/Work/A"));
+    let revision = app.session.settings().revision();
+    w.press_and_move(&mut app, work.rect.center(), inner.rect.center());
+    assert!(app.font_view.sidebar.dragging.is_some());
+    assert_eq!(app.font_view.sidebar.drop, None);
+    w.release(&mut app, inner.rect.center());
+    assert_eq!(app.session.settings().revision(), revision);
+}
+
+#[test]
+fn a_groups_file_entry_shows_in_the_categories_section() {
+    let mut app = FontcraftApp::default();
+    let w = Window::new();
+    w.frame(&mut app);
+    let problems = app.session.set_user_groups(&[("Groups.plist", "{categories = ({name = Odd; list = (A, zz);});}")]);
+    assert!(problems.is_empty(), "{problems:?}");
+    w.frame(&mut app);
+    let at = row(&app, "categories/Odd").rect.center();
+    w.click(&mut app, at, Modifiers::NONE);
+    assert_eq!(visible(&mut app), ["A"]);
 }
 
 #[test]

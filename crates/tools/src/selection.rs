@@ -254,14 +254,32 @@ impl Selection {
         self.points.iter().copied().filter(|&(s, n)| scene.node(s, n).is_some_and(|node| node.on_curve())).collect()
     }
 
-    /// Whether the selection holds more than handles: an on-curve node, a shape, an anchor, a
-    /// guide or an annotation. Only such a selection can be duplicated by dragging.
-    pub fn has_structure(&self, scene: &Scene) -> bool {
-        !self.shapes.is_empty()
-            || !self.anchors.is_empty()
-            || !self.guides.is_empty()
-            || !self.annotations.is_empty()
-            || !self.on_curve_points(scene).is_empty()
+    /// Whether dragging a copy of the selection copies anything: a shape, an anchor, a guide, an
+    /// annotation, a whole path, or a segment whose two end nodes are both selected (what
+    /// `selection.move` with `duplicate` copies of a partly selected path).
+    pub fn has_copyable_part(&self, scene: &Scene) -> bool {
+        if !(self.shapes.is_empty() && self.anchors.is_empty() && self.guides.is_empty() && self.annotations.is_empty()) {
+            return true;
+        }
+        let mut by_shape: std::collections::BTreeMap<usize, BTreeSet<usize>> = Default::default();
+        for &(s, n) in &self.points {
+            by_shape.entry(s).or_default().insert(n);
+        }
+        by_shape.iter().any(|(&s, nodes)| {
+            scene.path(s).is_some_and(|path| {
+                nodes.len() == path.nodes.len() || path.segments().iter().any(|g| nodes.contains(&g.start) && nodes.contains(&g.end))
+            })
+        })
+    }
+
+    /// Whether the selection is handles and nothing else.
+    pub fn is_handles_only(&self, scene: &Scene) -> bool {
+        !self.points.is_empty()
+            && self.shapes.is_empty()
+            && self.anchors.is_empty()
+            && self.guides.is_empty()
+            && self.annotations.is_empty()
+            && self.points.iter().all(|&(s, n)| scene.node(s, n).is_some_and(|node| !node.on_curve()))
     }
 }
 

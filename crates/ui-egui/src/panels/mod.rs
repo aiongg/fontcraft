@@ -143,6 +143,8 @@ pub struct PanelState {
     pub review_hints: crate::dialogs::review_hints::ReviewHintsState,
     pub font_audit: crate::shell::font_audit::FontAuditState,
     pub table_viewer: crate::shell::table_viewer::TableViewerState,
+    /// The Settings window (`app.settings`).
+    pub settings_window: crate::shell::settings_window::SettingsWindowState,
 }
 
 impl Default for PanelState {
@@ -189,6 +191,7 @@ impl Default for PanelState {
             review_hints: Default::default(),
             font_audit: Default::default(),
             table_viewer: Default::default(),
+            settings_window: Default::default(),
         }
     }
 }

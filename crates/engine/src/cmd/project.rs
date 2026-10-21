@@ -593,7 +593,7 @@ fn export(_: &mut Session, _: &Value) -> Result<Value> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn open_project(s: &mut Session, v: &Value) -> Result<Value> {
+pub(super) fn open_project(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("project.open", v)?;
     let path = path_param(&p, "path")?;
     if let Ok(i) = s.find_project(Some(&json!(path.to_string_lossy()))) {
@@ -628,7 +628,7 @@ fn open_project(s: &mut Session, v: &Value) -> Result<Value> {
 }
 
 #[cfg(target_arch = "wasm32")]
-fn open_project(_: &mut Session, _: &Value) -> Result<Value> {
+pub(super) fn open_project(_: &mut Session, _: &Value) -> Result<Value> {
     Err(EngineError::Unsupported("opening a project file in the browser".into()))
 }
 

@@ -230,6 +230,9 @@ pub struct Tokens {
     pub measure_label_size: f32,
     /// Dots where a ruler or a measurement guide crosses the outline.
     pub measure_crossing_radius: f32,
+    /// Stretches of outline inside an overlap while the Measurement tool is active
+    /// (`measurement.overlapsIgnored`): they go when overlaps are removed.
+    pub measure_overlap: Color32,
     /// The inactive side of the layer under Show Background (`background.outlineDisplay`).
     pub background_outline: Color32,
     pub background_outline_width: f32,
@@ -501,6 +504,7 @@ impl Tokens {
             measure_ruler_width: 1.0,
             measure_label_size: 10.0,
             measure_crossing_radius: 3.0,
+            measure_overlap: Color32::from_rgb(0xc0, 0xc0, 0xc0),
             background_outline: Color32::from_rgba_unmultiplied(0xe0, 0x40, 0x40, 0x90),
             background_outline_width: 1.0,
             visible_layer_outline: Color32::from_rgba_unmultiplied(0x2d, 0x8c, 0xeb, 0xb0),

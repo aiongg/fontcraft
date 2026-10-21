@@ -26,6 +26,12 @@ pub const MAX_OPEN_PROJECTS: usize = 256;
 /// Most `..` segments in a stored relative path; a longer climb is stored absolute.
 const MAX_CLIMB: usize = 32;
 
+/// Whether `path` names a project file, by its extension in any case. `file.open` opens such a
+/// file as `project.open` does.
+pub fn is_project_file(path: &Path) -> bool {
+    path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case(fontcraft_format::project::PROJECT_EXTENSION))
+}
+
 /// A project's contents as edited.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ProjectData {
