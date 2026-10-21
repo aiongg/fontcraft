@@ -930,88 +930,61 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
 
 ### What to build next (in priority order)
 
-1. **Tuning of the measures that missed** (each was measured and is tracked in the measure tables above):
-   - M10.21b: the TrueType autohinter's x-height rows (92.9% against 95%) and zone agreement (98.29% against
-     99%). Its cap-height rows (100%) and size (78.8% of ttfautohint's) meet their targets.
-   - M13.20: auto-spacing's median error on Inter (30% to 75% against 10%; Oswald's 5% to 12.5% meets it). This
-     method's best fit to the sources' spacing is about 60%, so it needs a different model of the spacing, not
-     more tuning. Measure: `cargo test --release -p fontcraft-engine --test engine corpus_autospace:: --
-     --ignored --nocapture`. Auto-kerning meets its target (`corpus_autokern::`, 85.7% to 99.2%).
-   - Detect Composites on Inter (M13.15b, M13.15c): 78.1% against 95%. The 200 misses are merged attachments
-     (ogonek, cedilla, stroke letters), and 241 composites take other bases whose outlines equal the source's
-     bases and that no name or glyph data tells apart (`uni1FBE` and `ypogegrammeni` 21, `macronsub` 19,
-     `koronis` and `psili` 11, `tonos.top` 8, `uni1FC0` 8). The target is out of reach without anchor or source
-     hints; a further step needs them. Measure: `cargo test --release -p fontcraft-engine --test engine detect::
-     -- --ignored --nocapture`.
-2. **The remaining packages of each milestone**, in the order the plans' dependencies allow:
-   - M6.19; M7.20; M8.24; M9.26; M10.32.
-   - M11.20.
-   - M12.1a to M12.1c, M12.36, M12.65.
-   - M13.40 to M13.42 (caps: trial), M13.59 (waits for a trial sample of a saved Glyphs project), M13.61.
-     M13.60 is dropped.
-   - The builder queue, one at a time in the main checkout: M12.40c (the 3 corpus UFOs that differ from
-     makeotf), then the M10.21b and M13.20 tuning of item 1.
-3. **A second planning pass**, area by area, after the remaining packages: grade each area's rows against what
-   works, and write depth packages for the areas with the largest weight × gap (Drawing, Interpolation, Reusing
-   shapes, OpenType layout, Compiling; see the parity table).
-4. **Follow-up packages the writers named:**
-   - TTX: the font bounding box of one CFF font in the reader (M12.8, M12.9 follow-ups).
-   - Instances: the compile of a designspace without axes; the style-map style name of a Thin instance.
-   - PDF: the desktop shell reading the clipboard's PDF flavour, one PDF decode shared with the window, and placed
-     PDFs in bitmap exports.
-   - Audit: `checkOutlines` decimal output and keepContourOrder; `compareFamily -l`.
+1. **The depth waves of [`docs/plans/depth.md`](docs/plans/depth.md), wave 1 first** (M14.3 save prompts and
+   M1.8 Open chooser first). The second planning pass graded every area by behaviour and wrote 167 packages into
+   the milestone plans: 13 waves of up to nine writers, each with one builder beside it, then a builder tail, from
+   about 36% to about 51% parity. Wave 1: the builder M14.3 (save prompts on close and quit; closing a window loses
+   unsaved work today) and the writers M1.8 (File › Open… has no file chooser today), M9.27, M13.78, M3.19, M7.21,
+   M4.17, M3.40, M14.1 and M3.21. The packages that wait on an open decision (depth.md § 6) or on upstream
+   craft-keymap come last, and the close builders (M6.19, M7.20, M8.24, M9.26, M10.32, M11.20, M12.65, M13.61) after
+   them.
+2. **The measures that missed** are depth packages: M10.21c (the TrueType autohinter's x-height rows, 92.9%
+   against 95%, and zone agreement, 98.29% against 99%, measured again over more than the 7 sources the measure
+   covers today) and M13.20b (auto-spacing on Inter, 30% to 75% median error against 10%, with a model of shape
+   classes; measure: `cargo test --release -p fontcraft-engine --test engine corpus_autospace:: -- --ignored
+   --nocapture`). Detect Composites on Inter stays at 78.1% against 95% (M13.15c): the 200 misses are merged
+   attachments (ogonek, cedilla, stroke letters), and 241 composites take other bases whose outlines equal the
+   source's bases and that no name or glyph data tells apart. A further step needs anchor or source hints; no
+   package is queued. Measure: `cargo test --release -p fontcraft-engine --test engine detect:: -- --ignored
+   --nocapture`.
+3. **Follow-up packages the writers named:**
+   - TTX: the TrueType `post` table compiled again when a dump lacks it; glyph-order renames in a TTX import into a
+     CFF font (X.ttx4).
+   - Instances: the file names of masters exported as instances, against fontmake's (`FontInfo-Thin.ttf`).
+   - PDF: `draw_placed_pdf` hashes again when glyphs alternate between two PDFs.
    - Merge: CFF2, CID-keyed fonts and `JSTF`, which fontTools refuses too.
    - Convert (M12.30): locations beyond the axis ranges, the other output targets and options for UFO output.
-   - Project compile (M12.40 to M12.42): the 3 corpus UFOs that still differ from makeotf (advance widths and
-     composite outlines; M12.40c, in the builder queue); bundled character collection data and `GSUB` resources
-     for the ROS parameter.
-   - Colour: `SVG ` filters in Edit View, the filter primitives not drawn (turbulence, lighting, convolution and
-     others), and raster warnings shown in Text Preview. Space Center: images in the display menu. Colour
-     drawing: screenshots.
+   - Project compile (M12.40 to M12.42): mirrored components in single precision and makeotf's lookup grouping
+     across lookup flags, which are not followed (M12.40c); a guess entry for the compile's fallback warning;
+     bundled character collection data and `GSUB` resources for the ROS parameter.
+   - Colour: `feImage` in `SVG ` filters; filtered sprites keyed by glyph, not by occurrence (a large glyph clipped
+     at both canvas edges runs its filters again on every frame). Colour drawing: screenshots.
    - Table Viewer (M12.38): the source of the last export, a control-channel measure and screenshots.
-   - `edit.showAllMasters` (needs a tab model with a layer per text item).
-   - `.glyphs` files: the layouts of node attributes; version 2 top-level names in version 3 files.
-   - Small UI leftovers: extra nodes at intersections in the Instructor; the Exports tab's aliases (not yet
-     defined); the CLI's repeated `--check` keeps only the last value; web storage of modules.
-5. **The builder packages the earlier waves left**, one at a time in the main checkout: M12.36 (the PDF proof
-   through the suite's `craft-print`). Then the
-   Craft suite's shared libraries (`docs/decisions/0008-shared-suite-libraries.md`), in this order:
-   - X.suite2: `craft-quit`, native macOS quit and window-close handling for the desktop app.
-     The save prompts stay FontCraft's.
-   - X.suite3: `craft-settings`, settings storage in `config.toml` with backup and recovery,
-     with a one-time import of FontCraft's existing JSON settings file. It pairs with the
-     settings window.
-   - Watch item: the suite's proposed shared control-port authentication (`craft-control`, an
-     open upstream proposal). Adopt it for the control channel once it exists.
-
-   Later: `craft-ui` in M14.
-
-   Follow-ups: instruction deltas in variable TrueType fonts and an intermediate layer's own instructions
-   (M10.19, M10.19b); the variation of TrueType
-   composites with intermediate layers; variable values in table blocks (`fea.var.tableValues`: `BASE`, `GDEF` carets,
-   `hhea`, `OS/2`, `vmtx`; fea-rs rejects them); hint upkeep on background layers and for corner
-   and cap hints; the audit runner's remaining options and width checks, and a look at the outline
-   warnings on decoded compiled fonts.
-6. **Smaller follow-ups:** token expansion in `plan::postscript_name` and `plan::file_stem`, and
-   selecting and deleting corner components in Edit View (needs a hint selection kind).
-   Variable-font follow-ups: the layout of InterpolateLayout3 (two `.notdef` glyphs), alternate
-   layers with all bounds empty, fontc's combinatorial bracket kerning and
-   decreasing-axis tables, brace sources for composites of non-exported brace glyphs, vertical
-   phantom points and `VVAR`, and `OVERLAP_COMPOUND`.
-7. **The measures**: M6's (`docs/plans/M6.md` § 5: mark attachment against the oracles,
-   propagation against glyphsLib, composition and alignment over the corpus) and the corpus
-   measures not yet run: ttxn and tx for the normalised dump, sfntdiff for `diff`, cu2qu and ttfcomponentizer,
-   otfautohint for the `autohint` shell, FontBakery and comparefamily
-   over the corpus. M9's, the TTX writers' and readers', qu2cu's, the colour tables', subset's, convert's, project
-   compile's and merge's are run, and so are the measures that need AFDKO's tools (tx, makeotf, rotatefont,
+   - Small UI leftovers: the Exports tab's aliases (not yet defined).
+4. **The Craft suite's shared libraries** (`docs/decisions/0008-shared-suite-libraries.md`): `craft-quit` comes with
+   M14.3; X.suite3 (`craft-settings`, settings in `config.toml` with backup and recovery and a one-time import of
+   FontCraft's JSON settings file) is the builder of wave 12; `craft-ui` is M14.9; `craft-keymap` (M14.7, M14.8)
+   waits on two upstream pull requests. Watch item: the suite's proposed shared control-port authentication
+   (`craft-control`, an open upstream proposal); adopt it for the control channel once it exists.
+5. **Smaller follow-ups:** an intermediate layer's own TrueType instructions and the variation of TrueType
+   composites with intermediate layers (M10.19, M10.19b); variable values in table blocks (`fea.var.tableValues`:
+   `BASE`, `GDEF` carets, `hhea`, `OS/2`, `vmtx`; fea-rs rejects them); the layout of InterpolateLayout3 (two
+   `.notdef` glyphs), fontc's combinatorial bracket kerning and decreasing-axis tables, and brace sources for
+   composites of non-exported brace glyphs (with M9.39).
+6. **The measures not yet run:** ttxn and tx for the normalised dump, sfntdiff for `diff`, cu2qu and
+   ttfcomponentizer, otfautohint for the `autohint` shell and over the corpus (M10.33), FontBakery and
+   comparefamily over the corpus (M12.81), and the § 5 measures of M6 (M6.22; mark attachment is run), M7 (names
+   are run) and M8 (M8.34). M9's, the TTX writers' and readers', qu2cu's, the colour tables', subset's, convert's,
+   project compile's and merge's are run, and so are the measures that need AFDKO's tools (tx, makeotf, rotatefont,
    cffsubr and the CFF2 variable compile against fontmake).
-8. **Shell hooks for finished M13 packages**: dialogs and menu entries several commands wait for
+7. **Shell hooks for finished M13 packages**: dialogs and menu entries several commands wait for
    (for example the metrics-file import chooser, Status Definitions, the name-list rename).
-9. **Checks in the reference app**: `docs/observe.md` lists every row the running app could
-   settle (1,380 rows), with the synthetic test fonts `cargo xtask testfonts` writes.
+8. **Checks in the reference app**: `docs/observe.md` lists every row the running app could
+   settle (1,380 rows), with the synthetic test fonts `cargo xtask testfonts` writes; depth.md § 7 names the
+   checks that settle the most guesses.
 
-Left from M2: the compile plan's `features` section, and the CLI's `--name-by`, `--output-layout` and pattern instance
-selection (`docs/plans/M2.md` › M2.5).
+Left from M2: the compile plan's `features` section (M2.12), and the CLI's `--name-by`, `--output-layout` and
+pattern instance selection (M2.8).
 
 **The primary reference cannot be observed directly** (open decision O1: no licence). Editor
 behaviour comes from the handbook and from public tutorial videos the owner watches and reports
