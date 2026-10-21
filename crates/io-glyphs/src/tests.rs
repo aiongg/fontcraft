@@ -1160,3 +1160,80 @@ fn kept_layouts_an_edit_made_stale_are_dropped_from_a_copy() {
     assert_eq!(write(&pruned).unwrap(), write(&edited).unwrap());
     assert!(Arc::ptr_eq(pruned.glyphs.get("B").unwrap(), font.glyphs.get("B").unwrap()), "untouched glyphs are shared");
 }
+
+/// The node of glyph `A`'s first path at (`x`, 700).
+fn apex(font: &Font, x: f64) -> fontcraft_model::Node {
+    let Shape::Path(p) = &font.glyph("A").unwrap().layers[0].shapes[0] else { panic!() };
+    p.nodes.iter().find(|n| (n.x, n.y) == (x, 700.0)).unwrap().clone()
+}
+
+fn edit_apex(font: &mut Font, edit: impl FnOnce(&mut fontcraft_model::Node)) {
+    let mut g = font.glyph_mut("A").unwrap();
+    let Shape::Path(p) = &mut g.layers[0].shapes[0] else { panic!() };
+    edit(p.nodes.iter_mut().find(|n| n.y == 700.0).unwrap());
+}
+
+#[test]
+fn one_line_node_attributes_keep_their_layout_until_an_edit_changes_them() {
+    let text = V3.replace("(300,700,l),", "(300,700,l,{name = apex; userData = {k = v;};}),");
+    let font = read(&text).unwrap();
+    assert_eq!(apex(&font, 300.0).info.name.as_deref(), Some("apex"), "the name reaches the model");
+    assert_eq!(write(&font).unwrap(), text, "byte-identical while untouched");
+    assert!(without_stale_layouts(&font).is_none());
+
+    // Moving the node leaves its attributes, and their layout, as they were.
+    let mut moved = font.clone();
+    edit_apex(&mut moved, |n| n.x = 310.0);
+    assert!(write(&moved).unwrap().contains("(310,700,l,{name = apex; userData = {k = v;};}),"));
+    assert!(without_stale_layouts(&moved).is_none());
+
+    // A renamed node is written in the writer's layout, and a native save drops the stale one.
+    let mut renamed = font.clone();
+    edit_apex(&mut renamed, |n| n.info.name = Some("peak".into()));
+    let out = write(&renamed).unwrap();
+    assert!(out.contains("(300,700,l,{\nname = peak;\nuserData = {k = v;};\n}),"), "{out}");
+    assert_eq!(write(&read(&out).unwrap()).unwrap(), out);
+    let pruned = without_stale_layouts(&renamed).unwrap();
+    assert!(!apex(&pruned, 300.0).info.extra.iter().any(|e| e.key.as_str().starts_with(LAYOUT_KEY)), "the stale layout is dropped");
+    assert_eq!(write(&pruned).unwrap(), out);
+}
+
+#[test]
+fn version_2_top_level_keys_in_a_version_3_file_read_as_glyphslib_reads_them() {
+    let text = V3
+        .replace("familyName = \"Test Sans\";\n", "copyright = \"Old C\";\ndisablesNiceNames = 1;\nfamilyName = \"Test Sans\";\n")
+        .replace("metrics = (\n", "gridLength = 10;\nkeyboardIncrement = 5;\nmetrics = (\n");
+    let font = read(&text).unwrap();
+    let s = &font.info.settings;
+    assert_eq!((s.disables_nice_names, s.grid_length, s.keyboard_increment), (Some(true), Some(10.0), Some(5.0)));
+    assert_eq!(font.info.properties.value("copyrights"), Some("Old C"));
+    assert_eq!(write(&font).unwrap(), text, "byte-identical while untouched");
+
+    // An edited setting moves every setting into the dictionary, which overrides the top level.
+    let mut edited = font.clone();
+    Arc::make_mut(&mut edited.info).settings.grid_length = Some(20.0);
+    let out = write(&edited).unwrap();
+    assert!(out.contains("settings = {\ndisablesNiceNames = 1;\ngridLength = 20;\nkeyboardIncrement = 5;\n};"), "{out}");
+    assert!(!out.contains("gridLength = 10;") && !out.contains("\ndisablesNiceNames = 1;\nfamilyName"), "{out}");
+    assert_eq!(read(&out).unwrap().info.settings, edited.info.settings);
+
+    // A cleared setting is left out; the others stay where they were.
+    let mut cleared = font.clone();
+    Arc::make_mut(&mut cleared.info).settings.keyboard_increment = None;
+    let out = write(&cleared).unwrap();
+    assert_eq!(out, text.replace("keyboardIncrement = 5;\n", ""));
+
+    // An edited name is written as a property, without the stale top-level key.
+    let mut renamed = font.clone();
+    Arc::make_mut(&mut renamed.info).properties.set("copyrights", "New C", true);
+    let out = write(&renamed).unwrap();
+    assert!(!out.contains("Old C") && out.contains("value = \"New C\";"), "{out}");
+    assert_eq!(read(&out).unwrap().info.properties.value("copyrights"), Some("New C"));
+
+    // Keys a `settings` dictionary follows are not read, and stay as written.
+    let text = text.replace("unitsPerEm = 1000;\n", "settings = {\nkeyboardIncrementBig = 20;\n};\nunitsPerEm = 1000;\n");
+    let font = read(&text).unwrap();
+    let s = &font.info.settings;
+    assert_eq!((s.disables_nice_names, s.grid_length, s.keyboard_increment_big), (None, None, Some(20.0)));
+    assert_eq!(write(&font).unwrap(), text);
+}

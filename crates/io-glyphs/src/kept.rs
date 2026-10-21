@@ -199,6 +199,9 @@ fn shapes(shapes: &mut [Shape], anchors: &mut [fontcraft_model::Anchor], f: &mut
                 if !p.info.is_default() {
                     f(&mut p.info.attrs.extra);
                 }
+                for n in p.nodes.iter_mut().filter(|n| !n.info.is_default()) {
+                    f(&mut n.info.extra);
+                }
             }
             Shape::Component(c) => {
                 f(&mut c.extra);
