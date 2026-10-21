@@ -582,13 +582,27 @@ fn with_scene<R>(app: &FontcraftApp, f: impl FnOnce(&Scene, &Selection) -> R) ->
     Some(f(&scene, &tab.selection))
 }
 
-/// Runs item `id` of the open context menu as a click on it does, and closes the menu.
+/// Runs item `id` of the open context menu as a click on it does, and closes the menu. The item
+/// is checked as the menu would draw it now: a menu whose tab or glyph changed, or that a dialog
+/// covers, closes as it does on screen; an item that is gone or disabled is refused and leaves
+/// the menu open.
 pub fn invoke(app: &mut FontcraftApp, id: &str) -> Result<Value, String> {
-    let menu = app.tools.context_menu.take().ok_or("no context menu is open")?;
-    let item = menu.item(id).ok_or_else(|| format!("`{id}` is not in the context menu"))?;
-    if !item.enabled {
-        return Err(item.disabled_reason.clone().unwrap_or_else(|| format!("`{id}` is not available now")));
+    let menu = app.tools.context_menu.clone().ok_or("no context menu is open")?;
+    let same = app.state.tab().is_some_and(|t| t.id == menu.tab && t.edited_glyph() == Some(menu.glyph.as_str()));
+    if !same || app.dialog.is_some() {
+        app.tools.context_menu = None;
+        return Err(
+            if same { "a dialog is open; the context menu closed" } else { "the tab or the edited glyph changed; the context menu closed" }.into()
+        );
     }
+    if app.close_prompt.is_open() {
+        return Err("the question about unsaved changes is open".into());
+    }
+    let item = current_item(app, &menu, id).ok_or_else(|| format!("`{id}` is not in the context menu"))?;
+    if !item.enabled {
+        return Err(item.disabled_reason.unwrap_or_else(|| format!("`{id}` is not available now")));
+    }
+    app.tools.context_menu = None;
     let mut result = None;
     for (command, params) in steps_for(app, &menu, item.command) {
         let value = app.run_from_shell(command, &params)?;
@@ -596,6 +610,16 @@ pub fn invoke(app: &mut FontcraftApp, id: &str) -> Result<Value, String> {
         result.get_or_insert(value);
     }
     Ok(result.unwrap_or(Value::Null))
+}
+
+/// Item `id` of `menu` as the menu lists it for the current selection and state.
+fn current_item(app: &FontcraftApp, menu: &ContextMenu, id: &str) -> Option<ContextItem> {
+    let kinds: Vec<&'static str> = menu.sections.iter().map(|s| s.context).filter(|c| *c != INSTRUCTOR).collect();
+    let mut now = sections(&app.session, &app.state, &kinds);
+    if menu.sections.iter().any(|s| s.context == INSTRUCTOR) {
+        now.push(instructor_section(&app.state));
+    }
+    now.into_iter().flat_map(|s| s.items).find(|i| i.command == id)
 }
 
 /// Draws the open context menu, and queues the command of the item picked in it.

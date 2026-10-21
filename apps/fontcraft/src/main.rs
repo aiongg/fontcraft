@@ -144,9 +144,11 @@ impl eframe::App for Shell {
     }
 
     /// The control channel's window input (`ui.click`, `ui.drag`, `ui.wheel`, `ui.move`) joins the
-    /// window's own, one event per frame.
+    /// main window's own, one event per drawn frame: `ui` draws it, confined as its request.
     fn raw_input_hook(&mut self, _ctx: &eframe::egui::Context, raw_input: &mut eframe::egui::RawInput) {
-        self.app.raw_input_hook(raw_input);
+        if raw_input.viewport_id == eframe::egui::ViewportId::ROOT {
+            self.app.raw_input_hook(raw_input);
+        }
     }
 }
 

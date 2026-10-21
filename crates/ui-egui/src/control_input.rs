@@ -3,11 +3,13 @@
 //! - `ui.click {x, y}`, `ui.drag`, `ui.wheel` and `ui.move` become egui events at window points,
 //!   so they reach every widget a mouse reaches: Font View cells, panel fields, lists, the canvas
 //!   (a right-click there opens its context menu). The events wait in [`SyntheticInput`] and the
-//!   host hands them to egui one per frame ([`FontcraftApp::raw_input_hook`]), so egui sees a press,
-//!   the moves of a drag and the release as separate input, as it does from a real mouse.
+//!   host hands them to egui one per drawn frame ([`FontcraftApp::raw_input_hook`]), so egui sees
+//!   a press, the moves of a drag and the release as separate input, as it does from a real mouse.
 //! - The modifiers a request names are held for the frames its input spans: a click's press and
 //!   release, a drag from the press through every move to the release. The keyboard's own
 //!   modifiers come back after.
+//! - The person's own mouse press or key press in the window drops the input still waiting, and
+//!   so does the question about unsaved changes when it opens other than from that input.
 //! - `ui.contextMenu.list` and `ui.contextMenu.invoke` read and run the canvas context menu.
 //! - `ui.set` turns view switches on or off by running their menu commands, so the result is the
 //!   menu's. `ui.resize` and `ui.focus` ask the window through egui's viewport commands.
@@ -39,15 +41,69 @@ pub const MAX_WHEEL: f64 = 100.0;
 pub const MAX_COORDINATE: f64 = 100_000.0;
 /// Largest font-unit coordinate `ui.contextMenu.list` takes.
 const MAX_FONT_COORDINATE: f64 = 10_000_000.0;
-/// The window sizes `ui.resize` takes, in points.
-pub const MIN_WINDOW: f64 = 200.0;
+/// The smallest window `ui.resize` takes, in points: the window's own minimum size.
+pub const MIN_WINDOW_WIDTH: f64 = 640.0;
+pub const MIN_WINDOW_HEIGHT: f64 = 400.0;
+/// The largest size `ui.resize` takes, in points. Larger sizes are refused; sizes the window
+/// cannot take are clamped ([`MAX_SURFACE`]).
 pub const MAX_WINDOW: f64 = 16_384.0;
+/// The largest window side `ui.resize` asks for, in points: the texture size the renderer asks
+/// the graphics device for. A surface larger than the device's textures aborts the process.
+pub const MAX_SURFACE: f32 = 8_192.0;
+/// egui's texture side before the host reports the device's.
+const DEFAULT_TEXTURE_SIDE: f32 = 2_048.0;
 /// Most `ui.resize` and `ui.focus` requests waiting for the next frame.
 const MAX_VIEWPORT_COMMANDS: usize = 16;
 /// Most keys one `ui.set` takes.
 const MAX_SET_KEYS: usize = 64;
 /// Steps of a `ui.drag` that names none.
 const DEFAULT_DRAG_STEPS: u64 = 8;
+
+/// The sizes the window can take, from the last drawn frame.
+#[derive(Clone, Copy, Debug)]
+struct WindowLimits {
+    /// The graphics device's largest texture side, in pixels.
+    texture_side: f32,
+    /// Pixels per point: the larger of the monitor's and egui's (which includes the zoom).
+    pixels_per_point: f32,
+    /// The monitor's size in points, when the host knows it.
+    monitor: Option<egui::Vec2>,
+}
+
+impl Default for WindowLimits {
+    fn default() -> Self {
+        Self { texture_side: DEFAULT_TEXTURE_SIDE, pixels_per_point: 1.0, monitor: None }
+    }
+}
+
+impl WindowLimits {
+    fn of(ctx: &egui::Context) -> Self {
+        ctx.input(|i| Self {
+            texture_side: i.max_texture_side as f32,
+            pixels_per_point: i.pixels_per_point.max(i.viewport().native_pixels_per_point.unwrap_or(0.0)),
+            monitor: i.viewport().monitor_size,
+        })
+    }
+
+    /// The largest inner size the window can take, in points.
+    fn largest(&self) -> egui::Vec2 {
+        let ppp = if self.pixels_per_point.is_finite() && self.pixels_per_point > 0.0 { self.pixels_per_point } else { 1.0 };
+        let side = if self.texture_side.is_finite() && self.texture_side > 0.0 { self.texture_side / ppp } else { DEFAULT_TEXTURE_SIDE };
+        let side = side.min(MAX_SURFACE);
+        let mut size = egui::vec2(side, side);
+        if let Some(monitor) = self.monitor.filter(|m| m.x.is_finite() && m.y.is_finite() && m.x > 0.0 && m.y > 0.0) {
+            size = size.min(monitor);
+        }
+        size
+    }
+
+    fn clamp(&self, command: egui::ViewportCommand) -> egui::ViewportCommand {
+        match command {
+            egui::ViewportCommand::InnerSize(size) => egui::ViewportCommand::InnerSize(size.min(self.largest())),
+            other => other,
+        }
+    }
+}
 
 /// Control-channel input waiting for the next frames.
 #[derive(Default)]
@@ -58,14 +114,24 @@ pub struct SyntheticInput {
     host_modifiers: egui::Modifiers,
     /// Synthetic modifiers are in force in egui.
     holding: bool,
-    /// The frame being drawn carries synthetic input.
-    frame: bool,
+    /// What the hook added to egui's input for the event in flight: handed out, not yet drawn by
+    /// [`FontcraftApp::ui_with_control_input`]. Empty when no event is in flight. While the window
+    /// is hidden the host runs passes without a ui and carries their input over to the next
+    /// drawn pass, so these events can come back to the hook.
+    in_flight: Vec<egui::Event>,
+    limits: WindowLimits,
+    /// The question about unsaved changes was open at the last look.
+    prompt_open: bool,
+    /// Whether each drawn pass ran confined, for the tests.
+    #[cfg(test)]
+    confined: Vec<bool>,
 }
 
 impl SyntheticInput {
-    /// How many events wait to be handed to egui.
+    /// How many events wait to be drawn: those queued and the one handed to egui whose frame has
+    /// not been drawn yet.
     pub fn pending(&self) -> usize {
-        self.events.len()
+        self.events.len() + usize::from(!self.in_flight.is_empty())
     }
 
     /// Room for `additional` more events, or the error that refuses the whole request.
@@ -83,31 +149,59 @@ impl SyntheticInput {
         self.viewport.push(command);
         Ok(())
     }
+
+    /// Drops the waiting input when the question about unsaved changes has opened since the last
+    /// look, unless `ours` (it opened in a frame drawing the channel's input).
+    fn watch_close_prompt(&mut self, open: bool, ours: bool) {
+        if open && !self.prompt_open && !ours {
+            self.events.clear();
+        }
+        self.prompt_open = open;
+    }
 }
 
 impl FontcraftApp {
-    /// Hands the next waiting control-channel event to egui. The host calls it before every frame
+    /// Hands the next waiting control-channel event to egui. The host calls it before every pass
     /// (eframe's `raw_input_hook`); headless hosts call it before `ui`. Pointer and wheel events go
-    /// one per frame, each button press or release after a move to its position, so hover, clicks,
-    /// double clicks and drags register as they do from a mouse.
+    /// one per drawn frame, each button press or release after a move to its position, so hover,
+    /// clicks, double clicks and drags register as they do from a mouse. No event is handed out
+    /// while the one before it waits for [`Self::ui_with_control_input`] to draw it: a hidden
+    /// window's passes run no ui and never collect a backlog.
     pub fn raw_input_hook(&mut self, raw: &mut egui::RawInput) {
+        let prompt_open = self.close_prompt.is_open();
         let input = &mut self.input;
+        let mut ours = input.in_flight.clone();
+        let mut person_acts = false;
         for event in &raw.events {
+            if let Some(at) = ours.iter().position(|e| e == event) {
+                ours.swap_remove(at);
+                continue;
+            }
             match event {
                 egui::Event::ModifiersChanged(m) => input.host_modifiers = *m,
                 egui::Event::WindowFocused(false) => input.host_modifiers = egui::Modifiers::NONE,
+                egui::Event::PointerButton { pressed: true, .. } | egui::Event::Key { pressed: true, .. } => person_acts = true,
                 _ => {}
             }
         }
-        input.frame = !input.events.is_empty();
+        // The person takes over: their press must not run inside the agent's frame.
+        if person_acts {
+            input.events.clear();
+        }
+        input.watch_close_prompt(prompt_open, false);
+        if !input.in_flight.is_empty() {
+            return;
+        }
         let Some(event) = input.events.pop_front() else {
             if std::mem::take(&mut input.holding) {
-                raw.events.push(egui::Event::ModifiersChanged(input.host_modifiers));
+                // First, so a modifier change of the host's in this input wins.
+                raw.events.insert(0, egui::Event::ModifiersChanged(input.host_modifiers));
             }
             return;
         };
+        let mut added = Vec::with_capacity(3);
         if let egui::Event::PointerButton { pos, .. } = &event {
-            raw.events.push(egui::Event::PointerMoved(*pos));
+            added.push(egui::Event::PointerMoved(*pos));
         }
         // This frame's button or wheel modifiers, else those of a drag still holding its button.
         let held = match &event {
@@ -119,37 +213,53 @@ impl FontcraftApp {
         };
         match held {
             Some(m) => {
-                raw.events.push(egui::Event::ModifiersChanged(m));
+                added.push(egui::Event::ModifiersChanged(m));
                 input.holding = true;
             }
             None => {
                 if std::mem::take(&mut input.holding) {
-                    raw.events.push(egui::Event::ModifiersChanged(input.host_modifiers));
+                    added.push(egui::Event::ModifiersChanged(input.host_modifiers));
                 }
             }
         }
-        raw.events.push(event);
+        added.push(event);
+        raw.events.extend(added.iter().cloned());
+        input.in_flight = added;
     }
 
     /// Draws one frame as [`FontcraftApp::ui`] does, for a host with a control channel: it sends
-    /// the window requests waiting (`ui.resize`, `ui.focus`), and a frame that carries
-    /// control-channel input runs as a control request does, inside the automation roots and with
-    /// exports kept inside their destination. A bug in drawing returns its message.
+    /// the window requests waiting (`ui.resize`, clamped to what the window can take, and
+    /// `ui.focus`), and a frame that draws control-channel input runs as a control request does,
+    /// inside the automation roots and with exports kept inside their destination. A bug in
+    /// drawing returns its message.
     pub fn ui_with_control_input(&mut self, ui: &mut egui::Ui) -> Result<(), String> {
         let ctx = ui.ctx().clone();
+        self.input.limits = WindowLimits::of(&ctx);
         for command in std::mem::take(&mut self.input.viewport) {
-            ctx.send_viewport_cmd(command);
+            ctx.send_viewport_cmd(self.input.limits.clamp(command));
         }
-        let result = if self.input.frame {
+        // The question may have opened in the host's logic (a close request) or in a request.
+        let open = self.close_prompt.is_open();
+        self.input.watch_close_prompt(open, false);
+        let synthetic = !std::mem::take(&mut self.input.in_flight).is_empty();
+        let result = if synthetic {
             let roots = self.automation_roots.clone();
             let outside = self.session.export_outside();
             self.session.set_export_outside(false);
-            let result = file_access::confine(roots.as_ref(), || guard::catch_panic(|| self.ui(ui)));
+            let result = file_access::confine(roots.as_ref(), || {
+                #[cfg(test)]
+                self.input.confined.push(file_access::current().is_some());
+                guard::catch_panic(|| self.ui(ui))
+            });
             self.session.set_export_outside(outside);
             result
         } else {
+            #[cfg(test)]
+            self.input.confined.push(file_access::current().is_some());
             guard::catch_panic(|| self.ui(ui))
         };
+        let open = self.close_prompt.is_open();
+        self.input.watch_close_prompt(open, synthetic);
         if !self.input.events.is_empty() {
             ctx.request_repaint();
         }
@@ -157,11 +267,16 @@ impl FontcraftApp {
     }
 }
 
-/// The egui modifiers for control-channel modifiers: `cmd` is Command on the Mac and the command
-/// key (Control) elsewhere; `ctrl` is the Control key itself.
+/// The egui modifiers for control-channel modifiers, as the windowing layer reports the keys: on
+/// the Mac `cmd` is Command and `ctrl` is Control; elsewhere both are the Control key, which is
+/// also the command key.
 fn egui_modifiers(m: Modifiers) -> egui::Modifiers {
-    let mac = cfg!(target_os = "macos");
-    egui::Modifiers { alt: m.alt, ctrl: m.ctrl, shift: m.shift, mac_cmd: mac && m.cmd, command: m.cmd }
+    if cfg!(target_os = "macos") {
+        egui::Modifiers { alt: m.alt, ctrl: m.ctrl, shift: m.shift, mac_cmd: m.cmd, command: m.cmd }
+    } else {
+        let control = m.ctrl || m.cmd;
+        egui::Modifiers { alt: m.alt, ctrl: control, shift: m.shift, mac_cmd: false, command: control }
+    }
 }
 
 /// A window coordinate `key` of `params`.
@@ -256,9 +371,10 @@ pub fn wheel(app: &mut FontcraftApp, params: &Value) -> Result<Value, String> {
         },
     };
     let delta = egui::vec2(amount("dx")?, amount("dy")?);
-    let unit = match params.get("unit").and_then(Value::as_str) {
-        None | Some("line") => egui::MouseWheelUnit::Line,
-        Some("point") => egui::MouseWheelUnit::Point,
+    let unit = match params.get("unit") {
+        None | Some(Value::Null) => egui::MouseWheelUnit::Line,
+        Some(Value::String(u)) if u == "line" => egui::MouseWheelUnit::Line,
+        Some(Value::String(u)) if u == "point" => egui::MouseWheelUnit::Point,
         Some(_) => return Err(format!("{M}: `unit` must be line or point")),
     };
     let modifiers = egui_modifiers(crate::control::modifiers_and_flags(M, params)?);
@@ -268,16 +384,19 @@ pub fn wheel(app: &mut FontcraftApp, params: &Value) -> Result<Value, String> {
     Ok(queued(app, 2))
 }
 
-/// `ui.resize {width, height}`: the window's inner size in points, at the next frame.
+/// `ui.resize {width, height}`: the window's inner size in points, at the next frame. A size
+/// larger than the monitor or than the graphics device can draw is clamped; the reply has the
+/// size asked of the window.
 pub fn resize(app: &mut FontcraftApp, params: &Value) -> Result<Value, String> {
     const M: &str = "ui.resize";
-    let size = |key: &str| match params.get(key).and_then(Value::as_f64) {
-        Some(v) if (MIN_WINDOW..=MAX_WINDOW).contains(&v) => Ok(v as f32),
-        _ => Err(format!("{M}: `{key}` must be a number of points from {MIN_WINDOW} to {MAX_WINDOW}")),
+    let size = |key: &str, min: f64| match params.get(key).and_then(Value::as_f64) {
+        Some(v) if (min..=MAX_WINDOW).contains(&v) => Ok(v as f32),
+        _ => Err(format!("{M}: `{key}` must be a number of points from {min} to {MAX_WINDOW}")),
     };
-    let (width, height) = (size("width")?, size("height")?);
-    app.input.queue_viewport(egui::ViewportCommand::InnerSize(egui::vec2(width, height))).map_err(|e| format!("{M}: {e}"))?;
-    Ok(json!({"width": width, "height": height}))
+    let wanted = egui::vec2(size("width", MIN_WINDOW_WIDTH)?, size("height", MIN_WINDOW_HEIGHT)?);
+    let size = wanted.min(app.input.limits.largest());
+    app.input.queue_viewport(egui::ViewportCommand::InnerSize(size)).map_err(|e| format!("{M}: {e}"))?;
+    Ok(json!({"width": size.x, "height": size.y, "clamped": size != wanted}))
 }
 
 /// `ui.focus {}`: brings the window to the front and gives it the keyboard, at the next frame.
@@ -325,7 +444,7 @@ pub fn set(app: &mut FontcraftApp, params: &Value) -> Result<Value, String> {
     if keys.len() > MAX_SET_KEYS {
         return Err(format!("{M}: at most {MAX_SET_KEYS} keys"));
     }
-    let mut plan = Vec::with_capacity(keys.len());
+    let mut plan: Vec<(&str, &'static str, bool)> = Vec::with_capacity(keys.len());
     for (key, value) in keys {
         let (id, inverted) = switch_for(key).ok_or_else(|| {
             let known: Vec<String> = menus::SWITCHES.iter().map(|id| set_key(id)).collect();
@@ -335,28 +454,38 @@ pub fn set(app: &mut FontcraftApp, params: &Value) -> Result<Value, String> {
         if app.dialog.is_some() && !is_ui_command(id) {
             return Err(format!("{M}: `{key}` cannot change while a dialog is open"));
         }
-        plan.push((key.as_str(), id, on != inverted));
+        let want = on != inverted;
+        if let Some((other, ..)) = plan.iter().find(|(_, other_id, other_want)| *other_id == id && *other_want != want) {
+            return Err(format!("{M}: `{key}` and `{other}` ask for opposite states of one switch"));
+        }
+        plan.push((key.as_str(), id, want));
     }
-    let mut moved: Vec<&'static str> = Vec::new();
+    // Show Indexes turns all its labels on or off; put back the ones that were on.
+    let indexes = app.state.panels.edit_aids.indexes;
+    let mut moved: Vec<(&'static str, Option<bool>)> = Vec::new();
     let mut failure = None;
     for (key, id, want) in &plan {
-        if menus::checked(&app.session, &app.state, id) == Some(*want) {
+        let was = menus::checked(&app.session, &app.state, id);
+        if was == Some(*want) {
             continue;
         }
         if let Err(e) = app.run_menu_command(id, json!({})) {
             failure = Some(format!("{M}: `{key}`: {e}"));
             break;
         }
-        moved.push(*id);
+        moved.push((*id, was));
         if menus::checked(&app.session, &app.state, id) != Some(*want) {
             failure = Some(format!("{M}: `{key}` cannot be turned {} now", if *want { "on" } else { "off" }));
             break;
         }
     }
     if let Some(e) = failure {
-        for id in moved.into_iter().rev() {
-            let _ = app.run_menu_command(id, json!({}));
+        for (id, was) in moved.into_iter().rev() {
+            if menus::checked(&app.session, &app.state, id) != was {
+                let _ = app.run_menu_command(id, json!({}));
+            }
         }
+        app.state.panels.edit_aids.indexes = indexes;
         return Err(e);
     }
     let mut result = Map::new();
@@ -385,6 +514,9 @@ pub fn context_menu_list(app: &mut FontcraftApp, params: &Value) -> Result<Value
         };
         if app.state.tab().is_none() {
             return Err(format!("{M}: no Edit View tab is showing (open a glyph first)"));
+        }
+        if app.tools.toolbox.busy() || app.dialog.is_some() {
+            return Err(format!("{M}: the menu does not open while a tool is dragging or a dialog is open"));
         }
         context_menu::open(app, at, space).map_err(|e| format!("{M}: {e}"))?;
     }
@@ -423,9 +555,18 @@ mod tests {
             Self { ctx: egui::Context::default() }
         }
 
+        fn raw() -> egui::RawInput {
+            egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 800.0))), ..Default::default() }
+        }
+
         fn frame(&self, app: &mut FontcraftApp) -> egui::FullOutput {
-            let mut raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 800.0))), ..Default::default() };
+            let mut raw = Self::raw();
             app.raw_input_hook(&mut raw);
+            self.draw(app, raw)
+        }
+
+        /// A drawn pass over `raw`, which has been through the hook.
+        fn draw(&self, app: &mut FontcraftApp, raw: egui::RawInput) -> egui::FullOutput {
             let mut output = self.ctx.run_ui(raw, |ui| {
                 let _ = app.ui_with_control_input(ui);
             });
@@ -433,10 +574,15 @@ mod tests {
             output
         }
 
-        /// Frames until the waiting input is handed out, and `extra` more.
+        /// Frames until `pendingInput` is 0, as a client polls it, then `extra` more.
         fn settle(&self, app: &mut FontcraftApp, extra: usize) {
-            let frames = app.input.pending() + extra;
-            for _ in 0..frames {
+            let mut frames = 0;
+            while app.input.pending() > 0 {
+                assert!(frames < 4 * MAX_SYNTHETIC_EVENTS, "the input never drained");
+                self.frame(app);
+                frames += 1;
+            }
+            for _ in 0..extra {
                 self.frame(app);
             }
         }
@@ -471,16 +617,16 @@ mod tests {
         let r = ok(call(&mut app, "ui.click", json!({"x": at.x, "y": at.y})));
         assert_eq!(r["queued"], 3, "a move, the press and the release");
         assert_eq!(ok(call(&mut app, "ui.inspect", json!({})))["pendingInput"], 3);
-        w.settle(&mut app, 1);
-        assert_eq!(selected(&mut app), ["C"]);
+        w.settle(&mut app, 0);
+        assert_eq!(selected(&mut app), ["C"], "once pendingInput is 0 the click has been drawn");
         let at = cell(&app, "E");
         ok(call(&mut app, "ui.click", json!({"x": at.x, "y": at.y, "mods": ["cmd"]})));
-        w.settle(&mut app, 1);
+        w.settle(&mut app, 0);
         assert_eq!(selected(&mut app), ["C", "E"], "Cmd held through the click adds to the selection");
         // The modifiers are given back once the click is over.
         let at = cell(&app, "A");
         ok(call(&mut app, "ui.click", json!({"x": at.x, "y": at.y})));
-        w.settle(&mut app, 1);
+        w.settle(&mut app, 0);
         assert_eq!(selected(&mut app), ["A"]);
         // The dialog form of ui.click is still there.
         let r = call(&mut app, "ui.click", json!({"id": "ok"}));
@@ -559,7 +705,7 @@ mod tests {
         assert_eq!(ok(call(&mut app, "ui.contextMenu.list", json!({}))), json!({"open": false}));
         let p = crate::tools_glue::current_view(&app).unwrap().to_screen(Point::new(300.0, 300.0));
         ok(call(&mut app, "ui.click", json!({"x": p.x, "y": p.y, "button": "right"})));
-        w.settle(&mut app, 1);
+        w.settle(&mut app, 0);
         let menu = ok(call(&mut app, "ui.contextMenu.list", json!({})));
         assert_eq!(menu["open"], true);
         let contexts: Vec<&str> = menu["sections"].as_array().unwrap().iter().map(|s| s["context"].as_str().unwrap()).collect();
@@ -568,6 +714,99 @@ mod tests {
         assert_eq!(selection, json!({"points": [[0, 2]]}), "the right-click selected the node first");
         let r = call(&mut app, "ui.contextMenu.invoke", json!({"command": "no.such"}));
         assert_eq!(r["ok"], false);
+        assert_eq!(ok(call(&mut app, "ui.contextMenu.list", json!({})))["open"], true, "a refused item leaves the menu open");
+    }
+
+    #[test]
+    fn a_context_menu_item_is_checked_again_when_it_is_invoked() {
+        let mut app = FontcraftApp::default();
+        app.run("path.addRectangle", &json!({"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200})).unwrap();
+        app.run("view.editSelectedGlyphs", &json!({"glyphs": ["A"]})).unwrap();
+        app.run("view.setZoom", &json!({"size": 1000, "center": [200, 200]})).unwrap();
+        app.state.tab_mut().unwrap().selection = Selection::new();
+        Window::new().settle(&mut app, 2);
+        let open = |app: &mut FontcraftApp| ok(call(app, "ui.contextMenu.list", json!({"x": 300, "y": 300})));
+        const FOCUS: &str = "path.focusOnSelectedPath";
+        let menu = open(&mut app);
+        let item = menu["sections"].as_array().unwrap().iter().flat_map(|s| s["items"].as_array().unwrap()).find(|i| i["command"] == FOCUS).cloned();
+        assert_eq!(item.map(|i| i["enabled"].clone()), Some(json!(true)), "{menu}");
+        // The selection the right-click made is gone: the item is disabled now.
+        app.state.tab_mut().unwrap().selection = Selection::new();
+        let r = call(&mut app, "ui.contextMenu.invoke", json!({"command": FOCUS}));
+        assert_eq!(r["ok"], false, "{r}");
+        assert!(app.state.tab().unwrap().focus.is_none());
+        assert_eq!(ok(call(&mut app, "ui.contextMenu.list", json!({})))["open"], true);
+        // Another glyph in the tab: the menu belonged to A and closes.
+        open(&mut app);
+        app.run("view.editSelectedGlyphs", &json!({"glyphs": ["B"]})).unwrap();
+        let r = call(&mut app, "ui.contextMenu.invoke", json!({"command": FOCUS}));
+        assert!(r["error"].as_str().unwrap().contains("changed"), "{r}");
+        assert_eq!(ok(call(&mut app, "ui.contextMenu.list", json!({}))), json!({"open": false}));
+    }
+
+    #[test]
+    fn an_event_waits_for_the_frame_that_draws_it_and_that_frame_is_confined() {
+        let mut app = FontcraftApp::default();
+        app.automation_roots = file_access::AutomationRoots::new(Some(std::env::temp_dir().as_path()), None).unwrap();
+        let w = Window::new();
+        w.frame(&mut app);
+        let at = cell(&app, "C");
+        ok(call(&mut app, "ui.click", json!({"x": at.x, "y": at.y})));
+        // A hidden window: the host runs passes without a ui and carries their input over.
+        let mut raw = Window::raw();
+        app.raw_input_hook(&mut raw);
+        let handed = raw.events.clone();
+        assert_eq!(handed, [egui::Event::PointerMoved(at)]);
+        assert_eq!(ok(call(&mut app, "ui.inspect", json!({})))["pendingInput"], 3, "the move counts until a frame draws it");
+        for _ in 0..3 {
+            app.raw_input_hook(&mut raw);
+        }
+        assert_eq!(raw.events, handed, "a pass without a ui takes nothing more");
+        assert_eq!(app.input.pending(), 3);
+        // The window shows again and draws the carried input, confined as its request.
+        app.input.confined.clear();
+        w.draw(&mut app, raw);
+        assert_eq!(app.input.confined.first(), Some(&true));
+        assert_eq!(app.input.pending(), 2);
+        w.settle(&mut app, 0);
+        assert_eq!(selected(&mut app), ["C"]);
+        assert_eq!(app.input.confined.iter().filter(|c| **c).count(), 3, "one confined frame per event");
+        app.input.confined.clear();
+        w.frame(&mut app);
+        assert!(app.input.confined.iter().all(|c| !c), "a frame without channel input is the person's");
+    }
+
+    #[test]
+    fn the_persons_own_press_drops_the_waiting_input() {
+        let mut app = FontcraftApp::default();
+        app.automation_roots = file_access::AutomationRoots::new(Some(std::env::temp_dir().as_path()), None).unwrap();
+        let w = Window::new();
+        w.frame(&mut app);
+        let at = cell(&app, "C");
+        ok(call(&mut app, "ui.click", json!({"x": at.x, "y": at.y, "count": 2})));
+        w.frame(&mut app);
+        let mut raw = Window::raw();
+        raw.events.push(egui::Event::Key { key: egui::Key::A, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE });
+        app.raw_input_hook(&mut raw);
+        assert_eq!(app.input.pending(), 0);
+        assert_eq!(raw.events.len(), 1, "only the person's key");
+        app.input.confined.clear();
+        w.draw(&mut app, raw);
+        assert!(app.input.confined.iter().all(|c| !c));
+    }
+
+    #[test]
+    fn synthetic_cmd_and_ctrl_match_the_keys_the_window_reports() {
+        let cmd = egui_modifiers(Modifiers { cmd: true, ..Modifiers::NONE });
+        let ctrl = egui_modifiers(Modifiers { ctrl: true, ..Modifiers::NONE });
+        if cfg!(target_os = "macos") {
+            assert_eq!(cmd, egui::Modifiers::MAC_CMD | egui::Modifiers::COMMAND);
+            assert_eq!(ctrl, egui::Modifiers::CTRL);
+        } else {
+            // The Control key is both, whichever name the request uses.
+            assert_eq!(cmd, egui::Modifiers::CTRL | egui::Modifiers::COMMAND);
+            assert_eq!(ctrl, cmd);
+        }
     }
 
     #[test]
@@ -583,6 +822,9 @@ mod tests {
             ("ui.move", json!({"x": "1", "y": 1})),
             ("ui.resize", json!({"width": 100, "height": 600})),
             ("ui.resize", json!({"width": 800})),
+            ("ui.resize", json!({"width": 800, "height": 300})),
+            ("ui.wheel", json!({"x": 1, "y": 1, "dy": 1, "unit": 5})),
+            ("ui.set", json!({"fillPreview": true, "outline": true})),
         ] {
             let r = call(&mut app, method, params.clone());
             assert_eq!(r["ok"], false, "{method} {params}");
@@ -609,5 +851,33 @@ mod tests {
         let commands = output.viewport_output.get(&egui::ViewportId::ROOT).map(|v| v.commands.clone()).unwrap_or_default();
         assert!(commands.iter().any(|c| matches!(c, egui::ViewportCommand::InnerSize(s) if *s == egui::vec2(900.0, 700.0))), "{commands:?}");
         assert!(commands.iter().any(|c| matches!(c, egui::ViewportCommand::Focus)), "{commands:?}");
+    }
+
+    #[test]
+    fn a_resize_larger_than_the_window_can_take_is_clamped_and_says_so() {
+        // Before the first frame: egui's own texture side.
+        let mut app = FontcraftApp::default();
+        let r = ok(call(&mut app, "ui.resize", json!({"width": 9000, "height": 1000})));
+        assert_eq!(r, json!({"width": 2048.0, "height": 1000.0, "clamped": true}));
+        // A 3000 × 2000 point monitor at 2× on a device with 8192-pixel textures.
+        let w = Window::new();
+        let mut raw = Window::raw();
+        raw.max_texture_side = Some(8192);
+        let info = egui::ViewportInfo { native_pixels_per_point: Some(2.0), monitor_size: Some(egui::vec2(3000.0, 2000.0)), ..Default::default() };
+        raw.viewports.insert(egui::ViewportId::ROOT, info.clone());
+        app.raw_input_hook(&mut raw);
+        w.draw(&mut app, raw);
+        let r = ok(call(&mut app, "ui.resize", json!({"width": 16384, "height": 16384})));
+        assert_eq!(r, json!({"width": 3000.0, "height": 2000.0, "clamped": true}));
+        assert_eq!(ok(call(&mut app, "ui.resize", json!({"width": 1000, "height": 700})))["clamped"], false);
+        let mut raw = Window::raw();
+        raw.max_texture_side = Some(8192);
+        raw.viewports.insert(egui::ViewportId::ROOT, info);
+        app.raw_input_hook(&mut raw);
+        let output = w.draw(&mut app, raw);
+        let commands = output.viewport_output.get(&egui::ViewportId::ROOT).map(|v| v.commands.clone()).unwrap_or_default();
+        let sizes: Vec<egui::Vec2> =
+            commands.iter().filter_map(|c| if let egui::ViewportCommand::InnerSize(s) = c { Some(*s) } else { None }).collect();
+        assert_eq!(sizes, [egui::vec2(3000.0, 2000.0), egui::vec2(1000.0, 700.0)]);
     }
 }
