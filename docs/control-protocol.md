@@ -56,6 +56,10 @@ requests read and write. They are the same flags as `fontcraft-cli mcp` takes, a
   (`ui.click`, `ui.drag`, `ui.wheel`, `ui.move`), so a menu item an agent clicks is confined too.
   The person at the keyboard is not: files opened from the
   command line or a file dialog, and everything done with the mouse and keyboard, work as usual.
+  A mouse press or key press of the person's drops the window input still waiting, so it never
+  shares a frame with the agent's.
+- A paste that waits for the system clipboard (Edit › Paste clicked through window input) runs in
+  a later frame, outside the confinement. A paste reads no files.
 - A link in an open document that points outside the read root is treated as a missing file when
   a request reads it.
 
@@ -69,7 +73,7 @@ is checked for.
 | `engine.execute` | `{command, params?}` | runs any engine or UI command; the command's own result |
 | `engine.commands` | | `{commands: [{id, label, menu, shortcut, params, query, enabled, disabled_reason?}]}`; UI commands carry `ui: true` |
 | `document.inspect` | | `{documents: [{index, active, title, path, modified, revision, familyName, glyphs, masters, undo, redo}], active}` |
-| `ui.inspect` | | the UI state: `selected_glyphs`, `tabs` (each `{id, glyphs, edited, view: {scale, center}, selection, focus, selection_glyph}`: `selection` and the path `focus` belong to the glyph `selection_glyph`), `active_tab` (an index into `tabs`; `null` while Font View shows), `editing` (the edited glyph's name), `closed_tabs`, `display` (the View toggles), `show_palette`, `canvas_size`, `status`, `pendingInput` (window input events not yet handed to the window) |
+| `ui.inspect` | | the UI state: `selected_glyphs`, `tabs` (each `{id, glyphs, edited, view: {scale, center}, selection, focus, selection_glyph}`: `selection` and the path `focus` belong to the glyph `selection_glyph`), `active_tab` (an index into `tabs`; `null` while Font View shows), `editing` (the edited glyph's name), `closed_tabs`, `display` (the View toggles), `show_palette`, `canvas_size`, `status`, `pendingInput` (window input events not yet drawn) |
 | `ui.menu.list` | | the menu tree: `[{title, items: [{command, label, path, shortcut, enabled, disabled_reason?}]}]` |
 | `ui.menu.invoke` | `{command, params?}` | runs a menu item as a click on it does: the follow-up question its result asks (a pasted outline outside the glyph, imported files without a glyph) opens as a dialog; an id that is in no menu is an error |
 | `ui.screenshot` | `{path?}` | captures the window as PNG, written to `path` or returned as base64 `png`; `{width, height, pixelsPerPoint, path?, png?}`. Sizes are in pixels. The reply comes after the next frame is drawn. Headless hosts (tests, MCP) answer with an error |
@@ -89,10 +93,10 @@ is checked for.
 | `ui.move` | `{x, y}` | the pointer moves to a window point (hover) |
 | `ui.wheel` | `{x, y, dy?, dx?, unit?, mods?}` | a wheel turn over a window point |
 | `ui.set` | `{key: bool, …}` | turns view switches on or off with their menu commands; see [View switches](#view-switches) |
-| `ui.resize` | `{width, height}` | the window's inner size in points, 200 to 16,384, at the next frame; `{width, height}` |
+| `ui.resize` | `{width, height}` | the window's inner size in points, width 640 to 16,384 and height 400 to 16,384, at the next frame. A size larger than the monitor, or than the graphics device can draw (8,192 points at most), is clamped; `{width, height, clamped}` has the size asked of the window |
 | `ui.focus` | | brings the window to the front with the keyboard, at the next frame; `{focus: true}` |
-| `ui.contextMenu.list` | `{x?, y?, space?}` | the open canvas context menu: `{open, glyph, screen, at, hit, sections: [{context, items: [{command, label, enabled, disabled_reason?, checked?, alternate?}]}]}`; `{open: false}` when none is. With `x` and `y` it first opens the menu there, as a right-click does (`space` as in `ui.pointer`, default `font`) |
-| `ui.contextMenu.invoke` | `{command}` | runs an item of the open canvas context menu as a click on it does, and closes the menu; the item's result |
+| `ui.contextMenu.list` | `{x?, y?, space?}` | the open canvas context menu: `{open, glyph, screen, at, hit, sections: [{context, items: [{command, label, enabled, disabled_reason?, checked?, alternate?}]}]}`; `{open: false}` when none is. With `x` and `y` it first opens the menu there, as a right-click does (`space` as in `ui.pointer`, default `font`); that is refused while a tool is dragging or a dialog is open |
+| `ui.contextMenu.invoke` | `{command}` | runs an item of the open canvas context menu as a click on it does, and closes the menu; the item's result. The item is checked as the menu would show it now: a disabled or missing item is refused and the menu stays open; a menu whose tab or glyph changed, or that a dialog covers, closes and the request is refused. Refused while the question about unsaved changes is open |
 | `control.methods` | | this table |
 
 `ui.inspect` also names the active pointer tool (`tool`), the running interaction
@@ -153,26 +157,33 @@ and the canvas, where a right-click (`button: "right"`) opens the context menu t
 | `dy`, `dx` | wheel notches: `dy` up (+) or down (−), `dx` right (+) or left (−); at most 100 each. `unit: "point"` makes them points |
 | `mods` | as in `ui.pointer`; the flags `shift`, `alt`, `cmd` and `ctrl` (true) add to it |
 
-The reply is `{queued, pending}`: the events this request added and the events waiting in all.
-The events are handed to the window one per frame (each press and release after a move to its
-position), so egui sees hover, clicks, double clicks and drags as it does from a mouse. Read the
-result once `pending` has drained: `ui.inspect` reports it as `pendingInput`. The modifiers a
-request names are held for the frames its input spans, from the press through every move to the
-release; the keyboard's own come back after.
+The reply is `{queued, pending}`: the events this request added and the events not yet drawn in
+all. The events are handed to the window one per drawn frame (each press and release after a move
+to its position), so egui sees hover, clicks, double clicks and drags as it does from a mouse.
+While the window is minimized or hidden no event is handed out. `ui.inspect` reports the count as
+`pendingInput`; once it is 0 the last event has been drawn and the commands it ran are done, so
+read the result then. The modifiers a request names are held for the frames its input spans,
+from the press through every move to the release; the keyboard's own come back after. Off the
+Mac, `cmd` and `ctrl` both hold the Control key, as the keyboard reports it.
+
+The input still waiting is dropped when the person presses a mouse button or a key in the window,
+and when the question about unsaved changes opens other than from the agent's own window input
+(the person closes the window or quits).
 
 Limits, as in the sibling apps: at most 256 `steps` and 16 `count`; 1,024 events waiting across
 all requests. A request that breaks a limit, or does not fit in the queue, is refused whole
 before any of its events is queued; retry once the waiting input has drained. Counts must be
 non-negative integers; `0` acts as `1`.
 
-`ui.click {id}` presses a dialog control (below); give `id` or `x` and `y`, not both.
+`ui.click {id}` presses a dialog control (below); give `id` or `x` and `y`, not both (`id: null`
+counts as no `id`).
 
 ### View switches
 
 `ui.set` takes switches by key, each `true` or `false`, and runs the menu command of each switch
 whose state differs, so the result is what the View or Window menu item gives. The reply has each
 key's state afterwards. Every key is checked before the first switch moves; if a command fails,
-the switches already moved are put back.
+the switches already moved are put back (Show Indexes to the labels it showed).
 
 A key is a switch's command id (`view.showTunniLines`) or its short key: the id after its area,
 without a leading `show`, `set` or `toggle`, first letter lower case.
@@ -187,7 +198,10 @@ without a leading `show`, `set` or `toggle`, first letter lower case.
 | `keepLayerSelectionInSync`, `editBackground`, `powerNudge` | Edit and Path switches |
 | `palette`, `previewPanel`, `auditPanel` | the Palette, the Preview panel, the Audit panel |
 
-The list follows the menus' switches; an unknown key is an error that lists them all.
+The list follows the menus' switches; an unknown key is an error that lists them all. The
+sibling apps' keys `panel`, `brightness`, `controlBar` and `status` have no switch here and are
+unknown keys. Two keys for one switch (`fillPreview` and `outline`, or a short key and its
+command id) that ask for opposite states are refused.
 
 ### Dialogs
 

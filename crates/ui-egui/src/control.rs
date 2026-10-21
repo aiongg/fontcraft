@@ -76,13 +76,19 @@ pub const METHODS: &[(&str, &str)] = &[
         "ui.set",
         "{key: bool, …} turn view switches on or off with their menu commands: a switch's command id or its short key (boundingBox, nodes, metrics, fillPreview, outline, palette, hints…); returns each key's value",
     ),
-    ("ui.resize", "{width, height} the window's inner size in points (200 to 16384), at the next frame"),
+    (
+        "ui.resize",
+        "{width, height} the window's inner size in points (640 × 400 to 16384), at the next frame, clamped to the monitor and to what the graphics device can draw; returns {width, height, clamped}",
+    ),
     ("ui.focus", "{} bring the window to the front with the keyboard, at the next frame"),
     (
         "ui.contextMenu.list",
-        "{x?, y?, space?: font | screen} the open canvas context menu: {open, glyph, screen, at, hit, sections: [{context, items: [{command, label, enabled, disabled_reason?, checked?}]}]}, {open: false} when none is; with a position, open it there first",
+        "{x?, y?, space?: font | screen} the open canvas context menu: {open, glyph, screen, at, hit, sections: [{context, items: [{command, label, enabled, disabled_reason?, checked?, alternate?}]}]}, {open: false} when none is; with a position, open it there first",
     ),
-    ("ui.contextMenu.invoke", "{command} run an item of the open canvas context menu as a click on it does"),
+    (
+        "ui.contextMenu.invoke",
+        "{command} run an item of the open canvas context menu as a click on it does; refused when the item is disabled now, or the menu closed (its tab or glyph changed, or a dialog opened)",
+    ),
     ("control.methods", "{} this list"),
 ];
 
@@ -342,7 +348,7 @@ fn dispatch(app: &mut FontcraftApp, method: &str, params: &Value) -> Result<Valu
         }
         "ui.dialog.confirm" => dialogs::confirm(app).map_err(|e| format!("ui.dialog.confirm: {e}")),
         "ui.dialog.cancel" => dialogs::cancel(app).map_err(|e| format!("ui.dialog.cancel: {e}")),
-        "ui.click" => match params.get("id") {
+        "ui.click" => match params.get("id").filter(|v| !v.is_null()) {
             Some(Value::String(id)) if params.get("x").is_none() && params.get("y").is_none() => {
                 dialogs::click(app, id).map_err(|e| format!("ui.click: {e}"))
             }
