@@ -918,7 +918,11 @@ fn dimension_value(d: &Element, axis: Option<&AxisInfo>) -> Option<f64> {
 }
 
 /// Updates a location element under `parent` to `loc` where the model differs.
+/// Without axes nothing is written, and a kept element stays as read.
 fn patch_location(parent: &mut Element, axes: &[AxisInfo], names: &[String], loc: &[f64], unit: &str, level: usize) {
+    if names.is_empty() {
+        return;
+    }
     let current = read_location(parent, axes, &HashMap::new()).unwrap_or_default();
     if current.len() == loc.len() && current.iter().zip(loc).all(|(a, b)| a == b) {
         return;
@@ -1290,12 +1294,17 @@ fn patch_rules(root: &mut Element, font: &Font, model: &rules::Rules, unit: &str
     Ok(())
 }
 
-pub(crate) fn location_element(names: &[String], loc: &[f64]) -> Element {
+/// A `<location>` element, or none for a font without axes: fontTools refuses any location in a
+/// document without `<axes>` ("No axes defined").
+pub(crate) fn location_element(names: &[String], loc: &[f64]) -> Option<Element> {
+    if names.is_empty() {
+        return None;
+    }
     let mut el = Element::new("location");
     for (n, v) in names.iter().zip(loc) {
         el.children.push(XNode::Element(Element::new("dimension").with_attr("name", n).with_attr("xvalue", int_or_float(*v))));
     }
-    el
+    Some(el)
 }
 
 fn source_element(font: &Font, m: &Master, file_of: &HashMap<&str, String>, names: &[String]) -> Element {
@@ -1313,9 +1322,9 @@ fn source_element(font: &Font, m: &Master, file_of: &HashMap<&str, String>, name
     if let Some(l) = ds_str(&m.extra, "layer") {
         el.set_attr("layer", l);
     }
-    if !names.is_empty() {
-        let loc: Vec<f64> = (0..names.len()).map(|i| fontcraft_model::axes::design_value(&m.location, i)).collect();
-        el.children.push(XNode::Element(location_element(names, &loc)));
+    let loc: Vec<f64> = (0..names.len()).map(|i| fontcraft_model::axes::design_value(&m.location, i)).collect();
+    if let Some(l) = location_element(names, &loc) {
+        el.children.push(XNode::Element(l));
     }
     el
 }
@@ -1386,6 +1395,30 @@ fn new_document(font: &Font, file_of: &HashMap<&str, String>, layers: &DocLayers
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// fontTools refuses a document without `<axes>` that holds any `<location>`, and a variable
+    /// font without `<axis-subsets>` (checked with fontTools 4.66.1): neither is written for a font
+    /// without axes, on a new document or on a kept one.
+    #[test]
+    fn a_font_without_axes_writes_no_location() {
+        let mut font = fontcraft_model::Font::new("Solo");
+        font.source.format = fontcraft_model::SourceFormat::Designspace;
+        Arc::make_mut(&mut font.instances).extend([
+            Instance { name: "Bold".into(), is_bold: true, ..Default::default() },
+            Instance { name: "VF".into(), kind: Some("variable".into()), ..Default::default() },
+        ]);
+        let out = write(&font).unwrap();
+        assert!(!out.document.contains("<location"), "{}", out.document);
+        assert!(out.document.contains("<axis-subsets/>"), "{}", out.document);
+        let mut back = read(&out.document, &out.ufos).unwrap();
+        assert_eq!((back.masters.len(), back.instances.len()), (1, 2));
+
+        // A location the model holds without axes is not written into the kept document either.
+        Arc::make_mut(&mut back.masters)[0].location = vec![400.0];
+        Arc::make_mut(&mut back.instances)[0].location = vec![700.0];
+        let again = write(&back).unwrap();
+        assert_eq!(again.document, out.document);
+    }
 
     fn two_masters() -> (String, BTreeMap<String, Files>) {
         let mut light = fontcraft_model::Font::new("Duo");

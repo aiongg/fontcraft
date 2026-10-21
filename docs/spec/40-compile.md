@@ -705,9 +705,12 @@ causes; none comes from the handbook's keys, which no corpus instance at a maste
 One case is known to differ: a single-source designspace whose instance states no style-map
 names takes ufo2ft's fallbacks, where fontmake keeps the UFO's own style-map names.
 
-A UFO instance with a style-map style other than the four holds it in `fontinfo.plist`, as
-fontmake writes it. fontmake reads such a UFO back and compiles it to the same names as the
-instance; ufoLib's validating reader, and fontc, refuse it.
+A UFO instance with a style-map style other than the four differs from fontmake's. fontmake
+writes the style into `fontinfo.plist`, and ufoLib's validating reader and fontc refuse that
+file. FontCraft never writes a file the common tools refuse, so any UFO it writes keeps such a
+style in its lib, under `com.fontcraft.styleMapStyleName`, and leaves the key out of
+`fontinfo.plist`. Reading the UFO puts the style back, so the instance UFO compiles to the same
+names as the instance. Other tools read that UFO with the style-map style left out.
 
 A UFO's own `styleMapStyleName` is compared with the four lower-case names exactly, as ufo2ft
 compares it: `Bold` sets no style bit, and any stated value is name ID 2 title-cased. fontc
@@ -719,6 +722,8 @@ sits at one location: the masters build one by one, and instances build only whe
 source; with two or more, interpolation is refused, as fontTools refuses it ("Locations must be
 unique"). An open document saved as a designspace from another format holds no designspace text, so
 nothing in it states a location: it builds as a designspace without locations does. A variable export needs at least one axis.
+A designspace FontCraft writes for a font without axes has no `<location>` elements, and each
+`<variable-font>` has an empty `<axis-subsets/>`, so fontTools opens it.
 
 **Against the handbook.** TrueType composites with overlapping or transformed components stay
 composites by default, as fontc and fontmake keep them. The texts of the Keep Overlapping

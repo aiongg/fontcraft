@@ -483,9 +483,9 @@ pub(super) fn static_element(font: &Font, inst: &Instance, names: &[String], axe
     let family = family_of(inst, &font.family_name);
     let mut el = Element::new("instance").with_attr("name", format!("{family} {}", inst.name)).with_attr("familyname", &family);
     el.set_attr("stylename", &inst.name);
-    if !names.is_empty() {
-        let loc: Vec<f64> = (0..names.len()).map(|i| fontcraft_model::axes::design_value(&inst.location, i)).collect();
-        el = el.with_child(location_element(names, &loc));
+    let loc: Vec<f64> = (0..names.len()).map(|i| fontcraft_model::axes::design_value(&inst.location, i)).collect();
+    if let Some(l) = location_element(names, &loc) {
+        el = el.with_child(l);
     }
     el.set_attr("filename", filename_of(inst, &family));
     if let Some(p) = ps_name_of(inst) {
@@ -505,13 +505,12 @@ pub(super) fn static_element(font: &Font, inst: &Instance, names: &[String], axe
 pub(super) fn variable_element(font: &Font, inst: &Instance, names: &[String]) -> Element {
     let filename = inst.params.get(FILE_NAME).and_then(Value::as_str).map_or_else(|| default_vf_filename(inst, &font.family_name), str::to_string);
     let mut el = Element::new("variable-font").with_attr("name", &inst.name).with_attr("filename", filename);
-    if !names.is_empty() {
-        let mut subsets = Element::new("axis-subsets");
-        for n in names {
-            subsets = subsets.with_child(Element::new("axis-subset").with_attr("name", n));
-        }
-        el = el.with_child(subsets);
+    // fontTools refuses a variable font without the list; an empty one passes.
+    let mut subsets = Element::new("axis-subsets");
+    for n in names {
+        subsets = subsets.with_child(Element::new("axis-subset").with_attr("name", n));
     }
+    el = el.with_child(subsets);
     let mut bare = inst.clone();
     bare.params.remove(FILE_NAME);
     let lib = new_lib(&bare, &(None, None));

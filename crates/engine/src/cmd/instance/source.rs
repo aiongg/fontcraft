@@ -1485,8 +1485,10 @@ mod tests {
     /// fontc's fontinfo_var.designspace states the style-map style `thin`, which is not one of
     /// the four. fontTools' instantiator keeps it in the UFO instance; ufo2ft writes it
     /// title-cased as name ID 2 with no REGULAR, BOLD or ITALIC bit; and the style-map family,
-    /// stated as the family alone, stays name ID 1 (checked with fontmake 3.12.1). fontmake
-    /// compiles the instance UFO to the same names, though ufoLib's validating reader refuses it.
+    /// stated as the family alone, stays name ID 1 (checked with fontmake 3.12.1). fontmake writes
+    /// `thin` into the instance UFO's `fontinfo.plist`, which ufoLib's validating reader and fontc
+    /// refuse; the instance UFO keeps it in its lib, which ufoLib2 opens with validation
+    /// (checked with ufoLib2 0.18.1), and compiles to the same names.
     #[test]
     fn a_thin_style_map_style_is_kept_as_fontmake_keeps_it() {
         let (dir, ds) = source("thin");
@@ -1498,8 +1500,12 @@ mod tests {
         std::fs::write(&ds, text).unwrap();
         let mut s = Session::new();
         s.execute("font.instantiate", &json!({ "input": ds, "autohint": false })).unwrap();
-        let info = std::fs::read_to_string(dir.join("instances").join("Test-Thin.ufo").join("fontinfo.plist")).unwrap();
-        assert!(info.contains("<key>styleMapStyleName</key>") && info.contains("<string>thin</string>"), "{info}");
+        let instance = dir.join("instances").join("Test-Thin.ufo");
+        let info = std::fs::read_to_string(instance.join("fontinfo.plist")).unwrap();
+        assert!(!info.contains("styleMapStyleName") && info.contains("<key>styleMapFamilyName</key>"), "{info}");
+        let lib = std::fs::read_to_string(instance.join("lib.plist")).unwrap();
+        let kept = lib.split("<key>com.fontcraft.styleMapStyleName</key>").nth(1).map(str::trim_start);
+        assert!(kept.is_some_and(|k| k.starts_with("<string>thin</string>")), "{lib}");
 
         s.execute("file.open", &json!({ "path": ds })).unwrap();
         let out = dir.join("Thin.ttf");
@@ -1557,6 +1563,11 @@ mod tests {
         s.execute("file.open", &json!({ "path": path })).unwrap();
         s.execute("file.saveAs", &json!({ "path": dir.join("FromUfo.designspace") })).unwrap();
         s.execute("font.compile", &json!({ "destination": dir.join("FromUfo.ttf") })).unwrap();
+        // fontTools refuses any `<location>` in a document without `<axes>`.
+        let text = std::fs::read_to_string(dir.join("FromUfo.designspace")).unwrap();
+        assert!(!text.contains("<location"), "{text}");
+        s.execute("file.open", &json!({ "path": dir.join("FromUfo.designspace") })).unwrap();
+        s.execute("font.compile", &json!({ "destination": dir.join("Reopened.ttf") })).unwrap();
 
         s.execute("file.new", &json!({ "familyName": "Fresh" })).unwrap();
         s.execute("file.saveAs", &json!({ "path": dir.join("Fresh.designspace") })).unwrap();
