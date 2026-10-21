@@ -28,8 +28,8 @@ const USAGE: &str = "\
 
 /// The options, as data (M12.4, M12.10).
 const OPTIONS: &[OptSpec] = &[
-    OptSpec::list("table", "TAG", "", "dump only these tables, in this order; repeatable").short('t'),
-    OptSpec::list("exclude-table", "TAG", "", "dump every table except these; repeatable").short('x'),
+    OptSpec::list("table", "TAG", "", "dump only these tables, in this order; repeatable").short('t').repeat(),
+    OptSpec::list("exclude-table", "TAG", "", "dump every table except these; repeatable").short('x').repeat(),
     OptSpec::value("format", "FORMAT", "ttx", "ttx, json, hex or text"),
     OptSpec::value("split", "WHAT", "", "tables: one file per table beside the main file (needs -o or --output-dir)"),
     OptSpec::value("output", "PATH", "", "the file to write; - or none for standard output").short('o'),

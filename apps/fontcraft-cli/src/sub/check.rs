@@ -26,7 +26,7 @@ pub const SUBCOMMAND: Subcommand = Subcommand {
 const USAGE: &str = "\
   fontcraft-cli check [outlines|family|interpolation] INPUT... [--profile ID] [--check ID]... [--exclude ID]... [--fix] [--report PATH] [options]
   fontcraft-cli check outlines INPUT... [--fix] [--no-overlap-checks] [--no-basic-checks] [--min-area N] [--tolerance N] [--glyphs LIST] [--all] [-o OUT]
-  fontcraft-cli check family DIR|FONT... [--tolerance N] [--menu-names] [--metrics] [--panose] [--layout] [--single LIST] [--family LIST] [--no-hints]
+  fontcraft-cli check family DIR|FONT... [--tolerance N] [--menu-names] [--metrics] [--panose] [--layout] [--single LIST] [--family LIST] [--no-hints] [-l PATH]
   fontcraft-cli check interpolation INPUT... [--glyphs LIST] [--tolerance F] [--kinkiness F] [--show-all] [--ignore-missing] [--master NAME]... [--report PATH]
 ";
 
@@ -49,13 +49,13 @@ const OPTIONS: &[OptSpec] = &{
     let c = common!();
     [
         OptSpec::value("profile", "ID", "", "profile to run; default the source's own default profile, else universal"),
-        OptSpec::list("check", "ID_OR_GLOB", "", "run only matching checks (an id, or a prefix ending in *)"),
-        OptSpec::list("exclude", "ID_OR_GLOB", "", "leave matching checks out"),
-        OptSpec::list("group", "NAME", "", "run only the checks of these groups"),
+        OptSpec::list("check", "ID_OR_GLOB", "", "run only matching checks (an id, or a prefix ending in *); repeatable").repeat(),
+        OptSpec::list("exclude", "ID_OR_GLOB", "", "leave matching checks out; repeatable").repeat(),
+        OptSpec::list("group", "NAME", "", "run only the checks of these groups; repeatable").repeat(),
         OptSpec::list("glyphs", "SELECTOR", "", "restrict glyph-level checks to these glyphs: names, indexes, first-last ranges, /CID"),
         OptSpec::value("glyphs-file", "FILE", "", "read the glyph selection from FILE"),
-        OptSpec::list("master", "ID", "", "restrict to these masters"),
-        OptSpec::list("set", "CHECK.NAME=VALUE", "", "override a threshold of a check"),
+        OptSpec::list("master", "ID", "", "restrict to these masters; repeatable").repeat(),
+        OptSpec::list("set", "CHECK.NAME=VALUE", "", "override a threshold of a check; repeatable").repeat(),
         OptSpec::switch("all", false, "examine every glyph, ignoring the cache of unchanged glyphs"),
         OptSpec::switch("network", false, "allow the checks that need network access"),
         OptSpec::switch("fix", false, "after the run, apply every safe repair to the source and save it"),
@@ -121,6 +121,7 @@ const FAMILY: &[OptSpec] = &{
         OptSpec::list("single", "LIST", "", "run only these single-face tests, by number 1 to 34"),
         OptSpec::list("family", "LIST", "", "run only these family tests, by number 1 to 21"),
         OptSpec::switch("hints", true, "check stem-hint widths and positions"),
+        OptSpec::value("log-output", "PATH", "", "write what would be printed to PATH instead of standard output").short('l'),
         c[0],
         c[1],
         c[2],
@@ -144,8 +145,8 @@ const INTERPOLATION: &[OptSpec] = &{
         OptSpec::value("kinkiness", "F", "0.5", "sensitivity of the kink test; larger reports smaller kinks"),
         OptSpec::switch("show-all", false, "also list glyphs without problems"),
         OptSpec::switch("ignore-missing", false, "do not report glyphs absent from a sparse master"),
-        OptSpec::list("master", "NAME", "", "restrict the test to these masters"),
-        OptSpec::list("name", "NAME", "", "the same as --master"),
+        OptSpec::list("master", "NAME", "", "restrict the test to these masters; repeatable").repeat(),
+        OptSpec::list("name", "NAME", "", "the same as --master").repeat(),
         OptSpec::value("output", "PATH", "", "the same as --report"),
         c[0],
         c[1],
@@ -210,6 +211,8 @@ struct Output {
     min: u8,
     fail_on: u8,
     quiet: bool,
+    /// The printed text, kept for the log file instead of going to stdout (`check family -l`).
+    log: Option<String>,
 }
 
 impl Output {
@@ -228,6 +231,7 @@ impl Output {
             min: level("min-severity")?,
             fail_on: p.value("fail-on").map_or(Ok(0), |_| level("fail-on"))?,
             quiet: p.switch("quiet") || p.switch("quiet-mode"),
+            log: None,
         })
     }
 
@@ -244,7 +248,7 @@ impl Output {
 
 /// Prints `doc` (narrowed to `--min-severity`), writes `--report`, and turns the findings into
 /// the exit status.
-fn finish(s: &mut Session, doc: Value, o: &Output) -> Outcome {
+fn finish(s: &mut Session, doc: Value, o: &mut Output) -> Outcome {
     let rank = |r: &Value| r.get("severity").and_then(Value::as_str).and_then(severity_rank).unwrap_or(2);
     let ignored = |r: &Value| r.get("ignored").and_then(Value::as_bool).unwrap_or(false);
     let results = doc.get("results").and_then(Value::as_array).cloned().unwrap_or_default();
@@ -270,7 +274,8 @@ fn finish(s: &mut Session, doc: Value, o: &Output) -> Outcome {
         exec(s, "audit.export", &json!({"path": path, "results": shown}))?;
     }
     if !o.quiet {
-        print_doc(s, &shown, &o.format)?;
+        let format = o.format.clone();
+        print_doc(s, &shown, &format, &mut o.log)?;
     }
     if found > 0 || errors > 0 {
         let level = ["fail", "warn", "info"].get(usize::from(o.fail_on)).copied().unwrap_or("fail");
@@ -280,19 +285,36 @@ fn finish(s: &mut Session, doc: Value, o: &Output) -> Outcome {
     Ok(())
 }
 
-/// Prints a result document: JSON as is, text as one line per result and a summary, Markdown
-/// and HTML through `audit.export` into a temporary file.
-fn print_doc(s: &mut Session, doc: &Value, format: &str) -> Outcome {
+/// Prints one line, or keeps it in `log` when one is being written.
+fn emit(log: &mut Option<String>, line: &str) -> Outcome {
+    match log {
+        Some(text) => {
+            text.push_str(line);
+            text.push('\n');
+            Ok(())
+        }
+        None => out(line),
+    }
+}
+
+/// Prints one JSON value, indented, or keeps it in `log`.
+fn emit_json(log: &mut Option<String>, value: &Value) -> Outcome {
+    emit(log, &serde_json::to_string_pretty(value).map_err(|e| Failure::Failed(e.to_string()))?)
+}
+
+/// Prints a result document (or keeps it in `log`): JSON as is, text as one line per result and
+/// a summary, Markdown and HTML through `audit.export` into a temporary file.
+fn print_doc(s: &mut Session, doc: &Value, format: &str, log: &mut Option<String>) -> Outcome {
     match format {
-        "json" => io::out_json(doc),
+        "json" => emit_json(log, doc),
         "text" => {
             for w in doc.get("warnings").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str) {
                 io::note(w);
             }
             for r in doc.get("results").and_then(Value::as_array).into_iter().flatten() {
-                out(&text_line(r))?;
+                emit(log, &text_line(r))?;
             }
-            out(&summary_line(doc))
+            emit(log, &summary_line(doc))
         }
         other => {
             let dir = std::env::temp_dir().join(format!("fontcraft-check-{}", std::process::id()));
@@ -301,7 +323,7 @@ fn print_doc(s: &mut Session, doc: &Value, format: &str) -> Outcome {
             let written = exec(s, "audit.export", &json!({"path": path, "results": doc, "format": other}));
             let text = written.and_then(|_| std::fs::read_to_string(&path).map_err(|e| Failure::Failed(format!("cannot read the report back: {e}"))));
             let _ = std::fs::remove_dir_all(&dir);
-            out(text?.trim_end())
+            emit(log, text?.trim_end())
         }
     }
 }
@@ -376,7 +398,7 @@ fn audit(argv: &[String]) -> Outcome {
     if p.help {
         return out(&super::help(&SUBCOMMAND));
     }
-    let o = Output::read(&p)?;
+    let mut o = Output::read(&p)?;
     let mut s = Session::new();
     if p.switch("profiles") {
         return io::out_json(&exec(&mut s, "audit.profile.list", &json!({}))?);
@@ -435,7 +457,7 @@ fn audit(argv: &[String]) -> Outcome {
         }
         q.insert("target".into(), target(&p.positional));
         let doc = exec(&mut s, "audit.run", &Value::Object(q))?;
-        return finish(&mut s, doc, &o);
+        return finish(&mut s, doc, &mut o);
     }
     let [input] = p.positional.as_slice() else { return Err(usage("--fix takes one source")) };
     io::open(&mut s, input)?;
@@ -452,7 +474,7 @@ fn audit(argv: &[String]) -> Outcome {
         let applied = fixed.get("applied").and_then(Value::as_array).map_or(0, Vec::len);
         io::note(&format!("{applied} repairs applied"));
     }
-    finish(&mut s, doc, &o)
+    finish(&mut s, doc, &mut o)
 }
 
 /// Saves the fixed document to `--output` (or `--output-file`), else over the input.
@@ -472,7 +494,7 @@ fn outlines(argv: &[String]) -> Outcome {
     if p.help {
         return out(&help_for("outlines", OUTLINES));
     }
-    let o = Output::read(&p)?;
+    let mut o = Output::read(&p)?;
     let mut s = Session::new();
     if p.switch("clear-cache") || p.switch("clear-hash-map") {
         // No glyph hashes are stored yet: every run examines every glyph.
@@ -522,7 +544,7 @@ fn outlines(argv: &[String]) -> Outcome {
             call.insert("target".into(), json!(input));
             exec(&mut s, "audit.checkOutlines", &Value::Object(call))
         };
-        let result = outcome.and_then(|doc| finish(&mut s, doc, &o));
+        let result = outcome.and_then(|doc| finish(&mut s, doc, &mut o));
         if let Err(e) = &result
             && !matches!(e, Failure::Found(_))
         {
@@ -550,7 +572,12 @@ fn family(argv: &[String]) -> Outcome {
     if p.help {
         return out(&help_for("family", FAMILY));
     }
-    let o = Output::read(&p)?;
+    let mut o = Output::read(&p)?;
+    // -l: everything printed goes to the file instead, as the reference's log option does.
+    let log_path = p.value("log-output").filter(|v| !v.is_empty()).map(str::to_string);
+    if log_path.is_some() {
+        o.log = Some(String::new());
+    }
     let mut s = Session::new();
     let mut fonts: Vec<String> = p.positional.clone();
     if let Some(dir) = p.value("directory").filter(|v| !v.is_empty()) {
@@ -587,14 +614,24 @@ fn family(argv: &[String]) -> Outcome {
     for id in &asked {
         let report = exec(&mut s, id, &json!({"fonts": fonts}))?;
         if !o.quiet {
-            io::out_json(&report)?;
+            emit_json(&mut o.log, &report)?;
         }
     }
     if asked == ["audit.report.featureLanguages"] {
-        return Ok(());
+        return write_log(log_path.as_deref(), &o);
     }
     let doc = exec(&mut s, "audit.compareFamily", &Value::Object(q))?;
-    finish(&mut s, doc, &o)
+    let result = finish(&mut s, doc, &mut o);
+    write_log(log_path.as_deref(), &o)?;
+    result
+}
+
+/// Writes the text kept for `-l` to its file.
+fn write_log(path: Option<&str>, o: &Output) -> Outcome {
+    match (path, &o.log) {
+        (Some(path), Some(text)) => std::fs::write(path, text).map_err(|e| Failure::Failed(format!("cannot write the log file {path}: {e}"))),
+        _ => Ok(()),
+    }
 }
 
 // ── check interpolation ─────────────────────────────────────────────────────────────────────────
@@ -632,5 +669,5 @@ fn interpolation(argv: &[String]) -> Outcome {
         }
     }
     let doc = exec(&mut s, "audit.checkInterpolation", &Value::Object(q))?;
-    finish(&mut s, doc, &o)
+    finish(&mut s, doc, &mut o)
 }

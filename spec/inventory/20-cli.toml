@@ -122,6 +122,7 @@ milestone = "M2"
 summary = "List-valued options take comma-separated values and may be repeated. A value whose items all start with '+' or '-' edits the default list instead of replacing it (--drop-tables=+GSUB,-BASE); '*' means everything and an empty value means nothing."
 ref = "pyftsubset option syntax (=, +=, -=)"
 status = "docs"
+notes = "A later plain value of a list option replaces the list, as in pyftsubset. Options documented as repeatable (check's --check, --exclude, --group, --master and --set, dump's --table and --exclude-table, instance's --location, collection's --share-table) add the items of each later plain value instead (X.audit4); an empty value still empties them."
 
 [[behavior]]
 id = "cli.global.json"
@@ -1680,7 +1681,7 @@ milestone = "M12"
 summary = "Runs the quality checks of a profile on sources or binary fonts and prints the findings; several files or a folder are also checked as a family. Three action words give the classic single-purpose audits with the option sets of their reference tools: outlines, family and interpolation. Nothing is changed unless --fix is given. Exit status 1 when a finding reaches the --fail-on severity."
 ref = "docs/spec/21-qa.md › Running an audit (the mapping this row implements); AFDKO checkoutlinesufo.py, comparefamily.py; fontTools varLib.interpolatable"
 status = "docs"
-notes = "Built in M12.44. Several inputs are checked as one target (one family); text output prints one line per result and a summary line; --format markdown and html render through audit.export. --fix opens one source, runs audit.fix and saves it over the input or to -o. The per-glyph cache (--all) is not built."
+notes = "Built in M12.44. Several inputs are checked as one target (one family); text output prints one line per result and a summary line; --format markdown and html render through audit.export. --fix opens one source, runs audit.fix and saves it over the input or to -o. The per-glyph cache (--all) is not built. --check, --exclude, --group, --master and --set add up when repeated (X.audit4)."
 
 [[cli]]
 id = "check outlines"
@@ -1712,7 +1713,7 @@ notes = "Built in M12.44 on audit.checkOutlines. The reference names -e/--error-
 
 [[cli]]
 id = "check family"
-usage = "fontcraft-cli check family DIR|FONT... [--tolerance N] [--menu-names] [--metrics] [--panose] [--layout] [--single LIST] [--family LIST] [--no-hints]"
+usage = "fontcraft-cli check family DIR|FONT... [--tolerance N] [--menu-names] [--metrics] [--panose] [--layout] [--single LIST] [--family LIST] [--no-hints] [-l PATH]"
 options = [
   "DIR|FONT...: folder to scan for fonts (default the current folder) or explicit fonts",
   "--tolerance N: allowed difference in units before a metric mismatch is reported; default 0",
@@ -1723,6 +1724,7 @@ options = [
   "--single LIST: run only these single-face tests, by reference number 1 to 34 or by check id",
   "--family LIST: run only these family tests, by reference number 1 to 21 or by check id",
   "--no-hints: skip the checks of stem-hint widths and positions",
+  "-l, --log-output PATH: write what would be printed (the result document and the reports asked for) to PATH instead of standard output",
   "--expect-vendor CODE, --expect-url URL: values the vendor-id and URL checks compare against; default the project's values, then the environment variables CF_DEFAULT_FOUNDRY_CODE and CF_DEFAULT_URL",
   "[global options]: -o/--output, --output-dir, --in-place, --no-clobber, --face, --json, -q/--quiet, -v/--verbose, --log, --log-file, --color, -j/--jobs, --timing, --trace, --backtrace, --options, --save-options, --dry-run, --timestamp, @FILE, -h/--help, --version (behavior rows cli.global.*)",
 ]
@@ -1735,7 +1737,8 @@ milestone = "M12"
 summary = "Examines all OpenType fonts in a folder, or the fonts listed, as families and reports problems within each font and inconsistencies between them: naming and style linking, weight and width classes, vertical metrics, underline, embedding permissions, hint zones, script and feature coverage. Optional reports tabulate menu names, global metrics, PANOSE values and feature coverage side by side."
 ref = "AFDKO comparefamily.py usage, help and test titles, WinWeights.md; docs/spec/21-qa.md › comparefamily"
 status = "docs"
-notes = "Built in M12.44 on audit.compareFamily and the four audit.report.* commands (printed as JSON). -d names the folder. --expect-vendor and --expect-url are not built: the vendor and URL checks read the project values."
+notes = "Built in M12.44 on audit.compareFamily and the four audit.report.* commands (printed as JSON). -d names the folder; -l writes the printed text to a file (X.audit4). --expect-vendor and --expect-url are not built: the vendor and URL checks read the project values."
+guesses = ["-l has the long name --log-output, since --log and --log-file are the global logging options; the reference has only the short form."]
 
 [[cli]]
 id = "check interpolation"
