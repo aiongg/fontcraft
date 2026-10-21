@@ -234,6 +234,28 @@ fn color_svg_layer_draws_its_file_and_no_missing_image_marker() {
 }
 
 #[test]
+fn color_svg_layer_draws_its_filters() {
+    // A 40-unit bar moved 50 units right by its filter.
+    let dir = folder("svg-filter");
+    let file = dir.join("F.svg");
+    std::fs::write(
+        &file,
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><filter id="f" filterUnits="userSpaceOnUse" x="0" y="0" width="100" height="100"><feOffset dx="50" dy="0"/></filter><rect width="40" height="100" fill="#00FF00" filter="url(#f)"/></svg>"##,
+    )
+    .unwrap();
+    let mut app = colour_app(&["F"], "layer.convertToSvg");
+    let layer = colour_layer(&app, "F");
+    app.run("layer.setSvgImage", &json!({"glyph": "F", "layer": layer, "path": file.to_string_lossy()})).unwrap();
+    select_colour_layer(&mut app, "F");
+    let shapes = Window::new().settle(&mut app);
+    assert_eq!(app.color_ui.sprites(), 1);
+    assert_eq!(textured(&app, &shapes), 1, "the filtered file is one texture");
+    let image = picture(&app, "F", Some(&layer));
+    assert_eq!(at(&image, 70, 50), Color32::from_rgb(0, 255, 0), "moved 50 units right");
+    assert_eq!(at(&image, 20, 50).a(), 0, "and not left where it was");
+}
+
+#[test]
 fn color_layered_masters_draw_in_their_master_color_first_master_on_top() {
     let mut app = FontcraftApp::default();
     app.run("path.addRectangle", &json!({"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200})).unwrap();
