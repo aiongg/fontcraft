@@ -706,3 +706,87 @@ fn the_font_sets_the_arrow_increments() {
     let s = ToolSettings::default().with_font(&font);
     assert_eq!(s.increments, [1.0, 20.0, 100.0]);
 }
+
+/// One open path: a corner (0,0), handles (0,100) (100,200), a smooth node (200,200), handles
+/// (300,200) (400,100), and a corner (400,0).
+fn smooth_layer() -> Layer {
+    let mut layer = Layer::new("m01", 600.0);
+    let mut node = curve(200.0, 200.0);
+    node.smooth = true;
+    let nodes = vec![on(0.0, 0.0), off(0.0, 100.0), off(100.0, 200.0), node, off(300.0, 200.0), off(400.0, 100.0), curve(400.0, 0.0)];
+    layer.shapes.push(Shape::Path(Path::new(false, nodes)));
+    layer
+}
+
+/// Press at `from` and drag to `to` with `mods`, then release; the last preview.
+fn modifier_drag(h: &mut Harness, from: (f64, f64), to: (f64, f64), mods: Modifiers) -> Invocation {
+    let mut t = SelectTool::default();
+    h.actions.clear();
+    h.pointer(&mut t, Down, from.0, from.1, mods);
+    h.pointer(&mut t, Drag, (from.0 + to.0) / 2.0, (from.1 + to.1) / 2.0, mods);
+    h.pointer(&mut t, Drag, to.0, to.1, mods);
+    h.pointer(&mut t, Up, to.0, to.1, mods);
+    assert_eq!(h.count(|a| matches!(a, Action::Commit)), 1, "one interaction");
+    h.previews().last().cloned().cloned().unwrap()
+}
+
+#[test]
+fn alt_on_a_handle_keeps_its_angle_and_ctrl_alt_mirrors_it() {
+    let mut h = Harness::new(smooth_layer());
+    let kept = modifier_drag(&mut h, (300.0, 200.0), (337.0, 261.0), Modifiers::ALT);
+    assert_eq!(kept.id, "selection.move");
+    assert_eq!(kept.params["points"], json!([[0, 4]]));
+    assert_eq!(kept.params["mode"], json!("pointsOnly"));
+    assert!(kept.params.get("duplicate").is_none(), "a handle alone has nothing to copy");
+    assert!(matches!(h.actions.first(), Some(Action::Begin { label }) if label == "Move"));
+
+    let mirrored = modifier_drag(&mut h, (300.0, 200.0), (337.0, 261.0), Modifiers::ALT.with_ctrl());
+    assert_eq!(mirrored.params["mode"], json!("mirror"));
+    assert_eq!((mirrored.params["dx"].as_f64(), mirrored.params["dy"].as_f64()), (Some(37.0), Some(61.0)), "Ctrl suspends snapping");
+
+    // Alt added during a handle drag keeps the angle; it does not nudge.
+    let mut t = SelectTool::default();
+    h.actions.clear();
+    h.pointer(&mut t, Down, 300.0, 200.0, NONE);
+    h.pointer(&mut t, Drag, 320.0, 230.0, NONE);
+    h.pointer(&mut t, Drag, 337.0, 261.0, Modifiers::ALT);
+    assert_eq!(h.previews().last().unwrap().params["mode"], json!("pointsOnly"));
+}
+
+#[test]
+fn alt_on_lone_nodes_moves_only_them_and_a_selected_segment_still_duplicates() {
+    let mut h = Harness::new(test_layer());
+    let lone = modifier_drag(&mut h, (300.0, 100.0), (337.0, 161.0), Modifiers::ALT);
+    assert_eq!(lone.params["points"], json!([[1, 3]]));
+    assert_eq!(lone.params["mode"], json!("pointsOnly"));
+    assert!(lone.params.get("duplicate").is_none());
+    assert!(matches!(h.actions.first(), Some(Action::Begin { label }) if label == "Move"));
+
+    // The two ends of the line: a whole segment to copy.
+    h.selection = points(&[(2, 0), (2, 1)]);
+    let copy = modifier_drag(&mut h, (400.0, 0.0), (437.0, 61.0), Modifiers::ALT);
+    assert_eq!(copy.params["duplicate"], json!(true));
+    assert!(copy.params.get("mode").is_none());
+}
+
+#[test]
+fn alt_on_a_curve_segment_reshapes_it() {
+    let mut h = Harness::new(test_layer());
+    // (231.25, 68.75) is the curve's point at t = 0.5.
+    let inv = modifier_drag(&mut h, (231.25, 68.75), (241.25, 88.75), Modifiers::ALT);
+    assert!(matches!(h.actions.first(), Some(Action::Begin { label }) if label == "Reshape Segment"));
+    assert_eq!(inv.id, "path.reshapeSegment");
+    assert_eq!(inv.params["segment"], json!([1, 3]));
+    let t = inv.params["t"].as_f64().unwrap();
+    assert!((t - 0.5).abs() < 0.01, "t = {t}");
+    let to = (inv.params["to"][0].as_f64().unwrap(), inv.params["to"][1].as_f64().unwrap());
+    assert!((to.0 - 241.25).abs() < 0.5 && (to.1 - 88.75).abs() < 0.5, "to = {to:?}");
+    assert!(h.previews().iter().all(|i| i.id == "path.reshapeSegment"), "no move is sent");
+    assert_eq!(h.selection, points(&[(1, 0), (1, 3)]), "the press selects the segment's ends");
+
+    // A line segment has no handles: Alt-dragging it copies it.
+    h.selection = Selection::new();
+    let line = modifier_drag(&mut h, (450.0, 0.0), (487.0, 61.0), Modifiers::ALT);
+    assert_eq!(line.id, "selection.move");
+    assert_eq!(line.params["duplicate"], json!(true));
+}

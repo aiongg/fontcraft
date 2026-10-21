@@ -6,6 +6,7 @@
 //! | `normal` | move | move with them | move; the opposite handle of a smooth node turns to stay in line (along a straight side, the handle slides on its line) |
 //! | `pointsOnly` | move | stay | keep their angle: only the length changes |
 //! | `nudge` | move | the handles of each segment with one moved end are scaled per axis between the fixed end and the moved one | move |
+//! | `mirror` | move | move with them | move; the opposite handle of a smooth node takes the same length at the opposite angle (along a straight side, as `normal`) |
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -22,6 +23,7 @@ pub(super) enum Mode {
     Normal,
     PointsOnly,
     Nudge,
+    Mirror,
 }
 
 /// The target's points grouped by shape, with each segment's two end nodes added, leaving out
@@ -58,7 +60,7 @@ pub(super) fn move_path(path: &mut Path, selected: &BTreeSet<usize>, d: Vec2, mo
     let mut moved = vec![false; old.len()];
     let path_ref: &Path = path;
     match mode {
-        Mode::Normal => {
+        Mode::Normal | Mode::Mirror => {
             for &i in selected {
                 mark(&mut new, &mut moved, i, d);
             }
@@ -71,7 +73,11 @@ pub(super) fn move_path(path: &mut Path, selected: &BTreeSet<usize>, d: Vec2, mo
             }
             let handles: Vec<usize> = (0..old.len()).filter(|&j| moved.get(j).copied().unwrap_or(false) && !on(path_ref, j)).collect();
             for j in handles {
-                keep_smooth(path_ref, j, &old, &mut new, &mut moved);
+                if mode == Mode::Mirror {
+                    mirror(path_ref, j, &old, &mut new, &mut moved);
+                } else {
+                    keep_smooth(path_ref, j, &old, &mut new, &mut moved);
+                }
             }
         }
         Mode::PointsOnly => {
@@ -168,6 +174,27 @@ fn keep_smooth(path: &Path, j: usize, old: &[Point], new: &mut [Point], moved: &
             *p = pk + dir * (len_o / l);
             *m = true;
         }
+    }
+}
+
+/// After handle `j` moved: when its node is smooth and stays, the opposite handle becomes the
+/// mirror image of `j` through the node. A straight other side cannot turn, so there `j` behaves
+/// as in [`keep_smooth`].
+fn mirror(path: &Path, j: usize, old: &[Point], new: &mut [Point], moved: &mut [bool]) {
+    let Some((k, Some(o))) = handle_owner(path, j) else { return };
+    let is_moved = |i: usize| moved.get(i).copied().unwrap_or(false);
+    if is_moved(k) || is_moved(o) || !path.nodes.get(k).is_some_and(|n| n.smooth) {
+        return;
+    }
+    if on(path, o) {
+        keep_smooth(path, j, old, new, moved);
+        return;
+    }
+    let pk = at(old, k);
+    let to = pk - (at(new, j) - pk);
+    if let (Some(p), Some(m)) = (new.get_mut(o), moved.get_mut(o)) {
+        *p = to;
+        *m = true;
     }
 }
 
@@ -347,4 +374,62 @@ fn duplicate_in(parts: &mut LayerPartsMut, t: &Targets, points: &BTreeMap<usize,
         parts.annotations.push(copy);
     }
     copies
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::{Value, json};
+
+    use crate::Session;
+
+    fn run(s: &mut Session, id: &str, p: Value) -> Value {
+        s.execute(id, &p).unwrap_or_else(|e| panic!("{id}: {e}"))
+    }
+
+    fn xy(s: &Session) -> Vec<(f64, f64)> {
+        let font = s.font().unwrap();
+        let master = font.default_master().unwrap().id.clone();
+        match font.glyph("A").unwrap().layer(&master).unwrap().shapes.last() {
+            Some(fontcraft_model::Shape::Path(p)) => p.nodes.iter().map(|n| (n.x, n.y)).collect(),
+            other => panic!("not a path: {other:?}"),
+        }
+    }
+
+    /// Two curves meeting at node 3 (200,200), whose handles (100,200) and (300,200) are level.
+    fn session(smooth: bool) -> Session {
+        let mut s = Session::with_document();
+        let nodes = json!([
+            {"x": 0, "y": 0},
+            {"x": 0, "y": 100, "type": "offcurve"}, {"x": 100, "y": 200, "type": "offcurve"}, {"x": 200, "y": 200, "type": "curve", "smooth": smooth},
+            {"x": 300, "y": 200, "type": "offcurve"}, {"x": 400, "y": 100, "type": "offcurve"}, {"x": 400, "y": 0, "type": "curve"},
+        ]);
+        run(&mut s, "path.addPath", json!({"glyph": "A", "closed": false, "nodes": nodes}));
+        s
+    }
+
+    #[test]
+    fn mirror_makes_a_smooth_node_symmetric_and_leaves_a_corner_alone() {
+        let mut s = session(true);
+        let before = xy(&s);
+        run(&mut s, "selection.move", json!({"glyph": "A", "points": [[0, 4]], "dx": 50, "dy": 30, "mode": "mirror"}));
+        let after = xy(&s);
+        assert_eq!(after[4], (350.0, 230.0));
+        assert_eq!(after[2], (50.0, 170.0), "the opposite handle mirrors the moved one through the node");
+        assert_eq!(after[3], (200.0, 200.0), "the node stays");
+        run(&mut s, "edit.undo", json!({}));
+        assert_eq!(xy(&s), before, "one undo step");
+
+        // A plain move turns the opposite handle but keeps its length.
+        run(&mut s, "selection.move", json!({"glyph": "A", "points": [[0, 4]], "dx": 50, "dy": 30}));
+        let (x, y) = xy(&s)[2];
+        assert!(((200.0 - x).hypot(200.0 - y) - 100.0).abs() <= 1.0, "length kept: ({x}, {y})");
+
+        let mut s = session(false);
+        run(&mut s, "selection.move", json!({"glyph": "A", "points": [[0, 4]], "dx": 50, "dy": 30, "mode": "mirror"}));
+        let after = xy(&s);
+        assert_eq!((after[2], after[4]), ((100.0, 200.0), (350.0, 230.0)), "a corner's other handle stays");
+
+        let e = s.execute("selection.move", &json!({"glyph": "A", "points": [[0, 4]], "dx": 1, "dy": 1, "mode": "mirrored"})).unwrap_err();
+        assert!(e.to_string().contains("`mode`"), "{e}");
+    }
 }
