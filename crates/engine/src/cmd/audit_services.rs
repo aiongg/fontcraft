@@ -9,6 +9,8 @@
 //! round trip and rasterising answer "not available", which makes the checks that need them skip
 //! with the reason.
 
+use std::collections::HashSet;
+
 use fontcraft_audit::run::MAX_SOURCE_INSTANCES;
 use fontcraft_audit::services::{CompiledInstance, MAX_SHAPED_GLYPHS, ShapeRequest, ShapedGlyph};
 use fontcraft_audit::{AuditServices, CompatibilityReport, SourceMap, Unavailable};
@@ -329,7 +331,7 @@ fn check_outlines(s: &mut Session, v: &Value) -> Result<Value> {
             let names = glyphs_of(&report);
             f.insert("glyphs".into(), json!(names));
         }
-        let (fixed, cleanup) = as_one_step(s, |s| {
+        let (fixed, cleanup) = super::audit::one_step(s, "Check Outlines", |s| {
             let before = s.doc()?.font.clone();
             let fixed = s.execute("audit.fix", &Value::Object(f))?;
             let cleanup = clean_up_fixed(s, &before, &fixed, decimal, keep_order)?;
@@ -347,45 +349,24 @@ fn check_outlines(s: &mut Session, v: &Value) -> Result<Value> {
     Ok(report)
 }
 
-/// Runs `f` as one undo step labelled with the command's name: the steps it runs record no
-/// undo steps of their own.
-fn as_one_step<T>(s: &mut Session, f: impl FnOnce(&mut Session) -> Result<T>) -> Result<T> {
-    if s.batch.is_some() {
-        return f(s);
-    }
-    s.batch = Some(crate::Batch { label: "Check Outlines".into(), before: Vec::new() });
-    let out = f(s);
-    if let (Ok(_), Some(batch)) = (&out, s.batch.take()) {
-        for (id, before) in batch.before {
-            let Some(i) = s.position_of(id) else { continue };
-            if let Some(doc) = s.docs_mut().get_mut(i)
-                && !doc.font.same_as(&before)
-            {
-                crate::push_undo(doc, batch.label.clone(), before);
-            }
-        }
-    }
-    s.batch = None;
-    out
-}
-
 /// The reference's clean-up of each glyph its fix changed, on every layer audit.fix changed
 /// (`fixed` is its result; `before` the font before it): see [`outline_cleanup`].
 fn clean_up_fixed(s: &mut Session, before: &Font, fixed: &Value, decimal: bool, keep_order: bool) -> Result<Vec<Value>> {
-    let mut layers: Vec<(String, String)> = Vec::new();
+    let mut layers: Vec<(&str, &str)> = Vec::new();
+    let mut seen: HashSet<(&str, &str)> = HashSet::new();
     for a in fixed.get("applied").and_then(Value::as_array).into_iter().flatten() {
         if let (Some(g), Some(l)) = (a.get("glyph").and_then(Value::as_str), a.get("layer").and_then(Value::as_str))
-            && !layers.iter().any(|(x, y)| x == g && y == l)
+            && seen.insert((g, l))
         {
-            layers.push((g.to_string(), l.to_string()));
+            layers.push((g, l));
         }
     }
     s.edit("Check Outlines", |font| {
         let mut out = Vec::with_capacity(layers.len());
-        for (g, l) in &layers {
-            let original = before.glyph(g).and_then(|x| x.layers.iter().find(|x| &x.id == l));
+        for &(g, l) in &layers {
+            let original = before.glyph(g).and_then(|x| x.layers.iter().find(|x| x.id == l));
             let Ok(mut glyph) = font.glyph_mut(g) else { continue };
-            let Some(layer) = glyph.layers.iter_mut().find(|x| &x.id == l) else { continue };
+            let Some(layer) = glyph.layers.iter_mut().find(|x| x.id == l) else { continue };
             let merged = outline_cleanup::clean_up(layer, original, decimal, keep_order);
             out.push(json!({"glyph": g, "layer": l, "merged": merged}));
         }
@@ -396,10 +377,11 @@ fn clean_up_fixed(s: &mut Session, before: &Font, fixed: &Value, decimal: bool, 
 /// The glyphs a result document's results name.
 fn glyphs_of(report: &Value) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
+    let mut seen: HashSet<&str> = HashSet::new();
     for r in report.get("results").and_then(Value::as_array).into_iter().flatten() {
         if let Some(g) = r.pointer("/location/glyph").and_then(Value::as_str)
             && !g.is_empty()
-            && !out.iter().any(|x| x == g)
+            && seen.insert(g)
         {
             out.push(g.to_string());
         }
@@ -719,5 +701,26 @@ mod tests {
         assert_eq!(off.get(1).map(|g| g.cluster), Some(1));
         assert!(EngineServices.shape(&compiled.bytes, &request(vec![("toolong".into(), true)])).is_err());
         assert!(EngineServices.shape(b"not a font", &request(vec![])).is_err());
+    }
+
+    /// A fix that lists many steps cleans up each changed layer once, and finding the distinct
+    /// layers stays linear in the number of steps (it compared each step with every layer
+    /// before it, which hung on a large multi-master fix).
+    #[test]
+    fn a_fix_of_many_steps_cleans_each_layer_once() {
+        let mut s = Session::with_document();
+        let square = json!([{"x": 0.4, "y": 0.0}, {"x": 100.0, "y": 0.0}, {"x": 100.0, "y": 100.0}, {"x": 0.0, "y": 100.0}]);
+        s.execute("path.addPath", &json!({"glyph": "A", "nodes": square})).unwrap();
+        let before = s.doc().unwrap().font.clone();
+        let master = before.default_master().unwrap().id.clone();
+        let mut applied: Vec<Value> = (0..150_000).map(|i| json!({"glyph": format!("missing{i}"), "layer": master})).collect();
+        applied.push(json!({"glyph": "A", "layer": master}));
+        applied.push(json!({"glyph": "A", "layer": master}));
+        let cleanup = clean_up_fixed(&mut s, &before, &json!({"applied": applied}), false, true).unwrap();
+        assert_eq!(cleanup, [json!({"glyph": "A", "layer": master, "merged": 0})]);
+        let font = &s.doc().unwrap().font;
+        let layer = font.glyph("A").unwrap().layers.iter().find(|l| l.id == master).unwrap();
+        let Some(fontcraft_model::Shape::Path(path)) = layer.shapes.first() else { panic!("A keeps its path") };
+        assert_eq!(path.nodes.first().map(|n| n.x), Some(0.0), "the changed layer is rounded");
     }
 }

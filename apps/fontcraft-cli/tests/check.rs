@@ -162,3 +162,19 @@ fn repeated_checks_add_up_and_family_logs_to_a_file() {
     assert!(text.trim_end().ends_with("errors"), "the log ends with the summary line: {text}");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// `check family -l FILE` writes what it printed before a later step failed: here the metrics
+/// report, then a test number past the last one, which the family audit refuses.
+#[test]
+fn family_log_keeps_the_text_printed_before_a_failure() {
+    let dir = scratch("log-failure");
+    let (_, ttf) = fixtures(&dir);
+    let log = dir.join("family.log");
+    let (code, stdout, stderr) = cli(&["check", "family", ttf.as_str(), "--metrics", "--single", "99", "-l", log.to_str().unwrap()]);
+    assert!(code != 0 && code != 1, "the run fails: {code} {stderr}");
+    assert!(stdout.is_empty(), "-l keeps standard output empty: {stdout}");
+    let text = std::fs::read_to_string(&log).unwrap_or_else(|e| panic!("no log ({e}): {stderr}"));
+    let report: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("{e}: {text}"));
+    assert!(report.get("families").is_some(), "the log holds the metrics report: {text}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

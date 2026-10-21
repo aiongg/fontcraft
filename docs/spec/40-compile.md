@@ -959,6 +959,18 @@ they are kept. `HVAR` is scaled when every glyph takes one positive horizontal s
 or shear, kept when the widths are kept, and dropped otherwise. No reference has a matrix on
 `gvar`; the tests check that transforming and instancing commute within two units.
 
+## 4e. TTX import against ttx -m
+
+`tables import` (`fontcraft_tables::ttx::import`) compiles each table of a dump as fontTools'
+`ttx -m` does. The cases around the font's own outline table, with bounds recalculation on:
+
+| Case | fontTools | FontCraft |
+|---|---|---|
+| A dump with `head` or `OS/2` but no `hhea`, `vhea` or outline table, read into a CFF font | compiling `head` reads the Top DICT's FontBBox; no charstring is drawn | the same: charstrings that cannot be drawn do not stop the import |
+| The same with `hhea` or `vhea`, or into a CFF2 font | the extremes (and a CFF2 font's `head` box) draw every charstring; one that cannot be drawn fails the save | the import fails with the reason and changes nothing |
+| A font with `maxp`, `post` and `CFF `, and a dump without `CFF ` | loading the glyph order decompiles `CFF `; the save compiles it again, its FontBBox recalculated | the table is written as TTX and read back. When a name or string holds a control character (TTX text writes it as `?`), or the round trip fails, the table keeps its bytes and the result has a warning with the reason, since going through text would change the strings |
+| A font without `maxp` or `post` | `CFF ` is loaded only when `head` is compiled, after `CFF ` was written, so its bytes stay | the bytes stay; `head` and the extremes read them |
+
 ## 5. Commands and data touched
 
 This chapter defines no commands of its own. The stages are driven by the export commands in the

@@ -21,7 +21,7 @@ use std::path::{Component, Path, PathBuf};
 
 use fontcraft_tables::limits::{MAX_TTX_BYTES, MAX_TTX_GLYPH_PARTS, MAX_TTX_PARTS};
 use fontcraft_tables::sfnt::tag_str;
-use fontcraft_tables::ttx::{Element, ImportOptions, ParseBudget, import_tree, parse_within};
+use fontcraft_tables::ttx::{Element, ImportOptions, ParseBudget, import_tree_with_warnings, parse_within};
 use fontcraft_tables::{TableOrder, TablesError};
 use serde_json::{Value, json};
 
@@ -39,7 +39,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Import Tables from XML",
             [],
             None,
-            "{font: path, face?: number|name, dumps: [path], recalcBounds?: bool, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} compiles the tables of each TTX dump (in the order given) and puts them in the font, replacing tables with the same tag and leaving the others untouched; glyph names resolve against the dump's GlyphOrder, else the font's own; with recalcBounds (default true) bounding boxes, maxp maxima and hhea/vhea extremes are recalculated from the outlines; the font is written in the recommended order with fresh checksums (default output: FONT.edited.EXT) → {output, added: [tag], replaced: [tag]}",
+            "{font: path, face?: number|name, dumps: [path], recalcBounds?: bool, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} compiles the tables of each TTX dump (in the order given) and puts them in the font, replacing tables with the same tag and leaving the others untouched; glyph names resolve against the dump's GlyphOrder, else the font's own; with recalcBounds (default true) bounding boxes, maxp maxima and hhea/vhea extremes are recalculated from the outlines; the font is written in the recommended order with fresh checksums (default output: FONT.edited.EXT) → {output, added: [tag], replaced: [tag], warnings?: [string]} (warnings: a font's own CFF table that keeps its bytes instead of being compiled again, with the reason)",
             always,
             tables_import_ttx
         )
@@ -271,12 +271,15 @@ fn tables_import_ttx(_: &mut Session, p: &Value) -> Result<Value> {
     let options = ImportOptions { keep_bounds: !p.bool_or("recalcBounds", true)?, ..ImportOptions::default() };
     let before: Vec<_> = loaded.font.tables.iter().map(|(t, d)| (*t, d.clone())).collect();
     let mut font = loaded.font.clone();
+    let mut warnings: Vec<String> = Vec::new();
     for dump in &dumps {
         let root = read_dump(Path::new(dump))?;
-        font = import_tree(font, &root, &options).map_err(|e| match e {
+        let (merged, notes) = import_tree_with_warnings(font, &root, &options).map_err(|e| match e {
             TablesError::Invalid(m) => EngineError::Tables(TablesError::Invalid(format!("{dump}: {m}"))),
             other => tables_err(other),
         })?;
+        font = merged;
+        warnings.extend(notes.into_iter().map(|w| format!("{dump}: {w}")));
     }
     let mut added = Vec::new();
     let mut replaced = Vec::new();
@@ -288,5 +291,11 @@ fn tables_import_ttx(_: &mut Session, p: &Value) -> Result<Value> {
         }
     }
     let output = write_font(&p, &loaded, &font, TableOrder::Recommended, ".edited")?;
-    Ok(json!({ "output": output, "added": added, "replaced": replaced }))
+    let mut result = json!({ "output": output, "added": added, "replaced": replaced });
+    if !warnings.is_empty()
+        && let Some(o) = result.as_object_mut()
+    {
+        o.insert("warnings".into(), json!(warnings));
+    }
+    Ok(result)
 }

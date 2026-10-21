@@ -629,11 +629,11 @@ fn truthy(element: &Element, name: &str) -> bool {
 
 /// See [`super::import`].
 pub(crate) fn import(font: SfntFont, text: &str, options: &ImportOptions) -> Result<SfntFont> {
-    import_tree(font, &parse(text)?, options)
+    import_tree(font, &parse(text)?, options, &mut Vec::new())
 }
 
-/// See [`super::import_tree`].
-pub(crate) fn import_tree(mut font: SfntFont, root: &Element, options: &ImportOptions) -> Result<SfntFont> {
+/// See [`super::import_tree_with_warnings`]; `warnings` gets what the caller should be told.
+pub(crate) fn import_tree(mut font: SfntFont, root: &Element, options: &ImportOptions, warnings: &mut Vec<String>) -> Result<SfntFont> {
     if root.name != "ttFont" {
         return Err(TablesError::invalid(format!("the root element is '{}', not 'ttFont'", root.name)));
     }
@@ -706,13 +706,18 @@ pub(crate) fn import_tree(mut font: SfntFont, root: &Element, options: &ImportOp
     // fontTools' `importXML` reads the glyph order of a font with `maxp` and `post` before the
     // text, which loads a CFF font's `CFF ` table; the save then compiles that table again, its
     // FontBBox recalculated, although the text holds no `CFF ` element. A call that picks its
-    // tables (the internal copies of layout tables) changes only those.
-    if options.tables.is_empty()
-        && !elements.iter().any(|(tag, _)| tag == b"CFF ")
-        && let Some(data) = reload_cff(&font, ctx.recalc)
-    {
-        font.insert(*b"CFF ", data);
-        loaded.insert(*b"CFF ");
+    // tables (the internal copies of layout tables) changes only those. Without `maxp` or `post`
+    // fontTools loads `CFF ` only when it compiles `head`, after `CFF ` was written, so the table
+    // keeps its bytes and only the bounds read from it.
+    if options.tables.is_empty() && !elements.iter().any(|(tag, _)| tag == b"CFF ") {
+        match reload_cff(&font, ctx.recalc) {
+            Ok(Some(data)) => {
+                font.insert(*b"CFF ", data);
+                loaded.insert(*b"CFF ");
+            }
+            Ok(None) => {}
+            Err(reason) => warnings.push(format!("the font's CFF table keeps its bytes instead of being compiled again: {reason}")),
+        }
     }
     for (tag, element) in &elements {
         let tag = *tag;
@@ -761,18 +766,40 @@ pub(crate) fn import_tree(mut font: SfntFont, root: &Element, options: &ImportOp
 }
 
 /// The font's own `CFF ` table compiled again as fontTools compiles a table it has decompiled:
-/// written as TTX and read back. `None` when the font lacks `maxp`, `post` or `CFF `, or when the
-/// table cannot be written or read; its bytes then stay as they are.
-fn reload_cff(font: &SfntFont, recalc: bool) -> Option<Vec<u8>> {
-    if font.get(*b"maxp").is_none() || font.get(*b"post").is_none() || font.get(*b"CFF ").is_none() {
-        return None;
+/// written as TTX and read back. `Ok(None)` when the font lacks `maxp`, `post` or `CFF `. An
+/// error, with the reason, when the round trip through TTX text would change the table's strings
+/// or the table cannot be written or read back; its bytes then stay as they are.
+fn reload_cff(font: &SfntFont, recalc: bool) -> std::result::Result<Option<Vec<u8>>, String> {
+    let (Some(_), Some(_), Some(data)) = (font.get(*b"maxp"), font.get(*b"post"), font.get(*b"CFF ")) else { return Ok(None) };
+    // fontTools compiles the decompiled table without going through text, so a control
+    // character, which TTX text writes as `?`, keeps its byte there.
+    match cff_strings_fit_xml(data) {
+        Some(true) => {}
+        Some(false) => return Err("a name or string in it holds a control character that TTX text cannot carry".into()),
+        None => return Err("its name and string indexes cannot be read".into()),
     }
     let options = super::DumpOptions { tables: vec![*b"CFF "], strict: true, ..Default::default() };
-    let text = super::dump(font, &options).ok()?;
-    let root = parse(&attribute_breaks_as_references(&text)).ok()?;
-    let element = root.children.iter().find(|c| xml_to_tag(&c.name).ok() == Some(*b"CFF "))?;
+    // The text is dropped once parsed, so at most the tree and one copy of the text are held.
+    let text = attribute_breaks_as_references(&super::dump(font, &options).map_err(|e| format!("it cannot be written as TTX: {e}"))?);
+    let root = parse(&text).map_err(|e| format!("its TTX text cannot be read back: {e}"))?;
+    drop(text);
+    let element = root.children.iter().find(|c| xml_to_tag(&c.name).ok() == Some(*b"CFF ")).ok_or("its TTX text holds no CFF table")?;
     let ctx = ReadContext::new(glyph_order(font), font.tables.keys().copied().collect(), recalc);
-    read_cff::read_table_with(element, &ctx).ok().flatten().map(|(_, data)| data)
+    match read_cff::read_table_with(element, &ctx) {
+        Ok(Some((_, data))) => Ok(Some(data)),
+        Ok(None) => Err("its TTX text cannot be compiled".into()),
+        Err(e) => Err(format!("its TTX text cannot be compiled: {e}")),
+    }
+}
+
+/// Whether every name and string of a CFF table passes through TTX text unchanged (the writer
+/// turns each character XML 1.0 does not allow into `?`); `None` when the indexes cannot be read.
+fn cff_strings_fit_xml(data: &[u8]) -> Option<bool> {
+    let header = usize::from(*data.get(2)?);
+    let (names, at) = super::cff_index(data, header).ok()?;
+    let (_, at) = super::cff_index(data, at).ok()?;
+    let (strings, _) = super::cff_index(data, at).ok()?;
+    Some(names.iter().chain(&strings).all(|item| item.iter().all(|&b| !super::is_illegal_xml_char(char::from(b)))))
 }
 
 /// `text` with the line ends and tabs inside attribute values written as character references,
@@ -959,9 +986,11 @@ fn recalculate(
             loaded.insert(*b"CFF2");
         }
     }
-    // Glyph bounds for the hhea and vhea extremes.
+    // Glyph bounds for the hhea and vhea extremes, drawn only when one of them is compiled (as in
+    // fontTools, where `head` alone reads a CFF font's FontBBox and draws no charstring).
     let outlines_loaded = loaded.contains(b"glyf") || loaded.contains(b"CFF ") || loaded.contains(b"CFF2");
-    let bounds: Option<Vec<Option<[f64; 4]>>> = if !ctx.recalc || !outlines_loaded {
+    let extremes_wanted = [*b"hhea", *b"vhea"].iter().any(|h| loaded.contains(h) && font.get(*h).is_some());
+    let bounds: Option<Vec<Option<[f64; 4]>>> = if !ctx.recalc || !outlines_loaded || !extremes_wanted {
         None
     } else if let Some(g) = glyf {
         Some(g.glyphs.iter().map(|s| (s.contours != 0).then(|| s.bounds.map(|v| v as f64))).collect())

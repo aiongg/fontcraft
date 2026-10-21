@@ -904,7 +904,16 @@ pub fn import(font: SfntFont, text: &str, options: &ImportOptions) -> Result<Sfn
 /// [`import`] from a document already parsed (a split dump put together by the caller: every
 /// element that names another file with `src` replaced by that file's elements).
 pub fn import_tree(font: SfntFont, root: &Element, options: &ImportOptions) -> Result<SfntFont> {
-    read::import_tree(font, root, options)
+    read::import_tree(font, root, options, &mut Vec::new())
+}
+
+/// [`import_tree`] with the warnings a user should see: what was kept where fontTools would have
+/// changed it, and why (a font's own `CFF ` table that cannot be compiled again through TTX text
+/// keeps its bytes).
+pub fn import_tree_with_warnings(font: SfntFont, root: &Element, options: &ImportOptions) -> Result<(SfntFont, Vec<String>)> {
+    let mut warnings = Vec::new();
+    let font = read::import_tree(font, root, options, &mut warnings)?;
+    Ok((font, warnings))
 }
 
 /// One XML element of a TTX document.
