@@ -218,3 +218,63 @@ fn the_measurement_tool_covers_every_glyph_of_the_line() {
     want.sort();
     assert_eq!(ruler, want, "A, the space to B, B as one shape, and the angle (0 is up)");
 }
+
+/// A line of 200 glyphs, each a polygon of 2,600 nodes, holds more outline than one measurement
+/// takes: the Measurement tool labels the first glyphs, and later frames do not measure again.
+#[test]
+fn a_long_line_of_large_glyphs_is_measured_once() {
+    use fontcraft_model::{Glyph, Layer, Node, NodeKind, Path, Shape as ModelShape};
+    let mut app = FontcraftApp::default();
+    let names: Vec<String> = (0..200).map(|i| format!("g{i}")).collect();
+    app.session
+        .edit("glyphs", |font| {
+            let master = font.masters[0].id.clone();
+            let nodes: Vec<Node> = (0..2600)
+                .map(|k| {
+                    let a = f64::from(k) / 2600.0 * std::f64::consts::TAU;
+                    Node::new(300.0 + 250.0 * a.cos(), 300.0 + 250.0 * a.sin(), NodeKind::Line)
+                })
+                .collect();
+            for name in &names {
+                let mut glyph = Glyph::new(name);
+                let mut layer = Layer::new(&master, 600.0);
+                layer.shapes.push(ModelShape::Path(Path::new(true, nodes.clone())));
+                glyph.layers.push(layer);
+                font.glyphs.push(glyph);
+            }
+            Ok(())
+        })
+        .unwrap();
+    app.run("view.newTab", &json!({ "glyphs": names })).unwrap();
+    app.run("tool.select", &json!({"tool": "measurement"})).unwrap();
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut app);
+    let measured = crate::canvas::guides::measured_glyphs();
+    assert_eq!(measured, 200);
+    frame(&ctx, &mut app);
+    let shapes = frame(&ctx, &mut app);
+    assert_eq!(crate::canvas::guides::measured_glyphs(), measured, "the answer is kept, though the line was cut short");
+    assert!(!texts(&shapes, app.tokens.measure_on_curve).is_empty(), "the first glyphs are labelled");
+}
+
+/// After an edit only the glyphs it changed are measured again.
+#[test]
+fn an_edit_measures_again_only_the_glyphs_it_changed() {
+    let mut app = FontcraftApp::default();
+    for glyph in ["A", "B", "Z"] {
+        app.run("path.addRectangle", &json!({"glyph": glyph, "x": 0, "y": 0, "width": 100, "height": 100})).unwrap();
+    }
+    app.run("view.newTab", &json!({"glyphs": ["A", "B"]})).unwrap();
+    app.run("tool.select", &json!({"tool": "measurement"})).unwrap();
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut app);
+    let measured = crate::canvas::guides::measured_glyphs();
+    assert_eq!(measured, 2);
+    app.run("path.addRectangle", &json!({"glyph": "Z", "x": 200, "y": 0, "width": 50, "height": 50})).unwrap();
+    frame(&ctx, &mut app);
+    assert_eq!(crate::canvas::guides::measured_glyphs(), measured, "Z is not in the line");
+    app.run("path.addRectangle", &json!({"glyph": "B", "x": 50, "y": 0, "width": 100, "height": 100})).unwrap();
+    frame(&ctx, &mut app);
+    frame(&ctx, &mut app);
+    assert_eq!(crate::canvas::guides::measured_glyphs(), measured + 1, "B alone is measured again, once");
+}
