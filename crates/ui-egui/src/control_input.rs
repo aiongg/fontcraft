@@ -818,8 +818,13 @@ mod tests {
         w.settle(&mut app, 2);
         assert_eq!(app.tools.toolbox.active_id(), "select");
         let p = crate::tools_glue::current_view(&app).unwrap().to_screen(Point::new(500.0, 500.0));
-        ok(call(&mut app, "ui.click", json!({"x": p.x, "y": p.y, "mods": ["cmd", "alt", "ctrl"]})));
-        // The move, the press and the release: Cmd+Alt+Ctrl holds the Measurement tool.
+        // The chord that holds the Measurement tool on the keyboard the frames report.
+        let keys = match crate::tools_glue::keyboard(w.ctx.os() == egui::os::OperatingSystem::Mac) {
+            fontcraft_tools::toolbox::Keyboard::Mac => ["cmd", "alt", "ctrl"],
+            fontcraft_tools::toolbox::Keyboard::Other => ["ctrl", "alt", "shift"],
+        };
+        ok(call(&mut app, "ui.click", json!({"x": p.x, "y": p.y, "mods": keys})));
+        // The move, the press and the release: the chord holds the Measurement tool.
         for _ in 0..3 {
             w.frame(&mut app);
         }

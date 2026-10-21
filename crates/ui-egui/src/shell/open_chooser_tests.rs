@@ -227,7 +227,7 @@ fn dropped_fonts_that_cannot_open_are_reported_not_dropped_silently() {
     let ctx = egui::Context::default();
     let drop_files = |app: &mut FontcraftApp, files: &[PathBuf]| {
         let mut pending = Vec::new();
-        let _ = ctx.run_ui(input(Vec::new(), files), |ui| take_dropped(app, ui.ctx(), &mut pending));
+        ctx.run_ui(input(Vec::new(), files), |ui| take_dropped(app, ui.ctx(), &mut pending)).textures_delta.clear();
         pending
     };
     // A file with no path on disk, as on the web.

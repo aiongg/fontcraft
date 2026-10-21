@@ -284,6 +284,9 @@ fn the_axes_show_exactly_the_warnings_font_axes_list_gives() {
     app.run("font.axes.add", &json!({"name": "Swash", "tag": "Ab"})).unwrap();
     app.run("font.axes.add", &json!({"name": "Grade", "tag": "GRAD"})).unwrap();
     let check = |app: &mut FontcraftApp| {
+        // `read_response` also finds widgets of the pass before; a second frame drops a hint
+        // the edit removed.
+        tab.frame(app, Vec::new());
         tab.frame(app, Vec::new());
         let reply = app.run("font.axes.list", &json!({})).unwrap();
         let listed: Vec<Vec<String>> = reply["axes"]

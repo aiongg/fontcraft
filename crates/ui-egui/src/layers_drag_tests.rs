@@ -163,7 +163,9 @@ fn a_master_row_click_switches_the_glyphs_selected_in_the_text() {
     let (mut app, _) = two_masters();
     app.run("editView.toggleTextMode", &json!({"mode": "text"})).unwrap();
     app.run("editView.setText", &json!({"text": "ABC"})).unwrap();
-    app.run("editView.setCursor", &json!({"index": 0, "selectionLength": 2})).unwrap();
+    // A and B selected with the cursor after them: C, after the cursor, is the edited glyph.
+    app.run("editView.setCursor", &json!({"index": 2, "anchor": 0})).unwrap();
+    assert_eq!(app.state.editing(), Some("C"));
     let w = Window::new();
     w.settle(&mut app);
 
