@@ -61,8 +61,10 @@ pub(super) fn plan(filter: &SvgFilter, to_pixels: Affine, width: u32, height: u3
             FilterKind::Merge { inputs } => 4 + 2 * inputs.len() as u64,
             FilterKind::ConvolveMatrix { columns, rows, .. } => 4 + 4 * u64::from(*columns) * u64::from(*rows),
             FilterKind::Morphology { .. } => 32,
-            FilterKind::Turbulence { octaves, .. } => 4 + 32 * u64::from(*octaves),
-            FilterKind::DiffuseLighting { .. } | FilterKind::SpecularLighting { .. } => 32,
+            // An octave evaluates gradient noise for each of the four channels.
+            FilterKind::Turbulence { octaves, .. } => 4 + 128 * u64::from((*octaves).min(fontcraft_color::svg_filter::MAX_TURBULENCE_OCTAVES)),
+            // A Sobel normal, the light vector and a power for each pixel.
+            FilterKind::DiffuseLighting { .. } | FilterKind::SpecularLighting { .. } => 64,
             _ => 6,
         })
         .fold(0u64, u64::saturating_add);
@@ -192,11 +194,11 @@ fn get(px: &[u8], i: usize) -> [f32; 4] {
 }
 
 fn put(px: &mut [u8], i: usize, v: [f32; 4]) {
-    let a = if v[3].is_finite() { v[3].clamp(0.0, 1.0) } else { 0.0 };
+    let a = if v[3].is_nan() { 0.0 } else { v[3].clamp(0.0, 1.0) };
     if let Some(out) = px.get_mut(i * 4..i * 4 + 4) {
         for (o, c) in out.iter_mut().zip([v[0], v[1], v[2], a]) {
             // Premultiplied colour never exceeds its alpha.
-            let c = if c.is_finite() { c.clamp(0.0, a) } else { 0.0 };
+            let c = if c.is_nan() { 0.0 } else { c.clamp(0.0, a) };
             *o = (c * 255.0).round() as u8;
         }
     }
@@ -329,7 +331,14 @@ impl Run {
 
     /// The image `input` names, in linear RGB when `linear`.
     fn input(&self, input: FilterInput, linear: bool) -> Img {
-        let mut img = match input {
+        let mut img = self.input_as_is(input, linear);
+        self.spaces.convert(&mut img, linear);
+        img
+    }
+
+    /// `input` in the colour space it holds; `SourceAlpha`, which has no colour, marked `linear`.
+    fn input_as_is(&self, input: FilterInput, linear: bool) -> Img {
+        match input {
             FilterInput::SourceGraphic => Cow::Borrowed(&self.source),
             FilterInput::SourceAlpha => {
                 let mut px = self.source.px.clone();
@@ -343,9 +352,7 @@ impl Run {
                 None => Cow::Owned(self.clear()),
             },
         }
-        .into_owned();
-        self.spaces.convert(&mut img, linear);
-        img
+        .into_owned()
     }
 
     /// A user-space length along x and along y in pixels.
@@ -497,10 +504,11 @@ impl Run {
                 img
             }
             FilterKind::DisplacementMap { input, input2, scale, channels } => {
-                let (img, map) = (self.input(*input, linear), self.input(*input2, linear));
+                // `color-interpolation-filters` applies to the map only; `in` keeps its space.
+                let (img, map) = (self.input_as_is(*input, linear), self.input(*input2, linear));
                 let [a, b, c, d, _, _] = self.to_pixels.as_coeffs();
                 let linear_part = Affine::new([a, b, c, d, 0.0, 0.0]);
-                Img { px: effects::displace(&img.px, &map.px, self.w, self.h, *scale, *channels, linear_part), linear }
+                Img { px: effects::displace(&img.px, &map.px, self.w, self.h, *scale, *channels, linear_part), linear: img.linear }
             }
             FilterKind::Tile { input } => {
                 let img = self.input(*input, linear);

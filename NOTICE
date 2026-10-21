@@ -430,9 +430,11 @@ bundled, the file says so in its header and the project is listed here with its 
   (MIT License and Apache License 2.0).
 
   crates/render/src/color/filter/turbulence.rs (M11.17e) follows the feTurbulence reference code
-  of Scalable Vector Graphics (SVG) 1.1 (Second Edition), section 15.24
-  (https://www.w3.org/TR/SVG11/filters.html#feTurbulenceElement), Copyright 2011 World Wide Web
-  Consortium, under the W3C Software and Document License.
+  of Filter Effects Module Level 1 (https://www.w3.org/TR/filter-effects-1/#feTurbulenceElement),
+  the same code as in Scalable Vector Graphics (SVG) 1.1 (Second Edition), section 15.24. This
+  software includes material derived from Filter Effects Module Level 1
+  (https://www.w3.org/TR/filter-effects-1/). Copyright © 2018 W3C® (MIT, ERCIM, Keio, Beihang).
+  Used under the W3C Software and Document License; its full notice is in LICENSE-W3C.txt.
 
 Product names mentioned in the documentation are trademarks of their owners and are used only to
 identify the products FontCraft is compared with or interoperates with.

@@ -51,6 +51,10 @@
 //!   input is clear (a flood, a tile, a turbulence or a light), within the filter regions. Filters that can paint more than [`MAX_FILTER_PIXELS`] pixels, that cannot
 //!   be drawn, or that would take the glyph past its work leave the group unfiltered, with a
 //!   line in [`GlyphRaster::warnings`]; the glyph is not refused for them.
+//! - An SVG file outside a font ([`SvgFile`], Edit View's svg layers) is read once and drawn the
+//!   same way, at any scale, optionally within a view box: the sprite then holds only the part
+//!   of the drawing within the box, and whether a group's filters fit [`MAX_FILTER_PIXELS`] is
+//!   judged on that part. Filters near the box's edges read nothing from outside it.
 //! - A document whose root slices its viewport (`preserveAspectRatio` with `slice`) is clipped
 //!   to the em square, the viewport it is fitted to, unless the root's `overflow` (its `style`
 //!   property, else its attribute) is `visible` or `auto`.
@@ -471,13 +475,19 @@ struct Sprite {
 }
 
 fn sprite(rect: Rect, scale: f64) -> Result<Sprite, Refusal> {
+    sprite_at(rect, scale, (0.0, 0.0))
+}
+
+/// [`sprite`] with the drawing moved `shift` pixels right and down, under one pixel each.
+fn sprite_at(rect: Rect, scale: f64, shift: (f64, f64)) -> Result<Sprite, Refusal> {
     if !has_area(rect) {
         return Err(Refusal::new("the colour glyph draws nothing", 0));
     }
-    let left = (rect.x0 * scale).floor() - 1.0;
-    let right = (rect.x1 * scale).ceil() + 1.0;
-    let top = (-rect.y1 * scale).floor() - 1.0;
-    let bottom = (-rect.y0 * scale).ceil() + 1.0;
+    let (dx, dy) = shift;
+    let left = (rect.x0 * scale + dx).floor() - 1.0;
+    let right = (rect.x1 * scale + dx).ceil() + 1.0;
+    let top = (-rect.y1 * scale + dy).floor() - 1.0;
+    let bottom = (-rect.y0 * scale + dy).ceil() + 1.0;
     let (w, h) = (right - left, bottom - top);
     let side = f64::from(MAX_GLYPH_SIDE);
     let range = f64::from(i32::MAX / 2);
@@ -487,7 +497,7 @@ fn sprite(rect: Rect, scale: f64) -> Result<Sprite, Refusal> {
             0,
         ));
     }
-    let base = Affine::translate((-left, -top)) * Affine::scale_non_uniform(scale, -scale);
+    let base = Affine::translate((dx - left, dy - top)) * Affine::scale_non_uniform(scale, -scale);
     Ok(Sprite { width: w as u32, height: h as u32, scale, base, left: left as i32, top: top as i32 })
 }
 
@@ -925,6 +935,8 @@ struct Raster<'a, 'f> {
     budget: u64,
     refused: Option<String>,
     warnings: Vec<String>,
+    /// The part of the drawing the sprite holds (font units), when that is not all of it.
+    view: Option<Rect>,
 }
 
 impl<'a, 'f> Raster<'a, 'f> {
@@ -945,6 +957,7 @@ impl<'a, 'f> Raster<'a, 'f> {
             budget: budget_for(sprite),
             refused: None,
             warnings: Vec::new(),
+            view: None,
         }
     }
 
@@ -1115,12 +1128,12 @@ impl<'a, 'f> Raster<'a, 'f> {
         let limit = if group.filters.is_empty() {
             None
         } else {
-            match filtered_extent(&group.filters, extent(&group.items, self.scale), self.scale) {
+            match filtered_extent(&group.filters, extent(&group.items, self.scale, self.view), self.scale) {
                 // The filters leave nothing.
                 None => return,
-                Some(r) if filter_fits(r, self.scale) => Some(PixBox::of(r, self.ctm(), self.width, self.height)),
+                Some(r) if filter_fits(r, self.scale, self.view) => Some(PixBox::of(r, self.ctm(), self.width, self.height)),
                 Some(r) => {
-                    let pixels = r.area() * self.scale * self.scale;
+                    let pixels = within(r, self.view).area() * self.scale * self.scale;
                     self.warn(format!(
                         "an SVG filter that can paint {pixels:.0} pixels is drawn unfiltered; at most {MAX_FILTER_PIXELS} are filtered"
                     ));
@@ -1644,25 +1657,26 @@ fn drawable_bytes(items: &[Drawable]) -> usize {
 
 /// The area `items` may paint at `scale` sprite pixels per font unit, font units: a group's
 /// within its clips and mask regions, a filtered group's where its filters can paint
-/// ([`filtered_extent`]), or its unfiltered items' when that is past the filter limit.
-fn extent(items: &[Drawable], scale: f64) -> Option<Rect> {
+/// ([`filtered_extent`]), or its unfiltered items' when that is past the filter limit within
+/// `view` ([`filter_fits`]).
+fn extent(items: &[Drawable], scale: f64, view: Option<Rect>) -> Option<Rect> {
     items
         .iter()
         .filter_map(|d| match d {
             Drawable::Shape(s) => Some(s.outline.bounding_box()),
             Drawable::Image { place, .. } => Some(place.transform_rect_bbox(unit())),
             Drawable::Group(g) => {
-                let content = extent(&g.items, scale);
+                let content = extent(&g.items, scale, view);
                 let mut r = if g.filters.is_empty() {
                     content?
                 } else {
                     match filtered_extent(&g.filters, content, scale)? {
-                        r if filter_fits(r, scale) => r,
+                        r if filter_fits(r, scale, view) => r,
                         _ => content?,
                     }
                 };
                 for clip in &g.clips {
-                    r = r.intersect(extent(clip, scale)?);
+                    r = r.intersect(extent(clip, scale, view)?);
                 }
                 for mask in &g.masks {
                     r = r.intersect(mask.region.bounding_box());
@@ -1694,11 +1708,22 @@ fn filtered_extent(filters: &[SvgFilter], content: Option<Rect>, scale: f64) -> 
     r
 }
 
-/// Whether filters that can paint `r` (font units) are run at `scale`: it covers at most
-/// [`MAX_FILTER_PIXELS`] sprite pixels.
-fn filter_fits(r: Rect, scale: f64) -> bool {
-    let pixels = r.area() * scale * scale;
+/// Whether filters that can paint `r` (font units) are run at `scale`: its part within `view`,
+/// the part of the drawing rasterised, covers at most [`MAX_FILTER_PIXELS`] sprite pixels.
+fn filter_fits(r: Rect, scale: f64, view: Option<Rect>) -> bool {
+    let pixels = within(r, view).area() * scale * scale;
     pixels.is_finite() && pixels <= MAX_FILTER_PIXELS as f64
+}
+
+/// The part of `r` within `view`; all of it without a view.
+fn within(r: Rect, view: Option<Rect>) -> Rect {
+    match view {
+        None => r,
+        Some(v) => {
+            let c = r.intersect(v);
+            if has_area(c) { c } else { Rect::ZERO }
+        }
+    }
 }
 
 /// A glyph's colour source read once: its inflated and parsed `SVG ` document, or the decoded
@@ -2057,12 +2082,109 @@ fn draw_svg(font: &FontRef, source: &Source, options: &ColorOptions) -> Result<D
 }
 
 fn paint_svg(outlines: &mut Outlines, source: &Source, options: &ColorOptions) -> Result<Done, Refusal> {
-    let Some(rect) = extent(&source.items, options.scale) else { return blank(ColorKind::Svg) };
+    let Some(rect) = extent(&source.items, options.scale, None) else { return blank(ColorKind::Svg) };
     let sprite = sprite(rect, options.scale)?;
     let mut raster = Raster::new(&sprite, outlines, &[], options.text_color);
     raster.warnings.clone_from(&source.warnings);
     raster.draw_items(&source.items);
     raster.finish(sprite.left, sprite.top, ColorKind::Svg)
+}
+
+/// An SVG file read once for [`SvgFile::draw`], as Edit View draws an svg layer whose file has
+/// filters (M11.17e): its paints, images, clip paths, masks, patterns and filters, with the
+/// limits and warnings of an `SVG ` table's glyph.
+pub struct SvgFile {
+    source: Source,
+}
+
+impl std::fmt::Debug for SvgFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SvgFile").field("bytes", &self.bytes()).finish_non_exhaustive()
+    }
+}
+
+/// What [`SvgFile::draw`] gives.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FileRaster {
+    /// The drawing's pixels within the view asked for; `None` when nothing of it lies there.
+    pub raster: Option<GlyphRaster>,
+    /// The pixels all of the drawing covers, `[left, top, right, bottom]` from the glyph origin
+    /// (x right, y down); all zero when it draws nothing.
+    pub bounds: [i64; 4],
+}
+
+impl SvgFile {
+    /// Reads `svg` placed by `place` (from the file's viewport, y up with its bottom left at the
+    /// origin, to font units, as [`svg_draw::drawing`] takes it); `Err` with the reason when it
+    /// cannot be read.
+    pub fn read(svg: &[u8], place: Affine) -> Result<Self, String> {
+        if !finite_affine(place) {
+            return Err("the SVG file cannot be placed".into());
+        }
+        let drawing = svg_draw::drawing(svg, |_, _| place).map_err(|e| format!("the SVG file cannot be drawn: {e}"))?;
+        let mut images = Images { decoded: HashMap::new(), pixels_left: MAX_BITMAP_PIXELS, work: 0 };
+        Ok(SvgFile { source: Source { items: images.drawables(drawing.items), warnings: drawing.warnings } })
+    }
+
+    /// Whether a group of the file has filters.
+    pub fn has_filters(&self) -> bool {
+        fn any(items: &[Drawable]) -> bool {
+            items.iter().any(|d| match d {
+                Drawable::Group(g) => !g.filters.is_empty() || any(&g.items),
+                Drawable::Shape(_) | Drawable::Image { .. } => false,
+            })
+        }
+        any(&self.source.items)
+    }
+
+    /// Bytes the read file keeps, decoded images included.
+    pub fn bytes(&self) -> usize {
+        self.source.bytes()
+    }
+
+    /// The file at `scale` pixels per font unit, moved `shift` pixels right and down (each
+    /// under one pixel, so a raster laid at whole pixels lands where the outlines are filled),
+    /// rasterised within `view` (`[left, top, right, bottom]` in pixels from the glyph origin,
+    /// x right and y down) or whole without one. Filters are run on the part within the view, so
+    /// near its edges they read nothing from outside it. `Err` with the reason when it is not
+    /// drawn.
+    pub fn draw(&self, scale: f64, shift: (f64, f64), view: Option<[f64; 4]>) -> Result<FileRaster, String> {
+        if !(scale.is_finite() && scale > 0.0 && scale <= MAX_SCALE) {
+            return Err("the scale must be a positive number of at most 64 pixels per unit".into());
+        }
+        let (dx, dy) = shift;
+        if !(dx.is_finite() && dy.is_finite() && dx.abs() < 1.0 && dy.abs() < 1.0) {
+            return Err("the SVG file cannot be placed".into());
+        }
+        let view = match view {
+            None => None,
+            Some([x0, y0, x1, y1]) if [x0, y0, x1, y1].iter().all(|v| v.is_finite()) => {
+                Some(Rect::new((x0 - dx) / scale, -(y1 - dy) / scale, (x1 - dx) / scale, -(y0 - dy) / scale))
+            }
+            Some(_) => return Err("the view is not a box of numbers".into()),
+        };
+        let Some(all) = extent(&self.source.items, scale, view) else { return Ok(FileRaster { raster: None, bounds: [0; 4] }) };
+        let bounds = [
+            (all.x0 * scale + dx).floor() - 1.0,
+            (-all.y1 * scale + dy).floor() - 1.0,
+            (all.x1 * scale + dx).ceil() + 1.0,
+            (-all.y0 * scale + dy).ceil() + 1.0,
+        ]
+        .map(|v| v.clamp(-1.0e12, 1.0e12) as i64);
+        let rect = within(all, view);
+        if !has_area(rect) {
+            return Ok(FileRaster { raster: None, bounds });
+        }
+        let sprite = sprite_at(rect, scale, shift).map_err(|r| r.reason)?;
+        let text_color = [0, 0, 0, 255];
+        let mut outlines = Outlines::none();
+        let mut raster = Raster::new(&sprite, &mut outlines, &[], text_color);
+        raster.view = view;
+        raster.warnings.clone_from(&self.source.warnings);
+        raster.draw_items(&self.source.items);
+        let (raster, _) = raster.finish(sprite.left, sprite.top, ColorKind::Svg).map_err(|r| r.reason)?;
+        Ok(FileRaster { raster: Some(raster), bounds })
+    }
 }
 
 /// An SVG file drawn in colour outside a font (M11.17e), as Edit View draws an svg layer whose
@@ -2075,14 +2197,9 @@ pub fn svg_file(svg: &[u8], place: Affine, scale: f64) -> Result<GlyphRaster, St
     if !(scale.is_finite() && scale > 0.0 && scale <= MAX_SCALE) {
         return Err("the scale must be a positive number of at most 64 pixels per unit".into());
     }
-    if !finite_affine(place) {
-        return Err("the SVG file cannot be placed".into());
-    }
-    let drawing = svg_draw::drawing(svg, |_, _| place).map_err(|e| format!("the SVG file cannot be drawn: {e}"))?;
-    let mut images = Images { decoded: HashMap::new(), pixels_left: MAX_BITMAP_PIXELS, work: 0 };
-    let source = Source { items: images.drawables(drawing.items), warnings: drawing.warnings };
+    let file = SvgFile::read(svg, place)?;
     let options = ColorOptions { scale, palette: 0, text_color: [0, 0, 0, 255] };
-    paint_svg(&mut Outlines::none(), &source, &options).map(|(raster, _)| raster).map_err(|r| r.reason)
+    paint_svg(&mut Outlines::none(), &file.source, &options).map(|(raster, _)| raster).map_err(|r| r.reason)
 }
 
 /// The `sbix` record drawn for glyph `gid` at `ppem` pixels per em: the strike's size, the

@@ -51,6 +51,7 @@ pub(crate) fn import_placed(svg: &[u8], place: impl FnOnce(f64, f64) -> Affine, 
     let xml = roxmltree::Document::parse_with_options(text, xml_options).map_err(|e| ColorError::BadSvg(e.to_string()))?;
     check_depth(&xml)?;
     check_references(&xml)?;
+    crate::svg_filter::check_orders(&xml)?;
 
     let options = usvg::Options {
         resources_dir: None,

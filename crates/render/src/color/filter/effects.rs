@@ -94,7 +94,15 @@ pub(super) fn convolve(px: &[u8], w: usize, h: usize, c: &Convolution) -> Vec<u8
                 }
             }
             let i = y * w + x;
-            let v = sum.map(|s| s / divisor + bias);
+            let v = if c.preserve_alpha {
+                sum.map(|s| s / divisor + bias)
+            } else {
+                // The Filter Effects formula: the alpha gains the bias, each premultiplied colour
+                // the bias times that alpha.
+                let a = sum[3] / divisor + bias;
+                let k = bias * if a.is_nan() { 0.0 } else { a.clamp(0.0, 1.0) };
+                [sum[0] / divisor + k, sum[1] / divisor + k, sum[2] / divisor + k, a]
+            };
             if c.preserve_alpha {
                 let a = values.get(i).map_or(0.0, |v| v[3]);
                 let [r, g, b] = [v[0], v[1], v[2]].map(|c| c.clamp(0.0, 1.0) * a);
