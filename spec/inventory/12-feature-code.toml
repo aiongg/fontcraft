@@ -1748,13 +1748,14 @@ observe = [
 id = "autoFeature.abvs"
 area = "features"
 milestone = "M8"
-summary = "abvs (Above-base Substitutions). Trigger: Certain pairings of a base with a mark, in the scripts of South Asia. Generated: Script-specific ligature rules joining base and above-base mark; the exact glyph lists are not documented and must be taken from the open GlyphData naming plus observation."
+summary = "abvs (Above-base Substitutions). Trigger: Certain pairings of a base with a mark, in the scripts of South Asia. Generated: Ligature rules joining a letter and an above-base sign onto their ligature, read from the ligature's production name."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Not generated, because the handbook does not document the base and mark pairs it joins; Update in the reference app on a font of the script would settle what to write.",
+  "A ligature belongs in abvs when it has no code point of its own, its production name `uniXXXXYYYY` spells a letter and a sign the font encodes, and the sign has a `_top` anchor; Update in the reference app on a Kannada font with ki-kannada would settle it.",
+  "The halant and nukta are never the sign, since rphf, half and nukt form those pairs; the same Update would settle it.",
 ]
-notes = "Documented, not yet observed. Not generated: in a font with glyphs of an Indic script, Update lists abvs in its report as not generated, with the reason (`features::auto::indic`)."
+notes = "Documented, not yet observed. Generated (`features::auto::indic_positional`): one `sub X M by L;` line per unencoded glyph `L` of an Indic script whose production name is the code points of a letter `X` and a sign `M` with a `_top` anchor, in glyph order (`sub ka-kannada iMatra-kannada by ki-kannada;`). The glyph database's production names give the pairs."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the abvs entry: compare it with FontCraft's generator for the same font, or note that no abvs entry is created.",
 ]
@@ -1784,7 +1785,7 @@ status = "handbook"
 guesses = [
   "The rakar mark (`rakar-deva`) is formed in blwf from halant and ra, as Indic shaping expects, besides the `.below` glyphs the handbook names; Update on a Devanagari font with rakar-deva would settle it.",
 ]
-notes = "Documented, not yet observed. Generated from the glyph names (`features::auto::indic`): one `sub halant-S X-S by X-S.below;` line per `X-S.below` whose `X-S` and halant exist, and `sub halant-S ra-S by rakar-S;` for a `rakar-S` glyph unless `ra-S.below` exists."
+notes = "Documented, not yet observed. Generated from the glyph names (`features::auto::indic`): one `sub halant-S X-S by X-S.below;` line per `X-S.below` whose `X-S` and halant exist, and `sub halant-S ra-S by rakar-S;` for a `rakar-S` glyph unless `ra-S.below` exists or the rakar is a spacing mark, which pref forms."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the blwf entry: compare it with FontCraft's generator for the same font, or note that no blwf entry is created.",
 ]
@@ -1793,13 +1794,15 @@ observe = [
 id = "autoFeature.blws"
 area = "features"
 milestone = "M8"
-summary = "blws (Below-base Substitutions). Trigger: South Asian scripts: particular sequences of letters, such as Gujarati glyphs suffixed `.straight`, or specific combinations with halant in Oriya. Generated: Script-specific contextual or ligature rules; details are not documented."
+summary = "blws (Below-base Substitutions). Trigger: South Asian scripts: particular sequences of letters, such as Gujarati glyphs suffixed `.straight`, or specific combinations with halant in Oriya. Generated: Ligature rules joining a letter and a below-base sign, and contextual rules taking Gujarati `.straight` letters before a below-base form."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Not generated, because the handbook does not document the script-specific sequences it substitutes; Update in the reference app on a font of the script would settle what to write.",
+  "A ligature belongs in blws when its production name spells a letter and a sign with a `_bottom` anchor, as for abvs with `_top`; Update in the reference app on a Devanagari font with ru-deva would settle it.",
+  "A Gujarati `X-gujarati.straight` replaces `X-gujarati` before the script's below-base forms (its rakar and its `.below` glyphs), as no source says what the straight form is for; Update on a Gujarati font with a .straight glyph would settle it.",
+  "The Oriya halant combinations the handbook mentions are not written, as no source names their glyphs; Update on an Oriya font would settle them.",
 ]
-notes = "Documented, not yet observed. Not generated: in a font with glyphs of an Indic script, Update lists blws in its report as not generated, with the reason (`features::auto::indic`)."
+notes = "Documented, not yet observed. Generated (`features::auto::indic_positional`): one `sub X M by L;` line per unencoded glyph `L` whose production name spells a letter `X` and a sign `M` with a `_bottom` anchor (the halant and nukta excepted), then for each `X-gujarati.straight` one `sub X-gujarati' [below forms] by X-gujarati.straight;` line, the below forms being `rakar-gujarati` and the `.below` glyphs of Gujarati."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the blws entry: compare it with FontCraft's generator for the same font, or note that no blws entry is created.",
 ]
@@ -1814,7 +1817,7 @@ status = "handbook"
 guesses = [
   "Conjunct rules read the half forms the half feature has made, falling back to consonant and halant; Update on a Devanagari font with k_ya-deva would settle it.",
 ]
-notes = "Documented, not yet observed. Generated from the glyph names (`features::auto::indic`): one line per conjunct `X_Ya-S` (not an akhand, not a rakar ligature): each leading part as its half form `X-S` when the font has it, else as `Xa-S halant-S`, then the last consonant."
+notes = "Documented, not yet observed. Generated from the glyph names (`features::auto::indic`): one line per conjunct `X_Ya-S` (not an akhand, not a rakar ligature): each leading part as its half form `X-S` when the font has it, else as `Xa-S halant-S`, then the last consonant. A name whose last part is a vowel sign (`ka_iMatra-S`) is no conjunct; abvs or blws joins it."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the cjct entry: compare it with FontCraft's generator for the same font, or note that no cjct entry is created.",
 ]
@@ -1853,13 +1856,14 @@ observe = [
 id = "autoFeature.pref"
 area = "features"
 milestone = "M8"
-summary = "pref (Pre-base Forms). Trigger: South and Southeast Asian scripts: particular letter combinations that include a halant. Generated: Script-specific ligature rules of halant plus consonant onto a pre-base form; details are not documented."
+summary = "pref (Pre-base Forms). Trigger: South and Southeast Asian scripts: particular letter combinations that include a halant. Generated: A ligature rule of halant and ra onto the rakar the glyph database files as a spacing mark (Malayalam)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Not generated, because the handbook does not document the letter combinations it forms; Update in the reference app on a font of the script would settle what to write.",
+  "pref forms a rakar whose glyph database subcategory is Spacing Combining (rakar-malayalam), and blwf forms the other rakars; Update in the reference app on a Malayalam font with rakar-malayalam would settle it.",
+  "Scripts outside the nine Indic scripts of the glyph names (Khmer, Myanmar, Javanese) get no pref; Update on a Khmer font with ro-khmer.pre would settle it.",
 ]
-notes = "Documented, not yet observed. Not generated: in a font with glyphs of an Indic script, Update lists pref in its report as not generated, with the reason (`features::auto::indic`)."
+notes = "Documented, not yet observed. Generated (`features::auto::indic_positional`): one `sub halant-S ra-S by rakar-S;` line per `rakar-S` filed as a spacing mark whose ra and halant exist. The glyph database files rakar-malayalam as Spacing Combining and the Devanagari, Gujarati, Gurmukhi and Telugu rakars as Nonspacing."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the pref entry: compare it with FontCraft's generator for the same font, or note that no pref entry is created.",
 ]
@@ -1868,30 +1872,37 @@ observe = [
 id = "autoFeature.pres"
 area = "features"
 milestone = "M8"
-summary = "pres (Pre-base Substitutions). Trigger: South Asian scripts: particular combinations of matras and conjuncts. Width variants of a matra are numbered, e.g. iMatra-deva.01 to iMatra-deva.20. Generated: Contextual rules that pick, for each conjunct, the numbered matra variant whose width fits; the matching method is not documented."
+summary = "pres (Pre-base Substitutions). Trigger: South Asian scripts: particular combinations of matras and conjuncts. Width variants of a matra are numbered, e.g. iMatra-deva.01 to iMatra-deva.20. Generated: Contextual rules that pick, for each consonant and conjunct, the numbered i-matra variant whose `imatra` anchor best meets the base's `top` anchor."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Not generated, because the handbook does not document how a numbered matra width is matched to each conjunct; Update in the reference app on a font of the script would settle what to write.",
+  "The variant chosen for a base is the one whose `imatra` anchor, with the matra set before the base, lands nearest the base's `top` anchor; a tie goes to the earlier glyph, the plain matra first. Update in the reference app on a font with iMatra-deva.01 to .05 would settle it.",
+  "A base without a `top` anchor is measured at its right edge (its advance width); a variant without an `imatra` anchor is not a candidate. The same Update would settle it.",
+  "Only the vowel sign i of Devanagari, Bengali, Gurmukhi and Gujarati (the scripts where it stands before the base) gets variants; iiMatra and its `iimatra` anchor are not used. Update on a font with iiMatra variants would settle it.",
+  "Each rule looks at the one glyph after the matra, so a half form between the matra and the base is not measured; Update on a font with s-deva and iMatra variants would settle it.",
 ]
-notes = "Documented, not yet observed. Not generated: in a font with glyphs of an Indic script, Update lists pres in its report as not generated, with the reason (`features::auto::indic`)."
+notes = "Documented, not yet observed. Generated (`features::auto::indic_positional`): for `iMatra-S` with numbered variants `iMatra-S.1` to `.999` (at most 100 read), one `sub iMatra-S' [bases] by iMatra-S.NN;` line per variant that fits some base, in glyph order; bases the plain matra fits get no rule. The bases are the script's consonants, nukta forms and conjuncts (no marks, matras or half forms). the reference's public Devanagari tutorial (glyphsapp.com/learn/creating-a-devanagari-font) says each variant carries an `imatra` anchor and the generator matches it to the bases' `top` anchors; the handbook gives the `.01` numbering, the tutorial `.001`; both are read."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the pres entry: compare it with FontCraft's generator for the same font, or note that no pres entry is created.",
+  "In F3, add iMatra-deva.01 to iMatra-deva.05 of growing width with an imatra anchor each, and k_ssa-deva, k_ya-deva and t_ta-deva with top anchors on their stems; press Update and note which variant each conjunct gets and the form of the rules.",
 ]
 
 [[behavior]]
 id = "autoFeature.psts"
 area = "features"
 milestone = "M8"
-summary = "psts (Post-base Substitutions). Trigger: A halant together with base and matra arrangements that depend on the script, e.g. in Kannada, eMatra-kannada together with glyphs suffixed `.base` and `.base.e`. South Asian scripts only. Generated: Script-specific ligature or contextual rules; details are not documented."
+summary = "psts (Post-base Substitutions). Trigger: A halant together with base and matra arrangements that depend on the script, e.g. in Kannada, eMatra-kannada together with glyphs suffixed `.base` and `.base.e`. South Asian scripts only. Generated: Contextual rules taking a Kannada letter's `.base` form before the halant and the e sign, and its `.base.e` form before the e sign."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Not generated, because the handbook does not document the script-specific base and matra arrangements it substitutes; Update in the reference app on a font of the script would settle what to write.",
+  "`X-kannada.base` replaces `X-kannada` before halant-kannada and eMatra-kannada, and `X-kannada.base.e`, where it exists, takes the e sign instead; Update in the reference app on a Kannada font with ka-kannada.base and ma-kannada.base.e would settle it.",
+  "Without halant-kannada nothing is written, as the handbook names the halant as the trigger; the same Update without the halant would settle it.",
+  "The Oriya `.base` glyphs of the glyph database get no psts rules, as the handbook names Kannada only; Update on an Oriya font with ka-oriya.base would settle it.",
 ]
-notes = "Documented, not yet observed. Not generated: in a font with glyphs of an Indic script, Update lists psts in its report as not generated, with the reason (`features::auto::indic`)."
+notes = "Documented, not yet observed. Generated (`features::auto::indic_positional`): per `X-kannada.base.e` one `sub X-kannada' eMatra-kannada by X-kannada.base.e;` line, per `X-kannada.base` one `sub X-kannada' [halant-kannada eMatra-kannada] by X-kannada.base;` line (the e sign left out when a `.base.e` form exists), in glyph order, when halant-kannada exists. The glyph database has 38 Kannada `.base` glyphs and jha and ma `.base.e`."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the psts entry: compare it with FontCraft's generator for the same font, or note that no psts entry is created.",
+  "In a Kannada test font with ka-kannada, ma-kannada, halant-kannada, eMatra-kannada, ka-kannada.base, ma-kannada.base and ma-kannada.base.e, press Update and copy the psts code.",
 ]
 
 [[behavior]]
@@ -1928,13 +1939,13 @@ observe = [
 id = "autoFeature.vatu"
 area = "features"
 milestone = "M8"
-summary = "vatu (Vattu Variants). Trigger: The rkrf feature contains particular lookups. Generated: Rules derived from the rakar lookups; details are not documented."
+summary = "vatu (Vattu Variants). Trigger: The rkrf feature contains particular lookups. Generated: A call to each lookup the font's rkrf entry defines or calls."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Not generated, because the handbook does not document the rkrf lookups it is derived from; Update in the reference app on a font of the script would settle what to write.",
+  "vatu calls every lookup the rkrf entry defines or calls (`lookup NAME;` each), so the rakar forms also apply where a shaper runs vatu; an rkrf of plain rules, as Update writes it, gives no vatu. Update in the reference app on a font whose rkrf holds a lookup would settle which lookups count.",
 ]
-notes = "Documented, not yet observed. Not generated: in a font with glyphs of an Indic script, Update lists vatu in its report as not generated, with the reason (`features::auto::indic`)."
+notes = "Documented, not yet observed. Generated (`features::auto::indic_positional`): one `lookup NAME;` line per lookup named after the keyword `lookup` in the enabled rkrf entries, in order, each once (at most 256), comments skipped."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the vatu entry: compare it with FontCraft's generator for the same font, or note that no vatu entry is created.",
 ]
