@@ -69,7 +69,7 @@ fn in_glyph(e: TablesError, gid: usize) -> TablesError {
     }
 }
 
-pub(super) fn subr_error(e: fontcraft_cff::subr::SubrError) -> TablesError {
+pub(crate) fn subr_error(e: fontcraft_cff::subr::SubrError) -> TablesError {
     use fontcraft_cff::subr::SubrError;
     match e {
         SubrError::Invalid(m) => TablesError::Invalid(format!("the CFF data is damaged: {m}")),
@@ -792,7 +792,7 @@ fn curves(t: &mut Turtle<'_>, a: &[i64]) {
 /// An accented glyph's parts: character codes in the standard encoding, the accent's offset
 /// in font units.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(super) struct Seac {
+pub(crate) struct Seac {
     pub adx: f64,
     pub ady: f64,
     pub base: u8,
@@ -801,24 +801,24 @@ pub(super) struct Seac {
 
 /// A glyph as drawn: its own contours, and its `seac` parts.
 #[derive(Clone, Debug, PartialEq)]
-pub(super) struct Drawing {
+pub(crate) struct Drawing {
     pub contours: Vec<Contour>,
     pub seac: Option<Seac>,
 }
 
 /// The expanded charstrings of a `CFF ` or static `CFF2` table, cut into operators.
-pub(super) struct Programs {
+pub(crate) struct Programs {
     programs: Vec<Program>,
 }
 
 impl Programs {
-    pub(super) fn read(table: &[u8], cff2: bool) -> Result<Self> {
+    pub(crate) fn read(table: &[u8], cff2: bool) -> Result<Self> {
         Self::read_within(table, cff2, MAX_CHARSTRING_MEMORY)
     }
 
     /// [`Programs::read`] with the expanded charstrings and their operators held to `limit`
     /// bytes together.
-    pub(super) fn read_within(table: &[u8], cff2: bool, limit: usize) -> Result<Self> {
+    pub(crate) fn read_within(table: &[u8], cff2: bool, limit: usize) -> Result<Self> {
         let (expanded, mut memory) = expand(table, cff2, limit)?;
         let flat = Flat::read(&expanded, cff2)?;
         if cff2 && flat.private_blends() {
@@ -833,20 +833,20 @@ impl Programs {
         Ok(Programs { programs })
     }
 
-    pub(super) fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.programs.len()
     }
 
     /// The width operand of a CFF glyph (16.16, against its Private DICT's nominalWidthX).
-    pub(super) fn width(&self, gid: usize) -> Option<i64> {
+    pub(crate) fn width(&self, gid: usize) -> Option<i64> {
         self.programs.get(gid).and_then(|p| p.width)
     }
 
-    pub(super) fn is_accented(&self, gid: usize) -> bool {
+    pub(crate) fn is_accented(&self, gid: usize) -> bool {
         self.programs.get(gid).is_some_and(|p| p.seac.is_some())
     }
 
-    pub(super) fn draw(&self, gid: usize) -> Result<Drawing> {
+    pub(crate) fn draw(&self, gid: usize) -> Result<Drawing> {
         let p = self.programs.get(gid).ok_or_else(|| invalid(format!("glyph {gid} is beyond the CharStrings")))?;
         let mut pen = Collect::default();
         run(p, &mut pen).map_err(|e| in_glyph(e, gid))?;
@@ -1004,7 +1004,7 @@ fn encode_parts<T: Copy + Into<i64>>(code: u16, args: &[T], mask: &[u8], out: &m
 /// An unhinted charstring that draws `path`: the width operand first when given, then
 /// `rmoveto`, `rlineto` and `rrcurveto`, and `endchar` in CFF (CFF2 has none). Coordinates are
 /// kept to 16.16 fixed point; whole numbers are written as integers.
-pub(super) fn path_charstring(width: Option<i64>, path: &[fontcraft_cff::PathOp], cff2: bool) -> Result<Vec<u8>> {
+pub(crate) fn path_charstring(width: Option<i64>, path: &[fontcraft_cff::PathOp], cff2: bool) -> Result<Vec<u8>> {
     use fontcraft_cff::PathOp;
     let fixed = |v: f64| -> Result<i64> {
         let f = (v * ONE as f64).round();
@@ -1715,7 +1715,7 @@ fn read_u32(b: &[u8], at: usize) -> Option<u32> {
 
 /// A charstring of `(operands, operator)` steps, operands in font units.
 #[cfg(test)]
-pub(super) fn test_charstring(steps: &[(&[f64], u16)]) -> Vec<u8> {
+pub(crate) fn test_charstring(steps: &[(&[f64], u16)]) -> Vec<u8> {
     let mut out = Vec::new();
     for (args, code) in steps {
         let op = Op { code: *code, args: args.iter().map(|v| (v * ONE as f64).round() as i64).collect(), mask: Vec::new() };
@@ -1727,7 +1727,7 @@ pub(super) fn test_charstring(steps: &[(&[f64], u16)]) -> Vec<u8> {
 /// A name-keyed `CFF ` table of these glyphs (`.notdef` first) and charstrings, without
 /// subroutines; `top` is DICT data the Top DICT holds besides the offsets.
 #[cfg(test)]
-pub(super) fn test_table(names: &[&str], charstrings: Vec<Vec<u8>>, top: &[u8]) -> Vec<u8> {
+pub(crate) fn test_table(names: &[&str], charstrings: Vec<Vec<u8>>, top: &[u8]) -> Vec<u8> {
     let mut charset = vec![0u8];
     for i in 1..names.len() {
         charset.extend_from_slice(&(390 + i as u16).to_be_bytes());

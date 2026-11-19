@@ -1389,7 +1389,7 @@ milestone = "M12"
 summary = "Group of whole-font outline repairs and conversions that work on sources and on binary fonts alike: merge overlapping contours, set contour direction, add extreme points, round coordinates, convert between cubic and quadratic curves, and turn repeated shapes into components or components back into contours. Finding problems without changing anything is 'check outlines'."
 ref = "fontTools ttLib.removeOverlaps, cu2qu, qu2cu; AFDKO checkoutlinesufo -e, ttfcomponentizer.py, ttfdecomponentizer.py"
 status = "docs"
-notes = "X.tables2: on a binary TrueType font in which a glyph changed, maxp maxima, the font bounds and head.flags bit 1 are recalculated as fontTools' maxp.recalc does on saving (bit 1 is cleared when a glyph's left side bearing differs from its xMin). Composites that fontTools cannot follow (a cycle, nesting past 64 levels, a component past the glyph order) make its save fail; FontCraft then takes the composite maxima from the glyphs as drawn, under the font-wide drawing budget."
+notes = "X.tables2: on a binary TrueType font in which a glyph changed, maxp maxima, the font bounds and head.flags bit 1 are recalculated as fontTools' maxp.recalc does on saving (bit 1 is cleared when a glyph's left side bearing differs from its xMin). Composites that fontTools cannot follow (a cycle, nesting past 64 levels, a component past the glyph order) make its save fail; FontCraft then takes the composite maxima from the glyphs as drawn, under the font-wide drawing budget. M12.66: CFF and static CFF2 fonts take remove-overlaps, direction, extremes and round, rewriting only the outline table; direction, extremes and round work on several inputs at once (-j), printing results in the order given."
 
 [[cli]]
 id = "outlines remove-overlaps"
@@ -1415,8 +1415,10 @@ milestone = "M12"
 summary = "Merges overlapping contours and overlapping components of each glyph into a single non-overlapping outline. Composite glyphs whose components overlap are decomposed first. In a binary font, hints of glyphs that changed are dropped unless told otherwise."
 ref = "fontTools ttLib.removeOverlaps; AFDKO checkoutlinesufo (overlap removal), tx +V; fontTools varLib.instancer --remove-overlaps"
 status = "docs"
-notes = "Built in M12.28 (`fontcraft_tables::outlines`, `outlines.removeOverlaps`). TrueType fonts follow fontTools 4.66 `ttLib.removeOverlaps`, checked on a font built in code: simple glyphs first, then composites by depth; a composite is merged only when two of its components intersect; a glyph is replaced only when the merged contours differ, keeping its winding; replaced glyphs get lsb = xMin. Without --keep-hinting every processed glyph loses its instructions, while fpgm, prep and cvt stay, as in the oracle. CFF-flavoured and variable fonts are refused for now. Sources run path.removeOverlapForAllMasters, which leaves components alone."
+notes = "Built in M12.28 (`fontcraft_tables::outlines`, `outlines.removeOverlaps`). TrueType fonts follow fontTools 4.66 `ttLib.removeOverlaps`, checked on a font built in code: simple glyphs first, then composites by depth; a composite is merged only when two of its components intersect; a glyph is replaced only when the merged contours differ, keeping its winding; replaced glyphs get lsb = xMin. Without --keep-hinting every processed glyph loses its instructions, while fpgm, prep and cvt stay, as in the oracle. Variable TrueType fonts are refused. CFF and static CFF2 fonts (M12.66, `outlines_cff.rs`): each glyph is merged with the editor's geometry as `convert --remove-overlaps` does, keeping its drawn winding; a merged glyph gets an unhinted charstring with its width, the others keep their bytes; unused subroutines are then removed unless --keep-unused-subroutines; every other table keeps its bytes. Sources run path.removeOverlapForAllMasters, which leaves components alone."
 guesses = [
+  "On CFF fonts --keep-hinting changes nothing: glyphs that do not change always keep their hints, as tx +V leaves them, while fontTools without --keep-hinting removes the hints of the whole font; a tx +V run on a hinted OTF settles which reference to follow.",
+  "On CFF fonts head, hhea and hmtx keep their bytes after a merge (merging rarely moves the bounds; dropped small contours can); fontTools recalculates head bounds on saving, so a comparison of the head table after fontTools removeOverlaps on a corpus OTF would settle it.",
   "--min-area (default 25) only drops contours of glyphs whose overlaps were merged, so glyphs without overlaps match the fontTools result; checkoutlinesufo's behaviour on tiny contours of unmerged glyphs would settle it.",
   "--keep-contour-order has no effect: the editor's merge always keeps the order and start points of the contours it can match; checkoutlinesufo --ignore-contour-order output on a corpus font would show whether the difference matters.",
 ]
@@ -1438,8 +1440,9 @@ milestone = "M12"
 summary = "Sets the winding of every contour from how contours nest: outer contours counter-clockwise and inner ones clockwise for PostScript outlines, the opposite for TrueType, or simply reverses every contour."
 ref = "fontmake --keep-direction, cu2qu --keep-direction (direction is otherwise reversed for TrueType); AFDKO checkoutlinesufo (restores direction after overlap removal)"
 status = "inferred"
-notes = "Built in M12.28 with path.correctPathDirection's geometry; the TrueType convention reverses its result keeping each start point, reverse only reverses. Composites are left alone. TrueType fonts only among compiled fonts."
+notes = "Built in M12.28 with path.correctPathDirection's geometry; the TrueType convention reverses its result keeping each start point, reverse only reverses. Composites are left alone. CFF and static CFF2 fonts (M12.66) default to the PostScript convention; a glyph whose drawing changes gets an unhinted charstring, the others keep their bytes, and every other table keeps its bytes."
 guesses = [
+  "On CFF fonts a glyph whose contours were reversed or restarted loses its hints, as every changed CFF glyph does here; keeping the stems (they stay valid when no point moves) would need the hint masks moved, and a tx run that reverses contours would show what the reference keeps.",
   "The default flavour of a source is the PostScript convention (the editor's); a source written for TrueType outlines would need --flavour truetype.",
 ]
 
@@ -1457,7 +1460,10 @@ milestone = "M12"
 summary = "Inserts on-curve points where curves reach a horizontal or vertical extreme, without changing the shape, skipping extremes that would leave a segment shorter than the threshold."
 ref = "AFDKO comparefamily / otfautohint expectations (hinting needs points at extremes); editor command path.addExtremes"
 status = "inferred"
-notes = "Built in M12.28 with path.addExtremes (and path.forceExtremes for --min-segment 0). The editor's threshold is fixed at 3 units, so --min-segment accepts 3 or 0 only."
+notes = "Built in M12.28 with path.addExtremes (and path.forceExtremes for --min-segment 0). The editor's threshold is fixed at 3 units, so --min-segment accepts 3 or 0 only. CFF and static CFF2 fonts (M12.66): a glyph that gains points gets an unhinted charstring, the others keep their bytes; pointsAdded counts on-curve points."
+guesses = [
+  "On CFF fonts a glyph that gains extreme points loses its hints, as checkoutlinesufo drops the hints of glyphs it changes; checkoutlinesufo -e on a hinted OTF would confirm it.",
+]
 
 [[cli]]
 id = "outlines round"
@@ -1476,9 +1482,10 @@ milestone = "M12"
 summary = "Rounds point coordinates, component offsets, anchors and advance widths to integers or to a coarser grid. The reference tools round by default and offer options to keep decimals; this action applies the rounding as a separate step."
 ref = "AFDKO checkoutlinesufo -d, otfautohint -d, makeinstancesufo -r (all: do not round); fontmake --round-instances, --cff-round-tolerance"
 status = "inferred"
-notes = "Built in M12.28. On compiled fonts point coordinates, component offsets and advance widths are rounded; instructions stay because no point changes index. On sources path.roundCoordinatesForAllMasters runs with the grid asked for (advance widths stay, as in the editor command); --tolerance is for compiled fonts only."
+notes = "Built in M12.28. On TrueType fonts point coordinates, component offsets and advance widths are rounded; instructions stay because no point changes index. On CFF and static CFF2 fonts (M12.66) the points and control points of each charstring are rounded and a glyph that moves gets an unhinted charstring; widths and hmtx stay. On sources path.roundCoordinatesForAllMasters runs with the grid asked for (advance widths stay, as in the editor command); --tolerance is for compiled fonts only."
 guesses = [
   "Halfway values round away from zero to the grid (Rust's rounding); fontTools' otRound rounds them up, which only differs for negative halves on a grid coarser than 1 unit.",
+  "On CFF fonts widths stay as they are (they are whole numbers in practice) and a rounded glyph loses its hints; the reference tools round while writing charstrings and never as a separate step, so no source settles it.",
 ]
 
 [[cli]]
@@ -2723,7 +2730,7 @@ milestone = "M12"
 summary = "Applies the geometry of path.removeOverlap to every selected glyph of a source or binary font, decomposing composites with overlapping components first, and for a binary font rewrites only the outline table and its dependants. Returns the glyphs changed and the glyphs that failed."
 ref = "docs/spec/20-cli.md › outlines"
 status = "docs"
-notes = "Built in M12.28. TrueType fonts follow fontTools 4.66 `ttLib.removeOverlaps`, checked on a font built in code: simple glyphs first, then composites by depth; a composite is merged only when two of its components intersect; a glyph is replaced only when the merged contours differ, keeping its winding; replaced glyphs get lsb = xMin. Without --keep-hinting every processed glyph loses its instructions, while fpgm, prep and cvt stay, as in the oracle. CFF-flavoured and variable fonts are refused for now. Sources run path.removeOverlapForAllMasters, which leaves components alone."
+notes = "Built in M12.28. TrueType fonts follow fontTools 4.66 `ttLib.removeOverlaps`, checked on a font built in code: simple glyphs first, then composites by depth; a composite is merged only when two of its components intersect; a glyph is replaced only when the merged contours differ, keeping its winding; replaced glyphs get lsb = xMin. Without --keep-hinting every processed glyph loses its instructions, while fpgm, prep and cvt stay, as in the oracle. Variable TrueType fonts are refused. CFF and static CFF2 fonts (M12.66): a merged glyph gets an unhinted charstring, unchanged glyphs keep theirs, unused subroutines go unless keepUnusedSubroutines; see the `outlines remove-overlaps` row. Sources run path.removeOverlapForAllMasters, which leaves components alone."
 
 [[command]]
 id = "outlines.correctDirection"

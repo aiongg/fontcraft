@@ -69,7 +69,7 @@ pub(super) fn remove_ps_overlaps(font: &SfntFont, ignore_errors: bool, notes: &m
 }
 
 /// The glyph's contours merged; `None` when merging changes nothing.
-fn merged(contours: &[Contour]) -> std::result::Result<Option<Vec<Contour>>, String> {
+pub(crate) fn merged(contours: &[Contour]) -> std::result::Result<Option<Vec<Contour>>, String> {
     let mut path = BezPath::new();
     for c in contours {
         path.move_to(pt(c.start));
@@ -100,7 +100,7 @@ fn pt(p: P) -> Point {
     Point::new(p.0, p.1)
 }
 
-fn from_bez(path: &BezPath) -> Vec<Contour> {
+pub(crate) fn from_bez(path: &BezPath) -> Vec<Contour> {
     let mut out: Vec<Contour> = Vec::new();
     let p = |q: Point| (q.x, q.y);
     for el in path.elements() {

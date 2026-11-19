@@ -1681,6 +1681,18 @@ glyph selection, a choice of layer for UFOs, tolerance of failures, and for bina
 touches only the outline table and what depends on it (bounding boxes, `maxp`, `hmtx` side bearings,
 hint data of changed glyphs).
 
+On a `CFF ` or static `CFF2` font, `remove-overlaps`, `direction`, `extremes` and `round` rewrite only
+the outline table (M12.66). A glyph whose outline changes gets a new charstring without hints, with
+its width kept, as `tx +V` writes it. Every other charstring keeps its bytes, so unchanged glyphs keep
+their hints and subroutine calls, and a subroutinised font stays subroutinised. `remove-overlaps`
+then removes the subroutines nothing calls any more, as fontTools does, unless
+`--keep-unused-subroutines`. `round` moves points and control points, not widths. `decompose` is
+refused: CFF outlines have no components. Every other table, `head`, `hhea` and `hmtx` included,
+keeps its bytes.
+
+Several inputs of `direction`, `extremes` and `round` are worked on at once, `-j` workers, and their
+results are printed in the order the inputs were given.
+
 | Action | Engine command | Editor counterpart |
 |---|---|---|
 | `remove-overlaps` | `outlines.removeOverlaps` | `path.removeOverlap` |

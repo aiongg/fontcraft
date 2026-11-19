@@ -105,11 +105,11 @@ struct Cost {
     visits: usize,
 }
 
-pub(super) type P = (f64, f64);
+pub(crate) type P = (f64, f64);
 
 /// One segment of a closed contour, by its end point.
 #[derive(Clone, Debug, PartialEq)]
-pub(super) enum Seg {
+pub(crate) enum Seg {
     Line(P),
     /// Off-curve points, with implied on-curve points between them, and the end point.
     Quad(Vec<P>, P),
@@ -126,7 +126,7 @@ impl Seg {
 
 /// A closed contour: its last segment ends at `start` (an implied closing line is explicit).
 #[derive(Clone, Debug, Default, PartialEq)]
-pub(super) struct Contour {
+pub(crate) struct Contour {
     pub start: P,
     pub segs: Vec<Seg>,
 }
@@ -147,7 +147,7 @@ impl Contour {
         Contour { start: t(&self.start), segs }
     }
 
-    pub(super) fn reversed(&self) -> Contour {
+    pub(crate) fn reversed(&self) -> Contour {
         let mut segs = Vec::with_capacity(self.segs.len());
         for i in (0..self.segs.len()).rev() {
             let from = if i == 0 { self.start } else { self.segs.get(i - 1).map_or(self.start, Seg::end) };
@@ -598,7 +598,7 @@ fn pt(p: P) -> Point {
 }
 
 /// The drawing steps of cubic contours for the CFF writer: the implied closing line left out.
-pub(super) fn path_ops(contours: &[Contour]) -> Result<Vec<fontcraft_cff::PathOp>> {
+pub(crate) fn path_ops(contours: &[Contour]) -> Result<Vec<fontcraft_cff::PathOp>> {
     use fontcraft_cff::PathOp;
     let mut ops = Vec::new();
     for c in contours {

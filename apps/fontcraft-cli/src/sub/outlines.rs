@@ -5,7 +5,7 @@ use fontcraft_engine::Session;
 use serde_json::{Map, Value, json};
 
 use crate::args::{self, OptSpec, Parsed};
-use crate::io::{Failure, Outcome, execute, out, out_json_line, usage};
+use crate::io::{Failure, Outcome, batch, batch_outcome, execute, out, out_json_line, usage};
 
 use super::Subcommand;
 
@@ -21,9 +21,9 @@ pub const SUBCOMMAND: Subcommand = Subcommand {
 const USAGE: &str = "\
   fontcraft-cli outlines remove-overlaps|direction|extremes|round|to-quadratic|to-cubic|componentize|decompose INPUT... [args]
   fontcraft-cli outlines remove-overlaps INPUT [GLYPH...] [--keep-hinting] [--ignore-errors] [--keep-unused-subroutines] [-o OUT]
-  fontcraft-cli outlines direction INPUT... [--flavour postscript|truetype|reverse] [-o OUT]
-  fontcraft-cli outlines extremes INPUT... [--min-segment N] [-o OUT]
-  fontcraft-cli outlines round INPUT... [--grid N] [-o OUT]
+  fontcraft-cli outlines direction INPUT... [--flavour postscript|truetype|reverse] [-o OUT | --output-dir DIR] [-j N]
+  fontcraft-cli outlines extremes INPUT... [--min-segment N] [-o OUT | --output-dir DIR] [-j N]
+  fontcraft-cli outlines round INPUT... [--grid N] [--tolerance F] [-o OUT | --output-dir DIR] [-j N]
   fontcraft-cli outlines to-quadratic INPUT... [--max-error EM] [--mixed] [--interpolatable] [--keep-direction] [-o OUT | --output-dir DIR]
   fontcraft-cli outlines to-cubic INPUT... [--max-error EM] [--all-cubic] [-o OUT | --output-dir DIR]
   fontcraft-cli outlines componentize FONT.ttf [--reference UFO | --detect] [-o OUT]
@@ -41,7 +41,11 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::list("glyphs", "NAMES", "", "only these glyphs"),
     OptSpec::list("exclude-glyphs", "NAMES", "", "leave these glyphs alone"),
     OptSpec::switch("ignore-errors", false, "leave a glyph that cannot be done as it was and go on"),
-    OptSpec::switch("keep-hinting", false, "remove-overlaps: keep the instructions of glyphs that do not change"),
+    OptSpec::switch(
+        "keep-hinting",
+        false,
+        "remove-overlaps: keep the TrueType instructions of glyphs that do not change (CFF glyphs that do not change always keep their hints)",
+    ),
     OptSpec::switch("keep-unused-subroutines", false, "remove-overlaps: keep CFF subroutines that became unused"),
     OptSpec::value("min-area", "N", "25", "remove-overlaps: drop merged contours whose bounding box is smaller, in square units"),
     OptSpec::switch("keep-contour-order", true, "remove-overlaps: merged contours keep the order and start points of the contours they come from"),
@@ -163,23 +167,26 @@ fn run(args: &[String]) -> Outcome {
             if parsed.positional.len() > 1 && params.contains_key("output") {
                 return Err(usage("-o names one file: give --output-dir or --in-place for several inputs"));
             }
-            let mut failures = 0usize;
-            for input in &parsed.positional {
+            if let [one] = parsed.positional.as_slice() {
+                params.insert("input".into(), json!(one));
+                return out_json_line(&execute(&mut session, command, &Value::Object(params))?);
+            }
+            // Several inputs run at once (`-j`); results come out in the order given.
+            let results = batch(&parsed.positional, parsed.jobs()?, |input| {
                 let mut p = params.clone();
                 p.insert("input".into(), json!(input));
-                match execute(&mut session, command, &Value::Object(p)) {
-                    Ok(result) => out_json_line(&result)?,
-                    Err(e) if parsed.positional.len() > 1 => {
-                        crate::io::note(&format!("{input}: {}", e.message()));
-                        failures += 1;
-                    }
-                    Err(e) => return Err(e),
+                execute(&mut Session::new(), command, &Value::Object(p))
+            })?;
+            for (input, r) in parsed.positional.iter().zip(&results) {
+                match r {
+                    Ok(result) => out_json_line(result)?,
+                    Err(e) => crate::io::error(&format!("{input}: {}", e.message())),
                 }
             }
-            match failures {
-                0 => Ok(()),
-                n if n == parsed.positional.len() => Err(Failure::Failed(format!("all {n} inputs failed"))),
-                n => Err(Failure::Partial(format!("{n} of {} inputs failed", parsed.positional.len()))),
+            match batch_outcome(&results) {
+                Err(Failure::Partial(m)) => Err(Failure::Partial(m)),
+                Err(_) => Err(Failure::Failed(format!("all {} inputs failed", results.len()))),
+                Ok(()) => Ok(()),
             }
         }
     }
