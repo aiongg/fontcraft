@@ -14,6 +14,7 @@ mod annotation;
 mod attributes;
 pub(crate) mod audit;
 mod autohint;
+mod autohint_font;
 mod autohint_report;
 mod autohint_tt;
 mod axes;
@@ -422,6 +423,7 @@ pub const COMMAND_TABLES: &[CommandTable] = &[
     autohint::specs,
     autohint_tt::specs,
     autohint_report::specs,
+    autohint_font::specs,
     palette::specs,
     palette_dark::specs,
     color_layer::specs,

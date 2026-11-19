@@ -31,9 +31,10 @@ const USAGE: &str = "\
       an input apply unless --ignore-fontinfo or --fontinfo-file. With --tt-options or --tt-control the TrueType
       autohinter stores its instructions on the main master instead. Layers that already have
       hints are left alone unless --all. Each output is INPUT.autohinted.EXT unless -o (one
-      per input, comma-separated), --output-dir or --in-place says otherwise. A compiled font
-      can only be analysed (--report-only): to hint one, autohint its source, or export the
-      source with autohinting on.
+      per input, comma-separated), --output-dir or --in-place says otherwise. In a compiled
+      CFF font (OTF) every glyph's charstring is hinted again, as with --all, and the font is
+      written with its other tables unchanged. A compiled TrueType font can only be analysed
+      (--report-only): to hint one, autohint its source, or export it with autohinting on.
   fontcraft-cli autohint INPUT --print-list-fddict | --print-all-fddict [--fontinfo-file FILE]
       List the zone-and-stem sets in effect and the glyphs each one hints, without hinting.
 ";
@@ -146,6 +147,8 @@ struct Done {
     output: Option<String>,
     written: bool,
     hinter: Hinter,
+    /// A compiled font whose charstrings were hinted (`autohint.ps.runFont`), not a source.
+    compiled: bool,
     result: Value,
 }
 
@@ -294,6 +297,20 @@ fn is_truetype_font(path: &Path) -> bool {
     tag == [0, 1, 0, 0] || tag == b"true"
 }
 
+/// Whether `input` is a compiled font with a `CFF ` table (plain, in WOFF or WOFF2, or the
+/// collection member `face`), whose charstrings `autohint.ps.runFont` hints. A source, or a
+/// variable font with a `CFF2` table, is not.
+fn has_cff_table(input: &str, face: Option<&str>) -> bool {
+    let mut params = Map::new();
+    params.insert("font".into(), json!(input));
+    if let Some(n) = face.and_then(|f| f.parse::<u32>().ok()) {
+        params.insert("face".into(), json!(n));
+    }
+    let Ok(listed) = Session::new().execute("tables.list", &Value::Object(params)) else { return false };
+    let is_cff = |t: &Value| t.get("tag").and_then(Value::as_str).is_some_and(|tag| tag.trim_end() == "CFF");
+    listed.pointer("/faces/0/tables").and_then(Value::as_array).is_some_and(|tables| tables.iter().any(is_cff))
+}
+
 /// The engine parameters every input shares.
 fn hint_params(parsed: &Parsed, hinter: Hinter) -> Result<Map<String, Value>, Failure> {
     let mut params = Map::new();
@@ -437,6 +454,9 @@ fn hint_one(
     extra: &Extra,
     write: bool,
 ) -> Result<Done, Failure> {
+    if hinter == Hinter::PostScript && has_cff_table(input, parsed.value("face")) {
+        return hint_compiled(parsed, input, target, shared, extra, write);
+    }
     let output = match target {
         Target::InPlace => input.to_string(),
         Target::File(p) => p.to_string_lossy().into_owned(),
@@ -465,10 +485,51 @@ fn hint_one(
     }
     let result = execute(&mut session, hinter.command(), &Value::Object(params))?;
     if !write {
-        return Ok(Done { input: input.to_string(), output: Some(output), written: false, hinter, result });
+        return Ok(Done { input: input.to_string(), output: Some(output), written: false, hinter, compiled: false, result });
     }
     save(&mut session, target)?;
-    Ok(Done { input: input.to_string(), output: Some(output), written: true, hinter, result })
+    Ok(Done { input: input.to_string(), output: Some(output), written: true, hinter, compiled: false, result })
+}
+
+/// Hints the charstrings of the compiled CFF font `input` with `autohint.ps.runFont`, which writes
+/// the font to `target` with its other tables unchanged. As otfautohint does for a compiled font,
+/// every glyph is hinted again whatever --all says.
+fn hint_compiled(parsed: &Parsed, input: &str, target: &Target, shared: &Map<String, Value>, extra: &Extra, write: bool) -> Result<Done, Failure> {
+    if extra.overlaps.is_some() {
+        return Err(Failure::Failed(format!("{input}: hinting a compiled font on its overlap-free outline is not built yet")));
+    }
+    let mut params = Map::new();
+    for key in ["flex", "hintSubstitution", "allowChanges", "decimal", "maxSegments", "overlap"] {
+        if let Some(v) = shared.get(key) {
+            params.insert(key.into(), v.clone());
+        }
+    }
+    params.insert("font".into(), json!(input));
+    params.insert("hintAll".into(), json!(true));
+    if let Some(face) = parsed.value("face") {
+        let n: u32 = face.parse().map_err(|_| usage(format!("--face takes a font number, not `{face}`")))?;
+        params.insert("face".into(), json!(n));
+    }
+    if let Some(sel) = extra.selection {
+        // Selectors resolve against the glyph order and names the font opens with.
+        let mut session = Session::new();
+        open(&mut session, input, parsed.value("face"))?;
+        let (key, names) = sel.resolve(&mut session, input)?;
+        params.insert(key.into(), json!(names));
+    }
+    if let Some(text) = extra.fontinfo.map(|f| f.text_for(input)).transpose()?.flatten() {
+        params.insert("fontinfo".into(), json!(text));
+    }
+    match target {
+        Target::InPlace => params.insert("inPlace".into(), json!(true)),
+        Target::File(path) => params.insert("output".into(), json!(path)),
+    };
+    params.insert("noClobber".into(), json!(parsed.switch("no-clobber")));
+    params.insert("dryRun".into(), json!(!write));
+    let mut session = Session::new();
+    let result = execute(&mut session, "autohint.ps.runFont", &Value::Object(params))?;
+    let output = result.get("output").and_then(Value::as_str).map(str::to_string);
+    Ok(Done { input: input.to_string(), output, written: write, hinter: Hinter::PostScript, compiled: true, result })
 }
 
 /// Saves the session's document to `target`, making the output's folder when it is missing.
@@ -517,8 +578,12 @@ fn print_done(done: &Done, list_glyphs: bool) -> Outcome {
             out(&format!("{}{counts}", entry_name(h)))?;
         }
     }
-    let counts =
-        format!("{} {} hinted, {} skipped", hinted.len(), if done.hinter == Hinter::PostScript { "layers" } else { "glyphs" }, skipped.len());
+    let counts = format!(
+        "{} {} hinted, {} skipped",
+        hinted.len(),
+        if done.hinter == Hinter::PostScript && !done.compiled { "layers" } else { "glyphs" },
+        skipped.len()
+    );
     match (&done.output, done.written) {
         (Some(output), true) => out(&format!("{} -> {output}: {counts}", done.input)),
         (Some(output), false) if !list_glyphs => out(&format!("{}: {counts}; would write {output}", done.input)),
