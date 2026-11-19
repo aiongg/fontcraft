@@ -763,7 +763,7 @@ label = "Autohint PostScript"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyphs?: [names], excludeGlyphs?: [names], masters?: [id], flex?: bool, hintSubstitution?: bool, maxSegments?: number, hintAll?: bool}"
+params = "{glyphs?: [names], excludeGlyphs?: [names], masters?: [id], flex?: bool, hintSubstitution?: bool, maxSegments?: number, hintAll?: bool, fontinfo?: text, overlap?: \"auto\"|\"all\"|\"none\", overlapGlyphs?: [names], looseOverlapMapping?: bool, allowChanges?: bool, keepConflicts?: bool, decimal?: bool}"
 area = "hinting-ps"
 milestone = "M10"
 summary = "Runs the PostScript autohinter on a source or a compiled CFF/CFF2 font and writes stem hints, hint masks, counter hints and flex for the chosen glyphs, using each glyph's zone and stem set. Defaults match otfautohint: all glyphs, flex and hint substitution on, integer coordinates, conflicts removed, outlines untouched, maxSegments 100. This is the engine behind the export option and the Edit View Autohint item."
@@ -773,7 +773,7 @@ guesses = [
   "The autohinter is a port of otfautohint with its defaults; which autohinter the reference app runs is not documented, and a reference export compared with otfautohint's output on the same font would show whether they agree.",
   "The masters of one glyph are hinted together so their stems match, and one by one when their outlines are not compatible; a reference export of a two-master font would show whether its instances' hints come from one master.",
 ]
-notes = "Runs on the open source and stores the stems on the master layers, one undo step; layers that already have PostScript hints are skipped unless hintAll. Not yet offered: compiled CFF/CFF2 input, overlap handling, allowChanges, keepConflicts, decimal, override sets (overrides) and reportOnly (the report commands cover it). Zones or stems the autohinter cannot use leave it running without them, with a warning, where otfautohint refuses unless allowNoZonesOrStems."
+notes = "Runs on the open source and stores the stems on the master layers, one undo step; layers that already have PostScript hints are skipped unless hintAll. M10.36 adds fontinfo (override sets), overlap, overlapGlyphs and looseOverlapMapping, allowChanges, keepConflicts and decimal; see their behavior rows. Not yet offered: compiled CFF/CFF2 input and reportOnly (the report commands cover it). Zones or stems the autohinter cannot use leave it running without them, with a warning, where otfautohint refuses unless allowNoZonesOrStems."
 observe = [
   "T1: export as CFF with Autohint on; export it again unhinted and run otfautohint on that file; compare the hstem and vstem lists and the hint masks glyph by glyph and note every glyph where they differ.",
 ]
@@ -844,7 +844,7 @@ milestone = "M10"
 summary = "The hinter can hint glyphs that still contain overlapping contours roughly as if the overlap had been removed. Which glyphs get this treatment is set by a list (-m, --overlaps-file), by --force-overlap (all glyphs) or --force-no-overlap (none); without any of these it is on for variable fonts and for runs with a reference font, and off for single static fonts."
 ref = "AFDKO otfautohint --help; docs/otfautohint_Notes.md"
 status = "docs"
-notes = "Ported in crates/autohint/src/overlap.rs and segments.rs: segments are generated on the overlap-free outline and each is recorded for the element of the original outline it was matched to. The autohinter cannot remove overlaps itself (it sits below the path operations), so the caller passes the overlap-free contours; when they draw the same outline, nothing is matched."
+notes = "Ported in crates/autohint/src/overlap.rs and segments.rs: segments are generated on the overlap-free outline and each is recorded for the element of the original outline it was matched to. The autohinter cannot remove overlaps itself (it sits below the path operations), so the caller passes the overlap-free contours; when they draw the same outline, nothing is matched. autohint.ps.run (M10.36) makes them with fontcraft-pathops's union for each layer of a glyph the options select (`overlap` all, none, or auto: the glyphs in `overlapGlyphs` and glyphs hinted in several masters, otfautohint's default for variable fonts and reference runs) and passes them when the number of contours or the area they cover changed; a union that fails or runs past the path operations' time limit leaves the layer hinted with its overlaps, with a warning. The CLI maps -m, --overlaps-file, --force-overlap and --force-no-overlap to these and, as otfautohint's parser does, takes one option of the group at a time."
 guesses = ["FontCraft treats a glyph as overlapping when its path operations change the outline, where otfautohint asks whether any point of its flattened outline disappeared; the two differ on a cross of two bars whose corners all lie outside the other bar (overlapping here, not there), and comparing both autohinters on such glyphs would settle which to follow."]
 
 [[behavior]]
@@ -854,6 +854,7 @@ milestone = "M10"
 summary = "Option --loose-overlap-mapping relaxes the matching between segments of the overlap-removed shape and the original outline. It reduces, without eliminating, warnings that a derived path element could not be mapped back."
 ref = "AFDKO otfautohint --help"
 status = "docs"
+notes = "The `looseOverlapMapping` parameter of autohint.ps.run (M10.36) and the CLI's --loose-overlap-mapping. otfautohint's parser puts it in the overlap group, so it cannot be given with --force-overlap or an overlap list and applies to the default case, the glyphs hinted in several masters; the CLI refuses the same combinations."
 
 [[behavior]]
 id = "autohint.ps.output"
@@ -870,6 +871,7 @@ milestone = "M10"
 summary = "For a set of compatible masters, -r names a reference font whose hint structure is computed first and then imposed on the other inputs so that all end up with matching hint lists; -b gives an output path for the hinted reference. The reference font may not also appear among the inputs."
 ref = "AFDKO otfautohint --help"
 status = "docs"
+notes = "Not built: the CLI refuses -r and -b with exit status 4 (M10.36). Hinting separate files compatibly needs their glyphs matched up as masters of one design and the reference written back as well; the masters of one source are hinted together already, which gives the same matching hint lists."
 
 [[behavior]]
 id = "autohint.ps.hintAll"
@@ -886,6 +888,8 @@ milestone = "M10"
 summary = "For UFO input the hinter writes results into a separate processed layer unless -w (--write-to-default-layer) tells it to write the hints into the default layer's glyph files. Relevant to UFO round-tripping of autohint results."
 ref = "AFDKO otfautohint --help"
 status = "docs"
+notes = "FontCraft stores the hints on the master layers, which a UFO keeps in its default layer: what -w does. The CLI accepts -w for that reason (M10.36); --write-layer, which would name another layer such as the processed one, is refused with exit status 4."
+guesses = ["The autohint CLI writes hints to the default layer without -w, where otfautohint writes them to com.adobe.type.processedglyphs; a source keeps its hints with its outlines, and a user who needs the processed layer would show whether it is worth building."]
 
 [[behavior]]
 id = "autohint.ps.allowChanges"
@@ -894,7 +898,8 @@ milestone = "M10"
 summary = "With -c (--allow-changes) the hinter may alter outlines to hint better: it reorders contours to need fewer hint switches and turns nearly straight curves into lines. It is off by default, so hinting normally leaves every coordinate untouched."
 ref = "AFDKO otfautohint --help"
 status = "docs"
-notes = "FontCraft's port (crates/autohint, driver.rs and masters.rs) follows otfautohint: with changes allowed, glyphs of 4 to 100 contours may have their contours reordered, and when several masters are hinted together a segment that is a line in some masters and a curve in others becomes a curve in all; without changes allowed such masters are not hinted."
+notes = "FontCraft's port (crates/autohint, driver.rs and masters.rs) follows otfautohint: with changes allowed, glyphs of 4 to 100 contours may have their contours reordered, and when several masters are hinted together a segment that is a line in some masters and a curve in others becomes a curve in all; without changes allowed such masters are not hinted. The `allowChanges` parameter of autohint.ps.run and the CLI's -c reach it (M10.36); the CLI refuses -c with --report-only, as otfautohint's parser does."
+guesses = ["With allowChanges the changed outline only guides the autohinter: the stems it finds are stored and the layers' outlines stay as they were, since a source stores stems and an export builds the hint masks from them; otfautohint writes the reordered contours into the font. Comparing contour order in a font hinted by otfautohint -c with FontCraft's output would show what that changes."]
 
 [[behavior]]
 id = "autohint.ps.decimalCoordinates"
@@ -903,6 +908,7 @@ milestone = "M10"
 summary = "Coordinates are rounded to integers when glyphs are read for hinting unless -d (--decimal) is given, in which case fractional coordinates are kept and hint edges may be fractional too."
 ref = "AFDKO otfautohint --help"
 status = "docs"
+notes = "The `decimal` parameter of autohint.ps.run and the CLI's -d (M10.36) turn off the port's rounding (`round_coords`); an edge with no node within half a unit is stored as its fractional value."
 
 [[behavior]]
 id = "autohint.ps.noFlex"
@@ -989,7 +995,7 @@ milestone = "M10"
 summary = "Groups of glyphs can be hinted with their own zones and stems instead of the font's global ones. The reference reads them from a text file named fontinfo beside the font (or --fontinfo-file PATH; --ignore-fontinfo disables the lookup) containing named 'begin FDDict NAME … end FDDict NAME' blocks of key/value lines and 'begin GlyphSet NAME … end GlyphSet NAME' blocks listing glyph names or regular expressions; '#' starts a comment."
 ref = "AFDKO otfautohint --doc-fontinfo"
 status = "docs"
-notes = "FontCraft reads the text, not a file: the `fontinfo` parameter of autohint.ps.listFdDicts takes it, and `include` lines are not followed. Glyph patterns are matched by our own engine for the regular-expression features the format's documentation lists (anchors, classes, `.`, `*`, `+`, `?`, `{m,n}`, escapes such as `\\S`); groups and alternation are refused with the line number."
+notes = "FontCraft reads the text, not a file: the `fontinfo` parameter of autohint.ps.listFdDicts and autohint.ps.run (M10.36) takes it, and `include` lines are not followed. autohint.ps.run reads the sets against each master's zones and stems, so a glyph a set takes is hinted with it in every master. The CLI reads --fontinfo-file, else a file named fontinfo beside each input (otfautohint's fdTools looks in each font's folder), unless --ignore-fontinfo. Glyph patterns are matched by our own engine for the regular-expression features the format's documentation lists (anchors, classes, `.`, `*`, `+`, `?`, `{m,n}`, escapes such as `\\S`); groups and alternation are refused with the line number."
 
 [[behavior]]
 id = "autohint.ps.fontinfoOverrides.rules"
@@ -1047,6 +1053,7 @@ milestone = "M10"
 summary = "Option -k (--keep-conflicts) keeps a stem whose order inverts against another stem somewhere in the design space instead of removing it. Default is removal."
 ref = "AFDKO otfautohint --help"
 status = "docs"
+notes = "The `keepConflicts` parameter of autohint.ps.run and the CLI's -k (M10.36) turn off the port's `remove_conflicts`; it matters when the masters of a glyph are hinted together."
 guesses = ["The search that picks which conflicting stems to remove tries both choices for each conflict, as otfautohint does, but only for its first 4,096 steps; after that it keeps the first choice, so a glyph with that many order conflicts across masters can lose different stems than otfautohint would. Hinting such a glyph with otfautohint would show whether the limit is ever reached in practice."]
 
 [[behavior]]

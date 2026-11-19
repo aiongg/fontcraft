@@ -1997,7 +1997,7 @@ hinting inventories).
 | otfautohint | `-r / --reference-font` | --reference |  |
 | otfautohint | `-b / --reference-out` | --reference-out |  |
 | otfautohint | `-a / --all` | --all |  |
-| otfautohint | `-w / --write-to-default-layer` | (default) | the reference default, a separate processed layer, is --write-layer processed |
+| otfautohint | `-w / --write-to-default-layer` | (default); -w / --write-to-default-layer accepted | the reference default, a separate processed layer, is --write-layer processed (not built) |
 | otfautohint | `-k / --keep-conflicts` | --keep-conflicts |  |
 | otfautohint | `-c / --allow-changes` | --allow-changes |  |
 | otfautohint | `--report-only` | --report-only |  |
