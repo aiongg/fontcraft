@@ -36,7 +36,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Interpolate Glyph at Location",
             [],
             None,
-            "{glyph: name, location: {tag: number}, coordinates?: \"internal\"|\"external\" = \"internal\", model?: \"default\"|\"variable\"} the glyph's layer at the location, interpolated from its masters and intermediate layers, with alternate layers switched by their ranges as an export does. Axes the location leaves out take the origin master's value; `external` values go through Axis Location and Axis Mappings first; `model` defaults to the font's Font Type setting. Locations beyond the masters extrapolate. Incompatible layers are refused with the differences → {glyph, location: {tag: internal}, external: {tag: number}, placement: \"inside\"|\"outside\", layer: {width, shapes, anchors}}",
+            "{glyph: name, location: {tag: number}, coordinates?: \"internal\"|\"external\" = \"internal\", model?: \"default\"|\"variable\"} the glyph's layer at the location, interpolated from its masters and intermediate layers, with nodes following their interpolation curves and alternate layers switched by their ranges as an export does. Axes the location leaves out take the origin master's value; `external` values go through Axis Location and Axis Mappings first; `model` defaults to the font's Font Type setting. Locations beyond the masters extrapolate. Incompatible layers are refused with the differences → {glyph, location: {tag: internal}, external: {tag: number}, placement: \"inside\"|\"outside\", layer: {width, shapes, anchors}}",
             has_doc,
             interpolate_glyph
         ),
@@ -244,7 +244,7 @@ fn interpolate_glyph(s: &mut Session, p: &Value) -> Result<Value> {
     ds.to_normalized(&location).map_err(|e| interp_err(&p, e))?;
 
     let sources = GlyphSources::of(font, &ds, glyph).map_err(|e| interp_err(&p, e))?;
-    let options = InterpOptions { extrapolate: true, model, weight_y: None };
+    let options = InterpOptions { model, ..InterpOptions::default() };
     let layer = interpolate_layer(font, &sources, &location, &options).map_err(|e| interp_err(&p, e))?;
     let placement = match ds.classify(&location) {
         Placement::Inside => "inside",

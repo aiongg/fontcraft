@@ -4,8 +4,8 @@
 //! The `.glyphs` format version 4 keeps it in a node's attribute dictionary under `hoi`, keyed by
 //! axis tag, in the node of the lower layer of the span along that axis. Versions 2 and 3 have no
 //! equivalent. A UFO keeps it in the node's glyphsLib lib key with the node's other attribute
-//! keys. The model reads, keeps and writes it; interpolation and export ignore it, so nodes move
-//! in straight lines (`hoi.defaultLinear`, `hoi.curveTypes`).
+//! keys. The model reads, keeps and writes it; `fontcraft_interp::hoi` evaluates it for static
+//! instances (`hoi.defaultLinear`, `hoi.curveTypes`). Variable fonts do not carry it yet.
 //!
 //! | Curve | `.glyphs` version 4 |
 //! |---|---|

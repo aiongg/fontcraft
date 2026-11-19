@@ -14,6 +14,7 @@
 //! | [`compat`] | M9.3 | the compatibility check and its scope |
 //! | [`rules`] | M9.3, M9.4 | alternate range sets, inclusive bounds |
 //! | [`instance`] | M9.4 | interpolated layers, static instance fonts, master weights, a model cache |
+//! | [`hoi`] | M9.29 | higher-order interpolation curves: positions, timing, the handles of a Point curve |
 //! | [`overlay`] | M9.8 | non-overlapping feature-variation records from alternate boxes |
 //! | [`labels`] | M9.16 | the brace and bracket labels of special layers |
 //!
@@ -30,6 +31,7 @@ pub mod compat;
 pub mod designspace;
 pub mod doc_rules;
 pub mod error;
+pub mod hoi;
 pub mod instance;
 pub mod labels;
 pub mod mapping;

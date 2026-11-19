@@ -375,6 +375,33 @@ linearly and a green dot follows the graph.
 
 Headless: `hoi.setControlPoints`.
 
+### 9.1 Evaluation
+
+`fontcraft_interp::hoi` evaluates the curves. Each curve sits in a node of the lower layer of a
+span along one axis. The upper layer is the next layer up along that axis with the same
+coordinates on the other axes. `s` is the fraction of the way from the lower layer (0) to the
+upper layer (1).
+
+| Curve | Node position at `s` |
+|---|---|
+| none | straight line, constant speed |
+| Intermediate Point | quadratic Bézier through the point at `s` = 0.5 (guess) |
+| Handles (stored as a Bézier timing) | cubic Bézier at parameter `s`; the lower handle lies its time along the line from the lower node, the upper handle its time back from the upper node, each offset to the left of the line by its amplitude in percent of the line's length (guess) |
+| Rotation | angle and radius about the centre, both linear in `s`; a spiral when the radii differ (`hoi.rotationApproximation`, guess) |
+
+- An automatic centre, and a rotation without a centre, is the midpoint of the centres of the
+  path's bounding boxes on the two layers (guess). Automatic direction takes the smaller angle.
+- Default handles (times 1/3, amplitudes 0) give the straight line at constant speed.
+- The handles of the cubic equal to an Intermediate Point curve (`hoi.convertToHandles`) come
+  from raising the quadratic to a cubic.
+- Interpolation adds each curve's deviation from the straight line to the linear result,
+  weighted by the sum of the span's two layer weights; `s` is the upper layer's part of that sum.
+  Outside its span a curve adds nothing, and the other axes stay linear (guesses).
+- Static instances, the preview, `interpolation.interpolateGlyph` and re-interpolated layers
+  follow the curves; the interpolated layer keeps none. Variable fonts do not carry them yet
+  (M9.33).
+- The timing graph's function is the fraction of the curve's length travelled at `s` (guess).
+
 ## 10. Variable font options
 
 ### 10.1 Origin
@@ -609,7 +636,9 @@ the check in the reference app that would settle it.
     (GlyphsSDK version 4 description: `ip`, `rc`/`rd`, `tl`/`tu`/`al`/`au`). The mathematics,
     the variable encoding and the keys stay open. **Decided** (`docs/plans/M9.md` § 7,
     question 5 (b), decided by the orchestrator on the owner's behalf): M9 reads, keeps and
-    writes the data; the tool, its commands, the Info box and the export are M13's.
+    writes the data. **Guessed** (M9.29, § 9.1): the curve mathematics, the rotation
+    approximation, and how a curve combines with other axes; the depth packages M9.30 to M9.33
+    bring the commands, the tool, the Info box and the variable export into M9.
 15. Axis Mappings dialog: base arrow-key step, which arrow pair moves which coordinate, whether
     internal values of a point are editable and constrained to master positions, what happens
     with non-monotonic points.

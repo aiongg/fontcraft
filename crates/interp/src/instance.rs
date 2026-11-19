@@ -7,7 +7,8 @@
 //! `instance.manualInterpolation`, `instance.instanceInterpolations`,
 //! `compile.instanceInterpolation`, `compile.instanceLayoutInterpolation` (kerning),
 //! `compile.kernGroupReconciliation`, `intermediateLayer.sparseInExport` (static half),
-//! parameters `Local Interpolation`, `InterpolationWeightY`.
+//! parameters `Local Interpolation`, `InterpolationWeightY`, `hoi.appliesToAllExports` (static
+//! half).
 //!
 //! The kerning of an instance ([`interpolate_kerning`]) follows fontMath's kerning math
 //! (mathKerning.py, MIT License, https://github.com/robotools/fontMath): the group fallback for
@@ -32,6 +33,11 @@
 //!   applies there.
 //! - A glyph whose sources cannot interpolate fails the instance when it exports; one that does
 //!   not export keeps the layer of its heaviest source, with a note ([`instance_font_with_notes`]).
+//! - Nodes with higher-order interpolation curves follow them inside their span ([`crate::hoi`],
+//!   `hoi.appliesToAllExports`, static half) when [`InterpOptions::hoi`] is on, as it is for
+//!   static instances, the preview and `interpolation.interpolateGlyph`; the interpolated layer
+//!   then keeps no curves. The variable compile's probes at intermediate locations turn it off.
+//!   A glyph without curves interpolates exactly as without this step.
 //! - A failure changes nothing and leaves the input untouched.
 //! - A UFO or designspace source's instance also gets the font information fontmake's instancer
 //!   gives it ([`ufo_instance_info`]): every number of the font information interpolated, as
@@ -49,6 +55,7 @@ use fontcraft_model::{
 use crate::InterpError;
 use crate::compat::{self, MasterPairs};
 use crate::designspace::{Designspace, Location, NormLocation, Placement};
+use crate::hoi;
 use crate::sources::{GlyphSources, Source};
 use crate::{MAX_CACHED_MODELS, MAX_COORDINATE, MAX_GLYPHS, MAX_KERN_PAIRS, MAX_LAYER_NUMBERS};
 
@@ -71,11 +78,14 @@ pub struct InterpOptions {
     pub model: ModelKind,
     /// The InterpolationWeightY parameter: a separate weight-axis value for vertical coordinates.
     pub weight_y: Option<f64>,
+    /// Nodes follow their higher-order interpolation curves ([`crate::hoi`]); off, every node
+    /// moves in a straight line and keeps the curves its layer had.
+    pub hoi: bool,
 }
 
 impl Default for InterpOptions {
     fn default() -> Self {
-        Self { extrapolate: true, model: ModelKind::Default, weight_y: None }
+        Self { extrapolate: true, model: ModelKind::Default, weight_y: None, hoi: true }
     }
 }
 
@@ -111,7 +121,7 @@ pub fn options_for(font: &Font, instance: usize) -> Result<InterpOptions, Interp
         }
         None => None,
     };
-    Ok(InterpOptions { extrapolate: true, model, weight_y })
+    Ok(InterpOptions { extrapolate: true, model, weight_y, hoi: true })
 }
 
 /// Whether static instance `instance` sets something only interpolation applies: manual master
@@ -160,9 +170,14 @@ pub fn interpolate_layer(font: &Font, sources: &GlyphSources, location: &Locatio
     let glyph = font.glyph(&sources.glyph).ok_or_else(|| InterpError::UnknownGlyph(sources.glyph.clone()))?;
     let at = At { x: location.clone(), y: y_location(&designspace, location, options) };
     let mut cache = ModelCache::new();
-    let (layers, weights) = glyph_inputs(&designspace, glyph, sources, &at, None, options, &mut cache)?;
+    let (layers, locations, weights) = glyph_inputs(&designspace, glyph, sources, &at, None, options, &mut cache)?;
     match combine(&layers, &weights, false)? {
-        Some(layer) => Ok(as_master_layer(layer, &origin)),
+        Some(mut layer) => {
+            if options.hoi {
+                apply_hoi(&designspace, &layers, &locations, &weights, &mut layer)?;
+            }
+            Ok(as_master_layer(layer, &origin))
+        }
         None => Err(incompatible(font, sources)),
     }
 }
@@ -236,9 +251,15 @@ pub fn instance_font_with_notes(font: &Font, instance: usize, options: &InterpOp
             }
             _ => at.clone(),
         };
-        let layer = match glyph_inputs(&designspace, g, &sources, &at, manual.as_ref(), options, &mut cache).and_then(|(layers, w)| {
+        let layer = match glyph_inputs(&designspace, g, &sources, &at, manual.as_ref(), options, &mut cache).and_then(|(layers, locations, w)| {
             let heaviest = w.x.iter().enumerate().max_by(|a, b| a.1.total_cmp(b.1)).map_or(0, |(i, _)| i);
-            Ok((combine(&layers, &w, false)?, layers.get(heaviest).map(|l| Layer::clone(l))))
+            let mut combined = combine(&layers, &w, false)?;
+            if let Some(layer) = combined.as_mut()
+                && options.hoi
+            {
+                apply_hoi(&designspace, &layers, &locations, &w, layer)?;
+            }
+            Ok((combined, layers.get(heaviest).map(|l| Layer::clone(l))))
         }) {
             Ok((Some(layer), _)) => layer,
             Ok((None, fallback)) => {
@@ -439,7 +460,7 @@ fn local_interpolation<'f>(
     Ok((!names.is_empty()).then_some((names, at)))
 }
 
-/// The layers a glyph interpolates from at `at` and their weights.
+/// The layers a glyph interpolates from at `at`, their locations and their weights.
 fn glyph_inputs<'g>(
     designspace: &Designspace,
     glyph: &'g Glyph,
@@ -448,7 +469,7 @@ fn glyph_inputs<'g>(
     manual: Option<&HashMap<&str, f64>>,
     options: &InterpOptions,
     cache: &mut ModelCache,
-) -> Result<(Vec<&'g Layer>, Weights), InterpError> {
+) -> Result<(Vec<&'g Layer>, Vec<Location>, Weights), InterpError> {
     let mut chosen: Vec<&Source> = sources.at(&at.x);
     // As fontmake's instancer: when the glyph is drawn at the origin, sources left empty elsewhere
     // are skipped.
@@ -486,7 +507,19 @@ fn glyph_inputs<'g>(
             Weights { x, y }
         }
     };
-    Ok((layers, weights))
+    Ok((layers, chosen.iter().map(|s| s.location.clone()).collect(), weights))
+}
+
+/// `out`, the linear interpolation of `layers` (at `locations`, internal coordinates) with
+/// `weights`, with its nodes bent along the layers' higher-order interpolation curves
+/// ([`crate::hoi::apply`]). Layers without curves leave it untouched.
+fn apply_hoi(designspace: &Designspace, layers: &[&Layer], locations: &[Location], weights: &Weights, out: &mut Layer) -> Result<(), InterpError> {
+    if !layers.iter().any(|l| hoi::has_curves(l)) {
+        return Ok(());
+    }
+    let normalized = locations.iter().map(|l| designspace.to_normalized(l).map(|n| n.0)).collect::<Result<Vec<_>, _>>()?;
+    let tags: Vec<&str> = designspace.axes().iter().map(|a| a.tag.as_str()).collect();
+    hoi::apply(out, layers, &normalized, &weights.x, &weights.y, &tags)
 }
 
 fn incompatible(font: &Font, sources: &GlyphSources) -> InterpError {
@@ -1095,7 +1128,10 @@ mod tests {
     use std::sync::Arc;
 
     use fontcraft_model::plist::{Str, Value};
-    use fontcraft_model::{AxisRule, Font, Glyph, Instance, KernFirst, KernTable, Layer, MasterKerning, MetricValue, Param, Shape};
+    use fontcraft_model::{
+        AxisRule, Font, Glyph, Hoi, HoiAxis, HoiCurve, Instance, KernFirst, KernTable, Layer, MasterKerning, MetricValue, Node, NodeKind, Param,
+        Path, Rare, Shape,
+    };
 
     use super::*;
     use crate::sources::tests::{font_with, glyph, layer, master, rect};
@@ -1277,5 +1313,89 @@ mod tests {
         let odd = glyph("odd", vec![layer("thin", "thin", vec![rect(100.0)]), layer("black", "black", vec![rect(300.0), rect(10.0)])]);
         let refused = instance_font(&two(&[500.0], vec![odd]), 0, &InterpOptions::default());
         assert!(matches!(&refused, Err(InterpError::Incompatible { glyph, .. }) if glyph == "odd"), "{refused:?}");
+    }
+
+    /// A 700-high rectangle `right` wide whose bottom right node has `curve` on the weight axis.
+    fn curved(right: f64, curve: Option<HoiCurve>) -> Shape {
+        let mut nodes = vec![
+            Node::new(0.0, 0.0, NodeKind::Line),
+            Node::new(right, 0.0, NodeKind::Line),
+            Node::new(right, 700.0, NodeKind::Line),
+            Node::new(0.0, 700.0, NodeKind::Line),
+        ];
+        if let Some(curve) = curve {
+            let mut info = (*nodes[1].info).clone();
+            info.hoi = Hoi(vec![HoiAxis { axis: "wght".into(), curve }]);
+            nodes[1].info = Rare::new(info);
+        }
+        Shape::Path(Path::new(true, nodes))
+    }
+
+    /// The nodes of the first path of `name` in the instance font `font`.
+    fn nodes_of(font: &Font, name: &str) -> Vec<(f64, f64)> {
+        let Some(Shape::Path(p)) = font.glyph(name).unwrap().layers[0].shapes.first() else { panic!("no path") };
+        p.nodes.iter().map(|n| (n.x, n.y)).collect()
+    }
+
+    fn close(a: (f64, f64), b: (f64, f64)) -> bool {
+        (a.0 - b.0).abs() <= 1e-9 && (a.1 - b.1).abs() <= 1e-9
+    }
+
+    #[test]
+    fn a_node_with_a_curve_follows_it_in_instances() {
+        let ip = HoiCurve::Point { x: 200.0, y: 100.0 };
+        let o = glyph("o", vec![layer("thin", "thin", vec![curved(100.0, Some(ip))]), layer("black", "black", vec![curved(300.0, None)])]);
+        let font = two(&[500.0, 300.0, 100.0], vec![o]);
+        let on = InterpOptions::default();
+        let off = InterpOptions { hoi: false, ..InterpOptions::default() };
+
+        let halfway = instance_font(&font, 0, &on).unwrap();
+        let nodes = nodes_of(&halfway, "o");
+        assert!(close(nodes[1], (200.0, 100.0)), "through the intermediate point halfway: {nodes:?}");
+        assert!(close(nodes[2], (200.0, 700.0)), "nodes without a curve move in straight lines: {nodes:?}");
+        let Some(Shape::Path(p)) = halfway.glyph("o").unwrap().layers[0].shapes.first() else { panic!("no path") };
+        assert!(p.nodes.iter().all(|n| n.info.hoi.is_empty()), "the instance keeps no curves");
+
+        assert!(close(nodes_of(&instance_font(&font, 1, &on).unwrap(), "o")[1], (150.0, 75.0)), "a quarter of the way");
+        assert!(close(nodes_of(&instance_font(&font, 1, &off).unwrap(), "o")[1], (150.0, 0.0)), "straight with curves off");
+        assert!(close(nodes_of(&instance_font(&font, 2, &on).unwrap(), "o")[1], (100.0, 0.0)), "at the lower master");
+
+        let designspace = Designspace::new(&font).unwrap();
+        let sources = GlyphSources::of(&font, &designspace, "o").unwrap();
+        let one = interpolate_layer(&font, &sources, &Location(vec![500.0]), &on).unwrap();
+        let Some(Shape::Path(p)) = one.shapes.first() else { panic!("no path") };
+        assert!(close((p.nodes[1].x, p.nodes[1].y), (200.0, 100.0)), "one layer interpolated the same way");
+
+        // A glyph without curves comes out the same either way.
+        for i in 0..3 {
+            let (a, b) = (instance_font(&font, i, &on).unwrap(), instance_font(&font, i, &off).unwrap());
+            assert_eq!(a.glyph("n").unwrap().layers, b.glyph("n").unwrap().layers, "instance {i}");
+        }
+    }
+
+    #[test]
+    fn a_curve_bends_only_its_own_span_on_other_axes() {
+        let ip = HoiCurve::Point { x: 200.0, y: 100.0 };
+        let o = glyph(
+            "o",
+            vec![
+                layer("tn", "tn", vec![curved(100.0, Some(ip))]),
+                layer("bn", "bn", vec![curved(300.0, None)]),
+                layer("tw", "tw", vec![curved(100.0, None)]),
+                layer("bw", "bw", vec![curved(300.0, None)]),
+            ],
+        );
+        let masters = vec![
+            master("tn", "Thin Narrow", &[100.0, 50.0]),
+            master("bn", "Black Narrow", &[900.0, 50.0]),
+            master("tw", "Thin Wide", &[100.0, 100.0]),
+            master("bw", "Black Wide", &[900.0, 100.0]),
+        ];
+        let at = |wdth: f64| Instance { name: format!("W{wdth}"), location: vec![500.0, wdth], ..Instance::default() };
+        let font = font_with(&[("Weight", "wght"), ("Width", "wdth")], masters, vec![at(50.0), at(75.0), at(100.0)], vec![o]);
+        let node = |i: usize| nodes_of(&instance_font(&font, i, &InterpOptions::default()).unwrap(), "o")[1];
+        assert!(close(node(0), (200.0, 100.0)), "on the curve's span: {:?}", node(0));
+        assert!(close(node(1), (200.0, 50.0)), "halfway to the straight span: {:?}", node(1));
+        assert!(close(node(2), (200.0, 0.0)), "on the span without a curve: {:?}", node(2));
     }
 }
