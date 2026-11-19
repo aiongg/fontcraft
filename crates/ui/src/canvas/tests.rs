@@ -48,6 +48,7 @@ fn painted(app: &FontCraftApp, layer: fn(&PaintCx<'_>) -> Vec<Shape>) -> Vec<Sha
     view.rect = RECT;
     let top = app.models.canvas.glyph.as_ref().map_or(0.0, |g| g.ascender);
     let words = CanvasWords::default();
+    let overlay_words = super::overlays::OverlayWords::default();
     let cx = PaintCx {
         painter: &painter,
         rect: RECT,
@@ -58,6 +59,7 @@ fn painted(app: &FontCraftApp, layer: fn(&PaintCx<'_>) -> Vec<Shape>) -> Vec<Sha
         edit_background: app.view.edit_background,
         words: &words,
         tools: &app.tools.view,
+        overlays: super::overlays::Painted { data: &app.overlays.data, words: &overlay_words },
     };
     layer(&cx)
 }

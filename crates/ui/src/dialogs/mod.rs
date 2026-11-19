@@ -14,6 +14,7 @@ pub mod field_picker;
 pub mod fields;
 mod filters;
 pub mod form;
+mod guide_properties;
 mod host;
 pub mod kerning_audit;
 pub mod kerning_questions;
@@ -47,7 +48,7 @@ pub const MODULES: &[Module] = &[
 ];
 
 /// Every package's dialog specs, one line each.
-pub const SPECS: &[&[DialogSpec]] = &[filters::SPECS];
+pub const SPECS: &[&[DialogSpec]] = &[filters::SPECS, guide_properties::SPECS];
 
 /// Runs every dialog module for this pass.
 pub fn run(host: &mut DialogHost, app: &mut FontCraftApp) {

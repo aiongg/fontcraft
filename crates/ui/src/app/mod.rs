@@ -139,6 +139,8 @@ pub struct FontCraftApp {
     pub tt: crate::dialogs::tt::TtState,
     /// The open form dialog (`dialogs::form`).
     pub dialogs: crate::dialogs::form::DialogState,
+    /// The canvas overlays' switches, data and the text note being typed (`canvas::overlays`).
+    pub overlays: crate::canvas::overlays::Overlays,
     picks: Picks,
     /// The control channel: its listener, the window its input goes to, the replies waiting on frames.
     pub control: crate::control::Control,
@@ -180,6 +182,7 @@ impl FontCraftApp {
             closing: Closing::Idle,
             tt: Default::default(),
             dialogs: crate::dialogs::form::DialogState::default(),
+            overlays: Default::default(),
             picks: Picks::default(),
             control: crate::control::Control::default(),
             #[cfg(not(target_arch = "wasm32"))]
@@ -276,6 +279,7 @@ impl FontCraftApp {
         let mut cx = ProjectCx { session: &mut self.session, view: &self.view };
         self.models.project(stamp, &mut cx);
         models::console::project(&mut self.models.console, &mut cx);
+        crate::canvas::overlays::refresh(self);
         let engine = Stamp::of(&self.session, 0);
         if self.enabled_at != Some(engine) {
             self.enabled_at = Some(engine);

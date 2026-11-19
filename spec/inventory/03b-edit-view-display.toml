@@ -1865,7 +1865,11 @@ milestone = "M3"
 summary = "Sub-tool that places text notes on the layer. A note can hold several lines and wraps to the box width."
 ref = "Edit View › Annotating › Annotation Text"
 status = "handbook"
-notes = "Built in M3.16 (our geometry): the position is the box's top-left corner and the handle its top-right corner; the text wraps to the box width. Editing the text by double-click is not built yet; `annotation.update` with `text` does it."
+notes = "Built in M3.16 (our geometry): the position is the box's top-left corner and the handle its top-right corner; the text wraps to the box width. A click adds the note and opens a multi-line field at its box; a double-click on a text note with any annotation sub-tool opens the same field (M3.22). Return adds a line; Cmd+Return or a click outside commits through `annotation.update`; Escape cancels. Adding and typing a new note are one undo step."
+guesses = [
+  "Cmd+Return and a click outside commit the typed text and Escape cancels; watching the reference app type a note would settle the keys.",
+  "A new note left empty, or cancelled with Escape, is removed; checking whether the reference app keeps an empty note would settle it.",
+]
 
 [[tool]]
 id = "annotationArrow"
