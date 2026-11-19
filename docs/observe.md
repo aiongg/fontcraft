@@ -32,42 +32,42 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1427 rows to check: 2383 guesses and 561 observe steps.**
+**1450 rows to check: 2464 guesses and 578 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **512** |
-| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 108 |
+| **Built milestones (M0 to M6)** | all | **517** |
+| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 110 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
 | Built milestones (M0 to M6) | Filters | 36 |
 | Built milestones (M0 to M6) | Spacing and metrics keys | 23 |
 | Built milestones (M0 to M6) | Kerning and the Kerning window | 42 |
-| Built milestones (M0 to M6) | Font View | 109 |
+| Built milestones (M0 to M6) | Font View | 110 |
 | Built milestones (M0 to M6) | Font Info and features | 20 |
-| Built milestones (M0 to M6) | Files: open, import, export | 45 |
+| Built milestones (M0 to M6) | Files: open, import, export | 47 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **915** |
+| **Later milestones (after M6)** | all | **933** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 86 |
 | Later milestones (after M6) | Edit View: text mode and preview | 26 |
 | Later milestones (after M6) | Components and anchors | 43 |
 | Later milestones (after M6) | Filters | 5 |
 | Later milestones (after M6) | Spacing and metrics keys | 12 |
-| Later milestones (after M6) | Kerning and the Kerning window | 12 |
+| Later milestones (after M6) | Kerning and the Kerning window | 14 |
 | Later milestones (after M6) | Font View | 19 |
 | Later milestones (after M6) | Font Info and features | 290 |
-| Later milestones (after M6) | Interpolation | 77 |
+| Later milestones (after M6) | Interpolation | 81 |
 | Later milestones (after M6) | Hinting | 108 |
-| Later milestones (after M6) | Colour fonts | 60 |
+| Later milestones (after M6) | Colour fonts | 68 |
 | Later milestones (after M6) | Files: open, import, export | 68 |
-| Later milestones (after M6) | Settings and the window | 21 |
+| Later milestones (after M6) | Settings and the window | 25 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
-## Built milestones (M0 to M6) (512)
+## Built milestones (M0 to M6) (517)
 
-### Edit View: drawing, guides, layers and the Palette (108)
+### Edit View: drawing, guides, layers and the Palette (110)
 
 - [ ] `dialog.fieldKeys` (behavior, M3, inferred): In a dialog's number field, Return takes the typed value, Escape drops…
   - Guess: Dialog number fields follow the Info box's editing and arrow-key rules (infoBox.fieldEditing, infoBox.arrowKeyStepping); the handbook documents them for the Info box only.
@@ -114,6 +114,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: An Alt-drag on a segment that is part of a larger selection duplicates the selection instead of reshaping; observing that case would settle it.
   - Observe: Option-drag a curve segment at its middle and then near one end: note whether the point under the pointer stays under it and whether both handles change or only the nearer one.
   - Observe: Option-drag a curve segment across its chord: note whether the handles shrink to zero, stop, or turn round.
+- [ ] `tidyUp.mayBreakCompatibility` (behavior, M3, handbook): Points that look redundant in one master can be required for point-compatibility…
+  - Guess: A glyph counts as made incompatible when Tidy up Paths changes its node counts or segment types so that the compatibility check fails where it passed before; smooth flags do not count.
+  - Guess: The window reports such glyphs in a status message; the reference app may show nothing beyond its usual compatibility indicators.
+  - Observe: In a two-master font with an instance between the masters, put a node in the middle of a straight edge on both masters, run Tidy up Paths on one master only, and note any message beyond the compatibility indicators.
 - [ ] `nodes.metricLineHighlight` (behavior, M3, handbook): A beige diamond is drawn behind any node that sits precisely on…
   - Guess: "Vertical metric lines" are read as the master's height lines: ascender, cap height, x-height, baseline, descender and any other metric but the italic angle.
 - [ ] `infoBox.selectionGeometryFields` (behavior, M3, handbook): With several nodes selected the Info box shows X, Y, width and…
@@ -152,6 +156,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `path.tidyUpPaths` (M3, handbook, live): Tidy up Paths
   - Guess: Points within 0.01 units count as on a line or as one point.
   - Guess: A node counts as smooth when a curve meets it and its two directions are within 1° (03a question 9).
+  - Guess: A straight curve becomes a line when either of its end nodes is selected; running Tidy up Paths on one selected end in the reference app would settle it.
+  - Guess: A node on a line next to a curve is removed only when the curve's handles lie on the line between the node's on-curve neighbours, so the outline stays as it was; a node where a line runs into a curve along the curve's handle is kept.
+  - Observe: Draw a rectangle whose bottom edge is a curve with both handles on the edge; select only its right end node and run Tidy up Paths; note whether the bottom becomes a line.
+  - Observe: Draw a line into a curve whose first handle continues the line (an n stem into its arch); select the node where they meet and run Tidy up Paths; note whether it stays.
 - [ ] `infoBox.setSizeLock` (M3, inferred, live): Lock Info Box Proportions
   - Guess: The lock starts open; the handbook gives no default.
 - [ ] `path.alignSelection` (M3, handbook, live): Align Selection
@@ -192,8 +200,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `path.setStroke` (M3, inferred, live): Set Stroke
   - Guess: The axis-aligned cap is stored as cap code 4; not confirmed against the reference's files.
   - Guess: A forced cap axis is kept in the native key `lineCapAxis`, which .glyphs files do not hold, so saving as .glyphs loses it (a known loss).
-  - Guess: A UFO keeps no stroke or mask attributes, so saving as UFO loses strokes and masks (a known loss).
+  - Guess: A UFO keeps strokes, masks and the other path attributes in FontCraft's own glyph lib key `com.fontcraft.pathAttributes` (glyphsLib keeps none); the key's name and form are ours, so the reference app and glyphsLib drop it when they read the UFO.
+  - Guess: A UFO does not record the .glyphs format version, so a mask code 2 (intersect in version 4) written to a UFO reads back as a subtracting mask.
   - Guess: Stroke positions and mask values keep the stored form of the document's .glyphs version, so converting a document between versions 3 and 4 changes where strokes sit and what masks do (a known loss until the reference's conversion is observed).
+- [ ] `path.expandOutline` (M3, handbook, live): Expand Outline
+  - Guess: A hint, instruction or corner component on an expanded path is removed, since its nodes are gone; the running app would show whether it moves them to the new outline.
+  - Observe: Put a stem hint on a stroked path and another on a path after it, run Expand Outline, and note where each hint ends up.
 - [ ] `path.setMask` (M3, handbook, live): Mask
   - Guess: Only paths take the mask flag, though a mask cuts components below it too (03a question 23).
 - [ ] `guide.setProperties` (M3, inferred, live): Set Properties
@@ -964,12 +976,18 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Overwrite is the default button that Return presses; the warning in the reference app settles it.
   - Guess: The warning lists the conflicting pairs with the pasted and the current value; the handbook names no list, and a screenshot of the warning settles it.
 
-### Font View (109)
+### Font View (110)
 
+- [ ] `import.keepGlyphNames` (behavior, M1, handbook): When a compiled OTF or TTF is opened with the user setting…
+  - Guess: The glyphOrder parameter is added whatever the setting says, following the Opening Font Files page rather than the Glyph Order page, which ties it to the setting; opening a TTF with the setting off would settle it.
+  - Observe: With Keep Glyph Names from Imported Files off, open a TTF and note whether Font Info › Font has a glyphOrder parameter.
 - [ ] `path.convertToCubic` (M3, handbook, live): Convert to Cubic
   - Guess: New handles are not rounded to the grid, so the outline stays exact; the handbook does not say whether the reference rounds them.
 - [ ] `path.roundCoordinates` (M3, handbook, live): Round Coordinates
   - Guess: A font whose grid is off (spacing 0) rounds to whole units.
+  - Guess: With a selection, the handles next to a selected on-curve node are rounded with it.
+  - Guess: With a selection, anchors and components stay where they are, even when selected.
+  - Observe: Select two nodes of a path with fractional coordinates and an anchor, run Round Coordinates, and note which nodes, handles and anchors move.
 - [ ] `path.roundCoordinatesForAllMasters` (M3, handbook, live): Round Coordinates for All Masters
   - Guess: The label "… for All Masters" is ours; the handbook describes the Option key but not the item's label (03a question 18).
 - [ ] `path.removeOverlapForAllMasters` (M3, handbook, live): Remove Overlap for All Masters
@@ -1325,12 +1343,25 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `Decompose Glyphs` (parameter, M6, handbook): List of glyph names whose components are turned into outlines at export
   - Guess: A text value is read as glyph names separated by commas or spaces, besides the documented list; the reference app with a text value would settle it.
 
-### Files: open, import, export (45)
+### Files: open, import, export (47)
 
 - [ ] `file.save` (M1, handbook, live): Save
   - Guess: The save chooser offers one filter with every source extension, and the chosen extension picks the format (no extension: the native format); the reference's format pop-up in its save sheet is documented but its layout is not observed.
 - [ ] `file.saveAs` (M1, handbook, live): Save As…
   - Guess: Save As offers one filter with every source extension and no format or version pop-up, so the extension picks the format; the reference's save sheet picks the format from a pop-up, which observing it would let us match.
+- [ ] `export.ufoProductionNames` (behavior, M1, handbook): Convert Glyph Names to Production Names writes glyphs under their production names…
+  - Guess: A glyph whose name feature code uses is written under its own name, because the feature code is written unchanged; exporting a UFO with features from the reference app with the option on would settle it.
+  - Guess: The option renames glyphs even when the font's Use Custom Naming option or the Don't use Production Names parameter is on, since the user asked for it.
+  - Observe: Export a font with an ss01 feature that names A-cy to UFO with Convert Glyph Names to Production Names on, and read features.fea in the result.
+- [ ] `open.appliesNamingScheme` (behavior, M1, handbook): On opening a font file, glyphs are renamed to the built-in naming…
+  - Guess: Only names the glyph data knows are renamed (production, alternative, legacy and code-point names, with their suffixes); names it does not know stay as they are. Opening a TTF with such names in the reference app would settle it.
+  - Guess: A glyph whose name occurs in feature code, a custom parameter, a hint or a display string keeps it, with a warning, because those texts are not rewritten and the font would stop compiling. Opening a UFO whose features.fea names a uni-named glyph would settle it.
+  - Guess: A nice name that is already a glyph's name, or that an earlier glyph takes, is not used, and the glyph keeps its name without a warning.
+  - Guess: Renamed glyphs keep their places in the glyph order; they are not sorted by the default order.
+  - Guess: The user setting Keep Glyph Names from Imported Files does not switch on the font's Use Custom Naming option, so names typed later still become nice names.
+  - Observe: Open a TTF whose glyphs are named uni0041, uni0410 and glyph00005, and note which names change.
+  - Observe: Open a UFO whose features.fea substitutes a glyph named uni0411, and note whether that glyph is renamed and whether the feature code changes.
+  - Observe: With Keep Glyph Names from Imported Files on, open a TTF, then note whether Font Info › Other shows Use Custom Naming checked.
 - [ ] `file.open` (M1, handbook, live): Open…
   - Guess: The menu label and place are our assumption, and the shortcut is the platform convention; the chapter states neither.
   - Guess: File › Open… without a path asks the system chooser for files with one filter, Fonts, that holds every extension file.open reads (gz standing for .pcf.gz and .bdf.gz); the reference app's chooser filter is not documented.
@@ -1505,7 +1536,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (915)
+## Later milestones (after M6) (933)
 
 ### Edit View: drawing, guides, layers and the Palette (86)
 
@@ -2142,7 +2173,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The Space Center draws the showing Edit View tab's master, else the first master; how the reference picks the master of a multi-master font would settle it.
   - Guess: Matrix columns are the text's own glyphs; control glyphs get none. Opening a text with control glyphs in the reference would settle it.
 
-### Kerning and the Kerning window (12)
+### Kerning and the Kerning window (14)
 
 - [ ] `kerning.groupClassNames` (behavior, M8, handbook): Every kerning group is available in feature code as a glyph class…
   - Guess: Only the `@MMK_L_`/`@MMK_R_` classes the code refers to and no class entry defines are written, before the first entry, with the glyphs the target exports in font order, and a group without such glyphs stays undefined so the compiler names the reference; the expanded code of a reference export settles it.
@@ -2162,10 +2193,21 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The smallest distance is found on rows at most one unit apart, then refined between the neighbouring rows by a golden-section search on the outlines' exact crossings; the value is rounded to a whole unit.
   - Guess: Without `pairs` or glyph lists, every pair stored in the master is set; FontLab applies the command to the pairs selected in its window.
   - Guess: A group side is measured on the member named like the group, else its first member, not on every member; a pair whose value is 0 is stored only where another pair would otherwise apply.
+- [ ] `kerning.auditExceptions` (M13, docs, live): Audit Kerning Exceptions
+  - Guess: A class pair is a stored pair with at least one group side; a glyph pair that a glyph–glyph pair covers is not measured, as its value is not the class value.
+  - Guess: Without `pairs` or glyph lists, every class pair stored in the master is expanded to its members; FontLab applies the command to the pairs selected in its window.
+  - Guess: The default threshold is 0, so only outlines that overlap are reported; touching outlines (distance 0) are not.
+  - Guess: `fix` adds a glyph–glyph exception set to the threshold minus the distance without kerning, rounded up to a whole unit; it never adds a glyph–group exception.
 - [ ] `kerning.removePairsByRule` (M13, docs, live): Remove Pairs…
   - Guess: An exception is a stored pair with a glyph side whose glyph has a kerning group on the side facing the pair; its class value is the value that applies once it is removed (glyph–group, then group–glyph, then group–group; 0 when none applies). FontLab does not define either term on its page.
   - Guess: Every pair is judged on the kerning as it stood before the call, so removing a small group pair does not change which exceptions are removed.
   - Guess: `glyphs` keeps the pairs that name one of the glyphs, or a group one of them belongs to on the side facing the pair.
+- [ ] `kerning.matchAcrossMasters` (M13, docs, live): Match Kerning
+  - Guess: A master that lacks a pair gets the values most of the glyph pairs it decides have there (ties to the first in glyph order), 0 when it decides none; FontLab says only that missing pairs get zero values, which is the same where nothing applied before.
+  - Guess: Class kerning is not rebuilt with Compress afterwards: Compress works one master at a time and could leave the masters with different pairs again. The union keeps every master's own classes, and only the exceptions a filled pair needs are added.
+  - Guess: `mainMaster` decides only the order and spelling of added pairs (its own pairs first); by default it is the font's default master.
+  - Guess: Masters that take their kerning from another are skipped; at least two masters with kerning of their own are needed.
+  - Guess: Every direction (left to right, right to left, vertical) is matched; FontLab's page does not mention directions.
 - [ ] `kerning.loadPairList` (M13, docs, live): Load Pair List…
   - Guess: Lines starting with # or %% are skipped, and the two characters \n break a phrase into lines; the documentation does not describe comments or multi-line rows, and a sample list exported from the reference app would settle it.
   - Guess: A word that is neither a glyph name nor an @group is read as characters, and a single character in a pair as the glyph that encodes it; loading a list of plain words in the reference app would settle it.
@@ -2857,7 +2899,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
   - Observe: In F4 (widths and kana), press Update in Font Info › Features and copy the code of the vrt2 entry: compare it with FontCraft's generator for the same font, or note that no vrt2 entry is created.
 - [ ] `autoFeature.abvs` (behavior, M8, handbook): abvs (Above-base Substitutions)
-  - Guess: Not generated, because the handbook does not document the base and mark pairs it joins; Update in the reference app on a font of the script would settle what to write.
+  - Guess: A ligature belongs in abvs when it has no code point of its own, its production name `uniXXXXYYYY` spells a letter and a sign the font encodes, and the sign has a `_top` anchor; Update in the reference app on a Kannada font with ki-kannada would settle it.
+  - Guess: The halant and nukta are never the sign, since rphf, half and nukt form those pairs; the same Update would settle it.
   - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the abvs entry: compare it with FontCraft's generator for the same font, or note that no abvs entry is created.
 - [ ] `autoFeature.akhn` (behavior, M8, handbook): akhn (Akhands)
   - Guess: The akhands are k_ssa and j_nya in every Indic script, written as consonant, halant, consonant; Update on a Devanagari font with those glyphs would settle it.
@@ -2866,7 +2909,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The rakar mark (`rakar-deva`) is formed in blwf from halant and ra, as Indic shaping expects, besides the `.below` glyphs the handbook names; Update on a Devanagari font with rakar-deva would settle it.
   - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the blwf entry: compare it with FontCraft's generator for the same font, or note that no blwf entry is created.
 - [ ] `autoFeature.blws` (behavior, M8, handbook): blws (Below-base Substitutions)
-  - Guess: Not generated, because the handbook does not document the script-specific sequences it substitutes; Update in the reference app on a font of the script would settle what to write.
+  - Guess: A ligature belongs in blws when its production name spells a letter and a sign with a `_bottom` anchor, as for abvs with `_top`; Update in the reference app on a Devanagari font with ru-deva would settle it.
+  - Guess: A Gujarati `X-gujarati.straight` replaces `X-gujarati` before the script's below-base forms (its rakar and its `.below` glyphs), as no source says what the straight form is for; Update on a Gujarati font with a .straight glyph would settle it.
+  - Guess: The Oriya halant combinations the handbook mentions are not written, as no source names their glyphs; Update on an Oriya font would settle them.
   - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the blws entry: compare it with FontCraft's generator for the same font, or note that no blws entry is created.
 - [ ] `autoFeature.cjct` (behavior, M8, handbook): cjct (Conjunct Forms)
   - Guess: Conjunct rules read the half forms the half feature has made, falling back to consonant and halant; Update on a Devanagari font with k_ya-deva would settle it.
@@ -2878,14 +2923,22 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The rule is `sub base nukta by baseNukta;` in glyph order; Update in the reference app on a Devanagari font with kaNukta-deva would settle it.
   - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the nukt entry: compare it with FontCraft's generator for the same font, or note that no nukt entry is created.
 - [ ] `autoFeature.pref` (behavior, M8, handbook): pref (Pre-base Forms)
-  - Guess: Not generated, because the handbook does not document the letter combinations it forms; Update in the reference app on a font of the script would settle what to write.
+  - Guess: pref forms a rakar whose glyph database subcategory is Spacing Combining (rakar-malayalam), and blwf forms the other rakars; Update in the reference app on a Malayalam font with rakar-malayalam would settle it.
+  - Guess: Scripts outside the nine Indic scripts of the glyph names (Khmer, Myanmar, Javanese) get no pref; Update on a Khmer font with ro-khmer.pre would settle it.
   - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the pref entry: compare it with FontCraft's generator for the same font, or note that no pref entry is created.
 - [ ] `autoFeature.pres` (behavior, M8, handbook): pres (Pre-base Substitutions)
-  - Guess: Not generated, because the handbook does not document how a numbered matra width is matched to each conjunct; Update in the reference app on a font of the script would settle what to write.
+  - Guess: The variant chosen for a base is the one whose `imatra` anchor, with the matra set before the base, lands nearest the base's `top` anchor; a tie goes to the earlier glyph, the plain matra first. Update in the reference app on a font with iMatra-deva.01 to .05 would settle it.
+  - Guess: A base without a `top` anchor is measured at its right edge (its advance width); a variant without an `imatra` anchor is not a candidate. The same Update would settle it.
+  - Guess: Only the vowel sign i of Devanagari, Bengali, Gurmukhi and Gujarati (the scripts where it stands before the base) gets variants; iiMatra and its `iimatra` anchor are not used. Update on a font with iiMatra variants would settle it.
+  - Guess: Each rule looks at the one glyph after the matra, so a half form between the matra and the base is not measured; Update on a font with s-deva and iMatra variants would settle it.
   - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the pres entry: compare it with FontCraft's generator for the same font, or note that no pres entry is created.
+  - Observe: In F3, add iMatra-deva.01 to iMatra-deva.05 of growing width with an imatra anchor each, and k_ssa-deva, k_ya-deva and t_ta-deva with top anchors on their stems; press Update and note which variant each conjunct gets and the form of the rules.
 - [ ] `autoFeature.psts` (behavior, M8, handbook): psts (Post-base Substitutions)
-  - Guess: Not generated, because the handbook does not document the script-specific base and matra arrangements it substitutes; Update in the reference app on a font of the script would settle what to write.
+  - Guess: `X-kannada.base` replaces `X-kannada` before halant-kannada and eMatra-kannada, and `X-kannada.base.e`, where it exists, takes the e sign instead; Update in the reference app on a Kannada font with ka-kannada.base and ma-kannada.base.e would settle it.
+  - Guess: Without halant-kannada nothing is written, as the handbook names the halant as the trigger; the same Update without the halant would settle it.
+  - Guess: The Oriya `.base` glyphs of the glyph database get no psts rules, as the handbook names Kannada only; Update on an Oriya font with ka-oriya.base would settle it.
   - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the psts entry: compare it with FontCraft's generator for the same font, or note that no psts entry is created.
+  - Observe: In a Kannada test font with ka-kannada, ma-kannada, halant-kannada, eMatra-kannada, ka-kannada.base, ma-kannada.base and ma-kannada.base.e, press Update and copy the psts code.
 - [ ] `autoFeature.rkrf` (behavior, M8, handbook): rkrf (Rakar Forms)
   - Guess: Rakar ligatures are recognised by the names `X_ra-S` and `Xa_rakar-S`, as the handbook gives no naming; Update on a Devanagari font with k_ra-deva would settle it.
   - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the rkrf entry: compare it with FontCraft's generator for the same font, or note that no rkrf entry is created.
@@ -2893,7 +2946,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Generated from the glyph names alone, in glyph order, with no lookup or flag; Update in the reference app on a Devanagari font would settle the form.
   - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the rphf entry: compare it with FontCraft's generator for the same font, or note that no rphf entry is created.
 - [ ] `autoFeature.vatu` (behavior, M8, handbook): vatu (Vattu Variants)
-  - Guess: Not generated, because the handbook does not document the rkrf lookups it is derived from; Update in the reference app on a font of the script would settle what to write.
+  - Guess: vatu calls every lookup the rkrf entry defines or calls (`lookup NAME;` each), so the rakar forms also apply where a shaper runs vatu; an rkrf of plain rules, as Update writes it, gives no vatu. Update in the reference app on a font whose rkrf holds a lookup would settle which lookups count.
   - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the vatu entry: compare it with FontCraft's generator for the same font, or note that no vatu entry is created.
 - [ ] `autoFeature.ccmp` (behavior, M8, handbook): ccmp (Glyph Composition and Decomposition)
   - Guess: Latin ccmp is generated in the corpus's form: mark-ligature lookup first, then the dotless lookups with the top-accent filtering set; scripts other than Latin get no ccmp until a source shows their form.
@@ -3171,7 +3224,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `proof-pdf` (format, M14, inferred): PDF proof sheet
   - Open (our design, not confirmed): Vector PDF of an Edit View text, a glyph overview or a waterfall, drawn straight from the source outlines of the current master or instance so no font has to be installed. Scale follows the font's units-per-point setting; nodes, guides and annotations are included only when asked for.
 
-### Interpolation (77)
+### Interpolation (81)
 
 - [ ] `instance.manualInterpolation` (parameter, M9, docs): Whether the instance uses hand-entered master factors instead of factors computed from…
   - Guess: With manual interpolation on, the instance is the stored factors applied to the master layers; intermediate layers get no weight, alternate layers still switch by the instance's location, and the factors also weight metrics, kerning and parameters; settle with an instance using manual factors and a brace glyph in the reference app.
@@ -3390,6 +3443,25 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `glyph.relocateStartPoints` (M9, docs, live): Relocate Start Points
   - Guess: The bottom-left of the glyph is the bottom-left corner of the bounding box of the layer's paths (components left out), and nearest is the straight-line distance, ties going to the lower, then the leftmost node; settled by running the command in the reference app on an O with a counter.
   - Observe: Run Relocate Start Points on an O whose counter is offset to the right: note which counter node becomes the start.
+- [ ] `font.mergeFontsToMasters` (M9, docs, live): Merge Fonts to Masters
+  - Guess: The axes come from the weight and width classes, with the weight class value and the width class percentage as design coordinates; the secondary reference's result on fonts with weight classes 300, 400 and 700 would settle it.
+  - Guess: Each font also becomes a static instance at its master, so the merged font still exports every input; the secondary reference's instance list after a merge would settle it.
+  - Guess: Family name, features and the rest of Font Info are the first font's; the secondary reference's result on fonts with different family names would settle it.
+  - Guess: A glyph only some fonts have is kept, without layers for the other masters; the secondary reference's result on fonts with different glyph sets would settle it.
+  - Observe: Open two static fonts of one family with weight classes 300 and 700, run Merge Fonts to Masters, and note the axes, the master coordinates and the instances it makes.
+- [ ] `font.addVariation` (M9, docs, live): Add Variation…
+  - Guess: The other masters sit at 0 on a new axis, the value Add Axis gives them; the secondary reference's coordinates after Add Variation would settle it.
+  - Guess: The copy is named after the original, the axis and the location (`Regular Width 75`); the secondary reference's name for the new master would settle it.
+  - Guess: The commands to run are listed in the call rather than read from a saved action set; a documented action set file format would settle whether a file should be read as well.
+  - Observe: Run Add Variation on a one-master font with a new Width axis at 75 and note the new master's name and both masters' coordinates.
+- [ ] `glyph.replaceWithInstance` (M9, docs, live): Adjust by Variation
+  - Guess: Without a glyph list every glyph with a layer for the master is adjusted, and the master defaults to the first; the secondary reference's dialog defaults would settle it.
+  - Guess: Interpolated coordinates are not rounded; the secondary reference's result between odd coordinates would settle it.
+  - Observe: In a two-master font (weight 400 and 700), run Adjust by Variation on one glyph of the Regular master with a relative weight of +150, and note the stem width and whether the coordinates are rounded.
+- [ ] `font.setMasterLocations` (M9, docs, live): Set Master Locations…
+  - Guess: Coordinates between table entries are placed proportionally, and those beyond the ends follow the nearest pair; the secondary reference's result on an instance the table does not list would settle it.
+  - Guess: Moving the whole font also moves the virtual masters, the special layers and the internal side of Axis Mappings, while a list of masters or instances moves only those; the secondary reference's result on a font with intermediate layers would settle it.
+  - Observe: In a font with masters at 40 and 160 and an instance at 100, set the masters to 100 and 900 by table and note where the instance goes.
 - [ ] `hoi.timingGraph` (behavior, M13, handbook): The timing graph plots progress against axis position for the selected curve:…
   - Guess: Progress is the fraction of the curve's length travelled; settle by comparing the graph of a Handles curve with zero amplitudes and of a Point curve in the reference app.
 - [ ] `hoi.setControlPoints` (M13, inferred): Set Interpolation Control Points
@@ -3787,7 +3859,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In the secondary reference, open Review Hints on a glyph with ghost hints and note what the width field shows for one.
   - Observe: Press Next on the last hint in the secondary reference's Review Hints and check whether it wraps to the first.
 
-### Colour fonts (60)
+### Colour fonts (68)
 
 - [ ] `color.fourKinds` (behavior, M11, handbook): Four colour workflows are supported: layered fonts (one font file per colour),…
   - Guess: A glyph may mix kinds: its palette and full-colour layers feed COLR, its iColor layers sbix and its svg layer the SVG table, each written by its own rule; an svg layer wins over a conversion by Color Layers to SVG for that glyph. Settled by exporting a glyph with a palette layer and an svg layer from the reference.
@@ -3990,6 +4062,23 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `dialog.masterColorPicker` (panel, M11, handbook): Master Color picker
   - Guess: The colour is stored as the text `R,G,B,A` with components from 0 to 255 (the picker also reads `#RRGGBBAA` and a list of numbers). Settled by saving a font with a Master Color from the reference and reading the stored value.
   - Guess: Opacity is the alpha slider of the colour picker. Settled by opening the picker in the reference.
+- [ ] `bitmap.widthOnlyInBitmapFonts` (behavior, M13, docs): A bitmap glyph's advance can be edited directly only when the font…
+  - Guess: A font has outlines when any glyph has a path or component on any layer; a font opened from a bitmap file has none.
+  - Guess: The advance follows the outline when a bitmap is edited or regenerated, not at once when the glyph's width changes; the secondary reference's bitmap view after a width change would settle it.
+- [ ] `bitmap.references` (behavior, M13, docs): A bitmap glyph may be composed of references to other bitmap glyphs…
+  - Guess: Where a reference overlaps the glyph's own pixels or another reference, the darker level wins.
+  - Guess: References are drawn in on export rather than written as composite bitmaps (`EBDT` formats 8 and 9).
+  - Guess: A reference names a glyph by name, and a reference to a bitmap that is later removed draws nothing until it is removed too.
+- [ ] `font.overlayFonts` (M13, docs, live): Overlay Fonts…
+  - Guess: The result opens as a new untitled document and no source changes; watching the reference's command would settle whether it fills the current font instead.
+  - Guess: Sources are open documents only, as Add Other Font takes them; whether the reference also reads files that are not open is not documented.
+  - Guess: In colorLayers output each glyph's master layer holds every source's outlines, as the drawing shown where colour is not supported; the reference's choice (bottom source only, or all) would settle it.
+  - Guess: A glyph the bottom source lacks is added, with its record and width from the lowest source that has it and no kerning groups; the reference may keep only the bottom source's glyphs.
+  - Guess: The bottom source's scale also scales the widths, vertical metrics and kerning; its offset moves only the outlines.
+  - Guess: Components are always resolved to paths, so a scaled or moved source draws correctly; the reference may keep components where the transform allows it.
+  - Guess: In masters output each master is named after its source's family and master name, and colour and opacity are not stored, since a master has no colour.
+  - Guess: The new font keeps the bottom source's family name and drops its axes and instances.
+  - Guess: `color` defaults to opaque black and `output` has no default.
 - [ ] `bitmap.setStrikes` (M13, docs, live): Bitmap Strikes…
   - Guess: A strike to remove given without a depth removes every depth of that size, and one to add without a depth is black and white; the secondary reference's dialog lists sizes with their depth, so its behaviour for a bare size would settle it.
   - Guess: Adding a strike the font already has is refused rather than ignored.
@@ -3998,6 +4087,25 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Each bitmap spans the outline's box rounded out to whole pixels, so an empty glyph has a 0 × 0 bitmap that keeps its advance.
   - Guess: A glyph without outlines draws its placed PDF, as dark as the page is, with transparent counting as white; neither reference rasterises placed artwork into strikes, so this is our choice.
   - Guess: A placed PDF too large for a bitmap is left out with a warning rather than refusing the strike, since a template image is often larger than the glyph.
+- [ ] `bitmap.regenerateGlyphs` (M13, docs, live): Regenerate Bitmap Glyphs…
+  - Guess: Without `glyphs` every exported glyph is drawn again, so a strike that covered only some glyphs gains bitmaps for the rest; the secondary reference acts on the font view selection. Regenerating with nothing selected in the secondary reference would settle it.
+  - Guess: A glyph that is not exported is skipped and listed, as when a strike is first rasterised.
+  - Guess: A regenerated bitmap keeps the code its file gave the old one, so a strike in a non-Unicode encoding still exports with its codes.
+- [ ] `bitmap.removeGlyphs` (M13, docs, live): Remove Bitmap Glyphs…
+  - Guess: References to a removed bitmap from other glyphs of the same strike are removed with it, and those glyphs are listed in the result, rather than refusing the removal. Removing a referenced bitmap in the secondary reference would settle it.
+  - Guess: A call that would remove nothing (none of the glyphs has a bitmap in the chosen strikes) is refused rather than reported as an empty change.
+- [ ] `bitmap.setPixels` (M13, inferred, live): Set Pixels
+  - Guess: Clearing pixels never shrinks the bitmap's box; only `rows` set a smaller one. The secondary reference's saved BDF after clearing an edge row would settle whether it trims.
+  - Guess: `origin` is the bitmap's bottom-left corner relative to the glyph origin, the BDF bounding box offset, not a point inside the bitmap.
+  - Guess: A `strike` without `depth` names the strike of that size when the font has only one; with several depths of the size the call is refused.
+- [ ] `bitmap.transform` (M13, docs, live): Transform Bitmap
+  - Guess: Skew is horizontal only and counted from the baseline: a row moves floor(height × dx ÷ dy) pixels right, where height is how far its bottom edge lies above the baseline, so rows below the baseline move left. Skewing a glyph with a descender in the secondary reference's bitmap view would settle the direction and the rounding.
+  - Guess: Flips mirror the bitmap in its own box, which stays where it was, rather than about the advance's centre. Flipping an off-centre bitmap in the secondary reference would settle it.
+  - Guess: A quarter turn keeps the centre of the bitmap's box, rounding the new corner down; the secondary reference may turn about the glyph origin instead.
+  - Guess: A glyph built from references has them drawn into its pixels before it is transformed, so it loses its references; transforming only its own pixels would move them apart from the drawn parts.
+- [ ] `bitmap.setStrikeProperties` (M13, docs, live): Set Strike Properties
+  - Guess: A property name given twice is refused, since a BDF file names each property once.
+  - Guess: Changing the strike's ascent or descent does not edit a `FONT_ASCENT` or `FONT_DESCENT` entry in `properties`; the two are set separately. The secondary reference's BDF Info dialog after a change of line metrics would settle whether it keeps them in step.
 
 ### Files: open, import, export (68)
 
@@ -4271,13 +4379,28 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Every item starts ticked, so Accept Selected with no change of the ticks takes everything; the reference's manual does not say which state the ticks start in, and opening the window there settles it.
   - Guess: The stored-text view on double-click shows the glyph in FontCraft's native JSON form rather than as a .glif file, since the comparison is between models; the reference shows the file text, and a file-per-glyph text view would follow it more closely.
 
-### Settings and the window (21)
+### Settings and the window (25)
 
+- [ ] `sharing.confirmConnectionOnHost` (behavior, M13, handbook): A first connection attempt from a device must be confirmed on the…
+  - Guess: Devices are known by their IP address, so a device that gets a new address must be confirmed again; what the reference keys them by is not documented.
+- [ ] `sharing.viewerShowsActiveEditView` (behavior, M13, handbook): The viewer shows the Edit View that is currently active, and every…
+  - Guess: The page reloads every second.
+  - Guess: The tab is drawn filled on one line, as the preview line draws it, not with nodes, metrics or line breaks.
+  - Guess: The viewer follows tab switches.
+  - Observe: With the viewer connected, switch Edit View tabs and see whether the viewer follows.
+- [ ] `sharing.fontcraftEquivalent` (behavior, M13, inferred): FontCraft has no companion app; any browser on the network opens a…
+  - Open (our design, not confirmed): FontCraft has no companion app; any browser on the network opens a read-only page of the active Edit View after the device is confirmed on the computer.
 - [ ] `addons.repo.httpBasicAuth` (behavior, M13, handbook): An alternate repository URL may require a user name and password, sent…
   - Guess: Credentials are taken from the URL itself and stored with the setting, not in the operating system's keychain; the reference's storage is not described.
+- [ ] `settings.sharing` (panel, M13, handbook): Sharing
+  - Guess: The section shows the page's address, because there is no companion app that finds the computer by itself.
+  - Guess: Reset shows while at least one device is trusted.
 - [ ] `settings.addons` (panel, M13, handbook): Addons
   - Guess: The section is called Extensions, because FontCraft has no add-on kinds that need Python; the reference calls it Addons.
   - Observe: Screenshot Settings › Addons in the trial and list its controls in order, with defaults.
+- [ ] `sharing.enableExternalPreview` (setting, M13, handbook): Enable External Preview
+  - Guess: Off by default; the handbook does not say.
+  - Guess: The port and the random path are new each time the preview is turned on.
 - [ ] `addons.useSystemConsoleForScriptOutput` (setting, M13, handbook): Use system console for script output
   - Guess: With the setting on, the log still shows in the Command Console as well as on standard error, where the handbook says the reference sends it to the system console instead; keeping both loses nothing and the switch stays off by default.
 - [ ] `addons.alternatePluginRepos` (setting, M13, handbook): Alternate Plugin Repos
@@ -4306,8 +4429,6 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In the question, choose Save for a font never saved and cancel the file chooser: note whether the window stays open and the question closes.
 - [ ] `settings.menuItemNameOnOlderSystem` (behavior, M14, handbook): On macOS 12 the menu item that opens the window is labelled…
   - Guess: One label and place on every platform, Settings… in the Edit menu, as many Linux and Windows applications do; a native macOS menu bar would move it to the application menu.
-- [ ] `sharing.fontcraftEquivalent` (behavior, M14, inferred): FontCraft has no companion app planned; the same need can be met…
-  - Open (our design, not confirmed): FontCraft has no companion app planned; the same need can be met by a read-only preview stream over the control channel that any browser on the network can open after confirmation on the host.
 - [ ] `shortcuts.oneRegistry` (behavior, M14, inferred): FontCraft derives the action list from the command registry: every command with…
   - Open (our design, not confirmed): FontCraft derives the action list from the command registry: every command with a label is listed under its menu or noun prefix, and the stored override map is keyed by command id.
 - [ ] `app.settings` (M14, handbook, live): Settings…
