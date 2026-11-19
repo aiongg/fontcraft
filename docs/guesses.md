@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2907 guesses on 1554 rows (633 of them live commands).**
+**2912 guesses on 1555 rows (633 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -2197,10 +2197,15 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `diff` (cli) | M12 | docs | – | In compiler mode the index sorting, name-ID resolution and the removal of a one-sided name ID 25 apply to both fonts alike, where ttx_diff applies some only to the fontmake side; comparing verdicts on corpus pairs would show whether this matters. |
 | `diff` (cli) | M12 | docs | – | The off-by-one budget is counted on B's coordinates (ttx_diff's fontmake side) and A's values are set to B's; ttx_diff's own pairing of the two sides is not symmetric either. |
 | `diff` (cli) | M12 | docs | – | The hex detail prints offset, bytes and ASCII per 16-byte row as a unified diff; the exact layout of sfntdiff -d 2 has not been compared. |
+| `outlines remove-overlaps` (cli) | M12 | docs | – | On CFF fonts --keep-hinting changes nothing: glyphs that do not change always keep their hints, as tx +V leaves them, while fontTools without --keep-hinting removes the hints of the whole font; a tx +V run on a hinted OTF settles which reference to follow. |
+| `outlines remove-overlaps` (cli) | M12 | docs | – | On CFF fonts head, hhea and hmtx keep their bytes after a merge (merging rarely moves the bounds; dropped small contours can); fontTools recalculates head bounds on saving, so a comparison of the head table after fontTools removeOverlaps on a corpus OTF would settle it. |
 | `outlines remove-overlaps` (cli) | M12 | docs | – | --min-area (default 25) only drops contours of glyphs whose overlaps were merged, so glyphs without overlaps match the fontTools result; checkoutlinesufo's behaviour on tiny contours of unmerged glyphs would settle it. |
 | `outlines remove-overlaps` (cli) | M12 | docs | – | --keep-contour-order has no effect: the editor's merge always keeps the order and start points of the contours it can match; checkoutlinesufo --ignore-contour-order output on a corpus font would show whether the difference matters. |
+| `outlines direction` (cli) | M12 | inferred | – | On CFF fonts a glyph whose contours were reversed or restarted loses its hints, as every changed CFF glyph does here; keeping the stems (they stay valid when no point moves) would need the hint masks moved, and a tx run that reverses contours would show what the reference keeps. |
 | `outlines direction` (cli) | M12 | inferred | – | The default flavour of a source is the PostScript convention (the editor's); a source written for TrueType outlines would need --flavour truetype. |
+| `outlines extremes` (cli) | M12 | inferred | – | On CFF fonts a glyph that gains extreme points loses its hints, as checkoutlinesufo drops the hints of glyphs it changes; checkoutlinesufo -e on a hinted OTF would confirm it. |
 | `outlines round` (cli) | M12 | inferred | – | Halfway values round away from zero to the grid (Rust's rounding); fontTools' otRound rounds them up, which only differs for negative halves on a grid coarser than 1 unit. |
+| `outlines round` (cli) | M12 | inferred | – | On CFF fonts widths stay as they are (they are whole numbers in practice) and a rounded glyph loses its hints; the reference tools round while writing charstrings and never as a separate step, so no source settles it. |
 | `outlines to-quadratic` (cli) | M12 | inferred | – | A compiled font's contours are never reversed, since glyf contours already run the TrueType way; a cubic glyf font with PostScript-direction contours would show whether reversing should follow --keep-direction there too. |
 | `outlines componentize` (cli) | M12 | inferred | – | --detect prefers components with more contours and, of two equal outlines, makes the later glyph refer to the earlier; no reference tool detects components, so this stands until a use case asks otherwise. |
 | `outlines componentize` (cli) | M12 | inferred | – | --detect sets USE_MY_METRICS on the first component when its advance equals the glyph's, the rule ttfcomponentizer applies to the source's advances. |
