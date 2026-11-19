@@ -14,5 +14,6 @@ pub mod measurements;
 pub mod pairs_phrases;
 pub mod reference_font;
 pub mod related_glyphs;
+pub mod selection_info;
 pub mod selections;
 pub mod stub;

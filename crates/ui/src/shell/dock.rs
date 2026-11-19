@@ -307,6 +307,13 @@ impl DockPanels<PanelId> for Panels<'_> {
             PanelId::KerningWindow => {
                 panels::kerning_window::show(ui, panels::kerning_window::Props { model: &self.models.kerning_window, sent: self.sent });
             }
+            PanelId::Sidebar => panels::font_view::sidebar::show(
+                ui,
+                panels::font_view::sidebar::Props { model: &self.models.sidebar, inspector: &self.models.inspector, sent: self.sent },
+            ),
+            PanelId::SelectionInfo => {
+                panels::selection_info::show(ui, panels::selection_info::Props { model: &self.models.selection_info, sent: self.sent });
+            }
             // Drawn by `group_view`.
             PanelId::Document => {}
             other => panels::stub::show(ui, panels::stub::Props { title: other.title(&self.words) }),

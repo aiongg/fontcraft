@@ -9,11 +9,13 @@ pub mod font_info;
 pub mod font_view;
 pub mod glyph;
 pub mod glyph_info;
+pub mod glyph_props;
 pub mod glyph_sections;
 pub mod hinting;
 pub mod kerning_review;
 pub mod kerning_window;
 pub mod layers;
+pub mod sidebar;
 
 use craft::ui::contract::Tracked;
 use fontcraft_engine::Session;
@@ -59,6 +61,12 @@ pub struct Models {
     pub console: Tracked<console::ConsoleModel>,
     /// The Kerning window (`panels::kerning_window`).
     pub kerning_window: Tracked<kerning_window::KerningWindowModel>,
+    /// The sidebar's entries (`panels::font_view::sidebar`).
+    pub sidebar: Tracked<sidebar::SidebarModel>,
+    /// The glyph inspector's fields (`panels::font_view::inspector`).
+    pub inspector: Tracked<glyph_props::GlyphPropsModel>,
+    /// The Selection Info panel's fields (`panels::selection_info`).
+    pub selection_info: Tracked<glyph_props::GlyphPropsModel>,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -112,6 +120,9 @@ impl Models {
         layers::project(&mut self.layers, cx);
         layers::project_masters(&mut self.masters, cx);
         kerning_window::project(&mut self.kerning_window, cx);
+        sidebar::project(&mut self.sidebar, cx);
+        glyph_props::project_inspector(&mut self.inspector, cx);
+        glyph_props::project_selection_info(&mut self.selection_info, cx);
         true
     }
 }

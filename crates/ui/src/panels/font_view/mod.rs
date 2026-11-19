@@ -15,9 +15,12 @@
 
 pub mod cells;
 pub mod grid;
+pub mod inspector;
 pub mod keys;
 pub mod list;
+pub mod metrics;
 pub mod search;
+pub mod sidebar;
 pub mod status;
 
 use craft::ui::contract::{Show as _, ShowContainer as _, Tracked};
