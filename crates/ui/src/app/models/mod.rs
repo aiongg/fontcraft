@@ -20,6 +20,7 @@ pub mod layers;
 pub mod palette;
 pub mod sidebar;
 pub mod text;
+pub mod space_center;
 
 use craft::ui::contract::Tracked;
 use fontcraft_engine::Session;
@@ -75,6 +76,8 @@ pub struct Models {
     /// stamp, since they read the canvas's selection.
     pub palette: palette::PaletteModels,
     pub text: Tracked<text::TextModel>,
+    /// The Space Center (`panels::space_center`).
+    pub space_center: Tracked<space_center::SpaceCenterModel>,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -132,6 +135,7 @@ impl Models {
         glyph_props::project_inspector(&mut self.inspector, cx);
         glyph_props::project_selection_info(&mut self.selection_info, cx);
         text::project(&mut self.text, cx);
+        space_center::project(&mut self.space_center, cx);
         true
     }
 }

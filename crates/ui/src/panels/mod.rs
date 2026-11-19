@@ -20,6 +20,7 @@ pub mod related_glyphs;
 pub mod selection_info;
 pub mod selections;
 pub mod stroke;
+pub mod space_center;
 pub mod stub;
 pub mod transformations;
 pub mod widgets;

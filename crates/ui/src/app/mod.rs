@@ -76,6 +76,8 @@ pub struct ViewState {
     pub palette: crate::shell::palette::PaletteView,
     /// The edit view's text, its cursor and layout options (`canvas::text`).
     pub text: crate::canvas::text::EditText,
+    /// The Space Center's text, options and selected glyph.
+    pub space_center: crate::shell::space_center::SpaceCenterState,
 }
 
 impl Default for ViewState {
@@ -99,6 +101,7 @@ impl Default for ViewState {
             kerning: Default::default(),
             palette: Default::default(),
             text: Default::default(),
+            space_center: Default::default(),
         }
     }
 }
