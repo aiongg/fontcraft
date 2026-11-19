@@ -1070,7 +1070,7 @@ Engine command: `font.convert`.
 Reduces a font to chosen glyphs and removes everything that becomes unreachable: cmap entries, layout rules, variation data, names, hint tables. The kept set starts from glyph names, glyph indices, code points or text, and is closed over components and over the substitutions of the retained layout features. Defaults follow pyftsubset, which aims at small web fonts; each trimming step can be switched off.
 
 ```
-fontcraft-cli subset FONT [GLYPH...] [--unicodes LIST] [--text STRING] [--glyphs LIST] [--gids LIST] [options] [-o OUT]
+fontcraft-cli subset FONT... [GLYPH...] [--unicodes LIST] [--text STRING] [--glyphs LIST] [--gids LIST] [options] [-o OUT]
 ```
 
 **Glyph set.** The initial set is the union of every selection option. It is then closed over: composite
@@ -1078,6 +1078,25 @@ components; the `.notdef` policy; for each retained feature, the glyphs its subs
 from glyphs already in the set (repeated until stable) unless `--no-layout-closure`; COLR layers and
 paint glyphs; MATH variants; mirrored pairs. Giving no selection at all is an error; `'*'` must be
 explicit.
+
+**The converter's selection.** tx's subsetting options narrow the set before the closure runs:
+
+| Option | tx | Effect |
+|---|---|---|
+| `--exclude-glyphs LIST` | `-gx` | Leaves out names, glyph indices, ranges, `U+XXXX`, `/CID` and `/CID-CID`. |
+| `--fd LIST`, `--exclude-fd LIST` | `-fd`, `-fdx` | Keeps or leaves out the glyphs of Font DICTs of a CID-keyed CFF or a CFF2 font. |
+| `--goadb FILE` | `-gs` with `-gf` | Keeps the glyphs the GOADB names in its first or second column. |
+| `-p`, `--random PERCENT` | `-p` | Keeps a share of what is left, rounded half up, at least one glyph. The seed comes from the glyph names, so a font gives the same choice each run; `--seed N` sets it. |
+| `-P`, `--random-new PERCENT` | `-P` | The same with a new seed each run, which the summary line reports. |
+
+They apply in that order to the glyphs the other selections give, or to every glyph when no other
+selection is given. Then `.notdef` and the closure are added, so a component of a kept glyph stays
+even when an option leaves it out, and Font DICTs no kept glyph uses are dropped. The random
+generator is our own, so `-p` picks other glyphs than tx does for the same font.
+
+**Several inputs.** Arguments right after FONT that end in `.ttf`, `.otf`, `.woff`, `.woff2`, `.ttc`
+or `.otc` are further inputs. Each is subset with the same options, up to `--jobs` at once, and the
+results print in input order. Several inputs take `--output-dir` or no output option.
 
 **After the set is fixed** each table is trimmed: outlines and metrics of dropped glyphs go; cmap loses
 their mappings; GSUB/GPOS/GDEF lose rules, classes and coverage entries that mention them, then lookups,
@@ -1155,8 +1174,8 @@ Engine command: `font.subset`.
 | tx | `-g` | --glyphs |  |
 | tx | `-gx` | --exclude-glyphs |  |
 | tx | `-fd / -fdx` | --fd / --exclude-fd |  |
-| tx | `-p` | --random PERCENT |  |
-| tx | `-P` | --random PERCENT --seed random |  |
+| tx | `-p` | -p, --random PERCENT |  |
+| tx | `-P` | -P, --random-new PERCENT |  |
 | tx | `-pg` | --retain-gids |  |
 | tx | `-gs with -gf` | --goadb FILE |  |
 | mergefonts | one source font with -g / -gx or a glyph alias file | subset (and glyphs rename for the renaming part) |  |

@@ -1,17 +1,20 @@
-//! `font.subset` (M12.17–M12.19; `fontcraft_tables::subset`).
+//! `font.subset` (M12.17–M12.19, M12.73; `fontcraft_tables::subset`).
 //!
 //! Whole-file commands follow [`super::file_io`]: paths in, the input never changed, the output
 //! written atomically, a refusal on the web. Compiled fonts with TrueType or CFF outlines are
 //! subset with their layout, variation, colour, bitmap and math tables, CFF2 outlines included;
 //! the tables the subsetter does not know are dropped (the result lists them).
 
-use std::path::PathBuf;
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
 
+use fontcraft_tables::convert::FontDictFilter;
 use fontcraft_tables::sfnt::{Tag, parse_tag, tag_str};
 use fontcraft_tables::subset::{
-    DEFAULT_DROP_TABLES, DEFAULT_HINTING_TABLES, DEFAULT_NAME_IDS, DEFAULT_NAME_LANGUAGES, DEFAULT_NO_SUBSET_TABLES, SubsetOptions, subset,
+    DEFAULT_DROP_TABLES, DEFAULT_HINTING_TABLES, DEFAULT_NAME_IDS, DEFAULT_NAME_LANGUAGES, DEFAULT_NO_SUBSET_TABLES, GlyphFilter, RandomShare,
+    SubsetOptions, subset,
 };
-use fontcraft_tables::{TableOrder, WriteOptions};
+use fontcraft_tables::{SfntFont, TableOrder, WriteOptions};
 use serde_json::{Map, Value, json};
 
 use super::file_io::{self, InputKind, OutputRequest};
@@ -22,8 +25,11 @@ use crate::{EngineError, Result, Session};
 /// Most items one list parameter may hold, ranges counted by their size.
 const MAX_LIST_ITEMS: usize = 1_114_112;
 
-/// Parameters of the row that are not built yet: giving one is refused rather than ignored.
-const NOT_BUILT: [&str; 6] = ["excludeGlyphs", "fd", "excludeFd", "random", "goadb", "exportFlags"];
+/// Most Font DICTs `keep.fd` and `keep.excludeFd` may name, as CFF allows.
+const MAX_FONT_DICTS: usize = 256;
+
+/// Keys that belong inside `keep`; given at the top level they are refused rather than ignored.
+const KEEP_KEYS: [&str; 4] = ["excludeGlyphs", "fd", "excludeFd", "random"];
 
 /// The container of the output.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -40,24 +46,30 @@ pub fn specs() -> Vec<CommandSpec> {
         "Subset Font",
         [],
         None,
-        "{font: path, face?: int|name, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool, keep?: {glyphs?: [name]|\"*\", gids?: [int|\"a-b\"], unicodes?: [int|\"U+XXXX\"|\"XXXX-YYYY\"]|\"*\", text?: string}, ignoreMissingGlyphs?: bool, ignoreMissingUnicodes?: bool, retainGids?: bool, notdefGlyph?: bool, notdefOutline?: bool, recommendedGlyphs?: bool, bidiClosure?: bool, layoutClosure?: bool, layoutFeatures?: [tag]|\"*\"|{add?: [tag], remove?: [tag]}, layoutScripts?: [string]|\"*\"|{add?: [string], remove?: [string]}, hinting?: bool, hintingTables?: [tag]|{add?: [tag], remove?: [tag]}, desubroutinize?: bool, dropTables?: [tag]|{add?: [tag], remove?: [tag]}, passthroughTables?: bool, legacyKern?: bool, nameIds?: [int]|\"*\"|{add?: [int], remove?: [int]}, nameLanguages?: [int]|\"*\"|{add?: [int], remove?: [int]}, nameLegacy?: bool, glyphNames?: bool, legacyCmap?: bool, symbolCmap?: bool, pruneUnicodeRanges?: bool, pruneCodepageRanges?: bool, noSubsetTables?: [tag]|{add?: [tag], remove?: [tag]}, obfuscateNames?: bool, recalcBounds?: bool, timestamp?: \"keep\"|\"now\"|int, recalcAverageWidth?: bool, recalcMaxContext?: bool, canonicalOrder?: bool, container?: \"plain\"|\"woff\"|\"woff2\", zopfli?: bool, prettySvg?: bool} every list parameter takes a list, which replaces its default, or {add, remove}, which edits the default; dropTables defaults to JSTF DSIG EBDT EBLC EBSC PCLT LTSH Feat Glat Gloc Silf Sill, noSubsetTables to the tables copied as they are (avar BASE fvar gasp head hhea maxp vhea OS/2 loca name cvt fpgm prep VDMX DSIG CPAL MVAR cvar STAT: one left out is dropped unless passthroughTables, an unknown one added is kept as it is), hintingTables to cvt cvar fpgm prep hdmx VDMX. timestamp sets the modification time in seconds since 1970, now meaning SOURCE_DATE_EPOCH, else the clock (default keep); canonicalOrder writes the tables in the recommended order instead of the input's; container defaults to the input's (zopfli compression is not available); prettySvg writes subset SVG documents again with two-space indentation → {output, bytes, glyphCount, retained, glyphMap, tables, dropped, missingGlyphs, missingUnicodes, warnings}",
+        "{font: path, face?: int|name, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool, keep?: {glyphs?: [name]|\"*\", gids?: [int|\"a-b\"], unicodes?: [int|\"U+XXXX\"|\"XXXX-YYYY\"]|\"*\", text?: string, excludeGlyphs?: selector, fd?: [int], excludeFd?: [int], random?: {percent: number, seed?: int|string|\"random\"}}, goadb?: path, ignoreMissingGlyphs?: bool, ignoreMissingUnicodes?: bool, retainGids?: bool, notdefGlyph?: bool, notdefOutline?: bool, recommendedGlyphs?: bool, bidiClosure?: bool, layoutClosure?: bool, layoutFeatures?: [tag]|\"*\"|{add?: [tag], remove?: [tag]}, layoutScripts?: [string]|\"*\"|{add?: [string], remove?: [string]}, hinting?: bool, hintingTables?: [tag]|{add?: [tag], remove?: [tag]}, desubroutinize?: bool, dropTables?: [tag]|{add?: [tag], remove?: [tag]}, passthroughTables?: bool, legacyKern?: bool, nameIds?: [int]|\"*\"|{add?: [int], remove?: [int]}, nameLanguages?: [int]|\"*\"|{add?: [int], remove?: [int]}, nameLegacy?: bool, glyphNames?: bool, legacyCmap?: bool, symbolCmap?: bool, pruneUnicodeRanges?: bool, pruneCodepageRanges?: bool, noSubsetTables?: [tag]|{add?: [tag], remove?: [tag]}, obfuscateNames?: bool, recalcBounds?: bool, timestamp?: \"keep\"|\"now\"|int, recalcAverageWidth?: bool, recalcMaxContext?: bool, canonicalOrder?: bool, container?: \"plain\"|\"woff\"|\"woff2\", zopfli?: bool, prettySvg?: bool} every list parameter takes a list, which replaces its default, or {add, remove}, which edits the default; dropTables defaults to JSTF DSIG EBDT EBLC EBSC PCLT LTSH Feat Glat Gloc Silf Sill, noSubsetTables to the tables copied as they are (avar BASE fvar gasp head hhea maxp vhea OS/2 loca name cvt fpgm prep VDMX DSIG CPAL MVAR cvar STAT: one left out is dropped unless passthroughTables, an unknown one added is kept as it is), hintingTables to cvt cvar fpgm prep hdmx VDMX. timestamp sets the modification time in seconds since 1970, now meaning SOURCE_DATE_EPOCH, else the clock (default keep); canonicalOrder writes the tables in the recommended order instead of the input's; container defaults to the input's (zopfli compression is not available); prettySvg writes subset SVG documents again with two-space indentation. keep.excludeGlyphs, keep.fd, keep.excludeFd, goadb and keep.random narrow the glyphs the other keep entries choose, or every glyph when they choose none, before .notdef and the closure are added: excludeGlyphs leaves out the glyphs a selector names (names, glyph ids, ranges such as 3-9, U+0041, and /CID or /CID-CID in a CID-keyed font); fd and excludeFd keep or leave out the glyphs of Font DICTs of a CID-keyed CFF or a CFF2 font (indexes from 0); goadb keeps the glyphs a GlyphOrderAndAliasDB names in its first or second column; random keeps percent of what is left (0 to 100, rounded to whole glyphs, at least one), chosen by a generator seeded with seed, a new seed each run with \"random\", or one taken from the glyph names → {output, bytes, glyphCount, retained, glyphMap, tables, dropped, missingGlyphs, missingUnicodes, warnings, seed?} (seed: the seed a random choice used when it was given or drawn)",
         always,
         run_subset
     )
-    .files(const { &[FileParam::read("font"), FileParam::write("output"), FileParam::write("outputDir")] })
+    .files(const { &[FileParam::read("font"), FileParam::read("goadb"), FileParam::write("output"), FileParam::write("outputDir")] })
     .writes_files()]
 }
 
 fn run_subset(_: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("font.subset", v)?;
-    for key in NOT_BUILT {
+    for key in KEEP_KEYS {
         if p.get(key).is_some() {
-            return Err(EngineError::Unsupported(format!("`{key}` of font.subset is not built yet")));
+            return Err(p.bad(format!("`{key}` goes inside `keep`")));
         }
+    }
+    if p.get("exportFlags").is_some() {
+        return Err(EngineError::Unsupported("`exportFlags` of font.subset is not built yet".into()));
     }
     let input = PathBuf::from(p.str("font")?);
     let request = OutputRequest::from_params(&p)?;
-    let options = options(&p)?;
+    let mut options = options(&p)?;
+    let keep = p.opt_object("keep")?;
+    let random = keep.map(|k| random_share(&p, k)).transpose()?.flatten();
+    let goadb = goadb_names(&p)?;
 
     let file = file_io::read_input(&input)?;
     if !file.kind.is_font() {
@@ -80,6 +92,15 @@ fn run_subset(_: &mut Session, v: &Value) -> Result<Value> {
     let order = if p.bool_or("canonicalOrder", false)? { TableOrder::Recommended } else { TableOrder::Keep };
     let face = super::dehint::face_index(&p, &file.bytes)?;
     let font = fontcraft_tables::read(&file.bytes, face)?;
+    options.filter = GlyphFilter {
+        exclude: match keep {
+            Some(k) => excluded(&p, k, &font)?,
+            None => BTreeSet::new(),
+        },
+        font_dicts: keep.map(|k| font_dicts(&p, k)).transpose()?.flatten(),
+        goadb,
+        random,
+    };
     let result = subset(&font, &options)?;
     let sfnt = fontcraft_tables::write(&result.font, &WriteOptions { order })?;
     let bytes = match container {
@@ -109,7 +130,7 @@ fn run_subset(_: &mut Session, v: &Value) -> Result<Value> {
         .into_iter()
         .map(|t| json!({"tag": tag_str(t), "before": font.get(t).map_or(0, <[u8]>::len), "after": result.font.get(t).map_or(0, <[u8]>::len)}))
         .collect();
-    Ok(json!({
+    let mut out = json!({
         "output": path.display().to_string(),
         "bytes": bytes.len(),
         "glyphCount": result.retained.len(),
@@ -120,7 +141,114 @@ fn run_subset(_: &mut Session, v: &Value) -> Result<Value> {
         "missingGlyphs": result.missing_glyphs,
         "missingUnicodes": result.missing_unicodes.iter().map(|u| format!("U+{u:04X}")).collect::<Vec<_>>(),
         "warnings": result.warnings,
-    }))
+    });
+    if let (Some(seed), Value::Object(map)) = (random.and_then(|r| r.seed), &mut out) {
+        // A string: JSON readers lose precision on integers past 2^53.
+        map.insert("seed".into(), json!(seed.to_string()));
+    }
+    Ok(out)
+}
+
+/// The glyph ids `keep.excludeGlyphs` names, in the selector grammar of the other whole-file
+/// commands, with the `/CID` items of the reference converter.
+fn excluded(p: &Params<'_>, keep: &Map<String, Value>, font: &SfntFont) -> Result<BTreeSet<u32>> {
+    let Some(selector) = keep.get("excludeGlyphs").filter(|v| !v.is_null()) else { return Ok(BTreeSet::new()) };
+    // The shared resolver reads `glyphs`; given alone it returns exactly the glyphs named.
+    let alone = json!({ "glyphs": selector });
+    let alone_params = Params::new("font.subset", &alone)?;
+    let rewritten = super::convert_file::cid_selectors(&alone_params, font).map_err(|e| renamed(p, e))?;
+    let selected = match &rewritten {
+        Some(v) => super::dehint::selection(&Params::new("font.subset", v)?, font),
+        None => super::dehint::selection(&alone_params, font),
+    }
+    .map_err(|e| renamed(p, e))?;
+    Ok(selected.unwrap_or_default().into_iter().map(u32::from).collect())
+}
+
+/// A selector error, reported against `keep.excludeGlyphs`.
+fn renamed(p: &Params<'_>, e: EngineError) -> EngineError {
+    match e {
+        EngineError::BadParams { message, .. } => {
+            let message = message.replace("`glyphs`", "`keep.excludeGlyphs`");
+            p.bad(if message.contains("keep.excludeGlyphs") { message } else { format!("`keep.excludeGlyphs`: {message}") })
+        }
+        other => other,
+    }
+}
+
+/// `keep.fd` and `keep.excludeFd`: Font DICT indexes.
+fn font_dicts(p: &Params<'_>, keep: &Map<String, Value>) -> Result<Option<FontDictFilter>> {
+    let list = |key: &str| -> Result<Option<BTreeSet<u16>>> {
+        let Some(value) = keep.get(key).filter(|v| !v.is_null()) else { return Ok(None) };
+        let items = value.as_array().ok_or_else(|| p.bad(format!("`keep.{key}` must be a list of Font DICT indexes")))?;
+        if items.len() > MAX_FONT_DICTS {
+            return Err(p.bad(format!("`keep.{key}` lists more than {MAX_FONT_DICTS} Font DICTs")));
+        }
+        items
+            .iter()
+            .map(|v| {
+                v.as_u64()
+                    .and_then(|n| u16::try_from(n).ok())
+                    .filter(|n| usize::from(*n) < MAX_FONT_DICTS)
+                    .ok_or_else(|| p.bad(format!("`keep.{key}` items must be Font DICT indexes from 0 to {}", MAX_FONT_DICTS - 1)))
+            })
+            .collect::<Result<BTreeSet<u16>>>()
+            .map(Some)
+    };
+    let fd = list("fd")?;
+    let exclude = list("excludeFd")?;
+    if fd.is_none() && exclude.is_none() {
+        return Ok(None);
+    }
+    Ok(Some(FontDictFilter { keep: fd, exclude: exclude.unwrap_or_default() }))
+}
+
+/// `goadb`: the names in the first two columns of a GlyphOrderAndAliasDB.
+fn goadb_names(p: &Params<'_>) -> Result<Option<BTreeSet<String>>> {
+    let Some(path) = p.opt_str("goadb")? else { return Ok(None) };
+    let text = super::convert_file::goadb_text(Path::new(path), super::convert_file::MAX_GOADB_BYTES)?;
+    let goadb = fontcraft_tables::goadb::parse(text.strip_prefix('\u{feff}').unwrap_or(&text)).map_err(|e| p.bad(format!("`goadb` {path}: {e}")))?;
+    Ok(Some(goadb.entries.into_iter().flat_map(|e| [e.final_name, e.source_name]).collect()))
+}
+
+/// `keep.random`: `{percent, seed?}`.
+fn random_share(p: &Params<'_>, keep: &Map<String, Value>) -> Result<Option<RandomShare>> {
+    let Some(value) = keep.get("random").filter(|v| !v.is_null()) else { return Ok(None) };
+    let random = value.as_object().ok_or_else(|| p.bad("`keep.random` must be {percent, seed?}"))?;
+    for key in random.keys() {
+        if key != "percent" && key != "seed" {
+            return Err(p.bad(format!("`keep.random.{key}` is not a parameter; give percent or seed")));
+        }
+    }
+    let percent = random
+        .get("percent")
+        .and_then(Value::as_f64)
+        .filter(|v| v.is_finite() && (0.0..=100.0).contains(v))
+        .ok_or_else(|| p.bad("`keep.random.percent` must be a number from 0 to 100"))?;
+    let seed = match random.get("seed") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) if s == "random" => Some(fresh_seed()),
+        // A seed reported by an earlier run comes back as a string of digits.
+        Some(Value::String(s)) => Some(s.trim().parse::<u64>().map_err(|_| p.bad("`keep.random.seed` must be a whole number or \"random\""))?),
+        Some(v) => Some(v.as_u64().ok_or_else(|| p.bad("`keep.random.seed` must be a whole number from 0 or \"random\""))?),
+    };
+    // Within 0 to 100, the product is within 0 to 1,000,000.
+    let millionths = (percent * 10_000.0).round() as u32;
+    Ok(Some(RandomShare { millionths, seed }))
+}
+
+/// A seed that differs from run to run: the clock, the process and a counter, mixed.
+fn fresh_seed() -> u64 {
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let count = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    #[cfg(not(target_arch = "wasm32"))]
+    let base = {
+        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64);
+        nanos ^ (u64::from(std::process::id()) << 32)
+    };
+    #[cfg(target_arch = "wasm32")]
+    let base = super::file::clock() as u64;
+    base ^ count.wrapping_mul(0x9E37_79B9_7F4A_7C15)
 }
 
 /// The version, metadata and private data of a WOFF or WOFF2 input, which a WOFF or WOFF2
@@ -317,8 +445,10 @@ fn layout_features(p: &Params<'_>) -> Result<Option<Vec<String>>> {
 
 fn read_keep(p: &Params<'_>, keep: &Map<String, Value>, o: &mut SubsetOptions) -> Result<()> {
     for key in keep.keys() {
-        if !matches!(key.as_str(), "glyphs" | "gids" | "unicodes" | "text") {
-            return Err(EngineError::Unsupported(format!("`keep.{key}` of font.subset is not built yet")));
+        match key.as_str() {
+            "glyphs" | "gids" | "unicodes" | "text" | "excludeGlyphs" | "fd" | "excludeFd" | "random" => {}
+            "exportFlags" => return Err(EngineError::Unsupported("`keep.exportFlags` of font.subset is not built yet".into())),
+            _ => return Err(p.bad(format!("`keep.{key}` is not a parameter"))),
         }
     }
     match keep.get("glyphs") {

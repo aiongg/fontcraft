@@ -47,6 +47,7 @@ pub use fontcraft_cff::cid::Ros as CidCollection;
 pub use outline::QuadToCubic;
 use outline::{Contour, GlyfOutlines, PsOutlines};
 pub use postscript::{PsInput, PsSource, convert_postscript, read_postscript};
+pub(crate) use prepare::font_dict_of_glyphs;
 pub use prepare::{FontDictFilter, GoadbUse, PrepareOptions, convert_prepared, glyph_cids, prepare};
 
 /// Largest error bound accepted, in font units.

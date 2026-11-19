@@ -100,3 +100,25 @@ fn xml_prints_the_subset_as_ttx_and_pretty_svg_indents_documents() {
     assert_eq!(code, 2, "--xml and --json together are a usage error");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn several_inputs_are_subset_with_the_same_selection() {
+    let dir = std::env::temp_dir().join(format!("fontcraft-cli-subset-many-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("out")).unwrap();
+    let mut s = Session::with_document();
+    let (a, b) = (dir.join("A.ttf"), dir.join("B.ttf"));
+    s.execute("file.exportStatic", &json!({ "destination": a, "timestamp": 0 })).unwrap();
+    std::fs::copy(&a, &b).unwrap();
+    let out = dir.join("out");
+    let line = ["subset", a.to_str().unwrap(), b.to_str().unwrap(), "-p", "50", "--output-dir", out.to_str().unwrap(), "-j", "2", "--json"];
+    let (code, stdout, stderr) = cli(&line);
+    assert_eq!(code, 0, "{stderr}");
+    let results: Vec<Value> = stdout.lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0]["retained"], results[1]["retained"], "the same font gives the same random choice");
+    assert!(out.join("A.subset.ttf").exists() && out.join("B.subset.ttf").exists());
+    let (code, _, _) = cli(&["subset", a.to_str().unwrap(), b.to_str().unwrap(), "-p", "50", "-o", "x.ttf"]);
+    assert_eq!(code, 2, "one output file for several inputs is a usage error");
+    let _ = std::fs::remove_dir_all(&dir);
+}

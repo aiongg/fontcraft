@@ -36,7 +36,7 @@ const MAX_INPUTS: usize = 100_000;
 /// Seconds between 1904-01-01 (the `head` epoch) and 1970-01-01.
 const EPOCH_1904: i64 = 2_082_844_800;
 /// Largest GOADB file read.
-const MAX_GOADB_BYTES: usize = 64 << 20;
+pub(super) const MAX_GOADB_BYTES: usize = 64 << 20;
 /// Most axes a location names.
 const MAX_LOCATION_AXES: usize = fontcraft_tables::limits::MAX_AXES;
 /// Most Font DICTs a CFF table holds (an FDSelect index is one byte).
@@ -463,7 +463,7 @@ impl Settings {
 }
 
 /// The text of a GOADB file of at most `limit` bytes; a larger file is refused, not cut.
-fn goadb_text(path: &Path, limit: usize) -> Result<String> {
+pub(super) fn goadb_text(path: &Path, limit: usize) -> Result<String> {
     let read = file_io::read_input_up_to(path, limit)?;
     if read.bytes.len() > limit {
         return Err(EngineError::Io(format!("the GOADB {} is larger than {limit} bytes", path.display())));
@@ -476,7 +476,7 @@ fn goadb_text(path: &Path, limit: usize) -> Result<String> {
 /// CIDs the font has; a single CID the font lacks is refused, as a missing name is. The CID
 /// ranges are merged before the glyphs are looked up, and the glyphs are written as runs once,
 /// so the work and the rewritten list stay within the glyph count whatever the ranges repeat.
-fn cid_selectors(p: &Params<'_>, font: &SfntFont) -> Result<Option<Value>> {
+pub(super) fn cid_selectors(p: &Params<'_>, font: &SfntFont) -> Result<Option<Value>> {
     let mut out = serde_json::Map::new();
     let mut by_cid: Option<std::collections::BTreeMap<u32, u16>> = None;
     for key in ["glyphs", "excludeGlyphs"] {

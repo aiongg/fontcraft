@@ -94,6 +94,23 @@ pub fn plan(font: &SfntFont, options: &SubsetOptions) -> Result<Plan> {
         return Err(TablesError::BadOptions(format!("the font maps no glyph to {}", list.join(", "))));
     }
 
+    // The reference converter's selection narrows what the other selections chose (or every
+    // glyph, when they chose nothing); requested glyphs it leaves out lose their cmap entries.
+    if options.filter.is_set() {
+        let everything = options.glyphs.is_empty()
+            && options.gids.is_empty()
+            && !options.all_glyphs
+            && options.text.is_empty()
+            && options.unicodes.is_empty()
+            && !options.all_unicodes;
+        super::select::apply(font, &options.filter, &names, everything, &mut glyphs)?;
+        if everything {
+            plan.requested = glyphs.clone();
+        } else {
+            plan.requested.retain(|g| glyphs.contains(g));
+        }
+    }
+
     let truetype = font.tables.contains_key(b"glyf");
     if options.notdef_glyph {
         glyphs.insert(0);
