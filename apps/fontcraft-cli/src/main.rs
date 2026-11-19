@@ -46,10 +46,11 @@ USAGE:
 
   fontcraft-cli convert IN OUT [--smart-components components|outlines]
       Open IN (a source) and write OUT in the format its extension names (.fontcraft, .glyphs,
-      .glyphspackage, .ufo for one master, .designspace with a UFO per master), or compile it to
-      one static font (.ttf, .otf with CFF outlines, .woff, .woff2) of its first exportable
-      instance. --smart-components: a UFO or designspace keeps smart components as components
-      with their values (default) or holds them drawn as outlines.
+      .glyphspackage, .ufo for one master, .ufoz for one master in a ZIP archive, .designspace
+      with a UFO per master), or compile it to one static font (.ttf, .otf with CFF outlines,
+      .woff, .woff2) of its first exportable instance. --smart-components: a UFO, UFOZ or
+      designspace keeps smart components as components with their values (default) or holds them
+      drawn as outlines.
 
   fontcraft-cli compile SOURCE... [--format ttf|otf]... [--container plain|woff|woff2]...
                         [-o FILE | --output-dir DIR] [--instances[=NAME,...]] [--masters-as-instances]

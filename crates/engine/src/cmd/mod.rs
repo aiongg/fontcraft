@@ -46,6 +46,7 @@ pub mod fit_curve;
 mod font;
 mod font_fields;
 mod font_view;
+pub(crate) mod format_warnings;
 mod glyph;
 mod glyph_info;
 mod glyph_search;

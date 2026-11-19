@@ -30,7 +30,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Open…",
             ["File"],
             Some("Cmd+O"),
-            "{path: string, face?: number, keepGlyphNames?: bool} open a font as a new document, recognising it by content: a .fontcraft file, a .glyphs file (format versions 2 to 4), a .glyphspackage folder, a UFO folder (versions 2 and 3), a .designspace file with the UFOs it names (one document, a master per source), or a compiled font (TrueType, OpenType with CFF, a collection member chosen by face, WOFF, WOFF2). A compiled font opens view-only: save it with Save As to a source format. GlyphData*.xml files beside the source and in an Info folder beside it add to the glyph data for this document, unless the font's Ignore custom GlyphData file parameter is on. A UFO or designspace has its composites aligned automatically as it opens, so their metrics follow their bases (aligned counts the glyphs that changed); with the user setting user.disableAutomaticAlignmentForImportedFiles on, the font's Disable Automatic Alignment option is switched on instead. A UFO, designspace or compiled font has its glyphs renamed to the nice names the glyph data gives their names (`uni0041` becomes `A`), keeping their places and code points (renamed counts them); a glyph whose name feature code or other text uses keeps it, with a warning. keepGlyphNames (default: the user setting user.keepGlyphNamesFromImportedFiles) or the font's Use Custom Naming option keeps the file's names. warnings lists what reading a compiled font left out and the glyph data files that could not be used. A .fontcraftproject file opens as a project, as project.open does, with its reply → {title, path, format, version?, glyphs, masters, viewOnly, aligned, renamed, warnings}",
+            "{path: string, face?: number, keepGlyphNames?: bool} open a font as a new document, recognising it by content: a .fontcraft file, a .glyphs file (format versions 2 to 4), a .glyphspackage folder, a UFO folder (versions 2 and 3), a .designspace file with the UFOs it names (one document, a master per source), or a compiled font (TrueType, OpenType with CFF, a collection member chosen by face, WOFF, WOFF2). A compiled font opens view-only: save it with Save As to a source format. A UFOZ is saved back as a UFOZ. GlyphData*.xml files beside the source and in an Info folder beside it add to the glyph data for this document, unless the font's Ignore custom GlyphData file parameter is on. A UFO or designspace has its composites aligned automatically as it opens, so their metrics follow their bases (aligned counts the glyphs that changed); with the user setting user.disableAutomaticAlignmentForImportedFiles on, the font's Disable Automatic Alignment option is switched on instead. A UFO, designspace or compiled font has its glyphs renamed to the nice names the glyph data gives their names (`uni0041` becomes `A`), keeping their places and code points (renamed counts them); a glyph whose name feature code or other text uses keeps it, with a warning. keepGlyphNames (default: the user setting user.keepGlyphNamesFromImportedFiles) or the font's Use Custom Naming option keeps the file's names. warnings lists what reading a compiled font left out and the glyph data files that could not be used. A .fontcraftproject file opens as a project, as project.open does, with its reply → {title, path, format, version?, glyphs, masters, viewOnly, aligned, renamed, warnings}",
             always,
             open
         ).files(const { &[FileParam::read("path")] }),
@@ -39,7 +39,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Save",
             ["File"],
             Some("Cmd+S"),
-            "{path?: string, force?: bool, document?: number} write the document to its file in the format it was opened in (or to `path`, choosing the format from its extension). document: the session id of the document meant, which the app passes when it asks to overwrite; refused when another document is active, and left out of the command log. Refuses when the file changed on disk since it was read (for a designspace: the document or any of its UFOs), unless force is true. Single files are written atomically; a package or UFO rewrites only changed files; a designspace writes its UFOs, then the document → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
+            "{path?: string, force?: bool, document?: number} write the document to its file in the format it was opened in (or to `path`, choosing the format from its extension). document: the session id of the document meant, which the app passes when it asks to overwrite; refused when another document is active, and left out of the command log. Refuses when the file changed on disk since it was read (for a designspace: the document or any of its UFOs), unless force is true. Single files (a UFOZ among them) are written atomically; a package or UFO folder rewrites only changed files; a designspace writes its UFOs, then the document → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
             has_doc,
             save
         ).files(const { &[FileParam::write("path")] }).writes_files(),
@@ -48,7 +48,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Save As…",
             ["File"],
             Some("Cmd+Shift+S"),
-            "{path: string, format?: \"fontcraft\"|\"glyphs\"|\"glyphspackage\"|\"ufo\"|\"designspace\", version?: 2|3|4, compress?: bool, force?: bool, smartComponents?: \"components\"|\"outlines\"} write the document to a new file and make that its file; format defaults to the path's extension, version to the one the document has (3 for a new document; .glyphs has 2 to 4, UFO 2 and 3). A single UFO holds one master; a designspace writes a UFO per master beside it. compress: gzip a .fontcraft file (default: as it was opened). smartComponents (UFO and designspace): keep smart components as components with their values in the glyph lib (default), or draw them as outlines interpolated from the smart glyph's pole layers; the document keeps its components. losses lists what the format cannot hold → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
+            "{path: string, format?: \"fontcraft\"|\"glyphs\"|\"glyphspackage\"|\"ufo\"|\"ufoz\"|\"designspace\", version?: 2|3|4, compress?: bool, force?: bool, smartComponents?: \"components\"|\"outlines\"} write the document to a new file and make that its file; format defaults to the path's extension, version to the one the document has (3 for a new document; .glyphs has 2 to 4, UFO 2 and 3). A single UFO holds one master; a UFOZ is a UFO in a ZIP archive, under a folder named after the file; a designspace writes a UFO per master beside it. compress: gzip a .fontcraft file (default: as it was opened). smartComponents (UFO, UFOZ and designspace): keep smart components as components with their values in the glyph lib (default), or draw them as outlines interpolated from the smart glyph's pole layers; the document keeps its components. losses lists what the format cannot hold → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
             has_doc,
             save_as
         ).files(const { &[FileParam::write("path")] }).writes_files(),
@@ -150,8 +150,8 @@ fn open(_: &mut Session, _: &Value) -> Result<Value> {
 fn write_document(s: &mut Session, p: &Params, path: std::path::PathBuf, format: crate::io::SaveFormat, version: Option<u32>) -> Result<Value> {
     use crate::io::{self, SaveFormat};
     let outlines = smart_outlines(p)?;
-    if outlines && !matches!(format, SaveFormat::Ufo | SaveFormat::Designspace) {
-        return Err(p.bad("`smartComponents` applies to UFO and designspace files"));
+    if outlines && !format.is_ufo() {
+        return Err(p.bad("`smartComponents` applies to UFO, UFOZ and designspace files"));
     }
     let doc = s.doc()?;
     // Another program may have changed the file since it was read or last written here.
@@ -182,19 +182,15 @@ fn write_document(s: &mut Session, p: &Params, path: std::path::PathBuf, format:
             font.source.glyphs_version = Some(v);
             Some(v)
         }
-        SaveFormat::Ufo | SaveFormat::Designspace => {
+        SaveFormat::Ufo | SaveFormat::Ufoz | SaveFormat::Designspace => {
             let v = pick(font.source.ufo_version, 2..=3)?;
             font.source.ufo_version = Some(v);
             Some(v)
         }
     };
-    font.source.format = match format {
-        SaveFormat::Native => font.source.format,
-        SaveFormat::Glyphs => fontcraft_model::SourceFormat::Glyphs,
-        SaveFormat::GlyphsPackage => fontcraft_model::SourceFormat::GlyphsPackage,
-        SaveFormat::Ufo => fontcraft_model::SourceFormat::Ufo,
-        SaveFormat::Designspace => fontcraft_model::SourceFormat::Designspace,
-    };
+    if format != SaveFormat::Native {
+        font.source.format = format.source();
+    }
     let (smart, smart_losses) = smart_choice(&font, outlines);
     let mut saved = io::save(smart.as_ref().unwrap_or(&font), &path, format)?;
     saved.losses.extend(smart_losses);
@@ -283,10 +279,10 @@ fn save_as(s: &mut Session, p: &Value) -> Result<Value> {
     let path = std::path::PathBuf::from(p.str("path")?);
     let format = match p.opt_str("format")? {
         Some(f) => SaveFormat::parse(f).ok_or_else(|| {
-            p.bad(format!("`format` must be \"fontcraft\", \"glyphs\", \"glyphspackage\", \"ufo\" or \"designspace\", got \"{f}\""))
+            p.bad(format!("`format` must be \"fontcraft\", \"glyphs\", \"glyphspackage\", \"ufo\", \"ufoz\" or \"designspace\", got \"{f}\""))
         })?,
         None => SaveFormat::of_path(&path)
-            .ok_or_else(|| p.bad("give a `format`, or a path ending in .fontcraft, .glyphs, .glyphspackage, .ufo or .designspace"))?,
+            .ok_or_else(|| p.bad("give a `format`, or a path ending in .fontcraft, .glyphs, .glyphspackage, .ufo, .ufoz or .designspace"))?,
     };
     let version = p.opt_int("version", 2, 4)?.map(|v| v as u32);
     if let Some(compress) = p.get("compress") {

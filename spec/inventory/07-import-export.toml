@@ -586,6 +586,15 @@ milestone = "M1"
 summary = "While a document's source format is UFO, editor features the format cannot store are restricted: turning one on raises a warning message. The handbook does not list the affected features."
 ref = "Import & Export › Source Formats › Unified Font Object"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: on a UFO, UFOZ or designspace document every editing command still runs, and its reply gains `warnings` naming what it added that the file cannot hold: the entries the save loss report gained (the report file.save would return), and corner components, caps, brushes, segments and smart components, which a UFO keeps only in glyph lib keys other UFO tools ignore (the handbook's Export UFO section says UFO does not support smart or corner components). Undo, redo and the saves add none. The status bar shows the first warning (a UI follow-up)."
+guesses = [
+  "The warning does not block the command: the edit is made and the reply carries the warning; the handbook says only that turning such a feature on raises a warning. Settled by adding a corner component to a UFO in the reference.",
+  "The warnings are worked out by comparing the save loss report before and after each edit, plus a count of corner components, caps, brushes, segments and smart components, since the handbook lists no features; settled by trying each feature on a UFO in the reference and noting which warn.",
+]
+observe = [
+  "Open a UFO, add a corner component to a node of `A`: note the text of the warning and whether the corner is added.",
+  "On the same UFO, add a smart component and a cap: note whether each warns.",
+]
 
 [[behavior]]
 id = "source.ufoPerFileImportOptions"
