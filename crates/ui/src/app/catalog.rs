@@ -128,11 +128,12 @@ fn shell_def(command: &UiCommand) -> CommandDef {
 fn menu(enabled: impl Fn(usize) -> bool) -> MenuBar {
     let mut rows = Vec::new();
     for (at, spec) in fontcraft_engine::cmd::command_specs().iter().enumerate() {
-        if spec.menu.is_empty() {
+        if spec.menu.is_empty() || super::menu_alternates::alternate_of(spec.id).is_some() {
             continue;
         }
         let mut row = Row::new(spec.menu, CommandRef::new(spec.id), spec.label);
         row.enabled = enabled(at);
+        row.alternate = super::menu_alternates::menu_alternate(spec.id);
         rows.push(row);
     }
     for module in shell_commands::MODULES {

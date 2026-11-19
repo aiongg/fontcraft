@@ -3,6 +3,8 @@
 //! The shell is the only UI code that holds `&mut FontCraftApp`. It hands each view its props and nothing else.
 
 pub mod bars;
+pub mod command_palette;
+pub mod command_surfaces;
 pub mod commands;
 pub mod dock;
 pub mod rail;
@@ -65,6 +67,7 @@ fn title_bar(ui: &mut Ui, _: &mut BodyCx<'_>, app: &mut FontCraftApp) {
 
 fn body(ui: &mut Ui, cx: &mut BodyCx<'_>, app: &mut FontCraftApp) {
     dock::show(ui, app);
+    command_palette::show(ui, cx, app);
     if let Some(dialogs) = cx.dialogs() {
         dialogs.with(|host| crate::dialogs::run(host, app));
     }

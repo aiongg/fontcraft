@@ -3,6 +3,7 @@
 //! One file per area. Each file owns its model types and a `project` function; [`Models::project`] calls every
 //! one of them with a one-line arm, and only when the [`Stamp`] moved since the last call.
 
+pub mod console;
 pub mod glyph;
 
 use craft::ui::contract::Tracked;
@@ -17,6 +18,8 @@ pub struct Models {
     seen: Option<Stamp>,
     /// The shown glyph's width and sidebearings (`panels::glyph_metrics`).
     pub glyph_metrics: Tracked<glyph::GlyphMetrics>,
+    /// The Command Console's pane and input line (`panels::command_console`); projected outside the stamp.
+    pub console: Tracked<console::ConsoleModel>,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.

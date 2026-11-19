@@ -6,7 +6,9 @@
 //! view state moved.
 
 pub mod catalog;
+pub mod console;
 pub mod files;
+pub mod menu_alternates;
 pub mod models;
 mod msg;
 
@@ -46,6 +48,8 @@ pub struct ViewState {
     pub workspace: Workspace<PanelId>,
     /// The document canvas's view.
     pub canvas: CanvasView,
+    /// The Command Console, the command palette and About.
+    pub commands: console::CommandSurfaces,
 }
 
 impl Default for ViewState {
@@ -56,6 +60,7 @@ impl Default for ViewState {
             glyph: None,
             workspace: dock::default_workspace(),
             canvas: CanvasView::new(egui::Rect::NOTHING, Point::ZERO, 1.0),
+            commands: console::CommandSurfaces::default(),
         }
     }
 }
@@ -185,6 +190,7 @@ impl FontCraftApp {
         let stamp = Stamp::of(&self.session, self.view_revision);
         let mut cx = ProjectCx { session: &mut self.session, view: &self.view };
         self.models.project(stamp, &mut cx);
+        models::console::project(&mut self.models.console, &mut cx);
         let engine = Stamp::of(&self.session, 0);
         if self.enabled_at != Some(engine) {
             self.enabled_at = Some(engine);
