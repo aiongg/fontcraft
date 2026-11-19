@@ -17,6 +17,7 @@ use serde_json::{Map, Value, json};
 use super::fields::{self, Field, Kind, format_value};
 use super::spec::{Action, DialogSpec, Fields, Mode, Shaped, Tab, Third};
 use crate::app::FontCraftApp;
+use craft::ui::runtime::commands::CommandRef;
 
 /// The dialog state the app keeps: the open dialog and the folder chooser it waits for.
 #[derive(Default)]
@@ -362,10 +363,18 @@ pub fn current_master(app: &FontCraftApp) -> Option<String> {
     crate::shell::masters::current_master(font, &app.view.layers).map(|m| m.id.clone())
 }
 
-/// What the command acts on when the dialog names nothing: the glyph the glyph panels show, as `glyph` for a command
-/// that acts on one layer, else as `glyphs`. The canvas and Font View selections join here when they exist.
-fn selection_targets(app: &FontCraftApp, command: &str) -> Map<String, Value> {
+/// What the command acts on when the dialog names nothing: what a fired command takes ([`FontCraftApp::with_targets`]:
+/// Font View's selection while Font View shows with glyphs selected, else the canvas selection), else the glyph the
+/// glyph panels show, as `glyph` for a command that acts on one layer and as `glyphs` for one that acts on glyphs.
+fn selection_targets(app: &mut FontCraftApp, command: &str) -> Map<String, Value> {
     use fontcraft_engine::params::TargetKind;
+    let targeted = app.with_targets(CommandRef::new(command));
+    if targeted.id == command
+        && let Value::Object(m) = targeted.params
+        && !m.is_empty()
+    {
+        return m;
+    }
     let mut m = Map::new();
     let (Some(spec), Some(glyph)) = (fontcraft_engine::find_command(command), app.view.glyph.as_ref()) else { return m };
     if spec.targets.contains(&TargetKind::Layer) {

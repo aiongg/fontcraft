@@ -29,7 +29,7 @@ use craft::ui::runtime::frame::{FrameInput, FrameOutput};
 use craft::ui::shell::app::ShellApp;
 use craft::ui::shell::embed::CloseDecision;
 use fontcraft_engine::Session;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use self::catalog::{Catalog, Kind, TOOL_PREFIX};
 use self::files::Picks;
@@ -39,6 +39,17 @@ use crate::shell::dock::{self, PanelId};
 
 /// The app's identity for the host: the settings folder name, the display name and the version.
 pub const APP: AppInfo = AppInfo { id: "fontcraft", name: "FontCraft", version: env!("CARGO_PKG_VERSION") };
+
+/// Who started a run. The question a command's result asks ([`crate::dialogs::spec::After`]) opens only after the
+/// person's own run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Origin {
+    /// The person: a menu item, a shortcut, a dialog's OK, a click or key in the window, or one the control channel
+    /// plays as a click (`ui.menu.invoke`, `ui.contextMenu.invoke`).
+    Person,
+    /// A request that names the command: `engine.execute` over the control channel, as an agent sends it.
+    Control,
+}
 
 /// View and window state: what no engine command changes.
 pub struct ViewState {
@@ -248,9 +259,19 @@ impl FontCraftApp {
     /// [`files::PICKED`] without its path opens the file picker and returns `{"picker": true}`; without, it runs
     /// as given and the engine reports the missing path. A failure also goes to the status line.
     pub fn run_now(&mut self, msg: Msg, ask_files: bool) -> Result<Value, String> {
+        self.run_now_as(msg, ask_files, Origin::Person)
+    }
+
+    /// Runs `msg` now as a request that names the command (`engine.execute`): as [`Self::run_now`] without the file
+    /// picker, and no follow-up question opens.
+    pub fn run_request(&mut self, msg: Msg) -> Result<Value, String> {
+        self.run_now_as(msg, false, Origin::Control)
+    }
+
+    fn run_now_as(&mut self, msg: Msg, ask_files: bool, origin: Origin) -> Result<Value, String> {
         self.drain();
         let id = msg.command_id().map(str::to_owned);
-        let result = self.apply(msg, ask_files);
+        let result = self.apply(msg, ask_files, origin);
         if let Err(error) = &result {
             self.status = with_command_id(id, error.clone());
         }
@@ -261,12 +282,12 @@ impl FontCraftApp {
     /// Applies one message as `drain` does; the error names the command that failed.
     pub fn apply_msg(&mut self, msg: Msg) -> Result<(), String> {
         let id = msg.command_id().map(str::to_owned);
-        self.apply(msg, true).map(|_| ()).map_err(|error| with_command_id(id, error))
+        self.apply(msg, true, Origin::Person).map(|_| ()).map_err(|error| with_command_id(id, error))
     }
 
     /// Applies one message: the only code that runs `Session::execute`. Tool input runs the toolbox, whose answer
     /// is applied here too, before the next message.
-    fn apply(&mut self, msg: Msg, ask_files: bool) -> Result<Value, String> {
+    fn apply(&mut self, msg: Msg, ask_files: bool, origin: Origin) -> Result<Value, String> {
         match msg {
             Msg::Run(command) => {
                 if ask_files && self.picks.ask(&self.host, &command) {
@@ -275,7 +296,9 @@ impl FontCraftApp {
                 let params = if command.params.is_null() { json!({}) } else { command.params.clone() };
                 let reply = self.session.execute(&command.id, &params).map_err(|e| e.to_string())?;
                 crate::canvas::tools::apply::adopt(self, &reply);
-                crate::dialogs::after::after_run(self, &command.id, &params, &reply);
+                if origin == Origin::Person {
+                    crate::dialogs::after::after_run(self, &command.id, &params, &reply);
+                }
                 clipboard::after_run(self, &command.id, &reply);
                 if let Some(notice) = self.after_command(&command, &reply) {
                     self.status = notice;
@@ -352,6 +375,31 @@ impl FontCraftApp {
     }
 }
 
+impl FontCraftApp {
+    /// A command the person fired (menu item, shortcut): an engine command takes its targets from the selection
+    /// ([`Self::with_targets`]); one that has a dialog and was fired without parameters opens the dialog on those
+    /// targets instead of running.
+    pub(crate) fn fire(&mut self, command: CommandRef) {
+        let msg = match FontCraftApp::route(command) {
+            Msg::Run(fired) => {
+                let targeted = self.with_targets(fired.clone());
+                let Some(command) = clipboard::fired(self, targeted) else { return };
+                // Font View's per-glyph batch is no target list for the dialog, which then reads the selection itself.
+                let targets = match &command.params {
+                    Value::Object(m) if command.id == fired.id => m.clone(),
+                    _ => Map::new(),
+                };
+                if crate::dialogs::after::fired(self, &fired.id, &fired.params, &targets) {
+                    return;
+                }
+                Msg::Run(command)
+            }
+            other => other,
+        };
+        self.sent.push(msg);
+    }
+}
+
 /// `error` with the id of the command that failed in front, when the message ran one.
 fn with_command_id(id: Option<String>, error: String) -> String {
     match id {
@@ -381,22 +429,9 @@ impl ShellApp for FontCraftApp {
     fn output(&mut self, output: FrameOutput) {
         for fired in output.fired {
             // A held tool key fires again on release; the tool stays.
-            if fired.phase == FirePhase::Release {
-                continue;
+            if fired.phase != FirePhase::Release {
+                self.fire(fired.command);
             }
-            let msg = match FontCraftApp::route(fired.command) {
-                Msg::Run(command) => {
-                    let command = self.with_targets(command);
-                    let Some(command) = clipboard::fired(self, command) else { continue };
-                    // A command with a dialog that the selection gives no parameters opens its dialog.
-                    if crate::dialogs::after::fired(self, &command.id, &command.params) {
-                        continue;
-                    }
-                    Msg::Run(command)
-                }
-                other => other,
-            };
-            self.sent.push(msg);
         }
     }
 

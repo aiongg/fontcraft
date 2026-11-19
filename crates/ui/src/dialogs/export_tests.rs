@@ -168,7 +168,7 @@ fn window_contents_opens_on_the_edited_glyph_and_asks_where_to_save() {
     let (mut app, chooser) = drawn_with(vec![Picked::Paths(vec![svg.clone()])]);
 
     // The menu item fires with no parameters: the dialog opens on what the canvas shows.
-    assert!(crate::dialogs::after::fired(&mut app, "file.exportWindowContents", &Value::Null));
+    assert!(crate::dialogs::after::fired(&mut app, "file.exportWindowContents", &Value::Null, &serde_json::Map::new()));
     let opened = call(&mut app, "ui.dialog.inspect", json!({}));
     assert_eq!(opened["dialog"], "dialog.exportWindowContents");
     assert_eq!(opened["captions"]["ok"], "Export…");

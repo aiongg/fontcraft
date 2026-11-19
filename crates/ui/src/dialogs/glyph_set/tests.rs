@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use craft::host::Host;
+use craft::ui::runtime::commands::CommandRef;
 use fontcraft_engine::Session;
 use fontcraft_engine::model::{Component, Font, Shape};
 use serde_json::{Value, json};
@@ -171,4 +172,58 @@ fn a_paste_far_outside_the_glyph_asks_to_move_it() {
     expected.session.execute("edit.paste", &json!({"glyph": "A", "svg": svg})).unwrap();
     expected.session.execute("selection.move", &Value::Object(given)).unwrap();
     assert!(moved.same_as(&font(&expected)), "Move gives the font the command gives");
+}
+
+/// [`square_app`] with Font View showing and `glyphs` selected in it.
+fn font_view_app(glyphs: &[&str]) -> FontCraftApp {
+    let mut app = square_app();
+    app.sent.push(Msg::Shell(CommandRef::with_params("fontView.setSelection", json!({ "glyphs": glyphs }))));
+    app.sent.push(Msg::Shell(CommandRef::new("fontView.show")));
+    app.drain();
+    app
+}
+
+#[test]
+fn remove_glyph_fired_on_a_font_view_selection_asks_first() {
+    let mut app = font_view_app(&["B", "C"]);
+    app.fire(CommandRef::new("glyph.removeGlyph"));
+    app.drain();
+    let asked = inspect(&mut app);
+    assert_eq!(asked["dialog"], "dialog.removeGlyph", "the menu item opens the confirmation: {asked}");
+    assert_eq!(asked["params"]["glyphs"], json!(["B", "C"]), "{asked}");
+    assert!(font(&app).glyph("B").is_some(), "nothing is removed before OK");
+    call(&mut app, "ui.dialog.confirm", json!({}));
+    let font = font(&app);
+    assert!(font.glyph("B").is_none() && font.glyph("C").is_none() && font.glyph("A").is_some());
+}
+
+#[test]
+fn find_and_replace_acts_on_the_font_view_selection() {
+    let mut app = font_view_app(&["B", "C"]);
+    app.fire(CommandRef::new("edit.findAndReplace"));
+    app.drain();
+    let asked = inspect(&mut app);
+    assert_eq!(asked["dialog"], "dialog.findAndReplaceGlyphNames", "{asked}");
+    assert_eq!(asked["params"]["glyphs"], json!(["B", "C"]), "{asked}");
+    call(&mut app, "ui.dialog.cancel", json!({}));
+    // Opened without targets, the dialog reads the same selection.
+    let opened = open(&mut app, "dialog.findAndReplaceGlyphNames", json!({}));
+    assert_eq!(opened["params"]["glyphs"], json!(["B", "C"]), "{opened}");
+}
+
+#[test]
+fn only_the_persons_paste_asks_to_move_the_outline() {
+    let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000"><rect x="5000" y="0" width="100" height="100"/></svg>"#;
+    let mut app = square_app();
+    call(&mut app, "engine.execute", json!({"command": "edit.paste", "params": {"glyph": "A", "svg": svg}}));
+    assert_eq!(shapes(&app, "A"), 2, "{}", app.status);
+    assert_eq!(inspect(&mut app), json!({"open": false}), "a control request asks nothing");
+
+    let mut app = square_app();
+    app.fire(CommandRef::new("edit.paste"));
+    assert_eq!(app.clipboard.request, Some(PasteKind::Paste), "the menu item asks for the clipboard's text");
+    clipboard::paste(&mut app, svg, PasteKind::Paste);
+    app.drain();
+    assert_eq!(shapes(&app, "A"), 2, "{}", app.status);
+    assert_eq!(inspect(&mut app)["dialog"], "dialog.pastedOutlineBounds");
 }

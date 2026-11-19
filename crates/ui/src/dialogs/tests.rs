@@ -188,11 +188,11 @@ fn every_filter_with_parameters_has_a_dialog_and_bad_requests_are_errors() {
 #[test]
 fn a_fired_filter_opens_its_dialog() {
     let mut app = square_app();
-    assert!(super::after::fired(&mut app, "filter.roundCorners", &Value::Null));
+    assert!(super::after::fired(&mut app, "filter.roundCorners", &Value::Null, &serde_json::Map::new()));
     assert_eq!(super::form::inspect(&app)["dialog"], "dialog.filterRoundCorners");
     super::form::cancel(&mut app).unwrap();
-    assert!(!super::after::fired(&mut app, "filter.roundCorners", &json!({"glyph": "A", "radius": 5})));
-    assert!(!super::after::fired(&mut app, "spacing.setWidth", &Value::Null), "a command without a dialog runs");
+    assert!(!super::after::fired(&mut app, "filter.roundCorners", &json!({"glyph": "A", "radius": 5}), &serde_json::Map::new()));
+    assert!(!super::after::fired(&mut app, "spacing.setWidth", &Value::Null, &serde_json::Map::new()), "a command without a dialog runs");
 }
 
 /// The person's dialog: the window shows the app's dialog, a value typed into a row previews, and OK keeps it as one

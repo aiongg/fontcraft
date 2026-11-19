@@ -1,8 +1,9 @@
 //! When a dialog opens without `dialog.open`: from a command's menu item, and as the question a command's result asks.
 //!
 //! A command the person fires (menu item, shortcut) with no parameters opens its dialog instead of running
-//! ([`fired`]). A follow-up question ([`DialogSpec::after`]) opens after its command ran in `drain` or from the OK of a
-//! run-on-OK dialog, when the result calls for it ([`after_run`]).
+//! ([`fired`]). A follow-up question ([`DialogSpec::after`]) opens after the person's run of its command (in `drain`,
+//! or from the OK of a run-on-OK dialog) when the result calls for it ([`after_run`]); a run an `engine.execute`
+//! request asks for opens none.
 
 use serde_json::{Map, Value};
 
@@ -31,12 +32,13 @@ pub fn after_run(app: &mut FontCraftApp, command: &str, request: &Value, result:
     }
 }
 
-/// A command the person fired: one that has a dialog and no parameters opens the dialog and returns true; any other
-/// returns false and runs.
-pub fn fired(app: &mut FontCraftApp, id: &str, params: &Value) -> bool {
+/// A command the person fired: one that has a dialog and no parameters opens the dialog on `targets` (what the
+/// selection gives the command; empty lets the dialog read the selection) and returns true; any other returns false
+/// and runs.
+pub fn fired(app: &mut FontCraftApp, id: &str, params: &Value, targets: &Map<String, Value>) -> bool {
     let empty = params.is_null() || params.as_object().is_some_and(Map::is_empty);
     let Some(spec) = empty.then(|| super::for_command(id)).flatten() else { return false };
-    if let Err(e) = super::form::open(app, &spec, &Map::new()) {
+    if let Err(e) = super::form::open(app, &spec, targets) {
         app.status = e;
     }
     true
