@@ -12,7 +12,7 @@ use fontcraft_engine::cmd::CommandSpec;
 use crate::shell::commands::{self as shell_commands, UiCommand};
 
 /// The menus of the menu bar, in order. A row whose path starts elsewhere is not shown.
-pub const MENU_ORDER: &[&str] = &["File", "Edit", "Glyph", "Path", "Filter", "View", "Script", "Window", "Help"];
+pub const MENU_ORDER: &[&str] = &["File", "Edit", "Font", "Glyph", "Path", "Filter", "View", "Script", "Window", "Help"];
 
 /// The prefix of a tool's command id: `tool.select` makes the Select tool current.
 pub const TOOL_PREFIX: &str = "tool.";

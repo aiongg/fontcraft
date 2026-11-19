@@ -3065,6 +3065,7 @@ guesses = [
   "The new font keeps only the master layer of each glyph, and its family name, Font Info, features and other data are the first font's; the secondary reference's result on two fonts with different names and extra layers would settle it.",
   "Interpolated numbers are not rounded; the secondary reference's result at 50 between odd coordinates would settle it.",
   "A kerning pair only one font has counts as 0 in the other; the secondary reference's result on fonts with different pairs would settle it.",
+  "The menu bar has a Font menu, between Edit and Glyph, holding this and the other font-wide commands whose rows give the menu path Font › …; the primary reference has no Font menu, and the menu stays until these rows' menu paths are settled.",
 ]
 
 [[command]]
