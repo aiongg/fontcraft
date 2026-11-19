@@ -1873,14 +1873,23 @@ label = "Match Masters"
 menu = ["Glyph"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, masters?: [id], strong?: bool}"
+params = "{glyphs: [names] | glyph: name, reference?: id, masters?: [id], strong?: bool} → {glyphs, skipped}"
 area = "interpolation"
-milestone = "M13"
+milestone = "M9"
 summary = "Tries to make the masters of each glyph compatible automatically by reordering contours, moving start points and fixing direction. Strong mode forces both the ordering pass and the geometry comparison even when the font's auto-match settings disable them."
 ref = "FontLab 8 What's new › Families & variation › Variation (Match masters weak/strong; Improved Match Masters)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M9 to M13 by the M9 planning pass: a secondary-reference feature beyond the primary reference, as the M3 and M6 passes moved such rows (owner decision, docs/plans/M3.md § 7, question 3)."
+notes = "Built in M9.34 (documented, not yet observed). Every master, intermediate and alternate layer follows a reference layer (the first master's unless `reference` names another): paths of equal structure pair up greedily by centroid and area in the layer's node box scaled to a unit square, each takes the reference path's direction and the start node whose nodes lie nearest the reference's, components pair up by base glyph and nearest offset, and the shapes take the reference's order. A layer it cannot match is named in `skipped` and left as it was. The font has no auto-match settings, so `strong` decides whether already compatible layers are matched too."
+guesses = [
+  "Match Masters never adds or removes nodes: a layer whose paths differ in node structure from the reference's is reported and left alone; settled by watching the reference app on a glyph with a missing node.",
+  "Without `strong`, a layer already compatible with the reference is left alone; `strong` matches it too (start nodes and orders that interpolate but do not correspond). Settled by running both modes in the reference app on a glyph whose master starts at a different corner.",
+  "Paths pair up by the centroid of their on-curve nodes and their area, both measured in the layer's node box scaled to a unit square; settled by scrambling the contours of a glyph with similar contours in the reference app.",
+]
+observe = [
+  "Rotate the start node of one master's contour, keep the masters compatible, then run Match Masters weak and strong: note which mode restores the start.",
+  "Add a node to one master's contour and run Match Masters: note whether it adds a node elsewhere, reports the glyph, or does nothing.",
+]
 
 [[command]]
 id = "glyph.relocateStartPoints"
@@ -1888,14 +1897,20 @@ label = "Relocate Start Points"
 menu = ["Glyph"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, masters?: [id]}"
+params = "{glyphs: [names] | glyph: name, masters?: [id]} → {glyphs, skipped}"
 area = "interpolation"
-milestone = "M13"
+milestone = "M9"
 summary = "Moves the start point of every contour to the node nearest the bottom-left of the glyph, in one master or in all visible masters, giving a predictable common starting position."
 ref = "FontLab 8 What's new › Families & variation › Variation (Relocate startpoints)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M9 to M13 by the M9 planning pass: a secondary-reference feature beyond the primary reference, as the M3 and M6 passes moved such rows (owner decision, docs/plans/M3.md § 7, question 3)."
+notes = "Built in M9.34 (documented, not yet observed). On every master, intermediate and alternate layer of the glyphs (narrowed with `masters`), each closed path starts at its on-curve node nearest the bottom-left corner of the box of the layer's paths; open paths keep their start. Directions and the order of the paths stay as they are."
+guesses = [
+  "The bottom-left of the glyph is the bottom-left corner of the bounding box of the layer's paths (components left out), and nearest is the straight-line distance, ties going to the lower, then the leftmost node; settled by running the command in the reference app on an O with a counter.",
+]
+observe = [
+  "Run Relocate Start Points on an O whose counter is offset to the right: note which counter node becomes the start.",
+]
 
 [[command]]
 id = "edit.toggleMatchWhenEditing"

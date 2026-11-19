@@ -419,6 +419,7 @@ to a paid licence and EULA, not read) are recalled or deduced.
     the primary's text-mode escapes and placeholders; choose spellings once for both views.
     **M13 pass:** RoboFont's spellings are kept in Space Center; none clashes with the primary's escapes, since `?`, `!` and `:` cannot start a glyph name (`spaceCenter.inputSyntax`).
 11. **Match Masters heuristics.** "Weak" and "strong" matching are named but not specified.
+    **M9.34 pass (ours, until FontLab is observed):** weak matching leaves layers that are already compatible alone; strong matching matches them too. Both pair paths by centroid and area and never add nodes (`glyph.matchMasters` guesses).
 12. **Find outline matching.** FontForge matches point for point; decide whether ours should also match
     geometrically equal shapes with different point structure.
     **M13 pass (ours):** point for point only, as FontForge documents (`path.findOutlinePattern` guess).
