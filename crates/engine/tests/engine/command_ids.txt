@@ -50,6 +50,8 @@ spacing.shiftOutlineLeftBy10
 spacing.shiftOutlineRight
 spacing.getDerivedMetrics
 spacing.shiftOutlineRightBy10
+spacing.setVerticalOrigin
+spacing.setVerticalWidth
 spacing.updateMetricsKey
 glyph.updateMetrics
 glyph.updateMetricsForAllMasters
@@ -222,6 +224,9 @@ audit.step
 audit.cancel
 settings.get
 settings.set
+sharing.status
+sharing.answerDevice
+settings.resetTrustedDevices
 glyph.rename
 glyph.setProductionName
 glyph.setScript
@@ -397,11 +402,21 @@ axisMappings.removePoint
 axisMappings.convertCoordinate
 glyph.matchMasters
 glyph.relocateStartPoints
+hoi.setInterpolationType
+hoi.setControlPoints
+hoi.convertToHandles
+hoi.centerRotation
+hoi.setRotationDirection
+hoi.removeCurve
 font.instance.addForEachMaster
 font.instance.toMaster
 font.instance.addVariableFontSetting
 font.master.addFromOtherFont
 file.generateInstances
+font.setMasterLocations
+glyph.replaceWithInstance
+font.addVariation
+font.mergeFontsToMasters
 compareFonts.useLeft
 compareFonts.useRight
 compareFonts.diff
@@ -517,6 +532,11 @@ font.reorderGlyphs
 bitmap.importStrikes
 bitmap.exportStrikes
 bitmap.setStrikes
+bitmap.setPixels
+bitmap.transform
+bitmap.regenerateGlyphs
+bitmap.removeGlyphs
+bitmap.setStrikeProperties
 font.reportMetrics
 font.convert
 font.subset
@@ -615,6 +635,8 @@ kerning.kernToDistance
 kerning.buildGroups
 kerning.removePairsByRule
 kerning.verticalFromHorizontal
+kerning.auditExceptions
+kerning.matchAcrossMasters
 filter.adjustStems
 filter.changeWeight
 filter.condenseExtend
@@ -696,3 +718,5 @@ component.lock
 component.unlock
 glyph.listComposites
 glyph.setComponents
+font.overlayFonts
+font.overlayPreview
