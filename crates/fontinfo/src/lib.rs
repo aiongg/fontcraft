@@ -15,6 +15,7 @@
 //! | [`tokens`] | M7.13 | `{{{token}}}` text tokens and their expansion |
 //! | [`scale`] | M7.4 | a font scaled to a new units-per-em |
 //! | [`glyphset`] | M7.9 | the line grammar of Remove, Keep and Export Glyphs; Rename and Reencode lists |
+//! | [`warnings`] | M7.23 | the cautions about accepted values: family and style names, units per em, style linking, weight class |
 //!
 //! Who calls what: the engine's `font.customParameters.*`, `font.info.*`, `font.master.*` and
 //! `font.instance.*` commands check and address through [`catalog`], [`value`], [`fields`] and
@@ -37,6 +38,7 @@ pub mod syntax;
 pub mod target;
 pub mod tokens;
 pub mod value;
+pub mod warnings;
 
 pub use catalog::{Effect, ParamKind, ParamSpec, Scopes};
 pub use error::{PatternError, RowsError, ScaleError, TargetError, ValueError};

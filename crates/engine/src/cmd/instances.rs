@@ -8,10 +8,12 @@
 //! `instances.weightWidthClassIndependent`.
 //!
 //! Every edit validates all its parameters before it changes anything, and several targets get the
-//! same change in one undo step. The weight and width classes are stored apart from the axis
-//! coordinates: no command here derives one from the other.
+//! same change in one undo step. Warnings come from `fontcraft_fontinfo::warnings`: the edits
+//! return those of the fields they set, and the queries give every entry's, by field. The weight
+//! and width classes are stored apart from the axis coordinates: no command here derives one from
+//! the other.
 
-use fontcraft_fontinfo::{MAX_FIELD_BYTES, MAX_INSTANCES, WEIGHT_CLASS_RANGE, WIDTH_CLASS_RANGE, target, value};
+use fontcraft_fontinfo::{MAX_FIELD_BYTES, MAX_INSTANCES, WEIGHT_CLASS_RANGE, WIDTH_CLASS_RANGE, target, value, warnings as warn};
 use fontcraft_model::axes::design_value;
 use fontcraft_model::{Font, Instance, PropertyValue, StyleClass};
 use serde_json::{Map, json};
@@ -24,8 +26,6 @@ const DEFAULT_WEIGHT_CLASS: f64 = 400.0;
 const DEFAULT_WIDTH_CLASS: f64 = 5.0;
 /// The style name of a new instance.
 const DEFAULT_STYLE_NAME: &str = "Regular";
-/// Family and style name together longer than this may fail in older software.
-const MAX_SAFE_NAME_CHARS: usize = 20;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -34,7 +34,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "List Exports",
             [],
             None,
-            "{type?: \"static\"|\"variable\", activeOnly?: bool} the export entries in list order → {instances: [{index, id, type, name, active, weightClass, widthClass, axes: {tag: number}, isBold, isItalic, linkStyle}]}; weightClass and widthClass are 400 and 5 when the source states none",
+            "{type?: \"static\"|\"variable\", activeOnly?: bool} the export entries in list order → {instances: [{index, id, type, name, active, weightClass, widthClass, axes: {tag: number}, isBold, isItalic, linkStyle, warnings: [{field: 'styleName'|'styleLinking'|'weightClass', message}]}]}; weightClass and widthClass are 400 and 5 when the source states none; warnings are the cautions the edits give (an unsafe or long style name, a link to another family, a weight class between the standard steps)",
             has_doc,
             list
         ),
@@ -52,7 +52,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Edit Export",
             [],
             None,
-            "{instances: [id|name|index], active?: bool, styleName?: string, weightClass?: 1–1000, widthClass?: 1–9, axes?: {tag: number}, isBold?: bool, isItalic?: bool, linkStyle?: string (empty: no link)} write the given properties of every named entry as one undo step; axes sets the stored coordinates of the named axes only and leaves the classes alone → {changed: [keys], instances: [index], warnings: [string]}",
+            "{instances: [id|name|index], active?: bool, styleName?: string, weightClass?: 1–1000, widthClass?: 1–9, axes?: {tag: number}, isBold?: bool, isItalic?: bool, linkStyle?: string (empty: no link)} write the given properties of every named entry as one undo step; axes sets the stored coordinates of the named axes only and leaves the classes alone; warnings cover the properties given (style name, style linking, weight class) → {changed: [keys], instances: [index], warnings: [string]}",
             has_doc,
             set
         ),
@@ -61,7 +61,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Add Instance",
             [],
             None,
-            "{styleName?: string, axes?: {tag: number}, weightClass?: 1–1000, widthClass?: 1–9} add an active static instance at the end of the list, named Regular unless a name is given, at the first master's coordinates unless axes are given; the classes are 400 and 5 unless given → {index, name, warnings: [string]}",
+            "{styleName?: string, axes?: {tag: number}, weightClass?: 1–1000, widthClass?: 1–9} add an active static instance at the end of the list, named Regular unless a name is given, at the first master's coordinates unless axes are given; the classes are 400 and 5 unless given; warns about an unsafe or long style name and a weight class outside the standard steps → {index, name, warnings: [string]}",
             has_doc,
             add
         ),
@@ -106,7 +106,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Weight Class",
             [],
             None,
-            "{instances: [id|name|index], weightClass: 1–1000} set the Weight Class (100 to 900 are the standard steps); the axis coordinates do not change → {instances: [index]}",
+            "{instances: [id|name|index], weightClass: 1–1000} set the Weight Class (100 to 900 are the standard steps); the axis coordinates do not change; warns about a value between or beyond the standard steps, which some applications refuse → {instances: [index], warnings: [string]}",
             has_doc,
             set_weight_class
         ),
@@ -174,6 +174,7 @@ fn summary(font: &Font, index: usize, inst: &Instance) -> Value {
         "isBold": inst.is_bold,
         "isItalic": inst.is_italic,
         "linkStyle": inst.link_style,
+        "warnings": super::font::warnings_json(warn::instance(font, inst)),
     })
 }
 
@@ -313,53 +314,6 @@ fn place(location: &mut Vec<f64>, axis_count: usize, axes: &[(usize, f64)]) {
     *location = next;
 }
 
-// ---------- warnings ----------
-
-/// The family name an instance exports with: its own familyNames field, else the font's.
-fn family_of<'a>(font: &'a Font, inst: &'a Instance) -> &'a str {
-    inst.properties.value("familyNames").or_else(|| inst.properties.value("familyName")).unwrap_or(font.family_name.as_str())
-}
-
-/// Whether the instance carries an abbreviated PostScript name.
-fn has_postscript_name(inst: &Instance) -> bool {
-    ["postscriptFontName", "postscriptFontNames"].iter().any(|k| inst.properties.get(k).is_some() || inst.params.get(k).is_some())
-}
-
-/// The handbook's advice on style names, as warnings: ASCII letters, digits, spaces and hyphens
-/// only; family and style name within 20 characters unless a PostScript name is set.
-fn style_name_warnings(font: &Font, inst: &Instance) -> Vec<String> {
-    let mut out = Vec::new();
-    let name = &inst.name;
-    if name.chars().any(|c| !(c.is_ascii_alphanumeric() || c == ' ' || c == '-')) {
-        out.push(format!(
-            "the style name `{name}` has characters other than ASCII letters, digits, spaces and hyphens, which some software cannot show; Unicode names belong in the styleNames field"
-        ));
-    }
-    let family = family_of(font, inst);
-    let total = family.chars().count() + name.chars().count();
-    if total > MAX_SAFE_NAME_CHARS && !has_postscript_name(inst) {
-        out.push(format!(
-            "`{family}` and `{name}` together have {total} characters; names over {MAX_SAFE_NAME_CHARS} can fail in older software: set an abbreviated postscriptFontName and postscriptFullName"
-        ));
-    }
-    out
-}
-
-/// A warning when an instance links to a base instance of this font that exports under another
-/// family name: style linking works only within one family.
-fn link_warning(font: &Font, inst: &Instance) -> Option<String> {
-    let base = inst.link_style.as_deref()?;
-    if !inst.is_bold && !inst.is_italic {
-        return None;
-    }
-    let own = family_of(font, inst);
-    let other = font.instances.iter().find(|b| b.name == base && b.kind.is_none())?;
-    let theirs = family_of(font, other);
-    (own != theirs).then(|| {
-        format!("`{}` (family `{own}`) links to `{base}` (family `{theirs}`): style linking works only between fonts of the same family", inst.name)
-    })
-}
-
 // ---------- editing ----------
 
 /// The built-in properties `font.instance.set` and the narrower commands write.
@@ -435,6 +389,10 @@ impl Edited {
     fn targets_only(self) -> Value {
         json!({ "instances": self.instances })
     }
+
+    fn with_warnings(self) -> Value {
+        json!({ "instances": self.instances, "warnings": self.warnings })
+    }
 }
 
 /// Applies `changes` to the instances `key` names as one undo step, with the warnings of the
@@ -457,12 +415,17 @@ fn edit_instances(s: &mut Session, p: &Params, key: &str, label: &str, changes: 
         for &i in &targets {
             let Some(inst) = font.instances.get(i) else { continue };
             if changes.style_name.is_some() {
-                warnings.extend(style_name_warnings(font, inst));
+                warnings.extend(warn::style_name(font, inst));
             }
             if changes.is_bold.is_some() || changes.is_italic.is_some() || changes.link_style.is_some() {
-                warnings.extend(link_warning(font, inst));
+                warnings.extend(warn::style_link(font, inst));
+            }
+            if changes.weight_class.is_some() {
+                warnings.extend(warn::instance_weight_class(inst));
             }
         }
+        // The class warning names no instance, so several targets would repeat it.
+        warnings.dedup();
         Ok(warnings)
     })?;
     Ok(Edited { changed: keys, instances: targets, warnings })
@@ -499,7 +462,7 @@ fn set_style_linking(s: &mut Session, v: &Value) -> Result<Value> {
 fn set_weight_class(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("font.instance.setWeightClass", v)?;
     let class = opt_weight_class(&p)?.ok_or_else(|| p.bad("`weightClass` is required"))?;
-    edit_instances(s, &p, "instances", "Set Weight Class", &Changes { weight_class: Some(class), ..Changes::default() }).map(Edited::targets_only)
+    edit_instances(s, &p, "instances", "Set Weight Class", &Changes { weight_class: Some(class), ..Changes::default() }).map(Edited::with_warnings)
 }
 
 fn set_width_class(s: &mut Session, v: &Value) -> Result<Value> {
@@ -531,7 +494,8 @@ fn add(s: &mut Session, v: &Value) -> Result<Value> {
             width_class: width_class.map(|w| StyleClass::Number(f64::from(w))),
             ..Instance::default()
         };
-        let warnings = style_name_warnings(font, &inst);
+        let mut warnings = warn::style_name(font, &inst);
+        warnings.extend(warn::instance_weight_class(&inst));
         let out = json!({ "index": font.instances.len(), "name": inst.name, "warnings": warnings });
         std::sync::Arc::make_mut(&mut font.instances).push(inst);
         Ok(out)

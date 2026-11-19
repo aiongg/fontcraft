@@ -3,13 +3,14 @@
 //! Every command takes its targets in its parameters: `scope` (`font`, `master`, `instance`) and,
 //! below the font, `target` or `targets` (an id, a name or an index, through
 //! `fontcraft_fontinfo::target`). Several targets change in one undo step; a refusal changes
-//! nothing. Warnings (family name characters, units-per-em thresholds) come back in the result.
+//! nothing. Warnings (`fontcraft_fontinfo::warnings`: family and style names, units per em, weight
+//! class) come back in the result.
 
 use std::sync::Arc;
 
 use fontcraft_fontinfo::fields::{self, FieldSpec};
 use fontcraft_fontinfo::rows::{self, PasteMode, Row, RowKind};
-use fontcraft_fontinfo::{Scope, catalog, target, value as param_value};
+use fontcraft_fontinfo::{Scope, catalog, target, value as param_value, warnings as warn};
 use fontcraft_model::plist::{Dict, Str, Value as PlistValue};
 use fontcraft_model::{DEFAULT_LANGUAGE, Extra, Font, Localized, Param, Params as ParamList, Properties, Property, PropertyValue, StyleClass};
 use serde_json::{Value, json};
@@ -353,17 +354,12 @@ fn set_builtin(font: &mut Font, scope: Scope, i: usize, key: &str, text: &str, w
     match (scope, key) {
         (Scope::Font, "familyName") => {
             let name = text.trim();
-            if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == ' ') {
-                warnings.push(
-                    "the family name should hold only ASCII letters, digits and spaces: other characters can stop the fonts from exporting or installing (add a familyNames field for other names)"
-                        .into(),
-                );
-            }
+            warnings.extend(warn::family_name(name));
             font.family_name = name.to_string();
         }
         (Scope::Font, "unitsPerEm") => {
             let upm = whole(text)?;
-            warnings.extend(upm_warnings(upm));
+            warnings.extend(warn::units_per_em(upm));
             font.units_per_em = upm;
         }
         (Scope::Font, "versionMajor") => font.version_major = whole(text)?,
@@ -373,10 +369,16 @@ fn set_builtin(font: &mut Font, scope: Scope, i: usize, key: &str, text: &str, w
             Arc::make_mut(&mut font.info).date = Some(date);
         }
         (Scope::Master, "name") => Arc::make_mut(&mut font.masters).get_mut(i).ok_or_else(missing)?.name = text.trim().to_string(),
-        (Scope::Instance, "name") => Arc::make_mut(&mut font.instances).get_mut(i).ok_or_else(missing)?.name = text.trim().to_string(),
+        (Scope::Instance, "name") => {
+            Arc::make_mut(&mut font.instances).get_mut(i).ok_or_else(missing)?.name = text.trim().to_string();
+            let font: &Font = font;
+            let inst = font.instances.get(i).ok_or_else(missing)?;
+            warnings.extend(warn::style_name(font, inst));
+        }
         (Scope::Instance, "weightClass") => {
             let n = whole(text)?;
             Arc::make_mut(&mut font.instances).get_mut(i).ok_or_else(missing)?.weight_class = Some(StyleClass::Number(f64::from(n)));
+            warnings.extend(warn::weight_class(f64::from(n)));
         }
         (Scope::Instance, "widthClass") => {
             let n = whole(text)?;
@@ -385,21 +387,6 @@ fn set_builtin(font: &mut Font, scope: Scope, i: usize, key: &str, text: &str, w
         _ => return Err(format!("`{key}` is not a field of the {}", scope.name())),
     }
     Ok(())
-}
-
-/// The handbook's cautions about large units per em (`fontInfo.unitsPerEm.limits`).
-pub(super) fn upm_warnings(upm: u16) -> Vec<String> {
-    let mut out = Vec::new();
-    if upm > 3000 {
-        out.push("some applications have trouble with more than 3000 units per em".to_string());
-    }
-    if upm > 4096 {
-        out.push("glyph widths of fonts with CFF outlines can be unreliable above 4096 units per em".to_string());
-    }
-    if upm > 5000 {
-        out.push("some design applications have trouble with more than 5000 units per em".to_string());
-    }
-    out
 }
 
 // ---------- the field commands ----------
