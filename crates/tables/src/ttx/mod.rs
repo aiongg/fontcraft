@@ -122,6 +122,9 @@ pub struct DumpOptions {
     pub strict: bool,
     /// How bitmap images are written.
     pub bitmap_form: BitmapForm,
+    /// Character names written as comments after the mappings of Unicode `cmap` subtables
+    /// (ttx `--unicodedata`); without them no comments are written.
+    pub unicode_names: Option<std::sync::Arc<crate::text::UnicodeNames>>,
 }
 
 /// The font's tables as text, within [`MAX_TTX_OUTPUT`]. Images kept in files of their own
@@ -287,6 +290,7 @@ fn writer_for(font: &SfntFont, options: &DumpOptions) -> XmlWriter {
     w.bitmap_form = options.bitmap_form;
     w.tree = options.format == DumpFormat::Json;
     w.glyph_order = Some(glyph_order(font).map(Rc::new));
+    w.unicode_names = options.unicode_names.clone();
     w
 }
 
@@ -975,6 +979,8 @@ pub struct XmlWriter {
     bitmap_form: BitmapForm,
     /// Bitmap images written to files of their own; a writer dropped unappended drops them.
     images: Vec<ImageFile>,
+    /// Names for the comments after Unicode `cmap` mappings ([`DumpOptions::unicode_names`]).
+    unicode_names: Option<std::sync::Arc<crate::text::UnicodeNames>>,
 }
 
 impl Default for XmlWriter {
@@ -991,6 +997,7 @@ impl Default for XmlWriter {
             limit: MAX_TTX_OUTPUT,
             bitmap_form: BitmapForm::Raw,
             images: Vec::new(),
+            unicode_names: None,
         }
     }
 }
@@ -1155,6 +1162,11 @@ impl XmlWriter {
         self.disassemble
     }
 
+    /// The character names for `cmap` comments, when the dump has them.
+    pub(crate) fn unicode_names(&self) -> Option<std::sync::Arc<crate::text::UnicodeNames>> {
+        self.unicode_names.clone()
+    }
+
     /// The font's glyph names ([`glyph_order`]), read once per dump.
     pub fn glyph_order(&mut self, font: &SfntFont) -> Result<Rc<Vec<String>>> {
         if let Some(order) = &self.glyph_order {
@@ -1203,6 +1215,7 @@ impl XmlWriter {
             limit: self.limit,
             bitmap_form: self.bitmap_form,
             images: Vec::new(),
+            unicode_names: self.unicode_names.clone(),
         }
     }
 

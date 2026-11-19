@@ -31,7 +31,8 @@ use read_fonts::tables::cmap::CmapIterLimits;
 use read_fonts::tables::glyf::{Anchor, Glyph};
 use read_fonts::types::{Fixed, GlyphId};
 
-use super::{GlyphDetail, Out};
+use super::{GlyphDetail, Out, ViewOptions};
+use crate::convert::cff_table::Seac;
 use crate::features::Provider;
 use crate::limits::{MAX_GLYPHS, MAX_LOOKUP_NESTING, MAX_TTX_CMAP_ENTRIES};
 use crate::sfnt::SfntFont;
@@ -59,12 +60,47 @@ pub fn font_dict(font: &SfntFont) -> Result<String> {
     Ok(out.text)
 }
 
-/// `@glyphs`: the records of the glyphs named in `selection` (every glyph when empty), in the
-/// order given, without those named in `excluded` (`tx -gx`).
-pub fn glyphs(font: &SfntFont, selection: &[String], excluded: &[String], detail: GlyphDetail, hints: bool) -> Result<String> {
-    let src = Source::new(font)?;
+/// `@glyphs`: the records of the glyphs named in [`ViewOptions::glyphs`] (every glyph when
+/// empty), in the order given, without those named in [`ViewOptions::exclude_glyphs`]
+/// (`tx -gx`), kept or left out by font dict ([`ViewOptions::fd`], `tx -fd`), under the names
+/// [`ViewOptions::rename`] gives them (`tx -gf`).
+///
+/// An accented `seac` glyph prints its width, `adx ady base accent seac` and `endchar`; with
+/// [`ViewOptions::flatten_seac`] (`tx -dump -d`) it prints the base glyph's path and hints, then
+/// the accent's path moved by (adx, ady) without its hints, as `tx` printed them on a font built
+/// with fontTools.
+pub fn glyphs(font: &SfntFont, options: &ViewOptions) -> Result<String> {
+    let detail = options.glyph_detail;
+    let hints = !options.no_hints;
+    let mut src = Source::new(font)?;
+    let font_names = src.names.clone();
+    if !options.rename.is_empty() {
+        let map: HashMap<&str, &str> = options.rename.iter().map(|(from, to)| (from.as_str(), to.as_str())).collect();
+        for name in &mut src.names {
+            if let Some(to) = map.get(name.as_str()) {
+                *name = (*to).to_string();
+            }
+        }
+    }
+    let excluded = &options.exclude_glyphs;
     let left_out: HashSet<usize> = if excluded.is_empty() { HashSet::new() } else { src.select(excluded)?.into_iter().collect() };
-    let ids: Vec<usize> = src.select(selection)?.into_iter().filter(|g| !left_out.contains(g)).collect();
+    let ids: Vec<usize> = src.select(&options.glyphs)?.into_iter().filter(|g| !left_out.contains(g)).collect();
+    let ids = by_font_dict(font, ids, &options.fd, &options.exclude_fd)?;
+    // The seac parts of each glyph; only a name-keyed CFF table has them, and only the path
+    // shows them. A table the reader below cannot expand is drawn as the evaluator draws it.
+    let programs = match (detail, font.get(CFF)) {
+        (GlyphDetail::Short, _) | (_, None) => None,
+        (_, Some(data)) => crate::convert::cff_table::Programs::read(data, false).ok(),
+    };
+    let by_name: HashMap<&str, usize> = if programs.is_some() && options.flatten_seac {
+        let mut map = HashMap::with_capacity(font_names.len());
+        for (g, n) in font_names.iter().enumerate() {
+            map.entry(n.as_str()).or_insert(g);
+        }
+        map
+    } else {
+        HashMap::new()
+    };
     let mut out = Out::new();
     match detail {
         GlyphDetail::Short => out.line("## glyph[tag] {name,encoding}")?,
@@ -78,7 +114,13 @@ pub fn glyphs(font: &SfntFont, selection: &[String], excluded: &[String], detail
             continue;
         }
         out.line(&format!("glyph[{gid}] {{{name},{enc},"))?;
-        let tokens = src.path(gid, hints)?;
+        let tokens = match programs.as_ref().and_then(|p| p.seac(gid)) {
+            Some(seac) => {
+                let operand = programs.as_ref().and_then(|p| p.width(gid));
+                src.seac_path(gid, seac, operand, options.flatten_seac.then_some(&by_name), hints)?
+            }
+            None => src.path(gid, hints)?,
+        };
         if detail == GlyphDetail::Long {
             let count = tokens.len();
             for (i, t) in tokens.iter().enumerate() {
@@ -102,6 +144,42 @@ pub fn glyphs(font: &SfntFont, selection: &[String], excluded: &[String], detail
         }
     }
     Ok(out.text)
+}
+
+/// `ids` less the glyphs outside the font dicts `keep` (all when empty) or inside `leave_out`. Only a
+/// CID-keyed CFF font or a CFF2 font has font dicts to select by, as `tx -fd` requires.
+fn by_font_dict(font: &SfntFont, ids: Vec<usize>, keep: &[u16], leave_out: &[u16]) -> Result<Vec<usize>> {
+    if keep.is_empty() && leave_out.is_empty() {
+        return Ok(ids);
+    }
+    let upem = Provider(font).head().ok().map(|h| i32::from(h.units_per_em()));
+    let bad = |e: read_fonts::ps::error::Error| TablesError::Invalid(format!("the CFF table cannot be read: {e}"));
+    let cff = if let Some(data) = font.get(CFF) {
+        let cff = CffFontRef::new_cff(data, 0, upem).map_err(bad)?;
+        if !cff.is_cid() {
+            return Err(TablesError::BadOptions(
+                "the CFF font is not CID-keyed: only a CID-keyed CFF font or a CFF2 font has font dicts to select by".into(),
+            ));
+        }
+        cff
+    } else if let Some(data) = font.get(CFF2) {
+        CffFontRef::new_cff2(data, upem).map_err(bad)?
+    } else {
+        return Err(TablesError::BadOptions(
+            "a TrueType font has no font dicts: only a CID-keyed CFF font or a CFF2 font can be selected by font dict".into(),
+        ));
+    };
+    let count = cff.num_subfonts();
+    if let Some(fd) = keep.iter().chain(leave_out).find(|fd| **fd >= count) {
+        return Err(TablesError::BadOptions(format!("the font has {count} font dicts: there is no font dict {fd}")));
+    }
+    Ok(ids
+        .into_iter()
+        .filter(|g| {
+            let fd = u32::try_from(*g).ok().and_then(|g| cff.subfont_index(GlyphId::new(g))).unwrap_or(0);
+            (keep.is_empty() || keep.contains(&fd)) && !leave_out.contains(&fd)
+        })
+        .collect())
 }
 
 /// The outline entries of the normalised dump: for each glyph its name, then one line per path
@@ -261,6 +339,60 @@ impl<'a> Source<'a> {
     }
 
     fn cff_path(&self, data: &[u8], cff2: bool, id: GlyphId, gid: usize, hints: bool) -> Result<Vec<String>> {
+        let (ops, width) = self.cff_ops(data, cff2, id, gid)?;
+        Ok(render(&ops, width, hints))
+    }
+
+    /// The path of an accented glyph: its `seac` operator, or with `parts` (glyph indices by
+    /// name) the base glyph and the moved accent drawn out. `operand` is the glyph's width
+    /// operand (16.16, against nominalWidthX).
+    fn seac_path(&self, gid: usize, seac: Seac, operand: Option<i64>, parts: Option<&HashMap<&str, usize>>, hints: bool) -> Result<Vec<String>> {
+        let data = self.font.get(CFF).ok_or_else(|| TablesError::MissingTable("CFF ".into()))?;
+        let glyph = |g: usize| u32::try_from(g).map(GlyphId::new).map_err(|_| TablesError::invalid("glyph index out of range"));
+        // The width alone: drawing the glyph would follow the seac through the charset's
+        // standard strings, which a charset of custom strings lacks.
+        let width = self.cff_width(data, glyph(gid)?, gid, operand)?;
+        let Some(parts) = parts else {
+            return Ok(vec![
+                format!("{} width", num(width)),
+                format!("{} {} {} {} seac", num(seac.adx), num(seac.ady), seac.base, seac.accent),
+                "endchar".into(),
+            ]);
+        };
+        let part = |code: u8| -> Result<usize> {
+            let name = read_fonts::ps::encoding::PredefinedEncoding::Standard.name(code);
+            parts.get(name).copied().ok_or_else(|| TablesError::Invalid(format!("glyph {gid}: the font has no glyph `{name}` for seac code {code}")))
+        };
+        let (base, accent) = (part(seac.base)?, part(seac.accent)?);
+        let (mut ops, _) = self.cff_ops(data, false, glyph(base)?, base)?;
+        let (accent_ops, _) = self.cff_ops(data, false, glyph(accent)?, accent)?;
+        let (dx, dy) = (seac.adx, seac.ady);
+        for op in accent_ops {
+            match op {
+                Op::Move(x, y) => ops.push(Op::Move(x + dx, y + dy)),
+                Op::Line(x, y) => ops.push(Op::Line(x + dx, y + dy)),
+                Op::Curve([a, b, c, d, e, f]) => ops.push(Op::Curve([a + dx, b + dy, c + dx, d + dy, e + dx, f + dy])),
+                Op::HStem(..) | Op::VStem(..) | Op::Mask(_) => {}
+            }
+        }
+        Ok(render(&ops, width, hints))
+    }
+
+    /// The advance of one glyph of a `CFF ` table from its width operand, without drawing it.
+    fn cff_width(&self, data: &[u8], id: GlyphId, gid: usize, operand: Option<i64>) -> Result<f64> {
+        let upem = Provider(self.font).head().ok().map(|h| i32::from(h.units_per_em()));
+        let bad = |e: read_fonts::ps::error::Error| TablesError::Invalid(format!("glyph {gid}: the charstring cannot be read: {e}"));
+        let cff = CffFontRef::new_cff(data, 0, upem).map_err(bad)?;
+        let sub = cff.subfont(cff.subfont_index(id).unwrap_or(0), &[]).map_err(bad)?;
+        Ok(match (operand, sub.default_width()) {
+            (Some(w), _) => w as f64 / 65536.0 + sub.nominal_width().to_f64(),
+            (None, Some(default)) => default.to_f64(),
+            (None, None) => f64::from(self.widths.get(gid).copied().flatten().unwrap_or(0)),
+        })
+    }
+
+    /// The operators of one CFF glyph as the evaluator draws it, and its advance.
+    fn cff_ops(&self, data: &[u8], cff2: bool, id: GlyphId, gid: usize) -> Result<(Vec<Op>, f64)> {
         let upem = Provider(self.font).head().ok().map(|h| i32::from(h.units_per_em()));
         let bad = |e: read_fonts::ps::error::Error| TablesError::Invalid(format!("glyph {gid}: the charstring cannot be read: {e}"));
         let cff = if cff2 { CffFontRef::new_cff2(data, upem) } else { CffFontRef::new_cff(data, 0, upem) }.map_err(bad)?;
@@ -275,7 +407,7 @@ impl<'a> Source<'a> {
             Some(w) => w.to_f64(),
             None => f64::from(self.widths.get(gid).copied().flatten().unwrap_or(0)),
         };
-        Ok(render(&sink.ops, width, hints))
+        Ok((sink.ops, width))
     }
 
     fn tt_path(&self, id: GlyphId, gid: usize) -> Result<Vec<String>> {

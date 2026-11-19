@@ -19,10 +19,18 @@ fn ttx_specs() -> Vec<CommandSpec> {
         "Dump Tables",
         [],
         None,
-        "{font: path, face?: number, tables?: [tag | {tag, view?}], excludeTables?: [tag], format?: \"ttx\"|\"json\"|\"hex\"|\"text\", split?: \"tables\"|\"glyphs\", output?: path, outputDir?: path, noClobber?: bool, disassemble?: bool, bitmapFormat?: \"raw\"|\"row\"|\"bitwise\"|\"extfile\", strict?: bool, newline?: \"lf\"|\"cr\"|\"crlf\", normalize?: bool, version?: bool, hints?: bool, showExtensions?: bool, glyphs?: [name] | string, excludeGlyphs?: [name] | string, glyphDetail?: \"short\"|\"medium\"|\"long\", cmapSubtable?: number, units?: \"font\"|\"1000\", cffParts?: string, cffLevel?: \"offsets\"|\"bytes\"|\"values\", wrap?: bool} the tables of a compiled font, collection face, WOFF or WOFF2 file as TTX (the XML of the reference dump tool), the same tree as JSON, or hex; tables that cannot be read are written as hex unless strict; tables leaves the glyph order out; split writes one file per table beside the main file (glyphs also one file per glyph outline); bitmapFormat writes bitmap images as hex (raw, the default), hex per pixel row (row), a character per pixel (bitwise) or one file each under bitmaps/strikeN/ beside the dump (extfile, TTX with an output only; the dump and its images are written to temporary files first and moved into place once all are written: a failure while writing them changes nothing, and a failure while moving them leaves the files moved before it in place and removes the rest). Text views: a table with a view ({tag: \"GPOS\", view: \"fea\"|\"normalized\"|\"features\"}; the listings cmap hex-gid, dec-gid, hex-name, dec-name and summary (cmapSubtable picks one encoding record), hmtx advances and advances-lsb (units \"1000\" rescales), name raw, lines and described, GSUB and GPOS features, glyf points, VORG names, kern pairs; CFF literal: the CFF structures, cffParts letters h n t s g e C f F c p l or \"all\", cffLevel, wrap false keeps flowed data on one line), the pseudo-tables @font (the font program's DICTs) and @glyphs (the glyphs given, every glyph by default, less excludeGlyphs: index, name, encoding and, with glyphDetail medium or long, the path with hints unless hints is false), written as text. normalize writes the normalised dump: tables sorted, values that always differ zeroed, outlines as text paths, GSUB and GPOS as rules (version false also blanks the version fields, showExtensions marks extension lookups) → {format, text} or {format, json} without an output, {format, paths, images} with one (images: how many bitmap images extfile wrote to files)",
+        "{font: path, face?: number, tables?: [tag | {tag, view?}], excludeTables?: [tag], format?: \"ttx\"|\"json\"|\"hex\"|\"text\", split?: \"tables\"|\"glyphs\", output?: path, outputDir?: path, noClobber?: bool, disassemble?: bool, bitmapFormat?: \"raw\"|\"row\"|\"bitwise\"|\"extfile\", strict?: bool, newline?: \"lf\"|\"cr\"|\"crlf\", normalize?: bool, version?: bool, hints?: bool, showExtensions?: bool, glyphs?: [name] | string, excludeGlyphs?: [name] | string, glyphDetail?: \"short\"|\"medium\"|\"long\", cmapSubtable?: number, units?: \"font\"|\"1000\", cffParts?: string, cffLevel?: \"offsets\"|\"bytes\"|\"values\", wrap?: bool, allowVirtualGids?: bool, unicodeData?: path, fd?: [int], excludeFd?: [int], flattenSeac?: bool, names?: \"source\"|\"final\", goadb?: path} the tables of a compiled font, collection face, WOFF or WOFF2 file as TTX (the XML of the reference dump tool), the same tree as JSON, or hex; tables that cannot be read are written as hex unless strict; tables leaves the glyph order out; split writes one file per table beside the main file (glyphs also one file per glyph outline); bitmapFormat writes bitmap images as hex (raw, the default), hex per pixel row (row), a character per pixel (bitwise) or one file each under bitmaps/strikeN/ beside the dump (extfile, TTX with an output only; the dump and its images are written to temporary files first and moved into place once all are written: a failure while writing them changes nothing, and a failure while moving them leaves the files moved before it in place and removes the rest). Text views: a table with a view ({tag: \"GPOS\", view: \"fea\"|\"normalized\"|\"features\"}; the listings cmap hex-gid, dec-gid, hex-name, dec-name and summary (cmapSubtable picks one encoding record), hmtx advances and advances-lsb (units \"1000\" rescales), name raw, lines and described, GSUB and GPOS features, glyf points, VORG names, kern pairs; CFF literal: the CFF structures, cffParts letters h n t s g e C f F c p l or \"all\", cffLevel, wrap false keeps flowed data on one line), the pseudo-tables @font (the font program's DICTs) and @glyphs (the glyphs given, every glyph by default, less excludeGlyphs: index, name, encoding and, with glyphDetail medium or long, the path with hints unless hints is false), written as text. avar with the view designspace writes the fvar axes and the avar maps as a designspace snippet. For @glyphs: fd and excludeFd keep or leave out the glyphs of these font dicts of a CID-keyed CFF or a CFF2 font (indexes from 0); an accented seac glyph prints its seac operator, and flattenSeac draws it out (the base glyph with its hints, then the moved accent without them); goadb maps the names shown through a glyph name database, final names to source names (names \"source\", the default with goadb) or source names to final names (names \"final\"), and glyphs and excludeGlyphs use the names shown. unicodeData (a UnicodeData.txt file; TTX only) writes each character's name as a comment after the mappings of Unicode cmap subtables, ???? for a code point the file does not name; no names are bundled, so without it no comments are written. allowVirtualGids is accepted and changes nothing: glyph indices past the glyph count are always written as glyphNNNNN. normalize writes the normalised dump: tables sorted, values that always differ zeroed, outlines as text paths, GSUB and GPOS as rules (version false also blanks the version fields, showExtensions marks extension lookups) → {format, text} or {format, json} without an output, {format, paths, images} with one (images: how many bitmap images extfile wrote to files)",
         super::always,
         ttx::run
-    ).files(const { &[FileParam::read("font"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files()]
+    ).files(const {
+        &[
+            FileParam::read("font"),
+            FileParam::read("unicodeData"),
+            FileParam::read("goadb"),
+            FileParam::write("output"),
+            FileParam::write("outputDir"),
+        ]
+    }).writes_files()]
 }
 
 mod ttx {
@@ -101,6 +109,14 @@ mod ttx {
         if bitmap_form == BitmapForm::ExtFile && format != DumpFormat::Ttx {
             return Err(p.bad("`bitmapFormat` \"extfile\" works with the TTX format only"));
         }
+        if let Some(key) = super::extras::glyphs_only_given(&p) {
+            return Err(p.bad(format!("`{key}` applies to the @glyphs pseudo-table: name it in `tables`")));
+        }
+        super::extras::check_virtual_gids(&p)?;
+        let unicode_names = super::extras::unicode_names(&p)?;
+        if unicode_names.is_some() && format != DumpFormat::Ttx {
+            return Err(p.bad("`unicodeData` writes comments, which only the TTX format has"));
+        }
         let options = DumpOptions {
             format,
             tables,
@@ -110,6 +126,7 @@ mod ttx {
             no_disassemble: !p.bool_or("disassemble", true)?,
             strict: p.bool_or("strict", false)?,
             bitmap_form,
+            unicode_names,
         };
         let request = OutputRequest::from_params(&p)?;
         if request.in_place {
@@ -291,6 +308,19 @@ mod views {
         if p.opt_array("excludeTables")?.is_some_and(|v| !v.is_empty()) && !items.is_empty() {
             return Err(p.bad("give the tables to write or the tables to leave out, not both"));
         }
+        super::extras::check_virtual_gids(&p)?;
+        if super::extras::given(&p, "unicodeData") {
+            return Err(p.bad("`unicodeData` writes the comments of the TTX dump: text views and the normalised dump have none"));
+        }
+        if let Some(key) = super::extras::glyphs_only_given(&p)
+            && (normalize || !items.iter().any(|i| i.name == GLYPHS_VIEW))
+        {
+            return Err(p.bad(format!("`{key}` applies to the @glyphs pseudo-table: name it in `tables`")));
+        }
+        let fd = super::extras::font_dicts(&p, "fd")?;
+        let exclude_fd = super::extras::font_dicts(&p, "excludeFd")?;
+        let flatten_seac = p.bool_or("flattenSeac", false)?;
+        let rename = super::extras::rename(&p)?;
         let names = |key: &str| -> Result<Vec<String>> {
             Ok(match p.get(key) {
                 None | Some(Value::Null) => Vec::new(),
@@ -337,6 +367,10 @@ mod views {
             no_version: !p.bool_or("version", true)?,
             no_hints: !p.bool_or("hints", true)?,
             show_extensions: p.bool_or("showExtensions", false)?,
+            fd,
+            exclude_fd,
+            flatten_seac,
+            rename,
             ..ViewOptions::default()
         };
         let newline = match p.opt_str("newline")?.unwrap_or("lf") {
@@ -471,6 +505,202 @@ mod views {
                 json!({"font": f, "tables": ["@glyphs"], "glyphDetail": "huge"}),
                 json!({"font": f, "tables": [{"tag": "GPOS", "view": "fea"}], "format": "hex"}),
                 json!({"font": f, "normalize": true, "split": "tables", "outputDir": dir.display().to_string()}),
+            ] {
+                assert!(s.execute("font.dumpTables", &bad).is_err(), "{bad}");
+            }
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
+}
+
+/// The options of M12.76: `allowVirtualGids`, `unicodeData`, and the @glyphs options `fd`,
+/// `excludeFd`, `flattenSeac`, `names` and `goadb`.
+mod extras {
+    use std::path::Path;
+    use std::sync::Arc;
+
+    use fontcraft_tables::text::UnicodeNames;
+    use fontcraft_tables::text::unicode_data::MAX_UNICODE_DATA;
+    use serde_json::Value;
+
+    use super::super::convert_file::{MAX_GOADB_BYTES, goadb_text};
+    use super::super::file_io::read_input_up_to;
+    use crate::params::Params;
+    use crate::{EngineError, Result};
+
+    /// The keys that apply to the @glyphs pseudo-table only.
+    const GLYPHS_ONLY: [&str; 5] = ["fd", "excludeFd", "flattenSeac", "names", "goadb"];
+
+    /// Whether `key` is given with a value that asks for something (not null, false or empty).
+    pub(super) fn given(p: &Params<'_>, key: &str) -> bool {
+        match p.get(key) {
+            None | Some(Value::Null) | Some(Value::Bool(false)) => false,
+            Some(Value::Array(a)) => !a.is_empty(),
+            Some(_) => true,
+        }
+    }
+
+    /// The first @glyphs-only key the request gives.
+    pub(super) fn glyphs_only_given(p: &Params<'_>) -> Option<&'static str> {
+        GLYPHS_ONLY.into_iter().find(|k| given(p, k))
+    }
+
+    /// `allowVirtualGids` (ttx `-a`), which ttx 4.66 accepts and ignores: glyph indices past the
+    /// glyph count are always written as `glyphNNNNN`. Only its type is checked.
+    pub(super) fn check_virtual_gids(p: &Params<'_>) -> Result<()> {
+        p.bool_or("allowVirtualGids", false).map(|_| ())
+    }
+
+    /// The character names of `unicodeData`, read from the file it names.
+    pub(super) fn unicode_names(p: &Params<'_>) -> Result<Option<Arc<UnicodeNames>>> {
+        let path = match p.get("unicodeData") {
+            None | Some(Value::Null) | Some(Value::Bool(false)) => return Ok(None),
+            Some(Value::Bool(true)) => {
+                return Err(p.bad("no character names are bundled: give `unicodeData` the path of a UnicodeData.txt file"));
+            }
+            Some(Value::String(path)) => Path::new(path.as_str()),
+            Some(_) => return Err(p.bad("`unicodeData` is the path of a UnicodeData.txt file")),
+        };
+        let read = read_input_up_to(path, MAX_UNICODE_DATA)?;
+        if read.bytes.len() > MAX_UNICODE_DATA {
+            return Err(EngineError::Io(format!("{} is larger than {MAX_UNICODE_DATA} bytes", path.display())));
+        }
+        let text = String::from_utf8(read.bytes).map_err(|_| EngineError::Io(format!("{} is not UTF-8 text", path.display())))?;
+        let names = UnicodeNames::parse(text.strip_prefix('\u{feff}').unwrap_or(&text))
+            .map_err(|e| p.bad(format!("`unicodeData` {}: {e}", path.display())))?;
+        Ok(Some(Arc::new(names)))
+    }
+
+    /// Font dict indexes from 0: a list of numbers, or a comma-separated string of them.
+    pub(super) fn font_dicts(p: &Params<'_>, key: &str) -> Result<Vec<u16>> {
+        let bad = || p.bad(format!("`{key}` is a list of font dict indexes from 0 to 65535"));
+        let parse = |v: &Value| -> Result<u16> {
+            match v {
+                Value::Number(n) => n.as_u64().and_then(|n| u16::try_from(n).ok()).ok_or_else(bad),
+                Value::String(s) => s.trim().parse::<u16>().map_err(|_| bad()),
+                _ => Err(bad()),
+            }
+        };
+        let mut out: Vec<u16> = match p.get(key) {
+            None | Some(Value::Null) => Vec::new(),
+            Some(Value::Array(items)) => items.iter().map(parse).collect::<Result<_>>()?,
+            Some(Value::String(s)) => {
+                s.split(',').filter(|t| !t.trim().is_empty()).map(|t| parse(&Value::String(t.to_string()))).collect::<Result<_>>()?
+            }
+            Some(v) => vec![parse(v)?],
+        };
+        out.sort_unstable();
+        out.dedup();
+        Ok(out)
+    }
+
+    /// The `(from, to)` names of `names` and `goadb`: without a GOADB the names stay (`names`
+    /// \"source\" needs one); with one, final names become source names (\"source\", the
+    /// default) or source names become final names (\"final\").
+    pub(super) fn rename(p: &Params<'_>) -> Result<Vec<(String, String)>> {
+        let names = p.opt_str("names")?;
+        let to_source = match names {
+            None => true,
+            Some("source") => true,
+            Some("final") => false,
+            Some(other) => return Err(p.bad(format!("`names` must be \"source\" or \"final\", got \"{other}\""))),
+        };
+        let Some(path) = p.opt_str("goadb")? else {
+            if names == Some("source") {
+                return Err(p.bad("`names` \"source\" maps the names through a GOADB: give `goadb`"));
+            }
+            return Ok(Vec::new());
+        };
+        let text = goadb_text(Path::new(path), MAX_GOADB_BYTES)?;
+        let goadb =
+            fontcraft_tables::goadb::parse(text.strip_prefix('\u{feff}').unwrap_or(&text)).map_err(|e| p.bad(format!("`goadb` {path}: {e}")))?;
+        Ok(goadb.pairs(to_source))
+    }
+
+    #[cfg(test)]
+    #[cfg(not(target_arch = "wasm32"))]
+    mod tests {
+        use std::path::{Path, PathBuf};
+
+        use serde_json::json;
+
+        use crate::Session;
+
+        fn be(values: &[u16]) -> Vec<u8> {
+            values.iter().flat_map(|v| v.to_be_bytes()).collect()
+        }
+
+        /// A TrueType font of `.notdef` and `A` (U+0041), both empty, written to `dir`.
+        fn font_file(dir: &Path) -> PathBuf {
+            let mut font = fontcraft_tables::SfntFont::new(fontcraft_tables::Flavour::TrueType);
+            let mut head = vec![0u8; 54];
+            head[0..4].copy_from_slice(&0x0001_0000u32.to_be_bytes());
+            head[4..8].copy_from_slice(&0x0001_0000u32.to_be_bytes());
+            head[18..20].copy_from_slice(&1000u16.to_be_bytes());
+            head[50..52].copy_from_slice(&1u16.to_be_bytes());
+            font.insert(*b"head", head);
+            font.insert(*b"maxp", vec![0, 0, 0x50, 0, 0, 2]);
+            font.insert(*b"loca", vec![0; 12]);
+            font.insert(*b"glyf", Vec::new());
+            // post version 2: .notdef and A (standard name 36).
+            let mut post = vec![0, 2, 0, 0];
+            post.extend_from_slice(&[0; 28]);
+            post.extend(be(&[2, 0, 36]));
+            font.insert(*b"post", post);
+            // cmap: one Windows Unicode format 4 subtable mapping U+0041 to glyph 1.
+            let mut cmap = be(&[0, 1, 3, 1]);
+            cmap.extend_from_slice(&12u32.to_be_bytes());
+            cmap.extend(be(&[4, 32, 0, 4, 4, 1, 0, 0x41, 0xFFFF, 0, 0x41, 0xFFFF, 0xFFC0, 1, 0, 0]));
+            font.insert(*b"cmap", cmap);
+            let bytes = fontcraft_tables::write(&font, &fontcraft_tables::WriteOptions::default()).unwrap();
+            let path = dir.join("Extras.ttf");
+            std::fs::write(&path, bytes).unwrap();
+            path
+        }
+
+        #[test]
+        fn font_dump_tables_writes_unicode_names_maps_glyph_names_and_refuses_misplaced_options() {
+            let dir = std::env::temp_dir().join(format!("fontcraft-dump-extras-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            let f = font_file(&dir).display().to_string();
+            let data = dir.join("UnicodeData.txt");
+            std::fs::write(&data, "0000;<control>;Cc\n0041;LATIN CAPITAL LETTER A;Lu;0;L;;;;;N;;;;0061;\n").unwrap();
+            let data = data.display().to_string();
+            let goadb = dir.join("goadb.txt");
+            std::fs::write(&goadb, "A A.src uni0041\n").unwrap();
+            let goadb = goadb.display().to_string();
+            let mut s = Session::new();
+
+            let named = s.execute("font.dumpTables", &json!({"font": f, "tables": ["cmap"], "unicodeData": data})).unwrap();
+            let text = named["text"].as_str().unwrap();
+            assert!(text.contains("<map code=\"0x41\" name=\"A\"/><!-- LATIN CAPITAL LETTER A -->\n"), "{text}");
+            let plain = s.execute("font.dumpTables", &json!({"font": f, "tables": ["cmap"]})).unwrap();
+            assert!(!plain["text"].as_str().unwrap().contains("<!--"), "{plain}");
+            let virtual_gids = s.execute("font.dumpTables", &json!({"font": f, "tables": ["cmap"], "allowVirtualGids": true})).unwrap();
+            assert_eq!(virtual_gids, plain);
+
+            let source = s.execute("font.dumpTables", &json!({"font": f, "tables": ["@glyphs"], "goadb": goadb})).unwrap();
+            assert_eq!(source["text"], "## glyph[tag] {name,encoding}\nglyph[0] {.notdef,-}\nglyph[1] {A.src,U+0041}\n");
+            let picked = s
+                .execute("font.dumpTables", &json!({"font": f, "tables": ["@glyphs"], "goadb": goadb, "names": "source", "glyphs": ["A.src"]}))
+                .unwrap();
+            assert_eq!(picked["text"], "## glyph[tag] {name,encoding}\nglyph[1] {A.src,U+0041}\n");
+            let final_names = s.execute("font.dumpTables", &json!({"font": f, "tables": ["@glyphs"], "goadb": goadb, "names": "final"})).unwrap();
+            assert!(final_names["text"].as_str().unwrap().contains("{A,U+0041}"), "{final_names}");
+
+            for bad in [
+                json!({"font": f, "tables": ["cmap"], "flattenSeac": true}),
+                json!({"font": f, "tables": ["cmap"], "goadb": goadb}),
+                json!({"font": f, "normalize": true, "fd": [0]}),
+                json!({"font": f, "tables": ["@glyphs"], "names": "source"}),
+                json!({"font": f, "tables": ["@glyphs"], "names": "both", "goadb": goadb}),
+                json!({"font": f, "tables": ["@glyphs"], "fd": [0]}),
+                json!({"font": f, "tables": ["@glyphs"], "excludeFd": ["x"]}),
+                json!({"font": f, "tables": ["cmap"], "unicodeData": true}),
+                json!({"font": f, "tables": ["cmap"], "unicodeData": data, "format": "json"}),
+                json!({"font": f, "tables": [{"tag": "cmap", "view": "summary"}], "unicodeData": data}),
+                json!({"font": f, "tables": ["cmap"], "allowVirtualGids": "yes"}),
+                json!({"font": f, "tables": [{"tag": "avar", "view": "designspace"}]}),
             ] {
                 assert!(s.execute("font.dumpTables", &bad).is_err(), "{bad}");
             }

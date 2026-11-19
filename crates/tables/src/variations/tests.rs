@@ -290,3 +290,35 @@ fn build_avar_version_2_from_cross_axis_mappings_matches_fonttools() {
     assert_eq!(value(&m.mapped, WGHT), 0.5999755859375);
     assert_eq!(value(&m.mapped, WDTH), 0.0);
 }
+
+/// fontTools 4.66 `varLib.avar.unbuild` printed these on the same `fvar` and `avar` data.
+#[test]
+fn avar_designspace_matches_fonttools_unbuild() {
+    let v1 = avar_designspace(&v1_font()).unwrap();
+    assert_eq!(
+        v1,
+        "<?xml version='1.0' encoding='UTF-8'?>\n\
+         <designspace format=\"5.1\">\n  <axes>\n\
+         \x20   <axis tag=\"wght\" name=\"wght\" minimum=\"100\" maximum=\"900\" default=\"400\">\n\
+         \x20     <map input=\"100\" output=\"100\"/>\n\
+         \x20     <map input=\"250\" output=\"189.996337890625\"/>\n\
+         \x20     <map input=\"400\" output=\"400\"/>\n\
+         \x20     <map input=\"600.01220703125\" output=\"699.98779296875\"/>\n\
+         \x20     <map input=\"900\" output=\"900\"/>\n\
+         \x20   </axis>\n\
+         \x20   <axis tag=\"wdth\" name=\"wdth\" minimum=\"75\" maximum=\"125\" default=\"100\"/>\n\
+         \x20 </axes>\n</designspace>\n"
+    );
+    // The mappings come in the order of the store's regions, which the builder chooses.
+    let v2 = avar_designspace(&v2_font()).unwrap();
+    let block = |input: &str, output: &str| {
+        format!(
+            "      <mapping>\n        <input>\n          {input}\n        </input>\n        <output>\n          {output}\n        </output>\n      </mapping>\n"
+        )
+    };
+    assert!(v2.contains(&block("<dimension name=\"wdth\" xvalue=\"75\"/>", "<dimension name=\"wght\" xvalue=\"462.5\"/>")), "{v2}");
+    assert!(v2.contains(&block("<dimension name=\"wght\" xvalue=\"900\"/>", "<dimension name=\"wdth\" xvalue=\"93.75\"/>")), "{v2}");
+    assert_eq!(v2.matches("<mapping>").count(), 2, "the default location moves nothing and is left out: {v2}");
+    assert!(v2.contains("    </mappings>\n  </axes>\n</designspace>\n"), "{v2}");
+    assert!(matches!(avar_designspace(&SfntFont::new(Flavour::TrueType)), Err(TablesError::MissingTable(_))));
+}
