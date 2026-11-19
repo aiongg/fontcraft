@@ -142,9 +142,12 @@ fn proof_refusals_write_nothing() {
     let mut s = Session::new();
     let out = dir.join("out");
     for bad in [
-        json!({ "fonts": [ttf], "layout": "hints", "format": "svg", "outputDir": out }),
+        json!({ "fonts": [ttf], "layout": "synopsis", "format": "svg", "outputDir": out }),
         json!({ "fonts": [ttf], "layout": "palette", "format": "svg", "glyphs": ["nope"], "outputDir": out }),
-        json!({ "fonts": [ttf], "layout": "palette", "format": "svg", "black": true, "outputDir": out }),
+        json!({ "fonts": [ttf], "layout": "palette", "format": "svg", "show": ["em-box"], "outputDir": out }),
+        json!({ "fonts": [ttf], "layout": "palette", "format": "svg", "baseline": -120, "outputDir": out }),
+        json!({ "fonts": [ttf], "layout": "hints", "format": "svg", "settings": { "noSuchSetting": 1 }, "outputDir": out }),
+        json!({ "fonts": [ttf], "layout": "digi", "format": "svg", "panels": [{ "index": 1, "show": ["points"] }], "outputDir": out }),
         json!({ "fonts": [ttf], "layout": "palette", "format": "svg", "inPlace": true }),
         json!({ "fonts": [ttf], "layout": "palette", "format": "svg", "size": 1.0e9, "outputDir": out }),
         json!({ "fonts": [ttf], "layout": "outline", "format": "svg", "location": { "wght": 400 }, "outputDir": out }),
@@ -152,5 +155,34 @@ fn proof_refusals_write_nothing() {
         assert!(s.execute("font.proof", &bad).is_err(), "{bad}");
     }
     assert!(!out.exists(), "a refused proof writes nothing");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn proof_compare_writes_one_file_for_the_font_set_and_settings_are_listed() {
+    let (dir, ttf) = font("compare");
+    let mut s = Session::new();
+    let out = dir.join("set.pdf");
+    let result = run(&mut s, "font.proof", json!({ "fonts": [ttf, ttf], "layout": "compare", "output": out, "black": true }));
+    assert_eq!(result["proofs"].as_array().unwrap().len(), 1, "one proof for the whole set");
+    assert_eq!(result["proofs"][0]["pages"], 1);
+    assert!(std::fs::read(&out).unwrap().starts_with(b"%PDF-"));
+
+    let digi = run(
+        &mut s,
+        "font.proof",
+        json!({ "fonts": [ttf], "layout": "digi", "format": "svg", "metrics": "both", "baseline": -100,
+                "settings": { "emboxColorRGB": [1, 0, 0] }, "panels": [{ "index": 1, "settings": { "drawPoint_PointLabels": false } }],
+                "outputDir": dir.join("digi") }),
+    );
+    let pages = files(&digi);
+    assert_eq!(pages.len(), glyph_order(&mut s, &ttf).len(), "one page per glyph");
+    let page = std::fs::read_to_string(&pages[1]).unwrap();
+    assert!(page.contains("stroke=\"#ff0000\""), "the em box takes the colour setting");
+    assert!(page.contains("T = ") && page.contains("L = "), "both metrics are printed");
+
+    let listed = run(&mut s, "font.proof", json!({ "listSettings": true }));
+    let names: Vec<&str> = listed["settings"].as_array().unwrap().iter().map(|v| v["name"].as_str().unwrap()).collect();
+    assert!(names.contains(&"hintColorRGB") && names.contains(&"drawGlyph_EMBox"));
     std::fs::remove_dir_all(&dir).unwrap();
 }

@@ -11,6 +11,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+fontcraft-decompile.workspace = true
 fontcraft-model.workspace = true
 fontcraft-render.workspace = true
 fontcraft-tables.workspace = true

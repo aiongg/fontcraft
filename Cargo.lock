@@ -1462,6 +1462,7 @@ name = "fontcraft-proof"
 version = "0.0.1"
 dependencies = [
  "fontcraft-compile",
+ "fontcraft-decompile",
  "fontcraft-model",
  "fontcraft-render",
  "fontcraft-tables",

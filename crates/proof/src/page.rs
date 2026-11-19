@@ -10,13 +10,13 @@ pub(crate) const MARGIN: f64 = 36.0;
 /// Height of the title line at the top of each page.
 pub(crate) const HEADER: f64 = 24.0;
 /// Title text size.
-const TITLE_SIZE: f64 = 9.0;
+pub(crate) const TITLE_SIZE: f64 = 9.0;
 /// Most point sizes in one proof.
 pub(crate) const MAX_SIZES: usize = 64;
 /// Smallest and largest page side, in points (one inch to 200 inches, the PDF limit).
 const PAGE_SIDE: (f64, f64) = (72.0, 14_400.0);
 /// Smallest glyph or text size, in points.
-const MIN_SIZE: f64 = 1.0;
+pub(crate) const MIN_SIZE: f64 = 1.0;
 /// Width of the size column of a waterfall.
 const WATERFALL_GUTTER: f64 = 40.0;
 /// Most characters of waterfall text.
@@ -39,6 +39,8 @@ pub(crate) enum Ink {
     Handle,
     /// On-curve points.
     Point,
+    /// A colour of the drawing settings (`crate::layouts::Display`).
+    Rgb([u8; 3]),
 }
 
 impl Ink {
@@ -50,6 +52,17 @@ impl Ink {
             Ink::Guide => [0xc4, 0xc4, 0xc4],
             Ink::Handle => [0x3b, 0x7d, 0xd8],
             Ink::Point => [0xd0, 0x34, 0x2c],
+            Ink::Rgb(c) => c,
+        }
+    }
+
+    /// The ink of a print in black: labels and marks black, guides grey; a colour of the drawing
+    /// settings is kept, since `black` sets those itself.
+    pub(crate) fn black(self) -> Ink {
+        match self {
+            Ink::Text | Ink::Faint | Ink::Handle | Ink::Point => Ink::Text,
+            Ink::Guide => Ink::Rgb([0x80, 0x80, 0x80]),
+            Ink::Rgb(c) => Ink::Rgb(c),
         }
     }
 
@@ -69,6 +82,8 @@ pub(crate) const POINT_RADIUS: f64 = 1.5;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Anchor {
     Start,
+    /// The text ends at `x`.
+    End,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -104,10 +119,20 @@ pub(crate) enum Item {
         h: f64,
         ink: Ink,
     },
+    /// A point marker: a filled square on the curve, an open circle off it.
     Point {
         x: f64,
         y: f64,
         on_curve: bool,
+        ink: Ink,
+    },
+    /// A clickable area that opens page `page` (zero-based) of the same document.
+    Link {
+        x: f64,
+        y: f64,
+        w: f64,
+        h: f64,
+        page: usize,
     },
     Label {
         x: f64,
@@ -137,6 +162,8 @@ pub(crate) struct Page {
 /// A glyph the pages show.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ShownGlyph {
+    /// The font of a font set the glyph comes from (0 unless the layout compares fonts).
+    pub font: usize,
     pub gid: u32,
     pub name: String,
     pub unicode: Option<u32>,
@@ -169,7 +196,7 @@ pub(crate) fn grid_cell(size: f64) -> (f64, f64, f64) {
 }
 
 /// The usable area of a page below the title: `[x, y, w, h]`.
-fn content(page: [f64; 2]) -> [f64; 4] {
+pub(crate) fn content(page: [f64; 2]) -> [f64; 4] {
     [MARGIN, MARGIN + HEADER, (page[0] - 2.0 * MARGIN).max(0.0), (page[1] - 2.0 * MARGIN - HEADER).max(0.0)]
 }
 
@@ -208,7 +235,7 @@ pub fn grid_size_for(page_size: [f64; 2], glyphs_per_page: usize) -> Result<f64,
     Ok(if fits(rounded) { rounded } else { lo })
 }
 
-fn check_page(page: [f64; 2]) -> Result<(), ProofError> {
+pub(crate) fn check_page(page: [f64; 2]) -> Result<(), ProofError> {
     if page.iter().all(|s| s.is_finite() && (PAGE_SIDE.0..=PAGE_SIDE.1).contains(s)) {
         Ok(())
     } else {
@@ -216,27 +243,38 @@ fn check_page(page: [f64; 2]) -> Result<(), ProofError> {
     }
 }
 
-/// Lays out every sheet of `options` for the glyphs `gids` of `face`.
-pub(crate) fn layout(face: &Face<'_>, gids: &[u32], options: &ProofOptions, embedded: Option<Embedded>) -> Result<Document, ProofError> {
+/// Lays out every sheet of `options`. `gids` are the glyphs to show of the first face; the other
+/// faces of a font set are shown only by the `Compare` sheet, which picks their glyphs itself.
+pub(crate) fn layout(faces: &[Face<'_>], gids: &[u32], options: &ProofOptions, embedded: Option<Embedded>) -> Result<Document, ProofError> {
     check_page(options.page_size)?;
     let sizes = check_sizes(&options.sizes, options.page_size)?;
+    let Some(face) = faces.first() else {
+        return Err(ProofError::BadOptions("a proof needs a font".into()));
+    };
     if options.sheets.is_empty() {
         return Err(ProofError::BadOptions("a proof needs at least one sheet".into()));
     }
     if gids.is_empty() {
         return Err(ProofError::BadOptions("there are no glyphs to show".into()));
     }
-    let needs_outlines = options.sheets.iter().any(|s| matches!(s, Sheet::GlyphGrid | Sheet::GlyphPerPage));
+    let needs_outlines = options.sheets.iter().any(|s| !matches!(s, Sheet::Waterfall { .. } | Sheet::Compare));
     let mut glyphs = Vec::with_capacity(gids.len());
     if needs_outlines {
         let mut budget = crate::font::MAX_TOTAL_ELEMENTS;
         for &gid in gids {
             let outline = face.outline(gid, &mut budget)?;
-            glyphs.push(ShownGlyph { gid, name: face.name(gid).to_string(), unicode: face.unicode(gid), outline });
+            glyphs.push(ShownGlyph { font: 0, gid, name: face.name(gid).to_string(), unicode: face.unicode(gid), outline });
         }
     }
-    let mut doc = Document { title: format!("{} {}", face.family, face.style), pages: Vec::new(), glyphs, embedded: None };
+    let title = if faces.len() > 1 && options.sheets.iter().all(|s| *s == Sheet::Compare) {
+        format!("font set of {}", faces.len())
+    } else {
+        format!("{} {}", face.family, face.style)
+    };
+    let mut doc = Document { title, pages: Vec::new(), glyphs, embedded: None };
     let mut sheet_names: Vec<&'static str> = Vec::new();
+    // A size the caller gave; the tile layouts otherwise fit a number of glyphs per page.
+    let given_size = options.sizes.first().copied();
     for sheet in &options.sheets {
         let before = doc.pages.len();
         let name = match sheet {
@@ -253,18 +291,56 @@ pub(crate) fn layout(face: &Face<'_>, gids: &[u32], options: &ProofOptions, embe
                 doc.embedded = embedded.clone();
                 "waterfall"
             }
+            Sheet::GridWithOutlines => {
+                crate::layouts::linked::sheet(face, &mut doc, options.page_size, sizes.first().copied().unwrap_or(24.0))?;
+                "glyphs and outlines"
+            }
+            Sheet::Boxes | Sheet::Hints | Sheet::Digi => {
+                let displays = crate::layouts::Display::for_sheet(sheet, options)?;
+                let fit = match (given_size, options.glyphs_per_page) {
+                    (Some(size), _) => crate::layouts::tiles::Fit::Size(size),
+                    (None, Some(n)) => crate::layouts::tiles::Fit::PerPage(n),
+                    (None, None) => crate::layouts::tiles::Fit::PerPage(crate::layouts::default_per_page(sheet)),
+                };
+                crate::layouts::tiles::sheet(face, &mut doc, options, &displays, fit)?;
+                match sheet {
+                    Sheet::Boxes => "boxes",
+                    Sheet::Hints => "hints",
+                    _ => "digi",
+                }
+            }
+            Sheet::Compare => {
+                let displays = crate::layouts::Display::for_sheet(sheet, options)?;
+                let size = given_size.unwrap_or(crate::layouts::compare::DEFAULT_SIZE);
+                crate::layouts::compare::sheet(faces, &mut doc, options, &displays, size)?;
+                "font set"
+            }
         };
         sheet_names.extend(std::iter::repeat_n(name, doc.pages.len() - before));
     }
-    let total = doc.pages.len();
-    for (i, (page, sheet)) in doc.pages.iter_mut().zip(sheet_names).enumerate() {
-        let text = format!("{} \u{2014} {sheet} \u{2014} page {} of {total}", doc.title, i + 1);
-        page.items.push(Item::Label { x: MARGIN, y: MARGIN + TITLE_SIZE, size: TITLE_SIZE, text, anchor: Anchor::Start, ink: Ink::Text });
+    let header = crate::layouts::Display::for_title(options)?;
+    if header.page_title {
+        let total = doc.pages.len();
+        let size = header.page_title_size;
+        for (i, (page, sheet)) in doc.pages.iter_mut().zip(sheet_names).enumerate() {
+            let text = format!("{} \u{2014} {sheet} \u{2014} page {} of {total}", doc.title, i + 1);
+            page.items.push(Item::Label { x: MARGIN, y: MARGIN + size, size, text, anchor: Anchor::Start, ink: Ink::Text });
+        }
+    }
+    if options.black {
+        for page in &mut doc.pages {
+            for item in &mut page.items {
+                match item {
+                    Item::Line { ink, .. } | Item::Rect { ink, .. } | Item::Label { ink, .. } | Item::Point { ink, .. } => *ink = ink.black(),
+                    Item::Glyph { .. } | Item::Sample { .. } | Item::Link { .. } => {}
+                }
+            }
+        }
     }
     Ok(doc)
 }
 
-fn check_sizes(sizes: &[f64], page: [f64; 2]) -> Result<Vec<f64>, ProofError> {
+pub(crate) fn check_sizes(sizes: &[f64], page: [f64; 2]) -> Result<Vec<f64>, ProofError> {
     if sizes.len() > MAX_SIZES {
         return Err(ProofError::BadOptions(format!("a proof takes at most {MAX_SIZES} sizes")));
     }
@@ -278,7 +354,7 @@ fn check_sizes(sizes: &[f64], page: [f64; 2]) -> Result<Vec<f64>, ProofError> {
     Ok(if sizes.is_empty() { vec![72.0_f64.min(largest)] } else { sizes.to_vec() })
 }
 
-fn new_page(doc: &mut Document, page: [f64; 2]) -> Result<&mut Page, ProofError> {
+pub(crate) fn new_page(doc: &mut Document, page: [f64; 2]) -> Result<&mut Page, ProofError> {
     if doc.pages.len() >= MAX_PAGES {
         return Err(ProofError::BadOptions(format!("the proof would have more than {MAX_PAGES} pages: select fewer glyphs or a smaller size")));
     }
@@ -287,7 +363,7 @@ fn new_page(doc: &mut Document, page: [f64; 2]) -> Result<&mut Page, ProofError>
 }
 
 /// The scale and baseline offset that fit the font's ascender-to-descender height into `size`.
-fn em_fit(face: &Face<'_>, size: f64) -> (f64, f64) {
+pub(crate) fn em_fit(face: &Face<'_>, size: f64) -> (f64, f64) {
     let height = (face.ascender - face.descender).max(face.upem);
     let scale = size / height;
     let baseline = (size - (face.ascender - face.descender) * scale) / 2.0 + face.ascender * scale;
@@ -295,7 +371,7 @@ fn em_fit(face: &Face<'_>, size: f64) -> (f64, f64) {
 }
 
 /// Text cut to `max` characters, with an ellipsis when cut.
-fn fit_text(text: &str, max: usize) -> String {
+pub(crate) fn fit_text(text: &str, max: usize) -> String {
     if text.chars().count() <= max {
         return text.to_string();
     }
@@ -304,7 +380,7 @@ fn fit_text(text: &str, max: usize) -> String {
     out
 }
 
-fn grid(face: &Face<'_>, doc: &mut Document, page: [f64; 2], size: f64) -> Result<(), ProofError> {
+pub(crate) fn grid(face: &Face<'_>, doc: &mut Document, page: [f64; 2], size: f64) -> Result<(), ProofError> {
     let (cols, rows) = grid_shape(page, size);
     let per_page = cols.saturating_mul(rows);
     if per_page == 0 {
@@ -355,7 +431,7 @@ fn grid(face: &Face<'_>, doc: &mut Document, page: [f64; 2], size: f64) -> Resul
     Ok(())
 }
 
-fn outline_pages(face: &Face<'_>, doc: &mut Document, page: [f64; 2]) -> Result<(), ProofError> {
+pub(crate) fn outline_pages(face: &Face<'_>, doc: &mut Document, page: [f64; 2]) -> Result<(), ProofError> {
     if doc.pages.len().saturating_add(doc.glyphs.len()) > MAX_PAGES {
         return Err(ProofError::BadOptions(format!("the proof would have more than {MAX_PAGES} pages: select fewer glyphs")));
     }
@@ -449,7 +525,7 @@ fn points(els: &[El], at: &impl Fn(f64, f64) -> [f64; 2], items: &mut Vec<Item>)
     let on = |x: f32, y: f32, items: &mut Vec<Item>| {
         let (fx, fy) = (f64::from(x), f64::from(y));
         let [px, py] = at(fx, fy);
-        items.push(Item::Point { x: px, y: py, on_curve: true });
+        items.push(Item::Point { x: px, y: py, on_curve: true, ink: Ink::Point });
         if labels {
             let text = format!("{},{}", crate::text::num(fx), crate::text::num(fy));
             items.push(Item::Label { x: px + 3.0, y: py - 3.0, size: 5.0, text, anchor: Anchor::Start, ink: Ink::Faint });
@@ -459,7 +535,7 @@ fn points(els: &[El], at: &impl Fn(f64, f64) -> [f64; 2], items: &mut Vec<Item>)
     let off = |a: (f64, f64), c: (f32, f32), items: &mut Vec<Item>| {
         let [px, py] = at(f64::from(c.0), f64::from(c.1));
         items.push(Item::Line { from: at(a.0, a.1), to: [px, py], ink: Ink::Handle });
-        items.push(Item::Point { x: px, y: py, on_curve: false });
+        items.push(Item::Point { x: px, y: py, on_curve: false, ink: Ink::Handle });
     };
     for el in els {
         match *el {

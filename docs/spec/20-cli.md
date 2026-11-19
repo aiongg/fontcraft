@@ -2166,12 +2166,19 @@ name and glyph id, so tools can read the glyph order back from the file.
 
 **Hint overlays.** Successive stems are drawn slightly offset so that overlapping stems can be told
 apart; areas where two stems overlap get their own colour. `--hint-groups` limits the overlay to chosen
-hint-substitution groups.
+hint-substitution groups. A stem that overlaps the one drawn before it takes the overlap colour and
+reaches two units further past the em box. Stems, groups and zones are read from a `CFF ` table only:
+the zones are BlueValues, each group is the set of stems one hint mask turns on, and counter hints are
+not drawn.
 
 **Low-level parameters.** The reference script exposes nearly eighty drawing parameters (page title font
 and size, tile paddings, colours of zones, em box, hints and labels, label fonts and sizes, metadata block
-placement, error-log columns). They are all available under their reference names through `--set`, and
-`--list-settings` documents them; the frequently used ones have the dedicated options above.
+placement, error-log columns). `--set` takes, under their reference names, the ones FontCraft draws: the
+element switches (em box, glyph, hints, zones, baseline, centre marks, advance box and ticks, contour and
+point labels, the metrics lines), label sizes, paddings, colours and the page title. It refuses the
+others by name, and `--list-settings` lists what it takes with defaults. Values are numbers, `0`/`1`
+for switches and `(r, g, b)` colours with parts from 0 to 1. A `--set` after `--panel N` changes only
+copy N of the `digi` layout. The frequently used settings have the dedicated options above.
 
 **Glyph ranges.** In this subcommand `zero-nine` style name ranges are accepted as well as `zero..nine`
 and are resolved by glyph index, as in the reference.
