@@ -19,7 +19,7 @@ What the chapter implies each object must store.
 | Component (a shape on a layer, ordered among the layer's shapes) | base glyph name; offset x, y; scale x, y (percent); slant; rotation; automatic alignment setting (per component: off, by layer, forced, horizontal only); locked flag; chosen attachment anchor name (optional); smart values: property name → number |
 | Smart glyph | list of properties (name, min, max); per layer and property a pole: `min`, `max` or none |
 | Corner component (attached to one node or one extra node) | corner glyph name; scale x, y; alignment mode `left`, `right`, `both`, `none` |
-| Cap component (attached to two adjacent nodes of one path) | cap glyph name; Fit flag; scale x, y; alignment mode |
+| Cap component (attached to two adjacent nodes of one path) | cap glyph name; Fit flag; scale x, y; alignment mode (stored keys: § 8.5) |
 | Segment component (attached to one path segment) | segment glyph name |
 | Brush (attached to one path segment) | brush glyph name |
 | Font | Disable Automatic Alignment option; `Propagate Anchors` parameter; Grid Spacing |
@@ -393,57 +393,146 @@ swap.
 
 - Name `_cap.<name>` (`cap.glyphNaming`).
 - Attaches to two neighbouring nodes of one path (`cap.attachesToTwoAdjacentNodes`).
+- The glyph's first path is open. Its first and last nodes are the points that join the stem
+  (W4), and they should reach past the butt line into the stem; otherwise `left` and `right`
+  anchors give the directions in and out, as for corners (forum 18125).
 - Anchor setups, pick one:
   1. `origin`: position of the first stem node relative to the cap (`cap.originAnchorSetup`).
-  2. `node1` and `node2`: both stem nodes; controls position and scaling against both, for stems of
-     varying width (`cap.node1Node2AnchorSetup`).
+     This runs the fitting of versions before 3.0.3, kept for cap glyphs without `node1` and
+     `node2` (W5). Staff answers say the glyph is then drawn upside down around the origin, as
+     for the bottom end of a stem (forum 7812, 11603, 17009).
+  2. `node1` and `node2`: both stem nodes, the butt line of the receiving shape; they control
+     position and scaling against both, for stems of varying width (`cap.node1Node2AnchorSetup`).
+     W5 advises keeping them horizontal or vertical.
 - Handbook tip: put these anchors on a known metric (baseline, x-height) so the host stem does not
   depend on the cap's overshoot.
 
 ### 8.2 Using
 
-- `capComponent.add`: select the two nodes → context menu Add Cap Component → `dialog.capPicker`
-  (cap glyphs only) → Return.
+- `capComponent.add`: select the two nodes (or the straight segment between them, W5) → context
+  menu Add Cap Component → `dialog.capPicker` (cap glyphs only) → Return.
 - Blue highlight, click / Shift-click, Delete, copy and paste onto other segments
-  (`cap.highlightAndSelection`, `cap.copyPasteOntoSegments`).
-- `capComponent.decompose` (Decompose Cap).
-- Info box (`infoBox.capComponent`): **Fit** checkbox (`capComponent.setFit`) sizes the cap to the
-  stroke it is attached to. Caps are also "replaced, transformed and aligned like corner
-  components": `capComponent.setGlyph`, `capComponent.setScale`, `capComponent.setAlignment`.
+  (`cap.highlightAndSelection`, `cap.copyPasteOntoSegments`). The highlight is a wide, faint blue
+  band along the fitted cap outline (W5 screenshot).
+- `capComponent.decompose` (Decompose Cap) gives the fitted path (forum 20115).
+- Caps are "replaced, transformed and aligned like corner components": `capComponent.setGlyph`,
+  `capComponent.setScale`, `capComponent.setAlignment`.
+
+### 8.3 Info box (`infoBox.capComponent`)
+
+From the 3.0.3 release-notes screenshot (W5), a still image:
+
+| Control | Command | Notes |
+|---|---|---|
+| name, arrow button | `capComponent.setGlyph`, open the cap glyph | as in the corner Info box |
+| ↔ horizontal scale | `capComponent.setScale` | computed and greyed while Fit is on (forum 22406) |
+| ↕ vertical scale | `capComponent.setScale` | applies with Fit on or off (W3) |
+| four alignment buttons | `capComponent.setAlignment` | left arrow, double arrow (centre), right arrow, x |
+| fit checkbox | `capComponent.setFit` | sizes the cap to the stroke it sits on |
+
+With several caps selected, a field whose values differ shows `Multi`.
+
+### 8.4 Fitting
+
+What written sources state:
+
+- With Fit on, the horizontal scale comes from the stroke and the stored horizontal scale is not
+  used; the vertical scale still applies (W3). A horizontal scale such as -50 % cannot be combined
+  with Fit (forum 30927).
+- With `node1` and `node2` and centre alignment, the cap's angle and position follow the line
+  between the two stem nodes, not the angles of the neighbouring segments (forum 18125).
+- Alignment x keeps the cap's drawn orientation (forum 17009).
+- Caps do not fit slanted stems seamlessly; two corners are the advice there (forum 21665, 2022).
+
+What stays our choice, in the rows' `guesses`: the cut points on the stem sides
+(`capComponent.add`), the origin-setup mapping (`cap.originAnchorSetup`), the reference width of
+an origin-only cap under Fit (`capComponent.setFit`), the point scale applies about
+(`capComponent.setScale`), left and right alignment and the default alignment
+(`capComponent.setAlignment`).
+
+### 8.5 Stored form of caps, segments and brushes
+
+Each is a hint on the layer, as a corner is (§ 7). The file-format specification (W1) lists the
+hint `type` strings `Corner`, `Cap`, `Brush` and `Segment`, in both the Glyphs 2 and the Glyphs 3
+format. `horizontal` is not written for these hints (W1).
+
+| Key | Cap | Segment component | Brush |
+|---|---|---|---|
+| `type` | `Cap` | `Segment` | `Brush` |
+| scripting constant (W2) | `CAP` = 17 | `SEGMENT` = 19 (since 3.1) | `BRUSH` = 18 (since 3.1) |
+| `name` | the cap glyph | the segment glyph | the brush glyph |
+| `origin` | first of the two nodes, in path order; the second is the next node (W4) | on-curve node ending the host segment (W4, forum 19101) | on-curve node ending the host segment (forum 21893) |
+| `options` | alignment: left 0, right 1, centre 2, none 4; plus 8 for Fit (W2, W3) | not described | not described |
+| `scale` | horizontal and vertical factors, default (1, 1) (W1, W3) | not described | not described |
+
+glyphsLib's table of numeric hint types stops at `Cap` = 17; the two later values come from W2.
+No source shows `options` or `scale` on a segment or brush hint; the guesses of
+`segmentComponent.add` and `brush.add` record that FontCraft writes only `type`, `name` and
+`origin` for them.
+
+### 8.6 Written sources for § 7 to § 10
+
+Read for M6.25. Facts only; none of their text is copied.
+
+| Label | Source |
+|---|---|
+| W1 | GlyphsSDK file-format specification, versions 2 and 3 (`GlyphsFileFormat/GlyphsFileFormatv3.md`, hint and `indexPath`) |
+| W2 | Glyphs scripting API documentation, `GSHint` and the hint-type constants (docu.glyphsapp.com), and the GlyphsSDK `ObjectWrapper` |
+| W3 | mekkablue Glyphs-Scripts, *Cap and Corner Manager* (Apache-2.0) |
+| W4 | mekkablue Glyphs-Scripts, *Convert Cap to Segment Component* (Apache-2.0) |
+| W5 | Glyphs 3.0.3 release notes, section *Cap components*, with its two screenshots (glyphsapp.com/news/glyphs-3-0-3-released) |
+| W6 | Tutorial *Reusing shapes: segment components* (glyphsapp.com/learn/reusing-shapes-segment-components) |
+| W7 | Tutorial *Reusing shapes: brushes* (glyphsapp.com/learn/reusing-shapes-brushes) |
+| W8 | Tutorial *Reusing shapes: corner components* (glyphsapp.com/learn/reusing-shapes-corner-components) |
+| forum N | Thread N on forum.glyphsapp.com (`/t/N`); a staff answer is marked as such in the row |
+
+Forum threads cited: 7812, 10109, 11603, 15594, 16992, 17009, 18125, 19101, 20115, 21014, 21665,
+21893, 22406, 23125, 25610, 26036, 26221, 30927, 33636.
 
 ## 9. Segment components
 
 - Glyph: `_segment.<name>`, one open path along the baseline, anchors `start` and `end`
-  (`segment.glyphNaming`).
+  (`segment.glyphNaming`). The fitting assumes `start` on the left and `end` on the right
+  (forum 26036).
 - `glyph.setAnchors` places `start` / `end` on the path's first and last node. If the anchors are
   not on those nodes, the component will not match the host segment's length. The two end nodes
   should be on the baseline or equally far from it (`segment.startEndAnchors`).
-- Works on straight and curved host segments (`segment.appliesToStraightAndCurved`).
+- Works on straight and curved host segments (`segment.appliesToStraightAndCurved`). A 2025 staff
+  answer says the menu item is not offered on smooth curve segments while pasting onto them works
+  (forum 33636); FontCraft follows the handbook and records the conflict as a guess.
+- The component is squeezed or stretched to the host segment's length; its height is not scaled
+  (W6). It follows the host path's direction, so on a counter-clockwise outline the segment glyph
+  is drawn turned 180 degrees (forum 26036).
 - Bending never adds nodes: lower accuracy on tight curves, but a constant node count across
-  masters (`segment.bendingAddsNoNodes`).
+  masters (`segment.bendingAddsNoNodes`). Each point, handles included, keeps its own
+  perpendicular distance from the host segment, so smooth handle-node-handle triples can kink (W6).
 - `segmentComponent.add`: select a segment (click it, or select both its nodes) → context menu Add
   Segment Component → `dialog.segmentPicker` → Return.
-- Blue highlight, click / Shift-click, Delete, copy and paste onto other segments.
-- `segmentComponent.decompose` (Decompose Segment Component).
+- Blue highlight (a faint band along the fitted outline, W6), click / Shift-click, Delete, copy
+  and paste onto other segments.
+- `segmentComponent.decompose` (Decompose Segment Component) gives the fitted path (forum 20115).
 - Info box (`infoBox.segmentComponent`): name (`segmentComponent.setGlyph`), arrow
-  (`segmentComponent.editGlyph`). No scale, alignment or fit controls are mentioned.
+  (`segmentComponent.editGlyph`). No scale, alignment or fit controls are mentioned; a 2021
+  request to mirror applied segment components (forum 21014) agrees.
 
 ## 10. Brushes
 
-- Glyph: `_brush.<name>`, exactly one closed path, anchors `start` and `end` (`brush.glyphNaming`).
-  Merge several shapes with Remove Overlap first.
+- Glyph: `_brush.<name>`, one closed path, anchors `start` and `end` (`brush.glyphNaming`).
+  Further shapes are ignored (W7); merge several shapes with Remove Overlap first.
 - `glyph.setAnchors` puts `start` / `end` at the left and right of the layer; normally on the
   baseline or at equal height (`brush.startEndAnchors`).
 - The outline between `start` and `end` stretches and bends; outline outside them keeps its shape
-  (`brush.stretchZoneBetweenAnchors`).
+  (`brush.stretchZoneBetweenAnchors`). The host segment runs through the brush at the anchors'
+  height (W7 screenshots).
 - Only curve segments (with handles) bend; Option-click a line segment to give it handles
-  (`brush.bendingNeedsHandles`).
+  (`brush.bendingNeedsHandles`). A brush wraps one host segment only (forum 23125).
 - `brush.add`: select one or more segments → context menu Add Brush → `dialog.brushPicker` → Return.
-  With nodes selected instead, the selected nodes become the end nodes of the brushes that are
-  added. Typical host: an open path of one segment (`brush.expandsSegments`).
-- Blue highlight; click on the brush outline to select; Shift-click; Delete; copy and paste onto
-  other segments.
-- `brush.decompose` (Decompose Brush).
+  With nodes selected instead, a brush goes on each segment ending at a selected node, with its end
+  anchor on that node (W7). Typical host: an open path of one segment (`brush.expandsSegments`).
+- Blue highlight (a faint band along the brush outline, W7); click on the brush outline to select;
+  Shift-click; Delete; copy and paste onto other segments. Cmd-A pressed repeatedly reaches all
+  brushes (forum 21893).
+- `brush.decompose` (Decompose Brush) gives the brushed outline (forum 20115).
 - Info box (`infoBox.brush`): name (`brush.setGlyph`), arrow (`brush.editGlyph`).
 
 ## 11. Pixel tool and pixel fonts
@@ -584,18 +673,27 @@ Corners, caps, segments, brushes
   path's nodes and the end node's side of the origin (`corner.pathDirection`).
 - **Q-28** Intermediate layers for corner scaling. **Answered (ours):** percentages read from the
   layer name, linear per axis (`corner.scaleInterpolatesWithIntermediateLayers`).
-- **Q-29** Cap fitting maths. **Planned for M13 with checks in the reference app:** no written
-  source, neither oracle supports caps, no corpus source uses them. The M13 plan
-  (`docs/plans/M13.md`, M13.40 and § 8) records a provisional fitting in the rows' `guesses`
-  (`capComponent.add`, `capComponent.setFit`, `capComponent.setAlignment`,
-  `cap.node1Node2AnchorSetup`) and lists exports of a synthetic cap font from the reference app's
-  trial that settle it; M13.40 starts after those checks. If the trial ends without them, M13.40
-  to M13.42 build on the recorded guesses (`docs/plans/M13.md` § 7 question 6).
-- **Q-30** Further controls in the cap, segment and brush Info boxes. **Planned for M13:** a
-  screenshot of each Info box in the trial (`infoBox.capComponent` observe step) settles it.
-- **Q-31** Segment and brush bending maths. **Planned for M13** as Q-29: provisional mapping in
-  the guesses of `segmentComponent.add` and `brush.add`, settled by exported segment and brush
-  test fonts (M13.41 and § 8).
+- **Q-29** Cap fitting maths. **Partly answered (written sources, § 8.4 and § 8.5):** the stored
+  keys, the Fit bit, the alignment values, what Fit does to the two scales, how centre alignment
+  with `node1` and `node2` turns the cap, and that the cap glyph's open path joins the stem at its
+  two end nodes. Still provisional, in the rows' `guesses`: the cut points on the stem sides, the
+  origin-setup mapping, the reference width of an origin-only cap, the point scale applies about,
+  and left and right alignment (`capComponent.add`, `cap.originAnchorSetup`,
+  `capComponent.setFit`, `capComponent.setScale`, `capComponent.setAlignment`). Neither oracle
+  supports caps and no corpus source uses them; the exports listed in `docs/plans/M13.md` § 8
+  settle the rest. If the trial ends without them, M13.40 to M13.42 build on the recorded guesses
+  (`docs/plans/M13.md` § 7 question 6).
+- **Q-30** Further controls in the cap, segment and brush Info boxes. **Answered for caps (W5
+  screenshot, § 8.3):** name and arrow, horizontal and vertical scale, four alignment buttons, fit.
+  **Open for segments and brushes:** the handbook lists only the name and the arrow; recorded as a
+  guess in `infoBox.segmentComponent` and `infoBox.brush`, settled by a screenshot of each.
+- **Q-31** Segment and brush bending maths. **Partly answered (written sources, § 9 and § 10):**
+  segment components stretch to the host length without scaling their height, follow the host
+  path's direction, and keep each point's perpendicular distance from the host; brushes keep the
+  outline beyond `start` and `end`, wrap one host segment each and bend only curve segments. Still
+  provisional: the fraction-of-length mapping and the rigid ends (`segmentComponent.add`,
+  `brush.add`), settled by exported segment and brush test fonts (M13.41 and `docs/plans/M13.md`
+  § 8).
 - **Q-32** Paste onto a selection of the wrong kind. **Answered (ours):** refused with a message
   (`corner.copyPasteOntoNodes`).
 - **Q-33** Attachments across masters and the order at export. **Answered (oracle, ours):** both

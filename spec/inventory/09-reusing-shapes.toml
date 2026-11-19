@@ -1511,12 +1511,12 @@ milestone = "M6"
 summary = "In Edit View a corner component is tinted with a faint blue background. A click selects it, Shift-click extends the selection to several corners, and Delete removes the selected ones."
 ref = "Reusing Shapes › Corner Components › Using Corner Components"
 status = "handbook"
-notes = "Documented, not yet observed. M6.10: Edit View tints each corner component on a node with a faint disc (`corner_highlight`); a corner on an extra node is not tinted. Selecting corners by click and deleting them need a selection kind for hints and are not built yet."
+notes = "Documented, not yet observed. M6.10: Edit View tints each corner component on a node with a faint disc (`corner_highlight`); a corner on an extra node is not tinted. Selecting corners by click and deleting them need a selection kind for hints and are not built yet. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the corner tutorial (W8) shows corner components as blue particles and selects them by a click or Shift-click on their blue line; the release-notes screenshot of caps (W5) and the tutorial screenshots of segment components and brushes (W6, W7) draw the highlight as a wide, faint blue band along the fitted outline of the attachment. The disc drawn by M6.10 differs from that and is a UI follow-up. W8 also says Select All, pressed repeatedly, cycles through all paths, all paths and anchors, all corner components and all anchors, so Delete can remove every corner at once."
 guesses = [
-  "The tint is a disc around the corner's node rather than a fill of the corner's own outline; a corner component in the reference app settles it.",
+  "The highlight is a wide, faint blue band along the corner's fitted outline, as the sources show for caps, segments and brushes; its width and colour are ours, and a corner at 400 % zoom in the reference app settles them.",
 ]
 observe = [
-  "Attach a corner component and note the shape and extent of its blue tint.",
+  "Attach a corner component at 400 % zoom and note the width and colour of its blue band, and how a selected corner differs from an unselected one.",
 ]
 
 [[behavior]]
@@ -1621,7 +1621,7 @@ milestone = "M6"
 summary = "Extra nodes, the points where overlapping paths intersect (displayed with View › Show Nodes › Extra Nodes), can take corner components through the same context-menu item. This gives smooth joins or ink traps at stem and crossbar crossings."
 ref = "Reusing Shapes › Corner Components › Extra Nodes"
 status = "handbook"
-notes = "Documented, not yet observed. The file format stores such a corner with a four-number origin: a path and the node ending one segment, and a path and the node ending the other (GlyphsSDK file-format specification v3, `indexPath`); fontc reads only the first two numbers. FontCraft reads all four and leaves these corners out of outlines: fitting one needs the two paths' overlap removed first, which the model's outline resolution cannot do. `cornerComponent.add` takes an extra node as `extraNodes: [[x, y]]` (M6.9)."
+notes = "Documented, not yet observed. The file format stores such a corner with a four-number origin: a path and the node ending one segment, and a path and the node ending the other (GlyphsSDK file-format specification v3, `indexPath`); fontc reads only the first two numbers. FontCraft reads all four and leaves these corners out of outlines: fitting one needs the two paths' overlap removed first, which the model's outline resolution cannot do. `cornerComponent.add` takes an extra node as `extraNodes: [[x, y]]` (M6.9). Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the scripting API (W2) gives such a corner's origin node as a handle object when it sits on an intersection; the corner tutorial (W8) selects several extra nodes by Shift-click, adds corners from the context menu, and states that the ink traps follow when the crossbar is moved. None of them says which of the two segments is stored first."
 guesses = [
   "The two crossing segments are stored with the earlier path first (then the earlier node); a source saved by the reference app with a corner on an extra node settles which segment comes first.",
 ]
@@ -1637,7 +1637,7 @@ milestone = "M13"
 summary = "A glyph is a cap glyph when its name starts with _cap. followed by any name (_cap.flag)."
 ref = "Reusing Shapes › Cap Components › Creating Cap Glyphs"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): a forum thread (15594, 2020) reports that a cap glyph named with an underscore after `_cap` in place of the dot is not offered. Third-party scripts (W3, W4) treat corner, cap and segment glyphs as glyph category `Corner`."
 
 [[behavior]]
 id = "cap.attachesToTwoAdjacentNodes"
@@ -1646,7 +1646,10 @@ milestone = "M13"
 summary = "A cap component is bound to two nodes that are neighbours on the same path (a corner is bound to one). It models stroke endings: spurs, terminals, flag serifs."
 ref = "Reusing Shapes › Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the stored hint's `origin` is the first of the two nodes in path order and the second is the node after it (W4 reads the second node as the origin's next node). The 3.0.3 release notes (W5) add a cap by selecting a straight line segment; a user answer (forum 15594) says the context-menu item shows when a cap glyph exists and two nodes are selected. A user report with a staff reply (forum 10109, 2018) says a cap could misbehave when the path's start node is one of its nodes, and that moving the start node fixed it."
+guesses = [
+  "The two nodes may be selected in either order; the stored origin is the earlier one in path order, and on a closed path the last node and node 0 are neighbours with the last node as origin. A cap on the closing segment saved by the reference app settles it.",
+]
 observe = [
   "Select two nodes that are not neighbours on one path, then two nodes on different paths, and open the context menu: note whether Add Cap Component is shown, disabled or missing.",
 ]
@@ -1658,7 +1661,10 @@ milestone = "M13"
 summary = "Simple anchor setup for a cap glyph: a single anchor named origin gives the spot in the cap shape on which the first stem node of the pair lands."
 ref = "Reusing Shapes › Cap Components › Creating Cap Glyphs"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the 3.0.3 release notes (W5) say the cap fitting was redesigned around node1 and node2, and the earlier fitting is kept for any cap glyph without those two anchors, so this setup runs the earlier fitting. Staff answers (forum 7812, 11603, 17009) say that without node1 and node2 the cap is drawn upside down around the origin point, as for the bottom end of a stem, and that an origin anchor moves that point; a cap glyph turned 180 degrees with its origin anchor on the x-height avoids drawing it upside down."
+guesses = [
+  "In the origin setup the cap glyph is drawn as for the bottom end of a stem; its x axis is mapped onto the direction from the first to the second stem node and its origin onto the first node, so at a stem's top end it turns 180 degrees. Staff answers support the drawing rule; exporting `_cap.flag` on the top and bottom of a stem settles the mapping.",
+]
 
 [[behavior]]
 id = "cap.node1Node2AnchorSetup"
@@ -1667,9 +1673,9 @@ milestone = "M13"
 summary = "Flexible anchor setup for a cap glyph: two anchors named node1 and node2 stand for the two stem nodes, so both the position and the scaling of the cap are controlled relative to both nodes. This lets one cap fit stems of different widths."
 ref = "Reusing Shapes › Cap Components › Creating Cap Glyphs"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the 3.0.3 release notes (W5) call node1 and node2 the butt line of the receiving shape and advise keeping them horizontal or vertical; their screenshot shows a cap glyph whose open path runs down from above node1, around, and up past node2. A staff answer (forum 18125) says that with node1 and node2 and centre alignment, the cap's angle and position follow the two stem nodes, not the angles of the neighbouring segments. With Fit on, the horizontal scale is computed and the vertical scale still applies (W3; forum 22406, 30927)."
 guesses = [
-  "With node1 and node2 anchors the cap is mapped by the similarity transform that sends node1 onto the first host node and node2 onto the second (uniform scale, rotation, translation); settled by exporting `_cap.round` on the 80- and 120-unit stems.",
+  "With node1 and node2 the cap's x axis is laid on the line from the first to the second host node and node1 lands on the first node; with Fit on, the horizontal scale is the host nodes' distance over the node1 to node2 distance and the vertical scale is the Info box value, so scaling is not uniform. Exporting `_cap.round` on the 80- and 120-unit stems settles it.",
 ]
 observe = [
   "Add `_cap.round` (anchors node1 and node2 50 units apart) to the 80-unit stem of `l` and the 120-unit stem of `i`, export and send back: compare the cap's height in both to see whether scaling is uniform or along the stem end only.",
@@ -1687,9 +1693,9 @@ milestone = "M13"
 summary = "Attaches a cap component to two selected adjacent nodes of one path. In the UI it is a context-menu item that opens a glyph picker listing only cap glyphs; Return inserts the highlighted one."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): a third-party script (W4) takes the first and last nodes of the cap glyph's first path as the points that join the stem, so the cap glyph holds an open path, as a corner glyph does; the 3.0.3 screenshot (W5) shows that open path, and the fitted caps on an H join both stem sides in place of the stem's end segment. A staff answer (forum 18125) says the path's end nodes must reach past the butt line into the stem, or the cap glyph needs left and right anchors that give the directions in and out, as corners use. The hint is stored with `type = Cap`, `name` the cap glyph and `origin` the first node (W1, W2)."
 guesses = [
-  "The cap's open path replaces the host segment between the two nodes and is joined to the path at both ends, as a corner's open path replaces part of the host outline; settled by exporting a cap test font from the reference app and comparing the outline.",
+  "The cap glyph's first path is open; it replaces the host segment between the two nodes, its start joins the side before the first node and its end the side after the second, and those sides are cut where the cap's ends meet them, as a corner's ends are fitted; left and right anchors act as for corners. The sources agree on the joining; an export of the cap test font settles the cut points.",
 ]
 observe = [
   "In the cap test font (a `_cap.flag` glyph with an `origin` anchor and an open path, an `l` with an 80-unit stem), select the two top nodes of the stem, choose Add Cap Component from the context menu, pick `_cap.flag`, then export an OTF and send it back: its `l` outline shows where the cap's path goes and whether the stem's top segment is replaced.",
@@ -1707,7 +1713,7 @@ milestone = "M13"
 summary = "Context-menu item that bakes a cap component into the host path and removes the component."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): a forum thread (20115, 2021) says Decompose on corner, cap, segment and smart components gives the fitted paths. A third-party script from the same collection as W3 (Decompose Corner and Cap Components) cleans up duplicate nodes at the path's start after decomposing, which hints that the reference app can leave one there."
 guesses = [
   "Decompose Cap writes the fitted outline into the host path in place of the cap and keeps the node order of the host before the cap; settled by decomposing a cap in the reference app and comparing node order with the exported outline.",
 ]
@@ -1727,12 +1733,12 @@ milestone = "M13"
 summary = "Toggles the Fit option of a cap component. When on, the cap is resized automatically to the width of the stroke end it sits on, that is the distance between its two nodes."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): Fit is bit value 8 of the hint's `options`, added to the alignment value: the scripting API (W2) documents `auto (for caps) = alignment | 8` and a third-party script (W3) names the bit FIT. With Fit on, the horizontal scale comes from the stroke and the stored horizontal scale is ignored; the vertical scale still applies (W3). The Info box then shows the computed horizontal scale greyed out (forum 22406, 2022). A staff answer (forum 30927, 2024) says Fit cannot be combined with a horizontal scale such as -50 %. The 3.0.3 screenshot (W5) shows a `fit` checkbox beside the vertical scale field."
 guesses = [
-  "With Fit on, the cap is scaled along the stroke-end direction by the ratio of the host's node distance to the cap's reference width (the distance between node1 and node2, or the cap's advance width with only an origin anchor); its other direction is not scaled. Settled by the Fit export check.",
+  "With Fit on, the horizontal scale is the host nodes' distance over the cap's reference width and replaces the stored horizontal scale, which is kept but not used; the reference width is the node1 to node2 distance, or the cap glyph's advance width when it has only an origin anchor (no source names the latter). Reading the greyed horizontal scale of an origin-only cap in the reference app settles it.",
 ]
 observe = [
-  "Add `_cap.flag` (origin anchor only) to the 80-unit stem of `l` and to the 120-unit stem of `i`, export with Fit off and again with Fit on: compare the cap outlines in the four results for scale along and across the stem end.",
+  "Add `_cap.flag` (origin anchor only, advance width 100) to the 80-unit stem of `l` with Fit on and read the greyed horizontal scale in its Info box: 80 % means the advance width is the reference width.",
 ]
 
 [[command]]
@@ -1747,7 +1753,10 @@ milestone = "M13"
 summary = "Swaps the cap glyph used by an attached cap component. The handbook says caps are replaced the same way as corners, that is through the name in the Info box."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the 3.0.3 screenshot (W5) shows the cap glyph's name at the top of the Info box with an arrow button beside it, as in the corner Info box. Alignment, Fit and scale are stored in the hint's `options` and `scale`, apart from its `name` (W1, W2)."
+guesses = [
+  "Replacing the cap glyph changes the hint's name only and keeps its scale, alignment and Fit, since they are stored apart; the observe step settles it.",
+]
 observe = [
   "Click the name of an attached cap in its Info box and note what opens (the cap picker, a text field or a menu) and whether the new cap keeps the old one's scale and alignment.",
 ]
@@ -1761,15 +1770,15 @@ kind = "engine"
 params = "{glyph?: name, layer?: id, caps?: [indices], scaleX?: percent, scaleY?: percent}"
 area = "components"
 milestone = "M13"
-summary = "Sets the horizontal and vertical scale of a cap component; negative values flip it. The handbook states only that caps transform like corners, so the field set is taken from the corner Info box."
+summary = "Sets the horizontal and vertical scale of a cap component; negative values flip it. The Info box has a horizontal and a vertical scale field, and with Fit on the horizontal value is computed from the stroke and the stored one is not used."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the 3.0.3 screenshot (W5) shows a horizontal (↔) and a vertical (↕) scale field in the cap Info box. The scale is stored in the hint's `scale` as factors, as for corners (W1; W3 sets it on caps). With Fit on, only the vertical value applies (W3; forum 30927)."
 guesses = [
-  "The cap Info box has the corner Info box's horizontal and vertical scale fields, applied after fitting and before placement; settled by the Info box check.",
+  "Scale applies in the cap glyph's own frame, about its origin or node1, before the cap is turned and placed on the stem; exporting a cap with each scale field at 50 % settles it.",
 ]
 observe = [
-  "Select an attached cap with View › Show Info on and list every control of its Info box, with default values; type 50 into each scale field you find and export, to see whether scale applies before or after Fit.",
+  "Type 50 into each scale field of an attached cap with Fit off and export: note whether the cap shrinks along the stroke end, across it, and about which point.",
 ]
 
 [[command]]
@@ -1784,9 +1793,10 @@ milestone = "M13"
 summary = "Sets the alignment mode of a cap component using the same four modes as corners. The handbook says caps align like corners without describing what each mode does on a two-node attachment."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the scripting API (W2) stores the alignment in the low bits of the hint's `options`: left 0, right 1, centre 2, fixed 4, with Fit added as 8; a third-party script (W3) masks the four alignment bits to keep Fit. The 3.0.3 screenshot (W5) shows four buttons: left arrow, double arrow (centre), right arrow and x. Staff answers say x keeps the cap's drawn orientation (forum 17009) and centre with node1 and node2 follows the line between the two stem nodes (forum 18125); a 2022 staff answer (forum 21665) says caps do not fit slanted stems seamlessly and two corners should be used there. FontCraft calls centre `both` and x `none`, as for corners."
 guesses = [
-  "For a cap, left aligns to the incoming segment of the first node, right to the outgoing segment of the second, both to their mean direction and none keeps the cap unrotated; settled by exporting the slanted-stem cap with each mode.",
+  "For a cap, left turns it to the side before the first node and right to the side after the second, as corners do; centre (both) follows the line between the two nodes and none keeps it unrotated, as staff answers say. Exporting the slanted-stem cap with each mode settles left and right.",
+  "A new cap is stored with options 0 (left), as a new corner is; the 3.0.3 screenshot shows four caps in centre alignment, which may have been set by hand. Adding a cap in the reference app and reading its Info box settles it.",
 ]
 observe = [
   "Add `_cap.flag` to the slanted stem of `slash` and export once per alignment mode the Info box offers: note the cap's rotation in each export.",
@@ -1797,17 +1807,21 @@ id = "infoBox.capComponent"
 label = "Cap component Info box"
 location = "inspector"
 controls = [
-  "Fit checkbox",
-  "component name (replace), scale fields and alignment modes as in the corner Info box",
+  "component name (click to replace) with an arrow button that opens the cap glyph",
+  "horizontal scale field (↔); computed and greyed while Fit is on",
+  "vertical scale field (↕)",
+  "four alignment buttons: left, centre (double arrow), right, none (x)",
+  "fit checkbox",
 ]
 area = "components"
 milestone = "M13"
-summary = "Shown for a selected cap component when View › Show Info is on. Only the Fit checkbox is described explicitly; the remaining controls follow from the statement that caps are replaced, transformed and aligned like corners."
+summary = "Shown for a selected cap component when View › Show Info is on: the cap glyph's name and arrow button, a horizontal and a vertical scale field, four alignment buttons and a fit checkbox."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the controls are those in the 3.0.3 release-notes screenshot (W5), a still image, not a video, so the row stays `handbook`; with several caps selected, a field whose values differ shows `Multi`. The greyed horizontal value under Fit is from forum 22406."
 observe = [
-  "Screenshot the Info box of a selected cap, segment component and brush with View › Show Info on; list each control and its default.",
+  "Screenshot the Info box of a selected segment component and of a selected brush with View › Show Info on; list each control and its default.",
+  "Add a new cap and note the default state of its fit checkbox and alignment buttons.",
 ]
 
 [[panel]]
@@ -1820,7 +1834,7 @@ milestone = "M13"
 summary = "Glyph picker opened by Add Cap Component."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the segment tutorial (W6) shows the same kind of picker listing all segment glyphs and narrowing the list by the typed part of a glyph name."
 observe = [
   "Open Add Cap Component on a font with three cap glyphs and two corner glyphs: confirm only cap glyphs are listed and note the sort order and what the search field matches.",
 ]
@@ -1832,9 +1846,9 @@ milestone = "M13"
 summary = "A cap component is tinted with a faint blue background in Edit View. Click selects, Shift-click selects several, Delete removes the selected caps."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the 3.0.3 screenshot (W5) shows each cap's highlight as a wide, faint blue band along the fitted cap outline, and one Info box for several selected caps."
 observe = [
-  "Screenshot a selected and an unselected cap at 400% zoom to record the highlight colour and how the selection is drawn.",
+  "Screenshot a selected and an unselected cap at 400 % zoom to record how a selected cap differs from the plain highlight.",
 ]
 
 [[behavior]]
@@ -1844,7 +1858,7 @@ milestone = "M13"
 summary = "A selected cap component can be copied and then pasted onto other selected segments (node pairs) with the standard Copy and Paste commands."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): a staff fix (forum 16992, 2021) made copied and pasted outlines carry their corner and cap components; the corner tutorial (W8) says pasting works with several targets selected."
 observe = [
   "Copy a selected cap, select two adjacent nodes on another stem and paste; then select a single node and paste: note what is pasted in each case.",
 ]
@@ -1860,7 +1874,7 @@ milestone = "M13"
 summary = "A glyph is a segment glyph when its name starts with _segment. followed by any name (_segment.stem). Its contents are a single open path laid on the baseline plus the anchors start and end."
 ref = "Reusing Shapes › Segment Components › Creating Segment Glyphs"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the segment tutorial (W6) draws the open path along the baseline with a start anchor on the first node and an end anchor on the last. A staff answer (forum 26036, 2023) says the fitting assumes start on the left and end on the right."
 
 [[behavior]]
 id = "segment.startEndAnchors"
@@ -1869,7 +1883,7 @@ milestone = "M13"
 summary = "The start and end anchors belong on the first and last node of the open path; Glyph › Set Anchors (Cmd+U) puts them there. If they sit elsewhere, the fitted component will not span the full length of the host segment. The path's two end nodes should both be on the baseline or both at one equal distance from it."
 ref = "Reusing Shapes › Segment Components › Creating Segment Glyphs"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. The anchor rule is already in `components::default_anchors` (M6.3); documented, not yet observed."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. The anchor rule is already in `components::default_anchors` (M6.3); documented, not yet observed. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the segment tutorial (W6) says to snap the anchors exactly onto the first and last nodes and keep them level; their height matters little."
 observe = [
   "Move the end anchor of `_segment.wave` 40 units left of the end node and look at an attached segment component: note how much shorter it is.",
 ]
@@ -1881,7 +1895,10 @@ milestone = "M13"
 summary = "A segment component replaces one straight or curved host segment with its open path, which may be a single bent segment or a long path with many nodes."
 ref = "Reusing Shapes › Segment Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the segment tutorial (W6) shows a segment component bent along a curve segment. A staff answer (forum 25610, 2023) says to add one to a curve, select the two on-curve nodes at its ends. A later staff answer (forum 33636, 2025) says Add Segment Component is not offered on a smooth curve segment, while pasting onto one works and bends the component. FontCraft follows the handbook."
+guesses = [
+  "Add Segment Component accepts a curved host segment, as the handbook says; a 2025 staff answer says the menu item is not offered on smooth curve segments, so the reference app may refuse it. Adding one to a smooth curve of an `o` in the reference app settles it.",
+]
 
 [[behavior]]
 id = "segment.bendingAddsNoNodes"
@@ -1890,7 +1907,7 @@ milestone = "M13"
 summary = "Bending a segment component along a curved host segment moves its existing points only and never inserts nodes. Fidelity to the curve can suffer, but the node count is identical in every master, which keeps the result interpolatable."
 ref = "Reusing Shapes › Segment Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the segment tutorial (W6) says each point, nodes and handles alike, keeps its own perpendicular distance from the host segment, so a smooth handle, node, handle triple can lose its straight line on a curve. A staff answer (forum 26221) says turning the segment glyph's lines into curves gives smoother results on curved hosts."
 
 [[command]]
 id = "segmentComponent.add"
@@ -1904,10 +1921,11 @@ milestone = "M13"
 summary = "Attaches a segment component to a selected path segment (a segment counts as selected after a click on it or when its two nodes are both selected). In the UI it is a context-menu item that opens a picker listing only segment glyphs; Return inserts the highlighted one."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the hint is stored with `type = Segment` (W1; scripting constant SEGMENT = 19 since version 3.1, W2), `name` the segment glyph and `origin` the on-curve node that ends the host segment (W4 moves a cap's origin to the next node when converting it to a segment; forum 19101). The tutorial (W6) says the component is squeezed or stretched onto the host segment whatever its length, and suggests separate segment glyphs for x-height and cap-height lengths, so the height is not scaled. A staff answer (forum 26036) says the component follows the host path's direction with start on the left, so on a counter-clockwise outline the glyph is drawn turned 180 degrees."
 guesses = [
-  "On a straight host segment the segment glyph's path is scaled along the baseline so start lands on the first node and end on the second, and is not scaled across; settled by the straight-segment export check.",
-  "On a curved host segment each point of the segment glyph, handles included, is moved to the host curve at the same fraction of its length and offset along the curve's normal by its distance from the baseline; settled by the curved-segment export check.",
+  "On a straight host segment the segment glyph's path is scaled along the baseline so start lands on the segment's first node and end on its last, and is not scaled across; the tutorial supports both, and the straight-segment export check settles the details.",
+  "On a curved host segment each point of the segment glyph, handles included, is moved to the host curve at the same fraction of its length and keeps its distance from the baseline along the curve's normal (the tutorial states the distance rule; the fraction of length is ours). The side above the baseline maps to the left of the host path's direction, a turn without mirroring, as the staff answer on direction implies. The curved-segment export check settles it.",
+  "A segment component's hint stores only `type`, `name` and `origin`, with no `options` or `scale`, since no source shows either on one; a source saved by the reference app with a segment component settles it.",
 ]
 observe = [
   "In the segment test font (`_segment.wave`: a three-node open path on the baseline with start and end anchors on its end nodes), add the segment component to the bottom straight segment of a square and to one curved segment of an `o`, export an OTF and send it back: the outlines show the length and normal mapping, and whether the node count stays three.",
@@ -1925,7 +1943,7 @@ milestone = "M13"
 summary = "Context-menu item that replaces the host segment with the fitted path of the segment component and removes the component."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): a forum thread (20115, 2021) says Decompose Segment Component gives the fitted path."
 observe = [
   "Decompose a segment component on the `o` and save: compare the resulting path with the exported outline of the Add Segment Component check.",
 ]
@@ -1974,7 +1992,10 @@ milestone = "M13"
 summary = "Shown for a selected segment component when View › Show Info is on."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): a 2021 feature request (forum 21014) asks for a way to mirror segment components after they are applied, which agrees with an Info box without scale fields."
+guesses = [
+  "The segment Info box has only the name and the arrow button, with no scale, alignment or fit controls, as the handbook lists; a screenshot of the Info box in the reference app settles it.",
+]
 
 [[panel]]
 id = "dialog.segmentPicker"
@@ -1986,7 +2007,7 @@ milestone = "M13"
 summary = "Glyph picker opened by Add Segment Component."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the segment tutorial (W6) shows the picker listing every segment glyph and narrowing the list as a part of a glyph name is typed."
 
 [[behavior]]
 id = "segment.highlightAndSelection"
@@ -1995,7 +2016,7 @@ milestone = "M13"
 summary = "A segment component is tinted with a faint blue background in Edit View. Click selects, Shift-click selects several, Delete removes the selected ones."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the segment tutorial's curve screenshot (W6) shows the highlight as a faint blue band along the fitted segment outline."
 
 [[behavior]]
 id = "segment.copyPasteOntoSegments"
@@ -2004,7 +2025,7 @@ milestone = "M13"
 summary = "A selected segment component can be copied and pasted onto other selected segments with the standard Copy and Paste commands."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): a staff answer (forum 33636, 2025) says pasting onto a curved segment works even where Add Segment Component is not offered; the same thread reports that pasting onto a curved segment ending at the path's start node attached it to the previous segment."
 
 # =====================================================================================
 # Brushes
@@ -2014,12 +2035,12 @@ notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/pla
 id = "brush.glyphNaming"
 area = "components"
 milestone = "M13"
-summary = "A glyph is a brush glyph when its name starts with _brush. followed by any name (_brush.arrow). It must contain exactly one closed path plus two anchors, start and end; several closed shapes have to be merged into one with Remove Overlap first."
+summary = "A glyph is a brush glyph when its name starts with _brush. followed by any name (_brush.arrow). It holds one closed path plus two anchors, start and end; further shapes are ignored, so several closed shapes have to be merged into one with Remove Overlap first."
 ref = "Reusing Shapes › Brushes › Creating Brush Glyphs"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
-observe = [
-  "Give `_brush.arrow` a second closed path and add the brush: note whether it is refused, uses the first path only, or merges both.",
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the brush tutorial (W7) says further shapes in a brush glyph are ignored, and makes a counter part of the single outline by reconnecting nodes across a hidden gap."
+guesses = [
+  "A brush uses the brush glyph's first path; when that path is open, the brush draws nothing and its glyph is reported. A brush glyph whose first path is open, in the reference app, settles it.",
 ]
 
 [[behavior]]
@@ -2029,7 +2050,7 @@ milestone = "M13"
 summary = "Glyph › Set Anchors (Cmd+U) places a brush glyph's start and end anchors at the left and right of the layer. They normally sit on the baseline or at one equal distance from it."
 ref = "Reusing Shapes › Brushes › Creating Brush Glyphs"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. The anchor rule is already in `components::default_anchors` (M6.3); documented, not yet observed."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. The anchor rule is already in `components::default_anchors` (M6.3); documented, not yet observed. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the brush tutorial (W7) also uses Set Anchors for All Masters (Cmd-Opt-U); its screenshot of `_brush.arrow` shows start at the shaft's left end and end where the head begins, both at the height of the shaft's centre line."
 guesses = [
   "Set Anchors puts a brush glyph's start at (0, 0) and its end at (advance width, 0); Set Anchors on a brush glyph in the reference app settles it.",
 ]
@@ -2041,7 +2062,7 @@ milestone = "M13"
 summary = "Only the part of the brush outline lying between the start and end anchors stretches and bends to follow the host segment. Outline before start and after end keeps its shape, which is how fixed ends such as an arrowhead are made."
 ref = "Reusing Shapes › Brushes › Creating Brush Glyphs"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the brush tutorial (W7) says the anchors are the size reference: outline beyond them stays fixed and outline between them is stretched or squeezed. Its screenshots show the host path running through the brush at the anchors' height."
 
 [[behavior]]
 id = "brush.bendingNeedsHandles"
@@ -2050,7 +2071,7 @@ milestone = "M13"
 summary = "A segment of the brush outline bends along a curved host segment only if it is a curve segment with handles; straight line segments stay straight. Handles are added to a line segment by Option-clicking it."
 ref = "Reusing Shapes › Brushes › Creating Brush Glyphs"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the brush tutorial (W7) agrees: the curve handles on the segments between the anchors let the brush bend. A staff answer (forum 23125, 2022) says a brush wraps around one host segment only, so a path of several segments gets one brush per segment."
 
 [[behavior]]
 id = "brush.expandsSegments"
@@ -2059,7 +2080,7 @@ milestone = "M13"
 summary = "A brush turns a host path segment, straight or curved, into the brush's closed outline laid along it. It works on any segment but is intended mainly for open paths, most often an open path of a single segment."
 ref = "Reusing Shapes › Brushes"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the brush tutorial (W7) prefers open paths or single-segment paths, and shows that a brush on every segment of a longer path gives one brush per segment."
 
 [[command]]
 id = "brush.add"
@@ -2073,14 +2094,15 @@ milestone = "M13"
 summary = "Attaches a brush to every selected segment. If nodes are selected in place of segments, brushes are added so that each selected node is the end node of a new brush. In the UI it is a context-menu item that opens a picker listing only brush glyphs; Return inserts the highlighted one."
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the hint is stored with `type = Brush` (W1; scripting constant BRUSH = 18 since version 3.1, W2), `name` the brush glyph and `origin` the on-curve node where the host segment ends (staff answer, forum 21893). The brush tutorial (W7) says that with nodes selected, a brush is added on each segment ending at a selected node, with the end anchor on that node, and that outline beyond the anchors keeps its shape."
 guesses = [
-  "The brush outline between start and end follows the host segment as segments do; the parts before start and after end are moved rigidly with the host's direction at its two ends; settled by the brush export check.",
-  "With nodes selected, each selected node becomes the end node of a brush on the segment that ends there; a node at the start of an open path gets no brush. Settled by the node-selection check.",
+  "The brush outline between start and end follows the host segment as segment components do; the parts before start and after end keep their shape (tutorial) and are moved rigidly with the host's direction at its two ends (ours). The brush export check settles it.",
+  "With nodes selected, a node at the start of an open path gets no brush, since no segment ends there; the tutorial covers only end nodes. Selecting the first node of an open path in the reference app settles it.",
+  "A brush's hint stores only `type`, `name` and `origin`, with no `options` or `scale`, since no source shows either on one; a source saved by the reference app with a brush settles it.",
 ]
 observe = [
   "In the brush test font (`_brush.arrow`: one closed arrow outline, start anchor at the tail, end anchor where the head begins), add the brush to a straight open path and to a curved open path, export an OTF and send it back: the head should keep its shape and the shaft follow the curve.",
-  "Select only the last node of a three-segment open path and choose Add Brush: count how many brushes are added and on which segments.",
+  "Select only the first node of a three-segment open path and choose Add Brush: note whether a brush is added.",
 ]
 
 [[command]]
@@ -2095,7 +2117,7 @@ milestone = "M13"
 summary = "Context-menu item that replaces a brush with the outline it produces and removes the brush."
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): a forum thread (20115, 2021) reports that Decompose Brush then removed the brush and left the host path; a staff answer says it was fixed, so Decompose Brush gives the brushed outline."
 observe = [
   "Decompose a brush on the curved open path and save: note whether the open host path is removed and replaced by the closed outline.",
 ]
@@ -2145,6 +2167,9 @@ summary = "Shown for a selected brush when View › Show Info is on."
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
 notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+guesses = [
+  "The brush Info box has only the name and the arrow button, with no scale, alignment or fit controls, as the handbook lists; a screenshot of the Info box in the reference app settles it.",
+]
 
 [[panel]]
 id = "dialog.brushPicker"
@@ -2165,7 +2190,7 @@ milestone = "M13"
 summary = "A brush is tinted with a faint blue background in Edit View. Clicking on the brush's outline selects it, Shift-click selects several, Delete removes the selected brushes."
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the brush tutorial's screenshot (W7) shows a faint blue band along each brush outline. A staff answer (forum 21893, 2024) says pressing Cmd-A several times selects all brushes."
 
 [[behavior]]
 id = "brush.copyPasteOntoSegments"
