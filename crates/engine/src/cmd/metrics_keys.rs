@@ -11,7 +11,9 @@
 use std::collections::HashSet;
 
 use fontcraft_model::{Font, Glyph, Layer, Master};
-use fontcraft_spacing::{EvalError, Field, Finding, Problem, Scope, Slot, WIDTH_RANGE, effective_key, metric, parse_field, parse_stored};
+use fontcraft_spacing::{
+    EvalError, Field, Finding, Key, KeyError, Problem, Scope, Slot, WIDTH_RANGE, effective_key, metric, parse_field, parse_stored,
+};
 use serde_json::{Value, json};
 
 use super::*;
@@ -104,6 +106,20 @@ fn glyph_layer<'f>(p: &Params, font: &'f Font) -> Result<(&'f Glyph, &'f Layer)>
     };
     let l = g.layers.iter().find(|l| l.id == id).ok_or_else(|| p.bad(format!("glyph `{name}` has no layer `{id}`")))?;
     Ok((g, l))
+}
+
+/// The metrics key that applies to `f` of the layer, read, and the text its field shows: `==…`
+/// for the layer's own key, the stored text when it cannot be read.
+pub(super) fn shown_key(font: &Font, g: &Glyph, l: &Layer, f: Field) -> Option<(Scope, std::result::Result<Key, KeyError>, String)> {
+    effective_key(g, l, f).map(|(scope, text)| {
+        let parsed = parse_stored(text, scope, f, |n| font.glyph(n).is_some());
+        let shown = match (&parsed, scope) {
+            (Ok(k), _) => k.display(),
+            (Err(_), Scope::Local) => format!("=={}", text.strip_prefix('=').unwrap_or(text)),
+            (Err(_), Scope::Glyph) => text.to_string(),
+        };
+        (scope, parsed, shown)
+    })
 }
 
 /// The master `master` takes its metrics from, when that is another master.
@@ -362,13 +378,7 @@ fn get_metrics(s: &mut Session, v: &Value) -> Result<Value> {
     for f in Field::ALL {
         let actual = measured(f)?;
         out.insert(f.name().into(), json!(actual));
-        let entry = effective_key(g, l, f).map(|(scope, text)| {
-            let parsed = parse_stored(text, scope, f, |n| font.glyph(n).is_some());
-            let shown = match (&parsed, scope) {
-                (Ok(k), _) => k.display(),
-                (Err(_), Scope::Local) => format!("=={}", text.strip_prefix('=').unwrap_or(text)),
-                (Err(_), Scope::Glyph) => text.to_string(),
-            };
+        let entry = shown_key(font, g, l, f).map(|(scope, parsed, shown)| {
             let value = parsed.map_err(EvalError::from).and_then(|k| fontcraft_spacing::evaluate_key(font, &g.name, &l.id, f, &k));
             let (value, error) = match value {
                 Ok(v) => (Some(v), None),
