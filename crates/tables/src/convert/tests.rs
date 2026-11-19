@@ -558,3 +558,35 @@ fn a_full_cjk_font_fits_the_charstring_and_point_limits() {
         (None, None) => eprintln!("the font has no CFF or CFF2 outlines: nothing measured"),
     }
 }
+
+#[test]
+fn rebuilt_tables_get_their_bounds_again_unless_kept() {
+    // The font built in code states a zero bounding box in head.
+    let ttf = truetype_font();
+    let bbox = |font: &SfntFont| {
+        let head = font.get(*b"head").unwrap();
+        [36, 38, 40, 42].map(|at| i16::from_be_bytes([head[at], head[at + 1]]))
+    };
+    assert_eq!(bbox(&ttf), [0, 0, 0, 0]);
+    let copied = convert_with(&ttf, &ConvertOptions::new(ConvertTarget::TrueType { max_error: 1.0 })).unwrap().font.unwrap();
+    assert_eq!(bbox(&copied), [0, 0, 0, 0], "a table that keeps its format is copied");
+    let options = ConvertOptions { rebuild_tables: RebuildTables::All, ..ConvertOptions::new(ConvertTarget::TrueType { max_error: 1.0 }) };
+    let rebuilt = convert_with(&ttf, &options).unwrap().font.unwrap();
+    assert_eq!(bbox(&rebuilt), [0, 0, 650, 900], "A and B together");
+    let kept = convert_with(&ttf, &ConvertOptions { keep_bounds: true, ..options }).unwrap().font.unwrap();
+    assert_eq!(bbox(&kept), [0, 0, 0, 0]);
+    let absent =
+        ConvertOptions { rebuild_tables: RebuildTables::These(vec![*b"GPOS"]), ..ConvertOptions::new(ConvertTarget::TrueType { max_error: 1.0 }) };
+    assert!(convert_with(&ttf, &absent).is_ok(), "a named table the font lacks is skipped");
+}
+
+#[test]
+fn optimizing_for_speed_leaves_no_subroutines_and_refuses_subroutinizing() {
+    let ttf = truetype_font();
+    let options = ConvertOptions { optimize_for_speed: true, ..ConvertOptions::new(ConvertTarget::Cff) };
+    let otf = convert_with(&ttf, &options).unwrap().font.unwrap();
+    let s = fontcraft_cff::subr::charstrings_of_table(otf.get(CFF).unwrap(), false).unwrap();
+    assert!(s.global_subrs.is_empty() && s.local_subrs.iter().all(|l| l.is_empty()));
+    let both = ConvertOptions { subroutinize: Some(true), ..options };
+    assert!(matches!(convert_with(&ttf, &both), Err(TablesError::BadOptions(_))));
+}

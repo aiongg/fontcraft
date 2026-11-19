@@ -4,7 +4,7 @@
 // Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::string_slice)]
 
-use fontcraft_io_svg::svg_font::{is_svg_font, read_svg_font, write_svg_font};
+use fontcraft_io_svg::svg_font::{SvgFontOptions, SvgGlyphNames, is_svg_font, read_svg_font, write_svg_font, write_svg_font_with};
 use fontcraft_model::{Font, NodeKind, Shape};
 
 const SVG_FONT: &str = r#"<?xml version="1.0" standalone="no"?>
@@ -99,6 +99,36 @@ fn svg_font_written_reads_back_and_matches_tx() {
         }
     }
     assert_eq!(back.kerning.ltr.get(&master, "A", "O"), Some(-40.0));
+}
+
+#[test]
+fn svg_font_default_form_is_the_reference_converters() {
+    let font = read_svg_font(SVG_FONT.as_bytes()).unwrap().font;
+    let master = font.masters.first().unwrap().id.clone();
+    // tx -svg: the font element alone, no glyph names, relative lines and absolute curves,
+    // contours joined by " z " and the last closed by "z".
+    let text = write_svg_font_with(&font, &master, &SvgFontOptions::default()).unwrap();
+    assert!(text.starts_with("<font "), "{text}");
+    assert!(text.contains(r#"<glyph unicode="A" horiz-adv-x="600" d="M20,0l100,0l0,50l200,0l0,600z"/>"#), "{text}");
+    assert!(text.contains(r#"d="M55,0l131,0l0,122l-131,0 z M296,0l131,0l0,122l-131,0z""#), "{text}");
+    assert!(!text.contains("glyph-name") && !text.contains("<svg"), "{text}");
+
+    // -gn1: glyphs whose character is not printable ASCII, or that have none.
+    let options = SvgFontOptions { glyph_names: SvgGlyphNames::NonAscii, ..SvgFontOptions::default() };
+    let named = write_svg_font_with(&font, &master, &options).unwrap();
+    assert!(named.contains(r#"glyph-name="ellipsis""#) && named.contains(r#"glyph-name="f_i""#), "{named}");
+    assert!(!named.contains(r#"glyph-name="A""#) && !named.contains(r#"glyph-name="space""#), "{named}");
+
+    // A standalone document in the relative form reads back to the same outlines.
+    let options = SvgFontOptions { glyph_names: SvgGlyphNames::All, absolute: false, standalone: true };
+    let back = read_svg_font(write_svg_font_with(&font, &master, &options).unwrap().as_bytes()).unwrap().font;
+    for g in font.glyphs.iter() {
+        let (a, b) = (points(&font, &g.name), points(&back, &g.name));
+        assert_eq!(a.len(), b.len(), "{}", g.name);
+        for (p, q) in a.iter().zip(&b) {
+            assert!((p.0 - q.0).abs() < 2e-3 && (p.1 - q.1).abs() < 2e-3 && p.2 == q.2, "{}: {a:?} against {b:?}", g.name);
+        }
+    }
 }
 
 #[test]

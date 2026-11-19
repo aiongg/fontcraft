@@ -1,4 +1,4 @@
-//! Reading a UFOZ: a ZIP archive holding one UFO under a single root folder (UFO 3
+//! Reading and writing a UFOZ: a ZIP archive holding one UFO under a single root folder (UFO 3
 //! specification › Storage Formats). Written from the ZIP file format description (PKWARE
 //! APPNOTE): the end-of-central-directory record, the central directory, local headers; entries
 //! stored or deflated; ZIP64 sizes and offsets. Encrypted entries are refused.
@@ -151,6 +151,81 @@ pub fn read_ufoz(zip: &[u8]) -> Result<Files> {
     Ok(all.into_iter().filter_map(|(k, v)| k.strip_prefix(&prefix).map(|r| (r.to_string(), v))).collect())
 }
 
+/// Most files [`write_ufoz`] writes: the count an archive without ZIP64 records can hold.
+const MAX_WRITE_ENTRIES: usize = 0xffff;
+
+/// The CRC-32 ZIP stores for each file (the ISO 3309 polynomial, reflected).
+fn crc32(bytes: &[u8]) -> u32 {
+    let mut crc = 0xffff_ffff_u32;
+    for &b in bytes {
+        crc ^= u32::from(b);
+        for _ in 0..8 {
+            let mask = (crc & 1).wrapping_neg();
+            crc = (crc >> 1) ^ (0xedb8_8320 & mask);
+        }
+    }
+    !crc
+}
+
+/// A UFOZ of the UFO `files`, under the folder `root` (such as `Font.ufo`): each file deflated,
+/// or stored when deflating does not make it smaller, with UTF-8 names and the earliest ZIP
+/// date, so the same UFO always gives the same bytes. An archive that would need ZIP64 records
+/// (more than 65,535 files, or 4 GiB) is refused.
+pub fn write_ufoz(files: &Files, root: &str) -> Result<Vec<u8>> {
+    if files.len() > MAX_WRITE_ENTRIES {
+        return Err(broken(&format!("a UFOZ holds at most {MAX_WRITE_ENTRIES} files")));
+    }
+    if root.is_empty() || root.contains(['/', '\\']) {
+        return Err(broken(&format!("`{root}` cannot be its folder")));
+    }
+    let too_big = || broken("it would be larger than 4 GiB");
+    let mut out = Vec::new();
+    let mut central = Vec::new();
+    for (path, data) in files {
+        let name = format!("{root}/{path}");
+        let name_len = u16::try_from(name.len()).map_err(|_| broken(&format!("the path `{name}` is too long")))?;
+        let deflated = miniz_oxide::deflate::compress_to_vec(data, 6);
+        let (method, body): (u16, &[u8]) = if deflated.len() < data.len() { (8, &deflated) } else { (0, data) };
+        let offset = u32::try_from(out.len()).map_err(|_| too_big())?;
+        // The fields both headers share: version needed, flags (bit 11: UTF-8 names), method,
+        // time, date (1980-01-01), CRC, sizes and name length.
+        let mut common = Vec::with_capacity(24);
+        common.extend(20u16.to_le_bytes());
+        common.extend(0x0800u16.to_le_bytes());
+        common.extend(method.to_le_bytes());
+        common.extend(0u16.to_le_bytes());
+        common.extend(0x0021u16.to_le_bytes());
+        common.extend(crc32(data).to_le_bytes());
+        common.extend(u32::try_from(body.len()).map_err(|_| too_big())?.to_le_bytes());
+        common.extend(u32::try_from(data.len()).map_err(|_| too_big())?.to_le_bytes());
+        common.extend(name_len.to_le_bytes());
+        out.extend(LOCAL.to_le_bytes());
+        out.extend(&common);
+        out.extend(0u16.to_le_bytes());
+        out.extend(name.as_bytes());
+        out.extend(body);
+        central.extend(CENTRAL.to_le_bytes());
+        central.extend(20u16.to_le_bytes());
+        central.extend(&common);
+        // Extra field and comment lengths, disk, internal and external attributes.
+        central.extend([0u8; 12]);
+        central.extend(offset.to_le_bytes());
+        central.extend(name.as_bytes());
+    }
+    let count = u16::try_from(files.len()).map_err(|_| too_big())?;
+    let cd_offset = u32::try_from(out.len()).map_err(|_| too_big())?;
+    let cd_size = u32::try_from(central.len()).map_err(|_| too_big())?;
+    out.extend(central);
+    out.extend(EOCD.to_le_bytes());
+    out.extend([0u8; 4]);
+    out.extend(count.to_le_bytes());
+    out.extend(count.to_le_bytes());
+    out.extend(cd_size.to_le_bytes());
+    out.extend(cd_offset.to_le_bytes());
+    out.extend([0u8; 2]);
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,6 +282,19 @@ mod tests {
         let files = read_ufoz(&z).unwrap();
         assert_eq!(files.get("metainfo.plist").map(Vec::as_slice), Some(&b"meta"[..]));
         assert_eq!(files.get("glyphs/a.glif").map(Vec::as_slice), Some(&b"glif"[..]));
+    }
+
+    #[test]
+    fn a_written_ufoz_reads_back() {
+        assert_eq!(crc32(b"123456789"), 0xcbf4_3926, "the check value of CRC-32");
+        let mut files = Files::new();
+        files.insert("metainfo.plist".into(), b"meta".to_vec());
+        files.insert("glyphs/a.glif".into(), "<glyph/>".repeat(100).into_bytes());
+        let z = write_ufoz(&files, "Font.ufo").unwrap();
+        assert!(is_zip(&z));
+        assert_eq!(read_ufoz(&z).unwrap(), files);
+        assert_eq!(write_ufoz(&files, "Font.ufo").unwrap(), z, "the same UFO gives the same bytes");
+        assert!(write_ufoz(&files, "a/b").is_err());
     }
 
     #[test]

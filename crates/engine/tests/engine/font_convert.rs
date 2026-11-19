@@ -337,3 +337,88 @@ fn font_convert_applies_the_cff_writing_switches() {
     assert!(!dir.join("x.otf").exists() && !dir.join("x.ttf").exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn font_convert_writes_svg_fonts_ufoz_archives_and_the_save_options() {
+    let dir = std::env::temp_dir().join(format!("fontcraft-convert-extras-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut s = Session::with_document();
+    let square = json!([{"x": 60, "y": 0}, {"x": 560, "y": 0}, {"x": 560, "y": 700}, {"x": 60, "y": 700}]);
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": square}));
+    run(&mut s, "glyph.newGlyph", json!({"name": "A.alt"}));
+    run(&mut s, "path.addPath", json!({"glyph": "A.alt", "nodes": square}));
+    let ttf = dir.join("Font.ttf");
+    run(&mut s, "file.exportStatic", json!({ "destination": ttf, "timestamp": 0 }));
+
+    // The reference converter's default form: the font element alone, no glyph names,
+    // relative path data.
+    let r = run(&mut s, "font.convert", json!({ "input": ttf, "to": "svg-font" }));
+    assert_eq!(PathBuf::from(r["results"][0]["output"].as_str().unwrap()), dir.join("Font.svg"));
+    let text = std::fs::read_to_string(dir.join("Font.svg")).unwrap();
+    assert!(text.starts_with("<font ") && !text.contains("glyph-name"), "{text}");
+    let a = text.lines().find(|l| l.starts_with(r#"<glyph unicode="A" "#)).unwrap();
+    assert!(a.contains(r#" d="M"#) && a.ends_with(r#"z"/>"#) && !a.contains(" L "), "{a}");
+
+    // Every glyph named, absolute paths, a whole document with Windows line endings; the glyph
+    // without a character gets a private-use one.
+    let svg = dir.join("Named.svg");
+    let options = json!({ "glyphNames": "all", "absolute": true, "standalone": true });
+    run(&mut s, "font.convert", json!({ "input": ttf, "to": "svg-font", "output": svg, "svg": options, "newline": "crlf" }));
+    let text = std::fs::read_to_string(&svg).unwrap();
+    assert!(text.starts_with("<?xml") && text.contains("\r\n") && !text.replace("\r\n", "").contains('\n'), "{text:?}");
+    let alt = text.split("\r\n").find(|l| l.contains(r#"glyph-name="A.alt""#)).unwrap();
+    assert!(alt.contains(r#"unicode="&#xE"#) && alt.contains(" L "), "{alt}");
+    for bad in [
+        json!({ "input": ttf, "to": "otf", "svg": { "absolute": true } }),
+        json!({ "input": ttf, "to": "otf", "newline": "crlf" }),
+        json!({ "input": ttf, "to": "svg-font", "container": "woff" }),
+        json!({ "input": ttf, "to": "svg-font", "optimizeFor": "speed" }),
+        json!({ "input": ttf, "to": "svg-font", "svg": { "glyphNames": "some" } }),
+    ] {
+        assert!(s.execute("font.convert", &bad).is_err(), "{bad}");
+    }
+
+    // A UFOZ: one folder named after the output, holding the UFO.
+    let r = run(&mut s, "font.convert", json!({ "input": ttf, "to": "ufo", "ufo": { "structure": "zip", "skipExportKey": "glyphs" } }));
+    let ufoz = PathBuf::from(r["results"][0]["output"].as_str().unwrap());
+    assert_eq!(ufoz, dir.join("Font.ufoz"));
+    let bytes = std::fs::read(&ufoz).unwrap();
+    assert!(fontcraft_io_ufo::zip::read_archive(&bytes).unwrap().keys().all(|k| k.starts_with("Font.ufo/")));
+    let files = fontcraft_io_ufo::zip::read_ufoz(&bytes).unwrap();
+    assert!(files.contains_key("metainfo.plist") && files.contains_key("glyphs/contents.plist"));
+    assert!(s.execute("font.convert", &json!({ "input": ttf, "to": "ufo", "ufo": { "structure": "json" } })).is_err());
+    assert!(s.execute("font.convert", &json!({ "input": ttf, "to": "otf", "ufo": { "structure": "zip" } })).is_err());
+
+    // recalcBounds false keeps the bounding box a TTX dump states.
+    let x_max = |path: &PathBuf| {
+        let font = fontcraft_tables::read(&std::fs::read(path).unwrap(), 0).unwrap();
+        let head = font.get(*b"head").unwrap().to_vec();
+        i16::from_be_bytes([head[40], head[41]])
+    };
+    let real = x_max(&ttf);
+    let ttx = dir.join("Font.ttx");
+    run(&mut s, "font.dumpTables", json!({ "font": ttf, "output": ttx }));
+    let dump = std::fs::read_to_string(&ttx).unwrap();
+    let stated = format!("<xMax value=\"{real}\"/>");
+    assert!(dump.contains(&stated), "head states xMax {real}");
+    std::fs::write(&ttx, dump.replace(&stated, "<xMax value=\"4000\"/>")).unwrap();
+    let kept = dir.join("Kept.ttf");
+    run(&mut s, "font.convert", json!({ "input": ttx, "to": "ttf", "output": kept, "recalcBounds": false }));
+    assert_eq!(x_max(&kept), 4000);
+    let recalculated = dir.join("Recalculated.ttf");
+    run(&mut s, "font.convert", json!({ "input": ttx, "to": "ttf", "output": recalculated }));
+    assert_eq!(x_max(&recalculated), real);
+
+    // rebuildTables and optimizeFor speed.
+    let rebuilt = dir.join("Rebuilt.ttf");
+    run(&mut s, "font.convert", json!({ "input": ttf, "to": "ttf", "output": rebuilt, "rebuildTables": ["head", "glyf"] }));
+    assert_eq!(x_max(&rebuilt), real);
+    assert!(s.execute("font.convert", &json!({ "input": ttf, "to": "ttf", "output": rebuilt, "rebuildTables": ["toolong"] })).is_err());
+    let fast = dir.join("Fast.otf");
+    run(&mut s, "font.convert", json!({ "input": ttf, "to": "otf", "output": fast, "optimizeFor": "speed" }));
+    assert!(fontcraft_tables::read(&std::fs::read(&fast).unwrap(), 0).unwrap().get(*b"CFF ").is_some());
+    let both = json!({ "input": ttf, "to": "otf", "output": fast, "optimizeFor": "speed", "cff": { "subroutinize": true } });
+    assert!(s.execute("font.convert", &both).is_err());
+    let _ = std::fs::remove_dir_all(&dir);
+}

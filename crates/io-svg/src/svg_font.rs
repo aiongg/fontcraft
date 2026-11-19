@@ -9,9 +9,12 @@
 //! arcs become cubic curves; every subpath is closed, as SVG fonts fill them. Vertical kerning and
 //! the glyph-selection attributes (`arabic-form`, `lang`, `orientation`) are not read.
 //!
-//! Written: what AFDKO tx writes, standalone: `font-face`, `missing-glyph` from `.notdef`, a
-//! `glyph` per other glyph with `glyph-name`, its first code point and its outline with the
-//! components resolved, and `hkern` for pairs between two glyphs (group kerning is not written).
+//! Written: what AFDKO tx `-svg` writes: `font-face`, `missing-glyph` from `.notdef`, a `glyph`
+//! per other glyph with its first code point, its outline with the components resolved and
+//! quadratic curves raised to cubic ones, and `hkern` for pairs between two glyphs (group kerning
+//! is not written). [`SvgFontOptions`] chooses tx's forms: which glyphs get `glyph-name`
+//! (`-gn0`, `-gn1`, `-gn2`), relative or absolute path data (`-abs`), and the `font` element
+//! alone or a whole document (`-sa`).
 //!
 //! Input is untrusted: the document size, element count, path elements, coordinates and kerning
 //! pairs are checked against the crate's limits.
@@ -389,17 +392,58 @@ fn escape(s: &str) -> String {
     out
 }
 
-/// Path data in font units (y up), absolute commands.
+/// Which glyphs carry a `glyph-name` attribute.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SvgGlyphNames {
+    /// No glyph (the reference converter's default, `-gn0`).
+    #[default]
+    None,
+    /// Glyphs whose character is not printable ASCII, and glyphs without one (`-gn1`).
+    NonAscii,
+    /// Every glyph (`-gn2`).
+    All,
+}
+
+/// How [`write_svg_font_with`] writes a master. The default is the reference converter's:
+/// no glyph names, relative path data, the `font` element alone.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SvgFontOptions {
+    pub glyph_names: SvgGlyphNames,
+    /// Absolute, spaced path commands (`M 20,0 L 113,0 … Z`, `-abs`); otherwise lines relative
+    /// to the current point and curves absolute, unspaced (`M20,0l93,0C…z`).
+    pub absolute: bool,
+    /// A complete SVG document around the `font` element (`-sa`); otherwise the element alone.
+    pub standalone: bool,
+}
+
+fn round3(v: f64) -> f64 {
+    if v.is_finite() { (v * 1000.0).round() / 1000.0 } else { 0.0 }
+}
+
+/// The cubic control points of the quadratic segment from `p0` through `q` to `p`.
+fn raise(p0: Point, q: Point, p: Point) -> (Point, Point) {
+    (p0 + (q - p0) * (2.0 / 3.0), p + (q - p) * (2.0 / 3.0))
+}
+
+/// Path data in font units (y up), absolute commands; quadratic segments raised to cubic ones.
 fn path_data(b: &BezPath) -> String {
     let mut d = String::new();
     let pt = |p: Point| format!("{},{}", num(p.x), num(p.y));
+    let mut current = Point::ZERO;
     for el in b.elements() {
         let part = match *el {
             PathEl::MoveTo(p) => format!("M {}", pt(p)),
             PathEl::LineTo(p) => format!("L {}", pt(p)),
-            PathEl::QuadTo(c, p) => format!("Q {} {}", pt(c), pt(p)),
+            PathEl::QuadTo(q, p) => {
+                let (a, c) = raise(current, q, p);
+                format!("C {} {} {}", pt(a), pt(c), pt(p))
+            }
             PathEl::CurveTo(a, c, p) => format!("C {} {} {}", pt(a), pt(c), pt(p)),
             PathEl::ClosePath => "Z".to_string(),
+        };
+        current = match *el {
+            PathEl::MoveTo(p) | PathEl::LineTo(p) | PathEl::QuadTo(_, p) | PathEl::CurveTo(_, _, p) => p,
+            PathEl::ClosePath => current,
         };
         if !d.is_empty() {
             d.push(' ');
@@ -409,16 +453,67 @@ fn path_data(b: &BezPath) -> String {
     d
 }
 
-/// Master `master` of `font` as a standalone SVG font document.
+/// Path data as the reference converter writes it by default: each contour starts with an
+/// absolute `M`, lines are relative (`l`), curves absolute (`C`); contours are joined by ` z `
+/// and the last one ends in `z`. Relative steps are taken between the rounded points, so the
+/// rounding does not add up along a contour.
+fn path_data_relative(b: &BezPath) -> String {
+    let pt = |p: Point| format!("{},{}", num(p.x), num(p.y));
+    let mut contours: Vec<String> = Vec::new();
+    let mut current = Point::ZERO;
+    for el in b.elements() {
+        match *el {
+            PathEl::MoveTo(p) => contours.push(format!("M{}", pt(p))),
+            PathEl::LineTo(p) => {
+                let (dx, dy) = (round3(p.x) - round3(current.x), round3(p.y) - round3(current.y));
+                if let Some(c) = contours.last_mut() {
+                    let _ = write!(c, "l{},{}", num(dx), num(dy));
+                }
+            }
+            PathEl::QuadTo(q, p) => {
+                let (a, c2) = raise(current, q, p);
+                if let Some(c) = contours.last_mut() {
+                    let _ = write!(c, "C{} {} {}", pt(a), pt(c2), pt(p));
+                }
+            }
+            PathEl::CurveTo(a, c2, p) => {
+                if let Some(c) = contours.last_mut() {
+                    let _ = write!(c, "C{} {} {}", pt(a), pt(c2), pt(p));
+                }
+            }
+            PathEl::ClosePath => {}
+        }
+        current = match *el {
+            PathEl::MoveTo(p) | PathEl::LineTo(p) | PathEl::QuadTo(_, p) | PathEl::CurveTo(_, _, p) => p,
+            PathEl::ClosePath => current,
+        };
+    }
+    let mut d = contours.join(" z ");
+    if !d.is_empty() {
+        d.push('z');
+    }
+    d
+}
+
+/// Master `master` of `font` as a standalone SVG font document, every glyph named, absolute
+/// path data.
 pub fn write_svg_font(font: &Font, master: &str) -> Result<String, SvgError> {
+    write_svg_font_with(font, master, &SvgFontOptions { glyph_names: SvgGlyphNames::All, absolute: true, standalone: true })
+}
+
+/// Master `master` of `font` as an SVG font, written as `options` say. Lines end in `\n`.
+pub fn write_svg_font_with(font: &Font, master: &str, options: &SvgFontOptions) -> Result<String, SvgError> {
     let m = font.masters.iter().find(|m| m.id == master).ok_or_else(|| SvgError::BadPath(format!("no master {master}")))?;
     let metric = |kind: &str| -> Option<f64> {
         let i = font.metrics.iter().position(|d| d.kind == kind)?;
         m.metric_values.get(i).map(|v| v.pos)
     };
-    let mut out = String::from(
-        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\">\n<defs>\n",
-    );
+    let mut out = String::new();
+    if options.standalone {
+        out.push_str(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\">\n<defs>\n",
+        );
+    }
     let id: String = font.family_name.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').collect();
     let _ = writeln!(out, "<font id=\"{}\" horiz-adv-x=\"{}\">", escape(&id), font.units_per_em);
     let _ = write!(out, "<font-face font-family=\"{}\" units-per-em=\"{}\"", escape(&font.family_name), font.units_per_em);
@@ -440,15 +535,23 @@ pub fn write_svg_font(font: &Font, master: &str) -> Result<String, SvgError> {
     {
         let Some(layer) = g.layer(master) else { continue };
         let outline = font.outline_of(g, master).map_err(|e| SvgError::BadPath(e.to_string()))?;
-        let d = path_data(&outline);
+        let d = if options.absolute { path_data(&outline) } else { path_data_relative(&outline) };
         if missing {
             out.push_str("<missing-glyph");
         } else {
             out.push_str("<glyph");
-            if let Some(c) = g.unicodes.first().and_then(|u| char::from_u32(*u)) {
+            let character = g.unicodes.first().and_then(|u| char::from_u32(*u));
+            if let Some(c) = character {
                 let _ = write!(out, " unicode=\"{}\"", escape(&c.to_string()));
             }
-            let _ = write!(out, " glyph-name=\"{}\"", escape(&g.name));
+            let named = match options.glyph_names {
+                SvgGlyphNames::None => false,
+                SvgGlyphNames::NonAscii => !character.is_some_and(|c| matches!(c, ' '..='~')),
+                SvgGlyphNames::All => true,
+            };
+            if named {
+                let _ = write!(out, " glyph-name=\"{}\"", escape(&g.name));
+            }
         }
         let _ = write!(out, " horiz-adv-x=\"{}\"", num(layer.width));
         if !d.is_empty() {
@@ -464,6 +567,9 @@ pub fn write_svg_font(font: &Font, master: &str) -> Result<String, SvgError> {
             }
         }
     }
-    out.push_str("</font>\n</defs>\n</svg>\n");
+    out.push_str("</font>\n");
+    if options.standalone {
+        out.push_str("</defs>\n</svg>\n");
+    }
     Ok(out)
 }
