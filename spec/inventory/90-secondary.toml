@@ -2337,6 +2337,22 @@ observe = [
   "Export the same tab as PDF and measure the page against the text: note the margins and the scale.",
 ]
 
+[[panel]]
+id = "dialog.exportWindowContents"
+label = "Export Window Contents"
+location = "dialog"
+controls = ["file with Choose… (a save chooser offering PDF and SVG)", "points per em", "Export… button: asks where to save when no file is given"]
+area = "proofing"
+milestone = "M13"
+summary = "The dialog of File › Export › Window Contents…: writes what the canvas shows (the edited glyph in its shown layer of the current master) as one PDF or SVG page with file.exportWindowContents; the file's extension chooses the format."
+ref = "FontLab 8 What's new › Formats (File › Export › Window Contents; Preview panel as PDF)"
+status = "docs"
+origin = "fontlab"
+notes = "Documented, not yet observed. Built in crates/ui/src/dialogs/export.rs. The window supplies the tab's contents (text, master, layer pick) as parameters; nothing runs until Export…, which opens the save chooser when the File field is empty."
+guesses = [
+  "A small dialog with the file and the scale comes before the save chooser, and the format follows the file's extension (.pdf or .svg); exporting in the reference would show whether it asks anything besides the file.",
+]
+
 [[command]]
 id = "glyph.exportArtwork"
 label = "Export Artwork…"
