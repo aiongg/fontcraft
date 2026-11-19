@@ -382,7 +382,7 @@ pub fn update(entries: &Features, cx: &AutoContext) -> Result<UpdateReport, Feat
         }
         None => {}
     }
-    let code = langsys::code_for(&merged);
+    let code = langsys::code_for(&merged, cx.glyphs());
     merge_one(&mut merged, AutoEntry { kind: EntryKind::Prefix, name: langsys::NAME.into(), code, optional: false }, &mut report);
 
     report.features = merged;

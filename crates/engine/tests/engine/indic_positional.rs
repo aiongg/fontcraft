@@ -1,5 +1,6 @@
 //! The positional Indic features end to end (M8.32): Update writes pres from the i-matra
-//! variants' anchors, and the compiled font shapes each conjunct with its variant.
+//! variants' anchors and the Devanagari language systems, and the compiled font shapes each
+//! conjunct with its variant.
 // Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
@@ -7,7 +8,7 @@ use std::sync::Arc;
 
 use fontcraft_compile::preview::{PreviewKind, layout_font};
 use fontcraft_engine::Session;
-use fontcraft_model::{Anchor, Snippet};
+use fontcraft_model::Anchor;
 use fontcraft_shaping::{ShapeRequest, ShapingFont, Tag, shape};
 use serde_json::json;
 
@@ -38,13 +39,6 @@ fn devanagari(s: &mut Session) {
                 layer.anchors = anchors.into_iter().map(|(a, x)| Anchor::new(a, x, 700.0)).collect();
             }
         }
-        // The Indic shaper runs only for a font that names the script.
-        let features = Arc::make_mut(&mut font.features);
-        features.prefixes.push(Snippet {
-            name: "Languagesystems".into(),
-            code: "languagesystem DFLT dflt;\nlanguagesystem dev2 dflt;\n".into(),
-            ..Snippet::default()
-        });
         Ok(())
     })
     .unwrap();
@@ -69,4 +63,26 @@ fn pres_shapes_each_conjunct_with_the_i_matra_variant_its_stem_needs() {
     assert_eq!(names("\u{0915}\u{094D}\u{0937}\u{093F}"), ["iMatra-deva.02", "k_ssa-deva"]);
     assert_eq!(names("\u{0915}\u{094D}\u{092F}\u{093F}"), ["iMatra-deva.04", "k_ya-deva"]);
     assert_eq!(names("\u{0924}\u{094D}\u{0924}\u{093F}"), ["iMatra-deva.05", "t_ta-deva"]);
+}
+
+#[test]
+fn update_registers_the_devanagari_features_under_dev2_and_deva() {
+    let mut s = Session::with_document();
+    devanagari(&mut s);
+    s.execute("font.features.update", &json!({})).unwrap();
+    let font = Arc::clone(&s.doc().unwrap().font);
+    let prefix = font.features.prefixes.iter().find(|p| p.name == "Languagesystems").unwrap();
+    assert!(prefix.automatic);
+    assert_eq!(prefix.code, "languagesystem DFLT dflt;\n\nlanguagesystem dev2 dflt;\nlanguagesystem deva dflt;\n");
+
+    let r = s.execute("font.features.compile", &json!({})).unwrap();
+    assert_eq!(r["ok"], true, "{r}");
+    let features = r["features"].as_array().unwrap();
+    for tag in ["akhn", "cjct", "pres"] {
+        let f = features.iter().find(|f| f["tag"] == tag).unwrap_or_else(|| panic!("{tag} compiled: {r}"));
+        let systems = f["languageSystems"].as_array().unwrap();
+        for system in [json!(["dev2", "dflt"]), json!(["deva", "dflt"])] {
+            assert!(systems.contains(&system), "{tag} under {system}: {r}");
+        }
+    }
 }
