@@ -36,6 +36,8 @@ pub struct SidebarView {
     pub inspector_details: bool,
     /// The inspector's metric fields are the vertical ones (`fontView.toggleMetricsOrientation`).
     pub inspector_vertical: bool,
+    /// The entry whose context menu is open.
+    pub menu_row: Option<Vec<String>>,
 }
 
 /// A sidebar path from JSON: `"filters/Folder/Name"` or `["filters", "Folder", "Name"]`.

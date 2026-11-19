@@ -374,6 +374,7 @@ impl FontCraftApp {
             ViewMsg::TogglePanel(panel) => dock::toggle(&mut self.view.workspace, panel),
             ViewMsg::LayerMenu(row) => self.view.layers.menu_row = row,
             ViewMsg::TextPreviewArea(area) => self.view.text_preview.area = area,
+            ViewMsg::SidebarMenu(path) => self.view.sidebar.menu_row = path,
         }
         Ok(())
     }

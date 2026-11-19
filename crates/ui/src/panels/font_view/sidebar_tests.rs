@@ -6,13 +6,13 @@ use std::rc::Rc;
 use craft::ui::contract::Tracked;
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::testing::{Fixture, Room};
-use egui::Modifiers;
+use egui::{Event, Modifiers, PointerButton};
 use serde_json::{Value, json};
 
 use super::{Props, show};
-use crate::app::Msg;
 use crate::app::models::glyph_props::GlyphPropsModel;
 use crate::app::models::sidebar::{SidebarModel, SidebarRow};
+use crate::app::{Msg, ViewMsg};
 
 fn row(path: &str, kind: &str, depth: usize, count: usize) -> SidebarRow {
     let path: Vec<String> = path.split('/').map(str::to_string).collect();
@@ -41,6 +41,7 @@ fn model(selected: &[&str]) -> SidebarModel {
         rows,
         selected: selected.iter().map(|p| p.split('/').map(str::to_string).collect()).collect(),
         error: None,
+        menu_row: None,
     }
 }
 
@@ -106,4 +107,59 @@ fn the_actions_menu_posts_the_filter_commands() {
     let add = fixture.by_label("Add Folder").expect("Add Folder");
     fixture.click(&add).settle();
     assert_eq!(*posted.borrow(), vec![Msg::run("fontView.addFilterFolder", json!({ "name": "New Folder" }))]);
+}
+
+fn dialog(params: Value) -> Msg {
+    Msg::Shell(CommandRef::with_params("dialog.open", params))
+}
+
+/// The actions menu row `label`, chosen with `selected` entries selected, posts these messages.
+fn action(selected: &[&str], label: &str) -> Vec<Msg> {
+    let (mut fixture, posted) = open(model(selected));
+    let actions = fixture.by_label("Actions").expect("the Actions button");
+    fixture.click(&actions).settle();
+    let row = fixture.by_label(label).unwrap_or_else(|| panic!("no row {label}"));
+    fixture.click(&row).settle();
+    posted.take()
+}
+
+/// The actions menu opens the filter dialogs: a new smart or list filter, the editor of the last selected filter, and
+/// Missing Glyphs of the last selected entry the font lacks glyphs of.
+#[test]
+fn the_actions_menu_opens_the_filter_dialogs() {
+    assert_eq!(action(&[], "Add Smart Filter…"), vec![dialog(json!({ "command": "fontView.addSmartFilter" }))]);
+    assert_eq!(action(&[], "Add List Filter…"), vec![dialog(json!({ "command": "fontView.addListFilter", "params": {} }))]);
+    let edit = dialog(json!({ "dialog": "dialog.smartFilterEditor", "params": { "filter": "filters/Mine" } }));
+    assert_eq!(action(&["categories/Letter", "filters/Mine"], "Edit Filter…"), vec![edit]);
+    let missing = dialog(json!({ "dialog": "dialog.missingGlyphs", "params": { "entry": "languages/latin" } }));
+    assert_eq!(action(&["languages/latin"], "Show Missing Glyphs…"), vec![missing]);
+    assert_eq!(action(&["categories/Letter"], "Show Missing Glyphs…"), vec![], "Letter knows no full set");
+}
+
+/// A right-click on a filter opens its context menu, whose Edit Filter… opens the filter's editor.
+#[test]
+fn an_entrys_context_menu_edits_its_filter() {
+    // The model takes the menu's open entry back, as the app's projection does.
+    let model = Rc::new(RefCell::new(Tracked::new(model(&[]))));
+    let inspector = Tracked::new(GlyphPropsModel { has_font: true, ..GlyphPropsModel::default() });
+    let posted = Rc::new(RefCell::new(Vec::new()));
+    let (seen, shown) = (Rc::clone(&posted), Rc::clone(&model));
+    let mut fixture = Fixture::new(move |ui| {
+        let mut sent = Vec::new();
+        show(ui, Props { model: &shown.borrow(), inspector: &inspector, sent: &mut sent });
+        for msg in &sent {
+            if let Msg::View(ViewMsg::SidebarMenu(row)) = msg {
+                shown.borrow_mut().edit(|m| m.menu_row = row.clone());
+            }
+        }
+        seen.borrow_mut().extend(sent);
+    });
+    fixture.in_room(Room::Panel).settle();
+    let at = fixture.by_label("Mine").expect("the Mine filter").center();
+    let button = |pressed| Event::PointerButton { pos: at, button: PointerButton::Secondary, pressed, modifiers: Modifiers::NONE };
+    fixture.frame(vec![Event::PointerMoved(at), button(true)]).frame(vec![button(false)]).settle();
+    let edit = fixture.by_label("Edit Filter…").expect("the context menu's Edit Filter…");
+    fixture.click(&edit).settle();
+    let opened = dialog(json!({ "dialog": "dialog.smartFilterEditor", "params": { "filter": "filters/Mine" } }));
+    assert!(posted.borrow().contains(&opened), "{:?}", posted.borrow());
 }

@@ -51,6 +51,8 @@ pub enum ViewMsg {
     LayerMenu(Option<String>),
     /// The Text Preview's line length and the lines in view, as its text area reports them.
     TextPreviewArea(crate::shell::text_preview::Area),
+    /// The sidebar entry whose context menu is open; `None` when it closed.
+    SidebarMenu(Option<Vec<String>>),
 }
 
 impl Msg {

@@ -32,8 +32,10 @@ pub mod os2_bits;
 pub mod panose;
 pub mod path;
 pub mod review_hints;
+pub mod rule_tree;
 pub mod settings;
 pub mod shape_order;
+pub mod sidebar_filters;
 pub mod spec;
 pub mod start_window;
 pub mod tt;
@@ -71,7 +73,7 @@ pub const MODULES: &[Module] = &[
 
 /// Every package's dialog specs, one line each.
 pub const SPECS: &[&[DialogSpec]] =
-    &[filters::SPECS, glyph_set::SPECS, export::SPECS, import::SPECS, font_data::SPECS, shape_order::SPECS, path::SPECS, guide_properties::SPECS, color_palettes::SPECS, master_color::SPECS];
+    &[filters::SPECS, glyph_set::SPECS, export::SPECS, import::SPECS, font_data::SPECS, shape_order::SPECS, path::SPECS, guide_properties::SPECS, color_palettes::SPECS, master_color::SPECS, sidebar_filters::SPECS];
 
 /// Runs every dialog module for this pass.
 pub fn run(host: &mut DialogHost, app: &mut FontCraftApp) {
