@@ -3,6 +3,7 @@
 use craft::ui::rails::LastUsed;
 use craft::ui::runtime::commands::CommandRef;
 
+use crate::canvas::tools::ToolInput;
 use crate::shell::dock::PanelId;
 
 /// A message a view posts. The app layer applies them in [`FontCraftApp::drain`](super::FontCraftApp::drain), after
@@ -13,8 +14,26 @@ pub enum Msg {
     Run(CommandRef),
     /// A shell command (`shell::commands`): view and window state, no engine change.
     Shell(CommandRef),
+    /// A step of an interaction: a drag previews commands on a snapshot and ends as one undo step or as nothing.
+    Preview(Preview),
+    /// Pointer, modifier or key input for the active tool, in the edited glyph's font units. `drain` hands it to the
+    /// toolbox, whose answer comes back as more messages.
+    Tool(ToolInput),
     /// View state that is no command: the current tool, the shown glyph, the dock.
     View(ViewMsg),
+}
+
+/// One step of an interaction (`Session::begin`, `preview`, `commit`, `cancel`).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Preview {
+    /// Take a snapshot of the document; the label names the undo step.
+    Begin(String),
+    /// Run a command on the snapshot without recording history.
+    Update(CommandRef),
+    /// Keep the last preview as one undo step.
+    Commit,
+    /// Put the snapshot back, and the selection as it was at `Begin`.
+    Cancel,
 }
 
 /// A change to view state.
@@ -36,11 +55,11 @@ impl Msg {
         Msg::Run(CommandRef::with_params(id, params))
     }
 
-    /// The id of the command the message runs; `None` for a view message.
+    /// The id of the command the message runs; `None` for view changes, previews and tool input.
     pub fn command_id(&self) -> Option<&str> {
         match self {
             Msg::Run(command) | Msg::Shell(command) => Some(&command.id),
-            Msg::View(_) => None,
+            Msg::View(_) | Msg::Preview(_) | Msg::Tool(_) => None,
         }
     }
 }

@@ -9,6 +9,7 @@ pub mod camera;
 pub mod layers;
 pub mod paint;
 pub mod tokens;
+pub mod tools;
 
 use craft::behavior::CanvasView;
 use craft::behavior::kurbo::Size;
@@ -61,12 +62,15 @@ impl Default for Display {
 }
 
 /// The tool in the canvas's active-tool slot: a craft `CanvasTool` that also hands over the engine commands its
-/// gestures made. The tool bridge over `fontcraft_tools` fills the slot; until then it holds [`NoTool`].
+/// gestures made. [`tools::bridge::ToolBridge`] fills the slot.
 pub trait ActiveTool: CanvasTool {
     /// The messages the tool's gestures posted since the last call.
     fn take_sent(&mut self) -> Vec<Msg> {
         Vec::new()
     }
+
+    /// The camera of the coming pass, before the host runs the tool: font units to screen points.
+    fn set_camera(&mut self, _camera: Camera) {}
 }
 
 impl ActiveTool for NoTool {}
@@ -81,6 +85,8 @@ pub struct CanvasProps<'a> {
     pub display: Display,
     /// The background is the side being edited.
     pub edit_background: bool,
+    /// The selection and the active tool's overlays.
+    pub tools: &'a tools::ToolView,
     /// The active-tool slot.
     pub tool: &'a mut dyn ActiveTool,
 }
@@ -97,15 +103,26 @@ pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
     if let Some(size) = document {
         canvas = canvas.document(size);
     }
-    let (model, tokens, display, edit_background) = (props.model, props.tokens, props.display, props.edit_background);
+    let (model, tokens, display, edit_background, tool_view) = (props.model, props.tokens, props.display, props.edit_background, props.tools);
     let tool = &mut *props.tool;
     let mut reply = None;
     let _ = canvas.show(ui, |ui, body| {
         let Some(space) = canvas_space(&Env::of(ui).view()) else { return };
         let painter = ui.painter_at(space.view.rect);
         let camera = Camera::new(space.view, top);
-        let cx = PaintCx { painter: &painter, rect: space.view.rect, camera, model, tokens, display, edit_background, words: &paint_words };
+        let cx = PaintCx {
+            painter: &painter,
+            rect: space.view.rect,
+            camera,
+            model,
+            tokens,
+            display,
+            edit_background,
+            words: &paint_words,
+            tools: tool_view,
+        };
         layers::paint(&cx);
+        tool.set_camera(camera);
         if let Some(pass) = tool_pass(&body.env) {
             reply = Some(ToolHost::new().run(ui, &pass, &mut *tool));
         }

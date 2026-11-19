@@ -17,6 +17,7 @@ mod app;
 mod engine;
 mod inspect;
 mod menu;
+mod pointer;
 mod render;
 #[cfg(not(target_arch = "wasm32"))]
 mod screenshot;
@@ -43,12 +44,12 @@ pub use window_input::{SWITCHES, Switch};
 pub type Method = fn(&mut FontCraftApp, &Value) -> Result<Value, String>;
 
 /// Every module's methods.
-pub const MODULES: &[&[(&str, Method)]] = &[app::METHODS, engine::METHODS, inspect::METHODS, menu::METHODS, render::METHODS, window_input::METHODS];
+pub const MODULES: &[&[(&str, Method)]] =
+    &[app::METHODS, engine::METHODS, inspect::METHODS, menu::METHODS, pointer::METHODS, render::METHODS, window_input::METHODS];
 
 /// Methods of the protocol whose package is not built yet: `(method or prefix ending in `.`, package)`. A package
 /// that adds its methods to [`MODULES`] removes its line here.
-pub const LATER: &[(&str, &str)] =
-    &[("ui.pointer", "UI.3"), ("ui.key", "UI.3"), ("ui.text", "UI.3"), ("ui.tool.", "UI.3"), ("ui.dialog.", "UI.7"), ("ui.contextMenu.", "UI.25")];
+pub const LATER: &[(&str, &str)] = &[("ui.text", "UI.3"), ("ui.dialog.", "UI.7"), ("ui.contextMenu.", "UI.25")];
 
 /// The control channel's state on the app.
 #[derive(Default)]

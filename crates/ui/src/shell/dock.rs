@@ -324,7 +324,7 @@ impl DockPanels<PanelId> for Panels<'_> {
 /// Shows the dock and applies what the user did to it.
 pub fn show(ui: &mut Ui, app: &mut FontCraftApp) {
     let words = Env::of(ui).words::<PanelWords>();
-    let FontCraftApp { view, models, sent, status, active_tool, .. } = app;
+    let FontCraftApp { view, models, sent, status, active_tool, tools, .. } = app;
     let given = view.workspace.clone();
     let label = words.dock.clone();
     let mut panels = Panels {
@@ -335,6 +335,7 @@ pub fn show(ui: &mut Ui, app: &mut FontCraftApp) {
             tokens: &models.canvas_tokens,
             display: view.display,
             edit_background: view.edit_background,
+            tools: &tools.view,
             tool: active_tool.as_mut(),
         },
         sent,

@@ -12,6 +12,7 @@ pub mod kerning_review;
 pub mod params;
 pub mod rail;
 pub mod reference_font;
+pub mod selection;
 pub mod view;
 pub mod window;
 

@@ -15,6 +15,7 @@ pub mod app;
 pub mod canvas;
 pub mod control;
 pub mod dialogs;
+pub mod icons;
 pub mod panels;
 pub mod shell;
 #[cfg(test)]
