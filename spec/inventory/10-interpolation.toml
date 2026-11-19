@@ -1094,13 +1094,22 @@ label = "Interpolation Type"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer: id, nodes: [nodeRef], axis: tag, toward: up|down, type: linear|intermediatePoint|handles|rotation}"
+params = "{glyph: name, layer?: id, points: [[shape, node]], axis: tag, toward?: up|down, type: linear|intermediatePoint|handles|rotation}"
 area = "interpolation"
-milestone = "M13"
-summary = "Sets how the given nodes travel from this layer to the next layer along the axis. Offered in the tool's Info box and in the Interpolation submenu of the context menu; linear removes any custom curve. Whether a curve belongs to the segment between two layers or to one layer's node needs observing."
+milestone = "M9"
+summary = "Sets how the given nodes travel from this layer to the next layer along the axis. Offered in the tool's Info box and in the Interpolation submenu of the context menu; linear removes any custom curve."
 ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
 status = "handbook"
-notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
+notes = "Built in M9.30 (`crates/engine/src/cmd/hoi.rs`). Targets: `glyph`, `layer`, `points` ([shape, node] on that layer) and `axis`; `toward` (up, the default, or down) picks the span from the layer to its neighbour up or down the axis, the next layer with the same coordinates on the other axes. The curve is kept in the node of the span's lower layer, the same [shape, node] on both layers. A font with no axis or fewer than two masters is refused. Documented in the handbook, not yet observed. Linear removes the curve. Intermediate Point puts the point where the node is halfway along its present path (the midpoint of the straight line for a linear node). Handles takes the cubic equal to an intermediate point, or to the present path through its halfway position; a linear node gets the default handles (a straight line). Rotation turns about the automatic centre in the automatic direction. A node already of the type is left as it is."
+observe = [
+  "Choose Rotation for a knob in the reference app, save, and read whether the node's `hoi` holds `rc = auto` or coordinates.",
+]
+guesses = [
+  "A curve belongs to the node of the lower layer of a span, so editing the span down from a layer (`toward` down) changes the layer below; settle by bending a node toward the layer below in the reference app and saving.",
+  "A new intermediate point lies where the node is halfway along its present path; settle by switching a Handles node to Intermediate Point in the reference app's Info box and reading the point.",
+  "Switching a rotation to Handles takes the cubic through the rotation's halfway position; settle by switching a rotation to Handles in the reference app and comparing the drawn handles.",
+  "A new rotation keeps an automatic centre (`rc = auto`) rather than fixed coordinates; settle by choosing Rotation in the reference app and saving.",
+]
 
 [[command]]
 id = "hoi.setControlPoints"
@@ -1108,13 +1117,17 @@ label = "Set Interpolation Control Points"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer: id, node: nodeRef, axis: tag, toward: up|down, points: [[x, y]]}"
+params = "{glyph: name, layer?: id, points: [[shape, node]] (one node), axis: tag, toward?: up|down, positions: [[x, y]] (one or two)}"
 area = "interpolation"
-milestone = "M13"
-summary = "Headless form of dragging a knob or handle: sets the intermediate point (one point), the two handles (two points) or the rotation centre (one point) of a node's interpolation curve."
+milestone = "M9"
+summary = "Headless form of dragging a knob or handle: sets the intermediate point (one position), the two handles (two positions) or the rotation centre (one position, on a rotation) of a node's interpolation curve."
 ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
 status = "inferred"
-notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
+notes = "Built in M9.30 (`crates/engine/src/cmd/hoi.rs`). Targets: `glyph`, `layer`, `points` ([shape, node] on that layer) and `axis`; `toward` (up, the default, or down) picks the span from the layer to its neighbour up or down the axis, the next layer with the same coordinates on the other axes. The curve is kept in the node of the span's lower layer, the same [shape, node] on both layers. A font with no axis or fewer than two masters is refused. Documented in the handbook, not yet observed. Two positions are the lower and the upper handle in glyph coordinates, stored as times and amplitudes relative to the line between the node's two positions (`fontcraft_interp::hoi::handles_to_timing`); a node at the same place on both layers is refused. The positions are `positions`, since `points` names the nodes."
+guesses = [
+  "A curve belongs to the node of the lower layer of a span, so editing the span down from a layer (`toward` down) changes the layer below; settle by bending a node toward the layer below in the reference app and saving.",
+  "One position on a node that is not a rotation makes it an intermediate point, as dragging a knob on a straight line does; settle by dragging the knob of a Handles node in the reference app.",
+]
 
 [[command]]
 id = "hoi.convertToHandles"
@@ -1123,13 +1136,19 @@ menu = []
 shortcut = "Return"
 when = "tool:higherOrderInterpolation"
 kind = "engine"
-params = "{glyph: name, layer: id, nodes: [nodeRef], axis: tag}"
+params = "{glyph: name, layer?: id, points: [[shape, node]], axis: tag, toward?: up|down}"
 area = "interpolation"
-milestone = "M13"
+milestone = "M9"
 summary = "With an intermediate point selected in the HOI tool, Return replaces it with two handles for finer control of the curve. Shortcut active only inside the tool."
 ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
 status = "handbook"
-notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
+notes = "Built in M9.30 (`crates/engine/src/cmd/hoi.rs`). Targets: `glyph`, `layer`, `points` ([shape, node] on that layer) and `axis`; `toward` (up, the default, or down) picks the span from the layer to its neighbour up or down the axis, the next layer with the same coordinates on the other axes. The curve is kept in the node of the span's lower layer, the same [shape, node] on both layers. A font with no axis or fewer than two masters is refused. Documented in the handbook, not yet observed. The handles are those of the cubic equal to the intermediate-point curve (`fontcraft_interp::hoi::point_to_handles`), so the path does not change. Nodes without an intermediate point are left alone; a selection with none is refused."
+observe = [
+  "Press Return on an intermediate point in the reference app and compare the instance halfway before and after: equal means the conversion keeps the path.",
+]
+guesses = [
+  "A curve belongs to the node of the lower layer of a span, so editing the span down from a layer (`toward` down) changes the layer below; settle by bending a node toward the layer below in the reference app and saving.",
+]
 
 [[command]]
 id = "hoi.centerRotation"
@@ -1137,13 +1156,20 @@ label = "Center Rotation in Bounds"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer: id, nodes: [nodeRef], axis: tag}"
+params = "{glyph: name, layer?: id, points: [[shape, node]], axis: tag, toward?: up|down}"
 area = "interpolation"
-milestone = "M13"
+milestone = "M9"
 summary = "Info-box button that moves a rotation knob to the centre of the bounding box of the node's path, which is also where a new rotation centre starts."
 ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
 status = "handbook"
-notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
+notes = "Built in M9.30 (`crates/engine/src/cmd/hoi.rs`). Targets: `glyph`, `layer`, `points` ([shape, node] on that layer) and `axis`; `toward` (up, the default, or down) picks the span from the layer to its neighbour up or down the axis, the next layer with the same coordinates on the other axes. The curve is kept in the node of the span's lower layer, the same [shape, node] on both layers. A font with no axis or fewer than two masters is refused. Documented in the handbook, not yet observed. It sets the centre to automatic (`rc = auto`), the midpoint of the centres of the path's bounding boxes on the two layers (`fontcraft_interp::hoi::auto_center`). Nodes without a rotation are left alone; a selection with none is refused."
+observe = [
+  "Press the centre-bounds button in the reference app's HOI Info box, save, and read the node's `rc`.",
+]
+guesses = [
+  "A curve belongs to the node of the lower layer of a span, so editing the span down from a layer (`toward` down) changes the layer below; settle by bending a node toward the layer below in the reference app and saving.",
+  "The button stores the automatic centre rather than the coordinates of the centre; settle by pressing it in the reference app and saving.",
+]
 
 [[command]]
 id = "hoi.setRotationDirection"
@@ -1151,13 +1177,16 @@ label = "Rotation Direction"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer: id, nodes: [nodeRef], axis: tag, direction: automatic|clockwise|counterclockwise}"
+params = "{glyph: name, layer?: id, points: [[shape, node]], axis: tag, toward?: up|down, direction: automatic|clockwise|counterclockwise}"
 area = "interpolation"
-milestone = "M13"
+milestone = "M9"
 summary = "Chooses the sense of a rotation-type interpolation. Automatic takes the smaller angle; the other two force a direction."
 ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
 status = "handbook"
-notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
+notes = "Built in M9.30 (`crates/engine/src/cmd/hoi.rs`). Targets: `glyph`, `layer`, `points` ([shape, node] on that layer) and `axis`; `toward` (up, the default, or down) picks the span from the layer to its neighbour up or down the axis, the next layer with the same coordinates on the other axes. The curve is kept in the node of the span's lower layer, the same [shape, node] on both layers. A font with no axis or fewer than two masters is refused. Documented in the handbook, not yet observed. Automatic leaves `rd` out. Nodes without a rotation are left alone; a selection with none is refused. A rotation with no centre gets the automatic one, since a rotation with neither key would be written as an empty dictionary that reads back as a timing."
+guesses = [
+  "A curve belongs to the node of the lower layer of a span, so editing the span down from a layer (`toward` down) changes the layer below; settle by bending a node toward the layer below in the reference app and saving.",
+]
 
 [[command]]
 id = "hoi.removeCurve"
@@ -1166,13 +1195,16 @@ menu = []
 shortcut = "Delete"
 when = "tool:higherOrderInterpolation"
 kind = "engine"
-params = "{glyph: name, layer: id, nodes: [nodeRef], axis: tag}"
+params = "{glyph: name, layer?: id, points: [[shape, node]], axis: tag, toward?: up|down}"
 area = "interpolation"
-milestone = "M13"
+milestone = "M9"
 summary = "With a HOI knob selected, Delete discards the custom curve so the node interpolates linearly again; equal to choosing Linear as the type."
 ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
 status = "handbook"
-notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
+notes = "Built in M9.30 (`crates/engine/src/cmd/hoi.rs`). Targets: `glyph`, `layer`, `points` ([shape, node] on that layer) and `axis`; `toward` (up, the default, or down) picks the span from the layer to its neighbour up or down the axis, the next layer with the same coordinates on the other axes. The curve is kept in the node of the span's lower layer, the same [shape, node] on both layers. A font with no axis or fewer than two masters is refused. Documented in the handbook, not yet observed. It works on a layer with no neighbour above (a curve left over after a master was removed). Nodes without a curve are left alone; a selection with none is refused."
+guesses = [
+  "A curve belongs to the node of the lower layer of a span, so editing the span down from a layer (`toward` down) changes the layer below; settle by bending a node toward the layer below in the reference app and saving.",
+]
 
 [[command]]
 id = "hoi.selectAxis"

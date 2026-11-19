@@ -21,10 +21,13 @@
 //!
 //! [`timing`] is the fraction of the curve's length a node has travelled at `s`, which the timing
 //! graph plots. [`point_to_handles`] gives the handles of the cubic equal to a Point curve.
+//!
+//! The editing commands (`hoi.*`) find a span with [`neighbour_layer`] and [`node_span`], and turn
+//! dragged handles into a timing with [`handles_to_timing`].
 
 use fontcraft_model::{Hoi, HoiCenter, HoiCurve, HoiDirection, HoiTiming, Layer, Path, Rare, Shape};
 
-use crate::{InterpError, MAX_COORDINATE};
+use crate::{Designspace, GlyphSources, InterpError, MAX_COORDINATE, Source};
 
 /// A position in glyph coordinates.
 pub type Point = (f64, f64);
@@ -155,14 +158,22 @@ pub fn point_control(span: &Span, ip: Point) -> Point {
 /// node positions coincide (handles are relative to the line between them) or a value would be
 /// out of range.
 pub fn point_to_handles(span: &Span, ip: Point) -> Option<HoiTiming> {
+    let c = point_control(span, ip);
+    let h1 = add(span.lower, scale(sub(c, span.lower), 2.0 / 3.0));
+    let h2 = add(span.upper, scale(sub(c, span.upper), 2.0 / 3.0));
+    handles_to_timing(span, h1, h2)
+}
+
+/// The timing whose [`handles`] are `h1` (the lower handle) and `h2` (the upper one), in glyph
+/// coordinates; `None` when the two node positions coincide or a value would be out of range.
+pub fn handles_to_timing(span: &Span, h1: Point, h2: Point) -> Option<HoiTiming> {
     let d = span.direction();
     let length2 = d.0 * d.0 + d.1 * d.1;
     if !length2.is_finite() || length2 <= EPSILON {
         return None;
     }
-    let c = point_control(span, ip);
-    let v1 = scale(sub(c, span.lower), 2.0 / 3.0);
-    let v2 = scale(sub(c, span.upper), 2.0 / 3.0);
+    let v1 = sub(h1, span.lower);
+    let v2 = sub(h2, span.upper);
     let values = [dot(v1, d) / length2, -dot(v2, d) / length2, 100.0 * cross(d, v1) / length2, 100.0 * cross(d, v2) / length2];
     if !values.iter().all(|v| v.is_finite() && v.abs() <= MAX_COORDINATE) {
         return None;
@@ -174,6 +185,44 @@ pub fn point_to_handles(span: &Span, ip: Point) -> Option<HoiTiming> {
         lower_amplitude: Some(lower_amplitude),
         upper_amplitude: Some(upper_amplitude),
     })
+}
+
+/// The span of node `index` from path `lower` to path `upper`, with the paths' automatic
+/// rotation centre; `None` when the paths' node counts differ or there is no such node.
+pub fn node_span(lower: &Path, upper: &Path, index: usize) -> Option<Span> {
+    if lower.nodes.len() != upper.nodes.len() {
+        return None;
+    }
+    let (n, u) = (lower.nodes.get(index)?, upper.nodes.get(index)?);
+    let (a, b) = ((n.x, n.y), (u.x, u.y));
+    Some(Span { lower: a, upper: b, auto_center: auto_center(lower, upper).unwrap_or_else(|| midpoint_of(a, b)) })
+}
+
+/// The id of the layer next above (`up`) or next below layer `layer_id` along the axis tagged
+/// `tag`, among the sources it interpolates with: the glyph's master and intermediate layers, or
+/// for an alternate layer the sources of its set. The two layers have the same coordinates on
+/// every other axis. `None` when there is no such layer, the layer is not a source or the axis
+/// does not exist.
+pub fn neighbour_layer(
+    designspace: &Designspace,
+    sources: &GlyphSources,
+    layer_id: &str,
+    tag: &str,
+    up: bool,
+) -> Result<Option<String>, InterpError> {
+    let Some(axis) = designspace.axes().iter().position(|a| a.tag == tag) else { return Ok(None) };
+    let has = |group: &[Source]| group.iter().any(|s| s.layer_id == layer_id);
+    let group: &[Source] = if has(&sources.main) {
+        &sources.main
+    } else {
+        match sources.alternates.iter().find(|a| has(&a.sources)) {
+            Some(set) => &set.sources,
+            None => return Ok(None),
+        }
+    };
+    let Some(li) = group.iter().position(|s| s.layer_id == layer_id) else { return Ok(None) };
+    let locations = group.iter().map(|s| designspace.to_normalized(&s.location).map(|n| n.0)).collect::<Result<Vec<_>, _>>()?;
+    Ok(neighbour(&locations, li, axis, up).and_then(|k| group.get(k)).map(|s| s.layer_id.clone()))
 }
 
 /// The centre a rotation turns about: the given point, or the span's automatic centre.
@@ -262,7 +311,7 @@ pub fn apply(
             if !has_curves_on(lower, tag) {
                 continue;
             }
-            let Some(ui) = upper_neighbour(locations, li, axis) else { continue };
+            let Some(ui) = neighbour(locations, li, axis, true) else { continue };
             let Some(upper) = layers.get(ui) else { continue };
             let (sx, sy) = (share(weights_x, li, ui), share(weights_y, li, ui));
             if sx.is_some() || sy.is_some() {
@@ -317,8 +366,9 @@ fn has_curves_on(layer: &Layer, tag: &str) -> bool {
     layer.shapes.iter().any(|s| matches!(s, Shape::Path(p) if p.nodes.iter().any(|n| n.info.hoi.get(tag).is_some())))
 }
 
-/// The layer next above layer `li` along `axis` with the same coordinates on the other axes.
-fn upper_neighbour(locations: &[Vec<f64>], li: usize, axis: usize) -> Option<usize> {
+/// The layer next above (`up`) or next below layer `li` along `axis` with the same coordinates
+/// on the other axes.
+fn neighbour(locations: &[Vec<f64>], li: usize, axis: usize, up: bool) -> Option<usize> {
     let here = locations.get(li)?;
     let at = *here.get(axis)?;
     let mut best: Option<(usize, f64)> = None;
@@ -328,7 +378,8 @@ fn upper_neighbour(locations: &[Vec<f64>], li: usize, axis: usize) -> Option<usi
         }
         let Some(&v) = other.get(axis) else { continue };
         let same_elsewhere = here.iter().zip(other).enumerate().all(|(b, (p, q))| b == axis || (p - q).abs() <= EPSILON);
-        if same_elsewhere && v > at + EPSILON && best.is_none_or(|(_, w)| v < w) {
+        let beyond = if up { v > at + EPSILON } else { v < at - EPSILON };
+        if same_elsewhere && beyond && best.is_none_or(|(_, w)| if up { v < w } else { v > w }) {
             best = Some((k, v));
         }
     }
@@ -405,6 +456,30 @@ mod tests {
             lower_amplitude: Some(lower_amplitude),
             upper_amplitude: Some(upper_amplitude),
         })
+    }
+
+    #[test]
+    fn dragged_handles_give_back_the_timing_they_came_from() {
+        let sp = span((10.0, 20.0), (210.0, 120.0));
+        let timing = HoiTiming { lower_time: Some(0.2), upper_time: Some(0.45), lower_amplitude: Some(-15.0), upper_amplitude: Some(30.0) };
+        let (h1, h2) = handles(&sp, &timing);
+        let back = handles_to_timing(&sp, h1, h2).unwrap();
+        for (a, b) in back.values().iter().zip(timing.values()) {
+            assert!((a - b).abs() <= 1e-9, "{back:?} against {timing:?}");
+        }
+        assert_eq!(handles_to_timing(&span((5.0, 5.0), (5.0, 5.0)), h1, h2), None, "no direction when the positions coincide");
+    }
+
+    #[test]
+    fn the_neighbour_below_and_above_share_the_other_coordinates() {
+        // A 2×2 grid plus a layer halfway up the first axis.
+        let locations = vec![vec![0.0, 0.0], vec![1.0, 0.0], vec![0.0, 1.0], vec![1.0, 1.0], vec![0.5, 0.0]];
+        assert_eq!(neighbour(&locations, 0, 0, true), Some(4));
+        assert_eq!(neighbour(&locations, 1, 0, false), Some(4));
+        assert_eq!(neighbour(&locations, 4, 0, false), Some(0));
+        assert_eq!(neighbour(&locations, 2, 0, true), Some(3));
+        assert_eq!(neighbour(&locations, 0, 0, false), None);
+        assert_eq!(neighbour(&locations, 0, 1, true), Some(2));
     }
 
     #[test]
