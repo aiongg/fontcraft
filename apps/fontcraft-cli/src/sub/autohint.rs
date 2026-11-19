@@ -32,8 +32,9 @@ const USAGE: &str = "\
       autohinter stores its instructions on the main master instead. Layers that already have
       hints are left alone unless --all. Each output is INPUT.autohinted.EXT unless -o (one
       per input, comma-separated), --output-dir or --in-place says otherwise. In a compiled
-      CFF font (OTF) every glyph's charstring is hinted again, as with --all, and the font is
-      written with its other tables unchanged. A compiled TrueType font can only be analysed
+      CFF or CFF2 font (OTF) every glyph's charstring is hinted again, as with --all, and the
+      font is written with its other tables unchanged; in a variable CFF2 font the masters of
+      each glyph are hinted together and the stems written as blends. A compiled TrueType font can only be analysed
       (--report-only): to hint one, autohint its source, or export it with autohinting on.
   fontcraft-cli autohint INPUT --print-list-fddict | --print-all-fddict [--fontinfo-file FILE]
       List the zone-and-stem sets in effect and the glyphs each one hints, without hinting.
@@ -297,9 +298,8 @@ fn is_truetype_font(path: &Path) -> bool {
     tag == [0, 1, 0, 0] || tag == b"true"
 }
 
-/// Whether `input` is a compiled font with a `CFF ` table (plain, in WOFF or WOFF2, or the
-/// collection member `face`), whose charstrings `autohint.ps.runFont` hints. A source, or a
-/// variable font with a `CFF2` table, is not.
+/// Whether `input` is a compiled font with a `CFF ` or `CFF2` table (plain, in WOFF or WOFF2, or
+/// the collection member `face`), whose charstrings `autohint.ps.runFont` hints. A source is not.
 fn has_cff_table(input: &str, face: Option<&str>) -> bool {
     let mut params = Map::new();
     params.insert("font".into(), json!(input));
@@ -307,7 +307,7 @@ fn has_cff_table(input: &str, face: Option<&str>) -> bool {
         params.insert("face".into(), json!(n));
     }
     let Ok(listed) = Session::new().execute("tables.list", &Value::Object(params)) else { return false };
-    let is_cff = |t: &Value| t.get("tag").and_then(Value::as_str).is_some_and(|tag| tag.trim_end() == "CFF");
+    let is_cff = |t: &Value| t.get("tag").and_then(Value::as_str).is_some_and(|tag| matches!(tag.trim_end(), "CFF" | "CFF2"));
     listed.pointer("/faces/0/tables").and_then(Value::as_array).is_some_and(|tables| tables.iter().any(is_cff))
 }
 

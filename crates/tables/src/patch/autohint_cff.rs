@@ -18,6 +18,7 @@
 
 use fontcraft_cff::subr::{self, CharstringSet, SubrError, SubrOptions, TableRewrite};
 use fontcraft_cff::{CharstringHints, MAX_SEGMENTS, Number, PathOp, PrivateDict, encode_charstring};
+use read_fonts::ps::cff::blend::BlendState;
 use read_fonts::ps::cff::dict::{Entry, entries};
 use read_fonts::ps::cff::index::Index;
 use read_fonts::types::{Fixed, GlyphId};
@@ -31,9 +32,9 @@ const CFF: [u8; 4] = *b"CFF ";
 const CFF2: [u8; 4] = *b"CFF2";
 const HEAD: [u8; 4] = *b"head";
 /// Most entries read from one DICT.
-const MAX_DICT_ENTRIES: usize = 4_096;
+pub(super) const MAX_DICT_ENTRIES: usize = 4_096;
 /// Most Font DICTs read from an FDArray (the FDSelect holds a byte per Font DICT).
-const MAX_FONT_DICTS: usize = 256;
+pub(super) const MAX_FONT_DICTS: usize = 256;
 
 /// What the hinter needs to know about the font before it runs.
 #[derive(Clone, Debug)]
@@ -94,7 +95,7 @@ pub struct CffAutohint {
     pub bytes_after: usize,
 }
 
-fn from_subr(e: SubrError) -> TablesError {
+pub(super) fn from_subr(e: SubrError) -> TablesError {
     match e {
         SubrError::Invalid(m) => TablesError::Invalid(format!("the CFF table: {m}")),
         SubrError::Unsupported(m) => TablesError::Unsupported(m),
@@ -106,9 +107,7 @@ fn from_subr(e: SubrError) -> TablesError {
 fn cff_data(font: &SfntFont) -> Result<&[u8]> {
     match font.get(CFF) {
         Some(data) => Ok(data),
-        None if font.get(CFF2).is_some() => {
-            Err(TablesError::Unsupported("autohinting a variable font's CFF2 table; autohint its sources, or export them with autohinting on".into()))
-        }
+        None if font.get(CFF2).is_some() => Err(TablesError::Unsupported("the font has a CFF2 table, which autohint_cff2 hints".into())),
         None => Err(TablesError::MissingTable("CFF ".into())),
     }
 }
@@ -120,12 +119,12 @@ fn number(f: Fixed) -> Number {
     if v.fract() == 0.0 { Number::Int(v as i64) } else { Number::Real(v) }
 }
 
-/// The hinting values of one Private DICT. Entries that cannot be read end the reading; what was
-/// read before them stays.
-fn read_private(bytes: &[u8]) -> PrivateDict {
+/// The hinting values of one Private DICT, its blends (in a `CFF2` table) evaluated by `blend`.
+/// Entries that cannot be read end the reading; what was read before them stays.
+pub(super) fn read_private<'a>(bytes: &'a [u8], blend: Option<BlendState<'a>>) -> PrivateDict {
     let pairs = |values: &[(Fixed, Fixed)]| -> Vec<Number> { values.iter().flat_map(|(a, b)| [number(*a), number(*b)]).collect() };
     let mut d = PrivateDict::default();
-    for entry in entries(bytes, None).take(MAX_DICT_ENTRIES) {
+    for entry in entries(bytes, blend).take(MAX_DICT_ENTRIES) {
         let Ok(entry) = entry else { break };
         match entry {
             Entry::BlueValues(b) => d.blue_values = pairs(b.values()),
@@ -164,7 +163,7 @@ pub fn cff_hint_setup(font: &SfntFont) -> Result<CffHintSetup> {
         }
     }
     let read = |range: std::ops::Range<usize>| -> Result<PrivateDict> {
-        data.get(range).map(read_private).ok_or_else(|| TablesError::invalid("a Private DICT lies outside the CFF table"))
+        data.get(range).map(|d| read_private(d, None)).ok_or_else(|| TablesError::invalid("a Private DICT lies outside the CFF table"))
     };
     let privates = match fd_array {
         Some(offset) => {
@@ -319,12 +318,14 @@ pub fn autohint_cff(
     Ok(CffAutohint { font: out, hinted, skipped, bytes_before, bytes_after })
 }
 
-/// The table with `flat`'s charstrings, subroutinised, checked against `flat`.
-fn write_table(data: &[u8], flat: &CharstringSet) -> Result<Vec<u8>> {
+/// The table (`CFF ` or, when `flat` says so, `CFF2`) with `flat`'s charstrings, subroutinised,
+/// checked against `flat`.
+pub(super) fn write_table(data: &[u8], flat: &CharstringSet) -> Result<Vec<u8>> {
     let keep = TableRewrite { top: &[], private: &[], dedupe_family_blues: false };
     let (table, _) =
-        subr::rewrite_table(data, false, &keep, &mut |_: &CharstringSet| subr::subroutinize(flat, &SubrOptions::default())).map_err(from_subr)?;
-    let back = subr::charstrings_of_table(&table, false).and_then(|s| subr::desubroutinize_within(&s, MAX_CHARSTRING_MEMORY)).map_err(from_subr)?;
+        subr::rewrite_table(data, flat.cff2, &keep, &mut |_: &CharstringSet| subr::subroutinize(flat, &SubrOptions::default())).map_err(from_subr)?;
+    let back =
+        subr::charstrings_of_table(&table, flat.cff2).and_then(|s| subr::desubroutinize_within(&s, MAX_CHARSTRING_MEMORY)).map_err(from_subr)?;
     let expected = &flat.charstrings;
     if let Some(gid) = (0..expected.len().max(back.charstrings.len())).find(|&g| back.charstrings.get(g) != expected.get(g)) {
         return Err(TablesError::invalid(format!(
@@ -336,7 +337,7 @@ fn write_table(data: &[u8], flat: &CharstringSet) -> Result<Vec<u8>> {
 
 /// Stem edges rounded to whole units, as a charstring without fractions stores them; a ghost keeps
 /// its fixed width.
-fn round_stems(hints: &mut CharstringHints) {
+pub(super) fn round_stems(hints: &mut CharstringHints) {
     let round = |v: f64| (v + 0.5).floor();
     for s in hints.h_stems.iter_mut().chain(hints.v_stems.iter_mut()) {
         if s.is_ghost() {
