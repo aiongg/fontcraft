@@ -20,6 +20,7 @@ This page is the contract for panel writers. The worked example is the Metrics p
 | `shell/dock.rs` | `PanelId`, panel titles, the default layout, `DockPanels::body` |
 | `shell/commands.rs` | shell commands (view and window state): `MODULES` |
 | `panels/<panel>.rs` | one panel: props, view, words, its Fixture test |
+| `panels/widgets.rs` | the controls panels share: number fields, the key-or-number field, the nine-point grid |
 | `canvas/` | the document area: `camera.rs`, `layers.rs` (`LAYERS`), the active-tool slot in `mod.rs` |
 | `dialogs/` | dialogs on the window's `DialogHost`: `MODULES` |
 | `control/` | the control channel's method table: `MODULES` |
@@ -83,6 +84,23 @@ queries through `Session::query`, which refuses edits.
 5. **Register.** Add `pub mod <panel>;` to `panels/mod.rs`. In `Panels::body` (`shell/dock.rs`),
    replace the stub arm with
    `PanelId::Kerning => panels::kerning::show(ui, Props { model: &self.models.kerning, sent: self.sent })`.
+
+## Shared controls
+
+`panels/widgets.rs` holds the controls more than one panel uses. Use them instead of building a field of your own.
+
+| Function | Shows | Returns |
+|---|---|---|
+| `number(ui, label, value)` | a `NumberField` | the number committed; an emptied field commits nothing |
+| `clearable_number(ui, label, value)` | a `NumberField` that may be emptied | `NumberEdit::Set(n)`, or `Clear` when a field that held a value is emptied |
+| `clearable(ui, field, value)` | a `NumberField` the caller configured (range, unit) | as `clearable_number` |
+| `key_or_number(ui, label, &KeyedNumber, read_only)` | a field that holds a number or a metrics key, its state in the tooltip, and an update button while the key is out of sync | `KeyedOutput { commit, update }`: `commit` is the setter's `value` parameter |
+| `box_point(ui, label, point)` | craft's `ReferencePoint` over one of the nine `BOX_POINTS` names | the point picked |
+| `format_number(n)` | | at most two decimals, no trailing zeros, no negative zero |
+
+A field commits on Enter, Tab or leaving it, and a field left with its text unchanged commits nothing.
+`KeyedNumber` (value, key, `KeyState`, message) is plain data for a view model; `KeyedNumber::commit_value` holds the
+rules for what a typed text sets: a number, a key, or for an emptied field the current number (which removes the key).
 
 ## Posting commands
 

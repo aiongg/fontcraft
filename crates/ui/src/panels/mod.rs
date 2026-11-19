@@ -16,3 +16,4 @@ pub mod reference_font;
 pub mod related_glyphs;
 pub mod selections;
 pub mod stub;
+pub mod widgets;
