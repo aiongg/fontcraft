@@ -7,14 +7,19 @@
 //! | a click, Cmd-click or Shift-click on an entry | `fontView.selectSidebarEntries` with the entries the list then holds |
 //! | the disclosure of a section, group or folder | `fontView.setSidebarEntryOpen` |
 //! | renaming a filter or folder in place | `fontView.renameFilter` |
+//! | an entry's context menu: Show Missing Glyphs…, and Edit Filter… and Remove Filter on a filter | as the actions menu's rows |
+//! | Actions › Add Smart Filter… | `dialog.open` of the Smart Filter Editor for a new filter |
+//! | Actions › Add List Filter… | `dialog.open` of the List Filter Editor for a new filter of the selected glyphs |
 //! | Actions › Add Folder | `fontView.addFilterFolder` with the first free "New Folder" name |
+//! | Actions › Edit Filter… | `dialog.open` of the editor of the last selected smart or list filter |
 //! | Actions › Remove Filter | `fontView.removeFilter` on the last selected filter |
+//! | Actions › Show Missing Glyphs… | `dialog.open` of Missing Glyphs for the last selected entry the font lacks glyphs of |
 
 use std::borrow::Cow;
 
 use craft::behavior::{DisplayOrder, EditEvent, IconId, ItemSource, Selection};
 use craft::ui::buttons::Button;
-use craft::ui::contract::{Bind, CollectionEvent, Props as _, Show as _, ShowCollection as _, ShowContainer as _, Tracked, Trigger};
+use craft::ui::contract::{Bind, CollectionEvent, Entry, Props as _, Show as _, ShowCollection as _, ShowContainer as _, Tracked, Trigger};
 use craft::ui::display::Text;
 use craft::ui::layout_components::Stack;
 use craft::ui::list::{List, ListRow};
@@ -22,13 +27,14 @@ use craft::ui::menu::{Menu, MenuItem};
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::Env;
 use egui::Ui;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use super::inspector;
-use crate::app::Msg;
 use crate::app::models::glyph_props::GlyphPropsModel;
 use crate::app::models::sidebar::{SidebarModel, SidebarRow};
 use crate::app::sidebar::{path_value, unique_name};
+use crate::app::{Msg, ViewMsg};
+use crate::dialogs::sidebar_filters;
 
 craft::ui::words! {
     /// The words of the sidebar.
@@ -39,8 +45,16 @@ craft::ui::words! {
         complete: "fontcraftSidebar.complete" = "Complete";
         /// The actions menu and its rows.
         actions: "fontcraftSidebar.actions" = "Actions";
+        add_smart: "fontcraftSidebar.addSmartFilter" = "Add Smart Filter…";
+        add_list: "fontcraftSidebar.addListFilter" = "Add List Filter…";
         add_folder: "fontcraftSidebar.addFolder" = "Add Folder";
+        edit_filter: "fontcraftSidebar.editFilter" = "Edit Filter…";
         remove_filter: "fontcraftSidebar.removeFilter" = "Remove Filter";
+        show_missing: "fontcraftSidebar.showMissing" = "Show Missing Glyphs…";
+        /// An entry's context menu, and why its rows are off.
+        row_menu: "fontcraftSidebar.rowMenu" = "Entry Menu";
+        nothing_missing: "fontcraftSidebar.nothingMissing" = "The entry does not know its full glyph set, or the font has all of it";
+        no_editor: "fontcraftSidebar.noEditor" = "Folders have no editor";
         /// The name of a new folder.
         new_folder: "fontcraftSidebar.newFolder" = "New Folder";
         /// Without an open font.
@@ -71,7 +85,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
     let _ = Stack::new()
         .fill()
         .footer(|ui, _| {
-            actions(ui, model, &words, &mut foot);
+            actions(ui, model, &glyphs.glyphs, &words, &mut foot);
             inspector::show(ui, glyphs, &mut foot);
         })
         .show(ui, |ui, _| {
@@ -176,6 +190,7 @@ fn entries(ui: &mut Ui, model: &SidebarModel, words: &SidebarWords, sent: &mut V
     if picked.items != before {
         sent.push(select(model, &before, &picked.items));
     }
+    let mut menu_row = model.menu_row.as_ref().and_then(|p| model.row_of(p));
     for event in &out.events {
         match event {
             CollectionEvent::Open(change) => {
@@ -194,9 +209,55 @@ fn entries(ui: &mut Ui, model: &SidebarModel, words: &SidebarWords, sent: &mut V
                     sent.push(Msg::run("fontView.renameFilter", json!({ "filter": path_value(&row.path), "name": name })));
                 }
             }
+            CollectionEvent::ContextMenu(request) => menu_row = Some(request.key),
             _ => {}
         }
     }
+    let row = menu_row.and_then(|i| model.rows.get(i)).filter(|r| !r.is_section());
+    if let Some(row) = row {
+        let menu = Menu::context(words.row_menu.clone(), &out.response).pick(ui, &row_entries(row, words));
+        if let Some(picked) = menu.picked.as_deref().and_then(|id| row_command(row, id)) {
+            sent.push(picked);
+        }
+        let open = (menu.closed.is_none() && menu.picked.is_none()).then(|| row.path.clone());
+        if open != model.menu_row {
+            sent.push(Msg::View(ViewMsg::SidebarMenu(open)));
+        }
+    } else if model.menu_row.is_some() {
+        sent.push(Msg::View(ViewMsg::SidebarMenu(None)));
+    }
+}
+
+/// The rows of an entry's context menu.
+fn row_entries(row: &SidebarRow, words: &SidebarWords) -> Vec<Entry<String>> {
+    let show = Entry::new(MISSING.to_string(), words.show_missing.clone());
+    let mut entries = vec![if row.lacks_glyphs() { show } else { show.disabled_reason(words.nothing_missing.clone()) }];
+    if row.is_filter() {
+        let edit = Entry::new(EDIT.to_string(), words.edit_filter.clone());
+        entries.push(if editor(row).is_some() { edit } else { edit.disabled_reason(words.no_editor.clone()) });
+        entries.push(Entry::new(REMOVE.to_string(), words.remove_filter.clone()));
+    }
+    entries
+}
+
+/// The context menu's row ids.
+const MISSING: &str = "showMissing";
+const EDIT: &str = "editFilter";
+const REMOVE: &str = "removeFilter";
+
+/// The message of the context menu's row `id` for `row`.
+fn row_command(row: &SidebarRow, id: &str) -> Option<Msg> {
+    match id {
+        MISSING if row.lacks_glyphs() => Some(missing(row)),
+        EDIT => editor(row),
+        REMOVE if row.is_filter() => Some(Msg::run("fontView.removeFilter", json!({ "filter": path_value(&row.path) }))),
+        _ => None,
+    }
+}
+
+/// The `dialog.open` of Missing Glyphs for `row`.
+fn missing(row: &SidebarRow) -> Msg {
+    open_dialog(json!({ "dialog": sidebar_filters::MISSING, "params": { "entry": path_value(&row.path) } }))
 }
 
 /// The `fontView.selectSidebarEntries` for the rows the list left selected: All alone when it was just picked or
@@ -210,19 +271,55 @@ fn select(model: &SidebarModel, before: &[usize], after: &[usize]) -> Msg {
     Msg::Shell(CommandRef::with_params("fontView.selectSidebarEntries", json!({ "entries": entries, "mode": "replace" })))
 }
 
-/// The actions menu: Add Folder, and Remove Filter on the last selected filter.
-fn actions(ui: &mut Ui, model: &SidebarModel, words: &SidebarWords, sent: &mut Vec<Msg>) {
-    let chosen = model.selected.iter().rev().filter_map(|p| model.row_of(p)).filter_map(|i| model.rows.get(i)).find(|r| r.is_filter());
+/// The `dialog.open` of a dialog of the sidebar.
+fn open_dialog(params: Value) -> Msg {
+    Msg::Shell(CommandRef::with_params("dialog.open", params))
+}
+
+/// The `dialog.open` of the editor of a smart or list filter, which reads the stored filter by its path.
+fn editor(row: &SidebarRow) -> Option<Msg> {
+    let dialog = match row.kind.as_str() {
+        "smart" => sidebar_filters::SMART,
+        "list" => sidebar_filters::LIST,
+        _ => return None,
+    };
+    Some(open_dialog(json!({ "dialog": dialog, "params": { "filter": path_value(&row.path) } })))
+}
+
+/// The actions menu: the new filters and folders; Edit and Remove on the last selected filter; Show Missing Glyphs on
+/// the last selected entry the font lacks glyphs of. A new list filter holds the selected glyphs.
+fn actions(ui: &mut Ui, model: &SidebarModel, selected: &[String], words: &SidebarWords, sent: &mut Vec<Msg>) {
+    let picked = || model.selected.iter().rev().filter_map(|p| model.row_of(p)).filter_map(|i| model.rows.get(i));
+    let chosen = picked().find(|r| r.is_filter());
+    let lacking = picked().find(|r| r.lacks_glyphs());
+    let edit = chosen.and_then(editor);
     let opener = Button::new(words.actions.clone()).show(ui);
     Menu::new(words.actions.clone()).opened_by(&opener, Trigger::Click).show(ui, |ui, _| {
+        if MenuItem::new(words.add_smart.clone()).show(ui).ran {
+            sent.push(open_dialog(json!({ "command": "fontView.addSmartFilter" })));
+        }
+        if MenuItem::new(words.add_list.clone()).show(ui).ran {
+            let params = if selected.is_empty() { json!({}) } else { json!({ "glyphs": selected.join(" ") }) };
+            sent.push(open_dialog(json!({ "command": "fontView.addListFilter", "params": params })));
+        }
         if MenuItem::new(words.add_folder.clone()).show(ui).ran {
             let name = unique_name(&model.filter_names(), words.new_folder.as_str());
             sent.push(Msg::run("fontView.addFilterFolder", json!({ "name": name })));
+        }
+        if MenuItem::new(words.edit_filter.clone()).enabled(edit.is_some()).show(ui).ran
+            && let Some(open) = &edit
+        {
+            sent.push(open.clone());
         }
         if MenuItem::new(words.remove_filter.clone()).enabled(chosen.is_some()).show(ui).ran
             && let Some(row) = chosen
         {
             sent.push(Msg::run("fontView.removeFilter", json!({ "filter": path_value(&row.path) })));
+        }
+        if MenuItem::new(words.show_missing.clone()).enabled(lacking.is_some()).show(ui).ran
+            && let Some(row) = lacking
+        {
+            sent.push(missing(row));
         }
     });
 }

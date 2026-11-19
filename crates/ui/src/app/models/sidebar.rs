@@ -25,6 +25,8 @@ pub struct SidebarModel {
     pub selected: Vec<Vec<String>>,
     /// Why the entries could not be read.
     pub error: Option<String>,
+    /// The entry whose context menu is open.
+    pub menu_row: Option<Vec<String>>,
 }
 
 /// One sidebar entry.
@@ -119,7 +121,8 @@ pub fn project(model: &mut Tracked<SidebarModel>, cx: &mut ProjectCx<'_>) {
         row.open = row.has_children && open.get(&row.path).copied().unwrap_or(row.is_section());
     }
     let visible = shown(&rows);
-    let value = SidebarModel { has_font: true, rows, visible, selected: entries_of(cx.view.font_view.entries.as_ref()), error };
+    let selected = entries_of(cx.view.font_view.entries.as_ref());
+    let value = SidebarModel { has_font: true, rows, visible, selected, error, menu_row: cx.view.sidebar.menu_row.clone() };
     super::set(model, value);
 }
 

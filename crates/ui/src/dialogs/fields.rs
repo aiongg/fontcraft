@@ -5,12 +5,15 @@
 //! field's id for `ui.dialog.set` and `ui.dialog.click`. Values are JSON as the command takes them; the window's
 //! rows hold them as `DialogFields`, and [`Field::to_field_value`] and [`Field::from_field_value`] convert.
 
+use std::borrow::Cow;
 use std::collections::HashSet;
 
+use craft::behavior::{Selection, keyed};
 use craft::ui::choice::Checkbox;
-use craft::ui::contract::{Bind, Props as _, Show as _, ShowContainer as _};
+use craft::ui::contract::{Bind, Props as _, Show as _, ShowCollection as _, ShowContainer as _};
 use craft::ui::display::Text;
 use craft::ui::layout_components::Stack;
+use craft::ui::list::{List, ListRow};
 use craft::ui::patterns::form_dialogs::{CustomContext, DialogFields, FieldValue, Param, ParamKind};
 use craft::ui::runtime::env::Label;
 use craft::ui::runtime::requests::PathKind;
@@ -31,6 +34,8 @@ pub const MAX_LIST_ROWS: usize = 65_536;
 pub const MAX_TEXT_LINES: usize = 32;
 /// Digits after the decimal mark a number field shows.
 const NUMBER_DECIMALS: u32 = 2;
+/// Rows a list to select from shows at once; it scrolls past them.
+const LIST_ROWS: u16 = 12;
 
 /// Checks a value for a [`Kind::Custom`] field: the value as the field stores it, or why it does not fit.
 pub type CustomCheck = fn(&Field, &Value) -> Result<Value, String>;
@@ -407,7 +412,7 @@ fn choice_label<'a>(labels: &'a [String], at: usize, word: &'a str) -> &'a str {
     labels.get(at).map_or(word, String::as_str)
 }
 
-/// The control cell of a field that has no craft row of its own: checkboxes for words and selectable rows, the rows
+/// The control cell of a field that has no craft row of its own: checkboxes for words, a list for selectable rows, the rows
 /// as text for an order or a list that only shows, a package's own row for its kind.
 fn custom_row(ui: &mut Ui, fields: &mut DialogFields, cx: &mut CustomContext, field: &Field) -> Response {
     let current = match fields.get(&field.key) {
@@ -417,7 +422,7 @@ fn custom_row(ui: &mut Ui, fields: &mut DialogFields, cx: &mut CustomContext, fi
     };
     let words: Vec<(String, String)> = match &field.kind {
         Kind::Multi { choices, labels } => choices.iter().enumerate().map(|(i, w)| (w.clone(), choice_label(labels, i, w).to_string())).collect(),
-        Kind::List { rows, select: true } => rows.iter().map(|r| (r.clone(), r.clone())).collect(),
+        Kind::List { rows, select: true } => return select_rows(ui, fields, field, rows, &current),
         Kind::Custom { kind, .. } => {
             if let Some(row) = kind.row {
                 return row(ui, fields, cx, field);
@@ -449,6 +454,28 @@ fn custom_row(ui: &mut Ui, fields: &mut DialogFields, cx: &mut CustomContext, fi
         fields.set(field.key.clone(), FieldValue::Json(json!(next)));
     }
     shown.output
+}
+
+/// A list to select rows from (click, Shift-click, Cmd-click, Cmd-A); the value lists the selected rows in the list's
+/// order.
+fn select_rows(ui: &mut Ui, fields: &mut DialogFields, field: &Field, rows: &[String], current: &Value) -> Response {
+    let chosen: HashSet<&str> = current.as_array().map(|l| l.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
+    let before: Vec<usize> = rows.iter().enumerate().filter(|(_, r)| chosen.contains(r.as_str())).map(|(at, _)| at).collect();
+    let lead = before.last().copied();
+    let mut picked = Selection::new(before.clone(), lead, lead);
+    let positions: Vec<usize> = (0..rows.len()).collect();
+    let source = keyed(&positions, |at| *at).with_text(|at| Cow::Owned(rows.get(*at).cloned().unwrap_or_default()));
+    let out = List::<usize>::new(Label::from(field.label.clone()))
+        .max_rows(LIST_ROWS)
+        .selection(Bind::bound(&mut picked))
+        .id_salt(("fontcraftDialogList", field.key.as_str()))
+        .show_items(ui, &source, &mut |at, _| ListRow::new(rows.get(*at).cloned().unwrap_or_default()));
+    let after: HashSet<usize> = picked.items.iter().copied().collect();
+    if after != before.iter().copied().collect::<HashSet<_>>() {
+        let next: Vec<&String> = rows.iter().enumerate().filter(|(at, _)| after.contains(at)).map(|(_, r)| r).collect();
+        fields.set(field.key.clone(), FieldValue::Json(json!(next)));
+    }
+    out.response
 }
 
 /// The fields of a filter, from its entry in `filter.list`.

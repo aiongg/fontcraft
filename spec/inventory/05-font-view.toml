@@ -1409,9 +1409,9 @@ milestone = "M4"
 summary = "Window editing the name and the rule tree of a smart filter. A new filter starts with one rule."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
-notes = "The rules show as rows: a Match row per group (all, any or none of the rows under it), a row per rule with its property, comparison and value, and nested groups indented under their own Match row. `+` adds a rule, `…` adds a nested group (an Any group with one rule), `−` removes a rule or a nested group; while Alt is held each `+` shows `…` and adds a group too. Yes/no, case and colour rules take their value from a pop-up menu; the others from a text field. The editor of a stored filter opens with its `filter` path and reads the stored name and rules itself. Over the control channel the rules are one field, `rules`, in the shape fontView.addSmartFilter takes. Documented, not yet observed."
+notes = "The rules show as rows: a Match row per group (all, any or none of the rows under it), a row per rule with its property, comparison and value, and nested groups indented under their own Match row. `+` adds a rule, `…` adds a nested group (an Any group with one rule), `−` removes a rule or a nested group; a `+` clicked with Alt held adds a group too; the button keeps its look while Alt is held. Yes/no, case and colour rules take their value from a pop-up menu; the others from a text field. The editor of a stored filter opens with its `filter` path and reads the stored name and rules itself. Over the control channel the rules are one field, `rules`, in the shape fontView.addSmartFilter takes. Documented, not yet observed."
 guesses = [
-  "Besides Alt turning each `+` into `…`, every row keeps a separate `…` button that adds a group without Alt. Settled by observing whether the reference's editor shows a dots button while Option is up.",
+  "Besides Alt-click on `+`, every row keeps a separate `…` button that adds a group without Alt. Settled by observing whether the reference's editor shows a dots button while Option is up.",
   "A new smart filter is named New Filter, or New Filter 2 and so on when the name is taken. Settled by adding a smart filter in the reference.",
 ]
 observe = [

@@ -49,6 +49,8 @@ pub enum ViewMsg {
     TogglePanel(PanelId),
     /// The Layers row whose context menu is open; `None` when it closed.
     LayerMenu(Option<String>),
+    /// The sidebar entry whose context menu is open; `None` when it closed.
+    SidebarMenu(Option<Vec<String>>),
 }
 
 impl Msg {

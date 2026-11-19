@@ -307,6 +307,7 @@ impl FontCraftApp {
             ViewMsg::SelectGlyph(glyph) => self.view.glyph = Some(glyph),
             ViewMsg::TogglePanel(panel) => dock::toggle(&mut self.view.workspace, panel),
             ViewMsg::LayerMenu(row) => self.view.layers.menu_row = row,
+            ViewMsg::SidebarMenu(path) => self.view.sidebar.menu_row = path,
         }
         Ok(())
     }

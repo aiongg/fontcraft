@@ -19,6 +19,8 @@ pub mod kerning_audit;
 pub mod kerning_questions;
 pub mod os2_bits;
 pub mod panose;
+pub mod rule_tree;
+pub mod sidebar_filters;
 pub mod spec;
 pub mod tt;
 mod unsaved;
@@ -47,7 +49,7 @@ pub const MODULES: &[Module] = &[
 ];
 
 /// Every package's dialog specs, one line each.
-pub const SPECS: &[&[DialogSpec]] = &[filters::SPECS];
+pub const SPECS: &[&[DialogSpec]] = &[filters::SPECS, sidebar_filters::SPECS];
 
 /// Runs every dialog module for this pass.
 pub fn run(host: &mut DialogHost, app: &mut FontCraftApp) {
