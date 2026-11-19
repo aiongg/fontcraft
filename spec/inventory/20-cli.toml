@@ -149,6 +149,13 @@ milestone = "M0"
 summary = "Diagnostics, warnings, progress and timing go to standard error, each line prefixed with its level. -q shows errors only, the default shows warnings, -v adds informational messages, -vv adds debug output. --log takes a level or per-module levels (compile=debug,layout=warn). --log-file PATH writes the same stream to a file as well. Every message names the input it belongs to, and for compiled fonts the PostScript name."
 ref = "fontc --log; fontmake --verbose LEVEL; otfautohint -v/-vv and --log; comparefamily -l; tx -N"
 status = "docs"
+notes = "Built in M12.67. Levels error, warning, note, info and debug; the default shows warnings and notes (notes say what was written or skipped). -q sets error, each -v one level more (-vv debug), --log LEVEL sets the level, and the three act in the order given. --log also takes MODULE=LEVEL items, which filter the messages the libraries send through the log crate by module path (engine matches fontcraft_engine). A line reads `fontcraft-cli: LEVEL: INPUT: message`; the input is the one a batch worker or a script step is on, left out when the message already starts with it. --log-file FILE writes the same lines, without colour, to a new file. The common options may also come before the subcommand's name. Not built: the PostScript name on each line, and some subcommands still print a few messages with their own code instead of the shared logger."
+guesses = [
+  "The levels are error, warning, note, info and debug, with note (files written, steps skipped) shown by default between warnings and info; the references use the Python and Rust logging levels, which have no note, so user feedback would settle it.",
+  "A line reads `fontcraft-cli: LEVEL: INPUT: message`, in the style of compiler diagnostics; no reference fixes a format, so user feedback would settle it.",
+  "--log-file creates or truncates the file instead of appending to it; a user who wants a running log would settle it.",
+  "A per-module --log level applies to the libraries' messages only; the command line's own messages follow the main level. fontc's module filters would settle whether both should follow it.",
+]
 
 [[behavior]]
 id = "cli.global.color"
@@ -157,6 +164,10 @@ milestone = "M0"
 summary = "--color auto|always|never controls ANSI colour in diagnostics and diffs; auto colours only when the stream is a terminal and NO_COLOR is unset."
 ref = "fonttools diff --color"
 status = "docs"
+notes = "Built in M12.67: the level name of each message is coloured. auto colours when standard error is a terminal, NO_COLOR is unset or empty and TERM is not dumb; always and never force it. The log file never gets colour. Diffs are not coloured yet; the shared io::color_stdout answers the question for standard output."
+guesses = [
+  "--color auto also turns colour off for TERM=dumb, and an empty NO_COLOR counts as unset, as the NO_COLOR convention says; fonttools diff's own rule would settle it.",
+]
 
 [[behavior]]
 id = "cli.global.determinism"
@@ -214,6 +225,7 @@ milestone = "M2"
 summary = "-j/--jobs N sets the number of worker threads; the default is the number of cores, 0 means the same, and a negative N means that many fewer than the core count with a minimum of one. Results never depend on N."
 ref = "otfautohint -p; cu2qu -j"
 status = "docs"
+notes = "M12.67 adds -j/--jobs N to every subcommand and the shared reading of the value (unset or 0 every core, -N all but N, at least 1, at most 256); a value that is not a whole number is a usage error. Subcommands that work on several inputs adopt it in their own packages; the ones that declared --jobs before keep their own option with the default 1."
 
 [[behavior]]
 id = "cli.global.timing"
@@ -222,6 +234,10 @@ milestone = "M2"
 summary = "--timing prints the time spent in each stage to standard error when the run ends; --trace FILE also writes the stages as a Chrome trace-event JSON file."
 ref = "fontmake --timing; pyftsubset --timing; fontc --emit-timing"
 status = "docs"
+notes = "Built in M12.67: when the run ends, --timing prints one line per stage, as `fontcraft-cli: timing: NAME: 1.2 ms (3 runs)`, then the total wall time. A stage is an engine command a subcommand runs or a file it opens, summed per name. The lines show at every level and go to the log file too. Not built: --trace FILE."
+guesses = [
+  "The stages are the engine commands and file opens, not finer steps inside the compiler; fontmake's and fontc's stage lists would settle a finer split.",
+]
 
 [[behavior]]
 id = "cli.global.backtrace"
@@ -230,6 +246,7 @@ milestone = "M0"
 summary = "Errors are printed as one message with its chain of causes and the location in the input (file, table, glyph, line and column for text sources). --backtrace adds the internal stack for bug reports."
 ref = "otfautohint --traceback; feaLib --traceback; ttx -e"
 status = "docs"
+notes = "M12.67 adds --backtrace: a panic prints `panic: …` with the captured stack at the error level. Not built: the chain of causes and the location in the input."
 
 [[behavior]]
 id = "cli.global.dryRun"
@@ -246,6 +263,10 @@ milestone = "M0"
 summary = "-h prints a one-screen usage summary, --help the full option reference, 'fontcraft-cli help SUBCOMMAND' the same text. --version prints the version; with -v it adds the build commit, target triple and the versions of the font-handling crates."
 ref = "AFDKO tools -u (usage) / -h (help) / tx -v (component versions); fontc --vv"
 status = "docs"
+notes = "Built in M12.67: -h and --help print the same full text (usage, options with defaults, the engine commands the subcommand runs and a line naming the common options), as does `fontcraft-cli help SUBCOMMAND [ACTION]`. -V and --version are common options of every subcommand (dump and diff keep their own --version switch); with -v the version adds the build target and profile. Not built: a separate short -h text, the build commit and the versions of the font crates."
+guesses = [
+  "-h prints the full reference like --help rather than a shorter summary; the AFDKO -u and -h split would settle whether users want both.",
+]
 
 [[behavior]]
 id = "cli.global.abbreviations"
@@ -2157,6 +2178,12 @@ summary = "Dispatches any registered engine command by id with a JSON parameter 
 ref = "brief.md › everything is a command; AFDKO tx -s, sfntedit -X, spot -X (script files of command lines)"
 status = "inferred"
 own = true
+notes = "Built: --in, --cmd with --params (JSON, or - for standard input) or --params-file (JSON), --script with --keep-going, --save and a repeatable --export. A script line is `ID {JSON}`, run on the open document, or a complete `fontcraft-cli SUBCOMMAND …` line, run on its own (run and mcp are refused); blank lines and lines starting with # are skipped. The whole file is read before any step runs, and a line that cannot be read is a usage error naming FILE:LINE. A failing step stops the run and nothing after it runs; --save and --export run only when every step succeeded. The exit status is the failing step's own when it was the first step, else 5 (built in M12.67). Not built: --session, --undo-group, TOML parameter files and a repeated --in."
+guesses = [
+  "A failure after some steps succeeded exits 5, as a batch with some failed inputs does; tx -s and sfntedit -X stop with their own error, so users' scripts would settle it.",
+  "With --keep-going, --save and --export are skipped when any step failed; no reference has the option, so use would settle it.",
+  "A script step that runs a subcommand and finds something (exit status 1) counts as failed; users' scripts would settle whether it should go on.",
+]
 
 [[cli]]
 id = "commands"
@@ -2180,6 +2207,7 @@ summary = "Lists the command registry: id, label, kind, menu path, shortcut and 
 ref = "brief.md › everything is a command; fonttools help (lists subcommands with one-line descriptions); afdko invoker help"
 status = "inferred"
 own = true
+notes = "Built: PATTERN filters the catalogue, which prints as JSON. --cli (M12.67) lists the subcommands whose name or summary contains PATTERN, with the engine command of each subcommand and action as the inventory's `command` fields give them; with --json it also gives every option each subcommand accepts (from its option table and its usage text) and the common options, for the option-coverage measure. Not built: --kind, --area and --describe."
 
 [[cli]]
 id = "mcp"
@@ -2277,6 +2305,7 @@ summary = "Prints the list of subcommands with one line each, or the full refere
 ref = "AFDKO invoker (afdko -h, -h <command>, --help-all); fonttools help"
 status = "inferred"
 own = true
+notes = "Built in M12.67. `help` alone prints the general usage with every subcommand and the common options; `help SUBCOMMAND [ACTION]` prints the subcommand's reference; `help --all` the general usage, then every subcommand's reference, without categories. Examples are not printed yet."
 
 
 # ============================================================ engine commands

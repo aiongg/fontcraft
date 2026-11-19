@@ -7,9 +7,12 @@
 //! first positional argument. A subcommand's options come from its option table and, for
 //! subcommands that parse their own arguments, from the option names its usage text shows; an
 //! enumerated value is an alternative of a `a|b|c` group in either. Everything else falls back to
-//! the shell's file-name completion.
+//! the shell's file-name completion. Every subcommand also completes the common options
+//! ([`crate::args::GLOBAL`]) it does not declare itself.
 
-use crate::args::{Kind, OptSpec};
+use serde_json::{Value, json};
+
+use crate::args::{GLOBAL, Kind, OptSpec};
 use crate::io::{Outcome, out, usage};
 
 use super::Subcommand;
@@ -49,7 +52,18 @@ fn run(args: &[String]) -> Outcome {
         [] => return Err(usage(super::help(&SUBCOMMAND))),
         _ => return Err(usage("completion takes one shell name")),
     };
-    let model = model(super::ALL);
+    let mut model = model(super::ALL);
+    for entry in &mut model {
+        for spec in GLOBAL {
+            if !entry.opts.iter().any(|o| o.long.as_deref() == Some(spec.name)) {
+                let mut opt = from_spec(spec);
+                if entry.opts.iter().any(|o| o.short.is_some() && o.short == opt.short) {
+                    opt.short = None;
+                }
+                entry.opts.push(opt);
+            }
+        }
+    }
     let script = script(shell, &model).ok_or_else(|| usage(format!("unknown shell `{shell}` (shells: {})", SHELLS.join(", "))))?;
     out(script.trim_end())
 }
@@ -67,7 +81,7 @@ fn script(shell: &str, model: &[Entry]) -> Option<String> {
 
 /// One option as the scripts offer it.
 #[derive(Clone, Debug, Default, PartialEq)]
-struct Opt {
+pub(super) struct Opt {
     long: Option<String>,
     short: Option<char>,
     takes_value: bool,
@@ -79,6 +93,18 @@ struct Opt {
 }
 
 impl Opt {
+    /// The option as `commands --cli --json` lists it.
+    pub(super) fn to_json(&self) -> Value {
+        json!({
+            "long": self.long,
+            "short": self.short.map(String::from),
+            "takes_value": self.takes_value,
+            "values": self.values,
+            "negatable": self.negatable,
+            "help": self.help,
+        })
+    }
+
     /// The spellings that name it on a command line (`--x`, `--no-x`, `-x`).
     fn forms(&self) -> Vec<String> {
         let mut forms = Vec::new();
@@ -105,16 +131,17 @@ impl Opt {
 
 /// One subcommand as the scripts offer it.
 #[derive(Clone, Debug)]
-struct Entry {
+pub(super) struct Entry {
     name: &'static str,
     summary: &'static str,
     /// Actions and enumerated values of the first positional argument.
     words: Vec<String>,
-    opts: Vec<Opt>,
+    pub(super) opts: Vec<Opt>,
 }
 
-/// What the scripts offer for every subcommand.
-fn model(subs: &[Subcommand]) -> Vec<Entry> {
+/// What the scripts offer for every subcommand, from its own options and usage text, in the
+/// order of `subs`.
+pub(super) fn model(subs: &[Subcommand]) -> Vec<Entry> {
     subs.iter()
         .map(|sub| {
             let mut entry = Entry { name: sub.name, summary: sub.summary, words: Vec::new(), opts: Vec::new() };
@@ -136,7 +163,7 @@ fn push_word(words: &mut Vec<String>, word: &str) {
     }
 }
 
-fn from_spec(spec: &OptSpec) -> Opt {
+pub(super) fn from_spec(spec: &OptSpec) -> Opt {
     Opt {
         long: Some(spec.name.to_string()),
         short: spec.short,
@@ -258,7 +285,7 @@ fn literals(text: &str) -> Vec<String> {
 }
 
 /// Top-level words besides the subcommands.
-const TOP_LEVEL: &[&str] = &["help", "--help", "--version"];
+const TOP_LEVEL: &[&str] = &["help", "--help", "--version", "-V"];
 
 fn bash(model: &[Entry]) -> String {
     let top: Vec<&str> = model.iter().map(|e| e.name).chain(TOP_LEVEL.iter().copied()).collect();
