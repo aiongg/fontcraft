@@ -209,11 +209,11 @@ fn choose(p: &Params<'_>, font: &Font, sel: &Selection<'_>) -> Result<Chosen> {
             kept.extend(0..n);
         }
         if export_flags {
-            kept.retain(|i| font.glyphs.get(*i).is_some_and(|g| g.export));
+            kept.retain(|i| font.glyphs.as_arcs().get(*i).is_some_and(|g| g.export));
         }
         kept.retain(|i| !exclude.contains(i));
         if let Some(listed) = sel.goadb {
-            kept.retain(|i| font.glyphs.get(*i).is_some_and(|g| listed.contains(&g.name)));
+            kept.retain(|i| font.glyphs.as_arcs().get(*i).is_some_and(|g| listed.contains(&g.name)));
         }
         if let Some(share) = sel.random {
             let names: Vec<String> = font.glyphs.iter().map(|g| g.name.clone()).collect();
@@ -296,7 +296,7 @@ fn excluded(p: &Params<'_>, v: &Value, font: &Font, by_name: &HashMap<&str, usiz
 fn close_over_components(font: &Font, by_name: &HashMap<&str, usize>, kept: &mut BTreeSet<usize>) {
     let mut work: Vec<usize> = kept.iter().copied().collect();
     while let Some(i) = work.pop() {
-        let Some(glyph) = font.glyphs.get(i) else { continue };
+        let Some(glyph) = font.glyphs.as_arcs().get(i) else { continue };
         for layer in &glyph.layers {
             let components = layer.shapes.iter().filter_map(|s| if let Shape::Component(c) = s { Some(c.glyph.as_str()) } else { None });
             let hinted = layer.info.hints.iter().filter_map(|h| h.value.as_dict()?.get("name")?.as_str());
