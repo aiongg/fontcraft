@@ -1379,6 +1379,7 @@ fn compile_collection(
             dest: Dest::Memory,
             first_only: false,
             autohinter: req.autohinter.clone(),
+            naming: req.naming,
         };
         let mut memory = Sink::Memory { bytes: 0, keep: true, limit: MAX_COLLECTION_BYTES };
         let mut part = Report::default();
