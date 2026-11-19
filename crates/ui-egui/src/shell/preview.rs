@@ -32,6 +32,7 @@ use egui::{Color32, ColorImage, Pos2, Rect, Sense, TextureHandle, TextureOptions
 use fontcraft_engine::Session;
 use fontcraft_engine::cmd::preview::{blur_pixels, blur_radius, preview_range, turn_pixels};
 use fontcraft_engine::interp_cache::view_master_id;
+use fontcraft_engine::prelude::*;
 use fontcraft_geom::{Affine, BezPath};
 use fontcraft_model::{Font, Master};
 use fontcraft_render::{Style, render_path};

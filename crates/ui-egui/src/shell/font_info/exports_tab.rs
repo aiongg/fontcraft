@@ -26,7 +26,7 @@
 //! The preview line draws the first selected instance with [`fontcraft_render::render_line`]:
 //! the glyphs of `Aang126` the font has, or the glyph names of the instance's Instance Preview
 //! parameter. An instance at a master's location draws that master; one between masters draws
-//! its interpolated outlines, from the session's instance view (`Session::instance_view`).
+//! its interpolated outlines, from the session's instance view (`SessionInterpExt::instance_view`).
 //!
 //! Rows: `fontInfo.exports`, `fontInfo.exports.selection`, `fontInfo.exports.inactiveGrayIcon`,
 //! `fontInfo.exports.instancePreview`, the `Instance Preview` parameter (M7.18);
@@ -37,6 +37,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use fontcraft_engine::Session;
+use fontcraft_engine::prelude::*;
 
 use egui::{Align2, Color32, ColorImage, Id, Pos2, Rect, Sense, Stroke, StrokeKind, TextureHandle, TextureOptions, pos2, vec2};
 use fontcraft_engine::fontinfo::Scope;

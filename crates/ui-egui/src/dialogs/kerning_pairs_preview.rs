@@ -29,6 +29,7 @@ use serde_json::{Value, json};
 use crate::app::FontcraftApp;
 use crate::panels::Pending;
 use crate::shell::Args;
+use fontcraft_engine::prelude::*;
 
 /// The render sizes the window offers, in pixels per em.
 pub const SIZES: [u32; 6] = [24, 36, 48, 72, 96, 144];

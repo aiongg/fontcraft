@@ -4,6 +4,7 @@
 //! Lookups ([`find`], [`command_specs`], [`lookup`]) read the installed tables; before the
 //! install they find nothing, and [`lookup`] says so with [`EngineError::NotInstalled`].
 
+use std::any::Any;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
@@ -17,8 +18,22 @@ pub type CommandTable = fn() -> Vec<CommandSpec>;
 #[derive(Default)]
 pub struct Hooks {}
 
-/// How a command area sets up its per-session state. None yet.
-pub struct SlotInit {}
+/// A session slot ([`crate::slots`]) that every new session starts with, for state that must
+/// exist before anything can create it through `&mut Session`: a handle a reader holding only
+/// `&Session` shares with another thread. Other slots are created on first use.
+#[derive(Clone, Copy)]
+pub struct SlotInit(fn() -> Box<dyn Any + Send + Sync>);
+
+impl SlotInit {
+    /// A slot of type `T` holding its default value.
+    pub fn of<T: Any + Send + Sync + Default>() -> Self {
+        SlotInit(|| Box::new(T::default()))
+    }
+
+    pub(crate) fn create(&self) -> Box<dyn Any + Send + Sync> {
+        (self.0)()
+    }
+}
 
 /// What [`install`] installs: the command tables in registry order, the hooks and the
 /// per-session state of the command areas.
@@ -32,6 +47,7 @@ pub struct Install {
 /// The installed tables and what was built from them.
 struct Installed {
     tables: Vec<CommandTable>,
+    slots: Vec<SlotInit>,
     /// The commands, or why the tables were refused.
     registry: std::result::Result<Registry, String>,
 }
@@ -47,9 +63,12 @@ static INSTALLED: OnceLock<Installed> = OnceLock::new();
 /// later call with the same tables does nothing, and one with other tables is an error. Tables
 /// that register one id twice are refused, and every later call reports that.
 pub fn install(install: Install) -> Result<()> {
-    let Install { commands, hooks: _, slots: _ } = install;
-    let done = INSTALLED.get_or_init(|| Installed { registry: build(&commands), tables: commands.clone() });
-    let same = done.tables.len() == commands.len() && done.tables.iter().zip(&commands).all(|(a, b)| std::ptr::fn_addr_eq(*a, *b));
+    let Install { commands, hooks: _, slots } = install;
+    let done = INSTALLED.get_or_init(|| Installed { registry: build(&commands), tables: commands.clone(), slots: slots.clone() });
+    let same = done.tables.len() == commands.len()
+        && done.tables.iter().zip(&commands).all(|(a, b)| std::ptr::fn_addr_eq(*a, *b))
+        && done.slots.len() == slots.len()
+        && done.slots.iter().zip(&slots).all(|(a, b)| std::ptr::fn_addr_eq(a.0, b.0));
     if !same {
         return Err(EngineError::Internal("other command tables are already installed in this process".into()));
     }
@@ -78,6 +97,11 @@ fn registry() -> Result<&'static Registry> {
         Some(Err(why)) => Err(EngineError::Internal(why.clone())),
         None => Err(EngineError::NotInstalled),
     }
+}
+
+/// The slots every new session starts with; none before the install.
+pub(crate) fn slot_inits() -> &'static [SlotInit] {
+    INSTALLED.get().map_or(&[], |done| done.slots.as_slice())
 }
 
 /// Whether the command tables are installed.

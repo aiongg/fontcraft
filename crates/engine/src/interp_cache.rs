@@ -477,62 +477,84 @@ fn changed_glyphs(old: &Font, new: &Font) -> Changed {
     out
 }
 
-/// The active document's compatibility, through its [`InterpCache`]. The cache is kept per open
-/// document and brought up to date with the font on every call.
-impl crate::Session {
-    fn interp_cache(&mut self) -> Option<(&mut InterpCache, Arc<Font>, u64)> {
-        let doc = self.doc().ok()?;
-        let (id, font, revision) = (doc.id, Arc::clone(&doc.font), doc.revision);
-        let open: Vec<u64> = self.docs.iter().map(|d| d.id).collect();
-        self.interp.retain(|id, _| open.contains(id));
-        Some((self.interp.entry(id).or_default(), font, revision))
-    }
+/// The interpolation area's session slot: each open document's [`InterpCache`], by document id.
+/// The caches are brought up to date with the font on every call.
+#[derive(Default)]
+struct InterpSlot(HashMap<u64, InterpCache>);
 
+/// The active document's compatibility, designspace and instances, through its
+/// [`InterpCache`].
+pub trait SessionInterpExt {
     /// The compatibility of `glyph` in the active document; `None` when there is no document,
     /// no such glyph or no designspace to check against.
-    pub fn glyph_compat(&mut self, glyph: &str) -> Option<Arc<Compat>> {
-        let (cache, font, revision) = self.interp_cache()?;
-        cache.compat(&font, revision, glyph).ok()
-    }
+    fn glyph_compat(&mut self, glyph: &str) -> Option<Arc<Compat>>;
 
     /// Whether the active document shows incompatibility indicators: not while its Enforce
     /// Compatibility Check parameter is present and unchecked, nor without a designspace.
-    pub fn compat_indicators(&mut self) -> bool {
-        let Some((cache, font, revision)) = self.interp_cache() else { return false };
-        cache.indicators(&font, revision).unwrap_or(false)
-    }
+    fn compat_indicators(&mut self) -> bool;
 
     /// Whether glyph `glyph` shows the incompatibility indicators: its layers cannot
     /// interpolate and the font does not turn the indicators off.
-    pub fn shows_incompatible(&mut self, glyph: &str) -> bool {
-        let Some((cache, font, revision)) = self.interp_cache() else { return false };
-        cache.indicators(&font, revision).unwrap_or(false) && cache.compat(&font, revision, glyph).is_ok_and(|c| !c.ok)
-    }
+    fn shows_incompatible(&mut self, glyph: &str) -> bool;
 
     /// The active document's glyphs whose layers cannot interpolate (empty without a
     /// designspace), which the Master Compatible smart-filter rule reads.
-    pub fn incompatible_glyphs(&mut self) -> HashSet<String> {
-        let Some((cache, font, revision)) = self.interp_cache() else { return HashSet::new() };
-        cache.incompatible(&font, revision).map(|v| v.into_iter().collect()).unwrap_or_default()
-    }
+    fn incompatible_glyphs(&mut self) -> HashSet<String>;
 
     /// The active document's designspace.
-    pub fn designspace(&mut self) -> Result<Arc<Designspace>, String> {
-        let (cache, font, revision) = self.interp_cache().ok_or("no document open")?;
-        cache.designspace(&font, revision).map_err(|e| e.to_string())
-    }
+    fn designspace(&mut self) -> Result<Arc<Designspace>, String>;
 
     /// Glyph `glyph` of the active document at the instance at `instance`
     /// ([`InterpCache::instance_layer`]).
-    pub fn instance_layer(&mut self, glyph: &str, instance: usize) -> Result<Arc<Layer>, String> {
-        let (cache, font, revision) = self.interp_cache().ok_or("no document open")?;
-        cache.instance_layer(&font, revision, glyph, instance).map_err(|e| e.to_string())
-    }
+    fn instance_layer(&mut self, glyph: &str, instance: usize) -> Result<Arc<Layer>, String>;
 
     /// The active document's view of the instance at `instance` holding `glyphs`
     /// ([`InterpCache::instance_view`]).
-    pub fn instance_view(&mut self, instance: usize, glyphs: &[String]) -> Result<Arc<Font>, String> {
-        let (cache, font, revision) = self.interp_cache().ok_or("no document open")?;
+    fn instance_view(&mut self, instance: usize, glyphs: &[String]) -> Result<Arc<Font>, String>;
+}
+
+fn interp_cache(s: &mut crate::Session) -> Option<(&mut InterpCache, Arc<Font>, u64)> {
+    let doc = s.doc().ok()?;
+    let (id, font, revision) = (doc.id, Arc::clone(&doc.font), doc.revision);
+    let open: Vec<u64> = s.documents().iter().map(|d| d.id).collect();
+    let caches = &mut s.slot_mut::<InterpSlot>().0;
+    caches.retain(|id, _| open.contains(id));
+    Some((caches.entry(id).or_default(), font, revision))
+}
+
+impl SessionInterpExt for crate::Session {
+    fn glyph_compat(&mut self, glyph: &str) -> Option<Arc<Compat>> {
+        let (cache, font, revision) = interp_cache(self)?;
+        cache.compat(&font, revision, glyph).ok()
+    }
+
+    fn compat_indicators(&mut self) -> bool {
+        let Some((cache, font, revision)) = interp_cache(self) else { return false };
+        cache.indicators(&font, revision).unwrap_or(false)
+    }
+
+    fn shows_incompatible(&mut self, glyph: &str) -> bool {
+        let Some((cache, font, revision)) = interp_cache(self) else { return false };
+        cache.indicators(&font, revision).unwrap_or(false) && cache.compat(&font, revision, glyph).is_ok_and(|c| !c.ok)
+    }
+
+    fn incompatible_glyphs(&mut self) -> HashSet<String> {
+        let Some((cache, font, revision)) = interp_cache(self) else { return HashSet::new() };
+        cache.incompatible(&font, revision).map(|v| v.into_iter().collect()).unwrap_or_default()
+    }
+
+    fn designspace(&mut self) -> Result<Arc<Designspace>, String> {
+        let (cache, font, revision) = interp_cache(self).ok_or("no document open")?;
+        cache.designspace(&font, revision).map_err(|e| e.to_string())
+    }
+
+    fn instance_layer(&mut self, glyph: &str, instance: usize) -> Result<Arc<Layer>, String> {
+        let (cache, font, revision) = interp_cache(self).ok_or("no document open")?;
+        cache.instance_layer(&font, revision, glyph, instance).map_err(|e| e.to_string())
+    }
+
+    fn instance_view(&mut self, instance: usize, glyphs: &[String]) -> Result<Arc<Font>, String> {
+        let (cache, font, revision) = interp_cache(self).ok_or("no document open")?;
         cache.instance_view(&font, revision, instance, glyphs).map_err(|e| e.to_string())
     }
 }

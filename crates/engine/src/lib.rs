@@ -39,6 +39,8 @@ pub(crate) mod linked;
 pub mod log;
 pub mod macros;
 pub mod project;
+pub mod slots;
+pub mod spacing_state;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -63,6 +65,15 @@ use fontcraft_model::{Font, PropsCache};
 pub use fontcraft_pathops as pathops;
 pub use fontcraft_plugins as plugins;
 use serde_json::{Value, json};
+
+/// The extension traits through which the command areas reach their state on a [`Session`] or a
+/// [`DocState`] ([`slots`]): `use fontcraft_engine::prelude::*;`.
+pub mod prelude {
+    pub(crate) use crate::cmd::audit::DocAuditExt;
+    pub use crate::feature_state::SessionFeaturesExt;
+    pub use crate::interp_cache::SessionInterpExt;
+    pub use crate::spacing_state::SessionSpacingExt;
+}
 
 /// Most undo steps kept per document. A step is a pointer to the font as it was (glyphs it shares
 /// with its neighbours are not copied) plus a label.
@@ -217,10 +228,8 @@ pub struct DocState {
     /// change made by something else in between.
     #[cfg(not(target_arch = "wasm32"))]
     pub stamp: Option<io::Stamp>,
-    /// The last `audit.run` on this document, which `audit.results` and `audit.fix` read.
-    pub(crate) audit: Option<Arc<cmd::audit::KeptRun>>,
-    /// A run of `audit.start` not yet finished or cancelled.
-    pub(crate) audit_staged: cmd::audit::Slot,
+    /// The command areas' state for this document ([`slots`]).
+    pub(crate) exts: slots::DocExts,
     /// The glyph data files beside the source, merged with the user's.
     pub(crate) glyph_data: glyph_data::CustomData,
 }
@@ -260,16 +269,8 @@ pub struct Session {
     props: HashMap<u64, Arc<PropsCache>>,
     /// The language sets named through the glyph data last asked for.
     language_index: Option<Arc<fontcraft_glyphquery::LanguageIndex>>,
-    /// Each open document's metrics keys that need attention, by document id.
-    metrics_sync: HashMap<u64, fontcraft_spacing::SyncCache>,
-    /// Each open document's interpolation results, by document id ([`interp_cache`]).
-    interp: HashMap<u64, interp_cache::InterpCache>,
-    /// Each open document's kerning prepared for lookups, by document id.
-    kern_index: HashMap<u64, Arc<fontcraft_spacing::kerning::KernIndex>>,
-    /// Each open document's last feature compile, by document id ([`feature_state`]).
-    feature_state: HashMap<u64, Arc<feature_state::FeatureState>>,
-    /// Each open document's last preview build, shared with Text Preview ([`feature_state`]).
-    preview_builds: feature_state::PreviewBuilds,
+    /// The command areas' session state ([`slots`]).
+    slots: slots::SessionSlots,
     /// The file cache and in-memory files behind [`Session::assets`].
     assets: assets::SessionAssets,
     /// Installed modules, macros, recording, the command log (`extensions`).
@@ -383,8 +384,7 @@ impl Session {
             revision: 0,
             #[cfg(not(target_arch = "wasm32"))]
             stamp,
-            audit: None,
-            audit_staged: None,
+            exts: slots::DocExts::default(),
             glyph_data: glyph_data::CustomData::default(),
         });
         self.active = Some(self.docs.len() - 1);
@@ -563,19 +563,6 @@ impl Session {
         Ok(cache.clone())
     }
 
-    /// The active document's metrics keys that are out of sync, unlinked or in error, up to
-    /// date with its font. While the font is the one last scanned this returns at once; the first
-    /// call after an edit scans again the glyphs that changed and the glyphs whose keys read them.
-    pub fn metrics_sync(&mut self) -> Result<&fontcraft_spacing::SyncCache> {
-        let doc = self.doc()?;
-        let (id, font) = (doc.id, doc.font.clone());
-        let open: Vec<u64> = self.docs.iter().map(|d| d.id).collect();
-        self.metrics_sync.retain(|id, _| open.contains(id));
-        let cache = self.metrics_sync.entry(id).or_default();
-        cache.update(&font);
-        Ok(cache)
-    }
-
     /// Sets the active document's display strings (the texts of its Edit View tabs). This is
     /// view state, not an edit: it adds no undo step, and an unmodified document stays
     /// unmodified (`text.displayStrings`).
@@ -593,25 +580,6 @@ impl Session {
             doc.saved = font;
         }
         Ok(())
-    }
-
-    /// The active document's kerning prepared for lookups. The index is kept while it describes
-    /// the font ([`KernIndex::is_current`](fontcraft_spacing::kerning::KernIndex::is_current)) and
-    /// built again on the first call after an edit to kerning, masters or groups.
-    pub fn kern_index(&mut self) -> Result<Arc<fontcraft_spacing::kerning::KernIndex>> {
-        let doc = self.doc()?;
-        let (id, font) = (doc.id, doc.font.clone());
-        let open: Vec<u64> = self.docs.iter().map(|d| d.id).collect();
-        self.kern_index.retain(|id, _| open.contains(id));
-        let index = match self.kern_index.get(&id) {
-            Some(index) if index.is_current(&font) => index.clone(),
-            _ => {
-                let index = Arc::new(fontcraft_spacing::kerning::KernIndex::new(&font));
-                self.kern_index.insert(id, index.clone());
-                index
-            }
-        };
-        Ok(index)
     }
 
     /// [`Session::glyph_data`] for one document.

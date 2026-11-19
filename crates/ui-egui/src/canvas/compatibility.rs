@@ -27,6 +27,7 @@ use std::collections::{HashMap, HashSet};
 use egui::{Align2, Color32, FontId, Pos2, Rect, Sense, Shape, Stroke, Vec2};
 use fontcraft_engine::interp::{ANGLE_WARNING_DEGREES, Designspace, GlyphSources};
 use fontcraft_engine::model::{Font, Glyph, Layer, Shape as ModelShape};
+use fontcraft_engine::prelude::*;
 use fontcraft_geom::Shape as _;
 use fontcraft_geom::{Affine, Point, segments};
 use fontcraft_textlayout::Layout;

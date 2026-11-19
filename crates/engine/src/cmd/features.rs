@@ -21,6 +21,7 @@ use serde_json::{Value, json};
 
 use super::*;
 use crate::params::Params;
+use crate::prelude::*;
 use crate::{EngineError, Result, Session};
 
 /// Most bytes of the notes kept with one entry.

@@ -44,6 +44,7 @@ use crate::dialogs::field_picker::{Outcome, item};
 use crate::icons::{self, Icon};
 use crate::panels::{Pending, widgets};
 use crate::theme::Tokens;
+use fontcraft_engine::prelude::*;
 
 /// The sidebar's width, in list columns of the theme.
 const SIDEBAR_COLUMNS: f32 = 5.0;

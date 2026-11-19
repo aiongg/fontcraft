@@ -10,6 +10,7 @@ use serde_json::{Value, json};
 
 use crate::shell::text_preview::{self, Drawn, MAX_CHARS};
 use crate::{FontcraftApp, control};
+use fontcraft_engine::prelude::*;
 
 /// A headless window: one egui context kept across frames.
 struct Window {

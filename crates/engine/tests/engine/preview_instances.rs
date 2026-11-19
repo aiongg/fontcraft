@@ -1,5 +1,5 @@
 //! The engine half of the preview of instances: the instance views the preview draws
-//! (`Session::instance_view`, `Session::instance_layer`), `preview.render` and
+//! (`SessionInterpExt::instance_view`, `instance_layer`), `preview.render` and
 //! `preview.toggleInstanceVisibility`.
 // Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
@@ -10,6 +10,7 @@ use base64::Engine as _;
 use fontcraft_engine::Session;
 use fontcraft_engine::interp_cache::view_master_id;
 use fontcraft_engine::model::{Axis, Font, Glyph, GlyphTable, Instance, Layer, Master, Path, Shape};
+use fontcraft_engine::prelude::*;
 use serde_json::{Value, json};
 
 /// A box `w` wide, advance `w + 100`.

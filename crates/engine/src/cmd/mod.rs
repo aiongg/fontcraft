@@ -494,7 +494,7 @@ pub const COMMAND_TABLES: &[CommandTable] = &[
 /// Installs every command table for this process; later calls do nothing. Sessions call it when
 /// they are created, so a caller with a session never needs it.
 pub fn install() -> Result<()> {
-    registry::install(Install { commands: COMMAND_TABLES.to_vec(), ..Install::default() })
+    registry::install(Install { commands: COMMAND_TABLES.to_vec(), slots: vec![crate::feature_state::slot_init()], ..Install::default() })
 }
 
 /// Every command, in registry order (the order menus and listings show them in). Installs the

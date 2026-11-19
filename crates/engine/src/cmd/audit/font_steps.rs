@@ -11,6 +11,7 @@ use fontcraft_model::glyphdata::{Category, GlyphData};
 use fontcraft_spacing::kerning::{Direction, KernIndex, Position, Side, Step, facing};
 
 use super::*;
+use crate::prelude::*;
 
 mod fea;
 

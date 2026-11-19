@@ -1,10 +1,10 @@
 //! Metrics keys: evaluating them, listing the ones out of sync, and Update Metrics.
 //!
 //! The parser, the evaluator and the out-of-sync scan are in `fontcraft_spacing`; the scan's
-//! cache lives on the session ([`Session::metrics_sync`]). Updating a metric sets it to its key's
-//! value the way the setters do: a left sidebearing moves everything drawn in the layer
-//! (`shared::shift_layer`) and keeps the right sidebearing; a right sidebearing or a width
-//! moves the right edge; a top sidebearing moves the vertical origin and keeps the bottom one; a
+//! cache lives on the session ([`SessionSpacingExt::metrics_sync`]). Updating a metric sets it
+//! to its key's value the way the setters do: a left sidebearing moves everything drawn in the
+//! layer (`shared::shift_layer`) and keeps the right sidebearing; a right sidebearing or a
+//! width moves the right edge; a top sidebearing moves the vertical origin and keeps the bottom one; a
 //! bottom sidebearing or a vertical width changes the vertical width; a vertical origin moves the
 //! vertical box and keeps its height.
 
@@ -17,6 +17,7 @@ use serde_json::{Value, json};
 use super::*;
 use crate::EngineError;
 use crate::params::{Params, TargetKind};
+use crate::prelude::*;
 
 /// Most master ids `spacing.listOutOfSyncMetrics` takes.
 const MAX_MASTER_IDS: usize = 1_000;

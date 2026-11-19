@@ -11,6 +11,7 @@ use crate::shell::font_view::columns::Column;
 use crate::shell::font_view::grid::metrics_out_of_sync;
 use crate::shell::font_view::inspector::{self, SALT, Shown};
 use crate::shell::font_view::metrics::MetricField;
+use fontcraft_engine::prelude::*;
 
 struct Window {
     ctx: egui::Context,
