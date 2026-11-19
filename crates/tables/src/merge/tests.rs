@@ -663,3 +663,97 @@ fn merged_post_names_keep_their_latin1_bytes() {
     let strings = 34 + 2 * count;
     assert_eq!(post[strings..strings + 2], [1, 0xE9]);
 }
+
+fn pairs(list: &[(&str, &str)]) -> Vec<(String, String)> {
+    list.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect()
+}
+
+fn cff_table(font: &SfntFont) -> crate::reorder::cff::Cff<'_> {
+    crate::reorder::cff::parse(font.get(*b"CFF ").unwrap(), glyph_names(font).unwrap().len()).unwrap()
+}
+
+#[test]
+fn name_keyed_cff_fonts_merge_into_a_cid_keyed_font_with_a_font_dict_each() {
+    let one = built(&source("Cid One", &[("A", 0x41, 600.0), ("B", 0x42, 650.0)], false), CompileFlavour::Cff);
+    let two = built(&source("Cid Two", &[("a", 0x61, 500.0)], false), CompileFlavour::Cff);
+    let info = parse_cid_info(
+        "FontName (Merged-CID)\nFullName (Merged CID)\nFamilyName (Merged)\nWeight (Regular)\nversion (1.000)\n\
+         Registry (Adobe)\nOrdering (Identity)\nSupplement 0\nAdobeCopyright (Nobody)\n",
+    )
+    .unwrap();
+    let options = MergeOptions {
+        glyph_maps: vec![pairs(&[("0", ".notdef"), ("1", "A"), ("2", "B")]), pairs(&[("10", "a")])],
+        headers: vec![MapHeader::default(), MapHeader { ps_name: Some("Lower".into()), language_group: Some(1) }],
+        cid_info: Some(info),
+        ..MergeOptions::default()
+    };
+    let result = merge_with_report(&[one.clone(), two.clone()], &options).unwrap();
+    let names: Vec<&str> = result.glyphs.iter().map(|g| g.name.as_str()).collect();
+    assert_eq!(names, [".notdef", "cid00001", "cid00002", "cid00010"]);
+    let table = result.font.get(*b"CFF ").unwrap();
+    let parsed = crate::reorder::cff::parse(table, 4).unwrap();
+    assert!(parsed.is_cid());
+    assert_eq!(parsed.ros(), Some(("Adobe".to_string(), "Identity".to_string(), 0)));
+    assert_eq!(parsed.font_name().as_deref(), Some("Merged-CID"));
+    assert_eq!(parsed.charset(), [0, 1, 2, 10]);
+    assert_eq!(parsed.font_dict_of_glyphs(), (vec![0, 0, 0, 1], 2), "one Font DICT per input font");
+    assert_eq!(parsed.font_dict_name(0), cff_table(&one).font_name());
+    assert_eq!(parsed.font_dict_name(1).as_deref(), Some("Lower"), "the map header names its font's Font DICT");
+    assert_eq!(parsed.private_ints(1, 1217), Some(vec![1]));
+
+    // Each glyph keeps its outline, and its advance through its own Font DICT's widths.
+    assert_eq!(parsed.widths(3), cff_table(&two).widths(0));
+    assert_eq!(advances(&result.font)[3], 500.0);
+    let bounds = crate::ttx::read_cff::glyph_bounds(table).unwrap();
+    let bounds_two = crate::ttx::read_cff::glyph_bounds(two.get(*b"CFF ").unwrap()).unwrap();
+    assert_eq!(bounds[3], bounds_two[gid(&two, "a") as usize]);
+
+    // A CID-keyed font merges with its Font DICTs; numeric map names alone make the result
+    // CID-keyed, and without cidfontinfo the first font gives the ROS and the name.
+    let again = MergeOptions { glyph_maps: vec![Vec::new(), pairs(&[("20", "a")])], ..MergeOptions::default() };
+    let merged = merge(&[result.font.clone(), two.clone()], &again).unwrap();
+    let parsed = cff_table(&merged);
+    assert_eq!(parsed.charset(), [0, 1, 2, 10, 20]);
+    assert_eq!(parsed.font_dict_of_glyphs(), (vec![0, 0, 0, 1, 2], 3));
+    assert_eq!(parsed.font_dict_name(1).as_deref(), Some("Lower"));
+    assert_eq!(parsed.font_name().as_deref(), Some("Merged-CID"));
+    assert_eq!(parsed.ros(), Some(("Adobe".to_string(), "Identity".to_string(), 0)));
+
+    // A map without CID 0, a name-keyed font without a map, and renamed duplicates are refused.
+    let no_notdef = MergeOptions { glyph_maps: vec![pairs(&[("1", "A")]), pairs(&[("10", "a")])], ..options.clone() };
+    let e = merge(&[one.clone(), two.clone()], &no_notdef).unwrap_err().to_string();
+    assert!(e.contains(".notdef"), "{e}");
+    let unmapped = MergeOptions { glyph_maps: vec![pairs(&[("0", ".notdef"), ("1", "A")]), Vec::new()], ..options.clone() };
+    let e = merge(&[one.clone(), two.clone()], &unmapped).unwrap_err().to_string();
+    assert!(e.contains("name-keyed"), "{e}");
+    let rename = MergeOptions { duplicates: Some(Duplicates::Rename), ..options.clone() };
+    assert!(merge(&[one.clone(), two.clone()], &rename).is_err());
+    // Without a CID-keyed result, a CID-keyed input is refused.
+    let e = merge(&[two.clone(), result.font.clone()], &MergeOptions::default()).unwrap_err().to_string();
+    assert!(e.contains("CID-keyed"), "{e}");
+}
+
+#[test]
+fn a_name_keyed_merge_takes_the_header_name_and_a_hint_fonts_values() {
+    let one = built(&source("Hint One", &[("A", 0x41, 600.0)], false), CompileFlavour::Cff);
+    let two = built(&source("Hint Two", &[("B", 0x42, 600.0)], false), CompileFlavour::Cff);
+    let source_font = built(&source("Hint Source", &[("H", 0x48, 600.0)], false), CompileFlavour::Cff);
+    let n = glyph_names(&source_font).unwrap().len();
+    let mut hint_cff = cff_table(&source_font);
+    hint_cff.set_private_ints(0, 6, &[-15, 15, 700, 15]).unwrap();
+    hint_cff.set_private_ints(0, 1217, &[1]).unwrap();
+    let identity: Vec<u16> = (0..n as u16).collect();
+    let table = hint_cff.rebuild(&identity, None).unwrap();
+    let mut hint_font = source_font.clone();
+    hint_font.insert(*b"CFF ", table);
+
+    let options = MergeOptions { ps_name: Some("Merged-Regular".into()), hint_dict_from: Some(hint_font), ..MergeOptions::default() };
+    let merged = merge(&[one, two], &options).unwrap();
+    let parsed = cff_table(&merged);
+    assert_eq!(parsed.font_name().as_deref(), Some("Merged-Regular"));
+    assert_eq!(parsed.private_ints(0, 6), Some(vec![-15, 15, 700, 15]));
+    assert_eq!(parsed.private_ints(0, 1217), Some(vec![1]));
+
+    let e = merge(&[first(), second()], &MergeOptions { ps_name: Some("X".into()), ..MergeOptions::default() }).unwrap_err();
+    assert!(e.to_string().contains("CFF"), "{e}");
+}

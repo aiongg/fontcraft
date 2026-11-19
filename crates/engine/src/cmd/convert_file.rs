@@ -462,6 +462,23 @@ impl Settings {
     }
 }
 
+/// `font` converted to `to` (`ttf`, `otf`, `otf-cff2`, `cff` or `cff2`) with the default
+/// settings: the bytes and what was left behind. For commands that hand their result to the
+/// converter (`font.merge` with `to`).
+pub(super) fn convert_to(font: &SfntFont, to: &str) -> Result<(Vec<u8>, Vec<String>)> {
+    if to == "ufo" {
+        return Err(EngineError::Unsupported("`to: ufo` here: convert the result with font.convert".into()));
+    }
+    let v = json!({ "to": to });
+    let p = Params::new("font.convert", &v)?;
+    let settings = Settings::read(&p, to)?;
+    let c = settings.run(&p, font)?;
+    match c.output {
+        Output::File(bytes) => Ok((bytes, c.left_behind)),
+        Output::Folder(_) => Err(EngineError::Unsupported(format!("`to: {to}` writes a folder"))),
+    }
+}
+
 /// The text of a GOADB file of at most `limit` bytes; a larger file is refused, not cut.
 fn goadb_text(path: &Path, limit: usize) -> Result<String> {
     let read = file_io::read_input_up_to(path, limit)?;

@@ -12,12 +12,19 @@
 //! - The table is subroutinised again. fontTools leaves it without subroutines; when the
 //!   subroutiniser cannot finish, the table stays that way too, with a warning.
 //!
-//! CID-keyed fonts are refused, as fontTools refuses them.
+//! A CID-keyed font merges only into a CID-keyed result ([`super::cid`]); fontTools refuses
+//! them.
+//!
+//! Options of AFDKO mergefonts: the map header's PostScript name and language group set the
+//! Name INDEX and the Private DICT `LanguageGroup`, and a hint font's hint values (blue zones,
+//! stems, `ForceBold`, `LanguageGroup`, `ExpansionFactor`) and global metrics (underline position
+//! and thickness) replace the first font's.
 
 use std::collections::HashMap;
 
 use fontcraft_cff::subr::{SubrOptions, desubroutinize_table, subroutinize_table};
 
+use super::MapHeader;
 use super::plan::Plan;
 use crate::reorder::cff::{self as cff, Cff};
 use crate::reorder::names::num_glyphs;
@@ -26,15 +33,23 @@ use crate::{Result, TablesError};
 
 /// Top DICT `FontBBox`.
 const OP_FONT_BBOX: u16 = 5;
+/// Private DICT `LanguageGroup`.
+const OP_LANGUAGE_GROUP: u16 = 1217;
+/// The Top DICT global metrics a hint font supplies: `UnderlinePosition`, `UnderlineThickness`.
+const METRIC_OPS: [u16; 2] = [1203, 1204];
 /// Operands a `CFF ` charstring may hold on its stack, plus the width.
 const MAX_ARGS: usize = 49;
 
-/// One font's `CFF ` table with every subroutine call expanded.
-pub(super) fn expand(font: &SfntFont, index: usize) -> Result<Vec<u8>> {
+/// One font's `CFF ` table with every subroutine call expanded. A CID-keyed table is refused
+/// unless `cid_result`.
+pub(super) fn expand(font: &SfntFont, index: usize, cid_result: bool) -> Result<Vec<u8>> {
     let data = font.get(*b"CFF ").ok_or_else(|| TablesError::MissingTable("CFF ".into()))?;
     let parsed = cff::parse(data, num_glyphs(font)?)?;
-    if parsed.is_cid() {
-        return Err(TablesError::Unsupported(format!("merging CID-keyed CFF fonts (font {})", index + 1)));
+    if parsed.is_cid() && !cid_result {
+        return Err(TablesError::Unsupported(format!(
+            "merging a CID-keyed CFF font (font {}) into a name-keyed one; give a cidfontinfo file or numeric map names for a CID-keyed result",
+            index + 1
+        )));
     }
     desubroutinize_table(data, false).map_err(|e| TablesError::invalid(format!("the 'CFF ' table of font {} cannot be expanded: {e}", index + 1)))
 }
@@ -42,17 +57,27 @@ pub(super) fn expand(font: &SfntFont, index: usize) -> Result<Vec<u8>> {
 /// An expanded table ([`expand`]), parsed.
 pub(super) struct Expanded<'a> {
     pub cff: Cff<'a>,
-    /// `defaultWidthX` and `nominalWidthX`.
-    widths: (f64, f64),
+    /// `defaultWidthX` and `nominalWidthX` of glyph 0's Private DICT; `None` when they are not
+    /// whole numbers.
+    widths: Option<(f64, f64)>,
+    index: usize,
 }
 
 impl<'a> Expanded<'a> {
     pub fn read(font: &SfntFont, expanded: &'a [u8], index: usize) -> Result<Self> {
         let cff = cff::parse(expanded, num_glyphs(font)?)?;
-        let (Some(default), Some(nominal)) = cff.widths(0) else {
-            return Err(TablesError::Unsupported(format!("merging a CFF font whose Private DICT widths are not whole numbers (font {})", index + 1)));
+        let widths = match cff.widths(0) {
+            (Some(default), Some(nominal)) => Some((default as f64, nominal as f64)),
+            _ => None,
         };
-        Ok(Expanded { cff, widths: (default as f64, nominal as f64) })
+        Ok(Expanded { cff, widths, index })
+    }
+
+    /// The widths a name-keyed merge rewrites charstrings with.
+    fn widths(&self) -> Result<(f64, f64)> {
+        self.widths.ok_or_else(|| {
+            TablesError::Unsupported(format!("merging a CFF font whose Private DICT widths are not whole numbers (font {})", self.index + 1))
+        })
     }
 
     /// Every charstring, in glyph order.
@@ -70,21 +95,47 @@ pub(super) struct Built {
     pub bounds: Vec<Option<[i16; 4]>>,
 }
 
-/// The `CFF ` table of the glyphs of `plan` named `names`, from the expanded tables of the
-/// fonts.
-pub(super) fn build(fonts: &[Expanded<'_>], plan: &Plan, names: &[String], warnings: &mut Vec<String>) -> Result<Built> {
+/// The name-keyed `CFF ` table of the glyphs of `plan` named `names`, from the expanded tables
+/// of the fonts. `header` (the first font's map header) renames the font and sets its
+/// `LanguageGroup`; `hints` supplies the hint values and global metrics.
+pub(super) fn build(
+    fonts: &[Expanded<'_>],
+    plan: &Plan,
+    names: &[String],
+    header: &MapHeader,
+    hints: Option<&Cff<'_>>,
+    warnings: &mut Vec<String>,
+) -> Result<Built> {
     let first = fonts.first().ok_or_else(|| TablesError::BadOptions("give fonts to merge".into()))?;
+    let first_widths = first.widths()?;
     let mut replace: HashMap<usize, Vec<u8>> = HashMap::with_capacity(plan.slots.len());
     let mut new_to_old: Vec<u16> = Vec::with_capacity(plan.slots.len());
     for (g, slot) in plan.slots.iter().enumerate() {
         let source = fonts.get(slot.font).ok_or_else(|| TablesError::invalid("a glyph comes from a font that was not given"))?;
         let cs = source.cff.charstring(usize::from(slot.gid)).ok_or_else(|| TablesError::invalid("a glyph has no charstring"))?;
-        let bytes = if source.widths == first.widths { cs.to_vec() } else { rewrite_width(cs, source.widths, first.widths)? };
+        let widths = source.widths()?;
+        let bytes = if widths == first_widths { cs.to_vec() } else { rewrite_width(cs, widths, first_widths)? };
         replace.insert(g, bytes);
         new_to_old.push(if slot.font == 0 { slot.gid } else { 0 });
     }
-    let table = first.cff.rebuild_with(&new_to_old, Some(names), &replace, false)?;
-    let glyph_bounds = crate::ttx::read_cff::glyph_bounds(&table)?;
+    let mut top = first.cff.clone();
+    if let Some(name) = &header.ps_name {
+        top.set_font_name(name)?;
+    }
+    if let Some(h) = hints {
+        top.copy_hints_from(0, h, 0)?;
+    }
+    if let Some(group) = header.language_group {
+        top.set_private_ints(0, OP_LANGUAGE_GROUP, &[i64::from(group)])?;
+    }
+    let table = top.rebuild_with(&new_to_old, Some(names), &replace, false)?;
+    finish(&table, plan.slots.len(), hints, warnings)
+}
+
+/// A merged table finished: `FontBBox` set to the union of the glyphs' bounds, the global
+/// metrics of `hints` taken, then subroutinised again.
+pub(super) fn finish(table: &[u8], glyph_count: usize, hints: Option<&Cff<'_>>, warnings: &mut Vec<String>) -> Result<Built> {
+    let glyph_bounds = crate::ttx::read_cff::glyph_bounds(table)?;
     let rounded: Vec<Option<[f64; 4]>> = glyph_bounds.iter().map(|b| b.map(|b| [b[0].floor(), b[1].floor(), b[2].ceil(), b[3].ceil()])).collect();
     let bbox = rounded.iter().flatten().fold(None, |acc: Option<[f64; 4]>, b| {
         Some(match acc {
@@ -92,10 +143,16 @@ pub(super) fn build(fonts: &[Expanded<'_>], plan: &Plan, names: &[String], warni
             Some(a) => [a[0].min(b[0]), a[1].min(b[1]), a[2].max(b[2]), a[3].max(b[3])],
         })
     });
-    let mut top = first.cff.clone();
+    let mut top = cff::parse(table, glyph_count)?;
     let bbox = bbox.unwrap_or_default();
     top.set_top_ints(OP_FONT_BBOX, &bbox.map(|v| v as i64))?;
-    let table = top.rebuild_with(&new_to_old, Some(names), &replace, false)?;
+    if let Some(h) = hints {
+        top.copy_top_from(h, &METRIC_OPS);
+    }
+    let identity: Vec<u16> = (0..glyph_count)
+        .map(|g| u16::try_from(g).map_err(|_| TablesError::TooLarge { what: "the merged glyph count", limit: usize::from(u16::MAX) }))
+        .collect::<Result<_>>()?;
+    let table = top.rebuild(&identity, None)?;
     let table = match subroutinize_table(&table, false, &SubrOptions::default()) {
         Ok(t) => t,
         Err(e) => {

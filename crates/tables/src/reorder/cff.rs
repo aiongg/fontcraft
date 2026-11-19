@@ -8,6 +8,7 @@
 //! copied byte for byte, so no outline or hint changes. Strings are kept and new glyph names
 //! are appended, so every SID in the dictionaries stays valid.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 use read_fonts::ps::string::STANDARD_STRINGS;
@@ -27,6 +28,15 @@ const CID_COUNT: u16 = 1234;
 const FONT_NAME: u16 = 1238;
 const FDARRAY: u16 = 1236;
 const FDSELECT: u16 = 1237;
+const UNIQUE_ID: u16 = 13;
+const XUID: u16 = 14;
+const FONT_MATRIX: u16 = 1207;
+const LANGUAGE_GROUP: u16 = 1217;
+/// The Private DICT operators that hold hint values: blue zones, stems, `ForceBold`,
+/// `LanguageGroup` and `ExpansionFactor`.
+const HINT_OPS: [u16; 14] = [6, 7, 8, 9, 10, 11, 1209, 1210, 1211, 1212, 1213, 1214, LANGUAGE_GROUP, 1218];
+/// An INDEX with no items.
+const EMPTY_INDEX: &[u8] = &[0, 0];
 /// Most font DICTs: FDSelect stores a font DICT index in one byte.
 const MAX_FONT_DICTS: usize = 256;
 /// Longest glyph name a CFF charset should hold (the CFF specification's advice).
@@ -64,7 +74,7 @@ pub(crate) type Subrs<'s, 'a> = (&'s [&'a [u8]], &'s [&'a [u8]]);
 #[derive(Clone)]
 pub(crate) struct Cff<'a> {
     header: &'a [u8],
-    name_index: &'a [u8],
+    name_index: Cow<'a, [u8]>,
     top: Vec<Entry>,
     strings: Vec<&'a [u8]>,
     gsubrs: &'a [u8],
@@ -374,7 +384,7 @@ pub(crate) fn parse(bytes: &[u8], num_glyphs: usize) -> Result<Cff<'_>> {
     }
     Ok(Cff {
         header,
-        name_index,
+        name_index: Cow::Borrowed(name_index),
         top,
         strings,
         gsubrs,
@@ -567,6 +577,73 @@ impl<'a> Cff<'a> {
         self.top.iter().find(|e| e.op == op)?.ints.iter().copied().collect()
     }
 
+    /// The font name in the Name INDEX.
+    pub(crate) fn font_name(&self) -> Option<String> {
+        let (names, _) = index(Data::new(TAG, &self.name_index), 0).ok()?;
+        names.first().map(|n| String::from_utf8_lossy(n).into_owned())
+    }
+
+    /// Gives the font the name `name` in its Name INDEX.
+    pub(crate) fn set_font_name(&mut self, name: &str) -> Result<()> {
+        self.name_index = Cow::Owned(write_index(&[name.as_bytes()])?);
+        Ok(())
+    }
+
+    /// The `FontName` of Font DICT `fd` of a CID-keyed table.
+    pub(crate) fn font_dict_name(&self, fd: usize) -> Option<String> {
+        let sid = find(self.font_dicts.get(fd)?, FONT_NAME)?.int(0)?;
+        Some(self.sid_name(u16::try_from(sid).ok()?))
+    }
+
+    /// The Private DICT of Font DICT `fd` (the only one of a name-keyed table), made when a
+    /// name-keyed table has none.
+    fn private_mut(&mut self, fd: usize) -> Result<&mut Private<'a>> {
+        if self.privates.is_empty() && !self.cid {
+            self.privates.push(Private { dict: Vec::new(), subrs: None, subrs_at: None, local: None });
+        }
+        self.privates.get_mut(fd).ok_or_else(|| TablesError::invalid(format!("the CFF table has no Font DICT {fd}")))
+    }
+
+    /// Gives operator `op` of the Private DICT of Font DICT `fd` the integer operands `values`.
+    pub(crate) fn set_private_ints(&mut self, fd: usize, op: u16, values: &[i64]) -> Result<()> {
+        let entry = ints_entry(op, values)?;
+        let private = self.private_mut(fd)?;
+        match private.dict.iter_mut().find(|e| e.op == op) {
+            Some(e) => *e = entry,
+            None => private.dict.push(entry),
+        }
+        Ok(())
+    }
+
+    /// The integer operands of operator `op` of the Private DICT of Font DICT `fd`.
+    #[cfg(test)]
+    pub(crate) fn private_ints(&self, fd: usize, op: u16) -> Option<Vec<i64>> {
+        find(&self.privates.get(fd)?.dict, op)?.ints.iter().copied().collect()
+    }
+
+    /// The hint values of the Private DICT of Font DICT `fd` ([`HINT_OPS`]).
+    fn hint_entries(&self, fd: usize) -> Vec<Entry> {
+        self.privates.get(fd).map(|p| p.dict.iter().filter(|e| HINT_OPS.contains(&e.op)).cloned().collect()).unwrap_or_default()
+    }
+
+    /// Replaces the hint values of the Private DICT of Font DICT `fd` (blue zones, stems,
+    /// `ForceBold`, `LanguageGroup`, `ExpansionFactor`) with those of Font DICT `from_fd` of
+    /// `from`.
+    pub(crate) fn copy_hints_from(&mut self, fd: usize, from: &Cff<'_>, from_fd: usize) -> Result<()> {
+        let mut dict = from.hint_entries(from_fd);
+        let private = self.private_mut(fd)?;
+        dict.extend(private.dict.iter().filter(|e| !HINT_OPS.contains(&e.op)).cloned());
+        private.dict = dict;
+        Ok(())
+    }
+
+    /// Takes the numeric Top DICT entries `ops` from `from`: each one `from` has replaces this
+    /// table's, and one it lacks is removed.
+    pub(crate) fn copy_top_from(&mut self, from: &Cff<'_>, ops: &[u16]) {
+        self.top.retain(|e| !ops.contains(&e.op));
+        self.top.extend(from.top.iter().filter(|e| ops.contains(&e.op)).cloned());
+    }
+
     /// The SID (or CID) of every glyph.
     pub(crate) fn charset(&self) -> &[u16] {
         &self.charset
@@ -714,7 +791,7 @@ impl<'a> Cff<'a> {
         let top = encode(&top, &top_replace(charset_at, fd_select_at, cs_at, fd_array_at, first_private, encoding_at))?;
         let mut out = Vec::with_capacity(pos);
         out.extend_from_slice(self.header);
-        out.extend_from_slice(self.name_index);
+        out.extend_from_slice(&self.name_index);
         out.extend(write_index(&[top.as_slice()])?);
         out.extend(string_index);
         out.extend_from_slice(self.gsubrs);
@@ -745,6 +822,165 @@ impl<'a> Cff<'a> {
         }
         Ok(out)
     }
+}
+
+fn ints_entry(op: u16, values: &[i64]) -> Result<Entry> {
+    Ok(Entry { op, operands: values.iter().map(|v| dict_int(*v)).collect::<Result<_>>()?, ints: values.iter().map(|v| Some(*v)).collect() })
+}
+
+/// One Font DICT of [`assemble_cid`].
+pub(crate) struct CidFontDict {
+    /// The source table (an index into the sources) whose Private DICT this Font DICT copies.
+    pub source: usize,
+    /// The Font DICT of that table (0 in a name-keyed table).
+    pub fd: usize,
+    pub name: String,
+    /// `LanguageGroup`, replacing the copied one.
+    pub language_group: Option<i64>,
+}
+
+/// The Top DICT of [`assemble_cid`]: the first source's without its name-keyed entries, with
+/// these values.
+pub(crate) struct CidTop {
+    /// The CID font name (the Name INDEX entry).
+    pub font_name: String,
+    pub registry: String,
+    pub ordering: String,
+    pub supplement: i64,
+    /// String-valued entries (operator, text), replacing the first source's.
+    pub strings: Vec<(u16, String)>,
+    /// Integer entries, replacing the first source's.
+    pub ints: Vec<(u16, Vec<i64>)>,
+}
+
+/// One glyph of [`assemble_cid`].
+pub(crate) struct CidGlyph {
+    pub cid: u16,
+    /// Index into the Font DICTs.
+    pub fd: usize,
+    /// The source table and its glyph.
+    pub source: usize,
+    pub gid: usize,
+}
+
+/// A CID-keyed table made of glyphs of `sources`, tables without subroutines: each charstring
+/// is copied byte for byte and each Font DICT copies the Private DICT of the source Font DICT
+/// it names, so every glyph keeps its widths and hints. `hints` (a table and one of its Font
+/// DICTs) replaces the hint values of every Private DICT. `glyphs` are in glyph order, the first
+/// one CID 0.
+pub(crate) fn assemble_cid(
+    sources: &[Cff<'_>],
+    top: &CidTop,
+    fds: &[CidFontDict],
+    glyphs: &[CidGlyph],
+    hints: Option<(&Cff<'_>, usize)>,
+) -> Result<Vec<u8>> {
+    let first = sources.first().ok_or_else(|| TablesError::invalid("a CID-keyed table needs a source table"))?;
+    if fds.is_empty() {
+        return Err(TablesError::invalid("a CID-keyed table needs a Font DICT"));
+    }
+    if fds.len() > MAX_FONT_DICTS {
+        return Err(TablesError::TooLarge { what: "the Font DICTs of a CID-keyed table", limit: MAX_FONT_DICTS });
+    }
+    if glyphs.first().map(|g| g.cid) != Some(0) {
+        return Err(TablesError::invalid("the first glyph of a CID-keyed table must be CID 0"));
+    }
+    let mut extra: Vec<Vec<u8>> = Vec::new();
+    let mut sid_of = |text: &str| -> Result<i64> {
+        let bytes = text.as_bytes();
+        let sid = if let Some(sid) = STANDARD_STRINGS.iter().position(|s| s.as_bytes() == bytes) {
+            sid
+        } else if let Some(i) = first.strings.iter().position(|s| *s == bytes) {
+            STANDARD_STRINGS.len() + i
+        } else if let Some(i) = extra.iter().position(|s| s.as_slice() == bytes) {
+            STANDARD_STRINGS.len() + first.strings.len() + i
+        } else {
+            extra.push(bytes.to_vec());
+            STANDARD_STRINGS.len() + first.strings.len() + extra.len() - 1
+        };
+        Ok(i64::from(to_u16(sid, "the CFF string count")?))
+    };
+    let ros = [sid_of(&top.registry)?, sid_of(&top.ordering)?, top.supplement];
+    let string_entries: Vec<(u16, i64)> = top.strings.iter().map(|(op, s)| Ok((*op, sid_of(s)?))).collect::<Result<_>>()?;
+    let fd_names: Vec<i64> = fds.iter().map(|fd| sid_of(&fd.name)).collect::<Result<_>>()?;
+
+    let replaced: Vec<u16> = top.strings.iter().map(|(op, _)| *op).chain(top.ints.iter().map(|(op, _)| *op)).collect();
+    // A name-keyed source's unique ids name that font, not the CID font.
+    let foreign_ids: &[u16] = if first.cid { &[] } else { &[UNIQUE_ID, XUID] };
+    let mut entries = vec![ints_entry(ROS, &ros)?];
+    entries.extend(
+        first
+            .top
+            .iter()
+            .filter(|e| {
+                !matches!(e.op, ENCODING | PRIVATE | CHARSET | CHARSTRINGS | ROS | CID_COUNT | FDARRAY | FDSELECT)
+                    && !foreign_ids.contains(&e.op)
+                    && !replaced.contains(&e.op)
+            })
+            .cloned(),
+    );
+    for (op, sid) in &string_entries {
+        entries.push(ints_entry(*op, &[*sid])?);
+    }
+    for (op, values) in &top.ints {
+        entries.push(ints_entry(*op, values)?);
+    }
+    let max_cid = glyphs.iter().map(|g| g.cid).max().unwrap_or(0);
+    entries.push(ints_entry(CID_COUNT, &[i64::from(max_cid) + 1])?);
+
+    let mut charstrings = Vec::with_capacity(glyphs.len());
+    let mut charset = Vec::with_capacity(glyphs.len());
+    let mut fd_select = Vec::with_capacity(glyphs.len());
+    for g in glyphs {
+        let source = sources.get(g.source).ok_or_else(|| TablesError::invalid("a glyph comes from a table that was not given"))?;
+        charstrings.push(source.charstrings.get(g.gid).copied().ok_or_else(|| TablesError::invalid("a glyph has no charstring"))?);
+        charset.push(g.cid);
+        let fd = u8::try_from(g.fd)
+            .ok()
+            .filter(|_| g.fd < fds.len())
+            .ok_or_else(|| TablesError::invalid("a glyph names a Font DICT that was not given"))?;
+        fd_select.push(fd);
+    }
+    let mut privates = Vec::with_capacity(fds.len());
+    let mut font_dicts = Vec::with_capacity(fds.len());
+    for (fd, name_sid) in fds.iter().zip(&fd_names) {
+        let source = sources.get(fd.source).ok_or_else(|| TablesError::invalid("a Font DICT comes from a table that was not given"))?;
+        let mut dict: Vec<Entry> = source.privates.get(fd.fd).map(|p| p.dict.iter().filter(|e| e.op != SUBRS).cloned().collect()).unwrap_or_default();
+        if let Some((from, from_fd)) = hints {
+            let mut theirs = from.hint_entries(from_fd);
+            theirs.extend(dict.into_iter().filter(|e| !HINT_OPS.contains(&e.op)));
+            dict = theirs;
+        }
+        if let Some(group) = fd.language_group {
+            dict.retain(|e| e.op != LANGUAGE_GROUP);
+            dict.push(ints_entry(LANGUAGE_GROUP, &[group])?);
+        }
+        privates.push(Private { dict, subrs: None, subrs_at: None, local: None });
+        let mut fd_entries = vec![ints_entry(FONT_NAME, &[*name_sid])?];
+        if source.cid
+            && let Some(own) = source.font_dicts.get(fd.fd)
+        {
+            fd_entries.extend(own.iter().filter(|e| e.op == FONT_MATRIX).cloned());
+        }
+        font_dicts.push(fd_entries);
+    }
+
+    let mut cid: Cff<'_> = first.clone();
+    cid.strings.extend(extra.iter().map(Vec::as_slice));
+    cid.name_index = Cow::Owned(write_index(&[top.font_name.as_bytes()])?);
+    cid.top = entries;
+    cid.gsubrs = EMPTY_INDEX;
+    cid.global_subrs = Vec::new();
+    cid.local_subrs = Vec::new();
+    cid.charstrings = charstrings;
+    cid.charset = charset;
+    cid.cid = true;
+    cid.encoding = None;
+    cid.privates = privates;
+    cid.font_dicts = font_dicts;
+    cid.fd_select = fd_select;
+    let identity: Vec<u16> = (0..glyphs.len()).map(|g| to_u16(g, "a glyph id")).collect::<Result<_>>()?;
+    cid.rebuild_with(&identity, None, &HashMap::new(), false)
 }
 
 /// A Private DICT whose local subroutines follow it directly.
