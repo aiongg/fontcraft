@@ -15,9 +15,9 @@ pub mod font_view;
 pub mod menu_alternates;
 pub mod models;
 mod msg;
-pub mod sidebar;
 pub mod open;
 pub mod preview_host;
+pub mod sidebar;
 
 use std::sync::Arc;
 
