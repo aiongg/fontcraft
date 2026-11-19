@@ -276,6 +276,7 @@ bundled, the file says so in its header and the project is listed here with its 
   one region at a time, all-zero regions left out.
 
   The glyph statistics of crates/tables/src/metrics.rs follow fontTools' pens.statisticsPen and pens.momentsPen (MIT License): the same moments, derived values, thresholds and font-wide estimates.
+  The lookup debug information (crates/fea/src/debug.rs, M8.35) follows fontTools' (MIT License) feaLib/builder.py (buildLookups_, makeTable, buildDebg) and ttLib/tables/D__e_b_g.py: the Debg JSON layout, the place, name and feature of each lookup, and the order that picks the feature.
 
   The instancer of crates/tables/src/instance/ ports the full-instance path of fontTools' varLib.instancer (MIT License): instantiateGvar, instantiateCvar, instantiateMVAR, instantiateOTL, instantiateFeatureVariations, instantiateSTAT, pruningUnusedNames, set_default_weight_width_slant, iup_delta, and the glyf table's phantom points, setCoordinates and recalcBounds.
   Its partial path (crates/tables/src/instance/partial.rs) ports instantiateTupleVariationStore, changeTupleVariationAxisLimit, instantiateItemVariationStore, instantiateAvar (version 1), instantiateFvar, axisValuesFromAxisLimits, the limits' normalisation and renormalizeValue, and _instantiateFeatureVariations of fontTools' varLib.instancer (MIT License); crates/tables/src/instance/solver.rs ports varLib.instancer.solver (rebaseTent, MIT License, Copyright (c) 2017 Just van Rossum and the fontTools authors).

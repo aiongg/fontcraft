@@ -15,6 +15,7 @@ use fea_rs::{DiagnosticSet, GlyphMap, Kind, Node, NodeOrToken, Opts, ParseTree};
 use write_fonts_052::tables::gdef::GlyphClassDef;
 use write_fonts_052::tables::layout::{ClassDef, FeatureList, ScriptList};
 
+use crate::debug::Positions;
 use crate::provider::{self, Provider};
 use crate::resolve::{self, Loaded, MapResolver};
 use crate::variations::Info;
@@ -33,6 +34,7 @@ struct Job<'a> {
     first_name_id: u16,
     gpos: bool,
     lookup_per_rule_type: bool,
+    debug_lookups: bool,
     limits: Limits,
     mode: Mode,
 }
@@ -78,6 +80,7 @@ pub(crate) fn run(req: &CompileRequest, mode: Mode) -> Result<Output, Vec<Diagno
         first_name_id: req.first_name_id,
         gpos: req.gpos,
         lookup_per_rule_type: req.lookup_per_rule_type,
+        debug_lookups: req.debug_lookups,
         limits,
         mode,
     };
@@ -129,10 +132,12 @@ impl Job<'_> {
         if self.lookup_per_rule_type && self.mode != Mode::Validate {
             let why = match crate::split::split(tree.root()) {
                 Ok(None) => None,
-                Ok(Some(split)) => match self.reparse(split.text, &glyph_map, info.as_ref(), max) {
+                Ok(Some(split)) => match self.reparse(&split.text, &glyph_map, info.as_ref(), max) {
                     Ok(rewritten) => {
                         let remap = Remap::new(&tree, &self.root, &self.files, split.inserts, self.limits.text_bytes);
-                        return self.finish(&rewritten, &glyph_map, info.as_ref(), max, messages, &|set: &DiagnosticSet| remap.convert(set, max));
+                        let positions = Positions { rewritten: Some(&split.text), locate: &|pos: usize| remap.place(pos) };
+                        let convert = |set: &DiagnosticSet| remap.convert(set, max);
+                        return self.finish(&rewritten, &glyph_map, info.as_ref(), max, messages, &convert, &positions);
                     }
                     Err(why) => Some(why),
                 },
@@ -143,7 +148,10 @@ impl Job<'_> {
                 messages.truncate(max);
             }
         }
-        self.finish(&tree, &glyph_map, info.as_ref(), max, messages, &|set: &DiagnosticSet| convert(&tree, set, max))
+        // Places in the files, for the lookup debug information only; worked out on first use.
+        let remap = Remap::new(&tree, &self.root, &self.files, Vec::new(), self.limits.text_bytes);
+        let positions = Positions { rewritten: None, locate: &|pos: usize| remap.place(pos) };
+        self.finish(&tree, &glyph_map, info.as_ref(), max, messages, &|set: &DiagnosticSet| convert(&tree, set, max), &positions)
     }
 
     /// `files` parsed from the root file and checked against the limits.
@@ -165,7 +173,7 @@ impl Job<'_> {
 
     /// The code [`crate::split`] wrote out, parsed, checked and validated; why it cannot be
     /// used when it cannot.
-    fn reparse(&self, text: String, glyph_map: &GlyphMap, info: Option<&Info>, max: usize) -> Result<ParseTree, String> {
+    fn reparse(&self, text: &str, glyph_map: &GlyphMap, info: Option<&Info>, max: usize) -> Result<ParseTree, String> {
         if text.len() > self.limits.text_bytes {
             return Err(format!("with the lookup breaks the code is larger than {} bytes", self.limits.text_bytes));
         }
@@ -180,7 +188,8 @@ impl Job<'_> {
     }
 
     /// The run from validated code on: `GSUB` alone for the first pass, every table for a build.
-    /// `convert` turns fea-rs's messages about `tree` into ours.
+    /// `convert` turns fea-rs's messages about `tree` into ours; `positions` places its lookups.
+    #[allow(clippy::too_many_arguments)]
     fn finish(
         &self,
         tree: &ParseTree,
@@ -189,20 +198,21 @@ impl Job<'_> {
         max: usize,
         mut messages: Vec<Diagnostic>,
         convert: &dyn Fn(&DiagnosticSet) -> Vec<Diagnostic>,
+        positions: &Positions<'_>,
     ) -> Result<Output, Vec<Diagnostic>> {
         match self.mode {
             Mode::Validate => return Ok(Output::Compiled(Box::new(Compiled { warnings: messages, ..Compiled::default() }))),
             Mode::FirstPass => return first_pass(tree, glyph_map, info, max, messages, convert).map(|f| Output::FirstPass(Box::new(f))),
             Mode::Build => {}
         }
-        let opts = Opts::new().compile_gpos(self.gpos).max_error_messages(max);
+        let opts = Opts::new().compile_gpos(self.gpos).max_error_messages(max).compile_debg(self.debug_lookups);
         let provider = self.generated.map(|generated| Provider { generated });
         // One variation store for the code's variable values and the generated deltas.
         match fea_rs::compile::compile::<Info, Provider>(tree, glyph_map, info, provider.as_ref(), opts) {
             Ok((compilation, warnings)) => {
                 messages.extend(convert(&warnings));
                 messages.truncate(max);
-                self.output(tree, compilation, messages).map(|c| Output::Compiled(Box::new(c)))
+                self.output(tree, compilation, messages, positions).map(|c| Output::Compiled(Box::new(c)))
             }
             Err(errors) => {
                 messages.extend(convert(&errors));
@@ -212,7 +222,13 @@ impl Job<'_> {
         }
     }
 
-    fn output(&self, tree: &ParseTree, mut c: Compilation, warnings: Vec<Diagnostic>) -> Result<Compiled, Vec<Diagnostic>> {
+    fn output(
+        &self,
+        tree: &ParseTree,
+        mut c: Compilation,
+        warnings: Vec<Diagnostic>,
+        positions: &Positions<'_>,
+    ) -> Result<Compiled, Vec<Diagnostic>> {
         if c.name.is_some() {
             c.remap_name_ids(self.first_name_id);
         }
@@ -224,6 +240,7 @@ impl Job<'_> {
         if !self.gpos {
             c.gpos = None;
         }
+        let lookup_debug = if self.debug_lookups { Some(crate::debug::build(tree, &c, &self.files, positions).map_err(|d| vec![d])?) } else { None };
         if let (Some(generated), Some(gsub)) = (self.generated.filter(|g| !g.feature_variations.is_empty()), c.gsub.as_mut()) {
             crate::provider::order_feature_variations(gsub, generated);
         }
@@ -297,6 +314,7 @@ impl Job<'_> {
             os2,
             features,
             gdef_from_code,
+            lookup_debug,
             warnings,
         })
     }
@@ -496,6 +514,12 @@ impl<'a> Remap<'a> {
             shift = shift.saturating_add(len);
         }
         pos.checked_sub(shift)
+    }
+
+    /// The file, and the byte offset in it, of `pos` in the written-out code.
+    fn place(&self, pos: usize) -> Option<(String, usize)> {
+        let start = self.original(pos, false)?;
+        self.locate(start, start).map(|(file, range)| (file, range.start))
     }
 
     /// The file and range of `start..end` in the original code.

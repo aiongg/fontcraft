@@ -1865,7 +1865,7 @@ status = "docs"
 
 [[cli]]
 id = "features list"
-usage = "fontcraft-cli features list FONT [--table GSUB|GPOS] [--lookups] [--json]"
+usage = "fontcraft-cli features list FONT [--table GSUB|GPOS] [--lookups] [--face N|NAME] [--json]"
 options = [
   "--table GSUB|GPOS: only this table",
   "--lookups: add the lookup indices and lookup types behind each feature",
@@ -1893,7 +1893,7 @@ options = [
   "FEATURES: feature file, FontDame .txt file(s), or VOLT project (.vtp); or a font containing VOLT source tables",
   "--font FONT: font that supplies the glyph set and receives the tables",
   "--tables TAG,...: build only these of GSUB, GPOS, GDEF, BASE, OS/2, head, hhea, name, vhea, STAT; default all of them, so a layout table the source leaves empty is removed from the font",
-  "--debug-lookups: add a Debg table recording the source location of each lookup",
+  "--debug-lookups: add a Debg table recording, for each lookup, where it is defined, its name and a feature that uses it",
   "--include-dir DIR: base directory for relative include() paths; default the feature file's folder",
   "--syntax fea|mti|volt: source syntax; default detected from content",
   "--goadb FILE: glyph names in the source are development names to be mapped through this GOADB",
@@ -1916,9 +1916,11 @@ milestone = "M12"
 summary = "Compiles layout source into the tables of an existing font, replacing the tables it builds and leaving the rest of the font alone. Source is OpenType feature code by default; Monotype FontDame text and Microsoft VOLT projects are also accepted."
 ref = "fontTools feaLib __main__, mtiLib __init__ (main), voltLib __main__; AFDKO addfeatures; fontmake --mti-source"
 status = "docs"
-notes = "Checked with fontTools feaLib 4.66.1 on a font built in code: by default every supported table is built; GSUB, GPOS, GDEF and BASE are replaced, or removed when the code leaves them empty; head, hhea, vhea and OS/2 change only the fields the code's table blocks set, and a field of a later OS/2 version raises the table's version; the code's names replace records with the same platform, encoding, language and id; usMaxContext is recomputed whenever the font has GSUB or GPOS. Glyph names are the ones fontTools gives the font (CFF charset, post, then cmap names). Code with errors writes nothing; the errors print as file:line:column. --syntax mti and volt run the conversions of features convert. --debug-lookups is not built yet. A WOFF, WOFF2 or collection input gives a plain font of the face compiled."
+notes = "Checked with fontTools feaLib 4.66.1 on a font built in code: by default every supported table is built; GSUB, GPOS, GDEF and BASE are replaced, or removed when the code leaves them empty; head, hhea, vhea and OS/2 change only the fields the code's table blocks set, and a field of a later OS/2 version raises the table's version; the code's names replace records with the same platform, encoding, language and id; usMaxContext is recomputed whenever the font has GSUB or GPOS. Glyph names are the ones fontTools gives the font (CFF charset, post, then cmap names). Code with errors writes nothing; the errors print as file:line:column. --syntax mti and volt run the conversions of features convert. --debug-lookups writes the Debg table as feaLib 4.66.1 writes it with -d (checked on five of its feaLib test files and on code with an include): JSON under com.github.fonttools.feaLib, GSUB then GPOS, each lookup index with [file:line:column of the rule that started the lookup, the lookup block's name or null, [script, language, feature] or null]; a named lookup is placed at its first rule, not at its label; columns count characters from 1; the feature is the one that sorts last by feature tag, then language, then script, among the language systems whose features list the lookup; the aalt lookups have the place None; a table not built (--tables) records no lookups. The source file is named as given and an included file as the include folder joined to the include path. Known difference: an inline lookup of a contextual rule takes the place of the contextual lookup that calls it, where feaLib gives it the rule that created it; the two differ when one contextual lookup holds several rules. A WOFF, WOFF2 or collection input gives a plain font of the face compiled."
 guesses = [
   "Without -o the result goes beside the font as NAME.features.EXT, where feaLib's command line writes NAME#1.EXT; a request for the reference's naming would change it.",
+  "With --debug-lookups, feature code converted from FontDame or VOLT is named in the Debg table by the --emit-fea file, or <features> (feaLib's name for code without a file) when there is none; a request to name the original source would change it.",
+  "A Debg table already in the font is replaced whole, where feaLib replaces only its com.github.fonttools.feaLib entry and keeps other entries; a font carrying another tool's entries would settle it.",
 ]
 
 [[cli]]
@@ -2856,7 +2858,7 @@ milestone = "M12"
 summary = "Read-only query returning the scripts, language systems and features of GSUB and GPOS and optionally the lookups (index and type) each feature references per language system."
 ref = "docs/spec/20-cli.md › features"
 status = "docs"
-notes = "Entries come in table, script and language order (the default language system first, as dflt), the required feature first. With lookups, each lookup has its index, its type (an extension lookup's type read through) and whether it is stored through Extension lookups. The face is chosen by number; choosing it by name is not built yet."
+notes = "Entries come in table, script and language order (the default language system first, as dflt), the required feature first. With lookups, each lookup has its index, its type (an extension lookup's type read through) and whether it is stored through Extension lookups. The face is chosen by number, or by the full name (name ID 4) or PostScript name (name ID 6) of a face of the file; a number given as text is a face number."
 
 [[command]]
 id = "layout.compileFeatures"
@@ -2870,7 +2872,7 @@ milestone = "M12"
 summary = "Compiles feature code, FontDame text or a VOLT project against the glyph set of an existing binary font and replaces the tables the source defines; returns the tables written and the diagnostics with source positions."
 ref = "docs/spec/20-cli.md › features"
 status = "docs"
-notes = "Tables are put into the font as fontTools feaLib 4.66.1 puts them (see the features compile row). Name ids of 256 and above that the code declares move above the highest id the font already uses, as fontc moves them; feaLib keeps an explicit nameid and gives feature names the first unused id, so the two differ only for a font that already has ids of 256 and above. Code with errors fails with the first errors as file:line:column and writes nothing. The result lists the tables written and removed, the features with their language systems and lookup counts, and the compiler's warnings with their places. debugLookups is refused as not built yet. The compile is static: variable syntax in the code is refused for a variable font."
+notes = "Tables are put into the font as fontTools feaLib 4.66.1 puts them (see the features compile row). Name ids of 256 and above that the code declares move above the highest id the font already uses, as fontc moves them; feaLib keeps an explicit nameid and gives feature names the first unused id, so the two differ only for a font that already has ids of 256 and above. Code with errors fails with the first errors as file:line:column and writes nothing. The result lists the tables written and removed, the features with their language systems and lookup counts, and the compiler's warnings with their places. debugLookups adds the Debg table described in the features compile row. The compile is static: variable syntax in the code is refused for a variable font."
 
 [[command]]
 id = "layout.decompileFeatures"

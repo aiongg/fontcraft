@@ -169,3 +169,68 @@ fn layout_lint_features_reports_errors_with_line_and_column() {
     assert!(s.execute("layout.lintFeatures", &json!({ "source": broken, "warnings": "some" })).is_err());
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn layout_compile_features_writes_lookup_debug_info_as_the_reference_compiler_does() {
+    let dir = temp("debg");
+    let (mut s, ttf) = font(&dir);
+    let included = dir.join("marks.fea");
+    std::fs::write(&included, "lookup KERN {\n    pos left.k right.k -20;\n} KERN;\n").unwrap();
+    let fea = dir.join("debg.fea");
+    std::fs::write(
+        &fea,
+        "languagesystem DFLT dflt;\nlanguagesystem latn dflt;\ninclude(marks.fea)\nfeature liga {\n    sub left.k right.k by both.k;\n} liga;\nfeature kern { lookup KERN; } kern;\n",
+    )
+    .unwrap();
+    let out = dir.join("Debg.ttf");
+    let r = run(&mut s, "layout.compileFeatures", json!({ "source": fea, "font": ttf, "output": out, "debugLookups": true }));
+    assert!(r["tables"].as_array().unwrap().iter().any(|t| t == "Debg"), "{r}");
+
+    // fontTools feaLib 4.66.1 with debug=True writes this for the same files: the source as
+    // given, the included file joined to the source's folder, a named lookup at its first rule.
+    let place = |path: &Path, at: &str| serde_json::to_string(&format!("{}:{at}", path.display())).unwrap();
+    let expected = format!(
+        r#"{{"com.github.fonttools.feaLib": {{"GSUB": {{"0": [{}, null, ["latn", "dflt", "liga"]]}}, "GPOS": {{"0": [{}, "KERN", ["latn", "dflt", "kern"]]}}}}}}"#,
+        place(fea.as_path(), "5:5"),
+        place(included.as_path(), "2:5"),
+    );
+    let bytes = std::fs::read(&out).unwrap();
+    let f = skrifa::FontRef::new(&bytes).unwrap();
+    let debg = f.table_data(skrifa::raw::types::Tag::new(b"Debg")).expect("a Debg table");
+    assert_eq!(std::str::from_utf8(debg.as_bytes()).unwrap(), expected);
+
+    // Without the option no Debg table is written; with only GSUB built, GPOS records nothing.
+    let plain = dir.join("Plain.ttf");
+    run(&mut s, "layout.compileFeatures", json!({ "source": fea, "font": ttf, "output": plain }));
+    assert!(skrifa::FontRef::new(&std::fs::read(&plain).unwrap()).unwrap().table_data(skrifa::raw::types::Tag::new(b"Debg")).is_none());
+    let gsub_only = dir.join("GsubOnly.ttf");
+    run(&mut s, "layout.compileFeatures", json!({ "source": fea, "font": ttf, "output": gsub_only, "tables": ["GSUB"], "debugLookups": true }));
+    let bytes = std::fs::read(&gsub_only).unwrap();
+    let debg = skrifa::FontRef::new(&bytes).unwrap().table_data(skrifa::raw::types::Tag::new(b"Debg")).unwrap();
+    assert!(std::str::from_utf8(debg.as_bytes()).unwrap().ends_with(r#""GPOS": {}}}"#));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn layout_list_features_picks_a_face_by_its_name() {
+    let dir = temp("face-name");
+    let (mut s, ttf) = font(&dir);
+    let bytes = std::fs::read(&ttf).unwrap();
+    let f = skrifa::FontRef::new(&bytes).unwrap();
+    let name = f.name().unwrap();
+    let named = |id: u16| {
+        name.name_record()
+            .iter()
+            .find(|r| r.name_id().to_u16() == id)
+            .map(|r| r.string(name.string_data()).unwrap().chars().collect::<String>())
+            .unwrap()
+    };
+    let by_number = run(&mut s, "layout.listFeatures", json!({ "font": ttf, "face": 0 }));
+    for id in [4, 6] {
+        let by_name = run(&mut s, "layout.listFeatures", json!({ "font": ttf, "face": named(id) }));
+        assert_eq!(by_name, by_number, "name ID {id}");
+    }
+    let e = s.execute("layout.listFeatures", &json!({ "font": ttf, "face": "No Such Face" })).unwrap_err().to_string();
+    assert!(e.contains("No Such Face"), "{e}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

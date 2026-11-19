@@ -2254,8 +2254,10 @@ fontcraft-cli features list|compile|decompile|lint|convert|normalize INPUT [args
 Lists, for GSUB and GPOS, every script and language system with its features, and optionally the lookups each feature uses with their types. Shows at a glance whether a feature is registered for all the language systems it should be.
 
 ```
-fontcraft-cli features list FONT [--table GSUB|GPOS] [--lookups] [--json]
+fontcraft-cli features list FONT [--table GSUB|GPOS] [--lookups] [--face N|NAME] [--json]
 ```
+
+`--face` picks a face of a collection by number, full name (name ID 4) or PostScript name (name ID 6).
 
 Engine command: `layout.listFeatures`.
 
@@ -2282,6 +2284,13 @@ resolved against `--include-dir`. Errors carry file, line and column and the inc
 
 FontDame and VOLT input is first translated to the internal rule model shared with feature code, so the
 same table writers produce the result whatever the syntax.
+
+`--debug-lookups` adds a `Debg` table in feaLib's form: UTF-8 JSON that gives, for each lookup of GSUB
+and GPOS, the file, line and column of the rule that started it, the name of its lookup block, and a
+script, language and feature that use it. The compiler records the places; the feature is worked out
+from the built tables as feaLib picks it (the last key in feature, language, script order). An inline
+lookup of a contextual rule is placed at the contextual lookup that calls it, where feaLib places it at
+the rule that created it.
 
 Engine command: `layout.compileFeatures`. The editor's `font.features.compile` compiles the feature code
 of an open document for preview; both use the same compiler.
