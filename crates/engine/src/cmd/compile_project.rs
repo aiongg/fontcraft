@@ -205,7 +205,7 @@ pub(super) fn prepare(p: &Params, project: &Project, font: &Font, options: &mut 
 /// The text of the file at `path`, which must lie inside the automation read root when one is in
 /// force, since a project file can name any path. `key` names the parameter or project file key
 /// in messages.
-fn text(p: &Params, key: &str, path: &Path) -> Result<String> {
+pub(super) fn text(p: &Params, key: &str, path: &Path) -> Result<String> {
     crate::file_access::check_read(path).map_err(|e| p.bad(format!("{key}: {e}")))?;
     let input = super::file_io::read_input_up_to(path, makeotf::MAX_PROJECT_BYTES)?;
     if input.bytes.len() > makeotf::MAX_PROJECT_BYTES {

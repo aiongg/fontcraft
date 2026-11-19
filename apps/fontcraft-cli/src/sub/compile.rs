@@ -26,6 +26,9 @@ const USAGE: &str = "\
                         [--fs-selection-on N]... [--fs-selection-off N]... [--os2-version N] [project options]
                         [--cid-cmap FILE] [--mac-cmap FILE] [--mac-script N] [--mac-language N] [--uvs FILE]
                         [--interpolate-binary-layout [DIR]]
+                        [--skip-features] [--features FILE | --mti-source FILE] [--include-dir DIR]
+                        [--feature-writer NAME,...|none|...]... [--no-generate-gdef]
+                        [--debug-feature-file FILE] [--stub-gsub] [--feature-names-override]
   fontcraft-cli compile --project-file FILE [options]
       Compile each SOURCE to fonts, once per format and container (default plain). --format
       (repeatable, comma-separated): ttf and otf build static fonts with TrueType or CFF outlines;
@@ -69,7 +72,17 @@ const USAGE: &str = "\
       With only variable formats the static options (--instances, --masters-as-instances, --cbdt,
       --subset, --dsig, --pass-through-tables) are refused; a variable format does not go with
       --collection, --interpolate-binary-layout or a project compile.
-      --plan prints what would be built, without building.
+      --plan prints what would be built, without building, with the feature code of each static
+      font.
+      --skip-features leaves out GSUB, GPOS and GDEF. --features FILE replaces the source's
+      feature code (its includes read from its folder, or from --include-dir DIR);
+      --mti-source FILE replaces it with the FontDame layout files a property list names for the
+      default master, and runs no feature writer. --feature-writer (repeatable, comma-separated)
+      chooses the generated features: kern, mark (mark, mkmk, abvm and blwm), curs and gdef, each
+      optionally with (mode=append); none runs none and ... keeps the source's writers.
+      --no-generate-gdef leaves GDEF to the feature code. --debug-feature-file FILE writes the
+      feature code the first font compiled. --stub-gsub writes an empty GSUB when the font gets
+      none. --no-variable-features and --expand-features-to-instances are refused.
       --interpolate-binary-layout [DIR] gives each instance the GPOS interpolated from the
       compiled masters in DIR (default master_ttf, or master_otf for otf, beside the source),
       named as the source's master UFOs are, and the GDEF and GSUB of the default master; masters

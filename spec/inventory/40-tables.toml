@@ -1581,7 +1581,7 @@ milestone = "M8"
 summary = "Generated features have two modes. skip (default): a generated feature is not written when the feature code already declares that feature, unless the code contains the comment '# Automatic Code', in which case the generated lookups are inserted at that position. append: generated lookups are added after all hand-written lookups and markers are ignored. A source can replace the whole writer list, and an empty list or fontmake's --feature-writer None disables generation."
 ref = "fontmake USAGE.md (Feature writing); fontc fontbe/src/features.rs, fea-rs/src/compile/output.rs (insert_markers)"
 status = "docs"
-notes = "Built by M8.7 (`crates/compile/src/layout.rs`): the feature code's first pass tells which generated features it declares and where it holds the marker; a writer in append mode (`mode = append` in the source's feature-writer setting) puts its lookups after every hand-written lookup. Compared with fontc's and fontmake's GSUB, GPOS and GDEF lookup by lookup over the corpus."
+notes = "Built by M8.7 (`crates/compile/src/layout.rs`): the feature code's first pass tells which generated features it declares and where it holds the marker; a writer in append mode (`mode = append` in the source's feature-writer setting) puts its lookups after every hand-written lookup. Compared with fontc's and fontmake's GSUB, GPOS and GDEF lookup by lookup over the corpus. M2.12: `font.compile`'s `features.writers` (the command line's --feature-writer) replaces the setting for one build: each item a writer name (kern, mark, curs, gdef) or class name with an optional `(mode=append)` or `(mode=skip)`, `none` for no writer, `...` for the source's list (the four default writers without one); `features.generateGdef: false` drops the GDEF writer (`crates/engine/src/cmd/compile_features.rs`)."
 
 [[behavior]]
 id = "compile.kernValueLookup"
@@ -1699,7 +1699,7 @@ milestone = "M8"
 summary = "fontc's --skip-features builds the font without any layout tables, for fast outline-only iteration. We offer the same switch for preview builds."
 ref = "fontc fontc/src/args.rs"
 status = "docs"
-notes = "Built by M8.7: the compile option `skip_features` and `font.compile`'s `skipFeatures` parameter leave GSUB, GPOS and GDEF out."
+notes = "Built by M8.7: the compile option `skip_features` and `font.compile`'s `skipFeatures` parameter leave GSUB, GPOS and GDEF out. M2.12: the command line's --skip-features sets it; --stub-gsub then adds no GSUB."
 
 # ---------------------------------------------------------------------------------------------------
 # Behaviours: CFF path
