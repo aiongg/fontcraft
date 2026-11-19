@@ -35,6 +35,7 @@ pub mod cycling;
 pub mod drag_aids;
 pub mod draw;
 pub mod event;
+pub mod extra_nodes;
 pub mod geometry;
 pub mod guide_drag;
 pub mod hand;

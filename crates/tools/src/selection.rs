@@ -4,7 +4,9 @@
 //! The selection lives in the shell's UI state; the engine never stores it. Its lists use the
 //! same addresses as command targets: points as `[shape, node]`, shapes by index, anchors by
 //! name, guides as `{scope, index}`, annotations by index, PostScript hints by their position in
-//! the layer's hint list.
+//! the layer's hint list. Extra nodes, which only the TrueType Instructor selects, are
+//! `[shape, node, shape, node]`: the two crossing segments by the nodes they end at
+//! ([`crate::extra_nodes`]).
 
 use std::collections::BTreeSet;
 
@@ -53,6 +55,8 @@ pub enum Item {
     Annotation(usize),
     /// A PostScript hint, by its position in the layer's hint list.
     Hint(usize),
+    /// An extra node, as `[shape, node, shape, node]` ([`crate::extra_nodes::ExtraNode::key`]).
+    Intersection([usize; 4]),
 }
 
 /// How a list of items changes a selection.
@@ -82,6 +86,8 @@ pub struct Selection {
     pub annotations: BTreeSet<usize>,
     #[serde(skip_serializing_if = "BTreeSet::is_empty")]
     pub hints: BTreeSet<usize>,
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    pub intersections: BTreeSet<[usize; 4]>,
 }
 
 impl Selection {
@@ -98,9 +104,9 @@ impl Selection {
     }
 
     /// A selection from a target-shaped JSON object (`points`, `shapes`, `anchors`, `guides`,
-    /// `annotations`, `hints`; other keys are ignored). Each list is capped at [`MAX_SELECTION_LIST`].
+    /// `annotations`, `hints`, `intersections`; other keys are ignored). Each list is capped at [`MAX_SELECTION_LIST`].
     pub fn from_value(value: &Value) -> Result<Self, String> {
-        for key in ["points", "shapes", "anchors", "guides", "annotations", "hints"] {
+        for key in ["points", "shapes", "anchors", "guides", "annotations", "hints", "intersections"] {
             if let Some(list) = value.get(key).and_then(Value::as_array)
                 && list.len() > MAX_SELECTION_LIST
             {
@@ -108,7 +114,7 @@ impl Selection {
             }
         }
         let mut object = Map::new();
-        for key in ["points", "shapes", "anchors", "guides", "annotations", "hints"] {
+        for key in ["points", "shapes", "anchors", "guides", "annotations", "hints", "intersections"] {
             if let Some(v) = value.get(key) {
                 object.insert(key.to_string(), v.clone());
             }
@@ -123,10 +129,17 @@ impl Selection {
             && self.guides.is_empty()
             && self.annotations.is_empty()
             && self.hints.is_empty()
+            && self.intersections.is_empty()
     }
 
     pub fn len(&self) -> usize {
-        self.points.len() + self.shapes.len() + self.anchors.len() + self.guides.len() + self.annotations.len() + self.hints.len()
+        self.points.len()
+            + self.shapes.len()
+            + self.anchors.len()
+            + self.guides.len()
+            + self.annotations.len()
+            + self.hints.len()
+            + self.intersections.len()
     }
 
     pub fn clear(&mut self) {
@@ -141,6 +154,7 @@ impl Selection {
             Item::Guide(g) => self.guides.contains(g),
             Item::Annotation(i) => self.annotations.contains(i),
             Item::Hint(i) => self.hints.contains(i),
+            Item::Intersection(k) => self.intersections.contains(k),
         }
     }
 
@@ -153,6 +167,7 @@ impl Selection {
             Item::Guide(g) => self.guides.insert(g),
             Item::Annotation(i) => self.annotations.insert(i),
             Item::Hint(i) => self.hints.insert(i),
+            Item::Intersection(k) => self.intersections.insert(k),
         }
     }
 
@@ -165,6 +180,7 @@ impl Selection {
             Item::Guide(g) => self.guides.remove(g),
             Item::Annotation(i) => self.annotations.remove(i),
             Item::Hint(i) => self.hints.remove(i),
+            Item::Intersection(k) => self.intersections.remove(k),
         }
     }
 
@@ -183,6 +199,7 @@ impl Selection {
         out.extend(self.guides.iter().map(|&g| Item::Guide(g)));
         out.extend(self.annotations.iter().map(|&i| Item::Annotation(i)));
         out.extend(self.hints.iter().map(|&i| Item::Hint(i)));
+        out.extend(self.intersections.iter().map(|&k| Item::Intersection(k)));
         out
     }
 
@@ -206,6 +223,8 @@ impl Selection {
 
     /// The command target object for this selection in `scene`'s layer: `glyph`, `layer`,
     /// `side` for the background, and each non-empty list. Commands add their own parameters to it.
+    /// Extra nodes are left out: only the Instructor's hinting commands take them, with
+    /// parameters of their own.
     pub fn targets(&self, scene: &Scene) -> Map<String, Value> {
         let mut m = scene.target();
         if !self.points.is_empty() {
@@ -242,6 +261,7 @@ impl Selection {
         });
         let annotations = layer.info.annotations.len();
         self.annotations.retain(|&i| i < annotations);
+        self.intersections.retain(|&[s1, n1, s2, n2]| scene.node(s1, n1).is_some() && scene.node(s2, n2).is_some());
         // Hints are known only while they are shown; otherwise the shell keeps them in step.
         if scene.ps_hints.shown {
             let hints = scene.ps_hints.hints.len();

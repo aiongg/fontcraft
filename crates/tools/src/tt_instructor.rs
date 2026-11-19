@@ -2,7 +2,8 @@
 //! nodes and handles of the edited layer without moving them.
 //!
 //! Rows: `trueTypeInstructor`, `hinting.tt.tool.plainKeysAreInstructions`, `hint.tt.toggleDirection`,
-//! `hint.tt.increasePixelSize`, `hint.tt.decreasePixelSize`, `hinting.tt.instructions.addFromSelection`.
+//! `hint.tt.increasePixelSize`, `hint.tt.decreasePixelSize`, `hinting.tt.instructions.addFromSelection`,
+//! `hinting.tt.tool.masterOutline`.
 //!
 //! | Key (no Cmd, Ctrl or Alt) | Runs |
 //! |---|---|
@@ -23,15 +24,18 @@
 //! (Cmd+Ctrl+Alt+Shift+I) runs as a menu shortcut.
 //!
 //! The instruction commands get `glyph`, `layer` (the edited layer), `nodes` as `[path, node]`
-//! with `path` counting paths only, and `direction` from [`ToolSettings::tt_direction`]
+//! with `path` counting paths only (`[path, node, path, node]` for an extra node), and
+//! `direction` from [`ToolSettings::tt_direction`]
 //! (crate::ToolSettings), which the shell fills from the Instructor's view state. With nothing
 //! selected, or while the background is edited, the keys add nothing.
 //!
-//! Pointer: a click on a node or handle selects it (Shift toggles it); a drag from anywhere else
-//! draws a rectangle that selects the nodes and handles inside it (Shift toggles them into the
-//! selection); a click on nothing clears the selection. Instruction badges belong to the canvas
-//! (`canvas::tt_badges` in the egui shell), which takes clicks and drags on them before the tool
-//! sees them.
+//! Pointer: a click on a node, a handle or an extra node selects it (Shift toggles it); a drag
+//! from anywhere else draws a rectangle that selects the nodes, handles and extra nodes inside it
+//! (Shift toggles them into the selection); a click on nothing clears the selection. Extra nodes
+//! ([`crate::extra_nodes`]) are where the edited layer's paths cross; the Instructor offers them
+//! whatever Show Nodes › Extra Nodes is set to, and selects them as [`Item::Intersection`].
+//! Instruction badges belong to the canvas (`canvas::tt_badges` in the egui shell), which takes
+//! clicks and drags on them before the tool sees them.
 
 use fontcraft_geom::Point;
 use fontcraft_model::{LayerSide, Shape};
@@ -39,7 +43,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::event::{Key, KeyEvent, PointerEvent, PointerKind};
-use crate::geometry::{dist, rect_corners};
+use crate::extra_nodes::{ExtraNode, extra_node_at, extra_nodes, shape_path};
+use crate::geometry::{dist, point_in_polygon, rect_corners};
 use crate::hit::{Hit, hit_test};
 use crate::output::{Action, Invocation, Output, Overlay, OverlayKind};
 use crate::scene::Scene;
@@ -112,7 +117,7 @@ pub fn key_invocation(cx: &Context<'_>, c: char) -> Option<Invocation> {
     if id == "hint.tt.addStemHint" {
         points = stem_pairs(points, direction);
     }
-    let nodes: Vec<[usize; 2]> = points.iter().map(|p| [p.path, p.node]).collect();
+    let nodes: Vec<serde_json::Value> = points.iter().map(HintPoint::param).collect();
     let params = json!({
         "glyph": scene.glyph,
         "layer": scene.layer_id,
@@ -128,11 +133,23 @@ pub struct HintPoint {
     /// Index among the layer's paths, components skipped.
     pub path: usize,
     pub node: usize,
+    /// For an extra node, the other crossing segment as `[path, node]`.
+    pub other: Option<[usize; 2]>,
     pub at: Point,
 }
 
-/// The selected nodes and handles of the scene's paths, in selection order, as the hinting
-/// commands address them.
+impl HintPoint {
+    /// The point as the hinting commands' `nodes` list takes it.
+    pub fn param(&self) -> serde_json::Value {
+        match self.other {
+            None => json!([self.path, self.node]),
+            Some([path, node]) => json!([self.path, self.node, path, node]),
+        }
+    }
+}
+
+/// The selected nodes and handles of the scene's paths, then its selected extra nodes that
+/// still cross, in selection order, as the hinting commands address them.
 pub fn selected_points(scene: &Scene, selection: &Selection) -> Vec<HintPoint> {
     let mut path_index = Vec::with_capacity(scene.layer.shapes.len());
     let mut paths = 0usize;
@@ -151,9 +168,22 @@ pub fn selected_points(scene: &Scene, selection: &Selection) -> Vec<HintPoint> {
             let path = (*path_index.get(s)?)?;
             let Some(Shape::Path(p)) = scene.layer.shapes.get(s) else { return None };
             let node = p.nodes.get(n)?;
-            Some(HintPoint { path, node: n, at: Point::new(node.x, node.y) })
+            Some(HintPoint { path, node: n, other: None, at: Point::new(node.x, node.y) })
         })
+        .chain(selection.intersections.iter().filter_map(|&[s1, n1, s2, n2]| {
+            let layer = &scene.layer;
+            let e = extra_node_at(layer, (s1, n1), (s2, n2))?;
+            let (p1, p2) = (shape_path(layer, e.a.0)?, shape_path(layer, e.b.0)?);
+            Some(HintPoint { path: p1, node: e.a.1, other: Some([p2, e.b.1]), at: e.at })
+        }))
         .collect()
+}
+
+/// The extra nodes the Instructor offers in `scene`: those whose two paths can be selected.
+pub fn offered_extra_nodes(scene: &Scene) -> Vec<ExtraNode> {
+    let mut list = extra_nodes(&scene.layer);
+    list.retain(|e| scene.shape_editable(e.a.0) && scene.shape_editable(e.b.0));
+    list
 }
 
 /// The points in the order `hint.tt.addStemHint` pairs them: two by two along the stems. For the
@@ -173,10 +203,11 @@ pub fn stem_pairs(mut points: Vec<HintPoint>, direction: TtDirection) -> Vec<Hin
 enum State {
     #[default]
     Idle,
-    /// The button went down at `at` (font units); `on` is the point it went down on.
-    Pressed { at: Point, on: Option<(usize, usize)>, shift: bool, before: Selection },
+    /// The button went down at `at` (font units); `on` is the point or extra node it went down
+    /// on. `extra` holds the scene's extra nodes, found once per gesture.
+    Pressed { at: Point, on: Option<Item>, shift: bool, before: Selection, extra: Vec<ExtraNode> },
     /// A selection rectangle from `start` to `current`.
-    Marquee { start: Point, current: Point, shift: bool, before: Selection },
+    Marquee { start: Point, current: Point, shift: bool, before: Selection, extra: Vec<ExtraNode> },
 }
 
 /// The TrueType Instructor.
@@ -189,16 +220,25 @@ impl TtInstructorTool {
     fn down(&mut self, cx: &Context<'_>, ev: &PointerEvent) -> Output {
         let before = cx.selection.clone();
         let shift = ev.mods.shift;
+        let extra = offered_extra_nodes(cx.scene);
         let on = match hit_test(cx.scene, &cx.view, ev.pos, cx.settings.hit_tolerance) {
             Some(h) => match h.hit {
-                Hit::Node { shape, node } | Hit::Handle { shape, node } => Some((shape, node)),
+                Hit::Node { shape, node } | Hit::Handle { shape, node } => Some(Item::Point(shape, node)),
                 _ => None,
             },
             None => None,
         };
-        self.state = State::Pressed { at: ev.pos, on, shift, before: before.clone() };
-        let Some((s, n)) = on else { return Output::handled() };
-        let item = Item::Point(s, n);
+        let on = on.or_else(|| {
+            let pointer = cx.view.to_screen(ev.pos);
+            extra
+                .iter()
+                .map(|e| (dist(cx.view.to_screen(e.at), pointer), e))
+                .filter(|(d, _)| *d <= cx.settings.hit_tolerance)
+                .min_by(|a, b| a.0.total_cmp(&b.0))
+                .map(|(_, e)| Item::Intersection(e.key()))
+        });
+        self.state = State::Pressed { at: ev.pos, on: on.clone(), shift, before: before.clone(), extra };
+        let Some(item) = on else { return Output::handled() };
         let selection = if shift {
             let mut sel = before;
             sel.toggle(item);
@@ -215,17 +255,17 @@ impl TtInstructorTool {
 
     fn drag(&mut self, cx: &Context<'_>, ev: &PointerEvent) -> Output {
         match std::mem::take(&mut self.state) {
-            State::Pressed { at, on, shift, before } => {
+            State::Pressed { at, on, shift, before, extra } => {
                 let far = dist(cx.view.to_screen(at), cx.view.to_screen(ev.pos)) >= cx.settings.drag_threshold;
                 if !far {
-                    self.state = State::Pressed { at, on, shift, before };
+                    self.state = State::Pressed { at, on, shift, before, extra };
                     return Output::handled();
                 }
-                self.state = State::Marquee { start: at, current: ev.pos, shift, before };
+                self.state = State::Marquee { start: at, current: ev.pos, shift, before, extra };
                 self.marquee_selection(cx)
             }
-            State::Marquee { start, shift, before, .. } => {
-                self.state = State::Marquee { start, current: ev.pos, shift, before };
+            State::Marquee { start, shift, before, extra, .. } => {
+                self.state = State::Marquee { start, current: ev.pos, shift, before, extra };
                 self.marquee_selection(cx)
             }
             State::Idle => Output::default(),
@@ -235,12 +275,12 @@ impl TtInstructorTool {
     fn up(&mut self, cx: &Context<'_>) -> Output {
         match std::mem::take(&mut self.state) {
             State::Pressed { on: None, shift: false, .. } => Output::with(Action::Select { selection: Selection::new() }),
-            State::Pressed { on: Some((s, n)), shift: false, before, .. } if before.contains(&Item::Point(s, n)) => {
-                Output::with(Action::Select { selection: Selection::from_items([Item::Point(s, n)]) })
+            State::Pressed { on: Some(item), shift: false, before, .. } if before.contains(&item) => {
+                Output::with(Action::Select { selection: Selection::from_items([item]) })
             }
             State::Pressed { .. } => Output::handled(),
-            State::Marquee { start, current, shift, before } => {
-                self.state = State::Marquee { start, current, shift, before };
+            State::Marquee { start, current, shift, before, extra } => {
+                self.state = State::Marquee { start, current, shift, before, extra };
                 let out = self.marquee_selection(cx);
                 self.state = State::Idle;
                 out
@@ -250,15 +290,16 @@ impl TtInstructorTool {
     }
 
     fn marquee_selection(&self, cx: &Context<'_>) -> Output {
-        let State::Marquee { start, current, shift, before } = &self.state else { return Output::default() };
+        let State::Marquee { start, current, shift, before, extra } = &self.state else { return Output::default() };
         let corners = rect_corners(*start, 0.0, current.x - start.x, current.y - start.y);
         let region = in_region(cx.scene, &corners, false, false);
+        let inside = extra.iter().filter(|e| point_in_polygon(e.at, &corners)).map(|e| Item::Intersection(e.key()));
         let mut selection = if *shift { before.clone() } else { Selection::new() };
-        for &(s, n) in &region.points {
+        for item in region.points.iter().map(|&(s, n)| Item::Point(s, n)).chain(inside) {
             if *shift {
-                selection.toggle(Item::Point(s, n));
+                selection.toggle(item);
             } else {
-                selection.insert(Item::Point(s, n));
+                selection.insert(item);
             }
         }
         Output::with(Action::Select { selection })
@@ -477,7 +518,7 @@ mod tests {
 
     #[test]
     fn stem_pairs_run_across_the_stem_from_the_lower_or_left_point() {
-        let p = |path, node, x, y| HintPoint { path, node, at: Point::new(x, y) };
+        let p = |path, node, x, y| HintPoint { path, node, other: None, at: Point::new(x, y) };
         let points = vec![p(0, 2, 100.0, 100.0), p(1, 0, 300.0, 0.0), p(0, 1, 100.0, 0.0), p(1, 3, 300.0, 100.0)];
         let v: Vec<(usize, usize)> = stem_pairs(points.clone(), TtDirection::Vertical).iter().map(|p| (p.path, p.node)).collect();
         assert_eq!(v, vec![(0, 1), (0, 2), (1, 0), (1, 3)]);
@@ -523,6 +564,45 @@ mod tests {
             apply(out, &mut sel);
         }
         assert!(sel.is_empty());
+    }
+
+    #[test]
+    fn extra_nodes_are_selected_by_click_and_rectangle_and_instructed_as_intersections() {
+        // Shape 0: a component; shapes 1 and 2: bars that cross at (100|200, 100|200).
+        let mut layer = Layer::new("m01", 600.0);
+        layer.shapes.push(Shape::Component(Component::new("B", 0.0, 0.0)));
+        layer.shapes.push(Shape::Path(Path::rect(0.0, 100.0, 300.0, 200.0)));
+        layer.shapes.push(Shape::Path(Path::rect(100.0, 0.0, 200.0, 300.0)));
+        let mut tool = TtInstructorTool::default();
+        let mut sel = Selection::new();
+        let mut gesture = |steps: &[(PointerKind, f64, f64, Modifiers)], sel: &mut Selection| {
+            for &(kind, x, y, mods) in steps {
+                let out = run(&layer, &sel.clone(), TtDirection::Vertical, |cx| tool.pointer(cx, &PointerEvent::new(kind, x, y, mods)));
+                for a in out.actions {
+                    if let Action::Select { selection } = a {
+                        *sel = selection;
+                    }
+                }
+            }
+        };
+        // A click near the crossing of bar 1's bottom edge (ends at node 1) and bar 2's right
+        // edge (ends at node 2) selects that extra node.
+        gesture(&[(PointerKind::Down, 203.0, 98.0, NONE), (PointerKind::Up, 203.0, 98.0, NONE)], &mut sel);
+        assert_eq!(sel, Selection::from_items([Item::Intersection([1, 1, 2, 2])]));
+        let out = run(&layer, &sel, TtDirection::Vertical, |cx| TtInstructorTool::default().key(cx, &press('a')));
+        let r = runs(&out);
+        assert_eq!(r.first().map(|r| r.0.as_str()), Some("hint.tt.snapPoint"));
+        // Paths are counted without the component.
+        assert_eq!(r.first().map(|r| r.1["nodes"].clone()), Some(json!([[0, 1, 1, 2]])));
+        // A rectangle over the two lower crossings, which holds no node, selects both.
+        gesture(&[(PointerKind::Down, 90.0, 90.0, NONE), (PointerKind::Drag, 210.0, 110.0, NONE), (PointerKind::Up, 210.0, 110.0, NONE)], &mut sel);
+        assert_eq!(sel, Selection::from_items([Item::Intersection([1, 1, 2, 0]), Item::Intersection([1, 1, 2, 2])]));
+        // Shift+click takes one out again; a node and an extra node go to one command together.
+        gesture(&[(PointerKind::Down, 100.0, 100.0, Modifiers::SHIFT), (PointerKind::Up, 100.0, 100.0, Modifiers::SHIFT)], &mut sel);
+        gesture(&[(PointerKind::Down, 300.0, 200.0, Modifiers::SHIFT), (PointerKind::Up, 300.0, 200.0, Modifiers::SHIFT)], &mut sel);
+        assert_eq!(sel, Selection::from_items([Item::Intersection([1, 1, 2, 2]), Item::Point(1, 2)]));
+        let out = run(&layer, &sel, TtDirection::Vertical, |cx| TtInstructorTool::default().key(cx, &press('f')));
+        assert_eq!(runs(&out).first().map(|r| r.1["nodes"].clone()), Some(json!([[0, 2], [0, 1, 1, 2]])));
     }
 
     #[test]

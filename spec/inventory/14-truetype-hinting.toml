@@ -757,7 +757,12 @@ milestone = "M10"
 summary = "The current master's outline is drawn in black and is the only one whose nodes and handles can be selected. All nodes are drawn as gray discs (not the usual green circles and blue squares), and extra nodes at path intersections are always shown, whatever View › Show Nodes › Extra Nodes is set to."
 ref = "TrueType Hinting › Hinting Outlines"
 status = "handbook"
-notes = "M10.25, crates/ui-egui/src/canvas/tt_badges.rs: with the Instructor active the on-curve nodes of the edited layer are drawn as gray discs, the selected ones in the selection colour, and only they and their handles can be selected. Extra nodes at path intersections are not drawn yet. Documented, not yet observed."
+notes = "M10.25, crates/ui-egui/src/canvas/tt_badges.rs: with the Instructor active the on-curve nodes of the edited layer are drawn as gray discs, the selected ones in the selection colour, and only they and their handles can be selected. M10.35, crates/tools/src/tt_instructor.rs and extra_nodes.rs: the Instructor also offers the extra nodes where the edited layer's paths cross away from their nodes (more than 1 unit from the ends of both segments), whatever Show Nodes › Extra Nodes is set to; a click or a selection rectangle selects them as `intersections` ([shape, node, shape, node], each segment by the node it ends at), and the instruction keys pass them to the hinting commands as [path, node, path, node]. Drawing extra nodes and their badges in the Instructor is not done yet. Documented, not yet observed."
+guesses = [
+  "Extra nodes can be selected with a selection rectangle in the Instructor, as nodes can; the reference app would show whether a rectangle takes them.",
+  "Two segments that cross more than once give one extra node, the crossing nearest to where their chords cross, since an instruction names an extra node by its two segments only and export moves it to that crossing; instructing a curve that crosses a straight edge twice in the reference app would show which crossings it offers.",
+]
+observe = ["T4: in the Instructor, drag a selection rectangle over an extra node of X and note whether it is selected."]
 
 [[behavior]]
 id = "hinting.tt.tool.instanceOutline"
@@ -1554,7 +1559,7 @@ milestone = "M10"
 summary = "When a static font is exported with Remove Overlaps, points inside overlaps disappear and intersections become single points. An instruction on a point that is removed is reattached to whichever intersection point created by the removal lies closest, so hinting a regular node next to an intersection and hinting the intersection's extra node give the same result."
 ref = "TrueType Hinting › Points in Overlapping Intersections"
 status = "handbook"
-notes = "The editor half (M10.3, crates/hinting/src/remap.rs): Path > Remove Overlap keeps instructions on nodes that survive, found by place, and moves an instruction on a removed node, or on an intersection extra node, to the nearest on-curve node the removal created; with no such node it is removed and reported under hintUpkeep in the command result. Other outline edits remove an instruction whose node is gone and report it. The export half (M10.19, crates/compile/src/points.rs): a node that overlap removal takes away maps to the nearest on-curve point the removal created, and an instruction on an intersection extra node to the created point nearest to where its two segments' chords cross, the rule the editor uses. Documented for export, not yet observed in the editor."
+notes = "The editor half (M10.3, crates/hinting/src/remap.rs): Path > Remove Overlap keeps instructions on nodes that survive, found by place, and moves an instruction on a removed node, or on an intersection extra node, to the nearest on-curve node the removal created; with no such node it is removed and reported under hintUpkeep in the command result. Other outline edits remove an instruction whose node is gone and report it. The export half (M10.19, crates/compile/src/points.rs): a node that overlap removal takes away maps to the nearest on-curve point the removal created, and an instruction on an intersection extra node to the created point nearest to where its two segments' chords cross, the rule the editor uses. M10.35: the Instructor selects extra nodes as intersection points, so a static export of an instruction placed on one in the tool lands on the crossing's point (crates/compile/src/tt_hints_tests.rs). Documented for export, not yet observed in the editor."
 guesses = [
   "Path > Remove Overlap in the editor applies the documented export rule to instructions on removed nodes and on intersections, and PostScript ends on removed nodes become numbers; running Remove Overlap on an instructed glyph in the reference app would settle it.",
   "At export, the points a removed node can move to are the on-curve points no source node lies at, which includes on-curve points the cubic-to-quadratic conversion added; they lie on the source segment as crossing points do, so they are not told apart. Exporting an instructed cubic glyph with Remove Overlaps in the reference app and reading where the instruction lands would settle it.",
@@ -1575,6 +1580,8 @@ milestone = "M10"
 summary = "Variable fonts keep their overlaps, so intersection (extra) nodes do not exist in the output; an instruction placed on an extra node is dropped from a variable export. Glyphs meant for variable export must be instructed on regular nodes only; the UI should flag instructions on extra nodes."
 ref = "TrueType Hinting › Points in Overlapping Intersections"
 status = "handbook"
+notes = "M10.35, crates/compile/src/tt_hints.rs: a variable export compiles each glyph's instructions without those that name an extra node, and warns once per glyph with how many were left out. Flagging such instructions in the Instructor is not done yet. Documented, not yet observed."
+guesses = ["A variable export drops the instructions on extra nodes with one warning per glyph, the other instructions of the glyph kept; a variable export from the reference app would show whether it warns and whether instructions that depend on the dropped ones change."]
 observe = ["T4: instruct X on a node at the crossing and on a normal node, export a variable TTF and read X's glyph program; note whether the instruction on the crossing node is dropped."]
 
 [[behavior]]
