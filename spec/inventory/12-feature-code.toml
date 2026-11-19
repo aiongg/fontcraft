@@ -1000,17 +1000,19 @@ observe = [
 id = "autoFeature.languageSystems"
 area = "features"
 milestone = "M8"
-summary = "Generated code is preceded by languagesystem statements for the scripts in the font. The handbook does not describe this; expected as an automatic prefix and to be confirmed."
+summary = "Generated code is preceded by languagesystem statements for the scripts in the font: DFLT, the scripts locl names with their languages, and each Indic script the font has glyphs of, under its newer and its older tag. The handbook does not describe this; expected as an automatic prefix and to be confirmed."
 ref = "Appendix › Automatic Feature Generation"
 status = "inferred"
-notes = "The reference's stored output in the corpus has an automatic prefix named Languagesystems in 14 sources: `languagesystem DFLT dflt;`, a blank line, `languagesystem latn dflt;` and one `languagesystem latn XXX;` line per language the locl feature uses (M8 planning pass)."
+notes = "The reference's stored output in the corpus has an automatic prefix named Languagesystems in 14 sources: `languagesystem DFLT dflt;`, a blank line, `languagesystem latn dflt;` and one `languagesystem latn XXX;` line per language the locl feature uses (M8 planning pass). No corpus source has Indic glyphs. A shaper runs its Indic engine only when the font has features under one of the script's tags, so without these lines the Indic features never apply; fontTools' `ot_tags_from_script`, which the kern and mark writers of ufo2ft and fontc use, gives the newer tag first (`dev2`, then `deva`). glyphsLib writes no languagesystem statements of its own."
 guesses = [
-  "Only the scripts the locl code names get lines, as in every corpus source (Andika Mini, with Latin glyphs and no locl, has the DFLT line alone); Update on a font with Latin, Cyrillic and Greek glyphs and no locl would settle it.",
+  "Apart from the Indic scripts, only the scripts the locl code names get lines, as in every corpus source (Andika Mini, with Latin glyphs and no locl, has the DFLT line alone); Update on a font with Latin, Cyrillic and Greek glyphs and no locl would settle it.",
   "With several scripts, each script's group follows a blank line, in the order locl first names the scripts; Update on a font with .loclBGR and .loclTRK glyphs would settle it.",
   "A language that locl names before any `script` statement gets a `languagesystem DFLT <language>;` line after the DFLT line.",
+  "A font with glyphs of one of the nine Indic scripts the Indic generators serve (by the glyph's effective script, else its name's script suffix) gets that script's group after the locl scripts, in the order its first glyph comes: the newer tag with its locl languages, then `languagesystem <older tag> dflt;`; Update on a font with Devanagari and Tamil glyphs and no locl would settle it.",
 ]
 observe = [
   "In F1 (Latin features) plus a few Greek and Cyrillic letters, press Update in Font Info › Features: copy the Languagesystems prefix and note its script list and order.",
+  "In a font with ka-deva, ssa-deva, halant-deva and k_ssa-deva and a few Tamil letters, press Update in Font Info › Features: copy the Languagesystems prefix and note whether dev2, deva, tml2 and taml lines appear and in which order.",
 ]
 
 [[behavior]]

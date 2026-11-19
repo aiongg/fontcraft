@@ -389,7 +389,13 @@ an open question (`autoClass.general`). The corpus has `Uppercase`, `Lowercase`,
 
 Languagesystems prefix (`autoFeature.languageSystems`): `languagesystem DFLT dflt;`, then for each
 script the `locl` code names, a blank line, the script's `dflt` line and one line per language,
-in the order `locl` names them. A font without `locl` gets the `DFLT` line alone.
+in the order `locl` names them. A Latin font without `locl` gets the `DFLT` line alone. A font
+with glyphs of an Indic script the Indic generators serve also gets that script's group, after the
+`locl` scripts and in the order its first glyph comes: the newer tag (`dev2`, `bng2`, `gur2`,
+`gjr2`, `ory2`, `tml2`, `tel2`, `knd2`, `mlm2`) with its `locl` languages, then the older tag's
+`dflt` line (`deva`…). Without them a shaper falls back to `DFLT` and skips its Indic engine, so
+none of the Indic features apply. The tag order is that of fontTools' `ot_tags_from_script`; the
+reference's own output for Indic fonts is unconfirmed (a guess in the row).
 
 Update's merge rules: manual entries stay as they are; an automatic entry takes its regenerated
 code, or is removed when its glyphs are gone; a missing entry is added in the reference's feature
