@@ -97,6 +97,8 @@ pub struct FontCraftApp {
     /// The status line: the last error or notice.
     pub status: String,
     pub closing: Closing,
+    /// The open form dialog (`dialogs::form`).
+    pub dialogs: crate::dialogs::form::DialogState,
     picks: Picks,
     #[cfg(not(target_arch = "wasm32"))]
     file_panels: Option<craft::dialogs::service::FilePanels>,
@@ -129,6 +131,7 @@ impl FontCraftApp {
             sent: Vec::new(),
             status: String::new(),
             closing: Closing::Idle,
+            dialogs: crate::dialogs::form::DialogState::default(),
             picks: Picks::default(),
             #[cfg(not(target_arch = "wasm32"))]
             file_panels: None,
@@ -159,8 +162,9 @@ impl FontCraftApp {
                         continue;
                     }
                     let params = if command.params.is_null() { json!({}) } else { command.params.clone() };
-                    if let Err(error) = self.session.execute(&command.id, &params) {
-                        failed.push(format!("{}: {error}", command.id));
+                    match self.session.execute(&command.id, &params) {
+                        Ok(result) => crate::dialogs::after::after_run(self, &command.id, &params, &result),
+                        Err(error) => failed.push(format!("{}: {error}", command.id)),
                     }
                 }
                 Msg::Shell(command) => {
@@ -233,9 +237,14 @@ impl ShellApp for FontCraftApp {
     fn output(&mut self, output: FrameOutput) {
         for fired in output.fired {
             // A held tool key fires again on release; the tool stays.
-            if fired.phase != FirePhase::Release {
-                self.sent.push(FontCraftApp::route(fired.command));
+            if fired.phase == FirePhase::Release {
+                continue;
             }
+            // A command with a dialog, fired with no parameters, opens its dialog.
+            if catalog::kind(&fired.command.id) == Kind::Engine && crate::dialogs::after::fired(self, &fired.command.id, &fired.command.params) {
+                continue;
+            }
+            self.sent.push(FontCraftApp::route(fired.command));
         }
     }
 

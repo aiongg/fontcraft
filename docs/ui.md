@@ -131,11 +131,69 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   active tool runs in `canvas::active_tool`.
 - **Dialogs.** `dialogs::run` gets the window's `DialogHost` every pass. A module opens its dialog
   when app state asks for it and takes the answer on a later pass (`dialogs/unsaved.rs` is the
-  example: the close question).
+  example: the close question). A form over one command's parameters is a spec instead
+  (below).
 - **Control channel.** `control::dispatch(app, method, params)` looks the method up in
   `control::MODULES`. A method that changes the engine posts a `Msg`.
 - **File pickers.** A command listed in `app::files::PICKED` that arrives without its path opens
   the host's picker; the answer posts the command again with the path.
+
+## Dialog specs
+
+A dialog over one command's parameters is a `DialogSpec` (`dialogs/spec.rs`). The framework does
+the rest: `dialog.open {dialog | command, params?}`, the command's menu item, the live preview,
+OK and Cancel, the window's dialog and the control channel's `ui.dialog.*`.
+
+```rust
+// dialogs/kerning_questions.rs
+use super::fields::Field;
+use super::spec::{DialogSpec, Fields};
+
+pub const SPECS: &[DialogSpec] = &[
+    DialogSpec::new("dialog.renameKerningGroup", "Rename Kerning Group", "kerning.renameGroup", Fields::Fixed(fields)),
+];
+
+fn fields(_: &fontcraft_engine::Session) -> Vec<Field> {
+    vec![Field::text("name", "Name", 64, "the new group name")]
+}
+```
+
+Then add `mod kerning_questions;` and one line to `dialogs::SPECS`. The spec's `id` is its row in
+`spec/inventory`.
+
+| Part | Choices |
+|---|---|
+| `Fields` | `Filter` (the filter's `filter.list` schema), `Fixed(fn(&Session) -> Vec<Field>)`, `Targeted(fn(&mut Session, &targets) -> Result<Vec<Field>, String>)` (fields that depend on what the command acts on), `Shaped(Shaped)` (fields turned into the parameters: `given`, `params`, `link`), `Tabs(&[Tab])` (one dialog per tab; values come back when a tab shows again) |
+| `Mode` | `Preview` (default): every change previews on the font as it was at open; OK is one undo step; Cancel puts the font back. `.run_on_ok()`: nothing runs while open; OK runs the command once; a failure keeps the dialog open |
+| Builders | `.buttons(ok, cancel)` captions (empty: the common words), `.message(line)`, `.third(Third)` (a third answer to the field `key`), `.actions(&[Action])` (queries whose `text` goes to the clipboard), `.after(After)` (a follow-up question asked when `After::command`'s result calls for it; never opened from its own menu item) |
+
+Fields (`dialogs/fields.rs`): `Field::number`, `integer`, `bool`, `lock`, `text`, `text_area`,
+`choice`, `multi`, `folder`, `order`, `rows`, `select_list`, and `custom` for a kind the package
+defines (`Custom { name, check, row }`: the check and the control cell; rule trees, palettes,
+colours). `.in_group(heading)` puts a heading over a run of fields. A field's `key` is the
+parameter's key and its id for `ui.dialog.set` and `ui.dialog.click`. Each field shows as a craft
+`Param` row of a `FormDialog`; checking stays in the app layer, so a refused value changes nothing.
+
+Without a `glyph` or `glyphs` in `dialog.open`'s params, the targets come from
+`form::selection_targets`: the glyph the glyph panels show. The canvas and Font View selections
+join there when they exist.
+
+How it runs:
+
+| Piece | Does |
+|---|---|
+| `form.rs` | `FontCraftApp::dialogs.open`: the open dialog. `open`, `set`, `confirm`, `cancel`, `click`, `key`, `type_text`, `switch_tab`, `run_action`, `inspect`. With `drain`, the only code that drives the engine: the interaction (`begin`, `preview`, `commit`, `cancel`) and OK's run, whose result decides whether the dialog stays open |
+| `host.rs` | `SpecDialog` on the window's `DialogHost`: shows the app's dialog, refreshes it when its revision moves, and turns what the person does into the same `form.rs` calls |
+| `after.rs` | a command the person fires with no parameters opens its dialog (`FontCraftApp::output`); a follow-up opens after its command ran in `drain` or from a run-on-OK OK |
+| `control/dialogs.rs` | `ui.dialog.inspect`, `set`, `confirm`, `cancel`, `click {id}`, `key {key, shift?}`, `text {text}`. `ui.click {id}`, `ui.key` and `ui.text` hand dialog input to `click`, `key` and `text` |
+
+In the window the dialog has the keys of craft's `FormDialog`: Enter is OK unless the focused
+control takes it, Escape is Cancel, Tab commits a field and moves on. `ui.dialog.key` keeps the
+field rules of the earlier UI: `Return` in a field that has the keyboard takes the typed value and
+leaves the dialog open.
+
+A dialog that is not a form over parameters (a picker, a table, a question with its own layout)
+stays a `dialogs::MODULES` module with its own `StackDialog`.
 
 ## Forbidden in UI code
 
