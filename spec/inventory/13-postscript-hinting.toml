@@ -773,9 +773,30 @@ guesses = [
   "The autohinter is a port of otfautohint with its defaults; which autohinter the reference app runs is not documented, and a reference export compared with otfautohint's output on the same font would show whether they agree.",
   "The masters of one glyph are hinted together so their stems match, and one by one when their outlines are not compatible; a reference export of a two-master font would show whether its instances' hints come from one master.",
 ]
-notes = "Runs on the open source and stores the stems on the master layers, one undo step; layers that already have PostScript hints are skipped unless hintAll. M10.36 adds fontinfo (override sets), overlap, overlapGlyphs and looseOverlapMapping, allowChanges, keepConflicts and decimal; see their behavior rows. Not yet offered: compiled CFF/CFF2 input and reportOnly (the report commands cover it). Zones or stems the autohinter cannot use leave it running without them, with a warning, where otfautohint refuses unless allowNoZonesOrStems."
+notes = "Runs on the open source and stores the stems on the master layers, one undo step; layers that already have PostScript hints are skipped unless hintAll. M10.36 adds fontinfo (override sets), overlap, overlapGlyphs and looseOverlapMapping, allowChanges, keepConflicts and decimal; see their behavior rows. Compiled CFF input is autohint.ps.runFont's (M10.37); a CFF2 variable font is not offered yet, nor reportOnly (the report commands cover it). Zones or stems the autohinter cannot use leave it running without them, with a warning, where otfautohint refuses unless allowNoZonesOrStems."
 observe = [
   "T1: export as CFF with Autohint on; export it again unhinted and run otfautohint on that file; compare the hstem and vstem lists and the hint masks glyph by glyph and note every glyph where they differ.",
+]
+
+[[command]]
+id = "autohint.ps.runFont"
+label = "Autohint PostScript Font File"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{font: path, face?: number|name, glyphs?: [names], excludeGlyphs?: [names], hintAll?: bool, flex?: bool, hintSubstitution?: bool, maxSegments?: number, allowChanges?: bool, decimal?: bool, fontinfo?: text, dryRun?: bool, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Runs the PostScript autohinter on the charstrings of a compiled OpenType CFF font, otfautohint's main use: each glyph is hinted on the outline its charstring draws, against the zones and stems of its own Private DICT, and the font is written again with the hinted charstrings and every other table unchanged."
+ref = "AFDKO otfautohint --help; otfautohint otfFont.py (reading and writing a compiled font)"
+status = "inferred"
+notes = "M10.37. The charstrings are expanded, read as outlines and hinted as the CFF export hints them (fontcraft_compile::cff_hints::autohinted, with the Private DICT read as otfautohint reads a compiled font's); each new charstring keeps the width operand and every coordinate and segment, and is read back to check that it draws what the old one drew. The table is then subroutinised again, and every glyph's expanded charstring is compared with the one written. Name-keyed and CID-keyed fonts; each glyph uses its Font DICT's Private DICT. As in otfautohint, every glyph is hinted again by default and its old hints replaced (hintAll false leaves glyphs that have hints). Glyphs drawn with seac are skipped, as otfautohint skips them; tables.recompileCff decomposes them first. Override sets from fontinfo text are read against each Private DICT's set with the FontBBox as the font's vertical extent, as otfautohint takes it from a compiled font. Not offered yet: a CFF2 variable font (the masters of each region would have to be hinted together and the stems blended), and hinting on the overlap-free outline (overlap all, overlapGlyphs), which is refused."
+guesses = [
+  "The hinted CFF table is subroutinised again by FontCraft's subroutiniser, where otfautohint writes the new charstrings without subroutine calls and keeps the old subroutines; the file sizes of both outputs on one font would show whether this matters.",
+  "The outline is written back with its coordinates as they were, fractions included, and only the stems are rounded unless decimal, where otfautohint without --decimal writes the whole charstring with rounded coordinates; a font with fractional coordinates hinted by both would show the difference.",
+]
+observe = [
+  "otfautohint: hint an unhinted OTF built by fontmake, hint the same file with fontcraft-cli autohint, and compare the hstem, vstem and hintmask lists of every glyph.",
 ]
 
 [[command]]
@@ -863,6 +884,8 @@ milestone = "M10"
 summary = "Without -o the input font is modified in place; with -o the hinted result goes to new files and the number of output paths must equal the number of inputs. --report-only runs the whole analysis and logs findings without changing anything, and cannot be combined with --allow-changes."
 ref = "AFDKO otfautohint --help"
 status = "docs"
+notes = "FontCraft's CLI never writes over an input by default (cli.global rule): sources and compiled CFF fonts alike go to INPUT.autohinted.EXT unless -o, --output-dir or --in-place. --report-only hints without writing; on a compiled CFF font it runs autohint.ps.runFont with dryRun (M10.37)."
+guesses = ["autohint on a compiled font writes INPUT.autohinted.otf, as for source input, where otfautohint writes over the input; --in-place gives otfautohint's behaviour."]
 
 [[behavior]]
 id = "autohint.ps.referenceFont"
@@ -880,6 +903,7 @@ milestone = "M10"
 summary = "For UFO input the hinter normally skips glyphs it has hinted before whose default-layer outline has not changed since; -a (--all) hints every glyph regardless. FontCraft's equivalent is a per-layer record of the outline state the stored autohints were computed from."
 ref = "AFDKO otfautohint --help"
 status = "docs"
+notes = "For a compiled CFF font otfautohint hints every glyph again and replaces its hints, whatever -a says; the CLI does the same through autohint.ps.runFont, whose hintAll defaults to true (M10.37). On sources, layers that already have PostScript hints are skipped unless --all."
 
 [[behavior]]
 id = "autohint.ps.writeToDefaultLayer"

@@ -263,6 +263,21 @@ pub fn build(font: &Font) -> Result<Built, Error> {
     build_with(font, BuildOptions::default())
 }
 
+/// One glyph's Type 2 charstring, for tools that replace charstrings in an existing table:
+/// `path` with `hints` (checked by [`CharstringHints::validate`]) and, when given, the width
+/// operand, already relative to `nominalWidthX`. Coordinates and stems are written as given,
+/// without rounding, and every segment is kept while the operators are specialised, so the
+/// charstring draws exactly `path`.
+pub fn encode_charstring(glyph: &str, path: &[PathOp], hints: Option<&CharstringHints>, width: Option<f64>) -> Result<Vec<u8>, Error> {
+    if path.len() > MAX_SEGMENTS {
+        return Err(Error::TooManySegments { glyph: glyph.to_string(), count: path.len() });
+    }
+    if let Some(h) = hints {
+        h.validate(glyph, path)?;
+    }
+    charstring::build(glyph, path, hints, width, 0.0, true, true).map(|b| b.bytes)
+}
+
 /// [`build`] with `options`.
 pub fn build_with(font: &Font, options: BuildOptions) -> Result<Built, Error> {
     validate(font)?;
