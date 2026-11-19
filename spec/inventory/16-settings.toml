@@ -564,7 +564,7 @@ milestone = "M14"
 summary = "When on, glyphs keep the names found in an opened file; when off, names are converted to the app's default naming scheme on import. Intended for round trips with other tools."
 ref = "Settings › User Settings"
 status = "handbook"
-notes = "FontCraft (M14.1): a live setting (settings.set, default off) with its checkbox in Settings › User Settings. Opening a file does not rename glyphs yet, so the setting has no effect until renaming on import is built (M1.9)."
+notes = "FontCraft (M14.1): a live setting (settings.set, default off) with its checkbox in Settings › User Settings. Documented, not yet observed. With it on, file.open keeps the glyph names of a UFO, designspace or compiled font instead of renaming them to nice names (M1.9, open.appliesNamingScheme); the keepGlyphNames parameter of file.open overrides it for one file."
 
 [[setting]]
 id = "user.disableAutomaticAlignmentForImportedFiles"

@@ -2857,6 +2857,7 @@ milestone = "M1"
 summary = "When an OpenType font or UFO is opened, glyph names are either kept or converted to database names according to the user setting Keep Glyph Names from Imported Files."
 ref = "Font Info › Other Settings › Use Custom Naming"
 status = "handbook"
+notes = "Documented, not yet observed. Built in M1.9 with open.appliesNamingScheme: file.open renames a UFO's, designspace's or compiled font's glyphs to nice names unless keepGlyphNames, the user setting or the font's own Use Custom Naming option says to keep them."
 
 [[behavior]]
 id = "fontInfo.disableAutomaticAlignment"

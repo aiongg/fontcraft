@@ -93,11 +93,12 @@ fn write_ufo(dir: &Path) -> PathBuf {
 }
 
 /// Opens the UFO in `dir`, runs `font.compile` into `out.otf` with `extra`, and returns the bytes
-/// and the result.
+/// and the result. The UFO keeps its glyph names on opening, since the GOADB names them as the
+/// file does.
 fn build(dir: &Path, extra: Value) -> (Vec<u8>, Value) {
     let ufo = write_ufo(dir);
     let mut s = Session::new();
-    s.execute("file.open", &json!({ "path": ufo })).unwrap();
+    s.execute("file.open", &json!({ "path": ufo, "keepGlyphNames": true })).unwrap();
     let out = dir.join("out.otf");
     let mut params = json!({"formats": ["otf"], "destination": out, "timestamp": 0});
     for (k, v) in extra.as_object().unwrap() {
@@ -229,7 +230,7 @@ fn a_refused_project_compile_writes_nothing() {
     let dir = temp("refused");
     let ufo = write_ufo(&dir);
     let mut s = Session::new();
-    s.execute("file.open", &json!({ "path": ufo })).unwrap();
+    s.execute("file.open", &json!({ "path": ufo, "keepGlyphNames": true })).unwrap();
     let out = dir.join("out.otf");
     let bad_db = dir.join("FontMenuNameDB");
     std::fs::write(&bad_db, "f=No entry line\n").unwrap();
@@ -248,7 +249,7 @@ fn a_refused_project_compile_writes_nothing() {
 fn planned_order(dir: &Path, extra: Value) -> Vec<String> {
     let ufo = write_ufo(dir);
     let mut s = Session::new();
-    s.execute("file.open", &json!({ "path": ufo })).unwrap();
+    s.execute("file.open", &json!({ "path": ufo, "keepGlyphNames": true })).unwrap();
     let mut params = json!({"formats": ["otf"], "sections": ["glyphOrder", "productionNames"]});
     for (k, v) in extra.as_object().unwrap() {
         params[k] = v.clone();
@@ -284,7 +285,7 @@ fn a_confined_project_compile_reads_no_derived_path_outside_the_read_root() {
     let hidden = outside.join("FontMenuNameDB");
     std::fs::write(&hidden, "hidden words\n").unwrap();
     let mut s = Session::new();
-    s.execute("file.open", &json!({ "path": ufo })).unwrap();
+    s.execute("file.open", &json!({ "path": ufo, "keepGlyphNames": true })).unwrap();
     let roots = AutomationRoots::new(Some(&inside), Some(&inside)).unwrap().unwrap();
     let out = inside.join("out.otf");
     let fpr = inside.join("current.fpr");
@@ -437,7 +438,7 @@ fn build_metrics(name: &str, features: &str) -> Vec<u8> {
     let ufo = write_metrics_ufo(&dir, features);
     let mut s = Session::new();
     s.settings_mut().set("user.disableAutomaticAlignmentForImportedFiles", json!(true)).unwrap();
-    s.execute("file.open", &json!({ "path": ufo })).unwrap();
+    s.execute("file.open", &json!({ "path": ufo, "keepGlyphNames": true })).unwrap();
     let out = dir.join("out.otf");
     s.execute("font.compile", &json!({"formats": ["otf"], "destination": out, "timestamp": 0, "projectOptions": []})).unwrap();
     let bytes = std::fs::read(&out).unwrap();
@@ -525,7 +526,7 @@ fn a_project_compile_places_components_and_groups_lookups_as_the_reference_does(
     std::fs::write(glyphs.join("contents.plist"), contents).unwrap();
     let mut s = Session::new();
     s.settings_mut().set("user.disableAutomaticAlignmentForImportedFiles", json!(true)).unwrap();
-    s.execute("file.open", &json!({ "path": ufo })).unwrap();
+    s.execute("file.open", &json!({ "path": ufo, "keepGlyphNames": true })).unwrap();
     let out = dir.join("out.otf");
     s.execute("font.compile", &json!({"formats": ["otf"], "destination": out, "timestamp": 0, "projectOptions": []})).unwrap();
     let bytes = std::fs::read(&out).unwrap();
@@ -566,7 +567,7 @@ fn a_project_compile_places_nested_scaled_and_mirrored_components_in_single_prec
     std::fs::write(glyphs.join("contents.plist"), contents.replacen("</dict>", &format!("{entries}</dict>"), 1)).unwrap();
     let mut s = Session::new();
     s.settings_mut().set("user.disableAutomaticAlignmentForImportedFiles", json!(true)).unwrap();
-    s.execute("file.open", &json!({ "path": ufo })).unwrap();
+    s.execute("file.open", &json!({ "path": ufo, "keepGlyphNames": true })).unwrap();
     let out = dir.join("out.otf");
     s.execute("font.compile", &json!({"formats": ["otf"], "destination": out, "timestamp": 0, "projectOptions": []})).unwrap();
     let bytes = std::fs::read(&out).unwrap();
@@ -630,7 +631,7 @@ fn fs_selection_bits_and_the_os2_version_follow_the_reference() {
     let dir = temp("os2-refused");
     let ufo = write_ufo(&dir);
     let mut s = Session::new();
-    s.execute("file.open", &json!({ "path": ufo })).unwrap();
+    s.execute("file.open", &json!({ "path": ufo, "keepGlyphNames": true })).unwrap();
     for (params, says) in [
         (json!({"os2BitsOn": [8]}), "no value was given for bit 7, 9"),
         (json!({"os2BitsOff": [0]}), "bit 0 cannot be turned off"),
@@ -664,7 +665,7 @@ fn a_project_file_names_the_feature_file_sequences_licence_and_output() {
     )
     .unwrap();
     let mut s = Session::new();
-    s.execute("file.open", &json!({ "path": ufo })).unwrap();
+    s.execute("file.open", &json!({ "path": ufo, "keepGlyphNames": true })).unwrap();
     let result = s.execute("font.compile", &json!({"formats": ["otf"], "projectFile": fpr, "timestamp": 0})).unwrap();
     let warnings = result["warnings"].to_string();
     assert!(!warnings.contains("InputFontPath"), "the open source is the project's input: {warnings}");

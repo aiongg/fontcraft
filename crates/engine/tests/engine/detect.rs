@@ -522,7 +522,7 @@ fn composite_recovery_on_inter() {
     run(&mut s, "file.exportStatic", json!({"instances": ["Regular"], "outlines": "cff", "destination": otf, "timestamp": 0}));
     for tolerance in [0.5, 1.0] {
         let mut flat = Session::new();
-        run(&mut flat, "file.open", json!({"path": otf}));
+        run(&mut flat, "file.open", json!({"path": otf, "keepGlyphNames": true}));
         let t = std::time::Instant::now();
         let r = run(&mut flat, "font.detectComposites", json!({"tolerance": tolerance}));
         let took = t.elapsed();

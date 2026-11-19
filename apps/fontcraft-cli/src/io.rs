@@ -471,10 +471,12 @@ pub fn execute(session: &mut Session, id: &str, params: &Value) -> Result<Value,
     })
 }
 
-/// Opens `path` as the session's document.
+/// Opens `path` as the session's document. The command line keeps the glyph names the file
+/// gives, as the reference compilers do: what it writes names glyphs as its input did.
 pub fn open(session: &mut Session, path: &str) -> Result<Value, Failure> {
     detail(&format!("opening {path}"));
-    stage("file.open", || session.execute("file.open", &json!({"path": path}))).map_err(|e| Failure::Input(e.to_string()))
+    stage("file.open", || session.execute("file.open", &json!({"path": path, "keepGlyphNames": true})))
+        .map_err(|e| Failure::Input(e.to_string()))
 }
 
 /// The bytes of an input: a file, or stdin for `-`. At most [`MAX_INPUT`] bytes.

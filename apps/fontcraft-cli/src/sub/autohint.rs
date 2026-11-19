@@ -387,6 +387,8 @@ fn hint_one(
 pub(super) fn open(session: &mut Session, input: &str, face: Option<&str>) -> Result<Value, Failure> {
     let mut params = Map::new();
     params.insert("path".into(), json!(input));
+    // The hinted font keeps the glyph names the input gives (see `io::open`).
+    params.insert("keepGlyphNames".into(), json!(true));
     if let Some(face) = face {
         let n: u32 = face.parse().map_err(|_| usage(format!("--face takes a font number, not `{face}`")))?;
         params.insert("face".into(), json!(n));

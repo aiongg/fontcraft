@@ -84,6 +84,7 @@ milestone = "M1"
 summary = "Writes each chosen master as its own UFO 3 package into the destination folder. Options rename glyphs to production names and decide whether editor-only constructs are turned into plain paths or dropped. Headless form of the dialog's UFO tab. Smart components are drawn as outlines unless decomposeSmartStuff is false, as in the reference's export dialog; file.saveAs and CLI convert keep them as components unless asked."
 ref = "Import & Export › Exporting Font Files › Exporting UFO"
 status = "handbook"
+notes = "productionNames renames a copy of the font before writing it (export.ufoProductionNames, M1.9)."
 
 [[command]]
 id = "file.exportMetrics"
@@ -429,6 +430,14 @@ milestone = "M1"
 summary = "Convert Glyph Names to Production Names writes glyphs under their production names instead of the editor's readable names, for downstream tools that expect the simpler scheme. Off, the readable names are written unchanged."
 ref = "Import & Export › Exporting Font Files › Exporting UFO"
 status = "handbook"
+notes = "Documented, not yet observed. Built in M1.9: file.exportUfo with productionNames renames a copy of the font, so the document keeps its names. Each glyph but .notdef and .null takes its own production name, else the glyph data's; components, kerning, groups and the glyph order follow, and the renamed glyphs' own production names are dropped. A glyph whose production name is empty, breaks the naming rules or is taken by another glyph, or whose name feature code or other text uses, is written under its own name and listed in losses."
+guesses = [
+  "A glyph whose name feature code uses is written under its own name, because the feature code is written unchanged; exporting a UFO with features from the reference app with the option on would settle it.",
+  "The option renames glyphs even when the font's Use Custom Naming option or the Don't use Production Names parameter is on, since the user asked for it.",
+]
+observe = [
+  "Export a font with an ss01 feature that names A-cy to UFO with Convert Glyph Names to Production Names on, and read features.fea in the result.",
+]
 
 [[behavior]]
 id = "export.ufoDecomposeSmartStuff"
@@ -585,6 +594,7 @@ milestone = "M1"
 summary = "For a particular UFO, the two import behaviours (renaming glyphs to the built-in scheme, auto-aligning components) are controlled per file in Font Info › Other through Use Custom Naming and Disable Automatic Alignment, independently of the application-wide settings."
 ref = "Import & Export › Source Formats › Unified Font Object"
 status = "handbook"
+notes = "Documented, not yet observed. A UFO's lib key com.schriftgestaltung.useNiceNames set to 0 reads as Use Custom Naming on, and file.open then keeps its glyph names (M1.9); Disable Automatic Alignment keeps its components where the file puts them (M6.15)."
 
 [[behavior]]
 id = "interop.otherEditors"
@@ -679,6 +689,19 @@ milestone = "M1"
 summary = "On opening a font file, glyphs are renamed to the built-in naming scheme where possible. The setting Keep Glyph Names from Imported Files turns this off and keeps the file's names."
 ref = "Import & Export › Opening Font Files › Font File Importing Behaviors"
 status = "handbook"
+notes = "Documented, not yet observed. Built in M1.9 (`cmd/import_naming.rs`): file.open renames the glyphs of a UFO, a designspace or a compiled font (also SFD and bitmap fonts, which open as compiled fonts do) to the nice names the glyph data gives their names, after the glyph data files beside the source are read, and reports how many in `renamed`. Components, kerning, groups and the glyphOrder parameter follow; code points stay. The renamed font is the document as read: no undo step, not marked as edited. keepGlyphNames on file.open overrides user.keepGlyphNamesFromImportedFiles. The command line opens files with keepGlyphNames, so it writes the names its input gives. The web app adds documents from bytes without this step."
+guesses = [
+  "Only names the glyph data knows are renamed (production, alternative, legacy and code-point names, with their suffixes); names it does not know stay as they are. Opening a TTF with such names in the reference app would settle it.",
+  "A glyph whose name occurs in feature code, a custom parameter, a hint or a display string keeps it, with a warning, because those texts are not rewritten and the font would stop compiling. Opening a UFO whose features.fea names a uni-named glyph would settle it.",
+  "A nice name that is already a glyph's name, or that an earlier glyph takes, is not used, and the glyph keeps its name without a warning.",
+  "Renamed glyphs keep their places in the glyph order; they are not sorted by the default order.",
+  "The user setting Keep Glyph Names from Imported Files does not switch on the font's Use Custom Naming option, so names typed later still become nice names.",
+]
+observe = [
+  "Open a TTF whose glyphs are named uni0041, uni0410 and glyph00005, and note which names change.",
+  "Open a UFO whose features.fea substitutes a glyph named uni0411, and note whether that glyph is renamed and whether the feature code changes.",
+  "With Keep Glyph Names from Imported Files on, open a TTF, then note whether Font Info › Other shows Use Custom Naming checked.",
+]
 
 [[behavior]]
 id = "open.alignsCompositeMetrics"

@@ -56,6 +56,8 @@ mod hint_tt;
 mod hint_tt_defs;
 mod hint_tt_more;
 mod image;
+#[cfg(not(target_arch = "wasm32"))]
+mod import_naming;
 mod inspect;
 mod instance_masters;
 mod instances;
