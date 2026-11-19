@@ -3,7 +3,7 @@
 // Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
-use fontcraft_engine::io::{SaveFormat, save};
+use fontcraft_engine::io::{SaveFormat, save, save_losses};
 use fontcraft_io_ufo::Files;
 use fontcraft_testkit::temp_dir;
 
@@ -118,4 +118,19 @@ fn jpeg_and_tiff_images_are_saved_as_png_files_with_the_same_pixels() {
     let back = fontcraft_engine::io::open(&dir, None).unwrap().0;
     let path = back.glyph("a").unwrap().layers[0].info.image.as_ref().unwrap().path.clone();
     assert_eq!(path.as_deref(), Some("photo.png"));
+}
+
+/// The loss report worked out without saving counts JPEG and TIFF images as the PNG files the
+/// save makes, and names an image file no decoder reads.
+#[test]
+fn the_loss_report_counts_jpeg_and_tiff_images_as_png() {
+    let font = fontcraft_io_ufo::ufo::read(&ufo()).unwrap();
+    let losses = serde_json::to_string(&save_losses(&font, SaveFormat::Ufo)).unwrap();
+    assert!(!losses.contains("image files"), "{losses}");
+
+    let mut files = ufo();
+    files.insert("images/photo.jpg".into(), b"not an image".to_vec());
+    let font = fontcraft_io_ufo::ufo::read(&files).unwrap();
+    let losses = serde_json::to_string(&save_losses(&font, SaveFormat::Ufo)).unwrap();
+    assert!(losses.contains("image files"), "{losses}");
 }
