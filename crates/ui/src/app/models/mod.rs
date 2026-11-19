@@ -27,6 +27,7 @@ pub mod kerning_tools;
 pub mod kerning_window;
 pub mod layers;
 pub mod palette;
+pub mod preview;
 pub mod project;
 pub mod sidebar;
 pub mod space_center;
@@ -116,6 +117,9 @@ pub struct Models {
     /// The Features menu.
     pub features: Tracked<text::FeaturesModel>,
     pub project: project::ProjectModels,
+    /// The Preview Area's and the Preview Panel's lines (`panels::preview`).
+    pub preview_area: Tracked<preview::PreviewModel>,
+    pub preview_panel: Tracked<preview::PreviewModel>,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -185,6 +189,7 @@ impl Models {
         font_audit::project(&mut self.font_audit, cx);
         compatibility::project(&mut self.compatibility, cx);
         text::project_features(&mut self.features, &self.text, cx);
+        preview::project_both(&mut self.preview_area, &mut self.preview_panel, cx);
         true
     }
 }

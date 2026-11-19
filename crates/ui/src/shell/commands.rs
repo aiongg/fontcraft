@@ -75,6 +75,7 @@ pub const MODULES: &[Module] = &[
     crate::dialogs::find_glyphs::MODULE,
     super::extensions::MODULE,
     super::project::MODULE,
+    super::preview::MODULE,
 ];
 
 /// The module and description of the shell command `id`.

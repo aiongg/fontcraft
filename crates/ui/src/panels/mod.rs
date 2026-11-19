@@ -26,6 +26,7 @@ pub mod master_icons;
 pub mod master_switcher;
 pub mod measurements;
 pub mod pairs_phrases;
+pub mod preview;
 pub mod project;
 pub mod reference_font;
 pub mod related_glyphs;

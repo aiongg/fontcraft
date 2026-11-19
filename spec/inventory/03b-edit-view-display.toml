@@ -2620,7 +2620,7 @@ milestone = "M5"
 summary = "Splits the Edit View tab into the editing canvas above and a Preview Area below, or closes the split. It is the eye button at the bottom left of the window; dragging the separator changes the area's height."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
-notes = "Built in M5.11a as a shell command; the area sits between the canvas and the bottom bar and its top edge is the separator. Documented, not yet observed."
+notes = "Built in M5.11a as a shell command; the area sits between the canvas and the bottom bar and its top edge is the separator. In `crates/ui` (UI.15b) the edit view has one text, so `tab` is not taken there and the area is one open state; its height is set through `height` only, without a separator to drag. Documented, not yet observed."
 guesses = [
   "Each tab opens and closes its own Preview Area, while all tabs share one height; a second tab in the reference app settles it.",
   "The area is 140 points tall until its separator is dragged; the reference app's first height settles it.",
@@ -2677,7 +2677,7 @@ milestone = "M9"
 summary = "Detached version of the Preview Area. It shows the glyphs of the active Edit View tab of the current font and is empty while no Edit View tab is active; it refreshes as soon as one is clicked."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
-notes = "Built in M5.11a and M9.20: the panel has its own instance pop-up and keeps its own choice (`preview.setInstance` with `target: \"panel\"`). Documented, not yet observed."
+notes = "Built in M5.11a and M9.20: the panel has its own instance pop-up and keeps its own choice (`preview.setInstance` with `target: \"panel\"`). In `crates/ui` (UI.15b) it is a dock panel that previews the edit view's one text; it is blank while the edit view has no glyph to show. Documented, not yet observed."
 
 [[command]]
 id = "preview.setInstance"
@@ -2793,6 +2793,7 @@ ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
 notes = "Built in M5.11a; on by default, since the handbook says the current glyph is centred by default. Documented, not yet observed."
 guesses = [
+  "Besides the strip's context menu, Always Center Active Glyph is a toggle button in the controls row (the only place in `crates/ui`); the reference app's controls row settles whether it belongs there.",
   "Off, a line wider than the strip sits as near to centring the edited glyph as it can without leaving a gap at either edge; the reference app with a long text settles it.",
 ]
 

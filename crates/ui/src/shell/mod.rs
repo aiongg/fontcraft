@@ -27,6 +27,7 @@ pub mod masters;
 pub mod overlays;
 pub mod palette;
 pub mod params;
+pub mod preview;
 pub mod project;
 pub mod rail;
 pub mod reference_font;

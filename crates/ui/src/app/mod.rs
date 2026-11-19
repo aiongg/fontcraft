@@ -125,6 +125,8 @@ pub struct ViewState {
     pub extensions: crate::shell::extensions::ExtensionsView,
     /// The project the Project panel shows and its selected instances.
     pub project: crate::shell::project::ProjectWindowView,
+    /// The Preview Area's and the Preview Panel's settings (`shell::preview`).
+    pub preview: crate::shell::preview::PreviewState,
 }
 
 impl Default for ViewState {
@@ -164,6 +166,7 @@ impl Default for ViewState {
             components: Default::default(),
             extensions: Default::default(),
             project: Default::default(),
+            preview: Default::default(),
         }
     }
 }

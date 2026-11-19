@@ -5,8 +5,9 @@
 
 use craft::behavior::Axis;
 use craft::behavior::dock::{Column, DockEdge, Group, Layout, Node, PanelState, Permissions, SplitSize, Workspace};
-use craft::ui::contract::{Bind, BodyCx};
+use craft::ui::contract::{Bind, BodyCx, ShowContainer as _};
 use craft::ui::docking::{DockConfig, DockPanels, GroupAt, PanelSpec};
+use craft::ui::layout_components::Stack;
 use craft::ui::patterns::dock::DockArea;
 use craft::ui::runtime::env::{Env, Label};
 use egui::Ui;
@@ -274,6 +275,8 @@ struct Panels<'a> {
     canvas: canvas::CanvasProps<'a>,
     sent: &'a mut Vec<Msg>,
     words: std::sync::Arc<PanelWords>,
+    /// The Preview Area's height while it shows under the edit view.
+    preview_area: Option<f32>,
 }
 
 impl DockPanels<PanelId> for Panels<'_> {
@@ -365,6 +368,10 @@ impl DockPanels<PanelId> for Panels<'_> {
                 panels::smart_component::show(ui, panels::smart_component::Props { model: &self.models.palette.smart, sent: self.sent })
             }
             PanelId::Project => panels::project::show(ui, panels::project::Props { model: &self.models.project.model, sent: self.sent }),
+            PanelId::Preview => panels::preview::show(
+                ui,
+                panels::preview::Props { model: &self.models.preview_panel, target: crate::shell::preview::Target::Panel, sent: self.sent },
+            ),
             // Drawn by `group_view`.
             PanelId::Document => {}
             other => panels::stub::show(ui, panels::stub::Props { title: other.title(&self.words) }),
@@ -377,13 +384,33 @@ impl DockPanels<PanelId> for Panels<'_> {
         }
         match at {
             GroupAt::Show(rect) => {
-                canvas::show(ui, &mut self.canvas, self.sent);
+                match self.preview_area {
+                    // The Preview Area sits under the canvas, which takes the room it leaves.
+                    Some(height) => {
+                        let mut area_sent = Vec::new();
+                        let model = &self.models.preview_area;
+                        let (canvas, sent) = (&mut self.canvas, &mut *self.sent);
+                        let area = |ui: &mut Ui, _: &mut BodyCx<'_>| {
+                            let target = crate::shell::preview::Target::Area;
+                            panels::preview::show_area(ui, panels::preview::Props { model, target, sent: &mut area_sent }, height);
+                        };
+                        Stack::new().fill().footer(area).show(ui, |ui, _| canvas::show(ui, canvas, sent));
+                        self.sent.extend(area_sent);
+                    }
+                    None => canvas::show(ui, &mut self.canvas, self.sent),
+                }
                 Some(rect.height())
             }
             // The protected document group never sits in a flyout, which is what measures.
             GroupAt::Measure(_) => None,
         }
     }
+}
+
+/// The Preview Area's height while it is open.
+fn preview_area_height(view: &crate::app::ViewState) -> Option<f32> {
+    let tokens = panels::preview::PreviewTokens::standard();
+    view.preview.area_open.then(|| view.preview.area_height(tokens.area_height, tokens.area_min_height) as f32)
 }
 
 /// Shows the dock and applies what the user did to it.
@@ -393,6 +420,7 @@ pub fn show(ui: &mut Ui, app: &mut FontCraftApp) {
     let hinting = canvas::hinting::HintPaint { model: &models.hint_canvas, view: &view.hinting, tokens: &models.hint_tokens };
     let given = view.workspace.clone();
     let label = words.dock.clone();
+    let preview_area = preview_area_height(view);
     let display = canvas::text::display(view);
     let mut panels = Panels {
         models,
@@ -412,6 +440,7 @@ pub fn show(ui: &mut Ui, app: &mut FontCraftApp) {
         },
         sent,
         words,
+        preview_area,
     };
     let out = DockArea::new(label, Bind::given(given), &mut panels, DockConfig::default()).show(ui);
     let actions: Vec<_> = out.actions.into_iter().chain(out.requested).collect();
