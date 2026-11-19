@@ -38,6 +38,9 @@
 //! - Name ids of 256 and above that the code declares move to start at
 //!   [`CompileRequest::first_name_id`], everywhere they are referenced, so they cannot collide
 //!   with the source's own names.
+//! - With [`CompileRequest::debug_lookups`], [`Compiled::lookup_debug`] holds the place, name and
+//!   feature of each lookup, which [`LookupDebug::to_debg`] writes as fontTools feaLib's `Debg`
+//!   table (`debug.rs`).
 //!
 //! - A variable font: [`FeaVariations`] gives fea-rs the axes, masters and number values, and
 //!   resolves the code's variable values (`fontcraft_features::var_info`, M9.12);
@@ -47,6 +50,7 @@
 #![forbid(unsafe_code)]
 
 mod check;
+mod debug;
 mod diagnostic;
 mod files;
 mod generated;
@@ -61,6 +65,7 @@ mod run;
 mod split;
 mod variations;
 
+pub use debug::{DEBG_KEY, LookupDebug, LookupOrigin, SourcePlace};
 pub use diagnostic::{Diagnostic, Severity};
 pub use files::{IncludeCheck, VirtualFiles};
 pub use generated::{
@@ -96,6 +101,8 @@ pub struct CompileRequest<'a> {
     /// feature file specification groups rules; `false` lets a single substitution join a
     /// neighbouring multiple or ligature substitution's lookup, as fea-rs and feaLib do.
     pub lookup_per_rule_type: bool,
+    /// Records where each lookup came from ([`Compiled::lookup_debug`]), for the `Debg` table.
+    pub debug_lookups: bool,
     pub limits: Limits,
 }
 
@@ -110,6 +117,7 @@ impl<'a> CompileRequest<'a> {
             first_name_id: 256,
             gpos: true,
             lookup_per_rule_type: false,
+            debug_lookups: false,
             limits: Limits::default(),
         }
     }

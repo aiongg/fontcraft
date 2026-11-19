@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::{Diagnostic, GlyphClass, GlyphId16, Tag};
+use crate::{Diagnostic, GlyphClass, GlyphId16, LookupDebug, Tag};
 
 /// Which layout table a feature is in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -82,6 +82,8 @@ pub struct Compiled {
     pub features: Vec<FeatureSummary>,
     /// `GDEF` came from the code's `table GDEF` block rather than the generated classes.
     pub gdef_from_code: bool,
+    /// Where each lookup came from, when [`crate::CompileRequest::debug_lookups`] asks for it.
+    pub lookup_debug: Option<LookupDebug>,
     /// Warnings that did not stop the compile.
     pub warnings: Vec<Diagnostic>,
 }

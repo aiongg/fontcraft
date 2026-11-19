@@ -33,7 +33,7 @@ fn normalize_specs() -> Vec<CommandSpec> {
     ).files(const { &[FileParam::read("font"), FileParam::write("output")] }).writes_files()]
 }
 
-/// Most characters of a PostScript name given as `face`.
+/// Most characters of a face name given as `face`.
 const MAX_FACE_NAME: usize = 256;
 
 fn normalize(_: &mut Session, p: &Value) -> Result<Value> {
@@ -69,7 +69,7 @@ fn normalize(_: &mut Session, p: &Value) -> Result<Value> {
     let face = match p.get("face") {
         None => 0,
         Some(Value::String(name)) => face_by_name(&p, &input.bytes, name)?,
-        Some(v) => v.as_u64().and_then(|f| u32::try_from(f).ok()).ok_or_else(|| p.bad("`face` must be a face number or a PostScript name"))?,
+        Some(v) => v.as_u64().and_then(|f| u32::try_from(f).ok()).ok_or_else(|| p.bad("`face` must be a face number or a face name"))?,
     };
     let font = fontcraft_tables::read(&input.bytes, face)?;
     let options = fontcraft_tables::normalize::NormalizeOptions { tables, location };
@@ -84,7 +84,8 @@ fn normalize(_: &mut Session, p: &Value) -> Result<Value> {
     }
 }
 
-/// The face of a collection whose PostScript name (name ID 6) is `name`.
+/// The face of a collection whose full name (name ID 4) or PostScript name (name ID 6) is
+/// `name`; a number given as text is the face number.
 fn face_by_name(p: &Params<'_>, bytes: &[u8], name: &str) -> Result<u32> {
     if let Ok(index) = name.parse::<u32>() {
         return Ok(index);
@@ -99,12 +100,13 @@ fn face_by_name(p: &Params<'_>, bytes: &[u8], name: &str) -> Result<u32> {
         let Some(table) = font.get(*b"name") else { continue };
         let Ok(names) = skrifa::raw::tables::name::Name::read(FontData::new(table)) else { continue };
         let data = names.string_data();
-        let found = names.name_record().iter().any(|r| r.name_id().to_u16() == 6 && r.string(data).is_ok_and(|s| s.chars().eq(name.chars())));
+        let found =
+            names.name_record().iter().any(|r| matches!(r.name_id().to_u16(), 4 | 6) && r.string(data).is_ok_and(|s| s.chars().eq(name.chars())));
         if found {
             return Ok(face);
         }
     }
-    Err(p.bad(format!("no face of the file has the PostScript name \"{name}\"")))
+    Err(p.bad(format!("no face of the file has the full or PostScript name \"{name}\"")))
 }
 
 /// `layout.listFeatures` (M12.12).
@@ -114,7 +116,7 @@ fn list_specs() -> Vec<CommandSpec> {
         "List Layout Features",
         [],
         None,
-        "{font: path, face?: number, table?: \"GSUB\"|\"GPOS\", lookups?: bool, by?: \"feature\"|\"script\"} the scripts, language systems and features of a compiled font's GSUB and GPOS; with lookups, the lookups each feature names per language system with their type (an extension lookup's type read through) → by feature (default): {features: [{table, feature, systems: [{script, language, lookups?: [{index, type, extension}]}]}]}; by script: {systems: [{table, script, language, features: [{feature, lookups?}]}]}",
+        "{font: path, face?: number|name (a face of a collection by number, full name or PostScript name), table?: \"GSUB\"|\"GPOS\", lookups?: bool, by?: \"feature\"|\"script\"} the scripts, language systems and features of a compiled font's GSUB and GPOS; with lookups, the lookups each feature names per language system with their type (an extension lookup's type read through) → by feature (default): {features: [{table, feature, systems: [{script, language, lookups?: [{index, type, extension}]}]}]}; by script: {systems: [{table, script, language, features: [{feature, lookups?}]}]}",
         super::always,
         m12_12::list_features
     ).files(const { &[FileParam::read("font")] })]
@@ -127,7 +129,7 @@ fn decompile_specs() -> Vec<CommandSpec> {
         "Decompile Layout to Feature Code",
         [],
         None,
-        "{font: path, face?: number, tables?: [\"GSUB\"|\"GPOS\"|\"GDEF\"|\"BASE\"] (default all the font has), features?: [tag] (only these features and the lookups they reach), showExtensions?: bool, names?: \"final\"|\"source\" (source: development names from goadb), goadb?: path, classes?: \"auto\"|\"inline\" (auto names glyph sets used more than once), output?: path, outputDir?: path, noClobber?: bool} the font's layout tables as feature code; without output or outputDir the text is returned; constructs without feature syntax are written as comments and listed → {text?, output?, unsupported: [string]}",
+        "{font: path, face?: number|name, tables?: [\"GSUB\"|\"GPOS\"|\"GDEF\"|\"BASE\"] (default all the font has), features?: [tag] (only these features and the lookups they reach), showExtensions?: bool, names?: \"final\"|\"source\" (source: development names from goadb), goadb?: path, classes?: \"auto\"|\"inline\" (auto names glyph sets used more than once), output?: path, outputDir?: path, noClobber?: bool} the font's layout tables as feature code; without output or outputDir the text is returned; constructs without feature syntax are written as comments and listed → {text?, output?, unsupported: [string]}",
         super::always,
         m12_12::decompile_features
     ).files(const { &[FileParam::read("font"), FileParam::read("goadb"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files()]
@@ -151,14 +153,18 @@ mod m12_12 {
         tag_str(t).trim_end().to_string()
     }
 
-    /// The font at `font`, face `face` (0 by default).
+    /// The font at `font`, face `face`: a number (0 by default) or a face's full or PostScript
+    /// name.
     fn open(p: &Params) -> Result<(String, SfntFont)> {
         let path = p.str("font")?;
-        let face = p.opt_int("face", 0, i64::from(u32::MAX))?.and_then(|f| u32::try_from(f).ok()).unwrap_or(0);
         let input = read_input(Path::new(path))?;
         if !input.kind.is_font() {
             return Err(p.bad(format!("{path} is not a compiled font (it holds {})", input.kind.name())));
         }
+        let face = match p.get("face") {
+            Some(Value::String(name)) => super::face_by_name(p, &input.bytes, name)?,
+            _ => p.opt_int("face", 0, i64::from(u32::MAX))?.and_then(|f| u32::try_from(f).ok()).unwrap_or(0),
+        };
         let font = fontcraft_tables::read(&input.bytes, face)?;
         Ok((path.to_string(), font))
     }
@@ -305,7 +311,7 @@ fn compile_specs() -> Vec<CommandSpec> {
         "Compile Features into Font",
         [],
         None,
-        "{source: path | [path] (feature code; FontDame text, one file per table; a VOLT project, or a font holding one in its TSIV table), font: path, face?: number|name, syntax?: \"fea\"|\"mti\"|\"volt\" (default: told from the first line), tables?: [\"BASE\"|\"GDEF\"|\"GPOS\"|\"GSUB\"|\"OS/2\"|\"head\"|\"hhea\"|\"name\"|\"vhea\"|\"STAT\"] (default all: a layout table the code leaves empty is removed), includeDir?: path (default: the source's folder), goadb?: path (the code names glyphs by the source names this file maps to the font's), emitFea?: path (FontDame or VOLT input: also write the feature code it became), ship?: bool (remove the VOLT tables TSIV, TSIS, TSIP, TSID), to?: \"font\"|\"ttx\" (ttx: the built tables as TTX text), debugLookups?: bool (not built yet), output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} compiles the code against the font's glyph names and writes the font with the tables it builds, leaving the others as they are; a table block changes only the fields it sets; without output the file is the font's name with .features; code with errors writes nothing and fails with the errors and their places → {output, syntax, tables: [tag] (written), removed: [tag], features: [{tag, table: \"GSUB\"|\"GPOS\", languageSystems: [[script, language]], lookups: n}], diagnostics: [{severity, message, file, line, column}] (the compiler's warnings), warnings: [string], emitFea?: path}",
+        "{source: path | [path] (feature code; FontDame text, one file per table; a VOLT project, or a font holding one in its TSIV table), font: path, face?: number|name, syntax?: \"fea\"|\"mti\"|\"volt\" (default: told from the first line), tables?: [\"BASE\"|\"GDEF\"|\"GPOS\"|\"GSUB\"|\"OS/2\"|\"head\"|\"hhea\"|\"name\"|\"vhea\"|\"STAT\"] (default all: a layout table the code leaves empty is removed), includeDir?: path (default: the source's folder), goadb?: path (the code names glyphs by the source names this file maps to the font's), emitFea?: path (FontDame or VOLT input: also write the feature code it became), ship?: bool (remove the VOLT tables TSIV, TSIS, TSIP, TSID), to?: \"font\"|\"ttx\" (ttx: the built tables as TTX text), debugLookups?: bool (also write a Debg table: for each lookup the file, line and column of its first rule, its name and a script, language and feature that use it, as JSON in the reference compiler's form; a table not built records no lookups), output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} compiles the code against the font's glyph names and writes the font with the tables it builds, leaving the others as they are; a table block changes only the fields it sets; without output the file is the font's name with .features; code with errors writes nothing and fails with the errors and their places → {output, syntax, tables: [tag] (written), removed: [tag], features: [{tag, table: \"GSUB\"|\"GPOS\", languageSystems: [[script, language]], lookups: n}], diagnostics: [{severity, message, file, line, column}] (the compiler's warnings), warnings: [string], emitFea?: path}",
         super::always,
         m12_14::compile_features
     )

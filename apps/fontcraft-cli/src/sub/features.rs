@@ -23,7 +23,7 @@ pub const SUBCOMMAND: Subcommand = Subcommand {
 
 const USAGE: &str = "\
   fontcraft-cli features list|compile|decompile|lint|convert|normalize INPUT [args]
-  fontcraft-cli features list FONT [--table GSUB|GPOS] [--lookups] [--json]
+  fontcraft-cli features list FONT [--table GSUB|GPOS] [--lookups] [--face N|NAME] [--json]
   fontcraft-cli features compile FEATURES... --font FONT [-o OUT] [--tables TAG,...] [--debug-lookups] [--include-dir DIR] [--syntax fea|mti|volt] [--goadb FILE] [--emit-fea FILE] [--ship] [--to font|ttx]
   fontcraft-cli features decompile FONT [--table GSUB|GPOS|GDEF|BASE,...] [--features TAG,...] [--show-extensions] [-o OUT.fea]
   fontcraft-cli features lint FEATURES [--font FONT | --glyph-order FILE] [--include-dir DIR] [--warnings default|all] [--json]
@@ -43,7 +43,7 @@ const NORMALIZE_OPTIONS: &[OptSpec] = &[
         "",
         "resolve variable values at this location (user coordinates) instead of printing each master's value",
     ),
-    OptSpec::value("face", "N|NAME", "", "the face of a collection, by number or PostScript name"),
+    OptSpec::value("face", "N|NAME", "", "the face of a collection, by number, full name or PostScript name"),
     OptSpec::value("output", "FILE", "", "write the text to FILE instead of stdout").short('o'),
     OptSpec::switch("no-clobber", false, "refuse to replace an existing output file"),
 ];
@@ -53,7 +53,7 @@ const LIST_OPTIONS: &[OptSpec] = &[
     OptSpec::value("table", "GSUB|GPOS", "", "only this table"),
     OptSpec::switch("lookups", false, "add the lookups behind each feature with their types"),
     OptSpec::value("by", "feature|script", "feature", "group by feature tag or by script and language"),
-    OptSpec::value("face", "N", "", "the face of a collection, by number"),
+    OptSpec::value("face", "N|NAME", "", "the face of a collection, by number, full name or PostScript name"),
     OptSpec::switch("json", false, "print the engine command's result as JSON"),
 ];
 
@@ -65,7 +65,7 @@ const DECOMPILE_OPTIONS: &[OptSpec] = &[
     OptSpec::value("names", "final|source", "final", "source: write development names mapped back through --goadb"),
     OptSpec::value("goadb", "FILE", "", "the glyph name file for --names source"),
     OptSpec::value("classes", "auto|inline", "auto", "name glyph sets used more than once, or write them inline"),
-    OptSpec::value("face", "N", "", "the face of a collection, by number"),
+    OptSpec::value("face", "N|NAME", "", "the face of a collection, by number, full name or PostScript name"),
     OptSpec::value("output", "FILE", "", "write the feature code to FILE instead of stdout").short('o'),
     OptSpec::switch("no-clobber", false, "refuse to replace an existing output file"),
 ];
@@ -126,7 +126,7 @@ fn list(args: &[String]) -> Outcome {
     if let Some(by) = parsed.value("by") {
         params.insert("by".into(), json!(by));
     }
-    face_param(&mut params, parsed.value("face"))?;
+    face_value(&mut params, parsed.value("face"));
     let result = execute("layout.listFeatures", params)?;
     if parsed.switch("json") {
         return io::out_json(&result);
@@ -168,14 +168,14 @@ const COMPILE_OPTIONS: &[OptSpec] = &[
     OptSpec::switch("in-place", false, "replace the font"),
     OptSpec::switch("no-clobber", false, "refuse to replace an existing output file"),
     OptSpec::list("tables", "TAG", "", "build only these of BASE, GDEF, GPOS, GSUB, OS/2, head, hhea, name, vhea, STAT"),
-    OptSpec::switch("debug-lookups", false, "add a table recording where each lookup is defined (not built yet)"),
+    OptSpec::switch("debug-lookups", false, "add a Debg table recording where each lookup is defined, its name and a feature that uses it"),
     OptSpec::value("include-dir", "DIR", "", "the folder include() paths are read from (default: the source's folder)"),
     OptSpec::value("syntax", "fea|mti|volt", "", "the source's syntax (default: told from its first line)"),
     OptSpec::value("goadb", "FILE", "", "the source names glyphs by the development names this file maps"),
     OptSpec::value("emit-fea", "FILE", "", "for FontDame or VOLT input, also write the feature code it became"),
     OptSpec::switch("ship", false, "remove the VOLT source tables (TSIV, TSIS, TSIP, TSID)"),
     OptSpec::value("to", "font|ttx", "font", "write a font, or the built tables as TTX text"),
-    OptSpec::value("face", "N|NAME", "", "the face of a collection, by number or PostScript name"),
+    OptSpec::value("face", "N|NAME", "", "the face of a collection, by number, full name or PostScript name"),
     OptSpec::switch("json", false, "print the engine command's result as JSON"),
 ];
 
@@ -185,7 +185,7 @@ const LINT_OPTIONS: &[OptSpec] = &[
     OptSpec::value("glyph-order", "FILE", "", "check glyph names against this list (the first word of each line)"),
     OptSpec::value("include-dir", "DIR", "", "the folder include() paths are read from (default: the source's folder)"),
     OptSpec::value("warnings", "default|all", "default", "all: add notes on usually harmless conditions"),
-    OptSpec::value("face", "N|NAME", "", "the face of a collection, by number or PostScript name"),
+    OptSpec::value("face", "N|NAME", "", "the face of a collection, by number, full name or PostScript name"),
     OptSpec::switch("json", false, "print the engine command's result as JSON"),
 ];
 
@@ -308,7 +308,7 @@ fn decompile(args: &[String]) -> Outcome {
             params.insert(key.into(), json!(v));
         }
     }
-    face_param(&mut params, parsed.value("face"))?;
+    face_value(&mut params, parsed.value("face"));
     if let Some(output) = parsed.value("output") {
         params.insert("output".into(), json!(output));
         params.insert("noClobber".into(), json!(parsed.switch("no-clobber")));

@@ -6,7 +6,8 @@
 //! against the glyph names a compiler sees for the font, and puts the result into the font as
 //! feaLib's builder does (`fontcraft_tables::layout_install`): each requested layout table is
 //! replaced, or removed when the code leaves it empty; a table block changes only the fields it
-//! sets; `usMaxContext` is recomputed. Code with errors writes nothing.
+//! sets; `usMaxContext` is recomputed. Code with errors writes nothing. With `debugLookups` the
+//! font also gets feaLib's `Debg` table, from `fontcraft_fea::LookupDebug`.
 //!
 //! Lint runs the same compiler. With a glyph set it compiles in memory, so errors of the
 //! table-building stage are found too; without one it validates only and leaves out the
@@ -138,12 +139,12 @@ fn include_dir(p: &Params<'_>, source: &Path) -> Result<PathBuf> {
     })
 }
 
-/// The face a `face` parameter names: a number, or a PostScript name in a collection.
+/// The face a `face` parameter names: a number, or a full or PostScript name in a collection.
 fn face(p: &Params<'_>, bytes: &[u8]) -> Result<u32> {
     match p.get("face") {
         None => Ok(0),
         Some(Value::String(name)) => super::face_by_name(p, bytes, name),
-        Some(v) => v.as_u64().and_then(|f| u32::try_from(f).ok()).ok_or_else(|| p.bad("`face` must be a face number or a PostScript name")),
+        Some(v) => v.as_u64().and_then(|f| u32::try_from(f).ok()).ok_or_else(|| p.bad("`face` must be a face number or a face name")),
     }
 }
 
@@ -324,9 +325,7 @@ pub(super) fn compile_features(_: &mut Session, raw: &Value) -> Result<Value> {
         Some(other) => return Err(p.bad(format!("`syntax` must be \"fea\", \"mti\" or \"volt\", got \"{other}\""))),
     };
     let wanted = wanted_tables(&p)?;
-    if p.bool_or("debugLookups", false)? {
-        return Err(EngineError::Unsupported("the lookup debug table (`debugLookups`)".into()));
-    }
+    let debug_lookups = p.bool_or("debugLookups", false)?;
     let ship = p.bool_or("ship", false)?;
     let emit_fea = p.opt_str("emitFea")?.map(PathBuf::from);
     let req = OutputRequest::from_params(&p)?;
@@ -398,8 +397,8 @@ pub(super) fn compile_features(_: &mut Session, raw: &Value) -> Result<Value> {
     let files = virtual_files(&p, &root, &code, &include_dir)?;
     let order = GlyphOrder::new(names).map_err(|d| EngineError::Interaction(d.message))?;
     let first_name_id = layout_install::first_free_name_id(&font)?;
-    let request = CompileRequest { first_name_id, ..CompileRequest::new(&files, &order) };
-    let mut places = Places::new(&files, root_display, include_dir);
+    let request = CompileRequest { first_name_id, debug_lookups, ..CompileRequest::new(&files, &order) };
+    let mut places = Places::new(&files, root_display, include_dir.clone());
     let compiled = match fontcraft_fea::compile(&request) {
         Ok(compiled) => compiled,
         Err(diagnostics) => return Err(compile_failure(&mut places, &diagnostics)),
@@ -439,6 +438,25 @@ pub(super) fn compile_features(_: &mut Session, raw: &Value) -> Result<Value> {
     warnings.extend(report.warnings);
     if layout_install::update_max_context(&mut font)? && !written.contains(b"OS/2") {
         written.push(*b"OS/2");
+    }
+    if let (true, Some(debug)) = (debug_lookups, &compiled.lookup_debug) {
+        let mut debug = debug.clone();
+        // As feaLib: a table the compile does not build records no lookups.
+        if !wanted.contains(b"GSUB") {
+            debug.gsub.clear();
+        }
+        if !wanted.contains(b"GPOS") {
+            debug.gpos.clear();
+        }
+        // Files are named as feaLib names them: the source as given, an included file joined to
+        // the include folder; converted code is named by the file it is written to, if any.
+        let shown_root = match syntax {
+            Syntax::Fea => first.display().to_string(),
+            _ => emit_fea.as_ref().map_or_else(|| "<features>".to_string(), |f| f.display().to_string()),
+        };
+        let shown = |file: &str| if file == root { shown_root.clone() } else { include_dir.join(file).display().to_string() };
+        font.insert(*b"Debg", debug.to_debg(&shown));
+        written.push(*b"Debg");
     }
     if ship {
         for tag in VOLT_TABLES {

@@ -644,7 +644,7 @@ milestone = "M12"
 summary = "Private debugging table mapping compiled lookups back to feature source locations. fontc adds it as raw bytes from fea-rs when --emit-lookup-debug-info is given. Useful for our feature editor's 'where did this lookup come from' view; never in release builds."
 ref = "fontc fontc/src/args.rs, fontbe/src/font.rs"
 status = "docs"
-notes = "Not written and not passed through by font.compile: it describes the lookups of the build that made it, which a recompile replaces."
+notes = "Not written and not passed through by font.compile: it describes the lookups of the build that made it, which a recompile replaces. layout.compileFeatures writes it with debugLookups, as fontTools feaLib writes it (UTF-8 JSON; see the features compile row)."
 
 # ---------------------------------------------------------------------------------------------------
 # Behaviours: pipeline and preflight
