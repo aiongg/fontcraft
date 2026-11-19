@@ -19,8 +19,8 @@ pub mod kerning_window;
 pub mod layers;
 pub mod palette;
 pub mod sidebar;
-pub mod text;
 pub mod space_center;
+pub mod text;
 
 use craft::ui::contract::Tracked;
 use fontcraft_engine::Session;
