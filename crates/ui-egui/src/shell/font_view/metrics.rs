@@ -117,6 +117,8 @@ impl MetricField {
             Field::Width => "spacing.setWidth",
             Field::Top => "spacing.setTopSidebearing",
             Field::Bottom => "spacing.setBottomSidebearing",
+            Field::VertWidth => "spacing.setVerticalWidth",
+            Field::VertOrigin => "spacing.setVerticalOrigin",
         })
     }
 
