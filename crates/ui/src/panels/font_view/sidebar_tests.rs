@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use craft::ui::contract::Tracked;
 use craft::ui::runtime::commands::CommandRef;
-use craft::ui::testing::Fixture;
+use craft::ui::testing::{Fixture, Room};
 use egui::Modifiers;
 use serde_json::{Value, json};
 
@@ -54,7 +54,7 @@ fn open(model: SidebarModel) -> (Fixture, Rc<RefCell<Vec<Msg>>>) {
         show(ui, Props { model: &model, inspector: &inspector, sent: &mut sent });
         seen.borrow_mut().extend(sent);
     });
-    fixture.settle();
+    fixture.in_room(Room::Panel).settle();
     (fixture, posted)
 }
 
