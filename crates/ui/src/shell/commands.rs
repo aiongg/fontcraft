@@ -38,6 +38,7 @@ pub const MODULES: &[Module] = &[
     super::reference_font::MODULE,
     super::kerning_review::MODULE,
     super::glyph_info::MODULE,
+    crate::dialogs::tt::SHELL,
 ];
 
 /// The module and description of the shell command `id`.

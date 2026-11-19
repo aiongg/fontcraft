@@ -9,6 +9,7 @@ pub mod font_view;
 pub mod glyph;
 pub mod glyph_info;
 pub mod glyph_sections;
+pub mod hinting;
 pub mod kerning_review;
 
 use craft::ui::contract::Tracked;
@@ -45,6 +46,8 @@ pub struct Models {
     /// Glyph Info's search results (`panels::glyph_info`).
     pub glyph_info: Tracked<glyph_info::GlyphInfoModel>,
     glyph_info_search: glyph_info::SearchCache,
+    /// The Hinting Preview's rows (`panels::hinting_waterfall`).
+    pub hinting_waterfall: Tracked<hinting::Waterfall>,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -94,6 +97,7 @@ impl Models {
         glyph_sections::project_reference_font(&mut self.reference_font, cx);
         kerning_review::project(&mut self.pairs_phrases, cx);
         glyph_info::project(&mut self.glyph_info, &mut self.glyph_info_search, cx);
+        hinting::project(&mut self.hinting_waterfall, cx);
         true
     }
 }
