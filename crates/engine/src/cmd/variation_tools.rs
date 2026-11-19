@@ -268,8 +268,9 @@ fn set_master_locations(s: &mut Session, v: &Value) -> Result<Value> {
         }
     };
     let whole = named_masters.is_none() && named_instances.is_none();
-    let masters = named_masters.unwrap_or_else(|| (0..font.masters.len()).collect());
-    let instances = named_instances.unwrap_or_else(|| (0..font.instances.len()).collect());
+    // With either list given, the other names nothing.
+    let masters = named_masters.unwrap_or_else(|| if whole { (0..font.masters.len()).collect() } else { Vec::new() });
+    let instances = named_instances.unwrap_or_else(|| if whole { (0..font.instances.len()).collect() } else { Vec::new() });
     let (tag, axis_name) = font.axes.get(axis).map(|a| (a.tag.clone(), a.name.clone())).unwrap_or_default();
     let reverses = map.reverses();
 

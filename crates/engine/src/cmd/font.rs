@@ -38,7 +38,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "{font?: path, face?: number, layer?: master id (default: the first master), glyphs?: selector, excludeGlyphs?: selector, columns?: [\"gid\"|\"name\"|\"unicodes\"|\"advance\"|\"bbox\"|\"kind\"], names?: \"final\"|\"source\", goadb?: path} the glyphs of the active document, or of the font file at `font` without opening it, in glyph order. A selector is a string or list of strings of comma-separated items: names, glyph ids, U+XXXX code points, ranges A..B (or N-M between two ids) and *; excluded glyphs other than .notdef are left out. names \"source\" (the default when goadb is given) shows the source name the GOADB gives each final name. Without columns each glyph is {gid, name, unicodes: [hex], export, advance, shapes, bounds: [x0, y0, x1, y1] | null}; with columns it holds gid and the columns asked for (bbox as bounds; kind is empty, simple or composite) → {glyphs: [...]}",
             always,
             list_glyphs
-        ).files(const { &[FileParam::read("font")] }),
+        ).files(const { &[FileParam::read("font"), FileParam::read("goadb")] }),
     ]
 }
 

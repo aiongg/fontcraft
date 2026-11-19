@@ -1,5 +1,7 @@
 //! The positional Indic features end to end (M8.32): Update writes pres from the i-matra
 //! variants' anchors, and the compiled font shapes each conjunct with its variant.
+// Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
 use std::sync::Arc;
 
