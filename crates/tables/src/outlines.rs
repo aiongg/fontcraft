@@ -22,8 +22,9 @@
 //! composites (a cycle, nesting past 64 levels, a component past the glyph order) and fails, the
 //! `maxp` maxima come from the composites as drawn.
 //!
-//! CFF-flavoured fonts are refused for now, and so are variable TrueType fonts for every action
-//! but rounding: `gvar` would need its deltas rewritten.
+//! `CFF ` and static `CFF2` outlines are repaired in `outlines_cff.rs` (all actions but decomposing).
+//! Variable TrueType fonts are refused for every action but rounding: `gvar` would need its
+//! deltas rewritten.
 
 use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
@@ -73,7 +74,7 @@ pub enum OutlineAction {
 /// The winding [`OutlineAction::CorrectDirection`] gives.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Winding {
-    /// The convention of the font's outline format: TrueType for `glyf`.
+    /// The convention of the font's outline format: TrueType for `glyf`, PostScript for CFF.
     #[default]
     Auto,
     /// Outer contours counter-clockwise, counters clockwise.
@@ -92,8 +93,11 @@ pub struct OutlineOptions {
     pub glyphs: Vec<String>,
     /// Glyphs left alone even when `glyphs` names them.
     pub exclude_glyphs: Vec<String>,
-    /// Remove overlaps: keep the instructions of glyphs that do not change.
+    /// Remove overlaps: keep the instructions of glyphs that do not change (TrueType only: CFF
+    /// glyphs that do not change always keep their hints).
     pub keep_hinting: bool,
+    /// Remove overlaps on CFF outlines: keep the subroutines no charstring calls any more.
+    pub keep_unused_subroutines: bool,
     /// Leave a glyph that cannot be done as it was and report it, instead of failing.
     pub ignore_errors: bool,
     /// Remove overlaps: drop result contours whose bounding box is smaller (square units).
@@ -120,6 +124,7 @@ impl OutlineOptions {
             glyphs: Vec::new(),
             exclude_glyphs: Vec::new(),
             keep_hinting: false,
+            keep_unused_subroutines: false,
             ignore_errors: false,
             min_area: DEFAULT_MIN_AREA,
             winding: Winding::Auto,
@@ -167,10 +172,10 @@ pub fn repair(font: &SfntFont, options: &OutlineOptions) -> Result<OutlineResult
 pub fn repair_report(font: &SfntFont, options: &OutlineOptions) -> Result<OutlineReport> {
     check_options(options)?;
     if font.get(*b"glyf").is_none() {
-        if font.is_cff() {
-            return Err(TablesError::Unsupported("outline repairs on CFF outlines; TrueType (`glyf`) outlines only".into()));
+        if font.get(*b"CFF ").is_some() || font.get(*b"CFF2").is_some() {
+            return cff::repair_report(font, options);
         }
-        return Err(TablesError::MissingTable("glyf".into()));
+        return Err(TablesError::MissingTable("glyf, CFF or CFF2".into()));
     }
     if font.get(*b"gvar").is_some() && options.action != OutlineAction::Round {
         return Err(TablesError::Unsupported("changing the outlines of a variable font: instantiate it first".into()));
@@ -690,6 +695,19 @@ fn limited<T: Send + 'static>(f: impl FnOnce() -> std::result::Result<T, po::Pat
     po::run_with_time_limit(po::TIME_LIMIT, f).map_err(|e| e.to_string())?.map_err(|e| e.to_string())
 }
 
+/// The glyph ids `options` selects among `count` glyphs named `names`, in glyph order.
+fn selection(names: &[String], count: usize, options: &OutlineOptions) -> Result<Vec<usize>> {
+    let index: BTreeMap<&str, usize> = names.iter().enumerate().rev().map(|(i, n)| (n.as_str(), i)).collect();
+    let look =
+        |name: &String| index.get(name.as_str()).copied().ok_or_else(|| TablesError::BadOptions(format!("the font has no glyph named `{name}`")));
+    let mut chosen: BTreeSet<usize> =
+        if options.glyphs.is_empty() { (0..count).collect() } else { options.glyphs.iter().map(look).collect::<Result<_>>()? };
+    for name in &options.exclude_glyphs {
+        chosen.remove(&look(name)?);
+    }
+    Ok(chosen.into_iter().collect())
+}
+
 // ── The font being repaired ─────────────────────────────────────────────────────────────────────
 
 #[derive(Default)]
@@ -766,15 +784,7 @@ impl Work {
 
     /// The glyph ids `options` names, in glyph order.
     fn selection(&self, options: &OutlineOptions) -> Result<Vec<usize>> {
-        let index: BTreeMap<&str, usize> = self.names.iter().enumerate().rev().map(|(i, n)| (n.as_str(), i)).collect();
-        let look =
-            |name: &String| index.get(name.as_str()).copied().ok_or_else(|| TablesError::BadOptions(format!("the font has no glyph named `{name}`")));
-        let mut chosen: BTreeSet<usize> =
-            if options.glyphs.is_empty() { (0..self.glyphs.len()).collect() } else { options.glyphs.iter().map(look).collect::<Result<_>>()? };
-        for name in &options.exclude_glyphs {
-            chosen.remove(&look(name)?);
-        }
-        Ok(chosen.into_iter().collect())
+        selection(&self.names, self.glyphs.len(), options)
     }
 
     fn name(&self, gid: usize) -> String {
@@ -1487,6 +1497,9 @@ fn directed(outline: &[Vec<Pt>], truetype: bool) -> std::result::Result<Outline,
     out.extend(strays);
     Ok(out)
 }
+
+#[path = "outlines_cff.rs"]
+mod cff;
 
 #[path = "outlines_curves.rs"]
 pub(crate) mod curve_work;

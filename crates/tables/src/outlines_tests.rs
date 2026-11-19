@@ -211,7 +211,7 @@ fn refusals_and_damaged_glyphs() {
     let mut cff = input.clone();
     cff.remove(*b"glyf");
     cff.insert(*b"CFF ", vec![1, 0, 4, 1]);
-    assert!(matches!(repair(&cff, &OutlineOptions::new(OutlineAction::Round)), Err(TablesError::Unsupported(_))));
+    assert!(repair(&cff, &OutlineOptions::new(OutlineAction::Round)).is_err(), "a damaged CFF table fails");
     let mut variable = input.clone();
     variable.insert(*b"gvar", vec![0; 20]);
     assert!(matches!(repair(&variable, &OutlineOptions::new(OutlineAction::RemoveOverlaps)), Err(TablesError::Unsupported(_))));

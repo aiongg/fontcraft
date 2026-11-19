@@ -33,7 +33,7 @@ fn repair_specs() -> Vec<CommandSpec> {
             "Remove Overlaps (Whole Font)",
             [],
             None,
-            "{input: path, face?: int, glyphs?: [names], excludeGlyphs?: [names], keepHinting?: bool = false, ignoreErrors?: bool = false, keepUnusedSubroutines?: bool, minArea?: number = 25, keepContourOrder?: bool = true, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}. Merges overlapping contours of every selected glyph and writes the result; the input is never changed. A TrueType font: composites whose components overlap are decomposed first, a changed glyph loses its instructions, and without keepHinting every processed glyph does; other tables are copied. A source: path.removeOverlapForAllMasters on the glyphs → {input, output, kind, changed: [names], failed: [{glyph, reason}]}",
+            "{input: path, face?: int, glyphs?: [names], excludeGlyphs?: [names], keepHinting?: bool = false, ignoreErrors?: bool = false, keepUnusedSubroutines?: bool = false, minArea?: number = 25, keepContourOrder?: bool = true, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}. Merges overlapping contours of every selected glyph and writes the result; the input is never changed. A TrueType font: composites whose components overlap are decomposed first, a changed glyph loses its instructions, and without keepHinting every processed glyph does. A CFF or static CFF2 font: a changed glyph loses its hints, the others keep theirs, and subroutines no glyph calls any more are removed unless keepUnusedSubroutines. Other tables are copied. A source: path.removeOverlapForAllMasters on the glyphs → {input, output, kind, changed: [names], failed: [{glyph, reason}]}",
             always,
             remove_overlaps
         ).files(const { &[FileParam::read("input"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files(),
@@ -42,7 +42,7 @@ fn repair_specs() -> Vec<CommandSpec> {
             "Correct Contour Direction (Whole Font)",
             [],
             None,
-            "{input: path, face?: int, glyphs?: [names], excludeGlyphs?: [names], flavour?: \"postscript\" | \"truetype\" | \"reverse\" (default the input's convention: truetype for a TrueType font, postscript for a source), ignoreErrors?: bool, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}. path.correctPathDirection on every selected glyph, the TrueType convention reversing the result; reverse only reverses every contour → {input, output, kind, changed, failed}",
+            "{input: path, face?: int, glyphs?: [names], excludeGlyphs?: [names], flavour?: \"postscript\" | \"truetype\" | \"reverse\" (default the input's convention: truetype for a TrueType font, postscript for a CFF font or a source), ignoreErrors?: bool, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}. path.correctPathDirection on every selected glyph, the TrueType convention reversing the result; reverse only reverses every contour; in a CFF font a changed glyph loses its hints → {input, output, kind, changed, failed}",
             always,
             correct_direction
         ).files(const { &[FileParam::read("input"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files(),
@@ -51,7 +51,7 @@ fn repair_specs() -> Vec<CommandSpec> {
             "Add Extremes (Whole Font)",
             [],
             None,
-            "{input: path, face?: int, glyphs?: [names], excludeGlyphs?: [names], minSegment?: 3 | 0 (3, the editor's: skip an extreme closer than 3 units to a point; 0: add every extreme), ignoreErrors?: bool, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}. path.addExtremes (path.forceExtremes for 0) on every selected glyph → {input, output, kind, changed, failed, pointsAdded: {glyph: count}}",
+            "{input: path, face?: int, glyphs?: [names], excludeGlyphs?: [names], minSegment?: 3 | 0 (3, the editor's: skip an extreme closer than 3 units to a point; 0: add every extreme), ignoreErrors?: bool, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}. path.addExtremes (path.forceExtremes for 0) on every selected glyph; in a CFF font a changed glyph loses its hints → {input, output, kind, changed, failed, pointsAdded: {glyph: count}}",
             always,
             add_extremes
         ).files(const { &[FileParam::read("input"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files(),
@@ -60,7 +60,7 @@ fn repair_specs() -> Vec<CommandSpec> {
             "Round Coordinates (Whole Font)",
             [],
             None,
-            "{input: path, face?: int, glyphs?: [names], excludeGlyphs?: [names], grid?: units (default 1, at most 1000), tolerance?: units (compiled fonts only: round only values this close to the grid), ignoreErrors?: bool, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}. A compiled font: point coordinates, component offsets and advance widths to the grid. A source: path.roundCoordinatesForAllMasters with the grid → {input, output, kind, changed, failed, valuesChanged}",
+            "{input: path, face?: int, glyphs?: [names], excludeGlyphs?: [names], grid?: units (default 1, at most 1000), tolerance?: units (compiled fonts only: round only values this close to the grid), ignoreErrors?: bool, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}. A TrueType font: point coordinates, component offsets and advance widths to the grid. A CFF font: point coordinates; widths stay. A source: path.roundCoordinatesForAllMasters with the grid → {input, output, kind, changed, failed, valuesChanged}",
             always,
             round_coordinates
         ).files(const { &[FileParam::read("input"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files(),
@@ -106,7 +106,7 @@ fn remove_overlaps(_: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("outlines.removeOverlaps", v)?;
     let mut o = common_options(&p, OutlineAction::RemoveOverlaps)?;
     o.keep_hinting = p.bool_or("keepHinting", false)?;
-    p.bool_or("keepUnusedSubroutines", false)?;
+    o.keep_unused_subroutines = p.bool_or("keepUnusedSubroutines", false)?;
     p.bool_or("keepContourOrder", true)?;
     if let Some(area) = p.opt_f64("minArea")? {
         o.min_area = area;

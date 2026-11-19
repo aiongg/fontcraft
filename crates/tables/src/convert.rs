@@ -29,9 +29,9 @@
 //! AFDKO's otf2ttf (Apache-2.0, Copyright 2014 Adobe) and fontTools' `cffLib` converters (MIT)
 //! were read and their rules written anew here.
 
-mod cff_table;
-mod outline;
-mod overlaps;
+pub(crate) mod cff_table;
+pub(crate) mod outline;
+pub(crate) mod overlaps;
 mod postscript;
 mod prepare;
 #[cfg(test)]

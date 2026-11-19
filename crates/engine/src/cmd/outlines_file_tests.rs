@@ -64,6 +64,36 @@ fn outlines_remove_overlaps_on_a_source_and_a_binary() {
 }
 
 #[test]
+fn outlines_repairs_on_a_cff_font() {
+    let dir = scratch("cff");
+    let s = drawn();
+    let font = s.font().unwrap();
+    let options = fontcraft_compile::Options { remove_overlap: false, ..fontcraft_compile::Options::default() };
+    let otf = fontcraft_compile::compile(font, &font.default_target().unwrap(), fontcraft_compile::Flavour::Cff, &options).unwrap();
+    let binary = dir.join("in.otf");
+    std::fs::write(&binary, &otf.bytes).unwrap();
+
+    let mut session = Session::new();
+    let out = dir.join("out.otf");
+    let r = session.execute("outlines.removeOverlaps", &json!({"input": binary, "output": out, "keepUnusedSubroutines": true})).unwrap();
+    assert_eq!(r["kind"], json!("otf"));
+    assert_eq!(r["changed"], json!(["A"]));
+    let before = fontcraft_tables::read(&std::fs::read(&binary).unwrap(), 0).unwrap();
+    let after = fontcraft_tables::read(&std::fs::read(&out).unwrap(), 0).unwrap();
+    for tag in before.tags().into_iter().filter(|t| *t != *b"CFF ") {
+        assert_eq!(before.get(tag), after.get(tag), "{} is copied", fontcraft_tables::sfnt::tag_str(tag));
+    }
+    assert_ne!(before.get(*b"CFF "), after.get(*b"CFF "));
+
+    // The compiler writes the PostScript convention, which is the default for CFF.
+    let r = session.execute("outlines.correctDirection", &json!({"input": binary, "output": dir.join("direction.otf"), "glyphs": ["B"]})).unwrap();
+    assert_eq!(r["changed"], json!([]));
+    let r = session.execute("outlines.decompose", &json!({"input": binary, "output": dir.join("decomposed.otf")}));
+    assert!(r.is_err(), "CFF outlines have no components");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn outlines_direction_extremes_round_and_decompose() {
     let dir = scratch("others");
     let s = drawn();
