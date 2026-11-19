@@ -614,6 +614,9 @@ Prints a one-screen description of a font or source: format and flavour, names, 
 fontcraft-cli info INPUT... [--section NAME,...] [--json]
 ```
 
+The output is text, one block per input: the path, then each section with its fields indented
+under it. `--json` prints the engine result, a list of them for several inputs.
+
 `info` answers "what is this file" without the reader needing to know table names. It never fails on a
 font that merely has problems: unreadable tables are reported in place and the rest is still printed.
 
@@ -668,8 +671,13 @@ between members stay shared unless the edited member changes them.
 Lists the table directory: sfnt version, number of tables, and for each table its tag, checksum, offset and length, in file order. For a collection it lists every member and marks shared tables; for WOFF/WOFF2 it adds the compressed length.
 
 ```
-fontcraft-cli tables list FONT... [--json]
+fontcraft-cli tables list FONT... [--sort file|tag|size] [--face N|all] [--json]
 ```
+
+The text output gives, per font or collection member, a line with the path, format, sfnt version
+and table count, then the rows of `ttx -l` (tag, checksum, length, offset), with the compressed
+length for WOFF, the stored length of transformed WOFF2 tables and the shared tables of a
+collection after them. `--json` prints the engine result.
 
 Engine command: `tables.list`.
 
@@ -833,10 +841,10 @@ fontcraft-cli glyphs list|rename|reorder FONT [args]
 
 #### `glyphs list`
 
-Lists the glyphs in glyph order with index, name (or CID), code points and optionally advance, bounding box, font dict and component flag. The default is a compact multi-column listing of index and name.
+Lists the glyphs in glyph order with index, name, code points and optionally advance, bounding box and kind (empty, simple or composite). The default is spot's `-n` listing of index and name, `[GID]=<NAME>` items wrapped into lines; `--one-per-line` puts one item on each line (spot `-nc`); `--columns` prints one `glyph[GID] {FIELD,...}` row per glyph (tx `-dump -4`); `--json` prints the engine result.
 
 ```
-fontcraft-cli glyphs list FONT [--columns COLS] [--one-per-line] [--glyphs SELECTOR]
+fontcraft-cli glyphs list FONT [--one-per-line | --columns COLS] [--glyphs SELECTOR] [--exclude-glyphs SELECTOR] [--names source --goadb FILE] [--json]
 ```
 
 Engine command: `font.listGlyphs`.
@@ -846,7 +854,7 @@ Engine command: `font.listGlyphs`.
 | spot | `-n` | glyphs list |  |
 | spot | `-nc` | glyphs list --one-per-line |  |
 | spot | `-m` | --names source --goadb FILE |  |
-| tx | `-dump -4` | glyphs list --columns gid,name,unicodes,advance,bbox |  |
+| tx | `-dump -4` | glyphs list --columns gid,name,unicodes | rows `glyph[GID] {NAME,U+XXXX}` |
 
 #### `glyphs rename`
 

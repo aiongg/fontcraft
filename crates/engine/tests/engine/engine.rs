@@ -184,6 +184,29 @@ fn closing_a_modified_document_needs_discard() {
 }
 
 #[test]
+fn list_glyphs_selects_columns_and_source_names() {
+    let mut s = Fixture::Drawn.session();
+    let list = run(&mut s, "font.listGlyphs", json!({ "glyphs": "A,extra", "excludeGlyphs": ["extra"], "columns": ["name", "kind"] }));
+    let glyphs = list["glyphs"].as_array().unwrap();
+    assert_eq!(glyphs.len(), 1, "{list}");
+    let keys: Vec<&String> = glyphs[0].as_object().unwrap().keys().collect();
+    assert_eq!(keys.len(), 3, "gid and the columns asked for: {keys:?}");
+    assert_eq!((glyphs[0]["name"].as_str(), glyphs[0]["kind"].as_str()), (Some("A"), Some("simple")));
+    let by_code = run(&mut s, "font.listGlyphs", json!({ "glyphs": "U+E000", "columns": ["name"] }));
+    assert_eq!(by_code["glyphs"][0]["name"], "extra");
+    let dir = temp_dir("list-goadb");
+    let goadb = dir.join("GlyphOrderAndAliasDB");
+    std::fs::write(&goadb, "A a.source\n").unwrap();
+    let mapped = run(&mut s, "font.listGlyphs", json!({ "glyphs": "A..A", "columns": ["name"], "goadb": goadb }));
+    assert_eq!(mapped["glyphs"][0]["name"], "a.source", "a GOADB shows the source name");
+    assert!(matches!(s.execute("font.listGlyphs", &json!({ "columns": ["cid"] })), Err(EngineError::Unsupported(_))));
+    assert!(s.execute("font.listGlyphs", &json!({ "columns": ["width"] })).is_err());
+    assert!(s.execute("font.listGlyphs", &json!({ "glyphs": "nope" })).is_err());
+    assert!(s.execute("font.listGlyphs", &json!({ "names": "source" })).is_err(), "source names need a GOADB");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
 fn list_glyphs_and_info_report_the_font() {
     let mut s = Fixture::Drawn.session();
     let list = run(&mut s, "font.listGlyphs", json!({}));
