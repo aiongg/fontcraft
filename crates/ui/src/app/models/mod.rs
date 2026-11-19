@@ -14,6 +14,7 @@ pub mod hinting;
 pub mod kerning_review;
 pub mod kerning_window;
 pub mod layers;
+pub mod palette;
 
 use craft::ui::contract::Tracked;
 use fontcraft_engine::Session;
@@ -59,6 +60,9 @@ pub struct Models {
     pub console: Tracked<console::ConsoleModel>,
     /// The Kerning window (`panels::kerning_window`).
     pub kerning_window: Tracked<kerning_window::KerningWindowModel>,
+    /// The Info box and the Palette sections (`panels::info_box`, `panels::transformations`, …); projected outside the
+    /// stamp, since they read the canvas's selection.
+    pub palette: palette::PaletteModels,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.

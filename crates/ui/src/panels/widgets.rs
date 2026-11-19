@@ -8,7 +8,7 @@
 
 use craft::behavior::{Anchor9, IconId};
 use craft::ui::buttons::IconButton;
-use craft::ui::contract::{Bind, PlainData, Props as _, Show as _};
+use craft::ui::contract::{Bind, PlainData, Props as _, Show as _, ShowContainer as _};
 use craft::ui::layout_components::Row;
 use craft::ui::pickers::ReferencePoint;
 use craft::ui::runtime::env::{Env, Label};
@@ -177,11 +177,7 @@ pub fn key_or_number(ui: &mut Ui, label: Label, metric: &KeyedNumber, read_only:
         }
         if metric.state == KeyState::OutOfSync && !read_only {
             let update_label = format!("{} {}", words.update_key.as_str(), label.as_str());
-            out.update = IconButton::new(IconId::new("refresh"))
-                .label(update_label)
-                .tooltip(words.update_key.clone())
-                .show(ui)
-                .clicked();
+            out.update = IconButton::new(IconId::new("refresh")).label(update_label).tooltip(words.update_key.clone()).show(ui).clicked();
         }
     });
     out

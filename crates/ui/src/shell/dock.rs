@@ -307,6 +307,15 @@ impl DockPanels<PanelId> for Panels<'_> {
             PanelId::KerningWindow => {
                 panels::kerning_window::show(ui, panels::kerning_window::Props { model: &self.models.kerning_window, sent: self.sent });
             }
+            PanelId::InfoBox => panels::info_box::show(ui, panels::info_box::Props { model: &self.models.palette.info_box, sent: self.sent }),
+            PanelId::Transformations => {
+                panels::transformations::show(ui, panels::transformations::Props { model: &self.models.palette.transform, sent: self.sent });
+            }
+            PanelId::FitCurve => panels::fit_curve::show(ui, panels::fit_curve::Props { model: &self.models.palette.fit_curve, sent: self.sent }),
+            PanelId::AnchorContext => {
+                panels::anchor_context::show(ui, panels::anchor_context::Props { model: &self.models.palette.anchor_context, sent: self.sent });
+            }
+            PanelId::Stroke => panels::stroke::show(ui, panels::stroke::Props { model: &self.models.palette.stroke, sent: self.sent }),
             // Drawn by `group_view`.
             PanelId::Document => {}
             other => panels::stub::show(ui, panels::stub::Props { title: other.title(&self.words) }),
