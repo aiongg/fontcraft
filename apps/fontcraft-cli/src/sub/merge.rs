@@ -14,12 +14,15 @@ pub const SUBCOMMAND: Subcommand = Subcommand { name: "merge", summary: "Merge f
 
 const USAGE: &str = "\
   fontcraft-cli merge FONT [--map FILE] [--glyphs LIST] FONT [--map FILE] ... -o OUT [options]
-      Combine compiled TrueType fonts into one. Without maps, every glyph of every font is
-      kept (a name already used gets .1, .2 ...), the cmaps are united with the earlier font
-      keeping a shared character, and GSUB, GPOS and GDEF are merged; font-wide values take
-      the extremes or the first font's. A map file or glyph selection after a FONT takes only
-      those glyphs from it, renamed as the map says, with every font-wide value from the first
-      font and no layout unless --layout asks for it.
+      Combine fonts into one: compiled TrueType or CFF fonts, Type 1 fonts or bare CFF
+      tables. Without maps, every glyph of every font is kept (a name already used gets .1,
+      .2 ...), the cmaps are united with the earlier font keeping a shared character, and
+      GSUB, GPOS and GDEF are merged; font-wide values take the extremes or the first font's.
+      A map file or glyph selection after a FONT takes only those glyphs from it, renamed as
+      the map says, with every font-wide value from the first font and no layout unless
+      --layout asks for it. Numeric names in a map, --cid-info or a CID-keyed first font make
+      a CFF result CID-keyed, with one Font DICT per input font. A font program as the first
+      FONT gives a bare CFF result; --to converts the result.
 ";
 
 /// The options, as data (M12.23).
@@ -27,19 +30,19 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::value("map", "FILE", "", "glyph map for the preceding FONT: 'new-name source-name' per line"),
     OptSpec::list("glyphs", "SELECTOR", "", "take only these glyphs from the preceding FONT"),
     OptSpec::list("exclude-glyphs", "SELECTOR", "", "leave these glyphs of the preceding FONT out"),
-    OptSpec::list("fd", "N", "", "take only glyphs of these CID font dictionaries from the preceding FONT"),
-    OptSpec::list("exclude-fd", "N", "", "leave glyphs of these CID font dictionaries out"),
+    OptSpec::list("fd", "N", "", "take only glyphs of these Font DICTs from the preceding CID-keyed FONT"),
+    OptSpec::list("exclude-fd", "N", "", "leave glyphs of these Font DICTs of the preceding CID-keyed FONT out"),
     OptSpec::value("face", "N|NAME", "", "the face of the preceding FONT when it is a collection"),
     OptSpec::value("input-list", "FILE", "", "read font paths from this file, one per line, '#' comments"),
     OptSpec::value("layout", "merge|base|drop", "", "merge every font's layout, keep the first font's, or drop it (default merge, drop with maps)"),
     OptSpec::value("duplicates", "first|last|error|rename", "", "what to do with a glyph name two fonts share (default rename, first with maps)"),
     OptSpec::list("drop-tables", "TAG", "", "tables to leave out of the result"),
-    OptSpec::value("import-ttx", "FILE", "", "compile this XML dump into the result"),
-    OptSpec::value("cid-info", "FILE", "", "make the result CID-keyed with this font information"),
-    OptSpec::value("hint-dict-from", "FONT", "", "take the hint dictionary from this font"),
-    OptSpec::value("ps-name", "NAME", "", "the PostScript name of a CFF result"),
-    OptSpec::value("language-group", "0|1", "", "the language group of a CFF result"),
-    OptSpec::value("to", "FORMAT", "", "the output format"),
+    OptSpec::value("import-ttx", "FILE", "", "compile this XML dump into the result after merging"),
+    OptSpec::value("cid-info", "FILE", "", "make the result CID-keyed, its top-level values from this cidfontinfo file"),
+    OptSpec::value("hint-dict-from", "FONT", "", "take the hint values and underline metrics of this CFF or Type 1 font"),
+    OptSpec::value("ps-name", "NAME", "", "the PostScript name the first map's header would give (CFF results)"),
+    OptSpec::value("language-group", "0|1", "", "the language group the first map's header would give (CFF results)"),
+    OptSpec::value("to", "ttf|otf|otf-cff2|cff|cff2", "", "convert the result to this format"),
     OptSpec::value("output", "OUT", "", "the output file").short('o'),
     OptSpec::switch("no-clobber", false, "refuse to replace an existing output"),
     OptSpec::switch("json", false, "print the result as JSON"),

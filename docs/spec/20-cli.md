@@ -1355,8 +1355,27 @@ DICTs are kept, and each later glyph's width operand is rewritten for the first 
 and `nominalWidthX`; `merge` then subroutinises the result again. `MATH` and `BASE` are merged too: the
 first font's constants and baselines, every font's glyph data and scripts.
 
-Refused, because fontTools cannot merge them either: `CFF2` fonts, CID-keyed CFF fonts, `JSTF`
-tables (leave them out with `--drop-tables JSTF`), and `BASE` tables with variation data.
+Refused, because fontTools cannot merge them either: `CFF2` fonts, CID-keyed CFF fonts merged into a
+name-keyed result, `JSTF` tables (leave them out with `--drop-tables JSTF`), and `BASE` tables with
+variation data.
+
+**mergefonts' options.** These follow the mergefonts help text; they are documented there but not yet
+observed.
+
+| Option | What `merge` does |
+|---|---|
+| inputs | Type 1 fonts and bare CFF tables are read as CFF fonts. When the first FONT is one, the result is a bare CFF table (FontCraft writes no Type 1). |
+| CID-keyed result | Made when `--cid-info` is given, a map has numeric output names, or the first font is CID-keyed. Glyphs are addressed by CID and sorted by CID; CID 0 (`.notdef`) must be among them. A name-keyed font needs a map; a CID-keyed font without one keeps its CIDs. `--duplicates rename` is refused. |
+| Font DICTs | Each input Font DICT becomes one Font DICT of the result with its own Private DICT, so charstrings, widths and hints are copied unchanged. A name-keyed font gives one, a CID-keyed font one for each Font DICT the merge takes glyphs from. |
+| `--cid-info` | A cidfontinfo file (`Key value` lines, text in parentheses). Required: FontName, FullName, FamilyName, Weight, version, Registry, Ordering, Supplement, AdobeCopyright. Optional: Trademark, XUID. Other keys are ignored. Without the file, a CID-keyed first font gives the ROS and name; otherwise the result is `Adobe-Identity-0`, named after the first font. |
+| map header | `mergefonts NAME GROUP`. In a name-keyed result the first font's header sets the font name and `LanguageGroup`. In a CID-keyed result each font's header names the Font DICTs made from it and sets their `LanguageGroup`. |
+| `--ps-name`, `--language-group` | Replace the first font's header values. |
+| `--hint-dict-from` | The hint values (blue zones, stems, `ForceBold`, `LanguageGroup`, `ExpansionFactor`) of every Private DICT and the underline position and thickness come from this CFF font, Type 1 font or bare CFF table. |
+| `--fd`, `--exclude-fd` | Select the glyphs of a CID-keyed FONT by Font DICT; refused on a name-keyed FONT. |
+| `--import-ttx` | The XML dump is compiled into the merged font, as `tables import` compiles it. |
+| `--to` | The result goes through `convert --to` with its default settings: `ttf`, `otf`, `otf-cff2`, `cff` or `cff2`. |
+
+The CFF-only options are refused on TrueType fonts; map headers are ignored there, with a warning.
 
 **Variable fonts.** fontTools' merge has no rule for variation tables: it drops them and keeps the
 default outlines. `merge` keeps variable TrueType fonts variable when they share their axes. The rules

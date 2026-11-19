@@ -32,9 +32,14 @@
 //! The glyph merge (a map for at least one font) takes, for each font, only the glyphs its map
 //! lists, under their new names, and every font-wide value from the first font. Layout is
 //! dropped unless asked for.
+//!
+//! CFF fonts can also merge as AFDKO mergefonts merges them: into a CID-keyed font ([`cid`]),
+//! with the map header's PostScript name and language group, and with the hint values of
+//! another font ([`MergeOptions::hint_dict_from`]).
 
 mod base_math;
 mod cff;
+mod cid;
 mod cmap;
 mod fixed;
 mod glyphs;
@@ -44,8 +49,11 @@ mod var;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+pub use cid::{CidInfo, glyph_font_dicts, parse_cid_info};
+
 use crate::limits::{MAX_GLYPHS, MAX_LIST_LINE, MAX_MERGE_FONTS};
 use crate::reorder::be::Data;
+use crate::reorder::names::num_glyphs;
 use crate::sfnt::{Flavour, SfntFont, Tag, tag_str};
 use crate::{Result, TablesError};
 
@@ -115,6 +123,27 @@ pub struct MergeOptions {
     /// Seconds since 1970 for `head.created` and `head.modified`. `None` keeps the first font's
     /// creation time and the latest modification time of the inputs.
     pub timestamp: Option<i64>,
+    /// Per input font, the header of its glyph map file (CFF fonts only). The first font's names
+    /// and groups a name-keyed result; in a CID-keyed result each font's names and groups the
+    /// Font DICTs made from that font.
+    pub headers: Vec<MapHeader>,
+    /// Makes the result CID-keyed, with these Top DICT values (CFF fonts only).
+    pub cid_info: Option<CidInfo>,
+    /// Replaces the PostScript name of the first font's map header.
+    pub ps_name: Option<String>,
+    /// Replaces the language group of the first font's map header.
+    pub language_group: Option<u8>,
+    /// A CFF font whose hint values (blue zones, stems, `ForceBold`, `LanguageGroup`,
+    /// `ExpansionFactor`) and global metrics (underline position and thickness) the result
+    /// takes.
+    pub hint_dict_from: Option<SfntFont>,
+}
+
+/// The optional header line of a glyph map file: `mergefonts PostScriptName LanguageGroup`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MapHeader {
+    pub ps_name: Option<String>,
+    pub language_group: Option<u8>,
 }
 
 /// One glyph of the result.
@@ -208,7 +237,6 @@ pub fn merge_with_report(fonts: &[SfntFont], options: &MergeOptions) -> Result<M
         return Err(TablesError::BadOptions(format!("{} glyph maps were given for {} fonts", options.glyph_maps.len(), fonts.len())));
     }
     let layout = options.layout.unwrap_or(if map_form { LayoutMode::Drop } else { LayoutMode::Merge });
-    let duplicates = options.duplicates.unwrap_or(if map_form { Duplicates::First } else { Duplicates::Rename });
     let drop: BTreeSet<Tag> = options.drop_tables.iter().copied().collect();
     let mut kinds: Vec<bool> = Vec::with_capacity(fonts.len());
     for (i, font) in fonts.iter().enumerate() {
@@ -218,6 +246,43 @@ pub fn merge_with_report(fonts: &[SfntFont], options: &MergeOptions) -> Result<M
     if kinds.iter().any(|k| *k != is_cff) {
         return Err(TablesError::BadOptions("the fonts mix TrueType and CFF outlines: convert them to one kind first".into()));
     }
+    if !is_cff {
+        for (given, what) in [
+            (options.cid_info.is_some(), "a CID-keyed result"),
+            (options.hint_dict_from.is_some(), "a hint font"),
+            (options.ps_name.is_some(), "a PostScript name"),
+            (options.language_group.is_some(), "a language group"),
+        ] {
+            if given {
+                return Err(TablesError::BadOptions(format!("{what} applies to CFF fonts; these fonts have TrueType outlines")));
+            }
+        }
+    }
+    let cid_keyed: Vec<bool> = fonts.iter().map(cid::is_cid_keyed).collect::<Result<_>>()?;
+    let cid_result =
+        is_cff && (options.cid_info.is_some() || cid_keyed.first().copied().unwrap_or(false) || cid::maps_give_cids(&options.glyph_maps));
+    let duplicates = options.duplicates.unwrap_or(if map_form || cid_result { Duplicates::First } else { Duplicates::Rename });
+    if cid_result && duplicates == Duplicates::Rename {
+        return Err(TablesError::BadOptions("a CID-keyed result cannot rename a CID two fonts share: give duplicates first, last or error".into()));
+    }
+    let cid_maps = if cid_result { cid::cid_maps(&cid_keyed, &options.glyph_maps)? } else { Vec::new() };
+    let glyph_maps: &[Vec<(String, String)>] = if cid_result { &cid_maps } else { &options.glyph_maps };
+    let mut headers: Vec<MapHeader> = (0..fonts.len()).map(|i| options.headers.get(i).cloned().unwrap_or_default()).collect();
+    if let Some(h) = headers.first_mut() {
+        if options.ps_name.is_some() {
+            h.ps_name.clone_from(&options.ps_name);
+        }
+        if options.language_group.is_some() {
+            h.language_group = options.language_group;
+        }
+    }
+    let hint_cff = match &options.hint_dict_from {
+        None => None,
+        Some(font) => {
+            let data = font.get(*b"CFF ").ok_or_else(|| TablesError::BadOptions("the hint font has no 'CFF ' table".into()))?;
+            Some(crate::reorder::cff::parse(data, num_glyphs(font)?)?)
+        }
+    };
     if layout == LayoutMode::Merge
         && !drop.contains(b"JSTF")
         && let Some(i) = fonts.iter().position(|f| f.get(*b"JSTF").is_some())
@@ -230,7 +295,8 @@ pub fn merge_with_report(fonts: &[SfntFont], options: &MergeOptions) -> Result<M
     let variations = axes.as_ref().map(|a| var::Glyphs::read(fonts, a.len())).transpose()?;
 
     let (names, stored_names): (Vec<Vec<String>>, Vec<_>) = fonts.iter().map(plan::font_glyph_names).collect::<Result<Vec<_>>>()?.into_iter().unzip();
-    let expanded: Vec<Vec<u8>> = if is_cff { fonts.iter().enumerate().map(|(i, f)| cff::expand(f, i)).collect::<Result<_>>()? } else { Vec::new() };
+    let expanded: Vec<Vec<u8>> =
+        if is_cff { fonts.iter().enumerate().map(|(i, f)| cff::expand(f, i, cid_result)).collect::<Result<_>>()? } else { Vec::new() };
     let cff_fonts: Vec<cff::Expanded<'_>> =
         fonts.iter().zip(&expanded).enumerate().map(|(i, (f, e))| cff::Expanded::read(f, e, i)).collect::<Result<_>>()?;
     let sources: Vec<glyphs::Source<'_>> = if is_cff {
@@ -244,8 +310,15 @@ pub fn merge_with_report(fonts: &[SfntFont], options: &MergeOptions) -> Result<M
             _ => false,
         }
     };
-    let plan = plan::plan(&names, &options.glyph_maps, duplicates, &same)?;
+    let mut plan = plan::plan(&names, glyph_maps, duplicates, &same)?;
+    let cids = if cid_result { Some(cid::sort_by_cid(&mut plan)?) } else { None };
     let mut warnings: Vec<String> = Vec::new();
+    let has_header = |h: &MapHeader| h.ps_name.is_some() || h.language_group.is_some();
+    if !is_cff && headers.iter().any(has_header) {
+        warnings.push("the PostScript names and language groups of the map headers apply to CFF fonts only and are ignored".into());
+    } else if is_cff && !cid_result && headers.iter().skip(1).any(has_header) {
+        warnings.push("the map headers of the fonts after the first apply to CID-keyed results only and are ignored".into());
+    }
     let mut conflicts = plan.conflicts.clone();
     for (i, font) in fonts.iter().enumerate() {
         if variations.is_none() && font.get(*b"fvar").is_some() {
@@ -257,8 +330,17 @@ pub fn merge_with_report(fonts: &[SfntFont], options: &MergeOptions) -> Result<M
     let mut out = SfntFont::new(if is_cff { Flavour::Cff } else { Flavour::TrueType });
     let mut built = glyphs::build(&sources, &plan, is_cff, &mut warnings)?;
     if is_cff {
-        let names: Vec<String> = plan.slots.iter().map(|s| s.name.clone()).collect();
-        let table = cff::build(&cff_fonts, &plan, &names, &mut warnings)?;
+        let table = match &cids {
+            Some(cids) => {
+                let setup = cid::Setup { info: options.cid_info.as_ref(), headers: &headers, hints: hint_cff.as_ref() };
+                cid::build(&cff_fonts, &plan, cids, &setup, &mut warnings)?
+            }
+            None => {
+                let names: Vec<String> = plan.slots.iter().map(|s| s.name.clone()).collect();
+                let first_header = headers.first().cloned().unwrap_or_default();
+                cff::build(&cff_fonts, &plan, &names, &first_header, hint_cff.as_ref(), &mut warnings)?
+            }
+        };
         built.bounds = table.bounds;
         // fontTools keeps the first font's indexToLocFormat when there is no `loca`.
         built.long_loca = Data::new(*b"head", first.get(*b"head").unwrap_or_default()).i16(50)? != 0;
