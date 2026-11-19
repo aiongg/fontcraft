@@ -276,6 +276,20 @@ impl DockPanels<PanelId> for Panels<'_> {
             PanelId::GlyphMetrics => {
                 panels::glyph_metrics::show(ui, panels::glyph_metrics::Props { model: &self.models.glyph_metrics, sent: self.sent });
             }
+            PanelId::RelatedGlyphs => {
+                panels::related_glyphs::show(ui, panels::related_glyphs::Props { model: &self.models.related_glyphs, sent: self.sent });
+            }
+            PanelId::ReferenceFont => {
+                panels::reference_font::show(ui, panels::reference_font::Props { model: &self.models.reference_font, sent: self.sent });
+            }
+            PanelId::Selections => panels::selections::show(ui, panels::selections::Props { model: &self.models.selections, sent: self.sent }),
+            PanelId::Measurements => {
+                panels::measurements::show(ui, panels::measurements::Props { model: &self.models.measurements, sent: self.sent });
+            }
+            PanelId::PairsAndPhrases => {
+                panels::pairs_phrases::show(ui, panels::pairs_phrases::Props { model: &self.models.pairs_phrases, sent: self.sent });
+            }
+            PanelId::GlyphInfo => panels::glyph_info::show(ui, panels::glyph_info::Props { model: &self.models.glyph_info, sent: self.sent }),
             // Drawn by `group_view`.
             PanelId::Document => {}
             other => panels::stub::show(ui, panels::stub::Props { title: other.title(&self.words) }),

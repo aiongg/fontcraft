@@ -5,7 +5,11 @@
 pub mod bars;
 pub mod commands;
 pub mod dock;
+pub mod glyph_info;
+pub mod kerning_review;
+pub mod params;
 pub mod rail;
+pub mod reference_font;
 pub mod window;
 
 use craft::menu::MenuBarUi;

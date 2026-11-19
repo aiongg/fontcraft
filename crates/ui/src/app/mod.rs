@@ -46,6 +46,12 @@ pub struct ViewState {
     pub workspace: Workspace<PanelId>,
     /// The document canvas's view.
     pub canvas: CanvasView,
+    /// The fonts drawn behind the outline (`view.setReferenceFont`).
+    pub reference_font: crate::shell::reference_font::ReferenceFontState,
+    /// The Pairs & Phrases work lists and the auto-kerning proposal under review.
+    pub kerning_review: crate::shell::kerning_review::KerningReviewState,
+    /// Glyph Info's search, sort and selection.
+    pub glyph_info: crate::shell::glyph_info::GlyphInfoState,
 }
 
 impl Default for ViewState {
@@ -56,6 +62,9 @@ impl Default for ViewState {
             glyph: None,
             workspace: dock::default_workspace(),
             canvas: CanvasView::new(egui::Rect::NOTHING, Point::ZERO, 1.0),
+            reference_font: Default::default(),
+            kerning_review: Default::default(),
+            glyph_info: Default::default(),
         }
     }
 }
@@ -164,6 +173,8 @@ impl FontCraftApp {
                     }
                 }
                 Msg::Shell(command) => {
+                    // Shell commands change view state, which the projection reads.
+                    self.view_revision += 1;
                     if let Err(error) = crate::shell::commands::run(self, &command) {
                         failed.push(format!("{}: {error}", command.id));
                     }
