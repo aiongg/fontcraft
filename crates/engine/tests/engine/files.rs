@@ -520,7 +520,6 @@ fn masters_export_as_ufos() {
     let one = run(&mut s, "file.exportUfo", json!({ "destination": dir.join("one"), "masters": ["m01"] }));
     assert_eq!(one["files"].as_array().unwrap().len(), 1);
     assert!(s.execute("file.exportUfo", &json!({ "destination": dir.join("x"), "masters": ["nope"] })).is_err());
-    assert!(s.execute("file.exportUfo", &json!({ "destination": dir.join("x"), "productionNames": true })).is_err());
     // The document keeps its own file and format.
     assert_eq!(s.doc().unwrap().path.as_deref(), Some(single.as_path()));
     std::fs::remove_dir_all(&dir).unwrap();

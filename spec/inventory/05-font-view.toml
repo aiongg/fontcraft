@@ -2366,6 +2366,13 @@ milestone = "M1"
 summary = "When a compiled OTF or TTF is opened with the user setting Keep Glyph Names from Imported Files on, the file's glyph order is preserved by adding a glyphOrder parameter to the font automatically."
 ref = "Font View › Glyph Order"
 status = "handbook"
+notes = "Documented, not yet observed. A compiled font always opens with a glyphOrder parameter that lists the file's glyph order (open.recordsGlyphOrder, as the Opening Font Files page says), whether or not the setting is on; when glyphs are renamed on opening, the parameter lists the new names (M1.9)."
+guesses = [
+  "The glyphOrder parameter is added whatever the setting says, following the Opening Font Files page rather than the Glyph Order page, which ties it to the setting; opening a TTF with the setting off would settle it.",
+]
+observe = [
+  "With Keep Glyph Names from Imported Files off, open a TTF and note whether Font Info › Font has a glyphOrder parameter.",
+]
 
 # ── Naming rules ──
 

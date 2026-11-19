@@ -75,7 +75,9 @@ Destinations:
 - A masters list; Cmd-click toggles, Shift-click selects a range, Cmd+A selects all
   (`export.ufoMasterSelection`). One UFO per selected master, since a UFO holds one master.
 - Convert Glyph Names to Production Names: write production names instead of the readable names
-  (`export.ufoProductionNames`).
+  (`export.ufoProductionNames`). FontCraft renames a copy, so the document keeps its names. A
+  glyph whose production name is taken or invalid, or whose name feature code uses, keeps its
+  name and is listed in the losses.
 - Decompose Smart Stuff: on, editor-only constructs (smart components, corner components and
   similar) become plain paths; off, they are omitted from the UFO
   (`export.ufoDecomposeSmartStuff`).
@@ -141,7 +143,16 @@ add formats (`open.compiledFormats`).
 - Glyph order is stored as a `glyphOrder` custom parameter on the font
   (`open.recordsGlyphOrder`).
 - Glyph names are converted to the built-in scheme unless the setting Keep Glyph Names from
-  Imported Files is on (`open.appliesNamingScheme`).
+  Imported Files is on (`open.appliesNamingScheme`). FontCraft does this for compiled fonts,
+  UFOs and designspaces, after reading the glyph data files beside the source:
+  - Only names the glyph data knows change (`uni0041` becomes `A`). A nice name that is already
+    taken is not used.
+  - Components, kerning, groups and the `glyphOrder` parameter follow; code points and places
+    in the glyph order stay.
+  - A glyph whose name feature code or another text uses keeps it, with a warning, so the font
+    still compiles.
+  - `keepGlyphNames` on `file.open` overrides the setting, and a font's own Use Custom Naming
+    option keeps its names. The command line always keeps them.
 - Composite metrics are tied to their bases through automatic alignment unless the setting
   Disable Automatic Alignment for Imported Files is on (`open.alignsCompositeMetrics`).
 - TrueType: quadratic curves and components are kept as they are

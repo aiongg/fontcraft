@@ -102,6 +102,7 @@ mod hint_tt_defs;
 mod hint_tt_more;
 mod hint_upkeep;
 mod image;
+mod import_naming;
 mod instance_masters;
 mod instances;
 mod interaction;

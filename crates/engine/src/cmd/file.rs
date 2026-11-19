@@ -34,7 +34,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Open…",
             ["File"],
             Some("Cmd+O"),
-            "{path: string, face?: number} open a font as a new document, recognising it by content: a .fontcraft file, a .glyphs file (format versions 2 to 4), a .glyphspackage folder, a UFO folder (versions 2 and 3), a .designspace file with the UFOs it names (one document, a master per source), or a compiled font (TrueType, OpenType with CFF, a collection member chosen by face, WOFF, WOFF2). A compiled font opens view-only: save it with Save As to a source format. GlyphData*.xml files beside the source and in an Info folder beside it add to the glyph data for this document, unless the font's Ignore custom GlyphData file parameter is on. A UFO or designspace has its composites aligned automatically as it opens, so their metrics follow their bases (aligned counts the glyphs that changed); with the user setting user.disableAutomaticAlignmentForImportedFiles on, the font's Disable Automatic Alignment option is switched on instead. warnings lists what reading a compiled font left out and the glyph data files that could not be used. A .fontcraftproject file opens as a project, as project.open does, with its reply → {title, path, format, version?, glyphs, masters, viewOnly, aligned, warnings}",
+            "{path: string, face?: number, keepGlyphNames?: bool} open a font as a new document, recognising it by content: a .fontcraft file, a .glyphs file (format versions 2 to 4), a .glyphspackage folder, a UFO folder (versions 2 and 3), a .designspace file with the UFOs it names (one document, a master per source), or a compiled font (TrueType, OpenType with CFF, a collection member chosen by face, WOFF, WOFF2). A compiled font opens view-only: save it with Save As to a source format. GlyphData*.xml files beside the source and in an Info folder beside it add to the glyph data for this document, unless the font's Ignore custom GlyphData file parameter is on. A UFO or designspace has its composites aligned automatically as it opens, so their metrics follow their bases (aligned counts the glyphs that changed); with the user setting user.disableAutomaticAlignmentForImportedFiles on, the font's Disable Automatic Alignment option is switched on instead. A UFO, designspace or compiled font has its glyphs renamed to the nice names the glyph data gives their names (`uni0041` becomes `A`), keeping their places and code points (renamed counts them); a glyph whose name feature code or other text uses keeps it, with a warning. keepGlyphNames (default: the user setting user.keepGlyphNamesFromImportedFiles) or the font's Use Custom Naming option keeps the file's names. warnings lists what reading a compiled font left out and the glyph data files that could not be used. A .fontcraftproject file opens as a project, as project.open does, with its reply → {title, path, format, version?, glyphs, masters, viewOnly, aligned, renamed, warnings}",
             always,
             open
         ).files(const { &[FileParam::read("path")] }),
@@ -61,7 +61,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Export UFO",
             [],
             None,
-            "{destination: string, masters?: [string], productionNames?: bool, decomposeSmartStuff?: bool} write each chosen master (default: all) as its own UFO 3 into the destination folder, named Family-Style.ufo. The document keeps its file and format. productionNames: rename glyphs to production names (not supported yet). decomposeSmartStuff: draw smart components as outlines interpolated from the smart glyph's pole layers (default true); false keeps them as components with their values in the glyph lib → {files: [{path, master, filesWritten}], losses}",
+            "{destination: string, masters?: [string], productionNames?: bool, decomposeSmartStuff?: bool} write each chosen master (default: all) as its own UFO 3 into the destination folder, named Family-Style.ufo. The document keeps its file and format. productionNames: write each glyph under its production name (its own, else the glyph data's), components, kerning, groups and the glyph order following; the document keeps its names; a glyph whose production name is taken or breaks the naming rules, or whose name feature code or other text uses, keeps its name and is listed in losses. decomposeSmartStuff: draw smart components as outlines interpolated from the smart glyph's pole layers (default true); false keeps them as components with their values in the glyph lib → {files: [{path, master, filesWritten}], losses}",
             has_doc,
             export_ufo
         ).files(const { &[FileParam::write("destination")] }).writes_files(),
@@ -115,6 +115,7 @@ fn open(s: &mut Session, p: &Value) -> Result<Value> {
         return super::project::open_project(s, &json!({ "path": text }));
     }
     let face = p.opt_int("face", 0, i64::from(u16::MAX))?.map(|f| f as u32);
+    let keep_names = p.bool_or("keepGlyphNames", s.settings().get_bool(super::import_naming::KEEP_GLYPH_NAMES).unwrap_or(false))?;
     // A file that is already open is shown, not opened a second time (`file.openTwiceActivates`).
     if let Some(i) = super::session::find_open(s, &path) {
         s.set_active(i)?;
@@ -134,6 +135,8 @@ fn open(s: &mut Session, p: &Value) -> Result<Value> {
         let files: Vec<(&str, &[u8])> = glyph_data.iter().map(|(n, b)| (n.as_str(), b.as_slice())).collect();
         warnings.extend(s.set_source_glyph_data(&files)?);
     }
+    // After the glyph data beside the source is in place, so its names count.
+    let renamed = if keep_names { 0 } else { super::import_naming::name_imported(s, &mut warnings) };
     let doc = s.doc()?;
     let save_format = crate::io::SaveFormat::of_source(doc.font.source.format);
     let format = match doc.font.source.format {
@@ -145,7 +148,7 @@ fn open(s: &mut Session, p: &Value) -> Result<Value> {
     let reply = json!({
         "title": doc.title, "path": doc.path.as_ref().map(|p| p.to_string_lossy()), "format": format,
         "version": version, "glyphs": doc.font.glyphs.len(), "masters": doc.font.masters.len(), "viewOnly": save_format.is_none(), "warnings": warnings,
-        "aligned": aligned,
+        "aligned": aligned, "renamed": renamed,
     });
     remember(s, &path);
     Ok(reply)
@@ -382,10 +385,9 @@ fn save_as(s: &mut Session, p: &Value) -> Result<Value> {
 fn export_ufo(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("file.exportUfo", p)?;
     let destination = std::path::PathBuf::from(p.str("destination")?);
-    if p.bool_or("productionNames", false)? {
-        return Err(EngineError::Unsupported("renaming glyphs to production names on export (needs the glyph database, ROADMAP.md M4)".into()));
-    }
+    let production = p.bool_or("productionNames", false)?;
     let outlines = p.bool_or("decomposeSmartStuff", true)?;
+    let data = s.glyph_data()?;
     let font = s.font()?;
     let masters: Vec<String> = match p.get("masters") {
         None => font.masters.iter().map(|m| m.id.clone()).collect(),
@@ -405,8 +407,11 @@ fn export_ufo(s: &mut Session, p: &Value) -> Result<Value> {
     }
     std::fs::create_dir_all(&destination).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", destination.display())))?;
     let (smart, smart_losses) = smart_choice(font, outlines);
-    let mut exported = crate::io::export_ufos(smart.as_ref().unwrap_or(font), &masters, &destination)?;
+    let written = smart.as_ref().unwrap_or(font);
+    let (named, name_losses) = if production { super::import_naming::production_copy(written, &data) } else { (written.clone(), Vec::new()) };
+    let mut exported = crate::io::export_ufos(&named, &masters, &destination)?;
     exported.losses.extend(smart_losses);
+    exported.losses.extend(name_losses);
     let files: Vec<Value> =
         exported.files.iter().map(|(path, master, n)| json!({ "path": path.to_string_lossy(), "master": master, "filesWritten": n })).collect();
     Ok(json!({ "files": files, "losses": exported.losses }))

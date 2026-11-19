@@ -509,7 +509,7 @@ fn a_fon_opens_with_a_strike_per_size_and_a_pcf_gz_opens() {
     assert!(written.warnings.iter().any(|w| w.contains("2 glyphs have no code")), "{:?}", written.warnings);
     std::fs::write(&fon, written.bytes).unwrap();
     let mut s = Session::new();
-    run(&mut s, "file.open", json!({ "path": fon }));
+    run(&mut s, "file.open", json!({ "path": fon, "keepGlyphNames": true }));
     let names: Vec<String> = s.font().unwrap().glyphs.iter().map(|g| g.name.clone()).collect();
     assert_eq!(names, ["uni0041", "uni0042"]);
     let got = strikes(&s);
