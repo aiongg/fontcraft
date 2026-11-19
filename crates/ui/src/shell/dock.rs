@@ -364,6 +364,7 @@ impl DockPanels<PanelId> for Panels<'_> {
             PanelId::SmartComponent => {
                 panels::smart_component::show(ui, panels::smart_component::Props { model: &self.models.palette.smart, sent: self.sent })
             }
+            PanelId::Project => panels::project::show(ui, panels::project::Props { model: &self.models.project.model, sent: self.sent }),
             // Drawn by `group_view`.
             PanelId::Document => {}
             other => panels::stub::show(ui, panels::stub::Props { title: other.title(&self.words) }),

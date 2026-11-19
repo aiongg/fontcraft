@@ -110,11 +110,11 @@ impl ExportsWords {
     }
 
     /// The standard weight classes with their OpenType names.
-    fn weights(&self) -> [&Label; 9] {
+    pub fn weights(&self) -> [&Label; 9] {
         [&self.thin, &self.extra_light, &self.light, &self.regular, &self.medium, &self.semi_bold, &self.bold_weight, &self.extra_bold, &self.black]
     }
 
-    fn widths(&self) -> [&Label; 9] {
+    pub fn widths(&self) -> [&Label; 9] {
         [
             &self.ultra_condensed,
             &self.extra_condensed,
@@ -238,16 +238,16 @@ fn export_list(ui: &mut Ui, model: &ExportsModel, words: &ExportsWords, sent: &m
     });
 }
 
-fn mixed_bool(flag: Flag) -> Mixed<bool> {
+pub fn mixed_bool(flag: Flag) -> Mixed<bool> {
     if flag.mixed { Mixed::Mixed } else { Mixed::Same(flag.on) }
 }
 
-fn mixed_text(text: &str, mixed: bool) -> Mixed<String> {
+pub fn mixed_text(text: &str, mixed: bool) -> Mixed<String> {
     if mixed { Mixed::Mixed } else { Mixed::Same(text.to_string()) }
 }
 
 /// The new value of a check box that was clicked: a mixed box becomes checked.
-fn flipped(flag: Flag) -> bool {
+pub fn flipped(flag: Flag) -> bool {
     flag.mixed || !flag.on
 }
 
@@ -315,7 +315,7 @@ fn general(ui: &mut Ui, f: &ExportFields, selected: &[usize], words: &ExportsWor
 }
 
 /// A class field with its menu of standard values; the value the user chose.
-fn class_row(ui: &mut Ui, label: &Label, salt: &str, value: Option<f64>, standard: &[u16], names: &[Label], menu: &Label) -> Option<f64> {
+pub fn class_row(ui: &mut Ui, label: &Label, salt: &str, value: Option<f64>, standard: &[u16], names: &[Label], menu: &Label) -> Option<f64> {
     let mut chosen = None;
     Field::new(label.clone()).id_salt(("fontcraftExports.class", salt)).show(ui, |ui, _| {
         Row::new().show(ui, |ui, _| {

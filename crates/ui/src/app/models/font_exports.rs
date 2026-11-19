@@ -166,7 +166,8 @@ fn flag(all: &[&Instance], f: impl Fn(&Instance) -> bool) -> Flag {
     Flag { on: all.first().is_some_and(|i| f(i)), mixed: differs(all, f) }
 }
 
-fn fields(font: &Font, selected: &[usize], placement: &Value) -> Option<ExportFields> {
+/// The built-in fields of the `selected` instances of `font`; `placement` is `font.instance.placement`'s result (the warnings).
+pub fn fields(font: &Font, selected: &[usize], placement: &Value) -> Option<ExportFields> {
     let all: Vec<&Instance> = selected.iter().filter_map(|i| font.instances.get(*i)).collect();
     let first = *all.first()?;
     let statics: Vec<usize> = selected.iter().copied().filter(|i| font.instances.get(*i).is_some_and(|x| !is_variable(x))).collect();

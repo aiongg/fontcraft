@@ -1386,6 +1386,24 @@ observe = [
   "Edit an instance in an unsaved project and close the window: note whether a prompt appears and what it offers.",
 ]
 
+[[command]]
+id = "window.project.select"
+label = "Select Project Instances"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{project: id, instances?: [index]}"
+area = "font-info"
+milestone = "M7"
+summary = "Shows an open project in the Project panel and selects entries of its instance list; the fields at the right edit every selected entry. An empty list selects the first entry. A click, Cmd-click or Shift-click on a list entry runs it, and the project choice above the list runs it with the project picked."
+ref = "Import & Export › Projects"
+status = "inferred"
+notes = "Our own command so the shown project and the selection are view state a script can set; the reference app opens one window per project and selects by clicking. The Project panel shows one project at a time, the last opened unless one is picked."
+guesses = [
+  "One Project panel shows one open project at a time, with a choice between them when several are open, instead of one window per project; opening two projects in the reference app shows its window arrangement, and the dock has no free-floating windows.",
+  "The Duplicate item sits in the list's plus menu rather than a context menu on the entry; right-clicking a project instance in the reference app settles where it lives.",
+]
+
 [[behavior]]
 id = "project.separateFromFont"
 area = "font-info"

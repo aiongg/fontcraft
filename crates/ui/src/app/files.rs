@@ -12,6 +12,8 @@
 //! | `file.save` | as Save As, for a document without a file it can write back to (never saved, or a compiled font) |
 //! | `file.importOutlines` | several SVG or EPS files, into `files` |
 //! | `project.save` | a `.fontcraftproject` file, for a project never saved |
+//! | `project.linkFont` | a font source for the project to link, into `font` |
+//! | `project.setExportDestination` | a folder to export into, into `folder` |
 //!
 //! A chosen save name without an extension gets the offered one (the file service's extension policy).
 
@@ -29,6 +31,8 @@ pub const PICKED: &[(&str, &str)] = &[
     ("file.save", "path"),
     ("file.importOutlines", "files"),
     ("project.save", "path"),
+    ("project.linkFont", "font"),
+    ("project.setExportDestination", "folder"),
 ];
 
 /// Most files one picker answer opens; the rest are left alone.
@@ -40,6 +44,8 @@ const SAVE_EXTENSIONS: [&str; 5] = ["fontcraft", "glyphs", "glyphspackage", "ufo
 const NATIVE_EXTENSION: &str = "fontcraft";
 /// A project file's extension.
 const PROJECT_EXTENSION: &str = "fontcraftproject";
+/// The file kinds a project can link.
+pub const FONT_EXTENSIONS: [&str; 5] = ["glyphs", "glyphspackage", "ufo", "designspace", "fontcraft"];
 
 /// The extension of the format a document read from `source` is saved in; `None` for a source Save cannot write back
 /// to (a compiled font, a zipped UFO).
@@ -110,6 +116,8 @@ fn request(session: &Session, command: &CommandRef) -> Option<(PickRequest, &'st
                 .suggested_extension(PROJECT_EXTENSION);
             (request, Fill::One)
         }
+        "project.linkFont" => (PickRequest::open("document").filter("Font sources", &FONT_EXTENSIONS), Fill::One),
+        "project.setExportDestination" => (PickRequest::folder("export"), Fill::One),
         _ => return None,
     };
     Some((request.0, param, request.1))

@@ -10,9 +10,11 @@ pub mod clipboard;
 pub mod close;
 pub mod console;
 pub mod context_menu;
+pub mod dropped;
 pub mod files;
 pub mod font_view;
 pub mod menu_alternates;
+pub mod menus_dynamic;
 pub mod models;
 mod msg;
 pub mod open;
@@ -119,6 +121,10 @@ pub struct ViewState {
     pub font_audit: crate::shell::font_audit::FontAuditView,
     /// The component glyph picker and the smart settings windows.
     pub components: crate::shell::components::ComponentsView,
+    /// The shown reporters and the External Changes dialog.
+    pub extensions: crate::shell::extensions::ExtensionsView,
+    /// The project the Project panel shows and its selected instances.
+    pub project: crate::shell::project::ProjectWindowView,
 }
 
 impl Default for ViewState {
@@ -156,6 +162,8 @@ impl Default for ViewState {
             actions: Default::default(),
             font_audit: Default::default(),
             components: Default::default(),
+            extensions: Default::default(),
+            project: Default::default(),
         }
     }
 }
@@ -350,6 +358,7 @@ impl FontCraftApp {
                     crate::dialogs::after::after_run(self, &command.id, &params, &reply);
                 }
                 clipboard::after_run(self, &command.id, &reply);
+                crate::shell::project::after_run(self, &command.id, &reply);
                 if let Some(notice) = self.after_command(&command, &reply) {
                     self.status = notice;
                 }
@@ -373,6 +382,7 @@ impl FontCraftApp {
         let mut cx = ProjectCx { session: &mut self.session, view: &self.view };
         self.models.project(stamp, &mut cx);
         models::console::project(&mut self.models.console, &mut cx);
+        self.models.project.project(&mut cx);
         models::palette::project(&mut self.models.palette, &mut cx, &self.tools, stamp);
         models::compare::project_fonts(&mut self.models.compare_fonts, &mut cx);
         models::text_preview::project(&mut self.models.text_preview, &mut cx, &self.host);
@@ -384,6 +394,7 @@ impl FontCraftApp {
             self.enabled_at = Some(engine);
             self.catalog.refresh(&self.session);
         }
+        menus_dynamic::refresh(self);
     }
 
     /// Records a change to view state that a projection reads, made outside [`ViewMsg`] (a shell command).
@@ -451,6 +462,8 @@ impl FontCraftApp {
                     }
                     return;
                 }
+                // An extension's menu row fills in the filter or macro it runs.
+                let fired = menus_dynamic::fill_targets(self, fired);
                 let targeted = self.with_targets(fired.clone());
                 let Some(command) = clipboard::fired(self, targeted) else { return };
                 // Font View's per-glyph batch is no target list for the dialog, which then reads the selection itself.
@@ -506,6 +519,8 @@ impl ShellApp for FontCraftApp {
 
     fn logic(&mut self, ctx: &egui::Context) {
         models::text_preview::logic(&mut self.models.text_preview, ctx);
+        dropped::take(self, ctx);
+        crate::shell::external_changes::on_focus(self, ctx);
         crate::control::logic(self, ctx);
         open::take_dropped(self, ctx);
         crate::shell::font_audit::logic(self, ctx);

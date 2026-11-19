@@ -27,6 +27,7 @@ pub mod kerning_tools;
 pub mod kerning_window;
 pub mod layers;
 pub mod palette;
+pub mod project;
 pub mod sidebar;
 pub mod space_center;
 pub mod table_viewer;
@@ -114,6 +115,7 @@ pub struct Models {
     pub font_audit: Tracked<font_audit::FontAuditModel>,
     /// The Features menu.
     pub features: Tracked<text::FeaturesModel>,
+    pub project: project::ProjectModels,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.

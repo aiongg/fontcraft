@@ -73,6 +73,8 @@ pub const MODULES: &[Module] = &[
     crate::canvas::text::features::MODULE,
     crate::dialogs::sample_strings::MODULE,
     crate::dialogs::find_glyphs::MODULE,
+    super::extensions::MODULE,
+    super::project::MODULE,
 ];
 
 /// The module and description of the shell command `id`.
