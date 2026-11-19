@@ -47,6 +47,7 @@ pub const MODULES: &[Module] = &[
     super::kerning_window::MODULE,
     super::sidebar::MODULE,
     super::palette::MODULE,
+    crate::dialogs::actions::SHELL,
 ];
 
 /// The module and description of the shell command `id`.

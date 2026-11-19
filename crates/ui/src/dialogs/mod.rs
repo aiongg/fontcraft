@@ -8,6 +8,7 @@
 //! line to [`SPECS`]; `form.rs` keeps the open one in the app layer and `host.rs` shows it. `docs/ui.md` has the API.
 
 mod about;
+pub mod actions;
 pub mod after;
 pub mod custom_parameter_picker;
 pub mod feature_picker;
@@ -46,6 +47,7 @@ pub const MODULES: &[Module] = &[
     host::run,
     kerning_questions::run,
     kerning_audit::run,
+    actions::run_dialog,
 ];
 
 /// Every package's dialog specs, one line each.
