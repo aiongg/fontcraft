@@ -8,6 +8,7 @@ pub mod dock;
 pub mod font_info;
 pub mod font_view;
 pub mod rail;
+pub mod sidebar;
 pub mod view;
 pub mod window;
 

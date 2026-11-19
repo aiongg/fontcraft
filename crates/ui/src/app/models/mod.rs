@@ -7,6 +7,8 @@ pub mod canvas;
 pub mod font_info;
 pub mod font_view;
 pub mod glyph;
+pub mod glyph_props;
+pub mod sidebar;
 
 use craft::ui::contract::Tracked;
 use fontcraft_engine::Session;
@@ -29,6 +31,12 @@ pub struct Models {
     font_view_outlines: font_view::OutlineCache,
     /// The Font Info panel (`panels::font_info`).
     pub font_info: Tracked<font_info::FontInfoModel>,
+    /// The sidebar's entries (`panels::font_view::sidebar`).
+    pub sidebar: Tracked<sidebar::SidebarModel>,
+    /// The glyph inspector's fields (`panels::font_view::inspector`).
+    pub inspector: Tracked<glyph_props::GlyphPropsModel>,
+    /// The Selection Info panel's fields (`panels::selection_info`).
+    pub selection_info: Tracked<glyph_props::GlyphPropsModel>,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -72,6 +80,9 @@ impl Models {
         self.canvas_tokens = crate::canvas::tokens::Tokens::from_settings(cx.session.settings(), false);
         font_view::project(&mut self.font_view, &mut self.font_view_outlines, cx);
         font_info::project(&mut self.font_info, cx);
+        sidebar::project(&mut self.sidebar, cx);
+        glyph_props::project_inspector(&mut self.inspector, cx);
+        glyph_props::project_selection_info(&mut self.selection_info, cx);
         true
     }
 }

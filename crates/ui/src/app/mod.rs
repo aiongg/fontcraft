@@ -10,6 +10,7 @@ pub mod files;
 pub mod font_view;
 pub mod models;
 mod msg;
+pub mod sidebar;
 
 use std::sync::Arc;
 
@@ -53,6 +54,8 @@ pub struct ViewState {
     pub edit_background: bool,
     /// Font View's mode, sort, columns, search and glyph selection.
     pub font_view: font_view::FontViewState,
+    /// The sidebar's open entries and the glyph inspector's rows.
+    pub sidebar: sidebar::SidebarView,
     /// The Font Info panel's tab and the dialog it asked for.
     pub font_info: crate::shell::font_info::FontInfoView,
 }
@@ -68,6 +71,7 @@ impl Default for ViewState {
             display: crate::canvas::Display::default(),
             edit_background: false,
             font_view: font_view::FontViewState::default(),
+            sidebar: sidebar::SidebarView::default(),
             font_info: Default::default(),
         }
     }

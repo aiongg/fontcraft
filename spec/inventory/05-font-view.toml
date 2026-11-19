@@ -814,6 +814,22 @@ guesses = [
 ]
 
 [[command]]
+id = "fontView.setSidebarEntryOpen"
+label = "Open Sidebar Entry"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{entry: path, open: bool}"
+area = "font-view"
+milestone = "M4"
+summary = "Shows or hides the entries inside a sidebar section, category, script or filter folder (the disclosure triangle). View state only."
+ref = "Font View › Filtering Font View"
+status = "inferred"
+guesses = [
+  "The sections start open and every other entry with children starts closed. Settled by opening a new document in the reference.",
+]
+
+[[command]]
 id = "fontView.queryGlyphs"
 label = "Query Glyphs"
 menu = []
@@ -1054,11 +1070,18 @@ label = "Selection Info"
 location = "window"
 controls = [
   "glyph name",
+  "exports",
+  "glyph colour and layer colour",
+  "tags",
   "Unicode values",
   "production name",
   "script",
   "category and subcategory",
+  "case and direction",
   "sort name field with an enabling checkbox",
+  "note",
+  "left, right and width metrics keys",
+  "left and right kerning groups",
 ]
 area = "font-view"
 milestone = "M4"
@@ -1069,6 +1092,8 @@ notes = "Documented, not yet observed. Built in M4.8 with name, Unicode values, 
 guesses = [
   "Turning on the sort name check box only enables the field; the field's value is stored when it is committed. Turning it off removes the stored sort name (glyph.setSortName with null). Settled by observation.",
   "The window is not modal and follows the selection while it is open. Settled by observation.",
+  "The fields are in the order name, exports, glyph colour, layer colour, tags, Unicode, production name, script, category, subcategory, case, direction, sort name, note, the three metrics keys and the two kerning groups. Settled by opening Info for Selection in the reference.",
+  "The layer colour field edits the layer of Font View's master. Settled by observation.",
 ]
 
 [[panel]]

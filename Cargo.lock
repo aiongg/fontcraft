@@ -3377,6 +3377,7 @@ dependencies = [
  "fontcraft-glyphquery",
  "fontcraft-model",
  "fontcraft-render",
+ "fontcraft-spacing",
  "fontcraft-tools",
  "log",
  "serde_json",

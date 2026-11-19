@@ -3,4 +3,5 @@
 pub mod font_info;
 pub mod font_view;
 pub mod glyph_metrics;
+pub mod selection_info;
 pub mod stub;
