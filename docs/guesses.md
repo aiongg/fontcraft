@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2969 guesses on 1565 rows (636 of them live commands).**
+**2974 guesses on 1567 rows (636 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -740,6 +740,11 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontInfo.customParameterPicker` (panel) | M7 | handbook | – | The list shows every catalogue parameter allowed in the tab's scope, in alphabetical order, including those already present; the search matches any part of the name, ignoring case; the picker in the reference app settles order and matching. |
 | `fontInfo.customParameterPicker` (panel) | M7 | handbook | – | A parameter whose appendix entry names no scope is offered in all three tabs; the picker of each tab in the reference app settles it. |
 | `fontInfo.customParameterPicker` (panel) | M7 | handbook | – | The search also matches the descriptions and the other spellings of a name, and Add gives each parameter its kind's empty value; searching for a word of a description in the reference app settles the first, adding Filter there the second. |
+| `dialog.os2Bits` (panel) | M7 | inferred | – | fsType, codePageRanges and unicodeRanges each open a dialog of check boxes with a search field; opening each row's editor in the reference app settles it. |
+| `dialog.os2Bits` (panel) | M7 | inferred | – | codePageRanges stores code page numbers, and a stored bit below 64 that a code page stands for shows as that page; the file the reference app writes after ticking a box settles it. |
+| `dialog.panose` (panel) | M7 | inferred | – | The menus name the values only for family kind 2 (Latin Text); other family kinds show plain numbers. The dialog of the reference app with family kind 3 settles it. |
+| `dialog.panose` (panel) | M7 | inferred | – | Variable Font Origin, Get Hints From Master and Link Metrics With Master are menus of the font's masters that store the master's id; the reference app's row and the file it writes settle it. |
+| `dialog.panose` (panel) | M7 | inferred | – | A refused value's message stays under its row until the next edit; the reference app with vendorID ABCDE settles it. |
 | `fontInfo.masters` (panel) | M7 | handbook | – | A master made with Add Master becomes the selection, and a dragged master stays selected at its new place; the list's selection in the reference app after each action settles it. |
 | `fontInfo.masters` (panel) | M7 | handbook | – | The minus button is disabled while every master is selected, because a font keeps at least one master; whether the reference app disables it or refuses with a message settles it. |
 | `fontInfo.masters` (panel) | M7 | handbook | – | The General section has the name and icon only, without a plus button, because masters take no added General fields; the masters tab of the reference app settles it. |

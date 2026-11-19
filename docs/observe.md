@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1464 rows to check: 2499 guesses and 590 observe steps.**
+**1466 rows to check: 2504 guesses and 592 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 48 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **942** |
+| **Later milestones (after M6)** | all | **944** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 86 |
 | Later milestones (after M6) | Edit View: text mode and preview | 27 |
 | Later milestones (after M6) | Components and anchors | 43 |
@@ -56,7 +56,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Spacing and metrics keys | 12 |
 | Later milestones (after M6) | Kerning and the Kerning window | 14 |
 | Later milestones (after M6) | Font View | 19 |
-| Later milestones (after M6) | Font Info and features | 290 |
+| Later milestones (after M6) | Font Info and features | 292 |
 | Later milestones (after M6) | Interpolation | 86 |
 | Later milestones (after M6) | Hinting | 110 |
 | Later milestones (after M6) | Colour fonts | 68 |
@@ -1560,7 +1560,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (942)
+## Later milestones (after M6) (944)
 
 ### Edit View: drawing, guides, layers and the Palette (86)
 
@@ -2335,7 +2335,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.
   - Guess: Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.
 
-### Font Info and features (290)
+### Font Info and features (292)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
@@ -2523,6 +2523,15 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A parameter whose appendix entry names no scope is offered in all three tabs; the picker of each tab in the reference app settles it.
   - Guess: The search also matches the descriptions and the other spellings of a name, and Add gives each parameter its kind's empty value; searching for a word of a description in the reference app settles the first, adding Filter there the second.
   - Observe: In font A (m7-one), click the plus button beside Custom Parameters on the Font, Masters and Exports tabs: note which of typoAscender, Remove Glyphs, Filter, glyphOrder, versionString, familyNames and copyrights each tab offers, the order of the list, and whether the search matches inside names.
+- [ ] `dialog.os2Bits` (panel, M7, inferred): OS/2 Bits
+  - Guess: fsType, codePageRanges and unicodeRanges each open a dialog of check boxes with a search field; opening each row's editor in the reference app settles it.
+  - Guess: codePageRanges stores code page numbers, and a stored bit below 64 that a code page stands for shows as that page; the file the reference app writes after ticking a box settles it.
+  - Observe: In font A (m7-one), add fsType, codePageRanges and unicodeRanges on the Font tab and click each value: note whether a dialog opens, what it lists and how a search narrows it.
+- [ ] `dialog.panose` (panel, M7, inferred): PANOSE
+  - Guess: The menus name the values only for family kind 2 (Latin Text); other family kinds show plain numbers. The dialog of the reference app with family kind 3 settles it.
+  - Guess: Variable Font Origin, Get Hints From Master and Link Metrics With Master are menus of the font's masters that store the master's id; the reference app's row and the file it writes settle it.
+  - Guess: A refused value's message stays under its row until the next edit; the reference app with vendorID ABCDE settles it.
+  - Observe: In font A (m7-one), add panose on the Font tab and click its value: note whether a dialog opens, its menus and their names for family kind 2 and 3.
 - [ ] `fontInfo.masters` (panel, M7, handbook): Masters
   - Guess: A master made with Add Master becomes the selection, and a dragged master stays selected at its new place; the list's selection in the reference app after each action settles it.
   - Guess: The minus button is disabled while every master is selected, because a font keeps at least one master; whether the reference app disables it or refuses with a message settles it.
