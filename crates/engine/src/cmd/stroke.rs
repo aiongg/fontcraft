@@ -11,13 +11,14 @@
 use std::collections::HashMap;
 
 use fontcraft_geom::{BezPath, Point, Vec2, round_point};
+use fontcraft_hinting::Renumbered;
 use fontcraft_model::plist::{Str, Value as Plist};
-use fontcraft_model::{Dimension, Family, Hint, Layer, LayerSide, Node, NodeKind, Path, Shape, ShapeAttrs};
+use fontcraft_model::{Dimension, Family, Layer, LayerSide, Node, NodeKind, Path, Shape, ShapeAttrs};
 use fontcraft_pathops::{Cap, CapAxis, Join, MAX_STROKE_WIDTH, MaskMode, SMOOTH_MAX_DEGREES, contours_from_bez};
 use serde_json::{Value, json};
 
 use super::common::{Scope, each_layer, grid, scope};
-use super::shared::remap_hint;
+use super::shared::renumber_hints;
 use super::*;
 use crate::EngineError;
 use crate::params::{MAX_TARGETS, Params, TargetKind, Targets};
@@ -339,8 +340,6 @@ struct Expansion {
     new: Vec<usize>,
     /// The new shape index of every old shape; `None` for an expanded path.
     shapes: Vec<Option<usize>>,
-    /// The same for path indices (paths only, in shape order, as node references count them).
-    paths: Vec<Option<usize>>,
 }
 
 /// Replaces the stroked paths of `shapes` (every one, or those at `only`) by the outlines of their
@@ -370,25 +369,18 @@ fn expand_shapes(shapes: &mut Vec<Shape>, only: Option<&[usize]>, grid: f64) -> 
         return Ok(Expansion::default());
     }
     let old = std::mem::take(shapes);
-    let mut out = Expansion { new: Vec::new(), shapes: Vec::with_capacity(old.len()), paths: Vec::new() };
-    let mut path_count = 0usize;
+    let mut out = Expansion { new: Vec::new(), shapes: Vec::with_capacity(old.len()) };
     for (i, shape) in old.into_iter().enumerate() {
         match expanded.remove(&i) {
             Some(paths) => {
                 out.shapes.push(None);
-                out.paths.push(None);
                 for path in paths {
                     out.new.push(shapes.len());
                     shapes.push(Shape::Path(path));
-                    path_count += 1;
                 }
             }
             None => {
                 out.shapes.push(Some(shapes.len()));
-                if matches!(shape, Shape::Path(_)) {
-                    out.paths.push(Some(path_count));
-                    path_count += 1;
-                }
                 shapes.push(shape);
             }
         }
@@ -396,34 +388,34 @@ fn expand_shapes(shapes: &mut Vec<Shape>, only: Option<&[usize]>, grid: f64) -> 
     Ok(out)
 }
 
-/// Expand Outline on one side of `layer`, with the side's hints renumbered so they keep pointing
-/// at the same nodes. A hint on an expanded path is removed: its nodes are gone. Corner components
-/// count shapes (`fontcraft_model::corner`), other hints count paths only (as
-/// `fontcraft_hinting`'s node references do). Returns the indices of the new paths.
-fn expand_side(layer: &mut Layer, side: LayerSide, only: Option<&[usize]>, grid: f64) -> std::result::Result<Vec<usize>, String> {
-    let e = expand_shapes(layer.parts_mut(side).shapes, only, grid)?;
-    if e.new.is_empty() {
-        return Ok(e.new);
-    }
+/// Expand Outline on one side of `layer` (of glyph `glyph`), with the side's hints kept on their
+/// nodes ([`renumber_hints`]): on an expanded path a PostScript end becomes a number at its node's
+/// place, and a TrueType instruction or corner component is removed and reported in `done`. A side
+/// with hints that changed shapes is added to `done`, so the session's hint upkeep leaves it
+/// alone. Returns the indices of the new paths.
+fn expand_side(
+    layer: &mut Layer,
+    side: LayerSide,
+    only: Option<&[usize]>,
+    grid: f64,
+    glyph: &str,
+    done: &mut Renumbered,
+) -> std::result::Result<Vec<usize>, String> {
     let has_hints = match side {
         LayerSide::Foreground => !layer.info.hints.is_empty(),
         LayerSide::Background => layer.info.background.as_ref().is_some_and(|b| !b.hints.is_empty()),
     };
-    if has_hints {
-        let hints = match side {
-            LayerSide::Foreground => Some(&mut layer.info.hints),
-            LayerSide::Background => layer.info.background.as_mut().map(|b| &mut b.hints),
-        };
-        if let Some(hints) = hints {
-            // A reference past the old shapes pointed at nothing before and is left as it is.
-            let by_shape = |i: usize| e.shapes.get(i).map_or(Some(i), |m| *m);
-            let by_path = |i: usize| e.paths.get(i).map_or(Some(i), |m| *m);
-            let renumbered: Vec<Hint> = hints
-                .iter()
-                .filter_map(|h| if fontcraft_model::corner::is_corner(h) { remap_hint(h, &by_shape) } else { remap_hint(h, &by_path) })
-                .collect();
-            *hints = renumbered;
-        }
+    let stroked = layer.parts(side).shapes.iter().any(|sh| matches!(sh, Shape::Path(p) if is_stroked(p)));
+    let before = (has_hints && stroked).then(|| layer.clone());
+    let e = expand_shapes(layer.parts_mut(side).shapes, only, grid)?;
+    if e.new.is_empty() {
+        return Ok(e.new);
+    }
+    if let Some(before) = before {
+        // A reference past the old shapes pointed at nothing before and is left as it is.
+        let map = |i: usize| e.shapes.get(i).map_or(Some(i), |m| *m);
+        renumber_hints(&before, layer, side, glyph, &map, &mut done.report);
+        done.insert(glyph, &layer.id, side);
     }
     Ok(e.new)
 }
@@ -514,15 +506,18 @@ fn expand_outline(s: &mut Session, value: &Value) -> Result<Value> {
             return Err(p.bad(format!("`{k}` goes with one `glyph`; with `glyphs` every stroked path is expanded")));
         }
         let sc = scope(&p, font)?;
-        let out = s.edit("Expand Outline", |font| {
-            each_layer(font, &sc, ID, |_, layer| {
-                Ok(match expand_side(layer, LayerSide::Foreground, None, step) {
+        let (out, done) = s.edit("Expand Outline", |font| {
+            let mut done = Renumbered::default();
+            let out = each_layer(font, &sc, ID, |name, layer| {
+                Ok(match expand_side(layer, LayerSide::Foreground, None, step, name, &mut done) {
                     Ok(v) if v.is_empty() => Some("the layer has no stroked path".into()),
                     Ok(_) => None,
                     Err(e) => Some(e),
                 })
-            })
+            })?;
+            Ok((out, done))
         })?;
+        s.hints_renumbered(done);
         return Ok(out.to_json());
     }
     let mut t = Targets::parse(&p)?;
@@ -531,15 +526,18 @@ fn expand_outline(s: &mut Session, value: &Value) -> Result<Value> {
     }
     let only = (!t.shapes.is_empty()).then(|| t.shapes.clone());
     let bad = bad_for(ID);
-    let new = s.edit("Expand Outline", |font| {
-        t.edit_layer(font, |layer| {
-            let new = expand_side(layer, t.side, only.as_deref(), step).map_err(&bad)?;
+    let (new, done) = s.edit("Expand Outline", |font| {
+        let mut done = Renumbered::default();
+        let new = t.edit_layer(font, |layer| {
+            let new = expand_side(layer, t.side, only.as_deref(), step, &t.glyph, &mut done).map_err(&bad)?;
             if new.is_empty() {
                 return Err(bad("the layer has no stroked path".into()));
             }
             Ok(new)
-        })
+        })?;
+        Ok((new, done))
     })?;
+    s.hints_renumbered(done);
     t.layer = Some(t.layer_id(s.font()?)?);
     let count = new.len();
     t.shapes = new;
@@ -561,15 +559,18 @@ fn expand_outline_all_masters(s: &mut Session, value: &Value) -> Result<Value> {
         Some(_) if !sc.single => return Err(p.bad("`shapes` goes with one `glyph`")),
         Some(_) => Some(Targets::parse(&p)?.shapes),
     };
-    let out = s.edit("Expand Outline for All Masters", |font| {
-        each_layer(font, &sc, ID, |_, layer| {
-            Ok(match expand_side(layer, LayerSide::Foreground, only.as_deref(), step) {
+    let (out, done) = s.edit("Expand Outline for All Masters", |font| {
+        let mut done = Renumbered::default();
+        let out = each_layer(font, &sc, ID, |name, layer| {
+            Ok(match expand_side(layer, LayerSide::Foreground, only.as_deref(), step, name, &mut done) {
                 Ok(v) if v.is_empty() => Some("the layer has no stroked path".into()),
                 Ok(_) => None,
                 Err(e) => Some(e),
             })
-        })
+        })?;
+        Ok((out, done))
     })?;
+    s.hints_renumbered(done);
     if sc.single && out.glyphs.is_empty() {
         let reasons: Vec<String> = out.skipped.iter().filter_map(|v| v.get("reason").and_then(Value::as_str)).map(str::to_string).collect();
         return Err(p.bad(format!("no master layer has a stroked path to expand ({})", reasons.join("; "))));

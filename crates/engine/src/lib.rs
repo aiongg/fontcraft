@@ -98,7 +98,13 @@ fn realigned(what: &str, old: &Arc<Font>, new: &Arc<Font>, stamp: Option<&str>) 
 /// `new` with the hint node references of each layer whose nodes changed since `old` kept on
 /// the same nodes (`fontcraft_hinting::remap`); `None` when none needs to change. Remove Overlap
 /// moves TrueType instructions on removed nodes to the nearest node it created.
-fn hint_upkeep(what: &str, old: &Arc<Font>, new: &Arc<Font>, report: &mut fontcraft_hinting::RemapReport) -> Result<Option<Arc<Font>>> {
+fn hint_upkeep(
+    what: &str,
+    old: &Arc<Font>,
+    new: &Arc<Font>,
+    skip: &fontcraft_hinting::Renumbered,
+    report: &mut fontcraft_hinting::RemapReport,
+) -> Result<Option<Arc<Font>>> {
     if Arc::ptr_eq(old, new) {
         return Ok(None);
     }
@@ -106,7 +112,7 @@ fn hint_upkeep(what: &str, old: &Arc<Font>, new: &Arc<Font>, report: &mut fontcr
         "path.removeOverlap" | "path.removeOverlapForAllMasters" => fontcraft_hinting::RemapMode::OverlapRemoval,
         _ => fontcraft_hinting::RemapMode::Edit,
     };
-    let (next, found) = fontcraft_hinting::remap_after_edit(old, Font::clone(new), mode)
+    let (next, found) = fontcraft_hinting::remap_after_edit(old, Font::clone(new), mode, skip)
         .map_err(|e| EngineError::Disabled(what.to_string(), format!("the hints on the changed nodes cannot be kept: {e}")))?;
     if found.is_empty() && next.glyphs.as_arcs().iter().zip(new.glyphs.as_arcs()).all(|(a, b)| Arc::ptr_eq(a, b)) {
         return Ok(None);
@@ -232,6 +238,9 @@ pub struct Session {
     active: Option<usize>,
     journal: Vec<(String, Value)>,
     depth: u32,
+    /// The layer sides the running command renumbered the hints of itself
+    /// ([`Session::hints_renumbered`]); the hint upkeep leaves them alone.
+    renumbered: fontcraft_hinting::Renumbered,
     untitled: u32,
     next_id: u64,
     /// While `command.batch` runs: the font of each document it changed, as it was before.
@@ -718,6 +727,7 @@ impl Session {
         let snapshot = spec.journal.then(|| (self.docs.clone(), self.active, self.untitled, self.settings.clone(), self.projects.clone()));
         let _modules = extensions::ModuleScope::enter(&self.extensions);
         self.depth = 1;
+        self.renumbered = fontcraft_hinting::Renumbered::default();
         let outcome = guard::catch_panic(|| (spec.run)(self, params));
         self.depth = 0;
         let result = match outcome {
@@ -758,7 +768,8 @@ impl Session {
     /// Then the hint node references of every layer whose nodes the command changed are kept on
     /// the same nodes ([`hint_upkeep`]); what that removed or unlinked is returned.
     fn realign_after(&mut self, id: &str, before: Option<&[DocState]>) -> Result<fontcraft_hinting::RemapReport> {
-        let mut upkeep = fontcraft_hinting::RemapReport::default();
+        let skip = std::mem::take(&mut self.renumbered);
+        let mut upkeep = skip.report.clone();
         let Some(before) = before else { return Ok(upkeep) };
         if matches!(id, "edit.undo" | "edit.redo") {
             return Ok(upkeep);
@@ -769,11 +780,18 @@ impl Session {
             if let Some(font) = realigned(id, &old.font, &doc.font, stamp.as_deref())? {
                 doc.font = font;
             }
-            if let Some(font) = hint_upkeep(id, &old.font, &doc.font, &mut upkeep)? {
+            if let Some(font) = hint_upkeep(id, &old.font, &doc.font, &skip, &mut upkeep)? {
                 doc.font = font;
             }
         }
         Ok(upkeep)
+    }
+
+    /// Tells the session that the running command renumbered the hints of the layer sides in
+    /// `done` itself, for the edit it made: the hint upkeep after the command leaves them alone,
+    /// and `done.report` is returned with its own. Steps of a command add to the same list.
+    pub(crate) fn hints_renumbered(&mut self, done: fontcraft_hinting::Renumbered) {
+        self.renumbered.extend(done);
     }
 
     /// Starts an interaction on the active document: a drag, or a dialog with a live preview.

@@ -188,7 +188,8 @@ fn a_corner_component_follows_its_path_when_a_shape_is_added_before_it() {
         drop(g);
         f
     };
-    let (out, report) = fontcraft_hinting::remap_after_edit(&before, after, fontcraft_hinting::RemapMode::Edit).unwrap();
+    let (out, report) =
+        fontcraft_hinting::remap_after_edit(&before, after, fontcraft_hinting::RemapMode::Edit, &fontcraft_hinting::Renumbered::default()).unwrap();
     assert!(report.is_empty());
     let l = out.glyph("I").unwrap().layer("m01").unwrap();
     let c = l.info.hints.iter().find_map(|h| corner_hint(h).ok().flatten()).unwrap();
@@ -406,7 +407,7 @@ fn upkeep_per_edit_on_inter() {
         for _ in 0..EDITS {
             let next = after.clone();
             let t = std::time::Instant::now();
-            let (out, _) = remap_after_edit(&before, next, RemapMode::Edit).unwrap();
+            let (out, _) = remap_after_edit(&before, next, RemapMode::Edit, &Default::default()).unwrap();
             total += t.elapsed();
             changed = !out.glyph("n").is_some_and(|g| Arc::ptr_eq(g, after.glyph("n").unwrap()));
         }

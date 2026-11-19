@@ -3,7 +3,7 @@
 //! aligning an imported font and the clock.
 
 use fontcraft_model::plist::{Num, Number, Str, Value as Plist};
-use fontcraft_model::{Font, Hint, Layer, MAX_COORDINATE, Shape, Transform};
+use fontcraft_model::{Font, Hint, Layer, LayerSide, MAX_COORDINATE, Shape, Transform};
 use fontcraft_spacing::kerning::Direction;
 use fontcraft_spacing::metrics_source;
 
@@ -78,6 +78,77 @@ pub(crate) fn remap_hint(hint: &Hint, map: &impl Fn(usize) -> Option<usize>) -> 
         }
     }
     Some(out)
+}
+
+/// Keeps the hints of `side` of `layer` (glyph `glyph`) on their nodes after an edit that replaced
+/// some shapes of that side by others and kept the rest as they were. `before` is the layer before
+/// the edit; `layer` still holds the side's hints as they were. `map` gives the new index of each
+/// old shape, `None` for a replaced one. Hints that `fontcraft_hinting` follows go through
+/// [`fontcraft_hinting::renumber_side`]: on a replaced path a PostScript end becomes a number, and
+/// a TrueType instruction or corner component is removed and reported in `report`. Other hints
+/// get their shape indices renumbered, and are dropped when their shape was replaced.
+pub(crate) fn renumber_hints(
+    before: &Layer,
+    layer: &mut Layer,
+    side: LayerSide,
+    glyph: &str,
+    map: &impl Fn(usize) -> Option<usize>,
+    report: &mut fontcraft_hinting::RemapReport,
+) {
+    let was = before.parts(side).shapes;
+    let hints = match side {
+        LayerSide::Foreground => &before.info.hints,
+        LayerSide::Background => match before.info.background.as_ref() {
+            Some(b) => &b.hints,
+            None => return,
+        },
+    };
+    if hints.is_empty() {
+        return;
+    }
+    let kept: Vec<Hint> =
+        hints.iter().filter_map(|h| if fontcraft_hinting::follows_nodes(h, was) { Some(h.clone()) } else { remap_hint(h, map) }).collect();
+    // The new path index of each new shape, then of each old path.
+    let mut count = 0usize;
+    let new_paths: Vec<Option<usize>> = layer
+        .parts(side)
+        .shapes
+        .iter()
+        .map(|sh| {
+            matches!(sh, Shape::Path(_)).then(|| {
+                count += 1;
+                count - 1
+            })
+        })
+        .collect();
+    let paths: Vec<Option<usize>> = was
+        .iter()
+        .enumerate()
+        .filter(|(_, sh)| matches!(sh, Shape::Path(_)))
+        .map(|(i, _)| map(i).and_then(|j| new_paths.get(j).copied().flatten()))
+        .collect();
+    let set = |l: &mut Layer, hints: Vec<Hint>| match side {
+        LayerSide::Foreground => l.info.hints = hints,
+        LayerSide::Background => {
+            if let Some(b) = l.info.background.as_mut() {
+                b.hints = hints;
+            }
+        }
+    };
+    // `renumber_side` reads the hints as both layers hold them.
+    let adjusted;
+    let before = if kept == *hints {
+        before
+    } else {
+        let mut b = before.clone();
+        set(layer, kept.clone());
+        set(&mut b, kept);
+        adjusted = b;
+        &adjusted
+    };
+    if let Some(out) = fontcraft_hinting::renumber_side(before, layer, side, glyph, &paths, report) {
+        *layer = out;
+    }
 }
 
 /// Writes `new` into the node reference `v`, which held `old`, in its own syntax.

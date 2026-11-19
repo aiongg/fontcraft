@@ -21,6 +21,7 @@ use std::collections::BTreeSet;
 
 use fontcraft_components::propagate::{AnchorSource, base_layer, effective_anchors_with};
 use fontcraft_geom::{Affine, Point};
+use fontcraft_hinting::Renumbered;
 use fontcraft_model::corner::{self, CornerTarget};
 use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{
@@ -29,7 +30,7 @@ use fontcraft_model::{
 use serde_json::{Value, json};
 
 use super::common::{Outcome, Scope, in_range, scope};
-use super::shared::{MAX_LAYER_SHAPES, hint_shapes, remap_hint};
+use super::shared::{MAX_LAYER_SHAPES, hint_shapes, remap_hint, renumber_hints};
 use super::*;
 use crate::EngineError;
 use crate::params::{MAX_TARGETS, Params, TargetKind, Targets, kind};
@@ -322,14 +323,16 @@ pub(crate) fn decompose_where(
     Err(format!("components nest more than {MAX_COMPONENT_DEPTH} deep, or a glyph uses itself"))
 }
 
-/// `layer` with the decomposed shapes and its hints renumbered.
-fn with_shapes(layer: &Layer, d: Decomposed) -> Layer {
+/// `layer` (of glyph `glyph`) with the decomposed shapes and its hints renumbered; the layer is
+/// added to `done`, so the session's hint upkeep leaves it alone.
+fn with_shapes(layer: &Layer, d: Decomposed, glyph: &str, done: &mut Renumbered) -> Layer {
     let mut out = layer.clone();
     out.shapes = d.shapes;
     if !layer.info.hints.is_empty() {
         // A reference past the old shapes pointed at nothing before and is left as it is.
         let map = |i: usize| d.map.get(i).map_or(Some(i), |m| *m);
-        out.info.hints = layer.info.hints.iter().filter_map(|h| remap_hint(h, &map)).collect();
+        renumber_hints(layer, &mut out, LayerSide::Foreground, glyph, &map, &mut done.report);
+        done.insert(glyph, &layer.id, LayerSide::Foreground);
     }
     out
 }
@@ -349,6 +352,7 @@ fn full_decomposition(
     glyph: &str,
     layer: &Layer,
     call: &mut CallBudget,
+    done: &mut Renumbered,
 ) -> std::result::Result<FullDecomposition, String> {
     let mut warnings = Vec::new();
     let passed: Vec<Anchor> = match effective_anchors_with(font, Some(data), glyph, &layer.id) {
@@ -364,7 +368,7 @@ fn full_decomposition(
     };
     let d = decompose_shapes(font, layer, None, true, call)?;
     warnings.extend(d.warnings.iter().map(|w| format!("glyph `{glyph}`: {w}")));
-    let mut out = with_shapes(layer, d);
+    let mut out = with_shapes(layer, d, glyph, done);
     let anchors_added = passed.len();
     out.anchors.extend(passed);
     Ok(FullDecomposition { layer: out, anchors_added, warnings })
@@ -420,8 +424,9 @@ fn decompose_glyph_all_masters(s: &mut Session, value: &Value) -> Result<Value> 
 /// error; without it (all masters) it is skipped.
 fn decompose_in_scope(s: &mut Session, p: &Params, sc: &Scope, label: &str, strict: bool) -> Result<Value> {
     let data = s.glyph_data()?;
-    let (out, anchors_added, warnings) = s.edit(label, |font| {
+    let (out, anchors_added, warnings, done) = s.edit(label, |font| {
         let mut out = Outcome::default();
+        let mut done = Renumbered::default();
         let mut anchors_added = 0usize;
         let mut warnings = Vec::new();
         let mut changes: Vec<(String, Layer)> = Vec::new();
@@ -449,7 +454,7 @@ fn decompose_in_scope(s: &mut Session, p: &Params, sc: &Scope, label: &str, stri
                     out.skip(name, Some(id.as_str()), "the layer has no components");
                     continue;
                 }
-                match full_decomposition(font, &data, name, layer, &mut call) {
+                match full_decomposition(font, &data, name, layer, &mut call, &mut done) {
                     Ok(done) => {
                         anchors_added += done.anchors_added;
                         warnings.extend(done.warnings);
@@ -473,8 +478,9 @@ fn decompose_in_scope(s: &mut Session, p: &Params, sc: &Scope, label: &str, stri
                 *slot = layer;
             }
         }
-        Ok((out, anchors_added, warnings))
+        Ok((out, anchors_added, warnings, done))
     })?;
+    s.hints_renumbered(done);
     Ok(json!({"glyphs": out.glyphs, "skipped": out.skipped, "anchorsAdded": anchors_added, "warnings": warnings}))
 }
 
@@ -488,7 +494,8 @@ fn decompose_components(s: &mut Session, value: &Value) -> Result<Value> {
         (Some(_), Some(_)) => return Err(p.bad("give `components` or `shapes`, not both")),
         (a, b) => a.or(b),
     };
-    let (added, count, warnings) = s.edit("Decompose", |font| {
+    let (added, count, warnings, done) = s.edit("Decompose", |font| {
+        let mut done = Renumbered::default();
         let new = {
             let r = t.resolve(font)?;
             crate::check_unlocked(r.glyph)?;
@@ -511,15 +518,16 @@ fn decompose_components(s: &mut Session, value: &Value) -> Result<Value> {
             }
             let d = decompose_shapes(font, layer, Some(&which), false, &mut CallBudget::new()).map_err(|m| p.bad(m))?;
             let summary = (d.added.clone(), d.components, d.warnings.clone());
-            (with_shapes(layer, d), summary)
+            (with_shapes(layer, d, &t.glyph, &mut done), summary)
         };
-        let (layer, summary) = new;
+        let (layer, (added, count, warnings)) = new;
         t.edit_layer(font, |l| {
             *l = layer;
             Ok(())
         })?;
-        Ok(summary)
+        Ok((added, count, warnings, done))
     })?;
+    s.hints_renumbered(done);
     t.layer = Some(t.layer_id(s.font()?)?);
     let layer = t.layer.clone();
     t.shapes = added;

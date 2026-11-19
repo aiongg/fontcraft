@@ -1991,9 +1991,9 @@ milestone = "M3"
 summary = "Context-menu command that replaces a stroked path by ordinary closed outlines of its stroke and drops the stroke attributes."
 ref = "Edit View › Creating Strokes"
 status = "handbook"
-notes = "Built in M3.11: the new paths have no overlaps, outer paths run counter-clockwise, points are on the grid, and they keep the mask flag and colour label of the stroked path. With `glyphs` (Font View) every stroked path of each layer is expanded. M3.36: hints, instructions and corner components on the other paths are renumbered so they stay on the same nodes (node references count paths only, corner components count shapes), in the foreground or background that was expanded."
+notes = "Built in M3.11: the new paths have no overlaps, outer paths run counter-clockwise, points are on the grid, and they keep the mask flag and colour label of the stroked path. With `glyphs` (Font View) every stroked path of each layer is expanded. M3.36: hints, instructions and corner components on the other paths are renumbered so they stay on the same nodes (node references count paths only, corner components count shapes), in the foreground or background that was expanded. On an expanded path a PostScript hint end becomes a number at its node's last position, and a TrueType instruction or corner component is removed and reported under `hintUpkeep.removed`, as docs/plans/M10.md § Node references says for every edit that removes a linked node; documented, not yet observed for Expand Outline."
 guesses = [
-  "A hint, instruction or corner component on an expanded path is removed, since its nodes are gone; the running app would show whether it moves them to the new outline.",
+  "Expand Outline treats a hint on an expanded path as any edit treats a hint on a removed node (a PostScript end becomes a number, an instruction or corner component is removed); the running app would show whether it moves them to the new outline instead.",
 ]
 observe = [
   "Put a stem hint on a stroked path and another on a path after it, run Expand Outline, and note where each hint ends up.",

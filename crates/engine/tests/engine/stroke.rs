@@ -190,7 +190,7 @@ fn expand_outline_replaces_a_stroke_by_its_outline() {
 }
 
 /// Glyph `I`: a stroked square (path 0), a component and a stem (path 1, shape 2). A stem hint
-/// and a corner component sit on the stem, another stem hint on the stroked square.
+/// and a corner component sit on the stem, another stem hint and a corner component on the stroked square.
 fn hinted() -> Session {
     let mut s = Session::with_document();
     run(&mut s, "glyph.newGlyph", json!({"name": "_corner.one"}));
@@ -203,6 +203,7 @@ fn hinted() -> Session {
         let node = |path, node| Edge::Node(NodeRef::new(path, node));
         set_ps_hints(layer, &[PsHint::stem(true, node(1, 0), node(1, 3)), PsHint::stem(false, node(0, 0), node(0, 1))]).unwrap();
         layer.info.hints.push(CornerHint::new("_corner.one", 2, 1).to_hint());
+        layer.info.hints.push(CornerHint::new("_corner.one", 0, 2).to_hint());
         Ok(())
     })
     .unwrap();
@@ -217,12 +218,16 @@ fn expand_outline_keeps_hints_on_their_nodes() {
     let l = layer(&s, "I", "m01");
     assert_eq!(l.shapes.len(), 4);
     let ps: Vec<PsHint> = ps_hints(&l).unwrap().into_iter().map(|(_, h)| h).collect();
-    assert_eq!(ps.len(), 1, "the hint on the expanded square is gone: {ps:?}");
     let node = |path, node| Edge::Node(NodeRef::new(path, node));
     assert_eq!((ps[0].origin, ps[0].other), (node(2, 0), Some(node(2, 3))), "the stem is the third path now");
     assert_eq!(ps[0].edges(&l).unwrap(), (0.0, 700.0));
+    assert_eq!((ps[1].origin, ps[1].other), (Edge::Value(0.0), Some(Edge::Value(100.0))), "the expanded square's ends are unlinked at their places");
+    assert_eq!(r["hintUpkeep"]["unlinked"], json!(2), "{r}");
     let corners: Vec<CornerTarget> = l.info.hints.iter().filter_map(|h| corner::corner_hint(h).unwrap()).map(|c| c.target).collect();
     assert_eq!(corners, [CornerTarget::Node { shape: 3, node: 1 }], "a corner counts shapes, the component included");
+    let removed = r["hintUpkeep"]["removed"].as_array().unwrap();
+    assert_eq!(removed.len(), 1, "the corner on the expanded square is removed: {r}");
+    assert!(removed[0].as_str().unwrap().contains("corner component"), "{r}");
 
     // Undo puts the hints back with the stroke.
     run(&mut s, "edit.undo", json!({}));

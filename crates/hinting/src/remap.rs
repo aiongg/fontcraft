@@ -36,21 +36,26 @@
 //! layer's own hints.
 //!
 //! Left alone: layers and backgrounds without hints, those whose stored hints the command changed
-//! (a command that edits hints keeps its own references right), references that dangled before
-//! the edit, and hints that do not parse. A layer that needs no change keeps its value; a font
+//! (a command that edits hints keeps its own references right), those the command lists in
+//! [`Renumbered`] (it renumbered them itself, with [`renumber_side`]), references that dangled
+//! before the edit, and hints that do not parse. A layer that needs no change keeps its value; a font
 //! that needs none comes back as given.
+//!
+//! [`renumber_side`] is for a command that knows which paths it replaced (Expand Outline,
+//! Decompose): the old paths' new indices are given, so no node is matched by place. The other
+//! paths keep their nodes; references into a replaced path are gone, with the outcomes above.
 //!
 //! The engine runs [`remap_after_edit`] in `Session::realign_after`, after the component
 //! re-alignment, so both land in the command's undo step. Rows: `hinting.ps.manual.linkOnDrop`
 //! (links survive edits), `hinting.ps.masters.transferByNodeLink`,
 //! `hinting.tt.export.overlapRemovalMovesHints` (the editor half).
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
 use fontcraft_model::corner::{CornerHint, CornerTarget, corner_hint, is_corner};
 use fontcraft_model::plist::Value;
-use fontcraft_model::{Background, Font, Layer, Node, NodeKind, Path, Shape};
+use fontcraft_model::{Background, Font, Hint, Layer, LayerSide, Node, NodeKind, Path, Shape};
 
 use crate::noderef::{Syntax, put};
 use crate::{
@@ -80,6 +85,39 @@ impl RemapReport {
     }
 }
 
+/// The layer sides whose hint references a command renumbered itself, with what that did;
+/// [`remap_after_edit`] leaves them alone.
+#[derive(Clone, Debug, Default)]
+pub struct Renumbered {
+    /// (glyph, layer id, background).
+    sides: HashSet<(String, String, bool)>,
+    /// What renumbering removed or unlinked, reported with the upkeep's own.
+    pub report: RemapReport,
+}
+
+impl Renumbered {
+    pub fn insert(&mut self, glyph: &str, layer: &str, side: LayerSide) {
+        self.sides.insert((glyph.to_string(), layer.to_string(), side == LayerSide::Background));
+    }
+
+    pub fn contains(&self, glyph: &str, layer: &str, side: LayerSide) -> bool {
+        // Most commands list nothing: skip building the key.
+        !self.sides.is_empty() && self.sides.contains(&(glyph.to_string(), layer.to_string(), side == LayerSide::Background))
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.sides.is_empty() && self.report.is_empty()
+    }
+
+    /// Adds `other`'s sides and report to these.
+    pub fn extend(&mut self, other: Renumbered) {
+        self.sides.extend(other.sides);
+        self.report.removed.extend(other.report.removed);
+        self.report.unlinked += other.report.unlinked;
+        self.report.moved += other.report.moved;
+    }
+}
+
 /// How references to nodes the edit removed are treated.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum RemapMode {
@@ -91,9 +129,10 @@ pub enum RemapMode {
     OverlapRemoval,
 }
 
-/// `new` with the hint references of every changed layer remapped against `old`. Returns `new`
-/// unchanged (the same `Arc`s) when no layer with hints changed its node structure.
-pub fn remap_after_edit(old: &Font, mut new: Font, mode: RemapMode) -> Result<(Font, RemapReport), HintingError> {
+/// `new` with the hint references of every changed layer remapped against `old`, apart from the
+/// sides in `skip`. Returns `new` unchanged (the same `Arc`s) when no layer with hints changed its
+/// node structure.
+pub fn remap_after_edit(old: &Font, mut new: Font, mode: RemapMode, skip: &Renumbered) -> Result<(Font, RemapReport), HintingError> {
     let mut report = RemapReport::default();
     let (now, before) = (new.glyphs.as_arcs(), old.glyphs.as_arcs());
     if std::ptr::eq(now, before) {
@@ -112,13 +151,15 @@ pub fn remap_after_edit(old: &Font, mut new: Font, mode: RemapMode) -> Result<(F
         };
         let mut layers = Vec::new();
         for (li, layer) in g.layers.iter().enumerate() {
-            let own = !layer.info.hints.is_empty();
-            if !own && !layer.info.background.as_ref().is_some_and(|b| !b.hints.is_empty()) {
+            let own = !layer.info.hints.is_empty() && !skip.contains(&g.name, &layer.id, LayerSide::Foreground);
+            let back =
+                layer.info.background.as_ref().is_some_and(|b| !b.hints.is_empty()) && !skip.contains(&g.name, &layer.id, LayerSide::Background);
+            if !own && !back {
                 continue;
             }
             let Some(was) = prev.layers.iter().find(|l| l.id == layer.id) else { continue };
             let front = if own { remap_layer(was, layer, &g.name, mode, &mut report) } else { None };
-            let back = remap_background(was, front.as_ref().unwrap_or(layer), &g.name, mode, &mut report);
+            let back = if back { remap_background(was, front.as_ref().unwrap_or(layer), &g.name, mode, &mut report) } else { None };
             if let Some(out) = back.or(front) {
                 layers.push((li, out));
             }
@@ -142,13 +183,47 @@ pub fn remap_after_edit(old: &Font, mut new: Font, mode: RemapMode) -> Result<(F
 /// The hints of `new` remapped against `old` (the same layer of glyph `glyph` before the edit);
 /// `None` when nothing needs to change or the layer is left alone (module doc).
 pub fn remap_layer(old: &Layer, new: &Layer, glyph: &str, mode: RemapMode, report: &mut RemapReport) -> Option<Layer> {
-    remap_hints(old, new, glyph, &format!("layer `{}`", new.id), mode, report)
+    remap_hints(old, new, glyph, &format!("layer `{}`", new.id), mode, None, report)
+}
+
+/// The hints of `side` of `new` renumbered for an edit that replaced or renumbered whole paths of
+/// that side and left the other paths' nodes as they were: `paths` holds the new index of each old
+/// path (paths only, in shape order), `None` for a replaced one. `old` is the layer before the edit
+/// and `new` must still hold the side's hints as they were. `None` when nothing needs to change.
+pub fn renumber_side(old: &Layer, new: &Layer, side: LayerSide, glyph: &str, paths: &[Option<usize>], report: &mut RemapReport) -> Option<Layer> {
+    match side {
+        LayerSide::Foreground => remap_hints(old, new, glyph, &format!("layer `{}`", new.id), RemapMode::Edit, Some(paths), report),
+        LayerSide::Background => background(old, new, glyph, RemapMode::Edit, Some(paths), report),
+    }
+}
+
+/// Whether the node references of `hint` are kept by this module when the hint sits on a layer
+/// side whose shapes are `shapes`: PostScript hints, TrueType instructions and corner components on
+/// a path. Other hints (caps, segments, brushes, corners on anything else) are left to the command.
+pub fn follows_nodes(hint: &Hint, shapes: &[Shape]) -> bool {
+    if crate::ps::is_ps(hint) || crate::tt::is_tt(hint) {
+        return true;
+    }
+    match corner_hint(hint) {
+        Ok(Some(c)) => {
+            let shape = match c.target {
+                CornerTarget::Node { shape, .. } | CornerTarget::Intersection { shape, .. } => shape,
+            };
+            matches!(shapes.get(shape), Some(Shape::Path(_)))
+        }
+        _ => false,
+    }
 }
 
 /// `new` with the hints of its background remapped against the background of `old` (the same
 /// layer before the edit), as [`remap_layer`] remaps the layer's own; `None` when nothing needs
 /// to change or the background is left alone (module doc).
 pub fn remap_background(old: &Layer, new: &Layer, glyph: &str, mode: RemapMode, report: &mut RemapReport) -> Option<Layer> {
+    background(old, new, glyph, mode, None, report)
+}
+
+/// [`remap_background`], with the old paths' new indices when the command knows them.
+fn background(old: &Layer, new: &Layer, glyph: &str, mode: RemapMode, known: Option<&[Option<usize>]>, report: &mut RemapReport) -> Option<Layer> {
     let (was, now) = (old.info.background.as_ref()?, new.info.background.as_ref()?);
     if now.hints.is_empty() || was.hints != now.hints || was.shapes == now.shapes {
         return None;
@@ -161,14 +236,23 @@ pub fn remap_background(old: &Layer, new: &Layer, glyph: &str, mode: RemapMode, 
         l.info.hints = b.hints.clone();
         l
     };
-    let mut fixed = remap_hints(&stand_in(was), &stand_in(now), glyph, &format!("background of layer `{}`", new.id), mode, report)?;
+    let mut fixed = remap_hints(&stand_in(was), &stand_in(now), glyph, &format!("background of layer `{}`", new.id), mode, known, report)?;
     let mut out = new.clone();
     out.info.background.as_mut()?.hints = std::mem::take(&mut fixed.info.hints);
     Some(out)
 }
 
-/// [`remap_layer`] for a layer or a background's stand-in; `place` names it in messages.
-fn remap_hints(old: &Layer, new: &Layer, glyph: &str, place: &str, mode: RemapMode, report: &mut RemapReport) -> Option<Layer> {
+/// [`remap_layer`] for a layer or a background's stand-in; `place` names it in messages. `known`:
+/// the new index of each old path, when the command gives it ([`renumber_side`]).
+fn remap_hints(
+    old: &Layer,
+    new: &Layer,
+    glyph: &str,
+    place: &str,
+    mode: RemapMode,
+    known: Option<&[Option<usize>]>,
+    report: &mut RemapReport,
+) -> Option<Layer> {
     if old.info.hints != new.info.hints {
         return None;
     }
@@ -214,7 +298,7 @@ fn remap_hints(old: &Layer, new: &Layer, glyph: &str, place: &str, mode: RemapMo
     if refs.is_empty() {
         return None;
     }
-    let mut m = Matcher { old: old_paths, new: new_paths, grid: None, created: None, keys: None, path_match: HashMap::new() };
+    let mut m = Matcher { old: old_paths, new: new_paths, known, grid: None, created: None, keys: None, path_match: HashMap::new() };
     // `None`: the node is gone. References that dangled before the edit are not in the map.
     let map: BTreeMap<NodeRef, Option<NodeRef>> = refs.iter().filter_map(|r| m.locate(*r).map(|found| (*r, found))).collect();
     let overlap = mode == RemapMode::OverlapRemoval;
@@ -488,6 +572,8 @@ impl Place {
 struct Matcher<'a> {
     old: Vec<&'a Path>,
     new: Vec<&'a Path>,
+    /// The new index of each old path, when the command gives it: it replaces steps 1 to 5.
+    known: Option<&'a [Option<usize>]>,
     /// The new layer's nodes by grid cell, built on first use.
     grid: Option<HashMap<(i64, i64), Vec<NodeRef>>>,
     /// On-curve nodes of the new layer at places no old node had, built on first use.
@@ -559,6 +645,9 @@ impl Matcher<'_> {
     /// when it dangled before.
     fn locate(&mut self, r: NodeRef) -> Option<Option<NodeRef>> {
         let o = self.old_node(r).map(Place::of)?;
+        if let Some(paths) = self.known {
+            return Some(paths.get(r.path).copied().flatten().map(|path| NodeRef::new(path, r.node)).filter(|n| self.new_node(*n).is_some()));
+        }
         if self.new_node(r).is_some_and(|n| on_curve(n) == o.on && (n.x - o.x).abs() <= SAME && (n.y - o.y).abs() <= SAME) {
             return Some(Some(r));
         }

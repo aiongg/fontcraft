@@ -114,6 +114,29 @@ fn decompose_keeps_nested_components_and_adds_no_anchors() {
     assert_eq!(corner_shapes(l), [2]);
 }
 
+/// A component counts no paths and its decomposition adds some: a stem hint on the path after it
+/// is renumbered by paths, a corner by shapes, and the session's hint upkeep leaves both alone.
+#[test]
+fn decompose_renumbers_a_stem_hint_on_the_path_after_the_component() {
+    use fontcraft_hinting::{Edge, NodeRef, PsHint, ps_hints, set_ps_hints};
+    let mut s = composites();
+    s.edit("stem", |f| {
+        let mut g = f.glyph_mut("Aacute.alt")?;
+        let l = g.layer_mut("m01").unwrap();
+        let node = |n| Edge::Node(NodeRef::new(0, n));
+        set_ps_hints(l, &[PsHint::stem(true, node(0), node(3))]).unwrap();
+        Ok(())
+    })
+    .unwrap();
+    run(&mut s, "glyph.decomposeGlyph", json!({"glyph": "Aacute.alt"}));
+    let l = layer(s.font().unwrap(), "Aacute.alt", "m01");
+    let ps: Vec<PsHint> = ps_hints(l).unwrap().into_iter().map(|(_, h)| h).collect();
+    let node = |n| Edge::Node(NodeRef::new(2, n));
+    assert_eq!((ps[0].origin, ps[0].other), (node(0), Some(node(3))), "A and acutecomb draw paths 0 and 1");
+    let corners: Vec<CornerTarget> = l.info.hints.iter().filter_map(|h| corner::corner_hint(h).unwrap()).map(|c| c.target).collect();
+    assert_eq!(corners, [CornerTarget::Node { shape: 2, node: 0 }]);
+}
+
 #[test]
 fn decompose_refuses_what_it_cannot_do_and_changes_nothing() {
     let mut s = composites();
