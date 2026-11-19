@@ -3343,6 +3343,8 @@ dependencies = [
  "eframe 0.37.0",
  "egui 0.37.0",
  "fontcraft-engine",
+ "fontcraft-geom",
+ "fontcraft-glyphquery",
  "fontcraft-tools",
  "log",
  "serde_json",

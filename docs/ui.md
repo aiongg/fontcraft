@@ -126,9 +126,16 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
 
 ## The other seams
 
-- **Canvas.** `canvas::show` runs every pass. `Camera` turns font units (y up) into screen points.
-  A paint layer is one line in `canvas::layers::LAYERS` and a `fn(&PaintCx)` in its own file. The
-  active tool runs in `canvas::active_tool`.
+- **Canvas.** `canvas::show` runs every pass; it is never memoized, so its props may hold the active
+  tool. Its document is the edited glyph's advance box from the ascender down to the descender, and
+  `Camera` turns font units (y up) into screen points through the canvas view. It paints the
+  projected `models.canvas` (the edited glyph in font units, resolved once per engine revision) with
+  `models.canvas_tokens` (colours and sizes; the appearance settings feed them). A paint layer is one
+  line in `canvas::layers::LAYERS` and a `fn(&PaintCx)` in `canvas/paint/<layer>.rs`; drawing uses
+  `PaintCx::painter`. The active-tool slot is `FontCraftApp::active_tool`, a `canvas::ActiveTool`
+  (a craft `CanvasTool` that also hands over the commands its gestures made): craft's `ToolHost`
+  runs it on the canvas's pass, after the layers. View commands and display toggles are
+  `shell/view.rs`.
 - **Dialogs.** `dialogs::run` gets the window's `DialogHost` every pass. A module opens its dialog
   when app state asks for it and takes the answer on a later pass (`dialogs/unsaved.rs` is the
   example: the close question).

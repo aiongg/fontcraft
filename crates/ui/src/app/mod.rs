@@ -46,6 +46,10 @@ pub struct ViewState {
     pub workspace: Workspace<PanelId>,
     /// The document canvas's view.
     pub canvas: CanvasView,
+    /// The canvas's display toggles (View menu).
+    pub display: crate::canvas::Display,
+    /// The canvas edits the background of the layer (`path.editBackground`).
+    pub edit_background: bool,
 }
 
 impl Default for ViewState {
@@ -56,6 +60,8 @@ impl Default for ViewState {
             glyph: None,
             workspace: dock::default_workspace(),
             canvas: CanvasView::new(egui::Rect::NOTHING, Point::ZERO, 1.0),
+            display: crate::canvas::Display::default(),
+            edit_background: false,
         }
     }
 }
@@ -87,7 +93,10 @@ pub struct FontCraftApp {
     /// The tool rail's slots, one per tool group of `fontcraft_tools::TOOLS`.
     pub tool_slots: Vec<ToolSlot<&'static str>>,
     pub view: ViewState,
-    /// Moves with every applied [`ViewMsg`]; part of the projection [`Stamp`].
+    /// The canvas's active-tool slot.
+    pub active_tool: Box<dyn crate::canvas::ActiveTool>,
+    /// Moves with every applied [`ViewMsg`] and every view change a projection reads; part of the projection
+    /// [`Stamp`].
     view_revision: u64,
     /// The engine part of the stamp the enabled states were last asked at.
     enabled_at: Option<Stamp>,
@@ -123,6 +132,7 @@ impl FontCraftApp {
             catalog: Catalog::build(),
             tool_slots: tool_slots(),
             view: ViewState::default(),
+            active_tool: Box::new(craft::ui::canvas::NoTool),
             view_revision: 0,
             enabled_at: None,
             models: Models::default(),
@@ -190,6 +200,11 @@ impl FontCraftApp {
             self.enabled_at = Some(engine);
             self.catalog.refresh(&self.session);
         }
+    }
+
+    /// Records a change to view state that a projection reads, made outside [`ViewMsg`] (a shell command).
+    pub fn view_changed(&mut self) {
+        self.view_revision += 1;
     }
 
     fn apply_view(&mut self, msg: ViewMsg) {
