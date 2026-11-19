@@ -67,6 +67,8 @@ pub struct EditedGlyph {
     pub extra_nodes: Vec<[f64; 2]>,
     /// The nodes that carry a corner component.
     pub corners: Vec<[f64; 2]>,
+    /// The colour (RGBA from 0 to 1) of the status the glyph is in: its stored status, else the font's default.
+    pub status: Option<[f64; 4]>,
 }
 
 /// One component of the edited side.
@@ -153,6 +155,7 @@ pub fn edited_glyph(font: &Font, data: Option<&GlyphData>, glyph: &Glyph, master
         zones,
         extra_nodes: extra_nodes(&layer),
         corners: corners(&layer),
+        status: fontcraft_engine::cmd::status::effective_status(font, &glyph.name).map(|def| def.color),
         layer,
         outline,
         source,

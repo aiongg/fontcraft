@@ -2,6 +2,7 @@
 //!
 //! | Module | Draws |
 //! |---|---|
+//! | [`status`] | the glyph status tint behind the edited glyph |
 //! | [`background`] | the darker canvas while the background is edited; the other visible layers and the other side of the layer |
 //! | [`metrics`] | alignment zones, metric lines and their names, the edited glyph's side lines |
 //! | [`outline`] | the edited side's composite outline, over the paths as drawn when strokes or masks change it |
@@ -15,6 +16,7 @@ pub mod components;
 pub mod metrics;
 pub mod nodes;
 pub mod outline;
+pub mod status;
 
 use craft::behavior::kurbo::Affine;
 use egui::{Pos2, Shape, Stroke};

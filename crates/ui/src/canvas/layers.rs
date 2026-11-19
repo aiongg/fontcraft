@@ -41,6 +41,7 @@ pub struct PaintLayer {
 /// Every paint layer, bottom first.
 pub const LAYERS: &[PaintLayer] = &[
     PaintLayer { id: "background", paint: paint::background::tint },
+    PaintLayer { id: "status", paint: paint::status::paint },
     PaintLayer { id: "metrics", paint: paint::metrics::paint },
     PaintLayer { id: "otherLayers", paint: paint::background::paint },
     PaintLayer { id: "outline", paint: paint::outline::paint },
