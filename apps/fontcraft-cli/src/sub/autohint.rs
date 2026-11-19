@@ -2,6 +2,8 @@
 //! opens in a session of its own, `autohint.ps.run` (or `autohint.tt.run` for TrueType work)
 //! stores the hints on the master layers, and the document is saved to the output. The options
 //! are the reference tool's; those the autohinter does not offer yet are refused, never ignored.
+//! Override sets come from `--fontinfo-file`, else from a file named `fontinfo` beside each input,
+//! as the reference reads them for each font.
 //!
 //! Glyph selectors follow otfautohint's rules (AFDKO 5.0.1 `__main__.py` and `autohint.py`, Apache-2.0, Copyright 2014, 2016, 2022 Adobe; see
 //! `NOTICE`): a number is a glyph index, `/N` is CID N (`cid0000N`, `/0` is `.notdef`), a name
@@ -15,7 +17,7 @@ use fontcraft_engine::Session;
 use serde_json::{Map, Value, json};
 
 use crate::args::{self, OptSpec, Parsed};
-use crate::io::{self, Failure, Outcome, batch, batch_outcome, detail, execute, note, out, out_json_line, usage};
+use crate::io::{self, Failure, Outcome, batch, batch_outcome, detail, execute, note, out, out_json_line, usage, warn};
 
 use super::Subcommand;
 
@@ -23,9 +25,10 @@ pub const SUBCOMMAND: Subcommand =
     Subcommand { name: "autohint", summary: "Add PostScript or TrueType hints", usage: USAGE, options: OPTIONS, actions: &[], run };
 
 const USAGE: &str = "\
-  fontcraft-cli autohint INPUT... [-o OUT...] [--glyphs LIST] [--all] [--reference FONT] [--allow-changes] [--report-only] [options]
+  fontcraft-cli autohint INPUT... [-o OUT...] [--glyphs LIST] [--all] [--allow-changes] [--report-only] [options]
       Run the PostScript autohinter on each source and store its stems on the master layers,
-      the masters of one glyph hinted together. With --tt-options or --tt-control the TrueType
+      the masters of one glyph hinted together. Override sets in a file named fontinfo beside
+      an input apply unless --ignore-fontinfo or --fontinfo-file. With --tt-options or --tt-control the TrueType
       autohinter stores its instructions on the main master instead. Layers that already have
       hints are left alone unless --all. Each output is INPUT.autohinted.EXT unless -o (one
       per input, comma-separated), --output-dir or --in-place says otherwise. A compiled font
@@ -39,10 +42,26 @@ const USAGE: &str = "\
 pub(super) const MAX_TEXT_FILE: usize = 16 << 20;
 /// Most unresolved glyph selector entries reported one by one.
 const MAX_SELECTOR_WARNINGS: usize = 20;
-/// The file of override sets the reference reads from the folder of the first input.
+/// The file of override sets the reference reads from the folder of each font.
 const FONTINFO_FILE_NAME: &str = "fontinfo";
 /// Inserted between the input's name and its extension when no output is named.
 const OUTPUT_SUFFIX: &str = ".autohinted";
+/// The options of the reference's overlap group, of which one may be given.
+const OVERLAP_OPTIONS: [&str; 5] = ["overlap-glyphs", "overlaps-file", "force-overlap", "force-no-overlap", "loose-overlap-mapping"];
+/// The options only the PostScript autohinter takes.
+const POSTSCRIPT_OPTIONS: [&str; 11] = [
+    "flex",
+    "hint-sub",
+    "max-segments",
+    "fontinfo-file",
+    "overlap-glyphs",
+    "overlaps-file",
+    "force-overlap",
+    "loose-overlap-mapping",
+    "keep-conflicts",
+    "allow-changes",
+    "decimal",
+];
 
 /// The options, as data (M12.39).
 const OPTIONS: &[OptSpec] = &[
@@ -54,21 +73,27 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::value("reference", "FONT", "", "hint compatibly with this reference master (not built yet: hint one source with several masters)")
         .short('r'),
     OptSpec::value("reference-out", "PATH", "", "where to write the hinted reference (not built yet)").short('b'),
-    OptSpec::list("overlap-glyphs", "SELECTOR", "", "glyphs whose overlaps are accounted for (not built yet)").short('m'),
-    OptSpec::value("overlaps-file", "FILE", "", "read the overlap glyphs from FILE (not built yet)"),
-    OptSpec::switch("force-overlap", false, "account for overlaps in every glyph (not built yet)"),
-    OptSpec::switch("force-no-overlap", false, "account for overlaps in no glyph (what the autohinter does)"),
-    OptSpec::switch("loose-overlap-mapping", false, "relax the overlap mapping (not built yet)"),
+    OptSpec::list("overlap-glyphs", "SELECTOR", "", "hint these glyphs as if their overlapping contours were merged").short('m'),
+    OptSpec::value("overlaps-file", "FILE", "", "read the overlap glyphs from FILE"),
+    OptSpec::switch("force-overlap", false, "account for overlaps in every glyph"),
+    OptSpec::switch("force-no-overlap", false, "account for overlaps in no glyph (default: those hinted in several masters)"),
+    OptSpec::switch("loose-overlap-mapping", false, "match the overlap-free outline to the original loosely"),
     OptSpec::value("write-layer", "NAME|processed", "", "the UFO layer that receives the hints (not built yet: hints go on the master layers)"),
-    OptSpec::switch("keep-conflicts", false, "keep stems whose order changes between masters (not built yet)").short('k'),
-    OptSpec::switch("allow-changes", false, "allow small outline changes that improve hinting (not built yet)").short('c'),
+    OptSpec::switch("write-to-default-layer", false, "write the hints to the default layer, where they always go").short('w'),
+    OptSpec::switch("keep-conflicts", false, "keep a stem whose order against another changes between masters").short('k'),
+    OptSpec::switch(
+        "allow-changes",
+        false,
+        "let the autohinter reorder contours and straighten nearly straight curves while it works (outlines are kept)",
+    )
+    .short('c'),
     OptSpec::switch("report-only", false, "hint and report without writing anything"),
-    OptSpec::switch("decimal", false, "keep fractional coordinates (not built yet)").short('d'),
+    OptSpec::switch("decimal", false, "keep fractional coordinates instead of rounding them before hinting").short('d'),
     OptSpec::switch("flex", true, "generate flex at export; --no-flex turns it off (PostScript)"),
     OptSpec::switch("hint-sub", true, "use hint substitution; --no-hint-sub keeps one hint set per glyph (PostScript)"),
     OptSpec::switch("zones-stems", true, "--no-zones-stems: hint without alignment zones or stem widths (the autohinter always may, with a warning)"),
-    OptSpec::value("fontinfo-file", "FILE", "", "override sets (FDDict and GlyphSet blocks), for --print-list-fddict"),
-    OptSpec::switch("ignore-fontinfo", false, "do not read the file named fontinfo beside the first input"),
+    OptSpec::value("fontinfo-file", "FILE", "", "hint with the override sets (FDDict and GlyphSet blocks) in FILE"),
+    OptSpec::switch("ignore-fontinfo", false, "do not read the file named fontinfo beside each input"),
     OptSpec::switch("print-list-fddict", false, "list the zone-and-stem sets of the default master and their glyphs, then stop"),
     OptSpec::switch("print-all-fddict", false, "the same for every master"),
     OptSpec::value("max-segments", "N", "", "leave a direction with more segments unhinted (default and at most 100; PostScript)"),
@@ -81,9 +106,6 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::value("face", "N", "", "the font of a collection to read"),
     OptSpec::switch("dry-run", false, "hint and report what would be written, without writing"),
     OptSpec::switch("json", false, "print one JSON result per input"),
-    OptSpec::switch("quiet", false, "print nothing but errors").short('q'),
-    OptSpec::switch("verbose", false, "print skipped glyphs and more detail on stderr").short('v'),
-    OptSpec::value("jobs", "N", "1", "inputs processed at once").short('j'),
 ];
 
 /// Which autohinter a run uses.
@@ -111,7 +133,7 @@ impl Hinter {
 
 /// Where one input's result goes.
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum Target {
+pub(super) enum Target {
     /// Back into the input's own file (`file.save`).
     InPlace,
     /// A new file (`file.saveAs`), its format from the extension.
@@ -132,39 +154,33 @@ fn run(raw: &[String]) -> Outcome {
     if parsed.help {
         return out(&super::help(&SUBCOMMAND));
     }
-    set_verbosity(&parsed);
     if parsed.positional.is_empty() {
         return Err(usage(super::help(&SUBCOMMAND)));
     }
     let selection = Selection::from_options(&parsed)?;
+    let fontinfo = Fontinfo::from_options(&parsed)?;
     if parsed.switch("print-list-fddict") || parsed.switch("print-all-fddict") {
-        return print_fd_dicts(&parsed, selection.as_ref());
+        return print_fd_dicts(&parsed, selection.as_ref(), &fontinfo);
     }
     refuse_unbuilt(&parsed)?;
+    refuse_conflicts(&parsed)?;
     let hinter = choose_hinter(&parsed)?;
     let params = hint_params(&parsed, hinter)?;
+    let overlaps = Selection::overlaps(&parsed)?;
     let outputs = parsed.list("output");
     refuse_repeats(&parsed.positional)?;
     if !outputs.is_empty() && outputs.len() != parsed.positional.len() {
         return Err(usage(format!("{} inputs and {} outputs: give one output per input", parsed.positional.len(), outputs.len())));
     }
-    if parsed.value("fontinfo-file").is_some() {
-        return Err(Failure::Failed("override sets from a fontinfo file are not applied when hinting yet; --print-list-fddict lists them".into()));
-    }
-    if !parsed.switch("ignore-fontinfo")
-        && let Some(first) = parsed.positional.first()
-        && let Some(path) = fontinfo_beside(first)
-    {
-        note(&format!("{} is not applied when hinting yet (--ignore-fontinfo silences this)", path.display()));
-    }
     let write = !parsed.switch("report-only") && !parsed.switch("dry-run");
-    let jobs = jobs(&parsed)?;
+    let jobs = parsed.jobs()?;
     let as_json = parsed.switch("json");
+    let extra = Extra { selection: selection.as_ref(), overlaps: overlaps.as_ref(), fontinfo: (hinter == Hinter::PostScript).then_some(&fontinfo) };
 
     let results = batch(&parsed.positional, jobs, |input| {
         let index = parsed.positional.iter().position(|p| p == input).unwrap_or(0);
-        let target = target(&parsed, input, outputs.get(index).map(String::as_str))?;
-        hint_one(&parsed, input, &target, hinter, &params, selection.as_ref(), write)
+        let target = target(&parsed, input, outputs.get(index).map(String::as_str), OUTPUT_SUFFIX)?;
+        hint_one(&parsed, input, &target, hinter, &params, &extra, write)
     })?;
     for r in &results {
         match r {
@@ -191,6 +207,7 @@ fn refuse_repeats(inputs: &[String]) -> Outcome {
     }
 }
 
+/// The message level from `stems`' own -q and -v.
 pub(super) fn set_verbosity(parsed: &Parsed) {
     io::set_verbosity(if parsed.switch("quiet") {
         0
@@ -201,35 +218,44 @@ pub(super) fn set_verbosity(parsed: &Parsed) {
     });
 }
 
+/// `stems`' own --jobs.
 pub(super) fn jobs(parsed: &Parsed) -> Result<usize, Failure> {
     parsed.value("jobs").map_or(Ok(1), str::parse::<usize>).map_err(|_| usage("--jobs needs a number"))
 }
 
 /// The reference tool's options the autohinter does not offer yet.
 fn refuse_unbuilt(parsed: &Parsed) -> Outcome {
-    for name in ["reference", "reference-out", "overlaps-file", "write-layer"] {
-        if parsed.value(name).is_some() {
-            return Err(not_built(name));
-        }
+    match ["reference", "reference-out", "write-layer"].into_iter().find(|name| parsed.value(name).is_some()) {
+        Some(name) => Err(not_built(name)),
+        None => Ok(()),
     }
-    if !parsed.list("overlap-glyphs").is_empty() {
-        return Err(not_built("overlap-glyphs"));
-    }
-    for name in ["force-overlap", "loose-overlap-mapping", "keep-conflicts", "allow-changes", "decimal"] {
-        if parsed.switch(name) {
-            return Err(not_built(name));
-        }
-    }
-    Ok(())
 }
 
 pub(super) fn not_built(option: &str) -> Failure {
     let hint = match option {
         "reference" | "reference-out" => ": hint one source with several masters, whose masters are hinted together",
-        "write-layer" => ": hints are stored on the master layers",
+        "write-layer" => ": hints are stored on the master layers, which a UFO keeps in its default layer",
         _ => "",
     };
     Failure::Failed(format!("--{option} is not built yet{hint}"))
+}
+
+/// Whether option `name` is on the command line: a switch turned on, a value or a list given.
+fn given(parsed: &Parsed, name: &str) -> bool {
+    parsed.switch(name) || parsed.value(name).is_some() || !parsed.list(name).is_empty()
+}
+
+/// The combinations the reference refuses: more than one option of the overlap group, and
+/// --allow-changes with --report-only.
+fn refuse_conflicts(parsed: &Parsed) -> Outcome {
+    let overlap: Vec<&str> = OVERLAP_OPTIONS.into_iter().filter(|name| given(parsed, name)).collect();
+    if overlap.len() > 1 {
+        return Err(usage(format!("give one of --{}", overlap.join(", --"))));
+    }
+    if parsed.switch("allow-changes") && parsed.switch("report-only") {
+        return Err(usage("--allow-changes changes what is written, and --report-only writes nothing: give one"));
+    }
+    Ok(())
 }
 
 /// The TrueType autohinter when its options or control instructions are given, or when the
@@ -240,9 +266,17 @@ fn choose_hinter(parsed: &Parsed) -> Result<Hinter, Failure> {
     if !(tt_options || tt_input) {
         return Ok(Hinter::PostScript);
     }
-    let ps_only = !parsed.switch("flex") || !parsed.switch("hint-sub") || parsed.value("max-segments").is_some();
-    if ps_only {
-        return Err(usage("--no-flex, --no-hint-sub and --max-segments are PostScript options; the TrueType autohinter takes --tt-options"));
+    // --flex and --hint-sub are on by default: only their --no- forms count as given.
+    let ps_only: Vec<&str> = POSTSCRIPT_OPTIONS
+        .into_iter()
+        .filter(|name| match *name {
+            "flex" | "hint-sub" => !parsed.switch(name),
+            _ => given(parsed, name),
+        })
+        .collect();
+    if let Some(name) = ps_only.first() {
+        let shown = if matches!(*name, "flex" | "hint-sub") { format!("no-{name}") } else { name.to_string() };
+        return Err(usage(format!("--{shown} is an option of the PostScript autohinter; the TrueType autohinter takes --tt-options")));
     }
     Ok(Hinter::TrueType)
 }
@@ -268,6 +302,18 @@ fn hint_params(parsed: &Parsed, hinter: Hinter) -> Result<Map<String, Value>, Fa
             params.insert("flex".into(), json!(parsed.switch("flex")));
             params.insert("hintSubstitution".into(), json!(parsed.switch("hint-sub")));
             params.insert("hintAll".into(), json!(parsed.switch("all")));
+            params.insert("allowChanges".into(), json!(parsed.switch("allow-changes")));
+            params.insert("keepConflicts".into(), json!(parsed.switch("keep-conflicts")));
+            params.insert("decimal".into(), json!(parsed.switch("decimal")));
+            params.insert("looseOverlapMapping".into(), json!(parsed.switch("loose-overlap-mapping")));
+            let overlap = if parsed.switch("force-overlap") {
+                "all"
+            } else if parsed.switch("force-no-overlap") {
+                "none"
+            } else {
+                "auto"
+            };
+            params.insert("overlap".into(), json!(overlap));
             if let Some(text) = parsed.value("max-segments") {
                 let n: u32 = text.parse().map_err(|_| usage(format!("--max-segments takes a whole number, not `{text}`")))?;
                 params.insert("maxSegments".into(), json!(n));
@@ -286,8 +332,8 @@ fn hint_params(parsed: &Parsed, hinter: Hinter) -> Result<Map<String, Value>, Fa
 }
 
 /// Where `input`'s result goes: `-o`'s entry, else `--in-place`, else the input's name with
-/// [`OUTPUT_SUFFIX`] in `--output-dir` or beside it.
-fn target(parsed: &Parsed, input: &str, named: Option<&str>) -> Result<Target, Failure> {
+/// `suffix` before its extension, in `--output-dir` or beside it.
+pub(super) fn target(parsed: &Parsed, input: &str, named: Option<&str>, suffix: &str) -> Result<Target, Failure> {
     let input_path = Path::new(input.trim_end_matches(['/', '\\']));
     if parsed.switch("in-place") {
         if named.is_some() || parsed.value("output-dir").is_some() {
@@ -300,8 +346,8 @@ fn target(parsed: &Parsed, input: &str, named: Option<&str>) -> Result<Target, F
         None => {
             let stem = input_path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "output".into());
             let name = match input_path.extension() {
-                Some(ext) => format!("{stem}{OUTPUT_SUFFIX}.{}", ext.to_string_lossy()),
-                None => format!("{stem}{OUTPUT_SUFFIX}"),
+                Some(ext) => format!("{stem}{suffix}.{}", ext.to_string_lossy()),
+                None => format!("{stem}{suffix}"),
             };
             let dir = parsed.value("output-dir").map(PathBuf::from).or_else(|| input_path.parent().map(Path::to_path_buf)).unwrap_or_default();
             dir.join(name)
@@ -338,6 +384,49 @@ fn fontinfo_beside(input: &str) -> Option<PathBuf> {
     path.is_file().then_some(path)
 }
 
+/// Where the override sets come from.
+enum Fontinfo {
+    /// The text of `--fontinfo-file`, for every input.
+    File(String),
+    /// The file named fontinfo beside each input, when there is one.
+    Beside,
+    /// `--ignore-fontinfo`.
+    Ignored,
+}
+
+impl Fontinfo {
+    fn from_options(parsed: &Parsed) -> Result<Fontinfo, Failure> {
+        Ok(match parsed.value("fontinfo-file") {
+            Some(file) => Fontinfo::File(read_text(file)?),
+            None if parsed.switch("ignore-fontinfo") => Fontinfo::Ignored,
+            None => Fontinfo::Beside,
+        })
+    }
+
+    /// The override sets for `input`.
+    fn text_for(&self, input: &str) -> Result<Option<String>, Failure> {
+        match self {
+            Fontinfo::File(text) => Ok(Some(text.clone())),
+            Fontinfo::Ignored => Ok(None),
+            Fontinfo::Beside => match fontinfo_beside(input) {
+                Some(path) => {
+                    detail(&format!("{input}: override sets from {}", path.display()));
+                    read_text(&path.to_string_lossy()).map(Some)
+                }
+                None => Ok(None),
+            },
+        }
+    }
+}
+
+/// What each input resolves for itself.
+struct Extra<'a> {
+    selection: Option<&'a Selection>,
+    overlaps: Option<&'a Selection>,
+    /// `None` for the TrueType autohinter, which takes no override sets.
+    fontinfo: Option<&'a Fontinfo>,
+}
+
 /// Opens `input`, hints it and, when `write`, saves it to `target`.
 fn hint_one(
     parsed: &Parsed,
@@ -345,7 +434,7 @@ fn hint_one(
     target: &Target,
     hinter: Hinter,
     shared: &Map<String, Value>,
-    selection: Option<&Selection>,
+    extra: &Extra,
     write: bool,
 ) -> Result<Done, Failure> {
     let output = match target {
@@ -363,24 +452,37 @@ fn hint_one(
         )));
     }
     let mut params = shared.clone();
-    if let Some(sel) = selection {
+    if let Some(sel) = extra.selection {
         let (key, names) = sel.resolve(&mut session, input)?;
         params.insert(key.into(), json!(names));
+    }
+    if let Some(sel) = extra.overlaps {
+        let (_, names) = sel.resolve(&mut session, input)?;
+        params.insert("overlapGlyphs".into(), json!(names));
+    }
+    if let Some(text) = extra.fontinfo.map(|f| f.text_for(input)).transpose()?.flatten() {
+        params.insert("fontinfo".into(), json!(text));
     }
     let result = execute(&mut session, hinter.command(), &Value::Object(params))?;
     if !write {
         return Ok(Done { input: input.to_string(), output: Some(output), written: false, hinter, result });
     }
+    save(&mut session, target)?;
+    Ok(Done { input: input.to_string(), output: Some(output), written: true, hinter, result })
+}
+
+/// Saves the session's document to `target`, making the output's folder when it is missing.
+pub(super) fn save(session: &mut Session, target: &Target) -> Outcome {
     match target {
-        Target::InPlace => execute(&mut session, "file.save", &json!({}))?,
+        Target::InPlace => execute(session, "file.save", &json!({}))?,
         Target::File(path) => {
             if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty() && !d.exists()) {
                 std::fs::create_dir_all(dir).map_err(|e| Failure::Failed(format!("cannot create {}: {e}", dir.display())))?;
             }
-            execute(&mut session, "file.saveAs", &json!({"path": path}))?
+            execute(session, "file.saveAs", &json!({"path": path}))?
         }
     };
-    Ok(Done { input: input.to_string(), output: Some(output), written: true, hinter, result })
+    Ok(())
 }
 
 /// Opens `input` (a collection member with `face`) as the session's document.
@@ -434,25 +536,19 @@ fn entry_name(entry: &Value) -> String {
 }
 
 /// `--print-list-fddict` and `--print-all-fddict`: `autohint.ps.listFdDicts` on each input.
-fn print_fd_dicts(parsed: &Parsed, selection: Option<&Selection>) -> Outcome {
+fn print_fd_dicts(parsed: &Parsed, selection: Option<&Selection>, fontinfo: &Fontinfo) -> Outcome {
     if selection.is_some() {
         note("the glyph selection does not apply to the hint dictionary list");
     }
-    let fontinfo = match parsed.value("fontinfo-file") {
-        Some(file) => Some(read_text(file)?),
-        None if parsed.switch("ignore-fontinfo") => None,
-        None => parsed.positional.first().and_then(|p| fontinfo_beside(p)).map(|p| read_text(&p.to_string_lossy())).transpose()?,
-    };
-    let mut params = Map::new();
-    params.insert("allInstances".into(), json!(parsed.switch("print-all-fddict")));
-    if let Some(text) = fontinfo {
-        params.insert("fontinfo".into(), json!(text));
-    }
-    let params = Value::Object(params);
-    let results = batch(&parsed.positional, jobs(parsed)?, |input| {
+    let results = batch(&parsed.positional, parsed.jobs()?, |input| {
+        let mut params = Map::new();
+        params.insert("allInstances".into(), json!(parsed.switch("print-all-fddict")));
+        if let Some(text) = fontinfo.text_for(input)? {
+            params.insert("fontinfo".into(), json!(text));
+        }
         let mut session = Session::new();
         open(&mut session, input, parsed.value("face"))?;
-        Ok((input.to_string(), execute(&mut session, "autohint.ps.listFdDicts", &params)?))
+        Ok((input.to_string(), execute(&mut session, "autohint.ps.listFdDicts", &Value::Object(params))?))
     })?;
     for r in &results {
         match r {
@@ -522,6 +618,12 @@ fn number(v: &Value) -> String {
     }
 }
 
+/// The comma- or whitespace-separated entries of a glyph list file.
+fn read_entries(path: &str) -> Result<Vec<String>, Failure> {
+    let text = read_text(path)?;
+    Ok(text.split(|c: char| c == ',' || c.is_whitespace()).filter(|s| !s.is_empty()).map(str::to_string).collect())
+}
+
 /// A text file named by an option, at most [`MAX_TEXT_FILE`] bytes.
 pub(super) fn read_text(path: &str) -> Result<String, Failure> {
     let bytes = io::read_input(path)?;
@@ -558,12 +660,38 @@ impl Selection {
         let exclude = name.starts_with("exclude");
         let entries = match name {
             "glyphs" | "exclude-glyphs" => parsed.list(name).to_vec(),
-            _ => {
-                let text = read_text(parsed.value(name).unwrap_or_default())?;
-                text.split(|c: char| c == ',' || c.is_whitespace()).filter(|s| !s.is_empty()).map(str::to_string).collect()
-            }
+            _ => read_entries(parsed.value(name).unwrap_or_default())?,
         };
         Ok(Some(Selection { exclude, entries }))
+    }
+
+    /// The glyphs `--overlap-glyphs` or `--overlaps-file` names, if either is given (the two
+    /// exclude each other, see [`refuse_conflicts`]).
+    fn overlaps(parsed: &Parsed) -> Result<Option<Selection>, Failure> {
+        let entries = match parsed.value("overlaps-file") {
+            Some(file) => read_entries(file)?,
+            None if !parsed.list("overlap-glyphs").is_empty() => parsed.list("overlap-glyphs").to_vec(),
+            None => return Ok(None),
+        };
+        Ok(Some(Selection { exclude: false, entries }))
+    }
+
+    /// The glyph names the selection resolves to in `order` (a font's glyph order): the entries
+    /// in the order given without repeats, or for an exclusion every other glyph in glyph
+    /// order. Entries the font cannot resolve are reported for `input` and left out.
+    pub(super) fn names_in(&self, order: &[String], input: &str) -> Vec<String> {
+        let (names, unresolved) = resolve_entries(&self.entries, order);
+        for warning in unresolved.iter().take(MAX_SELECTOR_WARNINGS) {
+            warn(&format!("{input}: {warning}"));
+        }
+        if unresolved.len() > MAX_SELECTOR_WARNINGS {
+            warn(&format!("{input}: {} more glyph selector entries not in the font", unresolved.len() - MAX_SELECTOR_WARNINGS));
+        }
+        if !self.exclude {
+            return names;
+        }
+        let excluded: std::collections::HashSet<&str> = names.iter().map(String::as_str).collect();
+        order.iter().filter(|n| !excluded.contains(n.as_str())).cloned().collect()
     }
 
     /// The parameter (`glyphs` or `excludeGlyphs`) and the glyph names the selection resolves
@@ -580,10 +708,10 @@ impl Selection {
             .collect();
         let (names, unresolved) = resolve_entries(&self.entries, &order);
         for warning in unresolved.iter().take(MAX_SELECTOR_WARNINGS) {
-            note(&format!("{input}: {warning}"));
+            warn(&format!("{input}: {warning}"));
         }
         if unresolved.len() > MAX_SELECTOR_WARNINGS {
-            note(&format!("{input}: {} more glyph selector entries not in the font", unresolved.len() - MAX_SELECTOR_WARNINGS));
+            warn(&format!("{input}: {} more glyph selector entries not in the font", unresolved.len() - MAX_SELECTOR_WARNINGS));
         }
         Ok((if self.exclude { "excludeGlyphs" } else { "glyphs" }, names))
     }
@@ -694,12 +822,28 @@ mod tests {
     }
 
     #[test]
+    fn autohint_refuses_what_the_reference_refuses_together() {
+        let code = |list: &[&str]| run(&strings(list)).unwrap_err().exit_code();
+        // One option of the overlap group at a time, as the reference's parser has it.
+        assert_eq!(code(&["in.ufo", "--force-overlap", "--force-no-overlap"]), 2);
+        assert_eq!(code(&["in.ufo", "--force-overlap", "--loose-overlap-mapping"]), 2);
+        assert_eq!(code(&["in.ufo", "--overlap-glyphs", "a", "--force-overlap"]), 2);
+        assert_eq!(code(&["in.ufo", "--allow-changes", "--report-only"]), 2);
+        // PostScript options with the TrueType autohinter.
+        assert_eq!(code(&["in.ufo", "--tt-options", "--hinting-range-min=8", "--decimal"]), 2);
+        assert_eq!(code(&["in.ufo", "--tt-options", "--hinting-range-min=8", "--force-overlap"]), 2);
+        // Built options get past the checks to the missing input.
+        assert_eq!(code(&["/nonexistent/in.ufo", "--keep-conflicts", "--decimal", "--allow-changes", "-w", "--force-overlap"]), 3);
+        assert_eq!(code(&["/nonexistent/in.ufo", "--write-layer", "processed"]), 4, "a layer other than the default is not built");
+    }
+
+    #[test]
     fn outputs_default_beside_the_input_and_never_replace_it() {
         let parsed = args::parse(OPTIONS, &strings(&["dir/Font.ufo"])).unwrap();
-        assert_eq!(target(&parsed, "dir/Font.ufo/", None).unwrap(), Target::File(PathBuf::from("dir/Font.autohinted.ufo")));
-        assert!(target(&parsed, "dir/Font.ufo", Some("dir/Font.ufo")).is_err());
-        assert!(target(&parsed, "dir/Font.designspace", Some("dir/Other.designspace")).is_err(), "its UFOs would land on the input's");
+        assert_eq!(target(&parsed, "dir/Font.ufo/", None, OUTPUT_SUFFIX).unwrap(), Target::File(PathBuf::from("dir/Font.autohinted.ufo")));
+        assert!(target(&parsed, "dir/Font.ufo", Some("dir/Font.ufo"), OUTPUT_SUFFIX).is_err());
+        assert!(target(&parsed, "dir/Font.designspace", Some("dir/Other.designspace"), OUTPUT_SUFFIX).is_err(), "its UFOs would land on the input's");
         let parsed = args::parse(OPTIONS, &strings(&["Font.ufo", "--in-place"])).unwrap();
-        assert_eq!(target(&parsed, "Font.ufo", None).unwrap(), Target::InPlace);
+        assert_eq!(target(&parsed, "Font.ufo", None, OUTPUT_SUFFIX).unwrap(), Target::InPlace);
     }
 }
