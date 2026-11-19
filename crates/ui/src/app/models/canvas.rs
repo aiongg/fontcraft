@@ -15,6 +15,7 @@ use fontcraft_engine::pathops::geometry_helpers::segment_crossings;
 use fontcraft_geom::{BezPath, PathSeg, Piece, Point};
 
 use super::ProjectCx;
+use crate::shell::masters;
 
 /// Most glyphs the circular-reference check visits for one component.
 const MAX_REFERENCE_VISITS: usize = 4096;
@@ -35,7 +36,7 @@ pub struct CanvasModel {
     pub color: Option<crate::canvas::color::ColorPicture>,
 }
 
-/// The edited glyph in its master, in font units.
+/// The edited glyph in its active layer, in font units.
 #[derive(PlainData, Clone, Debug, PartialEq)]
 pub struct EditedGlyph {
     pub name: String,
@@ -111,15 +112,15 @@ pub fn project(model: &mut Tracked<CanvasModel>, cx: &mut ProjectCx<'_>) {
     let side = if cx.view.edit_background { LayerSide::Background } else { LayerSide::Foreground };
     let data = cx.session.glyph_data().ok();
     let edited = cx.session.font().ok().and_then(|font| Some((font, font.glyph(glyph.as_deref()?)?))).and_then(|(font, glyph)| {
-        let master = font.masters.first()?;
-        edited_glyph(font, data.as_deref(), glyph, master, side)
+        let layer = masters::shown_layer(font, &cx.view.layers, glyph)?;
+        let master = masters::layer_master(font, &cx.view.layers, layer)?;
+        edited_glyph(font, data.as_deref(), glyph, layer, master, side)
     });
     super::set(model, CanvasModel { glyph: edited, color: crate::canvas::color::project(cx) });
 }
 
-/// The canvas's picture of `glyph` in `master`, editing `side` of its layer.
-pub fn edited_glyph(font: &Font, data: Option<&GlyphData>, glyph: &Glyph, master: &Master, side: LayerSide) -> Option<EditedGlyph> {
-    let full = glyph.layer(&master.id)?;
+/// The canvas's picture of `glyph`'s layer `full`, editing its `side`, with the metric lines and zones of `master`.
+pub fn edited_glyph(font: &Font, data: Option<&GlyphData>, glyph: &Glyph, full: &Layer, master: &Master, side: LayerSide) -> Option<EditedGlyph> {
     let layer = fontcraft_tools::side_view(full, side).into_owned();
     let (descender, ascender) = vertical_span(font, master);
     let hidden = data.map(|d| out_of_scope(font, d, glyph, &master.id)).unwrap_or_default();

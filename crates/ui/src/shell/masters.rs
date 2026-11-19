@@ -101,6 +101,11 @@ pub fn shown_layer<'f>(font: &'f Font, view: &LayersView, glyph: &'f Glyph) -> O
     glyph.layer(&current_master(font, view)?.id)
 }
 
+/// The master `layer` belongs to, else the current master.
+pub fn layer_master<'f>(font: &'f Font, view: &LayersView, layer: &Layer) -> Option<&'f Master> {
+    font.masters.iter().find(|m| m.id == layer.master).or_else(|| current_master(font, view))
+}
+
 /// The glyph the glyph panels show: the selected one, else the font's first.
 pub fn shown_glyph<'f>(font: &'f Font, view: &ViewState) -> Option<&'f Glyph> {
     view.glyph.as_deref().and_then(|name| font.glyph(name)).or_else(|| font.glyphs.first()).map(|g| &**g)

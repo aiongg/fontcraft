@@ -40,8 +40,8 @@ pub fn tools_view(camera: &Camera) -> View {
 /// aids from the user settings.
 fn settings(session: &Session, font: &Font, app: &FontCraftApp) -> ToolSettings {
     let t = ToolTokens::standard();
-    let curve_tension =
-        font.masters.first().map_or(fontcraft_tools::rapid::DEFAULT_TENSION, |m| fontcraft_engine::cmd::tension::master_tension(font, &m.id));
+    let curve_tension = super::active_master(font, &app.view)
+        .map_or(fontcraft_tools::rapid::DEFAULT_TENSION, |m| fontcraft_engine::cmd::tension::master_tension(font, &m.id));
     ToolSettings {
         hit_tolerance: f64::from(t.hit_tolerance),
         snap_distance: f64::from(t.snap_distance),
