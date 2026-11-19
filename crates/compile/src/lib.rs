@@ -241,6 +241,42 @@ pub struct Options {
     /// Write an empty `GSUB` table when the layout stage gives none, for software that expects
     /// one (`--stub-gsub`). Not with the features skipped.
     pub stub_gsub: bool,
+    /// How the charstrings of a static `CFF ` table are written.
+    pub cff: CffOptions,
+    /// Set `USE_MY_METRICS` on the component that gives a TrueType composite its advance
+    /// (`compile.useMyMetrics`); false writes the flag on no component.
+    pub use_my_metrics: bool,
+}
+
+/// Most subroutines one CFF index can hold, the largest [`CffOptions::max_subrs`].
+pub const MAX_SUBRS_PER_INDEX: usize = fontcraft_cff::subr::MAX_SUBRS_PER_INDEX;
+
+/// How the charstrings of a static `CFF ` table are written ([`Options::cff`]). A project compile
+/// keeps coordinates to two decimals whatever `round_tolerance` says.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CffOptions {
+    /// Round a coordinate to an integer only when that moves it by at most this much
+    /// (`compile.cffRoundTolerance`): 0.5 rounds every coordinate, 0 none.
+    pub round_tolerance: f64,
+    /// Write the specialised operators (`hlineto`, `vhcurveto`…), not only `rlineto` and
+    /// `rrcurveto`.
+    pub specialise: bool,
+    /// Most subroutines in one index when the table is subroutinised.
+    pub max_subrs: usize,
+    /// Choose `defaultWidthX` and `nominalWidthX` so the widths take the fewest bytes, before the
+    /// table is subroutinised.
+    pub optimize_widths: bool,
+}
+
+impl Default for CffOptions {
+    fn default() -> Self {
+        CffOptions {
+            round_tolerance: cff::ROUND_TOLERANCE,
+            specialise: true,
+            max_subrs: fontcraft_cff::subr::DEFAULT_MAX_SUBRS,
+            optimize_widths: false,
+        }
+    }
 }
 
 /// The asset store a compile reads ([`Options::assets`]). Two are equal when they are the same
@@ -325,6 +361,8 @@ impl Default for Options {
             pass_through_tables: false,
             cid: cid::CidOptions::default(),
             stub_gsub: false,
+            cff: CffOptions::default(),
+            use_my_metrics: true,
         }
     }
 }

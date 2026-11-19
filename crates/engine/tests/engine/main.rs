@@ -44,6 +44,7 @@ mod compatibility_indicators;
 mod compile_cid;
 mod compile_extras;
 mod compile_features;
+mod compile_outlines;
 mod compile_project;
 mod construction;
 mod corner;

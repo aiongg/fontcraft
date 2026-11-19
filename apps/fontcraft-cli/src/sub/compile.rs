@@ -29,6 +29,12 @@ const USAGE: &str = "\
                         [--skip-features] [--features FILE | --mti-source FILE] [--include-dir DIR]
                         [--feature-writer NAME,...|none|...]... [--no-generate-gdef]
                         [--debug-feature-file FILE] [--stub-gsub] [--feature-names-override]
+                        [--flatten-components] [--decompose-components] [--decompose-transformed-components]
+                        [--no-auto-use-my-metrics] [--cff-round-tolerance F] [--optimize-cff 0|1|2]
+                        [--max-subrs N] [--optimize-widths] [--glyphs NAME,...] [--notdef auto|replace|allow-missing]
+                        [--glyph-data FILE]... [--production-names | --no-production-names]
+                        [--bump-version[=N|X.YYY]] [--post-format 2|3] [--exclude-table TAG]... [--tables TAG,...]
+                        [--autohint | --no-autohint] [--no-optimize-gvar] [--warnings default|all|none]
   fontcraft-cli compile --project-file FILE [options]
       Compile each SOURCE to fonts, once per format and container (default plain). --format
       (repeatable, comma-separated): ttf and otf build static fonts with TrueType or CFF outlines;
@@ -83,6 +89,24 @@ const USAGE: &str = "\
       --no-generate-gdef leaves GDEF to the feature code. --debug-feature-file FILE writes the
       feature code the first font compiled. --stub-gsub writes an empty GSUB when the font gets
       none. --no-variable-features and --expand-features-to-instances are refused.
+      --flatten-components, --decompose-components and --decompose-transformed-components change
+      how composites are written; --no-auto-use-my-metrics sets USE_MY_METRICS on no component.
+      --cff-round-tolerance F rounds a CFF coordinate only when that moves it by at most F (0 to
+      0.5, default 0.5). --optimize-cff 1 writes no subroutines, 0 also no specialised operators.
+      --max-subrs N caps the subroutines of one index (0: the format's limit). --optimize-widths
+      chooses defaultWidthX and nominalWidthX for the smallest widths. --glyphs NAME,... builds
+      only these glyphs, with .notdef and the glyphs their components use; the feature code is
+      compiled against them. --notdef replace draws a new .notdef. --glyph-data FILE adds a
+      glyph data file. --no-production-names keeps the source names. --bump-version raises the
+      version by 0.005, by N thousandths, or sets it to X.YYY. For static fonts: --post-format 3
+      writes post without glyph names; --exclude-table TAG leaves a table out; --tables TAG,...
+      also writes each font's tables as raw files named <stem>.<TAG> into the output folder.
+      --autohint and --no-autohint set the export's Autohint option. --optimize-gvar /
+      --no-optimize-gvar keep or drop the deltas interpolation gives. --warnings none prints no
+      warnings. --erase-open-corners, --propagate-anchors, --no-prefer-simple-glyphs, --filter,
+      --cid-keyed, --warn-unhinted, --check-compatibility=fix and the options with no counterpart
+      (--master-finder, --sparse-glyphs, --emit-designspace, --ufo-structure, --build-dir,
+      --emit-debug, --validate-sources, --keep-mvar, --designspace) are refused with the reason.
       --interpolate-binary-layout [DIR] gives each instance the GPOS interpolated from the
       compiled masters in DIR (default master_ttf, or master_otf for otf, beside the source),
       named as the source's master UFOs are, and the GDEF and GSUB of the default master; masters

@@ -902,6 +902,7 @@ milestone = "M2"
 summary = "CFF charstring coordinates are rounded to integers by default; fontmake's --cff-round-tolerance defaults to 0.5 and a value of 0 disables rounding so fractional coordinates are kept. A tolerance between the two rounds a coordinate (half up) only when that moves it by no more than the tolerance. Points are rounded before they are made relative, and fractions are written as 16.16 fixed numbers."
 ref = "fontmake USAGE.md (--cff-round-tolerance); fonttools misc/roundTools.py (roundFunc), pens/t2CharStringPen.py; crates/cff/crosscheck at tolerances 0, 0.3 and 0.5 (M2.3a)"
 status = "observed"
+notes = "M2.13: font.compile's cff.roundTolerance (--cff-round-tolerance) sets the tolerance of a static CFF table, 0 to 0.5; a project compile keeps two decimals and a CFF2 table its own tolerance. Glyph boxes are still rounded with the default tolerance."
 
 [[behavior]]
 id = "compile.glyphsOutlinePreSteps"
