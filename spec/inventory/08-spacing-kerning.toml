@@ -30,8 +30,12 @@ milestone = "M5"
 summary = "The part of the Edit View Info box (View › Show Info, Cmd+Shift+I) that shows and edits the sidebearings and width of the current glyph. Horizontal scripts, both left-to-right and right-to-left, show left and right sidebearings; top-to-bottom text shows top and bottom sidebearings."
 ref = "Spacing & Kerning › Spacing › Info Box"
 status = "handbook"
-notes = "Documented, not yet observed. Built in M5.8a (`panels/info_box_metrics.rs`): each field shows the key that applies, else the number, from `spacing.getMetrics`, and typing runs the field's setter on the current glyph's active layer. On an automatically aligned layer `spacing.getMetrics` lists the derived fields (`derived`) for the panel to grey out. The handbook's vertical Info box has O and H besides T and B; M5.20 added their setters (`spacing.setVerticalOrigin`, `spacing.setVerticalWidth`) and their values and keys in `spacing.getMetrics` (`vertOrigin`, `vertWidth`); the old panel does not show them; the Info box of `crates/ui` (`panels/info_box.rs`) edits them in its vertical layout."
+notes = "Documented, not yet observed. Built in M5.8a (`panels/info_box_metrics.rs`): each field shows the key that applies, else the number, from `spacing.getMetrics`, and typing runs the field's setter on the current glyph's active layer. On an automatically aligned layer `spacing.getMetrics` lists the derived fields (`derived`) for the panel to grey out. The handbook's vertical Info box has O and H besides T and B; M5.20 added their setters (`spacing.setVerticalOrigin`, `spacing.setVerticalWidth`) and their values and keys in `spacing.getMetrics` (`vertOrigin`, `vertWidth`); the old panel does not show them; the Info box of `crates/ui` (`panels/info_box.rs`) edits them in its vertical layout. With several glyphs selected (M5.22) a typed value goes to every glyph in `glyphs`, one undo step, and `spacing.getSharedMetrics` gives each field's shared value or marks it mixed."
+observe = [
+  "Select H, O and D with different left sidebearings in text mode and read the Info box's left sidebearing field: empty, grey Multiple Values, or one of the values?",
+]
 guesses = [
+  "With several glyphs selected, a field whose values differ is empty with the grey Multiple Values placeholder the handbook gives the Font View inspector; the reference app with several glyphs selected settles it.",
   "The glyph box hangs under the current glyph's descender, centred on its advance, separate from the selection box at the foot of the canvas; a screenshot of the reference app with a selection settles it.",
   "Emptying a field that holds a key stores the metric's current number, so the key goes and nothing moves; emptying such a field in the reference app settles it.",
   "A key that cannot be evaluated (a cycle, a division by zero, a result out of range) is drawn red like an out-of-sync key, without the update button; a cyclic key in the reference app settles it.",
@@ -230,6 +234,24 @@ summary = "Query, our addition for agents: returns the layer's sidebearings and 
 ref = "Spacing & Kerning › Spacing › Info Box; Metrics Keys"
 status = "inferred"
 own = true
+
+[[command]]
+id = "spacing.getSharedMetrics"
+label = "Get Shared Metrics"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{glyphs: [names], layer?: id}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Query, our addition for the Info box and the Font View inspector with several glyphs selected: for each metric field and each kerning group field, the value all the glyphs share, or that the values differ."
+ref = "Spacing & Kerning › Spacing › Info Box; Kerning › Kerning Groups; Font View › Glyph Properties"
+status = "inferred"
+own = true
+notes = "Built in M5.22 (`cmd/spacing_shared.rs`). A metric field shows the metrics key the glyphs share, else, with no key on any glyph, the measured value they share to two decimals; anything else is mixed. Group fields compare every glyph, metric fields only the glyphs that have the layer."
+guesses = [
+  "A metric field whose glyphs share a key shows the key even when their measured values differ; several glyphs with one key, one of them out of sync, in the reference app settle it.",
+]
 
 [[command]]
 id = "spacing.getDerivedMetrics"
@@ -846,8 +868,12 @@ milestone = "M5"
 summary = "The kerning part of the Edit View Info box: the kerning values for the current glyph against each immediate neighbour, the glyph's two kerning group names, and the locks that control group exceptions."
 ref = "Spacing & Kerning › Kerning › Info Box; Kerning Groups; Kerning Group Exceptions"
 status = "handbook"
-notes = "Documented, not yet observed: the Info box shows the kerning between the current glyph and the glyph on each side, with the grey placeholder 'Kern' when none is set, the glyph's kerning groups in the Group fields, and the locks that make the glyph an exception. A typed value goes to the sides the locks name (kerning.setPair); a lock runs kerning.addException or kerning.removeException, and a refused close goes to the status line."
+notes = "Documented, not yet observed: the Info box shows the kerning between the current glyph and the glyph on each side, with the grey placeholder 'Kern' when none is set, the glyph's kerning groups in the Group fields, and the locks that make the glyph an exception. A typed value goes to the sides the locks name (kerning.setPair); a lock runs kerning.addException or kerning.removeException, and a refused close goes to the status line. With several glyphs selected (M5.22) the Group fields send every glyph in `glyphs` (`kerning.setLeftGroup`, `kerning.setRightGroup`, one undo step) and show a group only when all the glyphs share it (`spacing.getSharedMetrics` `groups`); the kern fields still act on the pair at the cursor."
+observe = [
+  "Select H, O and D with different left groups in text mode and read the Info box's left Group field.",
+]
 guesses = [
+  "With several glyphs selected, a Group field whose glyphs differ is empty with the grey Multiple Values placeholder, and a kern field acts on the pair at the cursor only; the reference app with several glyphs selected settles it.",
   "A side whose glyph has no kerning group there shows its lock disabled, since opening it has nothing to make an exception from; the Info box on an ungrouped glyph in the running app settles it.",
   "In right-to-left text the kern field, lock and group at the left edge belong to the pair with the glyph drawn on the left, the next glyph in logical order; a right-to-left tab in the running app settles it.",
 ]
@@ -1131,6 +1157,7 @@ milestone = "M5"
 summary = "Group names are typed into the Group fields of the Info box. Several glyphs get the same group in one step either through the Font View inspector with the glyphs selected, or by selecting several glyphs in Edit View."
 ref = "Spacing & Kerning › Kerning › Kerning Groups"
 status = "handbook"
+notes = "Documented, not yet observed. `kerning.setLeftGroup` and its siblings take every selected glyph in `glyphs` and change them in one undo step; `spacing.getSharedMetrics` reports the group they share or that they differ (M5.22)."
 
 [[command]]
 id = "kerning.setLeftGroup"

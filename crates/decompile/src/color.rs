@@ -1,7 +1,10 @@
 //! Colour tables of a compiled font read back into the model (`color.open.compiledColorTables`).
 //!
 //! - `CPAL` becomes the font's `Color Palettes` parameter (lists of 0–255 integer lists), every
-//!   palette in table order.
+//!   palette in table order. A version 1 table whose palette types, palette labels or palette
+//!   entry labels say something gives the version 4 dictionary instead: type bit 0 becomes the
+//!   `light` background style, bit 1 `dark`, and each label's English name (else its first)
+//!   the palette's `name` or the row's entry in `names`.
 //! - `COLR` version 0 records become palette layers: one layer per record, bottom first, with the
 //!   outline of the record's layer glyph and its palette entry (65,535 is the text colour).
 //! - A `COLR` version 1 glyph whose paints are all solid palette colours at full opacity becomes
@@ -22,7 +25,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
-use fontcraft_model::plist::{Array, Layout, Number, Value};
+use fontcraft_model::plist::{Array, Dict, Layout, Number, Str, Value};
 use fontcraft_model::{
     Color, ColorStop, Extend, Family, Font, Glyph, Gradient, GradientKind, Layer, Node, NodeKind, PaletteEntry, Path, Shape, ShapeAttrs,
 };
@@ -84,7 +87,7 @@ fn read_palettes(sfnt: &FontRef, d: &mut Decompiled) -> usize {
     }
     let all = sfnt.color_palettes();
     let count = usize::from(all.len());
-    let mut palettes: Vec<Vec<Value>> = Vec::new();
+    let mut palettes: Vec<Vec<[u8; 4]>> = Vec::new();
     let mut rows = 0usize;
     for index in 0..all.len() {
         let Some(palette) = all.get(index) else {
@@ -102,31 +105,131 @@ fn read_palettes(sfnt: &FontRef, d: &mut Decompiled) -> usize {
             d.warnings.push(format!("the `CPAL` table has {count} palettes; only the first {} were read", palettes.len()));
             break;
         }
-        palettes.push(
-            colors
-                .iter()
-                .take(rows)
-                .map(|c| {
-                    let n = |v: u8| Value::Number(Number::int(i64::from(v)));
-                    Value::Array(Array {
-                        items: vec![n(c.red()), n(c.green()), n(c.blue()), n(c.alpha())],
-                        layout: Layout::Compact,
-                        ..Array::default()
-                    })
-                })
-                .collect(),
-        );
+        palettes.push(colors.iter().take(rows).map(|c| [c.red(), c.green(), c.blue(), c.alpha()]).collect());
     }
     if palettes.is_empty() || rows == 0 {
         return 0;
     }
-    let value = Value::Array(Array {
-        items: palettes.into_iter().map(|p| Value::Array(Array { items: p, layout: Layout::Multiline, ..Array::default() })).collect(),
-        layout: Layout::Multiline,
-        ..Array::default()
-    });
+    let labels = read_labels(sfnt, palettes.len(), rows);
+    let value = if labels.is_empty() { list_form(&palettes) } else { dictionary_form(&palettes, &labels) };
     Arc::make_mut(&mut d.font.info).params.set(COLOR_PALETTES, value);
     rows
+}
+
+/// What `CPAL` version 1 says about the palettes besides their colours.
+#[derive(Default)]
+struct Labels {
+    /// Per palette: its label's name, and whether its type marks it for light and for dark
+    /// backgrounds.
+    palettes: Vec<(Option<String>, bool, bool)>,
+    /// Per row: its label's name.
+    entries: Vec<Option<String>>,
+}
+
+impl Labels {
+    fn is_empty(&self) -> bool {
+        self.palettes.iter().all(|(name, light, dark)| name.is_none() && !light && !dark) && self.entries.iter().all(Option::is_none)
+    }
+}
+
+/// Palette type bit 0: the palette suits light backgrounds.
+const LIGHT_BACKGROUND: u32 = 0x0001;
+/// Palette type bit 1: the palette suits dark backgrounds.
+const DARK_BACKGROUND: u32 = 0x0002;
+/// A label that names nothing.
+const NO_LABEL: u16 = 0xFFFF;
+
+/// The palette types, palette labels and palette entry labels of a version 1 `CPAL`, for the
+/// first `palettes` palettes and `rows` rows; empty for version 0 or an array that cannot be read.
+fn read_labels(sfnt: &FontRef, palettes: usize, rows: usize) -> Labels {
+    let Ok(cpal) = sfnt.cpal() else { return Labels::default() };
+    if cpal.version() < 1 {
+        return Labels::default();
+    }
+    let names = crate::variable::Names::new(sfnt);
+    let mut seen: HashMap<u16, Option<String>> = HashMap::new();
+    let mut text = |id: u16| -> Option<String> {
+        if id == NO_LABEL {
+            return None;
+        }
+        seen.entry(id)
+            .or_insert_with(|| names.english(&[skrifa::string::StringId::new(id)]).map(|s| crate::clean_name(s.trim())).filter(|s| !s.is_empty()))
+            .clone()
+    };
+    let types: Vec<u32> = match cpal.palette_types_array() {
+        Some(Ok(a)) => a.iter().take(palettes).map(|t| t.get().bits()).collect(),
+        _ => Vec::new(),
+    };
+    let palette_labels: Vec<u16> = match cpal.palette_labels_array() {
+        Some(Ok(a)) => a.iter().take(palettes).map(|l| l.get().to_u16()).collect(),
+        _ => Vec::new(),
+    };
+    let entry_labels: Vec<u16> = match cpal.palette_entry_labels_array() {
+        Some(Ok(a)) => a.iter().take(rows).map(|l| l.get().to_u16()).collect(),
+        _ => Vec::new(),
+    };
+    let palettes = (0..palettes)
+        .map(|i| {
+            let t = types.get(i).copied().unwrap_or(0);
+            (palette_labels.get(i).and_then(|id| text(*id)), t & LIGHT_BACKGROUND != 0, t & DARK_BACKGROUND != 0)
+        })
+        .collect();
+    let entries = entry_labels.iter().map(|id| text(*id)).collect();
+    Labels { palettes, entries }
+}
+
+fn compact(items: Vec<Value>) -> Value {
+    Value::Array(Array { items, layout: Layout::Compact, ..Array::default() })
+}
+
+fn multiline(items: Vec<Value>) -> Value {
+    Value::Array(Array { items, layout: Layout::Multiline, ..Array::default() })
+}
+
+/// The version 3 form: lists of 0–255 integer lists.
+fn list_form(palettes: &[Vec<[u8; 4]>]) -> Value {
+    let n = |v: u8| Value::Number(Number::int(i64::from(v)));
+    multiline(palettes.iter().map(|p| multiline(p.iter().map(|c| compact(c.iter().map(|v| n(*v)).collect())).collect())).collect())
+}
+
+/// The version 4 form, the one that holds palette names, background styles and colour names:
+/// `{names = {row = name}; palettes = ({backgroundStyle; colors; name}…)}`, components from 0 to
+/// 1 to four places.
+fn dictionary_form(palettes: &[Vec<[u8; 4]>], labels: &Labels) -> Value {
+    let unit = |v: u8| {
+        let f = (f64::from(v) / 255.0 * 10_000.0).round() / 10_000.0;
+        Value::Number(Number::float(f).unwrap_or_else(|| Number::int(0)))
+    };
+    let list: Vec<Value> = palettes
+        .iter()
+        .enumerate()
+        .map(|(i, colours)| {
+            let mut p = Dict::new();
+            let (name, light, dark) = labels.palettes.get(i).cloned().unwrap_or_default();
+            let styles: Vec<Value> =
+                [(light, "light"), (dark, "dark")].iter().filter(|(on, _)| *on).map(|(_, s)| Value::String(Str::new(*s))).collect();
+            if !styles.is_empty() {
+                p.insert("backgroundStyle", compact(styles));
+            }
+            p.insert("colors", multiline(colours.iter().map(|c| compact(c.iter().map(|v| unit(*v)).collect())).collect()));
+            if let Some(name) = name {
+                p.insert("name", Value::String(Str::new(name)));
+            }
+            Value::Dict(p)
+        })
+        .collect();
+    let mut top = Dict::new();
+    let mut names = Dict::new();
+    for (row, name) in labels.entries.iter().enumerate() {
+        if let Some(name) = name {
+            names.insert(row.to_string(), Value::String(Str::new(name.as_str())));
+        }
+    }
+    if !names.entries.is_empty() {
+        top.insert("names", Value::Dict(names));
+    }
+    top.insert("palettes", multiline(list));
+    Value::Dict(top)
 }
 
 /// One stop of a gradient: offset, palette index, alpha.
@@ -723,6 +826,39 @@ mod tests {
         l.info.attrs.color_palette = Some(entry);
         l.shapes.push(Shape::Path(Path::rect(rect[0], rect[1], rect[2], rect[3])));
         l
+    }
+
+    #[test]
+    fn cpal_version_1_types_and_labels_open_as_the_version_4_dictionary() {
+        let dict = fontcraft_model::plist::openstep::parse(
+            "{names = {\"0\" = Ink;}; palettes = ({backgroundStyle = (light); colors = ((1,0,0,1),(0,0,1,0.502)); name = Day;},{backgroundStyle = (dark); colors = ((0,1,0,1),(0.0392,0.0784,0.1176,0.1569)); name = Night;});}",
+        )
+        .unwrap()
+        .root;
+        let mut f = Font::new("Labelled");
+        let master = f.masters[0].id.clone();
+        Arc::make_mut(&mut f.info).params.set(COLOR_PALETTES, dict.clone());
+        {
+            let mut a = f.glyph_mut("A").unwrap();
+            a.layers[0].shapes.push(Shape::Path(Path::rect(0.0, 0.0, 500.0, 500.0)));
+            a.layers.push(palette_layer(&master, "a0", PaletteEntry::Index(0), [0.0, 0.0, 500.0, 500.0]));
+            a.layers.push(palette_layer(&master, "a1", PaletteEntry::Index(1), [100.0, 100.0, 400.0, 400.0]));
+        }
+        let bytes = compile_ttf(&f, &Options::default()).unwrap().bytes;
+        assert_eq!(FontRef::new(&bytes).unwrap().cpal().unwrap().version(), 1);
+        let d = crate::decompile(&bytes, None).unwrap();
+        assert_eq!(d.font.info.params.get(COLOR_PALETTES), Some(&dict), "names, styles and colours come back");
+        assert!(!d.warnings.iter().any(|w| w.contains("CPAL")), "{:?}", d.warnings);
+        d.font.check().unwrap();
+        // Compiled again, the table says the same.
+        let again = compile_ttf(&d.font, &Options::default()).unwrap().bytes;
+        let font = FontRef::new(&again).unwrap();
+        let cpal = font.cpal().unwrap();
+        let types: Vec<u32> = cpal.palette_types_array().unwrap().unwrap().iter().map(|t| t.get().bits()).collect();
+        assert_eq!(types, [1, 2]);
+        let label = cpal.palette_entry_labels_array().unwrap().unwrap()[0].get().to_u16();
+        let name = font.localized_strings(skrifa::string::StringId::new(label)).english_or_first().map(|s| s.to_string());
+        assert_eq!(name.as_deref(), Some("Ink"));
     }
 
     #[test]

@@ -25,6 +25,7 @@ use fontcraft_fea::FeatureSummary;
 use fontcraft_features::EntryDiagnostic;
 use fontcraft_model::Font;
 
+use crate::cmd::registry::SlotInit;
 use crate::{DocState, Session};
 
 /// The result of one `font.features.compile`.
@@ -106,36 +107,63 @@ pub fn build_previews(font: &Font, master: &str, options: &Options) -> Result<Pr
     fontcraft_compile::preview::layout_fonts_with(font, master, options)
 }
 
-impl Session {
+/// The features area's session slot.
+#[derive(Default)]
+struct FeaturesSlot {
+    states: HashMap<u64, Arc<FeatureState>>,
+    preview_builds: PreviewBuilds,
+}
+
+/// Every session starts with the features slot, so the preview builds store exists before
+/// Text Preview, which reads it through `&Session`, first asks for it.
+pub(crate) fn slot_init() -> SlotInit {
+    SlotInit::of::<FeaturesSlot>()
+}
+
+/// The last feature compile and the preview builds of each open document.
+pub trait SessionFeaturesExt {
     /// The store of preview builds that `font.features.compile` and Text Preview share.
-    pub fn preview_builds(&self) -> PreviewBuilds {
-        self.preview_builds.clone()
-    }
+    fn preview_builds(&self) -> PreviewBuilds;
 
     /// The active document's last feature compile, if it has one.
-    pub fn feature_state(&self) -> Option<Arc<FeatureState>> {
-        self.active().and_then(|doc| self.feature_state_of(doc.id))
-    }
+    fn feature_state(&self) -> Option<Arc<FeatureState>>;
 
     /// The last feature compile of the document with this id.
-    pub fn feature_state_of(&self, doc_id: u64) -> Option<Arc<FeatureState>> {
-        self.feature_state.get(&doc_id).cloned()
-    }
+    fn feature_state_of(&self, doc_id: u64) -> Option<Arc<FeatureState>>;
 
     /// Keeps `state` as the document's last compile, replacing the one before; states of
     /// documents no longer open are dropped.
-    pub fn set_feature_state(&mut self, doc_id: u64, state: FeatureState) {
-        let open: Vec<u64> = self.docs.iter().map(|d| d.id).collect();
-        self.feature_state.retain(|id, _| open.contains(id));
-        self.preview_builds.retain(&open);
+    fn set_feature_state(&mut self, doc_id: u64, state: FeatureState);
+
+    /// Forgets the document's last compile.
+    fn clear_feature_state(&mut self, doc_id: u64);
+}
+
+impl SessionFeaturesExt for Session {
+    fn preview_builds(&self) -> PreviewBuilds {
+        self.slot::<FeaturesSlot>().map(|f| f.preview_builds.clone()).unwrap_or_default()
+    }
+
+    fn feature_state(&self) -> Option<Arc<FeatureState>> {
+        self.active().and_then(|doc| self.feature_state_of(doc.id))
+    }
+
+    fn feature_state_of(&self, doc_id: u64) -> Option<Arc<FeatureState>> {
+        self.slot::<FeaturesSlot>()?.states.get(&doc_id).cloned()
+    }
+
+    fn set_feature_state(&mut self, doc_id: u64, state: FeatureState) {
+        let open: Vec<u64> = self.documents().iter().map(|d| d.id).collect();
+        let slot = self.slot_mut::<FeaturesSlot>();
+        slot.states.retain(|id, _| open.contains(id));
+        slot.preview_builds.retain(&open);
         if open.contains(&doc_id) {
-            self.feature_state.insert(doc_id, Arc::new(state));
+            slot.states.insert(doc_id, Arc::new(state));
         }
     }
 
-    /// Forgets the document's last compile.
-    pub fn clear_feature_state(&mut self, doc_id: u64) {
-        self.feature_state.remove(&doc_id);
+    fn clear_feature_state(&mut self, doc_id: u64) {
+        self.slot_mut::<FeaturesSlot>().states.remove(&doc_id);
     }
 }
 

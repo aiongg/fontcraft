@@ -9,7 +9,7 @@
 //! warning or refusal the export would report.
 
 use fontcraft_color::export::{
-    self, ColrVersion, ExportPlan, Problem, ProblemKind, SvgSource, Switches, plan_between_masters, plan_master, read_switches,
+    self, ColrVersion, CpalPlan, ExportPlan, Problem, ProblemKind, SvgSource, Switches, plan_between_masters, plan_master, read_switches,
 };
 use fontcraft_color::paint::shape_refs;
 use fontcraft_color::strike::Strike;
@@ -25,7 +25,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Describe Color Export",
         [],
         None,
-        "{instance?: index | name (a static instance; `#n` for an unnamed one), master?: id (an export of that master), cbdt?: bool (default false; the export option that also writes CBDT and CBLC)} which colour tables an export writes, without exporting. Without `instance` or `master`, every static instance that exports, or the first master when there is none → {exports: [{instance: name | null, master: id | null, tables: [tag], switches: {colorLayersToSvg, colorLayersToColr, colorPaletteForCpal, colorPaletteForSvg, exportColrTable, exportSbixTable, exportSvgTable, sbixToSvg: ppem | null, cbdt}, cpal: {palettes, colors} | null, colr: {version: 0 | 1, glyphs: [{glyph, layers: [layer id]}]} | null, sbix: {strikes: [{ppem, glyphs: [name]}]} | null, cbdt: {strikes: [{ppem, glyphs: [name]}]} | null, svg: {documents: [{glyph, source: 'paint' | 'svgLayer' | 'bitmap', layer?, path?, ppem?}]} | null, problems: [{kind: 'warning' | 'refusal', glyph: name | null, message}], refused: bool}]}",
+        "{instance?: index | name (a static instance; `#n` for an unnamed one), master?: id (an export of that master), cbdt?: bool (default false; the export option that also writes CBDT and CBLC)} which colour tables an export writes, without exporting. Without `instance` or `master`, every static instance that exports, or the first master when there is none → {exports: [{instance: name | null, master: id | null, tables: [tag], switches: {colorLayersToSvg, colorLayersToColr, colorPaletteForCpal, colorPaletteForSvg, exportColrTable, exportSbixTable, exportSvgTable, sbixToSvg: ppem | null, cbdt}, cpal: {palettes, colors, version: 0 | 1, types: [palette type bits: 1 light, 2 dark], labels: [palette name | null], colorLabels: count of named colours} | null, colr: {version: 0 | 1, glyphs: [{glyph, layers: [layer id]}]} | null, sbix: {strikes: [{ppem, glyphs: [name]}]} | null, cbdt: {strikes: [{ppem, glyphs: [name]}]} | null, svg: {documents: [{glyph, source: 'paint' | 'svgLayer' | 'bitmap', layer?, path?, ppem?}]} | null, problems: [{kind: 'warning' | 'refusal', glyph: name | null, message}], refused: bool}]}",
         has_doc,
         describe
     )]
@@ -129,7 +129,7 @@ fn report(font: &Font, job: &Job, cbdt: bool) -> Value {
         "master": master,
         "tables": plan.tables(),
         "switches": switches.as_ref().map(switches_json),
-        "cpal": plan.cpal.as_ref().map(|c| json!({"palettes": c.palettes.palettes().len(), "colors": c.palettes.rows()})),
+        "cpal": plan.cpal.as_ref().map(cpal_json),
         "colr": plan.colr.as_ref().map(|c| json!({
             "version": match c.version { ColrVersion::V0 => 0, ColrVersion::V1 => 1 },
             "glyphs": c.glyphs.iter().map(|g| json!({"glyph": g.glyph, "layers": layer_ids(&g.paint)})).collect::<Vec<_>>(),
@@ -165,6 +165,19 @@ fn layer_ids(paint: &fontcraft_color::Paint) -> Vec<String> {
         }
     }
     out
+}
+
+/// The palettes and colours `CPAL` holds, its version, and each palette's type and label.
+fn cpal_json(c: &CpalPlan) -> Value {
+    let labels: Vec<Option<&str>> = (0..c.palettes.palettes().len()).map(|i| c.info.get(i).and_then(|p| p.name.as_deref())).collect();
+    json!({
+        "palettes": c.palettes.palettes().len(),
+        "colors": c.palettes.rows(),
+        "version": if c.labelled() { 1 } else { 0 },
+        "types": c.palette_types(),
+        "labels": labels,
+        "colorLabels": c.color_names.iter().filter(|n| n.is_some()).count(),
+    })
 }
 
 fn strikes_json(strikes: &[Strike]) -> Vec<Value> {

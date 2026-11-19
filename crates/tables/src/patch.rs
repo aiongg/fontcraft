@@ -11,6 +11,8 @@
 //! What to write is decided by the caller (the engine's `tables.recalculate` computes derived
 //! values from the font); this module only knows where each field lives.
 
+mod autohint_cff;
+mod autohint_cff2;
 mod cff;
 mod cmap;
 mod fvar;
@@ -20,6 +22,8 @@ mod recompile_cff;
 #[cfg(test)]
 mod tests;
 
+pub use autohint_cff::{CffAutohint, CffAutohintOptions, CffGlyph, CffHintSetup, CffHinted, CffSkipped, autohint_cff, cff_hint_setup};
+pub use autohint_cff2::{Cff2HintGlyph, Cff2HintSetup, Cff2Hinter, MAX_HINT_MASTERS, autohint_cff2, cff2_hint_setup};
 pub use cff::{CFF_FONT_BBOX, CFF_IS_FIXED_PITCH, cff_font_bbox, cff_top_ints, set_cff_top_ints};
 pub use cmap::{CmapConflict, CmapRebuild, rebuild_cmap};
 pub use fvar::{InstanceCleanup, clean_instances, drop_axis};

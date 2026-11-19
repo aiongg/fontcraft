@@ -191,7 +191,11 @@ See Font tab; scope `master`.
 
 Named numbers valued per master (`font.numbers.add / rename / remove`, `font.master.setNumber`).
 Feature code inserts them through number value tokens and the value interpolates for instances
-(`fontInfo.numbers.tokensInterpolate`).
+(`fontInfo.numbers.tokensInterpolate`). The plus button beside the heading runs
+`font.numbers.add` without a name, which picks `value` (`value1`, `value2`… while taken). Each row
+has a name field (`font.numbers.rename`, which refuses a taken or invalid name and leaves tokens
+using the old name as they are), a value field that runs `font.master.setNumber` on every selected
+master and shows "Multiple Values" when their values differ, and a minus (`font.numbers.remove`).
 
 ## Exports tab
 

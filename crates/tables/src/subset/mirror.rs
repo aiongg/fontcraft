@@ -444,6 +444,6 @@ pub(crate) const MIRRORED: [(u32, u32); 438] = [
 ];
 
 /// The mirrored partner of `cp`, if it has one.
-pub(crate) fn mirrored(cp: u32) -> Option<u32> {
+pub fn mirrored(cp: u32) -> Option<u32> {
     MIRRORED.binary_search_by_key(&cp, |(a, _)| *a).ok().and_then(|i| MIRRORED.get(i)).map(|(_, b)| *b)
 }

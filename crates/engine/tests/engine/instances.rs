@@ -198,6 +198,41 @@ fn font_instance_style_name_warnings() {
     assert!(warnings(&out).is_empty());
 }
 
+/// The queries give each entry's warnings by field, in the words the edits return them.
+#[test]
+fn font_instance_queries_carry_the_edit_warnings() {
+    let mut regular = instance("Regular");
+    regular.properties.set("familyNames", "Test Sans Display", true);
+    let mut s = font(vec![regular, instance("Italic")]);
+    let messages = |out: &Value| out["warnings"].as_array().unwrap().iter().map(|w| w.as_str().unwrap().to_string()).collect::<Vec<_>>();
+
+    let named = run(&mut s, "font.instance.set", json!({"instances": ["Italic"], "styleName": "Extra Condensed Italic"}));
+    let linked =
+        run(&mut s, "font.instance.setStyleLinking", json!({"instances": ["Extra Condensed Italic"], "isItalic": true, "linkStyle": "Regular"}));
+    let classed = run(&mut s, "font.instance.setWeightClass", json!({"instances": ["Extra Condensed Italic"], "weightClass": 350}));
+    assert_eq!(classed["instances"], json!([1]));
+    let (named, linked, classed) = (messages(&named), messages(&linked), messages(&classed));
+    assert_eq!((named.len(), linked.len(), classed.len()), (1, 1, 1), "{named:?} {linked:?} {classed:?}");
+    assert!(classed[0].contains("350"), "{classed:?}");
+
+    let entry = list(&mut s)[1].clone();
+    let by_field: Vec<(String, String)> = entry["warnings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|w| (w["field"].as_str().unwrap().to_string(), w["message"].as_str().unwrap().to_string()))
+        .collect();
+    let expected = [("styleName", &named[0]), ("styleLinking", &linked[0]), ("weightClass", &classed[0])];
+    assert_eq!(by_field, expected.map(|(f, m)| (f.to_string(), m.clone())));
+    let got = run(&mut s, "font.instance.get", json!({"instance": 1}))["instance"].clone();
+    assert_eq!(got["warnings"], entry["warnings"]);
+    assert_eq!(list(&mut s)[0]["warnings"], json!([]), "a plain Regular has none");
+
+    // A standard step clears the class warning.
+    let out = run(&mut s, "font.instance.setWeightClass", json!({"instances": [1], "weightClass": 400}));
+    assert_eq!(out["warnings"], json!([]));
+}
+
 #[test]
 fn font_instance_set_active_remove_and_reorder() {
     let mut s = font(vec![instance("Regular"), instance("Bold"), instance("Black")]);

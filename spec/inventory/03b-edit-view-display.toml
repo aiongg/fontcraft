@@ -1850,7 +1850,7 @@ milestone = "M5"
 summary = "In text mode a glyph command run from a menu or a shortcut (Update Metrics, Locked, Transform Metrics…) acts on every glyph of the text selection, each once, in the layer of the tab's master; with nothing selected it acts on the current glyph."
 ref = "Font View › Batch-Processing › Batch Commands; Edit View › Entering Text"
 status = "inferred"
-notes = "Built in M5.11b (`tools_glue::selection_targets`): the shell fills `glyphs` from the selected items, placeholders as the current glyph, and `layer` with the tab's master when the command takes one."
+notes = "Built in M5.11b (`tools_glue::selection_targets`): the shell fills `glyphs` from the selected items, placeholders as the current glyph, and `layer` with the tab's master when the command takes one. The Info box's group and metric fields take the same targets (M5.22)."
 guesses = [
   "Glyph commands in text mode take the glyphs of the text selection in the tab's master, as Font View's batch commands take the selected glyphs; the handbook does not say, and the reference app with a selected text would settle it.",
 ]

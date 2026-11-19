@@ -120,6 +120,7 @@ pub const MAX_BLUR_SIGMA: f64 = 256.0;
 /// Largest `feMorphology` radius in sprite pixels; a larger one counts as this.
 pub const MAX_MORPHOLOGY_RADIUS: f64 = 256.0;
 
+pub mod artwork;
 mod filter;
 
 /// The tables a colour glyph is drawn from.

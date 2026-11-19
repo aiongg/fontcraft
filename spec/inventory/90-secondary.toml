@@ -1154,6 +1154,7 @@ guesses = [
   "The first glyph in font order whose same-id layer has only closed paths equal to the selection wins, within 0.5 unit after a translation (and a flip with `flips`); selecting an outline shared by two glyphs in the reference app would settle which one it picks.",
   "No matching glyph is an error that changes nothing; the reference app's message or silence when nothing matches would settle it.",
   "The new component keeps the default automatic alignment unless aligning would move it beyond the tolerance or change the width, and then alignment is off on it; alignment is judged on the layer as it ends up, so a component next to remaining paths keeps the default. Checking the alignment setting of a component the reference app detected would settle it.",
+  "Hints keep their nodes: the ends of PostScript hints on the replaced paths become numbers at their places, TrueType instructions and corner components on them are removed and reported; a hinted glyph in the reference app settles it.",
 ]
 observe = [
   "Draw a copy of a glyph's outline in another glyph, select it and run Detect Component: note which glyph the component names and where it sits.",
@@ -2190,13 +2191,19 @@ label = "Generate Dark Palette"
 menu = ["Font"]
 shortcut = ""
 kind = "engine"
-params = "{palette?: index}"
+params = "{palette?: index, master?: id}"
 area = "color"
 milestone = "M13"
 summary = "Derives a second CPAL palette for dark backgrounds from the existing palette and flags it as the dark-background palette, so browsers can select it. Available as an export option and previewable in a dark preview."
 ref = "FontLab 8 What's new › Test & adjust › Previewing (Dark palette export); Color; Formats"
 status = "docs"
-notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). Built in M13.65 as a command, not an export option: it appends the derived palette to Color Palettes, named and given the `dark` background style of the version 4 form, and the compiler writes CPAL version 1 with that palette typed for dark backgrounds (bit 1) and labelled with its name. Each colour's OKLab lightness is inverted (L' = 1 - L) with hue and alpha kept; a colour that would fall outside sRGB keeps its hue and loses chroma. The dark preview is a UI follow-up."
+guesses = [
+  "The dark colour of each entry inverts its OKLab lightness (L' = 1 - L) and keeps its hue and alpha, losing chroma, not hue, when the result falls outside sRGB; the reference's palettes for a set of known colours would settle it.",
+  "The new palette is named after its source with \" Dark\" added (\"Dark\" when the source has no name), and only the new palette is marked; the source palette gets no `light` style. Settled by the names and CPAL palette types of a font the reference exports with a dark palette.",
+  "A Color Palettes value in the list forms (versions 2 and 3) is converted to the version 4 dictionary, the only form that records background styles; settled by what the reference keeps when it saves such a font in an older format.",
+]
+observe = ["Colour font with one palette: generate a dark palette, export, and dump CPAL; note the palette count, version, palette types and labels, and each dark colour against its source."]
 origin = "fontlab"
 
 [[panel]]
@@ -2366,11 +2373,12 @@ summary = "Writes one image file per glyph, named after the glyph, for the chose
 ref = "FontLab 8 What's new › Formats (Artwork as PDF, SVG, or PNG; Artwork Collection)"
 status = "docs"
 origin = "fontlab"
-notes = "Documented, not yet observed. Without a directory the pictures come back in the result (the web app and agents). The import side is a separate row."
+notes = "Documented, not yet observed. Without a directory the pictures come back in the result (the web app and agents). The import side is a separate row. A palette or full-colour layer is drawn in colour in PNG and PDF with the image-only effects of its paths (M11.21, `color.fullColor.imageOnlyEffects`); `filter.glyphAsImage` is the same command under the Filter menu."
 guesses = [
   "SVG uses the io-svg writer, PNG the render crate and PDF a minimal writer of our own; FontLab's options beyond the three formats are not followed.",
-  "A picture spans the advance width and the master's descender to ascender, widened to the outline where it reaches further, so pictures of one font line up; exporting a few glyphs in the reference would settle the frame.",
-  "SVG and PDF use one user unit or point per font unit (a PDF is scaled down to at most 14400 points a side); PNG is black on a transparent background at 256 pixels per em by default.",
+  "A picture spans the advance width and the master's descender to ascender, widened to what it draws (the outline, or the colour layers and their shadows) where that reaches further, so pictures of one font line up; exporting a few glyphs in the reference would settle the frame.",
+  "SVG and PDF use one user unit or point per font unit (a PDF is scaled down to at most 14400 points a side); PNG has a transparent background at 256 pixels per em by default, outlines in black.",
+  "SVG pictures are the outline in black even for colour layers; PDF pictures draw gradients and the image-only effects as images at `pixelsPerEm`. Exporting a full-colour glyph in each format from the reference would settle both.",
   "Characters a file name cannot hold become `_`, and names that differ only in case get `_2`, `_3`; the reference's file names for such glyphs would settle it.",
   "Without `glyphs` every glyph of the font is exported; the shell passes the selection.",
 ]
@@ -2654,6 +2662,7 @@ guesses = [
   "With endpointsLoose, the replacement's end nodes take the positions of the contour's own end nodes, so stems keep their length; the reference's documentation does not say.",
   "Closed patterns: the replacement paths take the place of the first matched contour and its attributes, and an empty replacement removes the matches; the reference's documentation does not say.",
   "A replacement under a mirroring match is reversed so its direction stays correct, as a mirrored component decomposed with corrected direction would be.",
+  "Hints on a path a closed pattern replaces lose their nodes (a PostScript end becomes a number, a TrueType instruction or corner component is removed and reported), other paths' hints follow them by path or shape index, and hints on a contour an open pattern edits follow their nodes as after any node edit; the reference's documentation does not mention hints.",
 ]
 observe = [
   "In the reference's Find/Replace dialog, replace an open serif pattern by one whose end nodes lie one unit from the pattern's, and note where the contour's end nodes land.",

@@ -32,6 +32,7 @@ use super::images::{Cell, CellImages, Frame};
 use super::{InlineEdit, LABEL_MIN_CELL};
 use crate::app::FontcraftApp;
 use crate::theme::Tokens;
+use fontcraft_engine::prelude::*;
 
 type Pending = Vec<(&'static str, Value)>;
 
@@ -147,7 +148,7 @@ struct CellPaint<'a> {
     labels: bool,
     display_unicode: bool,
     pixels_per_point: f32,
-    /// The document's metrics keys that need attention (`Session::metrics_sync`).
+    /// The document's metrics keys that need attention (`SessionSpacingExt::metrics_sync`).
     sync: Option<&'a SyncCache>,
     /// The glyphs whose layers cannot interpolate, while the font shows the indicators.
     incompatible: &'a HashSet<String>,

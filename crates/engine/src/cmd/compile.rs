@@ -44,7 +44,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Compile Fonts",
             [],
             None,
-            "{formats?: [\"ttf\"|\"otf\"|\"variable\"|\"variable-cff2\"|\"otf-cff2\"|\"ttf-interpolatable\"|\"otf-interpolatable\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], instances?: bool|[string]|regex, mastersAsInstances?: bool, variableFonts?: regex|[string], familyName?: string, optimizeDeltas?: bool, destination?: string, outputLayout?: \"flat\"|\"by-format\", nameBy?: \"filename\"|\"postscript-name\", outlines?: {keepDirection?: bool, conversionError?: number, removeOverlaps?: bool, flattenComponents?: bool, decomposeComponents?: bool, decomposeTransformedComponents?: bool, curves?: \"cu2qu\"|\"keep-quad\", dropImpliedOnCurves?: bool}, skipFeatures?: bool, subroutinize?: bool, cbdt?: bool, subset?: bool, stubDsig?: bool, passThroughTables?: bool, collection?: bool, interpolateBinaryLayout?: bool|path, timestamp?: number|\"now\", versionStamp?: bool, projectFile?: path, projectOptions?: [string], fontinfo?: path, menuNames?: path, goadb?: path, projectDefaults?: bool, featureFile?: path, licenseCode?: string, os2BitsOn?: [number], os2BitsOff?: [number], os2Version?: number, cidCmap?: path, cidMacCmap?: path, cidMacScript?: number, cidMacLanguage?: number, uvsFile?: path} build fonts from the active document. Static fonts (formats ttf: TrueType outlines, otf: CFF): every exportable instance (instances: true, the default; a font without instances builds its first master), the named instances (a list), those whose name or family and style name (`Noto Sans Bold`) a regular expression matches in full (a string, as the reference compiler's -i), or none (false); mastersAsInstances adds one font per master; an instance away from the masters is built from the font interpolated at it. A designspace without axes builds its masters, and its instances only when it has one source; one that states a location anyway is refused. Variable fonts (formats variable: glyf and gvar, variable-cff2: CFF2) are built as file.exportVariable builds them, one per variable font setting or one for the whole designspace, into the same destination: variableFonts picks those whose setting name or file name a regular expression matches in full (a pattern matching none is a warning), or the settings a list names; optimizeDeltas as in file.exportVariable; a variable format does not go with collection, interpolateBinaryLayout or a project compile, and with only variable formats the static options (instances, mastersAsInstances, cbdt, subset, stubDsig, passThroughTables) are refused. otf-cff2, ttf-interpolatable and otf-interpolatable are refused until they are built. Without formats a font with several masters and an axis builds a variable TTF, unless static options, a project compile or a .otf destination file ask for static fonts; any other font a static TTF. familyName: the family name the masters and variable fonts are built with; only instances of that family (their own family name, else the font's) are built, the others listed as skipped. Each font is written once per container (default plain). destination: a folder (files named by the instance's fileName parameter, else the PostScript name, with `Unnamed font` standing in for a missing family name in a .glyphs source and the document's file name in any other; nameBy: postscript-name ignores the fileName parameter; variable fonts are named as file.exportVariable names them; outputLayout: flat (default) writes into the folder itself, with both TrueType and CFF outlines each in a ttf or otf subfolder; by-format writes into the reference compiler's folders: master_ttf or master_otf for a font without instances built from its first master, instance_ttf or instance_otf for instances and masters built as instances, variable_ttf or variable_otf for variable fonts; an Export Folder parameter puts a font's files in that sub-folder, `..` climbing out of the destination; outside the desktop app a font whose files would land outside the destination is skipped), or a file path when exactly one file results; without it the fonts are built in memory and only described. conversionError: in em, default 0.001. curves: how TrueType curves are made: cu2qu (default) converts every cubic curve to quadratic ones; keep-quad converts nothing, and a glyph with a cubic curve stops the build. dropImpliedOnCurves: leave out of TrueType glyphs every on-curve point halfway between two off-curve points (default true); false leaves out only the points the conversion and quadratic splines imply and keeps every on-curve node. removeOverlaps: merge overlapping contours in every glyph (default true; a glyph whose overlaps cannot be removed keeps them, with a warning). decomposeComponents: write every composite as contours (default false: only the composites the source's parameters and filter list name). decomposeTransformedComponents: write as contours every composite with a scaled, mirrored, slanted or rotated component (default: as the source's filter list says). flattenComponents: replace a component that points at a composite by the glyphs it reaches, so no composite is nested (default: as the source's filter list says). The feature code is compiled with the generated kerning and mark attachment, its automatic code regenerated for each font's glyphs unless Update Features is off; an error in it skips the font with the error. skipFeatures: leave out GSUB, GPOS and GDEF, for a fast build (default false). subroutinize: move repeated CFF charstring fragments into subroutines (default true unless the Disable Subroutines parameter is set; a table beyond the subroutiniser's limits is written without them, with a warning). cbdt: also write CBDT and CBLC bitmap tables from the iColor layers (default false). subset: apply the Keep Glyphs and Remove Glyphs parameters (default true; false builds every glyph whose export flag is set). stubDsig: add an empty DSIG table (default false). passThroughTables: copy the legacy, bitmap and Apple tables a compiled font kept when it was opened (LTSH, VDMX, hdmx, JSTF, EBDT, EBLC, EBSC, morx, mort, feat, ltag, kerx, ankr, trak) when the glyph order is still theirs; otherwise they are left out with a warning (default false). collection: pack the fonts of each format into one collection file that stores identical tables once, plain container only: <document name>.ttc for TrueType and .otc for CFF in a destination folder, or the destination file when it ends in .ttc or .otc (which also asks for a collection); the fonts' own files are not written and their results list no files. interpolateBinaryLayout: true, or a folder relative to the source's folder (default master_ttf, or master_otf for otf), holding the compiled masters, named as the source's master UFOs are with the font extension: each compiled instance then gets the GPOS interpolated from those masters at its location, and the GDEF and GSUB of the default master when it has them; masters built with mastersAsInstances keep their own layout; the source must be a designspace or a .glyphs file or package with a file; not with collection or a project compile; a master that cannot be found or read stops the build before anything is written. timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now). versionStamp: append `;FontCraft <version>` to the version string (name ID 5) unless the font states its own (default true). A project compile, as the reference compiler's project workflow builds a font, runs when any of these is given: projectFile (a `current.fpr` project file, read first; the paths it names are relative to it: FontMenuDBPath, GlyphAliasDBPath, FeaturePath, the CMap and variation sequence files, and OutputFontPath, where the fonts are written when no destination is given; its InputFontPath is not read, the open document is built), projectOptions (option words applied left to right after it, a later one overriding an earlier: release, no-release, subroutinize, no-subroutinize, apply-goadb, no-apply-goadb, subset-to-goadb, no-subset-to-goadb, stub-dsig, no-stub-dsig, bold, no-bold, italic, no-italic, mac-names, no-mac-names, stub-cmap4, legacy-double-mapping, kern-class0-optimization, no-kern-class0-optimization; release turns on subroutinizing, renaming and ordering by the GlyphOrderAndAliasDB and a stub DSIG), fontinfo (a keyword file read last, filling only what is still unset), menuNames (a FontMenuNameDB), goadb (a GlyphOrderAndAliasDB: its code points always apply; renaming, ordering and subsetting only when asked), projectDefaults (look for fontinfo and a feature file called features or features.fea beside the source and for FontMenuNameDB and GlyphOrderAndAliasDB beside it or up to 4 folders above), featureFile (feature code that replaces the source's), licenseCode (appended to the unique font identifier, name ID 3, after a semicolon), os2BitsOn and os2BitsOff (OS/2 fsSelection bits 0 to 15 to turn on, then off; bits 7, 8 and 9 must all be given a value when one is turned on; bit 0 cannot be turned off; bit 15 does not take effect and drops the bits turned on before it, as in the reference), os2Version (the OS/2 version where the table needs no higher one; default 3, or 4 when a bit from 7 up is set). The source's own code points are replaced by those the GlyphOrderAndAliasDB and the glyph names give; without renaming, glyphs named by CFF standard strings come first in that list's order; menu names follow the FontMenuNameDB entry of the font's PostScript name, else the source's family and style names, with bold and italic setting the style link; CFF charstrings are subroutinized only when asked; overlaps are kept unless outlines.removeOverlaps is given; charstring coordinates keep two decimals; the version is 1.000 unless the feature code's head table sets a FontRevision; the weight and width classes come from the full name, the style bits from bold and italic, and the typographic, Windows and hhea metrics and the cap and x-heights from the glyphs d, O, o and the font box, as the reference computes them, with the feature code's OS/2 and hhea blocks overriding them; the source's kerning, anchors and name records other than the family, style, full and PostScript names are not used. A CID-keyed source (one with a Registry-Ordering-Supplement and a glyph-to-CID map) builds a CID-keyed CFF: glyphs in CID order, one font dictionary per sub-font with its own hinting values; cidCmap names a Unicode (UTF-32) CMap file of its character collection, which then gives every code point of the cmap table (without it the source's own code points are used); cidMacCmap names a one-byte Macintosh CMap file, written as a Macintosh cmap subtable with the script cidMacScript (default: from the ordering, Roman for an unknown one) and the language cidMacLanguage (default 0); a CMap file that cannot be read stops the build. uvsFile names a Unicode Variation Sequences file (lines of base character, variation selector and glyph name, or collection and CID+number for a CID-keyed font), written as a cmap format 14 subtable for any font; a sequence whose glyph the cmap already maps from the base character is a default sequence. Glyphs are written under their production names unless the Don't use Production Names parameter or Use Custom Naming is on; a name the font cannot hold is made valid, with a warning → {fonts: [{instance, source (instance, master, default, or variable), format, outlines, fileName? (variable fonts), glyphs, warnings, files: [{name, container, bytes, path?}]}], collections?: [{name, format, fonts, bytes, path?}], skipped: [{instance, source, reason}], warnings}",
+            "{formats?: [\"ttf\"|\"otf\"|\"variable\"|\"variable-cff2\"|\"otf-cff2\"|\"ttf-interpolatable\"|\"otf-interpolatable\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], instances?: bool|[string]|regex, mastersAsInstances?: bool, variableFonts?: regex|[string], familyName?: string, optimizeDeltas?: bool, destination?: string, outputLayout?: \"flat\"|\"by-format\", nameBy?: \"filename\"|\"postscript-name\", outlines?: {keepDirection?: bool, conversionError?: number, removeOverlaps?: bool, flattenComponents?: bool, decomposeComponents?: bool, decomposeTransformedComponents?: bool, curves?: \"cu2qu\"|\"keep-quad\", dropImpliedOnCurves?: bool, preferSimpleGlyphs?: bool, eraseOpenCorners?: bool, propagateAnchors?: bool, autoUseMyMetrics?: bool, filters?: [string]}, skipFeatures?: bool, features?: {file?: path, includeDir?: path, mtiSource?: path, writers?: \"none\"|[string], generateGdef?: bool, variable?: bool, expandToInstances?: bool, debugFile?: path, stubGsub?: bool, namesOverride?: bool}, cff?: {roundTolerance?: number, optimize?: 0|1|2, maxSubrs?: number, optimizeWidths?: bool, cidKeyed?: bool|string, warnUnhinted?: bool}, glyphs?: [name], notdef?: \"auto\"|\"replace\"|\"allow-missing\", glyphData?: [path], productionNames?: bool, postFormat?: 2|3, bumpVersion?: true|number|string, colrLayerReuse?: bool, excludeTables?: [tag], checkCompatibility?: bool|\"fix\", autohint?: bool, tables?: [tag], warnings?: \"default\"|\"all\"|\"none\", subroutinize?: bool, cbdt?: bool, subset?: bool, stubDsig?: bool, passThroughTables?: bool, collection?: bool, interpolateBinaryLayout?: bool|path, timestamp?: number|\"now\", versionStamp?: bool, projectFile?: path, projectOptions?: [string], fontinfo?: path, menuNames?: path, goadb?: path, projectDefaults?: bool, featureFile?: path, licenseCode?: string, os2BitsOn?: [number], os2BitsOff?: [number], os2Version?: number, cidCmap?: path, cidMacCmap?: path, cidMacScript?: number, cidMacLanguage?: number, uvsFile?: path} build fonts from the active document. Static fonts (formats ttf: TrueType outlines, otf: CFF): every exportable instance (instances: true, the default; a font without instances builds its first master), the named instances (a list), those whose name or family and style name (`Noto Sans Bold`) a regular expression matches in full (a string, as the reference compiler's -i), or none (false); mastersAsInstances adds one font per master; an instance away from the masters is built from the font interpolated at it. A designspace without axes builds its masters, and its instances only when it has one source; one that states a location anyway is refused. Variable fonts (formats variable: glyf and gvar, variable-cff2: CFF2) are built as file.exportVariable builds them, one per variable font setting or one for the whole designspace, into the same destination: variableFonts picks those whose setting name or file name a regular expression matches in full (a pattern matching none is a warning), or the settings a list names; optimizeDeltas as in file.exportVariable; a variable format does not go with collection, interpolateBinaryLayout or a project compile, and with only variable formats the static options (instances, mastersAsInstances, cbdt, subset, stubDsig, passThroughTables) are refused. otf-cff2, ttf-interpolatable and otf-interpolatable are refused until they are built. Without formats a font with several masters and an axis builds a variable TTF, unless static options, a project compile or a .otf destination file ask for static fonts; any other font a static TTF. familyName: the family name the masters and variable fonts are built with; only instances of that family (their own family name, else the font's) are built, the others listed as skipped. Each font is written once per container (default plain). destination: a folder (files named by the instance's fileName parameter, else the PostScript name, with `Unnamed font` standing in for a missing family name in a .glyphs source and the document's file name in any other; nameBy: postscript-name ignores the fileName parameter; variable fonts are named as file.exportVariable names them; outputLayout: flat (default) writes into the folder itself, with both TrueType and CFF outlines each in a ttf or otf subfolder; by-format writes into the reference compiler's folders: master_ttf or master_otf for a font without instances built from its first master, instance_ttf or instance_otf for instances and masters built as instances, variable_ttf or variable_otf for variable fonts; an Export Folder parameter puts a font's files in that sub-folder, `..` climbing out of the destination; outside the desktop app a font whose files would land outside the destination is skipped), or a file path when exactly one file results; without it the fonts are built in memory and only described. conversionError: in em, default 0.001. curves: how TrueType curves are made: cu2qu (default) converts every cubic curve to quadratic ones; keep-quad converts nothing, and a glyph with a cubic curve stops the build. dropImpliedOnCurves: leave out of TrueType glyphs every on-curve point halfway between two off-curve points (default true); false leaves out only the points the conversion and quadratic splines imply and keeps every on-curve node. removeOverlaps: merge overlapping contours in every glyph (default true; a glyph whose overlaps cannot be removed keeps them, with a warning). decomposeComponents: write every composite as contours (default false: only the composites the source's parameters and filter list name). decomposeTransformedComponents: write as contours every composite with a scaled, mirrored, slanted or rotated component (default: as the source's filter list says). flattenComponents: replace a component that points at a composite by the glyphs it reaches, so no composite is nested (default: as the source's filter list says). The feature code is compiled with the generated kerning and mark attachment, its automatic code regenerated for each font's glyphs unless Update Features is off; an error in it skips the font with the error. skipFeatures: leave out GSUB, GPOS and GDEF, for a fast build (default false). features: file names feature code that replaces the source's (its includes read from its folder); mtiSource names a property list of FontDame layout sources (a dictionary from master name to a dictionary from GDEF, GSUB or GPOS to a file beside the list; the default master's entry, or the only one), converted to feature code that replaces the source's, with no feature writer; neither goes with a project compile. includeDir: the folder include statements read from (default the feature file's, else the source's). writers: the feature writers that run, replacing the source's feature-writer setting: \"none\", or a list of kern, mark (mark, mkmk, abvm and blwm), curs and gdef, each optionally with (mode=append) or (mode=skip), and \"...\" once for the source's writers (all four without a setting). generateGdef: false leaves the GDEF writer out, so GDEF holds only what the feature code states (default true). debugFile: write the feature code the first font compiled to this file once the fonts are written (not with collection). stubGsub: write an empty GSUB when the font gets none (default false). variable: false (layout per master, merged) and expandToInstances: true are refused; namesOverride: true is what every build does (the feature code's name records replace the generated ones), false is refused. preferSimpleGlyphs: true is what every build does (a glyph with contours and components is written as contours); false is refused. eraseOpenCorners: true is refused until the export step that erases open corners is built; propagateAnchors (anchors are propagated as the source asks) and filters are refused. autoUseMyMetrics: false sets USE_MY_METRICS on no TrueType component (default true). cff: roundTolerance rounds a charstring coordinate to an integer only when that moves it by at most this much, 0 to 0.5 (default 0.5: every coordinate; a project compile keeps two decimals); optimize: 2 (default) writes specialised operators and subroutines as subroutinize says, 1 specialised operators without subroutines, 0 only rlineto and rrcurveto without subroutines (not with subroutinize: true); maxSubrs: most subroutines in one index, 0 for the format's limit of 65535 (default 65533); optimizeWidths: choose defaultWidthX and nominalWidthX so the widths take the fewest bytes (default false: the source's values); cidKeyed (a name-keyed source made CID-keyed) and warnUnhinted are refused. glyphs: build only these glyphs, with .notdef and every glyph their components use in any layer; the others stop exporting, so the feature code is compiled against the reduced set. notdef: auto (default) and allow-missing keep the source's .notdef and draw one when it has none; replace draws a new one whatever the source holds. glyphData: glyph data files (GlyphData XML) read on top of the user's and the source's, for production names, categories and scripts; a file that cannot be read stops the build. productionNames: false writes the source names (as the Don't use Production Names parameter), true production names whatever the source says. bumpVersion: raise the version (head fontRevision and name ID 5) by 0.005 (true), by a number of thousandths, or set it to a version written X.YYY. Static fonts only, not with a collection or a variable format: postFormat 3 writes post without glyph names (2, the default, changes nothing; a CFF font keeps its names in the CFF table and has format 3 already); excludeTables leaves these tables out of each font (head, maxp, hhea, hmtx, glyf, loca, CFF and CFF2 are refused); tables writes these tables of each font as raw files named after the font file with the tag as extension (<stem>.GPOS) into the destination folder, listed in the result's tables. colrLayerReuse changes nothing (no variable COLR is built). checkCompatibility: false and \"fix\" are refused with a variable format, which always checks; \"fix\" is refused everywhere. autohint: the export's Autohint option (default false; an instance's Autohint parameter overrides it). warnings: none leaves every warning out of the result; all is the default. The parameters of options with no counterpart are refused with the reason: masterFinder, sparseGlyphs, emitDesignspace, ufoStructure, buildDir, emitDebug, validateSources, keepMvar, designspace. subroutinize: move repeated CFF charstring fragments into subroutines (default true unless the Disable Subroutines parameter is set; a table beyond the subroutiniser's limits is written without them, with a warning). cbdt: also write CBDT and CBLC bitmap tables from the iColor layers (default false). subset: apply the Keep Glyphs and Remove Glyphs parameters (default true; false builds every glyph whose export flag is set). stubDsig: add an empty DSIG table (default false). passThroughTables: copy the legacy, bitmap and Apple tables a compiled font kept when it was opened (LTSH, VDMX, hdmx, JSTF, EBDT, EBLC, EBSC, morx, mort, feat, ltag, kerx, ankr, trak) when the glyph order is still theirs; otherwise they are left out with a warning (default false). collection: pack the fonts of each format into one collection file that stores identical tables once, plain container only: <document name>.ttc for TrueType and .otc for CFF in a destination folder, or the destination file when it ends in .ttc or .otc (which also asks for a collection); the fonts' own files are not written and their results list no files. interpolateBinaryLayout: true, or a folder relative to the source's folder (default master_ttf, or master_otf for otf), holding the compiled masters, named as the source's master UFOs are with the font extension: each compiled instance then gets the GPOS interpolated from those masters at its location, and the GDEF and GSUB of the default master when it has them; masters built with mastersAsInstances keep their own layout; the source must be a designspace or a .glyphs file or package with a file; not with collection or a project compile; a master that cannot be found or read stops the build before anything is written. timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now). versionStamp: append `;FontCraft <version>` to the version string (name ID 5) unless the font states its own (default true). A project compile, as the reference compiler's project workflow builds a font, runs when any of these is given: projectFile (a `current.fpr` project file, read first; the paths it names are relative to it: FontMenuDBPath, GlyphAliasDBPath, FeaturePath, the CMap and variation sequence files, and OutputFontPath, where the fonts are written when no destination is given; its InputFontPath is not read, the open document is built), projectOptions (option words applied left to right after it, a later one overriding an earlier: release, no-release, subroutinize, no-subroutinize, apply-goadb, no-apply-goadb, subset-to-goadb, no-subset-to-goadb, stub-dsig, no-stub-dsig, bold, no-bold, italic, no-italic, mac-names, no-mac-names, stub-cmap4, legacy-double-mapping, kern-class0-optimization, no-kern-class0-optimization; release turns on subroutinizing, renaming and ordering by the GlyphOrderAndAliasDB and a stub DSIG), fontinfo (a keyword file read last, filling only what is still unset), menuNames (a FontMenuNameDB), goadb (a GlyphOrderAndAliasDB: its code points always apply; renaming, ordering and subsetting only when asked), projectDefaults (look for fontinfo and a feature file called features or features.fea beside the source and for FontMenuNameDB and GlyphOrderAndAliasDB beside it or up to 4 folders above), featureFile (feature code that replaces the source's), licenseCode (appended to the unique font identifier, name ID 3, after a semicolon), os2BitsOn and os2BitsOff (OS/2 fsSelection bits 0 to 15 to turn on, then off; bits 7, 8 and 9 must all be given a value when one is turned on; bit 0 cannot be turned off; bit 15 does not take effect and drops the bits turned on before it, as in the reference), os2Version (the OS/2 version where the table needs no higher one; default 3, or 4 when a bit from 7 up is set). The source's own code points are replaced by those the GlyphOrderAndAliasDB and the glyph names give; without renaming, glyphs named by CFF standard strings come first in that list's order; menu names follow the FontMenuNameDB entry of the font's PostScript name, else the source's family and style names, with bold and italic setting the style link; CFF charstrings are subroutinized only when asked; overlaps are kept unless outlines.removeOverlaps is given; charstring coordinates keep two decimals; the version is 1.000 unless the feature code's head table sets a FontRevision; the weight and width classes come from the full name, the style bits from bold and italic, and the typographic, Windows and hhea metrics and the cap and x-heights from the glyphs d, O, o and the font box, as the reference computes them, with the feature code's OS/2 and hhea blocks overriding them; the source's kerning, anchors and name records other than the family, style, full and PostScript names are not used. A CID-keyed source (one with a Registry-Ordering-Supplement and a glyph-to-CID map) builds a CID-keyed CFF: glyphs in CID order, one font dictionary per sub-font with its own hinting values; cidCmap names a Unicode (UTF-32) CMap file of its character collection, which then gives every code point of the cmap table (without it the source's own code points are used); cidMacCmap names a one-byte Macintosh CMap file, written as a Macintosh cmap subtable with the script cidMacScript (default: from the ordering, Roman for an unknown one) and the language cidMacLanguage (default 0); a CMap file that cannot be read stops the build. uvsFile names a Unicode Variation Sequences file (lines of base character, variation selector and glyph name, or collection and CID+number for a CID-keyed font), written as a cmap format 14 subtable for any font; a sequence whose glyph the cmap already maps from the base character is a default sequence. Glyphs are written under their production names unless the Don't use Production Names parameter or Use Custom Naming is on; a name the font cannot hold is made valid, with a warning → {fonts: [{instance, source (instance, master, default, or variable), format, outlines, fileName? (variable fonts), glyphs, warnings, files: [{name, container, bytes, path?}]}], collections?: [{name, format, fonts, bytes, path?}], tables?: [{font, table, name, bytes, path?}], skipped: [{instance, source, reason}], warnings}",
             has_doc,
             compile
         ).files(const { &[FileParam::write("destination"), FileParam::read("projectFile"), FileParam::read("menuNames"), FileParam::read("goadb"), FileParam::read("fontinfo"), FileParam::read("cidCmap"), FileParam::read("cidMacCmap"), FileParam::read("uvsFile"), FileParam::read("featureFile")] }).writes_files(),
@@ -62,7 +62,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Describe Compile Plan",
             [],
             None,
-            "{formats?, containers?, instances?, mastersAsInstances?, variableFonts?, familyName?, destination?, outputLayout?, nameBy?, outlines?, skipFeatures?, cbdt?, subset?, stubDsig?, passThroughTables?, projectFile?, projectOptions?, fontinfo?, menuNames?, goadb?, projectDefaults?, cidCmap?, cidMacCmap?, cidMacScript?, cidMacLanguage?, featureFile?, licenseCode?, os2BitsOn?, os2BitsOff?, os2Version?, uvsFile?, sections?: [\"outputs\"|\"glyphOrder\"|\"productionNames\"|\"tables\"|\"instances\"]} what font.compile would build with the same parameters, without building or writing (a project compile's glyph names, order and code points and a CID-keyed font's CID order included): per output the instance, format, PostScript name, glyph count, whether overlaps are removed, the files (paths with a destination, names without) and the tables; a variable font's output (source variable) has its setting, format, PostScript name, style and files, without glyph count or tables; the final glyph order of the first output, by source name; the name each glyph of it is written under where that differs from its source name (its production name, made valid); each instance's master and location. sections: the parts to return (default all) → {outputs?: [{instance, source, format, postscriptName, style, glyphs, removeOverlap, files, tables?}], glyphOrder?, productionNames?: {source name: written name}, instances?: [{instance, source, master, location}], skipped, warnings}",
+            "{formats?, containers?, instances?, mastersAsInstances?, variableFonts?, familyName?, destination?, outputLayout?, nameBy?, outlines?, skipFeatures?, features?, cff?, glyphs?, notdef?, glyphData?, productionNames?, postFormat?, bumpVersion?, excludeTables?, tables?, cbdt?, subset?, stubDsig?, passThroughTables?, projectFile?, projectOptions?, fontinfo?, menuNames?, goadb?, projectDefaults?, cidCmap?, cidMacCmap?, cidMacScript?, cidMacLanguage?, featureFile?, licenseCode?, os2BitsOn?, os2BitsOff?, os2Version?, uvsFile?, sections?: [\"outputs\"|\"glyphOrder\"|\"productionNames\"|\"tables\"|\"features\"|\"instances\"]} what font.compile would build with the same parameters, without building or writing (a project compile's glyph names, order and code points and a CID-keyed font's CID order included): per output the instance, format, PostScript name, glyph count, whether overlaps are removed, the files (paths with a destination, names without) and the tables; a variable font's output (source variable) has its setting, format, PostScript name, style and files, without glyph count or tables; the final glyph order of the first output, by source name; the name each glyph of it is written under where that differs from its source name (its production name, made valid); each instance's master and location; per static output the feature code it would compile (features, null without code; the text features.debugFile receives for the first font). glyphs, notdef, glyphData, productionNames and bumpVersion change the plan as they change the build; the tables listed are those built before excludeTables, and no raw table file is written. sections: the parts to return (default all) → {outputs?: [{instance, source, format, postscriptName, style, glyphs, removeOverlap, files, tables?, features?}], glyphOrder?, productionNames?: {source name: written name}, instances?: [{instance, source, master, location}], skipped, warnings}",
             has_doc,
             compile_plan
         ).files(const { &[FileParam::read("projectFile"), FileParam::read("menuNames"), FileParam::read("goadb"), FileParam::read("fontinfo"), FileParam::read("cidCmap"), FileParam::read("cidMacCmap"), FileParam::read("uvsFile"), FileParam::read("featureFile")] }),
@@ -417,6 +417,8 @@ pub(super) struct Report {
     pub fonts: Vec<FontOut>,
     pub skipped: Vec<Value>,
     pub warnings: Vec<String>,
+    /// The feature code the first font built with code compiled (`features.debugFile`).
+    pub feature_code: Option<String>,
 }
 
 impl Report {
@@ -601,8 +603,9 @@ fn build_with(
     let font: &Font = &linked;
     let ctx = crate::export_steps::StepContext { data: &data };
     let mut options = Options { glyph_data: DataRef(Some(data.clone())), ..req.options.clone() };
-    // A project compile has set its include folder already: its feature file's folder.
-    if options.project.is_none() {
+    // A project compile has set its include folder already (its feature file's folder), and a
+    // request may have (`compile_request`: the source's folder or `features.includeDir`).
+    if options.project.is_none() && options.feature_dir.is_none() {
         source_includes(&mut options, path);
     }
     let prepared = fontcraft_compile::prepare_source(font, &mut report.warnings);
@@ -681,6 +684,9 @@ fn build_with(
                     report.warnings.push(format!("{at} is written outside the export destination, as the Export Folder parameter asks"));
                 }
                 files.push(file);
+            }
+            if report.feature_code.is_none() {
+                report.feature_code = compiled.feature_code.take();
             }
             report.fonts.push(FontOut { job: job.clone(), flavour, glyph_order: compiled.glyph_order, warnings: compiled.warnings, files });
         }
@@ -1123,7 +1129,7 @@ fn outline_options(p: &Params, options: &mut Options) -> Result<()> {
                 | "decomposeTransformedComponents"
                 | "curves"
                 | "dropImpliedOnCurves"
-        )
+        ) && !super::compile_outlines::OUTLINE_KEYS.contains(&k.as_str())
     }) {
         return Err(EngineError::Unsupported(format!("`outlines.{key}`")));
     }
@@ -1162,6 +1168,10 @@ pub(super) struct Selection {
     pub family: Option<String>,
     /// The instances `familyName` leaves out, as skipped fonts.
     pub skipped: Vec<Value>,
+    /// The `features` group.
+    pub features: super::compile_features::FeatureRequest,
+    /// The outline, CFF, glyph-set and output options.
+    pub output: super::compile_outlines::OutputRequest,
 }
 
 /// The parts of a `font.compile` request shared with `font.compilePlan`.
@@ -1184,7 +1194,10 @@ fn compile_request(s: &Session, p: &Params) -> Result<(Vec<Job>, Request, Select
     options.subset = p.bool_or("subset", true)?;
     options.stub_dsig = p.bool_or("stubDsig", false)?;
     options.pass_through_tables = p.bool_or("passThroughTables", false)?;
+    let output = super::compile_outlines::OutputRequest::read(p, s, &mut options)?;
     source_includes(&mut options, s.doc()?.path.as_deref());
+    let features = super::compile_features::FeatureRequest::read(p, font, super::compile_project::requested(p))?;
+    features.set_options(&mut options);
     let mut picked = Vec::new();
     if !flavours.is_empty() {
         picked = jobs(font, &select::pick(p)?, p.bool_or("mastersAsInstances", false)?, p)?;
@@ -1201,7 +1214,7 @@ fn compile_request(s: &Session, p: &Params) -> Result<(Vec<Job>, Request, Select
     let naming = select::naming(p, &formats)?;
     let req = Request { flavours, containers, options, dest, first_only: false, autohinter: crate::external_autohint::trusted(s), naming };
     check_size(&req, picked.len())?;
-    Ok((picked, req, Selection { formats, family, skipped }))
+    Ok((picked, req, Selection { formats, family, skipped, features, output }))
 }
 
 /// `optimizeDeltas` of a variable build; `None` follows the font's Optimize Variable Deltas
@@ -1227,7 +1240,14 @@ fn compile(s: &mut Session, p: &Value) -> Result<Value> {
     let (jobs, mut req, sel) = compile_request(s, &p)?;
     req.options.timestamp = timestamp(&p)?;
     super::compile_cid::read(&p, &mut req.options)?;
-    req.options.subroutinize = if p.get("subroutinize").is_some_and(|v| !v.is_null()) { Some(p.bool_or("subroutinize", true)?) } else { None };
+    // `cff.optimize` 0 and 1 have turned subroutines off already (`compile_outlines`).
+    if p.get("subroutinize").is_some_and(|v| !v.is_null()) {
+        req.options.subroutinize = Some(p.bool_or("subroutinize", true)?);
+    }
+    let data = match &req.options.glyph_data.0 {
+        Some(data) => data.clone(),
+        None => s.glyph_data()?,
+    };
     let doc = s.doc()?;
     let mut report = Report { skipped: sel.skipped.clone(), ..Report::default() };
     let prepared = match super::compile_project::read(&p, doc.path.as_deref())? {
@@ -1242,10 +1262,21 @@ fn compile(s: &mut Session, p: &Value) -> Result<Value> {
     let font = prepared.as_ref().unwrap_or(&doc.font);
     let renamed = select::renamed(font, sel.family.as_deref());
     let font = renamed.as_ref().unwrap_or(font);
+    let featured = sel.features.font(font, &mut report.warnings);
+    let font = featured.as_ref().unwrap_or(font);
+    let shaped = sel.output.font(&p, font, &mut report.warnings)?;
+    let font = shaped.as_ref().unwrap_or(font);
     let collection_file = p.opt_str("destination")?.map(std::path::PathBuf::from).filter(|d| collection_extension(d).is_some());
     let collection = collection_file.is_some() || p.bool_or("collection", false)?;
+    sel.output.check(!sel.formats.variable.is_empty(), collection)?;
+    if sel.output.wants_tables() && matches!(req.dest, Dest::File(_)) {
+        return Err(p.bad("`tables` writes raw table files beside the fonts: give a folder as `destination`"));
+    }
     if collection && !sel.formats.variable.is_empty() {
         return Err(p.bad("a collection packs static fonts: leave the variable formats out of `formats`"));
+    }
+    if collection && sel.features.has_debug_file() {
+        return Err(p.bad("`features.debugFile` is written by a build of separate font files: leave out `collection` or the debug file"));
     }
     if super::compile_layout::requested(&p)?.is_some() {
         if prepared.is_some() {
@@ -1270,13 +1301,42 @@ fn compile(s: &mut Session, p: &Value) -> Result<Value> {
         picks
     };
     let mut sink = Sink::new(&req.dest, false, s.export_outside())?;
-    let relayout = |job: &Job, flavour: Flavour, bytes: Vec<u8>| match &layouts {
-        Some(layouts) => layouts.replace(&p, job, flavour, bytes),
-        None => Ok(bytes),
+    // The raw tables of each static font and what the byte rewrite reported, kept for after the
+    // build: the rewrite step only sees the bytes.
+    let raw = std::cell::RefCell::new((Vec::<super::compile_outlines::RawTables>::new(), Vec::<String>::new()));
+    let relayout = |job: &Job, flavour: Flavour, bytes: Vec<u8>| -> Result<Vec<u8>> {
+        let bytes = match &layouts {
+            Some(layouts) => layouts.replace(&p, job, flavour, bytes)?,
+            None => bytes,
+        };
+        let mut notes = Vec::new();
+        let (bytes, tables) = sel.output.rewrite(bytes, &mut notes)?;
+        let mut kept = raw.borrow_mut();
+        kept.1.append(&mut notes);
+        if !tables.is_empty() {
+            kept.0.push((job.label.clone(), flavour, tables));
+        }
+        Ok(bytes)
     };
-    let rewrite: Option<Rewrite<'_>> = if layouts.is_some() { Some(&relayout) } else { None };
+    let rewrite: Option<Rewrite<'_>> = if layouts.is_some() || sel.output.rewrites() { Some(&relayout) } else { None };
     if !jobs.is_empty() {
-        build_with(font, &doc.title, doc.path.as_deref(), s.glyph_data()?, &jobs, &req, &mut sink, &mut report, rewrite)?;
+        build_with(font, &doc.title, doc.path.as_deref(), data, &jobs, &req, &mut sink, &mut report, rewrite)?;
+    }
+    let (raw_tables, mut rewrite_notes) = raw.take();
+    report.warnings.append(&mut rewrite_notes);
+    let mut table_files = Vec::new();
+    for (label, flavour, tables) in raw_tables {
+        let Some(font_out) = report.fonts.iter().find(|f| f.job.label == label && f.flavour == flavour) else { continue };
+        let Some(first) = font_out.files.first() else { continue };
+        let name = first.name.clone();
+        for (tag, bytes) in tables {
+            let file = sink.put(super::compile_outlines::raw_name(&name, &tag), Container::Plain, bytes, &mut report.warnings)?;
+            let mut v = json!({ "font": name, "table": super::compile_outlines::tag_text(&tag), "name": file.name, "bytes": file.bytes });
+            if let (Some(path), Value::Object(m)) = (&file.path, &mut v) {
+                m.insert("path".into(), json!(path.to_string_lossy()));
+            }
+            table_files.push(v);
+        }
     }
     let mut fonts = report.fonts_json(false);
     if !picks.is_empty() {
@@ -1292,7 +1352,26 @@ fn compile(s: &mut Session, p: &Value) -> Result<Value> {
         return Err(nothing_built(&report));
     }
     sink.commit()?;
-    Ok(json!({ "fonts": fonts, "skipped": report.skipped, "warnings": report.warnings }))
+    let mut warnings = report.warnings;
+    // The fonts are in place; a debug file that cannot be written is reported, not undone.
+    if let Err(e) = sel.features.write_debug(report.feature_code.as_deref()) {
+        warnings.push(format!("the debug feature file was not written: {e}"));
+    }
+    if sel.output.quiet() {
+        warnings.clear();
+        for font in &mut fonts {
+            if let Some(Value::Array(list)) = font.get_mut("warnings") {
+                list.clear();
+            }
+        }
+    }
+    let mut result = json!({ "fonts": fonts, "skipped": report.skipped, "warnings": warnings });
+    if sel.output.wants_tables()
+        && let Value::Object(m) = &mut result
+    {
+        m.insert("tables".into(), Value::Array(table_files));
+    }
+    Ok(result)
 }
 
 // ---------- collections ----------
@@ -1372,7 +1451,12 @@ fn compile_collection(
         };
         let mut memory = Sink::Memory { bytes: 0, keep: true, limit: MAX_COLLECTION_BYTES };
         let mut part = Report::default();
-        build(font, &doc.title, doc.path.as_deref(), s.glyph_data()?, jobs, &built, &mut memory, &mut part)?;
+        // `glyphData` has merged its files into the request's glyph data.
+        let data = match &req.options.glyph_data.0 {
+            Some(data) => data.clone(),
+            None => s.glyph_data()?,
+        };
+        build(font, &doc.title, doc.path.as_deref(), data, jobs, &built, &mut memory, &mut part)?;
         // Each pass prepares the same instances: what they report is kept once.
         for skipped in part.skipped {
             if !report.skipped.contains(&skipped) {
@@ -1520,22 +1604,21 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("font.compilePlan", p)?;
     let (jobs, mut req, sel) = compile_request(s, &p)?;
     super::compile_cid::read(&p, &mut req.options)?;
-    const SECTIONS: [&str; 5] = ["outputs", "glyphOrder", "productionNames", "tables", "instances"];
+    const SECTIONS: [&str; 6] = ["outputs", "glyphOrder", "productionNames", "tables", "features", "instances"];
     let sections: Vec<&str> = match p.opt_strings("sections")? {
         None => SECTIONS.to_vec(),
         Some(list) => {
-            for name in &list {
-                match *name {
-                    n if SECTIONS.contains(&n) => {}
-                    "features" => return Err(EngineError::Unsupported(format!("the `{name}` section of a compile plan"))),
-                    other => return Err(p.bad(format!("`sections` holds {}, got \"{other}\"", SECTIONS.join(", ")))),
-                }
+            if let Some(other) = list.iter().find(|n| !SECTIONS.contains(*n)) {
+                return Err(p.bad(format!("`sections` holds {}, got \"{other}\"", SECTIONS.join(", "))));
             }
             list
         }
     };
     let want = |name: &str| sections.contains(&name);
-    let data = s.glyph_data()?;
+    let data = match &req.options.glyph_data.0 {
+        Some(data) => data.clone(),
+        None => s.glyph_data()?,
+    };
     let doc = s.doc()?;
     let mut warnings: Vec<String> = Vec::new();
     // A project compile builds the font its preparation makes, as `font.compile` does.
@@ -1551,6 +1634,10 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
     let (font, source) = (project_font.as_ref().unwrap_or(&doc.font), doc.title.as_str());
     let renamed = super::compile_select::renamed(font, sel.family.as_deref());
     let font = renamed.as_ref().unwrap_or(font);
+    let featured = sel.features.font(font, &mut warnings);
+    let font = featured.as_ref().unwrap_or(font);
+    let shaped = sel.output.font(&p, font, &mut warnings)?;
+    let font = shaped.as_ref().unwrap_or(font);
     font.check()?;
     let linked = crate::export_steps::linked(font, doc.path.as_deref(), &mut warnings)?;
     let font: &Font = &linked;
@@ -1612,8 +1699,13 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
                 "style": plan.style_name, "glyphs": plan.glyph_order.len(), "removeOverlap": req.options.remove_overlap, "files": files,
                 "warnings": plan.warnings,
             });
-            if let (true, Value::Object(m)) = (want("tables"), &mut out) {
-                m.insert("tables".into(), json!(plan.tables));
+            if let Value::Object(m) = &mut out {
+                if want("tables") {
+                    m.insert("tables".into(), json!(plan.tables));
+                }
+                if want("features") {
+                    m.insert("features".into(), json!(plan.features));
+                }
             }
             outputs.push(out);
             if glyph_order.is_none() {
@@ -1639,7 +1731,7 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
         warnings.push(format!("`destination` is one file, but {} fonts would be built: font.compile refuses this", outputs.len()));
     }
     let mut result = Map::new();
-    if want("outputs") || want("tables") {
+    if want("outputs") || want("tables") || want("features") {
         result.insert("outputs".into(), Value::Array(outputs));
     }
     if want("glyphOrder") {

@@ -5,10 +5,12 @@
 //! new row.
 //!
 //! Long options take their value as `--opt VALUE` or `--opt=VALUE`; the single-dash spellings of
-//! the reference's project tool (`-ff`, `-osbOn`) take it as the next argument.
+//! the reference's project tool (`-ff`, `-osbOn`) take it as the next argument. A long option may
+//! be given in another letter case or shortened to a prefix of one spelling only.
 
 use serde_json::{Map, Value, json};
 
+use crate::args;
 use crate::io::{Failure, usage};
 
 /// What an option does with its value.
@@ -99,6 +101,50 @@ pub const OPTIONS: &[CompileOpt] = &[
     row(&["--drop-implied-oncurves"], "outlines.dropImpliedOnCurves", Kind::Flag(true), ""),
     row(&["--keep-implied-oncurves"], "outlines.dropImpliedOnCurves", Kind::Flag(false), ""),
     row(&["--conversion-error"], "outlines.conversionError", Kind::Number, "EM"),
+    row(&["--flatten-components"], "outlines.flattenComponents", Kind::Flag(true), ""),
+    row(&["--no-flatten-components"], "outlines.flattenComponents", Kind::Flag(false), ""),
+    row(&["--decompose-components"], "outlines.decomposeComponents", Kind::Flag(true), ""),
+    row(&["--decompose-transformed-components"], "outlines.decomposeTransformedComponents", Kind::Flag(true), ""),
+    row(&["--prefer-simple-glyphs"], "outlines.preferSimpleGlyphs", Kind::Flag(true), ""),
+    row(&["--no-prefer-simple-glyphs"], "outlines.preferSimpleGlyphs", Kind::Flag(false), ""),
+    row(&["--erase-open-corners"], "outlines.eraseOpenCorners", Kind::Flag(true), ""),
+    row(&["--no-erase-open-corners"], "outlines.eraseOpenCorners", Kind::Flag(false), ""),
+    row(&["--propagate-anchors"], "outlines.propagateAnchors", Kind::Flag(true), ""),
+    row(&["--no-propagate-anchors"], "outlines.propagateAnchors", Kind::Flag(false), ""),
+    row(&["--auto-use-my-metrics"], "outlines.autoUseMyMetrics", Kind::Flag(true), ""),
+    row(&["--no-auto-use-my-metrics"], "outlines.autoUseMyMetrics", Kind::Flag(false), ""),
+    row(&["--filter"], "outlines.filters", Kind::List, "NAME"),
+    // CFF.
+    row(&["--cff-round-tolerance"], "cff.roundTolerance", Kind::Number, "F"),
+    row(&["--optimize-cff"], "cff.optimize", Kind::Int(0, 2), "0|1|2"),
+    row(&["--max-subrs"], "cff.maxSubrs", Kind::Int(0, 65_535), "N"),
+    row(&["--optimize-widths"], "cff.optimizeWidths", Kind::Flag(true), ""),
+    row(&["--no-optimize-widths"], "cff.optimizeWidths", Kind::Flag(false), ""),
+    row(&["--cid-keyed"], "cff.cidKeyed", Kind::OptionalFolder, "R-O-S"),
+    row(&["--warn-unhinted"], "cff.warnUnhinted", Kind::Flag(true), ""),
+    row(&["--no-warn-unhinted"], "cff.warnUnhinted", Kind::Flag(false), ""),
+    // Glyph set, names and version.
+    row(&["--glyphs"], "glyphs", Kind::List, "NAME,..."),
+    row(&["--notdef"], "notdef", Kind::Choice(&["auto", "replace", "allow-missing"]), "auto|replace|allow-missing"),
+    row(&["--glyph-data"], "glyphData", Kind::List, "FILE"),
+    row(&["--production-names"], "productionNames", Kind::Flag(true), ""),
+    row(&["--no-production-names"], "productionNames", Kind::Flag(false), ""),
+    row(&["--bump-version"], "bumpVersion", Kind::OptionalFolder, "N|X.YYY"),
+    // Features.
+    row(&["--skip-features"], "skipFeatures", Kind::Flag(true), ""),
+    row(&["--features"], "features.file", Kind::Text, "FILE"),
+    row(&["--include-dir", "--fea-include-dir"], "features.includeDir", Kind::Text, "DIR"),
+    row(&["--mti-source"], "features.mtiSource", Kind::Text, "FILE"),
+    row(&["--feature-writer"], "features.writers", Kind::List, "NAME[(mode=append)],...|none|..."),
+    row(&["--generate-gdef"], "features.generateGdef", Kind::Flag(true), ""),
+    row(&["--no-generate-gdef", "--no-generate-GDEF"], "features.generateGdef", Kind::Flag(false), ""),
+    row(&["--variable-features"], "features.variable", Kind::Flag(true), ""),
+    row(&["--no-variable-features"], "features.variable", Kind::Flag(false), ""),
+    row(&["--expand-features-to-instances"], "features.expandToInstances", Kind::Flag(true), ""),
+    row(&["--debug-feature-file"], "features.debugFile", Kind::Text, "FILE"),
+    row(&["--stub-gsub"], "features.stubGsub", Kind::Flag(true), ""),
+    row(&["--no-stub-gsub"], "features.stubGsub", Kind::Flag(false), ""),
+    row(&["--feature-names-override"], "features.namesOverride", Kind::Flag(true), ""),
     // Tables and files of static fonts.
     row(&["--subset"], "subset", Kind::Flag(true), ""),
     row(&["--no-subset"], "subset", Kind::Flag(false), ""),
@@ -110,6 +156,29 @@ pub const OPTIONS: &[CompileOpt] = &[
     row(&["--interpolate-binary-layout"], "interpolateBinaryLayout", Kind::OptionalFolder, "DIR"),
     row(&["--subroutinize"], "subroutinize", Kind::FlagAndWord(true), ""),
     row(&["--no-subroutinize"], "subroutinize", Kind::FlagAndWord(false), ""),
+    row(&["--post-format"], "postFormat", Kind::Int(2, 3), "2|3"),
+    row(&["--exclude-table"], "excludeTables", Kind::List, "TAG"),
+    row(&["--tables"], "tables", Kind::List, "TAG,..."),
+    row(&["--autohint"], "autohint", Kind::OptionalFolder, "OPTIONS"),
+    row(&["--no-autohint"], "autohint", Kind::Flag(false), ""),
+    row(&["--warnings"], "warnings", Kind::Choice(&["default", "all", "none"]), "default|all|none"),
+    // Variable fonts.
+    row(&["--optimize-gvar"], "optimizeDeltas", Kind::Flag(true), ""),
+    row(&["--no-optimize-gvar"], "optimizeDeltas", Kind::Flag(false), ""),
+    row(&["--colr-layer-reuse"], "colrLayerReuse", Kind::Flag(true), ""),
+    row(&["--no-colr-layer-reuse"], "colrLayerReuse", Kind::Flag(false), ""),
+    row(&["--check-compatibility"], "checkCompatibility", Kind::OptionalFolder, "fix"),
+    row(&["--no-check-compatibility"], "checkCompatibility", Kind::Flag(false), ""),
+    // Options with no counterpart: font.compile refuses their parameters with the reason.
+    row(&["--master-finder"], "masterFinder", Kind::Text, "TEMPLATE"),
+    row(&["--sparse-glyphs"], "sparseGlyphs", Kind::Text, "FILE"),
+    row(&["--emit-designspace"], "emitDesignspace", Kind::Text, "PATH"),
+    row(&["--ufo-structure"], "ufoStructure", Kind::Text, "package|zip|json"),
+    row(&["--build-dir"], "buildDir", Kind::Text, "DIR"),
+    row(&["--emit-debug"], "emitDebug", Kind::Flag(true), ""),
+    row(&["--validate-sources"], "validateSources", Kind::Flag(true), ""),
+    row(&["--keep-mvar"], "keepMvar", Kind::Flag(true), ""),
+    row(&["--designspace"], "designspace", Kind::Text, "FILE"),
     // The project compile.
     row(
         &[
@@ -174,6 +243,7 @@ pub fn is_folder_value(arg: &str) -> bool {
 /// Reads `args` into the sources and the `font.compile` parameters, with the subcommand's own
 /// settings under `cli`.
 pub fn parse(args: &[String]) -> Result<(Vec<String>, Map<String, Value>), Failure> {
+    let long: Vec<&'static str> = OPTIONS.iter().flat_map(|o| o.flags.iter().copied()).filter(|f| f.starts_with("--")).collect();
     let mut sources = Vec::new();
     let mut params = Map::new();
     let mut it = args.iter().peekable();
@@ -189,6 +259,10 @@ pub fn parse(args: &[String]) -> Result<(Vec<String>, Map<String, Value>), Failu
         let (name, inline) = match arg.split_once('=') {
             Some((name, value)) if name.starts_with("--") => (name, Some(value)),
             _ => (arg.as_str(), None),
+        };
+        let name = match name.strip_prefix("--") {
+            Some(rest) if !rest.is_empty() => args::pick(&long, name)?.unwrap_or(name),
+            _ => name,
         };
         let opt = find(name).ok_or_else(|| usage(format!("unknown compile option `{name}`")))?;
         let value = match opt.kind {
@@ -357,8 +431,83 @@ mod tests {
     }
 
     #[test]
+    fn long_options_take_a_unique_prefix_or_another_letter_case() {
+        let (_, p) = parsed(&["F.glyphs", "--output-l=by-format", "--KEEP-OVERLAPS", "--rel", "--no-subr"]);
+        assert_eq!(p["outputLayout"], "by-format");
+        assert_eq!(p["outlines"]["removeOverlaps"], false);
+        assert_eq!(p["projectOptions"], json!(["release", "no-subroutinize"]), "the words recorded are the full spellings");
+        let args: Vec<String> = ["--out", "x"].iter().map(|s| s.to_string()).collect();
+        let e = parse(&args).unwrap_err();
+        assert!(e.message().contains("--output-dir"), "a prefix of several options lists them: {e:?}");
+    }
+
+    #[test]
+    fn feature_options_fill_the_features_group() {
+        let (_, p) = parsed(&[
+            "--features",
+            "f.fea",
+            "--fea-include-dir=inc",
+            "--feature-writer",
+            "kern,...",
+            "--feature-writer=mark(mode=append)",
+            "--no-generate-GDEF",
+            "--debug-feature-file",
+            "debug.fea",
+            "--stub-gsub",
+            "--skip-features",
+        ]);
+        let f = &p["features"];
+        assert_eq!((&f["file"], &f["includeDir"], &f["debugFile"]), (&json!("f.fea"), &json!("inc"), &json!("debug.fea")));
+        assert_eq!(f["writers"], json!(["kern", "...", "mark(mode=append)"]));
+        assert_eq!((&f["generateGdef"], &f["stubGsub"], &p["skipFeatures"]), (&json!(false), &json!(true), &json!(true)));
+        assert!(!is_project(p.as_object().unwrap()));
+    }
+
+    #[test]
+    fn outline_cff_and_glyph_set_options_fill_their_groups() {
+        let (_, p) = parsed(&[
+            "--flatten-components",
+            "--no-auto-use-my-metrics",
+            "--cff-round-tolerance",
+            "0.25",
+            "--optimize-cff=1",
+            "--max-subrs",
+            "0",
+            "--glyphs",
+            "A,Aacute",
+            "--notdef=replace",
+            "--post-format",
+            "3",
+            "--exclude-table",
+            "DSIG",
+            "--exclude-table=kern",
+            "--bump-version",
+            "--no-optimize-gvar",
+            "--warnings",
+            "none",
+        ]);
+        assert_eq!((&p["outlines"]["flattenComponents"], &p["outlines"]["autoUseMyMetrics"]), (&json!(true), &json!(false)));
+        assert_eq!((&p["cff"]["roundTolerance"], &p["cff"]["optimize"], &p["cff"]["maxSubrs"]), (&json!(0.25), &json!(1), &json!(0)));
+        assert_eq!((&p["glyphs"], &p["notdef"], &p["postFormat"]), (&json!(["A", "Aacute"]), &json!("replace"), &json!(3)));
+        assert_eq!((&p["excludeTables"], &p["bumpVersion"]), (&json!(["DSIG", "kern"]), &json!(true)));
+        assert_eq!((&p["optimizeDeltas"], &p["warnings"]), (&json!(false), &json!("none")));
+        let (sources, p) = parsed(&["--bump-version=1.250", "--check-compatibility", "F.glyphs", "--emit-debug"]);
+        assert_eq!(sources, ["F.glyphs"]);
+        assert_eq!((&p["bumpVersion"], &p["checkCompatibility"], &p["emitDebug"]), (&json!("1.250"), &json!(true), &json!(true)));
+        assert!(!is_project(p.as_object().unwrap()));
+    }
+
+    #[test]
     fn a_bad_value_or_an_unknown_option_is_a_usage_error() {
-        for args in [&["--output-layout", "nested"][..], &["--os2-version", "0"], &["--plan=yes"], &["--frobnicate"], &["--format"]] {
+        for args in [
+            &["--output-layout", "nested"][..],
+            &["--os2-version", "0"],
+            &["--plan=yes"],
+            &["--frobnicate"],
+            &["--format"],
+            &["--post-format", "4"],
+            &["--notdef", "keep"],
+        ] {
             let args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
             assert!(matches!(parse(&args), Err(Failure::Usage(_))), "{args:?}");
         }

@@ -126,7 +126,44 @@ mod cache;
 mod font_steps;
 mod staged;
 
-pub(crate) use staged::Slot;
+/// The audit area's state on a document: the last run, which `audit.results` and `audit.fix`
+/// read, and a run of `audit.start` not yet finished or cancelled. Both are document
+/// extensions ([`crate::slots`]), so a failing command puts them back with the document.
+pub(crate) trait DocAuditExt {
+    fn audit_run(&self) -> Option<&KeptRun>;
+    fn keep_audit_run(&mut self, run: KeptRun);
+    /// Drops the last run; whether there was one.
+    fn clear_audit_run(&mut self) -> bool;
+    fn audit_staged(&self) -> Option<Arc<std::sync::Mutex<staged::Staged>>>;
+    fn set_audit_staged(&mut self, staged: staged::Staged);
+    fn clear_audit_staged(&mut self);
+}
+
+impl DocAuditExt for DocState {
+    fn audit_run(&self) -> Option<&KeptRun> {
+        self.ext::<KeptRun>()
+    }
+
+    fn keep_audit_run(&mut self, run: KeptRun) {
+        self.set_ext(run);
+    }
+
+    fn clear_audit_run(&mut self) -> bool {
+        self.remove_ext::<KeptRun>().is_some()
+    }
+
+    fn audit_staged(&self) -> Option<Arc<std::sync::Mutex<staged::Staged>>> {
+        self.ext_arc()
+    }
+
+    fn set_audit_staged(&mut self, staged: staged::Staged) {
+        self.set_ext(std::sync::Mutex::new(staged));
+    }
+
+    fn clear_audit_staged(&mut self) {
+        self.remove_ext::<std::sync::Mutex<staged::Staged>>();
+    }
+}
 
 pub fn specs() -> Vec<CommandSpec> {
     let mut v = run_specs();
@@ -1239,7 +1276,7 @@ pub struct KeptRun {
 }
 
 fn kept_run(d: &DocState) -> Option<&KeptRun> {
-    d.audit.as_deref()
+    d.audit_run()
 }
 
 /// Has `glyph` changed between the kept font and `now`?
@@ -1335,7 +1372,7 @@ fn keep_run(s: &mut Session, t: &Target, run: &Run, ex: &mut Examined, font: Arc
         })
         .collect();
     let cache = Some(Arc::new(std::mem::take(&mut ex.cache)));
-    s.doc_mut()?.audit = Some(Arc::new(KeptRun { font, report: kept, refs, run_id, cache }));
+    s.doc_mut()?.keep_audit_run(KeptRun { font, report: kept, refs, run_id, cache });
     Ok(report)
 }
 

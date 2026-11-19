@@ -13,6 +13,22 @@ pub const SUBCOMMAND: Subcommand = Subcommand {
     run: oracle,
 };
 
+/// The option spellings of `oracle`, which reads its own arguments.
+pub const SPELLINGS: &[&str] = &[
+    "--corpus",
+    "--against",
+    "--format",
+    "--reference-bin",
+    "--output-dir",
+    "--match",
+    "--timestamp",
+    "--timeout",
+    "--differences",
+    "--json",
+    "--variable",
+    "--instances",
+];
+
 const USAGE: &str = "\
   fontcraft-cli oracle (SOURCE... | --corpus [DIR]) [--against fontc|fontmake] [--format ttf|otf]
                       [--reference-bin PATH] [--output-dir DIR] [--timestamp SECS] [--timeout SECS]
@@ -49,6 +65,7 @@ fn oracle(args: &[String]) -> Outcome {
         v.parse::<u64>().ok().filter(|n| *n <= max).ok_or_else(|| usage(format!("{opt} must be a whole number up to {max}, got `{v}`")))
     };
     while let Some(arg) = it.next() {
+        let arg = crate::args::spell_long(SPELLINGS, arg)?;
         match arg.as_str() {
             "--corpus" => corpus = Some(PathBuf::from(it.next_if(|n| !n.starts_with("--")).map(String::as_str).unwrap_or("corpus"))),
             "--against" => {

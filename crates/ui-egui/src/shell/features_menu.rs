@@ -21,6 +21,7 @@ use egui::{Popup, PopupCloseBehavior, Sense, StrokeKind};
 use fontcraft_engine::Session;
 use fontcraft_engine::fea::LayoutTable;
 use fontcraft_engine::feature_state::FeatureState;
+use fontcraft_engine::prelude::*;
 use fontcraft_textlayout::shaping::Tag;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};

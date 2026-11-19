@@ -28,6 +28,9 @@ pub struct Plan {
     pub style_name: String,
     /// Things the user should know that the build would also report.
     pub warnings: Vec<String>,
+    /// The feature code the build would compile
+    /// ([`crate::layout::LayoutTables::assembled_code`]).
+    pub features: Option<String>,
 }
 
 /// Plans the compile of `font` at `target`.
@@ -102,6 +105,7 @@ fn plan_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour, op
         postscript_name: names.name(6),
         style_name,
         warnings,
+        features: layout.code.clone(),
     })
 }
 

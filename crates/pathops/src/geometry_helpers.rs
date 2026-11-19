@@ -173,14 +173,44 @@ pub fn segment_crossings(segments: &[Vec<Piece>]) -> Result<Vec<Vec<f64>>, Strin
 /// [`segment_crossings`], taking its comparisons from `work`, which is left with what remains.
 /// Errors when `work` runs out.
 pub fn segment_crossings_within(segments: &[Vec<Piece>], work: &mut usize) -> Result<Vec<Vec<f64>>, String> {
+    let pairs = segment_crossing_pairs_within(segments, work)?;
+    let mut out: Vec<Vec<f64>> = vec![Vec::new(); segments.len()];
+    for c in pairs {
+        if let Some(list) = out.get_mut(c.a) {
+            list.push(c.ta);
+        }
+        if let Some(list) = out.get_mut(c.b) {
+            list.push(c.tb);
+        }
+    }
+    for list in &mut out {
+        list.sort_by(f64::total_cmp);
+        list.dedup_by(|x, y| (*x - *y).abs() <= SAME_T);
+    }
+    Ok(out)
+}
+
+/// Where two segments cross or touch: their indexes in the list, `a` before `b`, and the
+/// parameter on each, across all of its pieces.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SegmentCrossing {
+    pub a: usize,
+    pub ta: f64,
+    pub b: usize,
+    pub tb: f64,
+}
+
+/// Every place where two segments (lists of pieces) cross or touch, with the limits and the
+/// work accounting of [`segment_crossings_within`]. A crossing found from neighbouring boxes
+/// may be listed twice with nearly the same parameters.
+pub fn segment_crossing_pairs_within(segments: &[Vec<Piece>], work: &mut usize) -> Result<Vec<SegmentCrossing>, String> {
     if segments.len() > MAX_CROSSING_SEGMENTS {
         return Err(format!("the layer has {} segments; at most {MAX_CROSSING_SEGMENTS} can be compared", segments.len()));
     }
-    let mut out: Vec<Vec<f64>> = vec![Vec::new(); segments.len()];
+    let mut out: Vec<SegmentCrossing> = Vec::new();
     // Sweep along x: only segments whose boxes overlap in x are compared.
     let mut order: Vec<(usize, Rect)> = segments.iter().enumerate().filter_map(|(i, s)| segment_hull(s).map(|r| (i, r))).collect();
     order.sort_by(|a, b| a.1.x0.total_cmp(&b.1.x0));
-    let mut total = 0usize;
     let too_much = || "the segments overlap too much to compare: the search reached its work limit".to_string();
     for (k, (i, ri)) in order.iter().enumerate() {
         for (j, rj) in order.iter().skip(k + 1) {
@@ -197,24 +227,15 @@ pub fn segment_crossings_within(segments: &[Vec<Piece>], work: &mut usize) -> Re
                 for (pb, piece_b) in b.iter().enumerate() {
                     *work = work.checked_sub(1).ok_or_else(too_much)?;
                     for (ta, tb) in piece_crossings_within(piece_a, piece_b, work).ok_or_else(too_much)? {
-                        total += 1;
-                        if total > MAX_CROSSINGS {
+                        if out.len() >= MAX_CROSSINGS {
                             return Err(format!("the paths cross more than {MAX_CROSSINGS} times"));
                         }
-                        if let Some(list) = out.get_mut(*i) {
-                            list.push((pa as f64 + ta) / na);
-                        }
-                        if let Some(list) = out.get_mut(*j) {
-                            list.push((pb as f64 + tb) / nb);
-                        }
+                        let (ta, tb) = ((pa as f64 + ta) / na, (pb as f64 + tb) / nb);
+                        out.push(if i < j { SegmentCrossing { a: *i, ta, b: *j, tb } } else { SegmentCrossing { a: *j, ta: tb, b: *i, tb: ta } });
                     }
                 }
             }
         }
-    }
-    for list in &mut out {
-        list.sort_by(f64::total_cmp);
-        list.dedup_by(|x, y| (*x - *y).abs() <= SAME_T);
     }
     Ok(out)
 }

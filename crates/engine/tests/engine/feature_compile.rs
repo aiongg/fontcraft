@@ -7,6 +7,7 @@
 use std::sync::Arc;
 
 use fontcraft_engine::feature_state::{SharedBuild, build_previews};
+use fontcraft_engine::prelude::*;
 use fontcraft_engine::{EngineError, Session};
 use serde_json::{Value, json};
 

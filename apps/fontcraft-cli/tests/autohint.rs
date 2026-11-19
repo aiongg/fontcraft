@@ -282,3 +282,42 @@ fn dehint_clears_the_stored_hints_of_a_source() {
     assert_eq!(code, 0, "{stderr}");
     assert!(stored_hints(&dir.join("Partial.fontcraft")) > 0);
 }
+
+#[test]
+fn autohint_hints_the_charstrings_of_a_compiled_cff_font() {
+    let dir = scratch("otf");
+    let mut s = Session::with_document();
+    let nodes = json!([{"x": 100, "y": 0}, {"x": 180, "y": 0}, {"x": 180, "y": 700}, {"x": 100, "y": 700}]);
+    s.execute("path.addPath", &json!({"glyph": "l", "nodes": nodes})).unwrap();
+    let otf = dir.join("Src.otf");
+    s.execute("file.exportStatic", &json!({"destination": otf, "outlines": "cff", "autohint": false, "timestamp": 0})).unwrap();
+    let before = std::fs::read(&otf).unwrap();
+    let otf = otf.to_string_lossy().into_owned();
+
+    let (code, stdout, stderr) = cli(&["autohint", &otf, "--json"]);
+    assert_eq!(code, 0, "{stderr}");
+    let line: Value = serde_json::from_str(stdout.trim()).unwrap();
+    let output = dir.join("Src.autohinted.otf");
+    assert_eq!((&line["output"], &line["written"]), (&json!(output.to_string_lossy()), &json!(true)), "{line}");
+    assert!(line["result"]["hinted"].as_array().unwrap().iter().any(|h| h["glyph"] == "l"), "{line}");
+    assert_eq!(std::fs::read(&otf).unwrap(), before, "the input is left as it was");
+    assert_ne!(std::fs::read(&output).unwrap(), before, "the output has hints");
+
+    // --report-only lists the glyphs it would hint and writes nothing.
+    let elsewhere = dir.join("Other.otf");
+    let (code, stdout, stderr) = cli(&["autohint", &otf, "--report-only", "-o", &elsewhere.to_string_lossy(), "--glyphs", "l"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stdout.lines().any(|l| l.starts_with("l:")), "{stdout}");
+    assert!(!elsewhere.exists());
+
+    // The overlap options hint against the overlap-free outline and write the font.
+    let (code, stdout, stderr) = cli(&["autohint", &otf, "--force-overlap", "-o", &elsewhere.to_string_lossy(), "--json"]);
+    assert_eq!(code, 0, "{stderr}");
+    let line: Value = serde_json::from_str(stdout.trim()).unwrap();
+    assert!(line["result"]["hinted"].as_array().unwrap().iter().any(|h| h["glyph"] == "l"), "{line}");
+    assert!(elsewhere.exists());
+    let listed = dir.join("Listed.otf");
+    let (code, _, stderr) = cli(&["autohint", &otf, "--overlap-glyphs", "l", "-o", &listed.to_string_lossy()]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(listed.exists());
+}

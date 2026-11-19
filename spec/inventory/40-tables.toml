@@ -421,6 +421,7 @@ milestone = "M11"
 summary = "Colour palettes referenced by COLR and SVG. Written only when COLR or a vector SVG document uses them; fontc also writes CPAL alone when the source has palettes and no colour layers, fontmake does not, and FontCraft follows fontmake."
 ref = "fontc fontbe/src/cpal.rs; write-fonts src/tables/cpal.rs"
 status = "docs"
+notes = "Version 0 through write-fonts, which writes only that version. Version 1 (palette types, palette labels, palette entry labels; M13.65) is serialised by FontCraft with the array order and zero offsets of fontTools' C_P_A_L_ compile, when the version 4 Color Palettes form gives palettes background styles or names, or colours names."
 
 [[table]]
 tag = "sbix"
@@ -902,6 +903,7 @@ milestone = "M2"
 summary = "CFF charstring coordinates are rounded to integers by default; fontmake's --cff-round-tolerance defaults to 0.5 and a value of 0 disables rounding so fractional coordinates are kept. A tolerance between the two rounds a coordinate (half up) only when that moves it by no more than the tolerance. Points are rounded before they are made relative, and fractions are written as 16.16 fixed numbers."
 ref = "fontmake USAGE.md (--cff-round-tolerance); fonttools misc/roundTools.py (roundFunc), pens/t2CharStringPen.py; crates/cff/crosscheck at tolerances 0, 0.3 and 0.5 (M2.3a)"
 status = "observed"
+notes = "M2.13: font.compile's cff.roundTolerance (--cff-round-tolerance) sets the tolerance of a static CFF table, 0 to 0.5; a project compile keeps two decimals and a CFF2 table its own tolerance. Glyph boxes are still rounded with the default tolerance."
 
 [[behavior]]
 id = "compile.glyphsOutlinePreSteps"
@@ -1581,7 +1583,7 @@ milestone = "M8"
 summary = "Generated features have two modes. skip (default): a generated feature is not written when the feature code already declares that feature, unless the code contains the comment '# Automatic Code', in which case the generated lookups are inserted at that position. append: generated lookups are added after all hand-written lookups and markers are ignored. A source can replace the whole writer list, and an empty list or fontmake's --feature-writer None disables generation."
 ref = "fontmake USAGE.md (Feature writing); fontc fontbe/src/features.rs, fea-rs/src/compile/output.rs (insert_markers)"
 status = "docs"
-notes = "Built by M8.7 (`crates/compile/src/layout.rs`): the feature code's first pass tells which generated features it declares and where it holds the marker; a writer in append mode (`mode = append` in the source's feature-writer setting) puts its lookups after every hand-written lookup. Compared with fontc's and fontmake's GSUB, GPOS and GDEF lookup by lookup over the corpus."
+notes = "Built by M8.7 (`crates/compile/src/layout.rs`): the feature code's first pass tells which generated features it declares and where it holds the marker; a writer in append mode (`mode = append` in the source's feature-writer setting) puts its lookups after every hand-written lookup. Compared with fontc's and fontmake's GSUB, GPOS and GDEF lookup by lookup over the corpus. M2.12: `font.compile`'s `features.writers` (the command line's --feature-writer) replaces the setting for one build: each item a writer name (kern, mark, curs, gdef) or class name with an optional `(mode=append)` or `(mode=skip)`, `none` for no writer, `...` for the source's list (the four default writers without one); `features.generateGdef: false` drops the GDEF writer (`crates/engine/src/cmd/compile_features.rs`)."
 
 [[behavior]]
 id = "compile.kernValueLookup"
@@ -1699,7 +1701,7 @@ milestone = "M8"
 summary = "fontc's --skip-features builds the font without any layout tables, for fast outline-only iteration. We offer the same switch for preview builds."
 ref = "fontc fontc/src/args.rs"
 status = "docs"
-notes = "Built by M8.7: the compile option `skip_features` and `font.compile`'s `skipFeatures` parameter leave GSUB, GPOS and GDEF out."
+notes = "Built by M8.7: the compile option `skip_features` and `font.compile`'s `skipFeatures` parameter leave GSUB, GPOS and GDEF out. M2.12: the command line's --skip-features sets it; --stub-gsub then adds no GSUB."
 
 # ---------------------------------------------------------------------------------------------------
 # Behaviours: CFF path
@@ -1836,10 +1838,13 @@ guesses = [
 id = "compile.kernClassOptimisation"
 area = "compile"
 milestone = "M12"
-summary = "makeotf by default saves space in class kerning by using left-side class 0 for non-zero values, which confuses some programs; -skco suppresses it. Our pair positioning comes from write-fonts's PairPosBuilder and does not use this trick."
-ref = "AFDKO python/afdko/makeotf.py (-skco/-nskco); write-fonts src/tables/gpos/builders.rs"
-status = "docs"
-notes = "The project compile accepts kern-class0-optimization, no-kern-class0-optimization and the SuppressKernOptimization setting of a project or fontinfo file; they change nothing, since our pair positioning never puts non-zero values in first-class 0, which is what makeotf -skco writes (M12.40)."
+summary = "A class pair subtable leaves one first class out of its first class definition, as class 0, with non-zero values; the coverage table lists its glyphs. makeotf numbers the first and second classes in the order the feature code names them, so the first class named is class 0. feaLib, fea-rs and our pair positioning (write-fonts's PairPosBuilder) sort the classes by size, so the largest first class is class 0. makeotf documents -skco as suppressing the class 0 use; makeotf 5.0.1 with -skco still puts the first class named in class 0 and only adds an empty class record at the end. Each way gives every pair the same value."
+ref = "AFDKO python/afdko/makeotf.py (-skco/-nskco); write-fonts 0.52 src/tables/layout/builders.rs (ClassDefBuilder::new_using_class_0), src/tables/gpos/builders.rs; makeotf 5.0.1 and fontmake 3.12.1 run on synthetic UFOs (M12.80)"
+status = "observed"
+notes = "Observed with makeotf 5.0.1, with and without -skco, and fontmake on three synthetic UFOs whose kern features name three or four first classes of different sizes in different orders: class numbers as stated, the same values for every pair. The project compile accepts kern-class0-optimization, no-kern-class0-optimization and the SuppressKernOptimization setting of a project or fontinfo file and leaves the classes as our pair positioning builds them, with or without them (M12.40); so does an export with MakeOTF Compatibility Mode on (M12.80)."
+guesses = [
+  "The project compile keeps the size order of class pair subtables instead of makeotf's order of naming, and leaves out the empty class record -skco adds; neither changes a pair's value, and an application that reads class 0 differently would be the reason to follow makeotf.",
+]
 
 # ---------------------------------------------------------------------------------------------------
 # Behaviours: hinting, colour, misc

@@ -14,7 +14,7 @@
 //! Override sets from fontinfo text (`autohint.ps.fontinfoOverrides`) are read against each
 //! master's set, so a glyph a set takes is hinted with that set's zones and stems in every
 //! master. Overlap handling (`autohint.ps.overlapCorrection`) needs the overlap-free outline,
-//! which the autohinter cannot make: it is made here with `fontcraft-pathops` for each layer
+//! which the autohinter cannot make: it is made here (`cff_hints::overlap_free`) for each layer
 //! whose glyph the options select, and passed only when removing overlaps changes the outline.
 //!
 //! Every run is one undo step; a refusal (an unknown glyph or master, a locked glyph, fontinfo
@@ -26,13 +26,11 @@ use std::collections::{BTreeSet, HashSet};
 use fontcraft_autohint::fontinfo::{self, FontInfo};
 use fontcraft_autohint::{FdDict, GlyphHints, HintInput, MAX_SEGMENTS, Options, hint_glyph, hint_masters};
 use fontcraft_compile::cff::path_ops;
-use fontcraft_compile::cff_hints::{contours, master_autohint_dict};
+use fontcraft_compile::cff_hints::{self, contours, master_autohint_dict};
 use fontcraft_geom::BezPath;
-use fontcraft_geom::Shape as _;
 use fontcraft_hinting::ps::{has_ps_hints, set_ps_hints};
 use fontcraft_hinting::{Edge, NodeRef, PsHint};
 use fontcraft_model::{Font, Layer, Shape};
-use fontcraft_pathops::{TIME_LIMIT, run_with_time_limit};
 use serde_json::{Value, json};
 
 use super::*;
@@ -44,10 +42,6 @@ const MAX_LAYERS_PER_RUN: usize = 1 << 20;
 /// How far a node may lie from a stem edge and still carry it, in font units (charstring
 /// coordinates are whole units).
 const EDGE_TOLERANCE: f64 = 0.5;
-/// How much the total area of a layer's contours may change when overlaps are removed, in square
-/// font units, before the layer counts as overlapping (the union's intersection points are not
-/// on any grid).
-const OVERLAP_AREA_TOLERANCE: f64 = 1.0;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -262,33 +256,13 @@ fn hint_layers(
     Ok(out)
 }
 
-/// `contours` with their overlaps removed, when that changes the outline; `None`, with a warning
-/// when removal fails or takes longer than [`TIME_LIMIT`], otherwise.
+/// `contours` with their overlaps removed, when that changes the outline
+/// ([`cff_hints::overlap_free`]); `None`, with a warning when removal fails, otherwise.
 fn overlap_free(glyph: &str, master: &str, contours: &[BezPath], warnings: &mut Vec<String>) -> Option<Vec<BezPath>> {
-    if contours.is_empty() {
-        return None;
-    }
-    let input = contours.to_vec();
-    let kept = |why: String| format!("glyph `{glyph}`, master `{master}`: hinted with its overlaps, which could not be removed: {why}");
-    match run_with_time_limit(TIME_LIMIT, move || fontcraft_pathops::union(&input)) {
-        Ok(Ok(free)) => changes_outline(contours, &free).then_some(free),
-        Ok(Err(e)) => {
-            warnings.push(kept(e.to_string()));
-            None
-        }
-        Err(e) => {
-            warnings.push(kept(e.to_string()));
-            None
-        }
-    }
-}
-
-/// Whether removing overlaps changed the outline: the number of contours or the area they
-/// cover differs. A counter running against its outer contour is kept by the union, so it
-/// changes neither.
-fn changes_outline(before: &[BezPath], after: &[BezPath]) -> bool {
-    let total = |paths: &[BezPath]| paths.iter().map(|p| p.area().abs()).filter(|a| a.is_finite()).sum::<f64>();
-    before.len() != after.len() || (total(before) - total(after)).abs() > OVERLAP_AREA_TOLERANCE
+    cff_hints::overlap_free(contours).unwrap_or_else(|why| {
+        warnings.push(format!("glyph `{glyph}`, master `{master}`: hinted with its overlaps, which could not be removed: {why}"));
+        None
+    })
 }
 
 /// The autohinter's stems as PostScript hints on `layer`.

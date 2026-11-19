@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use fontcraft_engine::Session;
 use fontcraft_engine::compile::preview::PreviewFont;
+use fontcraft_engine::prelude::*;
 use fontcraft_geom::Point;
 use fontcraft_model::{Font, Layer, Master, metric};
 use fontcraft_spacing::kerning::KernIndex;

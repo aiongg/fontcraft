@@ -59,6 +59,18 @@ pub(crate) fn hint_shapes(hint: &Hint) -> Vec<usize> {
     out
 }
 
+/// The shapes of `shapes` (a layer side) that the node references of `hint` point at. PostScript
+/// hints and TrueType instructions count paths only, so their path indices are turned into shape
+/// indices; a reference past the paths comes back as `usize::MAX`.
+pub(crate) fn hint_shapes_on(hint: &Hint, shapes: &[Shape]) -> Vec<usize> {
+    let refs = hint_shapes(hint);
+    if fontcraft_model::corner::is_corner(hint) || !fontcraft_hinting::follows_nodes(hint, shapes) {
+        return refs;
+    }
+    let slots: Vec<usize> = shapes.iter().enumerate().filter(|(_, sh)| matches!(sh, Shape::Path(_))).map(|(i, _)| i).collect();
+    refs.into_iter().map(|p| slots.get(p).copied().unwrap_or(usize::MAX)).collect()
+}
+
 /// `hint` with each shape index it points at replaced by what `map` gives; `None` when `map`
 /// drops one of them. A hint without node references comes back unchanged.
 pub(crate) fn remap_hint(hint: &Hint, map: &impl Fn(usize) -> Option<usize>) -> Option<Hint> {

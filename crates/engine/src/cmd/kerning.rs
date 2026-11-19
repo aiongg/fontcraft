@@ -15,6 +15,7 @@ use super::shared::{MAX_KERN_VALUE, direction, editable_master, master};
 use super::*;
 use crate::EngineError;
 use crate::params::Params;
+use crate::prelude::*;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![

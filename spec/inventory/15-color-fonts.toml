@@ -553,7 +553,7 @@ summary = "Query: for one instance (or all) reports which colour tables would be
 ref = "Color Fonts › Working with Color Fonts › Exporting Color Fonts"
 status = "inferred"
 own = true
-notes = "Reads the same export plan the compiler builds its tables from. Without `instance` or `master` it covers every static instance that exports, or the first master when there is none, as a plain export does. `master` describes an export of that master; `cbdt` adds the export option that writes CBDT and CBLC. Each export lists its resolved switches, its tables, the COLR glyphs with the layers they are made from, the strikes, the SVG documents and their sources, and the warnings and refusals."
+notes = "Reads the same export plan the compiler builds its tables from. Without `instance` or `master` it covers every static instance that exports, or the first master when there is none, as a plain export does. `master` describes an export of that master; `cbdt` adds the export option that writes CBDT and CBLC. Each export lists its resolved switches, its tables, the CPAL version with each palette's type bits (1 light, 2 dark) and label and the number of named colours, the COLR glyphs with the layers they are made from, the strikes, the SVG documents and their sources, and the warnings and refusals."
 
 # ───────────────────────────── Panels ─────────────────────────────
 
@@ -946,6 +946,10 @@ milestone = "M11"
 summary = "A font may define several palettes. They share the same colour indices (one row per index, one column per palette), so every palette has the same number of entries, as CPAL requires."
 ref = "Color Fonts › COLR/CPAL Fonts › Defining the Color Palette"
 status = "handbook"
+notes = "M13.65: the palette names, background styles (light, dark) and colour names of the version 4 Color Palettes form are written to CPAL version 1 as palette types, palette labels and palette entry labels, each label a name ID above the font's other names; without any of them CPAL stays version 0. M13.65b: opening a compiled font reads palette types and labels back into the version 4 form (`color.open.compiledColorTables`); saving as `.glyphs` version 2 or 3 or as UFO keeps only the colours and reports the names and background styles as lost (`Color Palettes`). `color.describeExport` reports the CPAL version, each palette's type and label and the number of named colours."
+guesses = [
+  "CPAL is version 1 only when a palette has a name or a background style or a colour has a name, and version 0 otherwise, as both reference compilers write it; a font the reference exports from a version 4 file with named palettes would settle it.",
+]
 
 [[behavior]]
 id = "color.palette.perMaster"
@@ -1167,6 +1171,42 @@ milestone = "M11"
 summary = "Shadow, Inner Shadow and Pattern Image cannot be written to SVG. Only Filter › Glyph as Image respects them, in its PNG and PDF output; font export ignores them."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs"
 status = "handbook"
+notes = "Documented in the handbook; not yet observed in the reference app. Built in M11.21: `glyph.exportArtwork` and `filter.glyphAsImage` draw a palette or full-colour layer in colour in PNG and PDF (`fontcraft_render::color::artwork`), with these effects; SVG pictures and font export leave them out. A PDF holds the effects as images at `pixelsPerEm`. Edit View does not draw them."
+guesses = [
+  "A Shadow is the path's silhouette (fill and stroke) moved by the offset (font units, y up) and blurred by a Gaussian whose standard deviation is half the blur value, in the shadow colour, drawn just below the path and above the paths before it. Settled by exporting a square with a blur-0 shadow and a square with a blur-20 shadow through Glyph as Image and measuring the PNGs.",
+  "An Inner Shadow is the outside of the path moved by the offset and blurred the same way, kept inside the path, over the fill and the pattern and below the stroke. Settled by exporting a square with an inner shadow through Glyph as Image.",
+  "A Pattern Image is tiled from the glyph origin at one image pixel per font unit (a PDF by its points), over the path's fill, which shows where the image is transparent; an image that cannot be read is left out with a warning. Settled by exporting a path with a small pattern image through Glyph as Image.",
+  "A picture is widened to take in the shadows: the offset plus one and a half times the blur past the silhouette. Settled by exporting a glyph whose shadow reaches past the advance width.",
+  "Effects of paths inside a component that refers to another colour glyph are not drawn. Settled by exporting such a component through Glyph as Image.",
+]
+observe = [
+  "Full-colour layer: give a path a Shadow and an Inner Shadow; note whether Edit View draws either of them.",
+  "Export a 200-unit square with Shadow blur 0, offset 100 −100 through Filter › Glyph as Image as PNG; measure where the shadow lies and whether the picture widens to show it.",
+  "Give a path a Pattern Image of a known pixel size; export it as PNG and measure how many font units one image pixel spans and where the tiling starts.",
+]
+
+[[command]]
+id = "filter.glyphAsImage"
+label = "Glyph as Image…"
+menu = ["Filter"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, layer?: id, format: 'svg' | 'pdf' | 'png', directory?: path, pixelsPerEm?: number}"
+area = "color"
+milestone = "M11"
+summary = "Writes a picture of each chosen glyph as an image file, PNG or PDF, drawing colour layers with their Shadow, Inner Shadow and Pattern Image."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs"
+status = "handbook"
+notes = "Documented in the handbook (named as the one place the image-only effects are used); not yet observed in the reference app. Built in M11.21 as `glyph.exportArtwork` under the Filter menu: same parameters, files and result."
+guesses = [
+  "Glyph as Image PDFs hold outlines, not text: outlines and one-colour fills are vector paths, gradients and the image-only effects are images. Settled by exporting a full-colour glyph as PDF and reading the page's content.",
+  "It takes the formats and options of `glyph.exportArtwork`, SVG included, and writes one file per glyph into a folder. Settled by opening Filter › Glyph as Image in the reference and noting its formats and options.",
+  "A palette or full-colour layer draws all the glyph's colour layers of that master, as the compiled font shows the glyph, with black as the text colour; a master layer draws its outline in black. Settled by running it on one palette layer of a layered glyph.",
+]
+observe = [
+  "Run Filter › Glyph as Image on glyphs `A` and `a`: note the file names it writes, whether it asks for a folder, and its format choices.",
+  "Run it on a full-colour glyph as PDF and open the file: note whether the outlines are paths or text, and whether the shadow is an image.",
+]
 
 [[behavior]]
 id = "color.export.fullColorToSvg"
@@ -1561,8 +1601,9 @@ summary = "Opening a compiled font reads its CPAL into the Color Palettes parame
 ref = "Color Fonts"
 status = "inferred"
 own = true
-notes = "Every master gets the colour layers, each made from the layer glyph's layer of that master and given the base glyph's width. Paints that use transformations, blends or nested clips leave the glyph with its plain outline, and the warnings name it. The layer glyphs a colour glyph used are removed, as an export makes them again; one with a code point, one that is a colour glyph itself and one a remaining glyph uses as a component stay."
+notes = "Every master gets the colour layers, each made from the layer glyph's layer of that master and given the base glyph's width. Paints that use transformations, blends or nested clips leave the glyph with its plain outline, and the warnings name it. The layer glyphs a colour glyph used are removed, as an export makes them again; one with a code point, one that is a colour glyph itself and one a remaining glyph uses as a component stay. M13.65b: a CPAL version 1 table whose palette types, palette labels or palette entry labels say something opens as the version 4 Color Palettes dictionary: type bit 0 becomes the `light` background style, bit 1 `dark`, a palette label the palette's `name` and an entry label the row's entry in `names`, each read from the label's English name record, else its first; a version 0 table, or one whose arrays hold only defaults, opens as version 3 integer lists."
 guesses = [
+  "A CPAL version 1 table with palette types or labels opens as the version 4 Color Palettes dictionary, the only form that holds them, even in a document that is later saved in another format. Settled by opening, in the reference, a font whose CPAL has palette types and labels and reading the saved parameter.",
   "Opening a compiled colour font recovers palettes and vector colour layers and reports bitmap and SVG glyphs as lost. Settled by opening a COLR font in the reference.",
   "A COLR version 1 glyph whose paints are all opaque solid palette colours opens as palette layers; any other version 1 glyph opens as one full-colour layer. Settled by opening a COLR version 1 font with solid and gradient glyphs in the reference.",
   "Colours of full-colour layers open as palette references, so palette rows an export added for RGBA colours stay rows of every palette. Settled by opening, in the reference, a COLR version 1 font exported from full-colour layers with RGBA fills.",

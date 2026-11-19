@@ -25,6 +25,7 @@ use serde_json::{Value, json};
 use super::*;
 use crate::interp_cache::view_master_id;
 use crate::params::{Params, kind};
+use crate::prelude::*;
 
 /// The master parameters that set the strip's upper and lower edge.
 pub const PREVIEW_ASCENDER: &str = "Preview Ascender";

@@ -153,7 +153,7 @@ Attributes:
 | Stroke | width field, alignment centre / left / right, swatch, minus | `attributes.setStrokeWidth`, `attributes.setStrokeAlignment`, `attributes.setStrokeColor`, `attributes.removeStroke` | Width in font units; empty = 0; centred by default; left/right move the stroke to one side of the path; minus sets width 0 and a transparent colour |
 | Fill | swatch, minus | `attributes.setFillColor`, `attributes.removeFill` | Minus makes the fill transparent; the row is hidden while a gradient exists |
 | Gradient | linear / radial icons, gradient bar | `attributes.addGradient`, `attributes.setGradientType`, `attributes.addGradientStop`, `attributes.removeGradientStop`, `attributes.setGradientStopColor`, `attributes.setGradientPosition` | Added with the plus button; replaces Fill; at least two stops |
-| Shadow, Inner Shadow, Pattern Image | (not described) | `attributes.addAttribute` | Only used by Filter › Glyph as Image (PNG/PDF); never exported to a font |
+| Shadow, Inner Shadow, Pattern Image | (not described) | `attributes.addAttribute` | Only used by Filter › Glyph as Image (PNG/PDF; `filter.glyphAsImage`, the same command as `glyph.exportArtwork`); never exported to a font. How they are drawn: guesses on `color.fullColor.imageOnlyEffects` |
 
 Gradient editing: knobs under the bar are the stops (click to recolour, click the bar to add, drag a
 knob away to delete; panel `inspector.attributes.gradientBar`). In Edit View the geometry has its
@@ -335,6 +335,18 @@ Settle these by observing the reference app or its exported fonts.
    **Answered for M11 (oracle):** both oracles write CPAL version 0 with no labels or palette types;
    FontCraft does the same. fontc also writes CPAL when no colour layer uses it, fontmake does not;
    FontCraft follows fontmake.
+   **M13.65 (ours):** the version 4 `Color Palettes` form stores palette names, background styles
+   (`light`, `dark`) and colour names. When any of them is present FontCraft writes CPAL version 1:
+   `light` sets palette type bit 0, `dark` bit 1, and each name becomes a palette or palette entry
+   label with a name ID above the font's other names. `color.generateDarkPalette` appends a
+   palette marked `dark` (OKLab lightness inverted, hue and alpha kept). Without names or styles
+   CPAL stays version 0 (guesses on `color.palette.multiplePalettes` and
+   `color.generateDarkPalette`).
+   **M13.65b (ours):** opening a compiled font reads CPAL version 1 palette types and labels back
+   into the version 4 form. `.glyphs` versions 2 and 3 document only the list forms, and ufo2ft's
+   lib key holds only colours, so saving in those formats writes the colours as lists and the
+   save loss report names the palette names, background styles and colour names left out
+   (guesses on `Color Palettes` and `color.open.compiledColorTables`).
 5. When a colour row is removed in the palette editor, are layers using that or higher indices
    renumbered, left dangling, or flagged?
    **Answered for M11 (ours):** layers that use higher indices are renumbered down; removing a row

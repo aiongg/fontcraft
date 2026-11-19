@@ -115,6 +115,7 @@ fn tags(given: &[String], parsed: &[String]) -> Vec<Value> {
 }
 
 fn run(args: &[String]) -> Outcome {
+    let args = &args::spell_out(OPTIONS, args)?;
     let (tables, rest) = take_repeated(args, "-t", "--table");
     let (excluded, rest) = take_repeated(&rest, "-x", "--exclude-table");
     let parsed = args::parse(OPTIONS, &rest)?;

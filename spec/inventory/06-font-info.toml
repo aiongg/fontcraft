@@ -518,9 +518,10 @@ milestone = "M7"
 summary = "New files start at 1000 UPM. The format allows 16 to 16384; the handbook warns that some applications misbehave above 3000, Adobe InDesign and Illustrator above 5000, that CFF glyph widths become unreliable beyond 4096 UPM, and that no point coordinate may exceed plus or minus 32768."
 ref = "Font Info › Font › Units per Em"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.3."
+notes = "Documented, not yet observed. M7 plan § 4: M7.3. The messages come from fontcraft_fontinfo::warnings (M7.23): font.info.set returns them, and font.info.get lists those of the current value under `warnings` with field unitsPerEm, for the Font tab to show under the field. The handbook says beyond 4096, so 4096 itself gets only the 3000 caution."
 guesses = [
   "font.info.set refuses values outside 16–16384 and returns a warning above 3000, above 4096 (glyph widths of CFF-flavoured fonts, given whatever the outline flavour) and above 5000; the reference app settles whether it warns at all.",
+  "The Font tab shows each units-per-em warning under the Units per Em field while the value stands, not only right after an edit; typing 6000 in the reference app and reopening Font Info settles it.",
 ]
 observe = [
   "In font A (m7-one), type 3500 and then 6000 as Units per Em: note any warning or refusal for each.",
@@ -1651,7 +1652,7 @@ label = "Add Number Value"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{name: string, values?: {master: number}}"
+params = "{name?: string, values?: {master: number}}"
 area = "features"
 milestone = "M8"
 summary = "Adds a named number with the plus button beside the Number Values heading; every master then stores its own value under that name."
@@ -1660,6 +1661,10 @@ status = "handbook"
 notes = "Documented, not yet observed."
 guesses = [
   "A number value name is letters, digits and `_`, not starting with a digit, so that a `$name` token can read all of it; a leading `.` is allowed for settings such as `.monospace`, which the handbook names. A name the font has is refused. Naming a number value with a space, a hyphen or an inner dot in the reference app would settle it.",
+  "The plus button adds a number value called `value` (`value1`, `value2`… while taken) for the user to rename, because the handbook does not say what a new one is called; clicking the plus button twice in the reference app settles it.",
+]
+observe = [
+  "In font A (m7-one), open Font Info › Masters and click the plus button beside Number Values twice: note the names and values the two new rows get.",
 ]
 
 [[command]]
@@ -2187,7 +2192,7 @@ milestone = "M7"
 summary = "Style names outside ASCII letters, digits, spaces and simple punctuation are not safe everywhere; family plus style name longer than about 20 characters can fail in older systems, applications and printers. The remedy is abbreviated postscriptFontName and postscriptFullName values, and styleNames for Unicode names."
 ref = "Font Info › Exports › Style Name"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.7."
+notes = "Documented, not yet observed. M7 plan § 4: M7.7. The messages come from fontcraft_fontinfo::warnings (M7.23): font.instance.set, font.instance.add and font.info.set (instance name) return them; font.instance.list, font.instance.get and font.info.get list each entry's under `warnings` with field styleName."
 guesses = [
   "font.instance.set and the Exports tab warn, without refusing, when the style name has characters outside ASCII letters, digits, spaces and hyphens, or when family and style name together exceed 20 characters without a postscriptFontName; the reference app settles whether it warns.",
   "An empty or all-space style name is refused by font.instance.set and font.instance.add; clearing the Style Name field in the reference app settles it.",
@@ -2203,7 +2208,13 @@ milestone = "M7"
 summary = "The weight class accepts typed values from 1 to 1000 (350 for a Semi Light, say) besides the nine standard steps, although values between the standard steps are refused by some applications. Neither class is bound to the range or the values of the weight or width axis."
 ref = "Font Info › Exports › Weight & Width"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.7."
+notes = "Documented, not yet observed. M7 plan § 4: M7.7. The caution about other values comes from fontcraft_fontinfo::warnings (M7.23): font.instance.setWeightClass, font.instance.set, font.instance.add and font.info.set return it, and font.instance.list, font.instance.get and font.info.get list it under `warnings` with field weightClass."
+guesses = [
+  "The commands accept every value from 1 to 1000 and warn about any outside 100, 200, … 900, 1000 included; a class an older source writes as a name, or none, gets no warning. Typing 350 and 1000 as a weight class in the reference app settles whether it warns.",
+]
+observe = [
+  "In font B (m7-two), type 350 as an instance's weight class: note any warning and where it shows.",
+]
 
 [[behavior]]
 id = "fontInfo.instance.extrapolation"
@@ -2228,7 +2239,7 @@ milestone = "M7"
 summary = "Style linking connects only fonts with an identical family name. All instances inherit the Font tab's family name unless they carry a familyNames field, and instances from different source files (a roman and an italic file) can share a family name and link to each other."
 ref = "Font Info › Exports › Style Linking"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.7 (test over the compiled name tables of two linked instances)."
+notes = "Documented, not yet observed. M7 plan § 4: M7.7 (test over the compiled name tables of two linked instances). The message comes from fontcraft_fontinfo::warnings (M7.23): the linking commands return it, and font.instance.list, font.instance.get and font.info.get list it under `warnings` with field styleLinking, for the Exports tab to show under Style Linking."
 guesses = [
   "font.instance.setStyleLinking and font.instance.set link anyway but warn when the base instance named in the same file exports under another family name (its familyNames field); a base in another file is not checked. Linking two instances with different familyNames in the reference app settles whether it warns.",
 ]
@@ -2507,6 +2518,69 @@ guesses = [
   "An entry whose glyphs are gone keeps its place with empty code rather than being removed; pressing the entry's update button after deleting its glyphs would settle it.",
 ]
 
+
+[[command]]
+id = "font.features.setDisabled"
+label = "Disable Feature Entries"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{entries: [{kind: 'prefix'|'class'|'feature', name: string, index?: integer}], disabled: boolean}"
+area = "features"
+milestone = "M8"
+summary = "Disables or enables prefixes, classes and features, as Disable and Enable in the sidebar's context menu do. A disabled entry stays in the font and the sidebar, drawn struck through, but the compiled font and exported feature files leave it out. One undo step."
+ref = "Font Info › Features"
+status = "inferred"
+notes = "Not in the handbook. The file format stores a disabled flag on each entry, and both reference compilers leave disabled entries out (docs/spec/12-feature-code.md, open question 4). Entries already in the asked state are left alone and make no undo step."
+guesses = [
+  "A Disable and Enable item in the sidebar's context menu sets the flag; opening the context menu on a sidebar entry in the reference app would settle whether it is there.",
+  "Disabling a class that an enabled feature uses is allowed and gives a compile error; disabling such a class in the reference app would settle whether it warns first.",
+]
+observe = [
+  "In F1 (Latin features), right-click a feature in Font Info › Features and note whether the menu has Disable (or a similar item) and what the entry looks like afterwards.",
+]
+
+[[command]]
+id = "font.features.copyEntries"
+label = "Copy Feature Entries"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{entries: [{kind: 'prefix'|'class'|'feature', name: string, index?: integer}]}"
+area = "features"
+milestone = "M8"
+summary = "Returns the selected entries as clipboard text: feature code with a marker comment before each entry that keeps its kind, name, automatic and disabled flags, notes and stylistic-set names. Cmd+C in the sidebar and Copy in its context menu run it; the shell puts the text on the system clipboard."
+ref = "Font Info › Features"
+status = "inferred"
+notes = "Not in the handbook. Classes come first, then prefixes, then features, the order export assembles them in; a disabled entry's code is commented out so the text compiles as the font does. Text over 16 MB, more than Paste reads, is refused."
+guesses = [
+  "Entries travel as feature-file text with `# entry:` marker lines, so they paste into a text editor too; copying a feature in the reference app and pasting it into a text editor would settle the format it uses.",
+]
+observe = [
+  "In F1 (Latin features), select a class and a feature in Font Info › Features, press Cmd+C, and paste into a text editor: note the text.",
+]
+
+[[command]]
+id = "font.features.pasteEntries"
+label = "Paste Feature Entries"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{text: string}"
+area = "features"
+milestone = "M8"
+summary = "Adds the entries of clipboard text after the font's, as one undo step. Text from Copy Feature Entries gives each entry back with its code, flags, notes and names; other feature code is split into entries as Import Features splits it. A taken class or prefix name gets a numeric suffix, and pasted references to a renamed class follow it. Cmd+V in the sidebar and Paste in its context menu run it."
+ref = "Font Info › Features"
+status = "inferred"
+notes = "Not in the handbook. The marked form is read only when it is exactly what Copy writes (line breaks may be CRLF); any other text goes through the import's reader. A feature keeps its tag when the font has one, as import does, since a suffix would not be a tag."
+guesses = [
+  "Pasted entries go to the end of their groups rather than after the selected entry; pasting into a sidebar with a selection in the reference app would settle it.",
+  "A pasted feature whose tag the font has is added as a second entry with that tag rather than renamed or merged; pasting liga into a font with liga in the reference app would settle it.",
+]
+observe = [
+  "In F1 (Latin features), copy a class and a feature in Font Info › Features and paste them into a new font's Features tab, then into F1 again: note the names they get, and whether notes and the automatic flag come along.",
+]
+
 [[command]]
 id = "font.features.compile"
 label = "Compile"
@@ -2706,6 +2780,38 @@ summary = "Automatic entries carry an update button beside their name in the sid
 ref = "Font Info › Features › Automatic Feature Code"
 status = "handbook"
 notes = "Documented, not yet observed."
+
+
+[[behavior]]
+id = "fontInfo.features.contextMenu"
+area = "features"
+milestone = "M8"
+summary = "Right-clicking a sidebar entry opens a menu with Disable or Enable, Update Entry (automatic entries), Rename, Copy, Paste and Delete, acting on the selected entries; Cmd+C and Cmd+V copy and paste while the sidebar has focus. A disabled entry's name is drawn struck through."
+ref = "Font Info › Features"
+status = "inferred"
+notes = "Not in the handbook. The items run font.features.setDisabled, updateEntry, rename, copyEntries, pasteEntries and remove."
+guesses = [
+  "The context menu's items and their order are ours; right-clicking a sidebar entry in the reference app would settle them.",
+  "A disabled entry is drawn struck through; disabling an entry in the reference app would settle how it is shown.",
+]
+observe = [
+  "In F1 (Latin features), right-click a prefix, a class and a feature in Font Info › Features and note each menu's items in order.",
+]
+
+[[behavior]]
+id = "fontInfo.features.sidebarFilter"
+area = "features"
+milestone = "M8"
+summary = "A search field above the sidebar shows only the entries whose name or code holds the typed text, ignoring case; the groups stay in their order and clearing the field shows every entry."
+ref = "Font Info › Features"
+status = "inferred"
+notes = "Not in the handbook. View state only: it filters what font.features.list and font.features.get return."
+guesses = [
+  "The filter matches code as well as names; typing a glyph name into the reference app's sidebar search, if it has one, would settle it.",
+]
+observe = [
+  "In F1 (Latin features), in Font Info › Features, look for a search field over the sidebar; type a glyph name used in one feature's code and note which entries stay.",
+]
 
 [[behavior]]
 id = "fontInfo.features.updateDetectsNew"

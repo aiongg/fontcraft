@@ -151,6 +151,30 @@ fn detect_component_replaces_the_chosen_paths_with_the_glyph_they_repeat() {
     assert_eq!(shapes.len(), 2);
 }
 
+/// PostScript hints count paths: the square after the replaced acute becomes path 0 and keeps its
+/// stem hint; the stem on the acute's nodes is unlinked at its places.
+#[test]
+fn detect_component_keeps_stem_hints_on_their_nodes() {
+    use fontcraft_hinting::{Edge, NodeRef, PsHint, ps_hints, set_ps_hints};
+    let mut s = flattened();
+    let node = |path, n| Edge::Node(NodeRef::new(path, n));
+    s.edit("stems", |f| {
+        let mut g = f.glyph_mut("B")?;
+        let stems = [PsHint::stem(false, node(1, 0), node(1, 1)), PsHint::stem(false, node(0, 0), node(0, 1))];
+        set_ps_hints(&mut g.layers[0], &stems).unwrap();
+        Ok(())
+    })
+    .unwrap();
+    let r = run(&mut s, "path.detectComponent", json!({"glyph": "B", "shapes": [0]}));
+    assert_eq!(r["hintUpkeep"]["unlinked"], json!(2), "{r}");
+    let l = layer(s.font().unwrap(), "B");
+    let ps: Vec<PsHint> = ps_hints(l).unwrap().into_iter().map(|(_, h)| h).collect();
+    assert_eq!(ps.len(), 2, "{ps:?}");
+    assert_eq!((ps[0].origin, ps[0].other), (node(0, 0), Some(node(0, 1))), "the square is path 0 now");
+    assert_eq!(ps[0].edges(l).unwrap(), (0.0, 30.0));
+    assert_eq!((ps[1].origin, ps[1].other), (Edge::Value(50.0), Some(Edge::Value(150.0))), "the acute's nodes are gone");
+}
+
 #[test]
 fn detect_component_without_a_matching_glyph_is_an_error_that_changes_nothing() {
     let mut s = flattened();

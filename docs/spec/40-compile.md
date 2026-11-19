@@ -193,6 +193,28 @@ dropped. Where fontc refuses to build (a value that is not a list, `ignoreMarks`
 quantization other than 1, the legacy `kernFeatureWriter2`), FontCraft builds with the standard
 settings and warns; a value that is not a list turns the kerning off, as in fontmake.
 
+The `features` group of `font.compile` (M2.12; the command line's feature options) changes the
+source for one build, before any stage runs:
+
+- `file` (`--features`) and `mtiSource` (`--mti-source`) replace the feature code with one
+  entry. FontDame files are converted to feature code first (§ 4b), and no feature writer runs,
+  as ufo2ft's MTI compiler runs none.
+- `writers` (`--feature-writer`) replaces the feature-writer setting above; `...` stands for the
+  source's list, or the four default writers (kern, mark, GDEF, cursive) without one, as ufo2ft
+  reads it. `generateGdef: false` (`--no-generate-gdef`) drops the GDEF writer, so `GDEF` holds
+  only what the code states. In fontmake the option stops glyphsLib from writing a `GDEF` block
+  into the master UFOs, and ufo2ft's GDEF writer still runs; a corpus run with the option is the
+  measure that shows whether the two differ.
+- `debugFile` (`--debug-feature-file`) receives the code the first font compiled: the assembled
+  entries and any contextual mark code. fontmake's file also holds the generated kerning and mark
+  features as code; ours merges them as lookups, so they are not in it. `font.compilePlan`'s
+  `features` section returns the same text per static output.
+- `stubGsub` (`--stub-gsub`) writes an empty `GSUB` (no scripts, features or lookups) when the
+  layout stage gives none.
+- `variable: false` (`--no-variable-features`, per-master layout merged by varLib) and
+  `expandToInstances` (`--expand-features-to-instances`) are refused: one variable feature set is
+  compiled, and instances compile the source's code with includes resolved against its folder.
+
 ### 1.7 Variation tables
 
 Only when at least one axis has a range (`compile.variableOnlyTables`).
@@ -301,6 +323,21 @@ writing fonts; `font.compilePlan` describes the same choices without building.
 
 WOFF2 uses the container's default options: `glyf` and `loca` transformed, `hmtx` not, as
 fontTools does.
+
+`font.compile`'s outline, CFF, glyph-set and output options (M2.13; the command line's
+`--glyphs`, `--notdef`, `--cff-round-tolerance` and the rest) work in three places:
+
+| Where | Options | How |
+|---|---|---|
+| Compile options | `cff.roundTolerance`, `cff.optimize`, `cff.maxSubrs`, `cff.optimizeWidths`, `outlines.autoUseMyMetrics`, `autohint`, `glyphData` | Passed to the static compile. The CFF options apply to a static `CFF ` table only; `CFF2` keeps its own rounding and the default subroutine cap |
+| A copy of the font | `glyphs`, `notdef: "replace"`, `productionNames`, `bumpVersion` | Glyphs outside the subset stop exporting, so the feature assembly drops them as it drops any non-exporting glyph; the subset keeps `.notdef` and every glyph a kept glyph's components use. `replace` removes the source's `.notdef`, so the compiler draws one. `productionNames` sets or clears the *Don't use Production Names* parameter |
+| The built bytes | `postFormat: 3`, `excludeTables`, `tables` | Each static font is rewritten after its build: `post` keeps its 32-byte header as version 3, the excluded tables are left out, and the tables named are also written as raw files. Not with a variable format or a collection |
+
+fontmake's `--cff-round-tolerance`, `--optimize-cff`, `--max-subrs` and `--optimize-widths` are
+the models. FontCraft keeps the source's `defaultWidthX` and `nominalWidthX` unless asked;
+fontmake optimises them by default. `--erase-open-corners` waits for the export step that erases
+open corners (M3.31). The options with no counterpart are refused with the reason; the list is in
+the `compile` row's notes.
 
 ---
 
@@ -579,7 +616,7 @@ all five.
 | Feature compiler | feaLib; MTI optional | fea-rs | addfeatures (own parser) | fea-rs |
 | Generated kern/mark | ufo2ft writers, modes skip/append, quantisation option | same modes, no quantisation | none; kerning is written in the feature file | fontc rule, quantisation optional |
 | Contextual anchors (`*top` with a context in `GPOS_Context`) | ufo2ft's mark writer adds chained lookups that call the contextual anchors' attachments | ignored | n/a | as fontmake (M8.21) |
-| Kern class trick | n/a | n/a | left class 0 optimisation unless `-skco` | not used |
+| First class 0 in class kerning | the largest first class | the largest first class | the first class the code names, also with `-skco` | the largest first class |
 | GDEF classes | generated block unless `--no-generate-GDEF` | FEA block wins, else source categories | from feature file | fontc rule |
 | Feature variations tag | rvrn/rclt from designspace | same; Glyphs bracket layers default rvrn | designspace grammar noted in CFF2 doc | fontc rule |
 | DSIG | none | none | stub in release mode | none |
@@ -809,7 +846,8 @@ makeotf in these points:
 - Each run of a feature block's substitutions of one type gets its own lookup, as the feature
   file specification groups rules and makeotf's feature compiler does (`FeatCtx::prepRule`). The
   ordinary compile follows fea-rs and feaLib instead, where a single substitution joins a
-  neighbouring multiple or ligature substitution's lookup.
+  neighbouring multiple or ligature substitution's lookup. The MakeOTF Compatibility Mode
+  parameter turns this rule on for an ordinary export (M12.80).
 
 The measure builds the first 10 corpus UFOs that makeotf can build with both tools and compares
 a normalised dump: glyph order, `cmap`, names (ID 3 left out, ID 5 up to the first `;`),
@@ -826,6 +864,7 @@ These differences are ours on purpose or not yet followed:
 | a contour that starts with a line, in a component drawn in after the reader's list of path operations has grown past a multiple of 50 | the contour's move is sometimes lost, which joins it to the contour before it (`threequarters` of `Oswald-Regular-Round.ufo`) | the contour as drawn | a fault in makeotf: in `parseXMLContour` of `uforead.cpp`, the closing line can move the list, and the move is then written into the old copy |
 | vendor id, unique ID version, Panose weight, xAvgCharWidth, strikeout position, fsType, GDEF | worked out by makeotf | the ordinary compile's values | not yet followed; the measure does not compare them |
 | CID-keyed project compile | fractions kept | integers | the CID-keyed build rounds as every CID-keyed build does |
+| class pair subtables | classes numbered in the order the feature code names them, the first first class in class 0; `-skco` adds an empty class record at the end | sorted by size, the largest first class in class 0, as feaLib and fea-rs | every pair gets the same value; the pair positioning builder sorts its classes (`compile.kernClassOptimisation`) |
 
 ## 4b. FontDame conversion against mtiLib
 

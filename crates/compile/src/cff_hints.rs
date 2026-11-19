@@ -30,10 +30,12 @@
 
 use fontcraft_autohint::{ElementPos, FdDict, GlyphHints, HintInput, HintMask, Options, StemSet, Zone, ZoneSet, hint_glyph};
 use fontcraft_cff::{CharstringHints, MAX_STEM_HINTS, Mask, Number, PathOp, PrivateDict, StemHint, writable_stems};
+use fontcraft_geom::Shape as _;
 use fontcraft_geom::{BezPath, PathEl, Point};
 use fontcraft_hinting::ps::ps_hint_layer;
 use fontcraft_hinting::{HintSettings, PsHintKind, ps_hints};
 use fontcraft_model::{Font, Layer, ResolvedGlyph, Target};
+use fontcraft_pathops::{TIME_LIMIT, run_with_time_limit};
 
 use crate::cff::ROUND_TOLERANCE;
 use crate::{CompileError, ot_round};
@@ -41,6 +43,10 @@ use crate::{CompileError, ot_round};
 /// How far a node may lie from a stem edge and still count as on it, in font units: charstring
 /// coordinates are rounded to whole units.
 const EDGE_TOLERANCE: f64 = 0.5;
+/// How much the total area of a glyph's contours may change when overlaps are removed, in square
+/// font units, before the glyph counts as overlapping (the union's intersection points are not
+/// on any grid).
+const OVERLAP_AREA_TOLERANCE: f64 = 1.0;
 
 /// The zones and stems of the Private dict `private` in the autohinter's validated form, read
 /// as otfautohint reads them from a compiled font (StemSnap first, then StdHW/StdVW). Identical
@@ -236,9 +242,24 @@ pub fn autohinted_on_steps(name: &str, path: &[PathOp], dict: &FdDict, options: 
 
 /// The autohinter's hints for the outline `path` of glyph `name`, as charstring hints, or `None`
 /// (with a warning when the autohinter failed or its result cannot be written).
+///
+/// A glyph that `options` select for overlap handling (`overlap_forcing`, else `overlap_list`;
+/// a single outline is never hinted in several masters) is hinted against its contours with
+/// their overlaps removed ([`overlap_free`]), as otfautohint does, and the hints are written for
+/// `path` as it is. A glyph whose overlaps cannot be removed is hinted on its own outline, with a
+/// warning.
 pub fn autohinted(name: &str, path: &[PathOp], dict: &FdDict, options: &Options, warnings: &mut Vec<String>) -> Option<CharstringHints> {
     let (contours, starts) = contours(path);
-    let input = HintInput { name, contours: &contours, without_overlap: None, dict, options };
+    let wanted = options.overlap_forcing.unwrap_or_else(|| options.overlap_list.contains(name));
+    let free = if wanted {
+        overlap_free(&contours).unwrap_or_else(|e| {
+            warnings.push(format!("glyph `{name}`: hinted with its overlaps, which could not be removed: {e}"));
+            None
+        })
+    } else {
+        None
+    };
+    let input = HintInput { name, contours: &contours, without_overlap: free.as_deref(), dict, options };
     let hints = match hint_glyph(&input) {
         Ok(h) => h,
         Err(e) => {
@@ -258,6 +279,25 @@ pub fn autohinted(name: &str, path: &[PathOp], dict: &FdDict, options: &Options,
         return None;
     }
     Some(out)
+}
+
+/// `contours` with their overlaps removed (`fontcraft_pathops::union`), the outline the
+/// autohinter's overlap handling hints against; `None` when removing them changes neither the
+/// number of contours nor the area they cover (a counter running against its outer contour is
+/// kept by the union). An error when removal fails or takes longer than [`TIME_LIMIT`].
+pub fn overlap_free(contours: &[BezPath]) -> Result<Option<Vec<BezPath>>, String> {
+    if contours.is_empty() {
+        return Ok(None);
+    }
+    let input = contours.to_vec();
+    let free = match run_with_time_limit(TIME_LIMIT, move || fontcraft_pathops::union(&input)) {
+        Ok(Ok(free)) => free,
+        Ok(Err(e)) => return Err(e.to_string()),
+        Err(e) => return Err(e.to_string()),
+    };
+    let total = |paths: &[BezPath]| paths.iter().map(|p| p.area().abs()).filter(|a| a.is_finite()).sum::<f64>();
+    let changed = contours.len() != free.len() || (total(contours) - total(free.as_slice())).abs() > OVERLAP_AREA_TOLERANCE;
+    Ok(changed.then_some(free))
 }
 
 /// The closed contours `path` draws, as the autohinter reads a charstring, and the index in

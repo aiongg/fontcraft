@@ -5,6 +5,7 @@
 //! The font holds the names ([`fontcraft_model::Font::numbers`]); each master holds its values in
 //! the same order ([`fontcraft_model::Master::number_values`]), where a missing value counts as 0.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use fontcraft_model::{Font, MAX_COORDINATE, MAX_NAME_LEN, Master, NumberDef};
@@ -15,6 +16,9 @@ use crate::params::Params;
 
 /// Most named numbers one font may hold.
 const MAX_NUMBERS: usize = 10_000;
+
+/// The name `font.numbers.add` gives when none is passed (with a number appended while taken).
+const NEW_NAME: &str = "value";
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -32,7 +36,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Add Number Value",
             [],
             None,
-            "{name: string (letters, digits and `_`, not starting with a digit; a setting such as `.monospace` starts with `.`, and tokens do not read it), values?: {master id|name: number}} add a named number at the end; every master gets a value, 0 unless `values` gives one. A name the font has is refused → {index, name, values: {masterId: number}}",
+            "{name?: string (letters, digits and `_`, not starting with a digit; a setting such as `.monospace` starts with `.`, and tokens do not read it), values?: {master id|name: number}} add a named number at the end; every master gets a value, 0 unless `values` gives one. Without a name it is called `value` (`value1`, `value2`… while taken); a name the font has is refused → {index, name, values: {masterId: number}}",
             has_doc,
             add
         ),
@@ -119,6 +123,19 @@ fn check_name(p: &Params, font: &Font, name: &str, except: Option<usize>) -> Res
     Ok(())
 }
 
+/// `value`, else `value1`, `value2`…: the first name no number of `font` has.
+fn free_name(font: &Font) -> String {
+    let taken: HashSet<&str> = font.numbers.iter().map(|d| d.name.as_str()).collect();
+    if !taken.contains(NEW_NAME) {
+        return NEW_NAME.to_string();
+    }
+    // Each taken name rules out at most one candidate, so one of these is free.
+    (1..=taken.len().saturating_add(1))
+        .map(|n| format!("{NEW_NAME}{n}"))
+        .find(|name| !taken.contains(name.as_str()))
+        .unwrap_or_else(|| format!("{NEW_NAME}{}", taken.len().saturating_add(1)))
+}
+
 fn check_value(p: &Params, key: &str, v: f64) -> Result<f64> {
     if !v.is_finite() || v.abs() > MAX_COORDINATE {
         return Err(p.bad(format!("`{key}` must be a number within ±{MAX_COORDINATE}, got {v}")));
@@ -160,11 +177,16 @@ fn list(s: &mut Session, raw: &Value) -> Result<Value> {
 fn add(s: &mut Session, raw: &Value) -> Result<Value> {
     let p = Params::new("font.numbers.add", raw)?;
     let font = s.font()?;
-    let name = p.str("name")?.to_string();
-    check_name(&p, font, &name, None)?;
     if font.numbers.len() >= MAX_NUMBERS {
         return Err(p.bad(format!("the font already has {MAX_NUMBERS} number values")));
     }
+    let name = match p.opt_str("name")? {
+        Some(name) => {
+            check_name(&p, font, name, None)?;
+            name.to_string()
+        }
+        None => free_name(font),
+    };
     let mut values = vec![0.0; font.masters.len()];
     if let Some(given) = p.opt_object("values")? {
         for (key, v) in given {

@@ -450,8 +450,15 @@ fn check_blend(b: &Blend, regions: usize, glyph: &str) -> Result<(), Cff2Error> 
 }
 
 /// The charstring of `glyph` (with `regions` regions in its list), its bounds at the origin, and
-/// whether its hints were left out; specialised unless `generic`.
-fn charstring(glyph: &Cff2Glyph, regions: usize, tolerance: f64, generic: bool) -> Result<(Vec<u8>, Option<Bounds>, bool), Cff2Error> {
+/// whether its hints were left out; specialised unless `generic`, keeping every segment when
+/// `keep_segments`.
+fn charstring(
+    glyph: &Cff2Glyph,
+    regions: usize,
+    tolerance: f64,
+    generic: bool,
+    keep_segments: bool,
+) -> Result<(Vec<u8>, Option<Bounds>, bool), Cff2Error> {
     let name = glyph.name.as_str();
     if glyph.path.len() > MAX_SEGMENTS {
         return Err(Error::TooManySegments { glyph: name.to_string(), count: glyph.path.len() }.into());
@@ -499,7 +506,7 @@ fn charstring(glyph: &Cff2Glyph, regions: usize, tolerance: f64, generic: bool) 
     }
     let hints = glyph.hints.as_ref().filter(|h| !h.is_empty() && !commands.is_empty());
     let hinted = match hints {
-        Some(h) => hinted_charstring(&commands, h, glyph.vsindex, regions, tolerance, generic, name)?,
+        Some(h) => hinted_charstring(&commands, h, glyph.vsindex, regions, tolerance, Layout { generic, keep_segments }, name)?,
         None => None,
     };
     let unhinted = hints.is_some() && hinted.is_none();
@@ -510,7 +517,7 @@ fn charstring(glyph: &Cff2Glyph, regions: usize, tolerance: f64, generic: bool) 
     } else {
         // The specialiser keeps every blend within the stack; were an argument swap to push one
         // past it, the generic form is written instead.
-        match encode(&specialize(commands.clone(), MAX_STACK, false), glyph.vsindex, regions, name) {
+        match encode(&specialize(commands.clone(), MAX_STACK, keep_segments), glyph.vsindex, regions, name) {
             Err(Cff2Error::StackOverflow { .. }) => encode(&commands, glyph.vsindex, regions, name)?,
             other => other?,
         }
@@ -589,9 +596,10 @@ fn hinted_charstring(
     vsindex: u16,
     regions: usize,
     tolerance: f64,
-    generic: bool,
+    layout: Layout,
     name: &str,
 ) -> Result<Option<Vec<u8>>, Cff2Error> {
+    let Layout { generic, keep_segments } = layout;
     check_hints(hints, commands.len(), regions, name)?;
     let is_blend = |a: &Arg| matches!(a, Arg::Blend(..));
     let replacement = !hints.masks.is_empty() || !hints.counters.is_empty();
@@ -622,7 +630,7 @@ fn hinted_charstring(
         let written = if generic {
             write_commands(run, regions, name, &mut bytes)
         } else {
-            write_commands(&specialize(run.to_vec(), MAX_STACK, false), regions, name, &mut bytes)
+            write_commands(&specialize(run.to_vec(), MAX_STACK, keep_segments), regions, name, &mut bytes)
         };
         match written {
             Err(Cff2Error::StackOverflow { .. }) if !generic => {
@@ -650,6 +658,14 @@ fn hinted_charstring(
     out.extend(head);
     out.extend(body);
     Ok(Some(out))
+}
+
+/// How a charstring's segments are written: one generic operator each, or specialised, keeping
+/// every segment or not.
+#[derive(Clone, Copy, Debug)]
+struct Layout {
+    generic: bool,
+    keep_segments: bool,
 }
 
 /// Appends `commands` with their operators.
@@ -928,6 +944,39 @@ fn validate(font: &Cff2Font) -> Result<(), Cff2Error> {
     Ok(())
 }
 
+/// One glyph's `CFF2` charstring, for tools that replace charstrings in an existing table: the
+/// path and hints of `glyph`, whose blends have one delta per region of its list (`regions`),
+/// with every number written as given and every segment kept (specialised unless `generic`). A
+/// `vsindex` comes first when the glyph's list is not `default_vsindex`, the one its Private
+/// DICT sets. Returns the bytes and the operand stack they need, a subroutine call included;
+/// `None` when the stems' blends do not fit the operand stack.
+pub fn encode_cff2_charstring(glyph: &Cff2Glyph, regions: usize, default_vsindex: u16, generic: bool) -> Result<Option<(Vec<u8>, usize)>, Cff2Error> {
+    let (mut bytes, _, dropped) = charstring(glyph, regions, 0.0, generic, true)?;
+    if dropped {
+        return Ok(None);
+    }
+    if glyph.vsindex != default_vsindex && !leading_vsindex(&bytes) {
+        let mut head = Vec::new();
+        write_args(&[Arg::Plain(f64::from(glyph.vsindex))], 0, Context::Charstring, &glyph.name, &mut head)?;
+        head.push(OP_VSINDEX);
+        head.extend(bytes);
+        bytes = head;
+    }
+    let stack = stack_need(&bytes, regions);
+    Ok(Some((bytes, stack)))
+}
+
+/// Whether `charstring` starts with a `vsindex` operator.
+fn leading_vsindex(charstring: &[u8]) -> bool {
+    let len = match charstring.first() {
+        Some(32..=246) => 1,
+        Some(247..=254) => 2,
+        Some(28) => 3,
+        _ => return false,
+    };
+    charstring.get(len) == Some(&OP_VSINDEX)
+}
+
 /// The `CFF2` table for `font`, with each glyph's bounds at the origin.
 pub fn write_cff2(font: &Cff2Font) -> Result<Cff2Built, Cff2Error> {
     validate(font)?;
@@ -939,7 +988,7 @@ pub fn write_cff2(font: &Cff2Font) -> Result<Cff2Built, Cff2Error> {
         let Some(list) = font.region_lists.get(usize::from(g.vsindex)) else {
             return Err(Cff2Error::BadBlend { glyph: g.name.clone(), reason: format!("region list {} does not exist", g.vsindex) });
         };
-        let (bytes, b, dropped) = charstring(g, list.len(), font.round_tolerance, font.generic)?;
+        let (bytes, b, dropped) = charstring(g, list.len(), font.round_tolerance, font.generic, false)?;
         stack = stack.max(stack_need(&bytes, list.len()));
         charstrings.push(bytes);
         glyph_bounds.push(b);

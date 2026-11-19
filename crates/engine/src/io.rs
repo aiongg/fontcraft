@@ -36,6 +36,8 @@ pub enum SaveFormat {
     Glyphs,
     GlyphsPackage,
     Ufo,
+    /// A UFO in a ZIP archive, under one folder named after the file.
+    Ufoz,
     Designspace,
 }
 
@@ -46,6 +48,7 @@ impl SaveFormat {
             SaveFormat::Glyphs => "glyphs",
             SaveFormat::GlyphsPackage => "glyphspackage",
             SaveFormat::Ufo => "ufo",
+            SaveFormat::Ufoz => "ufoz",
             SaveFormat::Designspace => "designspace",
         }
     }
@@ -56,6 +59,7 @@ impl SaveFormat {
             "glyphs" => Some(SaveFormat::Glyphs),
             "glyphspackage" => Some(SaveFormat::GlyphsPackage),
             "ufo" => Some(SaveFormat::Ufo),
+            "ufoz" => Some(SaveFormat::Ufoz),
             "designspace" => Some(SaveFormat::Designspace),
             _ => None,
         }
@@ -74,7 +78,25 @@ impl SaveFormat {
             SourceFormat::GlyphsPackage => Some(SaveFormat::GlyphsPackage),
             SourceFormat::Ufo => Some(SaveFormat::Ufo),
             SourceFormat::Designspace => Some(SaveFormat::Designspace),
-            SourceFormat::Ufoz | SourceFormat::Binary => None,
+            SourceFormat::Ufoz => Some(SaveFormat::Ufoz),
+            SourceFormat::Binary => None,
+        }
+    }
+
+    /// Whether the format writes UFO files: a UFO folder, a UFOZ, or a designspace's UFOs.
+    pub fn is_ufo(self) -> bool {
+        matches!(self, SaveFormat::Ufo | SaveFormat::Ufoz | SaveFormat::Designspace)
+    }
+
+    /// The model's source format for a document saved in this format.
+    pub fn source(self) -> SourceFormat {
+        match self {
+            SaveFormat::Native => SourceFormat::Native,
+            SaveFormat::Glyphs => SourceFormat::Glyphs,
+            SaveFormat::GlyphsPackage => SourceFormat::GlyphsPackage,
+            SaveFormat::Ufo => SourceFormat::Ufo,
+            SaveFormat::Ufoz => SourceFormat::Ufoz,
+            SaveFormat::Designspace => SourceFormat::Designspace,
         }
     }
 
@@ -83,7 +105,7 @@ impl SaveFormat {
         match self {
             SaveFormat::Native => &[Family::Native],
             SaveFormat::Glyphs | SaveFormat::GlyphsPackage => &[Family::Glyphs],
-            SaveFormat::Ufo => &[Family::Ufo],
+            SaveFormat::Ufo | SaveFormat::Ufoz => &[Family::Ufo],
             SaveFormat::Designspace => &[Family::Ufo, Family::Designspace],
         }
     }
@@ -605,17 +627,36 @@ pub struct Saved {
     pub losses: Vec<Value>,
 }
 
-/// Writes `font` to `path` in `format`. A single file is written atomically. A package writes
-/// only the files whose bytes differ from what is on disk, and removes glyph files the document
-/// no longer has. Linked glyphs and masters (Import Font, Import Master) are left out.
-pub fn save(font: &Font, path: &Path, format: SaveFormat) -> Result<Saved> {
+/// `font` as [`ufo_images_as_png`] would give it, without decoding: each image file whose
+/// header names a format the decoder reads, within its size limits, counts as converted (an empty
+/// PNG file under the new name). For the loss report, which looks only at file names.
+fn ufo_images_as_png_by_header(font: &Font, files: FilesFrom) -> Option<Font> {
+    use fontcraft_imagery::{MAX_PIXELS, MAX_SIDE};
+    let convert = |bytes: &[u8]| -> Option<Vec<u8>> {
+        let info = fontcraft_imagery::sniff(bytes).ok()?;
+        let fits = info.width <= MAX_SIDE && info.height <= MAX_SIDE && u64::from(info.width) * u64::from(info.height) <= MAX_PIXELS;
+        (info.format.decodable() && fits).then(Vec::new)
+    };
+    fontcraft_io_ufo::images::to_png(font, files, &convert)
+}
+
+/// What saving `font` in `format` would leave out, as [`save`] reports it in `Saved::losses`,
+/// worked out without writing. A JPEG or TIFF image a UFO holds as PNG after the save is not
+/// named; one whose header the decoder refuses is. A file with a good header and a damaged body
+/// is named by the save but not here.
+pub fn save_losses(font: &Font, format: SaveFormat) -> Vec<Value> {
     let own = crate::linked::unlinked(font);
     let font: &Font = &own;
     let files_from = if format == SaveFormat::Designspace { FilesFrom::Designspace } else { FilesFrom::Single };
-    let converted = if matches!(format, SaveFormat::Ufo | SaveFormat::Designspace) { ufo_images_as_png(font, files_from) } else { None };
-    let font: &Font = converted.as_ref().unwrap_or(font);
+    let converted = if format.is_ufo() { ufo_images_as_png_by_header(font, files_from) } else { None };
+    loss_report(converted.as_ref().unwrap_or(font), format)
+}
+
+/// The losses of saving `font`, as [`save`] has prepared it, in `format`.
+fn loss_report(font: &Font, format: SaveFormat) -> Vec<Value> {
+    let files_from = if format == SaveFormat::Designspace { FilesFrom::Designspace } else { FilesFrom::Single };
     let mut losses = if format == SaveFormat::Native { Vec::new() } else { losses(font, format.families()) };
-    if matches!(format, SaveFormat::Ufo | SaveFormat::Designspace) {
+    if format.is_ufo() {
         losses.extend(ufo_layer_losses(font, format == SaveFormat::Designspace));
         losses.extend(side_file_losses(font));
         losses.extend(ufo_info_losses(font, files_from));
@@ -628,6 +669,19 @@ pub fn save(font: &Font, path: &Path, format: SaveFormat) -> Result<Saved> {
         let names: Vec<&str> = font.files.0.keys().map(String::as_str).collect();
         losses.push(json!({ "family": "glyphspackage", "entries": names.len(), "what": "files beside the glyphs in the package", "files": names }));
     }
+    losses
+}
+
+/// Writes `font` to `path` in `format`. A single file is written atomically. A package writes
+/// only the files whose bytes differ from what is on disk, and removes glyph files the document
+/// no longer has. Linked glyphs and masters (Import Font, Import Master) are left out.
+pub fn save(font: &Font, path: &Path, format: SaveFormat) -> Result<Saved> {
+    let own = crate::linked::unlinked(font);
+    let font: &Font = &own;
+    let files_from = if format == SaveFormat::Designspace { FilesFrom::Designspace } else { FilesFrom::Single };
+    let converted = if format.is_ufo() { ufo_images_as_png(font, files_from) } else { None };
+    let font: &Font = converted.as_ref().unwrap_or(font);
+    let losses = loss_report(font, format);
     match format {
         SaveFormat::Native | SaveFormat::Glyphs => {
             let bytes = if format == SaveFormat::Native {
@@ -673,6 +727,15 @@ pub fn save(font: &Font, path: &Path, format: SaveFormat) -> Result<Saved> {
             let (written, removed) = write_ufo(path, &files)?;
             Ok(Saved { bytes: files.values().map(Vec::len).sum(), files_written: written, files_removed: removed, losses })
         }
+        SaveFormat::Ufoz => {
+            let files = fontcraft_io_ufo::ufo::write(font)?;
+            if path.is_dir() {
+                return Err(EngineError::Io(format!("cannot write a UFOZ to {}: it is a folder", path.display())));
+            }
+            let bytes = fontcraft_io_ufo::zip::write_ufoz(&files, &ufoz_root(path))?;
+            fontcraft_format::write_atomic(path, &bytes)?;
+            Ok(Saved { bytes: bytes.len(), files_written: 1, files_removed: 0, losses })
+        }
         SaveFormat::Designspace => {
             let out = fontcraft_io_ufo::designspace::write(font)?;
             let dir = path.parent().unwrap_or(Path::new("."));
@@ -699,6 +762,13 @@ pub fn save(font: &Font, path: &Path, format: SaveFormat) -> Result<Saved> {
             Ok(Saved { bytes, files_written: written, files_removed: removed, losses })
         }
     }
+}
+
+/// The folder a UFOZ written to `path` holds its UFO in: the file's name with `.ufo`, as UFO
+/// writers name it.
+fn ufoz_root(path: &Path) -> String {
+    let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).filter(|s| !s.is_empty() && !s.contains(['/', '\\']));
+    format!("{}.ufo", stem.as_deref().unwrap_or("font"))
 }
 
 /// What [`export_ufos`] wrote: each UFO's path, master and number of files written.

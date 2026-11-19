@@ -17,7 +17,8 @@
 //! messages on stderr. Exit status, shared by every subcommand (`cli.global.exitCodes`): 0 success,
 //! 2 usage error, 3 an input could not be read, 4 the operation failed, 5 some inputs of a batch
 //! failed. (1 is reserved for "it ran and found something": differences, failed checks.) Every
-//! subcommand takes the common options of [`args::GLOBAL`], before or after its name.
+//! subcommand takes the common options of [`args::GLOBAL`], before or after its name. A
+//! subcommand name, like a long option, may be shortened to a prefix that names one only.
 #![forbid(unsafe_code)]
 
 mod args;
@@ -46,10 +47,11 @@ USAGE:
 
   fontcraft-cli convert IN OUT [--smart-components components|outlines]
       Open IN (a source) and write OUT in the format its extension names (.fontcraft, .glyphs,
-      .glyphspackage, .ufo for one master, .designspace with a UFO per master), or compile it to
-      one static font (.ttf, .otf with CFF outlines, .woff, .woff2) of its first exportable
-      instance. --smart-components: a UFO or designspace keeps smart components as components
-      with their values (default) or holds them drawn as outlines.
+      .glyphspackage, .ufo for one master, .ufoz for one master in a ZIP archive, .designspace
+      with a UFO per master), or compile it to one static font (.ttf, .otf with CFF outlines,
+      .woff, .woff2) of its first exportable instance. --smart-components: a UFO, UFOZ or
+      designspace keeps smart components as components with their values (default) or holds them
+      drawn as outlines.
 
   fontcraft-cli compile SOURCE... [--format ttf|otf]... [--container plain|woff|woff2]...
                         [-o FILE | --output-dir DIR] [--instances[=NAME,...]] [--masters-as-instances]
@@ -128,10 +130,14 @@ fn dispatch(args: &[String]) -> io::Outcome {
     match rest.first().map(String::as_str) {
         Some("-h" | "--help") | None => print_usage(),
         Some("help") => help(tail),
-        Some(name) => match sub::find(name) {
-            Some(sub) => sub::run(sub, tail),
-            None => Err(usage(format!("unknown subcommand `{name}`\n\n{USAGE}"))),
-        },
+        Some(name) => {
+            let full = sub::full_name(name, &["help"])?;
+            match full.map(|f| (f, sub::find(f))) {
+                Some(("help", _)) => help(tail),
+                Some((_, Some(sub))) => sub::run(sub, tail),
+                _ => Err(usage(format!("unknown subcommand `{name}`\n\n{USAGE}"))),
+            }
+        }
     }
 }
 
@@ -151,7 +157,7 @@ fn help(args: &[String]) -> io::Outcome {
     match parsed.positional.as_slice() {
         [] => print_usage(),
         [name, action @ ..] if action.len() <= 1 => {
-            let sub = sub::find(name).ok_or_else(|| usage(format!("unknown subcommand `{name}`")))?;
+            let sub = sub::lookup(name)?.ok_or_else(|| usage(format!("unknown subcommand `{name}`")))?;
             let mut rest: Vec<String> = action.to_vec();
             rest.push("--help".to_string());
             // An action that reads its own arguments may not know --help: the general text then.

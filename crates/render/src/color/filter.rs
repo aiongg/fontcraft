@@ -629,7 +629,7 @@ fn axis(sigma: f64) -> Axis {
 
 /// Blurs `px` (`w` × `h`, premultiplied) by the standard deviations `(sx, sy)` in pixels; what
 /// lies outside is clear.
-fn blur(px: &mut [u8], w: usize, h: usize, (sx, sy): (f64, f64)) {
+pub(super) fn blur(px: &mut [u8], w: usize, h: usize, (sx, sy): (f64, f64)) {
     let mut line: Vec<[f32; 4]> = Vec::new();
     let mut scratch: Vec<[f32; 4]> = Vec::new();
     let mut sums: Vec<[f64; 4]> = Vec::new();

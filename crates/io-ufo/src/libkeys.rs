@@ -14,7 +14,7 @@
 //! | the edit-tab texts | `…customParameter.GSFont.DisplayStrings` |
 //! | the font's user data, in a single UFO | `com.schriftgestaltung.Glyphs.fontUserData` (in a designspace: the document's `<lib>`) |
 //! | font parameters with no `fontinfo.plist` key | `…customParameter.GSFont.<name>`; `Virtual Master` as one list; `Disable Last Change` as `…disablesLastChange` |
-//! | `Color Palettes`, `meta Table`, `Don't use Production Names` | `com.github.googlei18n.ufo2ft.colorPalettes` (components from 0 to 1), `public.openTypeMeta` (tag → data), `com.github.googlei18n.ufo2ft.useProductionNames` (negated) |
+//! | `Color Palettes`, `meta Table`, `Don't use Production Names` | `com.github.googlei18n.ufo2ft.colorPalettes` (components from 0 to 1; of a version 4 dictionary only the colours, its names and background styles reported as lost), `public.openTypeMeta` (tag → data), `com.github.googlei18n.ufo2ft.useProductionNames` (negated) |
 //! | a master's icon | `…customParameter.GSFontMaster.iconName` |
 //! | a master's name parts | `com.schriftgestaltung.weight`, `…width`, `…customName` |
 //! | master parameters with no `fontinfo.plist` key | `…customParameter.GSFontMaster.<name>` |
@@ -187,6 +187,62 @@ fn color_to_model(c: &Value) -> Option<Value> {
     Some(array(items))
 }
 
+/// A version 4 `Color Palettes` dictionary (`{names; palettes = ({colors; name;
+/// backgroundStyle}…)}`, components from 0 to 1) as ufo2ft's lists, which hold only the colours
+/// ([`v4_dropped`] names the rest). Grey colours get three equal components; `None` for a CMYK
+/// colour, which ufo2ft has no form for, or a component outside 0 to 1.
+fn v4_palettes_to_ufo(v: &Value) -> Option<Value> {
+    let mut out = Vec::new();
+    for palette in &v.as_dict()?.get("palettes")?.as_array()?.items {
+        let mut colours = Vec::new();
+        for c in &palette.as_dict()?.get("colors")?.as_array()?.items {
+            let parts: Vec<f64> = c.as_array()?.items.iter().map(|n| n.as_num().map(Num::as_f64)).collect::<Option<_>>()?;
+            let rgba = match parts.as_slice() {
+                [g, a] => [*g, *g, *g, *a],
+                [r, g, b, a] => [*r, *g, *b, *a],
+                _ => return None,
+            };
+            if !rgba.iter().all(|v| (0.0..=1.0).contains(v)) {
+                return None;
+            }
+            colours.push(array(rgba.iter().map(|v| Number::float(*v).map(Value::Number)).collect::<Option<Vec<_>>>()?));
+        }
+        out.push(array(colours));
+    }
+    Some(array(out))
+}
+
+/// What ufo2ft's lists leave out of a version 4 `Color Palettes` dictionary: palette names,
+/// background styles, colour names and other keys; empty for the list forms.
+fn v4_dropped(v: &Value) -> Vec<&'static str> {
+    let Some(top) = v.as_dict() else { return Vec::new() };
+    let palettes: Vec<&Dict> =
+        top.get("palettes").and_then(Value::as_array).map_or_else(Vec::new, |a| a.items.iter().filter_map(Value::as_dict).collect());
+    let filled = |key: &str| {
+        palettes.iter().any(|d| match d.get(key) {
+            Some(Value::String(s)) => !s.as_str().trim().is_empty(),
+            Some(Value::Array(a)) => !a.items.is_empty(),
+            Some(_) => true,
+            None => false,
+        })
+    };
+    let mut out = Vec::new();
+    if filled("name") {
+        out.push("palette names");
+    }
+    if filled("backgroundStyle") {
+        out.push("background styles");
+    }
+    if top.get("names").and_then(Value::as_dict).is_some_and(|d| !d.entries.is_empty()) {
+        out.push("colour names");
+    }
+    let other_palette_keys = palettes.iter().any(|d| d.entries.iter().any(|(k, _)| !matches!(k.as_str(), "name" | "backgroundStyle" | "colors")));
+    if other_palette_keys || top.entries.iter().any(|(k, _)| !matches!(k.as_str(), "names" | "palettes")) {
+        out.push("other keys");
+    }
+    out
+}
+
 fn palettes(v: &Value, color: fn(&Value) -> Option<Value>) -> Option<Value> {
     let out: Option<Vec<Value>> =
         v.as_array()?.items.iter().map(|p| Some(array(p.as_array()?.items.iter().map(color).collect::<Option<Vec<_>>>()?))).collect();
@@ -232,6 +288,7 @@ fn meta_to_model(v: &Value) -> Option<Value> {
 
 fn to_ufo(conv: Conv, v: &Value) -> Option<Value> {
     match conv {
+        Conv::Palettes if v.as_dict().is_some() => v4_palettes_to_ufo(v),
         Conv::Palettes => palettes(v, color_to_ufo),
         Conv::Meta => meta_to_ufo(v),
         Conv::Negated => Some(Value::Bool(!truthy(v))),
@@ -347,6 +404,10 @@ impl Ctx<'_> {
                 continue;
             }
             if let Some((_, key, conv)) = OWN_KEYS.iter().find(|(n, ..)| *n == name) {
+                let dropped = if *conv == Conv::Palettes { v4_dropped(&p.value) } else { Vec::new() };
+                if !dropped.is_empty() {
+                    out.lost.push(format!("{what}: {} (`{key}` holds only the colours)", dropped.join(", ")));
+                }
                 match to_ufo(*conv, &p.value) {
                     Some(v) if font_level => self.font_key(out, key, Some(v), None, false, &what),
                     // A master's value replaces the font's.
@@ -863,6 +924,36 @@ mod tests {
         let back = color_to_model(&color_to_ufo(&grey).unwrap()).unwrap();
         assert_eq!(back, array(vec![int(64), int(255)]));
         assert!(color_to_ufo(&string("1,2,3,4,5")).is_none(), "CMYK has no ufo2ft form");
+    }
+
+    #[test]
+    fn a_version_4_palette_dictionary_keeps_its_colours_and_reports_its_names() {
+        let dict = fontcraft_plist::openstep::parse(
+            "{names = {\"0\" = Ink;}; palettes = ({backgroundStyle = (light); colors = ((1,0,0,1),(0.2,1)); name = Day;},{backgroundStyle = (dark); colors = ((0,0.502,0,1),(1,1,1,0.502)); name = Night;});}",
+        )
+        .unwrap()
+        .root;
+        let mut font = Font::new("Palettes");
+        font.source.glyphs_version = Some(4);
+        Arc::make_mut(&mut font.info).params.set("Color Palettes", dict.clone());
+        let files = ufo::write(&font).unwrap();
+        assert!(text(&files, "lib.plist").contains("<key>com.github.googlei18n.ufo2ft.colorPalettes</key>"));
+        let back = ufo::read(&files).unwrap();
+        let want = fontcraft_plist::openstep::parse("(((255,0,0,255),(51,255)),((0,128,0,255),(255,128)))").unwrap().root;
+        assert_eq!(back.info.params.get("Color Palettes"), Some(&want), "the colours come back as 8-bit lists, greys as two components");
+        let lost = ufo::info_losses(&font);
+        assert!(
+            lost.iter().any(|l| l.ends_with(
+                "parameter `Color Palettes`: palette names, background styles, colour names (`com.github.googlei18n.ufo2ft.colorPalettes` holds only the colours)"
+            )),
+            "{lost:?}"
+        );
+        // The list forms lose nothing.
+        Arc::make_mut(&mut font.info).params.set("Color Palettes", want.clone());
+        assert!(!ufo::info_losses(&font).iter().any(|l| l.contains("Color Palettes")), "{:?}", ufo::info_losses(&font));
+        // CMYK has no ufo2ft form, in either.
+        let cmyk = fontcraft_plist::openstep::parse("{palettes = ({colors = ((1,0,0,0,1));});}").unwrap().root;
+        assert!(to_ufo(Conv::Palettes, &cmyk).is_none());
     }
 
     #[test]

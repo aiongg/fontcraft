@@ -90,7 +90,7 @@ pub fn specs() -> Vec<CommandSpec> {
 // ── Reading ─────────────────────────────────────────────────────────────────────────────────────
 
 /// The `master` parameter: a master the font has, or `None` for the font's palettes.
-fn owner(p: &Params, font: &Font) -> Result<Option<String>> {
+pub(super) fn owner(p: &Params, font: &Font) -> Result<Option<String>> {
     match p.opt_str("master")? {
         None => Ok(None),
         Some(id) if font.masters.iter().any(|m| m.id == id) => Ok(Some(id.to_string())),
@@ -99,7 +99,7 @@ fn owner(p: &Params, font: &Font) -> Result<Option<String>> {
 }
 
 /// The stored value that applies and the palettes it holds.
-fn current<'f>(p: &Params, font: &'f Font, master: Option<&str>) -> Result<(Option<&'f Plist>, Palettes)> {
+pub(super) fn current<'f>(p: &Params, font: &'f Font, master: Option<&str>) -> Result<(Option<&'f Plist>, Palettes)> {
     let stored = palette::stored(font, master).map_err(|e| p.bad(e.to_string()))?;
     let palettes = stored.map_or_else(|| Ok(Palettes::default()), palette::parse).map_err(|e| p.bad(e.to_string()))?;
     Ok((stored, palettes))
@@ -131,7 +131,7 @@ fn colour(p: &Params, key: &str, text: &str) -> Result<Rgba> {
 }
 
 /// A palette number or row index parameter (whole number from 0).
-fn index(p: &Params, key: &str) -> Result<Option<usize>> {
+pub(super) fn index(p: &Params, key: &str) -> Result<Option<usize>> {
     Ok(p.opt_int(key, 0, i64::from(u16::MAX))?.and_then(|i| usize::try_from(i).ok()))
 }
 

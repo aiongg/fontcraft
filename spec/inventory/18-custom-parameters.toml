@@ -314,8 +314,9 @@ effect = "table-value"
 summary = "List of colour palettes exported as the CPAL table of a COLR/CPAL colour font. The same palettes are used to preview colour glyphs in Font View and Edit View."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "A master may carry its own Color Palettes, which wins over the font's for that master (`color.palette.perMaster`); both oracles read it so. Values are stored as lists of `\"r,g,b,a\"` strings in version 2, lists of integer lists (0 to 255) in version 3, and in version 4 as a dictionary whose `palettes` list holds `{colors; name; backgroundStyle}` with components from 0 to 1 and whose `names` map names colour rows (GlyphsFileFormatv4.md). A colour has two (grey), four (RGB) or five (CMYK) components plus alpha; components out of range are refused."
+notes = "A master may carry its own Color Palettes, which wins over the font's for that master (`color.palette.perMaster`); both oracles read it so. Values are stored as lists of `\"r,g,b,a\"` strings in version 2, lists of integer lists (0 to 255) in version 3, and in version 4 as a dictionary whose `palettes` list holds `{colors; name; backgroundStyle}` with components from 0 to 1 and whose `names` map names colour rows (GlyphsFileFormatv4.md). A colour has two (grey), four (RGB) or five (CMYK) components plus alpha; components out of range are refused. M13.65b: saved as `.glyphs` version 2 or 3, where only the list forms are documented, a version 4 dictionary is written as the version 3 lists (version 2 then spells each colour as \"r,g,b,a\"), keeping each colour's components, and the save loss report names its palette names, background styles, colour names and any other key; a dictionary whose colours do not convert is written as read and reported. Saved as UFO, ufo2ft's `com.github.googlei18n.ufo2ft.colorPalettes` takes the colours (components from 0 to 1, grey as three equal components) and the loss report names the rest; ufo2ft has no key for palette names or types."
 guesses = [
+  "A version 4 Color Palettes dictionary saved as format version 2 or 3 keeps only its colours, as lists, rather than being written as a dictionary those versions do not document. Settled by saving a version 4 file with named palettes as version 3 in the reference and reading the parameter.",
   "An edited Color Palettes keeps the form it was stored in; a new one is written as version 3 integer lists, or as the version 4 dictionary in a document read from version 4. Settled by editing the palettes in the reference and reading the saved file.",
   "A CMYK palette colour is converted to RGB without a colour profile, as (1 − c)(1 − k) and so on. Settled by exporting a CMYK palette from the reference and reading CPAL.",
 ]
@@ -1314,7 +1315,14 @@ summary = "When checked, the compiled layout tables are made comparable to makeo
 picker = "When on, the compiled layout tables match the output of the classic feature compiler, for feature code written against its behaviour or for applications that rely on it."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Moved to M12 by the M8 planning pass, with the makeotf-compatible compile mode (`compile.makeotfReleaseMode` and the other `docs/spec/40-compile.md` § 1.11 rows): the handbook does not say which layout differences it removes, and fea-rs has no such mode."
+notes = "Documented in the handbook, not yet observed. An export with it on compiles its feature code with the project compile's layout rules (M12.80): each run of a feature block's substitutions of one type gets its own lookup, as makeotf's feature compiler groups them (`compile.makeotfMetrics`), where the ordinary compile lets a single substitution join a neighbouring ligature or multiple substitution's lookup. Class kerning is built as the project compile builds it, which is the ordinary compile's way (`compile.kernClassOptimisation`). Read at every scope, the master's value over the font's and the instance's over both; the Edit View preview follows it too."
+guesses = [
+  "The parameter changes only how substitutions are grouped into lookups, the one layout rule the project compile has of its own; exporting feature code with mixed single and ligature substitutions in the reference app with it on and off would settle what else it changes.",
+  "Pair kerning classes keep the ordinary numbering (the largest first class in class 0), where makeotf numbers classes in the order the code names them and puts the first one in class 0; comparing the reference app's class kerning with the parameter on and off would settle whether it follows makeotf there.",
+]
+observe = [
+  "In F1, write `languagesystem DFLT dflt;` and a liga feature `sub d by O; sub d d by O;`, export with MakeOTF Compatibility Mode on and off, and note the GSUB lookup types each time (1 then 4, or one type 4 lookup).",
+]
 
 [[parameter]]
 name = "manufacturers"

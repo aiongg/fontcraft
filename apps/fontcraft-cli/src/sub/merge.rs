@@ -53,7 +53,7 @@ const PER_FONT: [(&str, &str); 6] =
     [("map", "map"), ("glyphs", "glyphs"), ("exclude-glyphs", "excludeGlyphs"), ("fd", "fd"), ("exclude-fd", "excludeFd"), ("face", "face")];
 
 fn run(args: &[String]) -> Outcome {
-    let (mut fonts, rest) = split(args)?;
+    let (mut fonts, rest) = split(&args::spell_out(OPTIONS, args)?)?;
     let parsed = args::parse(OPTIONS, &rest)?;
     if parsed.help {
         return out(&super::help(&SUBCOMMAND));

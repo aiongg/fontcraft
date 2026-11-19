@@ -139,6 +139,13 @@ mod tests {
             "true or a folder relative to the source's folder; each master file read from it is checked against the automation roots when opened",
         ),
         (
+            "font.compile",
+            &["file", "includeDir", "mtiSource", "debugFile"],
+            "inside the `features` group; each is checked against the automation roots when it is read or written",
+        ),
+        ("font.compile", &["glyphData"], "a list of glyph data files, each checked against the automation roots when it is read"),
+        ("font.compilePlan", &["glyphData"], "a list of glyph data files, each checked against the automation roots when it is read"),
+        (
             "font.instantiate",
             &["interpolateBinaryLayout"],
             "true or a folder relative to the source's folder; each master file read from it is checked against the automation roots when opened",

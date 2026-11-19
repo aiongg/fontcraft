@@ -1,6 +1,7 @@
 //! `fontcraft-cli mcp`.
 
 use super::Subcommand;
+use crate::args;
 use crate::io::{Failure, Outcome, usage};
 use std::path::Path;
 
@@ -9,6 +10,10 @@ use fontcraft_mcp::{Backend, DEFAULT_ADDR, Headless, Policy, Remote, Server, htt
 
 pub const SUBCOMMAND: Subcommand =
     Subcommand { name: "mcp", summary: "Run the MCP server on stdio or HTTP", usage: USAGE, options: &[], actions: &[], run: mcp };
+
+/// The option spellings of `mcp`, which reads its own arguments.
+pub const SPELLINGS: &[&str] =
+    &["--connect", "--headless", "--transport", "--listen", "--read-only", "--allow", "--deny", "--automation-read-root", "--automation-write-root"];
 
 const USAGE: &str = "\
   fontcraft-cli mcp [--connect ADDR | --headless] [--transport stdio|http] [--listen ADDR]
@@ -40,6 +45,7 @@ fn mcp(args: &[String]) -> Outcome {
     let (mut read_root, mut write_root): (Option<String>, Option<String>) = (None, None);
     let mut it = args.iter();
     while let Some(arg) = it.next() {
+        let arg = args::spell_long(SPELLINGS, arg)?;
         // The roots also come as `--flag=DIR`.
         let (flag, inline) = match arg.split_once('=') {
             Some((f, v)) if f.starts_with("--automation-") => (f, Some(v.to_string())),

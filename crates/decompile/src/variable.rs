@@ -116,13 +116,13 @@ pub(crate) fn read_any(font: &FontRef) -> Result<Decompiled, DecompileError> {
 /// For each name ID, the record a lookup reads: its first English record, else its first record
 /// (the static reader's choice). Chosen in one pass over the records, so a font with many
 /// records under one ID and many named instances or STAT values naming it does no repeated work.
-struct Names<'a> {
+pub(crate) struct Names<'a> {
     name: Option<Name<'a>>,
     by_id: BTreeMap<u16, (&'a NameRecord, bool)>,
 }
 
 impl<'a> Names<'a> {
-    fn new(sfnt: &FontRef<'a>) -> Self {
+    pub(crate) fn new(sfnt: &FontRef<'a>) -> Self {
         let name = sfnt.name().ok();
         let mut by_id: BTreeMap<u16, (&'a NameRecord, bool)> = BTreeMap::new();
         if let Some(n) = &name {
@@ -142,7 +142,7 @@ impl<'a> Names<'a> {
 
     /// The first of `ids` with a string that is not blank. At most [`MAX_DECODED_CHARS`]
     /// characters are decoded.
-    fn english(&self, ids: &[StringId]) -> Option<String> {
+    pub(crate) fn english(&self, ids: &[StringId]) -> Option<String> {
         let name = self.name.as_ref()?;
         ids.iter().find_map(|id| {
             let (record, _) = self.by_id.get(&id.to_u16())?;

@@ -14,5 +14,6 @@ workspace = true
 fontcraft-components.workspace = true
 fontcraft-geom.workspace = true
 fontcraft-model.workspace = true
+fontcraft-pathops.workspace = true
 serde.workspace = true
 serde_json.workspace = true

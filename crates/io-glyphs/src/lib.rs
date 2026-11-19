@@ -33,6 +33,7 @@ mod info;
 mod kept;
 mod layer;
 mod package;
+mod palettes;
 mod shape;
 mod v2;
 
@@ -80,7 +81,8 @@ pub fn write(font: &Font) -> Result<String> {
 
 /// What [`write`] leaves out of the document because the format version it writes has no place
 /// for it, one line each: zones beyond the overshoots (versions 3 and 4), the axis data only a
-/// designspace states, and glyph metadata the version has no key for.
+/// designspace states, glyph metadata the version has no key for, and what versions 2 and 3 cannot
+/// hold of a version 4 `Color Palettes` dictionary.
 pub fn info_losses(font: &Font) -> Vec<String> {
     let mut out = glyph::losses(&font.glyphs, font.source.glyphs_version.unwrap_or(3));
     // The format has no booleans: user data read from a UFO or a designspace comes back with 1
@@ -91,6 +93,7 @@ pub fn info_losses(font: &Font) -> Vec<String> {
     }
     out.extend(layer::losses(&font.glyphs, font.source.glyphs_version.unwrap_or(3)));
     out.extend(shape::losses(&font.glyphs, font.source.glyphs_version.unwrap_or(3)));
+    out.extend(palettes::losses(font, font.source.glyphs_version.unwrap_or(3)));
     // Versions 3 and 4 hold alignment zones only as the metrics' overshoots; version 2 writes
     // the other zones into `alignmentZones`.
     if font.source.glyphs_version.unwrap_or(3) != 2 {
@@ -903,7 +906,8 @@ pub(crate) fn take_master_display(d: &mut Dict) -> Result<(Option<String>, bool)
 }
 
 /// What [`take_master_display`] took, and the master's properties, parameters and user data.
-pub(crate) fn push_master_info(e: &mut Vec<(Str, Value)>, m: &Master) {
+/// `Color Palettes` takes the form of format `version` ([`palettes::for_version`]).
+pub(crate) fn push_master_info(e: &mut Vec<(Str, Value)>, m: &Master, version: u32) {
     if let Some(i) = &m.icon {
         e.push(("iconName".into(), string(i)));
     }
@@ -911,7 +915,7 @@ pub(crate) fn push_master_info(e: &mut Vec<(Str, Value)>, m: &Master) {
         e.push(("visible".into(), int(1)));
     }
     info::push_properties(e, &m.properties);
-    info::push_params(e, &m.params);
+    info::push_params(e, &palettes::for_version(&m.params, version));
     info::push_user_data(e, &m.user_data);
 }
 
@@ -1147,7 +1151,7 @@ fn write_font(font: &Font, version: u32) -> Result<Dict> {
     if version < 4 && !font.family_name.is_empty() {
         e.push(("familyName".into(), string(&font.family_name)));
     }
-    push_font_info_common(&mut e, font, &font.info.params);
+    push_font_info_common(&mut e, font, &palettes::for_version(&font.info.params, version));
     design::push_defs(&mut e, &font.stems, &font.numbers);
     let properties = without_kept_v2_names(&font.info.properties, extra);
     if version >= 4 && !font.family_name.is_empty() {
@@ -1170,7 +1174,7 @@ fn write_font(font: &Font, version: u32) -> Result<Dict> {
     if !font.instances.is_empty() {
         e.push(("instances".into(), list(font.instances.iter().map(write_instance).collect::<Result<_>>()?)));
     }
-    e.push(("fontMaster".into(), list(font.masters.iter().map(write_master).collect::<Result<_>>()?)));
+    e.push(("fontMaster".into(), list(font.masters.iter().map(|m| write_master(m, version)).collect::<Result<_>>()?)));
     e.push(("glyphs".into(), list(font.glyphs.iter().map(|g| write_glyph(g, version).map(Value::Dict)).collect::<Result<_>>()?)));
     let tables = [(ltr_key, &font.kerning.ltr), (Some("kerningRTL"), &font.kerning.rtl), (Some("kerningVertical"), &font.kerning.vertical)];
     for (key, table) in tables {
@@ -1200,7 +1204,7 @@ fn write_metric(m: &MetricDef) -> Value {
     Value::Dict(finish(e, &m.extra))
 }
 
-fn write_master(m: &Master) -> Result<Value> {
+fn write_master(m: &Master, version: u32) -> Result<Value> {
     let mut e = vec![("id".into(), string(&m.id))];
     if !m.name.is_empty() {
         e.push(("name".into(), string(&m.name)));
@@ -1228,7 +1232,7 @@ fn write_master(m: &Master) -> Result<Value> {
     design::push_values(&mut e, "stemValues", &m.stem_values)?;
     design::push_values(&mut e, "numberValues", &m.number_values)?;
     design::push_guides(&mut e, &m.guides)?;
-    push_master_info(&mut e, m);
+    push_master_info(&mut e, m, version);
     Ok(Value::Dict(finish(e, &m.extra)))
 }
 

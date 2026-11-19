@@ -1096,7 +1096,7 @@ Engine command: `font.convert`.
 | ttx | `-b` | --no-recalc-bounds |  |
 | ttx | `--recalc-timestamp / --no-recalc-timestamp` | --timestamp now / --timestamp keep |  |
 | ttx | `--flavor` | --container woff\|woff2 |  |
-| ttx | `--with-zopfli` | --zopfli |  |
+| ttx | `--with-zopfli` | --zopfli (refused with a WOFF result: no zopfli compressor) |  |
 | ttx | `--optimize-font-speed` | --optimize-for speed |  |
 | ttx | `-a` | --allow-virtual-gids |  |
 | ttLib | font -o / --output | convert FONT -o OUT (same format: load and save) |  |
@@ -1169,9 +1169,25 @@ glyph, it keeps that glyph without the glyphs its variable components name, and 
 table. FontCraft keeps those glyphs too, so the subset can be written. A subset that never mixes the two
 tables this way keeps the same glyphs as pyftsubset.
 
-**Sources.** `subset` also works on UFO, designspace and `.glyphs` input: glyphs are removed from every
-master and layer, and from groups, kerning and class definitions; feature code is left alone and a warning
-lists rules that now refer to missing glyphs.
+**Sources.** `subset` also works on `.glyphs`, `.glyphspackage`, `.fontcraft`, UFO and designspace
+input, and writes the result in the same format (`FONT.subset.EXT`). The selection options work as on a
+compiled font; `--gids` counts positions in the glyph order, and `--export-flags` keeps only the glyphs
+the source exports. The closure adds `.notdef` (when the source has one), the components of every layer
+of a kept glyph, and the corner, cap and brush glyphs its hints name. There is no layout closure.
+
+The removed glyphs leave every master and layer. Then:
+
+- kerning pairs that name a removed glyph, or a group no kept glyph is in, are removed;
+- named groups and class entries lose the removed glyphs, and go when they become empty;
+- feature code is pruned rule by rule: classes lose removed glyphs, a single substitution from one class
+  to another loses the same positions on both sides, and a rule that names a removed glyph outside a
+  class, or uses a class that became empty, is removed.
+
+fontmake's `--subset` runs pyftsubset on the compiled font, so it also keeps the glyphs that feature rules
+reach. The source subset compiles to the same glyph set as the compiled font subset with
+`--no-layout-closure`. Options that only change compiled tables have no effect on a source;
+`--retain-gids`, `--recommended-glyphs`, `--flavor`, `--fd` and `--exclude-fd` are refused. A designspace
+subset needs another folder or `--in-place`, because its UFOs keep their file names.
 
 Engine command: `font.subset`.
 
@@ -3000,6 +3016,13 @@ before implementation.
     `--feature-writer` must be defined so that the specs found in existing UFO libs
     (`com.github.googlei18n.ufo2ft.filters`, `…featureWriters`) can be translated.
    **Not M12:** belongs to `compile` (M2) and the feature writers (M8).
+   **Answered for `--feature-writer` (M2.12, our decision):** the names are `kern`, `mark` (which
+   writes mark, mkmk, abvm and blwm), `curs` and `gdef`, or ufo2ft's class names
+   (`KernFeatureWriter`, `MarkFeatureWriter`, `CursFeatureWriter`, `GdefFeatureWriter`), with or
+   without a module (`module::Class`), each optionally followed by `(mode=append)` or
+   `(mode=skip)`; `none` (or fontmake's `None`) runs no writer and `...` keeps the source's
+   writers. They become the source's `…featureWriters` setting, so a UFO lib's entries and the
+   option are read by one reader. Other writer options are refused.
 16. **Compatibility shims.** Should the binary react to being invoked as `makeotf`, `tx`, `ttx`,
     `pyftsubset` and translate the old option syntax? Not designed here; the mapping tables would make
     it mechanical.

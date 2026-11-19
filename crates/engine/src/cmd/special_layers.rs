@@ -9,6 +9,7 @@
 //! would leave a glyph unable to interpolate (two sources at one location, for one) is refused,
 //! unless the glyph could not interpolate before it either.
 
+use fontcraft_hinting::Renumbered;
 use fontcraft_interp::instance::interpolate_layer;
 use fontcraft_interp::labels::special_label;
 use fontcraft_interp::{Designspace, GlyphSources, InterpOptions, Location, ModelKind, Source};
@@ -16,6 +17,7 @@ use fontcraft_model::{AxisRule, Font, Glyph, Layer, LayerSide, Shape};
 use serde_json::{Map, Value, json};
 
 use super::common::{Outcome, in_range, scope};
+use super::shared::renumber_hints;
 use super::*;
 use crate::EngineError;
 use crate::params::{MAX_TARGETS, Params, TargetKind, Targets, kind};
@@ -415,28 +417,39 @@ fn set_shape_order(s: &mut Session, value: &Value) -> Result<Value> {
     if order.len() != count {
         return Err(p.bad(format!("`order` is not a permutation: it must name all {count} shapes of the layer, got {}", order.len())));
     }
-    s.edit("Set Shape Order", |font| {
+    let done = s.edit("Set Shape Order", |font| {
+        let mut done = Renumbered::default();
         t.edit_layer(font, |layer| {
+            let hinted = match t.side {
+                LayerSide::Foreground => !layer.info.hints.is_empty(),
+                LayerSide::Background => layer.info.background.as_ref().is_some_and(|b| !b.hints.is_empty()),
+            };
+            let before = hinted.then(|| layer.clone());
             let shapes = layer.parts_mut(t.side).shapes;
             let mut slots: Vec<Option<Shape>> = std::mem::take(shapes).into_iter().map(Some).collect();
             for &i in &order {
                 let shape = slots.get_mut(i).and_then(Option::take).ok_or_else(|| p.bad(format!("shape {i} does not resolve")))?;
                 shapes.push(shape);
             }
-            // Hints point at paths by index, so they follow their paths to the new places.
-            if t.side == LayerSide::Foreground && !layer.info.hints.is_empty() {
+            // Hints follow their shapes to the new places: corner components by shape index,
+            // PostScript hints and TrueType instructions by path index.
+            if let Some(before) = before {
                 let mut new_of: Vec<usize> = (0..count).collect();
                 for (new, &old) in order.iter().enumerate() {
                     if let Some(slot) = new_of.get_mut(old) {
                         *slot = new;
                     }
                 }
+                // A reference past the old shapes pointed at nothing before and is left as it is.
                 let remap = |i: usize| Some(new_of.get(i).copied().unwrap_or(i));
-                layer.info.hints = layer.info.hints.iter().filter_map(|h| super::shared::remap_hint(h, &remap)).collect();
+                renumber_hints(&before, layer, t.side, &t.glyph, &remap, &mut done.report);
+                done.insert(&t.glyph, &layer.id, t.side);
             }
             Ok(())
-        })
+        })?;
+        Ok(done)
     })?;
+    s.hints_renumbered(done);
     t.layer = Some(t.layer_id(s.font()?)?);
     Ok(json!({"glyph": t.glyph, "layer": t.layer, "order": order}))
 }

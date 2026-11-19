@@ -18,7 +18,7 @@ pub mod core;
 mod cs;
 mod finish;
 pub mod layout;
-mod mirror;
+pub mod mirror;
 pub mod other;
 pub mod select;
 pub mod var;

@@ -192,3 +192,30 @@ fn glyph_set_shape_order_and_swap_shapes() {
     refused(&mut s, "glyph.swapShapes", json!({"glyph": "e", "layer": "m", "a": 1, "b": 1}));
     refused(&mut s, "glyph.swapShapes", json!({"glyph": "e", "layer": "m", "a": 0, "b": 3}));
 }
+
+/// PostScript hints count paths, not shapes: with a component between two paths, a stem hint on
+/// the second path follows it to the front as path 0.
+#[test]
+fn glyph_set_shape_order_moves_stem_hints_by_path_index() {
+    use fontcraft_engine::model::Component;
+    use fontcraft_hinting::{Edge, NodeRef, PsHint, ps_hints, set_ps_hints};
+    let mut s = session(&[("m", 400.0)], vec![layer("m", "m", vec![rect(0.0, 10.0), rect(200.0, 30.0)])]);
+    run(&mut s, "glyph.newGlyph", json!({"name": "dot"}));
+    let node = |path, n| Edge::Node(NodeRef::new(path, n));
+    s.edit("component and stem", |font| {
+        let mut g = font.glyph_mut("e")?;
+        let l = g.layer_mut("m").unwrap();
+        l.shapes.insert(1, Shape::Component(Component::new("dot", 0.0, 0.0)));
+        set_ps_hints(l, &[PsHint::stem(false, node(1, 0), node(1, 1))]).unwrap();
+        Ok(())
+    })
+    .unwrap();
+    let out = run(&mut s, "glyph.setShapeOrder", json!({"glyph": "e", "layer": "m", "order": [2, 0, 1]}));
+    let l = e_layer(&s, "m");
+    assert!(matches!(l.shapes[2], Shape::Component(_)), "{:?}", l.shapes);
+    let ps = ps_hints(&l).unwrap();
+    assert_eq!(ps.len(), 1, "{:?}", l.info.hints);
+    assert_eq!((ps[0].1.origin, ps[0].1.other), (node(0, 0), Some(node(0, 1))), "the stem's path is path 0 now");
+    assert_eq!(ps[0].1.edges(&l).unwrap(), (200.0, 230.0));
+    assert!(out.get("hintUpkeep").is_none(), "nothing is unlinked or removed: {out}");
+}

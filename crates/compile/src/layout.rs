@@ -5,7 +5,7 @@
 //! Rows: the `GSUB`, `GPOS` and `GDEF` rows of `spec/inventory/40-tables.toml`,
 //! `compile.featureWriterModes`, `compile.skipFeatures`, `compile.kernQuantisation`,
 //! `implicit.markerMissing`, `implicit.markZeroWidth`, `Keep Kerning in one Lookup`,
-//! `Use Extension Kerning`.
+//! `Use Extension Kerning`, `MakeOTF Compatibility Mode`.
 //!
 //! The stage runs after the glyph order, as fontc runs it:
 //!
@@ -61,7 +61,9 @@ pub struct LayoutOptions {
     /// Add the generated kerning and mark attachment.
     pub implicit: bool,
     /// Each run of substitutions of one type gets its own lookup
-    /// ([`fontcraft_fea::CompileRequest::lookup_per_rule_type`]; a project compile).
+    /// ([`fontcraft_fea::CompileRequest::lookup_per_rule_type`]; a project compile). The
+    /// target's MakeOTF Compatibility Mode parameter turns it on as well
+    /// ([`crate::makeotf::compatibility_mode`]).
     pub lookup_per_rule_type: bool,
 }
 
@@ -81,9 +83,19 @@ pub struct LayoutTables {
     /// The features the code declares in top-level blocks, each once in code order; the other
     /// features of `compiled` were generated.
     pub declared: Vec<fontcraft_fea::Tag>,
+    /// The assembled feature code ([`LayoutTables::assembled_code`]).
+    pub(crate) code: Option<String>,
 }
 
 impl LayoutTables {
+    /// The feature code the compiler read for this target: the source's entries after the
+    /// automatic code was regenerated and the instance parameters applied, with the code of
+    /// contextual mark attachment appended. The generated kerning and mark lookups are merged
+    /// as lookups, not as code, so they are not in it. `None` when the target has no code.
+    pub fn assembled_code(&self) -> Option<&str> {
+        self.code.as_deref()
+    }
+
     /// The tables to add to the font as compiled, by tag: the layout tables and the code's whole
     /// `BASE` and `STAT` blocks.
     pub fn tables(&self) -> Vec<(fontcraft_fea::Tag, &[u8])> {
@@ -276,7 +288,7 @@ pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<Strin
     // Step 3: what the writers read from the code.
     let mut request = CompileRequest::new(&files, &glyph_order);
     request.gpos = opts.gpos;
-    request.lookup_per_rule_type = opts.lookup_per_rule_type;
+    request.lookup_per_rule_type = opts.lookup_per_rule_type || crate::makeotf::compatibility_mode(resolved);
     request.first_name_id = input.first_name_id;
     request.variations = variable_features.as_ref().map(|v| v as &dyn fontcraft_fea::FeaVariations);
     let first = match &assembly {
@@ -373,6 +385,12 @@ pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<Strin
     if assembly.is_none() && generated_lookups.is_empty() && contextual.is_none() {
         return Ok(LayoutTables::default());
     }
+    let code = match (&assembly, &contextual) {
+        (Some(a), Some(found)) => Some(format!("{}\n{}", a.files.root_text(), found.code)),
+        (Some(a), None) => Some(a.files.root_text().to_string()),
+        (None, Some(found)) => Some(found.code.clone()),
+        (None, None) => None,
+    };
 
     // Step 5: the compile.
     let contextual_files = match &contextual {
@@ -385,5 +403,5 @@ pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<Strin
     let diagnostics: Vec<EntryDiagnostic> = compiled.warnings.iter().map(|d| map.map(d.clone())).collect();
     warnings.extend(diagnostics.iter().map(|d| describe(&entries, d)));
     let declared = first.features.iter().map(|(tag, _)| *tag).collect();
-    Ok(LayoutTables { compiled, diagnostics, declared })
+    Ok(LayoutTables { compiled, diagnostics, declared, code })
 }

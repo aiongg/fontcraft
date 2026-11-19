@@ -359,6 +359,7 @@ fn variable_options(req: &Request) -> Options {
         include_check: o.include_check.clone(),
         version_stamp: o.version_stamp,
         curves: o.curves,
+        stub_gsub: o.stub_gsub,
         ..Options::default()
     }
 }
@@ -416,6 +417,9 @@ pub(super) fn build_variable(
     for pick in picks {
         for &flavour in flavours {
             let built = var::compile_variable(font, pick.setting, &options, &VariableOptions { flavour, optimize_deltas })?;
+            if report.feature_code.is_none() {
+                report.feature_code.clone_from(&built.compiled.feature_code);
+            }
             let mut files = Vec::with_capacity(req.containers.len());
             for &container in &req.containers {
                 let data = container.wrap(&built.compiled.bytes)?;

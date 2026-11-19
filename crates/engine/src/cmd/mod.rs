@@ -14,6 +14,7 @@ mod annotation;
 mod attributes;
 pub(crate) mod audit;
 mod autohint;
+mod autohint_font;
 mod autohint_report;
 mod autohint_tt;
 mod axes;
@@ -29,7 +30,9 @@ mod compare;
 pub(crate) mod compile;
 mod compile_cid;
 mod compile_export;
+mod compile_features;
 mod compile_layout;
+mod compile_outlines;
 mod compile_project;
 mod compile_select;
 mod component;
@@ -39,6 +42,7 @@ mod dimensions;
 mod edit;
 mod features;
 mod features_compile;
+mod features_entries;
 mod features_io;
 mod file;
 pub mod filter;
@@ -46,6 +50,7 @@ pub mod fit_curve;
 mod font;
 mod font_fields;
 mod font_view;
+pub(crate) mod format_warnings;
 mod glyph;
 mod glyph_info;
 mod glyph_search;
@@ -84,6 +89,7 @@ mod new_document;
 mod node;
 mod numbers;
 mod palette;
+mod palette_dark;
 mod path;
 mod pathops;
 pub mod preview;
@@ -96,6 +102,7 @@ pub mod sharing;
 pub mod smart;
 mod snippets;
 mod spacing;
+mod spacing_shared;
 mod special_layers;
 pub mod stroke;
 mod tokens;
@@ -129,6 +136,8 @@ mod outlines_file;
 mod proof;
 mod sources;
 mod subset;
+#[cfg(not(target_arch = "wasm32"))]
+mod subset_source;
 mod tables_file;
 mod tables_import;
 mod transform_file;
@@ -347,6 +356,7 @@ pub const COMMAND_TABLES: &[CommandTable] = &[
     spacing::specs,
     vertical_metrics::specs,
     metrics_keys::specs,
+    spacing_shared::specs,
     transform_metrics::specs,
     kerning::specs,
     kerning_groups::specs,
@@ -390,6 +400,7 @@ pub const COMMAND_TABLES: &[CommandTable] = &[
     tokens::specs,
     project::specs,
     features::specs,
+    features_entries::specs,
     numbers::specs,
     features_compile::specs,
     smart::specs,
@@ -416,7 +427,9 @@ pub const COMMAND_TABLES: &[CommandTable] = &[
     autohint::specs,
     autohint_tt::specs,
     autohint_report::specs,
+    autohint_font::specs,
     palette::specs,
+    palette_dark::specs,
     color_layer::specs,
     attributes::specs,
     image::specs,
@@ -494,7 +507,7 @@ pub const COMMAND_TABLES: &[CommandTable] = &[
 /// Installs every command table for this process; later calls do nothing. Sessions call it when
 /// they are created, so a caller with a session never needs it.
 pub fn install() -> Result<()> {
-    registry::install(Install { commands: COMMAND_TABLES.to_vec(), ..Install::default() })
+    registry::install(Install { commands: COMMAND_TABLES.to_vec(), slots: vec![crate::feature_state::slot_init()], ..Install::default() })
 }
 
 /// Every command, in registry order (the order menus and listings show them in). Installs the

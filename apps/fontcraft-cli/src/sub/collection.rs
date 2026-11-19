@@ -45,7 +45,7 @@ const OPTIONS: &[OptSpec] = &[
 ];
 
 fn run(raw: &[String]) -> Outcome {
-    let merged = merge_repeated(raw, "share-table");
+    let merged = merge_repeated(&args::spell_out(OPTIONS, raw)?, "share-table");
     let parsed = args::parse(OPTIONS, &merged)?;
     if parsed.help {
         return out(&super::help(&SUBCOMMAND));

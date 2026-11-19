@@ -238,6 +238,45 @@ pub struct Options {
     pub pass_through_tables: bool,
     /// The CMap files and Macintosh `cmap` ids of a CID-keyed CFF build ([`cid`]).
     pub cid: cid::CidOptions,
+    /// Write an empty `GSUB` table when the layout stage gives none, for software that expects
+    /// one (`--stub-gsub`). Not with the features skipped.
+    pub stub_gsub: bool,
+    /// How the charstrings of a static `CFF ` table are written.
+    pub cff: CffOptions,
+    /// Set `USE_MY_METRICS` on the component that gives a TrueType composite its advance
+    /// (`compile.useMyMetrics`); false writes the flag on no component.
+    pub use_my_metrics: bool,
+}
+
+/// Most subroutines one CFF index can hold, the largest [`CffOptions::max_subrs`].
+pub const MAX_SUBRS_PER_INDEX: usize = fontcraft_cff::subr::MAX_SUBRS_PER_INDEX;
+
+/// How the charstrings of a static `CFF ` table are written ([`Options::cff`]). A project compile
+/// keeps coordinates to two decimals whatever `round_tolerance` says.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CffOptions {
+    /// Round a coordinate to an integer only when that moves it by at most this much
+    /// (`compile.cffRoundTolerance`): 0.5 rounds every coordinate, 0 none.
+    pub round_tolerance: f64,
+    /// Write the specialised operators (`hlineto`, `vhcurveto`…), not only `rlineto` and
+    /// `rrcurveto`.
+    pub specialise: bool,
+    /// Most subroutines in one index when the table is subroutinised.
+    pub max_subrs: usize,
+    /// Choose `defaultWidthX` and `nominalWidthX` so the widths take the fewest bytes, before the
+    /// table is subroutinised.
+    pub optimize_widths: bool,
+}
+
+impl Default for CffOptions {
+    fn default() -> Self {
+        CffOptions {
+            round_tolerance: cff::ROUND_TOLERANCE,
+            specialise: true,
+            max_subrs: fontcraft_cff::subr::DEFAULT_MAX_SUBRS,
+            optimize_widths: false,
+        }
+    }
 }
 
 /// The asset store a compile reads ([`Options::assets`]). Two are equal when they are the same
@@ -321,6 +360,9 @@ impl Default for Options {
             stub_dsig: false,
             pass_through_tables: false,
             cid: cid::CidOptions::default(),
+            stub_gsub: false,
+            cff: CffOptions::default(),
+            use_my_metrics: true,
         }
     }
 }
@@ -333,6 +375,10 @@ pub struct Compiled {
     pub glyph_order: Vec<String>,
     /// Things the user should know that did not stop the compile.
     pub warnings: Vec<String>,
+    /// The feature code the layout stage compiled
+    /// ([`layout::LayoutTables::assembled_code`]); `None` without code or with the features
+    /// skipped.
+    pub feature_code: Option<String>,
 }
 
 /// Compiles `font` at `target` (a master, or a static instance anywhere) to a static font.
@@ -485,6 +531,8 @@ pub(crate) struct Extra {
     pub cid: Option<cid::CidPlan>,
     /// The masters a variable TrueType font's `cvar` varies with, once its `cvt ` is known.
     pub cvar: Option<var::cvar::CvarMasters>,
+    /// `CPAL`, built with the `name` table because its labels take IDs above the other names.
+    pub cpal: Option<color::PendingCpal>,
 }
 
 /// The outline stage of a variable compile: given the origin's final glyphs, the outlines to
@@ -583,6 +631,7 @@ pub(crate) fn compile_stages_with(
     extra.math = math::plan(font, &resolved, &edits);
     extra.cid = cid_plan;
     let color_tables = color::build(font, &color_plan, &color::GlyphOrder::new(&glyphs, &made)?, options, &mut warnings)?;
+    extra.cpal = color_tables.cpal;
     let bytes = build::assemble(
         font,
         &resolved,
@@ -597,7 +646,7 @@ pub(crate) fn compile_stages_with(
         options,
         &mut warnings,
     )?;
-    let mut compiled = Compiled { bytes, glyph_order: glyphs.into_iter().map(|g| g.name).collect(), warnings };
+    let mut compiled = Compiled { bytes, glyph_order: glyphs.into_iter().map(|g| g.name).collect(), warnings, feature_code: layout.code.clone() };
     if let Some(plan) = &extra.cid {
         cid::finish(&mut compiled, plan)?;
     }
@@ -643,8 +692,16 @@ pub(crate) fn layout_tables(
     };
     // A project compile groups rules into lookups as the reference's feature compiler does.
     let layout_options = layout::LayoutOptions { lookup_per_rule_type: options.project.is_some(), ..Default::default() };
-    layout::build(&input, &layout_options, warnings)
+    let mut tables = layout::build(&input, &layout_options, warnings)?;
+    if options.stub_gsub && tables.compiled.gsub.is_none() {
+        tables.compiled.gsub = Some(STUB_GSUB.to_vec());
+    }
+    Ok(tables)
 }
+
+/// An empty `GSUB` table, version 1.0: a script list, feature list and lookup list with no
+/// records, each right after the header.
+const STUB_GSUB: [u8; 16] = [0, 1, 0, 0, 0, 10, 0, 12, 0, 14, 0, 0, 0, 0, 0, 0];
 
 /// Fills what the glyphs do not store from the glyph database ([`Resolved::apply_glyph_data`])
 /// and gives non-spacing marks no advance (`compile.nonSpacingMarkWidth`), as fontc and glyphsLib

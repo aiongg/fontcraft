@@ -116,9 +116,6 @@ impl std::fmt::Debug for Staged {
     }
 }
 
-/// What a run in steps lives in on its document.
-pub type Slot = Option<Arc<Mutex<Staged>>>;
-
 impl Staged {
     fn total(&self) -> usize {
         self.layers.saturating_add(LATER_STAGES)
@@ -247,14 +244,14 @@ fn start(s: &mut Session, v: &Value) -> Result<Value> {
         staged.stage = Stage::Source;
     }
     let out = staged.progress();
-    s.doc_mut()?.audit_staged = Some(Arc::new(Mutex::new(staged)));
+    s.doc_mut()?.set_audit_staged(staged);
     Ok(out)
 }
 
 /// The run `runId` of the open document.
 fn in_progress(p: &Params, s: &Session) -> Result<Arc<Mutex<Staged>>> {
     let id = p.str("runId")?;
-    let slot = s.doc()?.audit_staged.clone();
+    let slot = s.doc()?.audit_staged();
     let staged = slot.ok_or_else(|| p.bad(format!("no audit run `{id}` is in progress on this document")))?;
     let same = staged.lock().map(|g| g.id == id).unwrap_or(false);
     if !same {
@@ -283,7 +280,7 @@ fn step(s: &mut Session, v: &Value) -> Result<Value> {
     let report = keep_run(s, &state.target, &state.run, &mut state.ex, font, id)?;
     let mut out = st.progress();
     drop(st);
-    s.doc_mut()?.audit_staged = None;
+    s.doc_mut()?.clear_audit_staged();
     if let Some(o) = out.as_object_mut() {
         o.insert("finished".into(), json!(true));
         o.insert("report".into(), report);
@@ -304,7 +301,7 @@ fn cancel(s: &mut Session, v: &Value) -> Result<Value> {
     }
     let id = st.id.clone();
     drop(st);
-    s.doc_mut()?.audit_staged = None;
+    s.doc_mut()?.clear_audit_staged();
     Ok(json!({"runId": id, "cancelled": true, "done": done, "total": total, "partial": partial}))
 }
 
@@ -331,7 +328,7 @@ mod tests {
     /// both runs gain the same notes and truncation count, as compiling and later checks add them.
     fn finished(s: &mut Session, interrupt: bool) -> Value {
         start(s, &json!({"profile": "outlines"})).unwrap();
-        let staged = s.doc().unwrap().audit_staged.clone().unwrap();
+        let staged = s.doc().unwrap().audit_staged().unwrap();
         let mut st = staged.lock().unwrap();
         st.advance(1);
         assert_eq!(st.stage, Stage::Layers);

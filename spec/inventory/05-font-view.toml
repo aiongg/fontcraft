@@ -675,7 +675,7 @@ status = "handbook"
 notes = "Documented, not yet observed (Glyph › Components: the List View cell adds and removes components)."
 guesses = [
   "The cell lists component names separated by a comma and a space; a name added to the list appends a component at offset zero (aligned automatically when the layer allows it), a name removed deletes the last component with that name, and only the layer of the master shown in Font View changes; editing the cell in the reference app settles it.",
-  "Removing a locked component through the list is refused with a message naming it, and nothing changes; the layer's hints follow their shapes to their new places and a hint on a removed component goes with it; removing a locked component's name from the cell in the reference app settles it.",
+  "Removing a locked component through the list is refused with a message naming it, and nothing changes; the layer's hints follow their shapes to their new places (PostScript hints and TrueType instructions count paths, so removing a component leaves them as they are) and a hint on a removed component goes with it; removing a locked component's name from the cell in the reference app settles it.",
 ]
 
 [[command]]

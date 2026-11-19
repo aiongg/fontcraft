@@ -55,7 +55,8 @@ pub(crate) fn table_error(e: cff::Error) -> CompileError {
 /// from, which holds the hints and the hint settings; without it the glyphs are unhinted.
 /// `hinting` holds the export's Autohint option and whether every hint is left out.
 /// `two_decimals`: keep coordinates to two decimals ([`two_decimals`]) instead of rounding them
-/// to integers, and every segment the outline draws.
+/// to integers, and every segment the outline draws. `cff_options`: the rounding tolerance and
+/// operators otherwise.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn build(
     source: Option<&Font>,
@@ -67,6 +68,7 @@ pub(crate) fn build(
     synthesised_notdef: bool,
     hinting: &HintingOptions,
     two_decimals: bool,
+    cff_options: &crate::CffOptions,
     warnings: &mut Vec<String>,
 ) -> Result<cff::Built, CompileError> {
     let settings = source.and_then(|s| hint_settings(s, font, warnings));
@@ -107,8 +109,8 @@ pub(crate) fn build(
         private,
         glyphs,
         widths: widths(font),
-        round_tolerance: if two_decimals { 0.0 } else { ROUND_TOLERANCE },
-        specialise: true,
+        round_tolerance: if two_decimals { 0.0 } else { cff_options.round_tolerance },
+        specialise: cff_options.specialise,
     };
     // The reference's converter keeps every segment it is given.
     cff::build_with(&cff_font, cff::BuildOptions { keep_topology: two_decimals }).map_err(table_error)

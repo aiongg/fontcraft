@@ -1,5 +1,5 @@
-//! `fontcraft-cli subset` (M12.17–M12.19b, M12.18b, M12.18c, M12.73): one `font.subset` run per input, with the
-//! option names of the reference subsetter and the glyph selection of the reference converter.
+//! `fontcraft-cli subset` (M12.17–M12.19b, M12.18b, M12.18c, M12.73, M12.74): one `font.subset` run per input, with
+//! the option names of the reference subsetter and the glyph selection of the reference converter.
 
 use fontcraft_engine::Session;
 use serde_json::{Map, Value, json};
@@ -27,6 +27,9 @@ const USAGE: &str = "\
       selections choose, or every glyph when none is given; the closure runs after them.
       Arguments after FONT that end in a font file extension are further inputs, subset with
       the same options, up to --jobs at once; they need --output-dir or no output option.
+      FONT may be a source (.glyphs, .glyphspackage, .fontcraft, UFO, designspace): the kept
+      glyphs and their components stay, the kerning, groups, classes and feature rules that
+      name removed glyphs go, and the result is written in the source's format.
 ";
 
 /// The options, as data.
@@ -45,6 +48,7 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::list("exclude-fd", "LIST", "", "leave out the glyphs of these Font DICTs"),
     OptSpec::value("goadb", "FILE", "", "keep only the glyphs a GlyphOrderAndAliasDB names in its first two columns"),
     OptSpec::switch("subset-to-goadb", false, "accepted with --goadb, which always subsets to the file"),
+    OptSpec::switch("export-flags", false, "keep only the glyphs a source marks as exported (sources only)"),
     OptSpec::value("random", "PERCENT", "", "keep a random PERCENT of the glyphs (at least one); the same font gives the same choice").short('p'),
     OptSpec::value("random-new", "PERCENT", "", "the same as --random PERCENT --seed random").short('P'),
     OptSpec::value("seed", "N|random", "", "the seed of --random; random draws a new one, which the summary reports"),
@@ -273,6 +277,16 @@ fn report(parsed: &Parsed, font: &str, result: &Value) -> Outcome {
         .map(|a| a.iter().filter_map(|d| d.get("tag").and_then(Value::as_str)).collect())
         .unwrap_or_default();
     let seed = result.get("seed").and_then(Value::as_str).map(|s| format!("; random seed {s}")).unwrap_or_default();
+    if let Some(removed) = result.get("removed").and_then(Value::as_u64) {
+        let count = |key: &str| result.get(key).and_then(Value::as_u64).unwrap_or(0);
+        return out(&format!(
+            "{font} -> {}: {} glyphs kept, {removed} removed; {} kerning pairs and {} feature rules removed{seed}",
+            result.get("output").and_then(Value::as_str).unwrap_or("?"),
+            count("glyphCount"),
+            count("kerningPairsRemoved"),
+            count("featureRulesRemoved"),
+        ));
+    }
     out(&format!(
         "{font} -> {}: {} glyphs kept; tables dropped: {}{seed}",
         result.get("output").and_then(Value::as_str).unwrap_or("?"),
@@ -354,12 +368,20 @@ fn params_for(parsed: &Parsed, font: &str) -> Result<Value, Failure> {
     if parsed.switch("subset-to-goadb") && parsed.value("goadb").is_none() {
         return Err(usage("--subset-to-goadb needs --goadb FILE"));
     }
-    let narrowed = !exclude.is_empty() || !fd.is_empty() || !exclude_fd.is_empty() || random.is_some() || parsed.value("goadb").is_some();
+    let narrowed = !exclude.is_empty()
+        || !fd.is_empty()
+        || !exclude_fd.is_empty()
+        || random.is_some()
+        || parsed.value("goadb").is_some()
+        || parsed.switch("export-flags");
     if glyphs.is_empty() && gids.is_empty() && unicodes.is_empty() && text.is_empty() && !narrowed {
         return Err(usage("give glyphs, --gids, --unicodes or --text to keep ('*' keeps all)"));
     }
     if !exclude.is_empty() {
         keep.insert("excludeGlyphs".into(), json!(exclude));
+    }
+    if parsed.switch("export-flags") {
+        keep.insert("exportFlags".into(), json!(true));
     }
     if !fd.is_empty() {
         keep.insert("fd".into(), json!(fd));
@@ -558,6 +580,7 @@ mod tests {
         let p = params_of(&["f.ttf", "--exclude-glyphs=A,3-9,/17", "--fd=1", "--exclude-fd=0,2", "--goadb", "GOADB", "--subset-to-goadb"]);
         assert_eq!(p["keep"], json!({"excludeGlyphs": ["A", "3-9", "/17"], "fd": [1], "excludeFd": [0, 2]}), "no other selection is needed");
         assert_eq!(p["goadb"], json!("GOADB"));
+        assert_eq!(params_of(&["f.glyphs", "--export-flags"])["keep"], json!({"exportFlags": true}), "alone, it starts from every glyph");
         assert_eq!(params_of(&["f.ttf", "-p", "12.5"])["keep"]["random"], json!({"percent": 12.5}));
         assert_eq!(params_of(&["f.ttf", "A", "--random=50", "--seed=7"])["keep"]["random"], json!({"percent": 50.0, "seed": 7}));
         assert_eq!(params_of(&["f.ttf", "-P", "1"])["keep"]["random"], json!({"percent": 1.0, "seed": "random"}));

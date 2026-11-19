@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 use super::shared::{MAX_KERN_VALUE, direction, editable_master};
 use super::*;
 use crate::params::{Params, TargetKind};
+use crate::prelude::*;
 
 /// Largest step one shortcut call may take, in units.
 const MAX_SHORTCUT_STEP: i64 = 1_000;
