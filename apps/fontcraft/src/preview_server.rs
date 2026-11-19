@@ -1,15 +1,17 @@
-//! The web preview server (desktop only): serves the preview page and the hinted font to the local network on a free port while the preview-address dialog is open (owner decision M10 § 7, question 5). One page and one font, 4 connections at a time, 64 KB of request headers.
-//!
-//! Rows: `hint.tt.showPreviewAddress`. The dialog and the page are
-//! `fontcraft_ui_egui::dialogs::tt_preview_address`; this module only serves them.
+//! The web preview server (desktop only): serves pages to the local network on a free port, 4
+//! connections at a time, 64 KB of request headers. Two sites use it:
+//! - [`Hinting`]: the preview page and the hinted font while the preview-address dialog is open
+//!   (owner decision M10 § 7, question 5). Rows: `hint.tt.showPreviewAddress`. The dialog and the
+//!   page are `fontcraft_ui_egui::dialogs::tt_preview_address`; this module only serves them.
+//! - External Preview (`crate::external_preview`), which answers by the peer's address.
 //!
 //! A small HTTP/1.1 server on `std::net`. Everything a peer sends is untrusted:
 //! - Only `GET` and `HEAD` are answered, one request per connection, with no request body.
 //! - The request head is capped in bytes and header lines, connections and the request rate are
 //!   capped ([`Limits`]), and a slow peer runs into [`REQUEST_TIMEOUT`].
-//! - The two files live under a random path, `/<token>/` and `/<token>/font.ttf`; every other
-//!   path is 404. A device that only knows the port, or a web page that points a host name at
-//!   this computer, cannot read the font without the address the dialog shows.
+//! - Every page lives under a random path, `/<token>/…`; every other path is 404. A device that
+//!   only knows the port, or a web page that points a host name at this computer, cannot read
+//!   the font without the address the app shows. What lies under the path is the [`Pages`]' own.
 //!
 //! [`Scope::LocalNetwork`] listens on every IPv4 interface and shows the address of the interface
 //! that carries the default route; [`Scope::ThisComputer`] listens on loopback only. The accept
@@ -73,6 +75,31 @@ impl Default for Limits {
     }
 }
 
+/// What a server answers under its random path.
+pub trait Pages: Send + Sync + 'static {
+    /// The reply to a `GET` of `/<token>/<rest>` from `peer` (`rest` is empty for the page
+    /// itself). A `HEAD` gets the same reply without its body.
+    fn answer(&self, rest: &str, peer: IpAddr) -> Reply;
+}
+
+/// The hinting preview's site: its page, and the font beside it at [`FONT_FILE`].
+pub struct Hinting {
+    site: Mutex<Arc<Site>>,
+}
+
+impl Pages for Hinting {
+    fn answer(&self, rest: &str, _peer: IpAddr) -> Reply {
+        let site = Arc::clone(&self.site.lock().unwrap_or_else(PoisonError::into_inner));
+        if rest.is_empty() {
+            Reply::page(200, site.page.clone())
+        } else if rest == FONT_FILE {
+            Reply { status: 200, content_type: "font/ttf", body: site.font.as_slice().into(), location: None, head_only: false }
+        } else {
+            Reply::text(404, "Not found.")
+        }
+    }
+}
+
 /// The app's [`PreviewHost`]: at most one server, replaced when the scope changes.
 #[derive(Default)]
 pub struct Host {
@@ -101,17 +128,17 @@ impl PreviewHost for Host {
 }
 
 /// One running server. Dropping it stops it.
-pub struct Server {
-    /// The page's address, as the dialog shows it.
+pub struct Server<P: Pages = Hinting> {
+    /// The page's address, as the app shows it.
     pub address: String,
     pub scope: Scope,
-    shared: Arc<Shared>,
+    shared: Arc<Shared<P>>,
     accept: Option<JoinHandle<()>>,
 }
 
 /// What the accepting and the connection threads share.
-struct Shared {
-    site: Mutex<Arc<Site>>,
+struct Shared<P> {
+    pages: Arc<P>,
     token: String,
     limits: Limits,
     stop: AtomicBool,
@@ -121,9 +148,21 @@ struct Shared {
     rate: Mutex<(Instant, usize)>,
 }
 
-impl Server {
+impl Server<Hinting> {
     /// Listens on a free port for `scope` and serves `site` until stopped.
-    pub fn start(site: Site, scope: Scope, limits: Limits) -> Result<Server, String> {
+    pub fn start(site: Site, scope: Scope, limits: Limits) -> Result<Server<Hinting>, String> {
+        Server::serve(Arc::new(Hinting { site: Mutex::new(Arc::new(site)) }), scope, limits)
+    }
+
+    /// Serves `site` from the next request on.
+    pub fn replace(&self, site: Site) {
+        *self.shared.pages.site.lock().unwrap_or_else(PoisonError::into_inner) = Arc::new(site);
+    }
+}
+
+impl<P: Pages> Server<P> {
+    /// Listens on a free port for `scope` and serves `pages` until stopped.
+    pub fn serve(pages: Arc<P>, scope: Scope, limits: Limits) -> Result<Server<P>, String> {
         let (bind, shown) = match scope {
             Scope::ThisComputer => (Ipv4Addr::LOCALHOST, IpAddr::V4(Ipv4Addr::LOCALHOST)),
             Scope::LocalNetwork => {
@@ -137,7 +176,7 @@ impl Server {
         let token = token();
         let address = format!("http://{}/{token}/", SocketAddr::new(shown, port));
         let shared = Arc::new(Shared {
-            site: Mutex::new(Arc::new(site)),
+            pages,
             token,
             limits,
             stop: AtomicBool::new(false),
@@ -152,9 +191,9 @@ impl Server {
         Ok(Server { address, scope, shared, accept: Some(accept) })
     }
 
-    /// Serves `site` from the next request on.
-    pub fn replace(&self, site: Site) {
-        *self.shared.site.lock().unwrap_or_else(PoisonError::into_inner) = Arc::new(site);
+    /// What the server answers with.
+    pub fn pages(&self) -> &Arc<P> {
+        &self.shared.pages
     }
 
     /// Stops accepting connections and closes the port; requests already being read are not
@@ -167,7 +206,7 @@ impl Server {
     }
 }
 
-impl Drop for Server {
+impl<P: Pages> Drop for Server<P> {
     fn drop(&mut self) {
         self.stop();
     }
@@ -195,10 +234,10 @@ fn token() -> String {
     out
 }
 
-fn accept_loop(listener: &TcpListener, shared: &Arc<Shared>) {
+fn accept_loop<P: Pages>(listener: &TcpListener, shared: &Arc<Shared<P>>) {
     while !shared.stop.load(Ordering::SeqCst) {
-        let stream = match listener.accept() {
-            Ok((stream, _)) => stream,
+        let (stream, peer) = match listener.accept() {
+            Ok((stream, peer)) => (stream, peer.ip()),
             Err(_) => {
                 std::thread::sleep(ACCEPT_POLL);
                 continue;
@@ -215,7 +254,7 @@ fn accept_loop(listener: &TcpListener, shared: &Arc<Shared>) {
         shared.active.fetch_add(1, Ordering::SeqCst);
         let conn_shared = Arc::clone(shared);
         let spawned = std::thread::Builder::new().name("preview-conn".into()).spawn(move || {
-            serve_connection(&stream, &conn_shared);
+            serve_connection(&stream, peer, &conn_shared);
             conn_shared.active.fetch_sub(1, Ordering::SeqCst);
         });
         // The stream went into the closure and is closed with it.
@@ -232,7 +271,7 @@ fn refuse_busy(stream: &TcpStream, max: usize) {
     let _ = stream.shutdown(Shutdown::Both);
 }
 
-fn serve_connection(stream: &TcpStream, shared: &Shared) {
+fn serve_connection<P: Pages>(stream: &TcpStream, peer: IpAddr, shared: &Shared<P>) {
     if stream.set_write_timeout(Some(WRITE_TIMEOUT)).is_err() {
         return;
     }
@@ -240,7 +279,7 @@ fn serve_connection(stream: &TcpStream, shared: &Shared) {
     let deadline = Instant::now() + shared.limits.request_timeout;
     let reply = match read_head(stream, deadline, &shared.limits) {
         Ok(None) => return,
-        Ok(Some(head)) => answer(&head, shared),
+        Ok(Some(head)) => answer(&head, peer, shared),
         Err(reply) => reply,
     };
     if shared.stop.load(Ordering::SeqCst) {
@@ -356,7 +395,8 @@ fn parse_head(head: &[u8], limits: &Limits) -> Result<Head, Reply> {
 // ---------------------------------------------------------------------------------------------
 // Answering
 
-struct Reply {
+/// A reply to one request.
+pub struct Reply {
     status: u16,
     content_type: &'static str,
     body: Arc<[u8]>,
@@ -366,13 +406,19 @@ struct Reply {
 }
 
 impl Reply {
-    fn text(status: u16, message: impl Into<String>) -> Self {
+    /// Plain text.
+    pub fn text(status: u16, message: impl Into<String>) -> Self {
         Reply { status, content_type: "text/plain; charset=utf-8", body: message.into().into_bytes().into(), location: None, head_only: false }
+    }
+
+    /// An HTML page.
+    pub fn page(status: u16, html: String) -> Self {
+        Reply { status, content_type: "text/html; charset=utf-8", body: html.into_bytes().into(), location: None, head_only: false }
     }
 }
 
 /// Counts a request against the rate cap: `false` when this second's allowance is spent.
-fn take_rate(shared: &Shared) -> bool {
+fn take_rate<P>(shared: &Shared<P>) -> bool {
     let mut rate = shared.rate.lock().unwrap_or_else(PoisonError::into_inner);
     let now = Instant::now();
     if now.saturating_duration_since(rate.0) >= Duration::from_secs(1) {
@@ -385,18 +431,15 @@ fn take_rate(shared: &Shared) -> bool {
     true
 }
 
-fn answer(head: &Head, shared: &Shared) -> Reply {
+fn answer<P: Pages>(head: &Head, peer: IpAddr, shared: &Shared<P>) -> Reply {
     if !take_rate(shared) {
         return Reply::text(429, "Too many requests; try again in a moment.");
     }
-    let site = Arc::clone(&shared.site.lock().unwrap_or_else(PoisonError::into_inner));
     let root = format!("/{}", shared.token);
     let mut reply = if head.path == root {
         Reply { status: 301, location: Some(format!("{root}/")), ..Reply::text(301, "Moved to the page's address with a final slash.") }
-    } else if head.path == format!("{root}/") {
-        Reply { status: 200, content_type: "text/html; charset=utf-8", body: site.page.as_bytes().into(), location: None, head_only: false }
-    } else if head.path == format!("{root}/{FONT_FILE}") {
-        Reply { status: 200, content_type: "font/ttf", body: site.font.as_slice().into(), location: None, head_only: false }
+    } else if let Some(rest) = head.path.strip_prefix(root.as_str()).and_then(|r| r.strip_prefix('/')) {
+        shared.pages.answer(rest, peer)
     } else {
         Reply::text(404, "Not found.")
     };
@@ -409,6 +452,7 @@ fn reason(status: u16) -> &'static str {
         200 => "OK",
         301 => "Moved Permanently",
         400 => "Bad Request",
+        403 => "Forbidden",
         404 => "Not Found",
         405 => "Method Not Allowed",
         408 => "Request Timeout",

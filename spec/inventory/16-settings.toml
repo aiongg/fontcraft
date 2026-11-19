@@ -816,10 +816,15 @@ controls = [
   "Reset button (present only after a device has connected)",
 ]
 area = "proofing"
-milestone = "M14"
+milestone = "M13"
 summary = "Section that controls streaming the current Edit View to a companion viewer app on a phone or tablet."
 ref = "Settings › Sharing"
 status = "handbook"
+notes = "FontCraft (docs/plans/M13.md, M13.71): the section holds the Enable External Preview switch (`settings.set` on `sharing.enableExternalPreview`), the page's address to type on the device, and the devices waiting for an answer with Accept and Refuse (`sharing.status`, `sharing.answerDevice`). The engine and the server are built; the section itself waits for the new desktop UI."
+guesses = [
+  "The section shows the page's address, because there is no companion app that finds the computer by itself.",
+  "Reset shows while at least one device is trusted.",
+]
 
 [[setting]]
 id = "sharing.enableExternalPreview"
@@ -828,55 +833,109 @@ kind = "bool"
 section = "Sharing"
 values = ""
 area = "proofing"
-milestone = "M14"
+milestone = "M13"
 summary = "Lets a companion viewer app on a device in the same local network connect and mirror the active Edit View. Default not stated."
 ref = "Settings › Sharing"
 status = "handbook"
+notes = "FontCraft: while on, the desktop app serves External Preview on a free port of every IPv4 interface, under a random path (apps/fontcraft/src/external_preview.rs); turning it off closes the port and forgets the address, the waiting and the refused devices. Turning it on is refused while automation roots are in force. Headless nothing is served."
+guesses = [
+  "Off by default; the handbook does not say.",
+  "The port and the random path are new each time the preview is turned on.",
+]
 
 [[command]]
 id = "settings.resetTrustedDevices"
 label = "Reset"
 menu = []
 shortcut = ""
-kind = "ui"
+kind = "engine"
 params = "{}"
 area = "proofing"
-milestone = "M14"
+milestone = "M13"
 summary = "Empties the list of devices that were approved for external preview, so each has to be confirmed again. The button only exists once at least one connection has been made."
 ref = "Settings › Sharing"
 status = "handbook"
+notes = "FontCraft: an engine command, because the trusted devices are a user setting (`sharing.trustedDevices`). Returns how many devices it forgot. Documented, not yet observed."
+
+[[command]]
+id = "sharing.status"
+label = "External Preview Status"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{}"
+area = "proofing"
+milestone = "M13"
+summary = "Reports whether External Preview is on, the page's address while the app serves it, why it could not start, and the waiting, trusted and refused devices, each an IP address."
+ref = "Settings › Sharing"
+status = "inferred"
+own = true
+notes = "FontCraft's own command, for the Sharing section and for agents."
+
+[[command]]
+id = "sharing.answerDevice"
+label = "Answer Device"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{device: IP address, trust: bool}"
+area = "proofing"
+milestone = "M13"
+summary = "Answers a device waiting to see External Preview: trust keeps it trusted until the trusted devices are reset; refuse turns it away while the preview runs. A device that is not waiting is refused and nothing changes."
+ref = "Settings › Sharing"
+status = "inferred"
+own = true
+notes = "FontCraft's form of the confirmation the reference asks for on the computer. At most 64 devices are trusted (the oldest go first) and 8 wait at once. Trusting is refused while automation roots are in force, so a confined agent cannot open the font to the network."
+guesses = [
+  "A refused device is turned away until the preview is turned off; it is not remembered across launches.",
+]
 
 [[behavior]]
 id = "sharing.sameNetworkRequired"
 area = "proofing"
-milestone = "M14"
+milestone = "M13"
 summary = "The computer and the viewing device must be on the same network; the viewer lists reachable computers and the user picks one."
 ref = "Settings › Sharing"
 status = "handbook"
+notes = "FontCraft: the device opens the address the Sharing section shows in any browser; nothing is announced on the network, so there is no list to pick from."
 
 [[behavior]]
 id = "sharing.confirmConnectionOnHost"
 area = "proofing"
-milestone = "M14"
+milestone = "M13"
 summary = "A first connection attempt from a device must be confirmed on the computer; confirmed devices are remembered as trusted."
 ref = "Settings › Sharing"
 status = "handbook"
+notes = "FontCraft: a device that is not trusted gets a page asking it to wait, which reloads every 2 seconds, and is listed until `sharing.answerDevice` answers it. Trusted devices are kept in the user's settings. Documented, not yet observed."
+guesses = [
+  "Devices are known by their IP address, so a device that gets a new address must be confirmed again; what the reference keys them by is not documented.",
+]
 
 [[behavior]]
 id = "sharing.viewerShowsActiveEditView"
 area = "proofing"
-milestone = "M14"
+milestone = "M13"
 summary = "The viewer shows the Edit View that is currently active, and every edit appears there immediately."
 ref = "Settings › Sharing"
 status = "handbook"
+notes = "FontCraft: the page shows the active tab's glyphs filled, on one line, in the tab's master, drawn by `preview.render` as SVG at most 4 times a second, and reloads itself every second with a meta refresh, with no script. It follows tab switches. With Font View showing, the page says so. Documented, not yet observed."
+guesses = [
+  "The page reloads every second.",
+  "The tab is drawn filled on one line, as the preview line draws it, not with nodes, metrics or line breaks.",
+  "The viewer follows tab switches.",
+]
+observe = [
+  "With the viewer connected, switch Edit View tabs and see whether the viewer follows.",
+]
 
 [[behavior]]
 id = "sharing.viewerGestures"
 area = "proofing"
-milestone = "M14"
+milestone = "M13"
 summary = "In the viewer: two-finger pinch zooms, one-finger drag pans, touch-and-hold returns to the viewer's menu."
 ref = "Settings › Sharing"
 status = "handbook"
+notes = "FontCraft: the page is plain HTML, so the browser's own pinch zoom and scrolling apply; there is no viewer menu to return to."
 
 [[behavior]]
 id = "sharing.troubleshooting"
@@ -889,10 +948,11 @@ status = "handbook"
 [[behavior]]
 id = "sharing.fontcraftEquivalent"
 area = "proofing"
-milestone = "M14"
-summary = "FontCraft has no companion app planned; the same need can be met by a read-only preview stream over the control channel that any browser on the network can open after confirmation on the host."
+milestone = "M13"
+summary = "FontCraft has no companion app; any browser on the network opens a read-only page of the active Edit View after the device is confirmed on the computer."
 ref = "Settings › Sharing"
 status = "inferred"
+notes = "apps/fontcraft/src/external_preview.rs, on the HTTP server of apps/fontcraft/src/preview_server.rs (one request per connection, capped headers, connections and request rate)."
 
 # --- Addons ---
 

@@ -15,8 +15,9 @@
 //! folder) and polls them on the first frame, when the window gains focus and every 5 seconds
 //! while it has it, and gives the Extension Manager HTTPS downloads and the system browser
 //! ([`net`]); `--safe-mode`, or Alt and Shift held as the window opens, lists the modules
-//! but runs none. Started without a file, it shows the Start Window unless the person
-//! turned that off. A document opens with one Edit View tab per display string it stores, and
+//! but runs none. While `sharing.enableExternalPreview` is on, it serves External Preview to the
+//! local network ([`external_preview`]). Started without a file, it shows the Start Window
+//! unless the person turned that off. A document opens with one Edit View tab per display string it stores, and
 //! saving writes the open tabs back.
 //!
 //! Closing the window, the app menu's Quit and File › Quit ask about each document with unsaved
@@ -27,6 +28,8 @@
 #[cfg(not(target_arch = "wasm32"))]
 mod clipboard;
 mod control_server;
+#[cfg(not(target_arch = "wasm32"))]
+mod external_preview;
 mod net;
 mod pickers;
 #[cfg(not(target_arch = "wasm32"))]
@@ -77,6 +80,9 @@ struct Shell {
     last_poll: Option<Instant>,
     /// Whether the window had focus at the last frame.
     focused: bool,
+    /// External Preview's server while its setting is on.
+    #[cfg(not(target_arch = "wasm32"))]
+    external: external_preview::ExternalPreview,
 }
 
 impl Shell {
@@ -141,6 +147,15 @@ impl eframe::App for Shell {
         // input is confined as the request that queued it.
         if let Err(panic) = self.app.ui_with_control_input(ui) {
             self.app.state.status = format!("internal error (please report it): {panic}");
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let state = &self.app.state;
+            let tab =
+                || state.tab().map(|t| external_preview::Tab::new(t.document, t.title(), t.shown_glyphs().map(str::to_string), t.master.clone()));
+            if let Some(after) = self.external.sync(&mut self.app.session, tab) {
+                ui.ctx().request_repaint_after(after);
+            }
         }
         if let Some(problem) = self.user_files.save_if_changed(self.app.session.settings()) {
             eprintln!("fontcraft: {problem}");
@@ -302,7 +317,23 @@ fn run() -> Result<(), String> {
                 },
                 None => None,
             };
-            Ok(Box::new(Shell { app, control, user_files, last_poll: None, focused: false }))
+            #[cfg(not(target_arch = "wasm32"))]
+            let external = {
+                let ctx = cc.egui_ctx.clone();
+                external_preview::ExternalPreview::new(
+                    fontcraft_ui_egui::dialogs::tt_preview_address::Scope::LocalNetwork,
+                    std::sync::Arc::new(move || ctx.request_repaint()),
+                )
+            };
+            Ok(Box::new(Shell {
+                app,
+                control,
+                user_files,
+                last_poll: None,
+                focused: false,
+                #[cfg(not(target_arch = "wasm32"))]
+                external,
+            }))
         }),
     )
     .map_err(|e| format!("cannot open the window: {e}"))
