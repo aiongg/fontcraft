@@ -133,6 +133,11 @@ pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
             reply = Some(ToolHost::new().run(ui, &pass, &mut *tool));
         }
     });
+    // A secondary press the tool did not take, or the Menu key, opens the context menu (`shell::context_menu`).
+    if let Some(at) = reply.as_ref().and_then(|r| r.context) {
+        let params = serde_json::json!({ "x": at.at.x, "y": at.at.y, "alt": at.mods.alt });
+        sent.push(Msg::Shell(craft::ui::runtime::commands::CommandRef::with_params("contextMenu.open", params)));
+    }
     if let Some(view) = reply.and_then(|r| r.view) {
         *props.view = view;
     }

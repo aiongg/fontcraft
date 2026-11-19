@@ -3,6 +3,7 @@
 pub mod anchor_context;
 pub mod command_console;
 pub mod fit_curve;
+pub mod context_menu;
 pub mod font_info;
 pub mod font_view;
 pub mod glyph_info;
