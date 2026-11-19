@@ -5,7 +5,7 @@
 //! Rows: the `GSUB`, `GPOS` and `GDEF` rows of `spec/inventory/40-tables.toml`,
 //! `compile.featureWriterModes`, `compile.skipFeatures`, `compile.kernQuantisation`,
 //! `implicit.markerMissing`, `implicit.markZeroWidth`, `Keep Kerning in one Lookup`,
-//! `Use Extension Kerning`.
+//! `Use Extension Kerning`, `MakeOTF Compatibility Mode`.
 //!
 //! The stage runs after the glyph order, as fontc runs it:
 //!
@@ -61,7 +61,9 @@ pub struct LayoutOptions {
     /// Add the generated kerning and mark attachment.
     pub implicit: bool,
     /// Each run of substitutions of one type gets its own lookup
-    /// ([`fontcraft_fea::CompileRequest::lookup_per_rule_type`]; a project compile).
+    /// ([`fontcraft_fea::CompileRequest::lookup_per_rule_type`]; a project compile). The
+    /// target's MakeOTF Compatibility Mode parameter turns it on as well
+    /// ([`crate::makeotf::compatibility_mode`]).
     pub lookup_per_rule_type: bool,
 }
 
@@ -286,7 +288,7 @@ pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<Strin
     // Step 3: what the writers read from the code.
     let mut request = CompileRequest::new(&files, &glyph_order);
     request.gpos = opts.gpos;
-    request.lookup_per_rule_type = opts.lookup_per_rule_type;
+    request.lookup_per_rule_type = opts.lookup_per_rule_type || crate::makeotf::compatibility_mode(resolved);
     request.first_name_id = input.first_name_id;
     request.variations = variable_features.as_ref().map(|v| v as &dyn fontcraft_fea::FeaVariations);
     let first = match &assembly {
