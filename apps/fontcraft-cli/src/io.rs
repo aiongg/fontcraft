@@ -366,12 +366,13 @@ pub fn stage<T>(name: &str, work: impl FnOnce() -> T) -> T {
     let result = work();
     let spent = start.elapsed();
     if let Ok(mut stages) = STAGES.lock() {
+        let len = stages.len();
         match stages.iter_mut().find(|(n, _, _)| n == name) {
             Some(entry) => {
                 entry.1 = entry.1.saturating_add(spent);
                 entry.2 = entry.2.saturating_add(1);
             }
-            None if stages.len() < MAX_STAGES => stages.push((name.to_string(), spent, 1)),
+            None if len < MAX_STAGES => stages.push((name.to_string(), spent, 1)),
             None => {}
         }
     }
