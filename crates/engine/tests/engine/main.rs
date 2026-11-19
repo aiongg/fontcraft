@@ -161,4 +161,5 @@ mod ufo_color_layers;
 mod ufo_images;
 mod undo_steps;
 mod url_scheme;
+mod variation_tools;
 mod woff2;

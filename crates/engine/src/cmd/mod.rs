@@ -124,6 +124,7 @@ mod subset;
 mod tables_file;
 mod tables_import;
 mod transform_file;
+pub mod variation_tools;
 mod variations_file;
 // M13 command modules (M13.1 skeleton; each package fills its own file).
 mod attach_cap;
@@ -384,6 +385,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(interpolation::specs());
         v.extend(match_masters::specs());
         v.extend(instance_masters::specs());
+        v.extend(variation_tools::specs());
         v.extend(compare::specs());
         v.extend(preview::specs());
         v.extend(hint_ps::specs());
