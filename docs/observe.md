@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1475 rows to check: 2523 guesses and 593 observe steps.**
+**1476 rows to check: 2524 guesses and 593 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,9 +48,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 48 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **950** |
+| **Later milestones (after M6)** | all | **951** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 86 |
-| Later milestones (after M6) | Edit View: text mode and preview | 27 |
+| Later milestones (after M6) | Edit View: text mode and preview | 28 |
 | Later milestones (after M6) | Components and anchors | 43 |
 | Later milestones (after M6) | Filters | 5 |
 | Later milestones (after M6) | Spacing and metrics keys | 13 |
@@ -1575,7 +1575,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (950)
+## Later milestones (after M6) (951)
 
 ### Edit View: drawing, guides, layers and the Palette (86)
 
@@ -1876,7 +1876,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `path.setPenPoint` (fidelity, inferred): Set Pen Point
   - Open (our design, not confirmed): Writes or clears the pen-point data of a node or of a free pen point, the action behind the pen-point fields of the Info box. Clearing the data is how a pen point on a node is removed. The reference exposes this only as Info box fields.
 
-### Edit View: text mode and preview (27)
+### Edit View: text mode and preview (28)
 
 - [ ] `textToken.syntax` (behavior, M7, handbook): In text fields that support them, `{{{token}}}` is replaced by a computed…
   - Guess: A token FontCraft cannot resolve stays in the text as written, and the compile report names it, as glyphsLib leaves it; a misspelt token in the reference app settles it.
@@ -1969,6 +1969,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: Export the same tab as PDF and measure the page against the text: note the margins and the scale.
 - [ ] `view.setPreferredSuffix` (M13, docs, live): Prefer Suffix
   - Guess: The suffix replaces control glyphs as well as the text's glyphs; the reference app would settle it.
+- [ ] `dialog.exportWindowContents` (panel, M13, docs): Export Window Contents
+  - Guess: A small dialog with the file and the scale comes before the save chooser, and the format follows the file's extension (.pdf or .svg); exporting in the reference would show whether it asks anything besides the file.
 
 ### Components and anchors (43)
 

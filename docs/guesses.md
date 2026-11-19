@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2994 guesses on 1577 rows (637 of them live commands).**
+**2995 guesses on 1578 rows (637 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -3069,6 +3069,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `palette.pairsAndPhrases` (panel) | M13 | docs | – | Pair rows show the value stored for exactly that pair in the showing tab's master, not the value that applies through groups. |
 | `dialog.exportProfiles` (panel) | M13 | docs | – | The built-in profiles are OpenType PS (CFF, plain), OpenType TT (TrueType, plain) and Web (TrueType, WOFF2 and WOFF), each writing into a subfolder named after it; the reference's full built-in list would settle it. |
 | `dialog.exportProfiles` (panel) | M13 | docs | – | There is no tick for which profiles the export dialog shows: Export Fonts As lists every profile; the reference's dialog would settle whether hidden profiles are needed. |
+| `dialog.exportWindowContents` (panel) | M13 | docs | – | A small dialog with the file and the scale comes before the save chooser, and the format follows the file's extension (.pdf or .svg); exporting in the reference would show whether it asks anything besides the file. |
 | `dialog.findOutline` (panel) | M13 | docs | – | The pattern and the replacement are drawn in glyphs of their own and named in the dialog, in place of the reference's two small outline editors; drawing panes inside the dialog would settle it. |
 | `dialog.findOutline` (panel) | M13 | docs | – | Restricting to selected glyphs is the selection itself: the selected glyphs, or every glyph when none is selected; an explicit checkbox would settle it. |
 | `dialog.ttInstructions` (panel) | M13 | docs | – | Parse stores the text at once (one undo step) instead of waiting for the dialog to close; watching the secondary reference's dialog would show whether its changes apply only on OK. |
