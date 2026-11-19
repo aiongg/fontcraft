@@ -10,6 +10,7 @@
 mod about;
 pub mod after;
 pub mod custom_parameter_picker;
+pub mod feature_picker;
 pub mod field_picker;
 pub mod fields;
 mod filters;
@@ -37,6 +38,7 @@ pub const MODULES: &[Module] = &[
     unsaved::run,
     field_picker::run,
     custom_parameter_picker::run,
+    feature_picker::run,
     os2_bits::run,
     panose::run,
     tt::run,

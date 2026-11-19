@@ -6,7 +6,7 @@
 //! | `font.info.selectTab {tab}` | shows one tab, showing the panel when it is hidden |
 //! | `font.info.openDialog {dialog, scope, targets?, name?, index?}` | asks `dialogs` for a picker or a value dialog |
 //!
-//! The dialogs module (`dialogs::field_picker`, `custom_parameter_picker`, `os2_bits`, `panose`) takes the request
+//! The dialogs module (`dialogs::field_picker`, `custom_parameter_picker`, `os2_bits`, `panose`, `feature_picker`) takes the request
 //! on its next pass and opens the dialog.
 
 use craft::ui::contract::PlainData;
@@ -40,7 +40,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Open Font Info Dialog",
         menu: &[],
         shortcut: None,
-        params: "{dialog: 'fieldPicker'|'parameterPicker'|'os2Bits'|'panose', scope: 'font'|'master'|'instance', targets?: [index], name?: string, index?: number} open a picker of the Font Info panel, or the dialog of the parameter `name` (its `index`th row of that name)",
+        params: "{dialog: 'fieldPicker'|'parameterPicker'|'os2Bits'|'panose'|'featurePicker', scope: 'font'|'master'|'instance', targets?: [index], name?: string, index?: number} open a picker of the Font Info panel, or the dialog of the parameter `name` (its `index`th row of that name)",
     },
 ];
 
@@ -154,6 +154,8 @@ pub enum InfoDialog {
         target: Target,
         index: usize,
     },
+    /// Add Feature, from the plus beside the Features heading.
+    FeaturePicker,
 }
 
 /// The panel's view state.
@@ -162,6 +164,8 @@ pub struct FontInfoView {
     pub tab: FontInfoTab,
     /// The dialog asked for and not yet opened.
     pub request: Option<InfoDialog>,
+    pub features: super::font_info_tabs::FeaturesView,
+    pub exports: super::font_info_tabs::ExportsView,
 }
 
 /// The `font.info.openDialog` parameters that ask for `dialog`.
@@ -171,6 +175,7 @@ pub fn open_params(dialog: &InfoDialog) -> Value {
         InfoDialog::ParameterPicker(t) => ("parameterPicker", t, None),
         InfoDialog::Bits { target, name, index } => ("os2Bits", target, Some((name.as_str(), *index))),
         InfoDialog::Panose { target, index } => ("panose", target, Some(("panose", *index))),
+        InfoDialog::FeaturePicker => return json!({ "dialog": "featurePicker" }),
     };
     let mut p = target.params();
     p.insert("dialog".into(), json!(name));
@@ -211,7 +216,8 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
                 "os2Bits" if crate::dialogs::os2_bits::BitSet::of(&name).is_some() => InfoDialog::Bits { target, name, index },
                 "os2Bits" => return Err(format!("`{name}` has no bit dialog: use fsType, codePageRanges or unicodeRanges")),
                 "panose" => InfoDialog::Panose { target, index },
-                other => return Err(format!("unknown dialog `{other}`: use fieldPicker, parameterPicker, os2Bits or panose")),
+                "featurePicker" => InfoDialog::FeaturePicker,
+                other => return Err(format!("unknown dialog `{other}`: use fieldPicker, parameterPicker, os2Bits, panose or featurePicker")),
             };
             app.view.font_info.request = Some(request);
             Ok(())

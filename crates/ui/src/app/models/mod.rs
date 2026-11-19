@@ -5,6 +5,8 @@
 
 pub mod canvas;
 pub mod console;
+pub mod font_exports;
+pub mod font_features;
 pub mod font_info;
 pub mod font_view;
 pub mod glyph;

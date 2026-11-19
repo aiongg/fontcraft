@@ -35,6 +35,7 @@ pub const MODULES: &[Module] = &[
     super::view::MODULE,
     super::font_view::MODULE,
     super::font_info::MODULE,
+    super::font_info_tabs::MODULE,
     super::reference_font::MODULE,
     super::kerning_review::MODULE,
     super::glyph_info::MODULE,

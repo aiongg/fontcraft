@@ -75,6 +75,40 @@ guesses = [
 ]
 
 [[command]]
+id = "font.info.features.select"
+label = "Select Feature Entries"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{entries: [{kind: 'prefix'|'class'|'feature', name, index}]}"
+area = "features"
+milestone = "M8"
+summary = "Selects entries of the Features tab's sidebar; the last one shows in the code editor. An empty list selects the first entry. A click, Cmd-click or Shift-click on a sidebar entry runs it."
+ref = "Font Info › Features"
+status = "inferred"
+notes = "Our own command so the selection is view state a script can set; the reference app selects by clicking."
+guesses = [
+  "Our own command for scripts and the window's clicks; nothing to observe, the reference app selects sidebar entries only by clicking them.",
+]
+
+[[command]]
+id = "font.info.exports.select"
+label = "Select Exports"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{instances: [index]}"
+area = "font-info"
+milestone = "M7"
+summary = "Selects entries of the Exports tab's list; the fields at the right edit every selected entry. An empty list selects the first entry. A click, Cmd-click or Shift-click on a list entry runs it."
+ref = "Font Info › Exports"
+status = "inferred"
+notes = "Our own command so the selection is view state a script can set; the reference app selects by clicking."
+guesses = [
+  "Our own command for scripts and the window's clicks; nothing to observe, the reference app selects exports only by clicking them.",
+]
+
+[[command]]
 id = "font.info.get"
 label = "Get Font Info"
 menu = []
