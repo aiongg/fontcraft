@@ -384,7 +384,7 @@ pub(super) fn write(data: &[u8], font: &SfntFont, w: &mut XmlWriter) -> Result<(
         match st.kind.as_ref() {
             Kind::Short { language, map } => {
                 w.open(&element, &[("platformID", &platform), ("platEncID", &encoding), ("language", &language.to_string())]);
-                write_map(w, map, &order)?;
+                write_map(w, map, &order, st.is_unicode())?;
                 w.close(&element);
             }
             Kind::Long { reserved, length, language, groups, map } => {
@@ -400,7 +400,7 @@ pub(super) fn write(data: &[u8], font: &SfntFont, w: &mut XmlWriter) -> Result<(
                         ("nGroups", &groups.to_string()),
                     ],
                 );
-                write_map(w, map, &order)?;
+                write_map(w, map, &order, st.is_unicode())?;
                 w.close(&element);
             }
             Kind::Uvs { entries } => {
@@ -426,9 +426,17 @@ pub(super) fn write(data: &[u8], font: &SfntFont, w: &mut XmlWriter) -> Result<(
     Ok(())
 }
 
-fn write_map(w: &mut XmlWriter, map: &[(u32, u32)], order: &[String]) -> Result<()> {
+/// The mappings of a subtable; with the dump's character names (ttx `--unicodedata`), each
+/// mapping of a Unicode subtable is followed by its character's name as a comment.
+fn write_map(w: &mut XmlWriter, map: &[(u32, u32)], order: &[String], unicode: bool) -> Result<()> {
+    let names = if unicode { w.unicode_names() } else { None };
     for (code, gid) in map {
-        w.simple("map", &[("code", &py_hex(i64::from(*code))), ("name", &glyph_name(order, *gid))]);
+        let attributes = [("code", py_hex(i64::from(*code))), ("name", glyph_name(order, *gid))];
+        let attributes: Vec<(&str, &str)> = attributes.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        match &names {
+            Some(names) => w.simple_comment("map", &attributes, names.name(*code)),
+            None => w.simple("map", &attributes),
+        }
         w.check()?;
     }
     Ok(())

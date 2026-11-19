@@ -19,6 +19,7 @@
 mod designspace;
 #[cfg(test)]
 mod tests;
+mod unbuild;
 
 use read_fonts::tables::avar::Avar as ReadAvar;
 use read_fonts::tables::fvar::Fvar;
@@ -35,6 +36,7 @@ use crate::sfnt::{SfntFont, Tag, tag_str};
 use crate::{Result, TablesError};
 
 pub use designspace::avar_options_from_designspace;
+pub use unbuild::avar_designspace;
 
 /// Most points in one axis map.
 pub const MAX_MAP_POINTS: usize = 1_024;

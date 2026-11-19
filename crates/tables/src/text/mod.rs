@@ -9,10 +9,13 @@
 //! | `GSUB=fea`, `GPOS=fea`, `GDEF=fea` | [`crate::fea_write`] | feaLib round trip |
 //! | the spot listings (`cmap=summary`, `name=lines`, `GPOS=features`…) | [`spot`] | AFDKO spot |
 //! | `CFF=literal` | [`cff_literal`] | `tx -dcf` |
+//! | `avar=designspace` | [`crate::variations::avar_designspace`] | `varLib.avar.unbuild` |
+//!
+//! [`unicode_data`] reads the character names the TTX dump writes after `cmap` mappings.
 //!
 //! Not built, and refused with [`TablesError::NotBuilt`]: `raw` for tables other than `name`,
 //! and the listings `BASE=list`, `BASE=friendly`, `GSUB=names`, `GPOS=pairs`, `kern=headers`,
-//! `kern=indices`, `kern=names` and `avar=designspace`.
+//! `kern=indices` and `kern=names`.
 //!
 //! Every function here reads untrusted bytes: counts are capped by the limits of
 //! [`crate::limits`], the text by [`MAX_TEXT_OUTPUT`], and nothing panics.
@@ -26,8 +29,10 @@ mod spot_desc;
 pub mod ttxn;
 pub mod ttxn_otl;
 pub mod txdump;
+pub mod unicode_data;
 
 pub use cff_literal::CffLevel;
+pub use unicode_data::UnicodeNames;
 
 #[cfg(test)]
 mod tests;
@@ -88,6 +93,17 @@ pub struct ViewOptions {
     pub cff_level: CffLevel,
     /// Keep the flowed data of the CFF literal view on one line (`tx -dcf -b`).
     pub no_wrap: bool,
+    /// `@glyphs` covers only the glyphs of these font dicts of a CID-keyed CFF or a CFF2 font
+    /// (`tx -fd`); empty covers all.
+    pub fd: Vec<u16>,
+    /// `@glyphs` leaves out the glyphs of these font dicts (`tx -fdx`).
+    pub exclude_fd: Vec<u16>,
+    /// `@glyphs` draws accented `seac` glyphs out and leaves dotsection out (`tx -dump -d`);
+    /// otherwise a `seac` glyph prints its `seac` operator.
+    pub flatten_seac: bool,
+    /// `(from, to)` glyph names: `@glyphs` shows a glyph named `from` as `to`, and its glyph
+    /// selection uses the names shown (`tx -gf`).
+    pub rename: Vec<(String, String)>,
 }
 
 /// The view as text.
@@ -100,7 +116,7 @@ pub fn view(font: &SfntFont, options: &ViewOptions) -> Result<String> {
     }
     match options.view.as_str() {
         FONT_VIEW => txdump::font_dict(font),
-        GLYPHS_VIEW => txdump::glyphs(font, &options.glyphs, &options.exclude_glyphs, options.glyph_detail, !options.no_hints),
+        GLYPHS_VIEW => txdump::glyphs(font, options),
         "normalized" => {
             check_tables(options, &[*b"GPOS", *b"GDEF"], "normalized")?;
             let opts = crate::normalize::NormalizeOptions { tables: options.tables.clone(), location: Vec::new() };
@@ -124,6 +140,10 @@ pub fn view(font: &SfntFont, options: &ViewOptions) -> Result<String> {
             }
             let base = options.table_offsets.iter().find(|(t, _)| t == b"CFF ").map_or(0, |(_, o)| *o);
             cff_literal::dump(data, base, &options.cff_parts, options.cff_level, !options.no_wrap)
+        }
+        "designspace" => {
+            check_tables(options, &[*b"avar"], "designspace")?;
+            crate::variations::avar_designspace(font)
         }
         name => {
             let [tag] = options.tables.as_slice() else {

@@ -846,6 +846,13 @@ impl Programs {
         self.programs.get(gid).is_some_and(|p| p.seac.is_some())
     }
 
+    /// The `seac` parts of an accented glyph, without drawing it.
+    pub(crate) fn seac(&self, gid: usize) -> Option<Seac> {
+        let code = |v: i64| u8::try_from(v / ONE).unwrap_or(0);
+        let [adx, ady, base, accent] = self.programs.get(gid)?.seac?;
+        Some(Seac { adx: fixed(adx), ady: fixed(ady), base: code(base), accent: code(accent) })
+    }
+
     pub(crate) fn draw(&self, gid: usize) -> Result<Drawing> {
         let p = self.programs.get(gid).ok_or_else(|| invalid(format!("glyph {gid} is beyond the CharStrings")))?;
         let mut pen = Collect::default();

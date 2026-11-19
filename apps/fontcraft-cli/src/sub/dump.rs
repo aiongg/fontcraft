@@ -1,5 +1,6 @@
-//! `fontcraft-cli dump` (M12.4, M12.10): a shell over `font.dumpTables`: TTX, JSON and hex, the
-//! text views (`-t TAG=VIEW`, `-t @font`, `-t @glyphs`) and the normalised dump (`--normalize`).
+//! `fontcraft-cli dump` (M12.4, M12.10, M12.76): a shell over `font.dumpTables`: TTX, JSON and
+//! hex, the text views (`-t TAG=VIEW`, `-t @font`, `-t @glyphs`) and the normalised dump
+//! (`--normalize`).
 
 use fontcraft_engine::{EngineError, Session};
 use serde_json::{Map, Value, json};
@@ -22,7 +23,11 @@ const USAGE: &str = "\
       record per glyph; --glyph-detail medium or long adds the path with its hints).
       Table listings: -t cmap=hex-gid|dec-gid|hex-name|dec-name|summary, -t hmtx=advances|advances-lsb,
       -t name=raw|lines|described, -t GSUB=features, -t GPOS=features, -t glyf=points,
-      -t VORG=names, -t kern=pairs; -t CFF=literal lists the CFF structures as stored.
+      -t VORG=names, -t kern=pairs; -t CFF=literal lists the CFF structures as stored;
+      -t avar=designspace writes the axes and their maps as a designspace snippet.
+      @glyphs takes --fd and --exclude-fd (font dicts of a CID-keyed font), --flatten-seac (draw
+      accented glyphs out) and --goadb FILE with --names source|final (the names shown).
+      --unicode-data FILE writes character names as comments after the cmap mappings.
       --normalize writes the normalised dump for comparing two versions of a font.
 ";
 
@@ -58,6 +63,13 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::value("cff-parts", "LETTERS", "all", "the structures of -t CFF=literal: h n t s g e C f F c p l, or all"),
     OptSpec::value("cff-level", "offsets|bytes|values", "values", "the detail of -t CFF=literal"),
     OptSpec::switch("wrap", true, "break the flowed data of -t CFF=literal into lines (--no-wrap: one line)"),
+    OptSpec::switch("allow-virtual-gids", false, "accept glyph indices past the glyph count (always written as glyphNNNNN)"),
+    OptSpec::value("unicode-data", "FILE", "", "a UnicodeData.txt file whose names the TTX dump writes after cmap mappings"),
+    OptSpec::value("fd", "LIST", "", "the font dicts whose glyphs @glyphs lists, comma-separated indexes from 0"),
+    OptSpec::value("exclude-fd", "LIST", "", "the font dicts whose glyphs @glyphs leaves out"),
+    OptSpec::switch("flatten-seac", false, "draw accented seac glyphs out in @glyphs"),
+    OptSpec::value("names", "source|final", "", "with --goadb, the names @glyphs shows (default source)"),
+    OptSpec::value("goadb", "FILE", "", "a glyph name database (final name, source name) for --names"),
 ];
 
 /// Takes every `-t X`, `--table X` and `--table=X` (or the forms of `long`) out of `args`, so the
@@ -140,6 +152,17 @@ fn run(args: &[String]) -> Outcome {
     base.insert("cffParts".into(), json!(parsed.value("cff-parts").unwrap_or("all")));
     base.insert("cffLevel".into(), json!(parsed.value("cff-level").unwrap_or("values")));
     base.insert("wrap".into(), json!(parsed.switch("wrap")));
+    if parsed.switch("allow-virtual-gids") {
+        base.insert("allowVirtualGids".into(), json!(true));
+    }
+    if parsed.switch("flatten-seac") {
+        base.insert("flattenSeac".into(), json!(true));
+    }
+    for (option, key) in [("unicode-data", "unicodeData"), ("fd", "fd"), ("exclude-fd", "excludeFd"), ("names", "names"), ("goadb", "goadb")] {
+        if let Some(v) = parsed.value(option).filter(|v| !v.is_empty()) {
+            base.insert(key.into(), json!(v));
+        }
+    }
     if let Some(glyphs) = parsed.value("exclude-glyphs").filter(|g| !g.is_empty()) {
         base.insert("excludeGlyphs".into(), json!(glyphs));
     }

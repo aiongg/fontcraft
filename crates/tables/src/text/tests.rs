@@ -948,3 +948,102 @@ fn a_collection_face_past_the_address_space_has_no_offsets() {
     assert!(super::table_offsets(&bytes, 0x4000_0000).is_empty());
     assert!(super::table_offsets(&bytes, u32::MAX - 1).is_empty());
 }
+
+/// `.notdef`, `A` and `acute` (both hinted) and `Aacute`, a seac of the two with the accent
+/// moved up by 100.
+fn seac_font() -> SfntFont {
+    let cs = crate::convert::cff_table::test_charstring;
+    let charstrings = vec![
+        cs(&[(&[500.0], 14)]),
+        cs(&[(&[600.0, 0.0, 50.0, 600.0, 50.0], 1), (&[0.0, 0.0], 21), (&[300.0, 700.0, 300.0, -700.0], 5), (&[], 14)]),
+        cs(&[(&[300.0, 750.0, 40.0], 1), (&[100.0, 30.0], 3), (&[100.0, 750.0], 21), (&[100.0, 100.0, -50.0, 0.0], 5), (&[], 14)]),
+        // A is 65 and acute 194 in the standard encoding.
+        cs(&[(&[600.0, 0.0, 100.0, 65.0, 194.0], 14)]),
+    ];
+    let mut font = SfntFont::new(Flavour::Cff);
+    font.insert(*b"CFF ", crate::convert::cff_table::test_table(&[".notdef", "A", "acute", "Aacute"], charstrings, &[]));
+    font
+}
+
+/// The records are what `tx -dump -6` and `tx -dump -6 -d` printed for the same glyphs built
+/// with fontTools (with a cmap there, so tx printed code points where these print `-`).
+#[test]
+fn seac_glyphs_print_their_operator_or_are_drawn_out_as_tx_prints_them() {
+    let font = seac_font();
+    let options = |flatten_seac| ViewOptions {
+        view: GLYPHS_VIEW.into(),
+        glyphs: vec!["Aacute".into()],
+        glyph_detail: GlyphDetail::Long,
+        flatten_seac,
+        ..Default::default()
+    };
+    assert_eq!(
+        view(&font, &options(false)).unwrap(),
+        "## glyph[tag] {name,encoding,path}\nglyph[3] {Aacute,-,\n  600 width\n  0 100 65 194 seac\n  endchar}\n"
+    );
+    assert_eq!(
+        view(&font, &options(true)).unwrap(),
+        "## glyph[tag] {name,encoding,path}
+glyph[3] {Aacute,-,
+  600 width
+  0 50 hstem
+  650 700 hstem
+  0 0 move
+  300 700 line
+  600 0 line
+  100 850 move
+  200 950 line
+  150 950 line
+  endchar}
+"
+    );
+    let acute = view(&font, &ViewOptions { glyphs: vec!["acute".into()], ..options(true) }).unwrap();
+    assert!(acute.contains("  300 width\n  750 790 hstem\n  100 130 vstem\n  100 750 move\n"), "{acute}");
+    let short = view(&font, &ViewOptions { glyph_detail: GlyphDetail::Short, ..options(false) }).unwrap();
+    assert_eq!(short, "## glyph[tag] {name,encoding}\nglyph[3] {Aacute,-}\n");
+}
+
+#[test]
+fn glyphs_view_selects_by_font_dict_and_shows_mapped_names() {
+    let glyphs = |font: &SfntFont, fd: Vec<u16>, exclude_fd: Vec<u16>| {
+        view(font, &ViewOptions { view: GLYPHS_VIEW.into(), fd, exclude_fd, ..Default::default() })
+    };
+    // Font dicts belong to CID-keyed fonts only.
+    assert!(matches!(glyphs(&seac_font(), vec![0], Vec::new()), Err(TablesError::BadOptions(_))));
+    assert!(matches!(glyphs(&tt_font(), Vec::new(), vec![0]), Err(TablesError::BadOptions(_))));
+    let cs = crate::convert::cff_table::test_charstring;
+    let charstrings = vec![cs(&[(&[500.0], 14)]), cs(&[(&[600.0, 0.0, 0.0], 21), (&[300.0, 700.0], 5), (&[], 14)])];
+    let data = crate::convert::cff_table::test_table(&[".notdef", "A"], charstrings, &[]);
+    let keyed = crate::reorder::cff::parse(&data, 2).unwrap().to_cid_keyed("Adobe", "Identity", 0, "Test-Regular", &Default::default()).unwrap();
+    let mut cid = SfntFont::new(Flavour::Cff);
+    cid.insert(*b"CFF ", keyed);
+    let all = glyphs(&cid, vec![0], Vec::new()).unwrap();
+    assert_eq!(all.lines().count(), 3, "every glyph is in font dict 0: {all}");
+    assert_eq!(glyphs(&cid, Vec::new(), vec![0]).unwrap(), "## glyph[tag] {name,encoding}\n");
+    assert!(matches!(glyphs(&cid, vec![1], Vec::new()), Err(TablesError::BadOptions(m)) if m.contains("1 font dicts")));
+
+    let renamed = ViewOptions {
+        view: GLYPHS_VIEW.into(),
+        rename: vec![("o".into(), "o.dev".into()), ("space".into(), "spacedev".into())],
+        glyphs: vec!["spacedev".into(), "o.dev".into()],
+        ..Default::default()
+    };
+    assert_eq!(view(&tt_font(), &renamed).unwrap(), "## glyph[tag] {name,encoding}\nglyph[3] {spacedev,U+0020}\nglyph[1] {o.dev,U+006F}\n");
+}
+
+/// fontTools' `_makeunicodes` keeps the first two fields, skips `<…>` names and lets a later line
+/// win; the dump writes the names as ttx `--unicodedata` writes them.
+#[test]
+fn unicode_data_names_the_cmap_mappings_of_unicode_subtables() {
+    let text = "0020;SPACE;Zs;0;WS;;;;;N;;;;;\n006F;LATIN SMALL LETTER O;Ll;0;L;;;;;N;;;004F;;004F\n0000;<control>;Cc\nnot a line\n0041;A & <B>;Lu\n";
+    let names = UnicodeNames::parse(text).unwrap();
+    assert_eq!(names.len(), 3);
+    assert_eq!(names.name(0x20), "SPACE");
+    assert_eq!(names.name(0), unicode_data::UNKNOWN_NAME);
+    let options = crate::ttx::DumpOptions { tables: vec![*b"cmap"], unicode_names: Some(std::sync::Arc::new(names)), ..Default::default() };
+    let dump = crate::ttx::dump(&tt_font(), &options).unwrap();
+    assert!(dump.contains("<map code=\"0x20\" name=\"space\"/><!-- SPACE -->\n"), "{dump}");
+    assert!(dump.contains("<map code=\"0x6f\" name=\"o\"/><!-- LATIN SMALL LETTER O -->\n"), "{dump}");
+    let plain = crate::ttx::dump(&tt_font(), &crate::ttx::DumpOptions { tables: vec![*b"cmap"], ..Default::default() }).unwrap();
+    assert!(plain.contains("<map code=\"0x20\" name=\"space\"/>\n") && !plain.contains("<!--"), "{plain}");
+}
