@@ -627,11 +627,29 @@ pub struct Saved {
     pub losses: Vec<Value>,
 }
 
+/// `font` as [`ufo_images_as_png`] would give it, without decoding: each image file whose
+/// header names a format the decoder reads, within its size limits, counts as converted (an empty
+/// PNG file under the new name). For the loss report, which looks only at file names.
+fn ufo_images_as_png_by_header(font: &Font, files: FilesFrom) -> Option<Font> {
+    use fontcraft_imagery::{MAX_PIXELS, MAX_SIDE};
+    let convert = |bytes: &[u8]| -> Option<Vec<u8>> {
+        let info = fontcraft_imagery::sniff(bytes).ok()?;
+        let fits = info.width <= MAX_SIDE && info.height <= MAX_SIDE && u64::from(info.width) * u64::from(info.height) <= MAX_PIXELS;
+        (info.format.decodable() && fits).then(Vec::new)
+    };
+    fontcraft_io_ufo::images::to_png(font, files, &convert)
+}
+
 /// What saving `font` in `format` would leave out, as [`save`] reports it in `Saved::losses`,
-/// worked out without writing. Images are not converted first, so a JPEG or TIFF image a UFO
-/// would hold as PNG is named too.
+/// worked out without writing. A JPEG or TIFF image a UFO holds as PNG after the save is not
+/// named; one whose header the decoder refuses is. A file with a good header and a damaged body
+/// is named by the save but not here.
 pub fn save_losses(font: &Font, format: SaveFormat) -> Vec<Value> {
-    loss_report(&crate::linked::unlinked(font), format)
+    let own = crate::linked::unlinked(font);
+    let font: &Font = &own;
+    let files_from = if format == SaveFormat::Designspace { FilesFrom::Designspace } else { FilesFrom::Single };
+    let converted = if format.is_ufo() { ufo_images_as_png_by_header(font, files_from) } else { None };
+    loss_report(converted.as_ref().unwrap_or(font), format)
 }
 
 /// The losses of saving `font`, as [`save`] has prepared it, in `format`.
