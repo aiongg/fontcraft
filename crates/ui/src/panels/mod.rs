@@ -15,4 +15,5 @@ pub mod pairs_phrases;
 pub mod reference_font;
 pub mod related_glyphs;
 pub mod selections;
+pub mod space_center;
 pub mod stub;

@@ -69,6 +69,8 @@ pub struct ViewState {
     pub commands: console::CommandSurfaces,
     /// The Kerning window's search, sort, selection and the dialogs it asked for.
     pub kerning: crate::shell::kerning_window::KerningView,
+    /// The Space Center's text, options and selected glyph.
+    pub space_center: crate::shell::space_center::SpaceCenterState,
 }
 
 impl Default for ViewState {
@@ -89,6 +91,7 @@ impl Default for ViewState {
             layers: Default::default(),
             commands: console::CommandSurfaces::default(),
             kerning: Default::default(),
+            space_center: Default::default(),
         }
     }
 }

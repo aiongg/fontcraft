@@ -17,6 +17,7 @@ pub mod params;
 pub mod rail;
 pub mod reference_font;
 pub mod selection;
+pub mod space_center;
 pub mod view;
 pub mod window;
 

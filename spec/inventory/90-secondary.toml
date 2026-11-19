@@ -4104,6 +4104,24 @@ observe = [
 ]
 
 [[command]]
+id = "spaceCenter.setValue"
+label = "Set Space Center Value"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{column: index, row: \"width\"|\"left\"|\"right\", text: string}"
+area = "spacing-kerning"
+milestone = "M13"
+summary = "Enters a value in the Space Center's matrix for one glyph of the text: a number, or `=` and an expression of glyph names and numbers, evaluated once and run as the row's spacing setter."
+ref = "RoboFont reference › Space Center › Numerical fields"
+status = "docs"
+origin = "robofont"
+notes = "Documented in the RoboFont reference, not yet observed. The command behind a matrix cell (`spaceCenter.matrixEntry`): the window evaluates the text against the font as it is and runs `spacing.setWidth`, `spacing.setLeftSidebearing` or `spacing.setRightSidebearing` on the column's layer with the number, so agents and the window enter values the same way."
+guesses = [
+  "A matrix entry is its own command that evaluates the text and then runs the spacing setter as a second step; the reference's undo history after one entry would settle whether it is one step.",
+]
+
+[[command]]
 id = "view.setPreferredSuffix"
 label = "Prefer Suffix"
 menu = ["View"]

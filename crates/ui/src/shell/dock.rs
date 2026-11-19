@@ -307,6 +307,10 @@ impl DockPanels<PanelId> for Panels<'_> {
             PanelId::KerningWindow => {
                 panels::kerning_window::show(ui, panels::kerning_window::Props { model: &self.models.kerning_window, sent: self.sent });
             }
+            PanelId::SpaceCenter => panels::space_center::show(
+                ui,
+                panels::space_center::Props { model: &self.models.space_center, tokens: &self.models.canvas_tokens, sent: self.sent },
+            ),
             // Drawn by `group_view`.
             PanelId::Document => {}
             other => panels::stub::show(ui, panels::stub::Props { title: other.title(&self.words) }),
