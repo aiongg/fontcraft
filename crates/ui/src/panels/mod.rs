@@ -16,6 +16,7 @@ pub mod hinting_waterfall;
 pub mod info_box;
 pub mod info_box_ps_hint;
 pub mod info_box_tt;
+pub mod kerning_tools;
 pub mod kerning_window;
 pub mod layers;
 pub mod master_icons;

@@ -19,6 +19,7 @@ pub mod glyph_sections;
 pub mod hint_canvas;
 pub mod hinting;
 pub mod kerning_review;
+pub mod kerning_tools;
 pub mod kerning_window;
 pub mod layers;
 pub mod palette;
@@ -77,6 +78,10 @@ pub struct Models {
     pub console: Tracked<console::ConsoleModel>,
     /// The Kerning window (`panels::kerning_window`).
     pub kerning_window: Tracked<kerning_window::KerningWindowModel>,
+    /// The Kerning Pairs Preview (`panels::kerning_tools::pairs_preview`).
+    pub kerning_pairs_preview: Tracked<kerning_tools::PairsPreviewModel>,
+    /// The Kerning Groups Editor (`panels::kerning_tools::groups_editor`).
+    pub kerning_groups_editor: Tracked<kerning_tools::GroupsEditorModel>,
     /// The sidebar's entries (`panels::font_view::sidebar`).
     pub sidebar: Tracked<sidebar::SidebarModel>,
     /// The glyph inspector's fields (`panels::font_view::inspector`).
@@ -155,6 +160,8 @@ impl Models {
         layers::project(&mut self.layers, cx);
         layers::project_masters(&mut self.masters, cx);
         kerning_window::project(&mut self.kerning_window, cx);
+        kerning_tools::project_preview(&mut self.kerning_pairs_preview, cx);
+        kerning_tools::project_groups(&mut self.kerning_groups_editor, cx);
         sidebar::project(&mut self.sidebar, cx);
         glyph_props::project_inspector(&mut self.inspector, cx);
         glyph_props::project_selection_info(&mut self.selection_info, cx);

@@ -49,6 +49,8 @@ pub enum PanelId {
     SpaceCenter,
     KerningWindow,
     KerningReview,
+    KerningPairsPreview,
+    KerningGroupsEditor,
     GlyphInfo,
     FontAudit,
     TableViewer,
@@ -89,6 +91,8 @@ impl PanelId {
         PanelId::SpaceCenter,
         PanelId::KerningWindow,
         PanelId::KerningReview,
+        PanelId::KerningPairsPreview,
+        PanelId::KerningGroupsEditor,
         PanelId::GlyphInfo,
         PanelId::FontAudit,
         PanelId::TableViewer,
@@ -129,6 +133,8 @@ impl PanelId {
             PanelId::SpaceCenter => "spaceCenter",
             PanelId::KerningWindow => "kerningWindow",
             PanelId::KerningReview => "kerningReview",
+            PanelId::KerningPairsPreview => "kerningPairsPreview",
+            PanelId::KerningGroupsEditor => "kerningGroupsEditor",
             PanelId::GlyphInfo => "glyphInfo",
             PanelId::FontAudit => "fontAudit",
             PanelId::TableViewer => "tableViewer",
@@ -175,6 +181,8 @@ impl PanelId {
             PanelId::SpaceCenter => w.space_center.clone(),
             PanelId::KerningWindow => w.kerning_window.clone(),
             PanelId::KerningReview => w.kerning_review.clone(),
+            PanelId::KerningPairsPreview => w.kerning_pairs_preview.clone(),
+            PanelId::KerningGroupsEditor => w.kerning_groups_editor.clone(),
             PanelId::GlyphInfo => w.glyph_info.clone(),
             PanelId::FontAudit => w.font_audit.clone(),
             PanelId::TableViewer => w.table_viewer.clone(),
@@ -227,6 +235,8 @@ craft::ui::words! {
         space_center: "fontcraftPanel.spaceCenter" = "Space Center";
         kerning_window: "fontcraftPanel.kerningWindow" = "Kerning Window";
         kerning_review: "fontcraftPanel.kerningReview" = "Kerning Review";
+        kerning_pairs_preview: "fontcraftPanel.kerningPairsPreview" = "Kerning Pairs Preview";
+        kerning_groups_editor: "fontcraftPanel.kerningGroupsEditor" = "Kerning Groups Editor";
         glyph_info: "fontcraftPanel.glyphInfo" = "Glyph Info";
         font_audit: "fontcraftPanel.fontAudit" = "Font Audit";
         table_viewer: "fontcraftPanel.tableViewer" = "Table Viewer";
@@ -307,6 +317,14 @@ impl DockPanels<PanelId> for Panels<'_> {
             PanelId::KerningWindow => {
                 panels::kerning_window::show(ui, panels::kerning_window::Props { model: &self.models.kerning_window, sent: self.sent });
             }
+            PanelId::KerningPairsPreview => panels::kerning_tools::pairs_preview::show(
+                ui,
+                panels::kerning_tools::pairs_preview::Props { model: &self.models.kerning_pairs_preview, sent: self.sent },
+            ),
+            PanelId::KerningGroupsEditor => panels::kerning_tools::groups_editor::show(
+                ui,
+                panels::kerning_tools::groups_editor::Props { model: &self.models.kerning_groups_editor, sent: self.sent },
+            ),
             PanelId::Sidebar => panels::font_view::sidebar::show(
                 ui,
                 panels::font_view::sidebar::Props { model: &self.models.sidebar, inspector: &self.models.inspector, sent: self.sent },
