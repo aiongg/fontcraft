@@ -308,8 +308,8 @@ fn compile_plan_describes_what_compile_builds_without_writing() {
     assert_eq!(summary["fonts"][0]["files"][0]["name"], "TestSans-Heavy.otf");
     assert!(summary["fonts"][0]["files"][0].get("dataBase64").is_none());
     // Formats that are not built yet are refused by name.
-    let e = s.execute("font.compile", &json!({"formats": ["variable"]})).unwrap_err().to_string();
-    assert!(e.contains("variable") && e.contains("M9"), "{e}");
+    let e = s.execute("font.compile", &json!({"formats": ["otf-cff2"]})).unwrap_err().to_string();
+    assert!(e.contains("otf-cff2") && e.contains("M2.9"), "{e}");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -330,7 +330,7 @@ fn a_failing_export_changes_nothing_and_writes_nothing() {
         assert!(e.contains("glyph `A`"), "{e}");
         let e = s.execute("file.exportAll", &json!({"destination": destination})).unwrap_err().to_string();
         assert!(e.contains("glyph `A`"), "{e}");
-        let e = s.execute("font.compile", &json!({"destination": destination})).unwrap_err().to_string();
+        let e = s.execute("font.compile", &json!({"formats": ["ttf"], "destination": destination})).unwrap_err().to_string();
         assert!(e.contains("glyph `A`"), "{e}");
     }
     assert_eq!(names(&out_dir), ["TestSans-Regular.ttf"], "no new files, no temporary files, no new folders");
@@ -412,7 +412,7 @@ fn a_glyphs_font_without_a_family_name_is_named_unnamed_font() {
     let out_dir = dir.join("out");
     run(&mut s, "file.exportStatic", json!({"destination": out_dir, "timestamp": 0}));
     assert_eq!(names(&out_dir), ["TestSans-Heavy.ttf", "Unnamedfont-Medium.ttf", "Unnamedfont-Regular.ttf"]);
-    let plan = run(&mut s, "font.compilePlan", json!({"destination": out_dir, "sections": ["outputs"]}));
+    let plan = run(&mut s, "font.compilePlan", json!({"formats": ["ttf"], "destination": out_dir, "sections": ["outputs"]}));
     assert!(plan.to_string().contains("Unnamedfont-Regular.ttf"), "{plan}");
     // Only the file name: the name table keeps the source's empty family name.
     let bytes = std::fs::read(out_dir.join("Unnamedfont-Regular.ttf")).unwrap();
@@ -647,4 +647,66 @@ fn export_variable_writes_one_variable_font_with_the_masters_as_its_extremes() {
     let mut s = two_masters(&temp("variable-broken"), &broken);
     let err = s.execute("file.exportVariable", &json!({})).unwrap_err().to_string();
     assert!(err.contains("not compatible") && err.contains('A'), "{err}");
+}
+
+/// One request builds static and variable fonts into the reference compiler's folders, and the
+/// plan lists exactly the files the compile writes (M2.8).
+#[test]
+fn compile_builds_static_and_variable_formats_into_by_format_folders() {
+    let dir = temp("by-format");
+    let mut s = two_masters(&dir, TWO_MASTERS);
+    let out = dir.join("out");
+    let request = json!({"formats": ["ttf", "variable"], "outputLayout": "by-format", "destination": out, "timestamp": 0});
+    let plan = run(&mut s, "font.compilePlan", request.clone());
+    assert!(!out.exists(), "a plan writes nothing");
+    let built = run(&mut s, "font.compile", request);
+    assert_eq!(
+        names(&out),
+        ["instance_ttf/TestSans-Heavy.ttf", "instance_ttf/TestSans-Medium.ttf", "instance_ttf/TestSans-Regular.ttf", "variable_ttf/TestSansVF.ttf"]
+    );
+    let paths = |list: &Value| -> Vec<String> {
+        let mut out: Vec<String> = list
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|o| o["files"].as_array().unwrap().iter().map(|f| f["path"].as_str().unwrap().to_string()))
+            .collect();
+        out.sort();
+        out
+    };
+    assert_eq!(paths(&plan["outputs"]), paths(&built["fonts"]));
+    let variable: Vec<&Value> = built["fonts"].as_array().unwrap().iter().filter(|f| f["source"] == "variable").collect();
+    assert_eq!(variable.len(), 1, "{built}");
+    assert_eq!((&variable[0]["format"], &variable[0]["fileName"]), (&json!("variable"), &json!("TestSansVF")));
+
+    // Without formats two masters build a variable TTF; asking for instances builds static ones.
+    let sources = |r: &Value| r["fonts"].as_array().unwrap().iter().map(|f| f["source"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+    assert_eq!(sources(&run(&mut s, "font.compile", json!({}))), ["variable"]);
+    assert_eq!(sources(&run(&mut s, "font.compile", json!({"instances": true}))), ["instance", "instance", "instance"]);
+    // nameBy: postscript-name passes over Bold's fileName parameter.
+    let r = run(&mut s, "font.compile", json!({"instances": ["Bold"], "nameBy": "postscript-name"}));
+    assert_eq!(r["fonts"][0]["files"][0]["name"], "TestSans-Bold.ttf");
+    // Static options with only variable formats are refused.
+    let e = s.execute("font.compile", &json!({"formats": ["variable"], "cbdt": true})).unwrap_err().to_string();
+    assert!(e.contains("cbdt"), "{e}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// `instances` as a pattern matches a whole name, or the family and style name, among the exported
+/// instances; `familyName` names the masters and keeps only the instances of that family (M2.8).
+#[test]
+fn compile_picks_instances_by_pattern_and_by_family() {
+    let dir = temp("select");
+    let mut s = two_masters(&dir, TWO_MASTERS);
+    let labels = |r: &Value| r["fonts"].as_array().unwrap().iter().map(|f| f["instance"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+    assert_eq!(labels(&run(&mut s, "font.compile", json!({"instances": "Reg.*|Bold|Hidden"}))), ["Regular", "Bold"]);
+    assert_eq!(labels(&run(&mut s, "font.compile", json!({"instances": "Test Sans Med.*"}))), ["Medium"]);
+    let e = s.execute("font.compile", &json!({"instances": "Light"})).unwrap_err().to_string();
+    assert!(e.contains("Light"), "{e}");
+
+    let out = dir.join("family");
+    let r = run(&mut s, "font.compile", json!({"familyName": "Other", "mastersAsInstances": true, "destination": out, "timestamp": 0}));
+    assert_eq!(names(&out), ["Other-Bold.ttf", "Other-Regular.ttf"]);
+    assert_eq!(r["skipped"].as_array().unwrap().len(), 3, "{r}");
+    std::fs::remove_dir_all(&dir).unwrap();
 }

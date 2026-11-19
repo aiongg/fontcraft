@@ -30,6 +30,7 @@ pub(crate) mod compile;
 mod compile_cid;
 mod compile_layout;
 mod compile_project;
+mod compile_select;
 mod component;
 mod custom_params;
 mod decompose;

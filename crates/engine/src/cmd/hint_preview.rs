@@ -86,6 +86,7 @@ pub(super) fn build(s: &Session, p: &Params, flavour: Flavour) -> Result<Built> 
         dest: Dest::Memory,
         first_only: false,
         autohinter: crate::external_autohint::trusted(s),
+        naming: Default::default(),
     };
     let mut sink = Sink::new(&req.dest, true, s.export_outside())?;
     let mut report = Report::default();

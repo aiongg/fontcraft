@@ -292,7 +292,7 @@ writing fonts; `font.compilePlan` describes the same choices without building.
 | Question | Rule | Row |
 |---|---|---|
 | Which fonts | The exportable static instances; the first master when the font has no static instance. Named instances are built whether they export or not. `font.compile` can add each master | `export.staticUsesInstancesOrDefault` |
-| Instances between masters | Skipped with a reason in the result until interpolation (M9). An export that builds nothing fails | `export.instancesBetweenMasters` |
+| Instances between masters | Built from the font interpolated at the instance; one that cannot be interpolated is skipped with a reason in the result. An export that builds nothing fails | `export.instancesBetweenMasters` |
 | File name | The instance's `fileName` parameter as written, else the PostScript name (name ID 6, as the compiler derives it, with the text tokens of the names expanded for the instance), plus `.ttf`, `.otf`, `.woff` or `.woff2`; characters a file name cannot hold are dropped. A font with no family name takes the family `Unnamed font` for the file name when its source is a .glyphs file or package, as fontmake does (`Unnamedfont-Bold.ttf`), and the source file's name without its extension when it is any other (`Draft.ufo` gives `Draft-Bold.ttf`, where fontc writes `-Bold.ttf`); the `name` table keeps the empty family | `export.fileNaming`, `compile.outputNaming` |
 | Both flavours at once | Each into a `ttf` or `otf` subfolder; a repeated file name keeps the later font, with a warning | `export.flavourSubfolders` |
 | One file as destination | Its extension sets the flavour and container; it receives the first font that can be built | `export.singleFileDestination` |
