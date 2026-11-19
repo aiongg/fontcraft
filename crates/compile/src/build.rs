@@ -65,7 +65,7 @@ fn written_affine(c: &Component) -> Affine {
 }
 
 /// `glyf` entries for every glyph of the order.
-fn build_glyphs(order: &[ResolvedGlyph], outlines: &[Prepared]) -> Result<Vec<Built>, CompileError> {
+fn build_glyphs(order: &[ResolvedGlyph], outlines: &[Prepared], use_my_metrics: bool) -> Result<Vec<Built>, CompileError> {
     let gids: HashMap<&str, u16> = order.iter().enumerate().filter_map(|(i, g)| Some((g.name.as_str(), u16::try_from(i).ok()?))).collect();
     let widths: HashMap<&str, f64> = order.iter().map(|g| (g.name.as_str(), g.width)).collect();
     let mut built = Vec::with_capacity(order.len());
@@ -94,8 +94,9 @@ fn build_glyphs(order: &[ResolvedGlyph], outlines: &[Prepared]) -> Result<Vec<Bu
                     let [a, b, cc, d, e, f] = c.transform.as_coeffs();
                     // `USE_MY_METRICS` on the first component that has the glyph's advance and is
                     // not moved horizontally, scaled or turned (`compile.useMyMetrics`).
-                    let use_my_metrics =
-                        !metrics_from_component && widths.get(c.base.as_str()).is_some_and(|w| reuses_metrics(g.width, *w, &c.transform));
+                    let use_my_metrics = use_my_metrics
+                        && !metrics_from_component
+                        && widths.get(c.base.as_str()).is_some_and(|w| reuses_metrics(g.width, *w, &c.transform));
                     metrics_from_component |= use_my_metrics;
                     let component = Component::new(
                         GlyphId16::new(*gid),
@@ -256,9 +257,10 @@ fn truetype(
     order: &[ResolvedGlyph],
     outlines: &[Prepared],
     composite_programs: &[(usize, Vec<u8>)],
+    use_my_metrics: bool,
     builder: &mut FontBuilder,
 ) -> Result<(Boxes, Maxp), CompileError> {
-    let mut built = build_glyphs(order, outlines)?;
+    let mut built = build_glyphs(order, outlines, use_my_metrics)?;
     for (gid, program) in composite_programs {
         if let Some(Built { glyph: TtGlyph::Composite(c), .. }) = built.get_mut(*gid) {
             c.set_instructions(program);
@@ -339,6 +341,7 @@ fn postscript(input: &CffInput, builder: &mut FontBuilder, warnings: &mut Vec<St
             input.synthesised_notdef,
             input.hinting,
             input.two_decimals,
+            input.cff,
             warnings,
         )?,
     };
@@ -368,7 +371,8 @@ fn postscript(input: &CffInput, builder: &mut FontBuilder, warnings: &mut Vec<St
     };
     let maxp =
         Maxp { num_glyphs: u16::try_from(input.order.len()).map_err(|_| CompileError::TooManyGlyphs(input.order.len()))?, ..Default::default() };
-    let table = if input.subroutinize { subroutinized(built.table, false, warnings) } else { built.table };
+    let table = if input.cff.optimize_widths { widths_optimized(built.table, warnings) } else { built.table };
+    let table = if input.subroutinize { subroutinized(table, false, input.cff.max_subrs, warnings) } else { table };
     builder.add_raw(Tag::new(b"CFF "), table);
     Ok((boxes, maxp))
 }
@@ -385,14 +389,27 @@ const DISABLE_SUBROUTINES: &str = "Disable Subroutines";
 /// ([`fontcraft_cff::subr::subroutinize_table`]), or `table` itself when that is not smaller. A
 /// table the subroutiniser refuses (too many tokens, a self-check that failed) is kept as it is,
 /// with a warning: the export never fails for want of subroutines.
-fn subroutinized(table: Vec<u8>, cff2: bool, warnings: &mut Vec<String>) -> Vec<u8> {
+fn subroutinized(table: Vec<u8>, cff2: bool, max_subrs: usize, warnings: &mut Vec<String>) -> Vec<u8> {
     use fontcraft_cff::subr::{SubrOptions, subroutinize_table};
-    match subroutinize_table(&table, cff2, &SubrOptions::default()) {
+    match subroutinize_table(&table, cff2, &SubrOptions { max_subrs, ..SubrOptions::default() }) {
         Ok(out) if out.len() < table.len() => out,
         Ok(_) => table,
         Err(e) => {
             let name = if cff2 { "CFF2" } else { "CFF" };
             warnings.push(format!("the {name} table was written without subroutines: {e}"));
+            table
+        }
+    }
+}
+
+/// `table` (a `CFF ` table) with the `defaultWidthX` and `nominalWidthX` that make its widths
+/// smallest ([`fontcraft_cff::subr::optimize_widths_table`]), or `table` itself, with a warning,
+/// when that fails.
+fn widths_optimized(table: Vec<u8>, warnings: &mut Vec<String>) -> Vec<u8> {
+    match fontcraft_cff::subr::optimize_widths_table(&table) {
+        Ok((out, _)) => out,
+        Err(e) => {
+            warnings.push(format!("the CFF widths were written as they are: {e}"));
             table
         }
     }
@@ -438,7 +455,8 @@ fn cff2_table(
         loc_format: 0,
     };
     let maxp = Maxp { num_glyphs: u16::try_from(glyphs).map_err(|_| CompileError::TooManyGlyphs(glyphs))?, ..Default::default() };
-    let table = if subroutinize { subroutinized(built.table.clone(), true, warnings) } else { built.table.clone() };
+    let table =
+        if subroutinize { subroutinized(built.table.clone(), true, fontcraft_cff::subr::DEFAULT_MAX_SUBRS, warnings) } else { built.table.clone() };
     builder.add_raw(Tag::new(b"CFF2"), table);
     Ok((boxes, maxp))
 }
@@ -460,6 +478,7 @@ struct CffInput<'a> {
     /// Coordinates to two decimals and the reference's glyph boxes
     /// ([`crate::makeotf::Finish::two_decimals`]).
     two_decimals: bool,
+    cff: &'a crate::CffOptions,
 }
 
 /// Builds every table and the font file. `synthesised_notdef`: glyph 0 is the compiler's own
@@ -551,7 +570,9 @@ pub fn assemble(
     });
     let outlines = instructed.as_deref().unwrap_or(outlines);
     let (boxes, mut maxp) = match flavour {
-        Flavour::TrueType => truetype(order, outlines, tt_hinting.as_ref().map_or(&[][..], |h| h.composites.as_slice()), &mut builder)?,
+        Flavour::TrueType => {
+            truetype(order, outlines, tt_hinting.as_ref().map_or(&[][..], |h| h.composites.as_slice()), options.use_my_metrics, &mut builder)?
+        }
         Flavour::Cff => match &extra.cff2 {
             Some(built) => {
                 let subroutinize = options.subroutinize.unwrap_or_else(|| !subroutines_disabled(font));
@@ -571,6 +592,7 @@ pub fn assemble(
                     subroutinize,
                     cid: extra.cid.as_ref(),
                     two_decimals: options.project.as_ref().is_some_and(|p| p.two_decimals),
+                    cff: &options.cff,
                 };
                 postscript(&input, &mut builder, warnings)?
             }

@@ -324,6 +324,21 @@ writing fonts; `font.compilePlan` describes the same choices without building.
 WOFF2 uses the container's default options: `glyf` and `loca` transformed, `hmtx` not, as
 fontTools does.
 
+`font.compile`'s outline, CFF, glyph-set and output options (M2.13; the command line's
+`--glyphs`, `--notdef`, `--cff-round-tolerance` and the rest) work in three places:
+
+| Where | Options | How |
+|---|---|---|
+| Compile options | `cff.roundTolerance`, `cff.optimize`, `cff.maxSubrs`, `cff.optimizeWidths`, `outlines.autoUseMyMetrics`, `autohint`, `glyphData` | Passed to the static compile. The CFF options apply to a static `CFF ` table only; `CFF2` keeps its own rounding and the default subroutine cap |
+| A copy of the font | `glyphs`, `notdef: "replace"`, `productionNames`, `bumpVersion` | Glyphs outside the subset stop exporting, so the feature assembly drops them as it drops any non-exporting glyph; the subset keeps `.notdef` and every glyph a kept glyph's components use. `replace` removes the source's `.notdef`, so the compiler draws one. `productionNames` sets or clears the *Don't use Production Names* parameter |
+| The built bytes | `postFormat: 3`, `excludeTables`, `tables` | Each static font is rewritten after its build: `post` keeps its 32-byte header as version 3, the excluded tables are left out, and the tables named are also written as raw files. Not with a variable format or a collection |
+
+fontmake's `--cff-round-tolerance`, `--optimize-cff`, `--max-subrs` and `--optimize-widths` are
+the models. FontCraft keeps the source's `defaultWidthX` and `nominalWidthX` unless asked;
+fontmake optimises them by default. `--erase-open-corners` waits for the export step that erases
+open corners (M3.31). The options with no counterpart are refused with the reason; the list is in
+the `compile` row's notes.
+
 ---
 
 ## 2. Table matrix
