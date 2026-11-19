@@ -1,4 +1,4 @@
-//! PostScript autohinting of a compiled font file (M10.37): `autohint.ps.runFont`.
+//! PostScript autohinting of a compiled font file (M10.37, CFF2 in M10.37b): `autohint.ps.runFont`.
 // Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
@@ -12,7 +12,7 @@ use fontcraft_engine::model::{AlignmentZone, Node, NodeKind, Param, Path as Mode
 use serde_json::{Value, json};
 use skrifa::raw::ps::cff::CffFontRef;
 use skrifa::raw::ps::cs::CommandSink;
-use skrifa::raw::types::{Fixed, Tag};
+use skrifa::raw::types::{F2Dot14, Fixed, Tag};
 use skrifa::{FontRef, MetadataProvider as _};
 
 /// `l`: a stem from x 100 to 180, 0 to 700 high; `o`: a box with a counter. The master has zones
@@ -90,14 +90,14 @@ fn outline(cmds: &[String]) -> Vec<String> {
     cmds.iter().filter(|c| !c.contains("stem") && !c.starts_with("hintmask")).cloned().collect()
 }
 
-fn tables_except_cff(bytes: &[u8]) -> Vec<(Tag, Vec<u8>)> {
+fn tables_except(bytes: &[u8], skip: &[u8; 4]) -> Vec<(Tag, Vec<u8>)> {
     let font = FontRef::new(bytes).unwrap();
     let mut out: Vec<(Tag, Vec<u8>)> = font
         .table_directory
         .table_records()
         .iter()
         .map(|r| r.tag())
-        .filter(|t| *t != Tag::new(b"CFF "))
+        .filter(|t| *t != Tag::new(skip))
         .map(|t| (t, font.table_data(t).unwrap().as_bytes().to_vec()))
         .collect();
     out.sort_by_key(|(t, _)| *t);
@@ -132,7 +132,7 @@ fn autohint_ps_run_font_hints_an_otf_as_the_export_does_and_keeps_the_rest() {
         assert_eq!(outline(&ours), outline(&glyph_commands(&before, ch)), "{ch} draws as it did");
     }
     assert!(glyph_commands(&out, 'l').contains(&"vstem 100 180".to_string()));
-    assert_eq!(tables_except_cff(&out), tables_except_cff(&before), "every other table keeps its bytes");
+    assert_eq!(tables_except(&out, b"CFF "), tables_except(&before, b"CFF "), "every other table keeps its bytes");
 
     // Glyph selection, hintAll and dryRun.
     let again = dir.join("Again.otf");
@@ -214,5 +214,84 @@ fn autohint_ps_run_font_hints_an_overlapping_glyph_on_its_overlap_free_outline()
     let listed = dir.join("Listed.otf");
     run(&mut s, json!({"font": plain, "output": listed, "overlapGlyphs": ["l"]}));
     assert_eq!(glyph_commands(&std::fs::read(&listed).unwrap(), 'l'), ours);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The two-master test font with `A` as a box with a counter: stems of 80 in Regular, and in
+/// Bold vertical stems of 120 and horizontal ones of 100, with zones and standard stems to match.
+fn variable_session(dir: &Path) -> Session {
+    let path = dir.join("TestSans.glyphs");
+    std::fs::write(&path, crate::export::TWO_MASTERS).unwrap();
+    let mut s = Session::new();
+    s.execute("file.open", &json!({ "path": path })).unwrap();
+    s.edit("setup", |font| {
+        let n = |x, y| Node::new(x, y, NodeKind::Line);
+        let outer = |x0: f64, y0: f64, x1: f64, y1: f64| Shape::Path(ModelPath::new(true, vec![n(x0, y0), n(x1, y0), n(x1, y1), n(x0, y1)]));
+        let inner = |x0: f64, y0: f64, x1: f64, y1: f64| Shape::Path(ModelPath::new(true, vec![n(x0, y0), n(x0, y1), n(x1, y1), n(x1, y0)]));
+        {
+            let mut a = font.glyph_mut("A")?;
+            a.layer_mut("m01").unwrap().shapes = vec![outer(50.0, 0.0, 450.0, 500.0), inner(130.0, 80.0, 370.0, 420.0)];
+            a.layer_mut("m02").unwrap().shapes = vec![outer(50.0, 0.0, 550.0, 500.0), inner(170.0, 100.0, 430.0, 400.0)];
+        }
+        for (master, (h, v)) in Arc::make_mut(&mut font.masters).iter_mut().zip([("(80)", "(80)"), ("(100)", "(120)")]) {
+            master.zones = vec![AlignmentZone { pos: 0.0, size: -10.0 }, AlignmentZone { pos: 500.0, size: 10.0 }];
+            master.params.0.push(Param::new("postscriptStemSnapH", parse_value(h).unwrap()));
+            master.params.0.push(Param::new("postscriptStemSnapV", parse_value(v).unwrap()));
+        }
+        Ok(())
+    })
+    .unwrap();
+    s
+}
+
+/// A CFF2 variable export of the session's font, autohinted or not.
+fn variable_export(s: &Session, autohint: bool) -> Vec<u8> {
+    use fontcraft_engine::compile::var::{VarFlavour, VariableOptions, compile_variable};
+    use fontcraft_engine::compile::{HintingOptions, Options};
+    let options = Options { hinting: HintingOptions { autohint, strip: false }, ..Options::default() };
+    let var = VariableOptions { flavour: VarFlavour::Cff2, ..VariableOptions::default() };
+    compile_variable(s.font().unwrap(), None, &options, &var).unwrap().compiled.bytes
+}
+
+/// Every stem, mask and drawing command of a glyph's CFF2 charstring at normalized `wght`.
+fn cff2_commands(bytes: &[u8], ch: char, wght: f64) -> Vec<String> {
+    let font = FontRef::new(bytes).unwrap();
+    let gid = font.charmap().map(ch).unwrap();
+    let table = font.table_data(Tag::new(b"CFF2")).unwrap();
+    let cff = CffFontRef::new_cff2(table.as_bytes(), None).unwrap();
+    let coords = [F2Dot14::from_f64(wght)];
+    let subfont = cff.subfont(0, &coords).unwrap();
+    let mut rec = Record::default();
+    cff.evaluate_charstring(&subfont, gid, &coords, &mut rec).unwrap();
+    rec.0
+}
+
+#[test]
+fn autohint_ps_run_font_hints_a_cff2_font_as_the_variable_export_does() {
+    let dir = scratch("cff2");
+    let mut s = variable_session(&dir);
+    let plain = dir.join("PlainVF.otf");
+    std::fs::write(&plain, variable_export(&s, false)).unwrap();
+    let before = std::fs::read(&plain).unwrap();
+    assert!(!cff2_commands(&before, 'A', 0.0).iter().any(|c| c.contains("stem")), "the input is unhinted");
+
+    let r = run(&mut s, json!({"font": plain}));
+    let hinted: Vec<&str> = r["hinted"].as_array().unwrap().iter().map(|h| h["glyph"].as_str().unwrap()).collect();
+    assert!(hinted.contains(&"A"), "{r}");
+    let out = std::fs::read(dir.join("PlainVF.autohinted.otf")).unwrap();
+
+    // At each master, the stems and masks of the variable export with autohinting on.
+    let exported = variable_export(&s, true);
+    for wght in [0.0, 1.0] {
+        let ours = cff2_commands(&out, 'A', wght);
+        assert!(ours.iter().any(|c| c.starts_with("vstem")) && ours.iter().any(|c| c.starts_with("hstem")), "at {wght}: {ours:?}");
+        assert_eq!(ours, cff2_commands(&exported, 'A', wght), "at {wght}");
+    }
+    assert!(cff2_commands(&out, 'A', 1.0).contains(&"vstem 50 170".to_string()), "{:?}", cff2_commands(&out, 'A', 1.0));
+    // The outline draws as it did, at the masters and between them; every other table is kept.
+    for wght in [0.0, 0.5, 1.0] {
+        assert_eq!(outline(&cff2_commands(&out, 'A', wght)), outline(&cff2_commands(&before, 'A', wght)), "at {wght}");
+    }
+    assert_eq!(tables_except(&out, b"CFF2"), tables_except(&before, b"CFF2"), "every other table keeps its bytes");
     let _ = std::fs::remove_dir_all(&dir);
 }

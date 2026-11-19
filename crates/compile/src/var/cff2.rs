@@ -168,14 +168,19 @@ enum Together {
 /// same stems, found on its own outline by point correspondence, in the same order
 /// ([`fontcraft_autohint::hint_masters`]). The paths are hinted as drawn, coordinates rounded,
 /// so masks name their steps directly.
-fn autohinted_together(name: &str, paths: &[Vec<PathOp>], dicts: &[&FdDict], warnings: &mut Vec<String>) -> Together {
-    let options = cff2_autohint_options();
+fn autohinted_together(
+    name: &str,
+    paths: &[Vec<PathOp>],
+    dicts: &[&FdDict],
+    options: &fontcraft_autohint::Options,
+    warnings: &mut Vec<String>,
+) -> Together {
     let rounded: Vec<Vec<PathOp>> = paths.iter().map(|p| p.iter().map(round_op).collect()).collect();
     let drawn: Vec<(Vec<BezPath>, Vec<usize>)> = rounded.iter().map(|p| crate::cff_hints::contours(p)).collect();
     let inputs: Vec<fontcraft_autohint::HintInput> = drawn
         .iter()
         .zip(dicts)
-        .map(|((contours, _), dict)| fontcraft_autohint::HintInput { name, contours, without_overlap: None, dict, options: &options })
+        .map(|((contours, _), dict)| fontcraft_autohint::HintInput { name, contours, without_overlap: None, dict, options })
         .collect();
     let results = match fontcraft_autohint::hint_masters(&inputs) {
         Ok(r) => r,
@@ -199,6 +204,28 @@ fn autohinted_together(name: &str, paths: &[Vec<PathOp>], dicts: &[&FdDict], war
         out.push(h);
     }
     Together::Hinted(out)
+}
+
+/// The masters of glyph `name` of a compiled `CFF2` font hinted together as the export hints a
+/// glyph's sources (row `autohint.ps.runFont`): `paths` and `dicts` hold one entry per master,
+/// the origin first; flex is left out, whatever `options` says. Returns one set of hints per
+/// master, `None` when the autohinter finds no stems, or why the glyph cannot be hinted.
+pub fn autohint_masters(
+    name: &str,
+    paths: &[Vec<PathOp>],
+    dicts: &[&FdDict],
+    options: &fontcraft_autohint::Options,
+) -> Result<Option<Vec<CharstringHints>>, String> {
+    let options = fontcraft_autohint::Options { no_flex: true, ..options.clone() };
+    let mut notes = Vec::new();
+    match autohinted_together(name, paths, dicts, &options, &mut notes) {
+        Together::Hinted(list) => Ok(Some(list)),
+        Together::Unhinted => match notes.into_iter().next() {
+            Some(why) => Err(why),
+            None => Ok(None),
+        },
+        Together::Incompatible(why) => Err(format!("its masters cannot be hinted together ({why})")),
+    }
 }
 
 fn round_op(op: &PathOp) -> PathOp {
@@ -233,7 +260,7 @@ fn glyph_hints(
     // Autohinted sources are hinted together, so that they share one structure.
     let mut together = None;
     if plans.len() > 1 && dicts.len() == plans.len() {
-        match autohinted_together(name, ops, &dicts, &mut notes) {
+        match autohinted_together(name, ops, &dicts, &cff2_autohint_options(), &mut notes) {
             Together::Hinted(list) => together = Some(list),
             Together::Unhinted => {
                 push_unique(warnings, notes);
