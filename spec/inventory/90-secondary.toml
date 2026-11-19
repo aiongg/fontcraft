@@ -2639,6 +2639,7 @@ guesses = [
   "With endpointsLoose, the replacement's end nodes take the positions of the contour's own end nodes, so stems keep their length; the reference's documentation does not say.",
   "Closed patterns: the replacement paths take the place of the first matched contour and its attributes, and an empty replacement removes the matches; the reference's documentation does not say.",
   "A replacement under a mirroring match is reversed so its direction stays correct, as a mirrored component decomposed with corrected direction would be.",
+  "Hints on a path a closed pattern replaces lose their nodes (a PostScript end becomes a number, a TrueType instruction or corner component is removed and reported), other paths' hints follow them by path or shape index, and hints on a contour an open pattern edits follow their nodes as after any node edit; the reference's documentation does not mention hints.",
 ]
 observe = [
   "In the reference's Find/Replace dialog, replace an open serif pattern by one whose end nodes lie one unit from the pattern's, and note where the contour's end nodes land.",

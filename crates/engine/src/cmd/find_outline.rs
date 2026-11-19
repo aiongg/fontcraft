@@ -20,13 +20,14 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use fontcraft_geom::{Affine, round_point};
-use fontcraft_model::{Font, Glyph, Layer, MAX_COORDINATE, MAX_OUTLINE_ELEMENTS, Node, NodeKind, Path, Shape};
+use fontcraft_hinting::Renumbered;
+use fontcraft_model::{Font, Glyph, Layer, LayerSide, MAX_COORDINATE, MAX_OUTLINE_ELEMENTS, Node, NodeKind, Path, Shape};
 use fontcraft_pathops::matcher::{MAX_MATCHES, MAX_PATTERN_NODES, MatchOptions, MatchedRun, match_outline_within};
 use fontcraft_pathops::{Contour, Node as PNode, NodeKind as PKind};
 use serde_json::{Value, json};
 
 use super::common::{Outcome, grid, in_range};
-use super::shared::remap_hint;
+use super::shared::renumber_hints;
 use super::*;
 use crate::params::{Params, TargetKind, kind};
 
@@ -666,13 +667,19 @@ fn splice(nodes: &[Node], closed: bool, runs: &[(MatchedRun, Vec<Node>)]) -> Vec
     out
 }
 
-/// The layer with every match replaced, and the nodes written.
-fn apply(hit: &Hit, tol: f64, step: f64) -> std::result::Result<(Layer, usize), String> {
+/// The layer with every match replaced, and the nodes written. A closed pattern replaces whole
+/// paths, so the layer's hints follow their shapes ([`renumber_hints`]): a PostScript end on a
+/// replaced path becomes a number at its node's place, a TrueType instruction or corner component
+/// on one is removed, and both are reported in `done`, which also lists the layer so the session's
+/// hint upkeep leaves it alone. An open pattern edits nodes inside paths that keep their indices;
+/// the session's hint upkeep finds the referenced nodes again, as after any node edit.
+fn apply(hit: &Hit, tol: f64, step: f64, done: &mut Renumbered) -> std::result::Result<(Layer, usize), String> {
     let layer = hit.layer;
     let replacement = hit.prep.replacement.as_deref().unwrap_or(&[]);
     let mut out = layer.clone();
     let mut written = 0usize;
-    let map: Vec<Option<usize>> = if hit.prep.closed {
+    // The new index of each old shape, `None` for a replaced one; only closed patterns replace.
+    let map: Option<Vec<Option<usize>>> = if hit.prep.closed {
         let mut first_of: BTreeMap<usize, usize> = BTreeMap::new();
         let mut gone: HashSet<usize> = HashSet::new();
         for (k, f) in hit.found.iter().enumerate() {
@@ -704,7 +711,7 @@ fn apply(hit: &Hit, tol: f64, step: f64) -> std::result::Result<(Layer, usize), 
             }
         }
         out.shapes = shapes;
-        moved
+        Some(moved)
     } else {
         let Some(rep) = replacement.first() else { return Err("the replacement has no path".into()) };
         let mut by_contour: BTreeMap<usize, Vec<(MatchedRun, Vec<Node>)>> = BTreeMap::new();
@@ -714,16 +721,14 @@ fn apply(hit: &Hit, tol: f64, step: f64) -> std::result::Result<(Layer, usize), 
             let nodes = spliced_nodes(rep, f, run, target, hit.prep.loose, tol, step)?;
             by_contour.entry(run.contour).or_default().push((run, nodes));
         }
-        let mut changed = HashSet::new();
         for (c, runs) in by_contour {
             let Some(&slot) = hit.outline.slots.get(c) else { continue };
             let Some(Shape::Path(path)) = out.shapes.get_mut(slot) else { continue };
             path.nodes = splice(&path.nodes, path.closed, &runs);
             path.to_bez().map_err(|why| format!("path {slot} would become invalid: {why}"))?;
             written = written.saturating_add(path.nodes.len());
-            changed.insert(slot);
         }
-        (0..layer.shapes.len()).map(|i| (!changed.contains(&i)).then_some(i)).collect()
+        None
     };
     let total = out.shapes.iter().fold(0usize, |n, s| match s {
         Shape::Path(p) => n.saturating_add(p.nodes.len()),
@@ -732,9 +737,12 @@ fn apply(hit: &Hit, tol: f64, step: f64) -> std::result::Result<(Layer, usize), 
     if total > MAX_OUTLINE_ELEMENTS {
         return Err(format!("the layer would hold more than {MAX_OUTLINE_ELEMENTS} nodes"));
     }
-    if !layer.info.hints.is_empty() {
+    if let Some(map) = map
+        && !layer.info.hints.is_empty()
+    {
         let at = |i: usize| map.get(i).copied().flatten();
-        out.info.hints = layer.info.hints.iter().filter_map(|h| remap_hint(h, &at)).collect();
+        renumber_hints(layer, &mut out, LayerSide::Foreground, &hit.glyph.name, &at, &mut done.report);
+        done.insert(&hit.glyph.name, &layer.id, LayerSide::Foreground);
     }
     Ok((out, written))
 }
@@ -745,6 +753,7 @@ fn replace_pattern(s: &mut Session, value: &Value) -> Result<Value> {
     let mut changes: Vec<(String, Layer)> = Vec::new();
     let mut glyphs: Vec<String> = Vec::new();
     let mut replaced = 0usize;
+    let mut done = Renumbered::default();
     let stopped = {
         let font = s.font()?;
         let req = request(&p, font, true)?;
@@ -754,7 +763,8 @@ fn replace_pattern(s: &mut Session, value: &Value) -> Result<Value> {
         let mut written = 0usize;
         scan(font, &req, &preps, true, &mut out, |hit| {
             let name = &hit.glyph.name;
-            let (layer, nodes) = apply(&hit, tol, step).map_err(|why| p.bad(format!("glyph `{name}`, layer `{}`: {why}", hit.layer.id)))?;
+            let (layer, nodes) =
+                apply(&hit, tol, step, &mut done).map_err(|why| p.bad(format!("glyph `{name}`, layer `{}`: {why}", hit.layer.id)))?;
             written = written.saturating_add(nodes);
             if written > MAX_WRITTEN_NODES {
                 return Err(p.bad(format!("the replacements would write more than {MAX_WRITTEN_NODES} nodes; replace in fewer glyphs at a time")));
@@ -777,6 +787,7 @@ fn replace_pattern(s: &mut Session, value: &Value) -> Result<Value> {
             }
             Ok(())
         })?;
+        s.hints_renumbered(done);
     }
     Ok(json!({"glyphs": glyphs, "replaced": replaced, "skipped": out.skipped, "stopped": stopped}))
 }
