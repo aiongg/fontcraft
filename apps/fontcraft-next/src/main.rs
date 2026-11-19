@@ -1,18 +1,109 @@
 //! FontCraft on the craft framework: the desktop window of `fontcraft-ui`, while it is built up
 //! to replace `apps/fontcraft`.
+//!
+//! `--control PORT` listens on `127.0.0.1:PORT` for the JSON control protocol
+//! (`docs/control-protocol.md`). `--automation-read-root` and `--automation-write-root` (or
+//! `FONTCRAFT_AUTOMATION_READ_ROOT` / `_WRITE_ROOT`) confine the files control requests read and write.
 #![forbid(unsafe_code)]
 
 use std::process::ExitCode;
 
 #[cfg(not(target_arch = "wasm32"))]
+const USAGE: &str = "\
+FontCraft, the font editor (craft framework build, in progress)
+
+USAGE:
+  fontcraft-next [--control PORT [--automation-read-root DIR] [--automation-write-root DIR]]
+
+  --control PORT   listen on 127.0.0.1:PORT for the JSON control protocol (no authentication:
+                   enable it only while you use it)
+  --automation-read-root DIR, --automation-write-root DIR
+                   control requests read files only inside the read root and write files only
+                   inside the write root (also --flag=DIR, or FONTCRAFT_AUTOMATION_READ_ROOT and
+                   FONTCRAFT_AUTOMATION_WRITE_ROOT; a flag replaces its variable). Each must be an
+                   existing folder; a root left out grants none of its access. What you do in the
+                   window is not confined. Without --control they are ignored.
+  -h, --help       this text
+  -V, --version    the version
+";
+
+#[cfg(not(target_arch = "wasm32"))]
 fn main() -> ExitCode {
-    match fontcraft_ui::run() {
+    let options = match options(std::env::args().skip(1)) {
+        Ok(Some(options)) => options,
+        Ok(None) => return ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("fontcraft-next: {error}");
+            return ExitCode::from(2);
+        }
+    };
+    match fontcraft_ui::run(options) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("fontcraft-next: {error}");
             ExitCode::FAILURE
         }
     }
+}
+
+/// The options of the command line; `None` when it only asked for the help or the version.
+#[cfg(not(target_arch = "wasm32"))]
+fn options(mut args: impl Iterator<Item = String>) -> Result<Option<fontcraft_ui::Options>, String> {
+    let root_env = |name: &str| std::env::var_os(name).filter(|v| !v.is_empty()).map(std::path::PathBuf::from);
+    let mut read_root = root_env("FONTCRAFT_AUTOMATION_READ_ROOT");
+    let mut write_root = root_env("FONTCRAFT_AUTOMATION_WRITE_ROOT");
+    let (mut read_given, mut write_given) = (false, false);
+    let mut port = None;
+    while let Some(arg) = args.next() {
+        // The roots also come as `--flag=DIR`.
+        let (flag, inline) = match arg.split_once('=') {
+            Some((f, v)) if f.starts_with("--automation-") => (f.to_string(), Some(v.to_string())),
+            _ => (arg.clone(), None),
+        };
+        if flag == "--automation-read-root" || flag == "--automation-write-root" {
+            let dir = inline.or_else(|| args.next()).ok_or_else(|| format!("{flag} needs a folder"))?;
+            let (slot, given) =
+                if flag == "--automation-read-root" { (&mut read_root, &mut read_given) } else { (&mut write_root, &mut write_given) };
+            if std::mem::replace(given, true) {
+                return Err(format!("{flag} is given twice: it takes one folder"));
+            }
+            *slot = Some(dir.into());
+            continue;
+        }
+        match arg.as_str() {
+            "-h" | "--help" => {
+                print!("{USAGE}");
+                return Ok(None);
+            }
+            "-V" | "--version" => {
+                println!("fontcraft-next {}", env!("CARGO_PKG_VERSION"));
+                return Ok(None);
+            }
+            "--control" => {
+                let value = args.next().ok_or("--control needs a port number")?;
+                port = Some(value.parse::<u16>().map_err(|_| format!("--control: `{value}` is not a port number"))?);
+            }
+            other => return Err(format!("unknown argument `{other}`\n\n{USAGE}")),
+        }
+    }
+    let Some(port) = port else { return Ok(Some(fontcraft_ui::Options::default())) };
+    // Checked before anything opens, so a mistyped root never leaves an unconfined channel.
+    let roots = fontcraft_engine::file_access::AutomationRoots::new(read_root.as_deref(), write_root.as_deref())?;
+    if let Some(roots) = &roots {
+        eprintln!("fontcraft-next: control requests: {}", roots.describe());
+    }
+    // A port another program holds is reported, and the window opens without the channel.
+    let control = match std::net::TcpListener::bind(("127.0.0.1", port)) {
+        Ok(listener) => {
+            eprintln!("fontcraft-next: control channel listening on 127.0.0.1:{port}");
+            Some(listener)
+        }
+        Err(e) => {
+            eprintln!("fontcraft-next: control channel: cannot listen on 127.0.0.1:{port}: {e}");
+            None
+        }
+    };
+    Ok(Some(fontcraft_ui::Options { control, roots }))
 }
 
 #[cfg(target_arch = "wasm32")]

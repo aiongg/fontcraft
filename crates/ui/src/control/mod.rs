@@ -1,24 +1,234 @@
-//! The control channel's method table (`docs/control-protocol.md`).
+//! The control channel (`docs/control-protocol.md`): one JSON request in, one JSON reply out.
+//!
+//! `{"id": 1, "method": "engine.execute", "params": {"command": "glyph.newGlyph", "params": {}}}` →
+//! `{"id": 1, "ok": true, "result": {…}}` or `{"id": 1, "ok": false, "error": "…"}`.
 //!
 //! Each module lists its methods in a slice and adds one line to [`MODULES`]. A method reads the app directly; a
-//! method that changes the engine posts a `Msg` and lets `drain` run it, as a view does. The listener that feeds
-//! [`dispatch`] arrives with the control-channel port.
+//! method that changes the engine goes through [`FontCraftApp::run_now`], the path `drain` takes, so it gets the
+//! command's result. A method whose package is not built yet is in [`LATER`] and answers with an error naming it.
+//!
+//! Hosts:
+//! - [`handle`] answers one request at once: tests ([`crate::testing`]) and hosts without a window.
+//! - The desktop app listens with [`Control::listen`] (`server.rs`). Requests are answered on the UI thread between
+//!   frames ([`logic`]); window input (`ui.click`, `ui.drag`, `ui.move`, `ui.wheel`) is replied to once the frames
+//!   have carried it, and `ui.screenshot` once the window is captured ([`after_ui`]).
 
 mod app;
+mod engine;
+mod inspect;
+mod menu;
+mod render;
+#[cfg(not(target_arch = "wasm32"))]
+mod screenshot;
+#[cfg(not(target_arch = "wasm32"))]
+mod server;
+mod window_input;
 
-use serde_json::Value;
+#[cfg(test)]
+mod tests;
+
+use std::sync::Arc;
+
+use craft::ui::runtime::windows::WindowHost;
+use fontcraft_engine::file_access::{self, AutomationRoots};
+use fontcraft_engine::guard;
+use serde_json::{Value, json};
 
 use crate::app::FontCraftApp;
+
+pub use inspect::INSPECT;
+pub use window_input::{SWITCHES, Switch};
 
 /// Runs one method with its parameters and returns its result, or the error the client gets.
 pub type Method = fn(&mut FontCraftApp, &Value) -> Result<Value, String>;
 
 /// Every module's methods.
-pub const MODULES: &[&[(&str, Method)]] = &[app::METHODS];
+pub const MODULES: &[&[(&str, Method)]] = &[app::METHODS, engine::METHODS, inspect::METHODS, menu::METHODS, render::METHODS, window_input::METHODS];
+
+/// Methods of the protocol whose package is not built yet: `(method or prefix ending in `.`, package)`. A package
+/// that adds its methods to [`MODULES`] removes its line here.
+pub const LATER: &[(&str, &str)] =
+    &[("ui.pointer", "UI.3"), ("ui.key", "UI.3"), ("ui.text", "UI.3"), ("ui.tool.", "UI.3"), ("ui.dialog.", "UI.7"), ("ui.contextMenu.", "UI.25")];
+
+/// The control channel's state on the app.
+#[derive(Default)]
+pub struct Control {
+    /// The folders control requests may read from and write to; `None` confines nothing.
+    pub roots: Option<Arc<AutomationRoots>>,
+    /// The window that window input goes to, as of the last frame; `None` without frames.
+    window: Option<WindowHost>,
+    /// Window input steps queued by the request being answered.
+    queued: usize,
+    /// Where the window input requests queued stands; while it is not idle, `drain` runs confined.
+    input: Input,
+    #[cfg(not(target_arch = "wasm32"))]
+    server: Option<server::Server>,
+}
+
+impl Control {
+    /// Answers requests from a listener on `127.0.0.1:port`, bound earlier; `ctx` is woken when one arrives.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn listen(&mut self, listener: std::net::TcpListener, ctx: &egui::Context) -> std::io::Result<std::net::SocketAddr> {
+        let server = server::Server::start(listener, ctx.clone())?;
+        let addr = server.addr;
+        self.server = Some(server);
+        Ok(addr)
+    }
+
+    /// Whether replies wait for frames (window input or a screenshot).
+    pub fn waiting(&self) -> bool {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(server) = &self.server {
+            return server.waiting();
+        }
+        false
+    }
+}
+
+/// Where control-channel window input stands. The commands it fires run in the `drain` after the pass that
+/// carried it, so that drain is confined too.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Input {
+    #[default]
+    Idle,
+    /// Steps are queued or in flight.
+    InFlight,
+    /// The input has run; the next drain applies what it fired.
+    LastDrain,
+}
+
+/// What a request comes to.
+enum Answer {
+    /// The reply, now.
+    Reply(Result<Value, String>),
+    /// A screenshot of the window, written to the path (already checked against the roots) or returned inline.
+    Screenshot(Option<String>),
+}
+
+/// Answers one request now. Never panics: a bug becomes an error reply and the app keeps running. A screenshot
+/// gets an error: this entry point has no window to capture.
+pub fn handle(app: &mut FontCraftApp, request: &Value) -> Value {
+    let id = request.get("id").cloned().unwrap_or(Value::Null);
+    let Some(method) = request.get("method").and_then(Value::as_str) else {
+        return with_id(reply(Err("a request is a JSON object with a string `method`".into())), &id);
+    };
+    let params = request.get("params").cloned().unwrap_or(Value::Null);
+    let answered = match answer(app, method, &params) {
+        Answer::Reply(result) => reply(result),
+        Answer::Screenshot(_) => reply(Err("ui.screenshot: this app has no window to capture (ui.render draws glyphs without one)".into())),
+    };
+    with_id(answered, &id)
+}
+
+/// `{"ok": true, "result": …}` or `{"ok": false, "error": …}`.
+fn reply(result: Result<Value, String>) -> Value {
+    match result {
+        Ok(result) => json!({"ok": true, "result": result}),
+        Err(error) => json!({"ok": false, "error": error}),
+    }
+}
+
+/// `reply` with the request's `id` first.
+fn with_id(reply: Value, id: &Value) -> Value {
+    let mut out = serde_json::Map::new();
+    out.insert("id".into(), id.clone());
+    if let Value::Object(map) = reply {
+        out.extend(map);
+    }
+    Value::Object(out)
+}
+
+/// Runs `method` with the automation roots in force. A client of the control channel exports inside the
+/// destination it names, whatever the app allows the user.
+fn answer(app: &mut FontCraftApp, method: &str, params: &Value) -> Answer {
+    app.control.queued = 0;
+    let roots = app.control.roots.clone();
+    file_access::confine(roots.as_ref(), || {
+        #[cfg(not(target_arch = "wasm32"))]
+        if method == "ui.screenshot" {
+            return match screenshot::path(params) {
+                Ok(path) => Answer::Screenshot(path),
+                Err(e) => Answer::Reply(Err(format!("ui.screenshot: {e}"))),
+            };
+        }
+        let outside = app.session.export_outside();
+        app.session.set_export_outside(false);
+        let result = guard::catch_panic(|| dispatch(app, method, params));
+        app.session.set_export_outside(outside);
+        if app.control.queued > 0 {
+            app.control.input = Input::InFlight;
+        }
+        Answer::Reply(match result {
+            Ok(result) => result,
+            Err(panic) => Err(format!("internal error (please report it): `{method}` failed unexpectedly: {panic}")),
+        })
+    })
+}
 
 /// Runs the method `name`.
 pub fn dispatch(app: &mut FontCraftApp, name: &str, params: &Value) -> Result<Value, String> {
     let method = MODULES.iter().flat_map(|methods| methods.iter()).find(|(n, _)| *n == name).map(|(_, m)| *m);
-    let method = method.ok_or_else(|| format!("unknown method `{name}`"))?;
-    method(app, params)
+    if let Some(method) = method {
+        return method(app, params);
+    }
+    if let Some((_, package)) = LATER.iter().find(|(m, _)| *m == name || (m.ends_with('.') && name.starts_with(m))) {
+        return Err(format!("`{name}` is not built yet in this app (it arrives with package {package})"));
+    }
+    Err(format!("unknown method `{name}` (see control.methods)"))
+}
+
+/// Every method name [`dispatch`] runs, in table order.
+pub fn method_names() -> Vec<&'static str> {
+    MODULES.iter().flat_map(|methods| methods.iter().map(|(n, _)| *n)).collect()
+}
+
+/// The control channel's work before the frame: notes the window for window input and, in the desktop app,
+/// answers the requests that arrived.
+pub fn logic(app: &mut FontCraftApp, ctx: &egui::Context) {
+    app.control.window = Some(WindowHost::of(ctx));
+    #[cfg(not(target_arch = "wasm32"))]
+    server::logic(app, ctx);
+}
+
+/// The control channel's work at the end of a UI pass: screenshots due are issued, and replies waiting on window
+/// input go out once the input has run.
+pub fn after_ui(app: &mut FontCraftApp, ctx: &egui::Context) {
+    if app.control.input == Input::InFlight && WindowHost::of(ctx).injected_idle_at_pass_end() {
+        app.control.input = Input::LastDrain;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    server::after_ui(app, ctx);
+}
+
+/// `FontCraftApp::drain` for the frame. While control-channel window input is in flight, and in the drain after it
+/// ran, what it fired runs as a request does: inside the automation roots, exporting inside the destination.
+pub fn drain(app: &mut FontCraftApp) {
+    if app.control.input == Input::Idle {
+        app.drain();
+        return;
+    }
+    if app.control.input == Input::LastDrain {
+        app.control.input = Input::Idle;
+    }
+    let roots = app.control.roots.clone();
+    let outside = app.session.export_outside();
+    app.session.set_export_outside(false);
+    file_access::confine(roots.as_ref(), || app.drain());
+    app.session.set_export_outside(outside);
+}
+
+/// Sets `key` on a JSON object (and does nothing to anything else).
+fn set(value: &mut Value, key: &str, item: Value) {
+    if let Some(map) = value.as_object_mut() {
+        map.insert(key.to_string(), item);
+    }
+}
+
+/// `params` as an object: `null` is an empty one.
+fn object<'a>(method: &str, params: &'a Value) -> Result<std::borrow::Cow<'a, serde_json::Map<String, Value>>, String> {
+    match params {
+        Value::Null => Ok(std::borrow::Cow::Owned(serde_json::Map::new())),
+        Value::Object(map) => Ok(std::borrow::Cow::Borrowed(map)),
+        _ => Err(format!("{method}: params must be a JSON object")),
+    }
 }

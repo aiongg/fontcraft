@@ -35,4 +35,12 @@ impl Msg {
     pub fn run(id: &str, params: serde_json::Value) -> Msg {
         Msg::Run(CommandRef::with_params(id, params))
     }
+
+    /// The id of the command the message runs; `None` for a view message.
+    pub fn command_id(&self) -> Option<&str> {
+        match self {
+            Msg::Run(command) | Msg::Shell(command) => Some(&command.id),
+            Msg::View(_) => None,
+        }
+    }
 }
