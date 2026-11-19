@@ -9,12 +9,15 @@
 //! as otfautohint reads them from a compiled font (`autohint_dict`). Override sets from fontinfo
 //! text are read against each Private DICT's set and the font's vertical extent (the FontBBox),
 //! as otfautohint reads them for a compiled font. As in otfautohint, every glyph is hinted again
-//! by default and its old hints replaced.
+//! by default and its old hints replaced. A glyph the overlap options select is hinted against
+//! its outline with the overlaps removed, while its charstring keeps the outline it has; a
+//! compiled font has one master, so `overlap: "auto"` selects only the glyphs in
+//! `overlapGlyphs`.
 //!
 //! A whole-file command as `super::file_io` describes: the input never changes and the output is
 //! written atomically; a refusal writes nothing.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use fontcraft_autohint::fontinfo::{self, FontInfo};
 use fontcraft_autohint::{FdDict, MAX_SEGMENTS, Options};
@@ -41,7 +44,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Autohint PostScript Font File",
             [],
             None,
-            "{font: path, face?: number|name, glyphs?: [names] (default: every glyph), excludeGlyphs?: [names], hintAll?: bool (default true: every glyph is hinted again and its hints replaced; false leaves glyphs that have hints), flex?: bool (default true), hintSubstitution?: bool (default true), maxSegments?: number (a direction with more segments is left unhinted unless glyphs are named; default and at most 100), allowChanges?: bool (let the autohinter reorder contours and treat nearly straight curves as lines while it works; the outlines written are not changed), decimal?: bool (keep fractional stem positions; default rounds them), fontinfo?: text (override sets: FDDict and GlyphSet blocks), dryRun?: bool (hint and report without writing), output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} runs the PostScript autohinter on the charstrings of a compiled font's CFF table, each glyph against the zones and stems of its Private DICT, and writes the font with the hinted charstrings, subroutinised again, every other table unchanged (default output: FONT.autohinted.EXT). Glyphs drawn with seac, glyphs that draw nothing and glyphs the autohinter finds no stems in keep their charstrings; a variable font's CFF2 table is refused → {output, written, hinted: [{glyph, horizontal, vertical}], skipped: [{glyph, reason}], warnings, bytesBefore, bytesAfter}",
+            "{font: path, face?: number|name, glyphs?: [names] (default: every glyph), excludeGlyphs?: [names], hintAll?: bool (default true: every glyph is hinted again and its hints replaced; false leaves glyphs that have hints), flex?: bool (default true), hintSubstitution?: bool (default true), maxSegments?: number (a direction with more segments is left unhinted unless glyphs are named; default and at most 100), allowChanges?: bool (let the autohinter reorder contours and treat nearly straight curves as lines while it works; the outlines written are not changed), overlap?: \"auto\"|\"all\"|\"none\" (hint against the outline with overlaps removed, the charstring keeping the outline it has: auto for the glyphs in overlapGlyphs; default auto), overlapGlyphs?: [names], looseOverlapMapping?: bool (match the overlap-free outline to the original loosely), decimal?: bool (keep fractional stem positions; default rounds them), fontinfo?: text (override sets: FDDict and GlyphSet blocks), dryRun?: bool (hint and report without writing), output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} runs the PostScript autohinter on the charstrings of a compiled font's CFF table, each glyph against the zones and stems of its Private DICT, and writes the font with the hinted charstrings, subroutinised again, every other table unchanged (default output: FONT.autohinted.EXT). Glyphs drawn with seac, glyphs that draw nothing and glyphs the autohinter finds no stems in keep their charstrings; a variable font's CFF2 table is refused → {output, written, hinted: [{glyph, horizontal, vertical}], skipped: [{glyph, reason}], warnings, bytesBefore, bytesAfter}",
             always,
             run_font
         )
@@ -59,9 +62,6 @@ type FontDictSets = Option<(FdDict, Option<FontInfo>)>;
 
 fn run_font(_: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("autohint.ps.runFont", v)?;
-    if p.opt_strings("overlapGlyphs")?.is_some_and(|g| !g.is_empty()) || matches!(p.opt_str("overlap")?, Some("all")) {
-        return Err(p.bad("hinting a compiled font on its overlap-free outline is not built yet"));
-    }
     let loaded = load(&p, "font", "face")?;
     let setup = patch::cff_hint_setup(&loaded.font).map_err(tables_err)?;
 
@@ -76,6 +76,13 @@ fn run_font(_: &mut Session, v: &Value) -> Result<Value> {
 
     let max_segments = p.opt_int("maxSegments", 1, MAX_SEGMENTS as i64)?.map_or(MAX_SEGMENTS, |n| usize::try_from(n).unwrap_or(MAX_SEGMENTS));
     let decimal = p.bool_or("decimal", false)?;
+    let overlap_forcing = match p.opt_str("overlap")? {
+        None | Some("auto") => None,
+        Some("all") => Some(true),
+        Some("none") => Some(false),
+        Some(other) => return Err(p.bad(format!("`overlap` is \"auto\", \"all\" or \"none\", not `{other}`"))),
+    };
+    let overlap_list: BTreeSet<String> = p.opt_strings("overlapGlyphs")?.unwrap_or_default().into_iter().map(str::to_string).collect();
     let options = Options {
         no_flex: !p.bool_or("flex", true)?,
         no_hint_sub: !p.bool_or("hintSubstitution", true)?,
@@ -83,6 +90,9 @@ fn run_font(_: &mut Session, v: &Value) -> Result<Value> {
         explicit_glyphs: named.is_some(),
         allow_changes: p.bool_or("allowChanges", false)?,
         round_coords: !decimal,
+        overlap_forcing,
+        overlap_list,
+        loose_overlap_mapping: p.bool_or("looseOverlapMapping", false)?,
         ..Options::default()
     };
     let run_options = CffAutohintOptions { hint_all: p.bool_or("hintAll", true)?, round_stems: !decimal };
@@ -111,13 +121,14 @@ fn run_font(_: &mut Session, v: &Value) -> Result<Value> {
         };
         let dict = info.as_ref().and_then(|i| i.dict_for(g.name)).unwrap_or(base);
         let mut found = Vec::new();
-        match autohinted(g.name, g.path, dict, &options, &mut found) {
-            None => match found.first() {
-                Some(why) => Err(why.replace(EXPORT_TAIL, "")),
-                None => Ok(None),
-            },
-            hints => Ok(hints),
+        let hints = autohinted(g.name, g.path, dict, &options, &mut found);
+        // A failure leaves the glyph as it was; the other notes (overlaps that could not be
+        // removed) go with the run's warnings.
+        if let Some(why) = found.iter().find(|w| w.ends_with(EXPORT_TAIL)) {
+            return Err(why.replace(EXPORT_TAIL, ""));
         }
+        warnings.extend(found);
+        Ok(hints)
     })
     .map_err(tables_err)?;
 
