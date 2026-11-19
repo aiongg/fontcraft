@@ -73,7 +73,7 @@ fn run_steps(s: &mut Session, p: &Params, steps: &[Value], results: &mut Vec<Val
         }
         let mut params = step.get("params").cloned().unwrap_or_else(|| json!({}));
         // Each step is a request of its own while automation roots are in force.
-        if let (Some(roots), Some(spec)) = (crate::file_access::current(), find_command(id)) {
+        if let (Some(roots), Some(spec)) = (crate::file_access::current(), super::registry::find(id)) {
             params = crate::file_access::command::check(s, spec, &params, &roots).map_err(|e| p.bad(format!("step {i} (`{id}`) failed: {e}")))?;
         }
         let value = s.execute(id, &params).map_err(|e| p.bad(format!("step {i} (`{id}`) failed: {e}")))?;

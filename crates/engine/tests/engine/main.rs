@@ -136,6 +136,7 @@ mod preview_instances;
 mod projects;
 mod proof;
 mod realign;
+mod registry;
 mod selections;
 mod settings;
 mod smart;

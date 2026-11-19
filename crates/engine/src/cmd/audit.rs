@@ -1775,7 +1775,7 @@ fn fix_info(s: &mut Session, info: &InfoFixes, how: &How, report: &mut FixReport
         if allowed.is_empty() {
             continue;
         }
-        if find_command(command).is_none() {
+        if super::registry::find(command).is_none() {
             report.skip(None, None, None, Some(fix), NO_FIX_CALL);
             continue;
         }

@@ -71,6 +71,7 @@ Nothing below L6 may depend on a UI toolkit. Everything from L0 to L6 builds for
 | L3 | `proof` | today (M12.1a: skeleton) | proof sheets: page layout and the SVG, HTML and PDF (pdf-writer) writers. Same-layer order: uses `render` and `tables` |
 | L3 | `render` | today (M3.2) | glyph layers and lines of glyphs to RGBA images and PNG (tiny-skia, nonzero fill): `ui.render`, Edit View's filled glyphs, coverage measures |
 | L4 | `tools` | today (M3.3: Select, Lasso Select, Hand, Zoom) | pointer tools: events in, commands and overlays out; hit testing, snapping, the selection and the Edit View keys |
+| L5 | `engine-core` | today | the session-free parts of the engine: `EngineError`, command parameters, user settings, the edit clock and the panic guard. Same-layer order: `engine` builds on it and re-exports each at its old path |
 | L5 | `engine` | today | sessions, history, the command registry |
 | L6 | `ui-egui` | today (shell) | the UI |
 | L6 | `mcp` | today | the MCP server |
@@ -122,6 +123,12 @@ A command is a `CommandSpec { id, label, menu, shortcut, params, enabled, run, j
 JSON out. Ids follow the reference's menu structure (`file.*`, `edit.*`, `glyph.*`, `path.*`,
 `filter.*`, `view.*`…), and noun prefixes for what has no menu (`kerning.*`, `font.info.*`,
 `hint.tt.*`, `audit.*`, `tables.*`).
+
+Each command module has a table (`specs()`), and `COMMAND_TABLES` in `cmd/mod.rs` lists the
+tables in registry order: the order menus and listings show commands in. The tables are installed
+once per process (`cmd::install`, called when a session is created); `cmd::registry` builds the
+registry from them, refuses an id registered twice, and answers lookups.
+`crates/engine/tests/engine/command_ids.txt` pins the full id order.
 
 A command that touches files declares it: `files` lists every parameter that holds a path (read
 or write, and its form), and `writes_files` marks a command that writes to disk, a query

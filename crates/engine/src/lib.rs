@@ -24,7 +24,6 @@
 #![forbid(unsafe_code)]
 
 pub mod assets;
-pub mod clock;
 pub mod cmd;
 pub(crate) mod export_steps;
 pub mod extension_index;
@@ -33,28 +32,25 @@ pub mod external_autohint;
 pub mod feature_state;
 pub mod file_access;
 pub mod glyph_data;
-pub mod guard;
 pub mod interp_cache;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod io;
 pub(crate) mod linked;
 pub mod log;
 pub mod macros;
-pub mod params;
 pub mod project;
-pub mod settings;
 pub(crate) mod ttvm;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-pub use clock::Clock;
 pub use cmd::{CommandInfo, CommandSpec, command_specs, find_command};
 pub use fontcraft_color as color;
 pub use fontcraft_compile as compile;
 pub use fontcraft_components as components;
 pub use fontcraft_container as container;
+pub use fontcraft_engine_core::{Clock, EngineError, Result, check_unlocked, clock, guard, params, settings};
 pub use fontcraft_fea as fea;
 pub use fontcraft_features as features;
 pub use fontcraft_fontinfo as fontinfo;
@@ -64,52 +60,10 @@ pub use fontcraft_imagery as imagery;
 pub use fontcraft_interp as interp;
 pub use fontcraft_model as model;
 use fontcraft_model::glyphdata::GlyphData;
-use fontcraft_model::{Font, Glyph, PropsCache};
+use fontcraft_model::{Font, PropsCache};
 pub use fontcraft_pathops as pathops;
 pub use fontcraft_plugins as plugins;
 use serde_json::{Value, json};
-
-#[derive(Debug, thiserror::Error)]
-pub enum EngineError {
-    #[error("unknown command `{0}`")]
-    UnknownCommand(String),
-    #[error("`{0}` is not available: {1}")]
-    Disabled(String, String),
-    #[error("{command}: {message}")]
-    BadParams { command: String, message: String },
-    #[error("glyph `{0}` is locked: unlock it to change it")]
-    Locked(String),
-    #[error("{0}")]
-    Interaction(String),
-    #[error("no document open")]
-    NoDocument,
-    #[error(transparent)]
-    Model(#[from] fontcraft_model::ModelError),
-    #[error(transparent)]
-    Format(#[from] fontcraft_format::FormatError),
-    #[error(transparent)]
-    Compile(#[from] fontcraft_compile::CompileError),
-    #[error(transparent)]
-    Glyphs(#[from] fontcraft_io_glyphs::GlyphsError),
-    #[error(transparent)]
-    Ufo(#[from] fontcraft_io_ufo::UfoError),
-    #[error(transparent)]
-    Decompile(#[from] fontcraft_decompile::DecompileError),
-    #[error(transparent)]
-    Settings(#[from] settings::SettingsError),
-    #[error(transparent)]
-    Tables(#[from] fontcraft_tables::TablesError),
-    #[error(transparent)]
-    Proof(#[from] fontcraft_proof::ProofError),
-    #[error("{0}")]
-    Io(String),
-    #[error("not supported yet: {0}")]
-    Unsupported(String),
-    #[error("internal error (please report it): {0}")]
-    Internal(String),
-}
-
-pub type Result<T> = std::result::Result<T, EngineError>;
 
 /// Most undo steps kept per document. A step is a pointer to the font as it was (glyphs it shares
 /// with its neighbours are not copied) plus a label.
@@ -194,13 +148,6 @@ pub(crate) fn push_undo(doc: &mut DocState, label: Arc<str>, before: Arc<Font>) 
         doc.history.undo.drain(..extra);
     }
     doc.history.redo.clear();
-}
-
-/// Refuses a locked glyph (decision 0004 item 7). Every editing command goes through it, by way
-/// of [`params::Targets::edit_layer`] or directly; [`Session::edit`] enforces the same rule on
-/// whatever a command changes.
-pub fn check_unlocked(glyph: &Glyph) -> Result<()> {
-    if glyph.info.locked { Err(EngineError::Locked(glyph.name.clone())) } else { Ok(()) }
 }
 
 /// The first glyph that was locked in `before` and whose drawing (layers or metrics keys)
@@ -325,6 +272,19 @@ pub struct Session {
     snippets_dir: Option<PathBuf>,
     /// The open projects (`project`).
     projects: project::Projects,
+    /// Creating a session installs the command tables.
+    _tables: TablesInstalled,
+}
+
+/// Installs the command tables ([`cmd::install`]) when a session is created, so every way of
+/// making one finds the commands.
+struct TablesInstalled;
+
+impl Default for TablesInstalled {
+    fn default() -> Self {
+        cmd::ensure_installed();
+        TablesInstalled
+    }
 }
 
 /// A running interaction (see [`Session::begin`]).
@@ -674,7 +634,7 @@ impl Session {
     /// Runs the command `id`. See the crate docs for what every command guarantees. While an
     /// interaction runs, only queries run; editing commands wait for its commit or cancel.
     pub fn execute(&mut self, id: &str, params: &Value) -> Result<Value> {
-        if self.depth == 0 && self.interaction.is_some() && find_command(id).is_some_and(|c| c.journal) {
+        if self.depth == 0 && self.interaction.is_some() && cmd::registry::find(id).is_some_and(|c| c.journal) {
             return Err(EngineError::Disabled(id.to_string(), "an interaction is running: commit or cancel it first".into()));
         }
         self.run_command(id, params, true, |_| Ok(()))
@@ -683,7 +643,7 @@ impl Session {
     /// Runs the query `id` without writing it to the command log, for views that read engine
     /// state on every frame. A command that is not a query is refused.
     pub fn query(&mut self, id: &str, params: &Value) -> Result<Value> {
-        let spec = find_command(id).ok_or_else(|| EngineError::UnknownCommand(id.to_string()))?;
+        let spec = cmd::registry::lookup(id)?;
         if spec.journal {
             return Err(EngineError::Disabled(id.to_string(), "it changes the document: run it as a command".into()));
         }
@@ -693,7 +653,7 @@ impl Session {
     /// [`Session::execute`] without the interaction rule. `record`: journal the command when it
     /// succeeds. `accept` judges the outcome before it is kept; its error rolls the command back.
     fn run_command(&mut self, id: &str, params: &Value, record: bool, accept: impl Fn(&Session) -> Result<()>) -> Result<Value> {
-        let spec = find_command(id).ok_or_else(|| EngineError::UnknownCommand(id.to_string()))?;
+        let spec = cmd::registry::lookup(id)?;
         if let Err(why) = (spec.enabled)(self) {
             return Err(EngineError::Disabled(id.to_string(), why));
         }
@@ -811,7 +771,7 @@ impl Session {
             Some(i) => (i.doc, i.before.clone()),
             None => return Err(EngineError::Interaction("no interaction is running: begin one first".into())),
         };
-        let spec = find_command(id).ok_or_else(|| EngineError::UnknownCommand(id.to_string()))?;
+        let spec = cmd::registry::lookup(id)?;
         if !spec.journal || matches!(id, "edit.undo" | "edit.redo") {
             return Err(EngineError::Interaction(format!("`{id}` cannot be previewed: only editing commands can")));
         }

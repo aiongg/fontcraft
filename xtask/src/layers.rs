@@ -59,6 +59,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("tables", Class::Layer(3)),
     ("proof", Class::Layer(3)),
     ("tools", Class::Layer(4)),
+    ("engine-core", Class::Layer(5)),
     ("engine", Class::Layer(5)),
     ("ui-egui", Class::Layer(6)),
     ("mcp", Class::Layer(6)),
@@ -77,7 +78,8 @@ pub const TABLE: &[(&str, Class)] = &[
 /// regions through `interp`; `hinting` reads TT zone
 /// and stem filters through `glyphquery`. `tables` uses the glyph encoders of `compile` and the
 /// decoders of `decompile`; `proof` draws through `render` and reads `tables`; `oracle` compares
-/// layout tables through the decompiler of `tables`.
+/// layout tables through the decompiler of `tables`. `engine` builds on the session-free parts in
+/// `engine-core`.
 pub const INTRA_LAYER_ORDER: &[&[&str]] = &[
     &["spacing", "textlayout"],
     &["spacing", "features"],
@@ -90,6 +92,7 @@ pub const INTRA_LAYER_ORDER: &[&[&str]] = &[
     &["decompile", "tables", "proof"],
     &["tables", "oracle"],
     &["render", "proof"],
+    &["engine-core", "engine"],
 ];
 
 /// External crates that are a UI toolkit, windowing or GPU dependency. A trailing `*` is a prefix.
