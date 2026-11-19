@@ -162,6 +162,7 @@ pub struct FontInfoView {
     pub tab: FontInfoTab,
     /// The dialog asked for and not yet opened.
     pub request: Option<InfoDialog>,
+    pub masters: super::font_info_masters::MastersTabView,
 }
 
 /// The `font.info.openDialog` parameters that ask for `dialog`.

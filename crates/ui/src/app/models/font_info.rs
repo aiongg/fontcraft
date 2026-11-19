@@ -32,6 +32,7 @@ pub struct FontInfoModel {
     pub note: String,
     /// The font's masters as (id, name), for the parameters whose value names one.
     pub masters: Vec<(String, String)>,
+    pub masters_tab: super::font_masters::MastersTabModel,
 }
 
 /// The Font tab.
@@ -217,6 +218,7 @@ pub fn project(model: &mut Tracked<FontInfoModel>, cx: &mut ProjectCx<'_>) {
         other: other(&settings),
         note: font.note.clone(),
         masters: font.masters.iter().take(MAX_SHOWN).map(|m| (m.id.clone(), m.name.clone())).collect(),
+        masters_tab: super::font_masters::project(font, &cx.view.font_info.masters),
     };
     super::set(model, value);
 }

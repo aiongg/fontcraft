@@ -92,6 +92,9 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
     if let Some(selection) = &model.selection {
         Section::new(words.selection.clone()).show(ui, |ui, _| selection_part(ui, &words, selection, sent));
     }
+    if let Some(timing) = &model.timing {
+        super::hoi_timing::view(ui, timing);
+    }
 }
 
 fn glyph_part(ui: &mut Ui, words: &InfoBoxWords, g: &GlyphBox, sent: &mut Vec<Msg>) {
@@ -283,7 +286,7 @@ mod tests {
     /// A key typed into a sidebearing field goes to its setter as text; a number as a number.
     #[test]
     fn metrics_fields_take_keys_and_numbers() {
-        let model = InfoBoxModel { glyph: Some(glyph(false)), selection: None };
+        let model = InfoBoxModel { glyph: Some(glyph(false)), selection: None, timing: None };
         assert_eq!(
             posted_after(model.clone(), "LSB", "=O"),
             vec![Msg::run("spacing.setLeftSidebearing", json!({"glyphs": ["A"], "layer": "m01", "value": "=O"}))]
@@ -294,7 +297,7 @@ mod tests {
     /// The vertical layout edits the vertical origin and width (M5.20).
     #[test]
     fn the_vertical_layout_sets_origin_and_height() {
-        let model = InfoBoxModel { glyph: Some(glyph(true)), selection: None };
+        let model = InfoBoxModel { glyph: Some(glyph(true)), selection: None, timing: None };
         assert_eq!(
             posted_after(model.clone(), "O", "120"),
             vec![Msg::run("spacing.setVerticalOrigin", json!({"glyphs": ["A"], "layer": "m01", "value": 120.0}))]
@@ -318,7 +321,7 @@ mod tests {
             place: Targets { json: json!({"glyph": "A", "layer": "m01", "points": [[0, 0]]}).to_string() },
             ..Default::default()
         };
-        let model = InfoBoxModel { glyph: Some(glyph(false)), selection: Some(selection) };
+        let model = InfoBoxModel { glyph: Some(glyph(false)), selection: Some(selection), timing: None };
         assert_eq!(
             posted_after(model, "X", "140"),
             vec![Msg::run(

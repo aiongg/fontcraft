@@ -1994,7 +1994,7 @@ summary = "Combines several open static fonts of one family into a single multi-
 ref = "FontLab 8 What's new › Families & variation › Variation (Merge Fonts to Masters)"
 status = "docs"
 origin = "fontlab"
-notes = "Documented in the secondary reference's release notes, not yet observed. Built (M9.36): a fontRef is an open document's title or path, anything else is read as a font file. Each font needs one master and the same units per em. A font's place is its weight class (the weightClass parameter of its master or font, else its first static instance's class, else 400) on `wght` and its width class, as a percentage, on `wdth`; an axis is made only for a class the fonts differ in, and two fonts at the same place are refused. The new font opens as an untitled document: a copy of the first font with every font's master (metric, stem and number values matched by definition), every layer tied to that master (backgrounds and special layers included), its kerning, and one static instance at each master. The menu item has no dialog yet."
+notes = "Documented in the secondary reference's release notes, not yet observed. Built (M9.36): a fontRef is an open document's title or path, anything else is read as a font file. Each font needs one master and the same units per em. A font's place is its weight class (the weightClass parameter of its master or font, else its first static instance's class, else 400) on `wght` and its width class, as a percentage, on `wdth`; an axis is made only for a class the fonts differ in, and two fonts at the same place are refused. The new font opens as an untitled document: a copy of the first font with every font's master (metric, stem and number values matched by definition), every layer tied to that master (backgrounds and special layers included), its kerning, and one static instance at each master. The menu item opens its dialog (dialog.mergeFontsToMasters)."
 guesses = [
   "The axes come from the weight and width classes, with the weight class value and the width class percentage as design coordinates; the secondary reference's result on fonts with weight classes 300, 400 and 700 would settle it.",
   "Each font also becomes a static instance at its master, so the merged font still exports every input; the secondary reference's instance list after a merge would settle it.",
@@ -2018,7 +2018,7 @@ summary = "Duplicates a master as a new master on a new axis and optionally runs
 ref = "FontLab 8 What's new › Families & variation › Variation (Add Variation; Run action set)"
 status = "docs"
 origin = "fontlab"
-notes = "Documented in the secondary reference's release notes, not yet observed. Built (M9.36): the copy takes the original's layers (backgrounds and special layers included) and kerning. An axis the font lacks is added first, with the other masters, instances and virtual masters at 0 on it; an axis it has is reused. The secondary reference runs a saved action set; here the commands are listed in the call, and the text `$master` in their params stands for the copy's id. Everything is one undo step, and a failing command changes nothing. The menu item has no dialog yet."
+notes = "Documented in the secondary reference's release notes, not yet observed. Built (M9.36): the copy takes the original's layers (backgrounds and special layers included) and kerning. An axis the font lacks is added first, with the other masters, instances and virtual masters at 0 on it; an axis it has is reused. The secondary reference runs a saved action set; here the commands are listed in the call, and the text `$master` in their params stands for the copy's id. Everything is one undo step, and a failing command changes nothing. The menu item opens its dialog (dialog.addVariation)."
 guesses = [
   "The other masters sit at 0 on a new axis, the value Add Axis gives them; the secondary reference's coordinates after Add Variation would settle it.",
   "The copy is named after the original, the axis and the location (`Regular Width 75`); the secondary reference's name for the new master would settle it.",
@@ -2041,7 +2041,7 @@ summary = "Replaces the outlines of a master layer with the glyph interpolated o
 ref = "FontLab 8 What's new › Families & variation › Variation (Adjust by variation)"
 status = "docs"
 origin = "fontlab"
-notes = "Documented in the secondary reference's release notes, not yet observed. Built (M9.36): the glyph is interpolated from all its sources (masters and intermediate layers, alternate layers switched by their ranges) with the variation model instances use; a location beyond the masters extrapolates. The master layer's width, shapes, anchors and vertical metrics change; its id, name, guides, hints and background stay. Without `glyphs` every glyph with a layer for the master is adjusted; locked glyphs and glyphs that cannot interpolate are skipped with the reason. The menu item has no dialog yet."
+notes = "Documented in the secondary reference's release notes, not yet observed. Built (M9.36): the glyph is interpolated from all its sources (masters and intermediate layers, alternate layers switched by their ranges) with the variation model instances use; a location beyond the masters extrapolates. The master layer's width, shapes, anchors and vertical metrics change; its id, name, guides, hints and background stay. Without `glyphs` every glyph with a layer for the master is adjusted; locked glyphs and glyphs that cannot interpolate are skipped with the reason. The menu item opens its dialog (dialog.adjustByVariation)."
 guesses = [
   "Without a glyph list every glyph with a layer for the master is adjusted, and the master defaults to the first; the secondary reference's dialog defaults would settle it.",
   "Interpolated coordinates are not rounded; the secondary reference's result between odd coordinates would settle it.",
@@ -2063,7 +2063,7 @@ summary = "Changes the design coordinates of many masters and instances on one a
 ref = "FontLab 8 What's new since VI › Families & variation (Batch coordinates)"
 status = "docs"
 origin = "fontlab"
-notes = "Documented in the secondary reference's release notes, not yet observed. Built (M9.36): a table maps each coordinate it lists exactly, places others proportionally between its entries and along the nearest pair beyond its ends; its `to` values must rise, or fall, with `from`. Without a master or instance list the virtual masters, the intermediate layers, the alternate layers' ranges and the internal values of the axis's Axis Mappings move too, so external coordinates stay where they were. A result beyond the coordinate limit is refused and nothing changes. The menu item has no dialog yet."
+notes = "Documented in the secondary reference's release notes, not yet observed. Built (M9.36): a table maps each coordinate it lists exactly, places others proportionally between its entries and along the nearest pair beyond its ends; its `to` values must rise, or fall, with `from`. Without a master or instance list the virtual masters, the intermediate layers, the alternate layers' ranges and the internal values of the axis's Axis Mappings move too, so external coordinates stay where they were. A result beyond the coordinate limit is refused and nothing changes. The menu item opens its dialog (dialog.setMasterLocations)."
 guesses = [
   "Coordinates between table entries are placed proportionally, and those beyond the ends follow the nearest pair; the secondary reference's result on an instance the table does not list would settle it.",
   "Moving the whole font also moves the virtual masters, the special layers and the internal side of Axis Mappings, while a list of masters or instances moves only those; the secondary reference's result on a font with intermediate layers would settle it.",
@@ -4581,3 +4581,67 @@ summary = "The whole editor runs in a web browser against a local or remote serv
 ref = "Fontra documentation › Introduction; Fontra how-tos › Installing Fontra Pak"
 status = "docs"
 origin = "fontra"
+
+[[panel]]
+id = "dialog.adjustByVariation"
+label = "Adjust by Variation"
+location = "dialog"
+controls = ["master menu", "Relative checkbox", "one coordinate field per axis", "OK button", "Cancel button"]
+area = "interpolation"
+milestone = "M9"
+summary = "The dialog of Glyph › Adjust by Variation: the master whose layers change and the location to interpolate at, absolute or relative to the master."
+ref = "FontLab 8 What's new › Families & variation › Variation (Adjust by variation)"
+status = "docs"
+origin = "fontlab"
+notes = "Documented in the secondary reference's release notes, not yet observed. FontCraft: crates/ui/src/dialogs/interp/variation.rs, a dialog of glyph.replaceWithInstance with a live preview on the shown glyph; the fields are keyed by axis tag and become `location`."
+guesses = [
+  "The dialog starts relative, at offset 0 on every axis, on the first master; the secondary reference's dialog would settle its defaults.",
+]
+
+[[panel]]
+id = "dialog.setMasterLocations"
+label = "Set Master Locations"
+location = "dialog"
+controls = ["axis menu", "table field (old:new pairs)", "Scale field", "Offset field", "OK button", "Cancel button"]
+area = "interpolation"
+milestone = "M9"
+summary = "The dialog of Font › Set Master Locations: one axis, then a table of old and new coordinates, or a scale and an offset."
+ref = "FontLab 8 What's new since VI › Families & variation (Batch coordinates)"
+status = "docs"
+origin = "fontlab"
+notes = "Documented in the secondary reference's release notes, not yet observed. FontCraft: crates/ui/src/dialogs/interp/variation.rs, a dialog of font.setMasterLocations that runs on OK. The table is typed as `old:new` pairs separated by commas or lines; a table that does not read goes to the command as typed, which refuses it and keeps the dialog open. An empty table uses the scale and offset."
+guesses = [
+  "The table is typed as text pairs rather than edited as rows; the secondary reference's dialog would show its layout.",
+]
+
+[[panel]]
+id = "dialog.addVariation"
+label = "Add Variation"
+location = "dialog"
+controls = ["axis tag field", "axis name field", "location field", "master menu", "master name field", "Add button", "Cancel button"]
+area = "interpolation"
+milestone = "M9"
+summary = "The dialog of Font › Add Variation…: the axis of the new master, its location and the master it copies."
+ref = "FontLab 8 What's new › Families & variation › Variation (Add Variation; Run action set)"
+status = "docs"
+origin = "fontlab"
+notes = "Documented in the secondary reference's release notes, not yet observed. FontCraft: crates/ui/src/dialogs/interp/variation.rs, a dialog of font.addVariation that runs on Add. The tag starts at the first of wght, wdth, opsz, slnt and ital the font lacks. The dialog runs no further commands; `commands` stays a parameter for scripts."
+guesses = [
+  "The tag starts at the first registered axis the font lacks; the secondary reference's dialog would settle its default.",
+]
+
+[[panel]]
+id = "dialog.mergeFontsToMasters"
+label = "Merge Fonts to Masters"
+location = "dialog"
+controls = ["checkboxes of the open fonts", "family name field", "Merge button", "Cancel button"]
+area = "interpolation"
+milestone = "M9"
+summary = "The dialog of Font › Merge Fonts to Masters: which open fonts to merge and the family name of the result."
+ref = "FontLab 8 What's new › Families & variation › Variation (Merge Fonts to Masters)"
+status = "docs"
+origin = "fontlab"
+notes = "Documented in the secondary reference's release notes, not yet observed. FontCraft: crates/ui/src/dialogs/interp/variation.rs, a dialog of font.mergeFontsToMasters that runs on Merge. Every open font starts ticked, named by the path it was opened from, else its title; it needs two open fonts."
+guesses = [
+  "Every open font starts ticked; the secondary reference's dialog would settle its defaults.",
+]

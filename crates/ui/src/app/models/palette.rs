@@ -107,6 +107,8 @@ pub struct InfoBoxModel {
     pub glyph: Option<GlyphBox>,
     /// `None` while nothing is selected.
     pub selection: Option<SelectionBox>,
+    /// The timing graph of the one selected node's interpolation curve.
+    pub timing: Option<super::hoi::TimingGraph>,
 }
 
 /// The Transformations section: its settings and what its buttons act on.
@@ -323,7 +325,8 @@ fn has_lists(targets: &Map<String, Value>) -> bool {
 
 fn info_box(cx: &mut ProjectCx<'_>, edit: Option<&Edit>) -> InfoBoxModel {
     let Some(edit) = edit else { return InfoBoxModel::default() };
-    InfoBoxModel { glyph: glyph_box(cx, edit), selection: selection_box(cx, edit) }
+    let timing = cx.session.font().ok().and_then(|font| super::hoi::timing_of(font, &edit.glyph, &edit.layer, &edit.selection.points));
+    InfoBoxModel { glyph: glyph_box(cx, edit), selection: selection_box(cx, edit), timing }
 }
 
 /// The fields of `spacing.getMetrics`'s reply for `field`.

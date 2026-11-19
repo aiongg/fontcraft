@@ -6,6 +6,7 @@
 //! the background press, hover and keys and paints its feedback over the layers.
 
 pub mod camera;
+pub mod compatibility;
 pub mod layers;
 pub mod paint;
 pub mod tokens;
@@ -40,6 +41,8 @@ pub struct Display {
     pub annotations: bool,
     pub fill_preview: bool,
     pub info: bool,
+    /// Every source layer of the edited glyph beside it (`view.showMasterCompatibility`).
+    pub master_compatibility: bool,
 }
 
 impl Default for Display {
@@ -57,6 +60,7 @@ impl Default for Display {
             annotations: true,
             fill_preview: true,
             info: true,
+            master_compatibility: false,
         }
     }
 }
@@ -87,6 +91,8 @@ pub struct CanvasProps<'a> {
     pub edit_background: bool,
     /// The selection and the active tool's overlays.
     pub tools: &'a tools::ToolView,
+    /// The Master Compatibility view.
+    pub compatibility: &'a Tracked<crate::app::models::compatibility::CompatibilityModel>,
     /// The active-tool slot.
     pub tool: &'a mut dyn ActiveTool,
 }
@@ -104,6 +110,7 @@ pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
         canvas = canvas.document(size);
     }
     let (model, tokens, display, edit_background, tool_view) = (props.model, props.tokens, props.display, props.edit_background, props.tools);
+    let compatibility = props.compatibility;
     let tool = &mut *props.tool;
     let mut reply = None;
     let _ = canvas.show(ui, |ui, body| {
@@ -120,6 +127,7 @@ pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
             edit_background,
             words: &paint_words,
             tools: tool_view,
+            compatibility,
         };
         layers::paint(&cx);
         tool.set_camera(camera);

@@ -4,14 +4,17 @@
 //! one of them with a one-line arm, and only when the [`Stamp`] moved since the last call.
 
 pub mod canvas;
+pub mod compatibility;
 pub mod console;
 pub mod font_info;
+pub mod font_masters;
 pub mod font_view;
 pub mod glyph;
 pub mod glyph_info;
 pub mod glyph_props;
 pub mod glyph_sections;
 pub mod hinting;
+pub mod hoi;
 pub mod kerning_review;
 pub mod kerning_window;
 pub mod layers;
@@ -68,6 +71,8 @@ pub struct Models {
     pub inspector: Tracked<glyph_props::GlyphPropsModel>,
     /// The Selection Info panel's fields (`panels::selection_info`).
     pub selection_info: Tracked<glyph_props::GlyphPropsModel>,
+    /// The Master Compatibility view (`canvas::compatibility`).
+    pub compatibility: Tracked<compatibility::CompatibilityModel>,
     /// The Info box and the Palette sections (`panels::info_box`, `panels::transformations`, …); projected outside the
     /// stamp, since they read the canvas's selection.
     pub palette: palette::PaletteModels,
@@ -127,6 +132,7 @@ impl Models {
         sidebar::project(&mut self.sidebar, cx);
         glyph_props::project_inspector(&mut self.inspector, cx);
         glyph_props::project_selection_info(&mut self.selection_info, cx);
+        compatibility::project(&mut self.compatibility, cx);
         true
     }
 }

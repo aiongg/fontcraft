@@ -8,6 +8,7 @@ use super::camera::Camera;
 use super::tokens::Tokens;
 use super::{Display, paint, tools};
 use crate::app::models::canvas::{CanvasModel, EditedGlyph};
+use crate::app::models::compatibility::CompatibilityModel;
 
 /// What a paint layer reads.
 pub struct PaintCx<'a> {
@@ -24,6 +25,8 @@ pub struct PaintCx<'a> {
     pub words: &'a paint::CanvasWords,
     /// The selection and the active tool's overlays.
     pub tools: &'a super::tools::ToolView,
+    /// The Master Compatibility view.
+    pub compatibility: &'a Tracked<CompatibilityModel>,
 }
 
 impl PaintCx<'_> {
@@ -48,6 +51,7 @@ pub const LAYERS: &[PaintLayer] = &[
     PaintLayer { id: "otherLayers", paint: paint::background::paint },
     PaintLayer { id: "outline", paint: paint::outline::paint },
     PaintLayer { id: "components", paint: paint::components::paint },
+    PaintLayer { id: "masterCompatibility", paint: super::compatibility::paint },
     PaintLayer { id: "selectedSegments", paint: tools::overlays::segments },
     PaintLayer { id: "nodes", paint: paint::nodes::paint },
     PaintLayer { id: "anchors", paint: paint::anchors::paint },

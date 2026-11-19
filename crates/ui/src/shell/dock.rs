@@ -359,6 +359,7 @@ pub fn show(ui: &mut Ui, app: &mut FontCraftApp) {
             display: view.display,
             edit_background: view.edit_background,
             tools: &tools.view,
+            compatibility: &models.compatibility,
             tool: active_tool.as_mut(),
         },
         sent,

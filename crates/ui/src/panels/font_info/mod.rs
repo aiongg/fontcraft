@@ -8,11 +8,13 @@
 //! | [`font_tab`] | General (Family Name, Units per Em, Version, Creation Date, added fields), Axes, Custom Parameters |
 //! | [`other_tab`] | Other Settings |
 //! | [`notes_tab`] | the font note |
+//! | [`masters_tab`] | Masters: the master list and the selected masters' sections |
 //!
 //! A tab click posts `font.info.selectTab`; every edit posts an engine command. The Masters, Exports and Features
 //! tabs come with their own packages.
 
 pub mod font_tab;
+pub mod masters_tab;
 pub mod notes_tab;
 pub mod other_tab;
 pub mod param_value;
@@ -109,7 +111,8 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
             FontInfoTab::Font => font_tab::view(ui, model, sent),
             FontInfoTab::Other => other_tab::view(ui, &model.other, sent),
             FontInfoTab::Notes => notes_tab::view(ui, &model.note, sent),
-            FontInfoTab::Masters | FontInfoTab::Exports | FontInfoTab::Features => {
+            FontInfoTab::Masters => masters_tab::view(ui, &model.masters_tab, &model.masters, sent),
+            FontInfoTab::Exports | FontInfoTab::Features => {
                 Text::new(words.not_yet.clone()).shade(Shade::Muted).show(ui);
             }
         }
