@@ -93,7 +93,7 @@ pub const PLANNED: &[&str] = &[];
 
 /// Subcommands that read their arguments without [`args::parse`] and do not answer `--help`
 /// themselves: [`run`] answers it and takes the common options out first.
-const OWN_PARSERS: &[&str] = &["compile", "info", "mcp", "oracle"];
+const OWN_PARSERS: &[&str] = &["compile", "mcp", "oracle"];
 
 /// The subcommand named `name`.
 pub fn find(name: &str) -> Option<&'static Subcommand> {

@@ -5,14 +5,15 @@
 //! fontcraft-cli run [--in FILE] [--cmd ID [--params JSON | --params-file FILE]]... [--script FILE [--keep-going]] [--save [FILE]] [--export FILE]...
 //! fontcraft-cli convert IN OUT [--smart-components components|outlines]
 //! fontcraft-cli compile SOURCE... [--format ttf|otf]... [--container plain|woff|woff2]... [-o FILE | --output-dir DIR] …
-//! fontcraft-cli info FILE [--section NAME,...] [--all-names] [--face N]
-//! fontcraft-cli tables list FONT [--sort file|tag|size] [--face N|all]
-//! fontcraft-cli glyphs list FONT [--face N]
+//! fontcraft-cli info INPUT... [--section NAME,...] [--all-names] [--face N] [--json]
+//! fontcraft-cli tables list FONT... [--sort file|tag|size] [--face N|all] [--json]
+//! fontcraft-cli glyphs list FONT [--one-per-line | --columns COLS] [--glyphs SELECTOR] [--json]
 //! fontcraft-cli mcp [--connect ADDR | --headless] [--transport stdio|http] [--listen ADDR] [--automation-read-root DIR] [--automation-write-root DIR] [--read-only] [--allow P]... [--deny P]...
 //! fontcraft-cli oracle (SOURCE... | --corpus [DIR]) [--against fontc|fontmake] [--format ttf|otf] [--variable | --instances] [--json] …
 //! ```
 //! Every subcommand is a thin shell over engine commands (`spec/inventory/20-cli.toml` lists the
-//! full planned set and the reference tools each one replaces). Results are JSON on stdout and
+//! full planned set and the reference tools each one replaces). Results are JSON on stdout (the
+//! listings `info`, `tables list` and `glyphs list` print text unless `--json` is given) and
 //! messages on stderr. Exit status, shared by every subcommand (`cli.global.exitCodes`): 0 success,
 //! 2 usage error, 3 an input could not be read, 4 the operation failed, 5 some inputs of a batch
 //! failed. (1 is reserved for "it ran and found something": differences, failed checks.) Every
@@ -67,13 +68,13 @@ USAGE:
       --plan prints what would be built, without building.
       One JSON line per SOURCE.
 
-  fontcraft-cli info FILE [--section NAME,...] [--all-names] [--face N]
-      Print a JSON summary of FILE (a compiled font or a source) without opening it: format, names,
+  fontcraft-cli info INPUT... [--section NAME,...] [--all-names] [--face N] [--json]
+      Describe each INPUT (a compiled font or a source) without opening it: format, names,
       metrics, style, tables, cmap, layout, axes, instances, masters, color, hinting, faces.
-  fontcraft-cli tables list FONT [--sort file|tag|size] [--face N|all]
-      Print the table directory of a compiled font, collection, WOFF or WOFF2 file as JSON.
-  fontcraft-cli glyphs list FONT [--face N]
-      Print the glyphs of FONT (a compiled font or a source) in glyph order as JSON.
+  fontcraft-cli tables list FONT... [--sort file|tag|size] [--face N|all] [--json]
+      Print the table directory of each compiled font, collection, WOFF or WOFF2 file.
+  fontcraft-cli glyphs list FONT [--one-per-line | --columns COLS] [--glyphs SELECTOR] [--json]
+      List the glyphs of FONT (a compiled font or a source) in glyph order.
 
   fontcraft-cli mcp [--connect ADDR | --headless] [--transport stdio|http] [--listen ADDR]
                     [--automation-read-root DIR] [--automation-write-root DIR] [--read-only]

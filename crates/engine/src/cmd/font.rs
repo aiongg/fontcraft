@@ -35,7 +35,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "List Glyphs",
             [],
             None,
-            "{font?: path, face?: number, layer?: master id (default: the first master)} the glyphs of the active document, or of the font file at `font` without opening it, in glyph order → {glyphs: [{gid, name, unicodes: [hex], export, advance, shapes, bounds: [x0, y0, x1, y1] | null}]}",
+            "{font?: path, face?: number, layer?: master id (default: the first master), glyphs?: selector, excludeGlyphs?: selector, columns?: [\"gid\"|\"name\"|\"unicodes\"|\"advance\"|\"bbox\"|\"kind\"], names?: \"final\"|\"source\", goadb?: path} the glyphs of the active document, or of the font file at `font` without opening it, in glyph order. A selector is a string or list of strings of comma-separated items: names, glyph ids, U+XXXX code points, ranges A..B (or N-M between two ids) and *; excluded glyphs other than .notdef are left out. names \"source\" (the default when goadb is given) shows the source name the GOADB gives each final name. Without columns each glyph is {gid, name, unicodes: [hex], export, advance, shapes, bounds: [x0, y0, x1, y1] | null}; with columns it holds gid and the columns asked for (bbox as bounds; kind is empty, simple or composite) → {glyphs: [...]}",
             always,
             list_glyphs
         ).files(const { &[FileParam::read("font")] }),
@@ -121,6 +121,12 @@ fn info_set(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(json!({ "changed": values.keys().collect::<Vec<_>>(), "warnings": warnings }))
 }
 
+/// The columns `font.listGlyphs` can give, in the order they are listed.
+const LIST_COLUMNS: [&str; 8] = ["gid", "name", "cid", "unicodes", "advance", "bbox", "fd", "kind"];
+
+/// Most items the selectors of one `font.listGlyphs` call may hold.
+const MAX_SELECTOR_ITEMS: usize = 100_000;
+
 fn list_glyphs(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("font.listGlyphs", p)?;
     let from_file;
@@ -135,29 +141,201 @@ fn list_glyphs(s: &mut Session, p: &Value) -> Result<Value> {
         Some(id) => font.master(id)?.id.clone(),
         None => font.default_master()?.id.clone(),
     };
+    let columns = match p.opt_strings("columns")? {
+        None => None,
+        Some(cols) => {
+            for c in &cols {
+                if !LIST_COLUMNS.contains(c) {
+                    return Err(p.bad(format!("unknown column `{c}` (columns: {})", LIST_COLUMNS.join(", "))));
+                }
+                if matches!(*c, "cid" | "fd") {
+                    return Err(crate::EngineError::Unsupported(format!("the `{c}` column of the glyph list")));
+                }
+            }
+            Some(cols)
+        }
+    };
+    let source_names = source_names(&p)?;
+    let chosen = chosen_glyphs(&p, font)?;
+    let wants = |c: &str| columns.as_ref().is_none_or(|cols| cols.iter().any(|x| *x == c));
     let glyphs: Vec<Value> = font
         .glyphs
         .iter()
         .enumerate()
+        .filter(|(gid, _)| chosen.as_ref().is_none_or(|set| set.contains(gid)))
         .map(|(gid, g)| {
             let l = g.layer(&layer);
-            // A glyph whose outline cannot be resolved still lists; `bounds` is null.
-            let bounds = font.outline(&g.name, &layer).ok().filter(|o| !o.elements().is_empty()).map(|o| {
-                let b = o.bounding_box();
-                json!([b.x0, b.y0, b.x1, b.y1])
-            });
-            json!({
-                "gid": gid,
-                "name": g.name,
-                "unicodes": g.unicodes.iter().map(|u| format!("{u:04X}")).collect::<Vec<_>>(),
-                "export": g.export,
-                "advance": l.map(|l| l.width),
-                "shapes": l.map_or(0, |l| l.shapes.len()),
-                "bounds": bounds,
-            })
+            let mut row = Map::new();
+            row.insert("gid".into(), json!(gid));
+            if wants("name") {
+                let name = source_names.as_ref().and_then(|m| m.get(g.name.as_str())).map_or(g.name.as_str(), String::as_str);
+                row.insert("name".into(), json!(name));
+            }
+            if wants("unicodes") {
+                row.insert("unicodes".into(), json!(g.unicodes.iter().map(|u| format!("{u:04X}")).collect::<Vec<_>>()));
+            }
+            if columns.is_none() {
+                row.insert("export".into(), json!(g.export));
+            }
+            if wants("advance") {
+                row.insert("advance".into(), json!(l.map(|l| l.width)));
+            }
+            if columns.is_none() {
+                row.insert("shapes".into(), json!(l.map_or(0, |l| l.shapes.len())));
+            }
+            if wants("bbox") {
+                // A glyph whose outline cannot be resolved still lists; `bounds` is null.
+                let bounds = font.outline(&g.name, &layer).ok().filter(|o| !o.elements().is_empty()).map(|o| {
+                    let b = o.bounding_box();
+                    json!([b.x0, b.y0, b.x1, b.y1])
+                });
+                row.insert("bounds".into(), json!(bounds));
+            }
+            if columns.as_ref().is_some_and(|cols| cols.contains(&"kind")) {
+                let shapes = l.map(|l| l.shapes.as_slice()).unwrap_or_default();
+                let kind = if shapes.iter().any(|s| matches!(s, fontcraft_model::Shape::Component(_))) {
+                    "composite"
+                } else if shapes.iter().any(|s| matches!(s, fontcraft_model::Shape::Path(_))) {
+                    "simple"
+                } else {
+                    "empty"
+                };
+                row.insert("kind".into(), json!(kind));
+            }
+            Value::Object(row)
         })
         .collect();
     Ok(json!({ "glyphs": glyphs }))
+}
+
+/// The source name of each final name, read from `goadb`, when the names asked for are the
+/// source names.
+fn source_names(p: &Params) -> Result<Option<std::collections::HashMap<String, String>>> {
+    let goadb = p.opt_str("goadb")?;
+    let names = p.opt_str("names")?.unwrap_or(if goadb.is_some() { "source" } else { "final" });
+    match (names, goadb) {
+        ("final", _) => Ok(None),
+        ("source", Some(path)) => {
+            let table = read_goadb(p, path)?;
+            Ok(Some(table.entries.into_iter().map(|e| (e.final_name, e.source_name)).collect()))
+        }
+        ("source", None) => Err(p.bad("`names` \"source\" needs a `goadb` to map the names back")),
+        (other, _) => Err(p.bad(format!("`names` must be \"final\" or \"source\", got \"{other}\""))),
+    }
+}
+
+/// The glyph ids `glyphs` names, less those `excludeGlyphs` names (never .notdef); `None` when
+/// neither is given.
+fn chosen_glyphs(p: &Params, font: &fontcraft_model::Font) -> Result<Option<std::collections::BTreeSet<usize>>> {
+    let include = selector_items(p, "glyphs")?;
+    let exclude = selector_items(p, "excludeGlyphs")?;
+    if include.is_none() && exclude.is_none() {
+        return Ok(None);
+    }
+    let by_name: std::collections::HashMap<&str, usize> = font.glyphs.iter().enumerate().map(|(i, g)| (g.name.as_str(), i)).collect();
+    let mut by_code: std::collections::HashMap<u32, usize> = std::collections::HashMap::new();
+    for (i, g) in font.glyphs.iter().enumerate() {
+        for &u in &g.unicodes {
+            by_code.entry(u).or_insert(i);
+        }
+    }
+    let count = font.glyphs.len();
+    let one = |key: &str, item: &str| -> Result<usize> {
+        if let Some(&gid) = by_name.get(item) {
+            return Ok(gid);
+        }
+        if let Ok(gid) = item.parse::<usize>() {
+            return if gid < count { Ok(gid) } else { Err(p.bad(format!("`{key}`: there is no glyph {gid} (the font has {count})"))) };
+        }
+        if let Some(hex) = item.strip_prefix("U+").or_else(|| item.strip_prefix("u+")) {
+            let code = u32::from_str_radix(hex, 16).map_err(|_| p.bad(format!("`{key}`: `{item}` is not a code point")))?;
+            return by_code.get(&code).copied().ok_or_else(|| p.bad(format!("`{key}`: no glyph has the code point {item}")));
+        }
+        if item.starts_with('/') || item.starts_with("re:") {
+            return Err(p.bad(format!("`{key}`: `{item}`: CID and pattern items are not read by this listing")));
+        }
+        Err(p.bad(format!("`{key}`: there is no glyph `{item}`")))
+    };
+    // Items become id ranges that are merged before the set is filled, so repeated or
+    // overlapping ranges cost no more than the glyph count.
+    let resolve = |key: &str, items: &[String]| -> Result<std::collections::BTreeSet<usize>> {
+        let mut ranges: Vec<(usize, usize)> = Vec::with_capacity(items.len());
+        for item in items {
+            if item == "*" {
+                if count > 0 {
+                    ranges.push((0, count - 1));
+                }
+                continue;
+            }
+            let range = item.split_once("..").or_else(|| {
+                item.split_once('-')
+                    .filter(|(a, b)| a.bytes().all(|c| c.is_ascii_digit()) && b.bytes().all(|c| c.is_ascii_digit()) && !a.is_empty() && !b.is_empty())
+            });
+            match range {
+                Some((a, b)) if !by_name.contains_key(item.as_str()) => {
+                    let (first, last) = (one(key, a)?, one(key, b)?);
+                    if first > last {
+                        return Err(p.bad(format!("`{key}`: the range `{item}` runs backwards")));
+                    }
+                    ranges.push((first, last));
+                }
+                _ => {
+                    let gid = one(key, item)?;
+                    ranges.push((gid, gid));
+                }
+            }
+        }
+        ranges.sort_unstable();
+        let mut set = std::collections::BTreeSet::new();
+        let mut next = 0;
+        for (first, last) in ranges {
+            let start = first.max(next);
+            if start <= last {
+                set.extend(start..=last);
+                next = last + 1;
+            }
+        }
+        Ok(set)
+    };
+    let mut chosen = match &include {
+        Some(items) => resolve("glyphs", items)?,
+        None => (0..count).collect(),
+    };
+    if let Some(items) = &exclude {
+        for gid in resolve("excludeGlyphs", items)? {
+            if gid != 0 {
+                chosen.remove(&gid);
+            }
+        }
+    }
+    Ok(Some(chosen))
+}
+
+/// The items of the selector `key`: one string or a list of strings, each split at commas.
+fn selector_items(p: &Params, key: &str) -> Result<Option<Vec<String>>> {
+    let Some(strings) = p.opt_strings(key)? else { return Ok(None) };
+    let mut items = Vec::new();
+    for s in strings {
+        for item in s.split(',').map(str::trim).filter(|i| !i.is_empty()) {
+            if items.len() >= MAX_SELECTOR_ITEMS {
+                return Err(p.bad(format!("`{key}` holds more than {MAX_SELECTOR_ITEMS} items")));
+            }
+            items.push(item.to_string());
+        }
+    }
+    Ok(Some(items))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn read_goadb(p: &Params, path: &str) -> Result<fontcraft_tables::goadb::Goadb> {
+    let bytes = crate::io::read_file(std::path::Path::new(path))?;
+    let text = String::from_utf8(bytes).map_err(|_| p.bad(format!("`goadb`: {path} is not UTF-8 text")))?;
+    fontcraft_tables::goadb::parse(text.strip_prefix('\u{feff}').unwrap_or(&text)).map_err(|e| p.bad(format!("`goadb`: {e}")))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn read_goadb(_: &Params, _: &str) -> Result<fontcraft_tables::goadb::Goadb> {
+    Err(crate::EngineError::Unsupported("reading a file by path in the browser".into()))
 }
 
 #[cfg(not(target_arch = "wasm32"))]

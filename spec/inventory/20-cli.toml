@@ -514,7 +514,7 @@ guesses = ["A table view, @font or @glyphs given with --format ttx (the default)
 
 [[cli]]
 id = "info"
-usage = "fontcraft-cli info INPUT... [--section NAME,...] [--json]"
+usage = "fontcraft-cli info INPUT... [--section NAME,...] [--all-names] [--face N] [--json]"
 options = [
   "INPUT...: binary font, collection, or source",
   "--section NAME,...: print only these parts: format, names, metrics, style, tables, cmap, layout, axes, instances, masters, color, hinting, faces; default all that apply",
@@ -534,6 +534,8 @@ milestone = "M1"
 summary = "Prints a one-screen description of a font or source: format and flavour, names, version, units per em, glyph count, vertical metrics, style flags, tables with sizes, cmap subtables, layout scripts and features, variation axes and named instances, colour and hinting presence, and the members of a collection. For a designspace or other source it lists masters and instances with their indices."
 ref = "AFDKO spot -T / -F, tx -dump -0, otc2otf -r, makeinstancesufo --instance_info; fontTools ttx -l"
 status = "docs"
+notes = "M12.68: text by default, one block per input: the path, then each section in the order of --section's list with its fields indented under it; a list of records prints one field=value line per record, and a section that cannot be read prints its error in place. --json prints the engine result, a list of results for several inputs. Inputs run as a batch (--jobs), printed in input order; an input that fails is reported on stderr and the others still print. The options use the shared option parser (prefixes, --no-x, @FILE)."
+guesses = ["The text layout (path line, indented key: value lines, field=value lines for records, yes/no for flags) is ours; no reference prints this summary, so a user preference would settle it."]
 
 [[cli]]
 id = "tables"
@@ -554,7 +556,7 @@ status = "docs"
 
 [[cli]]
 id = "tables list"
-usage = "fontcraft-cli tables list FONT... [--json]"
+usage = "fontcraft-cli tables list FONT... [--sort file|tag|size] [--face N|all] [--json]"
 options = [
   "FONT...: font, collection, WOFF or WOFF2",
   "--sort file|tag|size: order of the rows; default file order",
@@ -571,6 +573,8 @@ milestone = "M1"
 summary = "Lists the table directory: sfnt version, number of tables, and for each table its tag, checksum, offset and length, in file order. For a collection it lists every member and marks shared tables; for WOFF/WOFF2 it adds the compressed length."
 ref = "AFDKO sfntedit -l, spot -T; fontTools ttx -l"
 status = "docs"
+notes = "M12.68: text by default: per font (per member of a collection) a line with the path, the format, the sfnt version (1.0, OTTO, true or hexadecimal) and the table count, then ttx -l's header and rows (tag, 0x checksum, length, offset), followed by the compressed length for WOFF, the stored length of transformed WOFF2 tables and a shared column for collections; a WOFF2 table has - for its checksum. Rows are in file order unless --sort says otherwise, where ttx -l and spot -T use directory order. --json prints the engine result (one JSON line per font with several). Measured by spot_tx.py --listings: the (tag, checksum, offset, length) records equal those of spot -T and ttx -l. Several fonts run as a batch (--jobs). The options use the shared option parser (prefixes, --no-x, @FILE)."
+guesses = ["The header line above the rows (path, format, sfnt version, table count) is ours; ttx -l prints a Listing table info line and spot -T the offset table fields."]
 
 [[cli]]
 id = "tables extract"
@@ -743,24 +747,27 @@ status = "docs"
 
 [[cli]]
 id = "glyphs list"
-usage = "fontcraft-cli glyphs list FONT [--columns COLS] [--one-per-line] [--glyphs SELECTOR]"
+usage = "fontcraft-cli glyphs list FONT [--one-per-line | --columns COLS] [--glyphs SELECTOR] [--exclude-glyphs SELECTOR] [--names source --goadb FILE] [--face N] [--json]"
 options = [
-  "--columns gid,name,cid,unicodes,advance,bbox,fd,kind: fields to print; default gid,name",
+  "--columns gid,name,unicodes,advance,bbox,kind: one row per glyph, glyph[GID] {FIELD,...}, under a ## glyph[tag] header (cid and fd are not built)",
   "--one-per-line: one glyph per line instead of a wrapped listing",
   "--glyphs SELECTOR, --exclude-glyphs SELECTOR: restrict the listing",
-  "--names source|final, --goadb FILE: show development names by mapping back through a GOADB",
+  "--names source|final, --goadb FILE: show development names by mapping back through a GOADB (source is the default when --goadb is given)",
+  "--json: print the engine result",
   "[global options]: -o/--output, --output-dir, --in-place, --no-clobber, --face, --json, -q/--quiet, -v/--verbose, --log, --log-file, --color, -j/--jobs, --timing, --trace, --backtrace, --options, --save-options, --dry-run, --timestamp, @FILE, -h/--help, --version (behavior rows cli.global.*)",
 ]
 command = "font.listGlyphs"
 equivalents = [
   "spot: -n; -nc; -m",
-  "tx: -dump -4",
+  "tx: -dump -4 (--columns gid,name,unicodes)",
 ]
 area = "cli-tools"
 milestone = "M1"
 summary = "Lists the glyphs in glyph order with index, name (or CID), code points and optionally advance, bounding box, font dict and component flag. The default is a compact multi-column listing of index and name."
 ref = "AFDKO spot -n / -nc; tx -dump -4"
 status = "docs"
+notes = "M12.68: the default listing is spot -n's: a --- names[glyphId]=<name> header, then [GID]=<NAME> items separated by spaces; --one-per-line is spot -nc's, one item per line. --columns gid,name,unicodes prints tx -dump -4's rows: header ## glyph[tag] {name,encoding}, rows glyph[GID] {NAME,U+XXXX}, - for a glyph without a code point. Measured by crates/tables/crosscheck/spot_tx.py --listings against spot -ngid -n, spot -nc and tx -dump -4. The glyph selector reads names, glyph ids, U+XXXX, A..B and N-M ranges and *; /CID and re: items are refused. The options use the shared option parser."
+guesses = ["spot prints the whole -n listing on one line; ours wraps it at 100 characters, with the same items. A user who pipes the listing into a line-based tool would settle it.", "spot adds @GID to the names of TrueType glyphs unless -ngid is given; ours never does, since the index is already in the item.", "A glyph with several code points prints them joined by + (U+0041+U+0391), where tx -dump -4 prints the first only; a script reading tx's rows would settle it.", "kind is composite for a glyph with any component, simple for outlines only, empty otherwise.", "advance and bbox print as integers when whole, bbox as x0 y0 x1 y1, inside the braces of the --columns row."]
 
 [[cli]]
 id = "glyphs rename"
@@ -2516,12 +2523,13 @@ label = "List Glyphs"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font: path, face?: int|name, glyphs?: selector, excludeGlyphs?: selector, columns?: [\"gid\"|\"name\"|\"cid\"|\"unicodes\"|\"advance\"|\"bbox\"|\"fd\"|\"kind\"], names?: \"source\"|\"final\", goadb?: path}"
+params = "{font: path, face?: int|name, glyphs?: selector, excludeGlyphs?: selector, columns?: [\"gid\"|\"name\"|\"unicodes\"|\"advance\"|\"bbox\"|\"kind\"], names?: \"source\"|\"final\", goadb?: path}"
 area = "cli-tools"
 milestone = "M1"
 summary = "Read-only query returning the glyph list of a binary font or source in glyph order with the requested fields per glyph."
 ref = "docs/spec/20-cli.md › glyphs"
 status = "docs"
+notes = "M12.68: glyphs and excludeGlyphs (names, glyph ids, U+XXXX, A..B and N-M ranges, *; .notdef is never excluded), columns (gid always; bbox comes back as bounds; kind is empty, simple or composite), names and goadb (names source maps each final name to the GOADB's source name). The cid and fd columns are refused as not built, as are /CID and re: selector items. Without columns each glyph also gives export and shapes."
 
 [[command]]
 id = "font.renameGlyphs"
