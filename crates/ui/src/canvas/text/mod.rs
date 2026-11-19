@@ -12,6 +12,8 @@
 //! | [`input`] | the Text tool's clicks, drags and keys, run in `drain` |
 //! | [`paint`] | the text's paint layers: kerned gaps, selection, the other glyphs, group members, the cursor, the measurement line |
 //! | [`tokens`] | their colours and sizes |
+//! | [`features`] | the preview features the text is shaped with (`editView.toggleFeature` and its kin) |
+//! | [`edit`] | Edit › Copy, Cut, Paste and Delete in text mode, on the text |
 //!
 //! Text mode and the Text tool go together: choosing the Text tool enters text mode, any other tool ends it. The
 //! layout (`app::models::text`) is in text coordinates, the first line's baseline at y = 0; the canvas draws in the
@@ -19,6 +21,8 @@
 //! moves by the same amount when the edited glyph changes ([`after_project`]), so the text stays still on screen.
 
 pub mod commands;
+pub mod edit;
+pub mod features;
 pub mod input;
 pub mod paint;
 pub mod tokens;
@@ -86,6 +90,14 @@ pub struct EditText {
     pub revision: u64,
     /// The cursor index where a drag that selects text began.
     pub drag: Option<usize>,
+    /// The preview features the text is shaped with.
+    pub features: features::Features,
+    /// Edit › Select Sample Text: the window and the string chosen last.
+    pub samples: crate::dialogs::sample_strings::SampleStrings,
+    /// Find Glyphs: the pop-up, its search and its selected results.
+    pub find: crate::dialogs::find_glyphs::FindGlyphs,
+    /// Text for the system clipboard and a paste waiting for the clipboard's text.
+    pub clipboard: edit::TextClipboard,
     /// The Text tool is in the canvas's active-tool slot.
     slot: bool,
     /// Where the edited glyph sat in the text when the canvas last drew it.
@@ -103,6 +115,10 @@ impl Default for EditText {
             measurement_height: None,
             revision: 0,
             drag: None,
+            features: Default::default(),
+            samples: Default::default(),
+            find: Default::default(),
+            clipboard: Default::default(),
             slot: false,
             origin: None,
         }
@@ -249,6 +265,10 @@ pub fn reply(app: &FontCraftApp) -> Value {
         "groupMembers": text.group_members,
         "measurementLine": text.measurement,
         "measurementLineHeight": text.measurement_height,
+        "features": features::reply(&app.models.features),
+        "metricsLabels": app.models.text.labels.len(),
+        "sampleStrings": crate::dialogs::sample_strings::reply(app),
+        "findGlyphs": crate::dialogs::find_glyphs::reply(app),
     })
 }
 
@@ -260,3 +280,7 @@ pub fn inspect(app: &FontCraftApp, state: &mut Map<String, Value>) {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 mod tests;
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, clippy::panic)]
+mod feature_tests;

@@ -20,6 +20,7 @@ pub mod feature_picker;
 pub mod field_picker;
 pub mod fields;
 mod filters;
+pub mod find_glyphs;
 pub mod font_data;
 pub mod form;
 pub mod glyph_picker;
@@ -36,6 +37,7 @@ pub mod panose;
 pub mod path;
 pub mod review_hints;
 pub mod rule_tree;
+pub mod sample_strings;
 pub mod settings;
 pub mod shape_order;
 pub mod sidebar_filters;
@@ -75,6 +77,8 @@ pub const MODULES: &[Module] = &[
     audit_profile::run,
     glyph_picker::run_dialog,
     smart_settings::run,
+    sample_strings::run_dialog,
+    find_glyphs::run_dialog,
 ];
 
 /// Every package's dialog specs, one line each.

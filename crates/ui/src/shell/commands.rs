@@ -70,6 +70,9 @@ pub const MODULES: &[Module] = &[
     crate::dialogs::glyph_picker::SHELL,
     super::font_info_masters::MODULE,
     super::compatibility::MODULE,
+    crate::canvas::text::features::MODULE,
+    crate::dialogs::sample_strings::MODULE,
+    crate::dialogs::find_glyphs::MODULE,
 ];
 
 /// The module and description of the shell command `id`.

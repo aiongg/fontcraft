@@ -443,6 +443,14 @@ impl FontCraftApp {
         }
         let msg = match FontCraftApp::route(command) {
             Msg::Run(fired) => {
+                // Text mode's Edit menu acts on the text.
+                if let Some(result) = crate::canvas::text::edit::fired(self, &fired) {
+                    match result {
+                        Ok(msgs) => self.sent.extend(msgs),
+                        Err(error) => self.status = error,
+                    }
+                    return;
+                }
                 let targeted = self.with_targets(fired.clone());
                 let Some(command) = clipboard::fired(self, targeted) else { return };
                 // Font View's per-glyph batch is no target list for the dialog, which then reads the selection itself.

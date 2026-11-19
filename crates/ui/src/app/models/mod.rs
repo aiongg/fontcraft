@@ -112,6 +112,8 @@ pub struct Models {
     /// The Attributes panel (`panels::attributes`); projected outside the stamp, since it reads the canvas's selection.
     pub color: color::AttributesModels,
     pub font_audit: Tracked<font_audit::FontAuditModel>,
+    /// The Features menu.
+    pub features: Tracked<text::FeaturesModel>,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -129,6 +131,8 @@ pub struct Stamp {
     active: Option<(u64, u64)>,
     settings: u64,
     view: u64,
+    /// The active document's last feature compile.
+    compile: Option<(u64, u64, bool)>,
 }
 
 impl Stamp {
@@ -139,6 +143,7 @@ impl Stamp {
             active: session.active().map(|d| (d.id, d.revision)),
             settings: session.settings().revision(),
             view: view_revision,
+            compile: crate::canvas::text::features::compile_stamp(session),
         }
     }
 }
@@ -177,6 +182,7 @@ impl Models {
         compare::project_family(&mut self.compare_family, cx);
         font_audit::project(&mut self.font_audit, cx);
         compatibility::project(&mut self.compatibility, cx);
+        text::project_features(&mut self.features, &self.text, cx);
         true
     }
 }

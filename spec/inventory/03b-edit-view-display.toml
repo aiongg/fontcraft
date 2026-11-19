@@ -1490,7 +1490,7 @@ milestone = "M5"
 summary = "Chooser for stored sample strings. Unpinned it behaves as a transient picker; pinned it stays open so strings can be switched repeatedly."
 ref = "Edit View › Entering Text › Sample Strings"
 status = "handbook"
-notes = "Built in M5.13 (`dialogs/sample_strings.rs`): each group's name heads its strings; the string chosen last is highlighted. Documented, not yet observed."
+notes = "Built in M5.13 (`dialogs/sample_strings.rs`): each group's name heads its strings; the string chosen last is highlighted. In the new UI each string's group shows in a column beside it, and a Choose button puts the selected string in and closes the window. Documented, not yet observed."
 guesses = [
   "Up and Down put the previous or next string into the text at once and keep the window open; a click closes it unless it is pinned; Return and Escape close it.",
 ]
@@ -2426,7 +2426,7 @@ milestone = "M8"
 summary = "Pop-up at the bottom left of Edit View that switches OpenType features on and off for the tab's text. Active features appear on the button as their four-letter tags, and the button takes the accent colour while any is on."
 ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
 status = "handbook"
-notes = "Documented, not yet observed. Type-ahead moves the highlight to the first entry whose name starts with the typed text, ignoring case, and Return picks it; typed characters more than a second apart start a new search."
+notes = "Documented, not yet observed. Type-ahead moves the highlight to the first entry whose name starts with the typed text, ignoring case, and Return picks it; typed characters more than a second apart start a new search. The new UI (`crates/ui/src/panels/features_menu.rs`) shows the button at the start of the status bar; its menu has the letter keys of every menu (a letter runs the entry it names), so name type-ahead waits for a menu component that has it."
 guesses = [
   "Type-ahead highlights the matching entry and Return picks it, rather than toggling the entry as soon as it matches; typing a tag with the menu open in the reference app would settle it.",
 ]

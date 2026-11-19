@@ -8,10 +8,11 @@ use std::sync::Arc;
 
 use craft::ui::contract::{PlainData, Tracked};
 use fontcraft_engine::Session;
+use fontcraft_engine::compile::preview::PreviewFont;
 use fontcraft_engine::model::Font;
 use fontcraft_geom::{Affine, BezPath};
 use fontcraft_spacing::kerning::{GroupSide, Position, facing, members};
-use fontcraft_textlayout::{DEFAULT_LINE_WIDTH, Direction, Layout, Options};
+use fontcraft_textlayout::{DEFAULT_LINE_WIDTH, Direction, Layout, Options, PreviewShaper, Shaping};
 
 use super::ProjectCx;
 use crate::app::ViewState;
@@ -50,6 +51,94 @@ pub struct TextModel {
     pub members: Vec<BezPath>,
     /// View › Show Measurement Line, while it shows.
     pub measurement: Option<MeasurementLine>,
+    /// View › Show Metrics in text mode: each glyph's sidebearings and width (`spacing.metricsOverlayInTextMode`).
+    pub labels: Vec<MetricsLabel>,
+    /// The shaper of the preview font the layout shaped with; kept across projections.
+    #[plain_data(assume = "Arcs to a preview font and its shaper, never changed after they are made")]
+    pub shaper: ShaperSlot,
+}
+
+/// One glyph's metrics labels, in the edited glyph's units: its advance box, its two sidebearings (top and bottom in
+/// vertical text; `None` for an empty layer) and its advance, and how far the neighbours' negative kerning reaches
+/// into the box at its start and end.
+#[derive(PlainData, Clone, Debug, PartialEq)]
+pub struct MetricsLabel {
+    pub bounds: [f64; 4],
+    pub sides: Option<(f64, f64)>,
+    pub advance: f64,
+    pub overlap: (f64, f64),
+    pub vertical: bool,
+}
+
+/// A preview font and its shaper, or why the shaper could not be made. Two slots are equal when they hold the same
+/// font and shaper.
+#[derive(Clone, Default)]
+pub struct ShaperSlot(Option<(Arc<PreviewFont>, Result<Arc<PreviewShaper>, String>)>);
+
+impl PartialEq for ShaperSlot {
+    fn eq(&self, other: &Self) -> bool {
+        match (&self.0, &other.0) {
+            (None, None) => true,
+            (Some((a, x)), Some((b, y))) => {
+                Arc::ptr_eq(a, b)
+                    && match (x, y) {
+                        (Ok(x), Ok(y)) => Arc::ptr_eq(x, y),
+                        (Err(x), Err(y)) => x == y,
+                        _ => false,
+                    }
+            }
+            _ => false,
+        }
+    }
+}
+
+impl std::fmt::Debug for ShaperSlot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.0 {
+            None => f.write_str("ShaperSlot(None)"),
+            Some((_, shaper)) => f.debug_tuple("ShaperSlot").field(&shaper.as_ref().map(|_| "shaper")).finish(),
+        }
+    }
+}
+
+impl ShaperSlot {
+    /// The slot for `preview`: the cached shaper when it was made for the same font, else a new one.
+    pub fn for_preview(&self, preview: Option<Arc<PreviewFont>>) -> ShaperSlot {
+        let Some(preview) = preview else { return self.clone() };
+        if let Some((font, _)) = &self.0
+            && Arc::ptr_eq(font, &preview)
+        {
+            return self.clone();
+        }
+        let tags: Vec<fontcraft_textlayout::shaping::Tag> = preview.features.iter().map(|f| f.tag).collect();
+        let shaper = PreviewShaper::new(Arc::from(preview.bytes.as_slice()), &preview.glyph_order, &preview.private_use, &tags)
+            .map(Arc::new)
+            .map_err(|e| e.to_string());
+        ShaperSlot(Some((preview, shaper)))
+    }
+
+    fn shaper(&self, preview: Option<&Arc<PreviewFont>>) -> Option<&Result<Arc<PreviewShaper>, String>> {
+        let (font, shaper) = self.0.as_ref()?;
+        preview.filter(|p| Arc::ptr_eq(p, font)).map(|_| shaper)
+    }
+}
+
+/// What the Features menu shows (`canvas::text::features`).
+#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+pub struct FeaturesModel {
+    /// The document has a feature compile, and the font has not changed since.
+    pub compiled: bool,
+    pub current: bool,
+    /// The compiled features: tag and table (`GSUB` or `GPOS`), each tag once.
+    pub features: Vec<(String, String)>,
+    /// The script and language pairs Localized Forms offers.
+    pub language_systems: Vec<(String, String)>,
+    pub active: Vec<String>,
+    pub localized: bool,
+    pub script: Option<String>,
+    pub language: Option<String>,
+    /// Why the text is not shaped as the features ask.
+    pub shaping_error: Option<String>,
 }
 
 /// The measurement line (`measurementLine.semantics`, `measurementLine.display`), in the edited glyph's units: a
@@ -94,28 +183,63 @@ pub struct LayoutKey {
     pub doc: (u64, u64),
     pub text: u64,
     pub master: String,
+    /// The last feature compile (`features::compile_stamp`).
+    pub compile: Option<(u64, u64, bool)>,
 }
 
 pub fn project(model: &mut Tracked<TextModel>, cx: &mut ProjectCx<'_>) {
-    let value = build(cx.session, cx.view).unwrap_or_default();
+    let shaper = model.shaper.for_preview(text::features::preview(cx.session, &cx.view.text.features));
+    let mut value = build(cx.session, cx.view, &shaper).unwrap_or_default();
+    value.shaper = shaper;
     super::set(model, value);
 }
 
-/// The layout of the edit view's text in the current master, as the text commands left it.
-pub fn layout(session: &mut Session, view: &ViewState) -> Option<Arc<Layout>> {
+/// The Features menu's model; the shaping error comes from the projected layout.
+pub fn project_features(model: &mut Tracked<FeaturesModel>, text_model: &TextModel, cx: &mut ProjectCx<'_>) {
+    let error = match &text_model.layout {
+        Some(layout) => layout.shaping_error.clone(),
+        None if cx.view.text.features.any() => layout(cx.session, cx.view, &text_model.shaper).and_then(|l| l.shaping_error.clone()),
+        None => None,
+    };
+    let value = text::features::menu(cx.session, &cx.view.text.features, error);
+    super::set(model, value);
+}
+
+/// The layout of the edit view's text in the current master, as the text commands left it, shaped with the active
+/// preview features through `shaper` when a compile made a preview font.
+pub fn layout(session: &mut Session, view: &ViewState, shaper: &ShaperSlot) -> Option<Arc<Layout>> {
     let index = if view.text.kerning.shows_kerning() { session.kern_index().ok() } else { None };
+    let features = &view.text.features;
+    let preview = text::features::preview(session, features);
     let font = session.font().ok()?;
     let master = crate::shell::masters::current_master(font, &view.layers)?.id.clone();
+    let active = features.active_tags();
+    let found = shaper.shaper(preview.as_ref());
+    let shaping = match found {
+        Some(Ok(shaper)) => Some(Shaping { shaper: shaper.as_ref(), active: &active, localized: features.localized_tags() }),
+        _ => None,
+    };
     let options = Options {
         direction: view.text.direction.layout(),
         kerning: view.text.kerning,
         line_width: DEFAULT_LINE_WIDTH,
         index: index.as_deref(),
         layers: Some(&view.layers.layers),
+        shaping,
         cursive: true,
         ..Default::default()
     };
-    fontcraft_textlayout::layout(font, &master, &view.text.text, &options).ok().map(Arc::new)
+    let mut layout = fontcraft_textlayout::layout(font, &master, &view.text.text, &options).ok()?;
+    match found {
+        Some(Err(e)) => {
+            layout.shaping_error.get_or_insert_with(|| e.clone());
+        }
+        None if features.any() => {
+            layout.shaping_error.get_or_insert_with(|| "the features have not been compiled, so the text is not shaped".to_string());
+        }
+        _ => {}
+    }
+    Some(Arc::new(layout))
 }
 
 /// The layout key of the session and view as they are now.
@@ -123,16 +247,16 @@ pub fn key(session: &Session, view: &ViewState) -> Option<LayoutKey> {
     let font = session.font().ok()?;
     let doc = session.active().map(|d| (d.id, d.revision))?;
     let master = crate::shell::masters::current_master(font, &view.layers)?.id.clone();
-    Some(LayoutKey { doc, text: view.text.revision, master })
+    Some(LayoutKey { doc, text: view.text.revision, master, compile: text::features::compile_stamp(session) })
 }
 
-fn build(session: &mut Session, view: &ViewState) -> Option<TextModel> {
+fn build(session: &mut Session, view: &ViewState, shaper: &ShaperSlot) -> Option<TextModel> {
     let font = session.font().ok()?;
     if !text::shows_text(font, view) {
         return None;
     }
     let key = key(session, view)?;
-    let layout = layout(session, view)?;
+    let layout = layout(session, view, shaper)?;
     let font = session.font().ok()?;
     let state = &view.text;
     let edited = state.edited_index()?;
@@ -189,6 +313,7 @@ fn build(session: &mut Session, view: &ViewState) -> Option<TextModel> {
     let members = if state.group_members { group_members(font, state, &layout, master, shift) } else { Vec::new() };
     let measurement = (state.measurement && text::text_mode(view) && layout.direction != Direction::Vertical)
         .then(|| measurement_line(font, view, &layout, origin));
+    let labels = if text::text_mode(view) && view.display.metrics { metrics_labels(font, view, &layout, origin, heights.0) } else { Vec::new() };
     Some(TextModel {
         shown: true,
         text_mode: text::text_mode(view),
@@ -203,7 +328,46 @@ fn build(session: &mut Session, view: &ViewState) -> Option<TextModel> {
         cursor,
         members,
         measurement,
+        labels,
+        shaper: ShaperSlot::default(),
     })
+}
+
+/// Each glyph's metrics labels (`spacing.metricsOverlayInTextMode`), at most [`MAX_DRAWN_GLYPHS`]. `descender` is
+/// the bottom of the box the labels hang under, above the baseline.
+fn metrics_labels(font: &Font, view: &ViewState, layout: &Layout, origin: [f64; 2], descender: f64) -> Vec<MetricsLabel> {
+    use fontcraft_spacing::{Field, metric};
+    let vertical = layout.direction == Direction::Vertical;
+    let (a, b) = if vertical { (Field::Top, Field::Bottom) } else { (Field::Left, Field::Right) };
+    let mut sides: HashMap<&str, Option<(f64, f64)>> = HashMap::new();
+    let mut out = Vec::new();
+    for (i, p) in layout.placed.iter().enumerate() {
+        let Some(name) = p.glyph.as_deref() else { continue };
+        if out.len() >= MAX_DRAWN_GLYPHS {
+            break;
+        }
+        let measured = *sides.entry(name).or_insert_with(|| {
+            let layer = crate::shell::masters::shown_layer(font, &view.layers, font.glyph(name)?)?;
+            match (metric(font, layer, a), metric(font, layer, b)) {
+                (Ok(Some(a)), Ok(Some(b))) if a.is_finite() && b.is_finite() => Some((a, b)),
+                _ => None,
+            }
+        });
+        let [x0, y0, x1, y1] = band(layout, p.line, (p.offset, p.offset + p.advance), (descender, layout.ascender));
+        // Negative kerning lays a neighbour over the advance: the labels keep to the part it does not cover.
+        let reach = |kern: f64| if kern.is_finite() { kern.min(0.0).abs() } else { 0.0 };
+        let next = layout.placed.get(i + 1).filter(|n| n.line == p.line).map_or(0.0, |n| reach(n.kern));
+        let (start, end) = (reach(p.kern), next);
+        let overlap = if layout.direction == Direction::Rtl { (end, start) } else { (start, end) };
+        out.push(MetricsLabel {
+            bounds: [x0 - origin[0], y0 - origin[1], x1 - origin[0], y1 - origin[1]],
+            sides: measured,
+            advance: p.advance,
+            overlap,
+            vertical,
+        });
+    }
+    out
 }
 
 /// The measurement line's height: the one set, else half the x-height of the current master.

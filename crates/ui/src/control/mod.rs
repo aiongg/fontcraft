@@ -25,6 +25,7 @@ mod render;
 mod screenshot;
 #[cfg(not(target_arch = "wasm32"))]
 mod server;
+mod text;
 mod window_input;
 
 #[cfg(test)]
@@ -56,11 +57,12 @@ pub const MODULES: &[&[(&str, Method)]] = &[
     pointer::METHODS,
     render::METHODS,
     window_input::METHODS,
+    text::METHODS,
 ];
 
 /// Methods of the protocol whose package is not built yet: `(method or prefix ending in `.`, package)`. A package
 /// that adds its methods to [`MODULES`] removes its line here.
-pub const LATER: &[(&str, &str)] = &[("ui.text", "UI.3")];
+pub const LATER: &[(&str, &str)] = &[];
 
 /// The control channel's state on the app.
 #[derive(Default)]
