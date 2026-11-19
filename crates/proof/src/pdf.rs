@@ -75,8 +75,9 @@ const WIN_ANSI_HIGH: [(char, u8); 27] = [
 ];
 
 /// Writes every page of `doc` as one PDF. `face` is the font the document was laid out from; it
-/// gives the outlines, advances and kerning of waterfall text.
-pub(crate) fn write(doc: &Document, face: &Face<'_>) -> Result<Vec<u8>, ProofError> {
+/// gives the outlines, advances and kerning of waterfall text. Without it (a picture drawn from
+/// outlines the caller gave, `crate::vector`) waterfall text is left out.
+pub(crate) fn write(doc: &Document, face: Option<&Face<'_>>) -> Result<Vec<u8>, ProofError> {
     let mut next = Ref::new(1);
     let catalog = next.bump();
     let tree = next.bump();
@@ -91,8 +92,8 @@ pub(crate) fn write(doc: &Document, face: &Face<'_>) -> Result<Vec<u8>, ProofErr
     pdf.type1_font(label_font).base_font(Name(b"Helvetica")).encoding_predefined(Name(b"WinAnsiEncoding"));
     pdf.document_info(info).title(TextStr(&doc.title)).producer(TextStr(PRODUCER));
 
-    let mut writer =
-        Writer { doc, face, glyphs: Glyphs::new(doc), kerning: Kerning::new(&face.font), shaped: HashMap::new(), forms: BTreeMap::new(), next };
+    let kerning = face.map(|f| Kerning::new(&f.font));
+    let mut writer = Writer { doc, face, glyphs: Glyphs::new(doc), kerning, shaped: HashMap::new(), forms: BTreeMap::new(), next };
     for (page, &page_ref) in doc.pages.iter().zip(&page_refs) {
         let (content, used, links) = writer.page(page)?;
         let content_ref = writer.next.bump();
@@ -166,9 +167,9 @@ impl<'d> Glyphs<'d> {
 
 struct Writer<'d, 'f> {
     doc: &'d Document,
-    face: &'d Face<'f>,
+    face: Option<&'d Face<'f>>,
     glyphs: Glyphs<'d>,
-    kerning: Kerning<'f>,
+    kerning: Option<Kerning<'f>>,
     /// Waterfall lines already set: each glyph with its x offset in font units.
     shaped: HashMap<String, Vec<(u32, f64)>>,
     /// The form XObject of each filled glyph, written after the pages.
@@ -274,8 +275,9 @@ impl Writer<'_, '_> {
                     links.push((Rect::new(coord(*x), coord(h - y - lh), coord(x + w), coord(h - y)), *page));
                 }
                 Item::Sample { x, y, size, text } => {
-                    let placed = self.shape(text)?;
-                    let k = size / self.face.upem;
+                    let Some(face) = self.face else { continue };
+                    let placed = self.shape(face, text)?;
+                    let k = size / face.upem;
                     c.begin_marked_content_with_properties(SPAN_TAG).properties().actual_text(TextStr(text));
                     c.save_state();
                     c.set_fill_rgb(0.0, 0.0, 0.0);
@@ -310,7 +312,7 @@ impl Writer<'_, '_> {
 
     /// The glyphs of a waterfall line with their x offsets in font units: glyphs from `cmap`,
     /// advances from the font, pair kerning between neighbours.
-    fn shape(&mut self, text: &str) -> Result<Vec<(u32, f64)>, ProofError> {
+    fn shape(&mut self, face: &Face<'_>, text: &str) -> Result<Vec<(u32, f64)>, ProofError> {
         if let Some(placed) = self.shaped.get(text) {
             return Ok(placed.clone());
         }
@@ -318,10 +320,10 @@ impl Writer<'_, '_> {
         let mut pen = 0.0;
         let mut previous: Option<u32> = None;
         for ch in text.chars() {
-            let gid = self.face.glyph_for(ch).unwrap_or(0);
-            self.glyphs.load(self.face, gid)?;
-            if let Some(left) = previous {
-                pen += self.kerning.pair(left, gid);
+            let gid = face.glyph_for(ch).unwrap_or(0);
+            self.glyphs.load(face, gid)?;
+            if let (Some(left), Some(kerning)) = (previous, self.kerning.as_mut()) {
+                pen += kerning.pair(left, gid);
             }
             placed.push((gid, pen));
             pen += self.glyphs.get((0, gid)).map_or(0.0, |o| o.advance);

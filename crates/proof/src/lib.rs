@@ -12,6 +12,8 @@
 //! - `layouts`: the proof sheets ported from the reference proof script: the drawing settings
 //!   ([`SETTINGS`]), glyph tiles with em boxes, hints, zones and point labels
 //!   (`boxes`, `hints`, `digi`), the font-set comparison and the palette linked to outline pages.
+//! - `vector`: one page of outlines the caller places, with lines and point markers, written by
+//!   the SVG and PDF writers ([`write_vector`]); the window export uses it.
 //! - `html`: the browser specimen with the font embedded (WOFF2 when the input is WOFF2), sample
 //!   text, waterfall, character set, feature switches and axis stops; it carries no script.
 //!
@@ -33,10 +35,15 @@ mod pdf;
 mod select;
 mod svg;
 mod text;
+mod vector;
 
 pub use layouts::{MAX_SET_FONTS, Metrics, SETTINGS, Setting, SettingValue};
 pub use page::grid_size_for;
 pub use select::{GlyphSort, Selection, select_glyphs};
+pub use vector::{
+    MAX_VECTOR_GLYPHS, MAX_VECTOR_MARKS, MAX_VECTOR_SEGMENTS, Mark, Segment, VECTOR_PAGE_SIDE, VectorFormat, VectorGlyph, VectorInk, VectorPage,
+    write_vector,
+};
 
 /// Most pages one proof writes.
 pub const MAX_PAGES: usize = 10_000;
@@ -184,7 +191,7 @@ pub fn proof_set(fonts: &[&[u8]], face: u32, options: &ProofOptions) -> Result<P
         // The PDF draws waterfall text as outlines, so it embeds no font.
         ProofFormat::Pdf => {
             let doc = page::layout(&faces, &gids, options, None)?;
-            Ok(Proof { pages: doc.pages.len(), files: vec![pdf::write(&doc, face)?] })
+            Ok(Proof { pages: doc.pages.len(), files: vec![pdf::write(&doc, Some(face))?] })
         }
     }
 }
