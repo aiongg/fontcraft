@@ -13,13 +13,13 @@ use std::sync::Arc;
 use serde_json::{Map, Value, json};
 
 use super::*;
+use crate::EngineError;
 use crate::extensions::{LoadedMacro, MacroRun};
 use crate::macros::{
     self, BUILT_IN_ARGS, MACRO_EXTENSION, MAX_MACRO_NESTING, MAX_MACRO_RUN_BYTES, MAX_MACRO_RUN_STEPS, MAX_MACRO_TEXT, Macro, MacroError, Recording,
     Step,
 };
 use crate::params::Params;
-use crate::{Batch, EngineError};
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -163,7 +163,7 @@ fn rerun(s: &mut Session, p: Params) -> Result<Value> {
 fn load(s: &mut Session, p: &Params, spec: &Value) -> Result<Loaded> {
     match spec {
         Value::String(name) => {
-            let in_run = s.batch.is_some() && !s.extensions().running_macros.is_empty();
+            let in_run = !s.batch_is_idle() && !s.extensions().running_macros.is_empty();
             let by_name = format!("name:{name}");
             if in_run && let Some(hit) = s.extensions().macro_run.loaded.get(&by_name) {
                 return Ok(Loaded { key: Some(hit.key.clone()), path: Some(hit.path.clone()), m: Arc::clone(&hit.m) });
@@ -242,7 +242,7 @@ fn run_loaded(s: &mut Session, loaded: Loaded, args: Value, dry_run: bool) -> Re
     }
     // Outside a batch no macro is running: anything left on the stack is from a run that was
     // cut short.
-    if s.batch.is_none() {
+    if s.batch_is_idle() {
         s.extensions_mut().running_macros.clear();
     }
     let outermost = s.extensions().running_macros.is_empty();
@@ -265,30 +265,27 @@ fn run_loaded(s: &mut Session, loaded: Loaded, args: Value, dry_run: bool) -> Re
     if dry_run {
         return Ok(json!({ "title": label, "steps": steps }));
     }
-    let outer = s.batch.is_none();
     s.extensions_mut().running_macros.push(key.unwrap_or_default());
-    let ran = crate::guard::catch_panic(|| run_steps(s, &label, &steps, outer));
-    if outer {
-        s.batch = None;
-    }
+    // A panic is caught inside the step, so the batch it started ends with it.
+    let ran = s.one_step(&label, |s| {
+        crate::guard::catch_panic(|| run_steps(s, &steps))
+            .map_err(|panic| EngineError::Internal(format!("the macro `{label}` failed unexpectedly: {panic}")))
+            .and_then(|r| r)
+    });
     s.extensions_mut().running_macros.pop();
     if outermost {
         // Frees the macros read during the run.
         s.extensions_mut().macro_run = MacroRun::default();
     }
-    let results = ran.map_err(|panic| EngineError::Internal(format!("the macro `{label}` failed unexpectedly: {panic}")))??;
+    let results = ran?;
     if outermost {
         s.extensions_mut().last_macro = Some((path, Arc::unwrap_or_clone(m), args));
     }
     Ok(json!({ "title": label, "steps": steps.len(), "results": results }))
 }
 
-/// Runs resolved steps in order. `outer`: no batch or macro is running around this one, so this
-/// run owns the undo step.
-fn run_steps(s: &mut Session, label: &str, steps: &[Step], outer: bool) -> Result<Vec<Value>> {
-    if outer {
-        s.batch = Some(Batch { label: label.into(), before: Vec::new() });
-    }
+/// Runs resolved steps in order.
+fn run_steps(s: &mut Session, steps: &[Step]) -> Result<Vec<Value>> {
     let mut results = Vec::with_capacity(steps.len());
     let mut ran = Ok(());
     for (i, step) in steps.iter().enumerate() {
@@ -307,19 +304,6 @@ fn run_steps(s: &mut Session, label: &str, steps: &[Step], outer: bool) -> Resul
                 ran =
                     Err(EngineError::BadParams { command: "script.run".into(), message: format!("step {} (`{}`) failed: {e}", i + 1, step.command) });
                 break;
-            }
-        }
-    }
-    if outer
-        && let Some(batch) = s.batch.take()
-        && ran.is_ok()
-    {
-        for (id, before) in batch.before {
-            let Some(i) = s.position_of(id) else { continue };
-            if let Some(doc) = s.docs_mut().get_mut(i)
-                && !doc.font.same_as(&before)
-            {
-                crate::push_undo(doc, batch.label.clone(), before);
             }
         }
     }

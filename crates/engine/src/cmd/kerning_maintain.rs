@@ -4,7 +4,7 @@
 use fontcraft_spacing::kerning::{self, CompressReport, Direction, KeptWhy, MaintainError, NamedPair, Obsolete, Pair, Position, RenameScope, Side};
 use serde_json::{Value, json};
 
-use super::kerning::{direction, master};
+use super::shared::{direction, master};
 use super::*;
 use crate::EngineError;
 use crate::params::Params;

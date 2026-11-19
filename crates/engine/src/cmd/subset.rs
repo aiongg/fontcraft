@@ -387,7 +387,7 @@ fn options(p: &Params<'_>) -> Result<SubsetOptions> {
     match p.get("timestamp") {
         None => {}
         Some(Value::String(s)) if s == "keep" => {}
-        Some(Value::String(s)) if s == "now" => o.recalc_timestamp = Some(super::file::default_timestamp()),
+        Some(Value::String(s)) if s == "now" => o.recalc_timestamp = Some(super::shared::default_timestamp()),
         // Years 1904 to 9999, which is what the head table's date can sensibly hold.
         Some(_) => o.recalc_timestamp = p.opt_int("timestamp", -2_082_844_800, 253_402_300_799)?,
     }

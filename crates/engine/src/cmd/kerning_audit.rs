@@ -36,7 +36,7 @@ use serde_json::{Map, Value, json};
 
 use super::autokern::{Kit, MAX_PAIRS, horizontal, linked, read_pairs};
 use super::autospace::{master_ids, opt_in};
-use super::kerning::MAX_KERN_VALUE;
+use super::shared::MAX_KERN_VALUE;
 use super::*;
 use crate::params::Params;
 

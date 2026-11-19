@@ -318,7 +318,7 @@ fn document_index(s: &Session, p: &Params, what: &str, v: &Value) -> Result<usiz
         Value::String(name) => docs
             .iter()
             .position(|d| d.title == *name || d.path.as_deref().is_some_and(|path| path == std::path::Path::new(name)))
-            .or_else(|| super::session::find_open(s, std::path::Path::new(name)))
+            .or_else(|| super::shared::find_open(s, std::path::Path::new(name)))
             .ok_or_else(|| p.bad(format!("`{what}`: no open document is called or saved as `{name}`"))),
         _ => Err(p.bad(format!("`{what}` must be an open document's position, title or path"))),
     }

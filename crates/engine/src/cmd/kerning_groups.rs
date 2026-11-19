@@ -8,7 +8,7 @@ use fontcraft_model::{Font, KernGroups};
 use fontcraft_spacing::kerning::{GroupSide, Lock, Position, check_group_name, group_list, locks, shortcut_edit, stored_pair};
 use serde_json::{Value, json};
 
-use super::kerning::{MAX_KERN_VALUE, direction, editable_master};
+use super::shared::{MAX_KERN_VALUE, direction, editable_master};
 use super::*;
 use crate::params::{Params, TargetKind};
 

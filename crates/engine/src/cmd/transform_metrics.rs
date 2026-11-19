@@ -14,7 +14,7 @@ use fontcraft_spacing::{Field, SIDEBEARING_RANGE, WIDTH_RANGE, metric};
 use serde_json::{Value, json};
 
 use super::common::{each_layer, grid, scope};
-use super::spacing::shift_layer;
+use super::shared::shift_layer;
 use super::*;
 use crate::params::{Params, TargetKind};
 

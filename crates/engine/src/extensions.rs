@@ -28,10 +28,12 @@
 //! hook [`ExtensionState::after_command`] is complete: it hands each command to the log and the
 //! recorder, whose bodies those packages write.
 
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 use std::io::Read as _;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::Arc;
 
 use fontcraft_plugins::reporter::ReporterCache;
@@ -884,5 +886,59 @@ mod module_checks {
             }
             (out, passed, errors)
         }
+    }
+}
+
+// ── the filter modules in force on this thread ───────────────────────────────────────────────────────────────────────
+
+/// One installed filter module as the export filter step sees it.
+pub(crate) struct ModuleEntry {
+    pub(crate) plugin: Arc<Plugin>,
+    /// What [`ExtensionState::runnable`] said when the scope was entered: why it cannot run
+    /// (turned off, safe mode), if it cannot.
+    pub(crate) runnable: std::result::Result<(), String>,
+}
+
+/// The filter modules of the session whose command runs on this thread.
+pub(crate) struct ModuleSet {
+    pub(crate) filters: Vec<ModuleEntry>,
+}
+
+thread_local! {
+    /// The modules in force on this thread ([`ModuleScope`]).
+    static MODULES: RefCell<Option<Rc<ModuleSet>>> = const { RefCell::new(None) };
+}
+
+/// Makes a session's filter modules visible to the export filter step (`export_steps`) while one command (or one
+/// step of a command) runs, and puts back what it replaced when dropped (also when the command panics).
+/// Export builds run deep inside commands that have no other way to the session's
+/// `ExtensionState`; the sessions the steps open for built-in filters enter their own, empty,
+/// scope and restore this one.
+pub(crate) struct ModuleScope(Option<Rc<ModuleSet>>);
+
+impl ModuleScope {
+    /// Enters the filter modules of `ext`; none when it has none.
+    pub(crate) fn enter(ext: &ExtensionState) -> ModuleScope {
+        let filters: Vec<ModuleEntry> = ext
+            .registry
+            .list()
+            .iter()
+            .filter(|m| m.plugin.kind() == Kind::Filter)
+            .map(|m| ModuleEntry { plugin: Arc::clone(&m.plugin), runnable: ext.runnable(m.plugin.id(), Kind::Filter).map(|_| ()) })
+            .collect();
+        let set = (!filters.is_empty()).then(|| Rc::new(ModuleSet { filters }));
+        ModuleScope(MODULES.with(|m| m.replace(set)))
+    }
+
+    /// The modules in force on this thread.
+    pub(crate) fn current() -> Option<Rc<ModuleSet>> {
+        MODULES.with(|m| m.borrow().clone())
+    }
+}
+
+impl Drop for ModuleScope {
+    fn drop(&mut self) {
+        let previous = self.0.take();
+        MODULES.with(|m| *m.borrow_mut() = previous);
     }
 }

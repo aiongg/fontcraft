@@ -20,11 +20,10 @@ use fontcraft_geom::{Point, Rect, Shape as _};
 use fontcraft_model::{Font, Image, Layer, MAX_COORDINATE, NodeKind, PaletteEntry, Shape, Transform};
 use serde_json::{Value, json};
 
+use super::shared::check_path_text;
 use super::*;
 use crate::params::{Params, TargetKind};
 
-/// Most bytes in a referenced file path.
-const MAX_PATH_BYTES: usize = 4096;
 /// The file kinds an iColor layer references.
 const BITMAP_EXTENSIONS: [&str; 5] = ["png", "jpg", "jpeg", "tif", "tiff"];
 const SVG_EXTENSIONS: [&str; 1] = ["svg"];
@@ -371,17 +370,6 @@ fn file_path(s: &Session, p: &Params, extensions: &[&str], what: &str) -> Result
         return Err(p.bad(format!("`path` must name {}: {what}", extensions.iter().map(|e| format!(".{e}")).collect::<Vec<_>>().join(", "))));
     }
     s.stored_image_path(path).ok_or_else(|| p.bad(format!("`path` `{path}` is not a usable file path")))
-}
-
-/// Refuses a file path parameter `key` that is too long or holds a control character.
-pub(crate) fn check_path_text(p: &Params, key: &str, path: &str) -> Result<()> {
-    if path.len() > MAX_PATH_BYTES {
-        return Err(p.bad(format!("`{key}` is longer than {MAX_PATH_BYTES} bytes")));
-    }
-    if path.chars().any(char::is_control) {
-        return Err(p.bad(format!("`{key}` holds a control character")));
-    }
-    Ok(())
 }
 
 /// The tight bounds of `layer`'s paths; `None` when it has none. A path of one node counts as

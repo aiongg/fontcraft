@@ -897,7 +897,7 @@ fn export_features(s: &mut Session, v: &Value) -> Result<Value> {
     };
     let data = s.glyph_data()?;
     let font = s.font()?;
-    let master = super::kerning::master(&p, font)?;
+    let master = super::shared::master(&p, font)?;
     let mut out = json!({"master": master, "format": format.name()});
     let text = match format {
         Format::Fea => {

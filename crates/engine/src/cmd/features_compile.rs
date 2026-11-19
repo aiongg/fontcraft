@@ -417,7 +417,7 @@ fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
     let doc = s.doc()?;
     let (doc_id, revision) = (doc.id, doc.revision);
     // The folder an export reads includes from; none outside the automation read root.
-    let include_dir: Option<PathBuf> = doc.path.as_deref().and_then(super::compile::source_feature_dir);
+    let include_dir: Option<PathBuf> = doc.path.as_deref().and_then(super::shared::source_feature_dir);
     let data = s.glyph_data()?;
     let font = s.font()?;
     let master = master_id(&p, font, p.opt_str("master")?)?;

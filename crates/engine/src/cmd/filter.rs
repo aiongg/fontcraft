@@ -366,13 +366,13 @@ fn find(name: &str) -> Option<Entry> {
     }
     COMMAND_FILTERS
         .iter()
-        .find(|(n, id, ..)| (n.eq_ignore_ascii_case(name) || *id == name) && find_command(id).is_some())
+        .find(|(n, id, ..)| (n.eq_ignore_ascii_case(name) || *id == name) && super::registry::find(id).is_some())
         .map(|(n, id, ..)| Entry::Command(n, id))
 }
 
 fn names() -> Vec<&'static str> {
     let mut out: Vec<&str> = filters::registry().iter().map(|f| f.name()).collect();
-    out.extend(COMMAND_FILTERS.iter().filter(|(_, id, ..)| find_command(id).is_some()).map(|(n, ..)| *n));
+    out.extend(COMMAND_FILTERS.iter().filter(|(_, id, ..)| super::registry::find(id).is_some()).map(|(n, ..)| *n));
     out
 }
 

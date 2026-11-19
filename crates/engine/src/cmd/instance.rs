@@ -17,7 +17,10 @@ use fontcraft_tables::sfnt::{SfntFont, Tag, parse_tag, tag_str};
 use fontcraft_tables::{TableOrder, WriteOptions};
 use serde_json::{Map, Value, json};
 
+#[cfg(not(target_arch = "wasm32"))]
+use super::file_io::stage_folder;
 use super::file_io::{self, InputKind, OutputRequest};
+use super::file_io::{Staged, commit, discard, stage};
 use super::{CommandSpec, FileParam, always, cmd};
 use crate::params::Params;
 use crate::{EngineError, Result, Session};
@@ -335,163 +338,6 @@ fn set_modified(font: &mut SfntFont, unix: i64) {
         slot.copy_from_slice(&stamp.to_be_bytes());
     }
 }
-
-/// An output written to a temporary file beside its target.
-// The browser writes no files, so nothing builds one there.
-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-pub(super) struct Staged {
-    temp: PathBuf,
-    /// The file the temporary replaces: the output, or the file it links to.
-    target: PathBuf,
-    /// A folder (a UFO), which replaces an existing one by being swapped in for it.
-    folder: bool,
-}
-
-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-impl Staged {
-    /// The temporary file or folder.
-    pub(super) fn temp(&self) -> &Path {
-        &self.temp
-    }
-}
-
-/// Writes `bytes` to a new temporary file beside `out` (beside the file it links to, for a
-/// link), with the permissions of the file it will replace. Both the file replaced and the
-/// temporary must pass the write check before anything is created.
-#[cfg(not(target_arch = "wasm32"))]
-pub(super) fn stage(out: &Path, bytes: &[u8], n: usize) -> Result<Staged> {
-    use std::io::Write as _;
-    let io = |path: &Path, e: std::io::Error| EngineError::Io(format!("cannot write {}: {e}", path.display()));
-    let target = if out.is_symlink() { std::fs::canonicalize(out).map_err(|e| io(out, e))? } else { out.to_path_buf() };
-    if target.is_dir() {
-        return Err(EngineError::Io(format!("cannot write {}: it is a folder", target.display())));
-    }
-    let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "instance".into());
-    let temp = target.with_file_name(format!(".{name}.{}-{n}.tmp", std::process::id()));
-    // `out` was checked by the caller; a link may lead elsewhere, so check where the write lands.
-    file_io::check_write(&target)?;
-    file_io::check_write(&temp)?;
-    let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&temp).map_err(|e| io(&temp, e))?;
-    if let Err(e) = file.write_all(bytes).and_then(|()| file.sync_all()) {
-        let _ = std::fs::remove_file(&temp);
-        return Err(io(&temp, e));
-    }
-    if let Ok(meta) = std::fs::metadata(&target) {
-        let _ = std::fs::set_permissions(&temp, meta.permissions());
-    }
-    Ok(Staged { temp, target, folder: false })
-}
-
-/// Most files one staged folder holds.
-#[cfg(not(target_arch = "wasm32"))]
-const MAX_FOLDER_FILES: usize = crate::io::MAX_PACKAGE_FILES;
-
-/// Writes `files` (paths relative to the folder, `/`-separated) into a new temporary folder
-/// beside `out` (beside the folder it links to, for a link). An existing `out` must be a folder
-/// that `is_replaceable` accepts. Both the folder replaced and the temporary must pass the write
-/// check before anything is created.
-#[cfg(not(target_arch = "wasm32"))]
-fn stage_folder(out: &Path, files: &std::collections::BTreeMap<String, Vec<u8>>, n: usize, is_replaceable: impl Fn(&Path) -> bool) -> Result<Staged> {
-    let io = |path: &Path, e: std::io::Error| EngineError::Io(format!("cannot write {}: {e}", path.display()));
-    let target = if out.is_symlink() { std::fs::canonicalize(out).map_err(|e| io(out, e))? } else { out.to_path_buf() };
-    if target.exists() && !(target.is_dir() && is_replaceable(&target)) {
-        return Err(EngineError::Io(format!("cannot write {}: something that is not a UFO has that name", target.display())));
-    }
-    if files.len() > MAX_FOLDER_FILES {
-        return Err(EngineError::Io(format!("cannot write {}: more than {MAX_FOLDER_FILES} files", target.display())));
-    }
-    let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "instance".into());
-    let temp = target.with_file_name(format!(".{name}.{}-{n}.tmp", std::process::id()));
-    file_io::check_write(&target)?;
-    file_io::check_write(&temp)?;
-    std::fs::create_dir(&temp).map_err(|e| io(&temp, e))?;
-    let staged = Staged { temp, target, folder: true };
-    let written = write_tree(&staged.temp, &staged.target, files);
-    match written {
-        Ok(()) => Ok(staged),
-        Err(e) => {
-            discard(std::slice::from_ref(&staged));
-            Err(e)
-        }
-    }
-}
-
-/// Writes `files` under `root`, a new folder that stands in for `target` in messages.
-#[cfg(not(target_arch = "wasm32"))]
-fn write_tree(root: &Path, target: &Path, files: &std::collections::BTreeMap<String, Vec<u8>>) -> Result<()> {
-    let io = |path: &Path, e: std::io::Error| EngineError::Io(format!("cannot write {}: {e}", path.display()));
-    for (rel, bytes) in files {
-        let safe = !rel.is_empty() && !rel.starts_with('/') && !rel.contains('\\') && rel.split('/').all(|s| !s.is_empty() && s != "." && s != "..");
-        if !safe {
-            return Err(EngineError::Io(format!("cannot write {}: `{rel}` is not a path inside it", target.display())));
-        }
-        let path = root.join(rel);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| io(parent, e))?;
-        }
-        std::fs::write(&path, bytes).map_err(|e| io(&path, e))?;
-    }
-    Ok(())
-}
-
-/// Moves every staged output into place. A staged folder is swapped in: the folder it replaces
-/// is moved aside first, then removed. If one cannot be moved, the ones after it are discarded
-/// and the error says which were written.
-#[cfg(not(target_arch = "wasm32"))]
-pub(super) fn commit(staged: &[Staged]) -> Result<()> {
-    for (i, s) in staged.iter().enumerate() {
-        let moved = if s.folder { swap_folder(s) } else { std::fs::rename(&s.temp, &s.target) };
-        if let Err(e) = moved {
-            discard(staged.get(i..).unwrap_or_default());
-            let before = if i == 0 { String::new() } else { format!("; the {i} outputs before it were written") };
-            return Err(EngineError::Io(format!("cannot write {}: {e}{before}", s.target.display())));
-        }
-    }
-    Ok(())
-}
-
-/// Puts a staged folder in place of its target, which is set aside and removed once the new
-/// folder is there; when the move fails, the old folder is put back.
-#[cfg(not(target_arch = "wasm32"))]
-fn swap_folder(s: &Staged) -> std::io::Result<()> {
-    if std::fs::symlink_metadata(&s.target).is_err() {
-        return std::fs::rename(&s.temp, &s.target);
-    }
-    let name = s.target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "instance".into());
-    let aside = s.target.with_file_name(format!(".{name}.{}.old", std::process::id()));
-    std::fs::rename(&s.target, &aside)?;
-    if let Err(e) = std::fs::rename(&s.temp, &s.target) {
-        let _ = std::fs::rename(&aside, &s.target);
-        return Err(e);
-    }
-    let _ = std::fs::remove_dir_all(&aside);
-    Ok(())
-}
-
-/// Removes the temporaries that are still there.
-#[cfg(not(target_arch = "wasm32"))]
-pub(super) fn discard(staged: &[Staged]) {
-    for s in staged {
-        if s.folder {
-            let _ = std::fs::remove_dir_all(&s.temp);
-        } else {
-            let _ = std::fs::remove_file(&s.temp);
-        }
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-pub(super) fn stage(out: &Path, _: &[u8], _: usize) -> Result<Staged> {
-    Err(EngineError::Unsupported(format!("writing {} in the browser", out.display())))
-}
-
-#[cfg(target_arch = "wasm32")]
-pub(super) fn commit(_: &[Staged]) -> Result<()> {
-    Ok(())
-}
-
-#[cfg(target_arch = "wasm32")]
-pub(super) fn discard(_: &[Staged]) {}
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(super) mod layout;

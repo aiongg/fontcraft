@@ -12,7 +12,7 @@ use fontcraft_spacing::kerning_text::{self, KerningText, MAX_PAIRS, MAX_TEXT_BYT
 use fontcraft_spacing::{metrics_source, round_half_up};
 use serde_json::{Value, json};
 
-use super::kerning::MAX_KERN_VALUE;
+use super::shared::MAX_KERN_VALUE;
 use super::*;
 use crate::params::Params;
 
@@ -126,7 +126,7 @@ fn clip(text: &str) -> String {
 fn list_pairs(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("kerning.listPairs", p)?;
     let font = s.font()?;
-    let master = super::kerning::master(&p, font)?;
+    let master = super::shared::master(&p, font)?;
     let direction = direction_param(&p)?.unwrap_or(Direction::Ltr);
     let term = p.opt_str("term")?.unwrap_or_default();
     if term.len() > MAX_NAME_LEN + 1 {
@@ -172,7 +172,7 @@ fn key(left: &Side, right: &Side) -> Key {
 fn copy_pairs(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("kerning.copyPairs", p)?;
     let font = s.font()?;
-    let master = super::kerning::master(&p, font)?;
+    let master = super::shared::master(&p, font)?;
     let direction = direction_param(&p)?.unwrap_or(Direction::Ltr);
     let source = source_of(font, &master);
     let stored: Vec<NewPair> =
@@ -213,7 +213,7 @@ enum OnConflict {
 fn paste_pairs(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("kerning.pastePairs", p)?;
     let font = s.font()?;
-    let master = super::kerning::master(&p, font)?;
+    let master = super::shared::master(&p, font)?;
     let on_conflict = match p.opt_str("onConflict")? {
         None | Some("ask") => OnConflict::Ask,
         Some("overwrite") => OnConflict::Overwrite,
@@ -320,7 +320,7 @@ fn unknown_sides(font: &Font, direction: Direction, pasted: &[NewPair]) -> (Vec<
 fn delete_pairs(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("kerning.deletePairs", p)?;
     let font = s.font()?;
-    let master = super::kerning::master(&p, font)?;
+    let master = super::shared::master(&p, font)?;
     let direction = direction_param(&p)?.unwrap_or(Direction::Ltr);
     let all = p.bool_or("allMasters", false)?;
     let wanted = pairs_param(&p, "pairs", false)?.ok_or_else(|| p.bad("`pairs` is required"))?;

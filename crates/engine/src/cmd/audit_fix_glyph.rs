@@ -18,7 +18,7 @@ use fontcraft_model::{Alignment, Component, Font, Glyph, Layer, MAX_COMPONENT_DE
 use serde_json::{Value, json};
 
 use super::common::grid;
-use super::decompose::{MAX_LAYER_SHAPES, remap_hint};
+use super::shared::{MAX_LAYER_SHAPES, remap_hint};
 use super::*;
 use crate::params::{MAX_TARGETS, Params, TargetKind as K, Targets, kind};
 

@@ -39,7 +39,6 @@ pub(crate) mod linked;
 pub mod log;
 pub mod macros;
 pub mod project;
-pub(crate) mod ttvm;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -432,6 +431,33 @@ impl Session {
         self.batch.is_none()
     }
 
+    /// Runs `f` as one undo step named `label`, as `command.batch` does: the documents `f`
+    /// changes get one step each, and only when `f` succeeds. Inside a running batch `f` is part
+    /// of that batch.
+    pub fn one_step<T>(&mut self, label: &str, f: impl FnOnce(&mut Session) -> Result<T>) -> Result<T> {
+        let outer = self.batch.is_none();
+        if outer {
+            self.batch = Some(Batch { label: label.into(), before: Vec::new() });
+        }
+        let out = f(self);
+        if outer {
+            let finished = self.batch.take();
+            if out.is_ok()
+                && let Some(batch) = finished
+            {
+                for (id, before) in batch.before {
+                    let Some(i) = self.position_of(id) else { continue };
+                    if let Some(doc) = self.docs.get_mut(i)
+                        && !doc.font.same_as(&before)
+                    {
+                        push_undo(doc, batch.label.clone(), before);
+                    }
+                }
+            }
+        }
+        out
+    }
+
     /// The last-change text for an edit made now; `None` without a clock.
     fn stamp(&self) -> Option<String> {
         self.clock.as_ref().and_then(|c| c()).and_then(clock::last_change_text)
@@ -681,7 +707,7 @@ impl Session {
         if self.depth > 0 {
             // A step of another command: the outer call owns the snapshot and the journal. The
             // modules are read again, so a step sees what an earlier step installed or removed.
-            let _modules = export_steps::ModuleScope::enter(&self.extensions);
+            let _modules = extensions::ModuleScope::enter(&self.extensions);
             self.depth += 1;
             let r = (spec.run)(self, params);
             self.depth -= 1;
@@ -690,7 +716,7 @@ impl Session {
         // Snapshot for rollback. It copies pointers and labels, no glyph data, but it does walk
         // each document's history, so queries (which change nothing) skip it.
         let snapshot = spec.journal.then(|| (self.docs.clone(), self.active, self.untitled, self.settings.clone(), self.projects.clone()));
-        let _modules = export_steps::ModuleScope::enter(&self.extensions);
+        let _modules = extensions::ModuleScope::enter(&self.extensions);
         self.depth = 1;
         let outcome = guard::catch_panic(|| (spec.run)(self, params));
         self.depth = 0;

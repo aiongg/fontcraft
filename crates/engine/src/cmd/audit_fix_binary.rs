@@ -222,7 +222,7 @@ const FILE_FIXES: [(&str, &str); 10] = [
 
 /// The command that carries out the fix `id` on a compiled font file, when it is registered.
 pub(super) fn file_fix_command(id: &str) -> Option<&'static str> {
-    FILE_FIXES.iter().find(|(f, _)| *f == id).map(|(_, c)| *c).filter(|c| find_command(c).is_some())
+    FILE_FIXES.iter().find(|(f, _)| *f == id).map(|(_, c)| *c).filter(|c| super::registry::find(c).is_some())
 }
 
 /// The `audit.run` parameters `audit.fix` passes through on a file.
@@ -305,7 +305,7 @@ fn plan(results: &[Value], safe_only: bool, truetype: bool, report: &mut FileRep
             report.skip(check, Some(fix_id), "the fix changes the design: give safeOnly: false");
             continue;
         }
-        if find_command(command).is_none() {
+        if super::registry::find(command).is_none() {
             report.skip(check, Some(fix_id), format!("{command}, which carries out this fix, is not built yet"));
             continue;
         }
@@ -455,8 +455,8 @@ pub(super) fn fix_file(s: &mut Session, v: &Value) -> Result<Value> {
     // The calls work on a new temporary copy beside the file the output replaces (the file a
     // link points to, so the link stays), with that file's permissions; stage checks both
     // paths against the write roots before it creates the copy.
-    let staged = super::instance::stage(&output, &source.bytes, 0)?;
-    let discard = |staged: &super::instance::Staged| super::instance::discard(std::slice::from_ref(staged));
+    let staged = super::file_io::stage(&output, &source.bytes, 0)?;
+    let discard = |staged: &super::file_io::Staged| super::file_io::discard(std::slice::from_ref(staged));
     let tmp = staged.temp().to_path_buf();
     for call in &calls {
         match s.execute(call.command, &call_params(call, &tmp, true)) {
@@ -477,7 +477,7 @@ pub(super) fn fix_file(s: &mut Session, v: &Value) -> Result<Value> {
         discard(&staged);
         return Err(EngineError::Io(format!("{} exists and noClobber is set", output.display())));
     }
-    super::instance::commit(std::slice::from_ref(&staged))?;
+    super::file_io::commit(std::slice::from_ref(&staged))?;
     // The fixed file is in place, so a check run that fails now is reported, not an error.
     run.insert("target".into(), json!(output));
     let (remaining, warnings) = match s.execute("audit.run", &Value::Object(run)) {
@@ -697,11 +697,11 @@ fn fix_family(s: &mut Session, p: &Params) -> Result<Value> {
     let mut staged = Vec::new();
     let mut applied = Vec::new();
     for (n, f) in files.iter().enumerate().filter(|(_, f)| !f.calls.is_empty()) {
-        let next = file_io::check_write(&f.output).and_then(|()| super::instance::stage(&f.output, &f.bytes, n));
+        let next = file_io::check_write(&f.output).and_then(|()| super::file_io::stage(&f.output, &f.bytes, n));
         let one = match next {
             Ok(one) => one,
             Err(e) => {
-                super::instance::discard(&staged);
+                super::file_io::discard(&staged);
                 return Err(e);
             }
         };
@@ -717,7 +717,7 @@ fn fix_family(s: &mut Session, p: &Params) -> Result<Value> {
                     "result": result,
                 })),
                 Err(e) => {
-                    super::instance::discard(&staged);
+                    super::file_io::discard(&staged);
                     let file = f.input.display();
                     return Err(EngineError::Io(format!("the fix {} ({}) failed on {file}, so nothing was written: {e}", call.fix, call.command)));
                 }
@@ -728,10 +728,10 @@ fn fix_family(s: &mut Session, p: &Params) -> Result<Value> {
         && !req.in_place
         && let Some(taken) = outputs.iter().find(|o| o.exists())
     {
-        super::instance::discard(&staged);
+        super::file_io::discard(&staged);
         return Err(EngineError::Io(format!("{} exists and noClobber is set", taken.display())));
     }
-    super::instance::commit(&staged)?;
+    super::file_io::commit(&staged)?;
     // The family as written: the outputs, and the files that needed nothing.
     let written: Vec<&PathBuf> = files.iter().map(|f| if f.calls.is_empty() { &f.input } else { &f.output }).collect();
     run.insert("target".into(), json!(written));

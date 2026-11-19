@@ -28,6 +28,7 @@ mod common;
 mod compare;
 pub(crate) mod compile;
 mod compile_cid;
+mod compile_export;
 mod compile_layout;
 mod compile_project;
 mod compile_select;
@@ -90,6 +91,7 @@ mod project;
 mod scale_upm;
 mod session;
 mod settings;
+mod shared;
 pub mod sharing;
 pub mod smart;
 mod snippets;
@@ -175,6 +177,7 @@ pub mod tension;
 mod thickness;
 pub mod tt_assembly;
 mod tt_debug;
+mod ttvm;
 mod url;
 
 use serde::Serialize;
@@ -331,6 +334,7 @@ pub(crate) use cmd;
 /// fontcraft-engine --test engine registry::` and check that its diff only adds your ids.
 pub const COMMAND_TABLES: &[CommandTable] = &[
     file::specs,
+    compile_export::specs,
     edit::specs,
     clipboard::specs,
     corner::specs,

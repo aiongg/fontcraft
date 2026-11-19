@@ -400,7 +400,7 @@ fn drop_shape_hints(layer: &mut Layer) {
     if layer.info.hints.is_empty() {
         return;
     }
-    let hints: Vec<_> = layer.info.hints.iter().filter_map(|h| super::decompose::remap_hint(h, &|_| None)).collect();
+    let hints: Vec<_> = layer.info.hints.iter().filter_map(|h| super::shared::remap_hint(h, &|_| None)).collect();
     layer.info.hints = hints;
 }
 
@@ -914,7 +914,7 @@ fn match_components(layer: &mut Layer, wanted: &[String]) -> std::result::Result
     if !layer.info.hints.is_empty() && map.iter().any(Option::is_none) {
         // A reference past the old shapes pointed at nothing before and is left as it is.
         let to = |i: usize| map.get(i).map_or(Some(i), |m| *m);
-        let hints: Vec<_> = layer.info.hints.iter().filter_map(|h| super::decompose::remap_hint(h, &to)).collect();
+        let hints: Vec<_> = layer.info.hints.iter().filter_map(|h| super::shared::remap_hint(h, &to)).collect();
         layer.info.hints = hints;
     }
     let mut flags = keep.into_iter();

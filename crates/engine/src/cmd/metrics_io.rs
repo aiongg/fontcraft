@@ -109,13 +109,13 @@ impl Format {
 fn export_metrics(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("file.exportMetrics", v)?;
     let font = s.font()?;
-    let master = super::kerning::master(&p, font)?;
+    let master = super::shared::master(&p, font)?;
     let format = match p.str("format")? {
         "metrics" => Format::Metrics,
         "afm" => Format::Afm,
         other => return Err(p.bad(format!("`format` must be metrics or afm, got `{}`", clip(other)))),
     };
-    let direction = super::kerning::direction(&p)?;
+    let direction = super::shared::direction(&p)?;
     if format == Format::Afm && direction != Direction::Ltr {
         return Err(p.bad("AFM holds left-to-right kerning only: leave out `direction`, or export the metrics format"));
     }
@@ -391,7 +391,7 @@ fn source_master(p: &Params, font: &Font) -> Result<String> {
 fn import_metrics(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("file.importMetrics", v)?;
     let font = s.font()?;
-    let master = super::kerning::editable_master(&p, font)?;
+    let master = super::shared::editable_master(&p, font)?;
     let scope: Option<HashSet<String>> = p.opt_glyphs("glyphs", font)?.filter(|g| !g.is_empty()).map(|g| g.into_iter().collect());
     let source = load_source(s, &p)?;
     let is_font = matches!(source, Source::Font { .. });
@@ -770,7 +770,7 @@ fn import_glyph_metrics(font: &mut Font, master: &str, source: &Source, mode: Mo
         }
         let mut gm = font.glyph_mut(want.glyph)?;
         let Some(l) = gm.layers.iter_mut().find(|l| l.id == master) else { continue };
-        if let Err(e) = super::spacing::shift_layer(l, dx) {
+        if let Err(e) = super::shared::shift_layer(l, dx) {
             drop(gm);
             if aligned {
                 restore(font, &original)?;

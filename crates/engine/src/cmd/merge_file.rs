@@ -120,7 +120,7 @@ fn merge_fonts(_: &mut Session, v: &Value) -> Result<Value> {
         drop_tables,
         layout,
         duplicates,
-        timestamp: Some(super::file::default_timestamp()),
+        timestamp: Some(super::shared::default_timestamp()),
         headers,
         cid_info,
         ps_name,

@@ -336,7 +336,7 @@ fn open_file(s: &mut Session, path: &str, warnings: &mut Warnings) -> Option<(us
         warnings.push(format!("`{}` is not an absolute path and is skipped", quoted(path)));
         return None;
     }
-    if let Some(index) = super::session::find_open(s, file) {
+    if let Some(index) = super::shared::find_open(s, file) {
         return Some((index, false));
     }
     // A device or a pipe would never finish reading: only files and folders (packages) open.

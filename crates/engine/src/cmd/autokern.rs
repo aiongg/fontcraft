@@ -51,7 +51,7 @@ use serde_json::{Map, Value, json};
 
 use super::autospace::{default_glyphs, master_ids, opt_in};
 use super::common::master_metrics;
-use super::kerning::{MAX_KERN_VALUE, direction as any_direction};
+use super::shared::{MAX_KERN_VALUE, direction as any_direction};
 use super::*;
 use crate::params::{Params, TargetKind};
 

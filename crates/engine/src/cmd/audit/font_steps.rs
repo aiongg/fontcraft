@@ -64,7 +64,7 @@ pub(super) fn command(fix: &str) -> Option<&'static str> {
         "autohint" => "hint.ps.autohintGlyph",
         _ => return None,
     };
-    find_command(command).is_some().then_some(command)
+    crate::cmd::registry::find(command).is_some().then_some(command)
 }
 
 /// Is `fix` one of the font-wide steps (built or not)?

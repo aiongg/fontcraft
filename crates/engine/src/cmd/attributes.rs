@@ -852,7 +852,7 @@ fn add_attribute(s: &mut Session, value: &Value) -> Result<Value> {
         "innerShadow" => Edit::InnerShadow(ShadowEdit::read(&p)?),
         "patternImage" => {
             let image = p.opt_str("image")?.unwrap_or_default();
-            super::color_layer::check_path_text(&p, "image", image)?;
+            super::shared::check_path_text(&p, "image", image)?;
             Edit::Pattern(image.to_string())
         }
         other => return Err(p.bad(format!("`attribute` must be gradient, shadow, innerShadow or patternImage, got \"{other}\""))),

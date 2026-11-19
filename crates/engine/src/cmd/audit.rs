@@ -25,7 +25,7 @@ use serde_json::{Map, Value, json};
 
 use super::*;
 use crate::params::Params;
-use crate::{Batch, DocState, EngineError};
+use crate::{DocState, EngineError};
 
 const SCHEMA: &str = "fontcraft.audit/1";
 /// Most entries in a `checks`, `exclude`, `groups` or `scope` list.
@@ -1499,7 +1499,7 @@ fn fix_via(fx: &FixSpec) -> Option<&'static str> {
         None if FIX_ORDER.contains(&fx.id) => fx.command?,
         None => return None,
     };
-    find_command(command).is_some().then_some(command)
+    super::registry::find(command).is_some().then_some(command)
 }
 
 /// What `audit.fix` reports.
@@ -1601,7 +1601,7 @@ fn fix(s: &mut Session, v: &Value) -> Result<Value> {
         (ctx.grid_step, ctx.main_curve, ctx.variable)
     };
     let how = How { safe_only, dry, backup, facts };
-    one_step(s, FIX_LABEL, |s| {
+    s.one_step(FIX_LABEL, |s| {
         fix_info(s, &info, &how, &mut report);
         font_steps::run_steps(s, &run, &steps.fixes, steps.glyphs.as_ref(), &font_steps::DATA_STEPS, &how, &mut report)?;
         for group in &groups {
@@ -1793,32 +1793,6 @@ fn fix_info(s: &mut Session, info: &InfoFixes, how: &How, report: &mut FixReport
             Err(e) => report.skip(None, None, None, Some(fix), format!("the fix failed and changed nothing: {e}")),
         }
     }
-}
-
-/// Runs `f` as one undo step named `label`, as `command.batch` does; inside a batch it is part
-/// of that batch.
-pub(super) fn one_step<T>(s: &mut Session, label: &str, f: impl FnOnce(&mut Session) -> Result<T>) -> Result<T> {
-    let outer = s.batch.is_none();
-    if outer {
-        s.batch = Some(Batch { label: label.into(), before: Vec::new() });
-    }
-    let out = f(s);
-    if outer {
-        let finished = s.batch.take();
-        if out.is_ok()
-            && let Some(batch) = finished
-        {
-            for (id, before) in batch.before {
-                let Some(i) = s.position_of(id) else { continue };
-                if let Some(doc) = s.docs_mut().get_mut(i)
-                    && !doc.font.same_as(&before)
-                {
-                    crate::push_undo(doc, batch.label.clone(), before);
-                }
-            }
-        }
-    }
-    out
 }
 
 /// The layer `id` of `glyph`.
