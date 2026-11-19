@@ -5,6 +5,7 @@
 pub mod bars;
 pub mod commands;
 pub mod dock;
+pub mod font_info;
 pub mod rail;
 pub mod window;
 

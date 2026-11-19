@@ -55,6 +55,7 @@ pub enum PanelId {
     CompareFonts,
     CompareFamily,
     Project,
+    FontInfo,
 }
 
 impl PanelId {
@@ -94,6 +95,7 @@ impl PanelId {
         PanelId::CompareFonts,
         PanelId::CompareFamily,
         PanelId::Project,
+        PanelId::FontInfo,
     ];
 
     /// The stable id commands and saved layouts use.
@@ -133,6 +135,7 @@ impl PanelId {
             PanelId::CompareFonts => "compareFonts",
             PanelId::CompareFamily => "compareFamily",
             PanelId::Project => "project",
+            PanelId::FontInfo => "fontInfo",
         }
     }
 
@@ -178,6 +181,7 @@ impl PanelId {
             PanelId::CompareFonts => w.compare_fonts.clone(),
             PanelId::CompareFamily => w.compare_family.clone(),
             PanelId::Project => w.project.clone(),
+            PanelId::FontInfo => w.font_info.clone(),
         }
     }
 
@@ -229,6 +233,7 @@ craft::ui::words! {
         compare_fonts: "fontcraftPanel.compareFonts" = "Compare Fonts";
         compare_family: "fontcraftPanel.compareFamily" = "Compare Family";
         project: "fontcraftPanel.project" = "Project";
+        font_info: "fontcraftPanel.fontInfo" = "Font Info";
     }
 }
 
@@ -276,6 +281,7 @@ impl DockPanels<PanelId> for Panels<'_> {
             PanelId::GlyphMetrics => {
                 panels::glyph_metrics::show(ui, panels::glyph_metrics::Props { model: &self.models.glyph_metrics, sent: self.sent });
             }
+            PanelId::FontInfo => panels::font_info::show(ui, panels::font_info::Props { model: &self.models.font_info, sent: self.sent }),
             // Drawn by `group_view`.
             PanelId::Document => {}
             other => panels::stub::show(ui, panels::stub::Props { title: other.title(&self.words) }),

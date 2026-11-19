@@ -3,6 +3,7 @@
 //! One file per area. Each file owns its model types and a `project` function; [`Models::project`] calls every
 //! one of them with a one-line arm, and only when the [`Stamp`] moved since the last call.
 
+pub mod font_info;
 pub mod glyph;
 
 use craft::ui::contract::Tracked;
@@ -17,6 +18,8 @@ pub struct Models {
     seen: Option<Stamp>,
     /// The shown glyph's width and sidebearings (`panels::glyph_metrics`).
     pub glyph_metrics: Tracked<glyph::GlyphMetrics>,
+    /// The Font Info panel (`panels::font_info`).
+    pub font_info: Tracked<font_info::FontInfoModel>,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -50,6 +53,7 @@ impl Models {
         }
         self.seen = Some(stamp);
         glyph::project(&mut self.glyph_metrics, cx);
+        font_info::project(&mut self.font_info, cx);
         true
     }
 }

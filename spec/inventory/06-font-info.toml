@@ -745,6 +745,52 @@ observe = [
   "In font A (m7-one), click the plus button beside Custom Parameters on the Font, Masters and Exports tabs: note which of typoAscender, Remove Glyphs, Filter, glyphOrder, versionString, familyNames and copyrights each tab offers, the order of the list, and whether the search matches inside names.",
 ]
 
+[[panel]]
+id = "dialog.os2Bits"
+label = "OS/2 Bits"
+location = "dialog"
+controls = [
+  "search field",
+  "one check box per bit, named after the OS/2 table's bit",
+  "OK and Cancel buttons",
+]
+area = "font-info"
+milestone = "M7"
+summary = "Edits the fsType, codePageRanges and unicodeRanges parameters as check boxes, opened by the Edit button of their row. OK stores the checked bits with one font.customParameters.set; Cancel changes nothing."
+ref = "Font Info › Font › Custom Parameters"
+status = "inferred"
+notes = "Not documented and not yet observed. M7 plan: M7.22. fsType's usage levels 1, 2 and 3 exclude each other, as the M7.21 check refuses two of them."
+guesses = [
+  "fsType, codePageRanges and unicodeRanges each open a dialog of check boxes with a search field; opening each row's editor in the reference app settles it.",
+  "codePageRanges stores code page numbers, and a stored bit below 64 that a code page stands for shows as that page; the file the reference app writes after ticking a box settles it.",
+]
+observe = [
+  "In font A (m7-one), add fsType, codePageRanges and unicodeRanges on the Font tab and click each value: note whether a dialog opens, what it lists and how a search narrows it.",
+]
+
+[[panel]]
+id = "dialog.panose"
+label = "PANOSE"
+location = "dialog"
+controls = [
+  "ten menus, one per PANOSE digit",
+  "OK and Cancel buttons",
+]
+area = "font-info"
+milestone = "M7"
+summary = "Edits the panose parameter as ten menus, opened by the Edit button of its row. OK stores the ten digits with one font.customParameters.set; Cancel changes nothing."
+ref = "Font Info › Font › Custom Parameters"
+status = "inferred"
+notes = "Not documented and not yet observed. M7 plan: M7.22. The value names come from the PANOSE classification."
+guesses = [
+  "The menus name the values only for family kind 2 (Latin Text); other family kinds show plain numbers. The dialog of the reference app with family kind 3 settles it.",
+  "Variable Font Origin, Get Hints From Master and Link Metrics With Master are menus of the font's masters that store the master's id; the reference app's row and the file it writes settle it.",
+  "A refused value's message stays under its row until the next edit; the reference app with vendorID ABCDE settles it.",
+]
+observe = [
+  "In font A (m7-one), add panose on the Font tab and click its value: note whether a dialog opens, its menus and their names for family kind 2 and 3.",
+]
+
 [[command]]
 id = "font.customParameters.list"
 label = "List Custom Parameters"

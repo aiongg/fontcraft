@@ -46,6 +46,8 @@ pub struct ViewState {
     pub workspace: Workspace<PanelId>,
     /// The document canvas's view.
     pub canvas: CanvasView,
+    /// The Font Info panel's tab and the dialog it asked for.
+    pub font_info: crate::shell::font_info::FontInfoView,
 }
 
 impl Default for ViewState {
@@ -56,6 +58,7 @@ impl Default for ViewState {
             glyph: None,
             workspace: dock::default_workspace(),
             canvas: CanvasView::new(egui::Rect::NOTHING, Point::ZERO, 1.0),
+            font_info: Default::default(),
         }
     }
 }
@@ -164,6 +167,8 @@ impl FontCraftApp {
                     }
                 }
                 Msg::Shell(command) => {
+                    // Shell commands change view state, which projections read.
+                    self.view_revision += 1;
                     if let Err(error) = crate::shell::commands::run(self, &command) {
                         failed.push(format!("{}: {error}", command.id));
                     }
