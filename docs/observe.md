@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1475 rows to check: 2519 guesses and 593 observe steps.**
+**1475 rows to check: 2523 guesses and 593 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -356,7 +356,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `infoBox.showsColorLabels` (behavior, M4, handbook): The Info box shows the glyph colour label on its left half…
   - Guess: The split square sits at the left of the Info box and is drawn only when the glyph or the active layer has a colour label; the Info box itself shows only while something is selected. Settled by observation.
 - [ ] `editView.contextMenu` (panel, M4, handbook): Edit View canvas context menu
-  - Guess: The swatch row opens the glyph section of the menu, under a Glyph Color caption (Layer Color while Alt is held). Settled by observation.
+  - Guess: The swatches open the glyph section of the menu as a Glyph Color submenu (Layer Color when Alt was held at the click). Settled by observation.
   - Guess: The glyph section offers Exports, Locked and Show Glyph in Font View, and the menu ends with Copy Glyph Names, as the Glyphs 3 video lists them; the other entries of that list follow with their milestones. Settled by observation.
 - [ ] `view.showMeasurementLine` (M5, handbook, live): Show Measurement Line
   - Guess: The numbers sit just above the line, each centred between the advance edge and the crossing it measures, and a glyph narrower than 24 screen points gets none; watching the reference app with a known glyph would settle it.
@@ -1239,6 +1239,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A right-click on a glyph that is not selected selects it alone first; on a selected glyph the menu acts on the whole selection. Settled by observation.
   - Guess: The items come in this order: the colour swatches under a caption (Glyph Color, or Layer Color with Alt), then Tags, then Copy Glyph Names. Settled by observation.
   - Guess: With Alt held the swatches set the layer colour of Font View's master. Settled by observation.
+  - Guess: The swatches sit in a Glyph Color submenu, Exports follows them, then Tags and Copy Glyph Names. Settled by observation.
+  - Guess: Exports shows no mark when only some of the glyphs export, and choosing it then makes them all export; with all exporting it turns export off. Settled by observation.
+  - Guess: Exports is in this menu as the Glyphs 3 video shows it in the canvas menu. Settled by observation.
+  - Guess: More Tags… shows the sidebar with the glyph inspector, whose Tags field lists every tag. Settled by observation.
 - [ ] `fontView.sidebar` (panel, M4, handbook): Font View Sidebar
   - Guess: The sections start open; categories, scripts, folders and groups start closed. Settled by opening a new document in the reference.
   - Guess: The actions menu sits at the foot of the sidebar, below the entries. Settled by a screenshot of the reference's Font View.

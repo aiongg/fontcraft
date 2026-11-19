@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2990 guesses on 1577 rows (637 of them live commands).**
+**2994 guesses on 1577 rows (637 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -325,7 +325,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `infoBox.component` (panel) | M6 | handbook | – | With several components selected the box describes the first in shape order and shows how many more are selected beside its name; the reference app with two components selected settles it. |
 | `infoBox.component` (panel) | M6 | handbook | – | A component whose transform is a matrix with slant that cannot be shown as scale and rotation shows only X and Y, the other fields empty and greyed out; a component with such a matrix in the reference app settles it. |
 | `infoBox.image` (panel) | M11 | handbook | – | Width and height are edited independently, without a proportion lock. Settled by typing a new width for a selected image in the reference's Info box and reading its height. |
-| `editView.contextMenu` (panel) | M4 | handbook | – | The swatch row opens the glyph section of the menu, under a Glyph Color caption (Layer Color while Alt is held). Settled by observation. |
+| `editView.contextMenu` (panel) | M4 | handbook | – | The swatches open the glyph section of the menu as a Glyph Color submenu (Layer Color when Alt was held at the click). Settled by observation. |
 | `editView.contextMenu` (panel) | M4 | handbook | – | The glyph section offers Exports, Locked and Show Glyph in Font View, and the menu ends with Copy Glyph Names, as the Glyphs 3 video lists them; the other entries of that list follow with their milestones. Settled by observation. |
 | `window.textPreview` (panel) | M5 | handbook | – | The text is edited in a plain field above the area that draws it in the font, since FontCraft has no text field that draws in the font being edited; the field edits texts of up to 100,000 characters, longer ones change through Set Preview Text and Find and Replace. The reference field both edits and draws; a FontCraft field that draws in the font would settle it. |
 | `window.textPreview` (panel) | M5 | handbook | – | The style pop-up starts on the master of the showing Edit View tab and follows it until a style is picked; the reference app's first choice would settle it. |
@@ -575,6 +575,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontView.glyphContextMenu` (panel) | M4 | handbook | – | A right-click on a glyph that is not selected selects it alone first; on a selected glyph the menu acts on the whole selection. Settled by observation. |
 | `fontView.glyphContextMenu` (panel) | M4 | handbook | – | The items come in this order: the colour swatches under a caption (Glyph Color, or Layer Color with Alt), then Tags, then Copy Glyph Names. Settled by observation. |
 | `fontView.glyphContextMenu` (panel) | M4 | handbook | – | With Alt held the swatches set the layer colour of Font View's master. Settled by observation. |
+| `fontView.glyphContextMenu` (panel) | M4 | handbook | – | The swatches sit in a Glyph Color submenu, Exports follows them, then Tags and Copy Glyph Names. Settled by observation. |
+| `fontView.glyphContextMenu` (panel) | M4 | handbook | – | Exports shows no mark when only some of the glyphs export, and choosing it then makes them all export; with all exporting it turns export off. Settled by observation. |
+| `fontView.glyphContextMenu` (panel) | M4 | handbook | – | Exports is in this menu as the Glyphs 3 video shows it in the canvas menu. Settled by observation. |
+| `fontView.glyphContextMenu` (panel) | M4 | handbook | – | More Tags… shows the sidebar with the glyph inspector, whose Tags field lists every tag. Settled by observation. |
 | `fontView.sidebar` (panel) | M4 | handbook | – | The sections start open; categories, scripts, folders and groups start closed. Settled by opening a new document in the reference. |
 | `fontView.sidebar` (panel) | M4 | handbook | – | The actions menu sits at the foot of the sidebar, below the entries. Settled by a screenshot of the reference's Font View. |
 | `fontView.sidebar` (panel) | M4 | handbook | – | A script entry shows the Unicode Script property value its glyph-data id stands for (`Latin`, `Tibetan`, `Canadian Aboriginal`), not the id; paths and parameters keep the id. Settled by a screenshot of the reference's Languages section. |
