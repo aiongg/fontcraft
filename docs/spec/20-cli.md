@@ -2146,7 +2146,13 @@ fontcraft-cli proof FONT... [--layout NAME] [--format pdf|svg|html] [--glyphs LI
 | `text` | 1 | a string laid out with the font's advances, as paths | fontTools `svgPathPen` |
 
 All layouts except `waterfall` draw outlines as vector paths and do not embed the font, so they look the
-same in every viewer. `waterfall` embeds the font on purpose.
+same in every viewer. `waterfall` embeds the font on purpose in SVG and HTML. In PDF it draws the text as
+outlines too: each character's glyph comes from `cmap`, its advance from the font at the proof's location,
+and each pair of neighbours gets its `GPOS` (or `kern` table) pair kerning.
+
+A PDF proof is one file holding every page, each at its own size. Labels are set in the standard
+Helvetica font. Each glyph a cell or page is about sits in a `/Glyph` marked-content sequence with its
+name and glyph id, so tools can read the glyph order back from the file.
 
 **Hint overlays.** Successive stems are drawn slightly offset so that overlapping stems can be told
 apart; areas where two stems overlap get their own colour. `--hint-groups` limits the overlay to chosen

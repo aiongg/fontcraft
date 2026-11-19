@@ -5,9 +5,9 @@
 //! is written, so a failure leaves nothing behind. The command changes no document, so it is not
 //! journalled: replaying a session does not write proofs again.
 //!
-//! Built: the layouts `palette`, `outline` and `waterfall` as SVG, and the HTML specimen (any
-//! layout; it embeds the font as WOFF2). PDF is M12.36; the other layouts and the drawing options
-//! refuse with a message until their packages land.
+//! Built: the layouts `palette`, `outline` and `waterfall` as PDF (one file) and SVG (one file per
+//! page), and the HTML specimen (any layout; it embeds the font as WOFF2). The other layouts and
+//! the drawing options refuse with a message until their packages land.
 
 use std::path::{Path, PathBuf};
 
@@ -56,7 +56,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Make Proof Sheet",
         [],
         None,
-        "{fonts: [path], face?: int|name, layout: \"palette\"|\"outline\"|\"palette+outline\"|\"digi\"|\"boxes\"|\"hints\"|\"waterfall\"|\"compare\"|\"synopsis\"|\"features\"|\"cmap\"|\"vorg\"|\"text\", format?: \"pdf\"|\"svg\"|\"html\", output?: path, outputDir?: path, noClobber?: bool, glyphs?: selector, excludeGlyphs?: selector, glyphsPerPage?: int, size?: number, sizes?: [number], sort?: \"gid\"|\"name\"|\"unicode\"|\"lookup\", text?: string, features?: [tag]|\"*\", location?: {axis: number}, metrics?: \"h\"|\"v\"|\"both\", vertical?: bool, baseline?: number, show?: [string], hide?: [string], pointLabels?: [\"index\"|\"type\"|\"position\"], hintGroups?: [int], panels?: [{index: int, show?: [string], hide?: [string], settings?: object}], cidLayout?: path, errorLog?: path, fitBbox?: [l, b, r, t], scale?: {x: number, y?: number}, units?: \"font\"|1000, paltInKern?: bool, black?: bool, header?: bool, pageSize?: [w, h], margins?: [t, r, b, l], settings?: {name: value}} proof sheets of compiled fonts, written next to each input as NAME.proof.svg (NAME.proof-001.svg … for several pages), .html or .pdf; format defaults to pdf; a selector is a list of glyph names or ranges (a-b, a..b, by glyph index) or one comma-separated string; the HTML specimen embeds the font as WOFF2 and shows sample text, a waterfall, the character set, feature switches and axis stops; built so far: palette, outline and waterfall as SVG, and HTML → {proofs: [{font, format, layout, pages, files: [path]}]}",
+        "{fonts: [path], face?: int|name, layout: \"palette\"|\"outline\"|\"palette+outline\"|\"digi\"|\"boxes\"|\"hints\"|\"waterfall\"|\"compare\"|\"synopsis\"|\"features\"|\"cmap\"|\"vorg\"|\"text\", format?: \"pdf\"|\"svg\"|\"html\", output?: path, outputDir?: path, noClobber?: bool, glyphs?: selector, excludeGlyphs?: selector, glyphsPerPage?: int, size?: number, sizes?: [number], sort?: \"gid\"|\"name\"|\"unicode\"|\"lookup\", text?: string, features?: [tag]|\"*\", location?: {axis: number}, metrics?: \"h\"|\"v\"|\"both\", vertical?: bool, baseline?: number, show?: [string], hide?: [string], pointLabels?: [\"index\"|\"type\"|\"position\"], hintGroups?: [int], panels?: [{index: int, show?: [string], hide?: [string], settings?: object}], cidLayout?: path, errorLog?: path, fitBbox?: [l, b, r, t], scale?: {x: number, y?: number}, units?: \"font\"|1000, paltInKern?: bool, black?: bool, header?: bool, pageSize?: [w, h], margins?: [t, r, b, l], settings?: {name: value}} proof sheets of compiled fonts, written next to each input as NAME.proof.svg (NAME.proof-001.svg … for several pages), .html or .pdf; format defaults to pdf; a selector is a list of glyph names or ranges (a-b, a..b, by glyph index) or one comma-separated string; the HTML specimen embeds the font as WOFF2 and shows sample text, a waterfall, the character set, feature switches and axis stops; built so far: palette, outline and waterfall as PDF and SVG, and HTML → {proofs: [{font, format, layout, pages, files: [path]}]}",
         always,
         proof
     ).files(const { &[FileParam::read("fonts"), FileParam::read("cidLayout"), FileParam::write("errorLog"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files()]

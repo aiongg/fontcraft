@@ -7,9 +7,10 @@
 //! - `page`: the sheets as pages of drawing items (glyph grid, one glyph per page with points and
 //!   metrics, waterfall), independent of the file format.
 //! - `svg`: one SVG document per page; glyphs as paths, waterfall text in the embedded font.
+//! - `pdf`: one PDF document with every page (through `pdf-writer`); glyphs as paths, waterfall
+//!   text as outlines placed by `cmap`, advances and pair kerning (`kern`).
 //! - `html`: the browser specimen with the font embedded (WOFF2 when the input is WOFF2), sample
 //!   text, waterfall, character set, feature switches and axis stops; it carries no script.
-//! - PDF (through `pdf-writer`) draws the same pages (M12.36).
 //!
 //! [`select_glyphs`] turns a selection with ranges, exclusions and a sort order into the glyph
 //! names [`ProofOptions::glyphs`] takes; [`grid_size_for`] turns a glyphs-per-page count into a
@@ -21,7 +22,9 @@
 
 mod font;
 mod html;
+mod kern;
 mod page;
+mod pdf;
 mod select;
 mod svg;
 mod text;
@@ -108,10 +111,6 @@ pub enum ProofError {
 
 /// Makes the proof of the compiled font `bytes` (face `face` of a collection).
 pub fn proof(bytes: &[u8], face: u32, options: &ProofOptions) -> Result<Proof, ProofError> {
-    if options.format == ProofFormat::Pdf {
-        // M12.36: `pdf::write(&document(bytes, face, options)?)`.
-        return Err(ProofError::NotBuilt("PDF"));
-    }
     let font::FontBytes { sfnt, embed, container } = font::load(bytes, face)?;
     let font = font::font_ref(&sfnt)?;
     let location = font::location(&font, &options.location)?;
@@ -119,23 +118,17 @@ pub fn proof(bytes: &[u8], face: u32, options: &ProofOptions) -> Result<Proof, P
     let gids = face.resolve(&options.glyphs)?;
     match options.format {
         ProofFormat::Html => Ok(Proof { files: vec![html::write(&face, &gids, options, &embed, container)?], pages: 1 }),
-        ProofFormat::Svg | ProofFormat::Pdf => {
+        ProofFormat::Svg => {
             let doc = page::layout(&face, &gids, options, Some(embedded(embed, container, options)))?;
             let files = svg::write(&doc);
             Ok(Proof { pages: files.len(), files })
         }
+        // The PDF draws waterfall text as outlines, so it embeds no font.
+        ProofFormat::Pdf => {
+            let doc = page::layout(&face, &gids, options, None)?;
+            Ok(Proof { pages: doc.pages.len(), files: vec![pdf::write(&doc, &face)?] })
+        }
     }
-}
-
-/// The laid-out pages of a proof, for the page-based writers.
-#[allow(dead_code)] // The PDF writer (M12.36) draws from it.
-pub(crate) fn document(bytes: &[u8], face: u32, options: &ProofOptions) -> Result<page::Document, ProofError> {
-    let font::FontBytes { sfnt, embed, container } = font::load(bytes, face)?;
-    let font = font::font_ref(&sfnt)?;
-    let location = font::location(&font, &options.location)?;
-    let face = font::Face::new(font, &location)?;
-    let gids = face.resolve(&options.glyphs)?;
-    page::layout(&face, &gids, options, Some(embedded(embed, container, options)))
 }
 
 fn embedded(bytes: Vec<u8>, container: font::Container, options: &ProofOptions) -> page::Embedded {
@@ -148,10 +141,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn pdf_refuses_until_its_writer_lands_and_junk_is_an_error() {
-        let pdf = ProofOptions { format: ProofFormat::Pdf, ..ProofOptions::default() };
-        assert!(proof(&[], 0, &pdf).unwrap_err().to_string().contains("not built"));
-        for format in [ProofFormat::Svg, ProofFormat::Html] {
+    fn junk_is_an_error_in_every_format() {
+        for format in [ProofFormat::Svg, ProofFormat::Html, ProofFormat::Pdf] {
             let options = ProofOptions { format, ..ProofOptions::default() };
             assert!(proof(b"not a font at all", 0, &options).is_err());
         }

@@ -1813,12 +1813,16 @@ milestone = "M12"
 summary = "Draws proof sheets of a font's glyphs as PDF, SVG or HTML: overview palettes, one-glyph pages with points, coordinates and metrics, hint and alignment-zone overlays, size waterfalls, side-by-side comparison of several fonts, and sheets that show what layout features and the cmap do. Input may be a binary font, a Type 1 font or a source."
 ref = "AFDKO proofpdf.py help and pdflib/fontpdf.py parameter list (charplot, digiplot, fontplot, fontplot2, fontsetplot, hintplot, waterfallplot), tx -pdf / -ps help, spot proof options and table views; fontTools pens.svgPathPen, varLib.plot"
 status = "docs"
-notes = "M12.35 builds the palette, outline and waterfall layouts as SVG (one file per page, NAME.proof-001.svg …) and the HTML specimen; PDF is M12.36. The other layouts, --show/--hide and the other drawing options, --list-settings, --open and proofs of sources and Type 1 fonts refuse with a message until their packages land. Outline pages draw the points skrifa reports, so the implied on-curve points between two TrueType off-curve points appear as on-curve points."
+notes = "M12.35 builds the palette, outline and waterfall layouts as SVG (one file per page, NAME.proof-001.svg …) and the HTML specimen; M12.36 writes the same pages as one PDF (NAME.proof.pdf), each page at its own size, glyphs as vector paths, labels in the standard Helvetica font, and each shown glyph in a /Glyph marked-content sequence carrying its name and glyph id. The other layouts, --show/--hide and the other drawing options, --list-settings, --open and proofs of sources and Type 1 fonts refuse with a message until their packages land. Outline pages draw the points skrifa reports, so the implied on-curve points between two TrueType off-curve points appear as on-curve points."
 guesses = [
   "A palette cell is one glyph size wide and tall, plus two label lines (name, then code point and advance) at a tenth of the glyph size; the glyph is scaled so the font's ascender-to-descender height fills the cell. Settled by measuring a fontplot page of the reference script on our own font.",
   "An explicit --glyphs list is shown in --sort order (glyph order by default), not in the order given. Settled by running the reference script with an out-of-order -g list.",
   "A waterfall without --text shows the characters of the selected glyphs, split into groups that fit one line at the largest size; each group is set at every size before the next group starts. Settled by a waterfallplot run of the reference script.",
   "Pages of an SVG proof are numbered with at least three digits after the name (A.proof-001.svg); a one-page proof keeps the plain name. Nothing in the references fixes it.",
+  "A PDF waterfall draws its text as outlines (glyphs from cmap, advances at the proof's location, GPOS or kern pair kerning) instead of embedding the font, so the viewer's rasteriser and hinting are not what is seen. Settled by the owner if the PDF should embed the font as the reference's waterfallplot does.",
+  "PDF waterfall kerning reads the kern feature of the default language system of latn, else DFLT, else the first script that has one, and the kern table only when GPOS has no kern feature; device and variation deltas are left out. Settled by comparing a waterfallplot page of the reference script on a kerned font of ours.",
+  "A character the font does not map is drawn as .notdef with its advance in a PDF waterfall. Settled by a waterfallplot run with text the font lacks.",
+  "PDF labels and titles use the standard Helvetica font in WinAnsi encoding; characters outside it print as ?. Settled by reading the label font of a proofpdf page.",
 ]
 
 [[cli]]
@@ -2806,7 +2810,7 @@ milestone = "M12"
 summary = "Renders proof sheets for one or more fonts or sources in the chosen layout and returns the files written with page count. Read-only with respect to the fonts. The settings object accepts the low-level drawing parameters listed by 'proof --list-settings'."
 ref = "docs/spec/20-cli.md › proof"
 status = "docs"
-notes = "Built in M12.35 for compiled fonts: palette, outline and waterfall as SVG, and the HTML specimen for any layout; format pdf is M12.36. Parameters of other packages (show, hide, margins, settings and the rest) refuse with a message. The command changes no document, so it is not journalled. Result: {proofs: [{font, format, layout, pages, files}]}."
+notes = "Built in M12.35 and M12.36 for compiled fonts: palette, outline and waterfall as PDF (one file holding every page) and SVG (one file per page), and the HTML specimen for any layout. Parameters of other packages (show, hide, margins, settings and the rest) refuse with a message. The command changes no document, so it is not journalled. Result: {proofs: [{font, format, layout, pages, files}]}."
 guesses = [
   "The HTML specimen has no script: feature switches are checkboxes and each axis is a row of stops (nine even values plus the default) that CSS turns into font settings, so the axes are not free sliders. Settled by the owner if a scripted slider is wanted.",
 ]

@@ -1438,9 +1438,11 @@ dependencies = [
 name = "fontcraft-proof"
 version = "0.0.1"
 dependencies = [
+ "fontcraft-compile",
  "fontcraft-model",
  "fontcraft-render",
  "fontcraft-tables",
+ "lopdf",
  "pdf-writer",
  "skrifa 0.48.0",
  "thiserror 2.0.21",
