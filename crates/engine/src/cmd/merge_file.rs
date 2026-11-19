@@ -88,7 +88,7 @@ fn merge_fonts(_: &mut Session, v: &Value) -> Result<Value> {
     if glyph_maps.iter().all(Vec::is_empty) {
         glyph_maps.clear();
     }
-    let options = MergeOptions { glyph_maps, drop_tables, layout, duplicates, timestamp: Some(super::file::default_timestamp()) };
+    let options = MergeOptions { glyph_maps, drop_tables, layout, duplicates, timestamp: Some(super::shared::default_timestamp()) };
     let result = merge_with_report(&fonts, &options)?;
     let bytes = fontcraft_tables::write(&result.font, &WriteOptions { order: TableOrder::Recommended })?;
     let first_input = item_path(&p, items.first().unwrap_or(&Value::Null))?;

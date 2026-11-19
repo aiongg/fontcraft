@@ -432,7 +432,7 @@ fn set_shape_order(s: &mut Session, value: &Value) -> Result<Value> {
                     }
                 }
                 let remap = |i: usize| Some(new_of.get(i).copied().unwrap_or(i));
-                layer.info.hints = layer.info.hints.iter().filter_map(|h| super::decompose::remap_hint(h, &remap)).collect();
+                layer.info.hints = layer.info.hints.iter().filter_map(|h| super::shared::remap_hint(h, &remap)).collect();
             }
             Ok(())
         })

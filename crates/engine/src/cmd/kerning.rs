@@ -8,15 +8,13 @@
 
 use fontcraft_model::{Font, KernTable};
 use fontcraft_spacing::kerning::{Applied, Direction, KernError, Lock, Position, Side, Which, facing, locks, stored_pair};
-use fontcraft_spacing::{metrics_source, round_half_up};
+use fontcraft_spacing::round_half_up;
 use serde_json::{Value, json};
 
+use super::shared::{MAX_KERN_VALUE, direction, editable_master, master};
 use super::*;
 use crate::EngineError;
 use crate::params::Params;
-
-/// Largest kerning value a command stores, either sign: what a compiled pair value can hold.
-pub(crate) const MAX_KERN_VALUE: f64 = 32_767.0;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -69,35 +67,6 @@ pub fn specs() -> Vec<CommandSpec> {
 }
 
 // ---------- shared parameter readers ----------
-
-/// `direction`, `ltr` when absent.
-pub(crate) fn direction(p: &Params) -> Result<Direction> {
-    match p.opt_str("direction")? {
-        None => Ok(Direction::Ltr),
-        Some(name) => {
-            Direction::from_name(name).ok_or_else(|| p.bad(format!("`direction` must be \"ltr\", \"rtl\" or \"vertical\", got \"{name}\"")))
-        }
-    }
-}
-
-/// `master`, the first master when absent.
-pub(crate) fn master(p: &Params, font: &Font) -> Result<String> {
-    match p.opt_str("master")? {
-        Some(id) => font.master(id).map(|m| m.id.clone()).map_err(|_| p.bad(format!("the font has no master `{id}`"))),
-        None => Ok(font.default_master()?.id.clone()),
-    }
-}
-
-/// [`master`], refused when the master takes its kerning from another one.
-pub(crate) fn editable_master(p: &Params, font: &Font) -> Result<String> {
-    let id = master(p, font)?;
-    match metrics_source(font, &id) {
-        Some(source) if source.id != id => {
-            Err(p.bad(format!("master `{id}` takes its metrics and kerning from master `{}` ({}); edit that master instead", source.id, source.name)))
-        }
-        _ => Ok(id),
-    }
-}
 
 /// A command side: a glyph of the font or `@group`. A group must be the group of some glyph on
 /// the side that faces the pair at `position`.

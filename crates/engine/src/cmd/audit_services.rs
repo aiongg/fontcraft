@@ -331,7 +331,7 @@ fn check_outlines(s: &mut Session, v: &Value) -> Result<Value> {
             let names = glyphs_of(&report);
             f.insert("glyphs".into(), json!(names));
         }
-        let (fixed, cleanup) = super::audit::one_step(s, "Check Outlines", |s| {
+        let (fixed, cleanup) = s.one_step("Check Outlines", |s| {
             let before = s.doc()?.font.clone();
             let fixed = s.execute("audit.fix", &Value::Object(f))?;
             let cleanup = clean_up_fixed(s, &before, &fixed, decimal, keep_order)?;

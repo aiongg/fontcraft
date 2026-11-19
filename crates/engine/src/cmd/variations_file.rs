@@ -488,17 +488,17 @@ fn write_with_plot(out: &Path, bytes: &[u8], plot: &Path, svg: &[u8], req: &Outp
     }
     let created = file_io::create_output_dir(req)?;
     let mut staged = Vec::with_capacity(2);
-    let written = super::instance::stage(plot, svg, 0)
+    let written = super::file_io::stage(plot, svg, 0)
         .and_then(|s| {
             staged.push(s);
-            super::instance::stage(out, bytes, 1)
+            super::file_io::stage(out, bytes, 1)
         })
         .and_then(|s| {
             staged.push(s);
-            super::instance::commit(&staged)
+            super::file_io::commit(&staged)
         });
     if written.is_err() {
-        super::instance::discard(&staged);
+        super::file_io::discard(&staged);
         file_io::remove_created(&created);
     }
     written

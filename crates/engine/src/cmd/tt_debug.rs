@@ -3,7 +3,7 @@
 //!
 //! Both build the instance as TrueType in memory with the hinted preview's build
 //! (`hint_preview.rs`), and run its programs in FontCraft's own interpreter
-//! (`crate::ttvm`), ported from the one the preview draws with, so the points match.
+//! (`super::ttvm`), ported from the one the preview draws with, so the points match.
 //!
 //! The debugger keeps no session state: a result names the step it stopped at, and the next
 //! request passes that `step` back with an action. Each request runs the font and control value
@@ -26,11 +26,11 @@ use serde_json::{Map, Value, json};
 use skrifa::raw::FontRef;
 
 use super::hint_preview::{Built, build};
+use super::ttvm::debug::{GlyphRun, Outcome, SizeContext, StepInfo, VmPoint};
+use super::ttvm::{Program, SmoothMode, Target};
 use super::*;
 use crate::EngineError;
 use crate::params::Params;
-use crate::ttvm::debug::{GlyphRun, Outcome, SizeContext, StepInfo, VmPoint};
-use crate::ttvm::{Program, SmoothMode, Target};
 
 /// Pixel sizes accepted.
 pub const MIN_PPEM: u16 = 1;
@@ -562,7 +562,7 @@ mod tests {
         let n = points.len();
         let mut glyph = points;
         glyph.extend([VmPoint::default(); 4]);
-        let snapshot = crate::ttvm::debug::Snapshot {
+        let snapshot = super::ttvm::debug::Snapshot {
             outcome: Outcome::Finished,
             steps: 0,
             next: None,

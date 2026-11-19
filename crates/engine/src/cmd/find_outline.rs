@@ -26,7 +26,7 @@ use fontcraft_pathops::{Contour, Node as PNode, NodeKind as PKind};
 use serde_json::{Value, json};
 
 use super::common::{Outcome, grid, in_range};
-use super::decompose::remap_hint;
+use super::shared::remap_hint;
 use super::*;
 use crate::params::{Params, TargetKind, kind};
 

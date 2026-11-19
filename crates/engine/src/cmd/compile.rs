@@ -19,6 +19,7 @@ use fontcraft_compile::{AssetsRef, DataRef, Flavour, Options};
 use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Font, Resolved, SourceFormat, Target};
 
+use super::shared::source_feature_dir;
 use super::*;
 use crate::EngineError;
 use crate::params::Params;
@@ -216,10 +217,10 @@ pub(super) fn check_file_destination(p: &Params, dest: &Dest, flavours: &[Flavou
 /// `SOURCE_DATE_EPOCH`, else the clock.
 pub(super) fn timestamp(p: &Params) -> Result<i64> {
     if p.get("timestamp").and_then(Value::as_str) == Some("now") {
-        return Ok(super::file::clock());
+        return Ok(super::shared::clock());
     }
     // Years 1904 to 9999, which is what the head table's date can sensibly hold.
-    Ok(p.opt_int("timestamp", -2_082_844_800, 253_402_300_799)?.unwrap_or_else(super::file::default_timestamp))
+    Ok(p.opt_int("timestamp", -2_082_844_800, 253_402_300_799)?.unwrap_or_else(super::shared::default_timestamp))
 }
 
 /// Which instances to build.
@@ -1153,18 +1154,6 @@ fn outline_options(p: &Params, options: &mut Options) -> Result<()> {
 pub(super) fn source_includes(options: &mut Options, path: Option<&std::path::Path>) {
     options.feature_dir = path.and_then(source_feature_dir);
     options.include_check = crate::file_access::include_check();
-}
-
-/// The folder includes are read from: the source's folder, when automation may read it.
-#[cfg(not(target_arch = "wasm32"))]
-pub(super) fn source_feature_dir(path: &std::path::Path) -> Option<std::path::PathBuf> {
-    crate::io::feature_dir(path).filter(|d| crate::file_access::check_read(d).is_ok())
-}
-
-/// The web build has no file system to read includes from.
-#[cfg(target_arch = "wasm32")]
-pub(super) fn source_feature_dir(_path: &std::path::Path) -> Option<std::path::PathBuf> {
-    None
 }
 
 /// The parts of a `font.compile` request shared with `font.compilePlan`.

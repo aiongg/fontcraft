@@ -36,7 +36,7 @@ use fontcraft_spacing::{self as spacing, Field, SIDEBEARING_RANGE, Scope, WIDTH_
 use serde_json::{Map, Value, json};
 
 use super::common::{self, in_range, master_metrics};
-use super::spacing::shift_layer;
+use super::shared::shift_layer;
 use super::*;
 use crate::EngineError;
 use crate::params::{Params, TargetKind};

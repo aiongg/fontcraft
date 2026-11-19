@@ -24,7 +24,7 @@
 //! module that is turned off or not loaded (safe mode), refuses the export with a message naming
 //! it: the font would come out without a filter its source asks for. Parameters the module cannot
 //! take, and a module that fails on a glyph, are warnings, and that string changes nothing. The
-//! session's modules reach this stage through [`ModuleScope`], which `Session::execute` enters
+//! session's modules reach this stage through [`ModuleScope`](crate::extensions::ModuleScope), which `Session::execute` enters
 //! for each command, also for each step of a command that runs others.
 //!
 //! Before Filter decomposes, each composite of the target master is given the anchors it would
@@ -53,10 +53,8 @@
 //! `filter.menu.pluginFiltersListed` (M13.4, module filters).
 
 use std::borrow::Cow;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 use std::sync::Arc;
 
 use fontcraft_compile::Options;
@@ -64,12 +62,12 @@ use fontcraft_geom::{Affine, Point};
 use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::plist::{Num, Number, Value as PValue};
 use fontcraft_model::{Anchor, Font, Layer, MAX_COMPONENT_DEPTH, MAX_OUTLINE_ELEMENTS, Params, Resolved, Shape, Target, Transform};
+use fontcraft_plugins::Plugin;
 use fontcraft_plugins::export_filter::{self as module_filter, FilterCall};
-use fontcraft_plugins::{Kind, Plugin};
 use serde_json::{Map, Value};
 
 use crate::cmd::compile::Job;
-use crate::extensions::ExtensionState;
+use crate::extensions::{ModuleEntry, ModuleScope, ModuleSet};
 use crate::{EngineError, Result};
 
 const FILTER: &str = "Filter";
@@ -402,60 +400,6 @@ fn run_module(s: &mut crate::Session, master: &str, step: &ModuleStep, warnings:
         }
         Ok(())
     })
-}
-
-// ── the session's modules ───────────────────────────────────────────────────────────────────────
-
-/// One installed filter module as the export filter step sees it.
-struct ModuleEntry {
-    plugin: Arc<Plugin>,
-    /// What [`ExtensionState::runnable`] said when the scope was entered: why it cannot run
-    /// (turned off, safe mode), if it cannot.
-    runnable: std::result::Result<(), String>,
-}
-
-/// The filter modules of the session whose command runs on this thread.
-struct ModuleSet {
-    filters: Vec<ModuleEntry>,
-}
-
-thread_local! {
-    /// The modules in force on this thread ([`ModuleScope`]).
-    static MODULES: RefCell<Option<Rc<ModuleSet>>> = const { RefCell::new(None) };
-}
-
-/// Makes a session's filter modules visible to the export filter step while one command (or one
-/// step of a command) runs, and puts back what it replaced when dropped (also when the command panics).
-/// Export builds run deep inside commands that have no other way to the session's
-/// `ExtensionState`; the sessions the steps open for built-in filters enter their own, empty,
-/// scope and restore this one.
-pub(crate) struct ModuleScope(Option<Rc<ModuleSet>>);
-
-impl ModuleScope {
-    /// Enters the filter modules of `ext`; none when it has none.
-    pub(crate) fn enter(ext: &ExtensionState) -> ModuleScope {
-        let filters: Vec<ModuleEntry> = ext
-            .registry
-            .list()
-            .iter()
-            .filter(|m| m.plugin.kind() == Kind::Filter)
-            .map(|m| ModuleEntry { plugin: Arc::clone(&m.plugin), runnable: ext.runnable(m.plugin.id(), Kind::Filter).map(|_| ()) })
-            .collect();
-        let set = (!filters.is_empty()).then(|| Rc::new(ModuleSet { filters }));
-        ModuleScope(MODULES.with(|m| m.replace(set)))
-    }
-
-    /// The modules in force on this thread.
-    fn current() -> Option<Rc<ModuleSet>> {
-        MODULES.with(|m| m.borrow().clone())
-    }
-}
-
-impl Drop for ModuleScope {
-    fn drop(&mut self) {
-        let previous = self.0.take();
-        MODULES.with(|m| *m.borrow_mut() = previous);
-    }
 }
 
 /// Warns about the glyphs a filter run left as they were for a reason other than having no

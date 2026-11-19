@@ -39,6 +39,8 @@ fn porting_guide_names_only_registered_commands() {
 
 #[test]
 fn macro_examples_in_the_docs_are_valid_macros() {
+    // Steps resolve against the installed command tables; no session installs them here.
+    fontcraft_engine::cmd::install().unwrap();
     let mut examples = 0;
     for doc in ["docs/macros.md", "docs/porting.md"] {
         let text = repo_file(doc);

@@ -1,19 +1,15 @@
-//! File menu: new, open, save, close, export.
+//! File menu: new, open, save, close and the UFO export. The font exports are in
+//! `compile_export.rs`.
 //!
 //! Reading and writing files happens here only in native builds (through [`crate::io`]); on the
-//! web the shell hands bytes to [`crate::Session::add_document`] and takes the compiled fonts from
-//! `file.exportStatic` without a destination, as dataBase64. Building and naming the exported
-//! fonts is shared with `font.compile` (`compile.rs`).
+//! web the shell hands bytes to [`crate::Session::add_document`].
 
-use base64::Engine as _;
-use fontcraft_compile::{Flavour, Options};
 #[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
 
 use fontcraft_model::Font;
 use serde_json::{Value, json};
 
-use super::compile::{self, Dest, Pick, Report, Request, Sink};
 use super::*;
 use crate::EngineError;
 use crate::params::Params;
@@ -74,24 +70,6 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             close
         ),
-        cmd!(
-            "file.exportStatic",
-            "Export Static Fonts",
-            [],
-            None,
-            "{instances?: [string], outlines?: \"truetype\"|\"cff\", containers?: [\"plain\"|\"woff\"|\"woff2\"], destination?: string, removeOverlap?: bool, autohint?: bool, cbdt?: bool, timestamp?: number|\"now\", versionStamp?: bool} compile the active document's exportable instances (or the named ones; a font without instances exports its first master) to static fonts with TrueType (.ttf) or CFF (.otf) outlines, in each container asked for (default plain; WOFF and WOFF2 are .woff and .woff2). Instances between masters are skipped and listed. A designspace without axes is refused when it states a location, or when it has two or more sources and instances to build. destination: a folder, created when missing, where each file is named by the instance's fileName parameter, else its PostScript name (with `Unnamed font` standing in for a missing family name in a .glyphs source, and the document's file name in any other), in the sub-folder an instance's Export Folder parameter names (`..` climbs out of the destination); or one file path ending in .ttf, .otf, .woff or .woff2, which sets the outlines and container when they are not given and receives the first instance that can be built; without it the fonts are returned as dataBase64. Existing files are replaced; a failing export writes nothing. removeOverlap: merge overlapping contours in every glyph (default true; a glyph whose overlaps cannot be removed keeps them, with a warning). autohint: with CFF outlines, run the PostScript autohinter on every glyph without manual PostScript hints, except those the Disable autohinting for glyphs parameter lists; with TrueType outlines, run the TrueType autohinter on every glyph with the instance's TTFAutohint options and control instructions, in place of the manual TrueType instructions, and then, when the TTFAutohint binary path parameter names a program (desktop only), that program on the finished font (if it fails, the built-in result is written with a warning) (an instance's Autohint parameter overrides this option; default false). cbdt: also write CBDT and CBLC bitmap tables from the iColor layers (default false). timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now). versionStamp: append `;FontCraft <version>` to the version string (name ID 5) unless the font states its own (default true) → {fonts: [{instance, source, format, outlines, glyphs, warnings, files: [{name, container, bytes, path? | dataBase64?}]}], skipped: [{instance, source, reason}], warnings}; with one file also {path? | dataBase64?, bytes, glyphs, glyphOrder}",
-            has_doc,
-            export_static
-        ).files(const { &[FileParam::write("destination")] }).writes_files(),
-        cmd!(
-            "file.exportAll",
-            "Export All",
-            ["File"],
-            Some("Cmd+Alt+E"),
-            "{documents?: [string], outlines?: [\"truetype\"|\"cff\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], destination: string, removeOverlap?: bool, autohint?: bool, cbdt?: bool, timestamp?: number|\"now\", versionStamp?: bool} export every exportable instance of every open document (or of the documents named by title or path) in each outline format and container asked for (default truetype, plain) into the destination folder, as file.exportStatic names them; with both outline formats, the files go into ttf and otf subfolders. Instances between masters are skipped and listed. A designspace without axes is refused when it states a location, or when it has two or more sources and instances to build. removeOverlap, autohint: as in file.exportStatic. A failing export writes nothing → {documents: [{title, fonts, skipped}], written, warnings}",
-            has_doc,
-            export_all
-        ).files(const { &[FileParam::write("destination")] }).writes_files(),
     ]
 }
 
@@ -117,7 +95,7 @@ fn open(s: &mut Session, p: &Value) -> Result<Value> {
     let face = p.opt_int("face", 0, i64::from(u16::MAX))?.map(|f| f as u32);
     let keep_names = p.bool_or("keepGlyphNames", s.settings().get_bool(super::import_naming::KEEP_GLYPH_NAMES).unwrap_or(false))?;
     // A file that is already open is shown, not opened a second time (`file.openTwiceActivates`).
-    if let Some(i) = super::session::find_open(s, &path) {
+    if let Some(i) = super::shared::find_open(s, &path) {
         s.set_active(i)?;
         remember(s, &path);
         let doc = s.doc()?;
@@ -127,7 +105,7 @@ fn open(s: &mut Session, p: &Value) -> Result<Value> {
     }
     let (font, mut warnings) = crate::io::open(&path, face)?;
     let font = crate::linked::resolve(&font, Some(&path), &mut warnings)?.unwrap_or(font);
-    let (font, aligned) = align_imported(s, font, &mut warnings);
+    let (font, aligned) = super::shared::align_imported(s, font, &mut warnings);
     let glyph_data = crate::glyph_data::source_files(&path, &mut warnings);
     // Every reader checks the font it returns.
     s.push_document(font, Some(path.clone()));
@@ -152,47 +130,6 @@ fn open(s: &mut Session, p: &Value) -> Result<Value> {
     });
     remember(s, &path);
     Ok(reply)
-}
-
-/// The user setting that keeps imported fonts out of automatic alignment.
-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-pub(crate) const DISABLE_ALIGNMENT_FOR_IMPORTED: &str = "user.disableAutomaticAlignmentForImportedFiles";
-
-/// What opening an imported source (UFO, designspace) does to its composites
-/// (`open.alignsCompositeMetrics`, `components.importedFilesDisableAutoAlignSetting`): with the
-/// user setting Disable Automatic Alignment for Imported Files on, the font's own Disable
-/// Automatic Alignment option is switched on, so its components stay where the file puts them;
-/// otherwise every composite is aligned, so its metrics follow its bases. A font whose own option
-/// is already on is left as read. `.fontcraft` and `.glyphs` sources store aligned positions and
-/// are not touched; nor is a compiled font, which is view-only and has no anchors to align by. Alignment that fails, or gives a font that does not pass the model's checks,
-/// leaves the font as read with a warning. Returns the font and how many glyphs alignment changed.
-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-pub(crate) fn align_imported(s: &Session, mut font: Font, warnings: &mut Vec<String>) -> (Font, usize) {
-    use fontcraft_model::SourceFormat;
-    if !matches!(font.source.format, SourceFormat::Ufo | SourceFormat::Ufoz | SourceFormat::Designspace) {
-        return (font, 0);
-    }
-    if s.settings().get_bool(DISABLE_ALIGNMENT_FOR_IMPORTED) == Some(true) {
-        if font.info.settings.disables_automatic_alignment != Some(true) {
-            std::sync::Arc::make_mut(&mut font.info).settings.disables_automatic_alignment = Some(true);
-        }
-        return (font, 0);
-    }
-    let before = font.clone();
-    let names: Vec<String> = font.glyphs.as_arcs().iter().map(|g| g.name.clone()).collect();
-    let aligned = match fontcraft_components::metrics::realign_glyphs(font, &names) {
-        Ok(aligned) => aligned,
-        Err(e) => {
-            warnings.push(format!("the composites were left as the file places them: {e}"));
-            return (before, 0);
-        }
-    };
-    if let Err(e) = aligned.check_changed(&before) {
-        warnings.push(format!("the composites were left as the file places them: {e}"));
-        return (before, 0);
-    }
-    let changed = aligned.glyphs.as_arcs().iter().zip(before.glyphs.as_arcs()).filter(|(a, b)| !std::sync::Arc::ptr_eq(a, b)).count();
-    (aligned, changed)
 }
 
 /// Puts a document just opened or saved first in the recent documents. The list is a
@@ -431,169 +368,4 @@ fn close(s: &mut Session, p: &Value) -> Result<Value> {
     let title = doc.title.clone();
     s.close_active()?;
     Ok(json!({ "closed": title }))
-}
-
-/// The head-table time when the caller gives none: `SOURCE_DATE_EPOCH` for reproducible builds,
-/// else the clock.
-pub(super) fn default_timestamp() -> i64 {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        if let Some(t) = std::env::var("SOURCE_DATE_EPOCH").ok().and_then(|v| v.trim().parse::<i64>().ok()) {
-            return t;
-        }
-    }
-    clock()
-}
-
-/// Seconds since the Unix epoch (0 on the web, where the shell passes the time).
-pub(super) fn clock() -> i64 {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok().and_then(|d| i64::try_from(d.as_secs()).ok()).unwrap_or(0)
-    }
-    #[cfg(target_arch = "wasm32")]
-    {
-        0
-    }
-}
-
-/// The outline format named by `outlines` (one of them, or a list under `many`).
-fn flavour(p: &Params, name: &str) -> Result<Flavour> {
-    match name {
-        "truetype" => Ok(Flavour::TrueType),
-        "cff" => Ok(Flavour::Cff),
-        other => Err(p.bad(format!("`outlines` must be \"truetype\" or \"cff\", got \"{other}\""))),
-    }
-}
-
-/// The compile options of the export commands: `timestamp`, `removeOverlap` (default true),
-/// `autohint` and `cbdt`.
-fn export_options(p: &Params) -> Result<Options> {
-    Ok(Options {
-        hinting: fontcraft_compile::HintingOptions { autohint: p.bool_or("autohint", false)?, strip: false },
-        timestamp: compile::timestamp(p)?,
-        remove_overlap: p.bool_or("removeOverlap", true)?,
-        cbdt: p.bool_or("cbdt", false)?,
-        version_stamp: p.bool_or("versionStamp", true)?,
-        ..Default::default()
-    })
-}
-
-fn export_static(s: &mut Session, p: &Value) -> Result<Value> {
-    let p = Params::new("file.exportStatic", p)?;
-    let font = s.font()?;
-    let dest = Dest::read(&p)?;
-    let flavour = match p.opt_str("outlines")? {
-        Some(name) => flavour(&p, name)?,
-        None if dest.extension() == Some("otf") => Flavour::Cff,
-        None => Flavour::TrueType,
-    };
-    let containers = compile::containers(&p, "containers", &dest)?;
-    compile::check_file_destination(&p, &dest, &[flavour], &containers)?;
-    let options = export_options(&p)?;
-    let pick = Pick::read(&p, "instances")?;
-    let jobs = compile::jobs(font, &pick, false, &p)?;
-    if jobs.is_empty() {
-        return Err(p.bad("`instances` names no instance"));
-    }
-    let named_several = matches!(pick, Pick::Named(_)) && jobs.len() > 1;
-    if matches!(dest, Dest::File(_)) && named_several {
-        return Err(p.bad("`destination` is one file, but several instances are named: give a folder"));
-    }
-    let first_only = matches!(dest, Dest::File(_));
-    let req = Request { flavours: vec![flavour], containers, options, dest, first_only, autohinter: crate::external_autohint::trusted(s) };
-    compile::check_size(&req, jobs.len())?;
-    let mut report = Report::default();
-    compile::check_glyph_names(font)?;
-    let mut sink = Sink::new(&req.dest, true, s.export_outside())?;
-    compile::build(font, &s.doc()?.title, s.doc()?.path.as_deref(), s.glyph_data()?, &jobs, &req, &mut sink, &mut report)?;
-    if report.fonts.is_empty() {
-        return Err(compile::nothing_built(&report));
-    }
-    sink.commit()?;
-    let mut result = json!({ "fonts": report.fonts_json(true), "skipped": report.skipped, "warnings": report.warnings });
-    // One file: its path or data, size and glyph order at the top, as callers that export a
-    // single font read them.
-    if let (Some(font), Value::Object(m)) = (report.fonts.first().filter(|_| report.file_count() == 1), &mut result) {
-        if let Some(file) = font.files.first() {
-            match (&file.path, &file.data) {
-                (Some(path), _) => m.insert("path".into(), json!(path.to_string_lossy())),
-                (None, Some(data)) => m.insert("dataBase64".into(), json!(base64::engine::general_purpose::STANDARD.encode(data))),
-                (None, None) => None,
-            };
-            m.insert("bytes".into(), json!(file.bytes));
-        }
-        m.insert("glyphs".into(), json!(font.glyph_order.len()));
-        m.insert("glyphOrder".into(), json!(font.glyph_order));
-    }
-    Ok(result)
-}
-
-fn export_all(s: &mut Session, p: &Value) -> Result<Value> {
-    let p = Params::new("file.exportAll", p)?;
-    let docs = s.documents();
-    let chosen: Vec<usize> = match p.opt_strings("documents")? {
-        None => (0..docs.len()).collect(),
-        Some(names) => {
-            let mut out = Vec::new();
-            for name in names {
-                let i = docs
-                    .iter()
-                    .position(|d| d.title == name || d.path.as_deref().is_some_and(|path| path == std::path::Path::new(name)))
-                    .ok_or_else(|| p.bad(format!("no open document is called or saved as `{name}`")))?;
-                if !out.contains(&i) {
-                    out.push(i);
-                }
-            }
-            out
-        }
-    };
-    if chosen.is_empty() {
-        return Err(EngineError::NoDocument);
-    }
-    let dest = Dest::read(&p)?;
-    match dest {
-        Dest::Folder(_) => {}
-        Dest::Memory => return Err(p.bad("give a `destination` folder")),
-        Dest::File(_) => return Err(p.bad("`destination` must be a folder: Export All writes several files")),
-    }
-    let mut flavours = Vec::new();
-    for name in p.opt_strings("outlines")?.unwrap_or_else(|| vec!["truetype"]) {
-        let f = flavour(&p, name)?;
-        if !flavours.contains(&f) {
-            flavours.push(f);
-        }
-    }
-    if flavours.is_empty() {
-        return Err(p.bad("`outlines` names no outline format"));
-    }
-    let containers = compile::containers(&p, "containers", &dest)?;
-    let options = export_options(&p)?;
-    let req = Request { flavours, containers, options, dest, first_only: false, autohinter: crate::external_autohint::trusted(s) };
-    let mut jobs = Vec::with_capacity(chosen.len());
-    for &i in &chosen {
-        let doc = docs.get(i).ok_or(EngineError::NoDocument)?;
-        compile::check_glyph_names(&doc.font)?;
-        jobs.push(compile::jobs(&doc.font, &Pick::Exportable, false, &p)?);
-    }
-    compile::check_size(&req, jobs.iter().map(Vec::len).sum())?;
-    let mut sink = Sink::new(&req.dest, false, s.export_outside())?;
-    let mut warnings: Vec<String> = Vec::new();
-    let mut reports = Vec::with_capacity(chosen.len());
-    for (&i, jobs) in chosen.iter().zip(&jobs) {
-        let doc = docs.get(i).ok_or(EngineError::NoDocument)?;
-        let mut report = Report::default();
-        compile::build(&doc.font, &doc.title, doc.path.as_deref(), s.glyph_data_of(doc)?, jobs, &req, &mut sink, &mut report)?;
-        warnings.append(&mut report.warnings);
-        reports.push((doc.title.clone(), report));
-    }
-    let written: usize = reports.iter().map(|(_, r)| r.file_count()).sum();
-    if written == 0 {
-        let skipped = Report { skipped: reports.into_iter().flat_map(|(_, r)| r.skipped).collect(), ..Default::default() };
-        return Err(compile::nothing_built(&skipped));
-    }
-    sink.commit()?;
-    let documents: Vec<Value> =
-        reports.iter().map(|(title, r)| json!({ "title": title, "fonts": r.fonts_json(false), "skipped": r.skipped })).collect();
-    Ok(json!({ "documents": documents, "written": written, "warnings": warnings }))
 }

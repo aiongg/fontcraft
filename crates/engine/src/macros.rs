@@ -338,10 +338,10 @@ pub fn resolve_command(id: &str) -> Option<&'static str> {
 }
 
 fn resolve_command_with(id: &str, aliases: &[(&str, &str)]) -> Option<&'static str> {
-    if let Some(spec) = crate::find_command(id) {
+    if let Some(spec) = crate::cmd::registry::find(id) {
         return Some(spec.id);
     }
-    aliases.iter().find(|(old, _)| *old == id).and_then(|(_, new)| crate::find_command(new)).map(|spec| spec.id)
+    aliases.iter().find(|(old, _)| *old == id).and_then(|(_, new)| crate::cmd::registry::find(new)).map(|spec| spec.id)
 }
 
 /// Step `n`'s command, resolved and allowed as a step.
@@ -724,6 +724,8 @@ mod tests {
 
     #[test]
     fn placeholders_are_filled_from_arguments_defaults_and_the_selection() {
+        // Steps resolve against the installed command tables; no session installs them here.
+        crate::cmd::install().unwrap();
         let m = Macro::from_value(&json!({
             "args": {"width": {"type": "int", "min": 0, "max": 2000, "default": 600}},
             "steps": [{"command": "spacing.setWidth", "params": {"glyphs": {"$arg": "glyphs"}, "value": {"$arg": "width"}}}],
@@ -741,6 +743,7 @@ mod tests {
 
     #[test]
     fn unknown_commands_and_arguments_are_refused_by_step() {
+        crate::cmd::install().unwrap();
         let unknown = Macro::from_value(&json!({"steps": [{"command": "glyph.newGlyph"}, {"command": "no.suchCommand"}]})).unwrap();
         assert_eq!(unknown.resolve(&Value::Null), Err(MacroError::UnknownCommand { step: 2, command: "no.suchCommand".into() }));
         assert!(unknown.check().is_err());
@@ -759,6 +762,7 @@ mod tests {
 
     #[test]
     fn renamed_commands_and_parameters_resolve_through_their_aliases() {
+        crate::cmd::install().unwrap();
         let m = Macro::from_value(&json!({"steps": [{"command": "glyph.makeGlyph", "params": {"glyphName": "x"}}]})).unwrap();
         let mut left = MAX_RESOLVED_VALUES;
         let steps =
@@ -773,6 +777,7 @@ mod tests {
 
     #[test]
     fn a_long_list_pasted_into_many_steps_is_refused() {
+        crate::cmd::install().unwrap();
         let glyphs: Vec<String> = (0..10_000).map(|i| format!("g{i}")).collect();
         let step = json!({"command": "spacing.setWidth", "params": {"glyphs": {"$arg": "glyphs"}, "value": 1}});
         let m = Macro::from_value(&json!({"steps": vec![step; 5_000]})).unwrap();

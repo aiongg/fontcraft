@@ -17,7 +17,7 @@ use fontcraft_pathops::{Cap, CapAxis, Join, MAX_STROKE_WIDTH, MaskMode, SMOOTH_M
 use serde_json::{Value, json};
 
 use super::common::{Scope, each_layer, grid, scope};
-use super::decompose::remap_hint;
+use super::shared::remap_hint;
 use super::*;
 use crate::EngineError;
 use crate::params::{MAX_TARGETS, Params, TargetKind, Targets};

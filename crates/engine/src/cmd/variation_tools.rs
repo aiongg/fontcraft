@@ -492,7 +492,7 @@ fn add_variation(s: &mut Session, v: &Value) -> Result<Value> {
         match step.get("command").and_then(Value::as_str) {
             None => return Err(p.bad(format!("`commands[{i}]` has no `command`"))),
             Some(id @ ("edit.undo" | "edit.redo")) => return Err(p.bad(format!("`commands[{i}]`: `{id}` cannot run inside Add Variation"))),
-            Some(id) if find_command(id).is_none() => return Err(p.bad(format!("`commands[{i}]`: there is no command `{id}`"))),
+            Some(id) if super::registry::find(id).is_none() => return Err(p.bad(format!("`commands[{i}]`: there is no command `{id}`"))),
             Some(_) => {}
         }
         if let Some(params) = step.get("params")
@@ -515,7 +515,7 @@ fn add_variation(s: &mut Session, v: &Value) -> Result<Value> {
     }
     let (from_id, from_name) = (original.id.clone(), original.name.clone());
 
-    super::audit::one_step(s, "Add Variation", |s| {
+    s.one_step("Add Variation", |s| {
         if existing.is_none() {
             let mut axis = Map::new();
             axis.insert("tag".into(), json!(tag));
@@ -542,7 +542,7 @@ fn add_variation(s: &mut Session, v: &Value) -> Result<Value> {
             let mut params = step.get("params").filter(|v| !v.is_null()).cloned().unwrap_or_else(|| json!({}));
             put_master(&mut params, &id, 0);
             // Each step is a request of its own while automation roots are in force.
-            if let (Some(roots), Some(spec)) = (crate::file_access::current(), find_command(command)) {
+            if let (Some(roots), Some(spec)) = (crate::file_access::current(), super::registry::find(command)) {
                 params = crate::file_access::command::check(s, spec, &params, &roots)
                     .map_err(|e| p.bad(format!("`commands[{i}]` (`{command}`) failed: {e}")))?;
             }

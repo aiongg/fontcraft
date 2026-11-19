@@ -23,21 +23,16 @@ use fontcraft_components::propagate::{AnchorSource, base_layer, effective_anchor
 use fontcraft_geom::{Affine, Point};
 use fontcraft_model::corner::{self, CornerTarget};
 use fontcraft_model::glyphdata::GlyphData;
-use fontcraft_model::plist::{Num, Number, Str, Value as Plist};
 use fontcraft_model::{
-    Anchor, Component, Font, Glyph, Hint, Layer, LayerSide, MAX_COMPONENT_DEPTH, MAX_COORDINATE, MAX_GLYPHS, MAX_OUTLINE_ELEMENTS, Shape, Transform,
-    smart,
+    Anchor, Component, Font, Glyph, Layer, LayerSide, MAX_COMPONENT_DEPTH, MAX_COORDINATE, MAX_GLYPHS, MAX_OUTLINE_ELEMENTS, Shape, Transform, smart,
 };
 use serde_json::{Value, json};
 
 use super::common::{Outcome, Scope, in_range, scope};
+use super::shared::{MAX_LAYER_SHAPES, hint_shapes, remap_hint};
 use super::*;
 use crate::EngineError;
 use crate::params::{MAX_TARGETS, Params, TargetKind, Targets, kind};
-
-/// Most shapes one decomposed layer may hold (the compiler's limit on components per glyph).
-/// Also the most components decomposing one layer may visit, nested ones included.
-pub(crate) const MAX_LAYER_SHAPES: usize = 65_535;
 
 /// Most nodes one command may hold in the layers it decomposes, over all of them: the new layers
 /// are kept until the edit lands, so this bounds their memory. Each layer has its own
@@ -47,10 +42,6 @@ const MAX_CALL_NODES: usize = 10_000_000;
 const MAX_CALL_SHAPES: usize = 1_000_000;
 /// Most components one command may visit over all the layers it decomposes.
 const MAX_CALL_VISITS: usize = 20_000_000;
-
-/// The hint keys that hold node references: `(path, node)`, or `(path, node, path, node)` for an
-/// intersection.
-const NODE_REF_KEYS: [&str; 4] = ["origin", "target", "other1", "other2"];
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -377,86 +368,6 @@ fn full_decomposition(
     let anchors_added = passed.len();
     out.anchors.extend(passed);
     Ok(FullDecomposition { layer: out, anchors_added, warnings })
-}
-
-// ── Hints ───────────────────────────────────────────────────────────────────────────────────────
-
-/// Where the shape indices sit in a node reference of `len` numbers.
-fn shape_slots(len: usize) -> &'static [usize] {
-    match len {
-        2 => &[0],
-        4 => &[0, 2],
-        _ => &[],
-    }
-}
-
-/// The numbers of a node reference: a list (format version 3) or a `{a, b}` string (version 2).
-fn ref_numbers(v: &Plist) -> Option<Vec<usize>> {
-    let index = |f: f64| (f.is_finite() && f >= 0.0 && f.fract() == 0.0 && f <= f64::from(u32::MAX)).then_some(f as usize);
-    match v {
-        Plist::Array(a) if a.items.len() <= 4 => a.items.iter().map(|i| i.as_num().map(Num::as_f64).and_then(index)).collect(),
-        Plist::String(s) => {
-            let inner = s.as_str().trim().strip_prefix('{')?.strip_suffix('}')?;
-            let parts: Vec<&str> = inner.split(',').collect();
-            if parts.len() > 4 {
-                return None;
-            }
-            parts.iter().map(|p| p.trim().parse::<f64>().ok().and_then(index)).collect()
-        }
-        _ => None,
-    }
-}
-
-/// The shape indices `hint` points at.
-fn hint_shapes(hint: &Hint) -> Vec<usize> {
-    let Some(d) = hint.value.as_dict() else { return Vec::new() };
-    let mut out = Vec::new();
-    for key in NODE_REF_KEYS {
-        if let Some(nums) = d.get(key).and_then(ref_numbers) {
-            out.extend(shape_slots(nums.len()).iter().filter_map(|&i| nums.get(i).copied()));
-        }
-    }
-    out
-}
-
-/// `hint` with each shape index it points at replaced by what `map` gives; `None` when `map`
-/// drops one of them. A hint without node references comes back unchanged.
-pub(crate) fn remap_hint(hint: &Hint, map: &impl Fn(usize) -> Option<usize>) -> Option<Hint> {
-    let mut out = hint.clone();
-    let Plist::Dict(d) = &mut out.value else { return Some(out) };
-    for key in NODE_REF_KEYS {
-        let Some(v) = d.get_mut(key) else { continue };
-        let Some(nums) = ref_numbers(v) else { continue };
-        let mut new = nums.clone();
-        for &slot in shape_slots(nums.len()) {
-            if let Some(n) = new.get_mut(slot) {
-                *n = map(*n)?;
-            }
-        }
-        if new != nums {
-            write_ref(v, &nums, &new);
-        }
-    }
-    Some(out)
-}
-
-/// Writes `new` into the node reference `v`, which held `old`, in its own syntax.
-fn write_ref(v: &mut Plist, old: &[usize], new: &[usize]) {
-    let int = |n: usize| Plist::Number(Number::int(i64::try_from(n).unwrap_or(i64::MAX)));
-    match v {
-        Plist::Array(a) => {
-            for ((slot, &was), &now) in a.items.iter_mut().zip(old).zip(new) {
-                if was != now {
-                    *slot = int(now);
-                }
-            }
-        }
-        Plist::String(s) => {
-            let parts: Vec<String> = new.iter().map(usize::to_string).collect();
-            *s = Str::new(format!("{{{}}}", parts.join(", ")));
-        }
-        _ => {}
-    }
 }
 
 // ── Parameters ──────────────────────────────────────────────────────────────────────────────────

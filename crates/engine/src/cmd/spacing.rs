@@ -4,11 +4,12 @@
 //! [`set_metric`]. Behaviour notes: `docs/spec/08-spacing-kerning.md`
 //! § 1 and § 2.
 
-use fontcraft_model::{Font, Glyph, Layer, MAX_COORDINATE, MetricsKeys, Shape, Transform};
+use fontcraft_model::{Font, Glyph, Layer, MAX_COORDINATE, MetricsKeys};
 use fontcraft_spacing::{self as spacing, Entry, Field, Scope, WIDTH_RANGE};
 use serde_json::{Map, Value, json};
 
 use super::common::in_range;
+use super::shared::shift_layer;
 use super::*;
 use crate::params::{Params, TargetKind};
 
@@ -528,87 +529,4 @@ fn find_layer<'f>(p: &Params, font: &'f Font, name: &str, layer: &str) -> Result
     font.glyph(name)
         .and_then(|g| g.layers.iter().find(|l| l.id == layer).map(|l| (g.as_ref(), l)))
         .ok_or_else(|| p.bad(format!("glyph `{name}` has no layer `{layer}`")))
-}
-
-/// Moves everything drawn in a layer sideways by `dx`: outlines, components, images, anchors,
-/// guides, annotations, the placed image and the background. Hints stay as they are. Fails when a
-/// coordinate would leave the model's range or a shape cannot be moved, and then leaves the
-/// layer as it was.
-pub(crate) fn shift_layer(layer: &mut Layer, dx: f64) -> std::result::Result<(), String> {
-    if dx == 0.0 {
-        return Ok(());
-    }
-    let mut moved = layer.clone();
-    shift_in_place(&mut moved, dx)?;
-    *layer = moved;
-    Ok(())
-}
-
-fn shift_in_place(layer: &mut Layer, dx: f64) -> std::result::Result<(), String> {
-    shift_shapes(&mut layer.shapes, dx)?;
-    for a in &mut layer.anchors {
-        shift_x(&mut a.x, dx)?;
-    }
-    if layer.info.is_default() {
-        return Ok(());
-    }
-    let info = &mut *layer.info;
-    for g in &mut info.guides {
-        shift_x(&mut g.x, dx)?;
-    }
-    for a in &mut info.annotations {
-        shift_x(&mut a.x, dx)?;
-    }
-    if let Some(img) = &mut info.image {
-        shift_transform(&mut img.transform, dx)?;
-    }
-    if let Some(b) = &mut info.background {
-        shift_shapes(&mut b.shapes, dx)?;
-        for a in &mut b.anchors {
-            shift_x(&mut a.x, dx)?;
-        }
-        for g in &mut b.guides {
-            shift_x(&mut g.x, dx)?;
-        }
-        for a in &mut b.annotations {
-            shift_x(&mut a.x, dx)?;
-        }
-        if let Some(img) = &mut b.image {
-            shift_transform(&mut img.transform, dx)?;
-        }
-    }
-    Ok(())
-}
-
-fn shift_shapes(shapes: &mut [Shape], dx: f64) -> std::result::Result<(), String> {
-    for shape in shapes {
-        match shape {
-            Shape::Path(path) => {
-                for n in &mut path.nodes {
-                    shift_x(&mut n.x, dx)?;
-                }
-            }
-            Shape::Component(c) => shift_transform(&mut c.transform, dx)?,
-            Shape::Image(img) => shift_transform(&mut img.transform, dx)?,
-            // Its points are not in the model, so it cannot follow the rest.
-            Shape::Raw(_) => return Err("the layer holds a shape of a kind that cannot be moved yet".into()),
-        }
-    }
-    Ok(())
-}
-
-fn shift_transform(t: &mut Transform, dx: f64) -> std::result::Result<(), String> {
-    match t {
-        Transform::Decomposed { pos, .. } => shift_x(&mut pos.0, dx),
-        Transform::Matrix([.., x, _]) => shift_x(x, dx),
-    }
-}
-
-fn shift_x(x: &mut f64, dx: f64) -> std::result::Result<(), String> {
-    let v = *x + dx;
-    if !in_range(v) {
-        return Err(format!("the change puts a point at x = {v}, beyond ±{MAX_COORDINATE}"));
-    }
-    *x = v;
-    Ok(())
 }

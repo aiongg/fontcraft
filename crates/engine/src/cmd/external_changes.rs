@@ -171,7 +171,7 @@ fn target(s: &Session, p: &Params) -> Result<usize> {
             .filter(|i| *i < count)
             .ok_or_else(|| p.bad(format!("`font` {n} is not an open document; {count} are open"))),
         Some(Value::String(path)) => {
-            super::session::find_open(s, std::path::Path::new(path)).ok_or_else(|| p.bad(format!("no open document was opened from {path}")))
+            super::shared::find_open(s, std::path::Path::new(path)).ok_or_else(|| p.bad(format!("no open document was opened from {path}")))
         }
         Some(_) => Err(p.bad("`font` must be the position of an open document or the path it was opened from")),
     }
@@ -183,7 +183,7 @@ fn read_disk(s: &Session, path: &std::path::Path) -> Result<Font> {
     crate::file_access::check_read(path).map_err(EngineError::Io)?;
     let (font, mut warnings) = crate::io::open(path, None)?;
     let font = crate::linked::resolve(&font, Some(path), &mut warnings)?.unwrap_or(font);
-    let (font, _) = super::file::align_imported(s, font, &mut warnings);
+    let (font, _) = super::shared::align_imported(s, font, &mut warnings);
     Ok(font)
 }
 

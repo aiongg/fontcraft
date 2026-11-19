@@ -157,7 +157,7 @@ fn layer_name(p: &Params, key: &str) -> Result<Option<String>> {
 
 /// The default name of a new backup layer: the date and time, UTC.
 fn now_name() -> String {
-    date_time(super::file::clock())
+    date_time(super::shared::clock())
 }
 
 /// `secs` after the Unix epoch as `YYYY-MM-DD HH:MM`, UTC.
