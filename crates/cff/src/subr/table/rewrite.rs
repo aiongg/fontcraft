@@ -12,7 +12,15 @@ pub struct TableRewrite<'a> {
     pub top: &'a [u16],
     /// Operators removed from every Private DICT.
     pub private: &'a [u16],
+    /// Remove `FamilyBlues` and `FamilyOtherBlues` from a Private DICT where their operands are
+    /// the same as those of `BlueValues` and `OtherBlues`.
+    pub dedupe_family_blues: bool,
 }
+
+const OP_BLUE_VALUES: u16 = 6;
+const OP_OTHER_BLUES: u16 = 7;
+const OP_FAMILY_BLUES: u16 = 8;
+const OP_FAMILY_OTHER_BLUES: u16 = 9;
 
 /// The table with the DICT entries `rewrite` names removed and the charstrings `edit` returns
 /// from the table's own. `edit` must keep the number of glyphs and Font DICTs. Returns the table
@@ -42,6 +50,23 @@ pub fn rewrite_table(
     }
     for p in table.privates.iter_mut() {
         drop(p, rewrite.private);
+        if rewrite.dedupe_family_blues {
+            let same = |p: &[Entry], family: u16, own: u16| {
+                let operands = |op: u16| p.iter().find(|e| e.op == op).map(|e| e.raw.as_slice());
+                operands(family).is_some_and(|f| operands(own) == Some(f))
+            };
+            let mut ops = Vec::new();
+            for (family, own) in [(OP_FAMILY_BLUES, OP_BLUE_VALUES), (OP_FAMILY_OTHER_BLUES, OP_OTHER_BLUES)] {
+                if same(p.as_slice(), family, own) {
+                    ops.push(family);
+                }
+            }
+            drop(p, &ops);
+        }
+    }
+    // A removed Encoding takes its data with it: the font has StandardEncoding.
+    if !table.top.iter().any(|e| e.op == super::OP_ENCODING) {
+        table.encoding = None;
     }
     let set = edit(&table.set)?;
     Ok((table.write(&set)?, removed))

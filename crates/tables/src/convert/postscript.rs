@@ -102,6 +102,22 @@ fn unreadable(e: fontcraft_decompile::DecompileError) -> TablesError {
 
 /// Reads a PFA, PFB or bare CFF font program into a CFF-flavoured sfnt.
 pub fn read_postscript(bytes: &[u8]) -> Result<PsInput> {
+    read_postscript_with(bytes, &PsReadOptions::default())
+}
+
+/// How [`read_postscript_with`] lays out the glyphs of a Type 1 font; a bare CFF table keeps its
+/// own. The defaults are the reference converter's.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PsReadOptions {
+    /// Keep the file's glyph order, `.notdef` moved first (`tx +b`); otherwise `.notdef`, the
+    /// standard-string names in standard-string order, then the rest in file order.
+    pub keep_glyph_order: bool,
+    /// Add no empty `.notdef` to a font without one (`tx -amnd`).
+    pub allow_missing_notdef: bool,
+}
+
+/// [`read_postscript`] with the glyph order and `.notdef` switches of `options`.
+pub fn read_postscript_with(bytes: &[u8], options: &PsReadOptions) -> Result<PsInput> {
     let source = PsSource::sniff(bytes).ok_or_else(|| TablesError::invalid("the file is neither a Type 1 font nor a bare CFF table"))?;
     let mut notes = Vec::new();
     let ps = match source {
@@ -122,7 +138,7 @@ pub fn read_postscript(bytes: &[u8]) -> Result<PsInput> {
         return Err(TablesError::TooLarge { what: "the glyph count of the font program", limit: MAX_PS_GLYPHS - 1 });
     }
     let (table, glyphs) = match source {
-        PsSource::Type1 => type1_table(&ps, &mut notes)?,
+        PsSource::Type1 => type1_table(&ps, options, &mut notes)?,
         PsSource::BareCff => (bytes.to_vec(), bare_glyphs(&ps)),
     };
     let font = wrap(&ps, table, &glyphs)?;
@@ -345,17 +361,35 @@ fn cff_private(p: &PrivateDict) -> fontcraft_cff::PrivateDict {
 }
 
 /// The `CFF ` table tx writes for a Type 1 font, and its glyphs.
-fn type1_table(ps: &PsFont, notes: &mut Vec<String>) -> Result<(Vec<u8>, Vec<GlyphInfo>)> {
-    let order = type1_order(ps);
-    let has_notdef = ps.glyphs.first().is_some_and(|g| g.name == ".notdef");
-    let empty = PsGlyph { name: ".notdef".into(), ..PsGlyph::default() };
-    if !has_notdef {
-        notes.push("the font has no .notdef glyph: an empty one was added".into());
-    }
+fn type1_table(ps: &PsFont, options: &PsReadOptions, notes: &mut Vec<String>) -> Result<(Vec<u8>, Vec<GlyphInfo>)> {
+    let order = if options.keep_glyph_order {
+        let notdef = ps.glyphs.iter().position(|g| g.name == ".notdef");
+        notdef.into_iter().chain((0..ps.glyphs.len()).filter(|i| Some(*i) != notdef)).collect()
+    } else {
+        type1_order(ps)
+    };
+    let has_notdef = ps.glyphs.iter().any(|g| g.name == ".notdef");
+    // Glyph 0 of a CFF table is .notdef whatever it draws: without an added one (`-amnd`) the
+    // first glyph takes that place and loses its own name.
+    let first = order.first().and_then(|&i| ps.glyphs.get(i));
+    let zero = match first {
+        Some(g) if !has_notdef && options.allow_missing_notdef => {
+            notes.push(format!("the font has no .notdef glyph: its first glyph, {}, is glyph 0 and is named .notdef", g.name));
+            PsGlyph { name: ".notdef".into(), ..g.clone() }
+        }
+        _ => {
+            if !has_notdef {
+                notes.push("the font has no .notdef glyph: an empty one was added".into());
+            }
+            PsGlyph { name: ".notdef".into(), ..PsGlyph::default() }
+        }
+    };
     let glyphs: Vec<&PsGlyph> = if has_notdef {
         order.iter().filter_map(|&i| ps.glyphs.get(i)).collect()
+    } else if options.allow_missing_notdef {
+        std::iter::once(&zero).chain(order.iter().skip(1).filter_map(|&i| ps.glyphs.get(i))).collect()
     } else {
-        std::iter::once(&empty).chain(order.iter().filter_map(|&i| ps.glyphs.get(i))).collect()
+        std::iter::once(&zero).chain(order.iter().filter_map(|&i| ps.glyphs.get(i))).collect()
     };
     let by_name: HashMap<&str, usize> = glyphs.iter().enumerate().map(|(i, g)| (g.name.as_str(), i)).collect();
 

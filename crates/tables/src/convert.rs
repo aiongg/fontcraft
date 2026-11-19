@@ -21,6 +21,11 @@
 //! snapshot at a design location, a glyph subset (by glyph or Font DICT), GOADB renaming,
 //! subsetting and ordering, and overlap removal ([`prepare`], M12.30c and M12.30d).
 //!
+//! The reference converter's CFF-writing switches (M12.70) shape every CFF and CFF2 result:
+//! [`ConvertOptions::cff_write`] ([`fontcraft_cff::write_options`]), [`ConvertOptions::flatten_seac`]
+//! (`tx -Z`) and [`ConvertOptions::decid`] (`tx -decid`, `-usefd`); the glyph order and `.notdef`
+//! switches of a Type 1 input are [`PsReadOptions`]'.
+//!
 //! AFDKO's otf2ttf (Apache-2.0, Copyright 2014 Adobe) and fontTools' `cffLib` converters (MIT)
 //! were read and their rules written anew here.
 
@@ -44,9 +49,10 @@ use read_fonts::{FontData, FontRead};
 use crate::sfnt::{Flavour, SfntFont, Tag, WriteOptions};
 use crate::{Result, TablesError};
 pub use fontcraft_cff::cid::Ros as CidCollection;
+pub use fontcraft_cff::write_options::{CffWriteOptions, CharstringForm};
 pub use outline::QuadToCubic;
 use outline::{Contour, GlyfOutlines, PsOutlines};
-pub use postscript::{PsInput, PsSource, convert_postscript, read_postscript};
+pub use postscript::{PsInput, PsReadOptions, PsSource, convert_postscript, read_postscript, read_postscript_with};
 pub use prepare::{FontDictFilter, GoadbUse, PrepareOptions, convert_prepared, glyph_cids, prepare};
 
 /// Largest error bound accepted, in font units.
@@ -118,6 +124,20 @@ pub struct ConvertOptions {
     /// Make a name-keyed CFF result CID-keyed with this character collection (makeotf `-cn`
     /// writes Adobe-Identity-0): CID n is glyph n, one Font DICT.
     pub cid_keyed: Option<fontcraft_cff::cid::Ros>,
+    /// The reference converter's CFF-writing switches, applied to a CFF or CFF2 result.
+    pub cff_write: CffWriteOptions,
+    /// Draw `seac` glyphs out and remove `dotsection` from a CFF result (`tx -Z`).
+    pub flatten_seac: bool,
+    /// Make a CID-keyed CFF result name-keyed (`tx -decid`).
+    pub decid: Option<Decid>,
+}
+
+/// How [`ConvertOptions::decid`] makes a font name-keyed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Decid {
+    /// The Font DICT whose Private DICT every glyph takes (`tx -usefd`); `None` takes the one
+    /// Font DICT the glyphs (`.notdef` aside) come from, and refuses glyphs from several.
+    pub fd: Option<u16>,
 }
 
 impl ConvertOptions {
@@ -135,6 +155,9 @@ impl ConvertOptions {
             hints: true,
             modified: None,
             cid_keyed: None,
+            cff_write: CffWriteOptions::default(),
+            flatten_seac: false,
+            decid: None,
         }
     }
 }
@@ -149,6 +172,8 @@ pub struct Converted {
     pub glyphs: usize,
     /// Data of the input the target format could not hold, one line each.
     pub left_behind: Vec<String>,
+    /// What [`CffWriteOptions::warn_hints`] found, and CFF edits that could not be made.
+    pub warnings: Vec<String>,
 }
 
 /// The converted file's bytes: an sfnt font, or a bare CFF.
@@ -182,6 +207,9 @@ pub fn convert_with(font: &SfntFont, options: &ConvertOptions) -> Result<Convert
     if options.cid_keyed.is_some() && to != Outlines::Cff {
         return Err(TablesError::BadOptions("a CID-keyed result needs CFF outlines (otf or cff)".into()));
     }
+    if options.decid.is_some() && (to != Outlines::Cff || options.cid_keyed.is_some()) {
+        return Err(TablesError::BadOptions("making a font name-keyed needs CFF outlines (otf or cff) and no CID keying".into()));
+    }
     if from == Outlines::TrueType && font.get(*b"gvar").is_some() && to != Outlines::TrueType {
         return Err(TablesError::Unsupported("converting a variable TrueType font: instantiate it first".into()));
     }
@@ -210,11 +238,39 @@ pub fn convert_with(font: &SfntFont, options: &ConvertOptions) -> Result<Convert
         (Outlines::Cff, Outlines::Cff2) => cff_to_cff2(&mut work, options, &mut left_behind)?,
         (Outlines::Cff2, Outlines::Cff) => cff2_to_cff(&mut work, &mut left_behind)?,
     }
+    // Making a font name-keyed expands its subroutines.
+    let decided = options.decid.is_some();
+    if let Some(d) = options.decid {
+        decid(&mut work, d.fd, &mut left_behind)?;
+    }
+    if options.flatten_seac && to == Outlines::Cff {
+        flatten_seac(&mut work, &mut left_behind)?;
+    }
     if let Some(ros) = &options.cid_keyed {
         cid_key(&mut work, ros, &mut left_behind)?;
     }
+    let mut warnings = Vec::new();
+    let mut expanded = false;
     if to != Outlines::TrueType {
-        let subroutinize = options.subroutinize.unwrap_or(changed_outlines && !options.target.bare());
+        let tag = if to == Outlines::Cff2 { CFF2 } else { CFF };
+        if let Some(table) = work.get(tag) {
+            let cff2 = to == Outlines::Cff2;
+            let mut w = options.cff_write.clone();
+            w.drop_dotsection |= options.flatten_seac;
+            let rewrites = w.charstrings.is_some() || w.drop_dotsection || w.optimize_widths == Some(true);
+            let had_subrs = rewrites
+                && fontcraft_cff::subr::charstrings_of_table(table, cff2)
+                    .is_ok_and(|s| !s.global_subrs.is_empty() || s.local_subrs.iter().any(|l| !l.is_empty()));
+            let report = fontcraft_cff::write_options::apply(table, cff2, &w).map_err(cff_table::subr_error)?;
+            warnings.extend(report.warnings);
+            warnings.extend(report.notes);
+            expanded = report.expanded && had_subrs;
+            work.insert(tag, report.bytes);
+        }
+    }
+    if to != Outlines::TrueType {
+        // A table whose subroutines were expanded to rewrite it gets them back.
+        let subroutinize = options.subroutinize.unwrap_or((changed_outlines || expanded || decided) && !options.target.bare());
         let tag = if to == Outlines::Cff2 { CFF2 } else { CFF };
         if let Some(table) = work.get(tag) {
             let table = if subroutinize {
@@ -232,7 +288,7 @@ pub fn convert_with(font: &SfntFont, options: &ConvertOptions) -> Result<Convert
         let tag = if to == Outlines::Cff2 { CFF2 } else { CFF };
         let bytes = work.get(tag).ok_or_else(|| TablesError::MissingTable(crate::sfnt::tag_str(tag)))?.to_vec();
         left_behind.push("every table but the outline table (a bare font program)".into());
-        return Ok(Converted { bytes, font: None, glyphs, left_behind });
+        return Ok(Converted { bytes, font: None, glyphs, left_behind, warnings });
     }
     if let Some(seconds) = options.modified {
         let mut head = table(&work, *b"head")?.to_vec();
@@ -240,7 +296,7 @@ pub fn convert_with(font: &SfntFont, options: &ConvertOptions) -> Result<Convert
         work.insert(*b"head", head);
     }
     let bytes = crate::write(&work, &WriteOptions::default())?;
-    Ok(Converted { bytes, font: Some(work), glyphs, left_behind })
+    Ok(Converted { bytes, font: Some(work), glyphs, left_behind, warnings })
 }
 
 fn check_options(o: &ConvertOptions) -> Result<()> {
@@ -484,7 +540,12 @@ fn truetype_to_cff(font: &mut SfntFont, o: &ConvertOptions, left_behind: &mut Ve
         top: top_dict(font),
         private: fontcraft_cff::PrivateDict::default(),
         glyphs,
-        widths: fontcraft_cff::Widths::Optimise,
+        // `tx -W`: the widths are not optimised, so both stay 0.
+        widths: if o.cff_write.optimize_widths == Some(false) {
+            fontcraft_cff::Widths::Fixed { default_width_x: 0, nominal_width_x: 0 }
+        } else {
+            fontcraft_cff::Widths::Optimise
+        },
         round_tolerance: 0.5,
         specialise: true,
     };
@@ -656,6 +717,93 @@ fn cid_key(font: &mut SfntFont, ros: &fontcraft_cff::cid::Ros, left_behind: &mut
     let post_names = font.get(*b"post").and_then(|p| u32_at(p, 0)) == Some(0x0002_0000);
     if !post_names {
         left_behind.push("glyph names (the CFF table is CID-keyed)".into());
+    }
+    Ok(())
+}
+
+/// Draws the `seac` glyphs of a name-keyed `CFF ` table out (`tx -Z`); the base's hints stay
+/// when the glyph has none of its own, the accent's go. A CID-keyed table has no `seac` glyphs.
+fn flatten_seac(font: &mut SfntFont, left_behind: &mut Vec<String>) -> Result<()> {
+    let n = num_glyphs(font)?;
+    let data = table(font, CFF)?.to_vec();
+    let cff = crate::reorder::cff::parse(&data, n)?;
+    if cff.is_cid() {
+        return Ok(());
+    }
+    let mut by_name = std::collections::HashMap::new();
+    for (gid, name) in cff.glyph_names().into_iter().enumerate() {
+        by_name.entry(name).or_insert(gid);
+    }
+    let standard_glyph = |code: u8| by_name.get(read_fonts::ps::encoding::PredefinedEncoding::Standard.name(code)).copied();
+    let drawn = cff_table::seac_drawn_out(&data, &standard_glyph)?;
+    if drawn.is_empty() {
+        return Ok(());
+    }
+    let identity: Vec<u16> = (0..n).map(|g| u16::try_from(g).map_err(|_| TablesError::invalid("more than 65535 glyphs"))).collect::<Result<_>>()?;
+    let flat = cff.rebuild_with(&identity, None, &drawn, false)?;
+    font.insert(CFF, flat);
+    left_behind.push(format!("the accent hints of the seac glyphs drawn out ({})", drawn.len()));
+    Ok(())
+}
+
+/// Makes the CID-keyed `CFF ` table of `font` name-keyed (`tx -decid`): glyph g is named
+/// `cid` and its CID, `.notdef` stays, and one Font DICT's Private DICT serves every glyph:
+/// `forced` (`-usefd`), or the one the glyphs other than `.notdef` come from. A glyph moved to
+/// another Private DICT keeps its advance.
+fn decid(font: &mut SfntFont, forced: Option<u16>, left_behind: &mut Vec<String>) -> Result<()> {
+    let n = num_glyphs(font)?;
+    let data = fontcraft_cff::subr::desubroutinize_table(table(font, CFF)?, false).map_err(cff_table::subr_error)?;
+    let cff = crate::reorder::cff::parse(&data, n)?;
+    if !cff.is_cid() {
+        return Err(TablesError::BadOptions("only a CID-keyed CFF font can be made name-keyed".into()));
+    }
+    let (fds, count) = cff.font_dict_of_glyphs();
+    let fd = match forced {
+        Some(fd) if usize::from(fd) < count => usize::from(fd),
+        Some(fd) => return Err(TablesError::BadOptions(format!("the font has {count} Font DICTs: there is no Font DICT {fd}"))),
+        None => {
+            let used: std::collections::BTreeSet<u16> = fds.iter().skip(1).copied().collect();
+            match (used.len(), used.first()) {
+                (1, Some(&only)) => usize::from(only),
+                (0, _) => usize::from(fds.first().copied().unwrap_or(0)),
+                _ => {
+                    let list: Vec<String> = used.iter().map(u16::to_string).collect();
+                    return Err(TablesError::BadOptions(format!(
+                        "the glyphs come from Font DICTs {}: keep the glyphs of one (fdSelect) or force one Font DICT on all",
+                        list.join(", ")
+                    )));
+                }
+            }
+        }
+    };
+    let cids = cff.charset();
+    let names: Vec<String> =
+        (0..n).map(|g| if g == 0 { ".notdef".to_string() } else { format!("cid{}", cids.get(g).copied().unwrap_or(0)) }).collect();
+    let pair = |fd: usize| match cff.fd_widths(fd) {
+        (Some(default), Some(nominal)) => Ok((default as f64, nominal as f64)),
+        _ => Err(TablesError::Unsupported(format!("Font DICT {fd}: its widths are not whole numbers"))),
+    };
+    let target = pair(fd)?;
+    let mut replace = std::collections::HashMap::new();
+    let mut others = 0usize;
+    for (g, &from) in fds.iter().enumerate() {
+        let from = usize::from(from);
+        if from == fd {
+            continue;
+        }
+        others += 1;
+        let own = pair(from)?;
+        if own == target {
+            continue;
+        }
+        let code = cff.charstring(g).ok_or_else(|| TablesError::invalid("a glyph has no charstring"))?;
+        let moved = fontcraft_cff::write_options::reencode_width(code, own, target).map_err(|e| in_glyph(cff_table::subr_error(e), g))?;
+        replace.insert(g, moved);
+    }
+    let keyed = cff.to_name_keyed(fd, &names, &replace)?;
+    font.insert(CFF, keyed);
+    if others > 0 {
+        left_behind.push(format!("the hint values of the other Font DICTs ({others} glyphs take those of Font DICT {fd})"));
     }
     Ok(())
 }
@@ -907,7 +1055,9 @@ fn name_string(font: &SfntFont, id: u16) -> Option<String> {
 
 /// The PostScript name (name ID 6) as a CFF font name: printable ASCII without the delimiters,
 /// at most 63 characters.
-fn postscript_name(font: &SfntFont) -> String {
+/// The font's PostScript name (name ID 6) as a CFF FontName: printable ASCII without PostScript
+/// delimiters, at most 63 characters, `Untitled` when nothing is left.
+pub fn postscript_name(font: &SfntFont) -> String {
     let raw = name_string(font, 6).unwrap_or_default();
     let clean: String = raw.chars().filter(|c| c.is_ascii_graphic() && !"[](){}<>/%".contains(*c)).take(63).collect();
     if clean.is_empty() { "Untitled".to_string() } else { clean }

@@ -408,3 +408,22 @@ fn damaged_font_programs_are_refused_without_a_crash() {
     two[4..6].copy_from_slice(&2u16.to_be_bytes());
     assert!(matches!(read_postscript(&two), Err(TablesError::Unsupported(_))));
 }
+
+#[test]
+fn tx_switches_keep_the_file_order_and_draw_seac_out() {
+    let pfa = pfa_from(type1_parts());
+    let names = |input: &PsInput| crate::reorder::glyph_names(&input.font).unwrap();
+    let sorted = read_postscript(&pfa).unwrap();
+    assert_eq!(names(&sorted)[2], "one", "tx's order: standard strings first, by string id");
+    let kept = read_postscript_with(&pfa, &PsReadOptions { keep_glyph_order: true, ..PsReadOptions::default() }).unwrap();
+    assert_eq!(names(&kept), [".notdef", "space", "A", "O", "acute", "Aacute", "E", "one", "zzz", "B"]);
+
+    // -Z: Aacute (glyph 8) is drawn from A and acute.
+    let plain = convert_postscript(&sorted, &ConvertOptions::new(ConvertTarget::BareCff)).unwrap();
+    let flat = convert_postscript(&sorted, &ConvertOptions { flatten_seac: true, ..ConvertOptions::new(ConvertTarget::BareCff) }).unwrap();
+    let charstrings =
+        |bytes: &[u8]| fontcraft_cff::subr::desubroutinize(&fontcraft_cff::subr::charstrings_of_table(bytes, false).unwrap()).unwrap().charstrings;
+    let (before, after) = (charstrings(&plain.bytes), charstrings(&flat.bytes));
+    assert_ne!(before[8], after[8]);
+    assert!(flat.left_behind.iter().any(|l| l.contains("seac")), "{:?}", flat.left_behind);
+}

@@ -18,8 +18,9 @@ use std::path::{Path, PathBuf};
 use std::collections::BTreeSet;
 
 use fontcraft_tables::convert::{
-    CidCollection, ConvertOptions, ConvertTarget, FontDictFilter, GoadbUse, PostFormat, PrepareOptions, PsSource, QuadToCubic, convert_postscript,
-    convert_prepared, glyph_cids, prepare, read_postscript,
+    CffWriteOptions, CharstringForm, CidCollection, ConvertOptions, ConvertTarget, Decid, FontDictFilter, GoadbUse, PostFormat, PrepareOptions,
+    PsReadOptions, PsSource, QuadToCubic, convert_postscript, convert_prepared, glyph_cids, postscript_name, prepare, read_postscript,
+    read_postscript_with,
 };
 use fontcraft_tables::sfnt::parse_tag;
 use fontcraft_tables::ttx::{ImportOptions, import_tree};
@@ -56,7 +57,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Convert Font Format",
             [],
             None,
-            "{inputs: [path] | input: path, to: \"ttf\"|\"otf\"|\"otf-cff2\"|\"cff\"|\"cff2\"|\"ufo\", output?: path (one input), outputDir?: path, inPlace?: bool, noClobber?: bool, face?: int|name, container?: \"plain\"|\"woff\"|\"woff2\", nameBy?: \"filename\", curves?: {maxError?: em fraction (default one font unit), conversion?: \"optimized\"|\"exact\", keepDirection?: bool}, postFormat?: 2|3, cff?: {subroutinize?: bool, maxSubrs?: int}, hints?: bool, cid?: {keyed?: bool|\"REGISTRY-ORDERING-SUPPLEMENT\"}, glyphs?: selector, excludeGlyphs?: selector, fdSelect?: [int], excludeFd?: [int], goadb?: path, goadbRename?: bool (default true), goadbSubset?: bool, goadbOrder?: bool, location?: {axis: number}, clamp?: bool (default true), removeOverlaps?: bool, ignoreOverlapErrors?: bool, timestamp?: \"keep\"|\"now\"|int (seconds since 1970)}. Inputs: compiled fonts, TTX text (compiled first), Type 1 fonts (PFA, PFB) and bare CFF tables (wrapped in an OpenType CFF font first; bare tables are written without subroutines unless cff.subroutinize says otherwise). CFF or static CFF2 to TrueType (cubic to quadratic within maxError, contours reversed), TrueType to CFF or CFF2 (components decomposed, instructions dropped), CFF to CFF2 and back with hints kept, the bare outline table (cff, cff2), or a UFO of the font as file.open reads it (curves, postFormat, cff, hints and timestamp shape compiled output only and are refused with ufo). A variable font converted to UFO or to another outline flavour is snapshotted at its default location unless location is given. cid.keyed makes a name-keyed CFF result CID-keyed, CID n for glyph n (true: the Identity ordering, supplement 0; or a REGISTRY-ORDERING-SUPPLEMENT string). Before converting: location snapshots a variable font (axes not named at their default; clamped to the axis ranges unless clamp is false), glyphs and excludeGlyphs keep a subset (names, glyph ids, ranges such as 3-9, U+0041, and in a CID-keyed font /CID or /CID-CID; .notdef always stays), fdSelect and excludeFd keep the glyphs of some Font DICTs of a CID-keyed CFF or a CFF2 font (indexes from 0), goadb renames glyphs from its second column to its first (goadbRename), keeps only the glyphs it lists (goadbSubset) and orders them as it does (goadbOrder); removeOverlaps merges overlapping contours (TrueType outlines before converting a TrueType font or after converting to TrueType; CFF and CFF2 outlines before converting, a merged glyph losing its stem hints), and ignoreOverlapErrors keeps a glyph that cannot be merged. Without output the result goes beside the input with the new extension → {results: [{input, output, bytes, glyphs, leftBehind: [text]}]}",
+            "{inputs: [path] | input: path, to: \"ttf\"|\"otf\"|\"otf-cff2\"|\"cff\"|\"cff2\"|\"ufo\", output?: path (one input), outputDir?: path, inPlace?: bool, noClobber?: bool, face?: int|name, container?: \"plain\"|\"woff\"|\"woff2\", nameBy?: \"filename\"|\"postscript-name\", curves?: {maxError?: em fraction (default one font unit), conversion?: \"optimized\"|\"exact\", keepDirection?: bool}, postFormat?: 2|3, cff?: {subroutinize?: bool, maxSubrs?: int, charstringOptimize?: \"specialize\"|\"none\", optimizeWidths?: bool, keepGlyphOrder?: bool, flattenSeac?: bool, embedMinimal?: bool, dedupeFamilyBlues?: bool (default true), standardEncoding?: bool, allowMissingNotdef?: bool, keepUniqueId?: bool (default true), warnHints?: bool (default true)}, hints?: bool, cid?: {keyed?: bool|\"REGISTRY-ORDERING-SUPPLEMENT\", decid?: bool, fd?: int}, glyphs?: selector, excludeGlyphs?: selector, fdSelect?: [int], excludeFd?: [int], goadb?: path, goadbRename?: bool (default true), goadbSubset?: bool, goadbOrder?: bool, location?: {axis: number}, clamp?: bool (default true), removeOverlaps?: bool, ignoreOverlapErrors?: bool, timestamp?: \"keep\"|\"now\"|int (seconds since 1970)}. Inputs: compiled fonts, TTX text (compiled first), Type 1 fonts (PFA, PFB) and bare CFF tables (wrapped in an OpenType CFF font first; bare tables are written without subroutines unless cff.subroutinize says otherwise). CFF or static CFF2 to TrueType (cubic to quadratic within maxError, contours reversed), TrueType to CFF or CFF2 (components decomposed, instructions dropped), CFF to CFF2 and back with hints kept, the bare outline table (cff, cff2), or a UFO of the font as file.open reads it (curves, postFormat, cff, hints and timestamp shape compiled output only and are refused with ufo). A variable font converted to UFO or to another outline flavour is snapshotted at its default location unless location is given. cid.keyed makes a name-keyed CFF result CID-keyed, CID n for glyph n (true: the Identity ordering, supplement 0; or a REGISTRY-ORDERING-SUPPLEMENT string). cid.decid makes a CID-keyed CFF result name-keyed, glyphs named cid and their CID, with the Private DICT of the one Font DICT the glyphs come from, or of cid.fd for all. The cff keys shape a CFF or CFF2 result: charstringOptimize rewrites every charstring in the short operator forms or with rmoveto, rlineto and rrcurveto only; optimizeWidths chooses defaultWidthX and nominalWidthX again (false leaves both 0 in a table built from TrueType); flattenSeac draws accented seac glyphs out and drops dotsection; embedMinimal drops the descriptive Top DICT strings; dedupeFamilyBlues drops FamilyBlues and FamilyOtherBlues equal to BlueValues and OtherBlues; standardEncoding drops a custom Encoding; keepUniqueId false drops UniqueID and XUID; warnHints reports glyphs drawn without stem hints and repeated hint masks; keepGlyphOrder keeps a Type 1 font's glyph order (.notdef first) instead of the standard-string order; allowMissingNotdef lets the first glyph of a Type 1 font without .notdef take glyph 0. nameBy postscript-name names each output after the font's PostScript name. Before converting: location snapshots a variable font (axes not named at their default; clamped to the axis ranges unless clamp is false), glyphs and excludeGlyphs keep a subset (names, glyph ids, ranges such as 3-9, U+0041, and in a CID-keyed font /CID or /CID-CID; .notdef always stays), fdSelect and excludeFd keep the glyphs of some Font DICTs of a CID-keyed CFF or a CFF2 font (indexes from 0), goadb renames glyphs from its second column to its first (goadbRename), keeps only the glyphs it lists (goadbSubset) and orders them as it does (goadbOrder); removeOverlaps merges overlapping contours (TrueType outlines before converting a TrueType font or after converting to TrueType; CFF and CFF2 outlines before converting, a merged glyph losing its stem hints), and ignoreOverlapErrors keeps a glyph that cannot be merged. Without output the result goes beside the input with the new extension → {results: [{input, output, bytes, glyphs, leftBehind: [text], warnings: [text]}]}",
             always,
             convert_fonts
         )
@@ -80,6 +81,7 @@ struct Converted {
     output: Output,
     glyphs: usize,
     left_behind: Vec<String>,
+    warnings: Vec<String>,
 }
 
 /// What one input becomes.
@@ -105,11 +107,11 @@ fn convert_fonts(_: &mut Session, v: &Value) -> Result<Value> {
             return Err(EngineError::Unsupported(format!("`{key}` in font.convert")));
         }
     }
-    if let Some(name_by) = p.opt_str("nameBy")?
-        && name_by != "filename"
-    {
-        return Err(EngineError::Unsupported(format!("nameBy `{name_by}`: outputs are named after their input files")));
-    }
+    let name_by_font = match p.opt_str("nameBy")? {
+        None | Some("filename") => false,
+        Some("postscript-name") => true,
+        Some(other) => return Err(p.bad(format!("`nameBy` must be filename or postscript-name, not `{other}`"))),
+    };
     let inputs: Vec<&str> = match (p.opt_strings("inputs")?, p.opt_str("input")?) {
         (Some(_), Some(_)) => return Err(p.bad("give `inputs` or `input`, not both")),
         (Some(list), None) => list,
@@ -140,7 +142,23 @@ fn convert_fonts(_: &mut Session, v: &Value) -> Result<Value> {
 
     let mut outputs = Vec::with_capacity(inputs.len());
     for input in &inputs {
-        outputs.push(file_io::output_path(Path::new(input), &request, "", Some(settings.extension(container))).map_err(|e| in_input(e, input))?);
+        let path = Path::new(input);
+        let output = if name_by_font && request.output.is_none() && !request.in_place {
+            // The default name comes from the font's PostScript name, as `tx -A` names it.
+            let name = font_file_name(&p, path).map_err(|e| in_input(e, input))?;
+            let named = path.with_file_name(format!("{name}.font"));
+            let out = file_io::output_path(&named, &request, "", Some(settings.extension(container))).map_err(|e| in_input(e, input))?;
+            if out == path {
+                return Err(in_input(
+                    EngineError::Io(format!("the output {} would replace the input: give output or outputDir", out.display())),
+                    input,
+                ));
+            }
+            out
+        } else {
+            file_io::output_path(path, &request, "", Some(settings.extension(container))).map_err(|e| in_input(e, input))?
+        };
+        outputs.push(output);
     }
     // Two inputs written to one file, or an output that replaces another input, would lose a
     // result: refused before anything is written.
@@ -174,6 +192,7 @@ fn convert_fonts(_: &mut Session, v: &Value) -> Result<Value> {
             "bytes": c.output.len(),
             "glyphs": c.glyphs,
             "leftBehind": c.left_behind,
+            "warnings": c.warnings,
         }));
     }
     staging.commit()?;
@@ -202,6 +221,14 @@ struct Settings {
     timestamp: Timestamp,
     /// `cid.keyed`: the character collection of a CID-keyed result.
     cid_keyed: Option<CidCollection>,
+    /// `cid.decid` and `cid.fd`.
+    decid: Option<Decid>,
+    /// The CFF-writing keys of `cff`.
+    cff_write: CffWriteOptions,
+    /// `cff.flattenSeac`.
+    flatten_seac: bool,
+    /// `cff.keepGlyphOrder` and `cff.allowMissingNotdef`, for Type 1 inputs.
+    ps_read: PsReadOptions,
     /// The steps around the conversion; the glyph selection is resolved for each input.
     prepare: PrepareOptions,
 }
@@ -268,15 +295,57 @@ impl Settings {
         let cff = p.opt_object("cff")?;
         let mut subroutinize = None;
         let mut max_subrs = None;
+        let mut cff_write = CffWriteOptions::default();
+        let mut flatten_seac = false;
+        let mut ps_read = PsReadOptions::default();
         if let Some(cff) = cff {
             for (key, value) in cff {
+                let flag = || value.as_bool().ok_or_else(|| p.bad(format!("`cff.{key}` must be true or false")));
                 match key.as_str() {
-                    "subroutinize" => subroutinize = Some(value.as_bool().ok_or_else(|| p.bad("`cff.subroutinize` must be true or false"))?),
+                    "subroutinize" => subroutinize = Some(flag()?),
                     "maxSubrs" => {
                         let n = value.as_u64().and_then(|n| usize::try_from(n).ok()).ok_or_else(|| p.bad("`cff.maxSubrs` must be a whole number"))?;
                         max_subrs = Some(n);
                     }
-                    other => return Err(EngineError::Unsupported(format!("`cff.{other}` in font.convert"))),
+                    "charstringOptimize" => {
+                        cff_write.charstrings = match value.as_str() {
+                            Some("specialize") => Some(CharstringForm::Specialize),
+                            Some("none") => Some(CharstringForm::General),
+                            _ => return Err(p.bad("`cff.charstringOptimize` must be specialize or none")),
+                        }
+                    }
+                    "optimizeWidths" => cff_write.optimize_widths = Some(flag()?),
+                    "embedMinimal" => cff_write.embed_minimal = flag()?,
+                    "dedupeFamilyBlues" => cff_write.dedupe_family_blues = flag()?,
+                    "standardEncoding" => cff_write.standard_encoding = flag()?,
+                    "keepUniqueId" => cff_write.keep_unique_id = flag()?,
+                    "warnHints" => cff_write.warn_hints = flag()?,
+                    "flattenSeac" => flatten_seac = flag()?,
+                    "keepGlyphOrder" => ps_read.keep_glyph_order = flag()?,
+                    "allowMissingNotdef" => ps_read.allow_missing_notdef = flag()?,
+                    other => return Err(p.bad(format!("`cff.{other}` is not a CFF setting"))),
+                }
+            }
+        }
+        if !matches!(to, "otf" | "otf-cff2" | "cff" | "cff2") {
+            let cff_only = [
+                "charstringOptimize",
+                "optimizeWidths",
+                "embedMinimal",
+                "dedupeFamilyBlues",
+                "standardEncoding",
+                "keepUniqueId",
+                "warnHints",
+                "flattenSeac",
+            ];
+            if let Some(key) = cff_only.iter().find(|k| cff.is_some_and(|c| c.contains_key(**k))) {
+                return Err(p.bad(format!("`cff.{key}` shapes CFF and CFF2 output (otf, otf-cff2, cff, cff2)")));
+            }
+        }
+        if matches!(to, "otf-cff2" | "cff2") {
+            for key in ["embedMinimal", "standardEncoding", "keepUniqueId", "flattenSeac"] {
+                if cff.is_some_and(|c| c.contains_key(key)) {
+                    return Err(p.bad(format!("`cff.{key}` shapes CFF output (otf, cff); CFF2 has no such entries")));
                 }
             }
         }
@@ -288,13 +357,20 @@ impl Settings {
             Some(_) => return Err(p.bad("`timestamp` must be keep, now or whole seconds since 1970")),
         };
         let prepare = Self::prepare(p)?;
-        let cid_keyed = Self::cid(p)?;
+        let (cid_keyed, decid) = Self::cid(p)?;
         if cid_keyed.is_some() && !matches!(to, "otf" | "cff") {
             return Err(p.bad("`cid.keyed` needs CFF output (otf or cff)"));
+        }
+        if decid.is_some() && (!matches!(to, "otf" | "cff") || cid_keyed.is_some()) {
+            return Err(p.bad("`cid.decid` needs CFF output (otf or cff) and no `cid.keyed`"));
         }
         Ok(Settings {
             prepare,
             cid_keyed,
+            decid,
+            cff_write,
+            flatten_seac,
+            ps_read,
             to,
             max_error_em,
             quad_to_cubic,
@@ -307,13 +383,25 @@ impl Settings {
         })
     }
 
-    /// `cid`: only `keyed` is acted on; `true` is Adobe-Identity-0, a string names
-    /// registry-ordering-supplement.
-    fn cid(p: &Params<'_>) -> Result<Option<CidCollection>> {
-        let Some(cid) = p.opt_object("cid")? else { return Ok(None) };
+    /// `cid`: `keyed` (`true` is Adobe-Identity-0, a string names
+    /// registry-ordering-supplement), `decid` and `fd`. `info` is refused.
+    fn cid(p: &Params<'_>) -> Result<(Option<CidCollection>, Option<Decid>)> {
+        let Some(cid) = p.opt_object("cid")? else { return Ok((None, None)) };
         let mut keyed = None;
+        let mut decid = false;
+        let mut fd = None;
         for (key, value) in cid {
             match (key.as_str(), value) {
+                ("decid", Value::Bool(b)) => decid = *b,
+                ("decid", _) => return Err(p.bad("`cid.decid` must be true or false")),
+                ("fd", v) => {
+                    let n = v
+                        .as_u64()
+                        .and_then(|n| u16::try_from(n).ok())
+                        .filter(|n| usize::from(*n) < MAX_FONT_DICTS)
+                        .ok_or_else(|| p.bad(format!("`cid.fd` must be a Font DICT index from 0 to {}", MAX_FONT_DICTS - 1)))?;
+                    fd = Some(n);
+                }
                 ("keyed", Value::Bool(false)) => {}
                 ("keyed", Value::Bool(true)) => keyed = Some(("Adobe", "Identity", 0)), // brand-ok: the CFF registry value
                 ("keyed", Value::String(ros)) => {
@@ -329,7 +417,15 @@ impl Settings {
                 (other, _) => return Err(EngineError::Unsupported(format!("`cid.{other}` in font.convert"))),
             }
         }
-        Ok(keyed.map(|(registry, ordering, supplement)| CidCollection { registry: registry.to_string(), ordering: ordering.to_string(), supplement }))
+        if fd.is_some() && !decid {
+            return Err(p.bad("`cid.fd` forces a Font DICT on a font made name-keyed: it needs `cid.decid`"));
+        }
+        let keyed = keyed.map(|(registry, ordering, supplement)| CidCollection {
+            registry: registry.to_string(),
+            ordering: ordering.to_string(),
+            supplement,
+        });
+        Ok((keyed, decid.then_some(Decid { fd })))
     }
 
     /// `fdSelect` and `excludeFd`: Font DICT indexes.
@@ -420,7 +516,7 @@ impl Settings {
             return ufo(font, steps);
         }
         let c = convert_prepared(font, &self.options(units_per_em(font))?, &steps)?;
-        Ok(Converted { output: Output::File(c.bytes), glyphs: c.glyphs, left_behind: c.left_behind })
+        Ok(Converted { output: Output::File(c.bytes), glyphs: c.glyphs, left_behind: c.left_behind, warnings: c.warnings })
     }
 
     fn options(&self, units_per_em: f64) -> Result<ConvertOptions> {
@@ -441,6 +537,9 @@ impl Settings {
         o.max_subrs = self.max_subrs;
         o.hints = self.hints;
         o.cid_keyed = self.cid_keyed.clone();
+        o.decid = self.decid;
+        o.cff_write = self.cff_write.clone();
+        o.flatten_seac = self.flatten_seac;
         o.modified = match self.timestamp {
             Timestamp::Keep => None,
             Timestamp::At(unix) => Some(unix.saturating_add(EPOCH_1904)),
@@ -460,6 +559,24 @@ impl Settings {
             _ => "otf",
         }
     }
+}
+
+/// The PostScript name of the font in `input`, for `nameBy: postscript-name`.
+fn font_file_name(p: &Params<'_>, input: &Path) -> Result<String> {
+    let file = file_io::read_input(input)?;
+    let font = match file.kind {
+        k if k.is_font() => fontcraft_tables::read(&file.bytes, super::dehint::face_index(p, &file.bytes)?)?,
+        InputKind::Ttx => import_tree(SfntFont::new(Flavour::TrueType), &super::tables_import::read_dump(input)?, &ImportOptions::default())?,
+        _ if PsSource::sniff(&file.bytes).is_some() => read_postscript(&file.bytes)?.font,
+        _ => return Err(EngineError::Unsupported("nameBy postscript-name needs a compiled font, TTX, a Type 1 font or a bare CFF table".into())),
+    };
+    // The name is printable ASCII without PostScript delimiters; a backslash or colon would
+    // still be a path on some systems.
+    let name = postscript_name(&font);
+    if name.contains(['\\', ':']) || name.starts_with('.') {
+        return Err(EngineError::Unsupported(format!("the PostScript name `{name}` cannot be a file name: give output or use nameBy filename")));
+    }
+    Ok(name)
 }
 
 /// The text of a GOADB file of at most `limit` bytes; a larger file is refused, not cut.
@@ -595,12 +712,12 @@ fn convert_one(p: &Params<'_>, input: &Path, settings: &Settings, container: Con
                     "glyph selection, a GOADB, a location or overlap removal on a Type 1 font or bare CFF table: convert it to otf first".into(),
                 ));
             }
-            let ps = read_postscript(&file.bytes)?;
+            let ps = read_postscript_with(&file.bytes, &settings.ps_read)?;
             if settings.to == "ufo" {
                 ufo(&ps.font, PrepareOptions::default())?
             } else {
                 let c = convert_postscript(&ps, &settings.options(units_per_em(&ps.font))?)?;
-                Converted { output: Output::File(c.bytes), glyphs: c.glyphs, left_behind: c.left_behind }
+                Converted { output: Output::File(c.bytes), glyphs: c.glyphs, left_behind: c.left_behind, warnings: c.warnings }
             }
         }
         _ => {
@@ -619,7 +736,7 @@ fn convert_one(p: &Params<'_>, input: &Path, settings: &Settings, container: Con
                 .map_err(|e| EngineError::Io(format!("WOFF2: {e}")))?,
         ),
     };
-    Ok(Converted { output, glyphs: converted.glyphs, left_behind: converted.left_behind })
+    Ok(Converted { output, glyphs: converted.glyphs, left_behind: converted.left_behind, warnings: converted.warnings })
 }
 
 /// A UFO of `font` as `file.open` reads a compiled font, after the steps; a variable font
@@ -634,7 +751,7 @@ fn ufo(font: &SfntFont, mut steps: PrepareOptions) -> Result<Converted> {
     let decompiled = fontcraft_decompile::decompile(&bytes, None)?;
     left_behind.extend(decompiled.warnings);
     let files = fontcraft_io_ufo::ufo::write(&decompiled.font)?;
-    Ok(Converted { glyphs: decompiled.font.glyphs.len(), output: Output::Folder(files), left_behind })
+    Ok(Converted { glyphs: decompiled.font.glyphs.len(), output: Output::Folder(files), left_behind, warnings: Vec::new() })
 }
 
 /// The temporary files of one run. [`Staging::commit`] moves them into place; dropped before

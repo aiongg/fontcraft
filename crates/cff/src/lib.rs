@@ -48,6 +48,7 @@ mod specialize;
 mod strings;
 pub mod subr;
 mod width;
+pub mod write_options;
 
 use std::collections::HashSet;
 

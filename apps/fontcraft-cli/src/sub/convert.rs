@@ -37,6 +37,13 @@ const USAGE: &str = "\
       keep part of the glyph set (names, glyph ids, /CID in a CID-keyed font), --fd-select and
       --exclude-fd keep the glyphs of some Font DICTs, --goadb renames, subsets or orders the
       glyphs, and --remove-overlaps merges overlapping contours.
+      CFF and CFF2 results take the reference converter's writing switches: --charstring-optimize,
+      --[no-]optimize-widths, --flatten-seac, --cff-embed-minimal, --[no-]dedupe-family-blues,
+      --standard-encoding, --[no-]keep-unique-id and --[no-]warn-hints (on by default: glyphs
+      drawn without stem hints are reported). --keep-glyph-order and --allow-missing-notdef shape
+      a Type 1 input. --decid makes a CID-keyed font name-keyed (glyphs named cidN), with the
+      hint values of the one Font DICT its glyphs come from, or of --fd N for all of them.
+      --name-by postscript-name names each output after the font's PostScript name.
 ";
 
 const OPTIONS: &[OptSpec] = &[
@@ -59,6 +66,28 @@ const OPTIONS: &[OptSpec] = &[
         "R-O-S",
         "make a name-keyed CFF result CID-keyed, CID n for glyph n (default Identity ordering, supplement 0); give a collection as --cid-keyed=R-O-S",
     ),
+    OptSpec::value(
+        "charstring-optimize",
+        "specialize|none",
+        "",
+        "CFF charstrings in the compact operator forms, or with rmoveto, rlineto and rrcurveto only",
+    ),
+    OptSpec::switch(
+        "optimize-widths",
+        false,
+        "choose defaultWidthX and nominalWidthX again (--no-optimize-widths: leave them 0 in a table built from TrueType)",
+    ),
+    OptSpec::switch("flatten-seac", false, "draw seac accented glyphs out and drop dotsection"),
+    OptSpec::switch("cff-embed-minimal", false, "drop the descriptive Top DICT strings (version, Notice, Copyright, FullName, FamilyName, Weight)"),
+    OptSpec::switch("dedupe-family-blues", false, "drop FamilyBlues and FamilyOtherBlues equal to BlueValues and OtherBlues (default on)"),
+    OptSpec::switch("standard-encoding", false, "drop a custom Encoding: the font has StandardEncoding"),
+    OptSpec::switch("keep-unique-id", false, "keep UniqueID and XUID (default on; --no-keep-unique-id drops them)"),
+    OptSpec::switch("warn-hints", false, "report glyphs drawn without stem hints and repeated hint masks (default on)"),
+    OptSpec::switch("keep-glyph-order", false, "Type 1 input: keep the file's glyph order (.notdef first)"),
+    OptSpec::switch("allow-missing-notdef", false, "Type 1 input without .notdef: its first glyph becomes glyph 0 instead of an added empty .notdef"),
+    OptSpec::switch("decid", false, "make a CID-keyed CFF result name-keyed, glyphs named cidN"),
+    OptSpec::value("fd", "N", "", "with --decid: every glyph takes the hint values of Font DICT N"),
+    OptSpec::value("name-by", "filename|postscript-name", "", "name each output after the input file (default) or the font's PostScript name"),
     OptSpec::value("timestamp", "keep|now|SECONDS", "", "head.modified: keep it, the current time, or seconds since 1970"),
     OptSpec::value("glyphs", "SELECTOR", "", "keep only these glyphs and .notdef: names, glyph ids, ranges (3-9), U+0041"),
     OptSpec::value("exclude-glyphs", "SELECTOR", "", "leave these glyphs out"),
@@ -96,10 +125,28 @@ fn convert(raw: &[String]) -> Outcome {
     let given = ["glyphs", "exclude-glyphs", "goadb"].into_iter().find(|name| parsed.value(name).is_some_and(|v| !v.is_empty()));
     let given = given.or_else(|| ["location", "fd-select", "exclude-fd"].into_iter().find(|name| !parsed.list(name).is_empty()));
     let given = given.or_else(|| parsed.value("cid-keyed").is_some().then_some("cid-keyed"));
+    let given = given.or_else(|| ["charstring-optimize", "fd", "name-by"].into_iter().find(|name| parsed.value(name).is_some_and(|v| !v.is_empty())));
     let given = given.or_else(|| {
-        ["no-rename", "subset-to-goadb", "goadb-order", "no-clamp", "remove-overlaps", "ignore-overlap-errors"]
-            .into_iter()
-            .find(|name| parsed.switch(name))
+        [
+            "no-rename",
+            "subset-to-goadb",
+            "goadb-order",
+            "no-clamp",
+            "remove-overlaps",
+            "ignore-overlap-errors",
+            "optimize-widths",
+            "flatten-seac",
+            "cff-embed-minimal",
+            "dedupe-family-blues",
+            "standard-encoding",
+            "keep-unique-id",
+            "warn-hints",
+            "keep-glyph-order",
+            "allow-missing-notdef",
+            "decid",
+        ]
+        .into_iter()
+        .find(|name| parsed.switch(name))
     });
     if let Some(name) = given {
         return Err(usage(format!("--{name} applies to compiled fonts; a source is converted as it is (see instance and subset)")));
@@ -218,6 +265,10 @@ fn convert_fonts(parsed: &args::Parsed, raw: &[String]) -> Outcome {
         if parsed.switch("json") {
             out_json_line(r)?;
         } else {
+            let input = r.get("input").and_then(Value::as_str).unwrap_or("?");
+            for w in r.get("warnings").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str) {
+                crate::io::warn(&format!("{input}: {w}"));
+            }
             let left: Vec<&str> =
                 r.get("leftBehind").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
             out(&format!(
@@ -296,8 +347,39 @@ fn font_params(parsed: &args::Parsed, raw: &[String]) -> Result<Map<String, Valu
     if let Some(n) = parsed.value("max-subrs").filter(|v| !v.is_empty()) {
         cff.insert("maxSubrs".into(), json!(n.parse::<u64>().map_err(|_| usage("--max-subrs needs a number"))?));
     }
+    // A switch the command defaults on or off is sent only when given, either way.
+    let given = |name: &str| -> Option<bool> {
+        if raw.iter().any(|a| a == &format!("--no-{name}")) { Some(false) } else { parsed.switch(name).then_some(true) }
+    };
+    if let Some(v) = parsed.value("charstring-optimize").filter(|v| !v.is_empty()) {
+        if !matches!(v, "specialize" | "none") {
+            return Err(usage("--charstring-optimize needs specialize or none"));
+        }
+        cff.insert("charstringOptimize".into(), json!(v));
+    }
+    for (key, name) in [
+        ("optimizeWidths", "optimize-widths"),
+        ("flattenSeac", "flatten-seac"),
+        ("embedMinimal", "cff-embed-minimal"),
+        ("dedupeFamilyBlues", "dedupe-family-blues"),
+        ("standardEncoding", "standard-encoding"),
+        ("keepUniqueId", "keep-unique-id"),
+        ("warnHints", "warn-hints"),
+        ("keepGlyphOrder", "keep-glyph-order"),
+        ("allowMissingNotdef", "allow-missing-notdef"),
+    ] {
+        if let Some(v) = given(name) {
+            cff.insert(key.into(), json!(v));
+        }
+    }
     if !cff.is_empty() {
         params.insert("cff".into(), Value::Object(cff));
+    }
+    if let Some(v) = parsed.value("name-by").filter(|v| !v.is_empty()) {
+        if !matches!(v, "filename" | "postscript-name") {
+            return Err(usage("--name-by needs filename or postscript-name"));
+        }
+        params.insert("nameBy".into(), json!(v));
     }
     if parsed.switch("no-hints") {
         params.insert("hints".into(), json!(false));
@@ -315,6 +397,21 @@ fn font_params(parsed: &args::Parsed, raw: &[String]) -> Result<Map<String, Valu
             json!(ros)
         };
         params.insert("cid".into(), json!({ "keyed": keyed }));
+    }
+    let fd = match parsed.value("fd").filter(|v| !v.is_empty()) {
+        Some(v) => Some(v.parse::<u64>().map_err(|_| usage(format!("--fd takes a Font DICT number, not {v}")))?),
+        None => None,
+    };
+    if parsed.switch("decid") {
+        let cid = params.entry("cid").or_insert_with(|| json!({}));
+        if let Value::Object(m) = cid {
+            m.insert("decid".into(), json!(true));
+            if let Some(fd) = fd {
+                m.insert("fd".into(), json!(fd));
+            }
+        }
+    } else if fd.is_some() {
+        return Err(usage("--fd needs --decid"));
     }
     for (key, name) in [("fdSelect", "fd-select"), ("excludeFd", "exclude-fd")] {
         let items = parsed.list(name);
@@ -398,5 +495,24 @@ mod tests {
         assert_eq!(p["curves"], json!({ "keepDirection": true }));
         assert_eq!(p["location"], json!({ "wght": 300.0, "wdth": 80.0 }));
         assert!(params(&["A.ttf", "--to", "otf", "--location", "wght=1,wght=2"]).is_err(), "an axis given twice is refused");
+        let p = params(&[
+            "A.otf",
+            "--to",
+            "cff",
+            "--charstring-optimize",
+            "none",
+            "--no-warn-hints",
+            "--flatten-seac",
+            "--decid",
+            "--fd",
+            "2",
+            "--name-by",
+            "postscript-name",
+        ])
+        .unwrap();
+        assert_eq!(p["cff"], json!({ "charstringOptimize": "none", "warnHints": false, "flattenSeac": true }));
+        assert_eq!(p["cid"], json!({ "decid": true, "fd": 2 }));
+        assert_eq!(p["nameBy"], json!("postscript-name"));
+        assert!(params(&["A.otf", "--to", "cff", "--fd", "1"]).is_err(), "--fd needs --decid");
     }
 }

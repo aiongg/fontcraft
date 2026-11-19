@@ -150,7 +150,7 @@ pub fn recompile_cff(font: &SfntFont) -> Result<CffRecompile> {
     let mut expected: Vec<Vec<u8>> = Vec::new();
     let mut changed = 0usize;
     let mut seac_glyphs = 0usize;
-    let rewrite = TableRewrite { top: top_keys, private: &OBSOLETE_PRIVATE };
+    let rewrite = TableRewrite { top: top_keys, private: &OBSOLETE_PRIVATE, dedupe_family_blues: false };
     let (table, removed) = subr::rewrite_table(data, false, &rewrite, &mut |set: &CharstringSet| {
         let mut flat = subr::desubroutinize_within(set, MAX_CHARSTRING_MEMORY)?;
         let mut replaced: Vec<(usize, Vec<u8>)> = Vec::new();

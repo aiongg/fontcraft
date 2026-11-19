@@ -549,6 +549,51 @@ impl<'a> Cff<'a> {
         cid.rebuild_with(&identity, None, replace, false)
     }
 
+    /// The table made name-keyed, as `tx -decid` makes it: the Private DICT of Font DICT `fd`
+    /// serves every glyph, glyph `g` (from 1) is named `names[g]`, the Top DICT loses its CID
+    /// entries and takes the Font DICT's `FontMatrix` when its own is missing or the identity.
+    /// The charstrings must not call local subroutines (the caller expands them first), and
+    /// those of `replace` (by glyph id) replace the table's.
+    pub(crate) fn to_name_keyed(&self, fd: usize, names: &[String], replace: &HashMap<usize, Vec<u8>>) -> Result<Vec<u8>> {
+        // ROS, CIDFontVersion, CIDFontRevision, CIDFontType, CIDCount, UIDBase, FDArray, FDSelect
+        // and FontName.
+        const CID_KEYS: [u16; 9] = [ROS, 1231, 1232, 1233, CID_COUNT, 1235, FDARRAY, FDSELECT, FONT_NAME];
+        const FONT_MATRIX: u16 = 1207;
+        if !self.cid {
+            return Err(TablesError::Unsupported("the CFF table is already name-keyed".into()));
+        }
+        let font_dict = self.font_dicts.get(fd).ok_or_else(|| TablesError::BadOptions(format!("the font has no Font DICT {fd}")))?;
+        let mut private = self.privates.get(fd).cloned().unwrap_or(Private { dict: Vec::new(), subrs: None, subrs_at: None, local: None });
+        if private.subrs.is_some() {
+            return Err(TablesError::invalid("the Font DICT's local subroutines must be expanded before the font is made name-keyed"));
+        }
+        private.local = None;
+        let mut top: Vec<Entry> =
+            self.top.iter().filter(|e| !CID_KEYS.contains(&e.op) && !matches!(e.op, CHARSET | PRIVATE | ENCODING)).cloned().collect();
+        if let Some(matrix) = find(font_dict, FONT_MATRIX) {
+            let identity = |e: &Entry| e.ints.iter().copied().collect::<Option<Vec<i64>>>() == Some(vec![1, 0, 0, 1, 0, 0]);
+            match top.iter_mut().find(|e| e.op == FONT_MATRIX) {
+                None if identity(matrix) => {}
+                None => top.push(matrix.clone()),
+                Some(own) if identity(&*own) => *own = matrix.clone(),
+                Some(own) if own.operands == matrix.operands || identity(matrix) => {}
+                Some(_) => {
+                    return Err(TablesError::Unsupported("the Top DICT and the Font DICT both scale the glyphs (two FontMatrix entries)".into()));
+                }
+            }
+        }
+        let mut keyed = self.clone();
+        keyed.top = top;
+        keyed.cid = false;
+        keyed.encoding = None;
+        keyed.font_dicts = Vec::new();
+        keyed.fd_select = Vec::new();
+        keyed.privates = vec![private];
+        keyed.local_subrs = Vec::new();
+        let identity: Vec<u16> = (0..self.charstrings.len()).map(|g| to_u16(g, "a glyph id")).collect::<Result<_>>()?;
+        keyed.rebuild_with(&identity, Some(names), replace, false)
+    }
+
     /// Gives the Top DICT operator `op` the integer operands `values`, replacing its entry or
     /// adding one at the end.
     pub(crate) fn set_top_ints(&mut self, op: u16, values: &[i64]) -> Result<()> {
@@ -607,7 +652,14 @@ impl<'a> Cff<'a> {
     /// `defaultWidthX` and `nominalWidthX` of the Private DICT glyph `g` uses, when they are
     /// integers (both default to 0).
     pub(crate) fn widths(&self, g: usize) -> (Option<i64>, Option<i64>) {
-        let get = |op: u16| match self.private_of(g).and_then(|p| find(&p.dict, op)) {
+        let fd = if self.cid { usize::from(self.fd_select.get(g).copied().unwrap_or(0)) } else { 0 };
+        self.fd_widths(fd)
+    }
+
+    /// `defaultWidthX` and `nominalWidthX` of the Private DICT of Font DICT `fd` (0 in a
+    /// name-keyed font), when they are integers (both default to 0).
+    pub(crate) fn fd_widths(&self, fd: usize) -> (Option<i64>, Option<i64>) {
+        let get = |op: u16| match self.privates.get(fd).and_then(|p| find(&p.dict, op)) {
             None => Some(0),
             Some(e) => e.int(0),
         };
