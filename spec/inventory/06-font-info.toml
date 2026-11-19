@@ -518,9 +518,10 @@ milestone = "M7"
 summary = "New files start at 1000 UPM. The format allows 16 to 16384; the handbook warns that some applications misbehave above 3000, Adobe InDesign and Illustrator above 5000, that CFF glyph widths become unreliable beyond 4096 UPM, and that no point coordinate may exceed plus or minus 32768."
 ref = "Font Info › Font › Units per Em"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.3."
+notes = "Documented, not yet observed. M7 plan § 4: M7.3. The messages come from fontcraft_fontinfo::warnings (M7.23): font.info.set returns them, and font.info.get lists those of the current value under `warnings` with field unitsPerEm, for the Font tab to show under the field. The handbook says beyond 4096, so 4096 itself gets only the 3000 caution."
 guesses = [
   "font.info.set refuses values outside 16–16384 and returns a warning above 3000, above 4096 (glyph widths of CFF-flavoured fonts, given whatever the outline flavour) and above 5000; the reference app settles whether it warns at all.",
+  "The Font tab shows each units-per-em warning under the Units per Em field while the value stands, not only right after an edit; typing 6000 in the reference app and reopening Font Info settles it.",
 ]
 observe = [
   "In font A (m7-one), type 3500 and then 6000 as Units per Em: note any warning or refusal for each.",
@@ -2191,7 +2192,7 @@ milestone = "M7"
 summary = "Style names outside ASCII letters, digits, spaces and simple punctuation are not safe everywhere; family plus style name longer than about 20 characters can fail in older systems, applications and printers. The remedy is abbreviated postscriptFontName and postscriptFullName values, and styleNames for Unicode names."
 ref = "Font Info › Exports › Style Name"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.7."
+notes = "Documented, not yet observed. M7 plan § 4: M7.7. The messages come from fontcraft_fontinfo::warnings (M7.23): font.instance.set, font.instance.add and font.info.set (instance name) return them; font.instance.list, font.instance.get and font.info.get list each entry's under `warnings` with field styleName."
 guesses = [
   "font.instance.set and the Exports tab warn, without refusing, when the style name has characters outside ASCII letters, digits, spaces and hyphens, or when family and style name together exceed 20 characters without a postscriptFontName; the reference app settles whether it warns.",
   "An empty or all-space style name is refused by font.instance.set and font.instance.add; clearing the Style Name field in the reference app settles it.",
@@ -2207,7 +2208,13 @@ milestone = "M7"
 summary = "The weight class accepts typed values from 1 to 1000 (350 for a Semi Light, say) besides the nine standard steps, although values between the standard steps are refused by some applications. Neither class is bound to the range or the values of the weight or width axis."
 ref = "Font Info › Exports › Weight & Width"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.7."
+notes = "Documented, not yet observed. M7 plan § 4: M7.7. The caution about other values comes from fontcraft_fontinfo::warnings (M7.23): font.instance.setWeightClass, font.instance.set, font.instance.add and font.info.set return it, and font.instance.list, font.instance.get and font.info.get list it under `warnings` with field weightClass."
+guesses = [
+  "The commands accept every value from 1 to 1000 and warn about any outside 100, 200, … 900, 1000 included; a class an older source writes as a name, or none, gets no warning. Typing 350 and 1000 as a weight class in the reference app settles whether it warns.",
+]
+observe = [
+  "In font B (m7-two), type 350 as an instance's weight class: note any warning and where it shows.",
+]
 
 [[behavior]]
 id = "fontInfo.instance.extrapolation"
@@ -2232,7 +2239,7 @@ milestone = "M7"
 summary = "Style linking connects only fonts with an identical family name. All instances inherit the Font tab's family name unless they carry a familyNames field, and instances from different source files (a roman and an italic file) can share a family name and link to each other."
 ref = "Font Info › Exports › Style Linking"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.7 (test over the compiled name tables of two linked instances)."
+notes = "Documented, not yet observed. M7 plan § 4: M7.7 (test over the compiled name tables of two linked instances). The message comes from fontcraft_fontinfo::warnings (M7.23): the linking commands return it, and font.instance.list, font.instance.get and font.info.get list it under `warnings` with field styleLinking, for the Exports tab to show under Style Linking."
 guesses = [
   "font.instance.setStyleLinking and font.instance.set link anyway but warn when the base instance named in the same file exports under another family name (its familyNames field); a base in another file is not checked. Linking two instances with different familyNames in the reference app settles whether it warns.",
 ]

@@ -1,7 +1,7 @@
 //! Font Info and whole-font queries.
 
 use fontcraft_fontinfo::fields as fontinfo_fields;
-use fontcraft_fontinfo::{Scope, target};
+use fontcraft_fontinfo::{Scope, target, warnings as warn};
 use fontcraft_geom::Shape as _;
 use fontcraft_model::{StyleClass, metric};
 use serde_json::{Map, Value, json};
@@ -17,7 +17,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Get Font Info",
             [],
             None,
-            "{scope?: 'font'|'master'|'instance' (default font), target?: id|name|index (required below the font), keys?: [string]} the Font Info of the font, one master or one export: its built-in fields, its added fields with every language (fields: [{key, label, localizable, value: text | [{language, value}]}]) and its custom parameters (customParameters: [{name, value, enabled}]); `keys` picks top-level entries or added fields by key. Font: {familyName, unitsPerEm, versionMajor, versionMinor, date, masters: [{id, name, ascender, capHeight, xHeight, descender}], glyphCount, fields, customParameters}; master: {id, name, fields, customParameters}; instance: {id, name, weightClass, widthClass, exports, fields, customParameters}",
+            "{scope?: 'font'|'master'|'instance' (default font), target?: id|name|index (required below the font), keys?: [string]} the Font Info of the font, one master or one export: its built-in fields, its added fields with every language (fields: [{key, label, localizable, value: text | [{language, value}]}]) and its custom parameters (customParameters: [{name, value, enabled}]); `keys` picks top-level entries or added fields by key. Font: {familyName, unitsPerEm, versionMajor, versionMinor, date, masters: [{id, name, ascender, capHeight, xHeight, descender}], glyphCount, fields, customParameters, warnings}; master: {id, name, fields, customParameters}; instance: {id, name, weightClass, widthClass, exports, fields, customParameters, warnings}. warnings: [{field, message}], the cautions font.info.set and font.instance.set give for the current values (font: familyName, unitsPerEm; instance: styleName, styleLinking, weightClass)",
             has_doc,
             info_get
         ),
@@ -26,7 +26,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Font Info",
             [],
             None,
-            "{scope?: 'font'|'master'|'instance' (default font), targets?: [id|name|index] (required below the font), values: {key: value}} write built-in and added fields as one undo step, the same values to every target. Font: familyName (at most 255 bytes), unitsPerEm (16–16384; outlines are not scaled), versionMajor (0–32767), versionMinor (0–999), date (ISO 8601 or the format's text, stored in UTC); master: name; instance: name, weightClass (1–1000), widthClass (1–9). An added field takes a text (a localizable field's default language) or [{language, value}] (all its languages), and is added when the target lacks it → {changed: [keys], warnings: [text]} (a family name with characters other than ASCII letters, digits and spaces; more than 3000, 4096 or 5000 units per em)",
+            "{scope?: 'font'|'master'|'instance' (default font), targets?: [id|name|index] (required below the font), values: {key: value}} write built-in and added fields as one undo step, the same values to every target. Font: familyName (at most 255 bytes), unitsPerEm (16–16384; outlines are not scaled), versionMajor (0–32767), versionMinor (0–999), date (ISO 8601 or the format's text, stored in UTC); master: name; instance: name, weightClass (1–1000), widthClass (1–9). An added field takes a text (a localizable field's default language) or [{language, value}] (all its languages), and is added when the target lacks it → {changed: [keys], warnings: [text]} (a family name with characters other than ASCII letters, digits and spaces; more than 3000, 4096 or 5000 units per em; an instance name outside ASCII letters, digits, spaces and hyphens or over 20 characters with the family; a weight class outside 100, 200, … 900)",
             has_doc,
             info_set
         ),
@@ -71,6 +71,7 @@ fn info_get(s: &mut Session, p: &Value) -> Result<Value> {
             "glyphCount": font.glyphs.len(),
             "fields": fields,
             "customParameters": params,
+            "warnings": warnings_json(warn::font(font)),
         }),
         Scope::Master => {
             let m = font.masters.get(i).ok_or_else(missing)?;
@@ -81,6 +82,7 @@ fn info_get(s: &mut Session, p: &Value) -> Result<Value> {
             json!({
                 "id": x.id, "name": target::instance_name(x), "weightClass": class(&x.weight_class), "widthClass": class(&x.width_class),
                 "exports": x.exports, "fields": fields, "customParameters": params,
+                "warnings": warnings_json(warn::instance(font, x)),
             })
         }
     };
@@ -98,6 +100,11 @@ fn info_get(s: &mut Session, p: &Value) -> Result<Value> {
         out.insert(key.to_string(), value);
     }
     Ok(Value::Object(out))
+}
+
+/// Font Info warnings, each with the field it belongs under.
+pub(super) fn warnings_json(list: Vec<warn::Warning>) -> Value {
+    Value::Array(list.into_iter().map(|w| json!({"field": w.field, "message": w.message})).collect())
 }
 
 fn info_set(s: &mut Session, p: &Value) -> Result<Value> {

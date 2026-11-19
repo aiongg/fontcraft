@@ -92,6 +92,30 @@ fn font_info_get_and_set_reach_every_scope() {
     refused(&mut s, "font.info.set", json!({"values": {"date": "someday"}}));
 }
 
+/// `font.info.get` gives the Font tab's warnings for the current values, by field, in the words
+/// `font.info.set` returns them; the CFF caution starts above 4096 units per em.
+#[test]
+fn font_info_get_gives_the_warnings_of_the_current_values() {
+    let mut s = session();
+    assert_eq!(run(&mut s, "font.info.get", json!({"keys": ["warnings"]})), json!({"warnings": []}));
+    let set = |s: &mut Session, upm: u32| -> Vec<String> {
+        let r = run(s, "font.info.set", json!({"values": {"unitsPerEm": upm}}));
+        r["warnings"].as_array().unwrap().iter().map(|w| w.as_str().unwrap().to_string()).collect()
+    };
+    assert_eq!(set(&mut s, 4096).len(), 1);
+    let said = set(&mut s, 4097);
+    assert_eq!(said.len(), 2, "{said:?}");
+    let shown = run(&mut s, "font.info.get", json!({}))["warnings"].clone();
+    assert_eq!(shown, json!([{"field": "unitsPerEm", "message": said[0]}, {"field": "unitsPerEm", "message": said[1]}]));
+
+    // An instance's warnings: its name and weight class.
+    let r = run(&mut s, "font.info.set", json!({"scope": "instance", "targets": ["i2"], "values": {"weightClass": 350}}));
+    let said = r["warnings"].as_array().unwrap().clone();
+    assert_eq!(said.len(), 1, "{said:?}");
+    let shown = run(&mut s, "font.info.get", json!({"scope": "instance", "target": "i2", "keys": ["warnings"]}));
+    assert_eq!(shown, json!({"warnings": [{"field": "weightClass", "message": said[0]}]}));
+}
+
 #[test]
 fn localizable_fields_gain_and_lose_languages() {
     let mut s = session();
