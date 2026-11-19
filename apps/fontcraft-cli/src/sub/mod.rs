@@ -35,8 +35,6 @@ mod transform;
 mod variations;
 mod woff;
 
-use serde_json::{Value, json};
-
 use crate::args::{self, OptSpec};
 use crate::io::{Failure, Outcome, out, usage};
 
@@ -143,38 +141,6 @@ pub fn not_built(sub: &Subcommand, args: &[String]) -> Outcome {
         None => sub.name.to_string(),
     };
     Err(Failure::Failed(format!("{what} is not built yet")))
-}
-
-/// `--name VALUE` options after the positional arguments, as JSON parameters; `flags` are the
-/// options that take no value.
-pub(crate) fn options(
-    args: &[String],
-    names: &[(&str, &str)],
-    flags: &[(&str, &str)],
-) -> Result<(Vec<String>, serde_json::Map<String, Value>), Failure> {
-    let own: Vec<&str> = names.iter().chain(flags).map(|(form, _)| *form).collect();
-    let args = args::take_globals(args, &own)?;
-    let mut positional = Vec::new();
-    let mut params = serde_json::Map::new();
-    let mut it = args.iter();
-    while let Some(a) = it.next() {
-        if let Some((_, key)) = flags.iter().find(|(f, _)| f == a) {
-            params.insert((*key).to_string(), json!(true));
-        } else if let Some((_, key)) = names.iter().find(|(f, _)| f == a) {
-            let v = it.next().ok_or_else(|| usage(format!("{a} needs a value")))?;
-            let value = match *key {
-                "face" => v.parse::<u64>().map(Value::from).unwrap_or_else(|_| json!(v)),
-                "sections" => json!(v.split(',').collect::<Vec<_>>()),
-                _ => json!(v),
-            };
-            params.insert((*key).to_string(), value);
-        } else if a.starts_with("--") {
-            return Err(usage(format!("unknown option {a}")));
-        } else {
-            positional.push(a.clone());
-        }
-    }
-    Ok((positional, params))
 }
 
 #[cfg(test)]
