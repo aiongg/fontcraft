@@ -148,6 +148,7 @@ mod settings;
 mod smart;
 mod snippets;
 mod spacing_set;
+mod spacing_shared;
 mod special_layers;
 mod status;
 mod stem_filters;

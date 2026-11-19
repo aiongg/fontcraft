@@ -96,6 +96,7 @@ pub mod sharing;
 pub mod smart;
 mod snippets;
 mod spacing;
+mod spacing_shared;
 mod special_layers;
 pub mod stroke;
 mod tokens;
@@ -347,6 +348,7 @@ pub const COMMAND_TABLES: &[CommandTable] = &[
     spacing::specs,
     vertical_metrics::specs,
     metrics_keys::specs,
+    spacing_shared::specs,
     transform_metrics::specs,
     kerning::specs,
     kerning_groups::specs,

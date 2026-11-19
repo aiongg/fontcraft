@@ -30,6 +30,13 @@ the text cursor (`spacing.currentGlyphFollowsCursor`).
   Their keys (`metricVertOrigin` and `metricVertWidth` in format 3; format 2 has only
   `vertWidthMetricsKey`) take the width's forms: no `|`, no `@`.
 - Up/Down in a field: ±1. With Shift: ±10. With Cmd+Shift: ±100 (`spacing.infoBoxArrowSteps`).
+- Several glyphs (a text selection in text mode, or several glyphs selected in a tab): the metric
+  and Group fields send every glyph in `glyphs`, and each setter changes them all in one undo
+  step. A field shows a value only when every glyph shares it (`spacing.getSharedMetrics`): the
+  shared metrics key, else, with no key on any glyph, the shared measured value to two
+  decimals. A mixed field is empty with a grey "Multiple Values" placeholder, as the handbook
+  describes for the Font View inspector (a guess for the Info box). A kern field still acts on
+  the pair at the cursor.
 
 ### 1.3 Spacing shortcuts (Text tool)
 
