@@ -402,6 +402,10 @@ to a paid licence and EULA, not read) are recalled or deduced.
    **M13 pass (ours, D11):** a side-profile method of our own, calibrated on each font's control glyphs, with a corpus measure (`docs/plans/M13.md` § 3 and § 5).
 5. **Bitmap strikes in the native format.** Where strikes live (per master? per font?), how grey depth
    is stored, and whether strike editing belongs to M11 or should wait for demand.
+   **M13.63 (ours):** strike glyphs are edited by command (`bitmap.setPixels`, `bitmap.transform`,
+   `bitmap.regenerateGlyphs`, `bitmap.removeGlyphs`, `bitmap.setStrikeProperties`). A strike glyph
+   may hold references to other bitmaps of its strike; they are stored as references and drawn into
+   the pixels on export.
 6. **Action sets and command stability.** A saved action set is a list of command ids with parameters,
    so command ids and parameter names become a file format. Needs a versioning rule.
    **M13 pass (D8):** action sets are macros: JSON `.fcmacro` files with a format version; command ids and parameter names follow decision 0004 item 8 (aliases for renames); a run checks every step before running any.

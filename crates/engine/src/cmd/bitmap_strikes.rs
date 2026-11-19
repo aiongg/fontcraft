@@ -34,7 +34,7 @@ const DEFAULT_DPI: u32 = 72;
 /// Most pixels rasterised for one new strike.
 const MAX_RASTER_PIXELS: u64 = 64 << 20;
 /// Most pixels rasterised in one `bitmap.setStrikes` call, over every strike it adds.
-const MAX_CALL_RASTER_PIXELS: u64 = 256 << 20;
+pub(super) const MAX_CALL_RASTER_PIXELS: u64 = 256 << 20;
 /// Most pixels a placed PDF's page is drawn at for one bitmap.
 const MAX_PDF_PAGE_PIXELS: u64 = 16 << 20;
 /// Samples taken across each side of a bitmap pixel when a placed PDF is drawn into it.
@@ -77,17 +77,17 @@ pub fn specs() -> Vec<CommandSpec> {
 
 /// A `{ppem, depth?}` item of a strike list.
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct StrikeSpec {
-    ppem: u16,
-    depth: Option<u8>,
+pub(super) struct StrikeSpec {
+    pub(super) ppem: u16,
+    pub(super) depth: Option<u8>,
 }
 
 impl StrikeSpec {
-    fn matches(self, s: &BitmapStrike) -> bool {
+    pub(super) fn matches(self, s: &BitmapStrike) -> bool {
         s.ppem == self.ppem && self.depth.is_none_or(|d| d == s.depth)
     }
 
-    fn label(self) -> String {
+    pub(super) fn label(self) -> String {
         match self.depth {
             Some(d) => strike::label(self.ppem, d),
             None => self.ppem.to_string(),
@@ -95,31 +95,36 @@ impl StrikeSpec {
     }
 }
 
-fn strike_specs(p: &Params<'_>, key: &str) -> Result<Option<Vec<StrikeSpec>>> {
+pub(super) fn strike_specs(p: &Params<'_>, key: &str) -> Result<Option<Vec<StrikeSpec>>> {
     let Some(items) = p.opt_array(key)? else { return Ok(None) };
     if items.len() > strike::MAX_STRIKES {
         return Err(p.bad(format!("`{key}` lists more than {} strikes", strike::MAX_STRIKES)));
     }
     let mut out = Vec::with_capacity(items.len());
     for item in items {
-        let ppem = item
-            .get("ppem")
-            .and_then(Value::as_u64)
-            .and_then(|v| u16::try_from(v).ok())
-            .filter(|v| *v > 0)
-            .ok_or_else(|| p.bad(format!("`{key}`: each item needs `ppem`, a whole number from 1 to {}", u16::MAX)))?;
-        let depth = match item.get("depth") {
-            None | Some(Value::Null) => None,
-            Some(v) => Some(
-                v.as_u64()
-                    .and_then(|d| u8::try_from(d).ok())
-                    .filter(|d| strike::valid_depth(*d))
-                    .ok_or_else(|| p.bad(format!("`{key}`: `depth` must be 1, 2, 4 or 8")))?,
-            ),
-        };
-        out.push(StrikeSpec { ppem, depth });
+        out.push(strike_spec(p, key, item)?);
     }
     Ok(Some(out))
+}
+
+/// One `{ppem, depth?}` object, found under `key`.
+pub(super) fn strike_spec(p: &Params<'_>, key: &str, item: &Value) -> Result<StrikeSpec> {
+    let ppem = item
+        .get("ppem")
+        .and_then(Value::as_u64)
+        .and_then(|v| u16::try_from(v).ok())
+        .filter(|v| *v > 0)
+        .ok_or_else(|| p.bad(format!("`{key}`: each item needs `ppem`, a whole number from 1 to {}", u16::MAX)))?;
+    let depth = match item.get("depth") {
+        None | Some(Value::Null) => None,
+        Some(v) => Some(
+            v.as_u64()
+                .and_then(|d| u8::try_from(d).ok())
+                .filter(|d| strike::valid_depth(*d))
+                .ok_or_else(|| p.bad(format!("`{key}`: `depth` must be 1, 2, 4 or 8")))?,
+        ),
+    };
+    Ok(StrikeSpec { ppem, depth })
 }
 
 fn sort_strikes(strikes: &mut [BitmapStrike]) {
@@ -291,6 +296,7 @@ fn to_strike(font: &Font, path: &str, file: &BitmapFont, warnings: &mut Vec<Stri
             left: g.bitmap.left,
             bottom: g.bitmap.bottom,
             data: g.bitmap.data.clone(),
+            references: Vec::new(),
         });
     }
     if doubled > 0 {
@@ -384,6 +390,12 @@ fn export_strikes(s: &mut Session, v: &Value) -> Result<Value> {
             out
         }
     };
+    // The file formats hold pixels only: references are drawn in.
+    let flat = chosen
+        .iter()
+        .map(|s| s.flattened().map_err(|e| p.bad(format!("strike {}: {e}", s.label()))))
+        .collect::<Result<Vec<Option<BitmapStrike>>>>()?;
+    let chosen: Vec<&BitmapStrike> = chosen.iter().zip(&flat).map(|(s, f)| f.as_ref().unwrap_or(*s)).collect();
     if matches!(format, Format::Embedded | Format::Otb) {
         return export_sfnt(font, &p, format, &chosen, path, destination);
     }
@@ -665,14 +677,14 @@ fn set_strikes(s: &mut Session, v: &Value) -> Result<Value> {
 
 /// What the rest of one `bitmap.setStrikes` call may rasterise: pixels to draw, and bytes of
 /// bitmaps the font can still hold beside the strikes it keeps.
-struct RasterBudget {
-    pixels: u64,
-    bytes: usize,
+pub(super) struct RasterBudget {
+    pub(super) pixels: u64,
+    pub(super) bytes: usize,
 }
 
 impl RasterBudget {
     /// For drawing strikes already measured against the real budget.
-    fn unlimited() -> Self {
+    pub(super) fn unlimited() -> Self {
         Self { pixels: u64::MAX, bytes: usize::MAX }
     }
 }
@@ -686,7 +698,22 @@ fn rasterize_strike(
     font: &Font,
     assets: &dyn AssetStore,
     p: &Params<'_>,
+    strike: (u16, u8),
+    budget: &mut RasterBudget,
+    draw: bool,
+    warnings: &mut Vec<String>,
+) -> Result<BitmapStrike> {
+    rasterize_glyphs(font, assets, p, strike, None, budget, draw, warnings)
+}
+
+/// [`rasterize_strike`] for the glyphs named in `only`, or every exported glyph when `None`.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn rasterize_glyphs(
+    font: &Font,
+    assets: &dyn AssetStore,
+    p: &Params<'_>,
     (ppem, depth): (u16, u8),
+    only: Option<&HashSet<String>>,
     budget: &mut RasterBudget,
     draw: bool,
     warnings: &mut Vec<String>,
@@ -719,7 +746,7 @@ fn rasterize_strike(
     let mut charged: Option<(String, u64)> = None;
     // Each placed file is read and measured once per strike, however many glyphs place it.
     let mut page_sizes = PageSizes::new();
-    for glyph in font.glyphs.iter().filter(|g| g.export) {
+    for glyph in font.glyphs.iter().filter(|g| g.export && only.is_none_or(|o| o.contains(&g.name))) {
         let Some(layer) = glyph.layer(&master.id) else { continue };
         let outline = fontcraft_render::closed_contours(&font.outline_of(glyph, &master.id)?);
         let mut bitmap = StrikeGlyph {
@@ -732,6 +759,7 @@ fn rasterize_strike(
             left: 0,
             bottom: 0,
             data: Vec::new(),
+            references: Vec::new(),
         };
         let mut placed = None;
         let found = match pixel_box(&outline, &px) {

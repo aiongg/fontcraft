@@ -18,6 +18,7 @@ mod autohint_report;
 mod autohint_tt;
 mod axes;
 mod background;
+mod bitmap_edit;
 mod bitmap_strikes;
 mod clipboard;
 mod clipboard_scale;
@@ -402,6 +403,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(layout_file::specs());
         v.extend(glyph_order_file::specs());
         v.extend(bitmap_strikes::specs());
+        v.extend(bitmap_edit::specs());
         v.extend(metrics_report::specs());
         v.extend(convert_file::specs());
         v.extend(subset::specs());

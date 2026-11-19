@@ -239,6 +239,7 @@ fn read_strike(eblc: &Eblc<'_>, ebdt: &Ebdt<'_>, size: &BitmapSize, names: &[Str
             left: i32::from(image.left),
             bottom: i32::from(image.top) - i32::from(image.height),
             data: image.data,
+            references: Vec::new(),
         });
     }
     Ok((out, skipped))
