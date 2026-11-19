@@ -2190,13 +2190,19 @@ label = "Generate Dark Palette"
 menu = ["Font"]
 shortcut = ""
 kind = "engine"
-params = "{palette?: index}"
+params = "{palette?: index, master?: id}"
 area = "color"
 milestone = "M13"
 summary = "Derives a second CPAL palette for dark backgrounds from the existing palette and flags it as the dark-background palette, so browsers can select it. Available as an export option and previewable in a dark preview."
 ref = "FontLab 8 What's new › Test & adjust › Previewing (Dark palette export); Color; Formats"
 status = "docs"
-notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). Built in M13.65 as a command, not an export option: it appends the derived palette to Color Palettes, named and given the `dark` background style of the version 4 form, and the compiler writes CPAL version 1 with that palette typed for dark backgrounds (bit 1) and labelled with its name. Each colour's OKLab lightness is inverted (L' = 1 - L) with hue and alpha kept; a colour that would fall outside sRGB keeps its hue and loses chroma. The dark preview is a UI follow-up."
+guesses = [
+  "The dark colour of each entry inverts its OKLab lightness (L' = 1 - L) and keeps its hue and alpha, losing chroma, not hue, when the result falls outside sRGB; the reference's palettes for a set of known colours would settle it.",
+  "The new palette is named after its source with \" Dark\" added (\"Dark\" when the source has no name), and only the new palette is marked; the source palette gets no `light` style. Settled by the names and CPAL palette types of a font the reference exports with a dark palette.",
+  "A Color Palettes value in the list forms (versions 2 and 3) is converted to the version 4 dictionary, the only form that records background styles; settled by what the reference keeps when it saves such a font in an older format.",
+]
+observe = ["Colour font with one palette: generate a dark palette, export, and dump CPAL; note the palette count, version, palette types and labels, and each dark colour against its source."]
 origin = "fontlab"
 
 [[panel]]

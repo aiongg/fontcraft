@@ -14,7 +14,8 @@
 //!   `Export … Table` parameter set off removes its table. CBDT only with the export option
 //!   [`Switches::cbdt`], never from a parameter.
 //! - CPAL holds every palette, the one `Color Palette for CPAL` names moved to position 0, and is
-//!   written only when COLR or SVG uses it.
+//!   written only when COLR or SVG uses it. The plan carries the palette names, background
+//!   styles and colour names of a version 4 value, in the same order, for `CPAL` version 1.
 //! - COLR version 0 when every colour glyph is a stack of solid layers, version 1 as soon as one
 //!   needs a gradient.
 //! - A master's own `Color Palettes` wins over the font's.
@@ -28,7 +29,7 @@ use fontcraft_model::{Font, Glyph, ModelError, Params, Target, param_flag};
 
 use crate::layers::{ColorLayerKind, ICOLOR_SIZES, color_layers, export_kind};
 use crate::paint::{ColorRef, MasterPaints, Paint, PaintVariation, ShapeRef, drawn_shapes};
-use crate::palette::{self, FOREGROUND_INDEX};
+use crate::palette::{self, FOREGROUND_INDEX, PaletteInfo};
 use crate::strike::{self, Strike};
 use crate::{ColorError, Palettes, Rgba};
 
@@ -218,6 +219,11 @@ impl ExportPlan {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CpalPlan {
     pub palettes: Palettes,
+    /// Each palette's name and background styles, in the order of `palettes`; empty when the
+    /// stored value records none (the version 2 and 3 forms).
+    pub info: Vec<PaletteInfo>,
+    /// Each palette row's colour name, from row 0; empty or all `None` when there are none.
+    pub color_names: Vec<Option<String>>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -392,7 +398,11 @@ pub fn plan_master(font: &Font, master_id: &str, switches: &Switches) -> ExportP
             check_rows(&g.glyph, &g.paint, palettes.rows(), &mut plan.problems);
         }
         let version = if colr_glyphs.iter().all(|g| crate::paint::is_solid_stack(&g.paint)) { ColrVersion::V0 } else { ColrVersion::V1 };
-        plan.cpal = Some(CpalPlan { palettes: chosen_first(&palettes, switches.palette_for_cpal, &mut plan.problems) });
+        let stored = palette::stored(font, Some(master_id)).ok().flatten();
+        let info = stored.map(palette::palette_info).unwrap_or_default();
+        let color_names = stored.map(|v| palette::color_names(v, palettes.rows())).unwrap_or_default();
+        let (palettes, info) = chosen_first(&palettes, &info, switches.palette_for_cpal, &mut plan.problems);
+        plan.cpal = Some(CpalPlan { palettes, info, color_names });
         plan.colr = Some(ColrPlan { version, glyphs: colr_glyphs });
     }
     if !documents.is_empty() {
@@ -559,19 +569,22 @@ fn palette_rows(paint: &Paint, depth: usize, out: &mut Vec<u16>) {
 
 /// `palettes` with palette `chosen` moved to the front (`color.export.colorPaletteForCpal`); a
 /// palette the font does not have leaves the order alone, with a warning.
-fn chosen_first(palettes: &Palettes, chosen: usize, problems: &mut Vec<Problem>) -> Palettes {
+fn chosen_first(palettes: &Palettes, info: &[PaletteInfo], chosen: usize, problems: &mut Vec<Problem>) -> (Palettes, Vec<PaletteInfo>) {
     if chosen == 0 || palettes.is_empty() {
-        return palettes.clone();
+        return (palettes.clone(), info.to_vec());
     }
     let all = palettes.palettes();
-    let Some(first) = all.get(chosen) else {
+    if all.get(chosen).is_none() {
         problems
             .push(warning(None, format!("{COLOR_PALETTE_FOR_CPAL} names palette {chosen}, but the font has {}; palette 0 comes first", all.len())));
-        return palettes.clone();
+        return (palettes.clone(), info.to_vec());
+    }
+    let order: Vec<usize> = std::iter::once(chosen).chain((0..all.len()).filter(|i| *i != chosen)).collect();
+    let Ok(reordered) = Palettes::new(order.iter().filter_map(|i| all.get(*i).cloned()).collect()) else {
+        return (palettes.clone(), info.to_vec());
     };
-    let mut order = vec![first.clone()];
-    order.extend(all.iter().enumerate().filter(|(i, _)| *i != chosen).map(|(_, p)| p.clone()));
-    Palettes::new(order).unwrap_or_else(|_| palettes.clone())
+    let info = if info.is_empty() { Vec::new() } else { order.iter().map(|i| info.get(*i).cloned().unwrap_or_default()).collect() };
+    (reordered, info)
 }
 
 #[cfg(test)]

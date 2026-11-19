@@ -3,7 +3,7 @@
 //!
 //! | Module | Package | Table |
 //! |---|---|---|
-//! | [`cpal`] | M11.6 | `CPAL` version 0: every palette, the chosen one first, no labels |
+//! | [`cpal`] | M11.6, M13.65 | `CPAL`: every palette, the chosen one first; version 1 with palette types and labels when the palettes have background styles or names |
 //! | [`colr`] | M11.6 (v0), M11.7 (v1), M11.19 (variable) | `COLR` base glyphs, layers, clip boxes |
 //! | [`sbix`] | M11.8 | `sbix` version 1, serialised here and added raw |
 //! | [`svg`] | M11.9, M11.10 | the `SVG ` table, one document per glyph |
@@ -13,8 +13,9 @@
 //! How they join the pipeline (`lib.rs`, `plan.rs`): [`plan`] reads the export plan from
 //! `fontcraft_color::export` once per compile; [`append_layer_glyphs`] adds the layer glyphs
 //! `<base>.color<i>` after the source glyphs, before outline preparation, so they are drawn and
-//! written like any glyph; [`build`] makes the tables, which `build::assemble` adds raw. A font
-//! without colour layers gets an empty plan, and nothing changes.
+//! written like any glyph; [`build`] makes the tables, which `build::assemble` adds raw. `CPAL`
+//! alone is built there ([`PendingCpal`]): its labels take name IDs above the font's other names.
+//! A font without colour layers gets an empty plan, and nothing changes.
 //!
 //! Image bytes come only through the [`AssetStore`] in [`crate::Options::assets`]; the compiler
 //! never opens a file.
@@ -66,10 +67,19 @@ impl<'a> GlyphOrder<'a> {
     }
 }
 
-/// The tables [`build`] made, by tag, for `build::assemble` to add as they are.
+/// The tables [`build`] made, by tag, for `build::assemble` to add as they are, and the `CPAL`
+/// it builds once the other names are known.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ColorTables {
     pub tables: Vec<(Tag, Vec<u8>)>,
+    pub cpal: Option<PendingCpal>,
+}
+
+/// What [`cpal::build`] needs besides the first free name ID: the plan and the colours COLR added.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PendingCpal {
+    pub plan: fontcraft_color::export::CpalPlan,
+    pub added: Vec<fontcraft_color::Rgba>,
 }
 
 /// The export plan of a compile of `resolved`, read from `font`; empty without a source font
@@ -393,9 +403,8 @@ pub fn build(
     {
         let cpal_plan = plan.cpal.clone().unwrap_or_default();
         let built = colr::build_variable(colr_plan, plan.variation.as_ref(), order, cpal_plan.palettes.rows(), font)?;
-        let cpal_table = cpal::build(&cpal_plan, &built.added)?;
         out.tables.push((Tag::new(b"COLR"), built.table));
-        out.tables.push((Tag::new(b"CPAL"), cpal_table));
+        out.cpal = Some(PendingCpal { plan: cpal_plan, added: built.added });
     }
     if let (Some(sbix_plan), Some(font)) = (&plan.sbix, font) {
         out.tables.push((Tag::new(b"sbix"), sbix::build(sbix_plan, order, assets, font.units_per_em, warnings)?));
@@ -569,6 +578,33 @@ mod tests {
                 let post = font.post().unwrap();
                 assert_eq!(post.glyph_name(skrifa::raw::types::GlyphId16::new(gid(&out, "B.color0"))), Some("bee.color0"));
             }
+        }
+    }
+
+    #[test]
+    fn a_dark_palette_compiles_to_cpal_version_1_with_its_type_and_label() {
+        let mut f = palette_font();
+        let palettes = Palettes::new(vec![
+            vec![Rgba::new(1, 2, 3, 255), Rgba::new(5, 6, 7, 255)],
+            vec![Rgba::new(250, 250, 250, 255), Rgba::new(200, 200, 200, 255)],
+        ])
+        .unwrap();
+        let value = fontcraft_color::palette::store_dark(None, &palettes, "Night");
+        Arc::make_mut(&mut f.info).params.set(fontcraft_color::palette::COLOR_PALETTES_PARAM, value);
+        for flavour in [Flavour::TrueType, Flavour::Cff] {
+            let out = compile(&f, &f.default_target().unwrap(), flavour, &Options::default()).unwrap();
+            let font = FontRef::new(&out.bytes).unwrap();
+            let cpal = font.cpal().unwrap();
+            assert_eq!(cpal.version(), 1, "{flavour:?}");
+            let types: Vec<u32> = cpal.palette_types_array().unwrap().unwrap().iter().map(|t| t.get().bits()).collect();
+            assert_eq!(types, [0, 2], "{flavour:?}: palette 1 is for dark backgrounds");
+            let labels: Vec<u16> = cpal.palette_labels_array().unwrap().unwrap().iter().map(|l| l.get().to_u16()).collect();
+            assert_eq!(labels[0], 0xFFFF, "{flavour:?}");
+            assert!(labels[1] >= 256, "{flavour:?}: {labels:?}");
+            let name = font.localized_strings(skrifa::string::StringId::new(labels[1])).english_or_first().map(|s| s.to_string());
+            assert_eq!(name.as_deref(), Some("Night"), "{flavour:?}");
+            assert!(cpal.palette_entry_labels_array().is_none(), "{flavour:?}: no colour names");
+            assert_eq!(cpal_palettes(&out), [vec![(1, 2, 3, 255), (5, 6, 7, 255)], vec![(250, 250, 250, 255), (200, 200, 200, 255)]], "{flavour:?}");
         }
     }
 

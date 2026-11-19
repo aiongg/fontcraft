@@ -481,6 +481,26 @@ struct CffInput<'a> {
     cff: &'a crate::CffOptions,
 }
 
+/// The `CPAL` table, its labels given name IDs above every font-specific ID in `names`, to
+/// which their records are added.
+fn cpal_with_labels(
+    pending: &crate::color::PendingCpal,
+    names: &mut Vec<info::NameRecord>,
+    warnings: &mut Vec<String>,
+) -> Result<Vec<u8>, CompileError> {
+    let first_font_id = crate::var::names::FIRST_FONT_NAME_ID;
+    let first = match names.iter().map(|r| r.id).filter(|id| *id >= first_font_id).max() {
+        Some(highest) => highest.saturating_add(1),
+        None => first_font_id,
+    };
+    let built = crate::color::cpal::build(&pending.plan, &pending.added, first, warnings)?;
+    if !built.names.is_empty() {
+        names.extend(built.names.into_iter().map(|(id, text)| info::NameRecord { platform: 3, encoding: 1, language: 0x409, id, text }));
+        names.sort_by_key(|r| (r.platform, r.encoding, r.language, r.id));
+    }
+    Ok(built.table)
+}
+
 /// Builds every table and the font file. `synthesised_notdef`: glyph 0 is the compiler's own
 /// `.notdef`.
 #[allow(clippy::too_many_arguments)]
@@ -534,6 +554,10 @@ pub fn assemble(
     if options.version_stamp {
         info::stamp_version(&mut info, font);
     }
+    let cpal = match &extra.cpal {
+        Some(pending) => Some(cpal_with_labels(pending, &mut info.names, warnings)?),
+        None => None,
+    };
     let m = info.metrics;
     let mut builder = FontBuilder::new();
     // Glyph names: in `post` for TrueType, unless there are too many; in the charset for CFF.
@@ -763,6 +787,9 @@ pub fn assemble(
             continue;
         }
         builder.add_raw(*tag, bytes.as_slice());
+    }
+    if let Some(cpal) = &cpal {
+        builder.add_raw(Tag::new(b"CPAL"), cpal.as_slice());
     }
     if let Some(ttfa) = tt_hinting.as_ref().and_then(|h| h.ttfa.as_ref()) {
         builder.add_raw(Tag::new(b"TTFA"), ttfa.as_slice());
