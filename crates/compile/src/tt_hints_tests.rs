@@ -520,3 +520,55 @@ fn control_instruction_point_shifts_move_points_after_iup() {
         assert_eq!(a, (b.0 + lift, b.1 + lift), "{ppem} PPM");
     }
 }
+
+/// Gives `f` an `X` of two crossing bars on every layer. Its main-master layer snaps two extra
+/// nodes, where bar 0's bottom edge (ending at node 1) meets bar 1's right edge (ending at node
+/// 2) at (200, 100) and where bar 0's top edge meets bar 1's left edge at (100, 200), and one
+/// regular node.
+fn add_crossing(f: &mut Font) {
+    let mut x = f.glyph_mut("X").unwrap();
+    for layer in x.layers.iter_mut() {
+        layer.width = 400.0;
+        layer.shapes.push(Shape::Path(Path::rect(0.0, 100.0, 300.0, 200.0)));
+        layer.shapes.push(Shape::Path(Path::rect(100.0, 0.0, 200.0, 300.0)));
+    }
+    let crossing = |p1, n1, p2, n2| TtPoint::Intersection { a: NodeRef::new(p1, n1), b: NodeRef::new(p2, n2) };
+    let snap = |p| instruction(TtKind::Snap { zone: ZoneRef::Auto }, Direction::Vertical, p, None, None);
+    let list = vec![snap(crossing(0, 1, 1, 2)), snap(crossing(0, 3, 1, 0)), snap(node(1, 2))];
+    set_tt_instructions(&mut x.layers[0], &list).unwrap();
+}
+
+#[test]
+fn a_static_export_moves_an_instruction_on_an_extra_node_to_the_crossing_point() {
+    use fontcraft_hinting::PointMap;
+    let mut f = hinted_font();
+    add_crossing(&mut f);
+    let out = compile_ttf(&f, &Options::default()).unwrap();
+    assert!(!out.warnings.iter().any(|w| w.contains("left out")), "{:?}", out.warnings);
+    let font = FontRef::new(&out.bytes).unwrap();
+    assert!(!program(&font, gid(&out, "X")).is_empty());
+    let glyf = font.glyf().unwrap();
+    let loca = font.loca(None).unwrap();
+    let Some(RawGlyph::Simple(x)) = loca.get_glyf(gid(&out, "X"), &glyf).unwrap() else { panic!("X is simple") };
+    let points: Vec<_> = x.points().collect();
+    let map = crate::points::point_indexes(&f, &Target::Master("m01".into()), "X", &Options::default()).unwrap().unwrap();
+    for (a, b, at) in [(NodeRef::new(0, 1), NodeRef::new(1, 2), (200, 100)), (NodeRef::new(0, 3), NodeRef::new(1, 0), (100, 200))] {
+        let p = points[usize::from(map.intersection(a, b).unwrap())];
+        assert_eq!((p.x, p.y, p.on_curve), (at.0, at.1, true), "the union's corner at the crossing");
+    }
+    runs_everywhere(&out.bytes);
+}
+
+#[test]
+fn a_variable_export_drops_instructions_on_extra_nodes_with_one_warning_per_glyph() {
+    let mut f = two_masters();
+    add_crossing(&mut f);
+    let var = crate::var::compile_variable(&f, None, &Options::default(), &crate::var::VariableOptions::default()).unwrap();
+    let out = &var.compiled;
+    let about_x: Vec<&String> = out.warnings.iter().filter(|w| w.contains("`X`")).collect();
+    assert_eq!(about_x.len(), 1, "{:?}", out.warnings);
+    assert!(about_x[0].contains("2 TrueType instructions on extra nodes"), "{about_x:?}");
+    let font = FontRef::new(&out.bytes).unwrap();
+    assert!(!program(&font, gid(out, "X")).is_empty(), "the Snap on a regular node is kept: {:?}", out.warnings);
+    runs_everywhere(&out.bytes);
+}

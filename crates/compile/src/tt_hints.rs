@@ -3,7 +3,8 @@
 //! Rows: `hinting.tt.export.manualWhenAutohintOff`, `hinting.tt.export.compileError`,
 //! `hinting.tt.export.instanceValues`, `hinting.tt.replicateToOtherMasters`,
 //! `hinting.tt.param.controlValueProgram`, `Export TrueType Hints`, `cvt Table`,
-//! `prep Table Assembly`, `fpgm Table Assembly`, `TTFMinimumDistance`.
+//! `prep Table Assembly`, `fpgm Table Assembly`, `TTFMinimumDistance`,
+//! `hinting.tt.variable.extraNodeHintsIgnored`.
 //!
 //! | Case | What the font gets |
 //! |---|---|
@@ -22,8 +23,9 @@
 //! exported without them, with a warning naming the glyph and the reason. `maxp` takes the
 //! largest needs [`fontcraft_ttasm::analyse`] finds in `fpgm`, `prep` and every glyph program.
 //! A variable font gets the default master's programs without Delta instructions (the handbook
-//! leaves them out of variable fonts); its `cvt ` follows the other masters through `cvar`
-//! ([`crate::var::cvar`]).
+//! leaves them out of variable fonts) and without instructions on extra nodes, which have no
+//! point in an outline that keeps its overlaps (one warning per glyph); its `cvt ` follows the
+//! other masters through `cvar` ([`crate::var::cvar`]).
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -44,6 +46,11 @@ use write_fonts::tables::glyf::{Contour, SimpleGlyph};
 use crate::outline::Prepared;
 use crate::points::exported;
 use crate::{CompileError, Options};
+
+/// Whether an instruction names an extra node (the intersection of two segments).
+fn on_extra_node(t: &fontcraft_hinting::TtInstruction) -> bool {
+    t.points().iter().any(|p| matches!(p, fontcraft_hinting::TtPoint::Intersection { .. }))
+}
 
 /// `maxStackElements` written when the analysis could not follow an imported program, so the
 /// font does not under-state what it needs.
@@ -356,6 +363,19 @@ pub fn tt_hinting(
                 &autohinted
             }
             None => instructions,
+        };
+        // A variable font keeps its overlaps, so extra nodes have no point in it.
+        let on_regular_nodes;
+        let instructions = if variable && instructions.iter().any(on_extra_node) {
+            on_regular_nodes = instructions.iter().filter(|t| !on_extra_node(t)).cloned().collect::<Vec<_>>();
+            warnings.push(format!(
+                "glyph `{}`: {} TrueType instructions on extra nodes were left out, since a variable font keeps its overlaps",
+                g.name,
+                instructions.len().saturating_sub(on_regular_nodes.len())
+            ));
+            on_regular_nodes.as_slice()
+        } else {
+            instructions
         };
         let Some(e) = exported(built, instructions, prepared, options.remove_overlap && !variable) else {
             warnings.push(format!("glyph `{}`: its exported points cannot be numbered, so it was exported without TrueType instructions", g.name));

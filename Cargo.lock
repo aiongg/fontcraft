@@ -3353,6 +3353,7 @@ dependencies = [
  "fontcraft-components",
  "fontcraft-geom",
  "fontcraft-model",
+ "fontcraft-pathops",
  "serde",
  "serde_json",
 ]
