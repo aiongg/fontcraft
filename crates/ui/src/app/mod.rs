@@ -134,6 +134,8 @@ pub struct FontCraftApp {
     pub closing: Closing,
     /// The hinting dialogs' state (`dialogs::tt`).
     pub tt: crate::dialogs::tt::TtState,
+    /// The open form dialog (`dialogs::form`).
+    pub dialogs: crate::dialogs::form::DialogState,
     picks: Picks,
     /// The control channel: its listener, the window its input goes to, the replies waiting on frames.
     pub control: crate::control::Control,
@@ -174,6 +176,7 @@ impl FontCraftApp {
             status: String::new(),
             closing: Closing::Idle,
             tt: Default::default(),
+            dialogs: crate::dialogs::form::DialogState::default(),
             picks: Picks::default(),
             control: crate::control::Control::default(),
             #[cfg(not(target_arch = "wasm32"))]
@@ -246,6 +249,7 @@ impl FontCraftApp {
                 let params = if command.params.is_null() { json!({}) } else { command.params.clone() };
                 let reply = self.session.execute(&command.id, &params).map_err(|e| e.to_string())?;
                 crate::canvas::tools::apply::adopt(self, &reply);
+                crate::dialogs::after::after_run(self, &command.id, &params, &reply);
                 if let Some(notice) = self.after_command(&command, &reply) {
                     self.status = notice;
                 }
@@ -349,13 +353,21 @@ impl ShellApp for FontCraftApp {
     fn output(&mut self, output: FrameOutput) {
         for fired in output.fired {
             // A held tool key fires again on release; the tool stays.
-            if fired.phase != FirePhase::Release {
-                let msg = match FontCraftApp::route(fired.command) {
-                    Msg::Run(command) => Msg::Run(self.with_targets(command)),
-                    other => other,
-                };
-                self.sent.push(msg);
+            if fired.phase == FirePhase::Release {
+                continue;
             }
+            let msg = match FontCraftApp::route(fired.command) {
+                Msg::Run(command) => {
+                    let command = self.with_targets(command);
+                    // A command with a dialog that the selection gives no parameters opens its dialog.
+                    if crate::dialogs::after::fired(self, &command.id, &command.params) {
+                        continue;
+                    }
+                    Msg::Run(command)
+                }
+                other => other,
+            };
+            self.sent.push(msg);
         }
     }
 

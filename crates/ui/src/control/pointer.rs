@@ -114,6 +114,12 @@ fn key(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
     const M: &str = "ui.key";
     let name =
         params.get("key").and_then(Value::as_str).ok_or_else(|| format!("{M}: `key` (a key name such as `v`, `ArrowLeft`, `Escape`) is required"))?;
+    if app.dialogs.open.is_some() {
+        let reply = super::dialogs::key(app, params).map_err(|e| format!("{M}: {e}"))?;
+        if reply["handled"] == true {
+            return Ok(reply);
+        }
+    }
     let mut mods = modifiers(M, params.get("mods"))?;
     for (flag, slot) in [("shift", &mut mods.shift), ("alt", &mut mods.alt), ("cmd", &mut mods.cmd), ("ctrl", &mut mods.ctrl)] {
         match params.get(flag) {

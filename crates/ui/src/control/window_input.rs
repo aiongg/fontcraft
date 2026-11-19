@@ -135,7 +135,7 @@ fn click(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
     let has_point = params.get("x").is_some() || params.get("y").is_some();
     match params.get("id").filter(|v| !v.is_null()) {
         Some(Value::String(_)) if has_point => Err(format!("{M}: give `id` or `x` and `y`, not both")),
-        Some(Value::String(_)) => super::dispatch(app, "ui.dialog.click", params).map_err(|e| format!("{M}: {e}")),
+        Some(Value::String(_)) => super::dialogs::click(app, params).map_err(|e| format!("{M}: {e}")),
         Some(_) => Err(format!("{M}: `id` must be a control id")),
         None if !has_point => Err(format!("{M}: `id` (a dialog control) or `x` and `y` (a window point) is required")),
         None => {

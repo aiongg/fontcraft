@@ -87,6 +87,9 @@ is checked for.
 | `ui.dialog.set` | `{field, value}` | gives a field of the open dialog a value and previews it; a number field also takes text. The `ui.dialog.inspect` reply |
 | `ui.dialog.confirm` | | OK: the preview becomes one undo step, `{confirmed, changed, command, params}`; in a `runOnOk` dialog the command runs once, `{confirmed, command, params, result}`, and a failure keeps the dialog open |
 | `ui.dialog.cancel` | | Cancel: the font as it was when the dialog opened; `{cancelled}` |
+| `ui.dialog.click` | `{id}` | the same as `ui.click {id}` |
+| `ui.dialog.key` | `{key, shift?}` | a key for the open dialog (`Return`, `Escape`, `Tab`, `ArrowUp`, `ArrowDown`) as `ui.key` gives it: `{handled, open, error?}`; `handled` is false for any other key or with no dialog open |
+| `ui.dialog.text` | `{text}` | types into the dialog field that has the keyboard, as `ui.text` does: `{field}`, false when none has it |
 | `ui.click` | `{id}` | presses a control of the open dialog: `ok`, `cancel`, a third button by its id (`replace`, `decompose`), a tab by its dialog id (shows that tab), an action by its id (runs it: `{action, command, text, result}`; `text` also goes to the system clipboard), or a field by its key (a checkbox or lock toggles; a number field takes the keyboard, its text selected, for `ui.text` and `ui.key`; a folder field opens the folder chooser, or without one takes the keyboard) |
 | `ui.click` | `{x, y, button?, count?, mods?}` | a mouse click at a window point; see [Window input](#window-input) |
 | `ui.drag` | `{x, y, toX, toY, steps?, count?, button?, mods?}` | press, move in steps, release; see [Window input](#window-input) |
