@@ -1383,10 +1383,12 @@ notes = "Documented, not yet observed. M6.9: `cmd/corner.rs`. The corner is stor
 guesses = [
   "A node that already holds a corner gets the new corner in its place, unscaled and aligned left, rather than a second corner; adding a corner to a node with a corner in the reference app settles it.",
   "An off-curve node and the first or last node of an open path are refused, because the fitting needs a segment on each side; the context menu on an open path's end node in the reference app settles it.",
+  "A corner follows its node through outline edits as a linked hint does (crates/hinting/src/remap.rs), including a background's corners; an edit that deletes its node removes the corner and reports it, as a TrueType instruction on that node is removed; Remove Overlap moves a corner on a removed node or an extra node to the nearest node the removal made. Inserting a node before a corner's node and deleting a corner's node in the reference app would settle both.",
 ]
 observe = [
   "Select the end node of an open path and open the context menu: note whether Add Corner Component is shown, and what the corner looks like if it is added.",
   "Add a corner to a node that already has one: note whether the old corner is replaced or a second one is added.",
+  "Add a corner to a node of a closed path, insert a node on the segment before it, then delete the corner's node: note whether the corner stays on its node after the insert, and whether it is removed or moves to another node after the delete.",
 ]
 
 [[command]]

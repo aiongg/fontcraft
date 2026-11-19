@@ -10,6 +10,7 @@
 //! | drop a marker on a node | `hint.ps.attachHintToNode`: that end follows the node |
 //! | `Tab`, `Shift+Tab` with hints selected | `hint.ps.selectNextHint`, `hint.ps.selectPreviousHint` |
 //! | `Delete` with hints selected | `hint.ps.deleteHints` |
+//! | a hint item of the badge or canvas context menu | [`menu_params`]: the badge menu acts on the selected hints, the canvas menu on the edited glyph |
 //! | arrow keys with hints selected | `hint.ps.setHintValues` for each selected hint across the arrow (Up and Down move horizontal hints, Left and Right vertical ones) by the font's increments (plain, `Shift`, `Cmd`); the whole hint moves, so an end linked to a node becomes a number; the hints stay selected |
 //!
 //! Hints are addressed by their position in the layer's PostScript hint list, as
@@ -284,6 +285,40 @@ pub fn path_index(scene: &Scene, shape: usize) -> Option<usize> {
 /// The shape index of the `path`-th path.
 pub fn shape_index(scene: &Scene, path: usize) -> Option<usize> {
     scene.layer.shapes.iter().enumerate().filter(|(_, s)| matches!(s, Shape::Path(_))).nth(path).map(|(i, _)| i)
+}
+
+/// The parameters a PostScript hint item of the Edit View context menus runs with, from what is
+/// selected; `None` for any other item. The badge menu's items act on the selected hints, as the
+/// `Delete` key does (`hint.ps.makeGhostHint`, `hint.ps.deleteHints`); Add Horizontal and Add
+/// Vertical Hint on the selected on-curve nodes; the canvas menu's Autohint on the edited glyph
+/// in the layer's master and Clear Hints on the edited layer. Nothing selected leaves the list
+/// out, and the command refuses to run.
+pub fn menu_params(scene: &Scene, selection: &Selection, id: &str) -> Option<Value> {
+    let mut m = Map::new();
+    m.insert("glyph".into(), json!(scene.glyph));
+    m.insert("layer".into(), json!(scene.layer_id));
+    match id {
+        "hint.ps.addHorizontalHint" | "hint.ps.addVerticalHint" => {
+            let nodes: Vec<Value> = selection
+                .on_curve_points(scene)
+                .into_iter()
+                .filter_map(|(shape, node)| path_index(scene, shape).map(|path| json!([path, node])))
+                .collect();
+            if !nodes.is_empty() {
+                m.insert("nodes".into(), Value::Array(nodes));
+            }
+        }
+        "hint.ps.makeGhostHint" | "hint.ps.deleteHints" => {
+            let hints = scene.ps_hints.selected(selection);
+            if !hints.is_empty() {
+                m.insert("hints".into(), json!(hints));
+            }
+        }
+        "hint.ps.autohintGlyph" => return Some(json!({"glyphs": [scene.glyph], "layer": scene.layer.master})),
+        "hint.ps.clearGlyphHints" => return Some(json!({"glyphs": [scene.glyph], "layers": [scene.layer_id]})),
+        _ => return None,
+    }
+    Some(Value::Object(m))
 }
 
 /// The command target of hint `index`: `{glyph, layer, hint}`.
@@ -742,6 +777,49 @@ mod tests {
         let (out, drag) = press(&cx, &PointerEvent { kind: Down, pos, mods: NONE }).unwrap();
         assert!(drag.is_none());
         assert!(matches!(out.actions.as_slice(), [Action::Select { .. }]));
+    }
+
+    /// The context menus' hint items, from the gestures that set up what they act on.
+    #[test]
+    fn the_badge_menu_acts_on_the_clicked_hints_as_the_delete_key_does() {
+        let mut shell = Shell::new();
+        let mut tool = SelectTool::default();
+        let menu = |shell: &Shell, id: &str| {
+            let mut scene = Scene::new("H", "m01", &shell.layer);
+            scene.ps_hints = shell.marks.clone();
+            menu_params(&scene, &shell.selection, id).unwrap()
+        };
+        // Nothing selected: the item has no hints to give, and the command refuses.
+        assert_eq!(menu(&shell, "hint.ps.makeGhostHint"), json!({"glyph": "H", "layer": "m01"}));
+        // A click on badge 1 (the press the menu opens with) makes it the hint Make Ghost Hint acts on.
+        let at = shell.badge(1);
+        shell.pointer(&mut tool, Down, at, NONE);
+        shell.pointer(&mut tool, Up, at, NONE);
+        assert_eq!(menu(&shell, "hint.ps.makeGhostHint"), json!({"glyph": "H", "layer": "m01", "hints": [1]}));
+        // Shift+click on badge 0 adds it; the menu and the Delete key name the same hints.
+        let at = shell.badge(0);
+        shell.pointer(&mut tool, Down, at, SHIFT);
+        shell.pointer(&mut tool, Up, at, SHIFT);
+        assert_eq!(menu(&shell, "hint.ps.makeGhostHint")["hints"], json!([0, 1]));
+        shell.run(|cx| tool.key(cx, &KeyEvent::press(Key::Delete, NONE)));
+        let runs = shell.runs();
+        let (id, params) = runs.last().unwrap();
+        assert_eq!(id, "hint.ps.deleteHints");
+        assert_eq!(*params, menu(&shell, "hint.ps.deleteHints"));
+        assert!(menu_params(&Scene::new("H", "m01", &shell.layer), &shell.selection, "path.reverseContours").is_none());
+    }
+
+    #[test]
+    fn the_canvas_menu_autohints_the_edited_glyph_and_adds_hints_on_the_selected_nodes() {
+        let shell = Shell::new();
+        let mut scene = Scene::new("H", "m01", &shell.layer);
+        scene.ps_hints = shell.marks.clone();
+        let none = Selection::new();
+        assert_eq!(menu_params(&scene, &none, "hint.ps.autohintGlyph"), Some(json!({"glyphs": ["H"], "layer": "m01"})));
+        assert_eq!(menu_params(&scene, &none, "hint.ps.clearGlyphHints"), Some(json!({"glyphs": ["H"], "layers": ["m01"]})));
+        // Shape 1 is the first path, so its nodes are [0, n]; a selected component adds nothing.
+        let nodes = Selection::from_items([Item::Point(1, 0), Item::Point(1, 3), Item::Shape(0)]);
+        assert_eq!(menu_params(&scene, &nodes, "hint.ps.addHorizontalHint").unwrap()["nodes"], json!([[0, 0], [0, 3]]));
     }
 
     #[test]

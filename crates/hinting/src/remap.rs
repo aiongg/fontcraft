@@ -25,10 +25,20 @@
 //! created, and so does an instruction on an intersection extra node (the handbook's rule for
 //! Remove Overlaps at export, `hinting.tt.export.overlapRemovalMovesHints`).
 //!
-//! Left alone: layers without hints, layers whose stored hints the command changed (a command
-//! that edits hints keeps its own references right), references that dangled before the edit,
-//! hints that do not parse, and background layers. A layer that needs no change keeps its value;
-//! a font that needs none comes back as given.
+//! Corner components (`Corner` hints) follow their nodes by the same steps. Their `origin` counts
+//! the layer's shapes, components included, and a closed path's nodes in file order, so it is
+//! stored anew when a shape before the path is added or removed. A corner on a gone node is
+//! removed and reported, as a TrueType instruction is, and moves with them under
+//! [`RemapMode::OverlapRemoval`] (a corner on an extra node lands on the node the removal made
+//! there). Caps, segments and brushes are left alone.
+//!
+//! A layer's background is remapped against the background before the edit, apart from the
+//! layer's own hints.
+//!
+//! Left alone: layers and backgrounds without hints, those whose stored hints the command changed
+//! (a command that edits hints keeps its own references right), references that dangled before
+//! the edit, and hints that do not parse. A layer that needs no change keeps its value; a font
+//! that needs none comes back as given.
 //!
 //! The engine runs [`remap_after_edit`] in `Session::realign_after`, after the component
 //! re-alignment, so both land in the command's undo step. Rows: `hinting.ps.manual.linkOnDrop`
@@ -38,8 +48,11 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
-use fontcraft_model::{Font, Layer, Node, NodeKind, Path, Shape};
+use fontcraft_model::corner::{CornerHint, CornerTarget, corner_hint, is_corner};
+use fontcraft_model::plist::Value;
+use fontcraft_model::{Background, Font, Layer, Node, NodeKind, Path, Shape};
 
+use crate::noderef::{Syntax, put};
 use crate::{
     Edge, HintingError, NodeOrder, NodeRef, PsHint, TtInstruction, TtKind, TtPoint, ps_hints, set_ps_hints, set_tt_instructions, tt_instructions,
 };
@@ -52,11 +65,12 @@ const SAME: f64 = 1e-6;
 /// What remapping did to one font.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct RemapReport {
-    /// Messages for removed TrueType instructions, one per instruction: glyph, layer, what.
+    /// Messages for removed TrueType instructions and corner components, one each: glyph, layer,
+    /// what.
     pub removed: Vec<String>,
     /// PostScript edges turned into numbers.
     pub unlinked: usize,
-    /// TrueType points moved to a node the overlap removal created.
+    /// TrueType points and corner components moved to a node the overlap removal created.
     pub moved: usize,
 }
 
@@ -98,11 +112,14 @@ pub fn remap_after_edit(old: &Font, mut new: Font, mode: RemapMode) -> Result<(F
         };
         let mut layers = Vec::new();
         for (li, layer) in g.layers.iter().enumerate() {
-            if layer.info.hints.is_empty() {
+            let own = !layer.info.hints.is_empty();
+            if !own && !layer.info.background.as_ref().is_some_and(|b| !b.hints.is_empty()) {
                 continue;
             }
             let Some(was) = prev.layers.iter().find(|l| l.id == layer.id) else { continue };
-            if let Some(out) = remap_layer(was, layer, &g.name, mode, &mut report) {
+            let front = if own { remap_layer(was, layer, &g.name, mode, &mut report) } else { None };
+            let back = remap_background(was, front.as_ref().unwrap_or(layer), &g.name, mode, &mut report);
+            if let Some(out) = back.or(front) {
                 layers.push((li, out));
             }
         }
@@ -125,16 +142,56 @@ pub fn remap_after_edit(old: &Font, mut new: Font, mode: RemapMode) -> Result<(F
 /// The hints of `new` remapped against `old` (the same layer of glyph `glyph` before the edit);
 /// `None` when nothing needs to change or the layer is left alone (module doc).
 pub fn remap_layer(old: &Layer, new: &Layer, glyph: &str, mode: RemapMode, report: &mut RemapReport) -> Option<Layer> {
+    remap_hints(old, new, glyph, &format!("layer `{}`", new.id), mode, report)
+}
+
+/// `new` with the hints of its background remapped against the background of `old` (the same
+/// layer before the edit), as [`remap_layer`] remaps the layer's own; `None` when nothing needs
+/// to change or the background is left alone (module doc).
+pub fn remap_background(old: &Layer, new: &Layer, glyph: &str, mode: RemapMode, report: &mut RemapReport) -> Option<Layer> {
+    let (was, now) = (old.info.background.as_ref()?, new.info.background.as_ref()?);
+    if now.hints.is_empty() || was.hints != now.hints || was.shapes == now.shapes {
+        return None;
+    }
+    // The hint readers work on a layer: a stand-in holding the background's shapes and hints.
+    let stand_in = |b: &Background| {
+        let mut l = Layer::new(new.master.clone(), new.width);
+        l.id.clone_from(&new.id);
+        l.shapes = b.shapes.clone();
+        l.info.hints = b.hints.clone();
+        l
+    };
+    let mut fixed = remap_hints(&stand_in(was), &stand_in(now), glyph, &format!("background of layer `{}`", new.id), mode, report)?;
+    let mut out = new.clone();
+    out.info.background.as_mut()?.hints = std::mem::take(&mut fixed.info.hints);
+    Some(out)
+}
+
+/// [`remap_layer`] for a layer or a background's stand-in; `place` names it in messages.
+fn remap_hints(old: &Layer, new: &Layer, glyph: &str, place: &str, mode: RemapMode, report: &mut RemapReport) -> Option<Layer> {
     if old.info.hints != new.info.hints {
         return None;
     }
     let (old_paths, new_paths) = (paths(old), paths(new));
-    if old_paths.len() == new_paths.len() && old_paths.iter().zip(&new_paths).all(|(a, b)| same_nodes(a, b)) {
+    let (old_slots, new_slots) = (path_slots(old), path_slots(new));
+    // A corner's origin counts shapes, so it changes when only the shapes around a path do.
+    let slots_moved = old_slots != new_slots && old.info.hints.iter().any(is_corner);
+    if !slots_moved && old_paths.len() == new_paths.len() && old_paths.iter().zip(&new_paths).all(|(a, b)| same_nodes(a, b)) {
         return None;
     }
     let ps = ps_hints(old).ok()?;
     let tt = tt_instructions(old).ok()?;
+    // The stored values count in file order: a reference to the start node of a closed path whose
+    // node count changed is stored differently although its model index stayed.
+    let (old_order, new_order) = (NodeOrder::of(old), NodeOrder::of(new));
+    let corners = corners(old, &old_slots, &old_order);
     let mut refs = BTreeSet::new();
+    for c in &corners {
+        refs.extend(c.point.node());
+        if let TtPoint::Intersection { a, b } = c.point {
+            refs.extend([a, b]);
+        }
+    }
     for (_, h) in &ps {
         refs.extend([Some(h.origin), h.other].into_iter().flatten().filter_map(|e| match e {
             Edge::Node(r) => Some(r),
@@ -161,16 +218,50 @@ pub fn remap_layer(old: &Layer, new: &Layer, glyph: &str, mode: RemapMode, repor
     // `None`: the node is gone. References that dangled before the edit are not in the map.
     let map: BTreeMap<NodeRef, Option<NodeRef>> = refs.iter().filter_map(|r| m.locate(*r).map(|found| (*r, found))).collect();
     let overlap = mode == RemapMode::OverlapRemoval;
-    let has_intersections = tt.iter().any(|(_, t)| t.points().iter().any(|p| matches!(p, TtPoint::Intersection { .. })));
-    // The stored values count in file order: a reference to the start node of a closed path whose
-    // node count changed is stored differently although its model index stayed.
-    let (old_order, new_order) = (NodeOrder::of(old), NodeOrder::of(new));
+    let has_intersections = tt.iter().any(|(_, t)| t.points().iter().any(|p| matches!(p, TtPoint::Intersection { .. })))
+        || corners.iter().any(|c| matches!(c.point, TtPoint::Intersection { .. }));
     let reordered = refs.iter().any(|r| old_order.closed_len(r.path) != new_order.closed_len(r.path));
-    if map.iter().all(|(k, v)| *v == Some(*k)) && !(overlap && has_intersections) && !reordered {
+    if map.iter().all(|(k, v)| *v == Some(*k)) && !(overlap && has_intersections) && !reordered && !slots_moved {
         return None;
     }
 
     let mut local = RemapReport::default();
+    // Per corner hint (by its index in the stored hints): its new value, `None` to remove it.
+    let mut corner_edits: BTreeMap<usize, Option<Value>> = BTreeMap::new();
+    for c in &corners {
+        let Some((after, reattached)) = m.point_after(c.point, &map, overlap) else {
+            corner_edits.insert(c.index, None);
+            local.removed.push(format!(
+                "glyph `{glyph}`, {place}: the corner component `{}` on {} was removed: its node is gone",
+                c.hint.name,
+                point_text(&c.point)
+            ));
+            continue;
+        };
+        let stored = |r: NodeRef| {
+            let f = new_order.to_file(r);
+            new_slots.get(f.path).map(|shape| (*shape, f.node))
+        };
+        let target =
+            match after {
+                TtPoint::Node(r) => stored(r).map(|(shape, node)| CornerTarget::Node { shape, node }),
+                TtPoint::Intersection { a, b } => stored(a)
+                    .zip(stored(b))
+                    .map(|((shape, node), (other_shape, other_node))| CornerTarget::Intersection { shape, node, other_shape, other_node }),
+                TtPoint::Lsb | TtPoint::Rsb => None,
+            };
+        let Some(target) = target.filter(|t| *t != c.hint.target) else { continue };
+        let Some(mut value) = old.info.hints.get(c.index).map(|h| h.value.clone()) else { continue };
+        let Value::Dict(d) = &mut value else { continue };
+        let items = match target {
+            CornerTarget::Node { shape, node } => vec![shape, node],
+            CornerTarget::Intersection { shape, node, other_shape, other_node } => vec![shape, node, other_shape, other_node],
+        };
+        let origin = Syntax::of(d.get("origin")).indexes(&items);
+        put(d, "origin", origin);
+        local.moved += usize::from(reattached);
+        corner_edits.insert(c.index, Some(value));
+    }
     let mut ps_changed = false;
     let ps_new: Vec<PsHint> = ps
         .into_iter()
@@ -224,11 +315,7 @@ pub fn remap_layer(old: &Layer, new: &Layer, glyph: &str, mode: RemapMode, repor
             broken_triples.insert(group);
         }
         let points = gone.iter().map(point_text).collect::<Vec<_>>().join(", ");
-        local.removed.push(format!(
-            "glyph `{glyph}`, layer `{}`: the {} instruction on {points} was removed: its node is gone",
-            new.id,
-            kind_name(&t.kind)
-        ));
+        local.removed.push(format!("glyph `{glyph}`, {place}: the {} instruction on {points} was removed: its node is gone", kind_name(&t.kind)));
     }
     // A triple hint that lost a member is no longer one: the others stay as plain Stem instructions.
     for t in &mut kept {
@@ -239,10 +326,26 @@ pub fn remap_layer(old: &Layer, new: &Layer, glyph: &str, mode: RemapMode, repor
         }
     }
 
-    if !ps_changed && !tt_changed && !reordered {
+    if !ps_changed && !tt_changed && !reordered && corner_edits.is_empty() {
         return None;
     }
     let mut out = new.clone();
+    if !corner_edits.is_empty() {
+        // Before the splices below, while the stored hints still line up with `old`'s.
+        let hints = std::mem::take(&mut out.info.hints);
+        out.info.hints = hints
+            .into_iter()
+            .enumerate()
+            .filter_map(|(i, mut h)| match corner_edits.remove(&i) {
+                Some(None) => None,
+                Some(Some(value)) => {
+                    h.value = value;
+                    Some(h)
+                }
+                None => Some(h),
+            })
+            .collect();
+    }
     if ps_changed || reordered {
         set_ps_hints(&mut out, &ps_new).ok()?;
     }
@@ -285,6 +388,41 @@ fn point_text(p: &TtPoint) -> String {
         TtPoint::Lsb => "lsb".to_string(),
         TtPoint::Rsb => "rsb".to_string(),
     }
+}
+
+/// The shape index of each path of the layer, in shape order.
+fn path_slots(layer: &Layer) -> Vec<usize> {
+    layer.shapes.iter().enumerate().filter_map(|(i, s)| matches!(s, Shape::Path(_)).then_some(i)).collect()
+}
+
+/// A corner component the remap can follow: its index in the stored hints, the hint, and the
+/// node or extra node it sits on in the model's order.
+struct Corner {
+    index: usize,
+    hint: CornerHint,
+    point: TtPoint,
+}
+
+/// The layer's corner components whose origin names a path; `slots` and `order` are the layer's.
+/// Others are left alone.
+fn corners(layer: &Layer, slots: &[usize], order: &NodeOrder) -> Vec<Corner> {
+    let at = |shape: usize, node: usize| slots.binary_search(&shape).ok().map(|path| order.to_model(NodeRef::new(path, node)));
+    layer
+        .info
+        .hints
+        .iter()
+        .enumerate()
+        .filter_map(|(index, h)| {
+            let hint = corner_hint(h).ok()??;
+            let point = match hint.target {
+                CornerTarget::Node { shape, node } => TtPoint::Node(at(shape, node)?),
+                CornerTarget::Intersection { shape, node, other_shape, other_node } => {
+                    TtPoint::Intersection { a: at(shape, node)?, b: at(other_shape, other_node)? }
+                }
+            };
+            Some(Corner { index, hint, point })
+        })
+        .collect()
 }
 
 /// The layer's paths in shape order, as node references count them.

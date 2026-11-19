@@ -6,7 +6,8 @@
 use std::sync::Arc;
 
 use fontcraft_engine::Session;
-use fontcraft_engine::model::{Layer, Node, NodeKind, Path, Shape};
+use fontcraft_engine::model::corner::{CornerHint, CornerTarget, corner_hint};
+use fontcraft_engine::model::{Background, Component, Font, Layer, Node, NodeKind, Path, Shape};
 use fontcraft_hinting::{
     Direction, Edge, NodeOrder, NodeRef, PsHint, StemRef, TtInstruction, TtKind, TtPoint, ZoneRef, ps_hints, set_ps_hints, set_tt_instructions,
     tt_instructions,
@@ -102,6 +103,96 @@ fn a_reference_to_the_start_node_follows_the_node_count_of_its_closed_path() {
     assert_eq!(h.edges(&layer(&s)).unwrap(), (100.0, 200.0));
     let stored = layer(&s).info.hints[0].value.as_dict().unwrap().get("origin").cloned().unwrap();
     assert_eq!(NodeRef::from_value(&stored, &NodeOrder::default()), Some(NodeRef::new(0, 4)), "the start node is stored last");
+}
+
+/// The background's stem hint, read from a stand-in layer holding the background's shapes and hints.
+fn background_hint(l: &Layer) -> (PsHint, (f64, f64)) {
+    let b = l.info.background.clone().unwrap();
+    let mut stand_in = Layer::new("m01", 600.0);
+    stand_in.shapes = b.shapes;
+    stand_in.info.hints = b.hints;
+    let h = ps_hints(&stand_in).unwrap().remove(0).1;
+    let edges = h.edges(&stand_in).unwrap();
+    (h, edges)
+}
+
+#[test]
+fn background_hints_follow_the_nodes_of_the_background() {
+    let mut s = Session::with_document();
+    s.edit("setup", |font| {
+        let mut g = font.glyph_mut("I")?;
+        let layer = g.layer_mut("m01").unwrap();
+        layer.shapes = vec![Shape::Path(Path::rect(0.0, 0.0, 50.0, 50.0))];
+        set_ps_hints(layer, &[PsHint::stem(true, node(0, 0), node(0, 3))]).unwrap();
+        let mut back = Layer::new("m01", 600.0);
+        back.shapes = vec![Shape::Path(Path::rect(100.0, 0.0, 200.0, 700.0))];
+        set_ps_hints(&mut back, &[PsHint::stem(true, node(0, 0), node(0, 3))]).unwrap();
+        layer.info.background = Some(Background { shapes: back.shapes.clone(), hints: back.info.hints.clone(), ..Default::default() });
+        Ok(())
+    })
+    .unwrap();
+    let front = layer(&s).info.hints.clone();
+    run_undoable(&mut s, "path.insertNode", json!({"glyph": "I", "side": "background", "segment": [0, 1]}));
+    let l = layer(&s);
+    assert_eq!(l.info.hints, front, "the layer's own hints are left alone");
+    let (h, edges) = background_hint(&l);
+    assert_eq!((h.origin, h.other), (node(0, 0), Some(node(0, 4))));
+    assert_eq!(edges, (0.0, 700.0));
+    // Deleting a linked background node unlinks that end, as on the layer itself.
+    let out = run_undoable(&mut s, "edit.delete", json!({"glyph": "I", "side": "background", "points": [[0, 4]]}));
+    let (h, _) = background_hint(&layer(&s));
+    assert_eq!((h.origin, h.other), (node(0, 0), Some(Edge::Value(700.0))));
+    assert_eq!(out["hintUpkeep"]["unlinked"], json!(1), "{out}");
+}
+
+/// The corner hint of glyph `I`'s layer.
+fn corner(s: &Session) -> Option<CornerHint> {
+    layer(s).info.hints.iter().find_map(|h| corner_hint(h).ok().flatten())
+}
+
+#[test]
+fn a_corner_component_follows_its_node_and_goes_with_it() {
+    let mut s = session(vec![Path::rect(100.0, 0.0, 200.0, 700.0)], &[], &[]);
+    // Model node 2, (200, 700), is node 1 in file order, where the start node comes last.
+    s.edit("corner", |font| {
+        let mut g = font.glyph_mut("I")?;
+        g.layer_mut("m01").unwrap().info.hints.push(CornerHint::new("_corner.serif", 0, 1).to_hint());
+        Ok(())
+    })
+    .unwrap();
+    run_undoable(&mut s, "path.insertNode", json!({"glyph": "I", "segment": [0, 1]}));
+    // Now model node 3 of five, so node 2 in file order.
+    assert_eq!(corner(&s).unwrap().target, CornerTarget::Node { shape: 0, node: 2 });
+    assert_eq!(tt_place(&s, tt_node(0, 3)), (200.0, 700.0));
+    let out = run_undoable(&mut s, "edit.delete", json!({"glyph": "I", "points": [[0, 3]]}));
+    assert_eq!(corner(&s), None, "the corner on the deleted node is removed");
+    let removed = out["hintUpkeep"]["removed"].as_array().unwrap();
+    assert!(removed.len() == 1 && removed[0].as_str().unwrap().contains("corner component `_corner.serif`"), "{out}");
+}
+
+/// A corner's origin counts shapes, components too: a shape added before its path moves it.
+#[test]
+fn a_corner_component_follows_its_path_when_a_shape_is_added_before_it() {
+    let s = session(vec![Path::rect(100.0, 0.0, 200.0, 700.0)], &[], &[]);
+    let before = {
+        let mut f = Font::clone(s.font().unwrap());
+        let mut g = f.glyphs.get_mut("I").unwrap();
+        g.layer_mut("m01").unwrap().info.hints.push(CornerHint::new("_corner.serif", 0, 1).to_hint());
+        drop(g);
+        f
+    };
+    let after = {
+        let mut f = before.clone();
+        let mut g = f.glyphs.get_mut("I").unwrap();
+        g.layer_mut("m01").unwrap().shapes.insert(0, Shape::Component(Component::new("A", 0.0, 0.0)));
+        drop(g);
+        f
+    };
+    let (out, report) = fontcraft_hinting::remap_after_edit(&before, after, fontcraft_hinting::RemapMode::Edit).unwrap();
+    assert!(report.is_empty());
+    let l = out.glyph("I").unwrap().layer("m01").unwrap();
+    let c = l.info.hints.iter().find_map(|h| corner_hint(h).ok().flatten()).unwrap();
+    assert_eq!(c.target, CornerTarget::Node { shape: 1, node: 1 });
 }
 
 #[test]
