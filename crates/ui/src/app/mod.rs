@@ -6,7 +6,9 @@
 //! view state moved.
 
 pub mod catalog;
+pub mod clipboard;
 pub mod console;
+pub mod context_menu;
 pub mod files;
 pub mod font_view;
 pub mod menu_alternates;
@@ -139,6 +141,10 @@ pub struct FontCraftApp {
     pub tt: crate::dialogs::tt::TtState,
     /// The open form dialog (`dialogs::form`).
     pub dialogs: crate::dialogs::form::DialogState,
+    /// The open canvas and glyph context menus.
+    pub context_menus: context_menu::ContextMenus,
+    /// Text for the system clipboard and a paste waiting for its text.
+    pub clipboard: clipboard::Clipboard,
     picks: Picks,
     /// The control channel: its listener, the window its input goes to, the replies waiting on frames.
     pub control: crate::control::Control,
@@ -180,6 +186,8 @@ impl FontCraftApp {
             closing: Closing::Idle,
             tt: Default::default(),
             dialogs: crate::dialogs::form::DialogState::default(),
+            context_menus: context_menu::ContextMenus::default(),
+            clipboard: clipboard::Clipboard::default(),
             picks: Picks::default(),
             control: crate::control::Control::default(),
             #[cfg(not(target_arch = "wasm32"))]
@@ -253,6 +261,7 @@ impl FontCraftApp {
                 let reply = self.session.execute(&command.id, &params).map_err(|e| e.to_string())?;
                 crate::canvas::tools::apply::adopt(self, &reply);
                 crate::dialogs::after::after_run(self, &command.id, &params, &reply);
+                clipboard::after_run(self, &command.id, &reply);
                 if let Some(notice) = self.after_command(&command, &reply) {
                     self.status = notice;
                 }
@@ -362,6 +371,7 @@ impl ShellApp for FontCraftApp {
             let msg = match FontCraftApp::route(fired.command) {
                 Msg::Run(command) => {
                     let command = self.with_targets(command);
+                    let Some(command) = clipboard::fired(self, command) else { continue };
                     // A command with a dialog that the selection gives no parameters opens its dialog.
                     if crate::dialogs::after::fired(self, &command.id, &command.params) {
                         continue;

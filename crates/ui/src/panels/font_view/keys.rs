@@ -57,6 +57,17 @@ pub fn requests<E>(model: &FontViewModel, after: &Selection<usize>, events: &[Co
                     sent.push(Msg::run("glyph.rename", json!({ "glyph": glyph, "newName": rename.name.trim() })));
                 }
             }
+            CollectionEvent::ContextMenu(request) => {
+                // A glyph that is not selected becomes the selection first; on a selected one the menu acts on all.
+                let glyphs = if after.items.contains(&request.key) { names(&after.items) } else { names(&[request.key]) };
+                if !after.items.contains(&request.key) && !glyphs.is_empty() {
+                    sent.push(Msg::Shell(CommandRef::with_params("fontView.setSelection", json!({ "glyphs": glyphs }))));
+                }
+                if !glyphs.is_empty() {
+                    let params = json!({ "glyphs": glyphs, "x": request.at.x, "y": request.at.y });
+                    sent.push(Msg::Shell(CommandRef::with_params("fontView.openGlyphMenu", params)));
+                }
+            }
             _ => {}
         }
     }

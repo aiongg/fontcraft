@@ -160,6 +160,34 @@ status = "inferred"
 own = true
 
 [[command]]
+id = "fontView.openGlyphMenu"
+label = "Open Glyph Menu"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{glyphs: [names], x?: number, y?: number}"
+area = "font-view"
+milestone = "M4"
+summary = "Our headless equivalent of a secondary click on a Font View cell or row: opens the glyph context menu on these glyphs at a window point."
+ref = "Font View › Glyph Properties"
+status = "inferred"
+own = true
+
+[[command]]
+id = "fontView.showTags"
+label = "Show Tags"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "font-view"
+milestone = "M4"
+summary = "Shows the sidebar, whose glyph inspector holds the Tags field of the selected glyphs: what the glyph menu's More Tags… does."
+ref = "Font View › Glyph Properties › Tags"
+status = "inferred"
+own = true
+
+[[command]]
 id = "fontView.getState"
 label = "Get Font View State"
 menu = []
@@ -1094,6 +1122,8 @@ controls = [
   "twelve colour label swatches and a cross button (Option: act on the layer colour)",
   "Tags submenu: every tag used in the font, with checkmark / dash state",
   "Copy Glyph Names submenu: Space Separated, One per Line, Comma Separated, Slashed, Python List, Unicodes",
+  "Exports check item (glyph.setExport): checked when every glyph exports",
+  "More Tags… at the end of the Tags submenu when the font has more than 512 tags: shows the inspector's Tags field",
 ]
 area = "font-view"
 milestone = "M4"
@@ -1105,6 +1135,10 @@ guesses = [
   "A right-click on a glyph that is not selected selects it alone first; on a selected glyph the menu acts on the whole selection. Settled by observation.",
   "The items come in this order: the colour swatches under a caption (Glyph Color, or Layer Color with Alt), then Tags, then Copy Glyph Names. Settled by observation.",
   "With Alt held the swatches set the layer colour of Font View's master. Settled by observation.",
+  "The swatches sit in a Glyph Color submenu, Exports follows them, then Tags and Copy Glyph Names. Settled by observation.",
+  "Exports shows no mark when only some of the glyphs export, and choosing it then makes them all export; with all exporting it turns export off. Settled by observation.",
+  "Exports is in this menu as the Glyphs 3 video shows it in the canvas menu. Settled by observation.",
+  "More Tags… shows the sidebar with the glyph inspector, whose Tags field lists every tag. Settled by observation.",
 ]
 
 [[panel]]

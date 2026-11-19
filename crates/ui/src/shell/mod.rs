@@ -6,6 +6,7 @@ pub mod bars;
 pub mod command_palette;
 pub mod command_surfaces;
 pub mod commands;
+pub mod context_menu;
 pub mod dock;
 pub mod font_info;
 pub mod font_view;
@@ -78,6 +79,7 @@ fn title_bar(ui: &mut Ui, _: &mut BodyCx<'_>, app: &mut FontCraftApp) {
 fn body(ui: &mut Ui, cx: &mut BodyCx<'_>, app: &mut FontCraftApp) {
     dock::show(ui, app);
     command_palette::show(ui, cx, app);
+    context_menu::show(ui, cx, app);
     if let Some(dialogs) = cx.dialogs() {
         dialogs.with(|host| crate::dialogs::run(host, app));
     }

@@ -769,9 +769,51 @@ ref = "Edit View › Glyph Display › Glyph & Layer Colors"
 status = "handbook"
 notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:12: the context menu with a path selected offers Set Glyph Color swatches. In Glyphs 3 it also lists Sharpen Corner, Reverse Selected Contours, Focus on Selected Paths, Component from Selection, Add Component…, Add Anchor, Add Horizontal Hint, Add Vertical Hint, Add Guide, Autohint, Export, Locked, Show Glyph in Font View and Copy Glyph Names. Not shown: Option for layer colours."
 guesses = [
-  "The swatch row opens the glyph section of the menu, under a Glyph Color caption (Layer Color while Alt is held). Settled by observation.",
+  "The swatches open the glyph section of the menu as a Glyph Color submenu (Layer Color when Alt was held at the click). Settled by observation.",
   "The glyph section offers Exports, Locked and Show Glyph in Font View, and the menu ends with Copy Glyph Names, as the Glyphs 3 video lists them; the other entries of that list follow with their milestones. Settled by observation.",
 ]
+
+[[command]]
+id = "contextMenu.open"
+label = "Open Context Menu"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{x: number, y: number, space?: \"screen\" | \"font\" (default screen), alt?: bool}"
+area = "ui-chrome"
+milestone = "M4"
+summary = "Our headless equivalent of a secondary click on the canvas: opens the canvas context menu at a point. An object there that is not selected becomes the selection first; nothing opens while a tool drags or a dialog is open."
+ref = "Edit View › Glyph Display › Glyph & Layer Colors"
+status = "inferred"
+own = true
+
+[[command]]
+id = "contextMenu.invoke"
+label = "Run Context Menu Item"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{command: id}"
+area = "ui-chrome"
+milestone = "M4"
+summary = "Our headless equivalent of clicking an item of the open canvas context menu: runs it with its targets from the selection and the click, and closes the menu. A disabled or missing item is refused and the menu stays open."
+ref = "Edit View › Glyph Display › Glyph & Layer Colors"
+status = "inferred"
+own = true
+
+[[command]]
+id = "contextMenu.close"
+label = "Close Context Menu"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "ui-chrome"
+milestone = "M4"
+summary = "Closes the open canvas and glyph context menus."
+ref = "Edit View › Glyph Display › Glyph & Layer Colors"
+status = "inferred"
+own = true
 
 [[command]]
 id = "path.editBackground"
