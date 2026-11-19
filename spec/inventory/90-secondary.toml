@@ -1645,14 +1645,20 @@ label = "Audit Kerning Exceptions"
 menu = ["Font", "Kerning"]
 shortcut = ""
 kind = "engine"
-params = "{masters?: [id], pairs?: [[left, right]], threshold?: number, fix?: bool}"
+params = "{masters?: [id], pairs?: [[left, right]], glyphsLeft?: [names], glyphsRight?: [names], direction?: 'ltr' | 'rtl', threshold?: number, fix?: bool}"
 area = "spacing-kerning"
 milestone = "M13"
 summary = "Expands class kerning to glyph pairs and reports the pairs whose outlines collide or come closer than the threshold under the class value. With fix it adds a corrective exception for each."
 ref = "FontLab 8 What's new › Metrics & kerning › Kerning (Audit Exceptions)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M12 to M13 by the M12 planning pass: a secondary-reference feature goes to M13, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3); docs/plans/M12.md § 7, question 2."
+notes = "Moved from M12 to M13 by the M12 planning pass: a secondary-reference feature goes to M13, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3); docs/plans/M12.md § 7, question 2. Built in M13.21b (`crates/engine/src/cmd/kerning_audit.rs`): the distance is Kern to Distance's closest approach plus the value that applies; the fix is one undo step. Documented, not yet observed."
+guesses = [
+  "A class pair is a stored pair with at least one group side; a glyph pair that a glyph–glyph pair covers is not measured, as its value is not the class value.",
+  "Without `pairs` or glyph lists, every class pair stored in the master is expanded to its members; FontLab applies the command to the pairs selected in its window.",
+  "The default threshold is 0, so only outlines that overlap are reported; touching outlines (distance 0) are not.",
+  "`fix` adds a glyph–glyph exception set to the threshold minus the distance without kerning, rounded up to a whole unit; it never adds a glyph–group exception.",
+]
 
 [[command]]
 id = "kerning.removePairsByRule"
@@ -1687,7 +1693,14 @@ summary = "Makes kerning interpolable across masters: flattens class kerning to 
 ref = "FontLab 8 What's new › Metrics & kerning › Kerning (Match Kerning)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M9 to M13 by the M9 planning pass: a secondary-reference feature beyond the primary reference, as the M3 and M6 passes moved such rows (owner decision, docs/plans/M3.md § 7, question 3)."
+notes = "Moved from M9 to M13 by the M9 planning pass: a secondary-reference feature beyond the primary reference, as the M3 and M6 passes moved such rows (owner decision, docs/plans/M3.md § 7, question 3). Built in M13.21b (`crates/engine/src/cmd/kerning_audit.rs`). Kerning groups belong to glyphs in FontCraft's model, so every master shares the main master's classes already; the command matches every direction in one undo step. The result is the one FontLab describes (flatten, fill with zeros, rebuild classes), reached without building the flat table: each master gets the union of the pairs the masters store, and glyph–glyph exceptions where a filled pair would change a glyph pair. Documented, not yet observed."
+guesses = [
+  "A master that lacks a pair gets the values most of the glyph pairs it decides have there (ties to the first in glyph order), 0 when it decides none; FontLab says only that missing pairs get zero values, which is the same where nothing applied before.",
+  "Class kerning is not rebuilt with Compress afterwards: Compress works one master at a time and could leave the masters with different pairs again. The union keeps every master's own classes, and only the exceptions a filled pair needs are added.",
+  "`mainMaster` decides only the order and spelling of added pairs (its own pairs first); by default it is the font's default master.",
+  "Masters that take their kerning from another are skipped; at least two masters with kerning of their own are needed.",
+  "Every direction (left to right, right to left, vertical) is matched; FontLab's page does not mention directions.",
+]
 
 [[panel]]
 id = "palette.pairsAndPhrases"

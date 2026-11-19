@@ -144,6 +144,7 @@ pub mod external_changes;
 mod file_helpers;
 mod find_outline;
 mod geometry_helpers;
+mod kerning_audit;
 pub mod math_base;
 pub mod measurements;
 mod metrics_files;
@@ -432,6 +433,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(derived_glyphs::specs());
         v.extend(autospace::specs());
         v.extend(autokern::specs());
+        v.extend(kerning_audit::specs());
         v.extend(pair_list::specs());
         v.extend(stem_filters::specs());
         v.extend(tension::specs());

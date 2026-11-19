@@ -132,13 +132,13 @@ pub fn specs() -> Vec<CommandSpec> {
 // ── Shared ─────────────────────────────────────────────────────────────────────────────────────
 
 /// Why `master` cannot have kerning of its own, when it takes it from another master.
-fn linked(font: &Font, m: &Master) -> Option<String> {
+pub(super) fn linked(font: &Font, m: &Master) -> Option<String> {
     let source = metrics_source(font, &m.id)?;
     (source.id != m.id).then(|| format!("master `{}` takes its kerning from master `{}`", m.name, source.name))
 }
 
 /// `direction` for the commands that measure outlines side by side.
-fn horizontal(p: &Params) -> Result<Direction> {
+pub(super) fn horizontal(p: &Params) -> Result<Direction> {
     let d = any_direction(p)?;
     if d == Direction::Vertical {
         return Err(p.bad("`direction` must be \"ltr\" or \"rtl\": outlines are measured side by side"));
@@ -181,7 +181,7 @@ fn read_side(p: &Params, font: &Font, index: &KernIndex, text: &str, at: &str, d
 
 /// The pairs `pairs`, `glyphsLeft` and `glyphsRight` name, repeats dropped; `None` when none of
 /// them is given.
-fn read_pairs(p: &Params, font: &Font, index: &KernIndex, direction: Direction) -> Result<Option<Vec<(Side, Side)>>> {
+pub(super) fn read_pairs(p: &Params, font: &Font, index: &KernIndex, direction: Direction) -> Result<Option<Vec<(Side, Side)>>> {
     let mut out = Vec::new();
     let mut seen = HashSet::new();
     let mut given = false;
@@ -372,7 +372,7 @@ struct Measured {
 }
 
 /// What one master needs to measure a set of glyphs.
-struct Kit {
+pub(super) struct Kit {
     cores: [(f64, f64); 2],
     depth: f64,
     glyphs: HashMap<String, Measured>,
@@ -382,7 +382,7 @@ impl Kit {
     /// Takes the outlines of every glyph in `needs`; with `step`, their clipped profiles over
     /// the band each is paired with; with `fine`, profiles at most a unit apart over a band that
     /// holds every outline. `Err` when the bands cannot be sampled at `step`.
-    fn new(
+    pub(super) fn new(
         font: &Font,
         m: &Master,
         step: Option<f64>,
@@ -461,7 +461,7 @@ impl Kit {
 
     /// The smallest horizontal distance between `left` and `right` standing side by side
     /// without kerning, at a height both reach.
-    fn closest(&self, left: &str, right: &str) -> std::result::Result<f64, String> {
+    pub(super) fn closest(&self, left: &str, right: &str) -> std::result::Result<f64, String> {
         let (ma, oa) = self.outline(left)?;
         let (mb, ob) = self.outline(right)?;
         let (Some((_, ra)), Some((lb, _))) = (&ma.fine, &mb.fine) else {

@@ -106,6 +106,7 @@ mod instance_masters;
 mod instances;
 mod interaction;
 mod interpolation;
+mod kerning_audit;
 mod kerning_groups;
 mod kerning_maintain;
 mod kerning_pairs;
