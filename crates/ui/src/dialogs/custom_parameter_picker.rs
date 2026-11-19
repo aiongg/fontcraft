@@ -37,6 +37,8 @@ craft::ui::words! {
 pub const MAX_QUERY_CHARS: usize = 256;
 /// Most parameters the list holds.
 const MAX_PARAMETERS: usize = 2048;
+/// Rows the list shows before it scrolls: the dialog body scrolls too, so the list must be capped.
+const LIST_ROWS: u16 = 12;
 
 const NAME: ColumnKey = ColumnKey::new("name");
 const KIND: ColumnKey = ColumnKey::new("kind");
@@ -143,6 +145,7 @@ impl StackDialog for ParameterPicker {
                 let positions: Vec<usize> = (0..list.len()).collect();
                 let source = keyed(&positions, |at| *at).with_text(|at| Cow::Owned(list.get(*at).map_or_else(String::new, |c| c.name.clone())));
                 let _ = Table::<usize>::new(words.list.clone(), columns)
+                    .max_rows(LIST_ROWS)
                     .select(SelectMode::Multi)
                     .selection(Bind::bound(&mut *selection))
                     .empty(words.none.clone())

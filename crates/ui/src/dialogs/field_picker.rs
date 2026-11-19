@@ -35,6 +35,8 @@ craft::ui::words! {
 
 /// Most fields the list holds.
 const MAX_FIELDS: usize = 1024;
+/// Rows the list shows before it scrolls: the dialog body scrolls too, so the list must be capped.
+const LIST_ROWS: u16 = 12;
 
 const NAME: ColumnKey = ColumnKey::new("name");
 const KEY: ColumnKey = ColumnKey::new("key");
@@ -136,6 +138,7 @@ impl StackDialog for FieldPicker {
                         let source =
                             keyed(&positions, |at| *at).with_text(|at| Cow::Owned(list.get(*at).map_or_else(String::new, |c| c.label.clone())));
                         let _ = Table::<usize>::new(words.list.clone(), columns)
+                            .max_rows(LIST_ROWS)
                             .select(SelectMode::Multi)
                             .selection(Bind::bound(selection))
                             .show_items(ui, &source, &mut |at, icx| {
