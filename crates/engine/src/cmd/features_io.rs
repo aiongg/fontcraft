@@ -487,7 +487,7 @@ fn split(text: &str) -> std::result::Result<Features, String> {
 
 /// The entries of a feature file: the UFO writer's form read back exactly, else the top-level
 /// split.
-fn entries_of(text: &str) -> std::result::Result<Features, String> {
+pub(super) fn entries_of(text: &str) -> std::result::Result<Features, String> {
     let written = ufo_features::read(text);
     if !written.is_empty() && !ufo_features::is_kept_text(&written) {
         let mut f = written;
@@ -541,13 +541,13 @@ fn rename_classes(code: &str, renames: &HashMap<String, String>) -> String {
 
 /// What one import added.
 #[derive(Default)]
-struct Added {
-    prefixes: Vec<String>,
-    classes: Vec<String>,
-    features: Vec<String>,
-    counts: [usize; 3],
-    renamed: Vec<Value>,
-    shared_tags: Vec<String>,
+pub(super) struct Added {
+    pub(super) prefixes: Vec<String>,
+    pub(super) classes: Vec<String>,
+    pub(super) features: Vec<String>,
+    pub(super) counts: [usize; 3],
+    pub(super) renamed: Vec<Value>,
+    pub(super) shared_tags: Vec<String>,
 }
 
 fn report(list: &mut Vec<String>, name: &str) {
@@ -557,7 +557,7 @@ fn report(list: &mut Vec<String>, name: &str) {
 }
 
 /// Adds `new` after the entries of `into` (see the module doc).
-fn add_entries(into: &mut Features, mut new: Features) -> Added {
+pub(super) fn add_entries(into: &mut Features, mut new: Features) -> Added {
     let mut added = Added::default();
     let mut class_names: HashSet<String> = into.classes.iter().map(|c| c.name.clone()).collect();
     let font_classes = class_names.clone();

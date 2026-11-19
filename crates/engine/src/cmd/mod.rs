@@ -42,6 +42,7 @@ mod dimensions;
 mod edit;
 mod features;
 mod features_compile;
+mod features_entries;
 mod features_io;
 mod file;
 pub mod filter;
@@ -399,6 +400,7 @@ pub const COMMAND_TABLES: &[CommandTable] = &[
     tokens::specs,
     project::specs,
     features::specs,
+    features_entries::specs,
     numbers::specs,
     features_compile::specs,
     smart::specs,

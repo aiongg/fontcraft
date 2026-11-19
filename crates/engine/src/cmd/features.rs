@@ -24,11 +24,11 @@ use crate::params::Params;
 use crate::{EngineError, Result, Session};
 
 /// Most bytes of the notes kept with one entry.
-const MAX_NOTES_BYTES: usize = 1 << 20;
+pub(super) const MAX_NOTES_BYTES: usize = 1 << 20;
 /// Most localized names of one stylistic set.
-const MAX_LABELS: usize = 1_000;
+pub(super) const MAX_LABELS: usize = 1_000;
 /// Most characters of one localized stylistic-set name.
-const MAX_LABEL_CHARS: usize = 8_000;
+pub(super) const MAX_LABEL_CHARS: usize = 8_000;
 /// Most characters of a class name (the feature file specification's limit).
 const MAX_CLASS_NAME: usize = 63;
 
@@ -201,7 +201,7 @@ pub fn specs() -> Vec<CommandSpec> {
 
 // ── Entries ─────────────────────────────────────────────────────────────────────────────────────
 
-fn kind_name(kind: EntryKind) -> &'static str {
+pub(super) fn kind_name(kind: EntryKind) -> &'static str {
     match kind {
         EntryKind::Prefix => "prefix",
         EntryKind::Class => "class",
@@ -218,7 +218,7 @@ fn kind_param(p: &Params, key: &str) -> Result<EntryKind> {
     }
 }
 
-fn group(f: &Features, kind: EntryKind) -> &Vec<Snippet> {
+pub(super) fn group(f: &Features, kind: EntryKind) -> &Vec<Snippet> {
     match kind {
         EntryKind::Prefix => &f.prefixes,
         EntryKind::Class => &f.classes,
@@ -226,7 +226,7 @@ fn group(f: &Features, kind: EntryKind) -> &Vec<Snippet> {
     }
 }
 
-fn group_mut(f: &mut Features, kind: EntryKind) -> &mut Vec<Snippet> {
+pub(super) fn group_mut(f: &mut Features, kind: EntryKind) -> &mut Vec<Snippet> {
     match kind {
         EntryKind::Prefix => &mut f.prefixes,
         EntryKind::Class => &mut f.classes,
@@ -234,7 +234,7 @@ fn group_mut(f: &mut Features, kind: EntryKind) -> &mut Vec<Snippet> {
     }
 }
 
-fn entry_count(f: &Features) -> usize {
+pub(super) fn entry_count(f: &Features) -> usize {
     f.prefixes.len() + f.classes.len() + f.features.len()
 }
 
@@ -266,7 +266,7 @@ fn find(p: &Params, f: &Features, kind: EntryKind, name: &str, index: Option<usi
 }
 
 /// The entry the parameters `kind`, `name` and `index?` name.
-fn entry_param(p: &Params, f: &Features) -> Result<EntryRef> {
+pub(super) fn entry_param(p: &Params, f: &Features) -> Result<EntryRef> {
     let kind = kind_param(p, "kind")?;
     let name = p.str("name")?;
     let index = p.opt_int("index", 0, MAX_ENTRIES as i64)?.map(|i| i as usize);
@@ -291,14 +291,14 @@ fn snippet<'a>(p: &Params, f: &'a Features, entry: EntryRef) -> Result<&'a Snipp
     group(f, entry.kind).get(entry.index).ok_or_else(|| p.bad("the entry is gone"))
 }
 
-fn snippet_mut<'a>(f: &'a mut Features, entry: EntryRef, command: &str) -> Result<&'a mut Snippet> {
+pub(super) fn snippet_mut<'a>(f: &'a mut Features, entry: EntryRef, command: &str) -> Result<&'a mut Snippet> {
     group_mut(f, entry.kind)
         .get_mut(entry.index)
         .ok_or_else(|| EngineError::BadParams { command: command.into(), message: "the entry is gone".into() })
 }
 
 /// Why `name` cannot name an entry of `kind`, if it cannot.
-fn name_problem(kind: EntryKind, name: &str) -> Option<String> {
+pub(super) fn name_problem(kind: EntryKind, name: &str) -> Option<String> {
     match kind {
         EntryKind::Feature => {
             let ok = name.len() == 4 && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_');
@@ -565,7 +565,7 @@ fn remove(s: &mut Session, raw: &Value) -> Result<Value> {
 }
 
 /// The message of a parameter error, without the command name.
-fn message(e: &EngineError) -> String {
+pub(super) fn message(e: &EngineError) -> String {
     match e {
         EngineError::BadParams { message, .. } => message.clone(),
         other => other.to_string(),
