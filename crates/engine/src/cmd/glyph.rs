@@ -85,9 +85,12 @@ fn new_glyph(s: &mut Session, p: &Value) -> Result<Value> {
         let index = fontcraft_model::insertion_index(font, &data, &probe);
         let layers = super::widths::new_glyph_layers(font, Some(&data), &name, &codes);
         font.add_glyph_at(index, &name, codes.clone(), width.unwrap_or(super::widths::BUILT_IN_LAYER_WIDTH))?;
+        let mut g = font.glyph_mut(&name)?;
         if width.is_none() {
-            font.glyph_mut(&name)?.layers = layers;
+            g.layers = layers;
         }
+        // `components.underscoreNameNotExported`
+        g.export = !name.starts_with('_');
         Ok(index)
     })?;
     Ok(json!({ "name": name, "index": index, "unicodes": codes.iter().map(|c| format!("{c:04X}")).collect::<Vec<_>>() }))

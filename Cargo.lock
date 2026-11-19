@@ -1523,6 +1523,7 @@ dependencies = [
 name = "fontcraft-tools"
 version = "0.0.1"
 dependencies = [
+ "fontcraft-components",
  "fontcraft-geom",
  "fontcraft-model",
  "serde",

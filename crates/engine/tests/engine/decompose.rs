@@ -284,6 +284,17 @@ fn component_from_selection_moves_mixed_shapes_on_every_master() {
 }
 
 #[test]
+fn a_part_with_an_underscore_name_does_not_export() {
+    let mut s = parts_session();
+    run(&mut s, "glyph.componentFromSelection", json!({"glyph": "B", "shapes": [0]}));
+    assert!(!s.font().unwrap().glyph("_part.B").unwrap().export, "the suggested `_part.` name makes a part");
+    run(&mut s, "glyph.componentFromSelection", json!({"glyph": "B", "shapes": [1], "name": "piece"}));
+    assert!(s.font().unwrap().glyph("piece").unwrap().export, "any other name exports");
+    run(&mut s, "glyph.newGlyph", json!({"name": "_connect"}));
+    assert!(!s.font().unwrap().glyph("_connect").unwrap().export, "New Glyph follows the same rule");
+}
+
+#[test]
 fn component_from_selection_refuses_a_taken_name() {
     let mut s = parts_session();
     let before = s.doc().unwrap().font.clone();

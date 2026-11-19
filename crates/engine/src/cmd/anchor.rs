@@ -483,13 +483,24 @@ fn align_component(s: &mut Session, p: &Params, t: &Targets, shape: usize) -> Re
 
 /// A component's origin point in its base glyph's coordinates: the base layer's `origin` anchor
 /// when it has one. Otherwise the point where the baseline meets the left sidebearing line,
-/// x = 0. On a slanted master the vertical through the slanted left sidebearing line at half the
-/// x-height is used instead; that line is slanted about half the x-height, so the vertical is
-/// x = 0 as well.
+/// x = 0. On a slanted master the left sidebearing line leans at the italic angle from the
+/// baseline at x = 0, and the origin point is on the baseline below where that line reaches half
+/// the x-height, as Align Selection slants anchors.
 fn component_origin(font: &Font, base: &str, master: &str) -> Point {
-    font.glyph(base)
+    let anchor = font
+        .glyph(base)
         .and_then(|g| g.layer(master))
         .and_then(|l| l.anchors.iter().find(|a| a.name == ORIGIN_ANCHOR))
-        .filter(|a| in_range(a.x) && in_range(a.y))
-        .map_or(Point::ZERO, |a| Point::new(a.x, a.y))
+        .filter(|a| in_range(a.x) && in_range(a.y));
+    if let Some(a) = anchor {
+        return Point::new(a.x, a.y);
+    }
+    let Ok(m) = font.master(master) else { return Point::ZERO };
+    let metrics = master_metrics(font, m);
+    let angle = metrics.italic_angle;
+    if !(angle.is_finite() && angle.abs() < MAX_ITALIC_ANGLE && metrics.x_height.is_finite()) {
+        return Point::ZERO;
+    }
+    let x = metrics.x_height / 2.0 * angle.to_radians().tan();
+    if in_range(x) { Point::new(x, 0.0) } else { Point::ZERO }
 }

@@ -281,3 +281,29 @@ fn align_selection_puts_a_component_origin_on_a_node_with_and_without_an_origin_
     .unwrap();
     refused(&mut s, "path.alignSelection", json!({"glyph": "A", "shapes": [1], "points": [[0, 2]]}), "locked");
 }
+
+#[test]
+fn on_a_slanted_master_the_component_origin_is_below_the_slanted_sidebearing_at_half_the_x_height() {
+    let mut s = component_fixture();
+    s.edit("italic", |f| {
+        let master = f.default_master()?.id.clone();
+        f.set_metric_pos(&master, metric::ITALIC_ANGLE, 10.0)?;
+        f.set_metric_pos(&master, metric::X_HEIGHT, 500.0)?;
+        Arc::make_mut(&mut f.info).settings.grid_length = Some(0.0);
+        Ok(())
+    })
+    .unwrap();
+    let target = node(s.font().unwrap(), "A", 0, 2);
+    run(&mut s, "path.alignSelection", json!({"glyph": "A", "shapes": [1], "points": [[0, 2]]}));
+    // The sidebearing line leaves the baseline at x = 0 and reaches half the x-height (250)
+    // 250 · tan 10° to the right; the origin point is on the baseline below that.
+    let origin_x = 250.0 * 10f64.to_radians().tan();
+    let (x, y) = offset(s.font().unwrap());
+    assert!((x - (target.0 - origin_x)).abs() < 1e-6 && (y - target.1).abs() < 1e-6, "({x}, {y}) for the node at {target:?}");
+
+    // An origin anchor still wins.
+    run(&mut s, "edit.undo", json!({}));
+    run(&mut s, "anchor.add", json!({"glyph": "B", "name": "origin", "x": 50, "y": 20}));
+    run(&mut s, "path.alignSelection", json!({"glyph": "A", "shapes": [1], "points": [[0, 2]]}));
+    assert_eq!(offset(s.font().unwrap()), (target.0 - 50.0, target.1 - 20.0));
+}

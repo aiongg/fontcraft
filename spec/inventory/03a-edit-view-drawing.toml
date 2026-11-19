@@ -930,7 +930,7 @@ milestone = "M3"
 summary = "Moves the selected nodes, handles, anchors or guides by an offset in font units. It is what the arrow keys run: one unit per press, 10 with Shift, 100 with Cmd; the mode follows the Option (points only) and Ctrl+Option (nudge) modifiers, and Ctrl+Option on a dragged handle of a smooth node (mirror)."
 ref = "Edit View › Moving Selected Nodes and Paths"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 13:42–13:45: dragging the two selected top nodes of a rectangle moves only them, which slants the stem. Arrow-key steps: see move.arrowKeyIncrements. `image: true` moves the layer's placed image too (M11.13b); the arrow keys send it while an image is selected, with the same steps (image.directManipulation)."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 13:42–13:45: dragging the two selected top nodes of a rectangle moves only them, which slants the stem. Arrow-key steps: see move.arrowKeyIncrements. `image: true` moves the layer's placed image too (M11.13b); the arrow keys send it while an image is selected, with the same steps (image.directManipulation). Components follow the rule of component.move: a locked component and one aligned in both directions stay, one aligned horizontally takes only the vertical part, and a move in which nothing named moves fails with a message naming the components (components.lockedCannotMove, components.autoAlignedCannotMove)."
 
 [[behavior]]
 id = "move.arrowKeyIncrements"
@@ -1359,7 +1359,10 @@ ref = "Edit View › Aligning"
 status = "handbook"
 notes = "Documented, not yet observed. Only the base glyph's own anchors on the component's master are searched for origin, not anchors propagated from its components."
 guesses = [
-  "The left sidebearing line is x = 0 of the base glyph, and on a slanted master it is slanted about half the x-height, so without an origin anchor the origin point is the base glyph's (0, 0) on every master; aligning a component on an italic master in the reference app settles it.",
+  "On a slanted master the left sidebearing line leaves the baseline at x = 0 and leans at the master's italic angle, so without an origin anchor the origin point is (x-height / 2 · tan(italic angle), 0) of the base glyph; aligning a component on an italic master in the reference app settles it.",
+]
+observe = [
+  "On a master with an italic angle of 10° and an x-height of 500, select a node and a component of a glyph without an origin anchor, run Path › Align Selection and read the component's x: is it the node's x minus 44, or the node's x?",
 ]
 
 [[behavior]]

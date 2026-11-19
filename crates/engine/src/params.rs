@@ -285,7 +285,7 @@ impl Targets {
             && self.annotations.is_empty())
     }
 
-    fn bad(&self, message: impl Into<String>) -> EngineError {
+    pub(crate) fn bad(&self, message: impl Into<String>) -> EngineError {
         EngineError::BadParams { command: self.command.into(), message: message.into() }
     }
 

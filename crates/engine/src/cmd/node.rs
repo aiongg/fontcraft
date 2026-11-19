@@ -32,7 +32,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Move",
             [],
             None,
-            "{glyph: name, layer?: id, side?: \"foreground\" | \"background\", points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: \"local\" | \"global\", index}], annotations?: [index], image?: bool, dx: number, dy: number, mode?: \"normal\" | \"pointsOnly\" | \"nudge\" | \"mirror\" (default normal), duplicate?: bool} moves what the targets name by (dx, dy) font units, within ±2,000,000. `image: true` moves the layer's placed image on that side too, unrounded; a locked image, or none, refuses it, and it cannot be duplicated. normal: the handles of moved nodes go with them, and the opposite handle of a smooth node turns to stay in line with a moved handle. pointsOnly: only the named points move, and a handle alone keeps its angle. nudge: the handles of each segment with one moved end are scaled between its ends. mirror: as normal, but the opposite handle of a smooth node takes the same length as a moved handle, at the opposite angle. A segment moves its two end nodes. duplicate: the original stays and a copy moves (part of a path is copied as open paths of its selected segments). Moved points are rounded to the grid → {selection}",
+            "{glyph: name, layer?: id, side?: \"foreground\" | \"background\", points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: \"local\" | \"global\", index}], annotations?: [index], image?: bool, dx: number, dy: number, mode?: \"normal\" | \"pointsOnly\" | \"nudge\" | \"mirror\" (default normal), duplicate?: bool} moves what the targets name by (dx, dy) font units, within ±2,000,000. `image: true` moves the layer's placed image on that side too, unrounded; a locked image, or none, refuses it, and it cannot be duplicated. normal: the handles of moved nodes go with them, and the opposite handle of a smooth node turns to stay in line with a moved handle. pointsOnly: only the named points move, and a handle alone keeps its angle. nudge: the handles of each segment with one moved end are scaled between its ends. mirror: as normal, but the opposite handle of a smooth node takes the same length as a moved handle, at the opposite angle. A segment moves its two end nodes. A locked component, or one aligned automatically, stays; one aligned only horizontally takes only dy; when nothing named moves, the command fails with a message naming the components. duplicate: the original stays and a copy moves (part of a path is copied as open paths of its selected segments). Moved points are rounded to the grid → {selection}",
             has_doc,
             selection_move
         )
@@ -392,7 +392,7 @@ fn selection_move(s: &mut Session, v: &Value) -> Result<Value> {
     }
     let step = grid(s.font()?);
     let sel = s.edit(if duplicate { "Duplicate" } else { "Move" }, |font| {
-        let sel = if t.has_lists() { moving::apply(font, &t, d, mode, duplicate, step)? } else { none_selected(&t) };
+        let sel = if t.has_lists() { moving::apply(font, &t, d, mode, duplicate, step, !image)? } else { none_selected(&t) };
         if image {
             t.edit_layer(font, |l| super::image::move_by(&p, &t, l, d))?;
         }
@@ -508,7 +508,7 @@ fn set_position(s: &mut Session, v: &Value) -> Result<Value> {
         let at = reference.of(rect);
         (Vec2::new(x.map_or(0.0, |x| x - at.x), y.map_or(0.0, |y| y - at.y)), grid(font))
     };
-    s.edit("Set Position", |font| moving::apply(font, &t, d, Mode::Normal, false, step))?;
+    s.edit("Set Position", |font| moving::apply(font, &t, d, Mode::Normal, false, step, true))?;
     Ok(json!({ "dx": d.x, "dy": d.y, "selection": t.to_json() }))
 }
 

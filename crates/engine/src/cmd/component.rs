@@ -525,7 +525,8 @@ fn split_matrix([a, b, c, d, dx, dy]: [f64; 6]) -> Option<Fields> {
 
 /// Whether moving or repositioning the component at `i` is allowed, and in which directions:
 /// `(x, y)`. Locked: neither; aligned: neither, or only y when it is aligned horizontally.
-fn free_axes(font: &Font, layer: &Layer, i: usize) -> (bool, bool) {
+/// `selection.move` follows the same rule.
+pub(crate) fn free_axes(font: &Font, layer: &Layer, i: usize) -> (bool, bool) {
     let Some(c) = component_at(layer, i) else { return (false, false) };
     if c.info.locked {
         return (false, false);

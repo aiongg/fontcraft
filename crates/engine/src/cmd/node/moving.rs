@@ -7,15 +7,19 @@
 //! | `pointsOnly` | move | stay | keep their angle: only the length changes |
 //! | `nudge` | move | the handles of each segment with one moved end are scaled per axis between the fixed end and the moved one | move |
 //! | `mirror` | move | move with them | move; the opposite handle of a smooth node takes the same length at the opposite angle (along a straight side, as `normal`) |
+//!
+//! Components follow the rule of `component.move`: a locked one stays, one aligned automatically
+//! stays, and one aligned only horizontally moves only up and down. When the targets name nothing
+//! else that moves, the command fails with a message naming the components.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use fontcraft_geom::{Point, Vec2, round_point, round_to_grid};
-use fontcraft_model::{Component, Font, LayerParts, LayerPartsMut, Node, Path, Shape, Transform};
+use fontcraft_model::{Component, Font, LayerParts, LayerPartsMut, LayerSide, Node, Path, Shape, Transform};
 
 use super::ops::{EPS, handle_owner, next, on, prev};
-use crate::params::{GuideRef, GuideScope, Targets};
+use crate::params::{GuideRef, GuideScope, ResolvedTargets, Targets};
 use crate::{EngineError, Result};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -240,20 +244,92 @@ fn shift(x: &mut f64, y: &mut f64, d: Vec2, step: f64) {
     *y = round_to_grid(*y + d.y, step);
 }
 
+/// Why a component the targets name does not move freely.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Held {
+    Locked,
+    Aligned,
+    /// Aligned horizontally: it moves only up and down.
+    AlignedHorizontally,
+}
+
+impl Held {
+    /// The offset the component takes of `d`.
+    fn offset(self, d: Vec2) -> Vec2 {
+        match self {
+            Held::Locked | Held::Aligned => Vec2::ZERO,
+            Held::AlignedHorizontally => Vec2::new(0.0, d.y),
+        }
+    }
+
+    fn message(self, shape: usize) -> String {
+        match self {
+            Held::Locked => format!("component {shape} is locked: unlock it to move it"),
+            Held::Aligned => format!("component {shape} is aligned automatically: disable its automatic alignment to move it"),
+            Held::AlignedHorizontally => format!("component {shape} is aligned horizontally: it moves only up and down"),
+        }
+    }
+}
+
+/// The components among the target's shapes that do not move freely, by shape index. Alignment
+/// applies to the foreground only; a background component is held only by its lock.
+fn held_components(font: &Font, t: &Targets, r: &ResolvedTargets<'_>) -> BTreeMap<usize, Held> {
+    let mut out = BTreeMap::new();
+    for &s in &t.shapes {
+        let Some(Shape::Component(c)) = r.parts.shapes.get(s) else { continue };
+        let held = if c.info.locked {
+            Some(Held::Locked)
+        } else if t.side == LayerSide::Foreground {
+            match crate::cmd::component::free_axes(font, r.layer, s) {
+                (true, true) => None,
+                (false, true) => Some(Held::AlignedHorizontally),
+                _ => Some(Held::Aligned),
+            }
+        } else {
+            None
+        };
+        if let Some(h) = held {
+            out.insert(s, h);
+        }
+    }
+    out
+}
+
+/// Fails when `d` moves something but none of what the targets name moves because every named
+/// thing is a held component; the message names each one.
+fn check_something_moves(t: &Targets, points: &BTreeMap<usize, BTreeSet<usize>>, held: &BTreeMap<usize, Held>, d: Vec2) -> Result<()> {
+    if held.is_empty() || d == Vec2::ZERO {
+        return Ok(());
+    }
+    let others = !points.is_empty() || !t.anchors.is_empty() || !t.guides.is_empty() || !t.annotations.is_empty();
+    let free_shape = t.shapes.iter().any(|s| held.get(s).is_none_or(|h| h.offset(d) != Vec2::ZERO));
+    if others || free_shape {
+        return Ok(());
+    }
+    let message = held.iter().map(|(&s, h)| h.message(s)).collect::<Vec<_>>().join("; ");
+    Err(t.bad(message))
+}
+
 /// Moves (or, with `duplicate`, copies and moves the copies of) what `t` names in `font` by
-/// `d`. Returns the selection afterwards: the same targets, or the copies.
-pub(super) fn apply(font: &mut Font, t: &Targets, d: Vec2, mode: Mode, duplicate: bool, step: f64) -> Result<Targets> {
-    let (master, points) = {
+/// `d`. Returns the selection afterwards: the same targets, or the copies. A move leaves locked
+/// and automatically aligned components where they are (see the module notes); `alone` says the
+/// target lists are all the command moves, so that it fails when none of them can move.
+pub(super) fn apply(font: &mut Font, t: &Targets, d: Vec2, mode: Mode, duplicate: bool, step: f64, alone: bool) -> Result<Targets> {
+    let (master, points, held) = {
         let r = t.resolve(font)?;
-        (r.master.id.clone(), points_by_shape(t, r.parts))
+        let held = if duplicate { BTreeMap::new() } else { held_components(font, t, &r) };
+        (r.master.id.clone(), points_by_shape(t, r.parts), held)
     };
+    if alone {
+        check_something_moves(t, &points, &held, d)?;
+    }
     let mut out = t.clone();
     let layer_part = t.edit_layer(font, |layer| {
         let mut parts = layer.parts_mut(t.side);
         if duplicate {
             Ok(Some(duplicate_in(&mut parts, t, &points, d, step)))
         } else {
-            move_in(&mut parts, t, &points, d, mode, step).map(|()| None)
+            move_in(&mut parts, t, &points, &held, d, mode, step).map(|()| None)
         }
     })?;
     let global: Vec<usize> = t.guides.iter().filter(|g| g.scope == GuideScope::Global).map(|g| g.index).collect();
@@ -284,15 +360,28 @@ pub(super) fn apply(font: &mut Font, t: &Targets, d: Vec2, mode: Mode, duplicate
     Ok(out)
 }
 
-fn move_in(parts: &mut LayerPartsMut, t: &Targets, points: &BTreeMap<usize, BTreeSet<usize>>, d: Vec2, mode: Mode, step: f64) -> Result<()> {
+fn move_in(
+    parts: &mut LayerPartsMut,
+    t: &Targets,
+    points: &BTreeMap<usize, BTreeSet<usize>>,
+    held: &BTreeMap<usize, Held>,
+    d: Vec2,
+    mode: Mode,
+    step: f64,
+) -> Result<()> {
     for (&s, set) in points {
         if let Some(path) = parts.path_mut(s) {
             move_path(path, set, d, mode, step);
         }
     }
     for &s in &t.shapes {
+        let by = match held.get(&s).map(|h| h.offset(d)) {
+            Some(by) if by == Vec2::ZERO => continue,
+            Some(by) => by,
+            None => d,
+        };
         if let Some(shape) = parts.shapes.get_mut(s) {
-            translate_shape(shape, d, step);
+            translate_shape(shape, by, step);
         }
     }
     for a in parts.anchors.iter_mut().filter(|a| t.anchors.contains(&a.name)) {
@@ -383,6 +472,9 @@ fn duplicate_in(parts: &mut LayerPartsMut, t: &Targets, points: &BTreeMap<usize,
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use fontcraft_model::{Alignment, Component, Shape};
     use serde_json::{Value, json};
 
     use crate::Session;
@@ -436,5 +528,81 @@ mod tests {
 
         let e = s.execute("selection.move", &json!({"glyph": "A", "points": [[0, 4]], "dx": 1, "dy": 1, "mode": "mirrored"})).unwrap_err();
         assert!(e.to_string().contains("`mode`"), "{e}");
+    }
+
+    const SQUARE: &str = r#"[{"x": 0, "y": 0}, {"x": 100, "y": 0}, {"x": 100, "y": 100}, {"x": 0, "y": 100}]"#;
+
+    /// A document whose glyph `A` holds one component of `B` (a square) with the given lock and
+    /// alignment, and nothing else.
+    fn component_session(locked: bool, alignment: Alignment) -> Session {
+        let mut s = Session::with_document();
+        let square: Value = serde_json::from_str(SQUARE).unwrap();
+        run(&mut s, "path.addPath", json!({"glyph": "B", "nodes": square}));
+        s.edit("setup", |font| {
+            let mut g = font.glyph_mut("A")?;
+            let mut c = Component::new("B", 0.0, 0.0);
+            c.info.locked = locked;
+            c.info.alignment = alignment;
+            g.layers.first_mut().unwrap().shapes.push(Shape::Component(c));
+            Ok(())
+        })
+        .unwrap();
+        s
+    }
+
+    fn component_xy(s: &Session) -> (f64, f64) {
+        let font = s.font().unwrap();
+        let master = font.default_master().unwrap().id.clone();
+        match font.glyph("A").unwrap().layer(&master).unwrap().shapes.first() {
+            Some(Shape::Component(c)) => {
+                let a = c.transform.affine().as_coeffs();
+                (a[4], a[5])
+            }
+            other => panic!("not a component: {other:?}"),
+        }
+    }
+
+    fn refused(s: &mut Session, p: Value) -> String {
+        let before = s.doc().unwrap().font.clone();
+        let e = s.execute("selection.move", &p).unwrap_err().to_string();
+        assert!(Arc::ptr_eq(&before, &s.doc().unwrap().font), "a refused move changes nothing: {e}");
+        e
+    }
+
+    #[test]
+    fn arrow_keys_leave_a_locked_component_and_move_the_rest() {
+        let mut s = component_session(true, Alignment::Disabled);
+        let e = refused(&mut s, json!({"glyph": "A", "shapes": [0], "dx": 10, "dy": 0}));
+        assert!(e.contains("component 0 is locked"), "{e}");
+
+        // With a path beside it, the path moves and the component stays.
+        let square: Value = serde_json::from_str(SQUARE).unwrap();
+        run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": square}));
+        let at = component_xy(&s);
+        run(&mut s, "selection.move", json!({"glyph": "A", "shapes": [0, 1], "dx": 10, "dy": 0}));
+        assert_eq!(component_xy(&s), at, "the locked component stays");
+        assert_eq!(xy(&s)[0], (10.0, 0.0), "the path moves");
+
+        // A copy is made all the same: the original stays where it is.
+        run(&mut s, "selection.move", json!({"glyph": "A", "shapes": [0], "dx": 10, "dy": 0, "duplicate": true}));
+        assert_eq!(component_xy(&s), at);
+    }
+
+    #[test]
+    fn arrow_keys_move_an_aligned_component_only_on_its_free_axis() {
+        // Alone on the layer with the default alignment: aligned in both directions.
+        let mut s = component_session(false, Alignment::Default);
+        let e = refused(&mut s, json!({"glyph": "A", "shapes": [0], "dx": 10, "dy": 10}));
+        assert!(e.contains("aligned automatically"), "{e}");
+
+        let mut s = component_session(false, Alignment::Horizontal);
+        let (x, y) = component_xy(&s);
+        run(&mut s, "selection.move", json!({"glyph": "A", "shapes": [0], "dx": 10, "dy": 20}));
+        assert_eq!(component_xy(&s), (x, y + 20.0), "only y changes");
+        let e = refused(&mut s, json!({"glyph": "A", "shapes": [0], "dx": 10, "dy": 0}));
+        assert!(e.contains("moves only up and down"), "{e}");
+        // selection.setPosition follows the same rule.
+        run(&mut s, "selection.setPosition", json!({"glyph": "A", "shapes": [0], "x": 500, "y": 300}));
+        assert_eq!(component_xy(&s), (x, 300.0));
     }
 }

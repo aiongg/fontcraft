@@ -1,7 +1,7 @@
 //! Behaviour tests: gestures in, actions out.
 
 use fontcraft_geom::{BezPath, Point};
-use fontcraft_model::{Anchor, Component, Font, Guide, Layer, Node, NodeKind, Path, Shape};
+use fontcraft_model::{Alignment, Anchor, Component, Font, Guide, Layer, Node, NodeKind, Path, Shape};
 use serde_json::{Value, json};
 
 use crate::event::PointerKind::{DoubleClick, Down, Drag, Move, Up};
@@ -519,7 +519,10 @@ fn hand_pans_and_zoom_zooms() {
 fn components_are_hit_inside_their_outline_and_move_as_shapes() {
     let mut font = Font::new("Test");
     font.glyph_mut("B").unwrap().layer_mut("m01").unwrap().shapes.push(Shape::Path(Path::rect(0.0, 0.0, 100.0, 100.0)));
-    font.glyph_mut("A").unwrap().layer_mut("m01").unwrap().shapes.push(Shape::Component(Component::new("B", 200.0, 0.0)));
+    let mut c = Component::new("B", 200.0, 0.0);
+    // Alone on the layer, the component would be aligned automatically and could not be dragged.
+    c.info.alignment = Alignment::Disabled;
+    font.glyph_mut("A").unwrap().layer_mut("m01").unwrap().shapes.push(Shape::Component(c));
     let scene = Scene::from_font(&font, "A", None).unwrap();
     assert_eq!(scene.components().len(), 1);
     let view = View::default();
@@ -549,6 +552,48 @@ fn components_are_hit_inside_their_outline_and_move_as_shapes() {
         })
         .unwrap();
     assert_eq!(last.params, json!({"glyph": "A", "layer": "m01", "shapes": [0], "dx": 10.0, "dy": 20.0}));
+}
+
+/// Drags a component of glyph `A` from inside its outline and returns the actions.
+fn drag_component(scene: &Scene) -> Vec<Action> {
+    let selection = Selection::from_items([Item::Shape(0)]);
+    let cx = Context { scene, view: View::default(), selection: &selection, settings: ToolSettings::default() };
+    let mut t = SelectTool::default();
+    let mut actions = Vec::new();
+    for e in [ev(Down, 250.0, 50.0, NONE), ev(Drag, 260.0, 70.0, Modifiers::CTRL), ev(Up, 260.0, 70.0, Modifiers::CTRL)] {
+        actions.extend(t.pointer(&cx, &e).actions);
+    }
+    actions
+}
+
+#[test]
+fn locked_and_fully_aligned_components_are_not_dragged() {
+    // A font whose glyph `A` holds one component of `B` (a 100-unit square) at x 200.
+    let font_with = |alignment: Alignment, locked: bool| {
+        let mut font = Font::new("Test");
+        font.glyph_mut("B").unwrap().layer_mut("m01").unwrap().shapes.push(Shape::Path(Path::rect(0.0, 0.0, 100.0, 100.0)));
+        let mut c = Component::new("B", 200.0, 0.0);
+        c.info.alignment = alignment;
+        c.info.locked = locked;
+        font.glyph_mut("A").unwrap().layer_mut("m01").unwrap().shapes.push(Shape::Component(c));
+        font
+    };
+    let moves = |a: &Action| matches!(a, Action::Begin { .. } | Action::Preview { .. } | Action::Run { .. });
+
+    // Alone on the layer, with the default alignment: aligned in both directions.
+    let font = font_with(Alignment::Default, false);
+    let scene = Scene::from_font(&font, "A", None).unwrap();
+    assert!(hit_test(&scene, &View::default(), Point::new(250.0, 50.0), 6.0).unwrap().locked);
+    assert!(!drag_component(&scene).iter().any(moves), "an aligned component stays put");
+
+    let font = font_with(Alignment::Disabled, true);
+    let scene = Scene::from_font(&font, "A", None).unwrap();
+    assert!(!drag_component(&scene).iter().any(moves), "a locked component stays put");
+
+    // Aligned horizontally only: the drag goes ahead, and `selection.move` keeps its x.
+    let font = font_with(Alignment::Horizontal, false);
+    let scene = Scene::from_font(&font, "A", None).unwrap();
+    assert!(drag_component(&scene).iter().any(|a| matches!(a, Action::Preview { invocation } if invocation.id == "selection.move")));
 }
 
 #[test]
