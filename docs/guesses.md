@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2956 guesses on 1562 rows (635 of them live commands).**
+**2969 guesses on 1565 rows (636 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -183,6 +183,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `view.zoomIn` | M3 | handbook | yes | One step multiplies the scale by √2, and the zoom value stays between 50 and 64,000 (03b question 8). |
 | `view.zoomToActiveLayer` | M3 | handbook | yes | The descender-to-ascender span, or the advance width when that is the tighter limit, fills the window less 8% on each side. |
 | `view.zoomToRect` | M3 | inferred | yes | The rectangle fills the window less 8% on each side, the margin of Zoom to Active Layer. |
+| `view.showExtraNodes` | M3 | handbook | yes | Extra Nodes are drawn as small hollow rings in their own colour; the handbook shows them but names no style. Settled by turning the toggle on in the reference over two crossing rectangles. |
 | `view.showHints` | M10 | handbook | yes | Show Hints starts off in a new window; the reference app would settle its default. |
 | `view.showAnchors` | M6 | handbook | yes | Show Anchors is on by default; the View menu of a fresh install of the reference app settles it. |
 | `view.showImage` | M11 | handbook | yes | Show Image is on in a new window. Settled by opening a file with a placed image in a fresh reference installation and reading the View menu. |
@@ -472,6 +473,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `glyph.decomposeGlyphForAllMasters` | M6 | handbook | yes | Only master layers are decomposed; intermediate and alternate layers keep their components. A composite with a brace layer in the reference app settles it. |
 | `path.convertToQuadratic` | M3 | handbook | yes | New off-curve points are rounded to the grid. |
 | `path.convertToQuadratic` | M3 | handbook | yes | With allMasters, master layers with the same node structure are converted together (one spline length for all), so they stay compatible. |
+| `fontView.keyboard` (behavior) | M4 | inferred | – | Each key above behaves as in a file browser's icon view. Settled by pressing them in the reference's Font View. |
+| `fontView.keyboard` (behavior) | M4 | inferred | – | Plus comes before minus at the bottom left. Settled by looking at the reference's Font View. |
+| `fontView.keyboard` (behavior) | M4 | inferred | – | Minus is greyed out with no selection. Settled by looking at the reference with nothing selected. |
 | `fontView.cell.followsMaster` (behavior) | M4 | handbook | – | Font View's master is its own: choosing a master in a tab does not change it, and a tab opened from Font View starts in it. Settled by observation. |
 | `fontView.cell.followsMaster` (behavior) | M4 | handbook | – | Each document window keeps its own selected master, as each font has its own window in the reference app; switching between two open fonts there would settle it. |
 | `fontView.cell.contentBySize` (behavior) | M4 | handbook | – | Names and Unicode markers show from a cell size of 64 points up. Settled by observation. |
@@ -1835,6 +1839,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `settings.addons` (panel) | M13 | handbook | – | The section is called Extensions, because FontCraft has no add-on kinds that need Python; the reference calls it Addons. |
 | `appearance.displayUnicodeValue` (setting) | M4 | handbook | – | On shows the code point, off the small marker, as the handbook's wording implies. Settled by observation. |
 | `appearance.displayUnicodeValue` (setting) | M4 | handbook | – | Off by default (the small marker), as the handbook gives no default. Settled by observing a fresh install. |
+| `appearance.handleSize` (setting) | M14 | handbook | – | Three steps, small, regular and large, at 0.75, 1 and 1.5 times the regular sizes; the handbook lists no steps. Settled by opening the reference's Appearance settings and measuring a node at each step. |
+| `appearance.handleSize` (setting) | M14 | handbook | – | The appearance colour settings default to the canvas colours FontCraft drew before they existed, the same value for light and dark; the handbook states no defaults. Settled by reading the reference's colour wells after Standard. |
 | `user.disableLocalization` (setting) | M14 | handbook | – | Disable Localization is stored and does nothing, because FontCraft has no translations yet. |
 | `user.useVersions` (setting) | M14 | handbook | – | Use Versions is stored and does nothing, because the system's version browser is a macOS service FontCraft does not use. |
 | `user.sendCrashReports` (setting) | M14 | handbook | – | Send Crash Reports and its two contact fields are stored and do nothing, because FontCraft has no crash-report service. |
@@ -2104,6 +2110,13 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `dump` (cli) | M12 | docs | – | kern=pairs lists the pairs a format 0 subtable counts and leaves out the sentinel pair spot prints after them when the subtable has room for one (spot reads it as data); subtables of formats 2 and 3 print nothing. A spot that does not crash on the test table would settle the sentinel. |
 | `dump` (cli) | M12 | docs | – | cmap listings of format 2 and 13 subtables print the mappings as fontTools reads them (glyph 0 left out), and formats 8 and 10 print only their header lines, where spot stops with an error on 13, 8 and 10; spot on a format 2 font would settle that one. |
 | `dump` (cli) | M12 | docs | – | In the hmtx listings a font with fewer side bearings than glyphs stops at the last one the table holds, where spot reads past the table. |
+| `dump` (cli) | M12 | docs | – | --unicode-data takes the names only from the file given: without one the cmap comments are left out, where ttx writes the names of Python's own Unicode database, and unicodeData true is refused because no names are bundled; bundling a name table would settle whether the comments should be written by default. |
+| `dump` (cli) | M12 | docs | – | Lines of a UnicodeData file that ttx stops on with a Python error (no semicolon, an empty name, a first field that is not hex) are skipped; a ttx that reads such files would settle it. |
+| `dump` (cli) | M12 | docs | – | --names, --goadb, --fd, --exclude-fd and --flatten-seac apply to @glyphs only and are refused with the TTX dump, other views and --normalize; tx -gf also renames the glyphs of its other outputs, which dump does not write. |
+| `dump` (cli) | M12 | docs | – | --glyphs and --exclude-glyphs select @glyphs by the names shown after --goadb maps them; tx run with -gf and -g together would settle which names -g matches. |
+| `dump` (cli) | M12 | docs | – | --fd takes several font dicts where tx -fd takes one, and takes CFF2 fonts as well as CID-keyed CFF ones; tx -fd on a CFF2 font would settle the second. |
+| `dump` (cli) | M12 | docs | – | --flatten-seac shows the base glyph's hints even when the seac glyph has stems of its own, and the seac form leaves such stems out; tx -dump -6 with and without -d on a seac glyph with its own stems would settle it. |
+| `dump` (cli) | M12 | docs | – | An avar version 2 table without a variation store prints its segment maps and no mappings, where fontTools stops with an error. |
 | `info` (cli) | M1 | docs | – | The text layout (path line, indented key: value lines, field=value lines for records, yes/no for flags) is ours; no reference prints this summary, so a user preference would settle it. |
 | `tables list` (cli) | M1 | docs | – | The header line above the rows (path, format, sfnt version, table count) is ours; ttx -l prints a Listing table info line and spot -T the offset table fields. |
 | `tables copy` (cli) | M12 | inferred | – | Copying a table the target already has replaces it without a prompt, as tables add does; a test against the reference workflow (sfntedit extract then add) shows the same result. |

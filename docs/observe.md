@@ -32,23 +32,23 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1461 rows to check: 2493 guesses and 588 observe steps.**
+**1464 rows to check: 2499 guesses and 590 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **520** |
-| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 112 |
+| **Built milestones (M0 to M6)** | all | **522** |
+| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 113 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
 | Built milestones (M0 to M6) | Filters | 36 |
 | Built milestones (M0 to M6) | Spacing and metrics keys | 23 |
 | Built milestones (M0 to M6) | Kerning and the Kerning window | 42 |
-| Built milestones (M0 to M6) | Font View | 110 |
+| Built milestones (M0 to M6) | Font View | 111 |
 | Built milestones (M0 to M6) | Font Info and features | 20 |
 | Built milestones (M0 to M6) | Files: open, import, export | 48 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **941** |
+| **Later milestones (after M6)** | all | **942** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 86 |
 | Later milestones (after M6) | Edit View: text mode and preview | 27 |
 | Later milestones (after M6) | Components and anchors | 43 |
@@ -61,13 +61,13 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Hinting | 110 |
 | Later milestones (after M6) | Colour fonts | 68 |
 | Later milestones (after M6) | Files: open, import, export | 68 |
-| Later milestones (after M6) | Settings and the window | 25 |
+| Later milestones (after M6) | Settings and the window | 26 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
-## Built milestones (M0 to M6) (520)
+## Built milestones (M0 to M6) (522)
 
-### Edit View: drawing, guides, layers and the Palette (112)
+### Edit View: drawing, guides, layers and the Palette (113)
 
 - [ ] `dialog.fieldKeys` (behavior, M3, inferred): In a dialog's number field, Return takes the typed value, Escape drops…
   - Guess: Dialog number fields follow the Info box's editing and arrow-key rules (infoBox.fieldEditing, infoBox.arrowKeyStepping); the handbook documents them for the Info box only.
@@ -250,6 +250,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The descender-to-ascender span, or the advance width when that is the tighter limit, fills the window less 8% on each side.
 - [ ] `view.zoomToRect` (M3, inferred, live): Zoom to Rectangle
   - Guess: The rectangle fills the window less 8% on each side, the margin of Zoom to Active Layer.
+- [ ] `view.showExtraNodes` (M3, handbook, live): Extra Nodes
+  - Guess: Extra Nodes are drawn as small hollow rings in their own colour; the handbook shows them but names no style. Settled by turning the toggle on in the reference over two crossing rectangles.
 - [ ] `path.editBackground` (M3, handbook, live): Edit Background
   - Guess: The edited side belongs to the tab and stays when another glyph, layer or master is edited.
   - Guess: Audit markers are not drawn on the background.
@@ -989,7 +991,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Overwrite is the default button that Return presses; the warning in the reference app settles it.
   - Guess: The warning lists the conflicting pairs with the pasted and the current value; the handbook names no list, and a screenshot of the warning settles it.
 
-### Font View (110)
+### Font View (111)
 
 - [ ] `import.keepGlyphNames` (behavior, M1, handbook): When a compiled OTF or TTF is opened with the user setting…
   - Guess: The glyphOrder parameter is added whatever the setting says, following the Opening Font Files page rather than the Glyph Order page, which ties it to the setting; opening a TTF with the setting off would settle it.
@@ -1008,6 +1010,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `path.convertToQuadratic` (M3, handbook, live): Convert to Quadratic
   - Guess: New off-curve points are rounded to the grid.
   - Guess: With allMasters, master layers with the same node structure are converted together (one spline length for all), so they stay compatible.
+- [ ] `fontView.keyboard` (behavior, M4, inferred): While Font View has the keyboard and no text field is active,…
+  - Guess: Each key above behaves as in a file browser's icon view. Settled by pressing them in the reference's Font View.
+  - Guess: Plus comes before minus at the bottom left. Settled by looking at the reference's Font View.
+  - Guess: Minus is greyed out with no selection. Settled by looking at the reference with nothing selected.
+  - Observe: In Font View press the arrows, Shift with an arrow, Home, End and Return, and note how the selection moves and what opens.
+  - Observe: Click the plus and minus buttons at the bottom left of Font View, with and without a selection.
 - [ ] `fontView.cell.followsMaster` (behavior, M4, handbook): Every grid cell draws the glyph's layer for the master currently selected…
   - Guess: Font View's master is its own: choosing a master in a tab does not change it, and a tab opened from Font View starts in it. Settled by observation.
   - Guess: Each document window keeps its own selected master, as each font has its own window in the reference app; switching between two open fonts there would settle it.
@@ -1552,7 +1560,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (941)
+## Later milestones (after M6) (942)
 
 ### Edit View: drawing, guides, layers and the Palette (86)
 
@@ -4428,7 +4436,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Every item starts ticked, so Accept Selected with no change of the ticks takes everything; the reference's manual does not say which state the ticks start in, and opening the window there settles it.
   - Guess: The stored-text view on double-click shows the glyph in FontCraft's native JSON form rather than as a .glif file, since the comparison is between models; the reference shows the file text, and a file-per-glyph text view would follow it more closely.
 
-### Settings and the window (25)
+### Settings and the window (26)
 
 - [ ] `sharing.confirmConnectionOnHost` (behavior, M13, handbook): A first connection attempt from a device must be confirmed on the…
   - Guess: Devices are known by their IP address, so a device that gets a new address must be confirmed again; what the reference keys them by is not documented.
@@ -4496,6 +4504,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Every checkbox is off by default; the handbook gives no defaults.
   - Observe: On a fresh install, open Settings › User Settings and note which checkboxes are on.
   - Observe: Note the labels of the two crash-report contact fields.
+- [ ] `appearance.handleSize` (setting, M14, handbook): Handle size
+  - Guess: Three steps, small, regular and large, at 0.75, 1 and 1.5 times the regular sizes; the handbook lists no steps. Settled by opening the reference's Appearance settings and measuring a node at each step.
+  - Guess: The appearance colour settings default to the canvas colours FontCraft drew before they existed, the same value for light and dark; the handbook states no defaults. Settled by reading the reference's colour wells after Standard.
 - [ ] `user.disableLocalization` (setting, M14, handbook): Disable Localization
   - Guess: Disable Localization is stored and does nothing, because FontCraft has no translations yet.
 - [ ] `user.useVersions` (setting, M14, handbook): Use Versions
