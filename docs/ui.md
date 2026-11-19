@@ -171,7 +171,8 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   (below).
 - **Control channel.** `control::dispatch(app, method, params)` looks the method up in
   `control::MODULES`. A method that changes the engine runs it through `FontCraftApp::run_now`,
-  the path `drain` takes, and returns the command's result. A package whose methods are not built
+  the path `drain` takes, and returns the command's result; `engine.execute` uses
+  `FontCraftApp::run_request`, a run of `Origin::Control`, after which no follow-up question opens. A package whose methods are not built
   yet is in `control::LATER`, which names it in the error; the package removes its line when it adds
   its module. `ui.inspect` keys come from `control::INSPECT`, `ui.set` switches from
   `control::SWITCHES`, one line per package each. `ui.click {id}` runs `ui.dialog.click`.
@@ -238,7 +239,7 @@ How it runs:
 |---|---|
 | `form.rs` | `FontCraftApp::dialogs.open`: the open dialog. `open`, `set`, `confirm`, `cancel`, `click`, `key`, `type_text`, `switch_tab`, `run_action`, `inspect`. With `drain`, the only code that drives the engine: the interaction (`begin`, `preview`, `commit`, `cancel`) and OK's run, whose result decides whether the dialog stays open |
 | `host.rs` | `SpecDialog` on the window's `DialogHost`: shows the app's dialog, refreshes it when its revision moves, and turns what the person does into the same `form.rs` calls |
-| `after.rs` | a command the person fires with no parameters opens its dialog (`FontCraftApp::output`); a follow-up opens after its command ran in `drain` or from a run-on-OK OK |
+| `after.rs` | a command the person fires with no parameters opens its dialog on the targets `FontCraftApp::with_targets` gives it (`FontCraftApp::fire`); a follow-up opens after the person's run of its command (`Origin::Person`, in `drain`) or from a run-on-OK OK |
 | `control/dialogs.rs` | `ui.dialog.inspect`, `set`, `confirm`, `cancel`, `click {id}`, `key {key, shift?}`, `text {text}`. `ui.click {id}`, `ui.key` and `ui.text` hand dialog input to `click`, `key` and `text` |
 
 In the window the dialog has the keys of craft's `FormDialog`: Enter is OK unless the focused
