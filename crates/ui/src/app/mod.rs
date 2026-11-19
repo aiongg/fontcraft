@@ -46,6 +46,8 @@ pub struct ViewState {
     pub workspace: Workspace<PanelId>,
     /// The document canvas's view.
     pub canvas: CanvasView,
+    /// The current master, the active layer and the Layers panel's state.
+    pub layers: crate::shell::masters::LayersView,
 }
 
 impl Default for ViewState {
@@ -56,6 +58,7 @@ impl Default for ViewState {
             glyph: None,
             workspace: dock::default_workspace(),
             canvas: CanvasView::new(egui::Rect::NOTHING, Point::ZERO, 1.0),
+            layers: Default::default(),
         }
     }
 }
@@ -164,6 +167,8 @@ impl FontCraftApp {
                     }
                 }
                 Msg::Shell(command) => {
+                    // Shell commands change view state, which projections read.
+                    self.view_revision += 1;
                     if let Err(error) = crate::shell::commands::run(self, &command) {
                         failed.push(format!("{}: {error}", command.id));
                     }
@@ -199,6 +204,7 @@ impl FontCraftApp {
             ViewMsg::ToolsLastUsed(last_used) => self.view.tools_last_used = last_used,
             ViewMsg::SelectGlyph(glyph) => self.view.glyph = Some(glyph),
             ViewMsg::TogglePanel(panel) => dock::toggle(&mut self.view.workspace, panel),
+            ViewMsg::LayerMenu(row) => self.view.layers.menu_row = row,
         }
     }
 

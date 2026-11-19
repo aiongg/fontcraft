@@ -28,6 +28,8 @@ pub enum ViewMsg {
     SelectGlyph(String),
     /// Show or hide a panel.
     TogglePanel(PanelId),
+    /// The Layers row whose context menu is open; `None` when it closed.
+    LayerMenu(Option<String>),
 }
 
 impl Msg {

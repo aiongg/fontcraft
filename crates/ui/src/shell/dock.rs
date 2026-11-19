@@ -276,6 +276,7 @@ impl DockPanels<PanelId> for Panels<'_> {
             PanelId::GlyphMetrics => {
                 panels::glyph_metrics::show(ui, panels::glyph_metrics::Props { model: &self.models.glyph_metrics, sent: self.sent });
             }
+            PanelId::Layers => panels::layers::show(ui, panels::layers::Props { model: &self.models.layers, sent: self.sent }),
             // Drawn by `group_view`.
             PanelId::Document => {}
             other => panels::stub::show(ui, panels::stub::Props { title: other.title(&self.words) }),

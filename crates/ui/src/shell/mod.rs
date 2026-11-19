@@ -5,6 +5,7 @@
 pub mod bars;
 pub mod commands;
 pub mod dock;
+pub mod masters;
 pub mod rail;
 pub mod window;
 
