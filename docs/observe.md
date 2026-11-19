@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1459 rows to check: 2491 guesses and 588 observe steps.**
+**1461 rows to check: 2493 guesses and 588 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 48 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **939** |
+| **Later milestones (after M6)** | all | **941** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 86 |
 | Later milestones (after M6) | Edit View: text mode and preview | 27 |
 | Later milestones (after M6) | Components and anchors | 43 |
@@ -58,7 +58,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Font View | 19 |
 | Later milestones (after M6) | Font Info and features | 290 |
 | Later milestones (after M6) | Interpolation | 86 |
-| Later milestones (after M6) | Hinting | 108 |
+| Later milestones (after M6) | Hinting | 110 |
 | Later milestones (after M6) | Colour fonts | 68 |
 | Later milestones (after M6) | Files: open, import, export | 68 |
 | Later milestones (after M6) | Settings and the window | 25 |
@@ -1552,7 +1552,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (939)
+## Later milestones (after M6) (941)
 
 ### Edit View: drawing, guides, layers and the Palette (86)
 
@@ -3520,7 +3520,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Edits collect in a draft that Apply writes, rather than each edit changing the font at once; watching the secondary reference's undo after editing a card would settle it.
   - Guess: A new mapping starts with no axis ticked and each value at the default master's location; the secondary reference's new card would settle it.
 
-### Hinting (108)
+### Hinting (110)
 
 - [ ] `hinting.ps.standardStems.privateDictMapping` (behavior, M10, docs): At export the first horizontal stem becomes StdHW and the first vertical…
   - Guess: More than twelve stems in one direction: the export writes the first twelve in list order and warns, and hint.ps.validateFontHints reports it; an export from the reference app with thirteen stems would settle it.
@@ -3606,6 +3606,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Identical zones are merged before the autohinter reads them: glyphsLib's mapping (and FontCraft's Private dict) keeps duplicates, which otfautohint rejects as overlapping zones (Oswald Italic, ascender equal to cap height); the export still writes the Private dict as fontmake does.
 - [ ] `autohint.ps.overlapCorrection` (behavior, M10, docs): The hinter can hint glyphs that still contain overlapping contours roughly as…
   - Guess: FontCraft treats a glyph as overlapping when its path operations change the outline, where otfautohint asks whether any point of its flattened outline disappeared; the two differ on a cross of two bars whose corners all lie outside the other bar (overlapping here, not there), and comparing both autohinters on such glyphs would settle which to follow.
+- [ ] `autohint.ps.writeToDefaultLayer` (behavior, M10, docs): For UFO input the hinter writes results into a separate processed layer…
+  - Guess: The autohint CLI writes hints to the default layer without -w, where otfautohint writes them to com.adobe.type.processedglyphs; a source keeps its hints with its outlines, and a user who needs the processed layer would show whether it is worth building.
+- [ ] `autohint.ps.allowChanges` (behavior, M10, docs): With -c (--allow-changes) the hinter may alter outlines to hint better: it…
+  - Guess: With allowChanges the changed outline only guides the autohinter: the stems it finds are stored and the layers' outlines stay as they were, since a source stores stems and an export builds the hint masks from them; otfautohint writes the reordered contours into the font. Comparing contour order in a font hinted by otfautohint -c with FontCraft's output would show what that changes.
 - [ ] `autohint.ps.variable.keepConflicts` (behavior, M10, docs): Option -k (--keep-conflicts) keeps a stem whose order inverts against another stem…
   - Guess: The search that picks which conflicting stems to remove tries both choices for each conflict, as otfautohint does, but only for its first 4,096 steps; after that it keeps the first choice, so a glyph with that many order conflicts across masters can lose different stems than otfautohint would. Hinting such a glyph with otfautohint would show whether the limit is ever reached in practice.
 - [ ] `hint.ps.autohintGlyph` (M10, handbook, live): Autohint
