@@ -33,7 +33,8 @@ const USAGE: &str = "\
       hints are left alone unless --all. Each output is INPUT.autohinted.EXT unless -o (one
       per input, comma-separated), --output-dir or --in-place says otherwise. In a compiled
       CFF font (OTF) every glyph's charstring is hinted again, as with --all, and the font is
-      written with its other tables unchanged. A compiled TrueType font can only be analysed
+      written with its other tables unchanged; the overlap options change its hints, never its
+      outlines. A compiled TrueType font can only be analysed
       (--report-only): to hint one, autohint its source, or export it with autohinting on.
   fontcraft-cli autohint INPUT --print-list-fddict | --print-all-fddict [--fontinfo-file FILE]
       List the zone-and-stem sets in effect and the glyphs each one hints, without hinting.
@@ -493,13 +494,12 @@ fn hint_one(
 
 /// Hints the charstrings of the compiled CFF font `input` with `autohint.ps.runFont`, which writes
 /// the font to `target` with its other tables unchanged. As otfautohint does for a compiled font,
-/// every glyph is hinted again whatever --all says.
+/// every glyph is hinted again whatever --all says, and the overlap options pick the glyphs
+/// hinted against their overlap-free outline (a compiled font has one master, so without them
+/// none is).
 fn hint_compiled(parsed: &Parsed, input: &str, target: &Target, shared: &Map<String, Value>, extra: &Extra, write: bool) -> Result<Done, Failure> {
-    if extra.overlaps.is_some() {
-        return Err(Failure::Failed(format!("{input}: hinting a compiled font on its overlap-free outline is not built yet")));
-    }
     let mut params = Map::new();
-    for key in ["flex", "hintSubstitution", "allowChanges", "decimal", "maxSegments", "overlap"] {
+    for key in ["flex", "hintSubstitution", "allowChanges", "decimal", "maxSegments", "overlap", "looseOverlapMapping"] {
         if let Some(v) = shared.get(key) {
             params.insert(key.into(), v.clone());
         }
@@ -510,12 +510,18 @@ fn hint_compiled(parsed: &Parsed, input: &str, target: &Target, shared: &Map<Str
         let n: u32 = face.parse().map_err(|_| usage(format!("--face takes a font number, not `{face}`")))?;
         params.insert("face".into(), json!(n));
     }
-    if let Some(sel) = extra.selection {
+    if extra.selection.is_some() || extra.overlaps.is_some() {
         // Selectors resolve against the glyph order and names the font opens with.
         let mut session = Session::new();
         open(&mut session, input, parsed.value("face"))?;
-        let (key, names) = sel.resolve(&mut session, input)?;
-        params.insert(key.into(), json!(names));
+        if let Some(sel) = extra.selection {
+            let (key, names) = sel.resolve(&mut session, input)?;
+            params.insert(key.into(), json!(names));
+        }
+        if let Some(sel) = extra.overlaps {
+            let (_, names) = sel.resolve(&mut session, input)?;
+            params.insert("overlapGlyphs".into(), json!(names));
+        }
     }
     if let Some(text) = extra.fontinfo.map(|f| f.text_for(input)).transpose()?.flatten() {
         params.insert("fontinfo".into(), json!(text));

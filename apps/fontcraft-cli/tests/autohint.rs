@@ -310,9 +310,14 @@ fn autohint_hints_the_charstrings_of_a_compiled_cff_font() {
     assert!(stdout.lines().any(|l| l.starts_with("l:")), "{stdout}");
     assert!(!elsewhere.exists());
 
-    // Overlap removal is not offered on a compiled font yet.
-    let (code, _, stderr) = cli(&["autohint", &otf, "--force-overlap", "-o", &elsewhere.to_string_lossy()]);
-    assert_ne!(code, 0);
-    assert!(stderr.contains("overlap"), "{stderr}");
-    assert!(!elsewhere.exists());
+    // The overlap options hint against the overlap-free outline and write the font.
+    let (code, stdout, stderr) = cli(&["autohint", &otf, "--force-overlap", "-o", &elsewhere.to_string_lossy(), "--json"]);
+    assert_eq!(code, 0, "{stderr}");
+    let line: Value = serde_json::from_str(stdout.trim()).unwrap();
+    assert!(line["result"]["hinted"].as_array().unwrap().iter().any(|h| h["glyph"] == "l"), "{line}");
+    assert!(elsewhere.exists());
+    let listed = dir.join("Listed.otf");
+    let (code, _, stderr) = cli(&["autohint", &otf, "--overlap-glyphs", "l", "-o", &listed.to_string_lossy()]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(listed.exists());
 }

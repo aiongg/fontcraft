@@ -146,7 +146,7 @@ fn autohint_ps_run_font_hints_an_otf_as_the_export_does_and_keeps_the_rest() {
     let refused = dir.join("Refused.otf");
     for bad in [
         json!({"font": plain, "output": refused, "glyphs": ["nope"]}),
-        json!({"font": plain, "output": refused, "overlap": "all"}),
+        json!({"font": plain, "output": refused, "overlap": "some"}),
         json!({"font": plain, "output": refused, "maxSegments": 0}),
         json!({"font": dir.join("missing.otf"), "output": refused}),
     ] {
@@ -166,5 +166,53 @@ fn autohint_ps_run_font_refuses_a_truetype_font() {
     std::fs::write(ttf, bytes).unwrap();
     let e = s.execute("autohint.ps.runFont", &json!({"font": ttf})).unwrap_err().to_string();
     assert!(e.contains("CFF"), "{e}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Every stem command of a glyph's charstring, sorted.
+fn stems(cmds: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = cmds.iter().filter(|c| c.contains("stem")).cloned().collect();
+    out.sort();
+    out
+}
+
+#[test]
+fn autohint_ps_run_font_hints_an_overlapping_glyph_on_its_overlap_free_outline() {
+    let dir = scratch("overlap");
+    let mut s = session();
+    // `l` as two overlapping stems, 100 to 180 and 140 to 220: one stem 100 to 220 once the
+    // overlap is removed.
+    s.edit("overlap", |font| {
+        let n = |x, y| Node::new(x, y, NodeKind::Line);
+        let rect = |x0: f64, x1: f64| Shape::Path(ModelPath::new(true, vec![n(x0, 0.0), n(x1, 0.0), n(x1, 700.0), n(x0, 700.0)]));
+        font.glyph_mut("l")?.layer_mut("m01").unwrap().shapes = vec![rect(100.0, 180.0), rect(140.0, 220.0)];
+        Ok(())
+    })
+    .unwrap();
+    let export_kept = |s: &mut Session| {
+        let r = s.execute("file.exportStatic", &json!({"outlines": "cff", "autohint": false, "removeOverlap": false, "timestamp": 0})).unwrap();
+        base64::engine::general_purpose::STANDARD.decode(r["fonts"][0]["files"][0]["dataBase64"].as_str().unwrap()).unwrap()
+    };
+    let plain = dir.join("Overlap.otf");
+    std::fs::write(&plain, export_kept(&mut s)).unwrap();
+    let before = std::fs::read(&plain).unwrap();
+    assert_eq!(glyph_commands(&before, 'l').iter().filter(|c| c.starts_with("M ")).count(), 2, "the export keeps both contours");
+
+    let forced = dir.join("Forced.otf");
+    let r = run(&mut s, json!({"font": plain, "output": forced, "overlap": "all"}));
+    assert!(r["hinted"].as_array().unwrap().iter().any(|h| h["glyph"] == "l"), "{r}");
+    let ours = glyph_commands(&std::fs::read(&forced).unwrap(), 'l');
+    assert_eq!(outline(&ours), outline(&glyph_commands(&before, 'l')), "only the hints change");
+
+    // The stems the source autohinter stores with overlap handling on, written by an export.
+    s.execute("autohint.ps.run", &json!({"glyphs": ["l"], "overlap": "all", "hintAll": true})).unwrap();
+    let source = glyph_commands(&export_kept(&mut s), 'l');
+    assert!(!stems(&source).is_empty(), "{source:?}");
+    assert_eq!(stems(&ours), stems(&source));
+
+    // Naming the glyph in overlapGlyphs hints it the same way.
+    let listed = dir.join("Listed.otf");
+    run(&mut s, json!({"font": plain, "output": listed, "overlapGlyphs": ["l"]}));
+    assert_eq!(glyph_commands(&std::fs::read(&listed).unwrap(), 'l'), ours);
     let _ = std::fs::remove_dir_all(&dir);
 }
