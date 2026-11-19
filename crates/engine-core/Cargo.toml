@@ -1,0 +1,25 @@
+[package]
+name = "fontcraft-engine-core"
+description = "FontCraft engine core: errors, parameters, settings, the clock and the panic guard (L5)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fontcraft-model.workspace = true
+fontcraft-format.workspace = true
+fontcraft-compile.workspace = true
+fontcraft-io-glyphs.workspace = true
+fontcraft-io-ufo.workspace = true
+fontcraft-decompile.workspace = true
+fontcraft-tables.workspace = true
+fontcraft-proof.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+log.workspace = true

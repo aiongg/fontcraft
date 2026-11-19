@@ -3,7 +3,7 @@
 //! `cargo xtask parity` reports which inventory rows have a command here.
 //!
 //! To add a command: put it in the module for its menu (or a new module with a `specs()` function,
-//! added to [`command_specs`]), with id, label, menu path, shortcut, a parameter description
+//! added to [`COMMAND_TABLES`]), with id, label, menu path, shortcut, a parameter description
 //! agents can call it from, an `enabled` check and a `run` function, plus tests. `run` reads its
 //! parameters through [`crate::params::Params`] and changes fonts only through
 //! [`crate::Session::edit`], which makes the change one undo step.
@@ -163,6 +163,7 @@ mod pixel;
 mod plugin;
 mod plugin_manager;
 mod power_guides;
+pub mod registry;
 pub mod related;
 mod script;
 mod segment_reshape;
@@ -179,6 +180,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 pub use self::file_params::{FileAccess, FileForm, FileParam};
+pub use self::registry::{CommandTable, Hooks, Install, SlotInit};
 use crate::params::TargetKind;
 use crate::{Result, Session};
 
@@ -319,169 +321,195 @@ macro_rules! cmd {
 }
 pub(crate) use cmd;
 
-/// Every command, in registry order (the order menus and listings show them in).
-pub fn command_specs() -> &'static [CommandSpec] {
-    static SPECS: std::sync::OnceLock<Vec<CommandSpec>> = std::sync::OnceLock::new();
-    SPECS.get_or_init(|| {
-        let mut v = Vec::new();
-        v.extend(file::specs());
-        v.extend(edit::specs());
-        v.extend(clipboard::specs());
-        v.extend(corner::specs());
-        v.extend(pixel::specs());
-        v.extend(glyph::specs());
-        v.extend(decompose::specs());
-        v.extend(glyph_set::specs());
-        v.extend(path::specs());
-        v.extend(spacing::specs());
-        v.extend(vertical_metrics::specs());
-        v.extend(metrics_keys::specs());
-        v.extend(transform_metrics::specs());
-        v.extend(kerning::specs());
-        v.extend(kerning_groups::specs());
-        v.extend(kerning_maintain::specs());
-        v.extend(kerning_window::specs());
-        v.extend(metrics_io::specs());
-        v.extend(font::specs());
-        v.extend(compile::specs());
-        v.extend(meta::specs());
-        v.extend(session::specs());
-        v.extend(inspect::specs());
-        v.extend(layer::specs());
-        v.extend(annotation::specs());
-        v.extend(background::specs());
-        v.extend(layers::specs());
-        v.extend(transform::specs());
-        v.extend(guide::specs());
-        v.extend(measure::specs());
-        v.extend(measure_line::specs());
-        v.extend(dimensions::specs());
-        v.extend(node::specs());
-        v.extend(segment_reshape::specs());
-        v.extend(fit_curve::specs());
-        v.extend(filter::specs());
-        v.extend(stroke::specs());
-        v.extend(pathops::specs());
-        v.extend(audit::specs());
-        v.extend(settings::specs());
-        v.extend(sharing::specs());
-        v.extend(glyph_info::specs());
-        v.extend(font_view::specs());
-        v.extend(new_document::specs());
-        v.extend(glyph_search::specs());
-        v.extend(custom_params::specs());
-        v.extend(font_fields::specs());
-        v.extend(scale_upm::specs());
-        v.extend(masters::specs());
-        v.extend(metric_defs::specs());
-        v.extend(instances::specs());
-        v.extend(clipboard_scale::specs());
-        v.extend(tokens::specs());
-        v.extend(project::specs());
-        v.extend(features::specs());
-        v.extend(numbers::specs());
-        v.extend(features_compile::specs());
-        v.extend(smart::specs());
-        v.extend(snippets::specs());
-        v.extend(anchor_context::specs());
-        v.extend(anchor::specs());
-        v.extend(features_io::specs());
-        v.extend(axes::specs());
-        v.extend(special_layers::specs());
-        v.extend(interpolation::specs());
-        v.extend(match_masters::specs());
-        v.extend(hoi::specs());
-        v.extend(instance_masters::specs());
-        v.extend(variation_tools::specs());
-        v.extend(compare::specs());
-        v.extend(preview::specs());
-        v.extend(hint_ps::specs());
-        v.extend(hint_tt_defs::specs());
-        v.extend(hint_tt::specs());
-        v.extend(hint_tt_more::specs());
-        v.extend(hint_points::specs());
-        v.extend(hint_import::specs());
-        v.extend(hint_preview::specs());
-        v.extend(autohint::specs());
-        v.extend(autohint_tt::specs());
-        v.extend(autohint_report::specs());
-        v.extend(palette::specs());
-        v.extend(color_layer::specs());
-        v.extend(attributes::specs());
-        v.extend(image::specs());
-        v.extend(color_export::specs());
-        v.extend(tables_file::specs());
-        v.extend(tables_import::specs());
-        v.extend(dump::specs());
-        v.extend(collection::specs());
-        v.extend(layout_file::specs());
-        v.extend(glyph_order_file::specs());
-        v.extend(bitmap_strikes::specs());
-        v.extend(bitmap_edit::specs());
-        v.extend(metrics_report::specs());
-        v.extend(convert_file::specs());
-        v.extend(subset::specs());
-        v.extend(instance::specs());
-        v.extend(merge_file::specs());
-        v.extend(transform_file::specs());
-        v.extend(optimize::specs());
-        v.extend(dehint::specs());
-        v.extend(outlines_file::specs());
-        v.extend(diff::specs());
-        v.extend(variations_file::specs());
-        v.extend(proof::specs());
-        v.extend(sources::specs());
-        v.extend(audit_services::specs());
-        v.extend(audit_profiles::specs());
-        v.extend(audit_reports::specs());
-        v.extend(audit_fix_binary::specs());
-        v.extend(audit_fix_glyph::specs());
-        v.extend(audit_fix_info::specs());
-        v.extend(plugin::specs());
-        v.extend(plugin_manager::specs());
-        v.extend(script::specs());
-        v.extend(url::specs());
-        v.extend(detect::specs());
-        v.extend(expressions::specs());
-        v.extend(construction::specs());
-        v.extend(related::specs());
-        v.extend(derived_glyphs::specs());
-        v.extend(autospace::specs());
-        v.extend(autokern::specs());
-        v.extend(kerning_audit::specs());
-        v.extend(pair_list::specs());
-        v.extend(stem_filters::specs());
-        v.extend(tension::specs());
-        v.extend(thickness::specs());
-        v.extend(corner_helpers::specs());
-        v.extend(geometry_helpers::specs());
-        v.extend(find_outline::specs());
-        v.extend(nonlinear::specs());
-        v.extend(autotrace::specs());
-        v.extend(selections::specs());
-        v.extend(drag_aids::specs());
-        v.extend(measurements::specs());
-        v.extend(power_guides::specs());
-        v.extend(status::specs());
-        v.extend(attach_cap::specs());
-        v.extend(attach_segment::specs());
-        v.extend(export_profiles::specs());
-        v.extend(file_helpers::specs());
-        v.extend(external_changes::specs());
-        v.extend(encodings::specs());
-        v.extend(math_base::specs());
-        v.extend(cross_axis::specs());
-        v.extend(cid::specs());
-        v.extend(tt_assembly::specs());
-        v.extend(tt_debug::specs());
-        v.extend(metrics_files::specs());
-        v.extend(component::specs());
-        v.extend(overlay::specs());
-        v
-    })
+/// Every command module's table, in registry order: the order menus and listings show commands
+/// in, which `tests/engine/command_ids.txt` pins.
+///
+/// **A new command module registers with two lines**: `mod my_area;` in the module list above,
+/// and `my_area::specs,` at the end of this list (or after the module whose menu neighbours it
+/// should follow). Then rewrite the golden list with `FONTCRAFT_BLESS=1 cargo test -p
+/// fontcraft-engine --test engine registry::` and check that its diff only adds your ids.
+pub const COMMAND_TABLES: &[CommandTable] = &[
+    file::specs,
+    edit::specs,
+    clipboard::specs,
+    corner::specs,
+    pixel::specs,
+    glyph::specs,
+    decompose::specs,
+    glyph_set::specs,
+    path::specs,
+    spacing::specs,
+    vertical_metrics::specs,
+    metrics_keys::specs,
+    transform_metrics::specs,
+    kerning::specs,
+    kerning_groups::specs,
+    kerning_maintain::specs,
+    kerning_window::specs,
+    metrics_io::specs,
+    font::specs,
+    compile::specs,
+    meta::specs,
+    session::specs,
+    inspect::specs,
+    layer::specs,
+    annotation::specs,
+    background::specs,
+    layers::specs,
+    transform::specs,
+    guide::specs,
+    measure::specs,
+    measure_line::specs,
+    dimensions::specs,
+    node::specs,
+    segment_reshape::specs,
+    fit_curve::specs,
+    filter::specs,
+    stroke::specs,
+    pathops::specs,
+    audit::specs,
+    settings::specs,
+    sharing::specs,
+    glyph_info::specs,
+    font_view::specs,
+    new_document::specs,
+    glyph_search::specs,
+    custom_params::specs,
+    font_fields::specs,
+    scale_upm::specs,
+    masters::specs,
+    metric_defs::specs,
+    instances::specs,
+    clipboard_scale::specs,
+    tokens::specs,
+    project::specs,
+    features::specs,
+    numbers::specs,
+    features_compile::specs,
+    smart::specs,
+    snippets::specs,
+    anchor_context::specs,
+    anchor::specs,
+    features_io::specs,
+    axes::specs,
+    special_layers::specs,
+    interpolation::specs,
+    match_masters::specs,
+    hoi::specs,
+    instance_masters::specs,
+    variation_tools::specs,
+    compare::specs,
+    preview::specs,
+    hint_ps::specs,
+    hint_tt_defs::specs,
+    hint_tt::specs,
+    hint_tt_more::specs,
+    hint_points::specs,
+    hint_import::specs,
+    hint_preview::specs,
+    autohint::specs,
+    autohint_tt::specs,
+    autohint_report::specs,
+    palette::specs,
+    color_layer::specs,
+    attributes::specs,
+    image::specs,
+    color_export::specs,
+    tables_file::specs,
+    tables_import::specs,
+    dump::specs,
+    collection::specs,
+    layout_file::specs,
+    glyph_order_file::specs,
+    bitmap_strikes::specs,
+    bitmap_edit::specs,
+    metrics_report::specs,
+    convert_file::specs,
+    subset::specs,
+    instance::specs,
+    merge_file::specs,
+    transform_file::specs,
+    optimize::specs,
+    dehint::specs,
+    outlines_file::specs,
+    diff::specs,
+    variations_file::specs,
+    proof::specs,
+    sources::specs,
+    audit_services::specs,
+    audit_profiles::specs,
+    audit_reports::specs,
+    audit_fix_binary::specs,
+    audit_fix_glyph::specs,
+    audit_fix_info::specs,
+    plugin::specs,
+    plugin_manager::specs,
+    script::specs,
+    url::specs,
+    detect::specs,
+    expressions::specs,
+    construction::specs,
+    related::specs,
+    derived_glyphs::specs,
+    autospace::specs,
+    autokern::specs,
+    kerning_audit::specs,
+    pair_list::specs,
+    stem_filters::specs,
+    tension::specs,
+    thickness::specs,
+    corner_helpers::specs,
+    geometry_helpers::specs,
+    find_outline::specs,
+    nonlinear::specs,
+    autotrace::specs,
+    selections::specs,
+    drag_aids::specs,
+    measurements::specs,
+    power_guides::specs,
+    status::specs,
+    attach_cap::specs,
+    attach_segment::specs,
+    export_profiles::specs,
+    file_helpers::specs,
+    external_changes::specs,
+    encodings::specs,
+    math_base::specs,
+    cross_axis::specs,
+    cid::specs,
+    tt_assembly::specs,
+    tt_debug::specs,
+    metrics_files::specs,
+    component::specs,
+    overlay::specs,
+];
+
+/// Installs every command table for this process; later calls do nothing. Sessions call it when
+/// they are created, so a caller with a session never needs it.
+pub fn install() -> Result<()> {
+    registry::install(Install { commands: COMMAND_TABLES.to_vec(), ..Install::default() })
 }
 
+/// Every command, in registry order (the order menus and listings show them in). Installs the
+/// command tables first when needed.
+pub fn command_specs() -> &'static [CommandSpec] {
+    ensure_installed();
+    registry::command_specs()
+}
+
+/// The command `id`. Installs the command tables first when needed.
 pub fn find_command(id: &str) -> Option<&'static CommandSpec> {
-    static INDEX: std::sync::OnceLock<std::collections::HashMap<&'static str, &'static CommandSpec>> = std::sync::OnceLock::new();
-    INDEX.get_or_init(|| command_specs().iter().map(|c| (c.id, c)).collect()).get(id).copied()
+    ensure_installed();
+    registry::find(id)
+}
+
+/// [`install`] where a failure cannot be returned, tried once per process. A failure is logged;
+/// lookups then find nothing and [`registry::lookup`] reports the reason.
+pub(crate) fn ensure_installed() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        if let Err(e) = install() {
+            log::error!("{e}");
+        }
+    });
 }

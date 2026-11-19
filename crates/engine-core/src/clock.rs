@@ -1,6 +1,6 @@
-//! The time [`crate::Session::edit`] stamps on changed glyphs (`fontView.column.lastChanged`).
+//! The time the engine's `Session::edit` stamps on changed glyphs (`fontView.column.lastChanged`).
 //!
-//! The app gives the session a clock ([`crate::Session::set_clock`]); a session without one
+//! The app gives the session a clock (`Session::set_clock` in the engine); a session without one
 //! stamps nothing. Tests use [`fixed_clock`], so their results do not depend on when they run.
 
 use std::sync::Arc;
@@ -63,7 +63,7 @@ pub fn writes_last_change(font: &Font) -> bool {
 /// Stamps `stamp` on every glyph of `next` whose contents differ from the glyph of that name in
 /// `before` (new and renamed glyphs included). Glyphs `next` still shares with `before` are not
 /// looked into.
-pub(crate) fn stamp_changed(next: &mut Font, before: &Font, stamp: &str) {
+pub fn stamp_changed(next: &mut Font, before: &Font, stamp: &str) {
     let (new, old) = (next.glyphs.as_arcs(), before.glyphs.as_arcs());
     if std::ptr::eq(new, old) {
         return;

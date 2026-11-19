@@ -27,6 +27,7 @@ fontcraft-io-bitmap = { path = "crates/io-bitmap" }
 fontcraft-decompile = { path = "crates/decompile" }
 fontcraft-compile = { path = "crates/compile" }
 fontcraft-oracle = { path = "crates/oracle" }
+fontcraft-engine-core = { path = "crates/engine-core" }
 fontcraft-engine = { path = "crates/engine" }
 fontcraft-mcp = { path = "crates/mcp" }
 fontcraft-ui-egui = { path = "crates/ui-egui" }

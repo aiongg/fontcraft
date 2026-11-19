@@ -285,7 +285,7 @@ impl Targets {
             && self.annotations.is_empty())
     }
 
-    pub(crate) fn bad(&self, message: impl Into<String>) -> EngineError {
+    pub fn bad(&self, message: impl Into<String>) -> EngineError {
         EngineError::BadParams { command: self.command.into(), message: message.into() }
     }
 
@@ -353,7 +353,7 @@ impl Targets {
 
     /// Runs `f` on the addressed layer of `font` for editing, after checking that the glyph is
     /// not locked and that every address resolves. Editing commands call this inside
-    /// [`crate::Session::edit`], so a refusal changes nothing.
+    /// the engine's `Session::edit`, so a refusal changes nothing.
     pub fn edit_layer<T>(&self, font: &mut Font, f: impl FnOnce(&mut Layer) -> Result<T>) -> Result<T> {
         let id = {
             let r = self.resolve(font)?;

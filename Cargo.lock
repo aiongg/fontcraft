@@ -1173,6 +1173,7 @@ dependencies = [
  "fontcraft-components",
  "fontcraft-container",
  "fontcraft-decompile",
+ "fontcraft-engine-core",
  "fontcraft-fea",
  "fontcraft-features",
  "fontcraft-fontinfo",
@@ -1201,6 +1202,24 @@ dependencies = [
  "serde",
  "serde_json",
  "skrifa 0.48.0",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "fontcraft-engine-core"
+version = "0.0.1"
+dependencies = [
+ "fontcraft-compile",
+ "fontcraft-decompile",
+ "fontcraft-format",
+ "fontcraft-io-glyphs",
+ "fontcraft-io-ufo",
+ "fontcraft-model",
+ "fontcraft-proof",
+ "fontcraft-tables",
+ "log",
+ "serde",
+ "serde_json",
  "thiserror 2.0.21",
 ]
 

@@ -31,7 +31,7 @@ pub fn specs() -> Vec<CommandSpec> {
 fn list(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("commands.list", p)?;
     let pattern = p.opt_str("pattern")?.map(str::to_lowercase);
-    let commands: Vec<CommandInfo> = command_specs()
+    let commands: Vec<CommandInfo> = super::registry::command_specs()
         .iter()
         .filter(|c| pattern.as_deref().is_none_or(|pat| c.id.to_lowercase().contains(pat) || c.label.to_lowercase().contains(pat)))
         .map(|c| c.info(s))

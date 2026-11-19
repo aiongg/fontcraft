@@ -571,7 +571,7 @@ fn list(_: &mut Session, _: &Value) -> Result<Value> {
         })
         .collect();
     for (name, id, label, menu) in COMMAND_FILTERS {
-        let Some(spec) = find_command(id) else { continue };
+        let Some(spec) = super::registry::find(id) else { continue };
         out.push(json!({
             "name": name,
             "command": id,

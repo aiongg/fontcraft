@@ -11,6 +11,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+fontcraft-engine-core.workspace = true
 fontcraft-audit.workspace = true
 fontcraft-autohint.workspace = true
 fontcraft-color.workspace = true
