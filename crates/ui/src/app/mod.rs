@@ -131,6 +131,8 @@ pub struct FontCraftApp {
     pub active_tool: Box<dyn crate::canvas::ActiveTool>,
     /// The toolbox, the selection and the running interaction.
     pub tools: crate::canvas::tools::Tools,
+    /// The gradient knob drag in progress (`canvas::color::knobs`).
+    pub knobs: crate::canvas::color::knobs::KnobDrag,
     /// Moves with every applied [`ViewMsg`] and every view change a projection reads; part of the projection
     /// [`Stamp`].
     view_revision: u64,
@@ -179,6 +181,7 @@ impl FontCraftApp {
             view: ViewState::default(),
             active_tool: Box::new(crate::canvas::tools::bridge::ToolBridge::default()),
             tools: crate::canvas::tools::Tools::default(),
+            knobs: Default::default(),
             view_revision: 0,
             enabled_at: None,
             models: Models::default(),
@@ -284,6 +287,7 @@ impl FontCraftApp {
         self.models.project(stamp, &mut cx);
         models::console::project(&mut self.models.console, &mut cx);
         models::palette::project(&mut self.models.palette, &mut cx, &self.tools, stamp);
+        models::color::project(&mut self.models.color, &mut cx, &self.tools, stamp);
         let engine = Stamp::of(&self.session, 0);
         if self.enabled_at != Some(engine) {
             self.enabled_at = Some(engine);

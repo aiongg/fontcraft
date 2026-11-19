@@ -109,6 +109,9 @@ pub fn sync(app: &mut FontCraftApp) {
 pub fn input(app: &mut FontCraftApp, input: ToolInput) -> Vec<String> {
     let out = match input {
         ToolInput::Pointer(ev) => {
+            if let Some(errors) = crate::canvas::color::knobs::pointer(app, ev) {
+                return errors;
+            }
             app.tools.mods = ev.mods;
             with_tool(app, |toolbox, cx| toolbox.pointer(cx, &ev))
         }

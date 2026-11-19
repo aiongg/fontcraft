@@ -6,7 +6,7 @@ use egui::{Painter, Rect};
 
 use super::camera::Camera;
 use super::tokens::Tokens;
-use super::{Display, paint, tools};
+use super::{Display, color, paint, tools};
 use crate::app::models::canvas::{CanvasModel, EditedGlyph};
 
 /// What a paint layer reads.
@@ -46,12 +46,14 @@ pub const LAYERS: &[PaintLayer] = &[
     PaintLayer { id: "status", paint: paint::status::paint },
     PaintLayer { id: "metrics", paint: paint::metrics::paint },
     PaintLayer { id: "otherLayers", paint: paint::background::paint },
+    PaintLayer { id: "color", paint: color::paint::paint },
     PaintLayer { id: "outline", paint: paint::outline::paint },
     PaintLayer { id: "components", paint: paint::components::paint },
     PaintLayer { id: "selectedSegments", paint: tools::overlays::segments },
     PaintLayer { id: "nodes", paint: paint::nodes::paint },
     PaintLayer { id: "anchors", paint: paint::anchors::paint },
     PaintLayer { id: "selection", paint: tools::overlays::selection },
+    PaintLayer { id: "gradientKnobs", paint: color::knobs::paint },
     PaintLayer { id: "toolOverlays", paint: tools::overlays::paint },
 ];
 

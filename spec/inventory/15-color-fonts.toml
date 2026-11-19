@@ -574,7 +574,7 @@ area = "color"
 milestone = "M11"
 summary = "Editor for the font-level Color Palettes parameter, opened by clicking the parameter value in Font Info › Font. All changes are staged: OK commits them as one edit, Cancel leaves the palettes exactly as they were."
 ref = "Color Fonts › COLR/CPAL Fonts › Defining the Color Palette"
-notes = "Built in M11.15. Nothing touches the font while it is open; its one field holds the staged colorPalette commands, and a step the font refuses on OK (a colour a layer uses) keeps it open with the message. Documented, not yet observed."
+notes = "Built in M11.15. Nothing touches the font while it is open; its one field holds the staged colorPalette commands, and a step the font refuses on OK (a colour a layer uses) keeps it open with the message. In the craft UI (`crates/ui`) the palettes are a table of swatches; the selected cell's colour is typed as `#RRGGBBAA`, and buttons add or remove colours and palettes. Documented, not yet observed."
 guesses = [
   "A click on a row's number selects the row that minus removes, and a click on a palette's heading opens a menu with Remove Palette. Settled by removing a row and a palette in the reference's editor.",
 ]
@@ -637,7 +637,7 @@ area = "color"
 milestone = "M11"
 summary = "Style inspector for the selected paths of a full-colour layer, shown at the bottom of the Palette and toggled together with the Info display by View › Show Info (Cmd+Shift+I). Stroke and Fill are present from the start; the other controls appear once added with the plus button."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs"
-notes = "Built in M11.15. Shown while a path of a full-colour layer is selected; every control runs an attributes command on the selected paths, and a colour picked in a swatch runs once, when its picker closes. Documented, not yet observed."
+notes = "Built in M11.15. Shown while a path of a full-colour layer is selected; every control runs an attributes command on the selected paths, and a colour picked in a swatch runs once, when its picker closes. In the craft UI (`crates/ui`) the Attributes panel shows each colour as a swatch beside its `#RRGGBBAA` text field, which runs its command when it commits; it follows the layer the canvas edits. Documented, not yet observed."
 guesses = [
   "The stroke alignment buttons read Centre, Left and Right, and shadows show as read-only lines (blur and offset) because no command removes them yet. Settled by adding a shadow in the reference's inspector.",
   "With several paths selected the bar shows the first path's gradient and the other controls show a value only when every path has it. Settled by selecting two paths with different gradients in the reference.",
@@ -658,7 +658,7 @@ area = "color"
 milestone = "M11"
 summary = "The stop editor inside the Gradient row of the Attributes inspector. It never holds fewer than two stops."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Gradient"
-notes = "Built in M11.15. A click on the bar adds a stop at that offset, a click on a knob opens its colour picker, a knob dragged along the bar moves the stop. Documented, not yet observed."
+notes = "Built in M11.15. A click on the bar adds a stop at that offset, a click on a knob opens its colour picker, a knob dragged along the bar moves the stop. In the craft UI (`crates/ui`) each stop is a row with its offset and colour fields and Remove, and Add Stop adds one in the middle of the widest gap; the bar itself is not drawn yet. Documented, not yet observed."
 guesses = [
   "A knob released more than two bar heights above or below the bar removes its stop. Settled by dragging a stop away in the reference and noting the distance.",
 ]

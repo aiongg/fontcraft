@@ -32,6 +32,8 @@ const SAME_CROSSING: f64 = 1e-6;
 #[derive(PlainData, Clone, Debug, Default, PartialEq)]
 pub struct CanvasModel {
     pub glyph: Option<EditedGlyph>,
+    /// The edited glyph in colour (`canvas::color`).
+    pub color: Option<crate::canvas::color::ColorPicture>,
 }
 
 /// The edited glyph in its master, in font units.
@@ -112,7 +114,7 @@ pub fn project(model: &mut Tracked<CanvasModel>, cx: &mut ProjectCx<'_>) {
         let master = font.masters.first()?;
         edited_glyph(font, data.as_deref(), glyph, master, side)
     });
-    super::set(model, CanvasModel { glyph: edited });
+    super::set(model, CanvasModel { glyph: edited, color: crate::canvas::color::project(cx) });
 }
 
 /// The canvas's picture of `glyph` in `master`, editing `side` of its layer.

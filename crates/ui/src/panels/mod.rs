@@ -1,6 +1,7 @@
 //! Panel views, one module per panel. `docs/ui.md` describes how to add one; [`glyph_metrics`] is the pattern.
 
 pub mod anchor_context;
+pub mod attributes;
 pub mod command_console;
 pub mod fit_curve;
 pub mod font_info;
