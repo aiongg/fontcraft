@@ -102,6 +102,7 @@ pub const SETTINGS: &[SettingDef] = &[
     SettingDef { id: "editing.leverRatio", kind: Kind::Number { min: 1.0, max: 100.0 }, default: DefaultValue::Number(6.0) },
     SettingDef { id: "editing.powerNudge", kind: Kind::Bool, default: DefaultValue::Bool(false) },
     SettingDef { id: "export.ttfAutohintBinary", kind: Kind::Text, default: DefaultValue::Text("") },
+    SettingDef { id: "sharing.enableExternalPreview", kind: Kind::Bool, default: DefaultValue::Bool(false) },
     SettingDef { id: "start.showAtLaunch", kind: Kind::Bool, default: DefaultValue::Bool(true) },
     SettingDef { id: "user.disableAutomaticAlignmentForImportedFiles", kind: Kind::Bool, default: DefaultValue::Bool(false) },
     SettingDef { id: "user.crashReportEmail", kind: Kind::Text, default: DefaultValue::Text("") },
@@ -130,10 +131,13 @@ pub enum Reserved {
     AuditProfiles,
     /// The user's export profiles, `[{name, params}]` (`file.saveExportProfile`).
     ExportProfiles,
+    /// The devices trusted to see External Preview, `[IP address]`, oldest first
+    /// (`sharing.answerDevice`, `settings.resetTrustedDevices`).
+    TrustedDevices,
 }
 
 impl Reserved {
-    pub const ALL: [Reserved; 7] = [
+    pub const ALL: [Reserved; 8] = [
         Reserved::Filters,
         Reserved::VisibleScripts,
         Reserved::RecentDocuments,
@@ -141,6 +145,7 @@ impl Reserved {
         Reserved::SampleStrings,
         Reserved::AuditProfiles,
         Reserved::ExportProfiles,
+        Reserved::TrustedDevices,
     ];
 
     pub fn id(self) -> &'static str {
@@ -152,6 +157,7 @@ impl Reserved {
             Reserved::SampleStrings => "sampleStrings.groups",
             Reserved::AuditProfiles => "audit.userProfiles",
             Reserved::ExportProfiles => fontcraft_model::fc_keys::EXPORT_PROFILES,
+            Reserved::TrustedDevices => "sharing.trustedDevices",
         }
     }
 
@@ -165,6 +171,7 @@ impl Reserved {
             Reserved::SampleStrings => "the Sample Strings settings",
             Reserved::AuditProfiles => "the audit.profile commands",
             Reserved::ExportProfiles => "file.saveExportProfile and file.removeExportProfile",
+            Reserved::TrustedDevices => "sharing.answerDevice and settings.resetTrustedDevices",
         }
     }
 

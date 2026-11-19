@@ -325,6 +325,8 @@ pub struct Session {
     snippets_dir: Option<PathBuf>,
     /// The open projects (`project`).
     projects: project::Projects,
+    /// External Preview while the app serves it (`cmd::sharing`).
+    sharing: cmd::sharing::SharingState,
 }
 
 /// A running interaction (see [`Session::begin`]).
@@ -525,6 +527,16 @@ impl Session {
     /// part of the rollback snapshot: a command that changes it does so only after it succeeds.
     pub fn extensions_mut(&mut self) -> &mut extensions::ExtensionState {
         &mut self.extensions
+    }
+
+    /// External Preview's address and the devices waiting or refused (`cmd::sharing`).
+    pub fn sharing(&self) -> &cmd::sharing::SharingState {
+        &self.sharing
+    }
+
+    /// For the app that serves External Preview, and for the sharing commands.
+    pub fn sharing_mut(&mut self) -> &mut cmd::sharing::SharingState {
+        &mut self.sharing
     }
 
     /// The user's settings, for the app (loading) and for the commands that own reserved ids.

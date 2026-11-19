@@ -110,7 +110,28 @@ mirror the active Edit View.
 - Connection problems: same wireless network, restart both, try another network, avoid routers
   running mixed wireless standards.
 
-We plan no companion app; `sharing.fontcraftEquivalent` proposes a read-only preview stream instead.
+### External Preview in FontCraft
+
+FontCraft has no companion app. While `sharing.enableExternalPreview` is on (off by default), the
+desktop app serves a page that any browser on the local network can open
+(`apps/fontcraft/src/external_preview.rs`).
+
+| Step | What happens |
+|---|---|
+| Turn on | The app listens on a free port of every IPv4 interface, under a random path. `sharing.status` gives the address to type on the device. |
+| First visit | The device, known by its IP address, gets a page asking it to wait. The page reloads every 2 seconds. `sharing.status` lists the device as waiting. |
+| Answer | `sharing.answerDevice {device, trust}`. Trusted devices are kept in the user's settings (`sharing.trustedDevices`). Refused devices are turned away while the preview runs. |
+| Watch | A trusted device gets the active tab's glyphs, filled on one line in the tab's master, as SVG inside the page. The page reloads every second with a meta refresh and has no script. The browser's own zoom and scrolling apply. |
+| Reset | `settings.resetTrustedDevices` forgets every trusted device. |
+| Turn off | The port closes; the address and the waiting and refused devices are forgotten. |
+
+Limits: 64 trusted devices (the oldest go first), 8 waiting at once, 64 refused. The page is drawn
+at most 4 times a second, and only while a device is trusted. The HTTP server is the hinting
+preview's (`apps/fontcraft/src/preview_server.rs`): `GET` and `HEAD` only, one request per
+connection, 4 connections, 64 KB of headers, 50 requests a second.
+
+While automation roots are in force, turning the preview on and trusting a device are refused, so a
+confined agent cannot send the open font to the network.
 
 ## Addons
 

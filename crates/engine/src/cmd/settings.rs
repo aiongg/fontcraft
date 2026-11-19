@@ -12,7 +12,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Get Setting",
             [],
             None,
-            "{id?: string} one setting's value by id (its default while it is not set), or every setting without an id. Besides the preferences, the ids fontView.filters, fontView.visibleScripts, file.recentDocuments, start.chooserPicks and sampleStrings.groups hold data their own commands write (null while empty) → {id, value} | {settings: {id: value}}",
+            "{id?: string} one setting's value by id (its default while it is not set), or every setting without an id. Besides the preferences, the ids fontView.filters, fontView.visibleScripts, file.recentDocuments, start.chooserPicks, sampleStrings.groups, audit.userProfiles and sharing.trustedDevices hold data their own commands write (null while empty) → {id, value} | {settings: {id: value}}",
             always,
             get
         ),
@@ -21,7 +21,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Setting",
             [],
             None,
-            "{id: string, value: any} set one preference, checked against its kind (true or false, a choice, a number in range, text); null returns it to its default. Unknown ids, and the ids other commands write, are refused; export.ttfAutohintBinary is refused while automation roots are in force → {id, value}",
+            "{id: string, value: any} set one preference, checked against its kind (true or false, a choice, a number in range, text); null returns it to its default. Unknown ids, and the ids other commands write, are refused; export.ttfAutohintBinary, and turning sharing.enableExternalPreview on, are refused while automation roots are in force → {id, value}",
             always,
             set
         ),
@@ -44,6 +44,10 @@ fn set(s: &mut Session, v: &Value) -> Result<Value> {
     // The trusted autohinter is a program the exports run; automation may not choose it.
     if id == crate::external_autohint::SETTING && crate::file_access::current().is_some() {
         return Err(p.bad(format!("{id} names a program to run and cannot be set while automation roots are in force")));
+    }
+    // External Preview sends the open font to the network; a confined agent may not turn it on.
+    if id == super::sharing::ENABLE_SETTING && value == Value::Bool(true) && crate::file_access::current().is_some() {
+        return Err(p.bad(format!("{id} serves the open font to the network and cannot be turned on while automation roots are in force")));
     }
     s.settings_mut().set(&id, value).map_err(|e| p.bad(e.to_string()))?;
     let value = s.settings().get(&id).map_err(|e| p.bad(e.to_string()))?;

@@ -84,6 +84,7 @@ mod project;
 mod scale_upm;
 mod session;
 mod settings;
+pub mod sharing;
 pub mod smart;
 mod snippets;
 mod spacing;
@@ -353,6 +354,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(pathops::specs());
         v.extend(audit::specs());
         v.extend(settings::specs());
+        v.extend(sharing::specs());
         v.extend(glyph_info::specs());
         v.extend(font_view::specs());
         v.extend(new_document::specs());
