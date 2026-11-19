@@ -2,5 +2,11 @@
 
 pub mod font_info;
 pub mod font_view;
+pub mod glyph_info;
 pub mod glyph_metrics;
+pub mod measurements;
+pub mod pairs_phrases;
+pub mod reference_font;
+pub mod related_glyphs;
+pub mod selections;
 pub mod stub;

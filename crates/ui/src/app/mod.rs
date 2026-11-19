@@ -55,6 +55,12 @@ pub struct ViewState {
     pub font_view: font_view::FontViewState,
     /// The Font Info panel's tab and the dialog it asked for.
     pub font_info: crate::shell::font_info::FontInfoView,
+    /// The fonts drawn behind the outline (`view.setReferenceFont`).
+    pub reference_font: crate::shell::reference_font::ReferenceFontState,
+    /// The Pairs & Phrases work lists and the auto-kerning proposal under review.
+    pub kerning_review: crate::shell::kerning_review::KerningReviewState,
+    /// Glyph Info's search, sort and selection.
+    pub glyph_info: crate::shell::glyph_info::GlyphInfoState,
 }
 
 impl Default for ViewState {
@@ -69,6 +75,9 @@ impl Default for ViewState {
             edit_background: false,
             font_view: font_view::FontViewState::default(),
             font_info: Default::default(),
+            reference_font: Default::default(),
+            kerning_review: Default::default(),
+            glyph_info: Default::default(),
         }
     }
 }

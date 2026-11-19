@@ -7,6 +7,9 @@ pub mod canvas;
 pub mod font_info;
 pub mod font_view;
 pub mod glyph;
+pub mod glyph_info;
+pub mod glyph_sections;
+pub mod kerning_review;
 
 use craft::ui::contract::Tracked;
 use fontcraft_engine::Session;
@@ -29,6 +32,19 @@ pub struct Models {
     font_view_outlines: font_view::OutlineCache,
     /// The Font Info panel (`panels::font_info`).
     pub font_info: Tracked<font_info::FontInfoModel>,
+    /// What is connected to the shown glyph (`panels::related_glyphs`).
+    pub related_glyphs: Tracked<glyph_sections::RelatedModel>,
+    /// The shown glyph's stored selections (`panels::selections`).
+    pub selections: Tracked<glyph_sections::SelectionsModel>,
+    /// The first master's metrics and stems (`panels::measurements`).
+    pub measurements: Tracked<glyph_sections::MeasurementsModel>,
+    /// The reference fonts (`panels::reference_font`).
+    pub reference_font: Tracked<glyph_sections::ReferenceFontModel>,
+    /// The Pairs & Phrases work list (`panels::pairs_phrases`).
+    pub pairs_phrases: Tracked<kerning_review::PairsModel>,
+    /// Glyph Info's search results (`panels::glyph_info`).
+    pub glyph_info: Tracked<glyph_info::GlyphInfoModel>,
+    glyph_info_search: glyph_info::SearchCache,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -72,6 +88,12 @@ impl Models {
         self.canvas_tokens = crate::canvas::tokens::Tokens::from_settings(cx.session.settings(), false);
         font_view::project(&mut self.font_view, &mut self.font_view_outlines, cx);
         font_info::project(&mut self.font_info, cx);
+        glyph_sections::project_related(&mut self.related_glyphs, cx);
+        glyph_sections::project_selections(&mut self.selections, cx);
+        glyph_sections::project_measurements(&mut self.measurements, cx);
+        glyph_sections::project_reference_font(&mut self.reference_font, cx);
+        kerning_review::project(&mut self.pairs_phrases, cx);
+        glyph_info::project(&mut self.glyph_info, &mut self.glyph_info_search, cx);
         true
     }
 }
