@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1472 rows to check: 2514 guesses and 593 observe steps.**
+**1474 rows to check: 2516 guesses and 593 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 48 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **947** |
+| **Later milestones (after M6)** | all | **949** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 86 |
 | Later milestones (after M6) | Edit View: text mode and preview | 27 |
 | Later milestones (after M6) | Components and anchors | 43 |
@@ -56,7 +56,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Spacing and metrics keys | 12 |
 | Later milestones (after M6) | Kerning and the Kerning window | 16 |
 | Later milestones (after M6) | Font View | 19 |
-| Later milestones (after M6) | Font Info and features | 292 |
+| Later milestones (after M6) | Font Info and features | 294 |
 | Later milestones (after M6) | Interpolation | 86 |
 | Later milestones (after M6) | Hinting | 110 |
 | Later milestones (after M6) | Colour fonts | 68 |
@@ -1569,7 +1569,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (947)
+## Later milestones (after M6) (949)
 
 ### Edit View: drawing, guides, layers and the Palette (86)
 
@@ -2348,7 +2348,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.
   - Guess: Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.
 
-### Font Info and features (292)
+### Font Info and features (294)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
@@ -2397,6 +2397,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In font B (m7-two), look at an instance's preview on the Exports tab: note where it is and what it shows.
 - [ ] `font.info.selectTab` (M7, inferred, live): Select Font Info Tab
   - Guess: Our own command for scripts; with the window closed it opens Font Info on that tab. Nothing to observe: the reference app switches tabs only by clicking them.
+- [ ] `font.info.exports.select` (M7, inferred): Select Exports
+  - Guess: Our own command for scripts and the window's clicks; nothing to observe, the reference app selects exports only by clicking them.
 - [ ] `font.info.listFields` (M7, inferred, live): List Available Fields
   - Guess: The Font tab offers familyNames, designers, designerURL, manufacturers, manufacturerURL, copyrights, versionString, vendorID, uniqueID, licenses, licenseURL, trademarks, descriptions, sampleTexts, postscriptFontName, postscriptFullNames, compatibleFullNames, WWSFamilyName, WWSSubfamilyName and variationsPostScriptNamePrefix; the Exports tab the same plus styleNames, styleMapFamilyNames, styleMapStyleNames, preferredFamilyNames, preferredSubfamilyNames and variableStyleNames; the Masters tab offers none and keeps master properties as read. The pickers of the reference app settle the three lists.
   - Observe: In font A (m7-one), click the plus button beside General on the Font tab: write down the fields offered, in their order.
@@ -2670,6 +2672,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `fontInfo.features.stylisticSetNames` (behavior, M8, handbook): Selecting one of ss01 to ss20 shows name rows above the editor,…
   - Guess: A name in a language without a Windows language id is left out, as fontc does (glyphsLib stops with an error), and text tokens in names are not expanded yet; a name in such a language exported from the reference app settles it.
   - Guess: Choosing another language for a name row removes the name and adds it in the new language, as two undo steps; changing a row's language in the reference app settles whether it is one step.
+- [ ] `font.info.features.select` (M8, inferred): Select Feature Entries
+  - Guess: Our own command for scripts and the window's clicks; nothing to observe, the reference app selects sidebar entries only by clicking them.
 - [ ] `font.numbers.list` (M8, inferred, live): List Number Values
   - Guess: Numbers are listed in the font's order, plus one master's values when asked; the Masters tab in the running app would settle the order.
 - [ ] `font.numbers.add` (M8, handbook, live): Add Number Value

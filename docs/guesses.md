@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2984 guesses on 1573 rows (636 of them live commands).**
+**2986 guesses on 1575 rows (636 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -732,6 +732,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontInfo.notes.markdownHighlighting` (behavior) | M7 | handbook | – | A note longer than 256 KiB is shown without highlighting so typing stays fast; a long note in the reference app settles whether it stops highlighting. |
 | `fontInfo.exports.instancePreview` (behavior) | M7 | handbook | – | The preview sits above the instance's fields, one line high, and draws the first selected instance; an instance between masters is drawn interpolated, and a variable font setting shows none; the Exports tab of the reference app settles placement. |
 | `fontInfo.exports.instancePreview` (behavior) | M7 | handbook | – | The default `Aang126` is read as characters and drawn with the glyphs mapped to them, skipping characters the font lacks; the reference app settles whether it names glyphs instead. |
+| `font.info.features.select` | M8 | inferred | no | Our own command for scripts and the window's clicks; nothing to observe, the reference app selects sidebar entries only by clicking them. |
+| `font.info.exports.select` | M7 | inferred | no | Our own command for scripts and the window's clicks; nothing to observe, the reference app selects exports only by clicking them. |
 | `fontInfo` (panel) | M7 | handbook | – | Font Info opens on the tab it last showed for that document, and on the Font tab the first time; opening it twice in the reference app settles it. |
 | `fontInfo` (panel) | M7 | handbook | – | One Font Info window shows the active document, and switching documents shows the other document's information in it; opening Font Info in two documents of the reference app settles whether each keeps a window of its own. |
 | `fontInfo.font` (panel) | M7 | handbook | – | The double-arrow button opens a prompt under the field that asks for the new units per em, starting at the current value, with Scale and Cancel buttons; clicking the button in the reference app settles the prompt's form. |
