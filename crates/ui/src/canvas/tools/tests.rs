@@ -198,3 +198,97 @@ fn the_bridge_posts_pointer_input_in_font_units() {
         .collect();
     assert_eq!(kinds, vec![PointerKind::Down, PointerKind::Up, PointerKind::DoubleClick]);
 }
+
+/// Glyph A's layer `id`.
+fn layer_by_id(app: &FontCraftApp, id: &str) -> Layer {
+    app.session.font().unwrap().glyph("A").unwrap().layers.iter().find(|l| l.id == id).unwrap().clone()
+}
+
+fn node_of(layer: &Layer, shape: usize, n: usize) -> (f64, f64) {
+    match layer.shapes.get(shape) {
+        Some(Shape::Path(p)) => (p.nodes[n].x, p.nodes[n].y),
+        other => panic!("shape {shape} is not a path: {other:?}"),
+    }
+}
+
+/// [`edit_app`] with one more layer of glyph A: a copy of the first master's layer under `id`, its paths 40 units to
+/// the right (the square's node 2 at (340, 300)), changed by `make` (which may also change the font) before it is
+/// added, all in one edit.
+fn with_shifted_layer(id: &str, make: impl FnOnce(&mut fontcraft_engine::model::Font, &mut Layer)) -> FontCraftApp {
+    let mut app = edit_app();
+    let id = id.to_string();
+    app.session
+        .edit("setup", |font| {
+            let first = font.masters[0].id.clone();
+            let mut layer = font.glyph("A").unwrap().layer(&first).unwrap().clone();
+            layer.id = id.clone();
+            for shape in &mut layer.shapes {
+                if let Shape::Path(p) = shape {
+                    for n in &mut p.nodes {
+                        n.x += 40.0;
+                    }
+                }
+            }
+            make(font, &mut layer);
+            font.glyph_mut("A")?.layers.push(layer);
+            Ok(())
+        })
+        .unwrap();
+    app.drain();
+    app
+}
+
+/// Drags node 2 of the square from (340, 300) to (390, 330) with the Select tool; asserts that only layer `id`
+/// changed, that the drag is one undo step and that undo restores the layer.
+fn drag_lands_on(app: &mut FontCraftApp, id: &str) {
+    let first = app.session.font().unwrap().masters[0].id.clone();
+    let (before, master_before) = (layer_by_id(app, id), layer_by_id(app, &first));
+    assert_eq!(super::target(&app.session, &app.view).unwrap().layer, id, "the tools edit the picked layer");
+    assert_eq!(app.models.canvas.glyph.as_ref().unwrap().layer.shapes, before.shapes, "the canvas draws the picked layer");
+    let steps = undo_steps(app);
+    pointer(app, json!([{"kind": "move", "x": 340, "y": 300}, {"kind": "down", "x": 340, "y": 300}]));
+    assert_eq!(selection(app), json!({"points": [[0, 2]]}), "the press hits the picked layer's node");
+    pointer(app, json!([{"kind": "drag", "x": 370, "y": 310}, {"kind": "drag", "x": 390, "y": 330}, {"kind": "up", "x": 390, "y": 330}]));
+    assert_eq!(undo_steps(app), steps + 1, "the drag is one undo step");
+    assert_eq!(node_of(&layer_by_id(app, id), 0, 2), (390.0, 330.0));
+    assert_eq!(layer_by_id(app, &first), master_before, "the first master's layer is untouched");
+    let filled = super::targets::with_targets(app, CommandRef::new("edit.delete"));
+    assert_eq!(filled.params["layer"], json!(id), "menu commands target the picked layer");
+    run(app, "edit.undo", json!({}));
+    assert_eq!(layer_by_id(app, id), before, "undo restores the picked layer");
+    assert_eq!(layer_by_id(app, &first), master_before);
+}
+
+/// A second master's layer picked in the Layers panel is the one the canvas draws and the tools hit and edit;
+/// `view.selectMaster` makes that master's layer the edited one too, and picking the first master's row goes back.
+#[test]
+fn the_tools_edit_the_master_layer_picked_in_the_layers_panel() {
+    let mut app = with_shifted_layer("m02", |font, layer| {
+        let mut m = font.default_master().unwrap().clone();
+        m.id = "m02".into();
+        m.name = "Bold".into();
+        Arc::make_mut(&mut font.masters).push(m);
+        let others: Vec<String> = font.glyphs.iter().map(|g| g.name.clone()).filter(|n| n != "A").collect();
+        for name in others {
+            font.glyph_mut(&name).unwrap().layers.push(Layer::new("m02", 600.0));
+        }
+        layer.master = "m02".into();
+    });
+    shell(&mut app, "layers.select", json!({"layer": "m02"}));
+    drag_lands_on(&mut app, "m02");
+    assert_eq!(app.models.canvas.glyph.as_ref().unwrap().master, "m02", "the metric lines are the picked master's");
+
+    let first = app.session.font().unwrap().masters[0].id.clone();
+    shell(&mut app, "layers.select", json!({"layer": first}));
+    assert_eq!(super::target(&app.session, &app.view).unwrap().layer, first);
+    shell(&mut app, "view.selectMaster", json!({"master": "m02"}));
+    drag_lands_on(&mut app, "m02");
+}
+
+/// A Color Palette layer picked in the Layers panel is the one the tools edit.
+#[test]
+fn the_tools_edit_a_colour_layer_picked_in_the_layers_panel() {
+    let mut app = with_shifted_layer("c1", |_, layer| layer.info.attrs.color_palette = Some(fontcraft_engine::model::PaletteEntry::Index(0)));
+    shell(&mut app, "layers.select", json!({"layer": "c1"}));
+    drag_lands_on(&mut app, "c1");
+}

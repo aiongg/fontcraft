@@ -16,11 +16,12 @@ pub mod targets;
 pub mod tokens;
 
 use fontcraft_engine::Session;
-use fontcraft_engine::model::{Font, LayerSide};
+use fontcraft_engine::model::{Font, Layer, LayerSide, Master};
 use fontcraft_tools::toolbox::Keyboard;
 use fontcraft_tools::{KeyEvent, Modifiers, Overlay, PointerEvent, Scene, Selection, Toolbox};
 
 use crate::app::ViewState;
+use crate::shell::masters;
 
 /// Input for the active tool.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -33,7 +34,7 @@ pub enum ToolInput {
     Key(KeyEvent),
 }
 
-/// What the selection belongs to: the edited glyph, its layer in the edited master and the edited side.
+/// What the selection belongs to: the edited glyph, its active layer and the edited side.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Target {
     pub glyph: String,
@@ -119,18 +120,34 @@ pub fn side(view: &ViewState) -> LayerSide {
     if view.edit_background { LayerSide::Background } else { LayerSide::Foreground }
 }
 
-/// What the canvas edits now: the edited glyph's layer in the first master, on the edited side.
-pub fn target(session: &Session, view: &ViewState) -> Option<Target> {
-    let font = session.font().ok()?;
+/// The active layer: the edited glyph's layer the Layers panel picked (`layers.select`), else its layer of the
+/// current master (`view.selectMaster`). The canvas draws it and the tools edit it.
+pub fn active_layer<'a>(font: &'a Font, view: &ViewState) -> Option<&'a Layer> {
     let glyph = font.glyph(edited_glyph(font, view)?)?;
-    let layer = glyph.layer(&font.masters.first()?.id)?;
-    Some(Target { glyph: glyph.name.clone(), layer: layer.id.clone(), side: side(view) })
+    masters::shown_layer(font, &view.layers, glyph)
 }
 
-/// The scene the tools work on: the edited side of the edited glyph's layer, as the canvas shows it.
+/// The active layer's master, else the current master: its metric lines, zones and curve tension apply.
+pub fn active_master<'a>(font: &'a Font, view: &ViewState) -> Option<&'a Master> {
+    match active_layer(font, view) {
+        Some(layer) => masters::layer_master(font, &view.layers, layer),
+        None => masters::current_master(font, &view.layers),
+    }
+}
+
+/// What the canvas edits now: the edited glyph's active layer, on the edited side.
+pub fn target(session: &Session, view: &ViewState) -> Option<Target> {
+    let font = session.font().ok()?;
+    let glyph = edited_glyph(font, view)?;
+    let layer = active_layer(font, view)?;
+    Some(Target { glyph: glyph.to_string(), layer: layer.id.clone(), side: side(view) })
+}
+
+/// The scene the tools work on: the edited side of the edited glyph's active layer, as the canvas shows it.
 pub fn scene<'a>(font: &'a Font, view: &ViewState, focus: Option<&Vec<usize>>) -> Option<Scene<'a>> {
     let glyph = edited_glyph(font, view)?;
-    let mut scene = Scene::from_font_side(font, glyph, None, side(view))?;
+    let layer = active_layer(font, view)?;
+    let mut scene = Scene::from_font_side(font, glyph, Some(&layer.id), side(view))?;
     scene.focus = focus.cloned();
     scene.background_shown = view.display.background;
     scene.guides_shown = view.display.guides;
