@@ -276,6 +276,9 @@ impl DockPanels<PanelId> for Panels<'_> {
             PanelId::GlyphMetrics => {
                 panels::glyph_metrics::show(ui, panels::glyph_metrics::Props { model: &self.models.glyph_metrics, sent: self.sent });
             }
+            PanelId::HintingWaterfall => {
+                panels::hinting_waterfall::show(ui, panels::hinting_waterfall::Props { model: &self.models.hinting_waterfall, sent: self.sent });
+            }
             // Drawn by `group_view`.
             PanelId::Document => {}
             other => panels::stub::show(ui, panels::stub::Props { title: other.title(&self.words) }),

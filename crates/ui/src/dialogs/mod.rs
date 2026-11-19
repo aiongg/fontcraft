@@ -4,6 +4,7 @@
 //! for it, takes the answer on a later pass and turns it into messages or app state. A module adds one line to
 //! [`MODULES`].
 
+pub mod tt;
 mod unsaved;
 
 use craft::ui::dialog::DialogHost;
@@ -14,7 +15,7 @@ use crate::app::FontCraftApp;
 pub type Module = fn(&mut DialogHost, &mut FontCraftApp);
 
 /// Every dialog module.
-pub const MODULES: &[Module] = &[unsaved::run];
+pub const MODULES: &[Module] = &[unsaved::run, tt::run];
 
 /// Runs every dialog module for this pass.
 pub fn run(host: &mut DialogHost, app: &mut FontCraftApp) {

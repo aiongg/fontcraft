@@ -4,6 +4,7 @@
 //! one of them with a one-line arm, and only when the [`Stamp`] moved since the last call.
 
 pub mod glyph;
+pub mod hinting;
 
 use craft::ui::contract::Tracked;
 use fontcraft_engine::Session;
@@ -17,6 +18,8 @@ pub struct Models {
     seen: Option<Stamp>,
     /// The shown glyph's width and sidebearings (`panels::glyph_metrics`).
     pub glyph_metrics: Tracked<glyph::GlyphMetrics>,
+    /// The Hinting Preview's rows (`panels::hinting_waterfall`).
+    pub hinting_waterfall: Tracked<hinting::Waterfall>,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -50,6 +53,7 @@ impl Models {
         }
         self.seen = Some(stamp);
         glyph::project(&mut self.glyph_metrics, cx);
+        hinting::project(&mut self.hinting_waterfall, cx);
         true
     }
 }

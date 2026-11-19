@@ -97,6 +97,8 @@ pub struct FontCraftApp {
     /// The status line: the last error or notice.
     pub status: String,
     pub closing: Closing,
+    /// The hinting dialogs' state (`dialogs::tt`).
+    pub tt: crate::dialogs::tt::TtState,
     picks: Picks,
     #[cfg(not(target_arch = "wasm32"))]
     file_panels: Option<craft::dialogs::service::FilePanels>,
@@ -129,6 +131,7 @@ impl FontCraftApp {
             sent: Vec::new(),
             status: String::new(),
             closing: Closing::Idle,
+            tt: Default::default(),
             picks: Picks::default(),
             #[cfg(not(target_arch = "wasm32"))]
             file_panels: None,
