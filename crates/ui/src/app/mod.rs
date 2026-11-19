@@ -171,6 +171,8 @@ pub struct FontCraftApp {
     pub frame_hook: Option<Box<dyn preview_host::FrameHook>>,
     /// The web server for the TrueType preview page; `None` where no port can be opened.
     pub preview_host: Option<Box<dyn preview_host::PreviewHost>>,
+    /// The canvas overlays' switches, data and the text note being typed (`canvas::overlays`).
+    pub overlays: crate::canvas::overlays::Overlays,
     /// The control channel: its listener, the window its input goes to, the replies waiting on frames.
     pub control: crate::control::Control,
     #[cfg(not(target_arch = "wasm32"))]
@@ -213,6 +215,7 @@ impl FontCraftApp {
             dialogs: crate::dialogs::form::DialogState::default(),
             context_menus: context_menu::ContextMenus::default(),
             clipboard: clipboard::Clipboard::default(),
+            overlays: Default::default(),
             picks: Picks::default(),
             frame_hook: None,
             preview_host: None,
@@ -329,6 +332,7 @@ impl FontCraftApp {
         models::console::project(&mut self.models.console, &mut cx);
         models::palette::project(&mut self.models.palette, &mut cx, &self.tools, stamp);
         models::compare::project_fonts(&mut self.models.compare_fonts, &mut cx);
+        crate::canvas::overlays::refresh(self);
         let engine = Stamp::of(&self.session, 0);
         if self.enabled_at != Some(engine) {
             self.enabled_at = Some(engine);

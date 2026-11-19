@@ -193,6 +193,7 @@ fn painted(app: &FontCraftApp, layer: fn(&PaintCx<'_>) -> Vec<Shape>) -> Vec<Sha
     let painter = Painter::new(egui::Context::default(), LayerId::background(), RECT);
     let top = app.models.canvas.glyph.as_ref().map_or(0.0, |g| g.ascender);
     let words = CanvasWords::default();
+    let overlay_words = crate::canvas::overlays::OverlayWords::default();
     let cx = PaintCx {
         painter: &painter,
         rect: RECT,
@@ -204,6 +205,7 @@ fn painted(app: &FontCraftApp, layer: fn(&PaintCx<'_>) -> Vec<Shape>) -> Vec<Sha
         words: &words,
         tools: &app.tools.view,
         text: &app.models.text,
+        overlays: crate::canvas::overlays::Painted { data: &app.overlays.data, words: &overlay_words },
     };
     layer(&cx)
 }
@@ -337,6 +339,7 @@ fn the_measurement_line_measures_each_glyph_in_text_mode_and_moves_with_cmd_ctrl
     assert_eq!(count(&shapes, t.measurement_advance), 6, "both edges of every advance");
     let painter = Painter::new(egui::Context::default(), LayerId::background(), RECT);
     let words = CanvasWords::default();
+    let overlay_words = crate::canvas::overlays::OverlayWords::default();
     let top = app.models.canvas.glyph.as_ref().map_or(0.0, |g| g.ascender);
     let cx = PaintCx {
         painter: &painter,
@@ -349,6 +352,7 @@ fn the_measurement_line_measures_each_glyph_in_text_mode_and_moves_with_cmd_ctrl
         words: &words,
         tools: &app.tools.view,
         text: &app.models.text,
+        overlays: crate::canvas::overlays::Painted { data: &app.overlays.data, words: &overlay_words },
     };
     let labels: Vec<f64> = super::paint::measurement_labels(&cx).into_iter().map(|(_, v)| v).collect();
     assert_eq!(labels, [100.0, 100.0], "V's two sidebearings are printed");

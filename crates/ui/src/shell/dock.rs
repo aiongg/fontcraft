@@ -360,7 +360,7 @@ impl DockPanels<PanelId> for Panels<'_> {
 /// Shows the dock and applies what the user did to it.
 pub fn show(ui: &mut Ui, app: &mut FontCraftApp) {
     let words = Env::of(ui).words::<PanelWords>();
-    let FontCraftApp { view, models, sent, status, active_tool, tools, .. } = app;
+    let FontCraftApp { view, models, sent, status, active_tool, tools, overlays, .. } = app;
     let given = view.workspace.clone();
     let label = words.dock.clone();
     let display = canvas::text::display(view);
@@ -375,6 +375,8 @@ pub fn show(ui: &mut Ui, app: &mut FontCraftApp) {
             tools: &tools.view,
             text: &models.text,
             tool: active_tool.as_mut(),
+            overlays: &overlays.data,
+            note: &mut overlays.note,
         },
         sent,
         words,

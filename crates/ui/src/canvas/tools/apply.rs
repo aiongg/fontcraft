@@ -47,6 +47,7 @@ fn settings(session: &Session, font: &Font, app: &FontCraftApp) -> ToolSettings 
         snap_distance: f64::from(t.snap_distance),
         drag_threshold: f64::from(t.drag_threshold),
         bounding_box: app.view.display.bounding_box,
+        tunni_lines: app.overlays.switches.tunni_lines,
         curve_tension,
         ..ToolSettings::default()
     }
@@ -140,10 +141,12 @@ pub fn input(app: &mut FontCraftApp, input: ToolInput) -> Vec<String> {
         }
         ToolInput::Key(ev) => with_tool(app, |toolbox, cx| toolbox.key(cx, &ev)),
     };
-    match out {
+    let errors = match out {
         Ok(out) => apply(app, out),
         Err(e) => vec![e],
-    }
+    };
+    crate::canvas::overlays::after_input(app, &input);
+    errors
 }
 
 /// Whether the toolbox takes the key `ev` now, and what that did: `None` when the key is not the tools'.
@@ -160,8 +163,13 @@ pub fn key(app: &mut FontCraftApp, ev: fontcraft_tools::KeyEvent) -> Option<Vec<
 
 /// Carries out a tool's actions in order. Returns the errors.
 pub fn apply(app: &mut FontCraftApp, out: Output) -> Vec<String> {
+    let out = crate::canvas::overlays::unless_locked(app, out);
     let mut errors = Vec::new();
     for action in out.actions {
+        let ran = match &action {
+            Action::Run { invocation } => Some((invocation.id.clone(), invocation.params.clone())),
+            _ => None,
+        };
         let msg = match action {
             Action::Begin { label } => Msg::Preview(Preview::Begin(label)),
             Action::Preview { invocation } => Msg::Preview(Preview::Update(CommandRef::with_params(invocation.id, invocation.params))),
@@ -178,12 +186,19 @@ pub fn apply(app: &mut FontCraftApp, out: Output) -> Vec<String> {
             }
         };
         let begin = matches!(msg, Msg::Preview(Preview::Begin(_)));
-        if let Err(e) = app.apply_msg(msg) {
-            errors.push(e);
-            if begin {
-                // The tool cannot drag without an interaction: end its gesture and skip the previews that follow.
-                let _ = app.tools.toolbox.cancel();
-                break;
+        match app.apply_msg(msg) {
+            Err(e) => {
+                errors.push(e);
+                if begin {
+                    // The tool cannot drag without an interaction: end its gesture and skip the previews that follow.
+                    let _ = app.tools.toolbox.cancel();
+                    break;
+                }
+            }
+            Ok(()) => {
+                if let Some((id, params)) = ran {
+                    crate::canvas::annotation_editor::after_tool_run(app, &id, &params);
+                }
             }
         }
     }

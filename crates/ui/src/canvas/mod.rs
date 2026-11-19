@@ -5,8 +5,10 @@
 //! the [`camera`], then craft's `ToolHost` runs the active tool ([`ActiveTool`]) on the canvas's pass: the tool gets
 //! the background press, hover and keys and paints its feedback over the layers.
 
+pub mod annotation_editor;
 pub mod camera;
 pub mod layers;
+pub mod overlays;
 pub mod paint;
 pub mod text;
 pub mod tokens;
@@ -93,12 +95,17 @@ pub struct CanvasProps<'a> {
     pub text: &'a Tracked<TextModel>,
     /// The active-tool slot.
     pub tool: &'a mut dyn ActiveTool,
+    /// What the overlay layers paint.
+    pub overlays: &'a overlays::OverlayData,
+    /// The text note being typed, with its field over the note.
+    pub note: &'a mut Option<annotation_editor::NoteEdit>,
 }
 
 /// Shows the canvas; what the active tool's gestures posted goes to `sent`.
 pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
     let words = Env::of(ui).words::<ChromeWords>();
     let paint_words = Env::of(ui).words::<paint::CanvasWords>();
+    let overlay_words = Env::of(ui).words::<overlays::OverlayWords>();
     let glyph = props.model.glyph.as_ref();
     // The document is the edited glyph's advance box from the ascender to the descender.
     let document = glyph.map(|g| Size::new(g.width.max(1.0), (g.ascender - g.descender).max(1.0)));
@@ -109,6 +116,8 @@ pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
     }
     let (model, tokens, display, edit_background, tool_view, text) =
         (props.model, props.tokens, props.display, props.edit_background, props.tools, props.text);
+    let overlay_data = props.overlays;
+    let note = &mut *props.note;
     let tool = &mut *props.tool;
     let mut reply = None;
     let _ = canvas.show(ui, |ui, body| {
@@ -126,8 +135,15 @@ pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
             words: &paint_words,
             tools: tool_view,
             text,
+            overlays: overlays::Painted { data: overlay_data, words: &overlay_words },
         };
         layers::paint(&cx);
+        if let Some(edit) = note.as_mut() {
+            let at = model.glyph.as_ref().and_then(|g| g.layer.info.annotations.get(edit.index)).map(|a| fontcraft_geom::Point::new(a.x, a.y));
+            if let Some(at) = at.map(|p| camera.to_screen(p)).filter(|p| p.x.is_finite() && p.y.is_finite()) {
+                annotation_editor::show(ui, annotation_editor::EditorProps { note: edit, at });
+            }
+        }
         tool.set_camera(camera);
         if let Some(pass) = tool_pass(&body.env) {
             reply = Some(ToolHost::new().run(ui, &pass, &mut *tool));

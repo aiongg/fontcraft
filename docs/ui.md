@@ -155,7 +155,10 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   `PaintCx::painter`. The active-tool slot is `FontCraftApp::active_tool`, a `canvas::ActiveTool`
   (a craft `CanvasTool` that also hands over the commands its gestures made): craft's `ToolHost`
   runs it on the canvas's pass, after the layers. View commands and display toggles are
-  `shell/view.rs`.
+  `shell/view.rs`. Guides, grids, measurement labels, annotations, display aids, the auto-meter and audit markers
+  are `canvas/overlays/`: `overlays::refresh` (after `drain`) reads what they need from the engine into
+  `OverlayData`, which layers read as `PaintCx::overlays`; their switches are `shell/overlays.rs`. A text note is
+  typed in a field over its box (`canvas/annotation_editor.rs`).
 - **Tools.** The slot holds `canvas::tools::bridge::ToolBridge`. It posts the canvas's press, drags,
   hover and keys as `Msg::Tool`; `drain` runs `fontcraft_tools::Toolbox` on them
   (`canvas/tools/apply.rs`) and applies its answer before the next message, so each event sees what

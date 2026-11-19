@@ -6,7 +6,7 @@ use egui::{Painter, Rect};
 
 use super::camera::Camera;
 use super::tokens::Tokens;
-use super::{Display, paint, tools};
+use super::{Display, overlays, paint, tools};
 use crate::app::models::canvas::{CanvasModel, EditedGlyph};
 use crate::app::models::text::TextModel;
 
@@ -27,6 +27,8 @@ pub struct PaintCx<'a> {
     pub tools: &'a super::tools::ToolView,
     /// The edit view's text around the edited glyph.
     pub text: &'a Tracked<TextModel>,
+    /// Guides, measurement labels, annotations, display aids, the auto-meter and audit markers.
+    pub overlays: super::overlays::Painted<'a>,
 }
 
 impl PaintCx<'_> {
@@ -48,15 +50,23 @@ pub const LAYERS: &[PaintLayer] = &[
     PaintLayer { id: "background", paint: paint::background::tint },
     PaintLayer { id: "status", paint: paint::status::paint },
     PaintLayer { id: "metrics", paint: paint::metrics::paint },
+    PaintLayer { id: "grid", paint: overlays::guides::grid },
+    PaintLayer { id: "guides", paint: overlays::guides::guides },
     PaintLayer { id: "textBehind", paint: super::text::paint::behind },
     PaintLayer { id: "otherLayers", paint: paint::background::paint },
     PaintLayer { id: "textGlyphs", paint: super::text::paint::glyphs },
     PaintLayer { id: "outline", paint: paint::outline::paint },
     PaintLayer { id: "components", paint: paint::components::paint },
+    PaintLayer { id: "auditHighlights", paint: overlays::audit::highlights },
     PaintLayer { id: "selectedSegments", paint: tools::overlays::segments },
     PaintLayer { id: "nodes", paint: paint::nodes::paint },
     PaintLayer { id: "anchors", paint: paint::anchors::paint },
+    PaintLayer { id: "annotations", paint: overlays::annotations::annotations },
+    PaintLayer { id: "editAids", paint: overlays::aids::aids },
+    PaintLayer { id: "autometer", paint: overlays::autometer::autometer },
     PaintLayer { id: "selection", paint: tools::overlays::selection },
+    PaintLayer { id: "measurement", paint: overlays::guides::measurement },
+    PaintLayer { id: "auditMarkers", paint: overlays::audit::markers },
     PaintLayer { id: "toolOverlays", paint: tools::overlays::paint },
     PaintLayer { id: "textCursor", paint: super::text::paint::cursor },
     PaintLayer { id: "measurementLine", paint: super::text::paint::measurement },

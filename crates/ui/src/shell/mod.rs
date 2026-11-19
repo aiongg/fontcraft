@@ -17,6 +17,7 @@ pub mod glyph_info;
 pub mod kerning_review;
 pub mod kerning_window;
 pub mod masters;
+pub mod overlays;
 pub mod palette;
 pub mod params;
 pub mod rail;

@@ -19,6 +19,7 @@ mod filters;
 pub mod font_data;
 pub mod form;
 mod glyph_set;
+mod guide_properties;
 mod host;
 pub mod import;
 pub mod kerning_audit;
@@ -62,7 +63,7 @@ pub const MODULES: &[Module] = &[
 
 /// Every package's dialog specs, one line each.
 pub const SPECS: &[&[DialogSpec]] =
-    &[filters::SPECS, glyph_set::SPECS, export::SPECS, import::SPECS, font_data::SPECS, shape_order::SPECS, path::SPECS];
+    &[filters::SPECS, glyph_set::SPECS, export::SPECS, import::SPECS, font_data::SPECS, shape_order::SPECS, path::SPECS, guide_properties::SPECS];
 
 /// Runs every dialog module for this pass.
 pub fn run(host: &mut DialogHost, app: &mut FontCraftApp) {
