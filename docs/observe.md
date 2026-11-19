@@ -32,12 +32,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1450 rows to check: 2464 guesses and 578 observe steps.**
+**1452 rows to check: 2472 guesses and 583 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **517** |
-| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 110 |
+| **Built milestones (M0 to M6)** | all | **519** |
+| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 112 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
 | Built milestones (M0 to M6) | Filters | 36 |
@@ -65,9 +65,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
-## Built milestones (M0 to M6) (517)
+## Built milestones (M0 to M6) (519)
 
-### Edit View: drawing, guides, layers and the Palette (110)
+### Edit View: drawing, guides, layers and the Palette (112)
 
 - [ ] `dialog.fieldKeys` (behavior, M3, inferred): In a dialog's number field, Return takes the typed value, Escape drops…
   - Guess: Dialog number fields follow the Info box's editing and arrow-key rules (infoBox.fieldEditing, infoBox.arrowKeyStepping); the handbook documents them for the Info box only.
@@ -361,6 +361,15 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: With several glyphs selected in the text, the Info box describes the glyph after the cursor only, and the Unicode value is shown, not edited.
   - Guess: At each outer edge the kern field sits on the sidebearing row and the group field with its lock on the width row; a screenshot of the reference app's Info box in text mode would settle it.
   - Guess: The preceding glyph's box sits beside the glyph box, on the side where the preceding glyph is drawn; the reference app with the Text tool would settle it.
+- [ ] `spacing.setVerticalOrigin` (M5, inferred, live): Set Vertical Origin
+  - Guess: Setting the vertical origin keeps the vertical width, so the whole vertical box moves; a glyph with a vertical origin typed into the reference Info box settles it.
+  - Guess: The vertical origin field takes the width's key forms (a glyph name, a constant, a calculation, `==` for the layer); `|` and `@` are refused.
+  - Guess: A layer with no stored vertical origin reads 0.
+  - Observe: In top-to-bottom text, type 50 into the O field of a glyph and read T, B and H: which of them change?
+- [ ] `spacing.setVerticalWidth` (M5, inferred, live): Set Vertical Width
+  - Guess: A numeric vertical width change is absorbed by the bottom sidebearing, as the width's is by the right one.
+  - Guess: A vertical width key may be a glyph name, a constant or a calculation; `|` and `@` are refused, as in the width field.
+  - Observe: Give a glyph the vertical width key =n+100 in the H field, then change n's vertical width: does the field show the key as out of sync, and does Update Metrics set it?
 - [ ] `align.anchorToPoints` (behavior, M6, handbook): When the selection is a single anchor plus a single path point,…
   - Guess: With two points the anchor keeps its height and moves horizontally onto the line at the italic angle through the points' midpoint, and a locked anchor refuses it; aligning an anchor between two nodes of different heights on an italic master in the reference app settles it.
 - [ ] `align.componentOriginPoint` (behavior, M6, handbook): A component's origin point is the position of an anchor named origin…
@@ -660,8 +669,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `cornerComponent.add` (M6, handbook, live): Add Corner Component
   - Guess: A node that already holds a corner gets the new corner in its place, unscaled and aligned left, rather than a second corner; adding a corner to a node with a corner in the reference app settles it.
   - Guess: An off-curve node and the first or last node of an open path are refused, because the fitting needs a segment on each side; the context menu on an open path's end node in the reference app settles it.
+  - Guess: A corner follows its node through outline edits as a linked hint does (crates/hinting/src/remap.rs), including a background's corners; an edit that deletes its node removes the corner and reports it, as a TrueType instruction on that node is removed; Remove Overlap moves a corner on a removed node or an extra node to the nearest node the removal made. Inserting a node before a corner's node and deleting a corner's node in the reference app would settle both.
   - Observe: Select the end node of an open path and open the context menu: note whether Add Corner Component is shown, and what the corner looks like if it is added.
   - Observe: Add a corner to a node that already has one: note whether the old corner is replaced or a second one is added.
+  - Observe: Add a corner to a node of a closed path, insert a node on the segment before it, then delete the corner's node: note whether the corner stays on its node after the insert, and whether it is removed or moves to another node after the delete.
 - [ ] `cornerComponent.decompose` (M6, handbook, live): Decompose Corner
   - Guess: A corner on an extra node, or one whose corner glyph does not exist, is refused instead of being removed without a trace; the reference app settles it.
 - [ ] `cornerComponent.setScale` (M6, handbook, live): Set Corner Scale
@@ -794,7 +805,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `spacing.shortcutsNeedTextTool` (behavior, M5, handbook): The spacing shortcuts act only while the Text tool is active, on…
   - Guess: A spacing shortcut on a metric that holds a metrics key changes the number and keeps the key, which then shows as out of sync; no source says whether the reference keeps the key, removes it or ignores the keypress.
 - [ ] `spacing.shortcutModifierScheme` (behavior, M5, handbook): Modifier scheme for the arrow-key spacing shortcuts: Ctrl addresses the left sidebearing,…
-  - Guess: In right-to-left text the shortcuts address the visual left and right sidebearings, as in left-to-right text; in top-to-bottom text they do nothing in M5. No source says.
+  - Guess: In right-to-left text the shortcuts address the visual left and right sidebearings, as in left-to-right text. No source says.
+  - Guess: In top-to-bottom text the spacing shortcuts act on the top and bottom sidebearings: Ctrl on the top one, Cmd on the bottom one, both together shift the outline vertically. No source says; trying the shortcuts in top-to-bottom text settles it.
+  - Observe: In top-to-bottom text with the Text tool, press Ctrl+Left, Cmd+Right and Cmd+Ctrl+Right (and the Up/Down arrows with the same modifiers) on a glyph and read T, B, O and H after each: what changes?
 - [ ] `metricsKey.notSyncedAutomatically` (behavior, M5, handbook): A linked metric is not recalculated when the glyph it refers to…
   - Guess: A key whose chain of references returns to its own glyph, or runs deeper than 32 steps, is an error: the metric keeps its number and the key is reported. A forum answer by the reference developers shows the reference does not stop such cycles (thread "Possible bug with spacing formula"). Watching the reference app with such a key settles what it shows.
   - Guess: Division by zero, and a result outside 0 to 65,535 units for a width or −32,768 to 32,767 for a sidebearing, are errors reported the same way; watching the reference app with such a key settles what it shows.
@@ -3537,8 +3550,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `hinting.ps.manual.linkOnDrop` (behavior, M10, handbook): Dropping a hint marker on a node links that end of the…
   - Guess: An edit that deletes the node a hint end is linked to turns that end into a number at the node's last position; deleting a linked node in the reference app would settle it.
   - Guess: After an edit, a linked node is found again by index, then by place and on- or off-curve class within half a unit, then by index when its path keeps the same node classes; reversing a contour and changing its start point with linked hints in the reference app would settle whether links follow the node.
+  - Guess: Hints in a layer's background keep their links through background edits as the layer's own do; inserting a node before a linked node in the background of a hinted glyph in the reference app would settle it.
   - Observe: T1: link a stem hint of I to two nodes, delete one of them, and note whether the hint keeps its position as a number, is deleted, or moves.
   - Observe: T1: link a stem hint of O to two nodes, reverse the contour, then make another node first, and note whether the hint stays on the same nodes.
+  - Observe: T1: in I, choose Edit › Copy to Background (or swap with the background), link a background stem hint to two background nodes, insert a node before one of them in the background, and note whether the hint stays on the same nodes.
 - [ ] `hinting.ps.manual.linkToExtremes` (behavior, M10, handbook): Hints give the best results when linked to extremum nodes; a UI…
   - Guess: A linked node counts as an extreme when it is on-curve and its two neighbouring points (handles included) both lie on one side of it along the hint's axis, within half a unit; the reference app shows no such warning, so its Add Extremes on a test outline, which adds a node wherever it finds an extreme missing, is the nearest check.
 - [ ] `hinting.ps.manual.ghostFromSingleNode` (behavior, M10, handbook): Control-click or right-click on exactly one node and choosing Add Horizontal Hint…
