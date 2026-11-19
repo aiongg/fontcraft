@@ -6,7 +6,7 @@
 //! | component aligned horizontally only | its outline in `component_shiftable` |
 //! | component placed by hand | its outline in `component_manual` |
 //! | empty base layer, missing base glyph, circular reference | a crossed box with a label, `component_placeholder` (`components.placeholder*`) |
-//! | corner component | a faint disc on its node, `corner_highlight` (`corner.highlightAndSelection`) |
+//! | corner or cap component | a wide, faint band along the outline fitting it put in, `attachment_band` (`corner.highlightAndSelection`) |
 //!
 //! The projection resolves outlines per engine revision, so composites follow a base glyph while it is being
 //! edited (`components.liveUpdateFromBaseGlyph`).
@@ -61,8 +61,8 @@ pub fn shapes(cx: &PaintCx<'_>) -> Vec<Shape> {
             None => out.extend(outline_shapes(cx, &mark.outline, stroke)),
         }
     }
-    for at in glyph.corners.iter().filter_map(|p| screen(cx, *p)) {
-        out.push(Shape::circle_filled(at, t.corner_highlight_radius, t.corner_highlight));
+    for band in &glyph.attachments {
+        out.extend(outline_shapes(cx, band, Stroke::new(t.attachment_band_width, t.attachment_band)));
     }
     out
 }

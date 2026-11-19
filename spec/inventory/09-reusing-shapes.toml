@@ -134,14 +134,14 @@ label = "Choose Glyph"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{tab?: id, purpose?: addComponent|addComponentAllMasters|baseGlyph|addCorner|cornerGlyph, glyph?: name, layer?: id, component?: index, points?: [[shape, node]], corners?: [indices], query?: string, select?: name, pick?: bool, open?: bool} → {open, purpose, query, results, total, selected} | the picked command's result"
+params = "{tab?: id, purpose?: addComponent|addComponentAllMasters|baseGlyph|addCorner|cornerGlyph|addCap|capGlyph, glyph?: name, layer?: id, component?: index, points?: [[shape, node]], corners?: [indices], caps?: [indices], query?: string, select?: name, pick?: bool, open?: bool} → {open, purpose, query, results, total, selected} | the picked command's result"
 area = "components"
 milestone = "M6"
 summary = "Drives the glyph picker that the component commands open: Add Component, the base glyph name of the component Info box, Add Corner Component and the name of the corner Info box. It fixes what the command acts on when the picker opens, searches, highlights a result and runs the command with it. Our own command, so agents can fill the picker as a person does; not a reference menu item."
 ref = "Reusing Shapes › Components › Building Composites; Corner Components › Using Corner Components"
 status = "inferred"
 own = true
-notes = "M6.11: `ui-egui/src/dialogs/glyph_picker_component.rs`. A pick that the command refuses leaves the picker open with the message."
+notes = "M6.11: `ui-egui/src/dialogs/glyph_picker_component.rs`. A pick that the command refuses leaves the picker open with the message. In `crates/ui` (`dialogs/glyph_picker.rs`) the picker also serves the cap purposes (`addCap` lists `_cap.` glyphs for `capComponent.add`, `capGlyph` runs `capComponent.setGlyph`), and a pick posts its command and closes the picker, so a refusal reaches the status line instead."
 
 [[panel]]
 id = "dialog.componentFromSelection"

@@ -9,16 +9,19 @@
 
 mod about;
 pub mod after;
+mod component_name;
 pub mod custom_parameter_picker;
 pub mod field_picker;
 pub mod fields;
 mod filters;
 pub mod form;
+pub mod glyph_picker;
 mod host;
 pub mod kerning_audit;
 pub mod kerning_questions;
 pub mod os2_bits;
 pub mod panose;
+pub mod smart_settings;
 pub mod spec;
 pub mod tt;
 mod unsaved;
@@ -44,10 +47,12 @@ pub const MODULES: &[Module] = &[
     host::run,
     kerning_questions::run,
     kerning_audit::run,
+    glyph_picker::run_dialog,
+    smart_settings::run,
 ];
 
 /// Every package's dialog specs, one line each.
-pub const SPECS: &[&[DialogSpec]] = &[filters::SPECS];
+pub const SPECS: &[&[DialogSpec]] = &[filters::SPECS, component_name::SPECS];
 
 /// Runs every dialog module for this pass.
 pub fn run(host: &mut DialogHost, app: &mut FontCraftApp) {

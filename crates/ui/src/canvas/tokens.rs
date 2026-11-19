@@ -39,8 +39,8 @@ pub struct Tokens {
     pub component_shiftable: Color32,
     pub component_placeholder: Color32,
     pub anchor: Color32,
-    /// The faint disc of a corner component on its node.
-    pub corner_highlight: Color32,
+    /// The faint band along a corner or cap component's fitted outline.
+    pub attachment_band: Color32,
     /// The other side of the layer under Show Background (`appearance.color.backgroundStroke`).
     pub background_outline: Color32,
     /// Another visible layer of the glyph (`appearance.color.otherLayersStroke`).
@@ -64,7 +64,8 @@ pub struct Tokens {
     pub component_outline_width: f32,
     /// Width and height of an anchor marker.
     pub anchor_size: f32,
-    pub corner_highlight_radius: f32,
+    /// Width of the band along a corner or cap component.
+    pub attachment_band_width: f32,
     /// Text size of metric names, anchor names and placeholder labels.
     pub label_size: f32,
     /// Room between a line or a marker and its label.
@@ -145,7 +146,7 @@ impl Tokens {
             component_shiftable: Color32::from_rgb(0x3c, 0x78, 0xd8),
             component_placeholder: Color32::from_rgb(0xd0, 0x40, 0x40),
             anchor: Color32::from_rgb(0xe8, 0x8a, 0x1a),
-            corner_highlight: Color32::from_rgba_unmultiplied(0x50, 0x96, 0xf0, 0x40),
+            attachment_band: Color32::from_rgba_unmultiplied(0x50, 0x96, 0xf0, 0x40),
             background_outline: Color32::from_rgba_unmultiplied(0xe0, 0x40, 0x40, 0x90),
             visible_layer_outline: Color32::from_rgba_unmultiplied(0x2d, 0x8c, 0xeb, 0xb0),
             background_tint: Color32::from_rgba_unmultiplied(0x00, 0x00, 0x00, 0x18),
@@ -163,7 +164,7 @@ impl Tokens {
             extra_node_radius: 2.5,
             component_outline_width: 2.0,
             anchor_size: 9.0,
-            corner_highlight_radius: 14.0,
+            attachment_band_width: 10.0,
             label_size: 10.0,
             label_gap: 4.0,
             background_outline_width: 1.0,

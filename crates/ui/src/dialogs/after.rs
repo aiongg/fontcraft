@@ -21,6 +21,7 @@ pub fn after(command: &str, request: &Value, result: &Value) -> Option<(DialogSp
 /// Opens the question the run of `command` asks, unless a dialog is open. A dialog that cannot open leaves its
 /// reason in the status line.
 pub fn after_run(app: &mut FontCraftApp, command: &str, request: &Value, result: &Value) {
+    crate::shell::components::after_run(app, command, result);
     if app.dialogs.open.is_some() {
         return;
     }
@@ -34,6 +35,9 @@ pub fn after_run(app: &mut FontCraftApp, command: &str, request: &Value, result:
 /// A command the person fired: one that has a dialog and no parameters opens the dialog and returns true; any other
 /// returns false and runs.
 pub fn fired(app: &mut FontCraftApp, id: &str, params: &Value) -> bool {
+    if super::glyph_picker::fired(app, id, params) {
+        return true;
+    }
     let empty = params.is_null() || params.as_object().is_some_and(Map::is_empty);
     let Some(spec) = empty.then(|| super::for_command(id)).flatten() else { return false };
     if let Err(e) = super::form::open(app, &spec, &Map::new()) {

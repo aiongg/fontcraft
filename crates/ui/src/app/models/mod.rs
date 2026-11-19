@@ -4,6 +4,7 @@
 //! one of them with a one-line arm, and only when the [`Stamp`] moved since the last call.
 
 pub mod canvas;
+pub mod components;
 pub mod console;
 pub mod font_info;
 pub mod font_view;

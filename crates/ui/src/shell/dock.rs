@@ -323,6 +323,9 @@ impl DockPanels<PanelId> for Panels<'_> {
                 panels::anchor_context::show(ui, panels::anchor_context::Props { model: &self.models.palette.anchor_context, sent: self.sent });
             }
             PanelId::Stroke => panels::stroke::show(ui, panels::stroke::Props { model: &self.models.palette.stroke, sent: self.sent }),
+            PanelId::SmartComponent => {
+                panels::smart_component::show(ui, panels::smart_component::Props { model: &self.models.palette.smart, sent: self.sent })
+            }
             // Drawn by `group_view`.
             PanelId::Document => {}
             other => panels::stub::show(ui, panels::stub::Props { title: other.title(&self.words) }),

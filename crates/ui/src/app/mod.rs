@@ -74,6 +74,8 @@ pub struct ViewState {
     pub kerning: crate::shell::kerning_window::KerningView,
     /// The Info box's reference point and size lock, the Transformations settings and the Fit Curve range.
     pub palette: crate::shell::palette::PaletteView,
+    /// The component glyph picker and the smart settings windows.
+    pub components: crate::shell::components::ComponentsView,
 }
 
 impl Default for ViewState {
@@ -96,6 +98,7 @@ impl Default for ViewState {
             commands: console::CommandSurfaces::default(),
             kerning: Default::default(),
             palette: Default::default(),
+            components: Default::default(),
         }
     }
 }
