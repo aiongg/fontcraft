@@ -17,3 +17,7 @@ fontcraft-tables.workspace = true
 skrifa.workspace = true
 pdf-writer.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+fontcraft-compile.workspace = true
+lopdf.workspace = true

@@ -207,10 +207,15 @@ impl<'a> Face<'a> {
         self.unicodes.get(gid as usize).copied().flatten()
     }
 
+    /// The glyph `cmap` maps `c` to.
+    pub(crate) fn glyph_for(&self, c: char) -> Option<u32> {
+        self.mappings.binary_search_by_key(&(c as u32), |m| m.0).ok().and_then(|i| self.mappings.get(i)).map(|m| m.1)
+    }
+
     /// The advance of the glyph mapped to `c`, in font units; half an em when nothing is mapped.
     pub(crate) fn char_advance(&self, c: char) -> f64 {
-        let gid = self.mappings.binary_search_by_key(&(c as u32), |m| m.0).ok().and_then(|i| self.mappings.get(i)).map(|m| m.1);
-        gid.and_then(|g| self.glyph_metrics.advance_width(GlyphId::new(g)))
+        self.glyph_for(c)
+            .and_then(|g| self.glyph_metrics.advance_width(GlyphId::new(g)))
             .map(f64::from)
             .filter(|a| a.is_finite() && *a >= 0.0)
             .unwrap_or(self.upem / 2.0)

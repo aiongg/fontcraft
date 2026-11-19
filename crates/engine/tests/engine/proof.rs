@@ -1,5 +1,5 @@
 //! `font.proof` on a font built in code: page count, glyphs per page and glyph order of the SVG
-//! sheets, and the structure of the HTML specimen.
+//! sheets, the single file of a PDF proof, and the structure of the HTML specimen.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
 use std::path::{Path, PathBuf};
@@ -92,6 +92,28 @@ fn proof_svg_pages_follow_glyph_order_and_glyphs_per_page() {
     let svg = std::fs::read_to_string(&files(&result)[0]).unwrap();
     assert!(svg.contains("@font-face") && svg.contains("data:font/ttf;base64,"));
     assert_eq!(svg.matches("class=\"s\"").count(), 12, "one line per default waterfall size");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn proof_pdf_is_one_file_holding_every_page() {
+    let (dir, ttf) = font("pdf");
+    let mut s = Session::new();
+    let order = glyph_order(&mut s, &ttf);
+    // PDF is the default format.
+    let result = run(&mut s, "font.proof", json!({ "fonts": [ttf], "layout": "outline", "outputDir": dir.join("pdf") }));
+    assert_eq!(result["proofs"][0]["format"], "pdf");
+    assert_eq!(result["proofs"][0]["pages"], order.len(), "one outline page per glyph");
+    let written = files(&result);
+    assert_eq!(written.len(), 1);
+    assert_eq!(written[0].file_name().unwrap().to_string_lossy(), "Proof.proof.pdf");
+    let pdf = std::fs::read(&written[0]).unwrap();
+    assert!(pdf.starts_with(b"%PDF-"));
+    let pages = pdf.windows(12).filter(|w| w.starts_with(b"/Type /Page") && w[11] != b's').count();
+    assert_eq!(pages, order.len());
+    for name in &order {
+        assert!(pdf.windows(name.len() + 8).any(|w| w == format!("/Name ({name})").as_bytes()), "{name} is marked in the file");
+    }
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
