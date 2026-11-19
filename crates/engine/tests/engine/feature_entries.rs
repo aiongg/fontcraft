@@ -313,3 +313,40 @@ fn number_values_are_added_set_per_master_renamed_and_removed() {
     refused(&mut s, "font.master.setNumber", json!({"masters": [7], "number": 0, "value": 1}), "no master 7");
     refused(&mut s, "font.numbers.remove", json!({"number": 5}), "no number value 5");
 }
+
+/// The Number Values editor: the plus button adds without a name, the name field renames and the
+/// value field sets every selected master, each one undo step.
+#[test]
+fn number_values_editor_adds_free_names_and_refuses_taken_renames() {
+    let mut s = Session::with_document();
+    s.edit("second master", |font| {
+        Arc::make_mut(&mut font.masters).push(Master { id: "m02".into(), name: "Bold".into(), ..Master::default() });
+        Ok(())
+    })
+    .unwrap();
+    let r = run(&mut s, "font.numbers.add", json!({}));
+    assert_eq!(r, json!({"index": 0, "name": "value", "values": {"m01": 0.0, "m02": 0.0}}));
+    assert_eq!(run(&mut s, "font.numbers.add", json!({}))["name"], "value1");
+    run(&mut s, "font.numbers.rename", json!({"number": 0, "name": "value2"}));
+    // `value` is free again and comes first.
+    assert_eq!(run(&mut s, "font.numbers.add", json!({}))["name"], "value");
+
+    refused(&mut s, "font.numbers.rename", json!({"number": "value", "name": "value1"}), "already has a number value");
+    refused(&mut s, "font.numbers.rename", json!({"number": "value", "name": "pad left"}), "number value name");
+    refused(&mut s, "font.numbers.rename", json!({"number": "value", "name": ""}), "number value name");
+
+    // Renaming to its own name changes nothing and makes no undo step.
+    let before = Arc::clone(&s.doc().unwrap().font);
+    run(&mut s, "font.numbers.rename", json!({"number": "value1", "name": "value1"}));
+    assert!(Arc::ptr_eq(&before, &s.doc().unwrap().font));
+
+    let before = Arc::clone(&s.doc().unwrap().font);
+    run(&mut s, "font.master.setNumber", json!({"masters": ["m01", "m02"], "number": "value1", "value": 7}));
+    assert_eq!(s.font().unwrap().masters.iter().map(|m| m.number_values[1]).collect::<Vec<_>>(), [7.0, 7.0]);
+    run(&mut s, "edit.undo", json!({}));
+    assert!(Arc::ptr_eq(&before, &s.doc().unwrap().font), "setting two masters is one undo step");
+
+    run(&mut s, "font.numbers.remove", json!({"number": "value2"}));
+    let names: Vec<String> = s.font().unwrap().numbers.iter().map(|d| d.name.clone()).collect();
+    assert_eq!(names, ["value1", "value"]);
+}

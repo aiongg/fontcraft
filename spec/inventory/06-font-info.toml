@@ -1651,7 +1651,7 @@ label = "Add Number Value"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{name: string, values?: {master: number}}"
+params = "{name?: string, values?: {master: number}}"
 area = "features"
 milestone = "M8"
 summary = "Adds a named number with the plus button beside the Number Values heading; every master then stores its own value under that name."
@@ -1660,6 +1660,10 @@ status = "handbook"
 notes = "Documented, not yet observed."
 guesses = [
   "A number value name is letters, digits and `_`, not starting with a digit, so that a `$name` token can read all of it; a leading `.` is allowed for settings such as `.monospace`, which the handbook names. A name the font has is refused. Naming a number value with a space, a hyphen or an inner dot in the reference app would settle it.",
+  "The plus button adds a number value called `value` (`value1`, `value2`… while taken) for the user to rename, because the handbook does not say what a new one is called; clicking the plus button twice in the reference app settles it.",
+]
+observe = [
+  "In font A (m7-one), open Font Info › Masters and click the plus button beside Number Values twice: note the names and values the two new rows get.",
 ]
 
 [[command]]
