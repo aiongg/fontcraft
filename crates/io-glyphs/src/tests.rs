@@ -734,6 +734,43 @@ fn version_2_holds_properties_and_palettes_in_its_own_forms() {
     assert_eq!(back.instances[0].params.get("familyName").and_then(Value::as_str), Some("Old Family"));
 }
 
+/// A version 4 `Color Palettes` dictionary: palette names, background styles, colour names, and
+/// a grey colour.
+const V4_PALETTES: &str = "{names = {\"0\" = Ink; \"1\" = Leaf;}; palettes = ({backgroundStyle = (light); colors = ((1,0,0,1),(0,0.502,0,1)); name = Day;},{backgroundStyle = (dark); colors = ((0.2,1),(1,1,1,0.502)); name = Night;});}";
+
+#[test]
+fn a_version_4_palette_dictionary_is_written_as_lists_before_version_4_and_its_names_are_reported() {
+    use fontcraft_model::Param;
+    let dict = fontcraft_plist::openstep::parse(V4_PALETTES).unwrap().root;
+    let lists = fontcraft_plist::openstep::parse("(((255,0,0,255),(0,128,0,255)),((51,255),(255,255,255,128)))").unwrap().root;
+    let strings = fontcraft_plist::openstep::parse(r#"(("255,0,0,255","0,128,0,255"),("51,255","255,255,255,128"))"#).unwrap().root;
+    for (text, version, want) in [(V3, 4, &dict), (V3, 3, &lists), (V2, 2, &strings)] {
+        let mut font = read(text).unwrap();
+        font.source.glyphs_version = Some(version);
+        Arc::make_mut(&mut font.info).params.set("Color Palettes", dict.clone());
+        Arc::make_mut(&mut font.masters)[0].params.0.push(Param::new("Color Palettes", dict.clone()));
+        let back = read(&write(&font).unwrap()).unwrap();
+        assert_eq!(back.info.params.get("Color Palettes"), Some(want), "version {version}: the font's");
+        assert_eq!(back.masters[0].params.get("Color Palettes"), Some(want), "version {version}: the master's");
+        let lost: Vec<String> = info_losses(&font).into_iter().filter(|l| l.contains("Color Palettes")).collect();
+        if version == 4 {
+            assert!(lost.is_empty(), "{lost:?}");
+            continue;
+        }
+        let what = format!(
+            "parameter `Color Palettes`: palette names (2), palettes with background styles (2), colour names (2) (format version {version} stores only the colours)"
+        );
+        let master = format!("master `{}`: {what}", if font.masters[0].name.is_empty() { &font.masters[0].id } else { &font.masters[0].name });
+        assert_eq!(lost, [what, master], "version {version}");
+    }
+    // A dictionary whose colours do not convert is written as read, and reported.
+    let mut font = read(V3).unwrap();
+    let bad = fontcraft_plist::openstep::parse("{palettes = ({colors = ((2,0,0,1));});}").unwrap().root;
+    Arc::make_mut(&mut font.info).params.set("Color Palettes", bad.clone());
+    assert_eq!(read(&write(&font).unwrap()).unwrap().info.params.get("Color Palettes"), Some(&bad));
+    assert!(info_losses(&font).iter().any(|l| l.contains("written as read")), "{:?}", info_losses(&font));
+}
+
 #[test]
 fn zones_beyond_the_overshoots_are_lost_only_after_version_2() {
     let mut font = read(&v2_design()).unwrap();

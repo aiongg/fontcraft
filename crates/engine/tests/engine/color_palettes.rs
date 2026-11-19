@@ -260,6 +260,14 @@ fn generate_dark_palette_appends_a_dark_palette_that_cpal_version_1_flags() {
     assert_eq!(cpal.version(), 1);
     let types: Vec<u32> = cpal.palette_types_array().unwrap().unwrap().iter().map(|t| t.get().bits()).collect();
     assert_eq!(types, [0, 0, 2]);
+    // The export report says the same before exporting.
+    let described = run(&mut s, "color.describeExport", json!({}));
+    let cpal = &described["exports"][0]["cpal"];
+    assert_eq!(
+        (cpal["version"].clone(), cpal["types"].clone(), cpal["labels"].clone()),
+        (json!(1), json!([0, 0, 2]), json!([null, null, "Dark"])),
+        "{described}"
+    );
 
     // The palette commands keep the dictionary form and its flag.
     run(&mut s, "colorPalette.setColor", json!({"palette": 2, "index": 0, "color": "#FFEEDD"}));

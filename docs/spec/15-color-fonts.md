@@ -342,6 +342,11 @@ Settle these by observing the reference app or its exported fonts.
    palette marked `dark` (OKLab lightness inverted, hue and alpha kept). Without names or styles
    CPAL stays version 0 (guesses on `color.palette.multiplePalettes` and
    `color.generateDarkPalette`).
+   **M13.65b (ours):** opening a compiled font reads CPAL version 1 palette types and labels back
+   into the version 4 form. `.glyphs` versions 2 and 3 document only the list forms, and ufo2ft's
+   lib key holds only colours, so saving in those formats writes the colours as lists and the
+   save loss report names the palette names, background styles and colour names left out
+   (guesses on `Color Palettes` and `color.open.compiledColorTables`).
 5. When a colour row is removed in the palette editor, are layers using that or higher indices
    renumbered, left dangling, or flagged?
    **Answered for M11 (ours):** layers that use higher indices are renumbered down; removing a row

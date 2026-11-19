@@ -148,7 +148,7 @@ also be an alternate).
 | Full-colour layer | `attr.color` (true); shapes carry fills and gradients (§2.7) | none standard | |
 | Bitmap colour layer | `attr.sbixSize`; the layer's image is the bitmap | none | |
 | SVG colour layer | `attr.svg` | none | |
-| Palettes | font custom parameter `Color Palettes`: v3 a list of colour lists, v4 `{palettes[] {name, backgroundStyle[], colors[]}, names {index: name}}` | lib `com.github.googlei18n.ufo2ft.colorPalettes` (read by `ufo2fontir`) | |
+| Palettes | font custom parameter `Color Palettes`: v3 a list of colour lists, v4 `{palettes[] {name, backgroundStyle[], colors[]}, names {index: name}}` | lib `com.github.googlei18n.ufo2ft.colorPalettes` (read by `ufo2fontir`) | UFO and `.glyphs` versions 2 and 3 have no place for v4's palette names, background styles or colour names: only the colours are written, and the loss report names the rest. |
 | Background | `background {shapes, anchors, guides, hints, annotations, backgroundImage}` nested in the layer | a layer named `public.background` | Per layer of each glyph (so one per master) versus one font-wide layer per UFO, which happens to line up because one UFO is one master. Backups of other layers have backgrounds too; UFO has no place for those. |
 | Advance | `width` (required), `vertWidth`, `vertOrigin` | `<advance width height>`, glyph lib `public.verticalOrigin` | |
 | Layer metrics keys | `metricLeft`, `metricRight`, `metricWidth`, `metricTop`, `metricBottom`, `metricVertWidth`, `metricVertOrigin` | none | Override the glyph-level keys for one master. |

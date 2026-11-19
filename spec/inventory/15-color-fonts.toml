@@ -553,7 +553,7 @@ summary = "Query: for one instance (or all) reports which colour tables would be
 ref = "Color Fonts › Working with Color Fonts › Exporting Color Fonts"
 status = "inferred"
 own = true
-notes = "Reads the same export plan the compiler builds its tables from. Without `instance` or `master` it covers every static instance that exports, or the first master when there is none, as a plain export does. `master` describes an export of that master; `cbdt` adds the export option that writes CBDT and CBLC. Each export lists its resolved switches, its tables, the COLR glyphs with the layers they are made from, the strikes, the SVG documents and their sources, and the warnings and refusals."
+notes = "Reads the same export plan the compiler builds its tables from. Without `instance` or `master` it covers every static instance that exports, or the first master when there is none, as a plain export does. `master` describes an export of that master; `cbdt` adds the export option that writes CBDT and CBLC. Each export lists its resolved switches, its tables, the CPAL version with each palette's type bits (1 light, 2 dark) and label and the number of named colours, the COLR glyphs with the layers they are made from, the strikes, the SVG documents and their sources, and the warnings and refusals."
 
 # ───────────────────────────── Panels ─────────────────────────────
 
@@ -946,7 +946,7 @@ milestone = "M11"
 summary = "A font may define several palettes. They share the same colour indices (one row per index, one column per palette), so every palette has the same number of entries, as CPAL requires."
 ref = "Color Fonts › COLR/CPAL Fonts › Defining the Color Palette"
 status = "handbook"
-notes = "M13.65: the palette names, background styles (light, dark) and colour names of the version 4 Color Palettes form are written to CPAL version 1 as palette types, palette labels and palette entry labels, each label a name ID above the font's other names; without any of them CPAL stays version 0."
+notes = "M13.65: the palette names, background styles (light, dark) and colour names of the version 4 Color Palettes form are written to CPAL version 1 as palette types, palette labels and palette entry labels, each label a name ID above the font's other names; without any of them CPAL stays version 0. M13.65b: opening a compiled font reads palette types and labels back into the version 4 form (`color.open.compiledColorTables`); saving as `.glyphs` version 2 or 3 or as UFO keeps only the colours and reports the names and background styles as lost (`Color Palettes`). `color.describeExport` reports the CPAL version, each palette's type and label and the number of named colours."
 guesses = [
   "CPAL is version 1 only when a palette has a name or a background style or a colour has a name, and version 0 otherwise, as both reference compilers write it; a font the reference exports from a version 4 file with named palettes would settle it.",
 ]
@@ -1565,8 +1565,9 @@ summary = "Opening a compiled font reads its CPAL into the Color Palettes parame
 ref = "Color Fonts"
 status = "inferred"
 own = true
-notes = "Every master gets the colour layers, each made from the layer glyph's layer of that master and given the base glyph's width. Paints that use transformations, blends or nested clips leave the glyph with its plain outline, and the warnings name it. The layer glyphs a colour glyph used are removed, as an export makes them again; one with a code point, one that is a colour glyph itself and one a remaining glyph uses as a component stay."
+notes = "Every master gets the colour layers, each made from the layer glyph's layer of that master and given the base glyph's width. Paints that use transformations, blends or nested clips leave the glyph with its plain outline, and the warnings name it. The layer glyphs a colour glyph used are removed, as an export makes them again; one with a code point, one that is a colour glyph itself and one a remaining glyph uses as a component stay. M13.65b: a CPAL version 1 table whose palette types, palette labels or palette entry labels say something opens as the version 4 Color Palettes dictionary: type bit 0 becomes the `light` background style, bit 1 `dark`, a palette label the palette's `name` and an entry label the row's entry in `names`, each read from the label's English name record, else its first; a version 0 table, or one whose arrays hold only defaults, opens as version 3 integer lists."
 guesses = [
+  "A CPAL version 1 table with palette types or labels opens as the version 4 Color Palettes dictionary, the only form that holds them, even in a document that is later saved in another format. Settled by opening, in the reference, a font whose CPAL has palette types and labels and reading the saved parameter.",
   "Opening a compiled colour font recovers palettes and vector colour layers and reports bitmap and SVG glyphs as lost. Settled by opening a COLR font in the reference.",
   "A COLR version 1 glyph whose paints are all opaque solid palette colours opens as palette layers; any other version 1 glyph opens as one full-colour layer. Settled by opening a COLR version 1 font with solid and gradient glyphs in the reference.",
   "Colours of full-colour layers open as palette references, so palette rows an export added for RGBA colours stay rows of every palette. Settled by opening, in the reference, a COLR version 1 font exported from full-colour layers with RGBA fills.",
