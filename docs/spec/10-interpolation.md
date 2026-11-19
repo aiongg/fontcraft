@@ -402,6 +402,22 @@ upper layer (1).
   (M9.33).
 - The timing graph's function is the fraction of the curve's length travelled at `s` (guess).
 
+### 9.2 Commands
+
+The six `hoi.*` commands (`crates/engine/src/cmd/hoi.rs`) each take `glyph`, `layer`, `points`
+(`[shape, node]` on that layer) and `axis`. `toward` picks the span: `up` (default) from the layer
+to the next layer up the axis, `down` from the next layer down to the layer. The curve is written
+to the node of the span's lower layer. A font with no axis or fewer than two masters is refused.
+
+| Command | Effect |
+|---|---|
+| `hoi.setInterpolationType` | linear removes the curve; Intermediate Point at the node's halfway position (guess); Handles from the curve's cubic; Rotation with an automatic centre (guess) |
+| `hoi.setControlPoints` | one position: a rotation's centre, or an intermediate point; two: the handles |
+| `hoi.convertToHandles` | intermediate points become the handles of the same cubic |
+| `hoi.centerRotation` | the rotation's centre becomes automatic (`rc = auto`, guess) |
+| `hoi.setRotationDirection` | automatic, clockwise or counterclockwise |
+| `hoi.removeCurve` | removes the curve; needs no layer on the far side |
+
 ## 10. Variable font options
 
 ### 10.1 Origin

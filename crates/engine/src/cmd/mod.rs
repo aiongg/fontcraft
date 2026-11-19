@@ -56,6 +56,7 @@ mod hint_ps;
 mod hint_tt;
 mod hint_tt_defs;
 mod hint_tt_more;
+mod hoi;
 mod image;
 #[cfg(not(target_arch = "wasm32"))]
 mod import_naming;
@@ -389,6 +390,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(special_layers::specs());
         v.extend(interpolation::specs());
         v.extend(match_masters::specs());
+        v.extend(hoi::specs());
         v.extend(instance_masters::specs());
         v.extend(variation_tools::specs());
         v.extend(compare::specs());

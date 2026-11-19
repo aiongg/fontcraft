@@ -102,6 +102,7 @@ mod hint_tt;
 mod hint_tt_defs;
 mod hint_tt_more;
 mod hint_upkeep;
+mod hoi;
 mod image;
 mod import_naming;
 mod indic_positional;
