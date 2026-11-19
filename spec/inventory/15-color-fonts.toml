@@ -946,6 +946,10 @@ milestone = "M11"
 summary = "A font may define several palettes. They share the same colour indices (one row per index, one column per palette), so every palette has the same number of entries, as CPAL requires."
 ref = "Color Fonts › COLR/CPAL Fonts › Defining the Color Palette"
 status = "handbook"
+notes = "M13.65: the palette names, background styles (light, dark) and colour names of the version 4 Color Palettes form are written to CPAL version 1 as palette types, palette labels and palette entry labels, each label a name ID above the font's other names; without any of them CPAL stays version 0."
+guesses = [
+  "CPAL is version 1 only when a palette has a name or a background style or a colour has a name, and version 0 otherwise, as both reference compilers write it; a font the reference exports from a version 4 file with named palettes would settle it.",
+]
 
 [[behavior]]
 id = "color.palette.perMaster"

@@ -214,3 +214,59 @@ fn unreadable_stored_palettes_refuse_edits() {
     refused(&mut s, "colorPalette.list", json!({}), "palette 1 has 1 colours");
     refused(&mut s, "colorPalette.addColor", json!({}), "palette 1 has 1 colours");
 }
+
+#[test]
+fn generate_dark_palette_appends_a_dark_palette_that_cpal_version_1_flags() {
+    let mut s = palette_font();
+    // A glyph whose palette layer draws something, so that COLR and CPAL are written.
+    s.edit("dot", |font| {
+        let master = font.masters[0].id.clone();
+        let mut dot = Glyph::new("dot");
+        let mut base = Layer::new(master.as_str(), 500.0);
+        base.shapes.push(Shape::Path(Path::rect(0.0, 0.0, 400.0, 400.0)));
+        dot.layers.push(base);
+        let mut colour = palette_layer(&master, "d0", PaletteEntry::Index(1), None);
+        colour.shapes.push(Shape::Path(Path::rect(0.0, 0.0, 400.0, 400.0)));
+        dot.layers.push(colour);
+        font.glyphs.push(dot);
+        Ok(())
+    })
+    .unwrap();
+    let r = run(&mut s, "color.generateDarkPalette", json!({"palette": 0}));
+    assert_eq!((r["palette"].clone(), r["palettes"].clone(), r["rows"].clone(), r["name"].clone()), (json!(2), json!(3), json!(3), json!("Dark")));
+    let listed = palettes(&mut s, json!({}));
+    assert_eq!(listed["palettes"][2], r["colors"]);
+    assert_eq!(listed["palettes"][0], json!(["#FF0000FF", "#00FF00FF", "#0000FFFF"]), "the source is unchanged");
+    // Pure red keeps its hue: red is still the strongest channel.
+    let red = fontcraft_color::Rgba::parse_hex(r["colors"][0].as_str().unwrap()).unwrap();
+    assert!(red.r > red.g && red.r > red.b && red.a == 255, "{red:?}");
+
+    let font = s.font().unwrap();
+    let stored = font.info.params.get("Color Palettes").unwrap();
+    let info = fontcraft_color::palette::palette_info(stored);
+    assert_eq!(info.len(), 3);
+    assert!(info[2].dark && !info[2].light && info[2].name.as_deref() == Some("Dark"));
+    assert!(!info[0].dark && !info[1].dark);
+
+    let out = fontcraft_compile::compile(
+        font,
+        &font.default_target().unwrap(),
+        fontcraft_compile::Flavour::TrueType,
+        &fontcraft_compile::Options::default(),
+    )
+    .unwrap();
+    use skrifa::raw::TableProvider;
+    let cpal = skrifa::FontRef::new(&out.bytes).unwrap().cpal().unwrap();
+    assert_eq!(cpal.version(), 1);
+    let types: Vec<u32> = cpal.palette_types_array().unwrap().unwrap().iter().map(|t| t.get().bits()).collect();
+    assert_eq!(types, [0, 0, 2]);
+
+    // The palette commands keep the dictionary form and its flag.
+    run(&mut s, "colorPalette.setColor", json!({"palette": 2, "index": 0, "color": "#FFEEDD"}));
+    let stored = s.font().unwrap().info.params.get("Color Palettes").unwrap();
+    assert!(fontcraft_color::palette::palette_info(stored)[2].dark);
+
+    refused(&mut s, "color.generateDarkPalette", json!({"palette": 9}), "no palette 9");
+    let mut empty = Session::with_document();
+    refused(&mut empty, "color.generateDarkPalette", json!({}), "no colour palettes");
+}

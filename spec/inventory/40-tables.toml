@@ -421,6 +421,7 @@ milestone = "M11"
 summary = "Colour palettes referenced by COLR and SVG. Written only when COLR or a vector SVG document uses them; fontc also writes CPAL alone when the source has palettes and no colour layers, fontmake does not, and FontCraft follows fontmake."
 ref = "fontc fontbe/src/cpal.rs; write-fonts src/tables/cpal.rs"
 status = "docs"
+notes = "Version 0 through write-fonts, which writes only that version. Version 1 (palette types, palette labels, palette entry labels; M13.65) is serialised by FontCraft with the array order and zero offsets of fontTools' C_P_A_L_ compile, when the version 4 Color Palettes form gives palettes background styles or names, or colours names."
 
 [[table]]
 tag = "sbix"

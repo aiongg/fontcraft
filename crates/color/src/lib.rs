@@ -8,6 +8,7 @@
 //! | Module | Package | What it gives |
 //! |---|---|---|
 //! | [`palette`] | M11.2 | `Color Palettes` read and written, a master's own palettes, the edit helpers |
+//! | [`dark`] | M13.65 | a palette for dark backgrounds, derived in OKLab |
 //! | [`layers`] | M11.3 | colour layer kinds, labels, a glyph's colour layers in paint order |
 //! | [`paint`] | M11.7 (M11.6 for solid layers, M11.19 for variation) | the paint graph of a glyph |
 //! | [`export`] | M11.6 | the eight instance switches, the export plan every table builder reads |
@@ -28,6 +29,7 @@
 #![forbid(unsafe_code)]
 
 pub mod assets;
+pub mod dark;
 pub mod error;
 pub mod export;
 pub mod layers;

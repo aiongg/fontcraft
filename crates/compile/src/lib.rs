@@ -485,6 +485,8 @@ pub(crate) struct Extra {
     pub cid: Option<cid::CidPlan>,
     /// The masters a variable TrueType font's `cvar` varies with, once its `cvt ` is known.
     pub cvar: Option<var::cvar::CvarMasters>,
+    /// `CPAL`, built with the `name` table because its labels take IDs above the other names.
+    pub cpal: Option<color::PendingCpal>,
 }
 
 /// The outline stage of a variable compile: given the origin's final glyphs, the outlines to
@@ -583,6 +585,7 @@ pub(crate) fn compile_stages_with(
     extra.math = math::plan(font, &resolved, &edits);
     extra.cid = cid_plan;
     let color_tables = color::build(font, &color_plan, &color::GlyphOrder::new(&glyphs, &made)?, options, &mut warnings)?;
+    extra.cpal = color_tables.cpal;
     let bytes = build::assemble(
         font,
         &resolved,

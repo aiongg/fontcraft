@@ -335,6 +335,13 @@ Settle these by observing the reference app or its exported fonts.
    **Answered for M11 (oracle):** both oracles write CPAL version 0 with no labels or palette types;
    FontCraft does the same. fontc also writes CPAL when no colour layer uses it, fontmake does not;
    FontCraft follows fontmake.
+   **M13.65 (ours):** the version 4 `Color Palettes` form stores palette names, background styles
+   (`light`, `dark`) and colour names. When any of them is present FontCraft writes CPAL version 1:
+   `light` sets palette type bit 0, `dark` bit 1, and each name becomes a palette or palette entry
+   label with a name ID above the font's other names. `color.generateDarkPalette` appends a
+   palette marked `dark` (OKLab lightness inverted, hue and alpha kept). Without names or styles
+   CPAL stays version 0 (guesses on `color.palette.multiplePalettes` and
+   `color.generateDarkPalette`).
 5. When a colour row is removed in the palette editor, are layers using that or higher indices
    renumbered, left dangling, or flagged?
    **Answered for M11 (ours):** layers that use higher indices are renumbered down; removing a row

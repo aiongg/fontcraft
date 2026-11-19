@@ -84,6 +84,7 @@ mod new_document;
 mod node;
 mod numbers;
 mod palette;
+mod palette_dark;
 mod path;
 mod pathops;
 pub mod preview;
@@ -417,6 +418,7 @@ pub const COMMAND_TABLES: &[CommandTable] = &[
     autohint_tt::specs,
     autohint_report::specs,
     palette::specs,
+    palette_dark::specs,
     color_layer::specs,
     attributes::specs,
     image::specs,

@@ -20,6 +20,9 @@
 //! - [`store`] writes palettes back in the form the parameter already had, keeping a version 4
 //!   value's colour names and palette names in step with the edit. [`to_param`] writes the
 //!   version 3 form, which the version 2 and UFO writers convert from.
+//! - [`palette_info`] and [`color_names`] read what only the version 4 form stores: palette names,
+//!   background styles (`light`, `dark`) and colour names, which `CPAL` version 1 writes as
+//!   palette types and labels. [`store_dark`] stores a palette for dark backgrounds in that form.
 //! - Pure functions; an edit that fails returns an error and changes nothing.
 
 use fontcraft_model::plist::{Array, Dict, Layout, Num, Number, Str, Value};
@@ -191,6 +194,14 @@ impl Palettes {
         Ok(next)
     }
 
+    /// `colours` appended as a new palette, one colour per row.
+    pub fn add_palette_with(&self, colours: Vec<Rgba>) -> Result<Palettes, ColorError> {
+        if self.palettes.len() >= MAX_PALETTES {
+            return Err(ColorError::LimitExceeded { what: "palettes", limit: MAX_PALETTES });
+        }
+        Palettes::new(self.palettes.iter().cloned().chain([colours]).collect())
+    }
+
     /// Palette `index` removed; refused for the last one ([`ColorError::LastPalette`]).
     pub fn remove_palette(&self, index: usize) -> Result<Palettes, ColorError> {
         if index >= self.palettes.len() {
@@ -203,6 +214,85 @@ impl Palettes {
         next.palettes.remove(index);
         Ok(next)
     }
+}
+
+/// Longest palette or colour name read from a version 4 value, in characters; a longer one is
+/// cut.
+pub const MAX_NAME_CHARS: usize = 256;
+/// Most `backgroundStyle` entries of one palette that are read.
+const MAX_STYLES: usize = 8;
+
+/// What a version 4 value says about one palette besides its colours.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PaletteInfo {
+    /// The palette's name; `None` when it has none or an empty one.
+    pub name: Option<String>,
+    /// `backgroundStyle` holds `light`: the palette is meant for light backgrounds.
+    pub light: bool,
+    /// `backgroundStyle` holds `dark`: the palette is meant for dark backgrounds.
+    pub dark: bool,
+}
+
+/// The name and background styles of every palette of `value`, in palette order. The version 2
+/// and 3 forms store neither and give an empty list, as does a value that holds no palettes.
+pub fn palette_info(value: &Value) -> Vec<PaletteInfo> {
+    let Some(list) = value.as_dict().and_then(|d| d.get("palettes")).and_then(Value::as_array) else {
+        return Vec::new();
+    };
+    list.items
+        .iter()
+        .take(MAX_PALETTES)
+        .map(|p| {
+            let d = p.as_dict();
+            let name = d.and_then(|d| d.get("name")).and_then(Value::as_str).map(cut_name).filter(|n| !n.is_empty());
+            let styles: Vec<&str> = match d.and_then(|d| d.get("backgroundStyle")) {
+                Some(Value::Array(a)) => a.items.iter().take(MAX_STYLES).filter_map(Value::as_str).collect(),
+                Some(Value::String(s)) => vec![s.as_str()],
+                _ => Vec::new(),
+            };
+            PaletteInfo { name, light: styles.contains(&"light"), dark: styles.contains(&"dark") }
+        })
+        .collect()
+}
+
+/// The colour names of a version 4 value (`names`, keyed by row), one entry for each of the first
+/// `rows` rows; a row without a name, and every row of the other forms, gives `None`.
+pub fn color_names(value: &Value, rows: usize) -> Vec<Option<String>> {
+    let mut out = vec![None; rows.min(MAX_PALETTE_ROWS)];
+    if let Some(names) = value.as_dict().and_then(|d| d.get("names")).and_then(Value::as_dict) {
+        for (key, v) in &names.entries {
+            if let (Ok(row), Some(text)) = (key.as_str().trim().parse::<usize>(), v.as_str())
+                && let Some(slot) = out.get_mut(row)
+            {
+                let text = cut_name(text);
+                if !text.is_empty() {
+                    *slot = Some(text);
+                }
+            }
+        }
+    }
+    out
+}
+
+fn cut_name(text: &str) -> String {
+    text.trim().chars().take(MAX_NAME_CHARS).collect()
+}
+
+/// The `Color Palettes` value that stores `palettes`, whose last palette was just appended, with
+/// that palette named `name` and marked for dark backgrounds. The value takes the version 4 form,
+/// the only one that records background styles: a version 4 `previous` keeps its other keys, a
+/// version 2 or 3 one is converted.
+pub fn store_dark(previous: Option<&Value>, palettes: &Palettes, name: &str) -> Value {
+    let v4 = previous.filter(|v| form(v) == Some(Form::V4));
+    let mut value = store(v4, palettes, Change::Colors, Form::V4);
+    if let Value::Dict(top) = &mut value
+        && let Some(Value::Array(list)) = top.get_mut("palettes")
+        && let Some(Value::Dict(last)) = list.items.last_mut()
+    {
+        last.insert("name", Value::String(Str::new(name)));
+        last.insert("backgroundStyle", compact(vec![Value::String(Str::new("dark"))]));
+    }
+    value
 }
 
 /// How a `Color Palettes` value is stored.
@@ -550,5 +640,32 @@ mod tests {
             assert_eq!(Rgba::parse_hex(bad), None, "{bad}");
         }
         assert_eq!(Rgba::new(1, 2, 255, 16).hex(), "#0102FF10");
+    }
+
+    #[test]
+    fn version_4_names_and_background_styles_are_read_and_a_dark_palette_is_stored_with_them() {
+        let v4 = value(
+            "{names = {\"1\" = Leaf; \"9\" = Gone;}; palettes = ({colors = ((1,0,0,1),(0,1,0,1)); name = Day; backgroundStyle = (light);},{colors = ((0,0,1,1),(1,1,1,1));});}",
+        );
+        let info = palette_info(&v4);
+        assert_eq!(info, [PaletteInfo { name: Some("Day".into()), light: true, dark: false }, PaletteInfo::default()]);
+        assert_eq!(color_names(&v4, 2), [None, Some("Leaf".to_string())], "a name past the last row is ignored");
+        let v3 = value("(((255,0,0,255),(0,255,0,255)))");
+        assert!(palette_info(&v3).is_empty());
+        assert_eq!(color_names(&v3, 2), [None, None]);
+
+        // A version 4 value keeps its names; a version 3 one becomes version 4.
+        for previous in [&v4, &v3] {
+            let before = parse(previous).unwrap();
+            let next = before.add_palette_with(vec![Rgba::BLACK; 2]).unwrap();
+            let stored = store_dark(Some(previous), &next, "Night");
+            assert_eq!(form(&stored), Some(Form::V4));
+            assert_eq!(parse(&stored).unwrap(), next);
+            let info = palette_info(&stored);
+            assert_eq!(info.last(), Some(&PaletteInfo { name: Some("Night".into()), light: false, dark: true }));
+            assert_eq!(info.len(), next.palettes().len());
+        }
+        assert_eq!(palette_info(&store_dark(Some(&v4), &parse(&v4).unwrap().add_palette().unwrap(), "Night"))[0].name.as_deref(), Some("Day"));
+        assert!(parse(&v4).unwrap().add_palette_with(vec![Rgba::BLACK]).is_err(), "one colour per row");
     }
 }
