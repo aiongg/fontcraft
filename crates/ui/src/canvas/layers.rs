@@ -8,6 +8,7 @@ use super::camera::Camera;
 use super::tokens::Tokens;
 use super::{Display, paint, tools};
 use crate::app::models::canvas::{CanvasModel, EditedGlyph};
+use crate::app::models::text::TextModel;
 
 /// What a paint layer reads.
 pub struct PaintCx<'a> {
@@ -24,6 +25,8 @@ pub struct PaintCx<'a> {
     pub words: &'a paint::CanvasWords,
     /// The selection and the active tool's overlays.
     pub tools: &'a super::tools::ToolView,
+    /// The edit view's text around the edited glyph.
+    pub text: &'a Tracked<TextModel>,
 }
 
 impl PaintCx<'_> {
@@ -45,7 +48,9 @@ pub const LAYERS: &[PaintLayer] = &[
     PaintLayer { id: "background", paint: paint::background::tint },
     PaintLayer { id: "status", paint: paint::status::paint },
     PaintLayer { id: "metrics", paint: paint::metrics::paint },
+    PaintLayer { id: "textBehind", paint: super::text::paint::behind },
     PaintLayer { id: "otherLayers", paint: paint::background::paint },
+    PaintLayer { id: "textGlyphs", paint: super::text::paint::glyphs },
     PaintLayer { id: "outline", paint: paint::outline::paint },
     PaintLayer { id: "components", paint: paint::components::paint },
     PaintLayer { id: "selectedSegments", paint: tools::overlays::segments },
@@ -53,6 +58,8 @@ pub const LAYERS: &[PaintLayer] = &[
     PaintLayer { id: "anchors", paint: paint::anchors::paint },
     PaintLayer { id: "selection", paint: tools::overlays::selection },
     PaintLayer { id: "toolOverlays", paint: tools::overlays::paint },
+    PaintLayer { id: "textCursor", paint: super::text::paint::cursor },
+    PaintLayer { id: "measurementLine", paint: super::text::paint::measurement },
 ];
 
 /// Paints every layer.

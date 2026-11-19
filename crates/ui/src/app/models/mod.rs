@@ -14,6 +14,7 @@ pub mod hinting;
 pub mod kerning_review;
 pub mod kerning_window;
 pub mod layers;
+pub mod text;
 
 use craft::ui::contract::Tracked;
 use fontcraft_engine::Session;
@@ -59,6 +60,7 @@ pub struct Models {
     pub console: Tracked<console::ConsoleModel>,
     /// The Kerning window (`panels::kerning_window`).
     pub kerning_window: Tracked<kerning_window::KerningWindowModel>,
+    pub text: Tracked<text::TextModel>,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -112,6 +114,7 @@ impl Models {
         layers::project(&mut self.layers, cx);
         layers::project_masters(&mut self.masters, cx);
         kerning_window::project(&mut self.kerning_window, cx);
+        text::project(&mut self.text, cx);
         true
     }
 }

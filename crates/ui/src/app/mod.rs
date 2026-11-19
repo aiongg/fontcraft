@@ -69,6 +69,8 @@ pub struct ViewState {
     pub commands: console::CommandSurfaces,
     /// The Kerning window's search, sort, selection and the dialogs it asked for.
     pub kerning: crate::shell::kerning_window::KerningView,
+    /// The edit view's text, its cursor and layout options (`canvas::text`).
+    pub text: crate::canvas::text::EditText,
 }
 
 impl Default for ViewState {
@@ -89,6 +91,7 @@ impl Default for ViewState {
             layers: Default::default(),
             commands: console::CommandSurfaces::default(),
             kerning: Default::default(),
+            text: Default::default(),
         }
     }
 }
@@ -213,11 +216,13 @@ impl FontCraftApp {
             self.status = last;
         }
         crate::canvas::tools::apply::sync(self);
+        crate::canvas::text::sync(self);
         self.tools.refresh();
         if self.closing == Closing::SaveThenClose {
             self.closing = if self.has_unsaved_changes() { Closing::Idle } else { Closing::Confirmed };
         }
         self.project();
+        crate::canvas::text::after_project(self);
     }
 
     /// Runs `msg` now, as `drain` would after the frame, and returns the command's result: what views posted

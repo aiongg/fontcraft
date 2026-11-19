@@ -8,6 +8,7 @@
 pub mod camera;
 pub mod layers;
 pub mod paint;
+pub mod text;
 pub mod tokens;
 pub mod tools;
 
@@ -23,6 +24,7 @@ use self::layers::PaintCx;
 use self::tokens::Tokens;
 use crate::app::Msg;
 use crate::app::models::canvas::CanvasModel;
+use crate::app::models::text::TextModel;
 use crate::shell::ChromeWords;
 
 /// The View menu's display toggles (`view.show*`, `shell::view`).
@@ -87,6 +89,8 @@ pub struct CanvasProps<'a> {
     pub edit_background: bool,
     /// The selection and the active tool's overlays.
     pub tools: &'a tools::ToolView,
+    /// The edit view's text, laid out around the edited glyph.
+    pub text: &'a Tracked<TextModel>,
     /// The active-tool slot.
     pub tool: &'a mut dyn ActiveTool,
 }
@@ -103,7 +107,8 @@ pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
     if let Some(size) = document {
         canvas = canvas.document(size);
     }
-    let (model, tokens, display, edit_background, tool_view) = (props.model, props.tokens, props.display, props.edit_background, props.tools);
+    let (model, tokens, display, edit_background, tool_view, text) =
+        (props.model, props.tokens, props.display, props.edit_background, props.tools, props.text);
     let tool = &mut *props.tool;
     let mut reply = None;
     let _ = canvas.show(ui, |ui, body| {
@@ -120,6 +125,7 @@ pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
             edit_background,
             words: &paint_words,
             tools: tool_view,
+            text,
         };
         layers::paint(&cx);
         tool.set_camera(camera);

@@ -107,6 +107,21 @@ pub fn sync(app: &mut FontCraftApp) {
 
 /// Hands `input` to the toolbox and carries out its answer. Returns the errors, in order.
 pub fn input(app: &mut FontCraftApp, input: ToolInput) -> Vec<String> {
+    if crate::canvas::text::text_mode(&app.view) {
+        return crate::canvas::text::input::input(app, input);
+    }
+    if let ToolInput::Key(ev) = input {
+        let out = match with_tool(app, |toolbox, cx| toolbox.key(cx, &ev)) {
+            Ok(out) => out,
+            Err(e) => return vec![e],
+        };
+        if !out.handled
+            && let Some(result) = crate::canvas::text::input::escape_to_text(app, &ev)
+        {
+            return result.err().into_iter().collect();
+        }
+        return apply(app, out);
+    }
     let out = match input {
         ToolInput::Pointer(ev) => {
             app.tools.mods = ev.mods;
@@ -133,8 +148,14 @@ pub fn input(app: &mut FontCraftApp, input: ToolInput) -> Vec<String> {
 
 /// Whether the toolbox takes the key `ev` now, and what that did: `None` when the key is not the tools'.
 pub fn key(app: &mut FontCraftApp, ev: fontcraft_tools::KeyEvent) -> Option<Vec<String>> {
+    if crate::canvas::text::text_mode(&app.view) {
+        return crate::canvas::text::input::takes_key(&ev).then(|| crate::canvas::text::input::input(app, ToolInput::Key(ev)));
+    }
     let out = with_tool(app, |toolbox, cx| toolbox.key(cx, &ev)).ok()?;
-    out.handled.then(|| apply(app, out))
+    if !out.handled {
+        return crate::canvas::text::input::escape_to_text(app, &ev).map(|result| result.err().into_iter().collect());
+    }
+    Some(apply(app, out))
 }
 
 /// Carries out a tool's actions in order. Returns the errors.
