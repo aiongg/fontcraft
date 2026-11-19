@@ -204,7 +204,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A UFO does not record the .glyphs format version, so a mask code 2 (intersect in version 4) written to a UFO reads back as a subtracting mask.
   - Guess: Stroke positions and mask values keep the stored form of the document's .glyphs version, so converting a document between versions 3 and 4 changes where strokes sit and what masks do (a known loss until the reference's conversion is observed).
 - [ ] `path.expandOutline` (M3, handbook, live): Expand Outline
-  - Guess: A hint, instruction or corner component on an expanded path is removed, since its nodes are gone; the running app would show whether it moves them to the new outline.
+  - Guess: Expand Outline treats a hint on an expanded path as any edit treats a hint on a removed node (a PostScript end becomes a number, an instruction or corner component is removed); the running app would show whether it moves them to the new outline instead.
   - Observe: Put a stem hint on a stroked path and another on a path after it, run Expand Outline, and note where each hint ends up.
 - [ ] `path.setMask` (M3, handbook, live): Mask
   - Guess: Only paths take the mask flag, though a mask cuts components below it too (03a question 23).
