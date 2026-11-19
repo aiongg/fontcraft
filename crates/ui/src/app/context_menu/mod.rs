@@ -39,7 +39,7 @@ use serde_json::{Map, Value, json};
 
 use self::glyph_menu::GlyphMenu;
 use self::item_state::GUIDE_PROPERTIES;
-use crate::app::{Closing, FontCraftApp, Msg};
+use crate::app::{FontCraftApp, Msg};
 use crate::canvas::tools::{self, apply};
 
 pub const CANVAS: &str = "canvas";
@@ -595,7 +595,7 @@ pub fn invoke(app: &mut FontCraftApp, id: &str, run: fn(&mut FontCraftApp, Msg) 
         app.context_menus.canvas = None;
         return Err(if same { "a dialog is open; the context menu closed" } else { "the edited glyph changed; the context menu closed" }.into());
     }
-    if matches!(app.closing, Closing::Ask | Closing::Asking) {
+    if app.closing.is_open() {
         return Err("the question about unsaved changes is open".into());
     }
     let kinds: Vec<&'static str> = menu.sections.iter().map(|s| s.context).collect();
