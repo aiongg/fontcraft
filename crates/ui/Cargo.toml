@@ -13,7 +13,7 @@ workspace = true
 [dependencies]
 fontcraft-engine.workspace = true
 fontcraft-tools.workspace = true
-craft = { workspace = true, features = ["ui-app", "keymap", "menu", "tracked", "settings", "platform-clipboard"] }
+craft = { workspace = true, features = ["ui-app", "keymap", "menu", "tracked", "settings", "platform-clipboard", "quit"] }
 # egui 0.37 is the craft fork (the workspace's `[patch.crates-io]`). Not a workspace dependency
 # while `fontcraft-ui-egui` keeps egui 0.36 under that name.
 egui = { version = "0.37", default-features = false }
