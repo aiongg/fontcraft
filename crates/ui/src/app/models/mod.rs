@@ -11,6 +11,7 @@ pub mod glyph_info;
 pub mod glyph_sections;
 pub mod hinting;
 pub mod kerning_review;
+pub mod layers;
 
 use craft::ui::contract::Tracked;
 use fontcraft_engine::Session;
@@ -48,6 +49,10 @@ pub struct Models {
     glyph_info_search: glyph_info::SearchCache,
     /// The Hinting Preview's rows (`panels::hinting_waterfall`).
     pub hinting_waterfall: Tracked<hinting::Waterfall>,
+    /// The shown glyph's layers (`panels::layers`).
+    pub layers: Tracked<layers::LayersModel>,
+    /// The masters and the current one (`panels::master_switcher`).
+    pub masters: Tracked<layers::MastersModel>,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -98,6 +103,8 @@ impl Models {
         kerning_review::project(&mut self.pairs_phrases, cx);
         glyph_info::project(&mut self.glyph_info, &mut self.glyph_info_search, cx);
         hinting::project(&mut self.hinting_waterfall, cx);
+        layers::project(&mut self.layers, cx);
+        layers::project_masters(&mut self.masters, cx);
         true
     }
 }

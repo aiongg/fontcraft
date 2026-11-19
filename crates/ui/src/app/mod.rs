@@ -61,6 +61,8 @@ pub struct ViewState {
     pub kerning_review: crate::shell::kerning_review::KerningReviewState,
     /// Glyph Info's search, sort and selection.
     pub glyph_info: crate::shell::glyph_info::GlyphInfoState,
+    /// The current master, the active layer and the Layers panel's state.
+    pub layers: crate::shell::masters::LayersView,
 }
 
 impl Default for ViewState {
@@ -78,6 +80,7 @@ impl Default for ViewState {
             reference_font: Default::default(),
             kerning_review: Default::default(),
             glyph_info: Default::default(),
+            layers: Default::default(),
         }
     }
 }
@@ -282,6 +285,7 @@ impl FontCraftApp {
             ViewMsg::ToolsLastUsed(last_used) => self.view.tools_last_used = last_used,
             ViewMsg::SelectGlyph(glyph) => self.view.glyph = Some(glyph),
             ViewMsg::TogglePanel(panel) => dock::toggle(&mut self.view.workspace, panel),
+            ViewMsg::LayerMenu(row) => self.view.layers.menu_row = row,
         }
         Ok(())
     }
