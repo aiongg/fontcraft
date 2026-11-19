@@ -20,6 +20,7 @@ mod finish;
 pub mod layout;
 mod mirror;
 pub mod other;
+pub mod select;
 pub mod var;
 mod varc;
 
@@ -138,6 +139,8 @@ pub struct SubsetOptions {
     /// Write subset SVG documents again from their parse tree, indented two spaces per level,
     /// instead of keeping their source text.
     pub pretty_svg: bool,
+    /// The reference converter's glyph selection, applied before the closure.
+    pub filter: GlyphFilter,
 }
 
 impl Default for SubsetOptions {
@@ -182,8 +185,42 @@ impl Default for SubsetOptions {
             recalc_average_width: false,
             recalc_max_context: false,
             pretty_svg: false,
+            filter: GlyphFilter::default(),
         }
     }
+}
+
+/// The glyph selection of the reference converter (`tx -gx`, `-fd`, `-fdx`, `-gs`, `-p`, `-P`;
+/// M12.73). It narrows the glyphs the other selections give, or every glyph of the font when
+/// none is given, before `.notdef` and the closure are added, so a component of a kept glyph
+/// comes back even when the filter leaves it out.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct GlyphFilter {
+    /// Glyph ids left out.
+    pub exclude: BTreeSet<u32>,
+    /// The Font DICTs whose glyphs stay, of a CID-keyed CFF or a CFF2 font.
+    pub font_dicts: Option<crate::convert::FontDictFilter>,
+    /// The names a GOADB lists in its first two columns: only glyphs named there stay.
+    pub goadb: Option<BTreeSet<String>>,
+    /// A random share of the glyphs left by the steps above.
+    pub random: Option<RandomShare>,
+}
+
+impl GlyphFilter {
+    /// Whether any step is asked for.
+    pub fn is_set(&self) -> bool {
+        !self.exclude.is_empty() || self.font_dicts.is_some() || self.goadb.is_some() || self.random.is_some()
+    }
+}
+
+/// A random choice of glyphs (`tx -p`): the share rounded to whole glyphs, at least one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RandomShare {
+    /// The share in millionths, 0 to 1,000,000.
+    pub millionths: u32,
+    /// The generator's seed; `None` derives one from the glyph names, so a font gets the same
+    /// choice on every run.
+    pub seed: Option<u64>,
 }
 
 /// The resolved selection the table modules work from.
@@ -360,5 +397,7 @@ pub fn subset(font: &SfntFont, options: &SubsetOptions) -> Result<SubsetResult> 
     })
 }
 
+#[cfg(test)]
+mod select_tests;
 #[cfg(test)]
 mod tests;

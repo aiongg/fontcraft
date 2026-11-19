@@ -1,5 +1,5 @@
-//! `fontcraft-cli subset` (M12.17–M12.19b, M12.18b, M12.18c): one `font.subset` run per input, with the option
-//! names of the reference subsetter.
+//! `fontcraft-cli subset` (M12.17–M12.19b, M12.18b, M12.18c, M12.73): one `font.subset` run per input, with the
+//! option names of the reference subsetter and the glyph selection of the reference converter.
 
 use fontcraft_engine::Session;
 use serde_json::{Map, Value, json};
@@ -13,7 +13,7 @@ pub const SUBCOMMAND: Subcommand =
     Subcommand { name: "subset", summary: "Reduce a font to chosen glyphs", usage: USAGE, options: OPTIONS, actions: &[], run };
 
 const USAGE: &str = "\
-  fontcraft-cli subset FONT [GLYPH...] [--unicodes LIST] [--text STRING] [--glyphs LIST] [--gids LIST] [options] [-o OUT]
+  fontcraft-cli subset FONT... [GLYPH...] [--unicodes LIST] [--text STRING] [--glyphs LIST] [--gids LIST] [options] [-o OUT]
       Keep the chosen glyphs and every glyph they use (components, accent parts, .notdef), and
       remove the rest from every table. Glyphs the kept layout features can substitute in are
       kept too. The output is FONT.subset.EXT unless -o, --output-dir or --in-place says
@@ -23,6 +23,10 @@ const USAGE: &str = "\
       --opt+=a,b and removes from it with --opt-=a,b; each list starts as its default.
       --opt? prints the value an option has at that point of the line; with no FONT nothing
       else is done.
+      --exclude-glyphs, --fd, --exclude-fd, --goadb and --random narrow the glyphs the other
+      selections choose, or every glyph when none is given; the closure runs after them.
+      Arguments after FONT that end in a font file extension are further inputs, subset with
+      the same options, up to --jobs at once; they need --output-dir or no output option.
 ";
 
 /// The options, as data.
@@ -35,6 +39,15 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::value("unicodes-file", "FILE", "", "a file of code points and ranges to keep"),
     OptSpec::value("text", "STRING", "", "keep the characters of this text"),
     OptSpec::value("text-file", "FILE", "", "keep the characters of this UTF-8 file; line breaks are not added"),
+    OptSpec::list("exclude-glyphs", "LIST", "", "glyphs to leave out: names, indices, ranges (3-9), U+XXXX, /CID; .notdef stays"),
+    OptSpec::value("exclude-glyphs-file", "FILE", "", "a file of glyphs to leave out"),
+    OptSpec::list("fd", "LIST", "", "keep only the glyphs of these Font DICTs of a CID-keyed or CFF2 font (from 0)"),
+    OptSpec::list("exclude-fd", "LIST", "", "leave out the glyphs of these Font DICTs"),
+    OptSpec::value("goadb", "FILE", "", "keep only the glyphs a GlyphOrderAndAliasDB names in its first two columns"),
+    OptSpec::switch("subset-to-goadb", false, "accepted with --goadb, which always subsets to the file"),
+    OptSpec::value("random", "PERCENT", "", "keep a random PERCENT of the glyphs (at least one); the same font gives the same choice").short('p'),
+    OptSpec::value("random-new", "PERCENT", "", "the same as --random PERCENT --seed random").short('P'),
+    OptSpec::value("seed", "N|random", "", "the seed of --random; random draws a new one, which the summary reports"),
     OptSpec::switch("ignore-missing-glyphs", false, "skip requested glyphs the font lacks instead of failing"),
     OptSpec::switch("ignore-missing-unicodes", true, "skip requested characters the font does not map instead of failing"),
     OptSpec::switch("retain-gids", false, "keep glyph indices by leaving dropped glyphs in place, empty"),
@@ -203,11 +216,38 @@ fn run(args: &[String]) -> Outcome {
     if parsed.switch("xml") && parsed.switch("json") {
         return Err(usage("give --xml or --json, not both"));
     }
-    let params = params(&parsed)?;
-    let result = execute(&mut Session::new(), "font.subset", &params).map_err(|f| match f {
+    let (inputs, _) = split_inputs(&parsed.positional);
+    if inputs.len() > 1 {
+        if parsed.value("output").is_some() || parsed.value("output-file").is_some() {
+            return Err(usage("several inputs need --output-dir or no output file"));
+        }
+        if parsed.switch("xml") {
+            return Err(usage("--xml takes one input"));
+        }
+        let results = io::batch(inputs, parsed.jobs()?, |input| Ok((input.to_string(), subset_one(&parsed, input)?)))?;
+        for r in &results {
+            match r {
+                Ok((input, result)) => report(&parsed, input, result)?,
+                Err(e) => io::error(e.message()),
+            }
+        }
+        return io::batch_outcome(&results);
+    }
+    let result = subset_one(&parsed, font)?;
+    report(&parsed, font, &result)
+}
+
+/// One `font.subset` run on `input`.
+fn subset_one(parsed: &Parsed, input: &str) -> Result<Value, Failure> {
+    let params = params_for(parsed, input)?;
+    execute(&mut Session::new(), "font.subset", &params).map_err(|f| match f {
         Failure::Failed(m) if m.contains("cannot open") || m.contains("cannot read") => Failure::Input(m),
         other => other,
-    })?;
+    })
+}
+
+/// Prints the result of one run.
+fn report(parsed: &Parsed, font: &str, result: &Value) -> Outcome {
     if parsed.switch("verbose") {
         io::set_verbosity(2);
         for d in result.get("dropped").and_then(Value::as_array).into_iter().flatten() {
@@ -219,7 +259,7 @@ fn run(args: &[String]) -> Outcome {
         }
     }
     if parsed.switch("json") {
-        return out_json_line(&result);
+        return out_json_line(result);
     }
     if parsed.switch("xml") {
         let output = result.get("output").and_then(Value::as_str).unwrap_or_default();
@@ -232,17 +272,38 @@ fn run(args: &[String]) -> Outcome {
         .and_then(Value::as_array)
         .map(|a| a.iter().filter_map(|d| d.get("tag").and_then(Value::as_str)).collect())
         .unwrap_or_default();
+    let seed = result.get("seed").and_then(Value::as_str).map(|s| format!("; random seed {s}")).unwrap_or_default();
     out(&format!(
-        "{font} -> {}: {} glyphs kept; tables dropped: {}",
+        "{font} -> {}: {} glyphs kept; tables dropped: {}{seed}",
         result.get("output").and_then(Value::as_str).unwrap_or("?"),
         result.get("glyphCount").and_then(Value::as_u64).unwrap_or(0),
         if dropped.is_empty() { "none".to_string() } else { dropped.join(" ") }
     ))
 }
 
-/// The `font.subset` parameters of a parsed command line.
+/// The file extensions that mark an argument after the first as another input.
+const FONT_EXTENSIONS: [&str; 6] = ["ttf", "otf", "woff", "woff2", "ttc", "otc"];
+
+/// The inputs and the glyph names among the positional arguments: the first argument, and each
+/// one right after it that ends in a font file extension, are inputs.
+fn split_inputs(positional: &[String]) -> (&[String], &[String]) {
+    let is_font = |a: &str| {
+        std::path::Path::new(a).extension().and_then(|e| e.to_str()).is_some_and(|e| FONT_EXTENSIONS.iter().any(|x| x.eq_ignore_ascii_case(e)))
+    };
+    let n = positional.iter().enumerate().take_while(|(i, a)| *i == 0 || is_font(a.as_str())).count();
+    positional.split_at_checked(n).unwrap_or((positional, Default::default()))
+}
+
+/// The `font.subset` parameters of a parsed command line, for its first input.
+#[cfg(test)]
 fn params(parsed: &Parsed) -> Result<Value, Failure> {
-    let Some((font, glyph_args)) = parsed.positional.split_first() else { return Err(usage(super::help(&SUBCOMMAND))) };
+    let Some(font) = parsed.positional.first() else { return Err(usage(super::help(&SUBCOMMAND))) };
+    params_for(parsed, font)
+}
+
+/// The `font.subset` parameters of a parsed command line, for the input `font`.
+fn params_for(parsed: &Parsed, font: &str) -> Result<Value, Failure> {
+    let (_, glyph_args) = split_inputs(&parsed.positional);
 
     let mut keep = Map::new();
     let mut glyphs: Vec<String> = glyph_args.to_vec();
@@ -262,8 +323,66 @@ fn params(parsed: &Parsed) -> Result<Value, Failure> {
     if let Some(path) = parsed.value("text-file") {
         text.extend(read_file(path)?.chars().filter(|c| *c != '\n' && *c != '\r'));
     }
-    if glyphs.is_empty() && gids.is_empty() && unicodes.is_empty() && text.is_empty() {
+    let mut exclude: Vec<String> = parsed.list("exclude-glyphs").to_vec();
+    if let Some(path) = parsed.value("exclude-glyphs-file") {
+        exclude.extend(file_words(path)?);
+    }
+    let fd_list = |name: &str| -> Result<Vec<u16>, Failure> {
+        parsed
+            .list(name)
+            .iter()
+            .map(|i| i.trim().parse::<u16>().map_err(|_| usage(format!("--{name} needs Font DICT indexes: `{i}` is not one"))))
+            .collect()
+    };
+    let (fd, exclude_fd) = (fd_list("fd")?, fd_list("exclude-fd")?);
+    let random = match (parsed.value("random"), parsed.value("random-new")) {
+        (Some(_), Some(_)) => return Err(usage("give --random (-p) or --random-new (-P), not both")),
+        (Some(p), None) => Some((p, parsed.value("seed"))),
+        (None, Some(p)) => {
+            if parsed.value("seed").is_some() {
+                return Err(usage("--random-new (-P) draws its own seed: give --random with --seed instead"));
+            }
+            Some((p, Some("random")))
+        }
+        (None, None) => {
+            if parsed.value("seed").is_some() {
+                return Err(usage("--seed needs --random"));
+            }
+            None
+        }
+    };
+    if parsed.switch("subset-to-goadb") && parsed.value("goadb").is_none() {
+        return Err(usage("--subset-to-goadb needs --goadb FILE"));
+    }
+    let narrowed = !exclude.is_empty() || !fd.is_empty() || !exclude_fd.is_empty() || random.is_some() || parsed.value("goadb").is_some();
+    if glyphs.is_empty() && gids.is_empty() && unicodes.is_empty() && text.is_empty() && !narrowed {
         return Err(usage("give glyphs, --gids, --unicodes or --text to keep ('*' keeps all)"));
+    }
+    if !exclude.is_empty() {
+        keep.insert("excludeGlyphs".into(), json!(exclude));
+    }
+    if !fd.is_empty() {
+        keep.insert("fd".into(), json!(fd));
+    }
+    if !exclude_fd.is_empty() {
+        keep.insert("excludeFd".into(), json!(exclude_fd));
+    }
+    if let Some((percent, seed)) = random {
+        let share = percent.trim().trim_end_matches('%').parse::<f64>().ok().filter(|v| v.is_finite() && (0.0..=100.0).contains(v));
+        let share = share.ok_or_else(|| usage(format!("--random needs a percentage from 0 to 100, not `{percent}`")))?;
+        let mut random = Map::new();
+        random.insert("percent".into(), json!(share));
+        match seed {
+            None => {}
+            Some("random") => {
+                random.insert("seed".into(), json!("random"));
+            }
+            Some(n) => {
+                let n = n.trim().parse::<u64>().map_err(|_| usage(format!("--seed needs a whole number or `random`, not `{n}`")))?;
+                random.insert("seed".into(), json!(n));
+            }
+        }
+        keep.insert("random".into(), Value::Object(random));
     }
     if !glyphs.is_empty() {
         keep.insert("glyphs".into(), if glyphs.iter().any(|g| g == "*") { json!("*") } else { json!(glyphs) });
@@ -281,6 +400,9 @@ fn params(parsed: &Parsed) -> Result<Value, Failure> {
     let mut params = Map::new();
     params.insert("font".into(), json!(font));
     params.insert("keep".into(), Value::Object(keep));
+    if let Some(goadb) = parsed.value("goadb") {
+        params.insert("goadb".into(), json!(goadb));
+    }
     for (key, name) in [
         ("ignoreMissingGlyphs", "ignore-missing-glyphs"),
         ("ignoreMissingUnicodes", "ignore-missing-unicodes"),
@@ -429,6 +551,35 @@ mod tests {
         assert!(params_of(&["f.ttf", "A"]).get("container").is_none(), "the input's container by default");
         let bad: Vec<String> = ["f.ttf", "A", "--flavor=zip"].iter().map(|s| s.to_string()).collect();
         assert!(params(&args::parse(OPTIONS, &bad).unwrap()).is_err());
+    }
+
+    #[test]
+    fn converter_selection_options_reach_the_command() {
+        let p = params_of(&["f.ttf", "--exclude-glyphs=A,3-9,/17", "--fd=1", "--exclude-fd=0,2", "--goadb", "GOADB", "--subset-to-goadb"]);
+        assert_eq!(p["keep"], json!({"excludeGlyphs": ["A", "3-9", "/17"], "fd": [1], "excludeFd": [0, 2]}), "no other selection is needed");
+        assert_eq!(p["goadb"], json!("GOADB"));
+        assert_eq!(params_of(&["f.ttf", "-p", "12.5"])["keep"]["random"], json!({"percent": 12.5}));
+        assert_eq!(params_of(&["f.ttf", "A", "--random=50", "--seed=7"])["keep"]["random"], json!({"percent": 50.0, "seed": 7}));
+        assert_eq!(params_of(&["f.ttf", "-P", "1"])["keep"]["random"], json!({"percent": 1.0, "seed": "random"}));
+        for bad in [
+            &["f.ttf", "--seed=1"][..],
+            &["f.ttf", "-p", "1", "-P", "1"],
+            &["f.ttf", "-p", "101"],
+            &["f.ttf", "--fd=x"],
+            &["f.ttf", "A", "--subset-to-goadb"],
+            &["f.ttf"],
+        ] {
+            let args: Vec<String> = bad.iter().map(|s| s.to_string()).collect();
+            assert!(params(&args::parse(OPTIONS, &args).unwrap()).is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn leading_font_files_are_inputs_and_the_rest_glyphs() {
+        let line: Vec<String> = ["a.ttf", "b.OTF", "c.woff2", "A", "d.ttf"].iter().map(|s| s.to_string()).collect();
+        let (inputs, glyphs) = split_inputs(&line);
+        assert_eq!((inputs, glyphs), (&line[..3], &line[3..]), "a font file after a glyph name is a glyph name");
+        assert_eq!(params_of(&["a.ttf", "b.ttf", "A"])["keep"]["glyphs"], json!(["A"]));
     }
 
     #[test]

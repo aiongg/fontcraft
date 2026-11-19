@@ -234,7 +234,7 @@ pub fn glyph_cids(font: &SfntFont) -> Result<Option<Vec<u16>>> {
 
 /// The Font DICT of every glyph, after checking that every index `filter` names exists, as
 /// `tx -fd` checks it.
-fn font_dict_of_glyphs(font: &SfntFont, filter: &FontDictFilter, count: usize) -> Result<Vec<u16>> {
+pub(crate) fn font_dict_of_glyphs(font: &SfntFont, filter: &FontDictFilter, count: usize) -> Result<Vec<u16>> {
     let (fds, dicts) = if let Some(bytes) = font.get(*b"CFF ") {
         let cff = crate::reorder::cff::parse(bytes, count)?;
         if !cff.is_cid() {

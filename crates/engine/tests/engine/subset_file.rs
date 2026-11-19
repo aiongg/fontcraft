@@ -112,3 +112,48 @@ fn font_subset_writes_the_order_and_container_asked_for() {
     assert!(r["dropped"].as_array().unwrap().iter().any(|d| d["tag"] == "gasp") || font.get(*b"gasp").is_none(), "{r}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn font_subset_takes_the_reference_converter_selection() {
+    let dir = std::env::temp_dir().join(format!("fontcraft-subset-select-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut s = Session::with_document();
+    let nodes = json!([{"x": 60, "y": 0}, {"x": 560, "y": 0}, {"x": 560, "y": 700}, {"x": 60, "y": 700}]);
+    for glyph in ["A", "B"] {
+        run(&mut s, "path.addPath", json!({"glyph": glyph, "nodes": nodes}));
+    }
+    let ttf = dir.join("Font.ttf");
+    run(&mut s, "file.exportStatic", json!({ "destination": ttf, "timestamp": 0 }));
+    let names = |r: &Value| -> Vec<String> { r["retained"].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect() };
+
+    // Alone, an exclusion starts from every glyph.
+    let r = run(&mut s, "font.subset", json!({ "font": ttf, "keep": {"excludeGlyphs": "B"}, "output": dir.join("x.ttf") }));
+    assert!(names(&r).contains(&"A".to_string()) && !names(&r).contains(&"B".to_string()), "{:?}", names(&r));
+    // With another selection, it narrows that one.
+    let r = run(&mut s, "font.subset", json!({ "font": ttf, "keep": {"glyphs": ["A", "B"], "excludeGlyphs": ["A"]}, "output": dir.join("x.ttf") }));
+    assert_eq!(names(&r), [".notdef", "B"]);
+    // A GOADB keeps the glyphs it lists.
+    let goadb = dir.join("GlyphOrderAndAliasDB");
+    std::fs::write(&goadb, "A A\nzero zero\n").unwrap();
+    let r = run(&mut s, "font.subset", json!({ "font": ttf, "goadb": goadb, "output": dir.join("x.ttf") }));
+    assert_eq!(names(&r), [".notdef", "A"]);
+    // A random share repeats with its seed, which the result reports.
+    let random = |seed: Value| json!({ "font": ttf, "keep": {"random": {"percent": 50, "seed": seed}}, "output": dir.join("x.ttf") });
+    let first = run(&mut s, "font.subset", random(json!(3)));
+    assert_eq!(first["seed"], json!("3"));
+    assert_eq!(names(&run(&mut s, "font.subset", random(json!("3")))), names(&first));
+    let drawn = run(&mut s, "font.subset", random(json!("random")));
+    assert!(drawn["seed"].as_str().unwrap().parse::<u64>().is_ok());
+    // Misplaced or unbuilt keys, a bad share and a Font DICT of a TrueType font are refused.
+    for bad in [
+        json!({ "font": ttf, "excludeGlyphs": ["A"] }),
+        json!({ "font": ttf, "keep": {"exportFlags": true} }),
+        json!({ "font": ttf, "keep": {"random": {"percent": 101}} }),
+        json!({ "font": ttf, "keep": {"fd": [0]} }),
+        json!({ "font": ttf, "keep": {"excludeGlyphs": ["nosuch"]} }),
+    ] {
+        assert!(s.execute("font.subset", &bad).is_err(), "{bad}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
