@@ -15,7 +15,20 @@ pub trait Backend {
     fn inspect(&mut self) -> Result<Value, String>;
     /// One phrase for `initialize`: which backend this is.
     fn describe(&self) -> String;
+    /// Whether a running app answers [`Backend::control`]: the window tools are offered only then.
+    fn has_app(&self) -> bool {
+        false
+    }
+    /// Calls a control method of the running app (`docs/control-protocol.md`), such as
+    /// `ui.screenshot`. Without an app it fails with [`NEEDS_APP`].
+    fn control(&mut self, method: &str, _params: &Value) -> Result<Value, String> {
+        Err(format!("`{method}` {NEEDS_APP}"))
+    }
 }
+
+/// Why a window tool fails without the app; it follows the tool's or method's name.
+pub const NEEDS_APP: &str =
+    "needs the running app: start it with `fontcraft --control 7985` and attach with `fontcraft-cli mcp --connect 127.0.0.1:7985`";
 
 /// An engine session inside this process: everything except UI-only commands.
 pub struct Headless(pub Session);
@@ -153,6 +166,12 @@ impl Backend for Remote {
     }
     fn describe(&self) -> String {
         format!("attached to the running app at {}", self.addr)
+    }
+    fn has_app(&self) -> bool {
+        true
+    }
+    fn control(&mut self, method: &str, params: &Value) -> Result<Value, String> {
+        self.call(method, params.clone())
     }
 }
 
