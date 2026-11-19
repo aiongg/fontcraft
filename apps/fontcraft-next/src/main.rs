@@ -4,7 +4,16 @@
 //! `--control PORT` listens on `127.0.0.1:PORT` for the JSON control protocol
 //! (`docs/control-protocol.md`). `--automation-read-root` and `--automation-write-root` (or
 //! `FONTCRAFT_AUTOMATION_READ_ROOT` / `_WRITE_ROOT`) confine the files control requests read and write.
+//!
+//! While `sharing.enableExternalPreview` is on, it serves External Preview to the local network
+//! ([`external_preview`], run each frame through the UI's frame hook). [`preview_server`] is the
+//! web server behind it and behind the TrueType preview page.
 #![forbid(unsafe_code)]
+
+#[cfg(not(target_arch = "wasm32"))]
+mod external_preview;
+#[cfg(not(target_arch = "wasm32"))]
+mod preview_server;
 
 use std::process::ExitCode;
 
@@ -86,7 +95,7 @@ fn options(mut args: impl Iterator<Item = String>) -> Result<Option<fontcraft_ui
             other => return Err(format!("unknown argument `{other}`\n\n{USAGE}")),
         }
     }
-    let Some(port) = port else { return Ok(Some(fontcraft_ui::Options::default())) };
+    let Some(port) = port else { return Ok(Some(desktop(fontcraft_ui::Options::default()))) };
     // Checked before anything opens, so a mistyped root never leaves an unconfined channel.
     let roots = fontcraft_engine::file_access::AutomationRoots::new(read_root.as_deref(), write_root.as_deref())?;
     if let Some(roots) = &roots {
@@ -103,7 +112,18 @@ fn options(mut args: impl Iterator<Item = String>) -> Result<Option<fontcraft_ui
             None
         }
     };
-    Ok(Some(fontcraft_ui::Options { control, roots }))
+    Ok(Some(desktop(fontcraft_ui::Options { control, roots, ..Default::default() })))
+}
+
+/// `options` with what only the desktop app supplies: External Preview's frame hook and the preview web server.
+#[cfg(not(target_arch = "wasm32"))]
+fn desktop(options: fontcraft_ui::Options) -> fontcraft_ui::Options {
+    let frame_hook: fontcraft_ui::MakeFrameHook = Box::new(|ctx| {
+        let ctx = ctx.clone();
+        let wake = std::sync::Arc::new(move || ctx.request_repaint());
+        Box::new(external_preview::Hook(external_preview::ExternalPreview::new(fontcraft_ui::app::preview_host::Scope::LocalNetwork, wake)))
+    });
+    fontcraft_ui::Options { frame_hook: Some(frame_hook), preview_host: Some(Box::new(preview_server::Host::default())), ..options }
 }
 
 #[cfg(target_arch = "wasm32")]

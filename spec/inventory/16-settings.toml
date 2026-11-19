@@ -12,7 +12,7 @@ label = "Settings…"
 menu = ["Edit"]
 shortcut = "Cmd+Comma"
 kind = "ui"
-params = "{section?: \"updates\"|\"appearance\"|\"userSettings\"|\"sampleStrings\"|\"sharing\"|\"addons\"|\"shortcuts\", open?: bool}"
+params = "{section?: \"updates\"|\"appearance\"|\"userSettings\"|\"sampleStrings\"|\"sharing\"|\"addons\"|\"shortcuts\", open?: bool, group?: number}"
 area = "ui-chrome"
 milestone = "M14"
 summary = "Opens the settings window, optionally on a given section. In the reference it sits in the application menu."
@@ -825,7 +825,7 @@ milestone = "M13"
 summary = "Section that controls streaming the current Edit View to a companion viewer app on a phone or tablet."
 ref = "Settings › Sharing"
 status = "handbook"
-notes = "FontCraft (docs/plans/M13.md, M13.71): the section holds the Enable External Preview switch (`settings.set` on `sharing.enableExternalPreview`), the page's address to type on the device, and the devices waiting for an answer with Accept and Refuse (`sharing.status`, `sharing.answerDevice`). The engine and the server are built; the section itself waits for the new desktop UI."
+notes = "FontCraft (docs/plans/M13.md, M13.71): the section holds the Enable External Preview switch (`settings.set` on `sharing.enableExternalPreview`), the page's address to type on the device, and the devices waiting for an answer with Accept and Refuse (`sharing.status`, `sharing.answerDevice`). A device that asks while the Settings window is closed gets a notice with Accept, Refuse and Later (crates/ui/src/dialogs/settings.rs)."
 guesses = [
   "The section shows the page's address, because there is no companion app that finds the computer by itself.",
   "Reset shows while at least one device is trusted.",

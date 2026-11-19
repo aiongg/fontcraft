@@ -161,6 +161,12 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   (`ui.click`, `ui.drag`, `ui.move`, `ui.wheel`) has run when they return.
 - **File pickers.** A command listed in `app::files::PICKED` that arrives without its path opens
   the host's picker; the answer posts the command again with the path.
+- **Closing.** `app/close.rs` keeps the question asked before unsaved work closes (the close box,
+  `app.quit`, File › Close): one document at a time, then the window or the document closes.
+  `dialogs/unsaved.rs` shows it; `window.closePrompt` answers it from the control channel.
+- **Frame hook.** `FontCraftApp::frame_hook` (`app/preview_host.rs`) runs once per frame in
+  `logic`. `apps/fontcraft-next` puts External Preview's server there; `preview_host` holds the
+  web server for the TrueType preview page.
 
 ## Dialog specs
 

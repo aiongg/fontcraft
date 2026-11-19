@@ -6,12 +6,15 @@
 //! view state moved.
 
 pub mod catalog;
+pub mod close;
 pub mod console;
 pub mod files;
 pub mod font_view;
 pub mod menu_alternates;
 pub mod models;
 mod msg;
+pub mod open;
+pub mod preview_host;
 
 use std::sync::Arc;
 
@@ -69,6 +72,14 @@ pub struct ViewState {
     pub commands: console::CommandSurfaces,
     /// The Kerning window's search, sort, selection and the dialogs it asked for.
     pub kerning: crate::shell::kerning_window::KerningView,
+    /// The Start Window.
+    pub start: crate::shell::start::StartState,
+    /// The Settings window.
+    pub settings: crate::shell::settings::SettingsState,
+    /// The question asked when a save finds its file changed on disk.
+    pub changed_on_disk: Option<crate::dialogs::changed_on_disk::Asked>,
+    /// The document the unsaved-changes dialog shows.
+    pub unsaved_shown: crate::dialogs::unsaved::Shown,
 }
 
 impl Default for ViewState {
@@ -89,25 +100,12 @@ impl Default for ViewState {
             layers: Default::default(),
             commands: console::CommandSurfaces::default(),
             kerning: Default::default(),
+            start: Default::default(),
+            settings: Default::default(),
+            changed_on_disk: None,
+            unsaved_shown: Default::default(),
         }
     }
-}
-
-/// Where closing the window stands.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Closing {
-    #[default]
-    Idle,
-    /// The window asked to close with unsaved changes: the unsaved-changes dialog opens next.
-    Ask,
-    /// The dialog is open.
-    Asking,
-    /// The answer was Save: the window closes once the save leaves nothing unsaved.
-    SaveThenClose,
-    /// The window may close: the next close request is let through.
-    Confirmed,
-    /// The close request has been sent.
-    Sent,
 }
 
 /// The app: the engine session, the host services, the command catalog, view state and view models.
@@ -134,12 +132,17 @@ pub struct FontCraftApp {
     pub sent: Vec<Msg>,
     /// The status line: the last error or notice.
     pub status: String,
-    pub closing: Closing,
+    /// The question asked before unsaved work is closed.
+    pub closing: close::ClosePrompt,
     /// The hinting dialogs' state (`dialogs::tt`).
     pub tt: crate::dialogs::tt::TtState,
     /// The open form dialog (`dialogs::form`).
     pub dialogs: crate::dialogs::form::DialogState,
-    picks: Picks,
+    pub(crate) picks: Picks,
+    /// Work the desktop app does each frame beside the UI (External Preview's server).
+    pub frame_hook: Option<Box<dyn preview_host::FrameHook>>,
+    /// The web server for the TrueType preview page; `None` where no port can be opened.
+    pub preview_host: Option<Box<dyn preview_host::PreviewHost>>,
     /// The control channel: its listener, the window its input goes to, the replies waiting on frames.
     pub control: crate::control::Control,
     #[cfg(not(target_arch = "wasm32"))]
@@ -177,10 +180,12 @@ impl FontCraftApp {
             models: Models::default(),
             sent: Vec::new(),
             status: String::new(),
-            closing: Closing::Idle,
+            closing: close::ClosePrompt::default(),
             tt: Default::default(),
             dialogs: crate::dialogs::form::DialogState::default(),
             picks: Picks::default(),
+            frame_hook: None,
+            preview_host: None,
             control: crate::control::Control::default(),
             #[cfg(not(target_arch = "wasm32"))]
             file_panels: None,
@@ -192,9 +197,9 @@ impl FontCraftApp {
         app
     }
 
-    /// Whether a document has changes not yet saved.
+    /// Whether a document or project has changes not yet saved.
     pub fn has_unsaved_changes(&self) -> bool {
-        self.session.documents().iter().any(|d| d.modified())
+        close::has_unsaved(&self.session)
     }
 
     /// Applies what was posted: the only place that runs engine commands. A failed command changes nothing and
@@ -202,7 +207,7 @@ impl FontCraftApp {
     pub fn drain(&mut self) {
         let mut failed = Vec::new();
         for command in self.picks.poll(&self.host, &mut failed) {
-            self.sent.push(Msg::Run(command));
+            self.sent.push(FontCraftApp::route(command));
         }
         for msg in std::mem::take(&mut self.sent) {
             if let Err(error) = self.apply_msg(msg) {
@@ -214,9 +219,7 @@ impl FontCraftApp {
         }
         crate::canvas::tools::apply::sync(self);
         self.tools.refresh();
-        if self.closing == Closing::SaveThenClose {
-            self.closing = if self.has_unsaved_changes() { Closing::Idle } else { Closing::Confirmed };
-        }
+        close::after_drain(self);
         self.project();
     }
 
@@ -235,6 +238,12 @@ impl FontCraftApp {
         result
     }
 
+    /// Runs the engine command `id` now, as `drain` applies it, and returns its result. For shell commands that build
+    /// on an engine command's reply.
+    pub(crate) fn run_command(&mut self, id: &str, params: Value) -> Result<Value, String> {
+        self.apply(Msg::run(id, params), false)
+    }
+
     /// Applies one message as `drain` does; the error names the command that failed.
     pub fn apply_msg(&mut self, msg: Msg) -> Result<(), String> {
         let id = msg.command_id().map(str::to_owned);
@@ -246,11 +255,20 @@ impl FontCraftApp {
     fn apply(&mut self, msg: Msg, ask_files: bool) -> Result<Value, String> {
         match msg {
             Msg::Run(command) => {
-                if ask_files && self.picks.ask(&self.host, &command) {
+                if ask_files && self.picks.ask(&self.host, &self.session, &command) {
                     return Ok(json!({ "picker": true }));
                 }
                 let params = if command.params.is_null() { json!({}) } else { command.params.clone() };
-                let reply = self.session.execute(&command.id, &params).map_err(|e| e.to_string())?;
+                let reply = match self.session.execute(&command.id, &params) {
+                    Ok(reply) => reply,
+                    Err(e) => {
+                        let error = e.to_string();
+                        crate::shell::start::after_error(self, &command.id, &error);
+                        crate::dialogs::changed_on_disk::after_error(self, &command.id, &params, &error);
+                        return Err(error);
+                    }
+                };
+                crate::shell::start::after_run(self, &command.id);
                 crate::canvas::tools::apply::adopt(self, &reply);
                 crate::dialogs::after::after_run(self, &command.id, &params, &reply);
                 if let Some(notice) = self.after_command(&command, &reply) {
@@ -359,6 +377,10 @@ impl ShellApp for FontCraftApp {
             if fired.phase == FirePhase::Release {
                 continue;
             }
+            // Quit and Close with unsaved work, and New from Glyph Sets from the menu, ask first.
+            if close::fired(self, &fired.command) || crate::shell::start::fired(self, &fired.command) {
+                continue;
+            }
             let msg = match FontCraftApp::route(fired.command) {
                 Msg::Run(command) => {
                     let command = self.with_targets(command);
@@ -376,9 +398,15 @@ impl ShellApp for FontCraftApp {
 
     fn logic(&mut self, ctx: &egui::Context) {
         crate::control::logic(self, ctx);
+        open::take_dropped(self, ctx);
         crate::control::drain(self);
-        if self.closing == Closing::Confirmed {
-            self.closing = Closing::Sent;
+        if let Some(mut hook) = self.frame_hook.take() {
+            if let Some(after) = hook.frame(self) {
+                ctx.request_repaint_after(after);
+            }
+            self.frame_hook = Some(hook);
+        }
+        if self.closing.take_close_window() {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
     }
@@ -393,15 +421,7 @@ impl ShellApp for FontCraftApp {
     }
 
     fn close_requested(&mut self) -> CloseDecision {
-        match self.closing {
-            Closing::Confirmed | Closing::Sent => CloseDecision::Close,
-            _ if !self.has_unsaved_changes() => CloseDecision::Close,
-            Closing::Idle => {
-                self.closing = Closing::Ask;
-                CloseDecision::Hold
-            }
-            _ => CloseDecision::Hold,
-        }
+        close::close_requested(self)
     }
 }
 

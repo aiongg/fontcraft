@@ -17,6 +17,9 @@ pub mod params;
 pub mod rail;
 pub mod reference_font;
 pub mod selection;
+pub mod settings;
+pub mod start;
+pub mod url;
 pub mod view;
 pub mod window;
 

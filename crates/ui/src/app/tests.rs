@@ -6,7 +6,7 @@ use craft::ui::shell::embed::CloseDecision;
 use fontcraft_engine::Session;
 use serde_json::json;
 
-use super::{APP, Closing, FontCraftApp, Msg};
+use super::{APP, FontCraftApp, Msg};
 
 fn app() -> FontCraftApp {
     FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()))
@@ -27,7 +27,7 @@ fn a_posted_command_runs_projects_and_guards_the_close() {
     assert!(app.status.is_empty(), "{}", app.status);
 
     assert!(matches!(app.close_requested(), CloseDecision::Hold));
-    assert_eq!(app.closing, Closing::Ask);
+    assert!(app.closing.is_open(), "the question about unsaved changes opens");
 }
 
 /// A command the engine refuses leaves its message in the status line and nothing else.

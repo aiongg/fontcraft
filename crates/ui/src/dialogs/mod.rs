@@ -9,6 +9,7 @@
 
 mod about;
 pub mod after;
+pub mod changed_on_disk;
 pub mod custom_parameter_picker;
 pub mod field_picker;
 pub mod fields;
@@ -19,9 +20,11 @@ pub mod kerning_audit;
 pub mod kerning_questions;
 pub mod os2_bits;
 pub mod panose;
+pub mod settings;
 pub mod spec;
+pub mod start_window;
 pub mod tt;
-mod unsaved;
+pub mod unsaved;
 
 use craft::ui::dialog::DialogHost;
 use serde_json::Value;
@@ -44,6 +47,9 @@ pub const MODULES: &[Module] = &[
     host::run,
     kerning_questions::run,
     kerning_audit::run,
+    start_window::run,
+    settings::run,
+    changed_on_disk::run,
 ];
 
 /// Every package's dialog specs, one line each.
