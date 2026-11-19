@@ -7,8 +7,8 @@ to stderr; stdout carries only protocol messages.
 
 | Mode | How | What works |
 |---|---|---|
-| **Attached** | `fontcraft-cli mcp --connect 127.0.0.1:7985` (the app must run with `fontcraft --control 7985`) | Everything: calls are forwarded over the [control protocol](control-protocol.md), and you see the app change |
-| **Headless** | `fontcraft-cli mcp --headless` | An engine session inside the process, starting with a new font. Everything except window and view commands, which answer that they need the running app |
+| **Attached** | `fontcraft-cli mcp --connect 127.0.0.1:7985` (the app must run with `fontcraft --control 7985`) | Everything: calls are forwarded over the [control protocol](control-protocol.md), and you see the app change. The [window tools](#window-tools) are listed too |
+| **Headless** | `fontcraft-cli mcp --headless` | An engine session inside the process, starting with a new font. Everything except window and view commands and the window tools, which answer that they need the running app |
 
 With no flag the server tries `127.0.0.1:7985` and falls back to headless.
 
@@ -42,6 +42,38 @@ printf '%s\n' \
   '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"run_command","arguments":{"command":"file.exportStatic","params":{"destination":"demo.ttf"}}}}' \
   | fontcraft-cli mcp --headless
 ```
+
+### Window tools
+
+Attached to the app, `tools/list` also offers tools that show and drive its window. Each calls
+one [control method](control-protocol.md#methods-today) and passes on only the arguments listed
+here. Headless, they are not listed, and a call answers that the tool needs the running app.
+
+| Tool | Arguments | Control method | Returns |
+|---|---|---|---|
+| `screenshot` | `{}` | `ui.screenshot` | the window as a PNG image, then `{width, height, pixelsPerPoint}` as text |
+| `render` | `{glyphs?, text?, master?, layer?, size?, scale?}` | `ui.render` | the glyphs filled black on white as a PNG image, then `{width, height, glyphs, master?}` as text |
+| `pointer` | `{events}` | `ui.pointer` | the active tool's state, selection and errors |
+| `click` | `{id}` or `{x, y, button?, count?, mods?, shift?, alt?, cmd?, ctrl?}` | `ui.click` | a dialog control's result, or `{queued, pending}` for a window click |
+| `key` | `{key, shift?, alt?, cmd?, ctrl?, action?}` | `ui.key` | whether anything took the key; the command and result of a menu shortcut |
+| `text` | `{text}` | `ui.text` | `{field}`, or `{keys, handled}` |
+| `menu` | `{}` | `ui.menu.list` | the menu tree |
+| `menu` | `{command, params?}` | `ui.menu.invoke` | the item's result; a follow-up question opens as a dialog |
+| `dialog_inspect` | `{}` | `ui.dialog.inspect` | the open dialog, or `{open: false}` |
+| `dialog_set` | `{field, value}` | `ui.dialog.set` | the dialog after the change |
+| `dialog_confirm` | `{}` | `ui.dialog.confirm` | the confirmed command and its parameters |
+| `dialog_cancel` | `{}` | `ui.dialog.cancel` | `{cancelled}` |
+
+- An image is MCP `image` content (`mimeType: image/png`, base64 `data`). `screenshot` and
+  `render` take no `path`: the server writes no file.
+- A window click is handed to the window over the next frames. Take a `screenshot` to see the
+  result.
+- Open a dialog with `run_command` and the UI command `dialog.open`.
+- Under `--read-only`, `--allow` or `--deny` the server cannot see in advance which command a
+  click or key will run. So `pointer`, `click`, `key` and `text` are not listed and are refused.
+  `menu` checks its command, and `dialog_set` and `dialog_confirm` check the open dialog's
+  command and parameters, before they act; a dialog that names no command is refused.
+  `screenshot`, `render`, `dialog_inspect` and `dialog_cancel` always run.
 
 ## Permissions
 
@@ -205,8 +237,8 @@ before the client sets a level.
 | Level | Sent when |
 |---|---|
 | `debug` | a prompt or resource is read; a completion found nothing to offer |
-| `info` | a command ran: `{command, ok: true}` |
-| `warning` | a command failed (`{command, error}`) or was refused (`{command, refused}`) |
+| `info` | a command ran: `{command, ok: true}`; a window tool ran: `{tool, ok: true}` |
+| `warning` | a command or window tool failed (`{command, error}`, `{tool, error}`) or was refused (`{command, refused}`, `{tool, refused}`) |
 | `error` | a bug inside the server was caught |
 
 Notifications go out before the reply to the request that caused them; at most 1,000 per request.
@@ -284,4 +316,4 @@ Transport: `crates/mcp/src/http.rs`, with the limits as named constants at the t
 
 | What | Milestone |
 |---|---|
-| Task-level tools over common command sequences: `open_font`, `draw_path`, `set_metrics`, `export_font`, `render_glyphs` (returns an image), `screenshot` | M3 |
+| Task-level tools over common command sequences: `open_font`, `draw_path`, `set_metrics`, `export_font`, `render_glyphs` (returns an image, also headless) | M3 |

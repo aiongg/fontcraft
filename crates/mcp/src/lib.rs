@@ -6,6 +6,9 @@
 //! - [`Remote`]: a running FontCraft app, reached over its control port (`fontcraft --control`),
 //!   so the agent's changes appear in the window.
 //!
+//! Attached to an app, the server also offers window tools ([`ui_tools`]): a screenshot, glyph
+//! renders, mouse and keyboard input, menus and dialogs.
+//!
 //! Besides the tools the server offers workflow prompts ([`prompts`]), resources and argument
 //! completion ([`resources`]) and log notifications. A [`Policy`] decides which commands a client may
 //! run; everything it cannot place is refused. Automation roots
@@ -22,6 +25,7 @@ pub mod http;
 pub mod policy;
 mod prompts;
 mod resources;
+mod ui_tools;
 
 use std::collections::HashMap;
 use std::io::{BufRead, Write};
@@ -127,6 +131,15 @@ fn tools() -> Value {
     ])
 }
 
+/// A tool's answer: its content, or the reason it failed. A failed tool is a result the agent
+/// reads, not a protocol error.
+fn tool_result(result: Result<Vec<Value>, String>) -> Value {
+    match result {
+        Ok(content) => json!({"content": content, "isError": false}),
+        Err(message) => json!({"content": [{"type": "text", "text": message}], "isError": true}),
+    }
+}
+
 fn error(id: &Value, code: i64, message: impl Into<String>) -> Value {
     json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message.into()}})
 }
@@ -155,6 +168,17 @@ impl Server {
     pub fn with_roots(mut self, roots: Option<Arc<AutomationRoots>>) -> Self {
         self.roots = roots;
         self
+    }
+
+    /// The tools this server offers: the window tools only when a running app answers them.
+    fn tool_list(&self) -> Value {
+        let mut list = tools();
+        if self.backend.has_app()
+            && let Some(all) = list.as_array_mut()
+        {
+            all.extend(ui_tools::list(self.policy.is_restricted()));
+        }
+        list
     }
 
     /// The log notifications produced since the last call, as JSON-RPC lines. A transport sends
@@ -236,6 +260,10 @@ impl Server {
                     instructions.push(' ');
                     instructions.push_str(&restricted);
                 }
+                if self.backend.has_app() {
+                    instructions.push(' ');
+                    instructions.push_str(&ui_tools::describe(self.policy.is_restricted()));
+                }
                 if let Some(roots) = &self.roots {
                     instructions.push_str(&format!(
                         " This server's {}; a path outside them is refused with a message, and macros and other commands that run steps it cannot see are refused.",
@@ -250,7 +278,7 @@ impl Server {
                 }))
             }
             "ping" => Ok(json!({})),
-            "tools/list" => Ok(json!({"tools": tools()})),
+            "tools/list" => Ok(json!({"tools": self.tool_list()})),
             "tools/call" => {
                 let name = params.get("name").and_then(Value::as_str).ok_or((INVALID_PARAMS, "`name` (a tool name) is required".to_string()))?;
                 let args = params.get("arguments").cloned().unwrap_or(Value::Null);
@@ -261,13 +289,14 @@ impl Server {
                         None => Err("`command` (a command id) is required".to_string()),
                     },
                     "inspect_document" => resources::Reader::document(self),
-                    other => return Err((INVALID_PARAMS, format!("unknown tool `{other}`"))),
+                    other => {
+                        return match ui_tools::call(self, other, &args) {
+                            Some(content) => Ok(tool_result(content)),
+                            None => Err((INVALID_PARAMS, format!("unknown tool `{other}`"))),
+                        };
+                    }
                 };
-                // A failed tool is a result the agent reads, not a protocol error.
-                Ok(match result {
-                    Ok(value) => json!({"content": [{"type": "text", "text": value.to_string()}], "isError": false}),
-                    Err(message) => json!({"content": [{"type": "text", "text": message}], "isError": true}),
-                })
+                Ok(tool_result(result.map(|value| vec![json!({"type": "text", "text": value.to_string()})])))
             }
             "logging/setLevel" => {
                 let level = params
