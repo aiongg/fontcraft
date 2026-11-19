@@ -3353,8 +3353,13 @@ milestone = "M13"
 summary = "Re-rasterises the selected glyphs into the chosen strikes from the current outlines, overwriting hand edits in those bitmaps."
 ref = "FontForge Element menu › Regenerate Bitmap Glyphs"
 status = "docs"
-notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Built in M13.63 (`crates/engine/src/cmd/bitmap_edit.rs`) on the rasteriser of bitmap.setStrikes (`rasterize_glyphs` in `bitmap_strikes.rs`): the glyphs are drawn from the first master's outlines, or from the placed PDF of a glyph without outlines, with the same pixel and byte limits, every strike measured before any is drawn. A new bitmap replaces the old one's pixels, offsets, advance and references, keeps its code, and a glyph the strike had no bitmap for gets one; the strike's metrics stay. Documented, not yet observed. Moved from M11 to M13 by the M11 planning pass (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
+guesses = [
+  "Without `glyphs` every exported glyph is drawn again, so a strike that covered only some glyphs gains bitmaps for the rest; the secondary reference acts on the font view selection. Regenerating with nothing selected in the secondary reference would settle it.",
+  "A glyph that is not exported is skipped and listed, as when a strike is first rasterised.",
+  "A regenerated bitmap keeps the code its file gave the old one, so a strike in a non-Unicode encoding still exports with its codes.",
+]
 
 [[command]]
 id = "bitmap.removeGlyphs"
@@ -3362,14 +3367,18 @@ label = "Remove Bitmap Glyphs…"
 menu = ["Glyph"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, strikes?: [{ppem: number, depth?: number}]}"
+params = "{glyphs, strikes?: [{ppem: number, depth?: number}]}"
 area = "color"
 milestone = "M13"
 summary = "Deletes the selected glyphs from the chosen strikes, leaving outlines and other strikes alone."
 ref = "FontForge Element menu › Remove Bitmap Glyphs"
 status = "docs"
-notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Built in M13.63 (`crates/engine/src/cmd/bitmap_edit.rs`). `glyphs` is required: the shell fills it from the selection. Without `strikes` every strike loses the glyphs' bitmaps. Documented, not yet observed. Moved from M11 to M13 by the M11 planning pass (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
+guesses = [
+  "References to a removed bitmap from other glyphs of the same strike are removed with it, and those glyphs are listed in the result, rather than refusing the removal. Removing a referenced bitmap in the secondary reference would settle it.",
+  "A call that would remove nothing (none of the glyphs has a bitmap in the chosen strikes) is refused rather than reported as an empty change.",
+]
 
 [[panel]]
 id = "window.bitmapEditor"
@@ -3453,14 +3462,19 @@ label = "Set Pixels"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph, strike: {ppem: number, depth?: number}, pixels?: [{x: number, y: number, value: number}], rows?: [string], origin?: [x, y], advance?: number}"
+params = "{glyph, strike: {ppem: number, depth?: number}, pixels?: [{x: number, y: number, value: number}], rows?: [string], origin?: [x, y], references?: [{glyph, x?: number, y?: number}], advance?: number}"
 area = "color"
 milestone = "M13"
-summary = "Headless form of bitmap editing: sets individual pixels, or replaces the whole glyph bitmap from rows of values, with its origin offset and, in a bitmap-only font, its advance."
+summary = "Headless form of bitmap editing: sets individual pixels, or replaces the whole glyph bitmap from rows of values, with its origin offset, its references to other bitmaps of the strike and, in a bitmap-only font, its advance."
 ref = "FontForge main views › Bitmap View"
 status = "inferred"
-notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Built in M13.63 (`crates/engine/src/cmd/bitmap_edit.rs`); each Bitmap Glyph Editor gesture is one call. `rows` replace the whole bitmap, top row first, one character a pixel (`.` off, `#` the darkest level, a hex digit for a level; two characters a pixel at 8 bits); `origin` is the bitmap's bottom-left corner in pixels from the glyph origin; `pixels` are counted from the glyph origin, rightwards and upwards, and grow the bitmap to take a pixel set outside it. The call makes the glyph's bitmap when the strike has none. References are stored on the strike glyph (`crates/model/src/strike.rs`, see `bitmap.references`). Moved from M11 to M13 by the M11 planning pass (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
+guesses = [
+  "Clearing pixels never shrinks the bitmap's box; only `rows` set a smaller one. The secondary reference's saved BDF after clearing an edge row would settle whether it trims.",
+  "`origin` is the bitmap's bottom-left corner relative to the glyph origin, the BDF bounding box offset, not a point inside the bitmap.",
+  "A `strike` without `depth` names the strike of that size when the font has only one; with several depths of the size the call is refused.",
+]
 
 [[command]]
 id = "bitmap.transform"
@@ -3474,8 +3488,14 @@ milestone = "M13"
 summary = "Flips, rotates by quarter turns or skews bitmap glyphs by a pixel ratio."
 ref = "FontForge Element menu › Transformations (bitmap view: Flip, Rotate, Skew)"
 status = "docs"
-notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Built in M13.63 (`crates/engine/src/cmd/bitmap_edit.rs`). Without `glyphs` every bitmap of the strike is transformed; a `strike` without `depth` takes every depth of the size. Flips mirror a bitmap within its box; quarter turns keep the box's centre, rounded down; `skew: [dx, dy]` moves each row dx pixels right for every dy rows its bottom edge lies above the baseline, rounded down, so the baseline row stays and the box widens. Advances stay. A glyph built from references has them drawn in first and loses them. Documented, not yet observed. Moved from M11 to M13 by the M11 planning pass (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
+guesses = [
+  "Skew is horizontal only and counted from the baseline: a row moves floor(height × dx ÷ dy) pixels right, where height is how far its bottom edge lies above the baseline, so rows below the baseline move left. Skewing a glyph with a descender in the secondary reference's bitmap view would settle the direction and the rounding.",
+  "Flips mirror the bitmap in its own box, which stays where it was, rather than about the advance's centre. Flipping an off-centre bitmap in the secondary reference would settle it.",
+  "A quarter turn keeps the centre of the bitmap's box, rounding the new corner down; the secondary reference may turn about the glyph origin instead.",
+  "A glyph built from references has them drawn into its pixels before it is transformed, so it loses its references; transforming only its own pixels would move them apart from the drawn parts.",
+]
 
 [[command]]
 id = "view.setFontViewStrike"
@@ -3554,6 +3574,25 @@ status = "docs"
 notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
 
+[[command]]
+id = "bitmap.setStrikeProperties"
+label = "Set Strike Properties"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{strike: {ppem: number, depth?: number}, name?: string, pointSize?: number, resolution?: [x, y], ascent?: number, descent?: number, properties?: [{name, value: string | number}]}"
+area = "color"
+milestone = "M13"
+summary = "Edits one strike's name, size in points, resolution, line metrics and the property list a BDF file carries; the Strike Properties dialog runs it."
+ref = "FontForge Element menu › BDF Info; FontForge dialogs › BDF Info Dialog"
+status = "docs"
+notes = "Built in M13.63 (`crates/engine/src/cmd/bitmap_edit.rs`) on the model's strike fields (`crates/model/src/strike.rs`). `properties` replaces the whole list, in order; values are text or whole numbers, as BDF properties are. The dialog's reset to computed defaults is not built. Documented, not yet observed."
+origin = "fontforge"
+guesses = [
+  "A property name given twice is refused, since a BDF file names each property once.",
+  "Changing the strike's ascent or descent does not edit a `FONT_ASCENT` or `FONT_DESCENT` entry in `properties`; the two are set separately. The secondary reference's BDF Info dialog after a change of line metrics would settle whether it keeps them in step.",
+]
+
 [[behavior]]
 id = "bitmap.widthOnlyInBitmapFonts"
 area = "color"
@@ -3561,8 +3600,12 @@ milestone = "M13"
 summary = "A bitmap glyph's advance can be edited directly only when the font has no outlines; with outlines present the strike advance follows the outline advance scaled to the strike size and rounded."
 ref = "FontForge main views › Bitmap View (Pointer; Set Width); Find Problems › Bitmap/Outline Advance Width Mismatch"
 status = "docs"
-notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Built in M13.63 in `bitmap.setPixels` (`crates/engine/src/cmd/bitmap_edit.rs`): in a font with outlines `advance` is refused and every edit sets the bitmap's advance to the glyph's first-master width scaled to the strike and rounded; in a font without outlines `advance` sets it, and a new bitmap starts from the scaled width. Changing a glyph's width does not reach its bitmaps until they are edited or regenerated. Documented, not yet observed. Moved from M11 to M13 by the M11 planning pass (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
+guesses = [
+  "A font has outlines when any glyph has a path or component on any layer; a font opened from a bitmap file has none.",
+  "The advance follows the outline when a bitmap is edited or regenerated, not at once when the glyph's width changes; the secondary reference's bitmap view after a width change would settle it.",
+]
 
 [[behavior]]
 id = "bitmap.references"
@@ -3571,8 +3614,13 @@ milestone = "M13"
 summary = "A bitmap glyph may be composed of references to other bitmap glyphs of the same strike, and building an accented composite can create the bitmap references together with the outline components."
 ref = "FontForge main views › Bitmap View (Bitmap references); FontForge Element menu › Build Accented Glyph"
 status = "docs"
-notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Built in M13.63: a strike glyph stores its references (`crates/model/src/strike.rs`, `BitmapReference`: the drawn glyph and a pixel offset of its origin), set with `bitmap.setPixels` `references`. The model refuses a reference to the glyph itself, references that lead back to a glyph, chains more than 8 deep, more than 64 references on one glyph, more than 4,096 bitmaps drawn for one glyph, and a drawn-in bitmap over 1,024 pixels a side. `bitmap.exportStrikes` draws references into the pixels, since the bitmap file formats and our `EBDT` writer hold pixels only; a pixel drawn twice takes the darker level. Renaming a glyph renames the references to it; deleting it or removing its bitmap removes them. Building an accented composite does not yet make bitmap references. Documented, not yet observed. Moved from M11 to M13 by the M11 planning pass (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
+guesses = [
+  "Where a reference overlaps the glyph's own pixels or another reference, the darker level wins.",
+  "References are drawn in on export rather than written as composite bitmaps (`EBDT` formats 8 and 9).",
+  "A reference names a glyph by name, and a reference to a bitmap that is later removed draws nothing until it is removed too.",
+]
 
 # =====================================================================================================
 # FontForge — kerning views, classes, layout tables, encodings, CID

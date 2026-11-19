@@ -7,10 +7,14 @@
 //! file stated are kept as they were, so a strike imported from a BDF file is written back with
 //! them.
 //!
+//! A strike glyph may also draw other bitmaps of its strike, placed at a pixel offset
+//! ([`BitmapReference`]). References nest at most [`MAX_BITMAP_REFERENCE_DEPTH`] deep and never
+//! loop; [`BitmapStrike::flattened`] draws them in for the file writers, which know only pixels.
+//!
 //! The limits match those of the bitmap file readers (`fontcraft-io-bitmap`), so whatever they
 //! read fits a strike.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -31,6 +35,12 @@ pub const MAX_STRIKE_STRING: usize = 65_536;
 /// Largest absolute value of a strike's ascent, descent, or a glyph's advance or offset, in
 /// pixels.
 pub const MAX_STRIKE_COORDINATE: i32 = 32_767;
+/// Most references one strike glyph holds.
+pub const MAX_BITMAP_REFERENCES: usize = 64;
+/// Longest chain of references from one strike glyph through others.
+pub const MAX_BITMAP_REFERENCE_DEPTH: usize = 8;
+/// Most bitmaps one strike glyph draws through its references, nested ones included.
+pub const MAX_BITMAP_REFERENCE_PARTS: usize = 4_096;
 
 /// The glyphs of a font drawn at one pixel size.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -100,6 +110,22 @@ pub struct StrikeGlyph {
     /// packed from the most significant bit. Base64 text in the native file.
     #[serde(serialize_with = "to_base64", deserialize_with = "from_base64")]
     pub data: Vec<u8>,
+    /// Other bitmaps of the same strike drawn into this one, over its own pixels.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub references: Vec<BitmapReference>,
+}
+
+/// A strike glyph drawn into another at a pixel offset.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BitmapReference {
+    /// The strike glyph drawn.
+    pub glyph: String,
+    /// Pixels from the referring glyph's origin to the drawn glyph's origin, rightwards.
+    #[serde(default)]
+    pub x: i32,
+    /// Pixels from the referring glyph's origin to the drawn glyph's origin, upwards.
+    #[serde(default)]
+    pub y: i32,
 }
 
 fn one_bit() -> u8 {
@@ -124,9 +150,73 @@ fn from_base64<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
 }
 
 impl StrikeGlyph {
+    /// A glyph with no pixels (a 0 × 0 bitmap at the origin) and no references.
+    pub fn empty(glyph: impl Into<String>, advance: i32) -> Self {
+        StrikeGlyph {
+            glyph: glyph.into(),
+            code: None,
+            advance,
+            scalable_width: None,
+            width: 0,
+            height: 0,
+            left: 0,
+            bottom: 0,
+            data: Vec::new(),
+            references: Vec::new(),
+        }
+    }
+
     /// Bytes per row at `depth` bits per pixel.
     pub fn stride(&self, depth: u8) -> usize {
         (usize::from(self.width) * usize::from(depth)).div_ceil(8)
+    }
+
+    /// The level of the pixel in column `x` of row `y` (rows from the top) at `depth` bits per
+    /// pixel; 0 outside the bitmap.
+    pub fn pixel(&self, depth: u8, x: u16, y: u16) -> u8 {
+        let Some((at, shift, mask)) = self.locate(depth, x, y) else { return 0 };
+        self.data.get(at).map_or(0, |&b| (b >> shift) & mask)
+    }
+
+    /// Sets the pixel in column `x` of row `y` (rows from the top) to `level`, cut to `depth`
+    /// bits. A pixel outside the bitmap is left alone.
+    pub fn set_pixel(&mut self, depth: u8, x: u16, y: u16, level: u8) {
+        let Some((at, shift, mask)) = self.locate(depth, x, y) else { return };
+        if let Some(b) = self.data.get_mut(at) {
+            *b = (*b & !(mask << shift)) | ((level & mask) << shift);
+        }
+    }
+
+    /// The byte, bit shift and level mask of a pixel; `None` outside the bitmap or at a depth a
+    /// strike cannot have.
+    fn locate(&self, depth: u8, x: u16, y: u16) -> Option<(usize, u32, u8)> {
+        if !valid_depth(depth) || x >= self.width || y >= self.height {
+            return None;
+        }
+        let d = usize::from(depth);
+        let bit = usize::from(x) * d;
+        // `d` divides 8, so the pixel never straddles a byte.
+        let shift = u32::try_from(8usize.saturating_sub(d + bit % 8)).ok()?;
+        let mask = u8::MAX >> (8 - d);
+        Some((usize::from(y) * self.stride(depth) + bit / 8, shift, mask))
+    }
+
+    /// The bitmap's box, `(left, bottom, right, top)` in pixels up from the baseline; `None` when
+    /// it has no pixels.
+    pub fn pixel_box(&self) -> Option<(i64, i64, i64, i64)> {
+        if self.width == 0 || self.height == 0 {
+            return None;
+        }
+        let (left, bottom) = (i64::from(self.left), i64::from(self.bottom));
+        Some((left, bottom, left + i64::from(self.width), bottom + i64::from(self.height)))
+    }
+}
+
+/// The highest level of a pixel at `depth` bits: 1 for black and white, 255 at 8 bits.
+pub fn max_level(depth: u8) -> u8 {
+    match depth {
+        1 | 2 | 4 => (1u8 << depth) - 1,
+        _ => u8::MAX,
     }
 }
 
@@ -216,9 +306,216 @@ impl BitmapStrike {
             if bytes > MAX_STRIKE_BYTES {
                 return Err(format!("the bitmaps take more than {MAX_STRIKE_BYTES} bytes"));
             }
+            if g.references.len() > MAX_BITMAP_REFERENCES {
+                return Err(format!("glyph `{}` has more than {MAX_BITMAP_REFERENCES} references", g.glyph));
+            }
+            for r in &g.references {
+                check_name("bitmap reference", &r.glyph).map_err(|e| e.to_string())?;
+                if r.glyph == g.glyph {
+                    return Err(format!("glyph `{}` refers to itself", g.glyph));
+                }
+                if !coordinate(r.x) || !coordinate(r.y) {
+                    return Err(format!("glyph `{}`: a reference offset is beyond ±{MAX_STRIKE_COORDINATE}", g.glyph));
+                }
+            }
+        }
+        self.check_references()
+    }
+
+    /// The glyphs by name.
+    fn index(&self) -> HashMap<&str, &StrikeGlyph> {
+        self.glyphs.iter().map(|g| (g.glyph.as_str(), g)).collect()
+    }
+
+    /// The reference rules across glyphs: no loop, at most [`MAX_BITMAP_REFERENCE_DEPTH`] levels
+    /// and [`MAX_BITMAP_REFERENCE_PARTS`] bitmaps per glyph, a drawn-in box within
+    /// [`MAX_STRIKE_BITMAP_SIDE`], and drawn-in bitmaps within [`MAX_STRIKE_BYTES`].
+    fn check_references(&self) -> Result<(), String> {
+        if self.glyphs.iter().all(|g| g.references.is_empty()) {
+            return Ok(());
+        }
+        let index = self.index();
+        let mut memo = HashMap::new();
+        let mut bytes = 0usize;
+        for g in &self.glyphs {
+            let composite = composite_of(&index, &g.glyph, &mut memo, &mut Vec::new())?;
+            let side = i64::from(MAX_STRIKE_BITMAP_SIDE);
+            let size = match composite.pixel_box {
+                Some((l, b, r, t)) if r - l > side || t - b > side => {
+                    return Err(format!("glyph `{}` with its references drawn in would be wider or taller than {side} pixels", g.glyph));
+                }
+                Some((l, b, r, t)) => usize::try_from(((r - l) * i64::from(self.depth) + 7) / 8 * (t - b)).unwrap_or(usize::MAX),
+                None => 0,
+            };
+            bytes = bytes.saturating_add(size);
+            if bytes > MAX_STRIKE_BYTES {
+                return Err(format!("the bitmaps with their references drawn in would take more than {MAX_STRIKE_BYTES} bytes"));
+            }
         }
         Ok(())
     }
+
+    /// `name`'s bitmap with its references drawn in, nested ones included, and no references
+    /// left; `None` when the strike has no bitmap for `name`. A pixel drawn twice takes the
+    /// darker level. References to glyphs the strike lacks draw nothing.
+    pub fn composed(&self, name: &str) -> Result<Option<StrikeGlyph>, String> {
+        let index = self.index();
+        let Some(glyph) = index.get(name).copied() else { return Ok(None) };
+        compose(&index, glyph, self.depth).map(Some)
+    }
+
+    /// A copy of the strike with every glyph's references drawn in; `None` when no glyph has
+    /// references.
+    pub fn flattened(&self) -> Result<Option<BitmapStrike>, String> {
+        if self.glyphs.iter().all(|g| g.references.is_empty()) {
+            return Ok(None);
+        }
+        self.check_references()?;
+        let index = self.index();
+        let mut glyphs = Vec::with_capacity(self.glyphs.len());
+        for g in &self.glyphs {
+            glyphs.push(if g.references.is_empty() { g.clone() } else { compose(&index, g, self.depth)? });
+        }
+        Ok(Some(BitmapStrike { glyphs, ..self.clone_without_glyphs() }))
+    }
+
+    /// The strike's own fields with no glyphs.
+    fn clone_without_glyphs(&self) -> BitmapStrike {
+        BitmapStrike {
+            ppem: self.ppem,
+            depth: self.depth,
+            name: self.name.clone(),
+            point_size: self.point_size,
+            resolution: self.resolution,
+            ascent: self.ascent,
+            descent: self.descent,
+            properties: self.properties.clone(),
+            glyphs: Vec::new(),
+        }
+    }
+}
+
+/// What following a glyph's references reaches: how deep they nest, how many bitmaps they draw
+/// (the glyph's own included) and the box of all of them.
+#[derive(Clone, Copy)]
+struct Composite {
+    depth: usize,
+    parts: usize,
+    pixel_box: Option<(i64, i64, i64, i64)>,
+}
+
+/// The [`Composite`] of `name`, memoised; `path` holds the glyphs whose references lead here.
+/// A reference to a glyph the strike lacks draws nothing. The recursion is at most
+/// [`MAX_BITMAP_REFERENCE_DEPTH`] + 1 calls deep.
+fn composite_of<'a>(
+    index: &HashMap<&'a str, &'a StrikeGlyph>,
+    name: &'a str,
+    memo: &mut HashMap<&'a str, Composite>,
+    path: &mut Vec<&'a str>,
+) -> Result<Composite, String> {
+    if let Some(known) = memo.get(name) {
+        return Ok(*known);
+    }
+    let root = path.first().copied().unwrap_or(name);
+    if path.contains(&name) {
+        return Err(format!("the references of glyph `{root}` lead back to `{name}`"));
+    }
+    if path.len() > MAX_BITMAP_REFERENCE_DEPTH {
+        return Err(format!("the references of glyph `{root}` nest more than {MAX_BITMAP_REFERENCE_DEPTH} levels deep"));
+    }
+    let Some(glyph) = index.get(name).copied() else {
+        return Ok(Composite { depth: 0, parts: 0, pixel_box: None });
+    };
+    let mut out = Composite { depth: 0, parts: 1, pixel_box: glyph.pixel_box() };
+    path.push(name);
+    for r in &glyph.references {
+        let inner = composite_of(index, r.glyph.as_str(), memo, path)?;
+        out.depth = out.depth.max(inner.depth.saturating_add(1));
+        out.parts = out.parts.saturating_add(inner.parts);
+        if let Some((l, b, rt, t)) = inner.pixel_box {
+            let (x, y) = (i64::from(r.x), i64::from(r.y));
+            out.pixel_box = Some(union(out.pixel_box, (l + x, b + y, rt + x, t + y)));
+        }
+    }
+    path.pop();
+    if out.depth > MAX_BITMAP_REFERENCE_DEPTH {
+        return Err(format!("the references of glyph `{name}` nest more than {MAX_BITMAP_REFERENCE_DEPTH} levels deep"));
+    }
+    if out.parts > MAX_BITMAP_REFERENCE_PARTS {
+        return Err(format!("glyph `{name}` draws more than {MAX_BITMAP_REFERENCE_PARTS} bitmaps through its references"));
+    }
+    memo.insert(name, out);
+    Ok(out)
+}
+
+fn union(a: Option<(i64, i64, i64, i64)>, (l, b, r, t): (i64, i64, i64, i64)) -> (i64, i64, i64, i64) {
+    match a {
+        Some((al, ab, ar, at)) => (al.min(l), ab.min(b), ar.max(r), at.max(t)),
+        None => (l, b, r, t),
+    }
+}
+
+/// `glyph` with its references drawn in, at `depth` bits per pixel.
+fn compose(index: &HashMap<&str, &StrikeGlyph>, glyph: &StrikeGlyph, depth: u8) -> Result<StrikeGlyph, String> {
+    // Every bitmap drawn, with its origin's offset from `glyph`'s.
+    let mut parts: Vec<(&StrikeGlyph, i64, i64)> = vec![(glyph, 0, 0)];
+    let mut stack: Vec<(&StrikeGlyph, i64, i64, usize)> = vec![(glyph, 0, 0, 0)];
+    while let Some((g, dx, dy, level)) = stack.pop() {
+        for r in &g.references {
+            let Some(inner) = index.get(r.glyph.as_str()).copied() else { continue };
+            if level >= MAX_BITMAP_REFERENCE_DEPTH {
+                return Err(format!("the references of glyph `{}` nest more than {MAX_BITMAP_REFERENCE_DEPTH} levels deep", glyph.glyph));
+            }
+            if parts.len() >= MAX_BITMAP_REFERENCE_PARTS {
+                return Err(format!("glyph `{}` draws more than {MAX_BITMAP_REFERENCE_PARTS} bitmaps through its references", glyph.glyph));
+            }
+            let (x, y) = (dx + i64::from(r.x), dy + i64::from(r.y));
+            parts.push((inner, x, y));
+            stack.push((inner, x, y, level + 1));
+        }
+    }
+    let mut pixel_box = None;
+    for (g, dx, dy) in &parts {
+        if let Some((l, b, r, t)) = g.pixel_box() {
+            pixel_box = Some(union(pixel_box, (l + dx, b + dy, r + dx, t + dy)));
+        }
+    }
+    let mut out = StrikeGlyph { references: Vec::new(), data: Vec::new(), width: 0, height: 0, ..glyph.clone() };
+    let Some((left, bottom, right, top)) = pixel_box else { return Ok(out) };
+    let side = i64::from(MAX_STRIKE_BITMAP_SIDE);
+    if right - left > side || top - bottom > side || !coordinate_i64(left) || !coordinate_i64(bottom) {
+        return Err(format!(
+            "glyph `{}` with its references drawn in would be wider or taller than {side} pixels, or placed too far away",
+            glyph.glyph
+        ));
+    }
+    // Within 1..=1024 by the test above.
+    out.width = u16::try_from(right - left).unwrap_or(0);
+    out.height = u16::try_from(top - bottom).unwrap_or(0);
+    out.left = i32::try_from(left).unwrap_or(0);
+    out.bottom = i32::try_from(bottom).unwrap_or(0);
+    out.data = vec![0; out.stride(depth) * usize::from(out.height)];
+    for (g, dx, dy) in parts {
+        for row in 0..g.height {
+            for col in 0..g.width {
+                let level = g.pixel(depth, col, row);
+                if level == 0 {
+                    continue;
+                }
+                let x = i64::from(g.left) + dx + i64::from(col) - left;
+                let y = top - (i64::from(g.bottom) + dy + i64::from(g.height) - i64::from(row));
+                let (Ok(x), Ok(y)) = (u16::try_from(x), u16::try_from(y)) else { continue };
+                if level > out.pixel(depth, x, y) {
+                    out.set_pixel(depth, x, y, level);
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
+fn coordinate_i64(v: i64) -> bool {
+    (-i64::from(MAX_STRIKE_COORDINATE)..=i64::from(MAX_STRIKE_COORDINATE)).contains(&v)
 }
 
 /// `12`, or `12@4` for a grey strike.
@@ -256,12 +553,17 @@ pub(crate) fn check_strikes(strikes: &[BitmapStrike]) -> Result<(), ModelError> 
     Ok(())
 }
 
-/// Moves strike glyphs to the new names of renamed glyphs.
+/// Moves strike glyphs, and the references to them, to the new names of renamed glyphs.
 pub(crate) fn rename_in_strikes(strikes: &mut [BitmapStrike], renames: &std::collections::HashMap<&str, &str>) {
     for s in strikes.iter_mut() {
         for g in s.glyphs.iter_mut() {
             if let Some(new) = renames.get(g.glyph.as_str()) {
                 g.glyph = (*new).to_string();
+            }
+            for r in g.references.iter_mut() {
+                if let Some(new) = renames.get(r.glyph.as_str()) {
+                    r.glyph = (*new).to_string();
+                }
             }
         }
     }

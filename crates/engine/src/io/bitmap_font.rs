@@ -197,6 +197,7 @@ fn strike_glyph(name: String, g: &BitmapGlyph) -> StrikeGlyph {
         left: g.bitmap.left,
         bottom: g.bitmap.bottom,
         data: g.bitmap.data.clone(),
+        references: Vec::new(),
     }
 }
 

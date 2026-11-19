@@ -73,7 +73,7 @@ pub use shape_info::{
     Alignment, AnchorInfo, AnchorInfoBox, ComponentInfo, ComponentInfoBox, Dimension, NodeInfo, NodeInfoBox, Orientation, PathInfo, PathInfoBox,
     ShapeAttrs, SmartValue,
 };
-pub use strike::{BitmapStrike, StrikeGlyph, StrikeProperty, StrikeValue};
+pub use strike::{BitmapReference, BitmapStrike, StrikeGlyph, StrikeProperty, StrikeValue};
 
 /// Smallest and largest units-per-em the OpenType `head` table allows.
 pub const UPM_RANGE: std::ops::RangeInclusive<u16> = 16..=16384;

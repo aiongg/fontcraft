@@ -883,13 +883,16 @@ impl Font {
         Ok(())
     }
 
-    /// Removes the first glyph called `name`, and its bitmaps from the strikes when no other glyph
-    /// has that name.
+    /// Removes the first glyph called `name`, and its bitmaps and the references to them from the
+    /// strikes when no other glyph has that name.
     pub fn remove_glyph(&mut self, name: &str) -> Result<(), ModelError> {
         self.glyphs.remove(name).ok_or_else(|| ModelError::NoSuchGlyph(name.to_string()))?;
         if self.glyph(name).is_none() && self.bitmap_strikes.iter().any(|s| s.glyph(name).is_some()) {
             for s in Arc::make_mut(&mut self.bitmap_strikes).iter_mut() {
                 s.glyphs.retain(|g| g.glyph != name);
+                for g in s.glyphs.iter_mut() {
+                    g.references.retain(|r| r.glyph != name);
+                }
             }
         }
         Ok(())

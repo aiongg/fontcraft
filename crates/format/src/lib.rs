@@ -525,6 +525,7 @@ mod tests {
             left: 0,
             bottom: -1,
             data,
+            references: Vec::new(),
         });
         std::sync::Arc::make_mut(&mut font.bitmap_strikes).push(strike);
         let bytes = save(&font).unwrap();

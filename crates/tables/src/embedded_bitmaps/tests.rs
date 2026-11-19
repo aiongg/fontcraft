@@ -21,7 +21,18 @@ fn hex(text: &str) -> Vec<u8> {
 }
 
 fn glyph(name: &str, (width, height): (u16, u16), (left, bottom): (i32, i32), advance: i32, data: &[u8]) -> StrikeGlyph {
-    StrikeGlyph { glyph: name.into(), code: None, advance, scalable_width: None, width, height, left, bottom, data: data.to_vec() }
+    StrikeGlyph {
+        glyph: name.into(),
+        code: None,
+        advance,
+        scalable_width: None,
+        width,
+        height,
+        left,
+        bottom,
+        data: data.to_vec(),
+        references: Vec::new(),
+    }
 }
 
 fn strikes() -> (BitmapStrike, BitmapStrike) {

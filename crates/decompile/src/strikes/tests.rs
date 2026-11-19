@@ -78,6 +78,7 @@ fn bit_aligned_and_composite_images_open_as_model_rows() {
         left,
         bottom: 0,
         data: data.to_vec(),
+        references: Vec::new(),
     };
     let mut want = BitmapStrike::new(8, 1);
     want.ascent = 7;
