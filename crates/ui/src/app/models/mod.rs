@@ -4,6 +4,7 @@
 //! one of them with a one-line arm, and only when the [`Stamp`] moved since the last call.
 
 pub mod canvas;
+pub mod console;
 pub mod font_info;
 pub mod font_view;
 pub mod glyph;
@@ -53,6 +54,8 @@ pub struct Models {
     pub layers: Tracked<layers::LayersModel>,
     /// The masters and the current one (`panels::master_switcher`).
     pub masters: Tracked<layers::MastersModel>,
+    /// The Command Console's pane and input line (`panels::command_console`); projected outside the stamp.
+    pub console: Tracked<console::ConsoleModel>,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.

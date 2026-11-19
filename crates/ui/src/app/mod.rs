@@ -6,8 +6,10 @@
 //! view state moved.
 
 pub mod catalog;
+pub mod console;
 pub mod files;
 pub mod font_view;
+pub mod menu_alternates;
 pub mod models;
 mod msg;
 
@@ -63,6 +65,8 @@ pub struct ViewState {
     pub glyph_info: crate::shell::glyph_info::GlyphInfoState,
     /// The current master, the active layer and the Layers panel's state.
     pub layers: crate::shell::masters::LayersView,
+    /// The Command Console, the command palette and About.
+    pub commands: console::CommandSurfaces,
 }
 
 impl Default for ViewState {
@@ -81,6 +85,7 @@ impl Default for ViewState {
             kerning_review: Default::default(),
             glyph_info: Default::default(),
             layers: Default::default(),
+            commands: console::CommandSurfaces::default(),
         }
     }
 }
@@ -263,6 +268,7 @@ impl FontCraftApp {
         let stamp = Stamp::of(&self.session, self.view_revision);
         let mut cx = ProjectCx { session: &mut self.session, view: &self.view };
         self.models.project(stamp, &mut cx);
+        models::console::project(&mut self.models.console, &mut cx);
         let engine = Stamp::of(&self.session, 0);
         if self.enabled_at != Some(engine) {
             self.enabled_at = Some(engine);

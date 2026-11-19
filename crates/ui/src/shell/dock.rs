@@ -301,6 +301,9 @@ impl DockPanels<PanelId> for Panels<'_> {
                 panels::hinting_waterfall::show(ui, panels::hinting_waterfall::Props { model: &self.models.hinting_waterfall, sent: self.sent });
             }
             PanelId::Layers => panels::layers::show(ui, panels::layers::Props { model: &self.models.layers, sent: self.sent }),
+            PanelId::CommandConsole => {
+                panels::command_console::show(ui, panels::command_console::Props { model: &self.models.console, sent: self.sent });
+            }
             // Drawn by `group_view`.
             PanelId::Document => {}
             other => panels::stub::show(ui, panels::stub::Props { title: other.title(&self.words) }),

@@ -1465,15 +1465,20 @@ guesses = [
 id = "app.commandPalette"
 label = "Commands…"
 menu = ["Help"]
-shortcut = ""
+shortcut = "Cmd+Shift+P"
 kind = "ui"
-params = "{query?: string}"
+params = "{}"
 area = "ui-chrome"
 milestone = "M14"
 summary = "Opens a search field over every registered command; typing part of a name and pressing Enter runs it. A button expands the popup into the shortcut editor, and selecting a command shows its help text (FontLab key: Cmd+Shift+P)."
 ref = "FontLab 8 What's new › Explore & prepare › Commands & Shortcuts dialog"
 status = "docs"
 origin = "fontlab"
+notes = "The new UI (`crates/ui`, `shell/command_palette.rs`) builds it on the framework's command palette: each row shows the label, the menu path and the shortcut; the empty query lists the commands run last. A pick fires the command as its menu row does. Not built: the shortcut editor and the help text."
+guesses = [
+  "The palette lists the commands that have a menu row; the others take parameters and are reached through the Command Console. The secondary reference's list would settle it.",
+  "The shortcut Cmd+Shift+P comes from the secondary reference; the reference app has none.",
+]
 
 [[command]]
 id = "app.quickHelp"

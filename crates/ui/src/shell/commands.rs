@@ -31,7 +31,7 @@ pub struct Module {
 
 /// Every shell module.
 pub const MODULES: &[Module] = &[
-    Module] = &[     super::window::MODULE,
+    super::window::MODULE,
     super::view::MODULE,
     super::font_view::MODULE,
     super::font_info::MODULE,
@@ -40,8 +40,8 @@ pub const MODULES: &[Module] = &[
     super::glyph_info::MODULE,
     crate::dialogs::tt::SHELL,
     super::selection::MODULE,
-    Module] = &[super::window::MODULE,
     super::masters::MODULE,
+    super::command_surfaces::MODULE,
 ];
 
 /// The module and description of the shell command `id`.
