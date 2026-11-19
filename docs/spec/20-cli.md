@@ -2271,6 +2271,27 @@ reaches two units further past the em box. Stems, groups and zones are read from
 the zones are BlueValues, each group is the set of stems one hint mask turns on, and counter hints are
 not drawn.
 
+**Table-dumper sheets.** `synopsis`, `cmap`, `vorg` and `features` follow the reference table
+dumper's proofs (`spot -G`, `-t cmap=9`, `-t VORG=8`, `-P`), run on our own fonts:
+
+| Sheet | Per page | Each glyph shows |
+|---|---|---|
+| `synopsis` | 320 cells (`--glyphs-per-page 1` for one per page, as `-br`) | glyph id and advance above, the glyph, its name below |
+| `cmap` | lines at 24 points | the glyph of each mapped code point, advance ticks, `name@gid CODE` |
+| `vorg` | a grid at 24 points | the glyph in its vertical em box, ticks at the vertical origin and advance, `name@gid`, advance and origin |
+| `features` | one page per feature | per lookup a heading (index, type, language systems), then each rule: input, arrow, result; pairs set with the adjustment applied and its value |
+
+The feature sheet lists rules by the glyph id of their first glyph; `--sort lookup` keeps the font's
+order. Contextual, chained, reverse, cursive and mark lookups are named in their heading but not drawn.
+
+**Drawing elements.** `--show` and `--hide` switch named elements (em box, bounding box, advance
+ticks, baseline, zones, hints, points, handles, labels, name, numeric labels, side bearings, counts,
+thumbnail) in every layout but `palette`, `outline`, `palette+outline` and `waterfall`. Each name
+stands for a group of the low-level settings below. After `--panel N` they change only copy N of
+`digi`. The dumper's proof policies map onto them: `-p1` is `--hide name`, `-p2` `--hide
+numeric-labels`, `-p4` `--show em-box`, `-p5` `--show bbox`. `--no-header` leaves out the title line
+of each page.
+
 **Low-level parameters.** The reference script exposes nearly eighty drawing parameters (page title font
 and size, tile paddings, colours of zones, em box, hints and labels, label fonts and sizes, metadata block
 placement, error-log columns). `--set` takes, under their reference names, the ones FontCraft draws: the

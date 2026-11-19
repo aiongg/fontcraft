@@ -1,20 +1,20 @@
-//! `font.proof` (M12.35, M12.36; `fontcraft_proof`).
+//! `font.proof` (M12.35, M12.36, M12.78, M12.79; `fontcraft_proof`).
 //!
 //! Whole-file commands follow [`super::file_io`]: paths in, the input never changed, the output
 //! written atomically, a refusal on the web. Every proof is made in memory before the first file
 //! is written, so a failure leaves nothing behind. The command changes no document, so it is not
 //! journalled: replaying a session does not write proofs again.
 //!
-//! Built: the layouts `palette`, `outline`, `waterfall`, `palette+outline`, `boxes`, `hints`,
-//! `digi` and `compare` as PDF (one file) and SVG (one file per page), with `metrics`, `baseline`,
-//! `hintGroups`, `black`, `settings` and `panels`; and the HTML specimen (any layout; it embeds
-//! the font as WOFF2). `compare` makes one proof of all the fonts, named after the first. The
-//! other layouts and options refuse with a message until their packages land. `listSettings`
-//! returns the drawing settings instead of making a proof.
+//! Built: every layout as PDF (one file) and SVG (one file per page), with `metrics`, `baseline`,
+//! `hintGroups`, `black`, `show`, `hide`, `header`, `settings` and `panels`; `features` and
+//! `sort: "lookup"` for the features layout; and the HTML specimen (any layout; it embeds the
+//! font as WOFF2). `compare` makes one proof of all the fonts, named after the first. The other
+//! options refuse with a message until their packages land. `listSettings` returns the drawing
+//! settings instead of making a proof.
 
 use std::path::{Path, PathBuf};
 
-use fontcraft_proof::{GlyphSort, Metrics, ProofFormat, ProofOptions, Selection, SettingValue, Sheet};
+use fontcraft_proof::{GlyphSort, Metrics, Panel, ProofFormat, ProofOptions, Selection, SettingValue, Sheet};
 use serde_json::{Value, json};
 
 use super::file_io::{self, InputKind, OutputRequest};
@@ -35,10 +35,13 @@ const MAX_SETTINGS: usize = 256;
 /// Default waterfall sizes, as the reference's waterfall proof.
 const WATERFALL_SIZES: [f64; 12] = [36.0, 24.0, 20.0, 18.0, 16.0, 14.0, 12.0, 10.0, 9.0, 8.0, 7.0, 6.0];
 /// Parameters of the row that no built package handles yet.
-const NOT_BUILT_PARAMS: &[&str] =
-    &["vertical", "show", "hide", "pointLabels", "cidLayout", "errorLog", "fitBbox", "scale", "units", "paltInKern", "header", "margins", "features"];
+const NOT_BUILT_PARAMS: &[&str] = &["vertical", "pointLabels", "cidLayout", "errorLog", "fitBbox", "scale", "units", "paltInKern", "margins"];
 /// The layouts drawn in tiles, which read `metrics` and `baseline`.
 const TILE_LAYOUTS: &[&str] = &["boxes", "hints", "digi"];
+/// The layouts whose drawing elements `show` and `hide` switch.
+const ELEMENT_LAYOUTS: &[&str] = &["boxes", "hints", "digi", "compare", "synopsis", "features", "cmap", "vorg", "text"];
+/// Most elements `show` or `hide` names, and most feature tags of `features`.
+const MAX_NAMES: usize = 256;
 const LAYOUTS: &[&str] =
     &["palette", "outline", "palette+outline", "digi", "boxes", "hints", "waterfall", "compare", "synopsis", "features", "cmap", "vorg", "text"];
 
@@ -48,7 +51,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Make Proof Sheet",
         [],
         None,
-        "{fonts: [path], face?: int|name, layout: \"palette\"|\"outline\"|\"palette+outline\"|\"digi\"|\"boxes\"|\"hints\"|\"waterfall\"|\"compare\"|\"synopsis\"|\"features\"|\"cmap\"|\"vorg\"|\"text\", format?: \"pdf\"|\"svg\"|\"html\", output?: path, outputDir?: path, noClobber?: bool, listSettings?: bool, glyphs?: selector, excludeGlyphs?: selector, glyphsPerPage?: int, size?: number, sizes?: [number], sort?: \"gid\"|\"name\"|\"unicode\"|\"lookup\", text?: string, features?: [tag]|\"*\", location?: {axis: number}, metrics?: \"h\"|\"v\"|\"both\", vertical?: bool, baseline?: number, show?: [string], hide?: [string], pointLabels?: [\"index\"|\"type\"|\"position\"], hintGroups?: [int], panels?: [{index: int, show?: [string], hide?: [string], settings?: object}], cidLayout?: path, errorLog?: path, fitBbox?: [l, b, r, t], scale?: {x: number, y?: number}, units?: \"font\"|1000, paltInKern?: bool, black?: bool, header?: bool, pageSize?: [w, h], margins?: [t, r, b, l], settings?: {name: value}} proof sheets of compiled fonts, written next to each input as NAME.proof.svg (NAME.proof-001.svg … for several pages), .html or .pdf; format defaults to pdf; a selector is a list of glyph names or ranges (a-b, a..b, by glyph index) or one comma-separated string; the HTML specimen embeds the font as WOFF2 and shows sample text, a waterfall, the character set, feature switches and axis stops; built so far: palette, outline, waterfall, palette+outline, boxes, hints, digi and compare as PDF and SVG, and HTML; compare makes one proof of every font, named after the first; metrics and baseline apply to boxes, hints and digi, hintGroups to hints, panels (settings only) to digi; settings take the names listSettings returns, with a number, true/false or [r, g, b] (parts from 0 to 1) → {proofs: [{font, format, layout, pages, files: [path]}]}, or with listSettings {settings: [{name, default, about}]}",
+        "{fonts: [path], face?: int|name, layout: \"palette\"|\"outline\"|\"palette+outline\"|\"digi\"|\"boxes\"|\"hints\"|\"waterfall\"|\"compare\"|\"synopsis\"|\"features\"|\"cmap\"|\"vorg\"|\"text\", format?: \"pdf\"|\"svg\"|\"html\", output?: path, outputDir?: path, noClobber?: bool, listSettings?: bool, glyphs?: selector, excludeGlyphs?: selector, glyphsPerPage?: int, size?: number, sizes?: [number], sort?: \"gid\"|\"name\"|\"unicode\"|\"lookup\", text?: string, features?: [tag]|\"*\", location?: {axis: number}, metrics?: \"h\"|\"v\"|\"both\", vertical?: bool, baseline?: number, show?: [string], hide?: [string], pointLabels?: [\"index\"|\"type\"|\"position\"], hintGroups?: [int], panels?: [{index: int, show?: [string], hide?: [string], settings?: object}], cidLayout?: path, errorLog?: path, fitBbox?: [l, b, r, t], scale?: {x: number, y?: number}, units?: \"font\"|1000, paltInKern?: bool, black?: bool, header?: bool, pageSize?: [w, h], margins?: [t, r, b, l], settings?: {name: value}} proof sheets of compiled fonts, written next to each input as NAME.proof.svg (NAME.proof-001.svg … for several pages), .html or .pdf; format defaults to pdf; a selector is a list of glyph names or ranges (a-b, a..b, by glyph index) or one comma-separated string; the HTML specimen embeds the font as WOFF2 and shows sample text, a waterfall, the character set, feature switches and axis stops; every layout is built as PDF and SVG, and HTML; compare makes one proof of every font, named after the first; metrics and baseline apply to boxes, hints and digi, hintGroups to hints, panels to digi, features (tags, or \"*\" for all; default all) and sort lookup to features; show and hide take drawing elements (em-box, bbox, advance, baseline, zones, hhints, vhints, points, handles, point-labels, contour-labels, center-marks, name, numeric-labels, sidebearings, hint-counts, path-counts, filled-thumbnail) for every layout but palette, outline, palette+outline and waterfall; header false leaves out the title line of each page; settings take the names listSettings returns, with a number, true/false or [r, g, b] (parts from 0 to 1) → {proofs: [{font, format, layout, pages, files: [path]}]}, or with listSettings {settings: [{name, default, about}]}",
         always,
         proof
     ).files(const { &[FileParam::read("fonts"), FileParam::read("cidLayout"), FileParam::write("errorLog"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files()]
@@ -120,8 +123,28 @@ fn proof(_: &mut Session, p: &Value) -> Result<Value> {
         ("hints", _) => Sheet::Hints,
         ("digi", _) => Sheet::Digi,
         ("compare", _) => Sheet::Compare,
+        ("synopsis", _) => Sheet::Synopsis,
+        ("features", _) => Sheet::Features { tags: feature_tags(&p)?, font_order: p.opt_str("sort")? == Some("lookup") },
+        ("cmap", _) => Sheet::Cmap,
+        ("vorg", _) => Sheet::Vorg,
+        ("text", _) => Sheet::Text { text: p.opt_str("text")?.unwrap_or("").to_string() },
         (other, _) => return Err(EngineError::Unsupported(format!("the `{other}` proof layout"))),
     };
+    if p.get("features").is_some() && !matches!(sheet, Sheet::Features { .. }) {
+        return Err(p.bad("`features` applies to the features layout"));
+    }
+    let elements = ELEMENT_LAYOUTS.contains(&layout) && format != ProofFormat::Html;
+    for key in ["show", "hide"] {
+        if p.get(key).is_some() && !elements {
+            return Err(p.bad(format!("`{key}` applies to every layout but palette, outline, palette+outline and waterfall, and not to HTML")));
+        }
+    }
+    let show = names(&p, p.get("show"), "show")?;
+    let hide = names(&p, p.get("hide"), "hide")?;
+    if p.get("header").is_some() && format == ProofFormat::Html {
+        return Err(p.bad("`header` applies to PDF and SVG proofs"));
+    }
+    let header = p.bool_or("header", true)?;
     let tiles = TILE_LAYOUTS.contains(&layout) && format != ProofFormat::Html;
     for key in ["metrics", "baseline"] {
         if p.get(key).is_some() && !tiles {
@@ -158,13 +181,16 @@ fn proof(_: &mut Session, p: &Value) -> Result<Value> {
     let panels = panels(&p)?;
     let black = p.bool_or("black", false)?;
     let sizes = sizes(&p, &sheet, format, page_size)?;
-    let glyphs_per_page = if tiles { p.opt_int("glyphsPerPage", 1, fontcraft_proof::MAX_SHEET_GLYPHS as i64)?.map(|n| n as usize) } else { None };
+    let per_page = tiles || (layout == "synopsis" && format != ProofFormat::Html);
+    let glyphs_per_page = if per_page { p.opt_int("glyphsPerPage", 1, fontcraft_proof::MAX_SHEET_GLYPHS as i64)?.map(|n| n as usize) } else { None };
     let location = location(&p)?;
     let sort = match p.opt_str("sort")?.unwrap_or("gid") {
         "gid" => GlyphSort::Gid,
         "name" => GlyphSort::Name,
         "unicode" => GlyphSort::Unicode,
-        "lookup" => return Err(EngineError::Unsupported("sorting glyphs by lookup order (the features layout)".into())),
+        // The features layout keeps the rules in the font's order; the glyphs are read in glyph order.
+        "lookup" if layout == "features" && format != ProofFormat::Html => GlyphSort::Gid,
+        "lookup" => return Err(p.bad("`sort: \"lookup\"` applies to the features layout")),
         other => return Err(p.bad(format!("`sort` must be \"gid\", \"name\", \"unicode\" or \"lookup\", got \"{other}\""))),
     };
     let selection = Selection { glyphs: selector(&p, "glyphs")?, exclude: selector(&p, "excludeGlyphs")?, sort };
@@ -182,8 +208,11 @@ fn proof(_: &mut Session, p: &Value) -> Result<Value> {
         black,
         metrics,
         hint_groups: hint_groups.clone(),
+        show: show.clone(),
+        hide: hide.clone(),
         settings: settings.clone(),
         panels: panels.clone(),
+        header,
     };
     let mut made: Vec<Made> = Vec::with_capacity(fonts.len());
     let mut inputs = Vec::with_capacity(fonts.len());
@@ -290,28 +319,64 @@ fn settings(p: &Params<'_>, v: &Value, key: &str) -> Result<Vec<(String, Setting
         .collect()
 }
 
-/// `panels`: per copy of the digi layout, its settings. Showing and hiding elements per copy
-/// comes with the `show` and `hide` options.
-fn panels(p: &Params<'_>) -> Result<Vec<(usize, Vec<(String, SettingValue)>)>> {
+/// `panels`: per copy of the digi layout, the elements it shows and hides and its settings.
+fn panels(p: &Params<'_>) -> Result<Vec<Panel>> {
     let Some(list) = p.opt_array("panels")? else { return Ok(Vec::new()) };
     if list.len() > 2 {
         return Err(p.bad("`panels` describes at most the two copies of the digi layout"));
     }
     list.iter()
         .map(|panel| {
-            let Some(obj) = panel.as_object() else { return Err(p.bad("each of `panels` is an object {index, settings}")) };
+            let Some(obj) = panel.as_object() else { return Err(p.bad("each of `panels` is an object {index, show, hide, settings}")) };
             let index =
                 obj.get("index").and_then(Value::as_u64).filter(|i| *i < 2).ok_or_else(|| p.bad("a panel's `index` is 0 (left) or 1 (right)"))?;
-            for key in ["show", "hide"] {
-                if obj.contains_key(key) {
-                    return Err(EngineError::Unsupported(format!("`{key}` in a panel of font.proof")));
-                }
-            }
             let settings = match obj.get("settings") {
                 None => Vec::new(),
                 Some(v) => settings(p, v, "panels.settings")?,
             };
-            Ok((index as usize, settings))
+            let show = names(p, obj.get("show"), "panels.show")?;
+            let hide = names(p, obj.get("hide"), "panels.hide")?;
+            Ok(Panel { index: index as usize, show, hide, settings })
+        })
+        .collect()
+}
+
+/// A list of names: an array of strings, or one string of names separated by commas or spaces.
+fn names(p: &Params<'_>, v: Option<&Value>, key: &str) -> Result<Vec<String>> {
+    let items: Vec<String> = match v {
+        None => Vec::new(),
+        Some(Value::String(s)) => s.split([',', ' ']).filter(|s| !s.is_empty()).map(str::to_string).collect(),
+        Some(Value::Array(list)) => list
+            .iter()
+            .map(|v| v.as_str().map(str::trim).map(str::to_string))
+            .collect::<Option<Vec<String>>>()
+            .ok_or_else(|| p.bad(format!("`{key}` holds names")))?,
+        Some(_) => return Err(p.bad(format!("`{key}` must be a list of names"))),
+    };
+    if items.len() > MAX_NAMES {
+        return Err(p.bad(format!("`{key}` holds at most {MAX_NAMES} names")));
+    }
+    Ok(items)
+}
+
+/// `features`: tags of one to four printable characters, or `"*"` (and by default) for every
+/// feature of the font.
+fn feature_tags(p: &Params<'_>) -> Result<Vec<[u8; 4]>> {
+    let list = names(p, p.get("features"), "features")?;
+    if list.iter().any(|t| t == "*") {
+        return Ok(Vec::new());
+    }
+    list.iter()
+        .map(|t| {
+            let bytes = t.as_bytes();
+            if bytes.is_empty() || bytes.len() > 4 || !bytes.iter().all(|b| (0x20..0x7f).contains(b)) {
+                return Err(p.bad(format!("`{t}` is not a feature tag")));
+            }
+            let mut tag = *b"    ";
+            for (slot, b) in tag.iter_mut().zip(bytes) {
+                *slot = *b;
+            }
+            Ok(tag)
         })
         .collect()
 }

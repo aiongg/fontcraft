@@ -288,6 +288,9 @@ impl Tile<'_> {
         if d.glyph_box || d.center_marks_with_box {
             rect(0.0, y_start, adv, y_start + height, d.embox_colour, items);
         }
+        if let (true, Some([x0, y0, x1, y1])) = (d.glyph_bbox, bounds) {
+            rect(x0, y0, x1, y1, d.embox_colour, items);
+        }
         if d.x_advance {
             for x in [0.0, adv] {
                 line(at(x, -tick / 2.0), at(x, tick / 2.0), d.x_advance_colour, items);
@@ -446,7 +449,7 @@ impl Tile<'_> {
 
 /// The vertical origin and advance of glyph `gid`: from `VORG` and `vmtx` when the font has them,
 /// else the top of the em box and one em, as the reference.
-fn vertical(face: &Face<'_>, gid: u32, y_max: f64, base: f64) -> (f64, f64) {
+pub(crate) fn vertical(face: &Face<'_>, gid: u32, y_max: f64, base: f64) -> (f64, f64) {
     let id = GlyphId::new(gid);
     let vmtx = face.font.vmtx().ok();
     let advance = vmtx.as_ref().and_then(|t| t.advance(id)).map(f64::from).unwrap_or(face.upem);

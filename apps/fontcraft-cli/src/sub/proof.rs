@@ -1,7 +1,7 @@
-//! `fontcraft-cli proof` (M12.35, M12.36, M12.78): the options of the `proof` row parsed into the
-//! parameters of `font.proof`, and the files written printed one per line (or as JSON with
-//! `--json`). `--set` and `--panel` are read in order before the other options: a `--set` after
-//! `--panel N` belongs to copy N of the digi layout.
+//! `fontcraft-cli proof` (M12.35, M12.36, M12.78, M12.79): the options of the `proof` row parsed
+//! into the parameters of `font.proof`, and the files written printed one per line (or as JSON
+//! with `--json`). `--set`, `--show`, `--hide` and `--panel` are read in order before the other
+//! options: one after `--panel N` belongs to copy N of the digi layout.
 
 use serde_json::{Map, Value, json};
 
@@ -27,7 +27,7 @@ const OPTIONS: &[OptSpec] = &[
         "layout",
         "NAME",
         "palette",
-        "palette | outline | palette+outline | digi | boxes | hints | waterfall | compare (built); synopsis | features | cmap | vorg | text",
+        "palette | outline | palette+outline | digi | boxes | hints | waterfall | compare | synopsis | features | cmap | vorg | text",
     ),
     OptSpec::value("format", "FORMAT", "pdf", "pdf | svg | html; svg writes one file per page"),
     OptSpec::value("glyphs", "SELECTOR", "", "glyph names and ranges (a-b, a..b) to show, comma-separated; default all"),
@@ -36,16 +36,25 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::value("glyphs-per-page", "N", "", "scale glyphs so that N fit on a page (palette and boxes 156, palette+outline 320, hints 4, digi 1)"),
     OptSpec::value("size", "PT", "", "glyph size in points; overrides --glyphs-per-page"),
     OptSpec::list("sizes", "LIST", "", "waterfall sizes in points; ranges such as 8-12 accepted; default 36,24,20,18,16,14,12,10,9,8,7,6"),
-    OptSpec::value("sort", "ORDER", "gid", "gid | name | unicode | lookup"),
-    OptSpec::value("text", "STRING", "", "text for the waterfall and the HTML sample"),
+    OptSpec::value("sort", "ORDER", "gid", "gid | name | unicode | lookup (features: rules in the font's order)"),
+    OptSpec::value("text", "STRING", "", "text for the text and waterfall layouts and the HTML sample"),
+    OptSpec::list("features", "TAG,...", "", "features the features layout shows; '*' for all (default)"),
     OptSpec::list("location", "AXIS=VALUE", "", "proof a variable font at this location"),
     OptSpec::value("page-size", "WxH", "612x792", "page size in points"),
     OptSpec::value("metrics", "h|v|both", "", "side bearings boxes, hints and digi print: horizontal, vertical or both"),
     OptSpec::value("baseline", "N", "", "y of the em box's bottom edge in font units (boxes, hints, digi); default -120 for CID-keyed fonts, else 0"),
     OptSpec::list("hint-groups", "LIST", "", "with the hints layout, draw only the stems of these hint-replacement groups (zero-based)"),
     OptSpec::switch("black", false, "draw in black and grey only, for printing"),
+    OptSpec::list(
+        "show",
+        "LIST",
+        "",
+        "drawing elements to turn on: em-box, bbox, advance, baseline, zones, hhints, vhints, points, handles, point-labels, contour-labels, center-marks, name, numeric-labels, sidebearings, hint-counts, path-counts, filled-thumbnail",
+    ),
+    OptSpec::list("hide", "LIST", "", "drawing elements to turn off, as --show"),
+    OptSpec::switch("no-header", false, "leave out the title line with the font name and page number"),
     OptSpec::value("set", "NAME=VALUE", "", "set a drawing parameter; repeatable; --list-settings lists them"),
-    OptSpec::value("panel", "N", "", "with the digi layout, the copy (0 left, 1 right) the --set options after it change"),
+    OptSpec::value("panel", "N", "", "with the digi layout, the copy (0 left, 1 right) the --set, --show and --hide options after it change"),
     OptSpec::switch("list-settings", false, "print every drawing parameter with its default and meaning, and exit"),
     OptSpec::value("face", "N", "", "the font of a collection to proof"),
     OptSpec::value("output", "OUT", "", "the output file (one font only)").short('o'),
@@ -56,7 +65,7 @@ const OPTIONS: &[OptSpec] = &[
 ];
 
 fn run(args: &[String]) -> Outcome {
-    let (rest, settings, panels) = take_settings(args)?;
+    let Taken { rest, settings, show, hide, panels } = take_settings(args)?;
     let parsed = args::parse(OPTIONS, &rest)?;
     if parsed.help {
         return out(&super::help(&SUBCOMMAND));
@@ -80,8 +89,30 @@ fn run(args: &[String]) -> Outcome {
     if !settings.is_empty() {
         params.insert("settings".into(), Value::Object(settings));
     }
+    if !show.is_empty() {
+        params.insert("show".into(), json!(show));
+    }
+    if !hide.is_empty() {
+        params.insert("hide".into(), json!(hide));
+    }
     if !panels.is_empty() {
-        let list: Vec<Value> = panels.into_iter().map(|(index, settings)| json!({ "index": index, "settings": settings })).collect();
+        let list: Vec<Value> = panels
+            .into_iter()
+            .map(|p| {
+                let mut panel = Map::new();
+                panel.insert("index".into(), json!(p.index));
+                if !p.settings.is_empty() {
+                    panel.insert("settings".into(), Value::Object(p.settings));
+                }
+                if !p.show.is_empty() {
+                    panel.insert("show".into(), json!(p.show));
+                }
+                if !p.hide.is_empty() {
+                    panel.insert("hide".into(), json!(p.hide));
+                }
+                Value::Object(panel)
+            })
+            .collect();
         params.insert("panels".into(), Value::Array(list));
     }
     let result = io::execute(&mut session, "font.proof", &Value::Object(params))?;
@@ -137,6 +168,13 @@ fn params(parsed: &args::Parsed) -> Result<Map<String, Value>, Failure> {
     if parsed.switch("black") {
         p.insert("black".into(), json!(true));
     }
+    if parsed.switch("no-header") {
+        p.insert("header".into(), json!(false));
+    }
+    let features: Vec<String> = parsed.list("features").iter().map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect();
+    if !features.is_empty() {
+        p.insert("features".into(), json!(features));
+    }
     let groups = parsed
         .list("hint-groups")
         .iter()
@@ -182,27 +220,45 @@ fn params(parsed: &args::Parsed) -> Result<Map<String, Value>, Failure> {
     Ok(p)
 }
 
-/// The drawing settings of `--set NAME=VALUE`, global and per `--panel N`, taken out of `args`
-/// in order; the other arguments are returned for [`args::parse`].
-#[allow(clippy::type_complexity)]
-fn take_settings(args: &[String]) -> Result<(Vec<String>, Map<String, Value>, Vec<(usize, Map<String, Value>)>), Failure> {
-    let mut rest = Vec::with_capacity(args.len());
-    let mut global = Map::new();
-    let mut panels: Vec<(usize, Map<String, Value>)> = Vec::new();
+/// The drawing changes of one copy of the digi layout.
+#[derive(Debug, Default)]
+struct PanelArgs {
+    index: usize,
+    settings: Map<String, Value>,
+    show: Vec<String>,
+    hide: Vec<String>,
+}
+
+/// What [`take_settings`] takes out of the arguments.
+#[derive(Debug, Default)]
+struct Taken {
+    /// The other arguments, for [`args::parse`].
+    rest: Vec<String>,
+    settings: Map<String, Value>,
+    show: Vec<String>,
+    hide: Vec<String>,
+    panels: Vec<PanelArgs>,
+}
+
+/// The drawing changes of `--set NAME=VALUE`, `--show LIST` and `--hide LIST`, global and per
+/// `--panel N`, taken out of `args` in order.
+fn take_settings(args: &[String]) -> Result<Taken, Failure> {
+    const TAKEN: [&str; 4] = ["--set", "--panel", "--show", "--hide"];
+    let mut taken = Taken { rest: Vec::with_capacity(args.len()), ..Taken::default() };
     let mut panel: Option<usize> = None;
     let mut i = 0;
     while let Some(arg) = args.get(i) {
         i += 1;
         if arg == "--" {
-            rest.extend(args.iter().skip(i - 1).cloned());
+            taken.rest.extend(args.iter().skip(i - 1).cloned());
             break;
         }
         let (name, inline) = match arg.split_once('=') {
-            Some((n, v)) if n == "--set" || n == "--panel" => (n, Some(v.to_string())),
+            Some((n, v)) if TAKEN.contains(&n) => (n, Some(v.to_string())),
             _ => (arg.as_str(), None),
         };
-        if name != "--set" && name != "--panel" {
-            rest.push(arg.clone());
+        if !TAKEN.contains(&name) {
+            taken.rest.push(arg.clone());
             continue;
         }
         let value = match inline {
@@ -218,21 +274,33 @@ fn take_settings(args: &[String]) -> Result<(Vec<String>, Map<String, Value>, Ve
             panel = Some(index);
             continue;
         }
-        let (key, setting) = value.split_once('=').ok_or_else(|| usage(format!("--set takes NAME=VALUE, got `{value}`")))?;
-        let entry = (key.trim().to_string(), Value::String(setting.trim().to_string()));
-        match panel {
-            None => {
-                global.insert(entry.0, entry.1);
-            }
-            Some(index) => match panels.iter_mut().find(|(n, _)| *n == index) {
-                Some((_, map)) => {
-                    map.insert(entry.0, entry.1);
+        let target = match panel {
+            None => None,
+            Some(index) => {
+                if !taken.panels.iter().any(|p| p.index == index) {
+                    taken.panels.push(PanelArgs { index, ..PanelArgs::default() });
                 }
-                None => panels.push((index, Map::from_iter([entry]))),
-            },
+                taken.panels.iter_mut().find(|p| p.index == index)
+            }
+        };
+        if name == "--show" || name == "--hide" {
+            let names = value.split(',').map(str::trim).filter(|n| !n.is_empty()).map(str::to_string);
+            match (name == "--show", target) {
+                (true, None) => taken.show.extend(names),
+                (false, None) => taken.hide.extend(names),
+                (true, Some(p)) => p.show.extend(names),
+                (false, Some(p)) => p.hide.extend(names),
+            }
+            continue;
         }
+        let (key, setting) = value.split_once('=').ok_or_else(|| usage(format!("--set takes NAME=VALUE, got `{value}`")))?;
+        let (key, setting) = (key.trim().to_string(), Value::String(setting.trim().to_string()));
+        match target {
+            None => taken.settings.insert(key, setting),
+            Some(p) => p.settings.insert(key, setting),
+        };
     }
-    Ok((rest, global, panels))
+    Ok(taken)
 }
 
 /// `--sizes` items: numbers, or whole-number ranges `8-12` (every size from 8 to 12).
@@ -303,12 +371,28 @@ mod tests {
                 .iter()
                 .map(|s| s.to_string())
                 .collect();
-        let (rest, global, panels) = take_settings(&args).unwrap();
-        assert_eq!(rest, ["A.otf", "--layout", "digi", "--black"]);
-        assert_eq!(global["hintColorRGB"], "(0, 0.75, 0)");
-        assert_eq!(panels.len(), 1);
-        assert_eq!(panels[0].0, 1);
-        assert_eq!(panels[0].1["drawPoint_PointLabels"], "0");
+        let taken = take_settings(&args).unwrap();
+        assert_eq!(taken.rest, ["A.otf", "--layout", "digi", "--black"]);
+        assert_eq!(taken.settings["hintColorRGB"], "(0, 0.75, 0)");
+        assert_eq!(taken.panels.len(), 1);
+        assert_eq!(taken.panels[0].index, 1);
+        assert_eq!(taken.panels[0].settings["drawPoint_PointLabels"], "0");
         assert!(take_settings(&["--panel".to_string(), "3".to_string()]).is_err());
+    }
+
+    #[test]
+    fn show_and_hide_go_to_the_proof_or_to_the_panel_before_them() {
+        let args: Vec<String> = ["A.otf", "--hide", "name,numeric-labels", "--show=bbox", "--panel", "1", "--hide", "handles", "--no-header"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let taken = take_settings(&args).unwrap();
+        assert_eq!(taken.rest, ["A.otf", "--no-header"]);
+        assert_eq!(taken.hide, ["name", "numeric-labels"]);
+        assert_eq!(taken.show, ["bbox"]);
+        assert_eq!(taken.panels[0].index, 1);
+        assert_eq!(taken.panels[0].hide, ["handles"]);
+        let parsed = args::parse(OPTIONS, &taken.rest).unwrap();
+        assert_eq!(params(&parsed).unwrap()["header"], false);
     }
 }

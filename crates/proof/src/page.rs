@@ -257,7 +257,9 @@ pub(crate) fn layout(faces: &[Face<'_>], gids: &[u32], options: &ProofOptions, e
     if gids.is_empty() {
         return Err(ProofError::BadOptions("there are no glyphs to show".into()));
     }
-    let needs_outlines = options.sheets.iter().any(|s| !matches!(s, Sheet::Waterfall { .. } | Sheet::Compare));
+    // The feature and text sheets draw the glyphs they need as they go.
+    let needs_outlines =
+        options.sheets.iter().any(|s| !matches!(s, Sheet::Waterfall { .. } | Sheet::Compare | Sheet::Features { .. } | Sheet::Text { .. }));
     let mut glyphs = Vec::with_capacity(gids.len());
     if needs_outlines {
         let mut budget = crate::font::MAX_TOTAL_ELEMENTS;
@@ -315,11 +317,44 @@ pub(crate) fn layout(faces: &[Face<'_>], gids: &[u32], options: &ProofOptions, e
                 crate::layouts::compare::sheet(faces, &mut doc, options, &displays, size)?;
                 "font set"
             }
+            Sheet::Synopsis | Sheet::Cmap | Sheet::Vorg | Sheet::Features { .. } | Sheet::Text { .. } => {
+                use crate::layouts::{features, spot};
+                let displays = crate::layouts::Display::for_sheet(sheet, options)?;
+                let Some(d) = displays.first() else { return Err(ProofError::BadOptions("the sheet has no drawing settings".into())) };
+                let size = given_size.unwrap_or(spot::DEFAULT_SIZE);
+                match sheet {
+                    Sheet::Synopsis => {
+                        let fit = match (given_size, options.glyphs_per_page) {
+                            (Some(size), _) => crate::layouts::tiles::Fit::Size(size),
+                            (None, n) => crate::layouts::tiles::Fit::PerPage(n.unwrap_or(spot::SYNOPSIS_PER_PAGE)),
+                        };
+                        spot::synopsis(face, &mut doc, options, d, fit)?;
+                        "synopsis"
+                    }
+                    Sheet::Cmap => {
+                        spot::cmap(face, &mut doc, options, d, gids, size)?;
+                        "cmap"
+                    }
+                    Sheet::Vorg => {
+                        spot::vorg(face, &mut doc, options, d, size)?;
+                        "vertical origins"
+                    }
+                    Sheet::Features { tags, font_order } => {
+                        features::sheet(face, &mut doc, options, d, gids, features::Request { tags, font_order: *font_order, size })?;
+                        "features"
+                    }
+                    Sheet::Text { text } => {
+                        spot::text(face, &mut doc, options, d, gids, text, given_size.unwrap_or(spot::TEXT_SIZE))?;
+                        "text"
+                    }
+                    _ => "",
+                }
+            }
         };
         sheet_names.extend(std::iter::repeat_n(name, doc.pages.len() - before));
     }
     let header = crate::layouts::Display::for_title(options)?;
-    if header.page_title {
+    if header.page_title && options.header {
         let total = doc.pages.len();
         let size = header.page_title_size;
         for (i, (page, sheet)) in doc.pages.iter_mut().zip(sheet_names).enumerate() {
