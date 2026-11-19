@@ -142,12 +142,16 @@ fn proof_refusals_write_nothing() {
     let mut s = Session::new();
     let out = dir.join("out");
     for bad in [
-        json!({ "fonts": [ttf], "layout": "synopsis", "format": "svg", "outputDir": out }),
+        json!({ "fonts": [ttf], "layout": "features", "format": "svg", "features": ["smcp"], "outputDir": out }),
+        json!({ "fonts": [ttf], "layout": "palette", "format": "svg", "features": ["kern"], "outputDir": out }),
+        json!({ "fonts": [ttf], "layout": "palette", "format": "svg", "sort": "lookup", "outputDir": out }),
+        json!({ "fonts": [ttf], "layout": "synopsis", "format": "svg", "hide": ["sparkles"], "outputDir": out }),
         json!({ "fonts": [ttf], "layout": "palette", "format": "svg", "glyphs": ["nope"], "outputDir": out }),
         json!({ "fonts": [ttf], "layout": "palette", "format": "svg", "show": ["em-box"], "outputDir": out }),
         json!({ "fonts": [ttf], "layout": "palette", "format": "svg", "baseline": -120, "outputDir": out }),
         json!({ "fonts": [ttf], "layout": "hints", "format": "svg", "settings": { "noSuchSetting": 1 }, "outputDir": out }),
-        json!({ "fonts": [ttf], "layout": "digi", "format": "svg", "panels": [{ "index": 1, "show": ["points"] }], "outputDir": out }),
+        json!({ "fonts": [ttf], "layout": "digi", "format": "svg", "panels": [{ "index": 1, "show": ["sparkles"] }], "outputDir": out }),
+        json!({ "fonts": [ttf], "layout": "palette", "format": "html", "header": false, "outputDir": out }),
         json!({ "fonts": [ttf], "layout": "palette", "format": "svg", "inPlace": true }),
         json!({ "fonts": [ttf], "layout": "palette", "format": "svg", "size": 1.0e9, "outputDir": out }),
         json!({ "fonts": [ttf], "layout": "outline", "format": "svg", "location": { "wght": 400 }, "outputDir": out }),
@@ -184,5 +188,38 @@ fn proof_compare_writes_one_file_for_the_font_set_and_settings_are_listed() {
     let listed = run(&mut s, "font.proof", json!({ "listSettings": true }));
     let names: Vec<&str> = listed["settings"].as_array().unwrap().iter().map(|v| v["name"].as_str().unwrap()).collect();
     assert!(names.contains(&"hintColorRGB") && names.contains(&"drawGlyph_EMBox"));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn proof_spot_layouts_take_show_hide_and_header() {
+    let (dir, ttf) = font("spot");
+    let mut s = Session::new();
+    let synopsis = run(
+        &mut s,
+        "font.proof",
+        json!({ "fonts": [ttf], "layout": "synopsis", "format": "svg", "show": ["em-box"], "hide": "name,numeric-labels", "header": false,
+                "outputDir": dir.join("synopsis") }),
+    );
+    let pages = files(&synopsis);
+    assert_eq!(pages.len(), 1);
+    let page = std::fs::read_to_string(&pages[0]).unwrap();
+    assert_eq!(shown(&page), glyph_order(&mut s, &ttf), "every glyph in glyph order");
+    assert!(!page.contains("page 1 of"), "no title line");
+
+    let cmap = run(&mut s, "font.proof", json!({ "fonts": [ttf], "layout": "cmap", "format": "svg", "outputDir": dir.join("cmap") }));
+    let page = std::fs::read_to_string(&files(&cmap)[0]).unwrap();
+    assert_eq!(shown(&page), ["A", "B", "O"], "code-point order");
+
+    let digi = run(
+        &mut s,
+        "font.proof",
+        json!({ "fonts": [ttf], "layout": "digi", "format": "svg", "glyphs": ["A"], "panels": [{ "index": 1, "hide": ["points", "handles", "point-labels"] }],
+                "outputDir": dir.join("digi") }),
+    );
+    assert_eq!(files(&digi).len(), 1);
+
+    // A font without layout features has nothing for the features layout.
+    assert!(s.execute("font.proof", &json!({ "fonts": [ttf], "layout": "features", "format": "svg", "outputDir": dir.join("features") })).is_err());
     std::fs::remove_dir_all(&dir).unwrap();
 }

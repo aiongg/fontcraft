@@ -6,21 +6,28 @@
 //! - [`hints`]: the stem hints, hint-replacement groups and alignment zones of a `CFF ` font.
 //! - [`compare`]: a font set, one row per font, glyphs of the same index in one column.
 //! - [`linked`]: the glyph grid whose cells link to the outline pages that follow it.
+//! - [`spot`]: the sheets of the reference table dumper: glyph synopsis, `cmap`, vertical origins,
+//!   and text set as outlines; [`features`] draws the rules of `GSUB` and `GPOS` features.
 //!
 //! Settings and presets follow `fontpdf.py` and `proofpdf.py` of AFDKO 5.0.1 (Apache License 2.0,
 //! Copyright 2014 Adobe; see `NOTICE`): the setting names, their defaults and the elements each
-//! layout turns on. Positions inside a tile are our own.
+//! layout turns on. Positions inside a tile are our own. The elements `show` and `hide` switch
+//! ([`ELEMENTS`]) are names of ours for groups of those settings; the dumper's sheets read the
+//! same [`Display`], so its proof policies (no names, no numbers, em box, bounding box) are
+//! `hide name`, `hide numeric-labels`, `show em-box` and `show bbox`.
 
 pub(crate) mod compare;
+pub(crate) mod features;
 pub(crate) mod hints;
 pub(crate) mod linked;
+pub(crate) mod spot;
 pub(crate) mod tiles;
 
 #[cfg(test)]
 mod layout_tests;
 
 use crate::page::TITLE_SIZE;
-use crate::{ProofError, ProofOptions, Sheet};
+use crate::{Panel, ProofError, ProofOptions, Sheet};
 
 /// Most fonts one font-set proof compares.
 pub const MAX_SET_FONTS: usize = 256;
@@ -126,6 +133,28 @@ pub const SETTINGS: &[Setting] = &[
     Setting { name: "MetaDataGlyphColorRGB", default: "(0, 0, 0)", about: "colour of the metrics text" },
 ];
 
+/// The drawing elements `show` and `hide` take, with what each one switches.
+pub const ELEMENTS: &[(&str, &str)] = &[
+    ("em-box", "the em box"),
+    ("bbox", "the glyph's bounding box, drawn around it"),
+    ("advance", "ticks at the origin and the advance"),
+    ("baseline", "the baseline"),
+    ("zones", "the alignment zones (CFF fonts)"),
+    ("hhints", "horizontal stem hints (CFF fonts)"),
+    ("vhints", "vertical stem hints (CFF fonts)"),
+    ("points", "on-curve point marks"),
+    ("handles", "off-curve point marks and their handles"),
+    ("point-labels", "point labels"),
+    ("contour-labels", "contour start labels"),
+    ("center-marks", "marks at the middle of the advance and of the em height"),
+    ("name", "the glyph name"),
+    ("numeric-labels", "glyph ids, code points, advances and adjustment values next to glyphs"),
+    ("sidebearings", "the side bearings and advances in the metrics text"),
+    ("hint-counts", "the number of stem hints in the metrics text"),
+    ("path-counts", "the numbers of contours, moves, lines and curves in the metrics text"),
+    ("filled-thumbnail", "the small filled copy of the glyph under it"),
+];
+
 /// What a tile draws: the settings of [`SETTINGS`], after a layout's choices and the caller's.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Display {
@@ -138,6 +167,8 @@ pub(crate) struct Display {
     pub center_marks: bool,
     pub center_marks_with_box: bool,
     pub glyph_box: bool,
+    /// A box around the glyph's bounds (element `bbox`; no setting of the reference script).
+    pub glyph_bbox: bool,
     pub x_advance: bool,
     pub contour_labels: bool,
     pub point_marks: bool,
@@ -154,6 +185,9 @@ pub(crate) struct Display {
     pub meta_parts: bool,
     pub meta_paths: bool,
     pub meta_hints: bool,
+    /// Glyph ids, code points and values beside the glyphs of the dumper's sheets (element
+    /// `numeric-labels`).
+    pub numeric_labels: bool,
     pub filled: bool,
     pub page_title: bool,
     pub page_title_size: f64,
@@ -202,6 +236,7 @@ impl Default for Display {
             center_marks: false,
             center_marks_with_box: false,
             glyph_box: false,
+            glyph_bbox: false,
             x_advance: false,
             contour_labels: true,
             point_marks: true,
@@ -218,6 +253,7 @@ impl Default for Display {
             meta_parts: true,
             meta_paths: true,
             meta_hints: true,
+            numeric_labels: true,
             filled: false,
             page_title: true,
             page_title_size: TITLE_SIZE,
@@ -245,17 +281,19 @@ impl Default for Display {
 
 impl Display {
     /// The settings of each copy a sheet draws (two for `Digi`, one otherwise): the layout's
-    /// choices, then `black`, `metrics`, `settings` and the `panels`.
+    /// choices, then `black`, `show`, `hide`, `metrics`, `settings` and the `panels`.
     pub(crate) fn for_sheet(sheet: &Sheet, options: &ProofOptions) -> Result<Vec<Display>, ProofError> {
         let mut copies = preset(sheet);
         for d in &mut copies {
             d.apply_common(options)?;
         }
-        for (index, settings) in &options.panels {
+        for Panel { index, show, hide, settings } in &options.panels {
             let count = copies.len();
             let Some(d) = copies.get_mut(*index) else {
                 return Err(ProofError::BadOptions(format!("panel {index}: this layout draws {count} copy of each glyph, numbered from 0")));
             };
+            d.show_all(show, true)?;
+            d.show_all(hide, false)?;
             for (name, value) in settings {
                 d.set(name, *value)?;
             }
@@ -274,12 +312,53 @@ impl Display {
         if options.black {
             self.make_black();
         }
+        self.show_all(&options.show, true)?;
+        self.show_all(&options.hide, false)?;
         if let Some(m) = options.metrics {
             self.meta_side_bearings = m != Metrics::Vertical;
             self.meta_v_side_bearings = m != Metrics::Horizontal;
         }
         for (name, value) in &options.settings {
             self.set(name, *value)?;
+        }
+        Ok(())
+    }
+
+    fn show_all(&mut self, elements: &[String], on: bool) -> Result<(), ProofError> {
+        for e in elements {
+            self.show(e, on)?;
+        }
+        Ok(())
+    }
+
+    /// Turns the element `name` of [`ELEMENTS`] on or off; an unknown name is refused.
+    pub(crate) fn show(&mut self, name: &str, on: bool) -> Result<(), ProofError> {
+        let fields: Vec<&mut bool> = match name {
+            "em-box" => vec![&mut self.em_box],
+            "bbox" => vec![&mut self.glyph_bbox],
+            "advance" => vec![&mut self.x_advance],
+            "baseline" => vec![&mut self.baseline],
+            "zones" => vec![&mut self.blue_zones],
+            "hhints" => vec![&mut self.hhints],
+            "vhints" => vec![&mut self.vhints],
+            "points" => vec![&mut self.point_marks],
+            "handles" => vec![&mut self.bcp_marks],
+            "point-labels" => vec![&mut self.point_labels],
+            "contour-labels" => vec![&mut self.contour_labels],
+            "center-marks" => vec![&mut self.center_marks],
+            "name" => vec![&mut self.meta_name],
+            "numeric-labels" => vec![&mut self.numeric_labels],
+            "sidebearings" => vec![&mut self.meta_side_bearings, &mut self.meta_v_side_bearings],
+            "hint-counts" => vec![&mut self.meta_hints],
+            "path-counts" => vec![&mut self.meta_paths, &mut self.meta_parts],
+            "filled-thumbnail" => vec![&mut self.meta_outline],
+            _ => {
+                let names: Vec<&str> = ELEMENTS.iter().map(|(n, _)| *n).collect();
+                return Err(ProofError::BadOptions(format!("there is no drawing element `{name}`; the elements are {}", names.join(", "))));
+            }
+        };
+        for f in fields {
+            *f = on;
         }
         Ok(())
     }
@@ -388,6 +467,7 @@ pub(crate) fn default_per_page(sheet: &Sheet) -> usize {
     match sheet {
         Sheet::Boxes => 156,
         Sheet::Hints => 4,
+        Sheet::Synopsis => spot::SYNOPSIS_PER_PAGE,
         _ => 1,
     }
 }
@@ -459,6 +539,28 @@ fn preset(sheet: &Sheet) -> Vec<Display> {
             d.meta_side_bearings = false;
             vec![d]
         }
+        // The dumper's sheets: filled glyphs with name and numbers; the em box, bounding box and
+        // hints only when asked for. Advance ticks mark each glyph's width on the line-set
+        // sheets and the vertical advance on `vorg`.
+        Sheet::Synopsis | Sheet::Cmap | Sheet::Features { .. } | Sheet::Vorg | Sheet::Text { .. } => {
+            d.no_overlays();
+            d.filled = true;
+            d.only_name_and_side_bearings();
+            d.meta_side_bearings = false;
+            match sheet {
+                Sheet::Cmap | Sheet::Features { .. } => d.x_advance = true,
+                Sheet::Vorg => {
+                    d.x_advance = true;
+                    d.em_box = true;
+                }
+                Sheet::Text { .. } => {
+                    d.meta_name = false;
+                    d.numeric_labels = false;
+                }
+                _ => {}
+            }
+            vec![d]
+        }
         _ => vec![d],
     }
 }
@@ -522,16 +624,38 @@ mod tests {
     #[test]
     fn panels_change_one_copy_of_the_digi_layout() {
         let options = ProofOptions {
-            panels: vec![(1, vec![("drawPoint_PointLabels".into(), SettingValue::Number(0.0))])],
+            panels: vec![Panel {
+                index: 1,
+                hide: vec!["handles".into()],
+                show: vec!["em-box".into()],
+                settings: vec![("drawPoint_PointLabels".into(), SettingValue::Number(0.0))],
+            }],
             black: true,
             ..ProofOptions::default()
         };
         let copies = Display::for_sheet(&Sheet::Digi, &options).unwrap();
         assert_eq!(copies.len(), 2);
-        assert!(copies[0].em_box && !copies[1].em_box);
-        assert!(!copies[1].point_labels && copies[1].point_marks);
+        assert!(copies[0].em_box && copies[1].em_box, "the right copy shows its em box when asked");
+        assert!(!copies[1].point_labels && copies[1].point_marks && !copies[1].bcp_marks);
         assert_eq!(copies[0].hint_colour, [128, 128, 128]);
-        let wrong = ProofOptions { panels: vec![(1, Vec::new())], ..ProofOptions::default() };
+        let wrong = ProofOptions { panels: vec![Panel { index: 1, ..Panel::default() }], ..ProofOptions::default() };
         assert!(Display::for_sheet(&Sheet::Hints, &wrong).is_err());
+    }
+
+    #[test]
+    fn show_and_hide_switch_elements_and_settings_come_after_them() {
+        let options = ProofOptions {
+            show: vec!["em-box".into(), "bbox".into()],
+            hide: vec!["name".into(), "numeric-labels".into(), "sidebearings".into()],
+            settings: vec![("drawMeta_Name".into(), SettingValue::Number(1.0))],
+            ..ProofOptions::default()
+        };
+        let d = &Display::for_sheet(&Sheet::Synopsis, &options).unwrap()[0];
+        assert!(d.em_box && d.glyph_bbox && !d.numeric_labels && !d.meta_side_bearings && !d.meta_v_side_bearings);
+        assert!(d.meta_name, "a setting overrides hide");
+        let every: Vec<String> = ELEMENTS.iter().map(|(n, _)| n.to_string()).collect();
+        assert!(Display::for_sheet(&Sheet::Boxes, &ProofOptions { hide: every, ..ProofOptions::default() }).is_ok());
+        let bad = ProofOptions { show: vec!["sparkles".into()], ..ProofOptions::default() };
+        assert!(Display::for_sheet(&Sheet::Boxes, &bad).is_err());
     }
 }

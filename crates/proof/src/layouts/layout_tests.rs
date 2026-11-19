@@ -1,8 +1,12 @@
 //! The ported layouts on fonts built in code: pages, glyphs per page, glyph order, the elements
-//! each layout draws, links from the palette to the outline pages, and the font-set rows.
+//! each layout draws, links from the palette to the outline pages, and the font-set rows; the
+//! dumper's sheets (synopsis, cmap, vertical origins, text, feature rules), `show`, `hide` and
+//! the page header.
+
+use std::sync::Arc;
 
 use fontcraft_compile::{Flavour, Options, compile, compile_ttf};
-use fontcraft_model::{Font, Path, Shape};
+use fontcraft_model::{Font, Path, Shape, Snippet};
 
 use crate::font::{self, Face};
 use crate::page::{self, Document, Ink, Item};
@@ -169,4 +173,120 @@ fn black_turns_every_mark_black_or_grey() {
             assert!(c[0] == c[1] && c[1] == c[2], "grey or black: {c:?}");
         }
     }
+}
+
+/// `ABC` with a ligature, an alternate and two kerning pairs.
+fn features_font() -> Vec<u8> {
+    let mut f = model("Feat", ABC);
+    let features = Arc::make_mut(&mut f.features);
+    for (tag, code) in [("liga", "sub A B by I;"), ("salt", "sub A by B;"), ("kern", "pos A B -50; pos B A 20;")] {
+        features.features.push(Snippet { name: tag.into(), code: code.into(), ..Default::default() });
+    }
+    compile_ttf(&f, &Options::default()).unwrap().bytes
+}
+
+/// The origins of the glyphs a page is about, in drawing order.
+fn origins(doc: &Document, page: usize) -> Vec<[f64; 2]> {
+    doc.pages[page].items.iter().filter_map(|it| if let Item::Glyph { x, y, primary: true, .. } = it { Some([*x, *y]) } else { None }).collect()
+}
+
+fn rects(doc: &Document, page: usize) -> usize {
+    doc.pages[page].items.iter().filter(|it| matches!(it, Item::Rect { .. })).count()
+}
+
+#[test]
+fn synopsis_cmap_vorg_and_text_show_their_glyphs_in_order() {
+    let font = vec![ttf("Spot", ABC)];
+    let order = [".notdef", "A", "B", "I"];
+
+    let synopsis = layout(&font, &sheet(Sheet::Synopsis));
+    assert_eq!(synopsis.pages.len(), 1, "320 cells per page");
+    assert_eq!(primary(&synopsis, 0), order);
+    let text = labels(&synopsis, 0);
+    assert!(text.iter().any(|l| l == "A") && text.iter().any(|l| l == "600") && text.iter().any(|l| l == "3"), "{text:?}");
+    assert!(text.iter().any(|l| l.ends_with("synopsis \u{2014} page 1 of 1")), "the title names the sheet: {text:?}");
+    let one = layout(&font, &ProofOptions { glyphs_per_page: Some(1), ..sheet(Sheet::Synopsis) });
+    assert_eq!(one.pages.len(), 4, "one cell per page");
+
+    // Code-point order whatever the selection's order; .notdef has no code point.
+    let cmap = layout(&font, &ProofOptions { glyphs: vec!["I".into(), "A".into()], ..sheet(Sheet::Cmap) });
+    assert_eq!(primary(&cmap, 0), ["A", "I"]);
+    assert!(labels(&cmap, 0).iter().any(|l| l == "A@1 0041"), "{:?}", labels(&cmap, 0));
+    let unmapped = ProofOptions { glyphs: vec![".notdef".into()], ..sheet(Sheet::Cmap) };
+    assert!(proof(&font[0], 0, &unmapped).is_err(), "nothing to show");
+
+    // Without VORG every glyph is shown, each in its vertical em box.
+    let vorg = layout(&font, &sheet(Sheet::Vorg));
+    assert_eq!(primary(&vorg, 0), order);
+    assert_eq!(rects(&vorg, 0), 4, "one em box per glyph");
+    assert!(labels(&vorg, 0).iter().any(|l| l.starts_with("adv ")));
+
+    // Text: the glyphs of the characters in order, a line break back at the left margin.
+    let text = layout(&font, &sheet(Sheet::Text { text: "BIA\nA".into() }));
+    assert_eq!(primary(&text, 0), ["B", "I", "A", "A"]);
+    let at = origins(&text, 0);
+    assert!(at[1][0] > at[0][0] && at[1][1] == at[0][1], "I follows B on the line");
+    assert!(at[3][0] == at[0][0] && at[3][1] > at[0][1], "the second line starts under the first");
+    assert_eq!(labels(&text, 0).len(), 1, "the text sheet labels nothing but the title");
+    let glyphs = layout(&font, &sheet(Sheet::Text { text: String::new() }));
+    assert_eq!(primary(&glyphs, 0), order, "without text the glyphs to show are set");
+
+    for sheet_kind in [Sheet::Synopsis, Sheet::Cmap, Sheet::Vorg, Sheet::Text { text: "AB".into() }] {
+        let pdf = proof(&font[0], 0, &ProofOptions { format: ProofFormat::Pdf, ..sheet(sheet_kind.clone()) }).unwrap();
+        assert!(pdf.files[0].starts_with(b"%PDF-"), "{sheet_kind:?}");
+    }
+}
+
+#[test]
+fn show_hide_and_no_header_change_what_is_drawn() {
+    let font = vec![ttf("Shown", ABC)];
+    let plain = layout(&font, &sheet(Sheet::Synopsis));
+    let boxed = layout(
+        &font,
+        &ProofOptions {
+            show: vec!["em-box".into(), "bbox".into()],
+            hide: vec!["name".into(), "numeric-labels".into()],
+            header: false,
+            ..sheet(Sheet::Synopsis)
+        },
+    );
+    assert_eq!(rects(&plain, 0), 4, "one cell border per glyph");
+    assert!(rects(&boxed, 0) >= 4 + 4 + 3, "cells, em boxes and the bounding boxes of A, B and I");
+    assert!(labels(&boxed, 0).is_empty(), "no names, no numbers and no title: {:?}", labels(&boxed, 0));
+    // The same element names reach the tile layouts.
+    let tiles = layout(&font, &ProofOptions { hide: vec!["sidebearings".into(), "name".into()], ..sheet(Sheet::Boxes) });
+    assert_eq!(labels(&tiles, 0).len(), 1, "only the title is left: {:?}", labels(&tiles, 0));
+    let bad = ProofOptions { show: vec!["glitter".into()], ..sheet(Sheet::Synopsis) };
+    assert!(proof(&font[0], 0, &bad).is_err());
+}
+
+#[test]
+fn features_sheet_draws_each_rule_under_its_feature_and_lookup() {
+    let font = vec![features_font()];
+    let all = layout(&font, &sheet(Sheet::Features { tags: Vec::new(), font_order: false }));
+    assert_eq!(all.pages.len(), 3, "one page per feature");
+    let page_of = |doc: &Document, heading: &str| (0..doc.pages.len()).find(|p| labels(doc, *p).iter().any(|l| l == heading)).unwrap();
+    let liga = page_of(&all, "GSUB feature liga");
+    assert_eq!(primary(&all, liga), ["A", "B", "I"], "the components, then the ligature");
+    assert!(labels(&all, liga).iter().any(|l| l.starts_with("lookup ") && l.contains("ligature substitution") && l.contains("DFLT/dflt")));
+    assert!(labels(&all, liga).iter().any(|l| l == "+"));
+    let salt = page_of(&all, "GSUB feature salt");
+    assert_eq!(primary(&all, salt), ["A", "B"]);
+    let kern = page_of(&all, "GPOS feature kern");
+    assert_eq!(primary(&all, kern), ["A", "B", "B", "A"], "pairs by the first glyph's id");
+    assert!(labels(&all, kern).iter().any(|l| l == "-50") && labels(&all, kern).iter().any(|l| l == "20"));
+    let at = origins(&all, kern);
+    let upem = 1000.0;
+    let scale = super::spot::DEFAULT_SIZE / upem;
+    assert!((at[1][0] - at[0][0] - 550.0 * scale).abs() < 1e-6, "B is set 50 units closer: {at:?}");
+
+    // One feature, the rules whose first glyph is selected.
+    let only = layout(&font, &ProofOptions { glyphs: vec!["B".into()], ..sheet(Sheet::Features { tags: vec![*b"kern"], font_order: true }) });
+    assert_eq!(only.pages.len(), 1);
+    assert_eq!(primary(&only, 0), ["B", "A"]);
+    let missing = ProofOptions { format: ProofFormat::Pdf, ..sheet(Sheet::Features { tags: vec![*b"smcp"], font_order: false }) };
+    assert!(proof(&font[0], 0, &missing).is_err(), "a feature the font lacks is refused");
+    let pdf =
+        proof(&font[0], 0, &ProofOptions { format: ProofFormat::Pdf, ..sheet(Sheet::Features { tags: Vec::new(), font_order: false }) }).unwrap();
+    assert_eq!(pdf.pages, 3);
 }

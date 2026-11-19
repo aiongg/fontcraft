@@ -11,7 +11,10 @@
 //!   text as outlines placed by `cmap`, advances and pair kerning (`kern`).
 //! - `layouts`: the proof sheets ported from the reference proof script: the drawing settings
 //!   ([`SETTINGS`]), glyph tiles with em boxes, hints, zones and point labels
-//!   (`boxes`, `hints`, `digi`), the font-set comparison and the palette linked to outline pages.
+//!   (`boxes`, `hints`, `digi`), the font-set comparison and the palette linked to outline pages;
+//!   and the sheets of the reference table dumper: the glyph synopsis, the feature rules, the
+//!   `cmap`, the vertical origins and a text set as outlines. [`ELEMENTS`] names the drawing
+//!   elements `show` and `hide` switch.
 //! - `html`: the browser specimen with the font embedded (WOFF2 when the input is WOFF2), sample
 //!   text, waterfall, character set, feature switches and axis stops; it carries no script.
 //!
@@ -34,7 +37,7 @@ mod select;
 mod svg;
 mod text;
 
-pub use layouts::{MAX_SET_FONTS, Metrics, SETTINGS, Setting, SettingValue};
+pub use layouts::{ELEMENTS, MAX_SET_FONTS, Metrics, SETTINGS, Setting, SettingValue};
 pub use page::grid_size_for;
 pub use select::{GlyphSort, Selection, select_glyphs};
 
@@ -74,6 +77,34 @@ pub enum Sheet {
     Digi,
     /// One row per font of a font set, the glyphs of each index in one column.
     Compare,
+    /// A dense table of glyphs by index: glyph id, advance, name and shape in each cell.
+    Synopsis,
+    /// The rules of `GSUB` and `GPOS` features, each drawn as its input and its result: one
+    /// section per feature, one heading per lookup.
+    Features {
+        /// The feature tags to show, in this order; empty shows every feature of the font.
+        tags: Vec<[u8; 4]>,
+        /// Rules in the order the font stores them; otherwise each lookup's rules by glyph id.
+        font_order: bool,
+    },
+    /// Each code point of `cmap` with its glyph, in code-point order.
+    Cmap,
+    /// Glyphs in their vertical em box with the vertical origin and advance (`VORG`, `vmtx`).
+    Vorg,
+    /// A text set as outlines with the font's advances and pair kerning; without text, the
+    /// selected glyphs in order.
+    Text { text: String },
+}
+
+/// Changes for one copy of a layout that draws each glyph more than once (the digi layout):
+/// elements to show and hide, then drawing settings, applied after the proof-wide ones.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Panel {
+    /// The copy, numbered from 0 (left).
+    pub index: usize,
+    pub show: Vec<String>,
+    pub hide: Vec<String>,
+    pub settings: Vec<(String, SettingValue)>,
 }
 
 /// What [`proof`] makes.
@@ -100,10 +131,15 @@ pub struct ProofOptions {
     pub metrics: Option<Metrics>,
     /// The hint-replacement groups the hints layout draws (zero-based); empty draws every stem.
     pub hint_groups: Vec<usize>,
-    /// Drawing settings by name ([`SETTINGS`]), applied after the layout's own.
+    /// Drawing elements to turn on and off by name ([`ELEMENTS`]), after the layout's choices.
+    pub show: Vec<String>,
+    pub hide: Vec<String>,
+    /// Drawing settings by name ([`SETTINGS`]), applied after `show` and `hide`.
     pub settings: Vec<(String, SettingValue)>,
-    /// Settings for one copy of the digi layout (0 left, 1 right), applied after `settings`.
-    pub panels: Vec<(usize, Vec<(String, SettingValue)>)>,
+    /// Changes for one copy of the digi layout (0 left, 1 right), applied after the others.
+    pub panels: Vec<Panel>,
+    /// Print the title line with the font name, sheet and page number on each page.
+    pub header: bool,
 }
 
 impl Default for ProofOptions {
@@ -120,8 +156,11 @@ impl Default for ProofOptions {
             black: false,
             metrics: None,
             hint_groups: Vec::new(),
+            show: Vec::new(),
+            hide: Vec::new(),
             settings: Vec::new(),
             panels: Vec::new(),
+            header: true,
         }
     }
 }
