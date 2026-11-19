@@ -1314,7 +1314,7 @@ milestone = "M13"
 summary = "The timing graph plots progress against axis position for the selected curve: a straight diagonal from bottom-left to top-right for linear motion, shallow stretches where the node moves slowly and steep ones where it moves fast. It is derived from the curve and read-only; a white dot animates at constant speed beside a green dot that follows the graph."
 ref = "Interpolation › Higher-Order Interpolation › Interpolation Timing"
 status = "handbook"
-notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf). The graph's function is built in M9.29: `fontcraft_interp::hoi::timing` and `timing_graph` give the fraction of the curve's length travelled at each axis fraction, measured on a 64-segment polyline; the diagonal for a straight line at constant speed. The graph itself waits for the Info box (M9.32)."
+notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf). The graph's function is built in M9.29: `fontcraft_interp::hoi::timing` and `timing_graph` give the fraction of the curve's length travelled at each axis fraction, measured on a 64-segment polyline; the diagonal for a straight line at constant speed. The Info box shows the graph for the one selected node whose curve has a layer above it on the curve's axis (crates/ui/src/panels/hoi_timing.rs, M9.32): the diagonal faint behind the curve. The animated dots are not drawn yet."
 guesses = [
   "Progress is the fraction of the curve's length travelled; settle by comparing the graph of a Handles curve with zero amplitudes and of a Point curve in the reference app.",
 ]

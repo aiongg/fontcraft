@@ -13,6 +13,7 @@ pub mod font_view;
 pub mod glyph_info;
 pub mod glyph_metrics;
 pub mod hinting_waterfall;
+pub mod hoi_timing;
 pub mod info_box;
 pub mod info_box_component;
 pub mod info_box_ps_hint;

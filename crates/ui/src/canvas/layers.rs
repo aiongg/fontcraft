@@ -9,6 +9,7 @@ use super::tokens::Tokens;
 use super::{Display, color, hinting, overlays, paint, tools};
 use crate::app::models::canvas::{CanvasModel, EditedGlyph};
 use crate::app::models::text::TextModel;
+use crate::app::models::compatibility::CompatibilityModel;
 
 /// What a paint layer reads.
 pub struct PaintCx<'a> {
@@ -31,6 +32,8 @@ pub struct PaintCx<'a> {
     pub overlays: super::overlays::Painted<'a>,
     /// The hint layers' model and state.
     pub hinting: super::hinting::HintPaint<'a>,
+    /// The Master Compatibility view.
+    pub compatibility: &'a Tracked<CompatibilityModel>,
 }
 
 impl PaintCx<'_> {
@@ -64,6 +67,7 @@ pub const LAYERS: &[PaintLayer] = &[
     PaintLayer { id: "outline", paint: paint::outline::paint },
     PaintLayer { id: "components", paint: paint::components::paint },
     PaintLayer { id: "auditHighlights", paint: overlays::audit::highlights },
+    PaintLayer { id: "masterCompatibility", paint: super::compatibility::paint },
     PaintLayer { id: "selectedSegments", paint: tools::overlays::segments },
     PaintLayer { id: "nodes", paint: paint::nodes::paint },
     PaintLayer { id: "anchors", paint: paint::anchors::paint },

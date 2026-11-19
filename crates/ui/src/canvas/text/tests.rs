@@ -207,6 +207,7 @@ fn painted(app: &FontCraftApp, layer: fn(&PaintCx<'_>) -> Vec<Shape>) -> Vec<Sha
         text: &app.models.text,
         overlays: crate::canvas::overlays::Painted { data: &app.overlays.data, words: &overlay_words },
         hinting: crate::canvas::hinting::HintPaint { model: &app.models.hint_canvas, view: &app.view.hinting, tokens: &app.models.hint_tokens },
+        compatibility: &app.models.compatibility,
     };
     layer(&cx)
 }
@@ -355,6 +356,7 @@ fn the_measurement_line_measures_each_glyph_in_text_mode_and_moves_with_cmd_ctrl
         text: &app.models.text,
         overlays: crate::canvas::overlays::Painted { data: &app.overlays.data, words: &overlay_words },
         hinting: crate::canvas::hinting::HintPaint { model: &app.models.hint_canvas, view: &app.view.hinting, tokens: &app.models.hint_tokens },
+        compatibility: &app.models.compatibility,
     };
     let labels: Vec<f64> = super::paint::measurement_labels(&cx).into_iter().map(|(_, v)| v).collect();
     assert_eq!(labels, [100.0, 100.0], "V's two sidebearings are printed");

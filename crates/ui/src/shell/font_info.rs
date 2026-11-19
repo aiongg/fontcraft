@@ -166,6 +166,7 @@ pub struct FontInfoView {
     pub request: Option<InfoDialog>,
     pub features: super::font_info_tabs::FeaturesView,
     pub exports: super::font_info_tabs::ExportsView,
+    pub masters: super::font_info_masters::MastersTabView,
 }
 
 /// The `font.info.openDialog` parameters that ask for `dialog`.

@@ -403,6 +403,7 @@ pub fn show(ui: &mut Ui, app: &mut FontCraftApp) {
             edit_background: view.edit_background,
             tools: &tools.view,
             text: &models.text,
+            compatibility: &models.compatibility,
             tool: active_tool.as_mut(),
             overlays: &overlays.data,
             note: &mut overlays.note,

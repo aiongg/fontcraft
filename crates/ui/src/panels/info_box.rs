@@ -109,6 +109,9 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
     if let Some(b) = &model.cap {
         super::info_box_component::cap_part(ui, b, sent);
     }
+    if let Some(timing) = &model.timing {
+        super::hoi_timing::view(ui, timing);
+    }
 }
 
 fn glyph_part(ui: &mut Ui, words: &InfoBoxWords, g: &GlyphBox, sent: &mut Vec<Msg>) {

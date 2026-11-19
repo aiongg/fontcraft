@@ -116,6 +116,8 @@ pub struct InfoBoxModel {
     pub component: Option<ComponentBox>,
     pub corner: Option<CornerBox>,
     pub cap: Option<CapBox>,
+    /// The timing graph of the one selected node's interpolation curve.
+    pub timing: Option<super::hoi::TimingGraph>,
 }
 
 /// The Transformations section: its settings and what its buttons act on.
@@ -348,6 +350,7 @@ fn info_box(cx: &mut ProjectCx<'_>, edit: Option<&Edit>) -> InfoBoxModel {
         b.corner = components::corner_box(font, &edit.glyph, layer, &edit.selection);
         b.cap = components::cap_box(font, &edit.glyph, layer, &edit.selection);
     }
+    b.timing = cx.session.font().ok().and_then(|font| super::hoi::timing_of(font, &edit.glyph, &edit.layer, &edit.selection.points));
     b
 }
 

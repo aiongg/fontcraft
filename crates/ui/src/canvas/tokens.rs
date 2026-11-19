@@ -74,6 +74,8 @@ pub struct Tokens {
     pub visible_layer_outline_width: f32,
     /// Share of the canvas left free on each side when a glyph is fitted into it.
     pub fit_margin: f64,
+    /// The Master Compatibility view (`canvas::compatibility`).
+    pub compat: CompatTokens,
 }
 
 /// The handle-size steps of `appearance.handleSize` and how much each scales nodes, handles and anchors.
@@ -170,7 +172,62 @@ impl Tokens {
             background_outline_width: 1.0,
             visible_layer_outline_width: 0.75,
             fit_margin: 0.08,
+            compat: CompatTokens::standard(),
         }
+    }
+}
+
+/// The colours and sizes of the Master Compatibility view.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CompatTokens {
+    /// Segments that match, turn more than the warning angle, or do not match.
+    pub ok: Color32,
+    pub warn: Color32,
+    pub bad: Color32,
+    /// The lines that join corresponding points across the layers.
+    pub line: Color32,
+    /// The tints of the shapes, by shape index in turn.
+    pub tints: [Color32; 6],
+    pub segment_width: f32,
+    pub tint_width: f32,
+    pub line_width: f32,
+    pub label_size: f32,
+    /// How far a label sits from its point, in screen points.
+    pub label_gap: f32,
+    /// Dash and gap lengths of component outlines and anchor lines.
+    pub dash: f32,
+    pub dash_gap: f32,
+}
+
+impl CompatTokens {
+    fn standard() -> CompatTokens {
+        CompatTokens {
+            ok: Color32::from_rgb(0x2f, 0xa8, 0x4f),
+            warn: Color32::from_rgb(0xe0, 0xb0, 0x20),
+            bad: Color32::from_rgb(0xe0, 0x30, 0x30),
+            line: Color32::from_rgba_unmultiplied(0x60, 0x60, 0x60, 0xa0),
+            tints: [
+                Color32::from_rgba_unmultiplied(0x2d, 0x6c, 0xdf, 0x70),
+                Color32::from_rgba_unmultiplied(0xe8, 0x8a, 0x1a, 0x70),
+                Color32::from_rgba_unmultiplied(0x9a, 0x5c, 0xd0, 0x70),
+                Color32::from_rgba_unmultiplied(0x1a, 0xa0, 0xa0, 0x70),
+                Color32::from_rgba_unmultiplied(0xd0, 0x40, 0x90, 0x70),
+                Color32::from_rgba_unmultiplied(0x80, 0x80, 0x20, 0x70),
+            ],
+            segment_width: 2.0,
+            tint_width: 4.0,
+            line_width: 1.0,
+            label_size: 10.0,
+            label_gap: 4.0,
+            dash: 4.0,
+            dash_gap: 3.0,
+        }
+    }
+
+    /// The tint of shape `index`, opaque when `solid`.
+    pub fn tint(&self, index: usize, solid: bool) -> Color32 {
+        let base = self.tints.get(index % self.tints.len()).copied().unwrap_or(self.line);
+        if solid { Color32::from_rgb(base.r(), base.g(), base.b()) } else { base }
     }
 }
 

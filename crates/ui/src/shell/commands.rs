@@ -68,6 +68,8 @@ pub const MODULES: &[Module] = &[
     super::font_audit::MODULE,
     super::components::MODULE,
     crate::dialogs::glyph_picker::SHELL,
+    super::font_info_masters::MODULE,
+    super::compatibility::MODULE,
 ];
 
 /// The module and description of the shell command `id`.

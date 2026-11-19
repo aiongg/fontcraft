@@ -8,6 +8,7 @@
 pub mod annotation_editor;
 pub mod camera;
 pub mod color;
+pub mod compatibility;
 pub mod hinting;
 pub mod layers;
 pub mod overlays;
@@ -48,6 +49,8 @@ pub struct Display {
     pub info: bool,
     /// The edited layer's PostScript hints (`view.showHints`).
     pub hints: bool,
+    /// Every source layer of the edited glyph beside it (`view.showMasterCompatibility`).
+    pub master_compatibility: bool,
 }
 
 impl Default for Display {
@@ -66,6 +69,7 @@ impl Default for Display {
             fill_preview: true,
             info: true,
             hints: false,
+            master_compatibility: false,
         }
     }
 }
@@ -101,6 +105,8 @@ pub struct CanvasProps<'a> {
     pub tools: &'a tools::ToolView,
     /// The edit view's text, laid out around the edited glyph.
     pub text: &'a Tracked<TextModel>,
+    /// The Master Compatibility view.
+    pub compatibility: &'a Tracked<crate::app::models::compatibility::CompatibilityModel>,
     /// The active-tool slot.
     pub tool: &'a mut dyn ActiveTool,
     /// What the overlay layers paint.
@@ -128,6 +134,7 @@ pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
         (props.model, props.tokens, props.display, props.edit_background, props.tools, props.text, props.hinting);
     let overlay_data = props.overlays;
     let note = &mut *props.note;
+    let compatibility = props.compatibility;
     let tool = &mut *props.tool;
     let mut reply = None;
     let _ = canvas.show(ui, |ui, body| {
@@ -147,6 +154,7 @@ pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
             text,
             overlays: overlays::Painted { data: overlay_data, words: &overlay_words },
             hinting,
+            compatibility,
         };
         layers::paint(&cx);
         if let Some(edit) = note.as_mut() {

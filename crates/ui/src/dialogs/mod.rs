@@ -27,6 +27,7 @@ mod glyph_set;
 mod guide_properties;
 mod host;
 pub mod import;
+pub mod interp;
 pub mod kerning_audit;
 pub mod kerning_questions;
 pub mod master_color;
@@ -90,6 +91,7 @@ pub const SPECS: &[&[DialogSpec]] = &[
     master_color::SPECS,
     sidebar_filters::SPECS,
     component_name::SPECS,
+    interp::SPECS,
 ];
 
 /// Runs every dialog module for this pass.

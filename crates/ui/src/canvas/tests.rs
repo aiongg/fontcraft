@@ -63,6 +63,7 @@ fn painted(app: &FontCraftApp, layer: fn(&PaintCx<'_>) -> Vec<Shape>) -> Vec<Sha
         text: &app.models.text,
         overlays: super::overlays::Painted { data: &app.overlays.data, words: &overlay_words },
         hinting: crate::canvas::hinting::HintPaint { model: &app.models.hint_canvas, view: &app.view.hinting, tokens: &hint_tokens },
+        compatibility: &app.models.compatibility,
     };
     layer(&cx)
 }

@@ -36,6 +36,7 @@ pub struct FontInfoModel {
     pub features: super::font_features::FeaturesModel,
     /// The Exports tab; empty while another tab shows.
     pub exports: super::font_exports::ExportsModel,
+    pub masters_tab: super::font_masters::MastersTabModel,
 }
 
 /// The Font tab.
@@ -225,6 +226,7 @@ pub fn project(model: &mut Tracked<FontInfoModel>, cx: &mut ProjectCx<'_>) {
         masters: font.masters.iter().take(MAX_SHOWN).map(|m| (m.id.clone(), m.name.clone())).collect(),
         features,
         exports,
+        masters_tab: super::font_masters::project(font, &cx.view.font_info.masters),
     };
     super::set(model, value);
 }

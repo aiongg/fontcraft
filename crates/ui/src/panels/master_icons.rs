@@ -28,33 +28,38 @@ pub struct MasterGlyph<'a>(pub &'a MasterIcon);
 
 impl Glyph for MasterGlyph<'_> {
     fn paint(&self, painter: &Painter, _: &UiTokens, rect: Rect, color: Color32, _: bool) {
-        let side = rect.width().min(rect.height());
-        let origin = rect.center() - egui::Vec2::splat(side) / 2.0;
-        let at = |x: f32, y: f32| Pos2::new(origin.x + x * side, origin.y + y * side);
-        match self.0 {
-            MasterIcon::Builtin { weight, width } => {
-                let (Some(stroke), Some(span)) = (STROKE.get(usize::from(*weight)), SPAN.get(usize::from(*width))) else { return };
-                let pen = Stroke::new(stroke * side, color);
-                let (left, right) = (0.5 - span / 2.0, 0.5 + span / 2.0);
-                let depth = (span / 2.0).min(ARCH_DEPTH);
-                let top = X_HEIGHT + stroke / 2.0;
-                // The left stem, from a little above the arch's top down to the baseline.
-                painter.add(Shape::line_segment([at(left, X_HEIGHT - stroke * 0.25), at(left, BASELINE)], pen));
-                // The arch, from the left stem over to the right one, then the right stem down.
-                let mut points: Vec<Pos2> = (0..=ARCH_STEPS)
-                    .map(|i| {
-                        let t = std::f32::consts::PI * (1.0 - i as f32 / ARCH_STEPS as f32);
-                        at(0.5 + span / 2.0 * t.cos(), top + depth - depth * t.sin())
-                    })
-                    .collect();
-                points.push(at(right, BASELINE));
-                painter.add(Shape::line(points, pen));
-            }
-            MasterIcon::Outline(contours) => {
-                let pen = Stroke::new(side * GLYPH_LINE, color);
-                for contour in contours {
-                    painter.add(Shape::line(contour.iter().map(|[x, y]| at(*x, *y)).collect(), pen));
-                }
+        paint_icon(painter, rect, color, self.0);
+    }
+}
+
+/// Paints `icon` in `color`, centred in `rect`: for a list row's thumbnail, where no glyph component draws it.
+pub fn paint_icon(painter: &Painter, rect: Rect, color: Color32, icon: &MasterIcon) {
+    let side = rect.width().min(rect.height());
+    let origin = rect.center() - egui::Vec2::splat(side) / 2.0;
+    let at = |x: f32, y: f32| Pos2::new(origin.x + x * side, origin.y + y * side);
+    match icon {
+        MasterIcon::Builtin { weight, width } => {
+            let (Some(stroke), Some(span)) = (STROKE.get(usize::from(*weight)), SPAN.get(usize::from(*width))) else { return };
+            let pen = Stroke::new(stroke * side, color);
+            let (left, right) = (0.5 - span / 2.0, 0.5 + span / 2.0);
+            let depth = (span / 2.0).min(ARCH_DEPTH);
+            let top = X_HEIGHT + stroke / 2.0;
+            // The left stem, from a little above the arch's top down to the baseline.
+            painter.add(Shape::line_segment([at(left, X_HEIGHT - stroke * 0.25), at(left, BASELINE)], pen));
+            // The arch, from the left stem over to the right one, then the right stem down.
+            let mut points: Vec<Pos2> = (0..=ARCH_STEPS)
+                .map(|i| {
+                    let t = std::f32::consts::PI * (1.0 - i as f32 / ARCH_STEPS as f32);
+                    at(0.5 + span / 2.0 * t.cos(), top + depth - depth * t.sin())
+                })
+                .collect();
+            points.push(at(right, BASELINE));
+            painter.add(Shape::line(points, pen));
+        }
+        MasterIcon::Outline(contours) => {
+            let pen = Stroke::new(side * GLYPH_LINE, color);
+            for contour in contours {
+                painter.add(Shape::line(contour.iter().map(|[x, y]| at(*x, *y)).collect(), pen));
             }
         }
     }

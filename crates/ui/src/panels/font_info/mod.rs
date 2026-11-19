@@ -11,14 +11,15 @@
 //! | [`exports_tab`] | Exports: the export list and the selected entries' fields and parameters |
 //! | [`features_tab`] | Features: the sidebar of prefixes, classes and features, and the shown entry |
 //! | [`code_editor`] | the Features tab's code field and its diagnostics |
+//! | [`masters_tab`] | Masters: the master list and the selected masters' sections |
 //!
-//! A tab click posts `font.info.selectTab`; every edit posts an engine command. The Masters tab comes with its own
-//! package.
+//! A tab click posts `font.info.selectTab`; every edit posts an engine command.
 
 pub mod code_editor;
 pub mod exports_tab;
 pub mod features_tab;
 pub mod font_tab;
+pub mod masters_tab;
 pub mod notes_tab;
 pub mod other_tab;
 pub mod param_value;
@@ -119,9 +120,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
             FontInfoTab::Notes => notes_tab::view(ui, &model.note, sent),
             FontInfoTab::Exports => exports_tab::view(ui, &model.exports, &model.masters, sent),
             FontInfoTab::Features => features_tab::view(ui, &model.features, sent),
-            FontInfoTab::Masters => {
-                Text::new(words.not_yet.clone()).shade(Shade::Muted).show(ui);
-            }
+            FontInfoTab::Masters => masters_tab::view(ui, &model.masters_tab, &model.masters, sent),
         }
     });
 }

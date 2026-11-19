@@ -3070,3 +3070,44 @@ guesses = [
 observe = [
   "In font B (m7-two), look at an instance's preview on the Exports tab: note where it is and what it shows.",
 ]
+
+[[command]]
+id = "font.info.masters.select"
+label = "Select Masters"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{masters: [index]}"
+area = "font-info"
+milestone = "M7"
+summary = "Selects masters in the list of the Masters tab; the sections at the right then edit every selected master at once."
+ref = "Font Info › Masters"
+status = "inferred"
+notes = "Our own command, so a script or agent can do what clicking, Cmd-clicking and Shift-clicking in the list do. An empty list selects the first master; indices the font lacks are dropped."
+
+[[panel]]
+id = "fontInfo.addMetric"
+label = "Add Metric"
+location = "dialog"
+controls = ["category menu", "name field", "scope field (glyph predicate)", "Add button", "Cancel button"]
+area = "guides-metrics"
+milestone = "M7"
+summary = "Opened by the plus beside the Metrics heading of the Masters tab: the category, name and glyph scope of a new metric."
+ref = "Font Info › Masters › Metrics"
+status = "inferred"
+notes = "FontCraft: crates/ui/src/dialogs/interp/masters.rs, a dialog of font.metrics.add that runs on Add. It starts on the first category the font has no plain metric of; an empty name or scope is left out. The reference app adds a row in place; this dialog is our form of the metric editor (fontInfo.metricEditor) for a new metric."
+guesses = [
+  "Adding a metric opens the same editor as editing one, starting on the first category the font lacks; adding a metric in the reference app would show whether it adds a row at once instead.",
+]
+
+[[panel]]
+id = "fontInfo.stemScope"
+label = "Stem Scope"
+location = "dialog"
+controls = ["scope field (glyph predicate)", "OK button", "Cancel button"]
+area = "guides-metrics"
+milestone = "M7"
+summary = "Opened by a stem's scope button on the Masters tab: the glyphs the stem applies to, as a glyph predicate."
+ref = "Font Info › Masters › Stems"
+status = "inferred"
+notes = "FontCraft: crates/ui/src/dialogs/interp/masters.rs, a dialog of font.stems.set on `{stem: index}` that runs on OK; an emptied scope removes it."
