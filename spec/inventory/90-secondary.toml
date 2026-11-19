@@ -1918,14 +1918,23 @@ label = "Merge Fonts to Masters"
 menu = ["Font"]
 shortcut = ""
 kind = "engine"
-params = "{fonts: [fontRef | path], target?: fontRef}"
+params = "{fonts: [fontRef | path], family?: string} → {title, axes, masters, instances, glyphs}"
 area = "interpolation"
-milestone = "M13"
+milestone = "M9"
 summary = "Combines several open static fonts of one family into a single multi-master font, one master per source, creating axes and design coordinates from their weight and width differences. Background layers are carried over."
 ref = "FontLab 8 What's new › Families & variation › Variation (Merge Fonts to Masters)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M9 to M13 by the M9 planning pass: a secondary-reference feature beyond the primary reference, as the M3 and M6 passes moved such rows (owner decision, docs/plans/M3.md § 7, question 3)."
+notes = "Documented in the secondary reference's release notes, not yet observed. Built (M9.36): a fontRef is an open document's title or path, anything else is read as a font file. Each font needs one master and the same units per em. A font's place is its weight class (the weightClass parameter of its master or font, else its first static instance's class, else 400) on `wght` and its width class, as a percentage, on `wdth`; an axis is made only for a class the fonts differ in, and two fonts at the same place are refused. The new font opens as an untitled document: a copy of the first font with every font's master (metric, stem and number values matched by definition), every layer tied to that master (backgrounds and special layers included), its kerning, and one static instance at each master. The menu item has no dialog yet."
+guesses = [
+  "The axes come from the weight and width classes, with the weight class value and the width class percentage as design coordinates; the secondary reference's result on fonts with weight classes 300, 400 and 700 would settle it.",
+  "Each font also becomes a static instance at its master, so the merged font still exports every input; the secondary reference's instance list after a merge would settle it.",
+  "Family name, features and the rest of Font Info are the first font's; the secondary reference's result on fonts with different family names would settle it.",
+  "A glyph only some fonts have is kept, without layers for the other masters; the secondary reference's result on fonts with different glyph sets would settle it.",
+]
+observe = [
+  "Open two static fonts of one family with weight classes 300 and 700, run Merge Fonts to Masters, and note the axes, the master coordinates and the instances it makes.",
+]
 
 [[command]]
 id = "font.addVariation"
@@ -1933,14 +1942,22 @@ label = "Add Variation…"
 menu = ["Font"]
 shortcut = ""
 kind = "engine"
-params = "{from?: id, axis: {tag: string, name: string}, location: number, actionSet?: path}"
+params = "{axis: tag | {tag, name?}, location: number, from?: master, name?: string, commands?: [{command, params?}]} → {master, axis, results}"
 area = "interpolation"
-milestone = "M13"
-summary = "Duplicates a master as a new master on a new axis and optionally runs a saved action set on the copy (for example a weight change), giving a rough second master to refine."
+milestone = "M9"
+summary = "Duplicates a master as a new master on a new axis and optionally runs a list of commands on the copy (for example a weight change), giving a rough second master to refine."
 ref = "FontLab 8 What's new › Families & variation › Variation (Add Variation; Run action set)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M9 to M13 by the M9 planning pass: a secondary-reference feature beyond the primary reference, as the M3 and M6 passes moved such rows (owner decision, docs/plans/M3.md § 7, question 3)."
+notes = "Documented in the secondary reference's release notes, not yet observed. Built (M9.36): the copy takes the original's layers (backgrounds and special layers included) and kerning. An axis the font lacks is added first, with the other masters, instances and virtual masters at 0 on it; an axis it has is reused. The secondary reference runs a saved action set; here the commands are listed in the call, and the text `$master` in their params stands for the copy's id. Everything is one undo step, and a failing command changes nothing. The menu item has no dialog yet."
+guesses = [
+  "The other masters sit at 0 on a new axis, the value Add Axis gives them; the secondary reference's coordinates after Add Variation would settle it.",
+  "The copy is named after the original, the axis and the location (`Regular Width 75`); the secondary reference's name for the new master would settle it.",
+  "The commands to run are listed in the call rather than read from a saved action set; a documented action set file format would settle whether a file should be read as well.",
+]
+observe = [
+  "Run Add Variation on a one-master font with a new Width axis at 75 and note the new master's name and both masters' coordinates.",
+]
 
 [[command]]
 id = "glyph.replaceWithInstance"
@@ -1948,14 +1965,21 @@ label = "Adjust by Variation"
 menu = ["Glyph"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, master?: id, location: {axisTag: number}, relative?: bool}"
+params = "{glyphs?: [name], master?: id, location: {axisTag: number}, relative?: bool} → {master, location, glyphs, skipped}"
 area = "interpolation"
-milestone = "M13"
+milestone = "M9"
 summary = "Replaces the outlines of a master layer with the glyph interpolated or extrapolated at another design-space location, given absolutely or as an offset from the master's own location. Used to make a few glyphs slightly bolder or narrower than their master."
 ref = "FontLab 8 What's new › Families & variation › Variation (Adjust by variation)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M9 to M13 by the M9 planning pass: a secondary-reference feature beyond the primary reference, as the M3 and M6 passes moved such rows (owner decision, docs/plans/M3.md § 7, question 3)."
+notes = "Documented in the secondary reference's release notes, not yet observed. Built (M9.36): the glyph is interpolated from all its sources (masters and intermediate layers, alternate layers switched by their ranges) with the variation model instances use; a location beyond the masters extrapolates. The master layer's width, shapes, anchors and vertical metrics change; its id, name, guides, hints and background stay. Without `glyphs` every glyph with a layer for the master is adjusted; locked glyphs and glyphs that cannot interpolate are skipped with the reason. The menu item has no dialog yet."
+guesses = [
+  "Without a glyph list every glyph with a layer for the master is adjusted, and the master defaults to the first; the secondary reference's dialog defaults would settle it.",
+  "Interpolated coordinates are not rounded; the secondary reference's result between odd coordinates would settle it.",
+]
+observe = [
+  "In a two-master font (weight 400 and 700), run Adjust by Variation on one glyph of the Regular master with a relative weight of +150, and note the stem width and whether the coordinates are rounded.",
+]
 
 [[command]]
 id = "font.setMasterLocations"
@@ -1963,14 +1987,21 @@ label = "Set Master Locations…"
 menu = ["Font"]
 shortcut = ""
 kind = "engine"
-params = "{masters?: [id], instances?: [id], axis: tag, map: [{from: number, to: number}] | {scale?: number, offset?: number}}"
+params = "{axis: tag, map?: [{from, to}], scale?: number, offset?: number, masters?: [id], instances?: [id]} → {axis, masters, instances, virtualMasters, layers, axisMappings}"
 area = "interpolation"
-milestone = "M13"
+milestone = "M9"
 summary = "Changes the design coordinates of many masters and instances on one axis in a single step, by table or by scale and offset."
 ref = "FontLab 8 What's new since VI › Families & variation (Batch coordinates)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M9 to M13 by the M9 planning pass: a secondary-reference feature beyond the primary reference, as the M3 and M6 passes moved such rows (owner decision, docs/plans/M3.md § 7, question 3)."
+notes = "Documented in the secondary reference's release notes, not yet observed. Built (M9.36): a table maps each coordinate it lists exactly, places others proportionally between its entries and along the nearest pair beyond its ends; its `to` values must rise, or fall, with `from`. Without a master or instance list the virtual masters, the intermediate layers, the alternate layers' ranges and the internal values of the axis's Axis Mappings move too, so external coordinates stay where they were. A result beyond the coordinate limit is refused and nothing changes. The menu item has no dialog yet."
+guesses = [
+  "Coordinates between table entries are placed proportionally, and those beyond the ends follow the nearest pair; the secondary reference's result on an instance the table does not list would settle it.",
+  "Moving the whole font also moves the virtual masters, the special layers and the internal side of Axis Mappings, while a list of masters or instances moves only those; the secondary reference's result on a font with intermediate layers would settle it.",
+]
+observe = [
+  "In a font with masters at 40 and 160 and an instance at 100, set the masters to 100 and 900 by table and note where the instance goes.",
+]
 
 [[command]]
 id = "view.animateAxis"
