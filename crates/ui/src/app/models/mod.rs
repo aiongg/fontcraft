@@ -7,6 +7,7 @@ pub mod canvas;
 pub mod color;
 pub mod compare;
 pub mod console;
+pub mod font_audit;
 pub mod font_exports;
 pub mod font_features;
 pub mod font_info;
@@ -99,6 +100,7 @@ pub struct Models {
     pub text_preview: text_preview::TextPreviewModels,
     /// The Attributes panel (`panels::attributes`); projected outside the stamp, since it reads the canvas's selection.
     pub color: color::AttributesModels,
+    pub font_audit: Tracked<font_audit::FontAuditModel>,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -160,6 +162,7 @@ impl Models {
         space_center::project(&mut self.space_center, cx);
         table_viewer::project(&mut self.table_viewer, cx);
         compare::project_family(&mut self.compare_family, cx);
+        font_audit::project(&mut self.font_audit, cx);
         true
     }
 }

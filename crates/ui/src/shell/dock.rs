@@ -342,6 +342,7 @@ impl DockPanels<PanelId> for Panels<'_> {
             PanelId::TextPreview => {
                 panels::text_preview::show(ui, panels::text_preview::Props { model: &self.models.text_preview.view, sent: self.sent });
             }
+            PanelId::FontAudit => panels::font_audit::show(ui, panels::font_audit::Props { model: &self.models.font_audit, sent: self.sent }),
             // Drawn by `group_view`.
             PanelId::Document => {}
             other => panels::stub::show(ui, panels::stub::Props { title: other.title(&self.words) }),

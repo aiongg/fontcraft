@@ -7,6 +7,7 @@ pub mod compare_family;
 pub mod compare_fonts;
 pub mod context_menu;
 pub mod fit_curve;
+pub mod font_audit;
 pub mod font_info;
 pub mod font_view;
 pub mod glyph_info;

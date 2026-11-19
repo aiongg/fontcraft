@@ -10,6 +10,7 @@
 mod about;
 pub mod actions;
 pub mod after;
+pub mod audit_profile;
 pub mod changed_on_disk;
 pub mod color_palettes;
 pub mod custom_parameter_picker;
@@ -65,6 +66,7 @@ pub const MODULES: &[Module] = &[
     changed_on_disk::run,
     review_hints::run,
     actions::run_dialog,
+    audit_profile::run,
 ];
 
 /// Every package's dialog specs, one line each.

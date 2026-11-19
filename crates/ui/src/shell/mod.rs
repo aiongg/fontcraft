@@ -10,6 +10,7 @@ pub mod compare_family;
 pub mod compare_fonts;
 pub mod context_menu;
 pub mod dock;
+pub mod font_audit;
 pub mod font_info;
 pub mod font_info_tabs;
 pub mod font_view;

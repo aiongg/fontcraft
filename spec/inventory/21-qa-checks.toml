@@ -4252,6 +4252,68 @@ guesses = [
 ]
 
 [[command]]
+id = "audit.panel.fix"
+label = "Fix Audit Results"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{results?: [result id], safeOnly?: bool, preview?: bool}"
+area = "qa"
+milestone = "M12"
+summary = "The Fix, Fix All Safe and Apply buttons of the Font Audit panel: audit.fix on the chosen results of the panel's run, then the audit runs again."
+ref = "Our design"
+status = "inferred"
+own = true
+notes = "Built in UI.17. Without results it takes the selected results that have a fix; preview takes the results and safeOnly of the fix preview. When the engine's kept run is no longer the panel's, the panel's parameters run again first; otherwise the fix names the run id, so a run that replaced it in between makes the fix refuse."
+guesses = ["Fix runs the selected rows' fixes with safeOnly false, since the person chose them; watching how people use the panel would settle it."]
+
+[[command]]
+id = "audit.panel.ignore"
+label = "Ignore Audit Results"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{results?: [result id], reason?: string}"
+area = "qa"
+milestone = "M12"
+summary = "The Ignore button of the Font Audit panel: audit.ignoreIssue on each chosen result, with the reason, then the audit runs again."
+ref = "Our design"
+status = "inferred"
+own = true
+notes = "Built in UI.17. Without results it takes the selected results not yet ignored; without reason, the panel's reason field. Several results are one command.batch."
+guesses = ["Ignoring several rows at once is one undo step (a command.batch); nothing settles it."]
+
+[[command]]
+id = "audit.panel.unignore"
+label = "Stop Ignoring Audit Results"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{results?: [result id]}"
+area = "qa"
+milestone = "M12"
+summary = "The Stop Ignoring button of the Font Audit panel: audit.unignoreIssue on each chosen ignored result, then the audit runs again."
+ref = "Our design"
+status = "inferred"
+own = true
+notes = "Built in UI.17. Without results it takes the selected ignored results. Several results are one command.batch."
+
+[[command]]
+id = "audit.panel.setView"
+label = "Set Font Audit View"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{selected?: [result id], current?: id|null, groupOpen?: {group, open}, reason?: string, exportOpen?: bool, exportPath?: path, exportFormat?: 'html'|'markdown'|'json'|'text'}"
+area = "qa"
+milestone = "M12"
+summary = "Sets the Font Audit panel's view state: the selected and current results, whether a group shows its results, the reason Ignore stores and the export row."
+ref = "Our design"
+status = "inferred"
+own = true
+notes = "Built in UI.17: the panel posts it for a press in the result tree, a group's disclosure, the reason field and the export row, so agents can set the same state. Keys left out keep their value."
+
+[[command]]
 id = "audit.editProfile"
 label = "Edit Audit Profile"
 menu = []

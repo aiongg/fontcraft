@@ -103,6 +103,7 @@ pub struct ViewState {
     pub hinting: crate::canvas::hinting::HintingView,
     /// The Actions window's state.
     pub actions: crate::dialogs::actions::ActionsState,
+    pub font_audit: crate::shell::font_audit::FontAuditView,
 }
 
 impl Default for ViewState {
@@ -137,6 +138,7 @@ impl Default for ViewState {
             text_preview: Default::default(),
             hinting: Default::default(),
             actions: Default::default(),
+            font_audit: Default::default(),
         }
     }
 }
@@ -456,6 +458,7 @@ impl ShellApp for FontCraftApp {
         models::text_preview::logic(&mut self.models.text_preview, ctx);
         crate::control::logic(self, ctx);
         open::take_dropped(self, ctx);
+        crate::shell::font_audit::logic(self, ctx);
         crate::control::drain(self);
         if let Some(mut hook) = self.frame_hook.take() {
             if let Some(after) = hook.frame(self) {
