@@ -9,6 +9,7 @@
 
 mod about;
 pub mod after;
+pub mod audit_profile;
 pub mod custom_parameter_picker;
 pub mod field_picker;
 pub mod fields;
@@ -44,6 +45,7 @@ pub const MODULES: &[Module] = &[
     host::run,
     kerning_questions::run,
     kerning_audit::run,
+    audit_profile::run,
 ];
 
 /// Every package's dialog specs, one line each.

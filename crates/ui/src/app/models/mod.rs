@@ -5,6 +5,7 @@
 
 pub mod canvas;
 pub mod console;
+pub mod font_audit;
 pub mod font_info;
 pub mod font_view;
 pub mod glyph;
@@ -71,6 +72,7 @@ pub struct Models {
     /// The Info box and the Palette sections (`panels::info_box`, `panels::transformations`, …); projected outside the
     /// stamp, since they read the canvas's selection.
     pub palette: palette::PaletteModels,
+    pub font_audit: Tracked<font_audit::FontAuditModel>,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -127,6 +129,7 @@ impl Models {
         sidebar::project(&mut self.sidebar, cx);
         glyph_props::project_inspector(&mut self.inspector, cx);
         glyph_props::project_selection_info(&mut self.selection_info, cx);
+        font_audit::project(&mut self.font_audit, cx);
         true
     }
 }

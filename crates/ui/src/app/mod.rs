@@ -74,6 +74,7 @@ pub struct ViewState {
     pub kerning: crate::shell::kerning_window::KerningView,
     /// The Info box's reference point and size lock, the Transformations settings and the Fit Curve range.
     pub palette: crate::shell::palette::PaletteView,
+    pub font_audit: crate::shell::font_audit::FontAuditView,
 }
 
 impl Default for ViewState {
@@ -96,6 +97,7 @@ impl Default for ViewState {
             commands: console::CommandSurfaces::default(),
             kerning: Default::default(),
             palette: Default::default(),
+            font_audit: Default::default(),
         }
     }
 }
@@ -384,6 +386,7 @@ impl ShellApp for FontCraftApp {
 
     fn logic(&mut self, ctx: &egui::Context) {
         crate::control::logic(self, ctx);
+        crate::shell::font_audit::logic(self, ctx);
         crate::control::drain(self);
         if self.closing == Closing::Confirmed {
             self.closing = Closing::Sent;
