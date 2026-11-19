@@ -26,6 +26,12 @@
 //! (`tx -Z`) and [`ConvertOptions::decid`] (`tx -decid`, `-usefd`); the glyph order and `.notdef`
 //! switches of a Type 1 input are [`PsReadOptions`]'.
 //!
+//! Two of fontTools' `ttLib` save options finish a result (M12.75): [`ConvertOptions::rebuild_tables`]
+//! compiles tables again from their parsed form instead of copying their bytes (`ttLib -t`; the
+//! tables go through TTX text, as `ttx` compiles them, with [`ConvertOptions::keep_bounds`] as
+//! `-b`), and [`ConvertOptions::optimize_for_speed`] writes the structures the speed preset of
+//! [`crate::optimize`] writes (`--optimize-font-speed`).
+//!
 //! AFDKO's otf2ttf (Apache-2.0, Copyright 2014 Adobe) and fontTools' `cffLib` converters (MIT)
 //! were read and their rules written anew here.
 
@@ -131,6 +137,26 @@ pub struct ConvertOptions {
     pub flatten_seac: bool,
     /// Make a CID-keyed CFF result name-keyed (`tx -decid`).
     pub decid: Option<Decid>,
+    /// Tables of the result compiled again from their parsed form (`ttLib -t`).
+    pub rebuild_tables: RebuildTables,
+    /// Keep the bounding boxes, `maxp` maxima and `hhea`/`vhea` extremes of rebuilt tables as
+    /// they are instead of recalculating them (`ttLib -b`).
+    pub keep_bounds: bool,
+    /// Structures cheaper to read rather than smaller: CFF and CFF2 subroutines expanded and
+    /// every `gvar` delta written, as [`crate::optimize::OptimizeOptions::speed`] writes them.
+    pub optimize_for_speed: bool,
+}
+
+/// Which tables [`ConvertOptions::rebuild_tables`] names.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum RebuildTables {
+    /// Tables are copied as they are, unless the conversion rewrites them.
+    #[default]
+    None,
+    /// These tables, where the result has them.
+    These(Vec<Tag>),
+    /// Every table.
+    All,
 }
 
 /// How [`ConvertOptions::decid`] makes a font name-keyed.
@@ -159,6 +185,9 @@ impl ConvertOptions {
             cff_write: CffWriteOptions::default(),
             flatten_seac: false,
             decid: None,
+            rebuild_tables: RebuildTables::None,
+            keep_bounds: false,
+            optimize_for_speed: false,
         }
     }
 }
@@ -271,18 +300,29 @@ pub fn convert_with(font: &SfntFont, options: &ConvertOptions) -> Result<Convert
     }
     if to != Outlines::TrueType {
         // A table whose subroutines were expanded to rewrite it gets them back.
-        let subroutinize = options.subroutinize.unwrap_or((changed_outlines || expanded || decided) && !options.target.bare());
+        let subroutinize = match (options.optimize_for_speed, options.subroutinize) {
+            (true, _) => false,
+            (false, given) => given.unwrap_or((changed_outlines || expanded || decided) && !options.target.bare()),
+        };
         let tag = if to == Outlines::Cff2 { CFF2 } else { CFF };
         if let Some(table) = work.get(tag) {
             let table = if subroutinize {
                 subroutinize_table(table, to == Outlines::Cff2, options)?
-            } else if options.subroutinize == Some(false) {
+            } else if options.subroutinize == Some(false) || options.optimize_for_speed {
                 fontcraft_cff::subr::desubroutinize_table(table, to == Outlines::Cff2).map_err(cff_table::subr_error)?
             } else {
                 table.to_vec()
             };
             work.insert(tag, table);
         }
+    }
+    if options.rebuild_tables != RebuildTables::None {
+        work = rebuild(&work, &options.rebuild_tables, options.keep_bounds, &mut warnings)?;
+    }
+    if options.optimize_for_speed && !options.target.bare() {
+        let optimized = crate::optimize::optimize(&work, &crate::optimize::OptimizeOptions::speed())?;
+        warnings.extend(optimized.notes);
+        work = optimized.font;
     }
     let glyphs = num_glyphs(&work)?;
     if options.target.bare() {
@@ -310,12 +350,37 @@ fn check_options(o: &ConvertOptions) -> Result<()> {
     if !bound(o.cubic_error) {
         return Err(TablesError::BadOptions(format!("the conversion error must be above 0 and at most {MAX_ERROR_UNITS} units")));
     }
+    if o.optimize_for_speed && (o.subroutinize == Some(true) || o.max_subrs.is_some()) {
+        return Err(TablesError::BadOptions("optimizing for speed expands subroutines: leave out subroutinizing".into()));
+    }
     if let Some(n) = o.max_subrs
         && !(1..=fontcraft_cff::subr::MAX_SUBRS_PER_INDEX).contains(&n)
     {
         return Err(TablesError::BadOptions(format!("the subroutine limit must be 1 to {}", fontcraft_cff::subr::MAX_SUBRS_PER_INDEX)));
     }
     Ok(())
+}
+
+/// `work` with the tables `which` names compiled again from their TTX text. A table that cannot
+/// be read stops the conversion, since keeping its bytes would do less than was asked.
+fn rebuild(work: &SfntFont, which: &RebuildTables, keep_bounds: bool, warnings: &mut Vec<String>) -> Result<SfntFont> {
+    let tables: Vec<Tag> = match which {
+        RebuildTables::None => return Ok(work.clone()),
+        RebuildTables::All => Vec::new(),
+        RebuildTables::These(tags) => {
+            let present: Vec<Tag> = tags.iter().copied().filter(|t| work.get(*t).is_some()).collect();
+            if present.is_empty() {
+                return Ok(work.clone());
+            }
+            present
+        }
+    };
+    let dump_options = crate::ttx::DumpOptions { tables: tables.clone(), no_version: true, strict: true, ..crate::ttx::DumpOptions::default() };
+    let text = crate::ttx::dump(work, &dump_options)?;
+    let root = crate::ttx::parse(&text)?;
+    let (font, notes) = crate::ttx::import_tree_with_warnings(work.clone(), &root, &crate::ttx::ImportOptions { tables, keep_bounds })?;
+    warnings.extend(notes);
+    Ok(font)
 }
 
 fn subroutinize_table(table: &[u8], cff2: bool, o: &ConvertOptions) -> Result<Vec<u8>> {

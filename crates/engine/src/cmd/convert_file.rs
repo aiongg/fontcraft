@@ -9,17 +9,22 @@
 //! wrapped in WOFF or WOFF2. A snapshot at a design location, a glyph subset (by name, glyph id,
 //! CID or Font DICT), a GOADB and overlap removal run around the conversion
 //! (`fontcraft_tables::convert::prepare`). A UFO is the font as `file.open` reads it, written by
-//! the UFO writer. Each output is written to a temporary file (a folder, for a UFO) beside its
-//! target as soon as its input is converted, so memory holds one font at a time; only when all
-//! of them are there are they moved into place, so a failing conversion writes nothing.
+//! the UFO writer, as a folder or a UFOZ; an SVG font is the same font written by the SVG font
+//! writer, glyphs without a character given private-use ones. A result can have tables compiled
+//! again (`rebuildTables`) or be written for speed (`optimizeFor`); `recalcBounds` false keeps
+//! the bounds a TTX dump or a rebuilt table states. Each output is written to a temporary file
+//! (a folder, for a UFO) beside its target as soon as its input is converted, so memory holds
+//! one font at a time; only when all of them are there are they moved into place, so a failing
+//! conversion writes nothing.
 
 use std::path::{Path, PathBuf};
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 
+use fontcraft_io_svg::svg_font::{SvgFontOptions, SvgGlyphNames, write_svg_font_with};
 use fontcraft_tables::convert::{
     CffWriteOptions, CharstringForm, CidCollection, ConvertOptions, ConvertTarget, Decid, FontDictFilter, GoadbUse, PostFormat, PrepareOptions,
-    PsReadOptions, PsSource, QuadToCubic, convert_postscript, convert_prepared, glyph_cids, postscript_name, prepare, read_postscript,
+    PsReadOptions, PsSource, QuadToCubic, RebuildTables, convert_postscript, convert_prepared, glyph_cids, postscript_name, prepare, read_postscript,
     read_postscript_with,
 };
 use fontcraft_tables::sfnt::parse_tag;
@@ -47,7 +52,11 @@ const MAX_SELECTOR_ITEMS: usize = 65_536;
 
 /// Parameters of the row this version does not act on yet; naming one is refused, so a call
 /// never silently does less than it asks.
-const NOT_YET: [&str; 9] = ["type1", "newline", "ufo", "svg", "recalcBounds", "rebuildTables", "optimizeFor", "validateSources", "smartComponents"];
+const NOT_YET: [&str; 3] = ["type1", "validateSources", "smartComponents"];
+/// Most tables `rebuildTables` names (an sfnt directory holds at most this many).
+const MAX_REBUILD_TABLES: usize = 4_096;
+/// The first and last code points given to glyphs without one in an SVG font.
+const PRIVATE_USE: (u32, u32) = (0xE000, 0xF8FF);
 
 /// The commands of this module.
 pub fn specs() -> Vec<CommandSpec> {
@@ -57,7 +66,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Convert Font Format",
             [],
             None,
-            "{inputs: [path] | input: path, to: \"ttf\"|\"otf\"|\"otf-cff2\"|\"cff\"|\"cff2\"|\"ufo\", output?: path (one input), outputDir?: path, inPlace?: bool, noClobber?: bool, face?: int|name, container?: \"plain\"|\"woff\"|\"woff2\", nameBy?: \"filename\"|\"postscript-name\", curves?: {maxError?: em fraction (default one font unit), conversion?: \"optimized\"|\"exact\", keepDirection?: bool}, postFormat?: 2|3, cff?: {subroutinize?: bool, maxSubrs?: int, charstringOptimize?: \"specialize\"|\"none\", optimizeWidths?: bool, keepGlyphOrder?: bool, flattenSeac?: bool, embedMinimal?: bool, dedupeFamilyBlues?: bool (default true), standardEncoding?: bool, allowMissingNotdef?: bool, keepUniqueId?: bool (default true), warnHints?: bool (default true)}, hints?: bool, cid?: {keyed?: bool|\"REGISTRY-ORDERING-SUPPLEMENT\", decid?: bool, fd?: int}, glyphs?: selector, excludeGlyphs?: selector, fdSelect?: [int], excludeFd?: [int], goadb?: path, goadbRename?: bool (default true), goadbSubset?: bool, goadbOrder?: bool, location?: {axis: number}, clamp?: bool (default true), removeOverlaps?: bool, ignoreOverlapErrors?: bool, timestamp?: \"keep\"|\"now\"|int (seconds since 1970)}. Inputs: compiled fonts, TTX text (compiled first), Type 1 fonts (PFA, PFB) and bare CFF tables (wrapped in an OpenType CFF font first; bare tables are written without subroutines unless cff.subroutinize says otherwise). CFF or static CFF2 to TrueType (cubic to quadratic within maxError, contours reversed), TrueType to CFF or CFF2 (components decomposed, instructions dropped), CFF to CFF2 and back with hints kept, the bare outline table (cff, cff2), or a UFO of the font as file.open reads it (curves, postFormat, cff, hints and timestamp shape compiled output only and are refused with ufo). A variable font converted to UFO or to another outline flavour is snapshotted at its default location unless location is given. cid.keyed makes a name-keyed CFF result CID-keyed, CID n for glyph n (true: the Identity ordering, supplement 0; or a REGISTRY-ORDERING-SUPPLEMENT string). cid.decid makes a CID-keyed CFF result name-keyed, glyphs named cid and their CID, with the Private DICT of the one Font DICT the glyphs come from, or of cid.fd for all. The cff keys shape a CFF or CFF2 result: charstringOptimize rewrites every charstring in the short operator forms or with rmoveto, rlineto and rrcurveto only; optimizeWidths chooses defaultWidthX and nominalWidthX again (false leaves both 0 in a table built from TrueType); flattenSeac draws accented seac glyphs out and drops dotsection; embedMinimal drops the descriptive Top DICT strings; dedupeFamilyBlues drops FamilyBlues and FamilyOtherBlues equal to BlueValues and OtherBlues; standardEncoding drops a custom Encoding; keepUniqueId false drops UniqueID and XUID; warnHints reports glyphs drawn without stem hints and repeated hint masks; keepGlyphOrder keeps a Type 1 font's glyph order (.notdef first) instead of the standard-string order; allowMissingNotdef lets the first glyph of a Type 1 font without .notdef take glyph 0. nameBy postscript-name names each output after the font's PostScript name. Before converting: location snapshots a variable font (axes not named at their default; clamped to the axis ranges unless clamp is false), glyphs and excludeGlyphs keep a subset (names, glyph ids, ranges such as 3-9, U+0041, and in a CID-keyed font /CID or /CID-CID; .notdef always stays), fdSelect and excludeFd keep the glyphs of some Font DICTs of a CID-keyed CFF or a CFF2 font (indexes from 0), goadb renames glyphs from its second column to its first (goadbRename), keeps only the glyphs it lists (goadbSubset) and orders them as it does (goadbOrder); removeOverlaps merges overlapping contours (TrueType outlines before converting a TrueType font or after converting to TrueType; CFF and CFF2 outlines before converting, a merged glyph losing its stem hints), and ignoreOverlapErrors keeps a glyph that cannot be merged. Without output the result goes beside the input with the new extension → {results: [{input, output, bytes, glyphs, leftBehind: [text], warnings: [text]}]}",
+            "{inputs: [path] | input: path, to: \"ttf\"|\"otf\"|\"otf-cff2\"|\"cff\"|\"cff2\"|\"ufo\"|\"ufoz\"|\"svg-font\", output?: path (one input), outputDir?: path, inPlace?: bool, noClobber?: bool, face?: int|name, container?: \"plain\"|\"woff\"|\"woff2\", nameBy?: \"filename\"|\"postscript-name\", curves?: {maxError?: em fraction (default one font unit), conversion?: \"optimized\"|\"exact\", keepDirection?: bool}, postFormat?: 2|3, cff?: {subroutinize?: bool, maxSubrs?: int, charstringOptimize?: \"specialize\"|\"none\", optimizeWidths?: bool, keepGlyphOrder?: bool, flattenSeac?: bool, embedMinimal?: bool, dedupeFamilyBlues?: bool (default true), standardEncoding?: bool, allowMissingNotdef?: bool, keepUniqueId?: bool (default true), warnHints?: bool (default true)}, hints?: bool, cid?: {keyed?: bool|\"REGISTRY-ORDERING-SUPPLEMENT\", decid?: bool, fd?: int}, glyphs?: selector, excludeGlyphs?: selector, fdSelect?: [int], excludeFd?: [int], goadb?: path, goadbRename?: bool (default true), goadbSubset?: bool, goadbOrder?: bool, location?: {axis: number}, clamp?: bool (default true), removeOverlaps?: bool, ignoreOverlapErrors?: bool, timestamp?: \"keep\"|\"now\"|int (seconds since 1970), recalcBounds?: bool (default true), rebuildTables?: [tag]|\"all\", optimizeFor?: \"size\"|\"speed\", ufo?: {structure?: \"package\"|\"zip\", skipExportKey?: \"public\"|\"glyphs\"}, svg?: {glyphNames?: \"none\"|\"non-ascii\"|\"all\", absolute?: bool, standalone?: bool}, newline?: \"lf\"|\"cr\"|\"crlf\"}. Inputs: compiled fonts, TTX text (compiled first), Type 1 fonts (PFA, PFB) and bare CFF tables (wrapped in an OpenType CFF font first; bare tables are written without subroutines unless cff.subroutinize says otherwise). CFF or static CFF2 to TrueType (cubic to quadratic within maxError, contours reversed), TrueType to CFF or CFF2 (components decomposed, instructions dropped), CFF to CFF2 and back with hints kept, the bare outline table (cff, cff2), a UFO of the font as file.open reads it (a folder, or with ufo.structure zip or to ufoz a UFOZ archive; ufo.skipExportKey names where non-exporting glyphs would be listed, and a compiled font has none), or an SVG font of it (svg-font: the font element alone unless svg.standalone; svg.glyphNames chooses which glyphs carry glyph-name, default none; path data relative unless svg.absolute; glyphs without a character get private-use ones from U+E000 in glyph order; newline sets the line ending). curves, postFormat, cff, hints, timestamp, rebuildTables and optimizeFor shape compiled output only and are refused with ufo and svg-font. recalcBounds false keeps the bounding boxes, maxp maxima and hhea extremes a TTX input states and those of rebuilt tables. rebuildTables compiles the named tables of the result (all: every table) again from their parsed form instead of copying their bytes. optimizeFor speed writes CFF and CFF2 charstrings without subroutines and every gvar delta (cff.subroutinize and cff.maxSubrs are refused with it). A variable font converted to UFO or to another outline flavour is snapshotted at its default location unless location is given. cid.keyed makes a name-keyed CFF result CID-keyed, CID n for glyph n (true: the Identity ordering, supplement 0; or a REGISTRY-ORDERING-SUPPLEMENT string). cid.decid makes a CID-keyed CFF result name-keyed, glyphs named cid and their CID, with the Private DICT of the one Font DICT the glyphs come from, or of cid.fd for all. The cff keys shape a CFF or CFF2 result: charstringOptimize rewrites every charstring in the short operator forms or with rmoveto, rlineto and rrcurveto only; optimizeWidths chooses defaultWidthX and nominalWidthX again (false leaves both 0 in a table built from TrueType); flattenSeac draws accented seac glyphs out and drops dotsection; embedMinimal drops the descriptive Top DICT strings; dedupeFamilyBlues drops FamilyBlues and FamilyOtherBlues equal to BlueValues and OtherBlues; standardEncoding drops a custom Encoding; keepUniqueId false drops UniqueID and XUID; warnHints reports glyphs drawn without stem hints and repeated hint masks; keepGlyphOrder keeps a Type 1 font's glyph order (.notdef first) instead of the standard-string order; allowMissingNotdef lets the first glyph of a Type 1 font without .notdef take glyph 0. nameBy postscript-name names each output after the font's PostScript name. Before converting: location snapshots a variable font (axes not named at their default; clamped to the axis ranges unless clamp is false), glyphs and excludeGlyphs keep a subset (names, glyph ids, ranges such as 3-9, U+0041, and in a CID-keyed font /CID or /CID-CID; .notdef always stays), fdSelect and excludeFd keep the glyphs of some Font DICTs of a CID-keyed CFF or a CFF2 font (indexes from 0), goadb renames glyphs from its second column to its first (goadbRename), keeps only the glyphs it lists (goadbSubset) and orders them as it does (goadbOrder); removeOverlaps merges overlapping contours (TrueType outlines before converting a TrueType font or after converting to TrueType; CFF and CFF2 outlines before converting, a merged glyph losing its stem hints), and ignoreOverlapErrors keeps a glyph that cannot be merged. Without output the result goes beside the input with the new extension → {results: [{input, output, bytes, glyphs, leftBehind: [text], warnings: [text]}]}",
             always,
             convert_fonts
         )
@@ -133,11 +142,11 @@ fn convert_fonts(_: &mut Session, v: &Value) -> Result<Value> {
     };
     let request = OutputRequest::from_params(&p)?;
     let settings = Settings::read(&p, to)?;
-    if container != Container::Plain && matches!(to, "cff" | "cff2" | "ufo") {
-        return Err(p.bad("a bare CFF or CFF2 table or a UFO cannot be wrapped in WOFF"));
+    if container != Container::Plain && matches!(to, "cff" | "cff2" | "ufo" | "ufoz" | "svg-font") {
+        return Err(p.bad("a bare CFF or CFF2 table, a UFO or an SVG font cannot be wrapped in WOFF"));
     }
-    if to == "ufo" && request.in_place {
-        return Err(p.bad("`inPlace` cannot replace a font with a UFO folder"));
+    if matches!(to, "ufo" | "ufoz" | "svg-font") && request.in_place {
+        return Err(p.bad("`inPlace` cannot replace a font with a UFO or an SVG font"));
     }
 
     let mut outputs = Vec::with_capacity(inputs.len());
@@ -184,7 +193,14 @@ fn convert_fonts(_: &mut Session, v: &Value) -> Result<Value> {
     let mut staging = Staging::open(&request)?;
     let mut results = Vec::with_capacity(inputs.len());
     for (n, (input, output)) in inputs.iter().zip(&outputs).enumerate() {
-        let c = convert_one(&p, Path::new(input), &settings, container).map_err(|e| in_input(e, input))?;
+        let mut c = convert_one(&p, Path::new(input), &settings, container).map_err(|e| in_input(e, input))?;
+        if settings.ufo_zip
+            && let Output::Folder(files) = &c.output
+        {
+            // The archive's one folder is named after the output, as UFO writers name it.
+            let stem = output.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "font".into());
+            c.output = Output::File(fontcraft_io_ufo::zip::write_ufoz(files, &format!("{stem}.ufo"))?);
+        }
         staging.stage(output, &c.output, n)?;
         results.push(json!({
             "input": input,
@@ -231,6 +247,17 @@ struct Settings {
     ps_read: PsReadOptions,
     /// The steps around the conversion; the glyph selection is resolved for each input.
     prepare: PrepareOptions,
+    /// `recalcBounds` false: TTX inputs and rebuilt tables keep the bounds they state.
+    keep_bounds: bool,
+    rebuild_tables: RebuildTables,
+    /// `optimizeFor: speed`.
+    optimize_for_speed: bool,
+    /// `ufo.structure: zip`: a UFOZ archive instead of a folder.
+    ufo_zip: bool,
+    /// The `svg` keys.
+    svg: SvgFontOptions,
+    /// The line ending of an SVG font.
+    newline: &'static str,
 }
 
 enum Timestamp {
@@ -241,6 +268,9 @@ enum Timestamp {
 
 impl Settings {
     fn read(p: &Params<'_>, to: &str) -> Result<Self> {
+        // `ufoz` is a UFO written as a UFOZ.
+        let zip_target = to == "ufoz";
+        let to = if zip_target { "ufo" } else { to };
         let to: &'static str = match to {
             "ttf" => "ttf",
             "otf" => "otf",
@@ -250,17 +280,17 @@ impl Settings {
             "ufo" => "ufo",
             "ttx" => return Err(EngineError::Unsupported("`to: ttx`: write TTX with font.dumpTables".into())),
             "pfa" | "pfb" | "t1-text" => return Err(EngineError::Unsupported(format!("`to: {to}`: Type 1 fonts are read, not written"))),
-            "ufoz" | "designspace" | "glyphs" | "native" => {
+            "designspace" | "glyphs" | "native" => {
                 return Err(EngineError::Unsupported(format!("`to: {to}` from a compiled font: open it (file.open) and save it with file.saveAs")));
             }
-            "svg-font" => return Err(EngineError::Unsupported("`to: svg-font`".into())),
-            other => return Err(p.bad(format!("`to` must be ttf, otf, otf-cff2, cff, cff2 or ufo, not `{other}`"))),
+            "svg-font" => "svg-font",
+            other => return Err(p.bad(format!("`to` must be ttf, otf, otf-cff2, cff, cff2, ufo or svg-font, not `{other}`"))),
         };
-        // A UFO holds the outlines as drawn: these keys shape a compiled result only.
-        if to == "ufo" {
-            for key in ["curves", "postFormat", "cff", "hints", "timestamp"] {
+        // A UFO or SVG font holds the outlines as drawn: these keys shape a compiled result only.
+        if matches!(to, "ufo" | "svg-font") {
+            for key in ["curves", "postFormat", "cff", "hints", "timestamp", "rebuildTables", "optimizeFor"] {
                 if p.get(key).is_some() {
-                    return Err(p.bad(format!("`{key}` has no effect on a UFO")));
+                    return Err(p.bad(format!("`{key}` has no effect on a UFO or an SVG font")));
                 }
             }
         }
@@ -356,6 +386,24 @@ impl Settings {
             Some(Value::Number(n)) => Timestamp::At(n.as_i64().ok_or_else(|| p.bad("`timestamp` must be keep, now or whole seconds"))?),
             Some(_) => return Err(p.bad("`timestamp` must be keep, now or whole seconds since 1970")),
         };
+        let rebuild_tables = Self::rebuild_tables(p)?;
+        let optimize_for_speed = match p.opt_str("optimizeFor")? {
+            None | Some("size") => false,
+            Some("speed") => true,
+            Some(other) => return Err(p.bad(format!("`optimizeFor` must be size or speed, not `{other}`"))),
+        };
+        if optimize_for_speed && (subroutinize == Some(true) || max_subrs.is_some()) {
+            return Err(p.bad("`optimizeFor` speed expands CFF subroutines: leave out `cff.subroutinize` and `cff.maxSubrs`"));
+        }
+        let ufo_zip = match (zip_target, Self::ufo(p, to)?) {
+            (false, zip) => zip,
+            (true, true) => true,
+            (true, false) if p.opt_object("ufo")?.is_some_and(|u| u.contains_key("structure")) => {
+                return Err(p.bad("`to: ufoz` writes a UFOZ: leave out `ufo.structure` or give zip"));
+            }
+            (true, false) => true,
+        };
+        let (svg, newline) = Self::svg(p, to)?;
         let prepare = Self::prepare(p)?;
         let (cid_keyed, decid) = Self::cid(p)?;
         if cid_keyed.is_some() && !matches!(to, "otf" | "cff") {
@@ -380,7 +428,94 @@ impl Settings {
             max_subrs,
             hints: p.bool_or("hints", true)?,
             timestamp,
+            keep_bounds: !p.bool_or("recalcBounds", true)?,
+            rebuild_tables,
+            optimize_for_speed,
+            ufo_zip,
+            svg,
+            newline,
         })
+    }
+
+    /// `rebuildTables`: table tags, or `"all"`.
+    fn rebuild_tables(p: &Params<'_>) -> Result<RebuildTables> {
+        match p.get("rebuildTables") {
+            None => Ok(RebuildTables::None),
+            Some(Value::String(s)) if s == "all" => Ok(RebuildTables::All),
+            Some(Value::Array(items)) => {
+                if items.len() > MAX_REBUILD_TABLES {
+                    return Err(p.bad(format!("`rebuildTables` names more than {MAX_REBUILD_TABLES} tables")));
+                }
+                let mut seen = BTreeSet::new();
+                let mut tags = Vec::with_capacity(items.len());
+                for item in items {
+                    let name = item.as_str().ok_or_else(|| p.bad("`rebuildTables` items must be table tags"))?;
+                    let tag = parse_tag(name).map_err(|e| p.bad(format!("`rebuildTables`: {e}")))?;
+                    if seen.insert(tag) {
+                        tags.push(tag);
+                    }
+                }
+                Ok(RebuildTables::These(tags))
+            }
+            Some(_) => Err(p.bad("`rebuildTables` must be a list of table tags or \"all\"")),
+        }
+    }
+
+    /// `ufo`: `structure` (whether the result is a UFOZ) and `skipExportKey`. A compiled font
+    /// exports every glyph, so the key has nothing to list; it is checked all the same.
+    fn ufo(p: &Params<'_>, to: &str) -> Result<bool> {
+        let Some(ufo) = p.opt_object("ufo")? else { return Ok(false) };
+        if to != "ufo" {
+            return Err(p.bad("`ufo` shapes UFO output (to: ufo)"));
+        }
+        let mut zip = false;
+        for (key, value) in ufo {
+            match (key.as_str(), value.as_str()) {
+                ("structure", Some("package")) => zip = false,
+                ("structure", Some("zip")) => zip = true,
+                ("structure", Some("json")) => return Err(EngineError::Unsupported("`ufo.structure` json in font.convert".into())),
+                ("structure", _) => return Err(p.bad("`ufo.structure` must be package or zip")),
+                ("skipExportKey", Some("public" | "glyphs")) => {}
+                ("skipExportKey", _) => return Err(p.bad("`ufo.skipExportKey` must be public or glyphs")),
+                (other, _) => return Err(EngineError::Unsupported(format!("`ufo.{other}` in font.convert"))),
+            }
+        }
+        Ok(zip)
+    }
+
+    /// `svg` and `newline`: how an SVG font is written, and its line ending.
+    fn svg(p: &Params<'_>, to: &str) -> Result<(SvgFontOptions, &'static str)> {
+        let mut svg = SvgFontOptions::default();
+        if let Some(options) = p.opt_object("svg")? {
+            if to != "svg-font" {
+                return Err(p.bad("`svg` shapes SVG font output (to: svg-font)"));
+            }
+            for (key, value) in options {
+                let flag = || value.as_bool().ok_or_else(|| p.bad(format!("`svg.{key}` must be true or false")));
+                match key.as_str() {
+                    "glyphNames" => {
+                        svg.glyph_names = match value.as_str() {
+                            Some("none") => SvgGlyphNames::None,
+                            Some("non-ascii") => SvgGlyphNames::NonAscii,
+                            Some("all") => SvgGlyphNames::All,
+                            _ => return Err(p.bad("`svg.glyphNames` must be none, non-ascii or all")),
+                        }
+                    }
+                    "absolute" => svg.absolute = flag()?,
+                    "standalone" => svg.standalone = flag()?,
+                    other => return Err(p.bad(format!("`svg.{other}` is not an SVG font setting"))),
+                }
+            }
+        }
+        let newline = match p.opt_str("newline")? {
+            None => "\n",
+            Some(_) if to != "svg-font" => return Err(p.bad("`newline` sets the line ending of text output (to: svg-font)")),
+            Some("lf") => "\n",
+            Some("cr") => "\r",
+            Some("crlf") => "\r\n",
+            Some(other) => return Err(p.bad(format!("`newline` must be lf, cr or crlf, not `{other}`"))),
+        };
+        Ok((svg, newline))
     }
 
     /// `cid`: `keyed` (`true` is Adobe-Identity-0, a string names
@@ -515,6 +650,9 @@ impl Settings {
         if self.to == "ufo" {
             return ufo(font, steps);
         }
+        if self.to == "svg-font" {
+            return self.svg_font(font, steps);
+        }
         let c = convert_prepared(font, &self.options(units_per_em(font))?, &steps)?;
         Ok(Converted { output: Output::File(c.bytes), glyphs: c.glyphs, left_behind: c.left_behind, warnings: c.warnings })
     }
@@ -540,6 +678,9 @@ impl Settings {
         o.decid = self.decid;
         o.cff_write = self.cff_write.clone();
         o.flatten_seac = self.flatten_seac;
+        o.rebuild_tables = self.rebuild_tables.clone();
+        o.keep_bounds = self.keep_bounds;
+        o.optimize_for_speed = self.optimize_for_speed;
         o.modified = match self.timestamp {
             Timestamp::Keep => None,
             Timestamp::At(unix) => Some(unix.saturating_add(EPOCH_1904)),
@@ -555,9 +696,50 @@ impl Settings {
             (_, "ttf") => "ttf",
             (_, "cff") => "cff",
             (_, "cff2") => "cff2",
+            (_, "ufo") if self.ufo_zip => "ufoz",
             (_, "ufo") => "ufo",
+            (_, "svg-font") => "svg",
             _ => "otf",
         }
+    }
+
+    /// An SVG font of `font` after the steps, from the font as `file.open` reads it; a variable
+    /// font without a location is snapshotted at its default location. Glyphs without a
+    /// character (`.notdef` aside) get private-use ones from U+E000 on, in glyph order, as the
+    /// reference converter gives them, so that text can reach every glyph; code points the font
+    /// already maps are skipped.
+    fn svg_font(&self, font: &SfntFont, mut steps: PrepareOptions) -> Result<Converted> {
+        if steps.location.is_none() && font.get(*b"fvar").is_some() {
+            steps.location = Some(Vec::new());
+        }
+        let (font, mut left_behind) = prepare(font, &steps, true)?;
+        let bytes = fontcraft_tables::write(&font, &WriteOptions::default())?;
+        let mut decompiled = fontcraft_decompile::decompile(&bytes, None)?;
+        left_behind.extend(decompiled.warnings);
+        let model = &mut decompiled.font;
+        let used: HashSet<u32> = model.glyphs.iter().flat_map(|g| g.unicodes.iter().copied()).collect();
+        let mut next = PRIVATE_USE.0;
+        for i in 0..model.glyphs.len() {
+            if !model.glyphs.as_arcs().get(i).is_some_and(|g| g.unicodes.is_empty() && g.name != ".notdef") {
+                continue;
+            }
+            while used.contains(&next) {
+                next += 1;
+            }
+            if next > PRIVATE_USE.1 {
+                left_behind.push("characters for every glyph: the private use area U+E000 to U+F8FF ran out".into());
+                break;
+            }
+            if let Some(mut g) = model.glyphs.get_mut_at(i) {
+                g.unicodes.push(next);
+            }
+            next += 1;
+        }
+        let master =
+            model.masters.first().map(|m| m.id.clone()).ok_or_else(|| EngineError::Unsupported("an SVG font of a font without a master".into()))?;
+        let text = write_svg_font_with(model, &master, &self.svg).map_err(|e| EngineError::Io(format!("cannot write the SVG font: {e}")))?;
+        let text = if self.newline == "\n" { text } else { text.replace('\n', self.newline) };
+        Ok(Converted { glyphs: model.glyphs.len(), output: Output::File(text.into_bytes()), left_behind, warnings: Vec::new() })
     }
 }
 
@@ -583,8 +765,8 @@ fn font_file_name(p: &Params<'_>, input: &Path) -> Result<String> {
 /// settings: the bytes and what was left behind. For commands that hand their result to the
 /// converter (`font.merge` with `to`).
 pub(super) fn convert_to(font: &SfntFont, to: &str) -> Result<(Vec<u8>, Vec<String>)> {
-    if to == "ufo" {
-        return Err(EngineError::Unsupported("`to: ufo` here: convert the result with font.convert".into()));
+    if matches!(to, "ufo" | "svg-font") {
+        return Err(EngineError::Unsupported(format!("`to: {to}` here: convert the result with font.convert")));
     }
     let v = json!({ "to": to });
     let p = Params::new("font.convert", &v)?;
@@ -719,7 +901,8 @@ fn convert_one(p: &Params<'_>, input: &Path, settings: &Settings, container: Con
         InputKind::Ttx => {
             no_face()?;
             let root = super::tables_import::read_dump(input)?;
-            let font = import_tree(SfntFont::new(Flavour::TrueType), &root, &ImportOptions::default())?;
+            let options = ImportOptions { keep_bounds: settings.keep_bounds, ..ImportOptions::default() };
+            let font = import_tree(SfntFont::new(Flavour::TrueType), &root, &options)?;
             settings.run(p, &font)?
         }
         _ if PsSource::sniff(&file.bytes).is_some() => {
@@ -732,6 +915,8 @@ fn convert_one(p: &Params<'_>, input: &Path, settings: &Settings, container: Con
             let ps = read_postscript_with(&file.bytes, &settings.ps_read)?;
             if settings.to == "ufo" {
                 ufo(&ps.font, PrepareOptions::default())?
+            } else if settings.to == "svg-font" {
+                settings.svg_font(&ps.font, PrepareOptions::default())?
             } else {
                 let c = convert_postscript(&ps, &settings.options(units_per_em(&ps.font))?)?;
                 Converted { output: Output::File(c.bytes), glyphs: c.glyphs, left_behind: c.left_behind, warnings: c.warnings }

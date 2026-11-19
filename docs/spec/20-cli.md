@@ -995,6 +995,28 @@ stay, only the representation changes. Operations that change content have their
 **Type 1.** Reading accepts PFA, PFB and the decrypted text form. Writing produces ordinary host fonts
 only. Multiple-master Type 1 input is always snapshotted, at `--location` or at its default instance.
 
+**SVG fonts** (`--to svg-font`, or `IN OUT.svg`) take the forms of `tx -svg`, observed with AFDKO
+5.0.1 on corpus fonts:
+
+| Option | Default | Effect |
+|---|---|---|
+| `--svg-standalone` (`-sa`) | off | a whole SVG document; otherwise the `font` element alone |
+| `--svg-absolute` (`-abs`) | off | `M x,y L x,y C … Z` with spaces; otherwise each contour starts with an absolute `M`, lines are relative (`l`), curves absolute (`C`), and contours are joined by ` z ` |
+| `--svg-glyph-names none\|non-ascii\|all` (`-gn0/1/2`) | none | which glyphs carry `glyph-name`; non-ascii names glyphs whose character is not printable ASCII |
+| `--newline lf\|cr\|crlf` | lf | line ending |
+
+`.notdef` is the `missing-glyph`. Each other glyph carries its first code point; glyphs without
+one get code points from U+E000 upward in glyph order, as tx gives them. Quadratic curves are
+raised to cubic ones. Differences from tx: `font-face` has the family name and the vertical
+metrics (tx: the PostScript name and the underline), no copyright comments are written, kerning
+pairs are written as `hkern`, and the standalone document declares the SVG namespace.
+
+**Save options.** `--rebuild-tables TAG,...|all` compiles those tables of the result again from
+their parsed form, as `ttLib -t` does. `--no-recalc-bounds` keeps the bounds a TTX input or a
+rebuilt table states (`ttx -b`). `--optimize-for speed` writes CFF without subroutines and every
+`gvar` delta, the speed preset of `optimize`; fontTools' speed mode also packs `glyf` coordinates
+differently, which is not built. `--ufo-structure zip` (or `--to ufoz`) writes a UFOZ.
+
 **CID-keyed UFOs** follow the AFDKO convention: `com.adobe.type.ROS`, `com.adobe.type.postscriptCIDMap`
 and optionally `com.adobe.type.postscriptFDArray` in `lib.plist`, with one `FDArraySelect.<index>[.<name>]`
 group per font dict. Converting a CID-keyed font to UFO names glyphs `cidNNNNN`; converting such a UFO to

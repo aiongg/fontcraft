@@ -23,13 +23,14 @@ const USAGE: &str = "\
       one static font (.ttf, .otf with CFF outlines, .woff, .woff2) of its first exportable
       instance. --smart-components: a UFO or designspace keeps smart components as components
       with their values (default) or holds them drawn as outlines.
-  fontcraft-cli convert FONT OUT | convert FONT... --to ttf|otf|otf-cff2|cff|cff2|ufo [options]
+  fontcraft-cli convert FONT OUT | convert FONT... --to ttf|otf|otf-cff2|cff|cff2|ufo|svg-font [options]
       Rewrite compiled fonts, TTX text, Type 1 fonts (.pfa, .pfb) and bare CFF tables with other
       outlines: CFF or CFF2 to TrueType (cubic curves become quadratic within one font unit or
       --max-error em, contours reversed), TrueType to CFF or
       CFF2 (components decomposed, instructions dropped), CFF to CFF2 and back with hints kept,
-      only the CFF or CFF2 table (cff, cff2), or a UFO of the font as the editor opens it. With
-      IN OUT the extension of OUT says what to write; .woff and .woff2 keep the input's outlines.
+      only the CFF or CFF2 table (cff, cff2), a UFO of the font as the editor opens it, or an SVG
+      font of it (svg-font). With IN OUT the extension of OUT says what to write; .woff and .woff2
+      keep the input's outlines, .ufoz writes a zipped UFO and .svg an SVG font.
       Each output is INPUT.EXT unless -o, --output-dir or --in-place says otherwise.
       A variable font written as UFO or with other outlines is snapshotted at its default
       location unless --location says where. --cid-keyed makes a CFF result CID-keyed.
@@ -44,10 +45,17 @@ const USAGE: &str = "\
       a Type 1 input. --decid makes a CID-keyed font name-keyed (glyphs named cidN), with the
       hint values of the one Font DICT its glyphs come from, or of --fd N for all of them.
       --name-by postscript-name names each output after the font's PostScript name.
+      --rebuild-tables compiles the named tables (or all) again instead of copying them;
+      --no-recalc-bounds keeps the bounding boxes a TTX input or a rebuilt table states;
+      --optimize-for speed writes CFF without subroutines and every gvar delta.
+      SVG fonts: the font element alone with relative path data and no glyph names, unless
+      --svg-standalone, --svg-absolute or --svg-glyph-names say otherwise; glyphs without a
+      character get private-use ones; --newline sets the line ending. UFOs: --ufo-structure zip
+      writes a UFOZ.
 ";
 
 const OPTIONS: &[OptSpec] = &[
-    OptSpec::value("to", "FORMAT", "", "ttf, otf, otf-cff2, cff, cff2 or ufo"),
+    OptSpec::value("to", "FORMAT", "", "ttf, otf, otf-cff2, cff, cff2, ufo or svg-font"),
     OptSpec::value("container", "plain|woff|woff2", "plain", "wrap the result"),
     OptSpec::value("max-error", "EM", "", "largest curve conversion error, as a fraction of the em (default: one font unit)"),
     OptSpec::value(
@@ -88,6 +96,19 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::switch("decid", false, "make a CID-keyed CFF result name-keyed, glyphs named cidN"),
     OptSpec::value("fd", "N", "", "with --decid: every glyph takes the hint values of Font DICT N"),
     OptSpec::value("name-by", "filename|postscript-name", "", "name each output after the input file (default) or the font's PostScript name"),
+    OptSpec::switch(
+        "recalc-bounds",
+        false,
+        "recompute the bounding boxes of a TTX input and of rebuilt tables (default on; --no-recalc-bounds keeps the stated ones)",
+    ),
+    OptSpec::list("rebuild-tables", "TAG,...|all", "", "compile these tables of the result again from their parsed form instead of copying them"),
+    OptSpec::value("optimize-for", "size|speed", "", "small files (default), or CFF without subroutines and every gvar delta"),
+    OptSpec::value("svg-glyph-names", "none|non-ascii|all", "", "SVG font: which glyphs carry glyph-name (default none)"),
+    OptSpec::switch("svg-absolute", false, "SVG font: absolute path commands instead of relative ones"),
+    OptSpec::switch("svg-standalone", false, "SVG font: a whole SVG document instead of the font element alone"),
+    OptSpec::value("newline", "lf|cr|crlf", "", "line ending of an SVG font (default lf)"),
+    OptSpec::value("ufo-structure", "package|zip", "", "UFO output: a folder (default) or a zipped UFOZ"),
+    OptSpec::value("skip-export-key", "public|glyphs", "", "UFO output: where non-exporting glyphs are listed (a compiled font has none)"),
     OptSpec::value("timestamp", "keep|now|SECONDS", "", "head.modified: keep it, the current time, or seconds since 1970"),
     OptSpec::value("glyphs", "SELECTOR", "", "keep only these glyphs and .notdef: names, glyph ids, ranges (3-9), U+0041"),
     OptSpec::value("exclude-glyphs", "SELECTOR", "", "leave these glyphs out"),
@@ -125,7 +146,13 @@ fn convert(raw: &[String]) -> Outcome {
     let given = ["glyphs", "exclude-glyphs", "goadb"].into_iter().find(|name| parsed.value(name).is_some_and(|v| !v.is_empty()));
     let given = given.or_else(|| ["location", "fd-select", "exclude-fd"].into_iter().find(|name| !parsed.list(name).is_empty()));
     let given = given.or_else(|| parsed.value("cid-keyed").is_some().then_some("cid-keyed"));
-    let given = given.or_else(|| ["charstring-optimize", "fd", "name-by"].into_iter().find(|name| parsed.value(name).is_some_and(|v| !v.is_empty())));
+    let given = given.or_else(|| {
+        ["charstring-optimize", "fd", "name-by", "optimize-for", "svg-glyph-names", "newline", "ufo-structure", "skip-export-key"]
+            .into_iter()
+            .find(|name| parsed.value(name).is_some_and(|v| !v.is_empty()))
+    });
+    let given = given.or_else(|| (!parsed.list("rebuild-tables").is_empty()).then_some("rebuild-tables"));
+    let given = given.or_else(|| raw.iter().any(|a| a == "--no-recalc-bounds").then_some("no-recalc-bounds"));
     let given = given.or_else(|| {
         [
             "no-rename",
@@ -144,6 +171,9 @@ fn convert(raw: &[String]) -> Outcome {
             "keep-glyph-order",
             "allow-missing-notdef",
             "decid",
+            "svg-absolute",
+            "svg-standalone",
+            "recalc-bounds",
         ]
         .into_iter()
         .find(|name| parsed.switch(name))
@@ -216,7 +246,7 @@ fn program_kind(path: &str) -> Option<Program> {
 /// Whether `output` names a file `font.convert` writes.
 fn writes_binary(output: &str) -> bool {
     let extension = std::path::Path::new(output).extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-    matches!(extension.as_str(), "ttf" | "otf" | "cff" | "cff2" | "woff" | "woff2")
+    matches!(extension.as_str(), "ttf" | "otf" | "cff" | "cff2" | "woff" | "woff2" | "svg" | "ufoz")
 }
 
 /// The flavour already in a compiled font, for `IN OUT.woff`: from the sfnt version and, for
@@ -288,6 +318,7 @@ fn font_params(parsed: &args::Parsed, raw: &[String]) -> Result<Map<String, Valu
     let mut params = Map::new();
     let mut inputs: Vec<String> = parsed.positional.clone();
     let mut container = parsed.value("container").unwrap_or("plain").to_string();
+    let mut ufo_structure = parsed.value("ufo-structure").filter(|v| !v.is_empty()).map(str::to_string);
     let to = match parsed.value("to") {
         Some(to) => to.to_string(),
         None => {
@@ -303,13 +334,21 @@ fn font_params(parsed: &args::Parsed, raw: &[String]) -> Result<Map<String, Valu
                 "cff" => "cff",
                 "cff2" => "cff2",
                 "ufo" => "ufo",
+                "ufoz" => {
+                    if ufo_structure.as_deref().is_some_and(|v| v != "zip") {
+                        return Err(usage("an OUT.ufoz is a zipped UFO: leave out --ufo-structure or give zip"));
+                    }
+                    ufo_structure = Some("zip".into());
+                    "ufo"
+                }
+                "svg" => "svg-font",
                 "woff" | "woff2" => {
                     container = extension.clone();
                     flavour_of(input)?
                 }
                 other => {
                     return Err(usage(format!(
-                        "cannot write `.{other}` from a compiled font (writable: .ttf, .otf, .cff, .cff2, .woff, .woff2, .ufo)"
+                        "cannot write `.{other}` from a compiled font (writable: .ttf, .otf, .cff, .cff2, .woff, .woff2, .ufo, .ufoz, .svg)"
                     )));
                 }
             };
@@ -383,6 +422,55 @@ fn font_params(parsed: &args::Parsed, raw: &[String]) -> Result<Map<String, Valu
     }
     if parsed.switch("no-hints") {
         params.insert("hints".into(), json!(false));
+    }
+    if let Some(v) = given("recalc-bounds") {
+        params.insert("recalcBounds".into(), json!(v));
+    }
+    let rebuild: Vec<&str> = parsed.list("rebuild-tables").iter().flat_map(|l| l.split([' ', ','])).filter(|w| !w.is_empty()).collect();
+    if rebuild.contains(&"all") {
+        if rebuild.len() > 1 {
+            return Err(usage("--rebuild-tables takes table tags or all, not both"));
+        }
+        params.insert("rebuildTables".into(), json!("all"));
+    } else if !rebuild.is_empty() {
+        params.insert("rebuildTables".into(), json!(rebuild));
+    }
+    if let Some(v) = parsed.value("optimize-for").filter(|v| !v.is_empty()) {
+        if !matches!(v, "size" | "speed") {
+            return Err(usage("--optimize-for needs size or speed"));
+        }
+        params.insert("optimizeFor".into(), json!(v));
+    }
+    let mut svg = Map::new();
+    if let Some(v) = parsed.value("svg-glyph-names").filter(|v| !v.is_empty()) {
+        if !matches!(v, "none" | "non-ascii" | "all") {
+            return Err(usage("--svg-glyph-names needs none, non-ascii or all"));
+        }
+        svg.insert("glyphNames".into(), json!(v));
+    }
+    for (key, name) in [("absolute", "svg-absolute"), ("standalone", "svg-standalone")] {
+        if parsed.switch(name) {
+            svg.insert(key.into(), json!(true));
+        }
+    }
+    if !svg.is_empty() {
+        params.insert("svg".into(), Value::Object(svg));
+    }
+    if let Some(v) = parsed.value("newline").filter(|v| !v.is_empty()) {
+        if !matches!(v, "lf" | "cr" | "crlf") {
+            return Err(usage("--newline needs lf, cr or crlf"));
+        }
+        params.insert("newline".into(), json!(v));
+    }
+    let mut ufo = Map::new();
+    if let Some(v) = ufo_structure {
+        ufo.insert("structure".into(), json!(v));
+    }
+    if let Some(v) = parsed.value("skip-export-key").filter(|v| !v.is_empty()) {
+        ufo.insert("skipExportKey".into(), json!(v));
+    }
+    if !ufo.is_empty() {
+        params.insert("ufo".into(), Value::Object(ufo));
     }
     if let Some(ros) = parsed.value("cid-keyed") {
         let keyed = if ros.is_empty() {
@@ -514,5 +602,19 @@ mod tests {
         assert_eq!(p["cid"], json!({ "decid": true, "fd": 2 }));
         assert_eq!(p["nameBy"], json!("postscript-name"));
         assert!(params(&["A.otf", "--to", "cff", "--fd", "1"]).is_err(), "--fd needs --decid");
+
+        let p = params(&["A.otf", "B.svg", "--svg-glyph-names", "non-ascii", "--svg-standalone", "--newline", "crlf"]).unwrap();
+        assert_eq!(p["to"], json!("svg-font"));
+        assert_eq!(p["svg"], json!({ "glyphNames": "non-ascii", "standalone": true }));
+        assert_eq!(p["newline"], json!("crlf"));
+        let p = params(&["A.otf", "B.ufoz", "--skip-export-key", "glyphs"]).unwrap();
+        assert_eq!((&p["to"], &p["ufo"]), (&json!("ufo"), &json!({ "structure": "zip", "skipExportKey": "glyphs" })));
+        assert!(params(&["A.otf", "B.ufoz", "--ufo-structure", "package"]).is_err(), "a .ufoz is zipped");
+        let p = params(&["A.ttf", "--to", "ttf", "--no-recalc-bounds", "--rebuild-tables", "glyf,head", "--optimize-for", "speed"]).unwrap();
+        assert_eq!(p["recalcBounds"], json!(false));
+        assert_eq!(p["rebuildTables"], json!(["glyf", "head"]));
+        assert_eq!(p["optimizeFor"], json!("speed"));
+        assert_eq!(params(&["A.ttf", "--to", "ttf", "--rebuild-tables", "all"]).unwrap()["rebuildTables"], json!("all"));
+        assert!(!params(&["A.ttf", "--to", "ttf"]).unwrap().contains_key("recalcBounds"), "left out, the command's default applies");
     }
 }
