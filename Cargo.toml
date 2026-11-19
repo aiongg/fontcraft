@@ -1,7 +1,8 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "apps/*", "xtask"]
-default-members = ["crates/*", "apps/fontcraft", "apps/fontcraft-cli", "xtask"]
+exclude = ["vendor", "xtask/glyphdata-oracle"]
+default-members = ["crates/*", "apps/fontcraft", "apps/fontcraft-cli", "apps/fontcraft-next", "xtask"]
 
 [workspace.package]
 version = "0.0.1"
@@ -30,6 +31,7 @@ fontcraft-oracle = { path = "crates/oracle" }
 fontcraft-engine = { path = "crates/engine" }
 fontcraft-mcp = { path = "crates/mcp" }
 fontcraft-ui-egui = { path = "crates/ui-egui" }
+fontcraft-ui = { path = "crates/ui" }
 fontcraft-tools = { path = "crates/tools" }
 fontcraft-testkit = { path = "crates/testkit" }
 fontcraft-pathops = { path = "crates/pathops" }
@@ -63,6 +65,9 @@ craft-print = { git = "https://github.com/storytold/craft-libs", rev = "e9546e19
 # The desktop shell's close and quit handling: on macOS the app quits through the platform's own
 # path, and the app menu's Quit asks about unsaved documents as the close box does.
 craft-quit = { git = "https://github.com/storytold/craft-libs", rev = "e9546e191dd62f2bc1d61eca45dbdc2f1b3c1d8e" }
+# The craft framework through its facade (`craft::ui::…`), for `fontcraft-ui`. The egui and winit
+# `[patch.crates-io]` below must equal `craft::egui_fork::REV` at this rev.
+craft = { git = "https://github.com/storytold/craft-libs", rev = "4bd0107b9215e2903069b98debd9316e2a9238ae", default-features = false }
 
 # foundation (all MIT OR Apache-2.0 unless noted)
 kurbo = { version = "0.13", features = ["serde"] }
@@ -82,9 +87,10 @@ unicode-normalization = "0.1"
 # Without default features: no extra performance tables. Builds for wasm32.
 regex = { version = "1", default-features = false, features = ["std", "unicode"] }
 
-# Unicode Script, Script_Extensions and Bidi_Class for the kern writer (Unicode-3.0). Pinned to the
-# version fontc 1.0.0 reads, so that scripts split as there.
-icu_properties = "=2.1.2"
+# Unicode Script, Script_Extensions and Bidi_Class for the kern writer (Unicode-3.0). Pinned
+# exactly: craft-i18n needs ~2.3, and 2.3.0 carries the same Unicode data (the ICU 78.1 export) as
+# the 2.1.2 that fontc 1.0.0 reads, so scripts split as there.
+icu_properties = "=2.3.0"
 
 # fonts: the fontations crates (MIT OR Apache-2.0). See docs/decisions/0002-compile-pipeline.md.
 write-fonts = "0.54"
@@ -137,6 +143,28 @@ rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
 # HTTPS for the desktop app's network extension indexes (MIT OR Apache-2.0). rustls with the ring
 # provider and the bundled Mozilla root certificates: no OpenSSL. Never in a crate that builds for wasm.
 ureq = { version = "3.4", default-features = false, features = ["rustls"] }
+
+# The egui fork that craft is built with (`craft::egui_fork`). It is egui 0.37, so it replaces only
+# 0.37 requirements: `fontcraft-ui-egui` stays on egui 0.36 from crates.io until it is removed.
+# The winit fork replaces winit for both, so the 0.36 desktop app builds its window events through
+# `vendor/egui-winit-0.36`: egui-winit 0.36.2 with the fork's one extra event (MIT OR Apache-2.0).
+[patch.crates-io]
+egui-winit-036 = { path = "vendor/egui-winit-0.36", package = "egui-winit" }
+ecolor = { git = "https://github.com/storytold/egui.git", rev = "e9711ca9b69772f875ae0d1cef1977ff8c16234d" }
+emath = { git = "https://github.com/storytold/egui.git", rev = "e9711ca9b69772f875ae0d1cef1977ff8c16234d" }
+epaint = { git = "https://github.com/storytold/egui.git", rev = "e9711ca9b69772f875ae0d1cef1977ff8c16234d" }
+epaint_default_fonts = { git = "https://github.com/storytold/egui.git", rev = "e9711ca9b69772f875ae0d1cef1977ff8c16234d" }
+egui = { git = "https://github.com/storytold/egui.git", rev = "e9711ca9b69772f875ae0d1cef1977ff8c16234d" }
+egui-winit = { git = "https://github.com/storytold/egui.git", rev = "e9711ca9b69772f875ae0d1cef1977ff8c16234d" }
+egui-wgpu = { git = "https://github.com/storytold/egui.git", rev = "e9711ca9b69772f875ae0d1cef1977ff8c16234d" }
+egui_glow = { git = "https://github.com/storytold/egui.git", rev = "e9711ca9b69772f875ae0d1cef1977ff8c16234d" }
+egui_extras = { git = "https://github.com/storytold/egui.git", rev = "e9711ca9b69772f875ae0d1cef1977ff8c16234d" }
+egui_kittest = { git = "https://github.com/storytold/egui.git", rev = "e9711ca9b69772f875ae0d1cef1977ff8c16234d" }
+egui_system_font_provider = { git = "https://github.com/storytold/egui.git", rev = "e9711ca9b69772f875ae0d1cef1977ff8c16234d" }
+eframe = { git = "https://github.com/storytold/egui.git", rev = "e9711ca9b69772f875ae0d1cef1977ff8c16234d" }
+egui_demo_lib = { git = "https://github.com/storytold/egui.git", rev = "e9711ca9b69772f875ae0d1cef1977ff8c16234d" }
+egui_inspection = { git = "https://github.com/storytold/egui.git", rev = "e9711ca9b69772f875ae0d1cef1977ff8c16234d" }
+winit = { git = "https://github.com/storytold/winit.git", rev = "a517b3846ee8457d84ee4975110bfda6797c44dc" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

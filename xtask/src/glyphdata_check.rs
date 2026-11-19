@@ -4,8 +4,8 @@
 //! file, and a derived set (every record name with `.sc`, `.ss01` and `.001`; 10,000 two- and
 //! three-part ligatures drawn with a fixed seed from the letters and marks of one script;
 //! `uniXXXX` for every BMP code point with a record; 1,000 `_` names). Each name is looked up in
-//! FontCraft's database, in fontc's `glyphs-reader` 1.0.0 (category, subcategory, production name,
-//! code point) and in glyphsLib through `crates/glyphdata/crosscheck/glyphslib.py` (the same and
+//! FontCraft's database, in fontc's `glyphs-reader` 1.0.0 through `xtask/glyphdata-oracle`
+//! (category, subcategory, production name, code point) and in glyphsLib through `crates/glyphdata/crosscheck/glyphslib.py` (the same and
 //! script, case and description). Differences must match an entry of
 //! `crates/glyphdata/crosscheck/allow.toml`, which gives the cause and the number of names it
 //! covers; the check fails on any other difference and on an entry whose count is off.
@@ -137,27 +137,37 @@ fn ours(info: &Info) -> Answer {
     a
 }
 
-fn fontc(data: &glyphs_reader::glyphdata::GlyphData, name: &str) -> Answer {
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| data.query(name, None)));
-    let mut a = Answer::default();
-    match result {
-        Err(_) => {
-            for f in FONTC_FIELDS {
-                a.fields.insert(f, Some("<panic>".into()));
-            }
+/// fontc's answers from `xtask/glyphdata-oracle`, its own workspace: glyphs-reader pins an
+/// icu_properties the main workspace cannot share.
+fn fontc(root: &Path, names: &[(Set, String)]) -> Result<Vec<Answer>, String> {
+    let manifest = root.join("xtask/glyphdata-oracle/Cargo.toml");
+    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let mut child = Command::new(cargo)
+        .args(["run", "--quiet", "--release", "--manifest-path"])
+        .arg(&manifest)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("{}: {e}", manifest.display()))?;
+    let mut stdin = child.stdin.take().ok_or("no stdin")?;
+    let input: String = names.iter().map(|(_, n)| format!("{n}\n")).collect();
+    let writer = std::thread::spawn(move || stdin.write_all(input.as_bytes()));
+    let stdout = child.stdout.take().ok_or("no stdout")?;
+    let mut out = Vec::with_capacity(names.len());
+    for line in std::io::BufReader::new(stdout).lines() {
+        let v: serde_json::Value = serde_json::from_str(&line.map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+        let mut a = Answer::default();
+        for f in FONTC_FIELDS {
+            a.fields.insert(f, v.get(*f).and_then(|x| x.as_str()).map(str::to_string));
         }
-        Ok(r) => {
-            a.fields.insert("category", r.as_ref().map(|r| r.category.to_string()));
-            a.fields.insert("subCategory", r.as_ref().and_then(|r| r.subcategory.map(|s| s.to_string())));
-            // fontc exports a glyph without a production name under its own name.
-            a.fields.insert(
-                "production",
-                Some(r.as_ref().and_then(|r| r.production_name.as_ref().map(|p| p.to_string())).unwrap_or_else(|| name.to_string())),
-            );
-            a.fields.insert("unicode", r.as_ref().and_then(|r| r.codepoint.map(|c| format!("{c:04X}"))));
-        }
+        out.push(a);
     }
-    a
+    writer.join().map_err(|_| "writer thread failed")?.map_err(|e| e.to_string())?;
+    let status = child.wait().map_err(|e| e.to_string())?;
+    if !status.success() || out.len() != names.len() {
+        return Err(format!("glyphdata-oracle failed ({status}; {} of {} answers)", out.len(), names.len()));
+    }
+    Ok(out)
 }
 
 fn python() -> PathBuf {
@@ -373,11 +383,7 @@ pub fn run(root: &Path, args: &[&str]) -> Result<(), String> {
     );
 
     let mut allow = allow_list(root)?;
-    let fontc_data = glyphs_reader::glyphdata::GlyphData::new(None);
-    let hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(|_| {}));
-    let fontc_answers: Vec<Answer> = names.iter().map(|(_, n)| fontc(&fontc_data, n)).collect();
-    std::panic::set_hook(hook);
+    let fontc_answers = fontc(root, &names)?;
     let mut failures = compare("fontc", FONTC_FIELDS, &names, &ours, &fontc_answers, &mut allow, verbose);
 
     match glyphslib(root, &names) {

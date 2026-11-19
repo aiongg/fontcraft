@@ -1,0 +1,15 @@
+[package]
+name = "fontcraft-next"
+description = "FontCraft, the font editor, on the craft framework (desktop app, in progress)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fontcraft-ui.workspace = true
+eframe = { version = "0.37", default-features = false, features = ["wayland"] }

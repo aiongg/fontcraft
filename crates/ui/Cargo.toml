@@ -1,0 +1,29 @@
+[package]
+name = "fontcraft-ui"
+description = "FontCraft user interface on the craft framework: app layer, shell and panel views (L6)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fontcraft-engine.workspace = true
+fontcraft-tools.workspace = true
+craft = { workspace = true, features = ["ui-app", "keymap", "menu", "tracked", "settings", "platform-clipboard"] }
+# egui 0.37 is the craft fork (the workspace's `[patch.crates-io]`). Not a workspace dependency
+# while `fontcraft-ui-egui` keeps egui 0.36 under that name.
+egui = { version = "0.37", default-features = false }
+eframe = { version = "0.37", default-features = false }
+serde_json.workspace = true
+log.workspace = true
+
+# The system file pickers: native only.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+craft = { workspace = true, features = ["dialogs"] }
+
+[dev-dependencies]
+craft = { workspace = true, features = ["screen-testing"] }
