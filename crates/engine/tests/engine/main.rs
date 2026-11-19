@@ -87,6 +87,7 @@ mod font_convert;
 mod font_diff;
 mod font_fields;
 mod font_view;
+mod format_warnings;
 mod glyph_data;
 mod glyph_info;
 mod glyph_search;

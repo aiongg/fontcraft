@@ -146,7 +146,7 @@ write = true
 spec = "https://unifiedfontobject.org/versions/ufo3/#storage-formats"
 area = "import-export"
 milestone = "M1"
-summary = "A ZIP archive holding one UFO directory tree under a single root folder of arbitrary name; UTF-8 file names, ZIP64 allowed, compression optional, encryption forbidden. Content rules are identical to `ufo3`. Read with our own bounded ZIP reader (stored, deflated and ZIP64 entries); not written yet, so a UFOZ is saved with Save As to another format."
+summary = "A ZIP archive holding one UFO directory tree under a single root folder of arbitrary name; UTF-8 file names, ZIP64 allowed, compression optional, encryption forbidden. Content rules are identical to `ufo3`. Read with our own bounded ZIP reader (stored, deflated and ZIP64 entries). Written by file.save and file.saveAs (format `ufoz`, or a path ending in .ufoz): each file deflated, or stored when that is not smaller, under one folder named after the file (`Font.ufoz` holds `Font.ufo/`), with fixed dates so the same UFO always gives the same bytes; an archive that would need ZIP64 records is refused. A UFOZ document saves back as a UFOZ."
 ref = "UFO 3 specification › Storage Formats; PKWARE APPNOTE (ZIP format)"
 status = "docs"
 

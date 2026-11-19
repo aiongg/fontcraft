@@ -736,6 +736,11 @@ impl Session {
                 .and_then(|v| accept(self).map(|()| v)),
             Err(panic) => Err(EngineError::Internal(format!("`{id}` failed unexpectedly: {panic}"))),
         };
+        // What an edit created that a UFO document's file cannot hold (previews and queries skip it).
+        let result = match (result, &snapshot) {
+            (Ok(v), Some((before, ..))) if record => Ok(cmd::format_warnings::attach(&self.docs, before, id, v)),
+            (r, _) => r,
+        };
         if record {
             self.extensions.after_command(id, params, spec.journal, &result);
         }
