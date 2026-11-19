@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2870 guesses on 1547 rows (626 of them live commands).**
+**2881 guesses on 1553 rows (632 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1172,6 +1172,17 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `layers.reInterpolate` | M9 | inferred | yes | With no location given, a master layer uses its master's location and an intermediate layer its coordinates; a backup layer needs a location and is refused without one. |
 | `layers.reInterpolate` | M9 | inferred | yes | An alternate layer is interpolated from the other layers of its range set at its location, the way static instances switch to that set; settle with the reference app's item, if it has one. |
 | `layers.reInterpolate` | M9 | inferred | yes | The interpolation uses the font's Font Type model and extrapolates beyond the masters, as static instances do; settle with the reference app's item, if it has one. |
+| `hoi.setInterpolationType` | M9 | handbook | yes | A curve belongs to the node of the lower layer of a span, so editing the span down from a layer (`toward` down) changes the layer below; settle by bending a node toward the layer below in the reference app and saving. |
+| `hoi.setInterpolationType` | M9 | handbook | yes | A new intermediate point lies where the node is halfway along its present path; settle by switching a Handles node to Intermediate Point in the reference app's Info box and reading the point. |
+| `hoi.setInterpolationType` | M9 | handbook | yes | Switching a rotation to Handles takes the cubic through the rotation's halfway position; settle by switching a rotation to Handles in the reference app and comparing the drawn handles. |
+| `hoi.setInterpolationType` | M9 | handbook | yes | A new rotation keeps an automatic centre (`rc = auto`) rather than fixed coordinates; settle by choosing Rotation in the reference app and saving. |
+| `hoi.setControlPoints` | M9 | inferred | yes | A curve belongs to the node of the lower layer of a span, so editing the span down from a layer (`toward` down) changes the layer below; settle by bending a node toward the layer below in the reference app and saving. |
+| `hoi.setControlPoints` | M9 | inferred | yes | One position on a node that is not a rotation makes it an intermediate point, as dragging a knob on a straight line does; settle by dragging the knob of a Handles node in the reference app. |
+| `hoi.convertToHandles` | M9 | handbook | yes | A curve belongs to the node of the lower layer of a span, so editing the span down from a layer (`toward` down) changes the layer below; settle by bending a node toward the layer below in the reference app and saving. |
+| `hoi.centerRotation` | M9 | handbook | yes | A curve belongs to the node of the lower layer of a span, so editing the span down from a layer (`toward` down) changes the layer below; settle by bending a node toward the layer below in the reference app and saving. |
+| `hoi.centerRotation` | M9 | handbook | yes | The button stores the automatic centre rather than the coordinates of the centre; settle by pressing it in the reference app and saving. |
+| `hoi.setRotationDirection` | M9 | handbook | yes | A curve belongs to the node of the lower layer of a span, so editing the span down from a layer (`toward` down) changes the layer below; settle by bending a node toward the layer below in the reference app and saving. |
+| `hoi.removeCurve` | M9 | handbook | yes | A curve belongs to the node of the lower layer of a span, so editing the span down from a layer (`toward` down) changes the layer below; settle by bending a node toward the layer below in the reference app and saving. |
 | `axisMappings.addPoint` | M9 | handbook | yes | A variable font setting without an Axis Mappings parameter of its own gets a copy of the font's on its first mapping edit, so its other axes keep their mappings; settle by editing a setting's mappings in the reference app and reading the saved file. |
 | `axisMappings.setPoint` | M9 | handbook | yes | A change that breaks the increasing order on either coordinate is refused with a message and changes nothing; settle by dragging a point past its neighbour in the reference app. |
 | `axisMappings.nudgePoint` | M9 | handbook | yes | The base step is 1 unit, Up and Down move the external value and Left and Right the internal value; settle in the reference app's Axis Mappings dialog. |

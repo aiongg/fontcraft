@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1452 rows to check: 2472 guesses and 583 observe steps.**
+**1457 rows to check: 2483 guesses and 586 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 47 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **933** |
+| **Later milestones (after M6)** | all | **938** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 86 |
 | Later milestones (after M6) | Edit View: text mode and preview | 26 |
 | Later milestones (after M6) | Components and anchors | 43 |
@@ -57,7 +57,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Kerning and the Kerning window | 14 |
 | Later milestones (after M6) | Font View | 19 |
 | Later milestones (after M6) | Font Info and features | 290 |
-| Later milestones (after M6) | Interpolation | 81 |
+| Later milestones (after M6) | Interpolation | 86 |
 | Later milestones (after M6) | Hinting | 108 |
 | Later milestones (after M6) | Colour fonts | 68 |
 | Later milestones (after M6) | Files: open, import, export | 68 |
@@ -1549,7 +1549,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (933)
+## Later milestones (after M6) (938)
 
 ### Edit View: drawing, guides, layers and the Palette (86)
 
@@ -3237,7 +3237,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `proof-pdf` (format, M14, inferred): PDF proof sheet
   - Open (our design, not confirmed): Vector PDF of an Edit View text, a glyph overview or a waterfall, drawn straight from the source outlines of the current master or instance so no font has to be installed. Scale follows the font's units-per-point setting; nodes, guides and annotations are included only when asked for.
 
-### Interpolation (81)
+### Interpolation (86)
 
 - [ ] `instance.manualInterpolation` (parameter, M9, docs): Whether the instance uses hand-entered master factors instead of factors computed from…
   - Guess: With manual interpolation on, the instance is the stored factors applied to the master layers; intermediate layers get no weight, alternate layers still switch by the instance's location, and the factors also weight metrics, kerning and parameters; settle with an instance using manual factors and a brace glyph in the reference app.
@@ -3376,6 +3376,26 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Choosing Intermediate or Alternate in a row's context menu opens the same editor as double-clicking that part of the label; settle by choosing Intermediate on a backup layer in the reference app.
 - [ ] `edit.keepLayerSelectionInSync` (M9, handbook, live): Keep Layer Selection in Sync
   - Guess: The selection is carried only from one master layer to another of the same glyph, when the glyph is compatible; nodes, shapes and anchors that resolve on the new layer are kept, guides and annotations are dropped. Settle by switching from a master to an intermediate layer with the option on.
+- [ ] `hoi.setInterpolationType` (M9, handbook, live): Interpolation Type
+  - Guess: A curve belongs to the node of the lower layer of a span, so editing the span down from a layer (`toward` down) changes the layer below; settle by bending a node toward the layer below in the reference app and saving.
+  - Guess: A new intermediate point lies where the node is halfway along its present path; settle by switching a Handles node to Intermediate Point in the reference app's Info box and reading the point.
+  - Guess: Switching a rotation to Handles takes the cubic through the rotation's halfway position; settle by switching a rotation to Handles in the reference app and comparing the drawn handles.
+  - Guess: A new rotation keeps an automatic centre (`rc = auto`) rather than fixed coordinates; settle by choosing Rotation in the reference app and saving.
+  - Observe: Choose Rotation for a knob in the reference app, save, and read whether the node's `hoi` holds `rc = auto` or coordinates.
+- [ ] `hoi.setControlPoints` (M9, inferred, live): Set Interpolation Control Points
+  - Guess: A curve belongs to the node of the lower layer of a span, so editing the span down from a layer (`toward` down) changes the layer below; settle by bending a node toward the layer below in the reference app and saving.
+  - Guess: One position on a node that is not a rotation makes it an intermediate point, as dragging a knob on a straight line does; settle by dragging the knob of a Handles node in the reference app.
+- [ ] `hoi.convertToHandles` (M9, handbook, live): Convert Intermediate Point to Handles
+  - Guess: A curve belongs to the node of the lower layer of a span, so editing the span down from a layer (`toward` down) changes the layer below; settle by bending a node toward the layer below in the reference app and saving.
+  - Observe: Press Return on an intermediate point in the reference app and compare the instance halfway before and after: equal means the conversion keeps the path.
+- [ ] `hoi.centerRotation` (M9, handbook, live): Center Rotation in Bounds
+  - Guess: A curve belongs to the node of the lower layer of a span, so editing the span down from a layer (`toward` down) changes the layer below; settle by bending a node toward the layer below in the reference app and saving.
+  - Guess: The button stores the automatic centre rather than the coordinates of the centre; settle by pressing it in the reference app and saving.
+  - Observe: Press the centre-bounds button in the reference app's HOI Info box, save, and read the node's `rc`.
+- [ ] `hoi.setRotationDirection` (M9, handbook, live): Rotation Direction
+  - Guess: A curve belongs to the node of the lower layer of a span, so editing the span down from a layer (`toward` down) changes the layer below; settle by bending a node toward the layer below in the reference app and saving.
+- [ ] `hoi.removeCurve` (M9, handbook, live): Remove Interpolation Curve
+  - Guess: A curve belongs to the node of the lower layer of a span, so editing the span down from a layer (`toward` down) changes the layer below; settle by bending a node toward the layer below in the reference app and saving.
 - [ ] `axisMappings.addPoint` (M9, handbook, live): Add Mapping Point
   - Guess: A variable font setting without an Axis Mappings parameter of its own gets a copy of the font's on its first mapping edit, so its other axes keep their mappings; settle by editing a setting's mappings in the reference app and reading the saved file.
 - [ ] `axisMappings.setPoint` (M9, handbook, live): Edit Mapping Point
@@ -3477,8 +3497,6 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In a font with masters at 40 and 160 and an instance at 100, set the masters to 100 and 900 by table and note where the instance goes.
 - [ ] `hoi.timingGraph` (behavior, M13, handbook): The timing graph plots progress against axis position for the selected curve:…
   - Guess: Progress is the fraction of the curve's length travelled; settle by comparing the graph of a Handles curve with zero amplitudes and of a Point curve in the reference app.
-- [ ] `hoi.setControlPoints` (M13, inferred): Set Interpolation Control Points
-  - Open (our design, not confirmed): Headless form of dragging a knob or handle: sets the intermediate point (one point), the two handles (two points) or the rotation centre (one point) of a node's interpolation curve.
 - [ ] `font.interpolateFonts` (M13, docs, live): Interpolate Fonts…
   - Guess: Fonts that differ anywhere are refused with the first difference, rather than leaving out the glyphs that do not match; the secondary reference's handling of a partly compatible pair would settle it.
   - Guess: The new font keeps only the master layer of each glyph, and its family name, Font Info, features and other data are the first font's; the secondary reference's result on two fonts with different names and extra layers would settle it.
