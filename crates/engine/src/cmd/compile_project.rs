@@ -39,6 +39,11 @@ const DEFAULT_FEATURE_FILES: [&str; 2] = ["features", "features.fea"];
 /// for, as the reference looks for them.
 const LEVELS_UP: usize = 4;
 
+/// Whether the parameters ask for a project compile.
+pub(super) fn requested(p: &Params) -> bool {
+    KEYS.iter().any(|k| p.get(k).is_some_and(|v| !v.is_null()))
+}
+
 /// The project the parameters describe, with notes about settings it does not use; `None` for
 /// an ordinary compile. `source` is the document's path.
 pub(super) fn read(p: &Params, source: Option<&Path>) -> Result<Option<(Project, Vec<String>)>> {

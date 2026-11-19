@@ -9,6 +9,7 @@ mod check;
 mod collection;
 mod commands;
 mod compile;
+mod compile_opts;
 mod completion;
 mod convert;
 mod dehint;

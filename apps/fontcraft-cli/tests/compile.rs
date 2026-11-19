@@ -89,7 +89,32 @@ fn compile_builds_each_format_and_container_and_plans_without_writing() {
     // Usage errors exit with 2, a refused build with 4.
     assert_eq!(cli(&["compile"]).0, 2);
     assert_eq!(cli(&["compile", src, src, "-o", one.to_str().unwrap()]).0, 2);
-    assert_eq!(cli(&["compile", src, "--format", "variable", "--output-dir", out]).0, 4);
+    assert_eq!(cli(&["compile", src, "--format", "otf-cff2", "--output-dir", out]).0, 4);
+    assert_eq!(cli(&["compile", src, "--output-layout", "nested", "--output-dir", out]).0, 2);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// `--output-layout by-format` writes into the reference compiler's folders: a source without
+/// instances builds its first master into master_ttf and master_otf.
+#[test]
+fn compile_writes_the_reference_folders_with_output_layout_by_format() {
+    let dir = temp("by-format");
+    let src = source(&dir);
+    let out_dir = dir.join("fonts");
+    let (code, _, stderr) = cli(&[
+        "compile",
+        src.to_str().unwrap(),
+        "--format=ttf,otf",
+        "--output-layout",
+        "by-format",
+        "--output-dir",
+        out_dir.to_str().unwrap(),
+        "--timestamp",
+        "0",
+    ]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(magic(&out_dir.join("master_ttf/Untitled-Regular.ttf")), [0, 1, 0, 0]);
+    assert_eq!(magic(&out_dir.join("master_otf/Untitled-Regular.otf")), b"OTTO");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -152,7 +177,7 @@ fn compile_cbdt_adds_the_bitmap_tables_of_icolor_layers() {
 
     let (code, _, stderr) = cli(&["compile", src, "--variable", "--cbdt"]);
     assert_ne!(code, 0, "variable fonts have no CBDT option");
-    assert!(stderr.contains("--variable takes only"), "{stderr}");
+    assert!(stderr.contains("cbdt"), "{stderr}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

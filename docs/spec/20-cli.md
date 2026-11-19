@@ -231,7 +231,7 @@ Each section gives the usage line, behaviour the options alone do not convey, an
 
 ### `compile`
 
-Compiles sources into binary fonts: static TTF or OTF per instance or master, each plain or wrapped as WOFF or WOFF2; later, variable TTF (gvar) or CFF2 and interpolatable masters (M9). Sources are a native project, a .glyphs file or package, a designspace or a UFO; later also a bare outline font (CFF, CFF2, TrueType, Type 1) that receives the remaining OpenType tables from a feature file and name data. Without --format every source yields static TTFs.
+Compiles sources into binary fonts: static TTF or OTF per instance or master and variable TTF (gvar) or CFF2, each plain or wrapped as WOFF or WOFF2; later, static CFF2 and interpolatable masters (M2.9). Sources are a native project, a .glyphs file or package, a designspace or a UFO; later also a bare outline font (CFF, CFF2, TrueType, Type 1) that receives the remaining OpenType tables from a feature file and name data. Without --format a source with one master yields a static TTF and one with several masters and an axis a variable TTF.
 
 ```
 fontcraft-cli compile SOURCE... [--format FMT]... [--container plain|woff|woff2]... [-o PATH | --output-dir DIR] [options]
@@ -247,19 +247,28 @@ chosen by the kind of source and by `--format`:
 | bare CFF / OTF / Type 1 / TrueType | `otf`, `ttf` | keep the outlines, build cmap, name, OS/2, hhea, post, layout from feature code, menu-name file and GOADB (AFDKO `makeotf` / `addfeatures` style) |
 | bare CFF2 variable font | `variable-cff2` | as above, with variable feature code; `fvar`, `avar`, `HVAR` are carried over, `MVAR` merged when `--keep-mvar` |
 
-**Built (M2).** `--format ttf|otf`, `--container plain|woff|woff2`, `-o`/`--output-dir`,
-`--instances[=NAME,...]`, `--masters-as-instances`, `--keep-overlaps`, `--keep-direction`,
-`--conversion-error`, `--timestamp`, `--cbdt` and `--plan`. Each SOURCE is opened as a document and built by
-`font.compile` (or described by `font.compilePlan`); the command prints one JSON line per SOURCE, and
-with several sources one that fails does not stop the others. The other options in the table below
-are later work.
+**Built (M2, M2.8).** `--format ttf|otf|variable|variable-cff2` (and `--variable`), `--container
+plain|woff|woff2`, `-o`/`--output-dir`, `--output-layout flat|by-format`, `--name-by
+filename|postscript-name`, `--instances[=NAME,...|=REGEX]`, `--masters-as-instances`,
+`--variable-fonts REGEX`, `--settings NAME,...`, `--family-name NAME`, `--keep-overlaps`,
+`--keep-direction`, `--conversion-error`, `--timestamp`, `--cbdt`, `--plan` and the project, CID and
+table options in the usage. The options are rows of one table (`compile_opts.rs`: spellings, the
+`font.compile` parameter path, the kind of value); an option without a row is refused as unknown.
+Each SOURCE is opened as a document and built by `font.compile` (or described by
+`font.compilePlan`); the command prints one JSON line per SOURCE, and with several sources one that
+fails does not stop the others. The other options in the table below are later work (M2.12, M2.13).
 
-**Defaults.** Without `--format`: `ttf`, whatever the number of masters (`variable` comes with M9).
+**Defaults.** Without `--format`: `ttf` for a source with one master or no axis, `variable` for one
+with several masters and an axis, unless an option only static fonts take asks for static fonts.
 `--afdko-project`: `otf`. Without `--container`: `plain`. Every exportable instance is built; a font
 without instances builds its first master. `--instances=NAME,...` builds only the instances with those
-exact names (a comma-separated list, not a pattern); `--masters-as-instances` adds one font per master.
-Until interpolation (M9) an instance is built only where it sits at a master; the others are listed as
-skipped, and a source that builds nothing fails. Overlapping contours are merged unless
+names; a value holding a regular expression character is an expression matched in full against each
+exported instance's name and its family and style name, as fontmake's `-i`.
+`--masters-as-instances` adds one font per master. An instance away from the masters is built from the
+font interpolated at it; one that cannot be interpolated is listed as skipped, and a source that
+builds nothing fails. `--output-layout by-format` writes into fontmake's folders: `master_ttf` or
+`master_otf` for a font built from its first master, `instance_ttf` or `instance_otf` for instances
+and masters built as instances, `variable_ttf` or `variable_otf` for variable fonts. Overlapping contours are merged unless
 `--keep-overlaps` is given; a glyph whose overlaps cannot be removed keeps them, with a warning
 naming it. Contours are reversed for TrueType unless
 `--keep-direction`; curves are converted to quadratics within `--conversion-error` em (default 0.001).
@@ -270,9 +279,8 @@ output is subroutinised unless `--no-subroutinize` is given or the source sets D
 beyond the subroutiniser's limits is written without subroutines, with a warning. Variable CFF2 output
 follows the same rule. Glyphs are written under their production names, made valid as fontc makes
 them, with a warning listing the names changed. Later: `--no-production-names`; glyphs flagged as not
-exported left out unless `--no-subset` (until then they are always left out); with `--output-layout
-by-format`, outputs and intermediate sources in per-format folders as fontmake arranges them
-(`master_ufo`, `instance_ufo`, `master_ttf`, `variable_ttf` and so on); CFF specialised and
+exported left out unless `--no-subset` (until then they are always left out); intermediate sources in
+fontmake's `master_ufo` and `instance_ufo` folders; CFF specialised and
 subroutinised (`--optimize-cff 2`); variable `gvar` IUP-optimised.
 
 **Option sources and precedence.** Lowest to highest: values stored in the source (custom parameters,
@@ -2866,7 +2874,8 @@ before implementation.
    **Answered (M12.39):** yes. `--tt-options` hands the string unchanged to the TrueType autohinter, which reads ttfautohint's long command-line options, as fontmake passes them.
 14. **fontmake output layout.** `--output-layout by-format` must reproduce fontmake's folder and file
     naming exactly to be a drop-in; the rules need to be observed for each format.
-   **Not M12:** `--output-layout` belongs to the `compile` row (M2); the rules are observed when that option is built.
+   **Not M12:** `--output-layout` belongs to the `compile` row (M2).
+   **Answered (M2.8):** from fontmake's `font_project.py` (`_output_dir`, `_output_path`): `variable_`, else `instance_` when the run interpolates or builds masters as instances, else `master_`, then the extension and `_interpolatable` for those formats. Not yet compared with a fontmake run on corpus sources.
 15. **Filter and feature-writer names.** The built-in names accepted by `--filter` and
     `--feature-writer` must be defined so that the specs found in existing UFO libs
     (`com.github.googlei18n.ufo2ft.filters`, `…featureWriters`) can be translated.
