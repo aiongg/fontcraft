@@ -1,0 +1,277 @@
+//! Palette › Transformations: the origin (`transform.setOrigin`), mirror, scale with its lock
+//! (`transform.setScaleLock`), rotate, slant, align, and the booleans union, subtract and intersect.
+//!
+//! The buttons act on the canvas selection, or on the whole layer when nothing is selected; the booleans take the
+//! selected paths, a path counting as selected when any of its nodes is. The two buttons beside a field apply its
+//! value in opposite directions. Field values go through `transform.setSettings`; each button passes them, and the
+//! origin, to its command.
+
+use craft::behavior::IconId;
+use craft::ui::buttons::toggle_button::ToggleButton;
+use craft::ui::buttons::{Button, IconButton};
+use craft::ui::contract::{Bind, Entry, Props as _, Show as _, ShowContainer as _, Tracked};
+use craft::ui::display::{Shade, Text};
+use craft::ui::layout_components::Row;
+use craft::ui::pickers::Select;
+use craft::ui::runtime::commands::CommandRef;
+use craft::ui::runtime::env::{Env, Label};
+use egui::Ui;
+use serde_json::{Value, json};
+
+use super::widgets;
+use crate::app::Msg;
+use crate::app::models::palette::TransformModel;
+use crate::shell::palette::METRICS;
+
+craft::ui::words! {
+    /// The words of the Transformations section.
+    pub struct TransformWords {
+        origin: "fontcraftTransform.origin" = "Origin";
+        reference: "fontcraftTransform.reference" = "Reference Point";
+        metric: "fontcraftTransform.metric" = "Metric";
+        baseline: "fontcraftTransform.baseline" = "Baseline";
+        half_x_height: "fontcraftTransform.halfXHeight" = "Half x-height";
+        x_height: "fontcraftTransform.xHeight" = "x-height";
+        half_cap_height: "fontcraftTransform.halfCapHeight" = "Half cap height";
+        cap_height: "fontcraftTransform.capHeight" = "Cap height";
+        mirror_horizontal: "fontcraftTransform.mirrorHorizontal" = "Mirror Horizontally";
+        mirror_vertical: "fontcraftTransform.mirrorVertical" = "Mirror Vertically";
+        scale_x: "fontcraftTransform.scaleX" = "Horizontal Scale";
+        scale_y: "fontcraftTransform.scaleY" = "Vertical Scale";
+        scale_lock: "fontcraftTransform.scaleLock" = "Lock Scale Proportions";
+        scale: "fontcraftTransform.scale" = "Scale";
+        reverse_scale: "fontcraftTransform.reverseScale" = "Reverse Scale";
+        rotate: "fontcraftTransform.rotate" = "Rotate";
+        rotate_ccw: "fontcraftTransform.rotateCounterclockwise" = "Rotate Counterclockwise";
+        rotate_cw: "fontcraftTransform.rotateClockwise" = "Rotate Clockwise";
+        slant: "fontcraftTransform.slant" = "Slant";
+        slant_left: "fontcraftTransform.slantLeft" = "Slant Left";
+        slant_right: "fontcraftTransform.slantRight" = "Slant Right";
+        slant_down: "fontcraftTransform.slantDown" = "Slant Down";
+        slant_up: "fontcraftTransform.slantUp" = "Slant Up";
+        align_left: "fontcraftTransform.alignLeft" = "Align Left";
+        align_center_h: "fontcraftTransform.alignCenterHorizontal" = "Align Horizontal Centers";
+        align_right: "fontcraftTransform.alignRight" = "Align Right";
+        align_top: "fontcraftTransform.alignTop" = "Align Top";
+        align_center_v: "fontcraftTransform.alignCenterVertical" = "Align Vertical Centers";
+        align_bottom: "fontcraftTransform.alignBottom" = "Align Bottom";
+        union: "fontcraftTransform.union" = "Union";
+        union_tip: "fontcraftTransform.unionTip" = "Merge the closed paths";
+        subtract: "fontcraftTransform.subtract" = "Subtract";
+        subtract_tip: "fontcraftTransform.subtractTip" = "Subtract the selected paths from the others";
+        intersect: "fontcraftTransform.intersect" = "Intersect";
+        intersect_tip: "fontcraftTransform.intersectTip" = "Keep where the selected paths overlap the others";
+        nothing: "fontcraftTransform.nothing" = "Open a glyph to transform it";
+    }
+}
+
+pub struct Props<'a> {
+    pub model: &'a Tracked<TransformModel>,
+    pub sent: &'a mut Vec<Msg>,
+}
+
+pub fn show(ui: &mut Ui, mut props: Props<'_>) {
+    view(&mut props, ui);
+}
+
+/// An icon button named `label` that is enabled with `enabled`; whether it was pressed.
+fn icon(ui: &mut Ui, name: &'static str, label: &Label, enabled: bool) -> bool {
+    IconButton::new(IconId::new(name)).label(label.clone()).tooltip(label.clone()).enabled(enabled).show(ui).clicked() && enabled
+}
+
+fn view(props: &mut Props<'_>, ui: &mut Ui) {
+    let words = Env::of(ui).words::<TransformWords>();
+    let m: &TransformModel = props.model;
+    let sent = &mut *props.sent;
+    let enabled = m.targets.is_some();
+    let origin: Value = serde_json::from_str(&m.origin).unwrap_or(Value::Null);
+    let press = |sent: &mut Vec<Msg>, id: &str, extra: Value| {
+        if let Some(t) = &m.targets {
+            sent.push(Msg::run(id, t.with(extra)));
+        }
+    };
+
+    let _ = Row::new().show(ui, |ui, _| {
+        let active = (m.mode == "box").then_some(m.box_point.as_str());
+        if let Some(point) = widgets::box_point(ui, words.origin.clone(), active) {
+            sent.push(shell("transform.setOrigin", json!({"mode": "box", "boxPoint": point})));
+        }
+        let reference = ToggleButton::new(words.reference.clone(), Bind::given(m.mode == "reference"))
+            .icon(IconId::new("target"))
+            .icon_only()
+            .tooltip(words.reference.clone())
+            .enabled(m.point.is_some())
+            .show(ui);
+        if reference.events.committed().is_some()
+            && let Some(p) = m.point
+        {
+            sent.push(shell("transform.setOrigin", json!({"mode": "reference", "point": p})));
+        }
+        let labels = [&words.baseline, &words.x_height, &words.half_x_height, &words.cap_height, &words.half_cap_height];
+        let names = ["baseline", "xHeight", "halfXHeight", "capHeight", "halfCapHeight"];
+        let metrics: Vec<Entry<String>> = names.iter().zip(labels).map(|(n, l)| Entry::new((*n).to_string(), l.clone())).collect();
+        let shown = if m.mode == "metrics" { m.metric.clone() } else { String::new() };
+        if let Some(picked) = Select::new(words.metric.clone(), Bind::given(shown), &metrics).show(ui).events.committed()
+            && METRICS.contains(&picked.as_str())
+        {
+            sent.push(shell("transform.setOrigin", json!({"mode": "metrics", "metric": picked})));
+        }
+    });
+
+    let _ = Row::new().show(ui, |ui, _| {
+        if icon(ui, "swap_horizontal", &words.mirror_horizontal, enabled) {
+            press(sent, "transform.mirrorHorizontal", json!({ "origin": origin }));
+        }
+        if icon(ui, "swap_vertical", &words.mirror_vertical, enabled) {
+            press(sent, "transform.mirrorVertical", json!({ "origin": origin }));
+        }
+    });
+
+    let [scale_x, scale_y] = m.scale;
+    let (sx, sy) = if m.scale_locked { (scale_x, scale_x) } else { (scale_x, scale_y) };
+    let _ = Row::new().show(ui, |ui, _| {
+        if Button::new(words.reverse_scale.clone()).enabled(enabled).show(ui).clicked() && enabled {
+            press(sent, "transform.reverseScale", json!({"x": sx, "y": sy, "origin": origin}));
+        }
+        if let Some(v) = widgets::number(ui, words.scale_x.clone(), Some(scale_x)) {
+            sent.push(shell("transform.setSettings", json!({ "scaleX": v })));
+        }
+        let lock = ToggleButton::new(words.scale_lock.clone(), Bind::given(m.scale_locked))
+            .icon(IconId::new(if m.scale_locked { "lock" } else { "lock_open" }))
+            .icon_only()
+            .tooltip(words.scale_lock.clone())
+            .show(ui);
+        if lock.events.committed().is_some() {
+            sent.push(shell("transform.setScaleLock", json!({ "locked": !m.scale_locked })));
+        }
+        if !m.scale_locked
+            && let Some(v) = widgets::number(ui, words.scale_y.clone(), Some(sy))
+        {
+            sent.push(shell("transform.setSettings", json!({ "scaleY": v })));
+        }
+        if icon(ui, "scaling", &words.scale, enabled) {
+            press(sent, "transform.scale", json!({"x": sx, "y": sy, "origin": origin}));
+        }
+    });
+
+    let _ = Row::new().show(ui, |ui, _| {
+        let angle = json!({"angle": m.rotate, "origin": origin});
+        if icon(ui, "rotate_ccw", &words.rotate_ccw, enabled) {
+            press(sent, "transform.rotateCounterclockwise", angle.clone());
+        }
+        if let Some(v) = widgets::number(ui, words.rotate.clone(), Some(m.rotate)) {
+            sent.push(shell("transform.setSettings", json!({ "rotate": v })));
+        }
+        if icon(ui, "rotate_cw", &words.rotate_cw, enabled) {
+            press(sent, "transform.rotateClockwise", angle);
+        }
+    });
+
+    let _ = Row::new().wrap(true).show(ui, |ui, _| {
+        let angle = json!({"angle": m.slant, "origin": origin});
+        if Button::new(words.slant_left.clone()).enabled(enabled).show(ui).clicked() && enabled {
+            press(sent, "transform.slantLeft", angle.clone());
+        }
+        if let Some(v) = widgets::number(ui, words.slant.clone(), Some(m.slant)) {
+            sent.push(shell("transform.setSettings", json!({ "slant": v })));
+        }
+        for (id, label) in
+            [("transform.slantRight", &words.slant_right), ("transform.slantDown", &words.slant_down), ("transform.slantUp", &words.slant_up)]
+        {
+            if Button::new(label.clone()).enabled(enabled).show(ui).clicked() && enabled {
+                press(sent, id, angle.clone());
+            }
+        }
+    });
+
+    let _ = Row::new().show(ui, |ui, _| {
+        for (id, name, label) in [
+            ("transform.alignLeft", "align_edge_left", &words.align_left),
+            ("transform.alignCenterHorizontal", "align_edge_hcenter", &words.align_center_h),
+            ("transform.alignRight", "align_edge_right", &words.align_right),
+            ("transform.alignTop", "align_edge_top", &words.align_top),
+            ("transform.alignCenterVertical", "align_edge_vcenter", &words.align_center_v),
+            ("transform.alignBottom", "align_edge_bottom", &words.align_bottom),
+        ] {
+            if icon(ui, name, label, enabled) {
+                press(sent, id, json!({}));
+            }
+        }
+    });
+
+    let _ = Row::new().show(ui, |ui, _| {
+        for (id, label, tip) in [
+            ("transform.booleanUnion", &words.union, &words.union_tip),
+            ("transform.booleanSubtract", &words.subtract, &words.subtract_tip),
+            ("transform.booleanIntersect", &words.intersect, &words.intersect_tip),
+        ] {
+            if Button::new(label.clone()).tooltip(tip.clone()).enabled(enabled).show(ui).clicked()
+                && let Some(t) = &m.boolean
+            {
+                sent.push(Msg::run(id, t.with(json!({}))));
+            }
+        }
+    });
+
+    if !enabled {
+        Text::new(words.nothing.clone()).shade(Shade::Muted).show(ui);
+    }
+}
+
+fn shell(id: &str, params: Value) -> Msg {
+    Msg::Shell(CommandRef::with_params(id, params))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use craft::ui::contract::Tracked;
+    use craft::ui::testing::Fixture;
+    use egui::{Key, Modifiers};
+    use serde_json::json;
+
+    use super::{Props, show};
+    use crate::app::Msg;
+    use crate::app::models::palette::{Targets, TransformModel};
+
+    /// A typed rotate angle goes to the settings; Rotate Clockwise passes it and the origin with the targets.
+    #[test]
+    fn rotate_uses_the_field_and_the_origin() {
+        let model = Tracked::new(TransformModel {
+            mode: "box".into(),
+            box_point: "center".into(),
+            metric: "baseline".into(),
+            scale: [110.0, 110.0],
+            scale_locked: true,
+            rotate: 90.0,
+            slant: 10.0,
+            origin: json!({"mode": "box", "boxPoint": "center"}).to_string(),
+            targets: Some(Targets { json: json!({"glyph": "A", "layer": "m01"}).to_string() }),
+            ..Default::default()
+        });
+        let posted = Rc::new(RefCell::new(Vec::new()));
+        let seen = Rc::clone(&posted);
+        let mut fixture = Fixture::new(move |ui| {
+            let mut sent = Vec::new();
+            show(ui, Props { model: &model, sent: &mut sent });
+            seen.borrow_mut().extend(sent);
+        });
+        fixture.settle();
+        let field = fixture.by_label("Rotate").expect("the Rotate field");
+        fixture.click(&field).key(Key::A, Modifiers::COMMAND).type_text("45").key(Key::Enter, Modifiers::NONE).settle();
+        let button = fixture.by_label("Rotate Clockwise").expect("the Rotate Clockwise button");
+        fixture.click(&button).settle();
+        assert_eq!(
+            *posted.borrow(),
+            vec![
+                Msg::Shell(craft::ui::runtime::commands::CommandRef::with_params("transform.setSettings", json!({"rotate": 45.0}))),
+                Msg::run(
+                    "transform.rotateClockwise",
+                    json!({"glyph": "A", "layer": "m01", "angle": 90.0, "origin": {"mode": "box", "boxPoint": "center"}})
+                ),
+            ]
+        );
+    }
+}

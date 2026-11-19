@@ -72,6 +72,8 @@ pub struct ViewState {
     pub commands: console::CommandSurfaces,
     /// The Kerning window's search, sort, selection and the dialogs it asked for.
     pub kerning: crate::shell::kerning_window::KerningView,
+    /// The Info box's reference point and size lock, the Transformations settings and the Fit Curve range.
+    pub palette: crate::shell::palette::PaletteView,
 }
 
 impl Default for ViewState {
@@ -93,6 +95,7 @@ impl Default for ViewState {
             layers: Default::default(),
             commands: console::CommandSurfaces::default(),
             kerning: Default::default(),
+            palette: Default::default(),
         }
     }
 }
@@ -280,6 +283,7 @@ impl FontCraftApp {
         let mut cx = ProjectCx { session: &mut self.session, view: &self.view };
         self.models.project(stamp, &mut cx);
         models::console::project(&mut self.models.console, &mut cx);
+        models::palette::project(&mut self.models.palette, &mut cx, &self.tools, stamp);
         let engine = Stamp::of(&self.session, 0);
         if self.enabled_at != Some(engine) {
             self.enabled_at = Some(engine);
