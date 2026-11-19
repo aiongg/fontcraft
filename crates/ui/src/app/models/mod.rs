@@ -4,6 +4,7 @@
 //! one of them with a one-line arm, and only when the [`Stamp`] moved since the last call.
 
 pub mod canvas;
+pub mod font_view;
 pub mod glyph;
 
 use craft::ui::contract::Tracked;
@@ -22,6 +23,9 @@ pub struct Models {
     pub canvas: Tracked<canvas::CanvasModel>,
     /// The canvas's colours and sizes, from the appearance settings.
     pub canvas_tokens: crate::canvas::tokens::Tokens,
+    /// Font View's glyphs, their order, the selection and the cell outlines (`panels::font_view`).
+    pub font_view: Tracked<font_view::FontViewModel>,
+    font_view_outlines: font_view::OutlineCache,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -63,6 +67,7 @@ impl Models {
         glyph::project(&mut self.glyph_metrics, cx);
         canvas::project(&mut self.canvas, cx);
         self.canvas_tokens = crate::canvas::tokens::Tokens::from_settings(cx.session.settings(), false);
+        font_view::project(&mut self.font_view, &mut self.font_view_outlines, cx);
         true
     }
 }

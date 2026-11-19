@@ -1429,6 +1429,26 @@ guesses = [
 
 # ═════════════════════════════ Behaviours ═════════════════════════════
 
+# ── Keyboard ──
+
+[[behavior]]
+id = "fontView.keyboard"
+area = "font-view"
+milestone = "M4"
+summary = "While Font View has the keyboard and no text field is active, the arrows move the glyph selection by one cell (Up and Down by a row in Grid View), Shift with an arrow extends it from the anchor, Home and End go to the first and last shown glyph, and Return opens the selection in Edit View; the view scrolls to keep the glyph in sight. Delete asks to remove the selected glyphs. The plus and minus buttons at the bottom left run New Glyph (the new glyph becomes the selection) and Remove Glyph on the selection; minus is greyed out with no selection."
+ref = "Font View › Grid View"
+status = "inferred"
+notes = "The keys come from the craft grid and table (crates/ui/src/panels/font_view/keys.rs turns what they report into commands). Minus and Delete post glyph.removeGlyph with the selection; the Remove Glyph dialog takes them over when it lands."
+guesses = [
+  "Each key above behaves as in a file browser's icon view. Settled by pressing them in the reference's Font View.",
+  "Plus comes before minus at the bottom left. Settled by looking at the reference's Font View.",
+  "Minus is greyed out with no selection. Settled by looking at the reference with nothing selected.",
+]
+observe = [
+  "In Font View press the arrows, Shift with an arrow, Home, End and Return, and note how the selection moves and what opens.",
+  "Click the plus and minus buttons at the bottom left of Font View, with and without a selection.",
+]
+
 # ── Grid cells ──
 
 [[behavior]]
