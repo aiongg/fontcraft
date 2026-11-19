@@ -13,6 +13,7 @@ use serde_json::{Value, json};
 
 use crate::shell::text_preview::{self, Drawn};
 use crate::{FontcraftApp, control};
+use fontcraft_engine::prelude::*;
 
 /// A headless window whose clock the test moves.
 struct Window {

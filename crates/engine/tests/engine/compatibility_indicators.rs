@@ -1,5 +1,5 @@
 //! The compatibility indicators' data: the per-glyph check the Edit View bar, the Font View
-//! corner and the Master Compatibility view read (`Session::glyph_compat`), the Master Compatible
+//! corner and the Master Compatibility view read (`SessionInterpExt::glyph_compat`), the Master Compatible
 //! smart-filter rule and the built-in Incompatible masters filter.
 // Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
@@ -10,6 +10,7 @@ use fontcraft_engine::Session;
 use fontcraft_engine::interp::params::ENFORCE_COMPATIBILITY_CHECK;
 use fontcraft_engine::model::plist::Value as Plist;
 use fontcraft_engine::model::{Axis, Font, Glyph, GlyphTable, Instance, Layer, Master, Path, Shape};
+use fontcraft_engine::prelude::*;
 use serde_json::{Value, json};
 
 fn rect(x0: f64, w: f64) -> Shape {

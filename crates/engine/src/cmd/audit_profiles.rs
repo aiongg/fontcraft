@@ -26,6 +26,7 @@ use serde_json::{Map, Value, json};
 use super::*;
 use crate::clock;
 use crate::params::Params;
+use crate::prelude::*;
 use crate::settings::Reserved;
 
 /// Deepest nesting of a JSON parameter turned into a property-list value.
@@ -399,7 +400,7 @@ fn clear_cache(s: &mut Session, v: &Value) -> Result<Value> {
         }
     }
     let doc = s.doc_mut()?;
-    let cleared = doc.audit.take().is_some();
+    let cleared = doc.clear_audit_run();
     Ok(json!({"cleared": cleared}))
 }
 

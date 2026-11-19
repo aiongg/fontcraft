@@ -7,6 +7,7 @@
 use std::sync::Arc;
 
 use fontcraft_engine::model::{Anchor, Axis, Component, Font, Glyph, GlyphTable, Instance, Layer, Master, Node, NodeKind, Path, Shape};
+use fontcraft_engine::prelude::*;
 use fontcraft_engine::{EngineError, Session};
 use fontcraft_geom::Shape as _;
 use fontcraft_testkit::{oval, rect, snapshot};

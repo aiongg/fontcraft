@@ -9,6 +9,7 @@ use std::sync::Arc;
 use craft::ui::contract::{PlainData, Tracked};
 use fontcraft_engine::Session;
 use fontcraft_engine::model::Font;
+use fontcraft_engine::prelude::*;
 use fontcraft_geom::{Affine, BezPath};
 use fontcraft_spacing::kerning::{GroupSide, Position, facing, members};
 use fontcraft_textlayout::{DEFAULT_LINE_WIDTH, Direction, Layout, Options};

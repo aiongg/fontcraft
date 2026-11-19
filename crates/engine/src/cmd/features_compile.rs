@@ -42,6 +42,7 @@ use serde_json::{Value, json};
 use super::*;
 use crate::feature_state::{FeatureState, PreviewBuilds, SharedBuild};
 use crate::params::Params;
+use crate::prelude::*;
 use crate::{EngineError, Result, Session};
 
 /// Most bytes of entry code read for the class and lookup names completion offers.

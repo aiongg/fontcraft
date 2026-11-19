@@ -28,6 +28,7 @@ use egui::{
     Vec2, pos2, vec2,
 };
 use fontcraft_engine::Session;
+use fontcraft_engine::prelude::*;
 use fontcraft_geom::{Affine, BezPath};
 use fontcraft_model::{Font, Guide, Layer, MAX_COORDINATE};
 use fontcraft_render::{Style, render_path};
