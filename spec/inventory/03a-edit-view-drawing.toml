@@ -1106,16 +1106,22 @@ label = "Tidy up Paths"
 menu = ["Path"]
 shortcut = "Cmd+Shift+T"
 kind = "engine"
-params = "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index], straighten?: units} | {glyphs: [names], layer?: id | layers?: [ids], straighten?} → {glyphs, skipped, selection?}"
+params = "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index], straighten?: units} | {glyphs: [names], layer?: id | layers?: [ids], straighten?} → {glyphs, skipped, incompatible, selection?}"
 area = "path-ops"
 milestone = "M3"
 summary = "Heuristically sets each node to smooth or corner and removes redundant points: handles lying on a straight segment, on-curve nodes sitting exactly on the line between their neighbours, and adjacent nodes with identical coordinates (which get merged). Works on the selected nodes, or on all nodes when nothing is selected."
 ref = "Edit View › Converting Nodes and Segments"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Tidy up Paths with Cmd+Shift+T. Not run. FontCraft: segment changes need both end nodes selected. `straighten` (FontCraft's own, 0 to 100 units) also turns curves that stray less than that from their chord into lines; the audit's `tidyPaths` fix passes the deviation check.outlines.almostStraightCurve reported."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Tidy up Paths with Cmd+Shift+T. Not run. The scope (all nodes, or the selected ones) is documented, not yet observed. FontCraft: a curve whose handles lie on its line becomes a line when either end node is selected; merging two nodes at one place needs both selected. A selected node on the line between its on-curve neighbours goes when both its segments run along that line, a curve counting when its handles lie on the line; the two segments become one line, so the outline does not change. A node where a straight segment runs into a curve along its handle stays. `incompatible` lists the glyphs whose layers could interpolate before the run and no longer can (tidyUp.mayBreakCompatibility). `straighten` (FontCraft's own, 0 to 100 units) also turns curves that stray less than that from their chord into lines; the audit's `tidyPaths` fix passes the deviation check.outlines.almostStraightCurve reported."
 guesses = [
   "Points within 0.01 units count as on a line or as one point.",
   "A node counts as smooth when a curve meets it and its two directions are within 1° (03a question 9).",
+  "A straight curve becomes a line when either of its end nodes is selected; running Tidy up Paths on one selected end in the reference app would settle it.",
+  "A node on a line next to a curve is removed only when the curve's handles lie on the line between the node's on-curve neighbours, so the outline stays as it was; a node where a line runs into a curve along the curve's handle is kept.",
+]
+observe = [
+  "Draw a rectangle whose bottom edge is a curve with both handles on the edge; select only its right end node and run Tidy up Paths; note whether the bottom becomes a line.",
+  "Draw a line into a curve whose first handle continues the line (an n stem into its arch); select the node where they meet and run Tidy up Paths; note whether it stays.",
 ]
 
 [[command]]
@@ -1124,7 +1130,7 @@ label = "Tidy up Paths for All Masters"
 menu = ["Path"]
 shortcut = "Cmd+Alt+Shift+T"
 kind = "engine"
-params = "{glyphs: [names] | glyph: name} → {glyphs, skipped}"
+params = "{glyphs: [names] | glyph: name} → {glyphs, skipped, incompatible}"
 area = "path-ops"
 milestone = "M3"
 summary = "Runs Tidy up Paths on every master layer of the selected glyphs. Shown in the Path menu while Option is held."
@@ -1138,6 +1144,12 @@ milestone = "M3"
 summary = "Points that look redundant in one master can be required for point-compatibility with other masters, so tidying a single layer can make a glyph stop interpolating."
 ref = "Edit View › Converting Nodes and Segments"
 status = "handbook"
+notes = "The handbook gives the warning; what the reference app shows after such a run is not documented. FontCraft: path.tidyUpPaths and path.tidyUpPathsForAllMasters return `incompatible`, the glyphs whose layers passed the compatibility check (interpolation.checkCompatibility, within its scope of masters) before the run and fail it after. The window is to show them in a status message; that part of the window is not built yet. path.roundCoordinates returns the same key, always empty."
+guesses = [
+  "A glyph counts as made incompatible when Tidy up Paths changes its node counts or segment types so that the compatibility check fails where it passed before; smooth flags do not count.",
+  "The window reports such glyphs in a status message; the reference app may show nothing beyond its usual compatibility indicators.",
+]
+observe = ["In a two-master font with an instance between the masters, put a node in the middle of a straight edge on both masters, run Tidy up Paths on one master only, and note any message beyond the compatibility indicators."]
 
 [[behavior]]
 id = "nodes.superSmoothBetweenCurves"

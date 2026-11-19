@@ -15,12 +15,14 @@ const STRAIGHTEN_SAMPLES: u32 = 32;
 
 /// Tidy up Paths on one contour, on the on-curve nodes `selected` (indices into
 /// `contour.nodes`), or on all of them. In this order it
-/// 1. turns curves whose off-curve nodes lie on the line between their ends into lines (both
-///    end nodes selected),
+/// 1. turns curves whose off-curve nodes lie on the line between their ends into lines (either
+///    end node selected),
 /// 2. merges nodes that sit on the node before them, when the segment between them is straight
 ///    or has no extent (both selected),
-/// 3. removes a node between two lines when it lies on the line between its neighbours (the
-///    node selected; the ends of an open contour stay),
+/// 3. removes a node that lies on the line between its on-curve neighbours when both its
+///    segments run along that line: lines, or curves whose off-curve nodes lie on it (the node
+///    selected; the ends of an open contour stay). The segment that replaces the two is a line,
+///    so the outline does not change,
 /// 4. makes each selected node smooth when a curve meets it and its two directions are within
 ///    1°, and a corner otherwise.
 ///
@@ -41,8 +43,7 @@ pub fn tidy_up_straightening(contour: &Contour, selected: Option<&[usize]>, stra
     let chosen = |r: &RNode| set.as_ref().is_none_or(|s| r.src.is_some_and(|i| s.contains(&i)));
 
     for j in ring.segment_ends() {
-        let flat = ring.prev(j).and_then(|p| ring.nodes.get(p)).is_some_and(chosen)
-            && ring.nodes.get(j).is_some_and(chosen)
+        let flat = (ring.prev(j).and_then(|p| ring.nodes.get(p)).is_some_and(chosen) || ring.nodes.get(j).is_some_and(chosen))
             && ring.seg(j).is_some_and(|s| {
                 s.is_curve()
                     && (s.ctrl.iter().all(|c| dist_to_segment(c.point, s.from, s.to) <= TIDY_TOLERANCE)
@@ -61,6 +62,12 @@ pub fn tidy_up_straightening(contour: &Contour, selected: Option<&[usize]>, stra
         // Each step removes a node and steps back by at most one, or moves on.
         while j < ring.len() && ring.len() > 2 {
             if on_line_between(&ring, j) && ring.nodes.get(j).is_some_and(chosen) {
+                // The segment out of `j` keeps its off-curve nodes on the node that ends it.
+                let next = ring.next(j);
+                if let Some(r) = next.and_then(|n| ring.nodes.get_mut(n)) {
+                    r.ctrl.clear();
+                    r.node.kind = NodeKind::Line;
+                }
                 ring.nodes.remove(j);
                 j = j.saturating_sub(1).max(usize::from(!ring.closed));
             } else {
@@ -91,12 +98,11 @@ fn strays_less(seg: &Seg<'_>, limit: f64) -> bool {
     })
 }
 
-/// Is node `j` between two straight segments and on the line between its neighbours?
+/// Is node `j` on the line between its on-curve neighbours, with both its segments along that
+/// line? A curve counts when all its off-curve nodes lie on the line between the neighbours: it
+/// may run back over itself, but it draws nothing off that line.
 fn on_line_between(ring: &Ring, j: usize) -> bool {
     let (Some(seg_in), Some(seg_out)) = (ring.seg(j), ring.next(j).and_then(|n| ring.seg(n))) else { return false };
-    if seg_in.is_curve() || seg_out.is_curve() {
-        return false;
-    }
     let (a, p, b) = (seg_in.from, seg_in.to, seg_out.to);
     let ab = b - a;
     let len2 = ab.hypot2();
@@ -104,7 +110,10 @@ fn on_line_between(ring: &Ring, j: usize) -> bool {
         return false;
     }
     let t = (p - a).dot(ab) / len2;
-    t > 0.0 && t < 1.0 && dist_to_segment(p, a, b) <= TIDY_TOLERANCE
+    t > 0.0
+        && t < 1.0
+        && dist_to_segment(p, a, b) <= TIDY_TOLERANCE
+        && seg_in.ctrl.iter().chain(seg_out.ctrl).all(|c| dist_to_segment(c.point, a, b) <= TIDY_TOLERANCE)
 }
 
 #[cfg(test)]
@@ -144,5 +153,36 @@ mod tests {
         assert_eq!(out.nodes.len(), 5);
         assert!(out.nodes.iter().all(|n| n.point != Point::new(50.0, 0.0)));
         assert!(out.nodes.iter().any(|n| n.point == Point::new(50.0, 100.0)));
+    }
+
+    #[test]
+    fn one_selected_end_straightens_a_curve_with_handles_on_its_line() {
+        // Nodes: (0,0), off (30,0), off (70,0), (100,0), (100,100), (0,100). Only (100,0), the
+        // end of the flat curve, is selected.
+        let path = BezPath::from_svg("M0,0 C30,0 70,0 100,0 L100,100 L0,100 Z").unwrap();
+        let c = contours_from_bez(&path).remove(0).tagged();
+        let out = tidy_up(&c, Some(&[3])).unwrap();
+        assert!(out.nodes.iter().all(Node::on_curve), "{:?}", out.nodes);
+        assert_eq!(out.nodes.len(), 4);
+    }
+
+    #[test]
+    fn a_node_between_a_line_and_a_curve_along_the_same_line_is_removed() {
+        // (50,0) sits between a line from (0,0) and a curve to (100,0) whose first handle runs
+        // back to (30,0): the curve stays on the line, but not between its own ends.
+        let path = BezPath::from_svg("M0,0 L50,0 C30,0 80,0 100,0 L100,100 L0,100 Z").unwrap();
+        let c = contours_from_bez(&path).remove(0).tagged();
+        let out = tidy_up(&c, Some(&[1])).unwrap();
+        let points: Vec<Point> = out.nodes.iter().map(|n| n.point).collect();
+        assert_eq!(points, vec![Point::new(0.0, 0.0), Point::new(100.0, 0.0), Point::new(100.0, 100.0), Point::new(0.0, 100.0)]);
+        assert_eq!(out.nodes[1].kind, NodeKind::Line);
+
+        // A stem running into a curve keeps its top node: the curve's handle continues the stem,
+        // but the node is not on the line between its on-curve neighbours.
+        let stem = BezPath::from_svg("M0,0 L0,100 C0,150 50,200 100,200 L100,0 Z").unwrap();
+        let c = contours_from_bez(&stem).remove(0).tagged();
+        let out = tidy_up(&c, Some(&[1])).unwrap();
+        assert!(out.nodes.iter().any(|n| n.point == Point::new(0.0, 100.0)));
+        assert!(out.nodes[1].smooth);
     }
 }

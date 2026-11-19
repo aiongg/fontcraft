@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use fontcraft_engine::model::{Anchor, Component, Node, NodeKind, Path, Shape};
+use fontcraft_engine::model::{Anchor, Axis, Component, Font, Glyph, GlyphTable, Instance, Layer, Master, Node, NodeKind, Path, Shape};
 use fontcraft_engine::{EngineError, Session};
 use fontcraft_geom::Shape as _;
 use fontcraft_testkit::{oval, rect, snapshot};
@@ -345,6 +345,73 @@ fn round_coordinates_rounds_nodes_anchors_and_component_offsets() {
     assert_eq!((a.x, a.y), (2.0, 2.0));
 }
 
+// The Edit View passes its selection: only the selected nodes, the handles of the selected
+// on-curve nodes and the nodes of the selected segments move; the anchor stays.
+#[test]
+fn round_coordinates_on_a_selection_leaves_the_rest() {
+    let mut s = Session::with_document();
+    add(&mut s, "A", rect(0.0, 0.0, 100.0, 100.0));
+    // path.addPath rounds to the grid, so the fractions go in directly.
+    let (on, off) = (NodeKind::Line, NodeKind::OffCurve);
+    let nodes = [(0.4, 0.4, on), (100.4, 0.4, on), (100.4, 50.4, off), (80.4, 100.4, off), (50.4, 100.4, NodeKind::Curve), (0.4, 100.4, on)];
+    s.edit("fractions", |font| {
+        let mut g = font.glyph_mut("A")?;
+        let l = &mut g.layers[0];
+        l.shapes[0] = Shape::Path(Path::new(true, nodes.iter().map(|&(x, y, k)| Node::new(x, y, k)).collect()));
+        l.anchors.push(Anchor::new("top", 1.6, 2.4));
+        Ok(())
+    })
+    .unwrap();
+    let r = run(&mut s, "path.roundCoordinates", json!({"glyph": "A", "points": [[0, 1], [0, 5]]}));
+    assert_eq!(r["incompatible"], json!([]));
+    assert_eq!(xy(&paths(&s, "A", None)[0]), [(0.4, 0.4), (100.0, 0.0), (100.0, 50.0), (80.4, 100.4), (50.4, 100.4), (0.0, 100.0)]);
+
+    run(&mut s, "path.roundCoordinates", json!({"glyph": "A", "segments": [[0, 4]]}));
+    assert_eq!(xy(&paths(&s, "A", None)[0]), [(0.4, 0.4), (100.0, 0.0), (100.0, 50.0), (80.0, 100.0), (50.0, 100.0), (0.0, 100.0)]);
+    let a = &s.font().unwrap().glyph("A").unwrap().layers[0].anchors[0];
+    assert_eq!((a.x, a.y), (1.6, 2.4));
+}
+
+/// Light (100) and Bold (900) with an instance between them, so their layers must stay
+/// compatible. `A` has a node in the middle of its bottom edge on both.
+fn two_master_session() -> Session {
+    let mut f = Font::new("Compat");
+    f.axes = Arc::new(vec![Axis { name: "Weight".into(), tag: "wght".into(), ..Axis::default() }]);
+    f.masters = Arc::new(
+        [("light", 100.0), ("bold", 900.0)]
+            .iter()
+            .map(|(id, w)| Master { id: (*id).into(), name: (*id).into(), location: vec![*w], ..Master::default() })
+            .collect(),
+    );
+    f.instances = Arc::new(vec![Instance { name: "Regular".into(), location: vec![400.0], ..Instance::default() }]);
+    let mut g = Glyph::new("A");
+    for master in ["light", "bold"] {
+        let mut l = Layer::new(master, 500.0);
+        let nodes =
+            [(0.0, 0.0), (50.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0)].iter().map(|&(x, y)| Node::new(x, y, NodeKind::Line)).collect();
+        l.shapes.push(Shape::Path(Path::new(true, nodes)));
+        g.layers.push(l);
+    }
+    f.glyphs = GlyphTable::from_glyphs(vec![Arc::new(g)]);
+    let mut s = Session::new();
+    s.add_document(f, None).unwrap();
+    s
+}
+
+// Tidying one master removes a node the other master still has; tidying both keeps them matched.
+#[test]
+fn tidy_up_lists_the_glyphs_it_makes_incompatible() {
+    let mut s = two_master_session();
+    assert!(s.glyph_compat("A").unwrap().ok);
+    let r = run(&mut s, "path.tidyUpPaths", json!({"glyph": "A", "layer": "light"}));
+    assert_eq!(r["incompatible"], json!(["A"]));
+
+    let mut s = two_master_session();
+    let r = run(&mut s, "path.tidyUpPathsForAllMasters", json!({"glyphs": ["A"]}));
+    assert_eq!(r["incompatible"], json!([]));
+    assert!(s.glyph_compat("A").unwrap().ok);
+}
+
 #[test]
 fn bad_parameters_change_nothing() {
     let mut s = Session::with_document();
@@ -361,6 +428,9 @@ fn bad_parameters_change_nothing() {
         ("path.removeOverlap", json!({"glyphs": ["A"], "shapes": [0]})),
         ("path.convertToQuadratic", json!({"glyph": "A", "tolerance": 0})),
         ("path.roundCoordinatesForAllMasters", json!({"glyph": "A", "layer": "m01"})),
+        ("path.roundCoordinates", json!({"glyphs": ["A"], "points": [[0, 1]]})),
+        ("path.roundCoordinates", json!({"glyph": "A", "segments": [[0, 9]]})),
+        ("path.roundCoordinates", json!({"glyph": "A", "allMasters": true, "points": [[0, 1]]})),
     ] {
         assert!(s.execute(id, &p).is_err(), "{id} {p}");
         assert_eq!(snapshot(&s), before, "{id} {p}");
