@@ -678,7 +678,9 @@ pub(crate) fn read(font: &mut Font, default_id: &str) {
 
 /// A glyph with a key this module or [`crate::shapekeys`] might type.
 fn has_candidates(g: &Glyph) -> bool {
-    let key = |k: &str| k.starts_with("com.schriftgestaltung.") || k == COLOR_LAYER_MAPPING || k == shapekeys::OBJECT_LIBS;
+    let key = |k: &str| {
+        k.starts_with("com.schriftgestaltung.") || k == COLOR_LAYER_MAPPING || k == shapekeys::OBJECT_LIBS || k == crate::pathkeys::PATH_ATTRIBUTES
+    };
     g.layers.iter().any(|l| {
         l.info.user_data.0.entries.iter().any(|(k, _)| key(k.as_str()))
             || l.info.background.as_ref().is_some_and(|b| {

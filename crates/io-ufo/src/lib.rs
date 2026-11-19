@@ -39,6 +39,7 @@ pub mod images;
 pub mod kerning;
 pub(crate) mod libkeys;
 pub mod names;
+mod pathkeys;
 mod shapekeys;
 pub mod ufo;
 mod ufo1;

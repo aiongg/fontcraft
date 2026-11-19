@@ -13,6 +13,7 @@
 //! | the components' locks and smart-component values | `com.schriftgestaltung.componentsLocked`, `…componentsSmartComponentValues`: one entry per component |
 //! | a node's user data, higher-order interpolation data (`hoi`) and other keys of its attribute dictionary | `com.schriftgestaltung.Glyphs.nodeUserData.<path>.<node>` (indices as the `.glyphs` format counts them: paths only, a closed path's start node last) |
 //! | an anchor's user data | `public.objectLibs`, under the anchor's identifier |
+//! | a path's lock and drawing attributes | FontCraft's `com.fontcraft.pathAttributes` ([`crate::pathkeys`]); glyphsLib keeps none |
 //!
 //! glyphsLib writes `shapeOrder` whenever a layer has both kinds of shape, so it follows the
 //! defaults rule of [`crate::libkeys`]. A smart component stays a component, with its values in
@@ -27,6 +28,7 @@ use fontcraft_plist::{Dict, Num, Value};
 
 use crate::glyphkeys::{Glif, Written, array, coordinate, dict, int, number, string};
 use crate::libkeys::sorted_keys;
+use crate::pathkeys::{self, PATH_ATTRIBUTES};
 
 pub(crate) const SHAPE_ORDER: &str = "com.schriftgestaltung.Glyphs.shapeOrder";
 const COMPONENT_INFO: &str = "com.schriftgestaltung.Glyphs.ComponentInfo";
@@ -40,7 +42,7 @@ pub(crate) const MERGED: [&str; 1] = [OBJECT_LIBS];
 
 /// A key of a background's lib this module types.
 pub(crate) fn is_background_key(k: &str) -> bool {
-    k.starts_with(NODE_USER_DATA) || k == OBJECT_LIBS
+    k.starts_with(NODE_USER_DATA) || k == OBJECT_LIBS || k == PATH_ATTRIBUTES
 }
 
 fn alignment_number(a: Alignment) -> Option<i64> {
@@ -63,8 +65,8 @@ fn alignment_of(n: Num) -> Option<Alignment> {
 }
 
 /// Whether a shape is written as a GLIF `<contour>`, and so counts in node user data's path
-/// index.
-fn is_contour(s: &Shape) -> bool {
+/// index (and in [`crate::pathkeys`]).
+pub(crate) fn is_contour(s: &Shape) -> bool {
     match s {
         Shape::Path(_) => true,
         Shape::Raw(r) => r.family == Family::Ufo && r.value.as_str().is_some_and(|t| t.trim_start().starts_with("<contour")),
@@ -179,6 +181,9 @@ pub(crate) fn entries(c: &Glif<'_>, w: &mut Written) {
             pi += 1;
         }
     }
+    if let Some(v) = pathkeys::entry(&l.shapes) {
+        w.put(PATH_ATTRIBUTES, v);
+    }
     // Anchor user data under the anchors' identifiers, with the object libs of other objects.
     let own = l.info.user_data.get(OBJECT_LIBS);
     if c.format >= 2 && l.anchors.iter().any(|a| !a.info.user_data.is_empty()) && own.is_none_or(|v| v.as_dict().is_some()) {
@@ -225,6 +230,7 @@ pub(crate) fn apply(glyph: &str, l: &mut fontcraft_model::Layer, skip: &dyn Fn(&
             COMPONENT_INFO => component_info(&mut l.shapes, v),
             COMPONENTS_LOCKED => components_locked(&mut l.shapes, v),
             COMPONENTS_SMART => components_smart(&mut l.shapes, v),
+            PATH_ATTRIBUTES => pathkeys::apply(&mut l.shapes, v),
             OBJECT_LIBS => match anchor_libs(glyph, &mut l.anchors, v) {
                 Some(rest) if rest.is_empty() => true,
                 Some(rest) => {
@@ -267,6 +273,8 @@ pub(crate) fn apply_background(glyph: &str, b: &mut fontcraft_model::Background,
             }
         } else if k.starts_with(NODE_USER_DATA) {
             node_user_data(&mut b.shapes, k, v)
+        } else if k == PATH_ATTRIBUTES {
+            pathkeys::apply(&mut b.shapes, v)
         } else {
             false
         };

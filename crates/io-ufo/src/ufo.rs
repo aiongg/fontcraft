@@ -2010,11 +2010,15 @@ pub(crate) fn shape_losses(font: &Font, designspace: bool) -> Vec<String> {
     });
     for l in layers {
         let background = l.info.background.as_ref();
+        // A full-colour layer that the colour layer list may split goes through `colorglyphs`,
+        // which keeps the fills only; any attribute is counted there.
+        let split = crate::colorglyphs::expands(l) || (l.is_master_layer() && l.info.attrs.full_color);
         let shapes = l.shapes.iter().map(|s| (s, false)).chain(background.into_iter().flat_map(|b| b.shapes.iter().map(|s| (s, true))));
         for (s, in_background) in shapes {
             match s {
                 Shape::Path(p) => {
-                    counts[0] += usize::from(p.info.locked || !p.info.attrs.is_empty());
+                    let any = p.info.locked || !p.info.attrs.is_empty();
+                    counts[0] += usize::from(if split && !in_background { any } else { crate::pathkeys::lost(p) });
                     counts[1] += p.nodes.iter().filter(|n| n.locked || !n.orientation.is_left()).count();
                     counts[2] += p.nodes.iter().filter(|n| n.tangent).count();
                     counts[3] += usize::from(!p.closed && p.nodes.first().is_some_and(|n| n.smooth));
@@ -2042,7 +2046,7 @@ pub(crate) fn shape_losses(font: &Font, designspace: bool) -> Vec<String> {
 
 /// The kinds of shape data [`shape_losses`] reports, as its lines begin.
 pub const SHAPE_LOSSES: [&str; 10] = [
-    "the paths' locks and drawing attributes",
+    "the paths' locks and drawing attributes, where neither the path attributes key nor the colour layer list holds them",
     "the nodes' locks and orientations",
     "tangent nodes, written as smooth",
     "smooth first nodes of open paths",

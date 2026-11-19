@@ -1928,11 +1928,12 @@ milestone = "M3"
 summary = "Writes the stroke attributes of one or more paths, the action behind the Stroke palette fields; setting width to null removes the stroke. The reference exposes these only as palette controls."
 ref = "Edit View › Creating Strokes"
 status = "inferred"
-notes = "Built in M3.11: keys not given keep their values; `width: null` removes every stroke attribute. Stored as the `.glyphs` path attributes `strokeWidth`, `strokeHeight`, `strokePos`, `lineJoin`, `lineCapStart`, `lineCapEnd` and `fill`."
+notes = "Built in M3.11: keys not given keep their values; `width: null` removes every stroke attribute. Stored as the `.glyphs` path attributes `strokeWidth`, `strokeHeight`, `strokePos`, `lineJoin`, `lineCapStart`, `lineCapEnd` and `fill`. M3.36: a UFO glyph keeps them, with the mask, colours, lock and the forced cap axis, in its lib under `com.fontcraft.pathAttributes` (one dictionary per contour, `.glyphs` key names), and reading the UFO gives them back; gradients, shadows and other stored attributes are listed as lost when saving."
 guesses = [
   "The axis-aligned cap is stored as cap code 4; not confirmed against the reference's files.",
   "A forced cap axis is kept in the native key `lineCapAxis`, which .glyphs files do not hold, so saving as .glyphs loses it (a known loss).",
-  "A UFO keeps no stroke or mask attributes, so saving as UFO loses strokes and masks (a known loss).",
+  "A UFO keeps strokes, masks and the other path attributes in FontCraft's own glyph lib key `com.fontcraft.pathAttributes` (glyphsLib keeps none); the key's name and form are ours, so the reference app and glyphsLib drop it when they read the UFO.",
+  "A UFO does not record the .glyphs format version, so a mask code 2 (intersect in version 4) written to a UFO reads back as a subtracting mask.",
   "Stroke positions and mask values keep the stored form of the document's .glyphs version, so converting a document between versions 3 and 4 changes where strokes sit and what masks do (a known loss until the reference's conversion is observed).",
 ]
 
@@ -1975,7 +1976,13 @@ milestone = "M3"
 summary = "Context-menu command that replaces a stroked path by ordinary closed outlines of its stroke and drops the stroke attributes."
 ref = "Edit View › Creating Strokes"
 status = "handbook"
-notes = "Built in M3.11: the new paths have no overlaps, outer paths run counter-clockwise, points are on the grid, and they keep the mask flag and colour label of the stroked path. With `glyphs` (Font View) every stroked path of each layer is expanded."
+notes = "Built in M3.11: the new paths have no overlaps, outer paths run counter-clockwise, points are on the grid, and they keep the mask flag and colour label of the stroked path. With `glyphs` (Font View) every stroked path of each layer is expanded. M3.36: hints, instructions and corner components on the other paths are renumbered so they stay on the same nodes (node references count paths only, corner components count shapes), in the foreground or background that was expanded."
+guesses = [
+  "A hint, instruction or corner component on an expanded path is removed, since its nodes are gone; the running app would show whether it moves them to the new outline.",
+]
+observe = [
+  "Put a stem hint on a stroked path and another on a path after it, run Expand Outline, and note where each hint ends up.",
+]
 
 [[command]]
 id = "path.expandOutlineForAllMasters"
