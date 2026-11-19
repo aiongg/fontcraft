@@ -90,14 +90,43 @@ pub const ALL: &[Subcommand] = &[
 /// The subcommands whose packages have not landed: each prints its usage and refuses to run.
 pub const PLANNED: &[&str] = &[];
 
+/// Subcommands that read their arguments without [`args::parse`] and do not answer `--help`
+/// themselves: [`run`] answers it and takes the common options out first.
+const OWN_PARSERS: &[&str] = &["compile", "info", "mcp", "oracle"];
+
 /// The subcommand named `name`.
 pub fn find(name: &str) -> Option<&'static Subcommand> {
     ALL.iter().find(|s| s.name == name)
 }
 
-/// The help text of a subcommand.
+/// Runs `sub` on its arguments.
+pub fn run(sub: &Subcommand, args: &[String]) -> Outcome {
+    if !OWN_PARSERS.contains(&sub.name) {
+        return (sub.run)(args);
+    }
+    if args.iter().take_while(|a| *a != "--").any(|a| a == "-h" || a == "--help") {
+        return out(&help(sub));
+    }
+    (sub.run)(&args::take_globals(args, &[])?)
+}
+
+/// The help text of a subcommand: its usage and options, the engine command it runs, and a
+/// pointer to the common options.
 pub fn help(sub: &Subcommand) -> String {
-    format!("fontcraft-cli {}: {}\n\nUSAGE:\n{}", sub.name, sub.summary, args::help(sub.usage, sub.options))
+    let mut text = format!("fontcraft-cli {}: {}\n\nUSAGE:\n{}", sub.name, sub.summary, args::help(sub.usage, sub.options));
+    let commands: Vec<String> = commands::ENGINE_COMMANDS
+        .iter()
+        .filter(|(id, _)| *id == sub.name || id.strip_prefix(sub.name).is_some_and(|rest| rest.starts_with(' ')))
+        .map(|(id, command)| if *id == sub.name { (*command).to_string() } else { format!("{command} ({id})") })
+        .collect();
+    if !commands.is_empty() {
+        text.push_str(&format!("\n\nENGINE COMMANDS: {}", commands.join(", ")));
+    }
+    text.push_str(
+        "\n\nCOMMON OPTIONS: -q, -v, -vv, --log LEVEL, --log-file FILE, --color auto|always|never, --timing,\n\
+         --backtrace, -j/--jobs N, -V/--version (`fontcraft-cli help` describes them)",
+    );
+    text
 }
 
 /// What a stub does: the usage for `--help`, a usage error without arguments, and exit status 4
@@ -122,6 +151,8 @@ pub(crate) fn options(
     names: &[(&str, &str)],
     flags: &[(&str, &str)],
 ) -> Result<(Vec<String>, serde_json::Map<String, Value>), Failure> {
+    let own: Vec<&str> = names.iter().chain(flags).map(|(form, _)| *form).collect();
+    let args = args::take_globals(args, &own)?;
     let mut positional = Vec::new();
     let mut params = serde_json::Map::new();
     let mut it = args.iter();

@@ -1,8 +1,8 @@
 //! `fontcraft-cli`: FontCraft from the command line.
 //!
 //! ```text
-//! fontcraft-cli commands [PATTERN]
-//! fontcraft-cli run [--in FILE] [--cmd ID [--params JSON]]... [--save [FILE]] [--export FILE]
+//! fontcraft-cli commands [PATTERN] [--cli [--json]]
+//! fontcraft-cli run [--in FILE] [--cmd ID [--params JSON | --params-file FILE]]... [--script FILE [--keep-going]] [--save [FILE]] [--export FILE]...
 //! fontcraft-cli convert IN OUT [--smart-components components|outlines]
 //! fontcraft-cli compile SOURCE... [--format ttf|otf]... [--container plain|woff|woff2]... [-o FILE | --output-dir DIR] …
 //! fontcraft-cli info FILE [--section NAME,...] [--all-names] [--face N]
@@ -14,8 +14,9 @@
 //! Every subcommand is a thin shell over engine commands (`spec/inventory/20-cli.toml` lists the
 //! full planned set and the reference tools each one replaces). Results are JSON on stdout and
 //! messages on stderr. Exit status, shared by every subcommand (`cli.global.exitCodes`): 0 success,
-//! 2 usage error, 3 an input could not be read, 4 the operation failed. (1 is reserved for "it ran
-//! and found something": differences, failed checks.)
+//! 2 usage error, 3 an input could not be read, 4 the operation failed, 5 some inputs of a batch
+//! failed. (1 is reserved for "it ran and found something": differences, failed checks.) Every
+//! subcommand takes the common options of [`args::GLOBAL`], before or after its name.
 #![forbid(unsafe_code)]
 
 mod args;
@@ -23,6 +24,7 @@ mod io;
 mod sub;
 
 use std::process::ExitCode;
+use std::time::Instant;
 
 use io::{out, usage};
 
@@ -30,13 +32,16 @@ const USAGE: &str = "\
 fontcraft-cli: FontCraft from the command line
 
 USAGE:
-  fontcraft-cli commands [PATTERN]
+  fontcraft-cli commands [PATTERN] [--cli [--json]]
       Print the command catalogue as JSON (only commands whose id or label contains PATTERN).
+      --cli lists the subcommands instead, with the engine command each one runs.
 
-  fontcraft-cli run [--in FILE] [--cmd ID [--params JSON]]... [--save [FILE]] [--export FILE]
+  fontcraft-cli run [--in FILE] [--cmd ID [--params JSON | --params-file FILE]]...
+                    [--script FILE [--keep-going]] [--save [FILE]] [--export FILE]...
       Headless batch: open FILE (a source) or start a new font, run the commands in order and
-      print one JSON result per line. Stops at the first command that fails. --save writes the
-      document (to FILE, or back to the file it was opened from); --export compiles it to a font.
+      print one JSON result per line. Stops at the first command that fails. --script runs a file
+      of steps. --save writes the document (to FILE, or back to the file it was opened from);
+      --export compiles it to a font.
 
   fontcraft-cli convert IN OUT [--smart-components components|outlines]
       Open IN (a source) and write OUT in the format its extension names (.fontcraft, .glyphs,
@@ -88,29 +93,71 @@ USAGE:
       (default ./corpus). Exit status 1 when a table differs or a build fails. --variable
       compares variable fonts at locations, --instances static instances against fontmake -i.
 
-  fontcraft-cli help | --version
+  fontcraft-cli help [SUBCOMMAND [ACTION]] [--all] | --version
+      The list of subcommands, the reference of one, or with --all the reference of every one.
 ";
 
 fn main() -> ExitCode {
+    let started = Instant::now();
+    io::init();
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let rest = args.get(1..).unwrap_or_default();
-    let result = match args.first().map(String::as_str) {
-        Some("-h" | "--help" | "help") | None => print_usage(),
-        Some("-V" | "--version") => out(&format!("fontcraft-cli {}", env!("CARGO_PKG_VERSION"))),
-        Some(name) => match sub::find(name) {
-            Some(sub) => (sub.run)(rest),
-            None => Err(usage(format!("unknown subcommand `{name}`\n\n{USAGE}"))),
-        },
-    };
-    match result {
+    let result = dispatch(&args);
+    let code = match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(failure) => {
             // An empty message: the subcommand has already said everything (`check --quiet`).
             if !failure.message().is_empty() {
-                eprintln!("fontcraft-cli: {}", failure.message());
+                io::error(failure.message());
             }
             ExitCode::from(failure.exit_code())
         }
+    };
+    io::report_timing(started);
+    code
+}
+
+/// Runs a command line: the common options before the subcommand's name, then the subcommand.
+fn dispatch(args: &[String]) -> io::Outcome {
+    let leading = args::leading_globals(args);
+    let (globals, rest) = args.split_at(leading);
+    if !globals.is_empty() {
+        args::parse(&[], globals)?;
+    }
+    let tail = rest.get(1..).unwrap_or_default();
+    match rest.first().map(String::as_str) {
+        Some("-h" | "--help") | None => print_usage(),
+        Some("help") => help(tail),
+        Some(name) => match sub::find(name) {
+            Some(sub) => sub::run(sub, tail),
+            None => Err(usage(format!("unknown subcommand `{name}`\n\n{USAGE}"))),
+        },
+    }
+}
+
+/// `fontcraft-cli help [SUBCOMMAND [ACTION]] [--all]`.
+fn help(args: &[String]) -> io::Outcome {
+    const OPTIONS: &[args::OptSpec] = &[args::OptSpec::switch("all", false, "print the reference of every subcommand")];
+    let parsed = args::parse(OPTIONS, args)?;
+    if parsed.switch("all") {
+        print_usage()?;
+        for sub in sub::ALL {
+            out(&format!("\n{}", sub::help(sub)))?;
+        }
+        return Ok(());
+    }
+    match parsed.positional.as_slice() {
+        [] => print_usage(),
+        [name, action @ ..] if action.len() <= 1 => {
+            let sub = sub::find(name).ok_or_else(|| usage(format!("unknown subcommand `{name}`")))?;
+            let mut rest: Vec<String> = action.to_vec();
+            rest.push("--help".to_string());
+            // An action that reads its own arguments may not know --help: the general text then.
+            match sub::run(sub, &rest) {
+                Err(io::Failure::Usage(_)) => out(&sub::help(sub)),
+                other => other,
+            }
+        }
+        _ => Err(usage("help takes a subcommand and at most one action")),
     }
 }
 
@@ -129,5 +176,6 @@ fn print_usage() -> io::Outcome {
             out(&format!("  {:<12} {}", sub.name, sub.summary))?;
         }
     }
-    Ok(())
+    out("\nCOMMON OPTIONS (every subcommand; one of its own with the same name takes precedence):")?;
+    out(args::option_lines(args::GLOBAL).trim_end())
 }

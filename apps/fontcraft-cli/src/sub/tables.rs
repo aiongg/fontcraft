@@ -2,7 +2,7 @@
 
 use super::Subcommand;
 use super::options;
-use crate::io::{Failure, Outcome, note, out, usage};
+use crate::io::{Failure, Outcome, out, usage, warn};
 use fontcraft_engine::Session;
 use serde_json::{Map, Value, json};
 
@@ -83,7 +83,7 @@ fn run(id: &str, params: Map<String, Value>) -> Result<Value, Failure> {
 fn print(result: &Value) -> Outcome {
     if let Some(warnings) = result.get("warnings").and_then(Value::as_array) {
         for w in warnings.iter().filter_map(Value::as_str) {
-            note(&format!("warning: {w}"));
+            warn(w);
         }
     }
     out(&serde_json::to_string_pretty(result).map_err(|e| Failure::Failed(e.to_string()))?)

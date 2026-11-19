@@ -165,10 +165,20 @@ Nothing else is written to standard output in this mode.
 ### Diagnostics (`cli.global.logging`, `.color`, `.backtrace`, `.timing`)
 
 Everything that is not the result goes to standard error: errors, warnings, progress, timing. Levels:
-`-q` errors only; default warnings; `-v` info; `-vv` debug. `--log` sets a level or per-module levels;
-`--log-file` duplicates the stream into a file. Each line carries the level, the input it concerns and,
-for compiled fonts, the PostScript name, so interleaved output from parallel jobs stays attributable.
-`--timing` prints per-stage times at the end; `--trace FILE` writes them as trace events.
+`-q` errors only; default warnings and notes (what was written or skipped); `-v` info; `-vv` debug.
+`-q`, `-v` and `--log` act in the order given. `--log` sets a level or per-module levels
+(`info,engine=debug`; modules filter the libraries' messages); `--log-file` duplicates the stream into
+a file. Each line carries the level, the input it concerns and, for compiled fonts, the PostScript
+name, so interleaved output from parallel jobs stays attributable:
+
+```
+fontcraft-cli: warning: Font.ttf: no 'GPOS' table
+```
+
+`--color auto|always|never` colours the level names. `--timing` prints per-stage times at the end;
+`--trace FILE` writes them as trace events. These options, with `-j`/`--jobs`, `--backtrace` and
+`-V`/`--version`, belong to every subcommand and may also come before its name; an option of the
+subcommand's own with the same long name takes precedence (`dump --version`).
 
 ### Reproducible output (`cli.global.determinism`, `.timestamp`)
 
@@ -2498,6 +2508,10 @@ Dispatches any registered engine command by id with a JSON parameter object and 
 ```
 fontcraft-cli run COMMAND-ID [--params JSON | --params-file FILE | KEY=VALUE...] [--document PATH] [--save] | run --script FILE | run --session
 ```
+
+A script file holds one step per line: `ID {JSON}` runs an engine command on the open document, and a
+complete `fontcraft-cli SUBCOMMAND …` line runs a subcommand on its own. The run stops at the first
+failing step (exit status 5 when earlier steps succeeded) unless `--keep-going` is given.
 
 `run` is the generic door; every other subcommand is a convenience in front of it. A command that is
 `kind = "ui"` (view and window state) is refused headless with exit status 2 and a message saying so.

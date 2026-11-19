@@ -1082,6 +1082,7 @@ dependencies = [
  "fontcraft-engine",
  "fontcraft-mcp",
  "fontcraft-oracle",
+ "log",
  "serde_json",
 ]
 

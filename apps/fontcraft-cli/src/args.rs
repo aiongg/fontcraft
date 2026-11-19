@@ -24,16 +24,37 @@
 //! - `--` ends the options; `-h` and `--help` ask for help; a lone `-` is a positional (stdin).
 //! - Where a subcommand reads queries ([`parse_with_queries`]), `--opt?` records the value
 //!   `opt` has at that point of the line; elsewhere it is an unknown option.
+//! - The common options ([`GLOBAL`]: `-q`, `-v`, `-vv`, `--log`, `--log-file`, `--color`,
+//!   `--timing`, `--backtrace`, `-j`/`--jobs`, `-V`/`--version`) are added to every table. An
+//!   option the subcommand declares with the same long name wins, and one with the same short
+//!   letter keeps the letter. When a name could be either, the subcommand's own option is tried
+//!   first at each step: exact name, then letter case, then prefix. [`parse`] applies the common
+//!   options it reads ([`crate::io::configure`]); `-q`, `-v` and `--log` act in the order given.
+//!   Subcommands that read their own arguments call [`take_globals`].
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use crate::io::{Failure, usage};
+use crate::io::{self, Color, Failure, Level, Setup, out, usage};
 
 /// Largest response or options file, in bytes.
 pub const MAX_RESPONSE_FILE: usize = 1 << 20;
 /// Deepest nesting of response and options files.
 pub const MAX_RESPONSE_DEPTH: usize = 8;
+
+/// The options every subcommand takes (`cli.global.logging`, `.color`, `.timing`, `.backtrace`,
+/// `.parallelism`, `.help`), added to its own by [`parse`].
+pub const GLOBAL: &[OptSpec] = &[
+    OptSpec::switch("quiet", false, "print errors only").short('q'),
+    OptSpec::switch("verbose", false, "also print informational messages; -vv adds debug output").short('v'),
+    OptSpec::value("log", "LEVEL", "", "error, warning, note (default), info or debug, then per-module levels: info,engine=debug"),
+    OptSpec::value("log-file", "FILE", "", "also write the messages to FILE"),
+    OptSpec::value("color", "auto|always|never", "", "colour the messages (default: auto, on a terminal unless NO_COLOR is set)"),
+    OptSpec::switch("timing", false, "print the time spent in each stage when the run ends"),
+    OptSpec::switch("backtrace", false, "print the stack with an internal error, for bug reports"),
+    OptSpec::value("jobs", "N", "", "worker threads where inputs are worked on at once: 0 every core (default), -N all but N").short('j'),
+    OptSpec::switch("version", false, "print the version (with -v also the build target) and stop").short('V'),
+];
 
 /// What an option takes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -159,6 +180,13 @@ impl Parsed {
             _ => &[],
         }
     }
+
+    /// The worker threads `--jobs` asks for, the subcommand's own option or the common one
+    /// ([`io::jobs`]).
+    #[allow(dead_code)] // The subcommands that work on inputs in parallel adopt it.
+    pub fn jobs(&self) -> Result<usize, Failure> {
+        io::jobs(self.value("jobs"))
+    }
 }
 
 /// Reads `args` against `specs`.
@@ -174,6 +202,8 @@ pub fn parse_with_queries(specs: &[OptSpec], args: &[String]) -> Result<Parsed, 
 
 fn parse_inner(specs: &[OptSpec], args: &[String], queries: bool) -> Result<Parsed, Failure> {
     let args = expand(args, 0, &mut Vec::new())?;
+    let globals = globals_for(specs);
+    let tiers: [&[OptSpec]; 2] = [specs, &globals];
     let mut parsed = Parsed::default();
     for spec in specs {
         let value = match spec.kind {
@@ -186,6 +216,8 @@ fn parse_inner(specs: &[OptSpec], args: &[String], queries: bool) -> Result<Pars
     }
     // The list options given so far on the line, for repeatable lists.
     let mut given: Vec<&'static str> = Vec::new();
+    // The level `-q`, `-v` and `--log` set so far, in the order given.
+    let mut levels = Levels::default();
     let mut it = args.into_iter().peekable();
     while let Some(arg) = it.next() {
         if arg == "--" {
@@ -201,7 +233,7 @@ fn parse_inner(specs: &[OptSpec], args: &[String], queries: bool) -> Result<Pars
                 && !body.contains('=')
                 && let Some(name) = body.strip_suffix('?')
             {
-                let (spec, on) = resolve(specs, name)?;
+                let (spec, on) = resolve(&tiers, name)?;
                 let given = if on { name } else { name.get(3..).unwrap_or(name) };
                 parsed.queries.push(Query { given: given.to_string(), name: spec.name, value: parsed.values.get(spec.name).cloned() });
                 continue;
@@ -214,7 +246,7 @@ fn parse_inner(specs: &[OptSpec], args: &[String], queries: bool) -> Result<Pars
                 },
                 None => (body, Edit::Set, None),
             };
-            let (spec, on) = resolve(specs, name)?;
+            let (spec, on) = resolve(&tiers, name)?;
             if edit != Edit::Set && spec.kind != Kind::List {
                 return Err(usage(format!("--{}: += and -= edit list options only", spec.name)));
             }
@@ -237,11 +269,23 @@ fn parse_inner(specs: &[OptSpec], args: &[String], queries: bool) -> Result<Pars
                     set_value(&mut parsed, spec, value, edit, &mut given);
                 }
             }
+            if is_global(&globals, spec) {
+                levels.track(spec.name, &parsed)?;
+            }
+            continue;
+        }
+        if let Some(count) = verbose_cluster(&arg)
+            && globals.iter().any(|g| g.short == Some('v'))
+        {
+            parsed.values.insert("verbose", OptValue::Switch(true));
+            for _ in 0..count {
+                levels.track("verbose", &parsed)?;
+            }
             continue;
         }
         let mut chars = arg.chars();
         if let (Some('-'), Some(c), None) = (chars.next(), chars.next(), chars.next()) {
-            let spec = specs.iter().find(|s| s.short == Some(c)).ok_or_else(|| usage(format!("unknown option -{c}")))?;
+            let spec = specs.iter().chain(&globals).find(|s| s.short == Some(c)).ok_or_else(|| usage(format!("unknown option -{c}")))?;
             match spec.kind {
                 Kind::Switch => {
                     parsed.values.insert(spec.name, OptValue::Switch(true));
@@ -255,11 +299,195 @@ fn parse_inner(specs: &[OptSpec], args: &[String], queries: bool) -> Result<Pars
                     set_value(&mut parsed, spec, value, Edit::Set, &mut given);
                 }
             }
+            if is_global(&globals, spec) {
+                levels.track(spec.name, &parsed)?;
+            }
             continue;
         }
         parsed.positional.push(arg);
     }
+    apply_globals(&parsed, &globals, levels)?;
     Ok(parsed)
+}
+
+/// The common options `own` leaves free: those whose long name it does not declare, without
+/// their short letter where `own` uses it.
+fn globals_for(own: &[OptSpec]) -> Vec<OptSpec> {
+    GLOBAL
+        .iter()
+        .filter(|g| !own.iter().any(|o| o.name == g.name))
+        .map(|g| {
+            let mut g = *g;
+            if g.short.is_some_and(|c| own.iter().any(|o| o.short == Some(c))) {
+                g.short = None;
+            }
+            g
+        })
+        .collect()
+}
+
+/// Whether `spec` is one of the common options (a subcommand's own option of the same name
+/// replaces it, so the name decides).
+fn is_global(globals: &[OptSpec], spec: &OptSpec) -> bool {
+    globals.iter().any(|g| g.name == spec.name)
+}
+
+/// How many `v`s a `-vv` (`-vvv`…) argument holds; `None` for anything else, `-v` included.
+fn verbose_cluster(arg: &str) -> Option<usize> {
+    let letters = arg.strip_prefix('-')?;
+    (letters.len() > 1 && letters.chars().all(|c| c == 'v')).then_some(letters.len())
+}
+
+/// The level `-q`, `-v` and `--log` set, read in the order they appear.
+#[derive(Default)]
+struct Levels {
+    level: Option<Level>,
+    modules: Vec<(String, Level)>,
+}
+
+impl Levels {
+    /// Takes in the common option `name` just set in `parsed`.
+    fn track(&mut self, name: &str, parsed: &Parsed) -> Result<(), Failure> {
+        match name {
+            "quiet" => self.level = Some(if parsed.switch("quiet") { Level::Error } else { Level::Note }),
+            "verbose" => self.level = Some(if parsed.switch("verbose") { self.level.unwrap_or(Level::Note).louder() } else { Level::Note }),
+            "log" => {
+                let text = parsed.value("log").unwrap_or_default();
+                let mut modules = Vec::new();
+                for item in text.split(',').map(str::trim).filter(|i| !i.is_empty()) {
+                    let bad = || usage(format!("--log: `{item}` is not a level (error, warning, note, info, debug) or MODULE=LEVEL"));
+                    match item.split_once('=') {
+                        Some((module, level)) if !module.trim().is_empty() => {
+                            modules.push((module.trim().to_string(), Level::parse(level).ok_or_else(bad)?))
+                        }
+                        Some(_) => return Err(bad()),
+                        None => self.level = Some(Level::parse(item).ok_or_else(bad)?),
+                    }
+                }
+                self.modules = modules;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+}
+
+/// Applies the common options given on the line. `--version` prints the version and stops the
+/// run with [`Failure::Done`].
+fn apply_globals(parsed: &Parsed, globals: &[OptSpec], levels: Levels) -> Result<(), Failure> {
+    let global = |name: &str| globals.iter().any(|g| g.name == name);
+    let value = |name: &str| if global(name) { parsed.value(name) } else { None };
+    let switch = |name: &str| global(name) && parsed.switch(name);
+    let color = match value("color") {
+        Some(v) => Some(Color::parse(v).ok_or_else(|| usage(format!("--color takes auto, always or never, not `{v}`")))?),
+        None => None,
+    };
+    if let Some(jobs) = value("jobs") {
+        io::jobs(Some(jobs))?;
+    }
+    let setup = Setup {
+        level: levels.level,
+        modules: levels.modules,
+        log_file: value("log-file").map(str::to_string),
+        color,
+        timing: switch("timing"),
+        backtrace: switch("backtrace"),
+    };
+    if setup != Setup::default() {
+        io::configure(setup)?;
+    }
+    if switch("version") {
+        out(&version_text(io::level() >= Level::Info))?;
+        return Err(Failure::Done);
+    }
+    Ok(())
+}
+
+/// `fontcraft-cli VERSION`; `detailed` adds the build target and profile.
+fn version_text(detailed: bool) -> String {
+    let mut text = format!("fontcraft-cli {}", env!("CARGO_PKG_VERSION"));
+    if detailed {
+        let profile = if cfg!(debug_assertions) { "debug" } else { "release" };
+        text.push_str(&format!("\ntarget: {}-{}\nbuild: {profile}", std::env::consts::ARCH, std::env::consts::OS));
+    }
+    text
+}
+
+/// For a subcommand that reads its own arguments: applies the common options in `args` whose
+/// spelling `own` does not claim (`["--face", "-o"]`), as [`parse`] does, and returns the other
+/// arguments in order. Nothing after `--` is read.
+pub fn take_globals(args: &[String], own: &[&str]) -> Result<Vec<String>, Failure> {
+    let mut globals = Vec::new();
+    let mut rest = Vec::new();
+    let mut it = args.iter();
+    while let Some(arg) = it.next() {
+        if arg == "--" {
+            rest.push(arg.clone());
+            rest.extend(it.by_ref().cloned());
+            break;
+        }
+        match global_arg(arg, own) {
+            Some(takes_next) => {
+                globals.push(arg.clone());
+                if takes_next && let Some(value) = it.next() {
+                    globals.push(value.clone());
+                }
+            }
+            None => rest.push(arg.clone()),
+        }
+    }
+    if !globals.is_empty() {
+        parse(&[], &globals)?;
+    }
+    Ok(rest)
+}
+
+/// How many arguments the common options at the start of a command line take
+/// (`fontcraft-cli -q --log-file x convert …` → 3).
+pub fn leading_globals(args: &[String]) -> usize {
+    let mut i = 0;
+    while let Some(arg) = args.get(i) {
+        match global_arg(arg, &[]) {
+            Some(true) => i += 2,
+            Some(false) => i += 1,
+            None => break,
+        }
+    }
+    i.min(args.len())
+}
+
+/// Whether `arg` is a common option that `own` does not claim, spelled out in full, and if so
+/// whether its value is the next argument.
+fn global_arg(arg: &str, own: &[&str]) -> Option<bool> {
+    let claimed = |form: String| own.contains(&form.as_str());
+    if let Some(body) = arg.strip_prefix("--") {
+        let (name, inline) = match body.split_once('=') {
+            Some((n, _)) => (n, true),
+            None => (body, false),
+        };
+        let (spec, negated) = match GLOBAL.iter().find(|g| g.name == name) {
+            Some(g) => (g, false),
+            None => (GLOBAL.iter().find(|g| g.kind == Kind::Switch && name.strip_prefix("no-") == Some(g.name))?, true),
+        };
+        if claimed(format!("--{}", spec.name)) {
+            return None;
+        }
+        return Some(spec.kind != Kind::Switch && !inline && !negated);
+    }
+    let c = if verbose_cluster(arg).is_some() {
+        'v'
+    } else {
+        let mut chars = arg.chars();
+        match (chars.next(), chars.next(), chars.next()) {
+            (Some('-'), Some(c), None) => c,
+            _ => return None,
+        }
+    };
+    let spec = GLOBAL.iter().find(|g| g.short == Some(c))?;
+    if claimed(format!("-{c}")) {
+        return None;
+    }
+    Some(spec.kind != Kind::Switch)
 }
 
 /// The value of an option whose value may be left out: the next argument when it is not an
@@ -369,29 +597,40 @@ fn split_list(text: &str) -> Vec<String> {
     text.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect()
 }
 
-/// The option `name` names, exactly or by a unique prefix, and whether it is the `no-` form.
-fn resolve<'a>(specs: &'a [OptSpec], name: &str) -> Result<(&'a OptSpec, bool), Failure> {
-    let forms = || {
-        specs.iter().flat_map(|s| {
-            let negative = (s.kind == Kind::Switch).then(|| (format!("no-{}", s.name), s, false));
-            std::iter::once((s.name.to_string(), s, true)).chain(negative)
-        })
-    };
-    if let Some((_, s, on)) = forms().find(|(n, _, _)| n == name) {
-        return Ok((s, on));
-    }
-    if let Some((_, s, on)) = forms().find(|(n, _, _)| n.eq_ignore_ascii_case(name)) {
-        return Ok((s, on));
-    }
-    let matches: Vec<(String, &OptSpec, bool)> = forms().filter(|(n, _, _)| n.starts_with(name)).collect();
-    match matches.as_slice() {
-        [(_, s, on)] => Ok((s, *on)),
-        [] => Err(usage(format!("unknown option --{name}"))),
-        many => {
-            let names: Vec<String> = many.iter().map(|(n, _, _)| format!("--{n}")).collect();
-            Err(usage(format!("--{name} is ambiguous: {}", names.join(", "))))
+/// The option `name` names, and whether it is the `no-` form. Each step looks through the
+/// tiers in order (the subcommand's own options, then the common ones): the exact name, then the
+/// name in another letter case, then a prefix that names one option only.
+fn resolve<'a>(tiers: &[&'a [OptSpec]], name: &str) -> Result<(&'a OptSpec, bool), Failure> {
+    for &specs in tiers {
+        if let Some((_, s, on)) = forms(specs).find(|(n, _, _)| n == name) {
+            return Ok((s, on));
         }
     }
+    for &specs in tiers {
+        if let Some((_, s, on)) = forms(specs).find(|(n, _, _)| n.eq_ignore_ascii_case(name)) {
+            return Ok((s, on));
+        }
+    }
+    for &specs in tiers {
+        let matches: Vec<(String, &OptSpec, bool)> = forms(specs).filter(|(n, _, _)| n.starts_with(name)).collect();
+        match matches.as_slice() {
+            [(_, s, on)] => return Ok((s, *on)),
+            [] => continue,
+            many => {
+                let names: Vec<String> = many.iter().map(|(n, _, _)| format!("--{n}")).collect();
+                return Err(usage(format!("--{name} is ambiguous: {}", names.join(", "))));
+            }
+        }
+    }
+    Err(usage(format!("unknown option --{name}")))
+}
+
+/// The spellings of each option: its name, and `no-NAME` for a switch.
+fn forms(specs: &[OptSpec]) -> impl Iterator<Item = (String, &OptSpec, bool)> {
+    specs.iter().flat_map(|s| {
+        let negative = (s.kind == Kind::Switch).then(|| (format!("no-{}", s.name), s, false));
+        std::iter::once((s.name.to_string(), s, true)).chain(negative)
+    })
 }
 
 /// `args` with every `@FILE` and `--options FILE` replaced by the file's arguments.
@@ -425,7 +664,8 @@ fn expand(args: &[String], depth: usize, stack: &mut Vec<PathBuf>) -> Result<Vec
     Ok(out)
 }
 
-fn read_small(path: &str) -> Result<String, Failure> {
+/// A text file of at most [`MAX_RESPONSE_FILE`] bytes of UTF-8.
+pub(crate) fn read_small(path: &str) -> Result<String, Failure> {
     use std::io::Read as _;
     let mut bytes = Vec::new();
     std::fs::File::open(path)
@@ -439,7 +679,7 @@ fn read_small(path: &str) -> Result<String, Failure> {
 
 /// Words of a response file: separated by whitespace, grouped by single or double quotes, lines
 /// starting with `#` skipped.
-fn split_words(text: &str) -> Vec<String> {
+pub(crate) fn split_words(text: &str) -> Vec<String> {
     let mut words = Vec::new();
     for line in text.lines().filter(|l| !l.trim_start().starts_with('#')) {
         let mut word = String::new();
@@ -477,19 +717,26 @@ pub fn help(usage_text: &str, specs: &[OptSpec]) -> String {
     let mut text = usage_text.trim_end().to_string();
     if !specs.is_empty() {
         text.push_str("\n\nOPTIONS:\n");
-        for s in specs {
-            let short = s.short.map(|c| format!("-{c}, ")).unwrap_or_default();
-            let form = match s.kind {
-                Kind::Switch => format!("{short}--[no-]{}", s.name),
-                Kind::Value | Kind::OptionalValue | Kind::List => format!("{short}--{} {}", s.name, s.value_name),
-            };
-            let default = match (s.kind, s.default) {
-                (_, "") | (Kind::Switch, "false") => String::new(),
-                (Kind::Switch, _) => " (default: on)".to_string(),
-                (_, d) => format!(" (default: {d})"),
-            };
-            text.push_str(&format!("  {form:<32} {}{default}\n", s.help));
-        }
+        text.push_str(&option_lines(specs));
+    }
+    text
+}
+
+/// One line per option: its forms, its help and its default.
+pub fn option_lines(specs: &[OptSpec]) -> String {
+    let mut text = String::new();
+    for s in specs {
+        let short = s.short.map(|c| format!("-{c}, ")).unwrap_or_default();
+        let form = match s.kind {
+            Kind::Switch => format!("{short}--[no-]{}", s.name),
+            Kind::Value | Kind::OptionalValue | Kind::List => format!("{short}--{} {}", s.name, s.value_name),
+        };
+        let default = match (s.kind, s.default) {
+            (_, "") | (Kind::Switch, "false") => String::new(),
+            (Kind::Switch, _) => " (default: on)".to_string(),
+            (_, d) => format!(" (default: {d})"),
+        };
+        text.push_str(&format!("  {form:<32} {}{default}\n", s.help));
     }
     text
 }
@@ -573,6 +820,64 @@ mod tests {
         let e = parse(SPECS, &args(&[&format!("@{}", looped.display())])).unwrap_err();
         assert!(e.message().contains("includes itself"), "{e:?}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn common_options_join_every_table_and_own_options_win() {
+        const OWN: &[OptSpec] = &[
+            OptSpec::switch("version", true, "keep the version fields"),
+            OptSpec::value("timestamp", "N", "", "time stamp").short('j'),
+            OptSpec::value("log-output", "PATH", "", "log"),
+        ];
+        let p = parse(OWN, &args(&["--no-version", "--jobs", "-1", "--tim", "5", "--log-o", "x"])).unwrap();
+        assert!(!p.switch("version"), "the subcommand's own --version wins");
+        assert_eq!(p.value("jobs"), Some("-1"), "the common --jobs is read, with a negative value");
+        assert_eq!(p.value("timestamp"), Some("5"), "a prefix names the subcommand's own option before a common one (--timing)");
+        assert_eq!(p.value("log-output"), Some("x"));
+        let p = parse(OWN, &args(&["-j", "7"])).unwrap();
+        assert_eq!(p.value("timestamp"), Some("7"), "the subcommand keeps its short letter");
+        assert!(parse(OWN, &args(&["--jobs", "many"])).is_err(), "--jobs needs a number");
+        assert!(parse(OWN, &args(&["--color", "sometimes"])).is_err());
+        assert!(parse(OWN, &args(&["--log", "loud"])).is_err());
+        assert!(parse(OWN, &args(&["--log", "=debug"])).is_err(), "a module needs a name");
+        assert!(parse(OWN, &args(&["-vv", "--log", "loud"])).is_err());
+    }
+
+    #[test]
+    fn log_levels_read_a_level_and_module_levels() {
+        let mut parsed = Parsed::default();
+        parsed.values.insert("log", OptValue::Value("info, engine=debug,compile=warn".into()));
+        let mut levels = Levels::default();
+        levels.track("log", &parsed).unwrap();
+        assert_eq!(levels.level, Some(Level::Info));
+        assert_eq!(levels.modules, [("engine".to_string(), Level::Debug), ("compile".to_string(), Level::Warning)]);
+        parsed.values.insert("verbose", OptValue::Switch(true));
+        levels.track("verbose", &parsed).unwrap();
+        assert_eq!(levels.level, Some(Level::Debug), "-v after --log info raises it one step");
+        parsed.values.insert("quiet", OptValue::Switch(true));
+        levels.track("quiet", &parsed).unwrap();
+        assert_eq!(levels.level, Some(Level::Error), "a later -q wins");
+    }
+
+    #[test]
+    fn hand_parsers_and_the_top_level_take_the_common_options_out() {
+        let rest = take_globals(&args(&["in.ttf", "--jobs", "3", "--face", "2", "-j", "1", "--", "--jobs"]), &["--face", "-j"]).unwrap();
+        assert_eq!(rest, ["in.ttf", "--face", "2", "-j", "1", "--", "--jobs"], "a claimed spelling and everything after -- stay");
+        assert_eq!(leading_globals(&args(&["--jobs", "2", "-vv", "--log-file=x", "convert", "-q"])), 4);
+        assert_eq!(leading_globals(&args(&["convert", "--jobs", "2"])), 0);
+        assert_eq!(leading_globals(&args(&["--jobs"])), 1, "a missing value is left to the parser");
+    }
+
+    #[test]
+    fn jobs_counts_from_the_cores() {
+        let cores = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
+        assert_eq!(io::jobs(Some("3")).unwrap(), 3);
+        assert_eq!(io::jobs(None).unwrap(), cores);
+        assert_eq!(io::jobs(Some("0")).unwrap(), cores);
+        assert_eq!(io::jobs(Some("-1")).unwrap(), cores.saturating_sub(1).max(1));
+        assert_eq!(io::jobs(Some("-100000")).unwrap(), 1, "at least one");
+        assert_eq!(io::jobs(Some("100000")).unwrap(), io::MAX_JOBS);
+        assert!(io::jobs(Some("2.5")).is_err());
     }
 
     #[test]
