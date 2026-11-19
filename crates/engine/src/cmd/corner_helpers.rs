@@ -321,7 +321,7 @@ fn replace_with_corner(s: &mut Session, v: &Value) -> Result<Value> {
 // ── Align Points to Background ──────────────────────────────────────────────────────────────────
 
 /// The off-curve nodes next to on-curve node `i`: the handles of its two segments.
-fn handles_of(path: &Path, i: usize) -> Vec<usize> {
+pub(super) fn handles_of(path: &Path, i: usize) -> Vec<usize> {
     let n = path.nodes.len();
     let prev = if i > 0 {
         Some(i - 1)

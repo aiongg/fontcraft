@@ -9,6 +9,10 @@
 //! locked glyph and a layer the operation cannot finish are skipped and listed in `skipped`; with
 //! one `glyph` they are errors.
 //!
+//! Tidy up Paths returns `incompatible`: the glyphs whose layers could interpolate before the run
+//! and no longer can (`tidyUp.mayBreakCompatibility`). Round Coordinates returns the same key,
+//! always empty.
+//!
 //! The geometry comes from `fontcraft-pathops`. Each layer's operation runs through
 //! [`po::run_with_time_limit`]: the boolean engine can loop forever on rare inputs
 //! (docs/plans/M3.md › M3.6, rule 8), so on native targets the operation runs on a worker thread
@@ -18,6 +22,7 @@
 
 use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::sync::Arc;
 use std::time::Duration;
 
 use fontcraft_geom::{BezPath, CubicBez, Point, Rect, Shape as _, Vec2, cubics_to_quadratic_splines, round_point, round_to_grid};
@@ -26,8 +31,10 @@ use fontcraft_pathops::{self as po, BoolOp, OpenPaths, OverlapOptions, PathOpErr
 use serde_json::{Value, json};
 
 use super::common::{Outcome, each_layer, grid, in_range, scope};
+use super::corner_helpers::handles_of;
 use super::*;
 use crate::EngineError;
+use crate::interp_cache::InterpCache;
 use crate::params::{Params, TargetKind as K, Targets, kind};
 
 /// Open Corner's overlap, as a share of the em, for a master without stems of either direction.
@@ -149,7 +156,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Tidy up Paths",
             ["Path"],
             Some("Cmd+Shift+T"),
-            "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index], straighten?: units (0 to 100, default 0)} or {glyphs: [names], layer?: id | layers?: [ids], straighten?}. On the nodes in `points`, the paths in `shapes`, or every path: straight curves become lines (with `straighten`, also curves that stray less than that many units from the line between their ends), a node on the one before it is merged into it, a node on the line between its neighbours is removed, and each node becomes smooth when a curve meets it and its directions are within 1°, else a corner. Removing points can break compatibility with other masters → {glyphs, skipped, selection?: {glyph, layer, shapes}}",
+            "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index], straighten?: units (0 to 100, default 0)} or {glyphs: [names], layer?: id | layers?: [ids], straighten?}. On the nodes in `points`, the paths in `shapes`, or every path: straight curves become lines when either end node is selected (with `straighten`, also curves that stray less than that many units from the line between their ends), a node on the one before it is merged into it, a node on the line between its on-curve neighbours is removed when its segments run along that line (lines, or curves whose handles lie on it), and each node becomes smooth when a curve meets it and its directions are within 1°, else a corner. Removing points can break compatibility with other masters: `incompatible` lists the glyphs whose layers could interpolate before and no longer can → {glyphs, skipped, incompatible: [names], selection?: {glyph, layer, shapes}}",
             has_doc,
             tidy_up_paths
         )
@@ -159,7 +166,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Tidy up Paths for All Masters",
             ["Path"],
             Some("Cmd+Alt+Shift+T"),
-            "{glyphs: [names] | glyph: name} path.tidyUpPaths on every path of every master layer of the glyphs. A locked glyph is skipped (an error with one `glyph`) → {glyphs, skipped: [{glyph, layer?, reason}]}",
+            "{glyphs: [names] | glyph: name} path.tidyUpPaths on every path of every master layer of the glyphs. A locked glyph is skipped (an error with one `glyph`) → {glyphs, skipped: [{glyph, layer?, reason}], incompatible: [names]}",
             has_doc,
             tidy_up_paths_for_all_masters
         )
@@ -221,17 +228,17 @@ pub fn specs() -> Vec<CommandSpec> {
             "Round Coordinates",
             ["Path"],
             None,
-            "{glyph: name, layer?: id, side?} or {glyphs: [names], layer?: id | layers?: [ids]} or {glyphs | glyph, allMasters: true}. Moves every node, handle, anchor and component offset to the nearest point of the font's grid (whole units when the font has no grid) → {glyphs, skipped}",
+            "{glyph: name, layer?: id, side?, points?: [[shape, node]], segments?: [[shape, node]]} or {glyphs: [names], layer?: id | layers?: [ids]} or {glyphs | glyph, allMasters: true}. Moves every node, handle, anchor and component offset to the nearest point of the font's grid (whole units when the font has no grid). With `points` or `segments` it moves only those nodes, the handles next to each on-curve one, and every node of each segment; anchors and components stay. `incompatible` is always empty (rounding adds, removes or retypes no point), as Tidy up Paths returns it → {glyphs, skipped, incompatible: []}",
             has_doc,
             round_coordinates
         )
-        .targets(&[K::Glyphs, K::Layer]),
+        .targets(&[K::Glyphs, K::Layer, K::Points, K::Segments]),
         cmd!(
             "path.roundCoordinatesForAllMasters",
             "Round Coordinates for All Masters",
             ["Path"],
             None,
-            "{glyphs: [names] | glyph: name} path.roundCoordinates on every master layer of the glyphs. A locked glyph is skipped (an error with one `glyph`) → {glyphs, skipped}",
+            "{glyphs: [names] | glyph: name} path.roundCoordinates on every master layer of the glyphs. A locked glyph is skipped (an error with one `glyph`) → {glyphs, skipped, incompatible: []}",
             has_doc,
             round_coordinates_for_all_masters
         )
@@ -857,14 +864,44 @@ fn tidy_up_paths(s: &mut Session, v: &Value) -> Result<Value> {
         }
         v => v.unwrap_or(0.0),
     };
-    run_layers(s, &p, "Tidy up Paths", &["points", "shapes"], |layer, side, t| {
+    let before = font_before(s)?;
+    let out = run_layers(s, &p, "Tidy up Paths", &["points", "shapes"], |layer, side, t| {
         each_contour(layer.parts_mut(side).shapes, t, move |c, sel| po::tidy_up_straightening(c, sel, straighten))
-    })
+    })?;
+    Ok(note_incompatible(s, before, out))
 }
 
 fn tidy_up_paths_for_all_masters(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("path.tidyUpPathsForAllMasters", v)?;
-    run_all_masters(s, &p, "Tidy up Paths for All Masters", master_layer, |layer, side, t| each_contour(layer.parts_mut(side).shapes, t, po::tidy_up))
+    let before = font_before(s)?;
+    let out = run_all_masters(s, &p, "Tidy up Paths for All Masters", master_layer, |layer, side, t| {
+        each_contour(layer.parts_mut(side).shapes, t, po::tidy_up)
+    })?;
+    Ok(note_incompatible(s, before, out))
+}
+
+/// The active document's font and revision, before an edit [`note_incompatible`] reports on.
+fn font_before(s: &Session) -> Result<(Arc<Font>, u64)> {
+    let doc = s.doc()?;
+    Ok((Arc::clone(&doc.font), doc.revision))
+}
+
+/// `out` with `incompatible`: the glyphs among `out.glyphs` whose layers could interpolate in
+/// `before` and no longer can. A font without a designspace to check against lists none. The old
+/// font is checked only for glyphs that are incompatible now.
+fn note_incompatible(s: &mut Session, before: (Arc<Font>, u64), mut out: Value) -> Value {
+    let (old_font, old_revision) = before;
+    let names: Vec<String> =
+        out.get("glyphs").and_then(Value::as_array).map(|a| a.iter().filter_map(|g| g.as_str().map(str::to_string)).collect()).unwrap_or_default();
+    let mut old = InterpCache::default();
+    let broken: Vec<String> = names
+        .into_iter()
+        .filter(|g| s.glyph_compat(g).is_some_and(|c| !c.ok) && old.compat(&old_font, old_revision, g).is_ok_and(|c| c.ok))
+        .collect();
+    if let Some(o) = out.as_object_mut() {
+        o.insert("incompatible".into(), json!(broken));
+    }
+    out
 }
 
 // ── Open Corner, Reconnect Nodes, Cut with Line ─────────────────────────────────────────────────
@@ -1327,9 +1364,43 @@ fn convert_to_quadratic(s: &mut Session, v: &Value) -> Result<Value> {
 
 // ── Round Coordinates ───────────────────────────────────────────────────────────────────────────
 
-fn round_in(layer: &mut Layer, side: LayerSide, step: f64) {
+/// The nodes Round Coordinates moves on a selection, path by path: each node in `points` with the
+/// handles next to it when it is on-curve, and every node of each segment in `segments`. `None`
+/// without either list (the whole layer).
+fn round_selection(t: Option<&Targets>, shapes: &[Shape]) -> Option<BTreeMap<usize, BTreeSet<usize>>> {
+    let t = t.filter(|t| !(t.points.is_empty() && t.segments.is_empty()))?;
+    let mut map: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
+    for &(s, k) in &t.points {
+        let Some(Shape::Path(path)) = shapes.get(s) else { continue };
+        let set = map.entry(s).or_default();
+        set.insert(k);
+        if path.nodes.get(k).is_some_and(Node::on_curve) {
+            set.extend(handles_of(path, k));
+        }
+    }
+    for &(s, k) in &t.segments {
+        let Some(Shape::Path(path)) = shapes.get(s) else { continue };
+        if let Some(seg) = path.segment_ending_at(k) {
+            map.entry(s).or_default().extend(seg.handles.iter().copied().chain([seg.start, seg.end]));
+        }
+    }
+    Some(map)
+}
+
+fn round_in(layer: &mut Layer, side: LayerSide, step: f64, t: Option<&Targets>) {
     let r = |v: f64| round_to_grid(v, step) + 0.0;
     let LayerPartsMut { shapes, anchors, .. } = layer.parts_mut(side);
+    if let Some(picked) = round_selection(t, shapes) {
+        for (s, nodes) in picked {
+            let Some(Shape::Path(path)) = shapes.get_mut(s) else { continue };
+            for k in nodes {
+                if let Some(n) = path.nodes.get_mut(k) {
+                    (n.x, n.y) = (r(n.x), r(n.y));
+                }
+            }
+        }
+        return;
+    }
     for shape in shapes.iter_mut() {
         match shape {
             Shape::Path(path) => {
@@ -1362,24 +1433,35 @@ fn round_step(font: &Font) -> f64 {
 fn round_coordinates(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("path.roundCoordinates", v)?;
     let step = round_step(s.font()?);
-    let op = |layer: &mut Layer, side: LayerSide, _: Option<&Targets>| -> Op<Option<Picked>> {
-        round_in(layer, side, step);
+    let op = |layer: &mut Layer, side: LayerSide, t: Option<&Targets>| -> Op<Option<Picked>> {
+        round_in(layer, side, step, t);
         Ok(None)
     };
-    if p.bool_or("allMasters", false)? {
-        run_all_masters(s, &p, "Round Coordinates", master_layer, op)
+    let out = if p.bool_or("allMasters", false)? {
+        run_all_masters(s, &p, "Round Coordinates", master_layer, op)?
     } else {
-        run_layers(s, &p, "Round Coordinates", &[], op)
-    }
+        run_layers(s, &p, "Round Coordinates", &["points", "segments"], op)?
+    };
+    Ok(none_incompatible(out))
 }
 
 fn round_coordinates_for_all_masters(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("path.roundCoordinatesForAllMasters", v)?;
     let step = round_step(s.font()?);
-    run_all_masters(s, &p, "Round Coordinates for All Masters", master_layer, |layer, side, _| {
-        round_in(layer, side, step);
+    let out = run_all_masters(s, &p, "Round Coordinates for All Masters", master_layer, |layer, side, _| {
+        round_in(layer, side, step, None);
         Ok(None)
-    })
+    })?;
+    Ok(none_incompatible(out))
+}
+
+/// `out` with an empty `incompatible`. Rounding moves points but never adds, removes or retypes
+/// them, and compatibility depends only on that structure, so there is nothing to check.
+fn none_incompatible(mut out: Value) -> Value {
+    if let Some(o) = out.as_object_mut() {
+        o.insert("incompatible".into(), json!([]));
+    }
+    out
 }
 
 #[cfg(test)]
