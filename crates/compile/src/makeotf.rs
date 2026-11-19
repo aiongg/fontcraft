@@ -74,6 +74,18 @@ fn err<T>(message: impl Into<String>) -> Result<T> {
     Err(ProjectError(message.into()))
 }
 
+/// The custom parameter that gives an ordinary export the project compile's layout rules.
+const COMPATIBILITY_MODE: &str = "MakeOTF Compatibility Mode"; // brand-ok: the file-format key
+
+/// The target's MakeOTF Compatibility Mode parameter is on: its feature code is compiled with
+/// the project compile's layout rules, so each run of a feature block's substitutions of one
+/// type gets its own lookup ([`crate::layout::LayoutOptions::lookup_per_rule_type`]). Pair
+/// kerning needs nothing more, since the project compile builds its classes as the ordinary
+/// compile does.
+pub(crate) fn compatibility_mode(target: &Resolved) -> bool {
+    target.params.get(COMPATIBILITY_MODE).and_then(fontcraft_model::param_flag).unwrap_or(false)
+}
+
 /// One GlyphOrderAndAliasDB line: the name in the compiled font, the name in the source, and
 /// code points that replace the ones the name gives (empty: none given).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -159,8 +171,9 @@ pub struct Settings {
     pub omit_mac_names: bool,
     pub stub_cmap4: bool,
     pub double_map: bool,
-    /// Accepted for compatibility: the pair positioning builder never puts non-zero values in
-    /// first-class 0, so the output is the same either way.
+    /// Accepted and left without effect: the reference still puts a first class in class 0
+    /// with it set and only adds an empty class record at the end, which changes no pair's
+    /// value (row `compile.kernClassOptimisation`).
     pub suppress_kern_class0: bool,
     pub paths: ProjectPaths,
     pub os2: Os2Settings,
@@ -1612,5 +1625,39 @@ mod tests {
         assert_eq!(project_bits("7"), Some(vec![7]));
         assert_eq!(project_bits("['7', '9']"), Some(vec![7, 9]));
         assert_eq!(project_bits("seven"), None);
+    }
+
+    /// MakeOTF Compatibility Mode gives an ordinary export the project compile's lookups: a
+    /// single substitution keeps its own lookup beside a ligature. Class kerning is built as the
+    /// project compile builds it, which is the ordinary compile's way, and with the parameter off
+    /// nothing changes.
+    #[test]
+    fn compatibility_mode_gives_an_export_the_project_compile_lookups() {
+        use fontcraft_model::Snippet;
+        let mut base = Font::new("Compat Sans");
+        let features = Arc::make_mut(&mut base.features);
+        features.prefixes.push(Snippet { name: "Languagesystems".into(), code: "languagesystem DFLT dflt;".into(), ..Default::default() });
+        features.features.push(Snippet { name: "liga".into(), code: "sub d by O;\nsub d d by O;".into(), ..Default::default() });
+        features.features.push(Snippet { name: "kern".into(), code: "pos [A B C] [V W] -50;\npos [o] [V W] -40;".into(), ..Default::default() });
+        let with = |flag: Option<bool>| {
+            let mut font = base.clone();
+            if let Some(flag) = flag {
+                Arc::make_mut(&mut font.info).params.0.push(Param::new(COMPATIBILITY_MODE, Value::Bool(flag)));
+            }
+            crate::compile(&font, &font.default_target().unwrap(), crate::Flavour::TrueType, &Options::default()).unwrap().bytes
+        };
+        let lookup_types = |bytes: &[u8]| -> Vec<u16> {
+            let font = FontRef::new(bytes).unwrap();
+            let lookups = font.gsub().unwrap().lookup_list().unwrap();
+            lookups.lookups().iter().map(|l| l.unwrap().lookup_type()).collect()
+        };
+        let gpos = |bytes: &[u8]| FontRef::new(bytes).unwrap().table_data(Tag::new(b"GPOS")).unwrap().as_bytes().to_vec();
+
+        let plain = with(None);
+        assert_eq!(with(Some(false)), plain, "the parameter off changes nothing");
+        assert_eq!(lookup_types(&plain), [4], "the ordinary compile merges the single substitution into the ligature lookup");
+        let on = with(Some(true));
+        assert_eq!(lookup_types(&on), [1, 4], "a single substitution keeps its own lookup beside a ligature");
+        assert_eq!(gpos(&on), gpos(&plain), "class kerning is built as the project compile builds it");
     }
 }

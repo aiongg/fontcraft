@@ -236,7 +236,7 @@ Parameters that change the feature code or how layout tables are generated.
 
 | Name | Scope | What it does | Table field |
 |---|---|---|---|
-| `MakeOTF Compatibility Mode` | ? | Builds layout tables the way Adobe's makeotf would. | OpenType layout tables |
+| `MakeOTF Compatibility Mode` | ? | Builds layout tables the way Adobe's makeotf would: each run of a feature block's substitutions of one type gets its own lookup, as in a project compile. | GSUB lookups |
 
 ### Variable-font layout
 

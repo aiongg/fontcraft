@@ -1836,10 +1836,13 @@ guesses = [
 id = "compile.kernClassOptimisation"
 area = "compile"
 milestone = "M12"
-summary = "makeotf by default saves space in class kerning by using left-side class 0 for non-zero values, which confuses some programs; -skco suppresses it. Our pair positioning comes from write-fonts's PairPosBuilder and does not use this trick."
-ref = "AFDKO python/afdko/makeotf.py (-skco/-nskco); write-fonts src/tables/gpos/builders.rs"
-status = "docs"
-notes = "The project compile accepts kern-class0-optimization, no-kern-class0-optimization and the SuppressKernOptimization setting of a project or fontinfo file; they change nothing, since our pair positioning never puts non-zero values in first-class 0, which is what makeotf -skco writes (M12.40)."
+summary = "A class pair subtable leaves one first class out of its first class definition, as class 0, with non-zero values; the coverage table lists its glyphs. makeotf numbers the first and second classes in the order the feature code names them, so the first class named is class 0. feaLib, fea-rs and our pair positioning (write-fonts's PairPosBuilder) sort the classes by size, so the largest first class is class 0. makeotf documents -skco as suppressing the class 0 use; makeotf 5.0.1 with -skco still puts the first class named in class 0 and only adds an empty class record at the end. Each way gives every pair the same value."
+ref = "AFDKO python/afdko/makeotf.py (-skco/-nskco); write-fonts 0.52 src/tables/layout/builders.rs (ClassDefBuilder::new_using_class_0), src/tables/gpos/builders.rs; makeotf 5.0.1 and fontmake 3.12.1 run on synthetic UFOs (M12.80)"
+status = "observed"
+notes = "Observed with makeotf 5.0.1, with and without -skco, and fontmake on three synthetic UFOs whose kern features name three or four first classes of different sizes in different orders: class numbers as stated, the same values for every pair. The project compile accepts kern-class0-optimization, no-kern-class0-optimization and the SuppressKernOptimization setting of a project or fontinfo file and leaves the classes as our pair positioning builds them, with or without them (M12.40); so does an export with MakeOTF Compatibility Mode on (M12.80)."
+guesses = [
+  "The project compile keeps the size order of class pair subtables instead of makeotf's order of naming, and leaves out the empty class record -skco adds; neither changes a pair's value, and an application that reads class 0 differently would be the reason to follow makeotf.",
+]
 
 # ---------------------------------------------------------------------------------------------------
 # Behaviours: hinting, colour, misc
