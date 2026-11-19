@@ -557,6 +557,8 @@ milestone = "M3"
 summary = "Toggles the display of Extra Nodes, the third node category the Show Nodes submenu controls. This section does not define them; see the path-editing part of the chapter."
 ref = "Edit View › Glyph Display › View Options"
 status = "handbook"
+notes = "Documented, not yet observed: Extra Nodes are the points where overlapping paths cross. The canvas marks every crossing of the edited side's paths, with one another or with themselves, away from their nodes, as a small ring while the toggle is on (`crates/ui/src/canvas/paint/nodes.rs`)."
+guesses = ["Extra Nodes are drawn as small hollow rings in their own colour; the handbook shows them but names no style. Settled by turning the toggle on in the reference over two crossing rectangles."]
 
 [[command]]
 id = "view.showMetrics"
