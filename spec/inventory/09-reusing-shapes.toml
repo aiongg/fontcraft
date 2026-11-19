@@ -157,7 +157,7 @@ milestone = "M6"
 summary = "Asks for the name of the glyph that will hold the selected shapes. The field starts with a name suggested from context and accepts any other name; an underscore-prefixed name makes the new glyph a non-exporting part."
 ref = "Reusing Shapes › Components › Turning Paths into Components"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 16:09–16:21: the dialog is titled Name of the Component Glyph, says that it applies to all master layers, and has a text field with Cancel and OK. Not shown: whether the field is pre-filled, an underscore name. M6.11: `ui-egui/src/dialogs/component_from_selection.rs`, opened by Glyph › Component from Selection and the canvas context menu; nothing runs until OK, which runs glyph.componentFromSelection once, then puts the new glyph into the tab's text after the edited glyph and edits it. Cancel changes nothing."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 16:09–16:21: the dialog is titled Name of the Component Glyph, says that it applies to all master layers, and has a text field with Cancel and OK. Not shown: whether the field is pre-filled, an underscore name. M6.11: `ui-egui/src/dialogs/component_from_selection.rs`, opened by Glyph › Component from Selection and the canvas context menu; nothing runs until OK, which runs glyph.componentFromSelection once, then puts the new glyph into the tab's text after the edited glyph and edits it. Cancel changes nothing. The new glyph exports unless its name starts with an underscore."
 guesses = [
   "The name field starts with the command's suggested name, `_part.` and the glyph name; the dialog of the reference app settles it.",
 ]
@@ -287,7 +287,7 @@ milestone = "M6"
 summary = "A glyph whose name begins with an underscore defaults to non-exporting, so it can serve purely as a part inside other glyphs (an _f.connect shared by fl and f_f). The default comes from the name; the glyph's exports property remains the actual switch."
 ref = "Reusing Shapes › Components › Underscore Components"
 status = "handbook"
-notes = "Documented, not yet observed. A glyph created by Add Glyphs, a recipe or Add to Font with a name that starts with an underscore gets exports off; the flag stays the switch afterwards, and renaming does not change it."
+notes = "Documented, not yet observed. A glyph created by Add Glyphs, a recipe, Add to Font, New Glyph or Component from Selection with a name that starts with an underscore gets exports off; the flag stays the switch afterwards, and renaming does not change it."
 guesses = [
   "Renaming a glyph to or from an underscore name leaves its exports flag alone; renaming in the reference app settles it.",
 ]
@@ -612,9 +612,14 @@ milestone = "M6"
 summary = "A locked component rejects every move, from mouse, arrow keys or Info box, until it is unlocked."
 ref = "Reusing Shapes › Components › Locking Components"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. `selection.move` (the arrow keys and drags) leaves a locked component where it is and moves the rest of the selection; when nothing else moves, it fails with a message naming the component. The Select tool starts no drag on a locked component. component.move and component.setTransform refuse it."
 guesses = [
   "A lock blocks Info box position edits and the Palette's transformations as well as moves, and leaves the component's other settings editable; a locked component in the reference app settles it.",
+  "Arrow keys with only locked or automatically aligned components selected change nothing and show a message naming them; pressing an arrow key on a locked component in the reference app settles whether it is silent instead.",
+]
+observe = [
+  "Select only a locked component, press an arrow key and note whether a message appears or nothing happens.",
+  "Select an automatically aligned component, press an arrow key and note whether a message appears or nothing happens.",
 ]
 
 [[behavior]]
@@ -856,7 +861,7 @@ milestone = "M6"
 summary = "An auto-aligned component cannot be dragged, nudged or repositioned through the Info box. The single exception is the blue case, which moves along the vertical axis only."
 ref = "Reusing Shapes › Components › Editing Components; Edit View › Info Box"
 status = "handbook"
-notes = "Documented, not yet observed. component.move and component.setTransform refuse the position change with a message; see the guess on component.move."
+notes = "Documented, not yet observed. component.move and component.setTransform refuse the position change with a message; see the guess on component.move. `selection.move` (the arrow keys and drags) follows the same rule: a component aligned in both directions stays, one aligned horizontally takes only the vertical part, and the command fails with a message when nothing it names moves (see the guess on components.lockedCannotMove). The Select tool starts no drag on a component aligned in both directions."
 
 [[behavior]]
 id = "components.singleNumberComponentShiftsVertically"

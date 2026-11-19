@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 
+use fontcraft_components::align::{AlignMode, component_alignment};
 use fontcraft_geom::{BezPath, CubicBez, ParamCurve, PathEl, Point, QuadBez};
 use fontcraft_model::{Font, Guide, Layer, LayerSide, Node, Path, Shape, metric};
 
@@ -16,6 +17,9 @@ const CURVE_SAMPLES: usize = 8;
 pub struct ComponentGeom {
     /// The component's index among the layer's shapes.
     pub shape: usize,
+    /// The component cannot be dragged: it is locked (`components.lockedCannotMove`) or aligned
+    /// automatically in both directions (`components.autoAlignedCannotMove`). A component aligned
+    /// only horizontally can be dragged; `selection.move` keeps its x.
     pub locked: bool,
     /// On-curve points of the outline (snap targets).
     pub nodes: Vec<Point>,
@@ -199,7 +203,9 @@ impl<'a> Scene<'a> {
         for (i, shape) in scene.layer.shapes.iter().enumerate() {
             let Shape::Component(c) = shape else { continue };
             let Ok(outline) = font.component_outline(c, &layer.master) else { continue };
-            components.push((i, outline, c.info.locked));
+            // Alignment reads the foreground layer; background components are not aligned.
+            let aligned = side == LayerSide::Foreground && component_alignment(font, layer, i) == Some(AlignMode::Full);
+            components.push((i, outline, c.info.locked || aligned));
         }
         for (i, outline, locked) in components {
             scene.add_component(i, &outline, locked);

@@ -100,7 +100,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Component from Selection",
             ["Glyph"],
             None,
-            "{glyph: name, layer?: id (a master layer), shapes?: [indices] (default: every path and component), name?: string (default: `_part.` and the glyph's name, with .001, .002… while taken)} move the shapes into a new glyph with that name, at their coordinates, and put a component of it at offset zero where the first of them was. Every master layer whose shapes at those indices are of the same kinds (path or component) does the same; the new glyph's layer for any other master stays empty and the master is listed in `skipped`. Hints move with the paths they point at. Anchors stay. A name that is already a glyph is an error → {name, glyph, layer, component: index, skipped: [{layer, reason}], warnings: [string], selection: {glyph, layer, shapes}}",
+            "{glyph: name, layer?: id (a master layer), shapes?: [indices] (default: every path and component), name?: string (default: `_part.` and the glyph's name, with .001, .002… while taken)} move the shapes into a new glyph with that name (one that starts with an underscore does not export), at their coordinates, and put a component of it at offset zero where the first of them was. Every master layer whose shapes at those indices are of the same kinds (path or component) does the same; the new glyph's layer for any other master stays empty and the master is listed in `skipped`. Hints move with the paths they point at. Anchors stay. A name that is already a glyph is an error → {name, glyph, layer, component: index, skipped: [{layer, reason}], warnings: [string], selection: {glyph, layer, shapes}}",
             has_doc,
             component_from_selection
         )
@@ -805,7 +805,11 @@ fn component_from_selection(s: &mut Session, value: &Value) -> Result<Value> {
         };
         let index = fontcraft_model::insertion_index(font, &data, &Glyph::new(name.as_str()));
         font.add_glyph_at(index, &name, Vec::new(), width)?;
-        font.glyph_mut(&name)?.layers = part_layers;
+        let mut part = font.glyph_mut(&name)?;
+        part.layers = part_layers;
+        // An underscore name makes a part that does not export (`components.underscoreNameNotExported`).
+        part.export = !name.starts_with('_');
+        drop(part);
         let mut g = font.glyph_mut(&t.glyph)?;
         for layer in rewrites {
             if let Some(slot) = g.layers.iter_mut().find(|l| l.id == layer.id) {

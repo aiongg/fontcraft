@@ -11,6 +11,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+fontcraft-components.workspace = true
 fontcraft-geom.workspace = true
 fontcraft-model.workspace = true
 serde.workspace = true
