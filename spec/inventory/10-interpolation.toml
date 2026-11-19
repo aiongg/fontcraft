@@ -201,7 +201,7 @@ kind = "engine"
 params = "{glyph: name, location: {tag: number}, coordinates?: internal|external, model?: default|variable}"
 area = "interpolation"
 milestone = "M9"
-summary = "Query: returns the interpolated layer (shapes, anchors, width) of one glyph at an arbitrary location, applying intermediate layers and alternate-layer switching as an export would. Fails with a compatibility report when the contributing layers are incompatible."
+summary = "Query: returns the interpolated layer (shapes, anchors, width) of one glyph at an arbitrary location, applying intermediate layers, alternate-layer switching and the nodes' higher-order interpolation curves as an export would. Fails with a compatibility report when the contributing layers are incompatible."
 ref = "Interpolation › Setting up Instances"
 status = "inferred"
 guesses = [
@@ -1212,6 +1212,12 @@ milestone = "M9"
 summary = "Ordinary interpolation moves each node along a straight line between its positions on two layers at constant speed. HOI replaces the straight line with a curve and thereby may also change the speed profile."
 ref = "Interpolation › Higher-Order Interpolation"
 status = "handbook"
+notes = "Built in M9.29 (`fontcraft_interp::hoi`): a node without a curve, and a Handles curve with the default handles (times 1/3, amplitudes 0), moves in a straight line at constant speed; a glyph without curves interpolates exactly as it did before curves were evaluated. A curve acts on the span between the layer whose node keeps it and the next layer up along its axis that has the same coordinates on the other axes. Its deviation from the straight line is added to the linear result, weighted by the sum of the two layers' interpolation weights, so on a grid of masters it fades linearly along the other axes. Documented in the handbook, not yet observed."
+guesses = [
+  "A curve acts only on its own axis span, weighted by the share its two layers have in the interpolation, and every other axis stays linear; settle by previewing an instance between two curved spans of a two-axis font in the reference app.",
+  "Outside its span (an extrapolated instance) a curve adds nothing; settle by exporting an instance beyond the masters of a font with a curve.",
+  "An interpolated layer (an instance, a re-interpolated intermediate layer) keeps no curves of its own; settle by adding an instance as a master in the reference app and looking for `hoi` on its nodes.",
+]
 
 [[behavior]]
 id = "hoi.nodeMarkers"
@@ -1238,8 +1244,14 @@ milestone = "M9"
 summary = "Three non-linear types exist: a curve through one intermediate point, a curve steered by two handles, and a rotation about a centre point whose default is the centre of the path's bounding box. Each node may use a different type."
 ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
 status = "handbook"
-notes = "The file format stores HOI per node: GlyphsSDK's version 4 description (Apache-2.0) gives the node attribute `hoi`, keyed by axis tag and kept in the lower node of a span, holding an intermediate point (`ip`), a rotation centre and direction (`rc`, `rd`) or a Bézier timing (`tl`, `tu`, `al`, `au`). No corpus source uses it, neither oracle reads it, and no source documents how a variable font encodes it. M9 reads, keeps and writes this data so files round-trip (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf); editing it, drawing it and using it at export are M13's. Built in M9.25: `fontcraft_model::hoi` holds it on the node (`NodeInfo.hoi`, one entry per axis tag, at most `MAX_AXIS_VALUES`, every number finite and within the coordinate range); the version 4 reader types it only when writing it back gives the same text, and keeps anything else as written. Version 2 and 3 files have no equivalent: writing one leaves the data out and reports it. A UFO keeps it as `hoi` with the node's other attribute keys in glyphsLib's `com.schriftgestaltung.Glyphs.nodeUserData.<path>.<node>` lib key; the native file keeps it on the node. Documented in the format description, not yet observed in a file the reference app saved."
+notes = "The file format stores HOI per node: GlyphsSDK's version 4 description (Apache-2.0) gives the node attribute `hoi`, keyed by axis tag and kept in the lower node of a span, holding an intermediate point (`ip`), a rotation centre and direction (`rc`, `rd`) or a Bézier timing (`tl`, `tu`, `al`, `au`). No corpus source uses it, neither oracle reads it, and no source documents how a variable font encodes it. M9 reads, keeps and writes this data so files round-trip (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf); editing it, drawing it and using it at export are M13's. Built in M9.25: `fontcraft_model::hoi` holds it on the node (`NodeInfo.hoi`, one entry per axis tag, at most `MAX_AXIS_VALUES`, every number finite and within the coordinate range); the version 4 reader types it only when writing it back gives the same text, and keeps anything else as written. Version 2 and 3 files have no equivalent: writing one leaves the data out and reports it. A UFO keeps it as `hoi` with the node's other attribute keys in glyphsLib's `com.schriftgestaltung.Glyphs.nodeUserData.<path>.<node>` lib key; the native file keeps it on the node. Documented in the format description, not yet observed in a file the reference app saved. Built in M9.29 (`fontcraft_interp::hoi::position`): at the fraction `s` of the span, a Point curve is the quadratic Bézier through the intermediate point at `s` = 0.5; Handles (the stored Bézier timing) is the cubic from the lower node through its two handles to the upper node at parameter `s`; Rotation turns about its centre. Static instances, the preview of instances, `interpolation.interpolateGlyph` and re-interpolated layers follow the curves; variable fonts do not carry them yet (M9.33). `point_to_handles` gives the handles of the cubic equal to a Point curve, for converting it with Return."
+observe = [
+  "Drag a knob in the HOI tool, then preview the instance halfway between the two layers: note whether the node lies on the intermediate point (a curve through it) or short of it (a control point).",
+]
 guesses = [
+  "A Point curve is the quadratic Bézier that passes through the intermediate point halfway along the span; settle with the observe step on this row.",
+  "The upper handle of a Handles curve lies its time back from the upper node, and both amplitudes are measured to the left of the direction from the lower to the upper node; settle by saving a curve with one upper amplitude in the reference app and comparing its drawn handle.",
+  "A Handles curve is evaluated at Bézier parameter equal to the axis fraction, so handle times also set the speed; settle by comparing a preview at a quarter of the span with this rule.",
   "Edits treat a node's curves as they treat its name and user data: reversing, copying or moving a node keeps them on that node, and a node added by splitting a segment has none; settle by reversing a contour with curves in the reference app and saving.",
   "Moving or transforming a node leaves its intermediate point and rotation centre where they are; settle by moving a node with a curve in the reference app and comparing the saved `ip` and `rc` values.",
   "A timing value the file leaves out stays left out when written back, and reads as the documented default (times 1/3, amplitudes 0); settle by saving a timing curve with default handles in the reference app.",
@@ -1248,11 +1260,20 @@ guesses = [
 [[behavior]]
 id = "hoi.rotationApproximation"
 area = "interpolation"
-milestone = "M13"
+milestone = "M9"
 summary = "When the two node positions and the chosen centre do not admit a true circular arc (unequal radii), the rotation is approximated; the method is not described."
 ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
 status = "handbook"
-notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
+notes = "Built in M9.29 (`fontcraft_interp::hoi`): the angle and the radius about the centre both change linearly with the axis fraction, which is a circular arc when the radii are equal and a spiral between the two positions otherwise. Automatic direction takes the smaller angle; Clockwise and Counterclockwise force the sense. An automatic centre, and a rotation that names none, turn about the midpoint of the centres of the path's bounding boxes on the two layers. Documented in the handbook, not yet observed."
+observe = [
+  "Give a node a rotation whose centre is nearer one of its two positions, then preview the instance halfway: note the node's distance from the centre and its angle.",
+]
+guesses = [
+  "With unequal radii the radius and the angle both interpolate linearly; settle with the observe step on this row.",
+  "An automatic centre is the midpoint of the centres of the bounding boxes (of all nodes) of the node's path on the lower and the upper layer, and a rotation without a centre uses it too; settle by saving a rotation with `rc = auto` and reading the knob's position in the reference app.",
+  "A rotation of exactly half a turn with Automatic direction goes counterclockwise; settle by rotating a node half a turn in the reference app.",
+  "A node that lies on the centre on either layer has no angle and moves in a straight line; settle by placing the centre on a node in the reference app.",
+]
 
 [[behavior]]
 id = "hoi.timingGraph"
@@ -1261,20 +1282,23 @@ milestone = "M13"
 summary = "The timing graph plots progress against axis position for the selected curve: a straight diagonal from bottom-left to top-right for linear motion, shallow stretches where the node moves slowly and steep ones where it moves fast. It is derived from the curve and read-only; a white dot animates at constant speed beside a green dot that follows the graph."
 ref = "Interpolation › Higher-Order Interpolation › Interpolation Timing"
 status = "handbook"
-notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
+notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf). The graph's function is built in M9.29: `fontcraft_interp::hoi::timing` and `timing_graph` give the fraction of the curve's length travelled at each axis fraction, measured on a 64-segment polyline; the diagonal for a straight line at constant speed. The graph itself waits for the Info box (M9.32)."
+guesses = [
+  "Progress is the fraction of the curve's length travelled; settle by comparing the graph of a Handles curve with zero amplitudes and of a Point curve in the reference app.",
+]
 
 [[behavior]]
 id = "hoi.appliesToAllExports"
 area = "compile"
-milestone = "M13"
+milestone = "M9"
 summary = "HOI curves must be honoured by both the static instance interpolator and the variable font compiler. How the reference encodes them in a variable font is not documented."
 ref = "Interpolation › Higher-Order Interpolation"
 status = "handbook"
+notes = "Static half built in M9.29: static instances (`fontcraft_interp::instance::instance_font`, `InterpOptions::hoi`) follow the curves. The variable compile keeps its probes at intermediate locations linear, so a variable font ignores the curves until M9.33 samples them into intermediate regions. Documented in the handbook, not yet observed."
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Variable font options: origin, axis location, axis mappings, STAT
 # ───────────────────────────────────────────────────────────────────────────────
-notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
 
 [[behavior]]
 id = "variable.originMaster"

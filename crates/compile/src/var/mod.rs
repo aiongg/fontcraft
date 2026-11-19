@@ -305,7 +305,9 @@ fn font_at(font: &Font, designspace: &fontcraft_interp::Designspace, location: &
         ..Default::default()
     });
     let index = probe.instances.len() - 1;
-    let options = fontcraft_interp::instance::options_for(&probe, index)?;
+    // Variable fonts do not carry higher-order interpolation curves yet, so the probes stay
+    // linear like the rest of the variable font.
+    let options = fontcraft_interp::InterpOptions { hoi: false, ..fontcraft_interp::instance::options_for(&probe, index)? };
     Ok(fontcraft_interp::instance::instance_font(&probe, index, &options)?)
 }
 
