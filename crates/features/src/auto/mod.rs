@@ -24,6 +24,7 @@ mod cpsp;
 mod figures;
 mod fractions;
 mod indic;
+mod indic_positional;
 mod langsys;
 mod ligatures;
 mod locl;
@@ -43,6 +44,9 @@ pub use locl::locl_languages;
 /// Most bytes of code one generated entry may hold.
 pub const MAX_GENERATED_BYTES: usize = 4 << 20;
 
+/// Most anchors read from one glyph into an [`AutoShape`].
+pub const MAX_AUTO_ANCHORS: usize = 256;
+
 /// One glyph as the generators see it.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct AutoGlyph {
@@ -56,6 +60,45 @@ pub struct AutoGlyph {
     pub script: Option<String>,
 }
 
+/// An anchor of an [`AutoShape`]: its name and horizontal position.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct AutoAnchor {
+    pub name: String,
+    pub x: f64,
+}
+
+/// What the positional Indic generators read beyond a glyph's name: its production name and,
+/// from the first master, its advance width and anchors. Widths and positions are finite.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct AutoShape {
+    /// The production name (`uni0C950CBF`), from the glyph or the glyph database.
+    pub production: Option<String>,
+    pub width: f64,
+    /// At most [`MAX_AUTO_ANCHORS`].
+    pub anchors: Vec<AutoAnchor>,
+}
+
+impl AutoShape {
+    /// The horizontal position of the anchor `name`.
+    pub fn anchor(&self, name: &str) -> Option<f64> {
+        self.anchors.iter().find(|a| a.name == name).map(|a| a.x)
+    }
+
+    /// The shape with non-finite numbers replaced by 0 and at most [`MAX_AUTO_ANCHORS`] anchors.
+    fn checked(mut self) -> Self {
+        if !self.width.is_finite() {
+            self.width = 0.0;
+        }
+        self.anchors.truncate(MAX_AUTO_ANCHORS);
+        for a in &mut self.anchors {
+            if !a.x.is_finite() {
+                a.x = 0.0;
+            }
+        }
+        self
+    }
+}
+
 /// What the generators read: the target's exporting glyphs in the font's order and the entries
 /// the font has.
 #[derive(Clone, Debug, Default)]
@@ -63,6 +106,7 @@ pub struct AutoContext {
     glyphs: Vec<AutoGlyph>,
     index: HashMap<String, usize>,
     existing: Arc<Features>,
+    shapes: HashMap<String, AutoShape>,
 }
 
 impl AutoContext {
@@ -72,7 +116,18 @@ impl AutoContext {
             return Err(FeatureError::Limit { what: "glyphs", limit: fontcraft_model::MAX_GLYPHS });
         }
         let index = glyphs.iter().enumerate().map(|(i, g)| (g.name.clone(), i)).collect();
-        Ok(Self { glyphs, index, existing })
+        Ok(Self { glyphs, index, existing, shapes: HashMap::new() })
+    }
+
+    /// The context with these production names, widths and anchors; shapes of glyphs it lacks
+    /// are dropped.
+    pub fn with_shapes(mut self, shapes: impl IntoIterator<Item = (String, AutoShape)>) -> Self {
+        for (name, shape) in shapes {
+            if self.index.contains_key(&name) {
+                self.shapes.insert(name, shape.checked());
+            }
+        }
+        self
     }
 
     /// The context of `font`'s exporting glyphs (or of `glyphs`, an export target's glyph set,
@@ -90,9 +145,22 @@ impl AutoContext {
             }
             None => font.glyphs.iter().filter(|g| g.export).map(|g| &**g).collect(),
         };
+        let master = font.masters.first().map(|m| m.id.as_str());
         let mut out = Vec::with_capacity(chosen.len());
+        let mut shapes = Vec::with_capacity(chosen.len());
         for glyph in chosen {
             let props = glyph_props(glyph, data, false);
+            let layer = master.and_then(|m| glyph.layer(m));
+            shapes.push((
+                glyph.name.clone(),
+                AutoShape {
+                    production: props.production_name.value.clone(),
+                    width: layer.map_or(0.0, |l| l.width),
+                    anchors: layer
+                        .map(|l| l.anchors.iter().take(MAX_AUTO_ANCHORS).map(|a| AutoAnchor { name: a.name.clone(), x: a.x }).collect())
+                        .unwrap_or_default(),
+                },
+            ));
             let sub_category = props.sub_category.value.or_else(|| {
                 let sub = match props.case.as_deref()? {
                     "upper" => "Uppercase",
@@ -110,7 +178,7 @@ impl AutoContext {
                 script: props.script.value,
             });
         }
-        Self::new(out, font.features.clone())
+        Ok(Self::new(out, font.features.clone())?.with_shapes(shapes))
     }
 
     pub fn glyphs(&self) -> &[AutoGlyph] {
@@ -127,6 +195,11 @@ impl AutoContext {
 
     pub fn existing(&self) -> &Features {
         &self.existing
+    }
+
+    /// The production name, width and anchors of `name`, when known.
+    pub fn shape(&self, name: &str) -> Option<&AutoShape> {
+        self.shapes.get(name)
     }
 }
 
@@ -164,6 +237,7 @@ pub fn generators() -> Vec<&'static dyn Generator> {
     all.extend(fractions::generators());
     all.extend(ligatures::generators());
     all.extend(indic::generators());
+    all.extend(indic_positional::generators());
     all.extend(cpsp::generators());
     all
 }
@@ -190,10 +264,10 @@ const DERIVED: [&str; 2] = ["aalt", langsys::NAME];
 /// The order in which Update places the features it adds. `ssXX` and `cvXX` stand for the
 /// numbered sets, in number order.
 const FEATURE_ORDER: &[&str] = &[
-    "aalt", "ccmp", "locl", "nukt", "akhn", "rphf", "rkrf", "blwf", "half", "cjct", "subs", "sinf", "sups", "numr", "dnom", "frac", "afrc", "ordn",
-    "lnum", "pnum", "tnum", "onum", "case", "init", "medi", "med2", "fina", "fin2", "fin3", "dlig", "liga", "hlig", "rlig", "c2sc", "smcp", "c2pc",
-    "pcap", "hist", "titl", "swsh", "ornm", "salt", "ssXX", "cvXX", "ital", "fwid", "hwid", "pwid", "qwid", "twid", "hkna", "vkna", "pkna", "hojo",
-    "ruby", "vrt2", "cpsp",
+    "aalt", "ccmp", "locl", "nukt", "akhn", "rphf", "rkrf", "pref", "blwf", "half", "vatu", "cjct", "pres", "abvs", "blws", "psts", "subs", "sinf",
+    "sups", "numr", "dnom", "frac", "afrc", "ordn", "lnum", "pnum", "tnum", "onum", "case", "init", "medi", "med2", "fina", "fin2", "fin3", "dlig",
+    "liga", "hlig", "rlig", "c2sc", "smcp", "c2pc", "pcap", "hist", "titl", "swsh", "ornm", "salt", "ssXX", "cvXX", "ital", "fwid", "hwid", "pwid",
+    "qwid", "twid", "hkna", "vkna", "pkna", "hojo", "ruby", "vrt2", "cpsp",
 ];
 
 /// Where `name` sorts among the entries Update adds; names outside the order sort last, in the
@@ -311,7 +385,6 @@ pub fn update(entries: &Features, cx: &AutoContext) -> Result<UpdateReport, Feat
     let code = langsys::code_for(&merged);
     merge_one(&mut merged, AutoEntry { kind: EntryKind::Prefix, name: langsys::NAME.into(), code, optional: false }, &mut report);
 
-    report.not_generated = indic::not_generated(cx);
     report.features = merged;
     Ok(report)
 }

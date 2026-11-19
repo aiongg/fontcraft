@@ -1,7 +1,7 @@
 //! The Indic features (M8.13).
 //!
-//! Rows: `autoFeature.abvs`, `akhn`, `blwf`, `blws`, `cjct`, `half`, `nukt`, `pref`, `pres`, `psts`, `rkrf`, `rphf`, `vatu`;
-//! the `Keep UI-Font Bounding Box` parameter.
+//! Rows: `autoFeature.akhn`, `blwf`, `cjct`, `half`, `nukt`, `rkrf`, `rphf`; the
+//! `Keep UI-Font Bounding Box` parameter.
 //!
 //! The rules come from the glyph names alone, in the naming of the glyph database: a script
 //! suffix (`ka-deva`), half forms without the inherent `a` (`k-deva`), conjuncts joining their
@@ -18,8 +18,9 @@
 //! | half | `X-S` where `Xa-S` exists | `sub Xa-S halant-S by X-S;` |
 //! | cjct | other conjuncts `X_Ya-S` | `sub X-S Ya-S by X_Ya-S;` (half forms, else consonant and halant) |
 //!
-//! abvs, blws, pref, pres, psts and vatu need data the handbook does not give; [`not_generated`]
-//! names them with the reason for Update's report. The `Keep UI-Font Bounding Box` parameter
+//! The positional features (abvs, blws, pref, pres, psts, vatu) are in `indic_positional`, which
+//! shares the name parsing here. A rakar the glyph database files as a spacing mark (Malayalam's
+//! pre-base rakar) is formed in pref, not in blwf. The `Keep UI-Font Bounding Box` parameter
 //! changes how the reference stacks Oriya conjuncts; the cjct written here never stacks, so the
 //! parameter has nothing to change.
 
@@ -32,16 +33,16 @@ use crate::source_map::EntryKind;
 const MAX_PARTS: usize = 16;
 
 /// A script with Indic shaping, as the glyph names spell it.
-struct Script {
+pub(super) struct Script {
     /// The name suffix after the hyphen (`deva`).
-    suffix: &'static str,
+    pub(super) suffix: &'static str,
     /// The virama's glyph name.
-    halant: &'static str,
+    pub(super) halant: &'static str,
     /// Whether rakar ligatures go into rkrf (the handbook's Devanagari, Gujarati and Malayalam).
     rakar_forms: bool,
 }
 
-static SCRIPTS: [Script; 9] = [
+pub(super) static SCRIPTS: [Script; 9] = [
     Script { suffix: "deva", halant: "halant-deva", rakar_forms: true },
     Script { suffix: "beng", halant: "halant-beng", rakar_forms: false },
     Script { suffix: "gurmukhi", halant: "halant-gurmukhi", rakar_forms: false },
@@ -56,24 +57,14 @@ static SCRIPTS: [Script; 9] = [
 /// The akhand conjuncts, as (half part, last consonant).
 const AKHANDS: [(&str, &str); 2] = [("k", "ssa"), ("j", "nya")];
 
-/// The Indic features Update recognises and does not write, with the reason.
-const NOT_GENERATED: [(&str, &str); 6] = [
-    ("abvs", "Not generated: the base and mark pairs it joins are not documented. Write the feature by hand."),
-    ("blws", "Not generated: its rules depend on the script and are not documented. Write the feature by hand."),
-    ("pref", "Not generated: the letter combinations it forms are not documented. Write the feature by hand."),
-    ("pres", "Not generated: how a numbered matra width is matched to each conjunct is not documented. Write the feature by hand."),
-    ("psts", "Not generated: its rules depend on the script and are not documented. Write the feature by hand."),
-    ("vatu", "Not generated: the rakar lookups it is derived from are not documented. Write the feature by hand."),
-];
-
 /// A glyph name taken apart: `k_ya-deva.below` is stem `k_ya`, script Devanagari, suffix `.below`.
-struct Name<'a> {
-    stem: &'a str,
-    script: &'static Script,
-    suffix: &'a str,
+pub(super) struct Name<'a> {
+    pub(super) stem: &'a str,
+    pub(super) script: &'static Script,
+    pub(super) suffix: &'a str,
 }
 
-fn parse(name: &str) -> Option<Name<'_>> {
+pub(super) fn parse(name: &str) -> Option<Name<'_>> {
     let (base, suffix) = match name.find('.') {
         Some(dot) => (name.get(..dot)?, name.get(dot..)?),
         None => (name, ""),
@@ -84,7 +75,7 @@ fn parse(name: &str) -> Option<Name<'_>> {
 }
 
 /// The glyph `stem-S`, when the font has it.
-fn named(cx: &AutoContext, stem: &str, script: &Script) -> Option<String> {
+pub(super) fn named(cx: &AutoContext, stem: &str, script: &Script) -> Option<String> {
     let name = format!("{stem}-{}", script.suffix);
     cx.has(&name).then_some(name)
 }
@@ -99,12 +90,12 @@ fn consonant(cx: &AutoContext, part: &str, script: &Script) -> Option<String> {
     named(cx, &format!("{part}a"), script)
 }
 
-fn halant(cx: &AutoContext, script: &Script) -> Option<&'static str> {
+pub(super) fn halant(cx: &AutoContext, script: &Script) -> Option<&'static str> {
     cx.has(script.halant).then_some(script.halant)
 }
 
 /// The parts of a conjunct name, two or more.
-fn parts(stem: &str) -> Option<Vec<&str>> {
+pub(super) fn parts(stem: &str) -> Option<Vec<&str>> {
     if !stem.contains('_') {
         return None;
     }
@@ -143,15 +134,6 @@ static CJCT: Indic = Indic { names: &["cjct"], rule: cjct };
 /// This module's generators, in the order an Indic shaper applies their features.
 pub(super) fn generators() -> Vec<&'static dyn Generator> {
     vec![&NUKT, &AKHN, &RPHF, &RKRF, &BLWF, &HALF, &CJCT]
-}
-
-/// The Indic features Update does not write, with the reason, when `cx` has glyphs of a script
-/// with Indic shaping; none otherwise. [`super::update`] adds them to its report.
-pub(super) fn not_generated(cx: &AutoContext) -> Vec<(String, String)> {
-    if !cx.glyphs().iter().any(|g| parse(&g.name).is_some()) {
-        return Vec::new();
-    }
-    NOT_GENERATED.iter().map(|(tag, why)| ((*tag).to_owned(), (*why).to_owned())).collect()
 }
 
 impl Generator for Indic {
@@ -229,6 +211,9 @@ fn blwf(cx: &AutoContext, glyph: &AutoGlyph, n: &Name<'_>) -> Option<String> {
         return Some(format!("sub {halant} {plain} by {};\n", glyph.name));
     }
     if n.stem == "rakar" && n.suffix.is_empty() {
+        if is_pre_base(glyph) {
+            return None;
+        }
         let ra = named(cx, "ra", n.script)?;
         // A `ra-S.below` already takes halant and ra.
         if cx.has(&format!("{ra}.below")) {
@@ -237,6 +222,12 @@ fn blwf(cx: &AutoContext, glyph: &AutoGlyph, n: &Name<'_>) -> Option<String> {
         return Some(format!("sub {halant} {ra} by {};\n", glyph.name));
     }
     None
+}
+
+/// A rakar the glyph database files as a spacing mark stands before the base (Malayalam); pref
+/// forms it.
+pub(super) fn is_pre_base(glyph: &AutoGlyph) -> bool {
+    glyph.sub_category.as_deref() == Some("Spacing Combining")
 }
 
 fn half(cx: &AutoContext, glyph: &AutoGlyph, n: &Name<'_>) -> Option<String> {
@@ -253,7 +244,8 @@ fn cjct(cx: &AutoContext, glyph: &AutoGlyph, n: &Name<'_>) -> Option<String> {
         return None;
     }
     let mut parts = parts(n.stem)?;
-    let last = parts.pop().filter(|p| p.ends_with('a'))?;
+    // `ka_iMatra-S` joins a consonant and a vowel sign: abvs or blws forms it.
+    let last = parts.pop().filter(|p| p.ends_with('a') && !p.ends_with("Matra"))?;
     let last = named(cx, last, n.script)?;
     let mut input = Vec::with_capacity(parts.len().saturating_mul(2).saturating_add(1));
     for part in parts {
@@ -359,12 +351,8 @@ mod tests {
     }
 
     #[test]
-    fn indic_features_not_generated_are_reported_for_indic_fonts_only() {
-        let reported: Vec<String> = not_generated(&devanagari()).into_iter().map(|(tag, _)| tag).collect();
-        assert_eq!(reported, ["abvs", "blws", "pref", "pres", "psts", "vatu"]);
-
+    fn indic_features_are_not_written_for_latin_fonts() {
         let latin = AutoContext::new(vec![glyph("a", "Letter"), glyph("k-dot", "Letter")], Arc::default()).unwrap();
-        assert!(not_generated(&latin).is_empty());
         for generator in generators() {
             assert!(generator.generate(&latin).unwrap().is_empty());
         }
