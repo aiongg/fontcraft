@@ -51,6 +51,11 @@ pub const MODULES: &[Module] = &[
     crate::canvas::text::commands::MODULE,
     super::space_center::MODULE,
     super::context_menu::MODULE,
+    crate::app::close::MODULE,
+    crate::app::open::MODULE,
+    super::start::MODULE,
+    super::settings::MODULE,
+    super::url::MODULE,
 ];
 
 /// The module and description of the shell command `id`.

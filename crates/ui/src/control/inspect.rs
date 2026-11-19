@@ -15,7 +15,14 @@ pub const METHODS: &[(&str, Method)] = &[("ui.inspect", inspect)];
 pub type Inspect = fn(&FontCraftApp, &mut Map<String, Value>);
 
 /// Every package's `ui.inspect` keys, one line per package.
-pub const INSPECT: &[Inspect] = &[crate::shell::kerning_window::inspect, crate::canvas::text::inspect, crate::shell::space_center::inspect];
+pub const INSPECT: &[Inspect] = &[
+    crate::shell::kerning_window::inspect,
+    crate::canvas::text::inspect,
+    crate::shell::space_center::inspect,
+    crate::app::close::inspect,
+    crate::shell::start::inspect,
+    crate::shell::settings::inspect,
+];
 
 /// `{}` → `{tool, glyph, panels, canvas: {zoom, center, rect}, status, closing, unsaved, pendingInput}`, plus
 /// the keys of [`INSPECT`].

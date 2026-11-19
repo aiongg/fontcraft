@@ -23,6 +23,10 @@ pub mod testing;
 
 pub use app::FontCraftApp;
 
+/// Builds the app's frame hook once the window's context exists (it wakes the window).
+#[cfg(not(target_arch = "wasm32"))]
+pub type MakeFrameHook = Box<dyn FnOnce(&egui::Context) -> Box<dyn app::preview_host::FrameHook>>;
+
 /// What the desktop app starts with.
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Default)]
@@ -31,6 +35,10 @@ pub struct Options {
     pub control: Option<std::net::TcpListener>,
     /// The folders control requests may read from and write to.
     pub roots: Option<std::sync::Arc<fontcraft_engine::file_access::AutomationRoots>>,
+    /// Work done each frame beside the UI (External Preview's server).
+    pub frame_hook: Option<MakeFrameHook>,
+    /// The web server for the TrueType preview page.
+    pub preview_host: Option<Box<dyn app::preview_host::PreviewHost>>,
 }
 
 /// Opens the desktop window and runs it until it closes.
@@ -46,6 +54,12 @@ pub fn run(options: Options) -> Result<(), String> {
     craft::ui::shell::app::run(spec, move |ctx| {
         let mut app = FontCraftApp::open(ctx);
         app.control.roots = options.roots;
+        app.frame_hook = options.frame_hook.map(|make| make(ctx));
+        app.preview_host = options.preview_host;
+        app.view.start.reveal = Some(craft::platform::open::reveal);
+        if app.session.settings().get_bool(shell::start::SHOW_AT_LAUNCH).unwrap_or(true) {
+            app.sent.push(app::Msg::Shell(craft::ui::runtime::commands::CommandRef::with_params("window.startWindow", serde_json::json!({}))));
+        }
         if let Some(listener) = options.control {
             match app.control.listen(listener, ctx) {
                 Ok(addr) => log::info!("control channel listening on {addr}"),
