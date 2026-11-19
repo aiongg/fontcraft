@@ -1,0 +1,129 @@
+//! Font Info: the tab strip (Font, Masters, Exports, Features, Other Settings, Notes) over the shown tab.
+//!
+//! | Module | Draws |
+//! |---|---|
+//! | `mod.rs` | the panel, the tab strip and the shared words |
+//! | [`rows`] | the section headings with their plus buttons and the field and parameter rows |
+//! | [`param_value`] | the value editor of each row |
+//! | [`font_tab`] | General (Family Name, Units per Em, Version, Creation Date, added fields), Axes, Custom Parameters |
+//! | [`other_tab`] | Other Settings |
+//! | [`notes_tab`] | the font note |
+//!
+//! A tab click posts `font.info.selectTab`; every edit posts an engine command. The Masters, Exports and Features
+//! tabs come with their own packages.
+
+pub mod font_tab;
+pub mod notes_tab;
+pub mod other_tab;
+pub mod param_value;
+pub mod rows;
+#[cfg(test)]
+mod tests;
+
+use std::borrow::Cow;
+
+use craft::behavior::{SelectionChange, keyed};
+use craft::ui::contract::{CollectionEvent, Show as _, ShowCollection as _, ShowContainer as _, Tracked};
+use craft::ui::display::{Shade, Text};
+use craft::ui::layout_components::Stack;
+use craft::ui::runtime::commands::CommandRef;
+use craft::ui::runtime::env::{Env, Label};
+use craft::ui::tabs::{Tab, TabStrip};
+use egui::Ui;
+use serde_json::json;
+
+use crate::app::Msg;
+use crate::app::models::font_info::FontInfoModel;
+use crate::shell::font_info::FontInfoTab;
+
+craft::ui::words! {
+    /// The words of the Font Info panel and its rows.
+    pub struct FontInfoWords {
+        /// The tab strip's name.
+        tabs: "fontcraftFontInfo.tabs" = "Font Info tabs";
+        font: "fontcraftFontInfo.font" = "Font";
+        masters: "fontcraftFontInfo.masters" = "Masters";
+        exports: "fontcraftFontInfo.exports" = "Exports";
+        features: "fontcraftFontInfo.features" = "Features";
+        other: "fontcraftFontInfo.other" = "Other Settings";
+        notes: "fontcraftFontInfo.notes" = "Notes";
+        /// Shown without an open font.
+        no_font: "fontcraftFontInfo.noFont" = "No font is open.";
+        /// Shown on a tab whose editor is not built yet.
+        not_yet: "fontcraftFontInfo.notYet" = "This tab is not available yet.";
+        /// A parameter's check box.
+        use_parameter: "fontcraftFontInfo.useParameter" = "Use this parameter";
+        /// A row's minus button.
+        remove_row: "fontcraftFontInfo.removeRow" = "Remove this row";
+        /// The field of targets that hold different values.
+        multiple: "fontcraftFontInfo.multiple" = "Multiple Values";
+        /// A menu whose value is none of its entries.
+        choose: "fontcraftFontInfo.choose" = "Choose…";
+        /// The button of a value edited in its own dialog.
+        edit: "fontcraftFontInfo.edit" = "Edit…";
+        edit_tip: "fontcraftFontInfo.editTip" = "Edit the value in its dialog";
+        /// The language menu of a localizable field.
+        language: "fontcraftFontInfo.language" = "Language";
+        add_language: "fontcraftFontInfo.addLanguage" = "Add a language";
+        remove_language: "fontcraftFontInfo.removeLanguage" = "Remove this language";
+    }
+}
+
+impl FontInfoTab {
+    /// The tab strip's label.
+    pub fn label(self, words: &FontInfoWords) -> Label {
+        match self {
+            FontInfoTab::Font => words.font.clone(),
+            FontInfoTab::Masters => words.masters.clone(),
+            FontInfoTab::Exports => words.exports.clone(),
+            FontInfoTab::Features => words.features.clone(),
+            FontInfoTab::Other => words.other.clone(),
+            FontInfoTab::Notes => words.notes.clone(),
+        }
+    }
+}
+
+/// What the Font Info panel reads and sends.
+pub struct Props<'a> {
+    pub model: &'a Tracked<FontInfoModel>,
+    pub sent: &'a mut Vec<Msg>,
+}
+
+pub fn show(ui: &mut Ui, mut props: Props<'_>) {
+    view(&mut props, ui);
+}
+
+fn view(props: &mut Props<'_>, ui: &mut Ui) {
+    let words = Env::of(ui).words::<FontInfoWords>();
+    let model: &FontInfoModel = props.model;
+    if !model.open {
+        Text::new(words.no_font.clone()).shade(Shade::Muted).show(ui);
+        return;
+    }
+    let sent = &mut *props.sent;
+    Stack::new().fill_width().show(ui, |ui, _| {
+        if let Some(tab) = tab_strip(ui, model.tab, &words) {
+            sent.push(Msg::Shell(CommandRef::with_params("font.info.selectTab", json!({ "tab": tab.name() }))));
+        }
+        match model.tab {
+            FontInfoTab::Font => font_tab::view(ui, model, sent),
+            FontInfoTab::Other => other_tab::view(ui, &model.other, sent),
+            FontInfoTab::Notes => notes_tab::view(ui, &model.note, sent),
+            FontInfoTab::Masters | FontInfoTab::Exports | FontInfoTab::Features => {
+                Text::new(words.not_yet.clone()).shade(Shade::Muted).show(ui);
+            }
+        }
+    });
+}
+
+/// The tab strip; the tab the user picked, if another than `shown`.
+fn tab_strip(ui: &mut Ui, shown: FontInfoTab, words: &FontInfoWords) -> Option<FontInfoTab> {
+    let labels: Vec<(FontInfoTab, Label)> = FontInfoTab::ALL.iter().map(|t| (*t, t.label(words))).collect();
+    let source = keyed(&labels, |(tab, _)| *tab).with_text(|(_, label)| Cow::Borrowed(label.as_str()));
+    let out = TabStrip::new(words.tabs.clone()).shown(shown).show_items(ui, &source, &mut |tab, _| Tab::new(tab.label(words)));
+    let picked = out.response.events.iter().rev().find_map(|event| match event {
+        CollectionEvent::Selection(SelectionChange::Set(keys)) => keys.last().copied(),
+        _ => None,
+    });
+    picked.or(out.picked).filter(|tab| *tab != shown)
+}

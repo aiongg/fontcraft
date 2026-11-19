@@ -53,6 +53,8 @@ pub struct ViewState {
     pub edit_background: bool,
     /// Font View's mode, sort, columns, search and glyph selection.
     pub font_view: font_view::FontViewState,
+    /// The Font Info panel's tab and the dialog it asked for.
+    pub font_info: crate::shell::font_info::FontInfoView,
 }
 
 impl Default for ViewState {
@@ -66,6 +68,7 @@ impl Default for ViewState {
             display: crate::canvas::Display::default(),
             edit_background: false,
             font_view: font_view::FontViewState::default(),
+            font_info: Default::default(),
         }
     }
 }

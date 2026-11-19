@@ -5,6 +5,7 @@
 
 pub mod canvas;
 pub mod font_view;
+pub mod font_info;
 pub mod glyph;
 
 use craft::ui::contract::Tracked;
@@ -26,6 +27,8 @@ pub struct Models {
     /// Font View's glyphs, their order, the selection and the cell outlines (`panels::font_view`).
     pub font_view: Tracked<font_view::FontViewModel>,
     font_view_outlines: font_view::OutlineCache,
+    /// The Font Info panel (`panels::font_info`).
+    pub font_info: Tracked<font_info::FontInfoModel>,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -68,6 +71,7 @@ impl Models {
         canvas::project(&mut self.canvas, cx);
         self.canvas_tokens = crate::canvas::tokens::Tokens::from_settings(cx.session.settings(), false);
         font_view::project(&mut self.font_view, &mut self.font_view_outlines, cx);
+        font_info::project(&mut self.font_info, cx);
         true
     }
 }
