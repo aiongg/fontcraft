@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2881 guesses on 1553 rows (632 of them live commands).**
+**2890 guesses on 1553 rows (632 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -2199,6 +2199,15 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `proof` (cli) | M12 | docs | – | PDF waterfall kerning reads the kern feature of the default language system of latn, else DFLT, else the first script that has one, and the kern table only when GPOS has no kern feature; device and variation deltas are left out. Settled by comparing a waterfallplot page of the reference script on a kerned font of ours. |
 | `proof` (cli) | M12 | docs | – | A character the font does not map is drawn as .notdef with its advance in a PDF waterfall. Settled by a waterfallplot run with text the font lacks. |
 | `proof` (cli) | M12 | docs | – | PDF labels and titles use the standard Helvetica font in WinAnsi encoding; characters outside it print as ?. Settled by reading the label font of a proofpdf page. |
+| `proof` (cli) | M12 | docs | – | A tile of boxes, hints and digi is one em wide plus the glyph padding (and room for hint labels when hints are drawn), as tall as the font's ascender-to-descender band or the em box, with the metrics text under it. Settled by measuring a hintplot and a digiplot page of the reference script on our own font. |
+| `proof` (cli) | M12 | docs | – | Without --baseline the em box's bottom edge is at 0, or at -0.12 em for a CID-keyed font and for digi (the reference's -120 scaled to the units per em); the BASE table is not read. Settled by a hintplot run on a 2048-unit font and on one with a BASE table. |
+| `proof` (cli) | M12 | docs | – | A glyph without hint replacement prints no 'in groups' line, and --hint-groups hides its stems unless group 0 is named. Settled by a hintplot -select_hints run on a glyph without replacement. |
+| `proof` (cli) | M12 | docs | – | Hints and alignment zones come only from a CFF table; TrueType and CFF2 fonts show none. Settled by running hintplot on a TrueType font. |
+| `proof` (cli) | M12 | docs | – | The compare layout puts each glyph's origin at the left of its one-em column and its baseline one glyph size below the row top, and labels rows with the font's index in the sorted set. Settled by measuring a fontsetplot page of the reference script. |
+| `proof` (cli) | M12 | docs | – | The palette of palette+outline fits 320 glyphs per page, as the reference's linked palette, rather than the overview palette's 156. Settled by counting a tx -pdf -1 palette page. |
+| `proof` (cli) | M12 | docs | – | In SVG, where each page is its own file, a palette+outline cell names its outline page (data-link-page) instead of linking to it. Nothing in the references fixes it. |
+| `proof` (cli) | M12 | docs | – | --list-settings lists only the settings FontCraft draws; the reference's font, margin, error-log and metadata-placement parameters are refused by --set. Settled by the owner if more are wanted. |
+| `proof` (cli) | M12 | docs | – | --metrics on digi changes both copies. Settled by a digiplot -vh run of the reference script. |
 | `features list` (cli) | M12 | docs | – | The text layout is ours (one line per table and feature, then an indented script/language line each, lookups after a colon; --by script swaps the two levels), since no reference prints this list in one format; JSON is the stable form. A request for spot's or comparefamily's layout would change it. |
 | `features compile` (cli) | M12 | docs | – | Without -o the result goes beside the font as NAME.features.EXT, where feaLib's command line writes NAME#1.EXT; a request for the reference's naming would change it. |
 | `features compile` (cli) | M12 | docs | – | With --debug-lookups, feature code converted from FontDame or VOLT is named in the Debg table by the --emit-fea file, or <features> (feaLib's name for code without a file) when there is none; a request to name the original source would change it. |
