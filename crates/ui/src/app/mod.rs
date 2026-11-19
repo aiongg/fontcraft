@@ -28,7 +28,7 @@ use serde_json::json;
 use self::catalog::{Catalog, Kind, TOOL_PREFIX};
 use self::files::Picks;
 use self::models::{Models, ProjectCx, Stamp};
-pub use self::msg::{Msg, ViewMsg};
+pub use self::msg::{Msg, Preview, ViewMsg};
 use crate::shell::dock::{self, PanelId};
 
 /// The app's identity for the host: the settings folder name, the display name and the version.
@@ -95,6 +95,8 @@ pub struct FontCraftApp {
     pub view: ViewState,
     /// The canvas's active-tool slot.
     pub active_tool: Box<dyn crate::canvas::ActiveTool>,
+    /// The toolbox, the selection and the running interaction.
+    pub tools: crate::canvas::tools::Tools,
     /// Moves with every applied [`ViewMsg`] and every view change a projection reads; part of the projection
     /// [`Stamp`].
     view_revision: u64,
@@ -132,7 +134,8 @@ impl FontCraftApp {
             catalog: Catalog::build(),
             tool_slots: tool_slots(),
             view: ViewState::default(),
-            active_tool: Box::new(craft::ui::canvas::NoTool),
+            active_tool: Box::new(crate::canvas::tools::bridge::ToolBridge::default()),
+            tools: crate::canvas::tools::Tools::default(),
             view_revision: 0,
             enabled_at: None,
             models: Models::default(),
@@ -163,31 +166,39 @@ impl FontCraftApp {
             self.sent.push(Msg::Run(command));
         }
         for msg in std::mem::take(&mut self.sent) {
-            match msg {
-                Msg::Run(command) => {
-                    if self.picks.ask(&self.host, &command) {
-                        continue;
-                    }
-                    let params = if command.params.is_null() { json!({}) } else { command.params.clone() };
-                    if let Err(error) = self.session.execute(&command.id, &params) {
-                        failed.push(format!("{}: {error}", command.id));
-                    }
-                }
-                Msg::Shell(command) => {
-                    if let Err(error) = crate::shell::commands::run(self, &command) {
-                        failed.push(format!("{}: {error}", command.id));
-                    }
-                }
-                Msg::View(view) => self.apply_view(view),
+            if let Err(error) = self.apply_msg(msg) {
+                failed.push(error);
             }
         }
         if let Some(last) = failed.pop() {
             self.status = last;
         }
+        crate::canvas::tools::apply::sync(self);
+        self.tools.refresh();
         if self.closing == Closing::SaveThenClose {
             self.closing = if self.has_unsaved_changes() { Closing::Idle } else { Closing::Confirmed };
         }
         self.project();
+    }
+
+    /// Applies one message; the error says what failed. Tool input runs the toolbox, whose answer is applied here
+    /// too, before the next message.
+    pub fn apply_msg(&mut self, msg: Msg) -> Result<(), String> {
+        match msg {
+            Msg::Run(command) => {
+                if self.picks.ask(&self.host, &command) {
+                    return Ok(());
+                }
+                let params = if command.params.is_null() { json!({}) } else { command.params.clone() };
+                let value = self.session.execute(&command.id, &params).map_err(|error| format!("{}: {error}", command.id))?;
+                crate::canvas::tools::apply::adopt(self, &value);
+                Ok(())
+            }
+            Msg::Shell(command) => crate::shell::commands::run(self, &command).map_err(|error| format!("{}: {error}", command.id)),
+            Msg::Preview(step) => crate::canvas::tools::apply::preview(self, step),
+            Msg::Tool(input) => crate::canvas::tools::apply::input(self, input).pop().map_or(Ok(()), Err),
+            Msg::View(view) => self.apply_view(view),
+        }
     }
 
     /// Copies what each panel shows into its view model when the engine or the view state moved.
@@ -207,20 +218,28 @@ impl FontCraftApp {
         self.view_revision += 1;
     }
 
-    fn apply_view(&mut self, msg: ViewMsg) {
+    fn apply_view(&mut self, msg: ViewMsg) -> Result<(), String> {
         self.view_revision += 1;
         match msg {
-            ViewMsg::SelectTool(tool) => self.view.tool = tool,
+            ViewMsg::SelectTool(tool) => {
+                self.view.tool = tool;
+                return crate::canvas::tools::apply::select_tool(self, tool);
+            }
             ViewMsg::ToolsLastUsed(last_used) => self.view.tools_last_used = last_used,
             ViewMsg::SelectGlyph(glyph) => self.view.glyph = Some(glyph),
             ViewMsg::TogglePanel(panel) => dock::toggle(&mut self.view.workspace, panel),
         }
+        Ok(())
     }
 
-    /// The message a fired command posts.
-    fn route(command: CommandRef) -> Msg {
+    /// The message a fired command posts. `tool.select` with a `tool` parameter makes that tool current.
+    pub(crate) fn route(command: CommandRef) -> Msg {
         match catalog::kind(&command.id) {
-            Kind::Tool(tool) => Msg::View(ViewMsg::SelectTool(tool)),
+            Kind::Tool(tool) => {
+                let named = command.params.get("tool").and_then(serde_json::Value::as_str);
+                let tool = named.and_then(|id| fontcraft_tools::TOOLS.iter().find(|t| t.id == id)).map_or(tool, |t| t.id);
+                Msg::View(ViewMsg::SelectTool(tool))
+            }
             Kind::Shell => Msg::Shell(command),
             Kind::Engine => Msg::Run(command),
         }
@@ -249,7 +268,11 @@ impl ShellApp for FontCraftApp {
         for fired in output.fired {
             // A held tool key fires again on release; the tool stays.
             if fired.phase != FirePhase::Release {
-                self.sent.push(FontCraftApp::route(fired.command));
+                let msg = match FontCraftApp::route(fired.command) {
+                    Msg::Run(command) => Msg::Run(crate::canvas::tools::targets::with_targets(self, command)),
+                    other => other,
+                };
+                self.sent.push(msg);
             }
         }
     }

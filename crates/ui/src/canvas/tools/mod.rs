@@ -1,0 +1,142 @@
+//! The pointer tools on the canvas: `fontcraft_tools::Toolbox` behind the canvas's active-tool slot.
+//!
+//! [`bridge::ToolBridge`] sits in the slot. Craft's `ToolHost` hands it the canvas's press, drags, hover and keys, and
+//! it posts each one in the edited glyph's font units as `Msg::Tool`. `drain` passes them to [`apply::input`], which
+//! runs the toolbox on the edited glyph's scene and the selection and carries out its answer in order: interaction
+//! steps as `Msg::Preview`, commands as `Msg::Run` (or shell and tool messages), selection and view changes directly.
+//! Each event sees what the one before it did. [`overlays`] paints the selection and the tool's overlays as layers.
+//!
+//! The selection belongs to the edited glyph's layer on the edited side (decision 0004: the engine never stores it).
+//! A command that returns a `selection` of that layer replaces it.
+
+pub mod apply;
+pub mod bridge;
+pub mod overlays;
+pub mod targets;
+pub mod tokens;
+
+use fontcraft_engine::Session;
+use fontcraft_engine::model::{Font, LayerSide};
+use fontcraft_tools::toolbox::Keyboard;
+use fontcraft_tools::{KeyEvent, Modifiers, Overlay, PointerEvent, Scene, Selection, Toolbox};
+
+use crate::app::ViewState;
+
+/// Input for the active tool.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ToolInput {
+    /// A pointer event in the edited glyph's font units.
+    Pointer(PointerEvent),
+    /// The modifier keys changed while the pointer stood still.
+    Modifiers(Modifiers),
+    /// A key going down or coming up.
+    Key(KeyEvent),
+}
+
+/// What the selection belongs to: the edited glyph, its layer in the edited master and the edited side.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Target {
+    pub glyph: String,
+    pub layer: String,
+    pub side: LayerSide,
+}
+
+/// What the canvas's tool layers paint.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ToolView {
+    pub selection: Selection,
+    /// The paths whose nodes alone show and take the selection (`path.focusOnSelectedPath`).
+    pub focus: Option<Vec<usize>>,
+    /// What the active tool asks the canvas to draw, in font units.
+    pub overlays: Vec<Overlay>,
+}
+
+/// The tools' side of the app: the toolbox, the selection and the running interaction.
+pub struct Tools {
+    pub toolbox: Toolbox,
+    pub selection: Selection,
+    pub focus: Option<Vec<usize>>,
+    /// The glyph, layer and side the selection belongs to.
+    target: Option<Target>,
+    /// The selection when the running interaction began: put back when it is cancelled. `Some` while an interaction
+    /// a tool began runs.
+    before: Option<Selection>,
+    /// The document revision the selection was last checked against.
+    checked: Option<(u64, u64)>,
+    /// The modifiers the toolbox last saw.
+    mods: Modifiers,
+    /// What the tool layers paint; [`Tools::refresh`] copies it from the state above.
+    pub view: ToolView,
+}
+
+impl Default for Tools {
+    fn default() -> Self {
+        let mut toolbox = Toolbox::new();
+        toolbox.set_keyboard(keyboard());
+        Tools {
+            toolbox,
+            selection: Selection::new(),
+            focus: None,
+            target: None,
+            before: None,
+            checked: None,
+            mods: Modifiers::NONE,
+            view: ToolView::default(),
+        }
+    }
+}
+
+/// Where the modifier keys come from: a Mac keeps Command and Control apart.
+fn keyboard() -> Keyboard {
+    if cfg!(target_os = "macos") { Keyboard::Mac } else { Keyboard::Other }
+}
+
+impl Tools {
+    /// Copies the selection, the focus and the active tool's overlays into [`Tools::view`], when they changed.
+    pub fn refresh(&mut self) {
+        let view = ToolView { selection: self.selection.clone(), focus: self.focus.clone(), overlays: self.toolbox.overlays() };
+        if view != self.view {
+            self.view = view;
+        }
+    }
+
+    /// The glyph, layer and side the selection belongs to.
+    pub fn target(&self) -> Option<&Target> {
+        self.target.as_ref()
+    }
+}
+
+/// The glyph the canvas edits: the shown one, else the font's first.
+pub fn edited_glyph<'a>(font: &'a Font, view: &'a ViewState) -> Option<&'a str> {
+    match &view.glyph {
+        Some(name) if font.glyphs.get(name).is_some() => Some(name.as_str()),
+        _ => font.glyphs.first().map(|g| g.name.as_str()),
+    }
+}
+
+/// The edited side of the layer.
+pub fn side(view: &ViewState) -> LayerSide {
+    if view.edit_background { LayerSide::Background } else { LayerSide::Foreground }
+}
+
+/// What the canvas edits now: the edited glyph's layer in the first master, on the edited side.
+pub fn target(session: &Session, view: &ViewState) -> Option<Target> {
+    let font = session.font().ok()?;
+    let glyph = font.glyph(edited_glyph(font, view)?)?;
+    let layer = glyph.layer(&font.masters.first()?.id)?;
+    Some(Target { glyph: glyph.name.clone(), layer: layer.id.clone(), side: side(view) })
+}
+
+/// The scene the tools work on: the edited side of the edited glyph's layer, as the canvas shows it.
+pub fn scene<'a>(font: &'a Font, view: &ViewState, focus: Option<&Vec<usize>>) -> Option<Scene<'a>> {
+    let glyph = edited_glyph(font, view)?;
+    let mut scene = Scene::from_font_side(font, glyph, None, side(view))?;
+    scene.focus = focus.cloned();
+    scene.background_shown = view.display.background;
+    scene.guides_shown = view.display.guides;
+    Some(scene)
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
+mod tests;

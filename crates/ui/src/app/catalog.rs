@@ -94,7 +94,9 @@ fn definitions() -> Vec<CommandDef> {
     for tool in fontcraft_tools::tool::TOOLS {
         let group = (!tool.group.is_empty()).then(|| tool.group.to_string());
         defs.push(
-            CommandDef::new(CommandRef::new(format!("{TOOL_PREFIX}{}", tool.id)), tool.label, Scope::app()).with_kind(CommandKind::Tool { group }),
+            CommandDef::new(CommandRef::new(format!("{TOOL_PREFIX}{}", tool.id)), tool.label, Scope::app())
+                .with_kind(CommandKind::Tool { group })
+                .with_icon(crate::icons::for_tool(tool.id)),
         );
     }
     defs

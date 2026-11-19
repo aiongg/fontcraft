@@ -5,6 +5,7 @@
 //! [`dispatch`] arrives with the control-channel port.
 
 mod app;
+mod pointer;
 
 use serde_json::Value;
 
@@ -14,7 +15,7 @@ use crate::app::FontCraftApp;
 pub type Method = fn(&mut FontCraftApp, &Value) -> Result<Value, String>;
 
 /// Every module's methods.
-pub const MODULES: &[&[(&str, Method)]] = &[app::METHODS];
+pub const MODULES: &[&[(&str, Method)]] = &[app::METHODS, pointer::METHODS];
 
 /// Runs the method `name`.
 pub fn dispatch(app: &mut FontCraftApp, name: &str, params: &Value) -> Result<Value, String> {

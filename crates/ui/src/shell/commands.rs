@@ -30,7 +30,7 @@ pub struct Module {
 }
 
 /// Every shell module.
-pub const MODULES: &[Module] = &[super::window::MODULE, super::view::MODULE];
+pub const MODULES: &[Module] = &[super::window::MODULE, super::view::MODULE, super::selection::MODULE];
 
 /// The module and description of the shell command `id`.
 pub fn find(id: &str) -> Option<(&'static Module, &'static UiCommand)> {

@@ -57,6 +57,7 @@ fn painted(app: &FontCraftApp, layer: fn(&PaintCx<'_>) -> Vec<Shape>) -> Vec<Sha
         display: app.view.display,
         edit_background: app.view.edit_background,
         words: &words,
+        tools: &app.tools.view,
     };
     layer(&cx)
 }

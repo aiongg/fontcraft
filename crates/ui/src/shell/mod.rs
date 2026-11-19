@@ -6,6 +6,7 @@ pub mod bars;
 pub mod commands;
 pub mod dock;
 pub mod rail;
+pub mod selection;
 pub mod view;
 pub mod window;
 

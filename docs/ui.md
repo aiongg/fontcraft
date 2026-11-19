@@ -91,6 +91,8 @@ queries through `Session::query`, which refuses edits.
 | `Msg::run("spacing.setWidth", json!({"glyphs": [name], "value": 640}))` | an engine command; one undo step |
 | `Msg::Shell(CommandRef::with_params("window.togglePanel", json!({"panel": "layers"})))` | a shell command |
 | `Msg::View(ViewMsg::SelectGlyph(name))` | view state that is no command |
+| `Msg::Preview(Preview::Begin(label))`, `Update(command)`, `Commit`, `Cancel` | an interaction: previews on a snapshot that end as one undo step or as nothing |
+| `Msg::Tool(ToolInput::Pointer(event))` | input for the canvas tools, in the edited glyph's font units |
 
 Commands take explicit targets in their parameters. Post on commit (`events.committed()`), not on
 every keystroke. Menu rows, keys and the tool rail fire commands through the same catalog; a
@@ -136,6 +138,12 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   (a craft `CanvasTool` that also hands over the commands its gestures made): craft's `ToolHost`
   runs it on the canvas's pass, after the layers. View commands and display toggles are
   `shell/view.rs`.
+- **Tools.** The slot holds `canvas::tools::bridge::ToolBridge`. It posts the canvas's press, drags,
+  hover and keys as `Msg::Tool`; `drain` runs `fontcraft_tools::Toolbox` on them
+  (`canvas/tools/apply.rs`) and applies its answer before the next message, so each event sees what
+  the one before it did. The selection lives in `FontCraftApp::tools` (the engine never stores it);
+  the selection and the tool's overlays paint as layers (`canvas/tools/overlays.rs`). A menu or key
+  command run without parameters gets its targets from the selection (`canvas/tools/targets.rs`).
 - **Dialogs.** `dialogs::run` gets the window's `DialogHost` every pass. A module opens its dialog
   when app state asks for it and takes the answer on a later pass (`dialogs/unsaved.rs` is the
   example: the close question).

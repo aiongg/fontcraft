@@ -1,5 +1,6 @@
-//! The tool rail: one slot per tool group. Picking a tool fires its `tool.<id>` command, which the app layer turns
-//! into `ViewMsg::SelectTool`; the tools themselves arrive with the canvas port.
+//! The tool rail: one slot per tool group, each tool with its icon (`crate::icons`). A slot shared by several tools
+//! shows the one used last and opens a flyout of the others. Picking a tool fires its `tool.<id>` command, which the
+//! app layer turns into `ViewMsg::SelectTool`; that makes it the toolbox's tool (`canvas::tools`).
 
 use craft::ui::rails::{LastUsed, ToolRail, ToolSlot};
 use craft::ui::runtime::env::Env;
