@@ -11,6 +11,7 @@ pub mod font_info;
 pub mod font_view;
 pub mod glyph_info;
 pub mod kerning_review;
+pub mod kerning_window;
 pub mod masters;
 pub mod params;
 pub mod rail;

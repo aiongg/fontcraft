@@ -6,6 +6,7 @@ pub mod font_view;
 pub mod glyph_info;
 pub mod glyph_metrics;
 pub mod hinting_waterfall;
+pub mod kerning_window;
 pub mod layers;
 pub mod master_icons;
 pub mod master_switcher;

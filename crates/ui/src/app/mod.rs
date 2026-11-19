@@ -67,6 +67,8 @@ pub struct ViewState {
     pub layers: crate::shell::masters::LayersView,
     /// The Command Console, the command palette and About.
     pub commands: console::CommandSurfaces,
+    /// The Kerning window's search, sort, selection and the dialogs it asked for.
+    pub kerning: crate::shell::kerning_window::KerningView,
 }
 
 impl Default for ViewState {
@@ -86,6 +88,7 @@ impl Default for ViewState {
             glyph_info: Default::default(),
             layers: Default::default(),
             commands: console::CommandSurfaces::default(),
+            kerning: Default::default(),
         }
     }
 }

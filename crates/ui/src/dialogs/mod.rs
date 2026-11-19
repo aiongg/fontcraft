@@ -15,6 +15,8 @@ pub mod fields;
 mod filters;
 pub mod form;
 mod host;
+pub mod kerning_audit;
+pub mod kerning_questions;
 pub mod os2_bits;
 pub mod panose;
 pub mod spec;
@@ -31,8 +33,18 @@ use crate::app::FontCraftApp;
 pub type Module = fn(&mut DialogHost, &mut FontCraftApp);
 
 /// Every dialog module.
-pub const MODULES: &[Module] =
-    &[unsaved::run, field_picker::run, custom_parameter_picker::run, os2_bits::run, panose::run, tt::run, about::run, host::run];
+pub const MODULES: &[Module] = &[
+    unsaved::run,
+    field_picker::run,
+    custom_parameter_picker::run,
+    os2_bits::run,
+    panose::run,
+    tt::run,
+    about::run,
+    host::run,
+    kerning_questions::run,
+    kerning_audit::run,
+];
 
 /// Every package's dialog specs, one line each.
 pub const SPECS: &[&[DialogSpec]] = &[filters::SPECS];

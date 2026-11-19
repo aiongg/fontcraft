@@ -12,6 +12,7 @@ pub mod glyph_info;
 pub mod glyph_sections;
 pub mod hinting;
 pub mod kerning_review;
+pub mod kerning_window;
 pub mod layers;
 
 use craft::ui::contract::Tracked;
@@ -56,6 +57,8 @@ pub struct Models {
     pub masters: Tracked<layers::MastersModel>,
     /// The Command Console's pane and input line (`panels::command_console`); projected outside the stamp.
     pub console: Tracked<console::ConsoleModel>,
+    /// The Kerning window (`panels::kerning_window`).
+    pub kerning_window: Tracked<kerning_window::KerningWindowModel>,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -108,6 +111,7 @@ impl Models {
         hinting::project(&mut self.hinting_waterfall, cx);
         layers::project(&mut self.layers, cx);
         layers::project_masters(&mut self.masters, cx);
+        kerning_window::project(&mut self.kerning_window, cx);
         true
     }
 }
