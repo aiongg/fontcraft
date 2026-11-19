@@ -283,6 +283,9 @@ impl DockPanels<PanelId> for Panels<'_> {
             }
             PanelId::FontView => panels::font_view::show(ui, panels::font_view::Props { model: &self.models.font_view, sent: self.sent }),
             PanelId::FontInfo => panels::font_info::show(ui, panels::font_info::Props { model: &self.models.font_info, sent: self.sent }),
+            PanelId::KerningWindow => {
+                panels::kerning_window::show(ui, panels::kerning_window::Props { model: &self.models.kerning_window, sent: self.sent });
+            }
             // Drawn by `group_view`.
             PanelId::Document => {}
             other => panels::stub::show(ui, panels::stub::Props { title: other.title(&self.words) }),

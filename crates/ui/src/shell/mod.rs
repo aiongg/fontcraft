@@ -7,6 +7,7 @@ pub mod commands;
 pub mod dock;
 pub mod font_info;
 pub mod font_view;
+pub mod kerning_window;
 pub mod rail;
 pub mod view;
 pub mod window;

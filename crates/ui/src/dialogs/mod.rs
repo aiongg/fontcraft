@@ -6,6 +6,8 @@
 
 pub mod custom_parameter_picker;
 pub mod field_picker;
+pub mod kerning_audit;
+pub mod kerning_questions;
 pub mod os2_bits;
 pub mod panose;
 mod unsaved;
@@ -18,7 +20,8 @@ use crate::app::FontCraftApp;
 pub type Module = fn(&mut DialogHost, &mut FontCraftApp);
 
 /// Every dialog module.
-pub const MODULES: &[Module] = &[unsaved::run, field_picker::run, custom_parameter_picker::run, os2_bits::run, panose::run];
+pub const MODULES: &[Module] =
+    &[unsaved::run, field_picker::run, custom_parameter_picker::run, os2_bits::run, panose::run, kerning_questions::run, kerning_audit::run];
 
 /// Runs every dialog module for this pass.
 pub fn run(host: &mut DialogHost, app: &mut FontCraftApp) {

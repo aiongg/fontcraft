@@ -55,6 +55,8 @@ pub struct ViewState {
     pub font_view: font_view::FontViewState,
     /// The Font Info panel's tab and the dialog it asked for.
     pub font_info: crate::shell::font_info::FontInfoView,
+    /// The Kerning window's search, sort, selection and the dialogs it asked for.
+    pub kerning: crate::shell::kerning_window::KerningView,
 }
 
 impl Default for ViewState {
@@ -69,6 +71,7 @@ impl Default for ViewState {
             edit_background: false,
             font_view: font_view::FontViewState::default(),
             font_info: Default::default(),
+            kerning: Default::default(),
         }
     }
 }

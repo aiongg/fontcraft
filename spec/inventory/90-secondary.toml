@@ -1661,6 +1661,42 @@ guesses = [
 ]
 
 [[command]]
+id = "dialog.auditKerningExceptions"
+label = "Audit Kerning Exceptions…"
+menu = ["Font", "Kerning"]
+shortcut = ""
+kind = "ui"
+params = "{threshold?: number, masters?: [id], direction?: 'ltr' | 'rtl', fix?: bool}"
+area = "spacing-kerning"
+milestone = "M13"
+summary = "The dialog over kerning.auditExceptions: threshold, direction and masters, the glyph pairs found closer than the threshold, and a button that adds the corrective exceptions."
+ref = "FontLab 8 What's new › Metrics & kerning › Kerning (Audit Exceptions)"
+status = "docs"
+origin = "fontlab"
+notes = "Built in the new UI (UI.14) as the follow-up of M13.21b. The dialog runs the audit when it opens and again on Audit; Add Exceptions runs it with fix and lists the exception each pair got. Documented, not yet observed."
+guesses = [
+  "The audit runs once with the default settings as the dialog opens; FontLab's page does not say whether its dialog lists pairs before a button is pressed.",
+]
+
+[[command]]
+id = "dialog.matchKerning"
+label = "Match Kerning…"
+menu = ["Font", "Kerning"]
+shortcut = ""
+kind = "ui"
+params = "{run?: bool, mainMaster?: id, masters?: [id]}"
+area = "spacing-kerning"
+milestone = "M13"
+summary = "The dialog over kerning.matchAcrossMasters: asks for the main master, runs the match and shows how many pairs each master had before and after."
+ref = "FontLab 8 What's new › Metrics & kerning › Kerning (Match Kerning)"
+status = "docs"
+origin = "fontlab"
+notes = "Built in the new UI (UI.14) as the follow-up of M13.21b. Documented, not yet observed."
+guesses = [
+  "The summary gives the pairs filled, the exceptions added and each master's pair count before and after; FontLab's page names no summary.",
+]
+
+[[command]]
 id = "kerning.removePairsByRule"
 label = "Remove Pairs…"
 menu = ["Font", "Kerning"]

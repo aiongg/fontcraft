@@ -7,6 +7,7 @@ pub mod canvas;
 pub mod font_info;
 pub mod font_view;
 pub mod glyph;
+pub mod kerning_window;
 
 use craft::ui::contract::Tracked;
 use fontcraft_engine::Session;
@@ -29,6 +30,8 @@ pub struct Models {
     font_view_outlines: font_view::OutlineCache,
     /// The Font Info panel (`panels::font_info`).
     pub font_info: Tracked<font_info::FontInfoModel>,
+    /// The Kerning window (`panels::kerning_window`).
+    pub kerning_window: Tracked<kerning_window::KerningWindowModel>,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -72,6 +75,7 @@ impl Models {
         self.canvas_tokens = crate::canvas::tokens::Tokens::from_settings(cx.session.settings(), false);
         font_view::project(&mut self.font_view, &mut self.font_view_outlines, cx);
         font_info::project(&mut self.font_info, cx);
+        kerning_window::project(&mut self.kerning_window, cx);
         true
     }
 }
