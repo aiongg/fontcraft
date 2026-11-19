@@ -317,7 +317,7 @@ impl FontCraftApp {
     /// Runs the engine command `id` now, as `drain` applies it, and returns its result. For shell commands that build
     /// on an engine command's reply.
     pub(crate) fn run_command(&mut self, id: &str, params: Value) -> Result<Value, String> {
-        self.apply(Msg::run(id, params), false)
+        self.apply(Msg::run(id, params), false, Origin::Person)
     }
 
     /// Applies one message as `drain` does; the error names the command that failed.
