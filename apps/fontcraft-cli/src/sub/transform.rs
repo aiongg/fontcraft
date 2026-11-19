@@ -28,7 +28,12 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::value("matrix", "A,B,C,D,E,F", "", "explicit matrix, x' = a·x + c·y + e, y' = b·x + d·y + f; excludes the four options above"),
     OptSpec::switch("scale-em", false, "with a matrix or --scale, also scale the units per em by the horizontal factor"),
     OptSpec::value("upem", "N", "", "set units per em to N and scale the whole font to match"),
-    OptSpec::value("glyph-table", "FILE", "", "per-glyph names, advances and offsets (not supported yet)"),
+    OptSpec::value(
+        "glyph-table",
+        "FILE",
+        "",
+        "lines of `source output advance|None x y`: only the listed glyphs are transformed and kept, each shifted by its own offset, given its advance and renamed",
+    ),
     OptSpec::value("widths", "auto|keep|transform|em", "auto", "advance widths of transformed glyphs"),
     OptSpec::list("glyphs", "NAMES", "", "transform only these glyphs"),
     OptSpec::list("exclude-glyphs", "NAMES", "", "leave these glyphs alone"),

@@ -229,6 +229,18 @@ Commands defined in other inventory files and reused here: `autohint.ps.run`, `a
 
 Each section gives the usage line, behaviour the options alone do not convey, and the mapping from reference options to ours. The full option list with one-line meanings is the `options` field of the matching `[[cli]]` row in `spec/inventory/20-cli.toml`. Every subcommand also takes the global options described under *Conventions*.
 
+`cargo xtask cli-options` counts the mapping tables against what the binary accepts
+(`fontcraft-cli commands --cli --json`) and writes `docs/cli-options.md`. It reads each **Ours** cell this way:
+
+- Options are the words that start with `--`, and `-x` with one letter. `same` means the reference option's
+  own spelling. `--no-x` is accepted when `--x` is a switch.
+- A cell checks against the section's subcommand. A clause (separated by `;`, `,`, a parenthesis, `or` or
+  `and`) that names another subcommand before its first option checks against that one:
+  `compile --subset; subset --flavor`.
+- A row is *present* when every option it names is accepted, *missing* when one is not, *unchecked* when it
+  names none (a positional argument, a default or a behaviour), and *refused* when the cell starts with
+  "refused". The rows of *Deliberately not carried over* count as refused for their reference tool.
+
 ### `compile`
 
 Compiles sources into binary fonts: static TTF or OTF per instance or master and variable TTF (gvar) or CFF2, each plain or wrapped as WOFF or WOFF2; later, static CFF2 and interpolatable masters (M2.9). Sources are a native project, a .glyphs file or package, a designspace or a UFO; later also a bare outline font (CFF, CFF2, TrueType, Type 1) that receives the remaining OpenType tables from a feature file and name data. Without --format a source with one master yields a static TTF and one with several masters and an axis a variable TTF.
@@ -1150,9 +1162,9 @@ Engine command: `font.subset`.
 | pyftsubset | `--unicodes / --unicodes-file` | --unicodes / --unicodes-file |  |
 | pyftsubset | `--ignore-missing-glyphs / --no-ignore-missing-glyphs` | same |  |
 | pyftsubset | `--ignore-missing-unicodes / --no-ignore-missing-unicodes` | same |  |
-| pyftsubset | `--output-file` | -o |  |
-| pyftsubset | `--flavor` | --container |  |
-| pyftsubset | `--with-zopfli` | --zopfli |  |
+| pyftsubset | `--output-file` | -o / --output-file |  |
+| pyftsubset | `--flavor` | --flavor woff\|woff2\|none |  |
+| pyftsubset | `--with-zopfli` | --with-zopfli (refused with --flavor woff: no zopfli compressor) |  |
 | pyftsubset | `--retain-gids` | --retain-gids |  |
 | pyftsubset | `--notdef-glyph / --no-notdef-glyph` | same |  |
 | pyftsubset | `--notdef-outline / --no-notdef-outline` | same |  |
@@ -1176,15 +1188,15 @@ Engine command: `font.subset`.
 | pyftsubset | `--legacy-cmap / --no-legacy-cmap` | same |  |
 | pyftsubset | `--symbol-cmap / --no-symbol-cmap` | same |  |
 | pyftsubset | `--recalc-bounds / --no-recalc-bounds` | same |  |
-| pyftsubset | `--recalc-timestamp / --no-recalc-timestamp` | --timestamp now / --timestamp keep |  |
+| pyftsubset | `--recalc-timestamp / --no-recalc-timestamp` | same |  |
 | pyftsubset | `--canonical-order / --no-canonical-order` | same |  |
 | pyftsubset | `--prune-unicode-ranges / --no-prune-unicode-ranges` | same |  |
 | pyftsubset | `--prune-codepage-ranges / --no-prune-codepage-ranges` | same |  |
 | pyftsubset | `--recalc-average-width / --no-recalc-average-width` | same |  |
 | pyftsubset | `--recalc-max-context / --no-recalc-max-context` | same |  |
-| pyftsubset | `--font-number` | --face |  |
+| pyftsubset | `--font-number` | --face / --font-number |  |
 | pyftsubset | `--pretty-svg` | --pretty-svg |  |
-| pyftsubset | `--verbose` | -v |  |
+| pyftsubset | `--verbose` | -v / --verbose |  |
 | pyftsubset | `--timing` | --timing |  |
 | pyftsubset | --option=? (query current value) | --option? (same output line); --show-defaults prints every option |  |
 | tx | `-g` | --glyphs |  |
@@ -1595,9 +1607,9 @@ Engine command: `woff.compress`.
 | ttLib.woff2 | `--no-glyf-transform` | --no-glyf-transform |  |
 | ttLib.woff2 | `--hmtx-transform` | --hmtx-transform |  |
 | ttLib.woff2 | `-v / --verbose / -q / --quiet` | -v / -q |  |
-| ttx | `--flavor woff\|woff2` | woff compress --format (or --container on compile, convert, subset) |  |
+| ttx | `--flavor woff\|woff2` | woff compress --format; also compile --container, convert --container and subset --flavor |  |
 | ttx | `--with-zopfli` | --zopfli |  |
-| pyftsubset | `--flavor / --with-zopfli` | subset --container / --zopfli |  |
+| pyftsubset | `--flavor / --with-zopfli` | subset --flavor / --with-zopfli |  |
 
 #### `woff decompress`
 
@@ -1614,7 +1626,7 @@ Engine command: `woff.decompress`.
 | ttLib.woff2 | decompress INPUT | woff decompress FONT |  |
 | ttLib.woff2 | `-o / --output-file` | -o |  |
 | ttLib.woff2 | `-v / --verbose / -q / --quiet` | -v / -q |  |
-| pyftsubset | `--flavor none` | subset --container plain |  |
+| pyftsubset | `--flavor none` | subset --flavor none |  |
 
 A WOFF2 collection unwraps to a collection whose `head` tables keep bit 11 of `flags`, which the
 encoder sets, and the `checkSumAdjustment` they had before. The directory checksums match those
@@ -2288,7 +2300,7 @@ Engine command: `font.proof`.
 | spot | `-br` | --layout synopsis --glyphs-per-page 1 |  |
 | spot | `-t cmap=9 / =10` | --layout cmap |  |
 | spot | `-t GPOS=8, -t GSUB=8, -P TAGS, -Proof` | --layout features --features TAGS\|* |  |
-| spot | `-A` | --layout features (undocumented alias of -P in the reference) |  |
+| spot | `-A` | --layout features (an undocumented alias of the reference's P option) |  |
 | spot | `-t VORG=8` | --layout vorg |  |
 | spot | `-f` | --sort lookup |  |
 | spot | `-V, -p6` | --vertical |  |

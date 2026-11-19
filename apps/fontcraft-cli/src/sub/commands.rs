@@ -14,8 +14,8 @@ const USAGE: &str = "\
   fontcraft-cli commands [PATTERN] [--cli [--json]]
       Print the command catalogue as JSON (only commands whose id or label contains PATTERN).
       --cli lists the subcommands instead (only those whose name or summary contains PATTERN):
-      each one's engine command and actions as text, or with --json also their options and the
-      common options, as one JSON document.
+      each one's engine command and actions as text, or with --json also their options, the
+      common options and the options of `help`, as one JSON document.
 ";
 
 const OPTIONS: &[OptSpec] = &[
@@ -116,7 +116,8 @@ fn matches(sub: &Subcommand, pattern: Option<&str>) -> bool {
 }
 
 /// The subcommands as JSON: name, summary, engine command, actions with theirs, and the options
-/// each accepts (from its option table and its usage text); then the common options.
+/// each accepts (from its option table and its usage text); then the common options and the
+/// options of `help`.
 fn cli_list(pattern: Option<&str>) -> Value {
     let model = completion::model(super::ALL);
     let subcommands: Vec<Value> = model
@@ -136,7 +137,8 @@ fn cli_list(pattern: Option<&str>) -> Value {
         })
         .collect();
     let common: Vec<Value> = GLOBAL.iter().map(|spec| completion::from_spec(spec).to_json()).collect();
-    json!({"subcommands": subcommands, "common_options": common})
+    let help: Vec<Value> = crate::HELP_OPTIONS.iter().map(|spec| completion::from_spec(spec).to_json()).collect();
+    json!({"subcommands": subcommands, "common_options": common, "help_options": help})
 }
 
 /// The subcommands as text: name, engine command (`(shell)` for none) and summary, then each
@@ -182,6 +184,7 @@ mod tests {
         assert!(tables["command"].is_null(), "a multi-action subcommand runs its actions' commands");
         assert!(tables["actions"].as_array().unwrap().iter().any(|a| a["name"] == "list" && a["command"] == "tables.list"));
         assert!(list["common_options"].as_array().unwrap().iter().any(|o| o["long"] == "jobs" && o["short"] == "j"));
+        assert!(list["help_options"].as_array().unwrap().iter().any(|o| o["long"] == "all"));
         let narrowed = cli_list(Some("TABLES"));
         assert!(narrowed["subcommands"].as_array().unwrap().iter().all(|s| s["name"] != "compile"), "PATTERN narrows the list");
     }

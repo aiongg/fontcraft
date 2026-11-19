@@ -5,6 +5,7 @@
 mod assets;
 mod audit;
 mod brands;
+mod cli_options;
 mod codecs;
 mod corpus;
 mod glyphdata;
@@ -44,6 +45,10 @@ commands:
   paramcatalog [--check]
                   write crates/fontinfo/src/catalog_data.rs from the inventory's parameter rows
                   (--check: fail if the file is out of date)
+  cli-options [--listing FILE]
+                  count the reference options mapped in docs/spec/20-cli.md that the command line accepts
+                  (from `fontcraft-cli commands --cli --json`, or FILE holding its output) and write
+                  docs/cli-options.md; reports only, fails nothing
   assets          check that every asset has a row in ASSETS.md and that no font binary is in the repository
   brands          check that user-visible text names no other vendor's products
   layers          enforce the crate dependency layering (docs/architecture.md)
@@ -81,6 +86,7 @@ fn main() -> ExitCode {
         Some("guesses") => guesses::run(&root(), rest.contains(&"--check")),
         Some("observe") => observe::run(&root(), rest.contains(&"--check")),
         Some("paramcatalog") => paramcatalog::run(&root(), rest.contains(&"--check")),
+        Some("cli-options") => cli_options::run(&root(), &rest),
         Some("assets") => assets::run(&root()),
         Some("brands") => brands::run(&root()),
         Some("layers") => cmd_layers(),

@@ -135,10 +135,12 @@ fn dispatch(args: &[String]) -> io::Outcome {
     }
 }
 
+/// The options of `help`, which is not a subcommand of [`sub::ALL`]; `commands --cli --json` lists them.
+const HELP_OPTIONS: &[args::OptSpec] = &[args::OptSpec::switch("all", false, "print the reference of every subcommand")];
+
 /// `fontcraft-cli help [SUBCOMMAND [ACTION]] [--all]`.
 fn help(args: &[String]) -> io::Outcome {
-    const OPTIONS: &[args::OptSpec] = &[args::OptSpec::switch("all", false, "print the reference of every subcommand")];
-    let parsed = args::parse(OPTIONS, args)?;
+    let parsed = args::parse(HELP_OPTIONS, args)?;
     if parsed.switch("all") {
         print_usage()?;
         for sub in sub::ALL {
