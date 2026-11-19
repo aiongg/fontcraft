@@ -11,6 +11,7 @@ mod about;
 pub mod actions;
 pub mod after;
 pub mod changed_on_disk;
+pub mod color_palettes;
 pub mod custom_parameter_picker;
 pub mod export;
 pub mod feature_picker;
@@ -25,6 +26,7 @@ mod host;
 pub mod import;
 pub mod kerning_audit;
 pub mod kerning_questions;
+pub mod master_color;
 pub mod os2_bits;
 pub mod panose;
 pub mod path;
@@ -67,7 +69,7 @@ pub const MODULES: &[Module] = &[
 
 /// Every package's dialog specs, one line each.
 pub const SPECS: &[&[DialogSpec]] =
-    &[filters::SPECS, glyph_set::SPECS, export::SPECS, import::SPECS, font_data::SPECS, shape_order::SPECS, path::SPECS, guide_properties::SPECS];
+    &[filters::SPECS, glyph_set::SPECS, export::SPECS, import::SPECS, font_data::SPECS, shape_order::SPECS, path::SPECS, guide_properties::SPECS, color_palettes::SPECS, master_color::SPECS];
 
 /// Runs every dialog module for this pass.
 pub fn run(host: &mut DialogHost, app: &mut FontCraftApp) {

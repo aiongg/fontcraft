@@ -6,7 +6,7 @@ use egui::{Painter, Rect};
 
 use super::camera::Camera;
 use super::tokens::Tokens;
-use super::{Display, hinting, overlays, paint, tools};
+use super::{Display, color, hinting, overlays, paint, tools};
 use crate::app::models::canvas::{CanvasModel, EditedGlyph};
 use crate::app::models::text::TextModel;
 
@@ -59,6 +59,7 @@ pub const LAYERS: &[PaintLayer] = &[
     PaintLayer { id: "textBehind", paint: super::text::paint::behind },
     PaintLayer { id: "otherLayers", paint: paint::background::paint },
     PaintLayer { id: "textGlyphs", paint: super::text::paint::glyphs },
+    PaintLayer { id: "color", paint: color::paint::paint },
     PaintLayer { id: "ttPreviewOutlines", paint: hinting::pixels::outlines },
     PaintLayer { id: "outline", paint: paint::outline::paint },
     PaintLayer { id: "components", paint: paint::components::paint },
@@ -76,6 +77,7 @@ pub const LAYERS: &[PaintLayer] = &[
     PaintLayer { id: "selection", paint: tools::overlays::selection },
     PaintLayer { id: "measurement", paint: overlays::guides::measurement },
     PaintLayer { id: "auditMarkers", paint: overlays::audit::markers },
+    PaintLayer { id: "gradientKnobs", paint: color::knobs::paint },
     PaintLayer { id: "toolOverlays", paint: tools::overlays::paint },
     PaintLayer { id: "textCursor", paint: super::text::paint::cursor },
     PaintLayer { id: "measurementLine", paint: super::text::paint::measurement },

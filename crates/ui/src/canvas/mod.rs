@@ -7,6 +7,7 @@
 
 pub mod annotation_editor;
 pub mod camera;
+pub mod color;
 pub mod hinting;
 pub mod layers;
 pub mod overlays;

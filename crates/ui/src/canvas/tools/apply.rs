@@ -139,6 +139,9 @@ pub fn input(app: &mut FontCraftApp, input: ToolInput) -> Vec<String> {
     }
     let out = match input {
         ToolInput::Pointer(ev) => {
+            if let Some(errors) = crate::canvas::color::knobs::pointer(app, ev) {
+                return errors;
+            }
             app.tools.mods = ev.mods;
             if let Some(errors) = crate::canvas::hinting::badges::pointer(app, &ev) {
                 return errors;

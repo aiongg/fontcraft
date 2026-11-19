@@ -4,6 +4,7 @@
 //! one of them with a one-line arm, and only when the [`Stamp`] moved since the last call.
 
 pub mod canvas;
+pub mod color;
 pub mod compare;
 pub mod console;
 pub mod font_exports;
@@ -96,6 +97,8 @@ pub struct Models {
     /// The Text Preview (`panels::text_preview`); projected outside the stamp, since its font builds land between
     /// frames.
     pub text_preview: text_preview::TextPreviewModels,
+    /// The Attributes panel (`panels::attributes`); projected outside the stamp, since it reads the canvas's selection.
+    pub color: color::AttributesModels,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
