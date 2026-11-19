@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2931 guesses on 1559 rows (634 of them live commands).**
+**2937 guesses on 1560 rows (635 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -2746,6 +2746,12 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `file.exportWithProfiles` | M13 | docs | yes | A profile's subfolder may not climb out of the destination with `..`, for any caller; the reference's profile settings would settle whether it can. |
 | `file.exportWithProfiles` | M13 | docs | yes | Two profiles that would write the same file refuse the whole export instead of keeping one; the reference's behaviour with two profiles sharing a folder would settle it. |
 | `file.saveExportProfile` | M13 | docs | yes | A copy made with basedOn writes into a subfolder named after the copy unless `settings` names a folder; the reference's Duplicate would settle it. |
+| `file.exportWindowContents` | M13 | docs | yes | Only Edit View tabs are exported; the reference's Font View and Preview panel exports are not followed. Exporting a Font View window in the reference would settle whether it is offered there. |
+| `file.exportWindowContents` | M13 | docs | yes | The page spans every glyph's advance from the master's descender to its ascender, widened to the outlines, with a tenth of the em around it; an export in the reference would settle the frame. |
+| `file.exportWindowContents` | M13 | docs | yes | One point per font unit by default (size defaults to the units per em), scaled down so no side passes 14400 points. |
+| `file.exportWindowContents` | M13 | docs | yes | SVG draws each glyph with a light fill and a thin contour, and nodes, handles and guides on every glyph unless `edited` names some; metric lines, anchors, open paths and the canvas background are left out. |
+| `file.exportWindowContents` | M13 | docs | yes | Feature substitutions active in the tab are not applied: the text is laid out by code point. |
+| `file.exportWindowContents` | M13 | docs | yes | Global guides are drawn at every edited glyph's origin, whatever their glyph filter says. |
 | `glyph.exportArtwork` | M13 | docs | yes | SVG uses the io-svg writer, PNG the render crate and PDF a minimal writer of our own; FontLab's options beyond the three formats are not followed. |
 | `glyph.exportArtwork` | M13 | docs | yes | A picture spans the advance width and the master's descender to ascender, widened to the outline where it reaches further, so pictures of one font line up; exporting a few glyphs in the reference would settle the frame. |
 | `glyph.exportArtwork` | M13 | docs | yes | SVG and PDF use one user unit or point per font unit (a PDF is scaled down to at most 14400 points a side); PNG is black on a transparent background at 256 pixels per em by default. |

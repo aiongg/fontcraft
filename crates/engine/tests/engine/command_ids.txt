@@ -687,6 +687,7 @@ file.saveExportProfile
 file.removeExportProfile
 file.listExportProfiles
 glyph.exportArtwork
+file.exportWindowContents
 file.revertGlyph
 edit.copyLayerToLayer
 edit.pasteAfter
