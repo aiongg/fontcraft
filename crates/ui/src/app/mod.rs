@@ -101,6 +101,8 @@ pub struct ViewState {
     pub text_preview: crate::shell::text_preview::TextPreviewState,
     /// Show Hints aside: the TrueType Instructor's state, the badge under a drag, the Review Hints dialog.
     pub hinting: crate::canvas::hinting::HintingView,
+    /// The Actions window's state.
+    pub actions: crate::dialogs::actions::ActionsState,
 }
 
 impl Default for ViewState {
@@ -134,6 +136,7 @@ impl Default for ViewState {
             compare_family: Default::default(),
             text_preview: Default::default(),
             hinting: Default::default(),
+            actions: Default::default(),
         }
     }
 }

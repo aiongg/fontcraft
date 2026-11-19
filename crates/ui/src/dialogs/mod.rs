@@ -8,6 +8,7 @@
 //! line to [`SPECS`]; `form.rs` keeps the open one in the app layer and `host.rs` shows it. `docs/ui.md` has the API.
 
 mod about;
+pub mod actions;
 pub mod after;
 pub mod changed_on_disk;
 pub mod custom_parameter_picker;
@@ -61,6 +62,7 @@ pub const MODULES: &[Module] = &[
     settings::run,
     changed_on_disk::run,
     review_hints::run,
+    actions::run_dialog,
 ];
 
 /// Every package's dialog specs, one line each.
