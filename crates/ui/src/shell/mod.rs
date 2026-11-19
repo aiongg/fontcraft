@@ -6,6 +6,8 @@ pub mod bars;
 pub mod command_palette;
 pub mod command_surfaces;
 pub mod commands;
+pub mod compare_family;
+pub mod compare_fonts;
 pub mod dock;
 pub mod font_info;
 pub mod font_view;
@@ -19,6 +21,7 @@ pub mod rail;
 pub mod reference_font;
 pub mod selection;
 pub mod sidebar;
+pub mod table_viewer;
 pub mod view;
 pub mod window;
 

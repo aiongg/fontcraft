@@ -2,6 +2,8 @@
 
 pub mod anchor_context;
 pub mod command_console;
+pub mod compare_family;
+pub mod compare_fonts;
 pub mod fit_curve;
 pub mod font_info;
 pub mod font_view;
@@ -21,5 +23,6 @@ pub mod selection_info;
 pub mod selections;
 pub mod stroke;
 pub mod stub;
+pub mod table_viewer;
 pub mod transformations;
 pub mod widgets;

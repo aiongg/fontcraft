@@ -4,6 +4,7 @@
 //! one of them with a one-line arm, and only when the [`Stamp`] moved since the last call.
 
 pub mod canvas;
+pub mod compare;
 pub mod console;
 pub mod font_info;
 pub mod font_view;
@@ -17,6 +18,7 @@ pub mod kerning_window;
 pub mod layers;
 pub mod palette;
 pub mod sidebar;
+pub mod table_viewer;
 
 use craft::ui::contract::Tracked;
 use fontcraft_engine::Session;
@@ -71,6 +73,12 @@ pub struct Models {
     /// The Info box and the Palette sections (`panels::info_box`, `panels::transformations`, …); projected outside the
     /// stamp, since they read the canvas's selection.
     pub palette: palette::PaletteModels,
+    /// The Table Viewer (`panels::table_viewer`).
+    pub table_viewer: Tracked<table_viewer::TableViewerModel>,
+    /// Compare Fonts (`panels::compare_fonts`); projected outside the stamp, since it reads two documents.
+    pub compare_fonts: Tracked<compare::CompareFontsModel>,
+    /// Compare Family (`panels::compare_family`).
+    pub compare_family: Tracked<compare::CompareFamilyModel>,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -127,6 +135,8 @@ impl Models {
         sidebar::project(&mut self.sidebar, cx);
         glyph_props::project_inspector(&mut self.inspector, cx);
         glyph_props::project_selection_info(&mut self.selection_info, cx);
+        table_viewer::project(&mut self.table_viewer, cx);
+        compare::project_family(&mut self.compare_family, cx);
         true
     }
 }

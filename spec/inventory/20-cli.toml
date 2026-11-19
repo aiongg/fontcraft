@@ -3285,13 +3285,14 @@ label = "Table Viewer"
 menu = ["Window"]
 shortcut = ""
 kind = "ui"
-params = "{font?: path, face?: number, compareWith?: path|null, table?: tag, view?: \"fields\"|\"ttx\"|\"differences\", path?: string, record?: [index], expand?: bool, search?: string} → {open, font, face, compareWith, table, view, search, tables: [{tag, length, checksum, decoded, error?, status?, firstOffset?}], identical?, differing: [name], content, record?}"
+params = "{font?: path, face?: number, compareWith?: path|null, table?: tag, view?: \"fields\"|\"ttx\"|\"differences\", path?: string, record?: [index], expand?: bool, search?: string, reload?: bool} → {open, font, face, compareWith, table, view, search, tables: [{tag, length, checksum, decoded, error?, status?, firstOffset?}], identical?, differing: [name], content, record?}"
 area = "cli-tools"
 milestone = "M12"
 summary = "Opens the Table Viewer window, optionally on a font file and with a second font to compare, and drives it: selects a table, a view (fields, TTX, differences), a record by path or by child positions, and the search. A refused change leaves the window as it was."
 ref = "Our design"
 status = "inferred"
 own = true
+notes = "reload reads the font and the compared font again. expand true reads and opens a record's children; expand false closes the record and keeps the selection. In the panel UI the command shows the Table Viewer panel and ui.inspect reports the viewer under tableViewer."
 guesses = ["The Table Viewer opens from the Window menu with no shortcut; the companion tool is a separate application, so nothing settles a menu place."]
 
 [[panel]]
