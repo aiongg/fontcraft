@@ -9,6 +9,7 @@ pub mod glyph_info;
 pub mod glyph_metrics;
 pub mod hinting_waterfall;
 pub mod info_box;
+pub mod kerning_tools;
 pub mod kerning_window;
 pub mod layers;
 pub mod master_icons;

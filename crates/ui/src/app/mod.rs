@@ -72,6 +72,8 @@ pub struct ViewState {
     pub commands: console::CommandSurfaces,
     /// The Kerning window's search, sort, selection and the dialogs it asked for.
     pub kerning: crate::shell::kerning_window::KerningView,
+    /// The Kerning Pairs Preview's options and the Kerning Groups Editor's side, group, view and proposal.
+    pub kerning_tools: crate::shell::kerning_tools::KerningToolsView,
     /// The Info box's reference point and size lock, the Transformations settings and the Fit Curve range.
     pub palette: crate::shell::palette::PaletteView,
 }
@@ -95,6 +97,7 @@ impl Default for ViewState {
             layers: Default::default(),
             commands: console::CommandSurfaces::default(),
             kerning: Default::default(),
+            kerning_tools: Default::default(),
             palette: Default::default(),
         }
     }
