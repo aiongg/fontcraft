@@ -74,6 +74,8 @@ pub struct ViewState {
     pub kerning: crate::shell::kerning_window::KerningView,
     /// The Info box's reference point and size lock, the Transformations settings and the Fit Curve range.
     pub palette: crate::shell::palette::PaletteView,
+    /// The Text Preview's text, style, size, layout and find bar.
+    pub text_preview: crate::shell::text_preview::TextPreviewState,
 }
 
 impl Default for ViewState {
@@ -96,6 +98,7 @@ impl Default for ViewState {
             commands: console::CommandSurfaces::default(),
             kerning: Default::default(),
             palette: Default::default(),
+            text_preview: Default::default(),
         }
     }
 }
@@ -284,6 +287,7 @@ impl FontCraftApp {
         self.models.project(stamp, &mut cx);
         models::console::project(&mut self.models.console, &mut cx);
         models::palette::project(&mut self.models.palette, &mut cx, &self.tools, stamp);
+        models::text_preview::project(&mut self.models.text_preview, &mut cx, &self.host);
         let engine = Stamp::of(&self.session, 0);
         if self.enabled_at != Some(engine) {
             self.enabled_at = Some(engine);
@@ -307,6 +311,7 @@ impl FontCraftApp {
             ViewMsg::SelectGlyph(glyph) => self.view.glyph = Some(glyph),
             ViewMsg::TogglePanel(panel) => dock::toggle(&mut self.view.workspace, panel),
             ViewMsg::LayerMenu(row) => self.view.layers.menu_row = row,
+            ViewMsg::TextPreviewArea(area) => self.view.text_preview.area = area,
         }
         Ok(())
     }
@@ -383,6 +388,7 @@ impl ShellApp for FontCraftApp {
     }
 
     fn logic(&mut self, ctx: &egui::Context) {
+        models::text_preview::logic(&mut self.models.text_preview, ctx);
         crate::control::logic(self, ctx);
         crate::control::drain(self);
         if self.closing == Closing::Confirmed {

@@ -49,6 +49,8 @@ pub enum ViewMsg {
     TogglePanel(PanelId),
     /// The Layers row whose context menu is open; `None` when it closed.
     LayerMenu(Option<String>),
+    /// The Text Preview's line length and the lines in view, as its text area reports them.
+    TextPreviewArea(crate::shell::text_preview::Area),
 }
 
 impl Msg {

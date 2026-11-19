@@ -17,6 +17,7 @@ pub mod kerning_window;
 pub mod layers;
 pub mod palette;
 pub mod sidebar;
+pub mod text_preview;
 
 use craft::ui::contract::Tracked;
 use fontcraft_engine::Session;
@@ -71,6 +72,9 @@ pub struct Models {
     /// The Info box and the Palette sections (`panels::info_box`, `panels::transformations`, …); projected outside the
     /// stamp, since they read the canvas's selection.
     pub palette: palette::PaletteModels,
+    /// The Text Preview (`panels::text_preview`); projected outside the stamp, since its font builds land between
+    /// frames.
+    pub text_preview: text_preview::TextPreviewModels,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.

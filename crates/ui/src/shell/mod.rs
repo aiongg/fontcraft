@@ -19,6 +19,7 @@ pub mod rail;
 pub mod reference_font;
 pub mod selection;
 pub mod sidebar;
+pub mod text_preview;
 pub mod view;
 pub mod window;
 

@@ -21,5 +21,6 @@ pub mod selection_info;
 pub mod selections;
 pub mod stroke;
 pub mod stub;
+pub mod text_preview;
 pub mod transformations;
 pub mod widgets;
