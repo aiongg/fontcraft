@@ -153,7 +153,7 @@ Attributes:
 | Stroke | width field, alignment centre / left / right, swatch, minus | `attributes.setStrokeWidth`, `attributes.setStrokeAlignment`, `attributes.setStrokeColor`, `attributes.removeStroke` | Width in font units; empty = 0; centred by default; left/right move the stroke to one side of the path; minus sets width 0 and a transparent colour |
 | Fill | swatch, minus | `attributes.setFillColor`, `attributes.removeFill` | Minus makes the fill transparent; the row is hidden while a gradient exists |
 | Gradient | linear / radial icons, gradient bar | `attributes.addGradient`, `attributes.setGradientType`, `attributes.addGradientStop`, `attributes.removeGradientStop`, `attributes.setGradientStopColor`, `attributes.setGradientPosition` | Added with the plus button; replaces Fill; at least two stops |
-| Shadow, Inner Shadow, Pattern Image | (not described) | `attributes.addAttribute` | Only used by Filter › Glyph as Image (PNG/PDF); never exported to a font |
+| Shadow, Inner Shadow, Pattern Image | (not described) | `attributes.addAttribute` | Only used by Filter › Glyph as Image (PNG/PDF; `filter.glyphAsImage`, the same command as `glyph.exportArtwork`); never exported to a font. How they are drawn: guesses on `color.fullColor.imageOnlyEffects` |
 
 Gradient editing: knobs under the bar are the stops (click to recolour, click the bar to add, drag a
 knob away to delete; panel `inspector.attributes.gradientBar`). In Edit View the geometry has its

@@ -303,3 +303,126 @@ fn export_artwork_writes_svg_png_and_pdf_per_glyph() {
     assert!(!dir.join("new").exists(), "no folder is left behind");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// Adds to `name` a full-colour layer `color` holding the rectangle `x0, y0` to `x1, y1`, filled
+/// red.
+fn colour_glyph(s: &mut Session, name: &str, (x0, y0, x1, y1): (f64, f64, f64, f64)) {
+    s.edit("Add Color Layer", |font| {
+        let mut g = font.glyph_mut(name)?;
+        let mut l = fontcraft_engine::model::Layer::new("m01", 600.0);
+        l.id = "color".into();
+        l.info.attrs.full_color = true;
+        g.layers.push(l);
+        Ok(())
+    })
+    .unwrap();
+    run(s, "path.addPath", json!({"glyph": name, "layer": "color", "nodes": rect(x0, y0, x1, y1)}));
+    run(s, "attributes.setFillColor", json!({"glyph": name, "layer": "color", "color": "#FF0000"}));
+}
+
+/// The PNG picture of glyph `name`'s colour layer at 200 pixels per em, decoded (straight RGBA).
+fn colour_png(s: &mut Session, id: &str, name: &str) -> (fontcraft_engine::imagery::Rgba8, Value) {
+    let out = run(s, id, json!({"glyphs": [name], "layer": "color", "format": "png", "pixelsPerEm": 200}));
+    let data = base64::engine::general_purpose::STANDARD.decode(out["files"][0]["dataBase64"].as_str().unwrap()).unwrap();
+    (fontcraft_engine::imagery::decode_rgba(&data, 1 << 24).unwrap(), out)
+}
+
+fn px(img: &fontcraft_engine::imagery::Rgba8, x: u32, y: u32) -> [u8; 4] {
+    let at = ((y * img.width + x) * 4) as usize;
+    img.pixels[at..at + 4].try_into().unwrap()
+}
+
+/// The pixel box (left, top, right, bottom, inclusive) of the pixels `keep` accepts.
+fn pixel_box(img: &fontcraft_engine::imagery::Rgba8, keep: impl Fn([u8; 4]) -> bool) -> (u32, u32, u32, u32) {
+    let mut b = (u32::MAX, u32::MAX, 0, 0);
+    for y in 0..img.height {
+        for x in 0..img.width {
+            if keep(px(img, x, y)) {
+                b = (b.0.min(x), b.1.min(y), b.2.max(x), b.3.max(y));
+            }
+        }
+    }
+    assert!(b.0 <= b.2, "no such pixel");
+    b
+}
+
+const RED: [u8; 4] = [255, 0, 0, 255];
+const BLUE: [u8; 4] = [0, 0, 255, 255];
+
+#[test]
+fn artwork_draws_a_shadow_below_and_offset_in_png_and_pdf_but_not_in_svg() {
+    let mut s = Session::with_document();
+    colour_glyph(&mut s, "A", (100.0, 100.0, 300.0, 300.0));
+    let shadow = json!({"glyph": "A", "layer": "color", "attribute": "shadow", "blur": 0, "offset": [200, -200], "color": "#0000FFFF"});
+    run(&mut s, "attributes.addAttribute", shadow);
+    let (img, _) = colour_png(&mut s, "glyph.exportArtwork", "A");
+    // 200 units at 200 pixels per em are 40 pixels: the shadow lies 40 right and 40 down.
+    let (x0, y0, x1, y1) = pixel_box(&img, |p| p == RED);
+    assert_eq!((x1 - x0 + 1, y1 - y0 + 1), (40, 40));
+    let (cx, cy) = ((x0 + x1) / 2, (y0 + y1) / 2);
+    assert_eq!(px(&img, cx, cy), RED);
+    assert_eq!(px(&img, x1, y1), RED, "the path lies over its shadow");
+    assert_eq!(px(&img, cx + 40, cy + 40), BLUE);
+    assert_eq!(px(&img, cx + 40, cy)[3], 0, "no shadow beside the path");
+
+    // Filter › Glyph as Image gives the same picture.
+    let (alias, _) = colour_png(&mut s, "filter.glyphAsImage", "A");
+    assert_eq!(alias, img);
+
+    let out = run(&mut s, "glyph.exportArtwork", json!({"glyphs": ["A"], "layer": "color", "format": "pdf"}));
+    let pdf = base64::engine::general_purpose::STANDARD.decode(out["files"][0]["dataBase64"].as_str().unwrap()).unwrap();
+    let pdf = String::from_utf8_lossy(&pdf);
+    assert!(pdf.contains("1 0 0 rg\n") && pdf.contains(" m\n"), "the fill is a red vector path");
+    assert!(pdf.contains("/SMask") && pdf.contains("/Im0 Do"), "the shadow is an image");
+
+    let out = run(&mut s, "glyph.exportArtwork", json!({"glyphs": ["A"], "layer": "color", "format": "svg"}));
+    let svg = base64::engine::general_purpose::STANDARD.decode(out["files"][0]["dataBase64"].as_str().unwrap()).unwrap();
+    let svg = String::from_utf8(svg).unwrap();
+    assert_eq!(svg.matches("<path").count(), 1, "{svg}");
+    assert!(!svg.contains("filter") && !svg.contains("image"), "SVG has no shadow: {svg}");
+}
+
+#[test]
+fn artwork_draws_an_inner_shadow_inside_the_path() {
+    let mut s = Session::with_document();
+    colour_glyph(&mut s, "B", (100.0, 100.0, 300.0, 300.0));
+    let inner = json!({"glyph": "B", "layer": "color", "attribute": "innerShadow", "blur": 0, "offset": [50, -50], "color": "#0000FFFF"});
+    run(&mut s, "attributes.addAttribute", inner);
+    let (img, _) = colour_png(&mut s, "glyph.exportArtwork", "B");
+    let (x0, y0, x1, y1) = pixel_box(&img, |p| p[3] == 255);
+    assert_eq!((x1 - x0 + 1, y1 - y0 + 1), (40, 40), "nothing is drawn outside the path");
+    // The outside moved 10 pixels right and down shades the top and left edges inside.
+    assert_eq!(px(&img, x0 + 3, y0 + 3), BLUE);
+    assert_eq!(px(&img, x1 - 3, y0 + 3), BLUE);
+    assert_eq!(px(&img, x1 - 3, y1 - 3), RED);
+}
+
+#[test]
+fn artwork_tiles_a_pattern_image_over_the_fill_and_reports_one_it_cannot_read() {
+    let dir = temp("pattern");
+    // 400 by 1 image pixels, one per font unit: red then green.
+    let pixels: Vec<u8> = (0..400).flat_map(|x| if x < 200 { [255, 0, 0, 255] } else { [0, 255, 0, 255] }).collect();
+    let png = fontcraft_render::Image::from_rgba_premultiplied(400, 1, pixels).unwrap().png().unwrap();
+    let file = dir.join("stripes.png");
+    std::fs::write(&file, png).unwrap();
+
+    let mut s = Session::with_document();
+    colour_glyph(&mut s, "C", (0.0, 0.0, 400.0, 100.0));
+    let pattern = json!({"glyph": "C", "layer": "color", "attribute": "patternImage", "image": file.to_string_lossy()});
+    run(&mut s, "attributes.addAttribute", pattern);
+    let (img, out) = colour_png(&mut s, "glyph.exportArtwork", "C");
+    assert_eq!(out["warnings"], json!([]));
+    let (x0, y0, _, y1) = pixel_box(&img, |p| p[3] == 255);
+    let mid = (y0 + y1) / 2;
+    // Units 0 to 200 are 0 to 40 pixels.
+    assert_eq!(px(&img, x0 + 20, mid), RED);
+    assert_eq!(px(&img, x0 + 60, mid), [0, 255, 0, 255]);
+
+    let missing = json!({"glyph": "C", "layer": "color", "attribute": "patternImage", "image": dir.join("gone.png").to_string_lossy()});
+    run(&mut s, "attributes.addAttribute", missing);
+    let (img, out) = colour_png(&mut s, "glyph.exportArtwork", "C");
+    assert_eq!(out["warnings"].as_array().unwrap().len(), 1, "{out}");
+    assert!(out["warnings"][0].as_str().unwrap().contains("gone.png"));
+    assert_eq!(px(&img, x0 + 60, mid), RED, "the path is drawn without its pattern");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

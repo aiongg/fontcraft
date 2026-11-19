@@ -2350,11 +2350,12 @@ summary = "Writes one image file per glyph, named after the glyph, for the chose
 ref = "FontLab 8 What's new › Formats (Artwork as PDF, SVG, or PNG; Artwork Collection)"
 status = "docs"
 origin = "fontlab"
-notes = "Documented, not yet observed. Without a directory the pictures come back in the result (the web app and agents). The import side is a separate row."
+notes = "Documented, not yet observed. Without a directory the pictures come back in the result (the web app and agents). The import side is a separate row. A palette or full-colour layer is drawn in colour in PNG and PDF with the image-only effects of its paths (M11.21, `color.fullColor.imageOnlyEffects`); `filter.glyphAsImage` is the same command under the Filter menu."
 guesses = [
   "SVG uses the io-svg writer, PNG the render crate and PDF a minimal writer of our own; FontLab's options beyond the three formats are not followed.",
-  "A picture spans the advance width and the master's descender to ascender, widened to the outline where it reaches further, so pictures of one font line up; exporting a few glyphs in the reference would settle the frame.",
-  "SVG and PDF use one user unit or point per font unit (a PDF is scaled down to at most 14400 points a side); PNG is black on a transparent background at 256 pixels per em by default.",
+  "A picture spans the advance width and the master's descender to ascender, widened to what it draws (the outline, or the colour layers and their shadows) where that reaches further, so pictures of one font line up; exporting a few glyphs in the reference would settle the frame.",
+  "SVG and PDF use one user unit or point per font unit (a PDF is scaled down to at most 14400 points a side); PNG has a transparent background at 256 pixels per em by default, outlines in black.",
+  "SVG pictures are the outline in black even for colour layers; PDF pictures draw gradients and the image-only effects as images at `pixelsPerEm`. Exporting a full-colour glyph in each format from the reference would settle both.",
   "Characters a file name cannot hold become `_`, and names that differ only in case get `_2`, `_3`; the reference's file names for such glyphs would settle it.",
   "Without `glyphs` every glyph of the font is exported; the shell passes the selection.",
 ]

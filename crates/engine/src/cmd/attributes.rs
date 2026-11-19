@@ -10,8 +10,8 @@
 //! converts them. A gradient replaces the fill colour without clearing it, so removing the
 //! gradient brings the fill back (`color.fullColor.gradientReplacesFill`). Fully transparent
 //! colours are how a removed fill or stroke is stored (`color.fullColor.transparentSwatch`).
-//! Shadows and the pattern image are stored and never exported
-//! (`color.fullColor.imageOnlyEffects`).
+//! Shadows and the pattern image are never written to a font; only the PNG and PDF pictures of
+//! `glyph.exportArtwork` draw them (`color.fullColor.imageOnlyEffects`).
 
 use std::collections::HashSet;
 
