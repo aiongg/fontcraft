@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1418 rows to check: 2357 guesses and 553 observe steps.**
+**1427 rows to check: 2383 guesses and 561 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,16 +48,16 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 45 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **906** |
+| **Later milestones (after M6)** | all | **915** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 86 |
 | Later milestones (after M6) | Edit View: text mode and preview | 26 |
-| Later milestones (after M6) | Components and anchors | 39 |
+| Later milestones (after M6) | Components and anchors | 43 |
 | Later milestones (after M6) | Filters | 5 |
 | Later milestones (after M6) | Spacing and metrics keys | 12 |
 | Later milestones (after M6) | Kerning and the Kerning window | 12 |
 | Later milestones (after M6) | Font View | 19 |
 | Later milestones (after M6) | Font Info and features | 290 |
-| Later milestones (after M6) | Interpolation | 72 |
+| Later milestones (after M6) | Interpolation | 77 |
 | Later milestones (after M6) | Hinting | 108 |
 | Later milestones (after M6) | Colour fonts | 60 |
 | Later milestones (after M6) | Files: open, import, export | 68 |
@@ -352,7 +352,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `align.anchorToPoints` (behavior, M6, handbook): When the selection is a single anchor plus a single path point,…
   - Guess: With two points the anchor keeps its height and moves horizontally onto the line at the italic angle through the points' midpoint, and a locked anchor refuses it; aligning an anchor between two nodes of different heights on an italic master in the reference app settles it.
 - [ ] `align.componentOriginPoint` (behavior, M6, handbook): A component's origin point is the position of an anchor named origin…
-  - Guess: The left sidebearing line is x = 0 of the base glyph, and on a slanted master it is slanted about half the x-height, so without an origin anchor the origin point is the base glyph's (0, 0) on every master; aligning a component on an italic master in the reference app settles it.
+  - Guess: On a slanted master the left sidebearing line leaves the baseline at x = 0 and leans at the master's italic angle, so without an origin anchor the origin point is (x-height / 2 · tan(italic angle), 0) of the base glyph; aligning a component on an italic master in the reference app settles it.
+  - Observe: On a master with an italic angle of 10° and an x-height of 500, select a node and a component of a glyph without an origin anchor, run Path › Align Selection and read the component's x: is it the node's x minus 44, or the node's x?
 - [ ] `component.setTransform` (M6, handbook, live): Set Component Transform
   - Guess: The command refuses a position edit on an aligned component (only `y` on one aligned horizontally) and any edit on a locked component, and accepts slants within ±89°, rotations within ±360° and scales from −10,000 % to 10,000 % except 0; typing such values into the Info box of the reference app settles it.
 - [ ] `view.showAnchors` (M6, handbook, live): Show Anchors
@@ -507,6 +508,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The base glyph goes into the tab text to the left of the composite, as the Info box section of the Measuring page says; the Components page says only next to it. Double-clicking a component in the reference app settles it.
 - [ ] `components.lockedCannotMove` (behavior, M6, handbook): A locked component rejects every move, from mouse, arrow keys or Info…
   - Guess: A lock blocks Info box position edits and the Palette's transformations as well as moves, and leaves the component's other settings editable; a locked component in the reference app settles it.
+  - Guess: Arrow keys with only locked or automatically aligned components selected change nothing and show a message naming them; pressing an arrow key on a locked component in the reference app settles whether it is silent instead.
+  - Observe: Select only a locked component, press an arrow key and note whether a message appears or nothing happens.
+  - Observe: Select an automatically aligned component, press an arrow key and note whether a message appears or nothing happens.
 - [ ] `components.placeholderEmptyBase` (behavior, M6, handbook): A component whose base glyph exists but has an empty layer is…
   - Guess: A placeholder is a crossed box the width of the base glyph's advance and half an em tall, labelled with the problem; seeing the three placeholders in the reference app settles their look.
   - Observe: Add a component of a glyph whose layer is empty and note how the placeholder looks.
@@ -570,8 +574,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A layer with a corner that cannot be fitted (its path deleted, a zero-length segment next to it) is drawn in the editor without any of its corners, as the export leaves it; a hint whose path was deleted in the reference app shows what it draws.
   - Guess: Corners are fitted on the layer's stored shapes, whose indices the hints name, before its smart components are drawn; fontc draws smart components first and then reads the indices against the shapes that result, which differs only in a layer that has both. A layer with a smart component before a path with a corner, built in the reference app, settles it.
 - [ ] `corner.highlightAndSelection` (behavior, M6, handbook): In Edit View a corner component is tinted with a faint blue…
-  - Guess: The tint is a disc around the corner's node rather than a fill of the corner's own outline; a corner component in the reference app settles it.
-  - Observe: Attach a corner component and note the shape and extent of its blue tint.
+  - Guess: The highlight is a wide, faint blue band along the corner's fitted outline, as the sources show for caps, segments and brushes; its width and colour are ours, and a corner at 400 % zoom in the reference app settles them.
+  - Observe: Attach a corner component at 400 % zoom and note the width and colour of its blue band, and how a selected corner differs from an unselected one.
 - [ ] `corner.copyPasteOntoNodes` (behavior, M6, handbook): A selected corner component can be copied with Edit › Copy and,…
   - Guess: Pasting a corner, cap, segment or brush onto a selection of the wrong kind (a corner with a segment selected, a cap on nodes that are not neighbours) is refused with a message and nothing changes; the reference app settles it.
   - Guess: One copied corner goes onto every selected node; several copied corners go onto as many selected nodes, in order, and any other count is refused. Copying two corners and pasting them onto three nodes in the reference app settles it.
@@ -1501,7 +1505,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (906)
+## Later milestones (after M6) (915)
 
 ### Edit View: drawing, guides, layers and the Palette (86)
 
@@ -1887,7 +1891,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `view.setPreferredSuffix` (M13, docs, live): Prefer Suffix
   - Guess: The suffix replaces control glyphs as well as the text's glyphs; the reference app would settle it.
 
-### Components and anchors (39)
+### Components and anchors (43)
 
 - [ ] `anchors.contextual` (behavior, M8, handbook): An anchor whose name starts with an asterisk (for example *bottom) is…
   - Guess: The contextual features are appended after the font's code, so their lookups come before the generated cursive and kerning lookups in the lookup list; a fontmake build with kerning, cursive and contextual anchors would settle the order.
@@ -1906,40 +1910,48 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The field is multi-line, since a context may hold several lines, commits when it loses the focus, and Escape restores the stored text; the running app would show its size and when it commits.
   - Observe: In F6 (contextual anchors), select a `*top` anchor in Edit View: note the Anchor Context field in the Palette and how it accepts a context with a token.
 - [ ] `cap.attachesToTwoAdjacentNodes` (behavior, M13, handbook): A cap component is bound to two nodes that are neighbours on…
+  - Guess: The two nodes may be selected in either order; the stored origin is the earlier one in path order, and on a closed path the last node and node 0 are neighbours with the last node as origin. A cap on the closing segment saved by the reference app settles it.
   - Observe: Select two nodes that are not neighbours on one path, then two nodes on different paths, and open the context menu: note whether Add Cap Component is shown, disabled or missing.
+- [ ] `cap.originAnchorSetup` (behavior, M13, handbook): Simple anchor setup for a cap glyph: a single anchor named origin…
+  - Guess: In the origin setup the cap glyph is drawn as for the bottom end of a stem; its x axis is mapped onto the direction from the first to the second stem node and its origin onto the first node, so at a stem's top end it turns 180 degrees. Staff answers support the drawing rule; exporting `_cap.flag` on the top and bottom of a stem settles the mapping.
 - [ ] `cap.node1Node2AnchorSetup` (behavior, M13, handbook): Flexible anchor setup for a cap glyph: two anchors named node1 and…
-  - Guess: With node1 and node2 anchors the cap is mapped by the similarity transform that sends node1 onto the first host node and node2 onto the second (uniform scale, rotation, translation); settled by exporting `_cap.round` on the 80- and 120-unit stems.
+  - Guess: With node1 and node2 the cap's x axis is laid on the line from the first to the second host node and node1 lands on the first node; with Fit on, the horizontal scale is the host nodes' distance over the node1 to node2 distance and the vertical scale is the Info box value, so scaling is not uniform. Exporting `_cap.round` on the 80- and 120-unit stems settles it.
   - Observe: Add `_cap.round` (anchors node1 and node2 50 units apart) to the 80-unit stem of `l` and the 120-unit stem of `i`, export and send back: compare the cap's height in both to see whether scaling is uniform or along the stem end only.
 - [ ] `cap.highlightAndSelection` (behavior, M13, handbook): A cap component is tinted with a faint blue background in Edit…
-  - Observe: Screenshot a selected and an unselected cap at 400% zoom to record the highlight colour and how the selection is drawn.
+  - Observe: Screenshot a selected and an unselected cap at 400 % zoom to record how a selected cap differs from the plain highlight.
 - [ ] `cap.copyPasteOntoSegments` (behavior, M13, handbook): A selected cap component can be copied and then pasted onto other…
   - Observe: Copy a selected cap, select two adjacent nodes on another stem and paste; then select a single node and paste: note what is pasted in each case.
 - [ ] `segment.startEndAnchors` (behavior, M13, handbook): The start and end anchors belong on the first and last node…
   - Observe: Move the end anchor of `_segment.wave` 40 units left of the end node and look at an attached segment component: note how much shorter it is.
+- [ ] `segment.appliesToStraightAndCurved` (behavior, M13, handbook): A segment component replaces one straight or curved host segment with its…
+  - Guess: Add Segment Component accepts a curved host segment, as the handbook says; a 2025 staff answer says the menu item is not offered on smooth curve segments, so the reference app may refuse it. Adding one to a smooth curve of an `o` in the reference app settles it.
 - [ ] `brush.glyphNaming` (behavior, M13, handbook): A glyph is a brush glyph when its name starts with _brush
-  - Observe: Give `_brush.arrow` a second closed path and add the brush: note whether it is refused, uses the first path only, or merges both.
+  - Guess: A brush uses the brush glyph's first path; when that path is open, the brush draws nothing and its glyph is reported. A brush glyph whose first path is open, in the reference app, settles it.
 - [ ] `brush.startEndAnchors` (behavior, M13, handbook): Glyph › Set Anchors (Cmd+U) places a brush glyph's start and end…
   - Guess: Set Anchors puts a brush glyph's start at (0, 0) and its end at (advance width, 0); Set Anchors on a brush glyph in the reference app settles it.
 - [ ] `capComponent.add` (M13, handbook): Add Cap Component
-  - Guess: The cap's open path replaces the host segment between the two nodes and is joined to the path at both ends, as a corner's open path replaces part of the host outline; settled by exporting a cap test font from the reference app and comparing the outline.
+  - Guess: The cap glyph's first path is open; it replaces the host segment between the two nodes, its start joins the side before the first node and its end the side after the second, and those sides are cut where the cap's ends meet them, as a corner's ends are fitted; left and right anchors act as for corners. The sources agree on the joining; an export of the cap test font settles the cut points.
   - Observe: In the cap test font (a `_cap.flag` glyph with an `origin` anchor and an open path, an `l` with an 80-unit stem), select the two top nodes of the stem, choose Add Cap Component from the context menu, pick `_cap.flag`, then export an OTF and send it back: its `l` outline shows where the cap's path goes and whether the stem's top segment is replaced.
 - [ ] `capComponent.decompose` (M13, handbook): Decompose Cap
   - Guess: Decompose Cap writes the fitted outline into the host path in place of the cap and keeps the node order of the host before the cap; settled by decomposing a cap in the reference app and comparing node order with the exported outline.
   - Observe: After adding `_cap.flag` to `l`, right-click the cap, choose Decompose Cap and save the file: compare the stem path's nodes with those of the exported OTF from the Add Cap Component check.
 - [ ] `capComponent.setFit` (M13, handbook): Fit Cap to Stroke
-  - Guess: With Fit on, the cap is scaled along the stroke-end direction by the ratio of the host's node distance to the cap's reference width (the distance between node1 and node2, or the cap's advance width with only an origin anchor); its other direction is not scaled. Settled by the Fit export check.
-  - Observe: Add `_cap.flag` (origin anchor only) to the 80-unit stem of `l` and to the 120-unit stem of `i`, export with Fit off and again with Fit on: compare the cap outlines in the four results for scale along and across the stem end.
+  - Guess: With Fit on, the horizontal scale is the host nodes' distance over the cap's reference width and replaces the stored horizontal scale, which is kept but not used; the reference width is the node1 to node2 distance, or the cap glyph's advance width when it has only an origin anchor (no source names the latter). Reading the greyed horizontal scale of an origin-only cap in the reference app settles it.
+  - Observe: Add `_cap.flag` (origin anchor only, advance width 100) to the 80-unit stem of `l` with Fit on and read the greyed horizontal scale in its Info box: 80 % means the advance width is the reference width.
 - [ ] `capComponent.setGlyph` (M13, handbook): Replace Cap Component
+  - Guess: Replacing the cap glyph changes the hint's name only and keeps its scale, alignment and Fit, since they are stored apart; the observe step settles it.
   - Observe: Click the name of an attached cap in its Info box and note what opens (the cap picker, a text field or a menu) and whether the new cap keeps the old one's scale and alignment.
 - [ ] `capComponent.setScale` (M13, handbook): Set Cap Scale
-  - Guess: The cap Info box has the corner Info box's horizontal and vertical scale fields, applied after fitting and before placement; settled by the Info box check.
-  - Observe: Select an attached cap with View › Show Info on and list every control of its Info box, with default values; type 50 into each scale field you find and export, to see whether scale applies before or after Fit.
+  - Guess: Scale applies in the cap glyph's own frame, about its origin or node1, before the cap is turned and placed on the stem; exporting a cap with each scale field at 50 % settles it.
+  - Observe: Type 50 into each scale field of an attached cap with Fit off and export: note whether the cap shrinks along the stroke end, across it, and about which point.
 - [ ] `capComponent.setAlignment` (M13, handbook): Set Cap Alignment
-  - Guess: For a cap, left aligns to the incoming segment of the first node, right to the outgoing segment of the second, both to their mean direction and none keeps the cap unrotated; settled by exporting the slanted-stem cap with each mode.
+  - Guess: For a cap, left turns it to the side before the first node and right to the side after the second, as corners do; centre (both) follows the line between the two nodes and none keeps it unrotated, as staff answers say. Exporting the slanted-stem cap with each mode settles left and right.
+  - Guess: A new cap is stored with options 0 (left), as a new corner is; the 3.0.3 screenshot shows four caps in centre alignment, which may have been set by hand. Adding a cap in the reference app and reading its Info box settles it.
   - Observe: Add `_cap.flag` to the slanted stem of `slash` and export once per alignment mode the Info box offers: note the cap's rotation in each export.
 - [ ] `segmentComponent.add` (M13, handbook): Add Segment Component
-  - Guess: On a straight host segment the segment glyph's path is scaled along the baseline so start lands on the first node and end on the second, and is not scaled across; settled by the straight-segment export check.
-  - Guess: On a curved host segment each point of the segment glyph, handles included, is moved to the host curve at the same fraction of its length and offset along the curve's normal by its distance from the baseline; settled by the curved-segment export check.
+  - Guess: On a straight host segment the segment glyph's path is scaled along the baseline so start lands on the segment's first node and end on its last, and is not scaled across; the tutorial supports both, and the straight-segment export check settles the details.
+  - Guess: On a curved host segment each point of the segment glyph, handles included, is moved to the host curve at the same fraction of its length and keeps its distance from the baseline along the curve's normal (the tutorial states the distance rule; the fraction of length is ours). The side above the baseline maps to the left of the host path's direction, a turn without mirroring, as the staff answer on direction implies. The curved-segment export check settles it.
+  - Guess: A segment component's hint stores only `type`, `name` and `origin`, with no `options` or `scale`, since no source shows either on one; a source saved by the reference app with a segment component settles it.
   - Observe: In the segment test font (`_segment.wave`: a three-node open path on the baseline with start and end anchors on its end nodes), add the segment component to the bottom straight segment of a square and to one curved segment of an `o`, export an OTF and send it back: the outlines show the length and normal mapping, and whether the node count stays three.
 - [ ] `segmentComponent.decompose` (M13, handbook): Decompose Segment Component
   - Observe: Decompose a segment component on the `o` and save: compare the resulting path with the exported outline of the Add Segment Component check.
@@ -1948,10 +1960,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `segmentComponent.editGlyph` (M13, handbook): Edit Segment Glyph
   - Observe: Click the arrow button in a segment component's Info box: note whether the segment glyph opens in the same tab after the current glyph or in a new tab.
 - [ ] `brush.add` (M13, handbook): Add Brush
-  - Guess: The brush outline between start and end follows the host segment as segments do; the parts before start and after end are moved rigidly with the host's direction at its two ends; settled by the brush export check.
-  - Guess: With nodes selected, each selected node becomes the end node of a brush on the segment that ends there; a node at the start of an open path gets no brush. Settled by the node-selection check.
+  - Guess: The brush outline between start and end follows the host segment as segment components do; the parts before start and after end keep their shape (tutorial) and are moved rigidly with the host's direction at its two ends (ours). The brush export check settles it.
+  - Guess: With nodes selected, a node at the start of an open path gets no brush, since no segment ends there; the tutorial covers only end nodes. Selecting the first node of an open path in the reference app settles it.
+  - Guess: A brush's hint stores only `type`, `name` and `origin`, with no `options` or `scale`, since no source shows either on one; a source saved by the reference app with a brush settles it.
   - Observe: In the brush test font (`_brush.arrow`: one closed arrow outline, start anchor at the tail, end anchor where the head begins), add the brush to a straight open path and to a curved open path, export an OTF and send it back: the head should keep its shape and the shaft follow the curve.
-  - Observe: Select only the last node of a three-segment open path and choose Add Brush: count how many brushes are added and on which segments.
+  - Observe: Select only the first node of a three-segment open path and choose Add Brush: note whether a brush is added.
 - [ ] `brush.decompose` (M13, handbook): Decompose Brush
   - Observe: Decompose a brush on the curved open path and save: note whether the open host path is removed and replaced by the closed outline.
 - [ ] `brush.setGlyph` (M13, handbook): Replace Brush
@@ -1959,9 +1972,14 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `brush.editGlyph` (M13, handbook): Edit Brush Glyph
   - Observe: Click the arrow button in a brush's Info box: note where the brush glyph opens.
 - [ ] `infoBox.capComponent` (panel, M13, handbook): Cap component Info box
-  - Observe: Screenshot the Info box of a selected cap, segment component and brush with View › Show Info on; list each control and its default.
+  - Observe: Screenshot the Info box of a selected segment component and of a selected brush with View › Show Info on; list each control and its default.
+  - Observe: Add a new cap and note the default state of its fit checkbox and alignment buttons.
 - [ ] `dialog.capPicker` (panel, M13, handbook): Cap glyph picker
   - Observe: Open Add Cap Component on a font with three cap glyphs and two corner glyphs: confirm only cap glyphs are listed and note the sort order and what the search field matches.
+- [ ] `infoBox.segmentComponent` (panel, M13, handbook): Segment component Info box
+  - Guess: The segment Info box has only the name and the arrow button, with no scale, alignment or fit controls, as the handbook lists; a screenshot of the Info box in the reference app settles it.
+- [ ] `infoBox.brush` (panel, M13, handbook): Brush Info box
+  - Guess: The brush Info box has only the name and the arrow button, with no scale, alignment or fit controls, as the handbook lists; a screenshot of the Info box in the reference app settles it.
 - [ ] `recipe.directives` (behavior, M13, docs): Recipe text accepts directives beside glyph names: a comment marker for ignored…
   - Guess: A recipe has one line of components; directives may follow it on that line or stand on lines of their own, several `#!` lines are joined with line breaks, and the note is written when the recipe is set, not at every rebuild.
   - Guess: An unknown `#?` keyword is refused, and `noanchors` is matched without regard to case; the reference's handling is not documented.
@@ -3153,7 +3171,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `proof-pdf` (format, M14, inferred): PDF proof sheet
   - Open (our design, not confirmed): Vector PDF of an Edit View text, a glyph overview or a waterfall, drawn straight from the source outlines of the current master or instance so no font has to be installed. Scale follows the font's units-per-point setting; nodes, guides and annotations are included only when asked for.
 
-### Interpolation (72)
+### Interpolation (77)
 
 - [ ] `instance.manualInterpolation` (parameter, M9, docs): Whether the instance uses hand-entered master factors instead of factors computed from…
   - Guess: With manual interpolation on, the instance is the stored factors applied to the master layers; intermediate layers get no weight, alternate layers still switch by the instance's location, and the factors also weight metrics, kerning and parameters; settle with an instance using manual factors and a brace glyph in the reference app.
@@ -3218,10 +3236,24 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: When several alternate sets contain the location, every one applies and the set with more bounds wins for a master both replace; settle with overlapping bracket ranges in the reference app.
 - [ ] `alternateLayer.variableExport` (behavior, M9, handbook): In a variable font, alternate layers are switched on by an OpenType…
   - Observe: In F2 (special layers), export the variable font with no Feature for Feature Variations parameter and read GSUB: note the feature that holds the `dollar` swap (rvrn or rlig).
+- [ ] `hoi.defaultLinear` (behavior, M9, handbook): Ordinary interpolation moves each node along a straight line between its positions…
+  - Guess: A curve acts only on its own axis span, weighted by the share its two layers have in the interpolation, and every other axis stays linear; settle by previewing an instance between two curved spans of a two-axis font in the reference app.
+  - Guess: Outside its span (an extrapolated instance) a curve adds nothing; settle by exporting an instance beyond the masters of a font with a curve.
+  - Guess: An interpolated layer (an instance, a re-interpolated intermediate layer) keeps no curves of its own; settle by adding an instance as a master in the reference app and looking for `hoi` on its nodes.
 - [ ] `hoi.curveTypes` (behavior, M9, handbook): Three non-linear types exist: a curve through one intermediate point, a curve…
+  - Guess: A Point curve is the quadratic Bézier that passes through the intermediate point halfway along the span; settle with the observe step on this row.
+  - Guess: The upper handle of a Handles curve lies its time back from the upper node, and both amplitudes are measured to the left of the direction from the lower to the upper node; settle by saving a curve with one upper amplitude in the reference app and comparing its drawn handle.
+  - Guess: A Handles curve is evaluated at Bézier parameter equal to the axis fraction, so handle times also set the speed; settle by comparing a preview at a quarter of the span with this rule.
   - Guess: Edits treat a node's curves as they treat its name and user data: reversing, copying or moving a node keeps them on that node, and a node added by splitting a segment has none; settle by reversing a contour with curves in the reference app and saving.
   - Guess: Moving or transforming a node leaves its intermediate point and rotation centre where they are; settle by moving a node with a curve in the reference app and comparing the saved `ip` and `rc` values.
   - Guess: A timing value the file leaves out stays left out when written back, and reads as the documented default (times 1/3, amplitudes 0); settle by saving a timing curve with default handles in the reference app.
+  - Observe: Drag a knob in the HOI tool, then preview the instance halfway between the two layers: note whether the node lies on the intermediate point (a curve through it) or short of it (a control point).
+- [ ] `hoi.rotationApproximation` (behavior, M9, handbook): When the two node positions and the chosen centre do not admit…
+  - Guess: With unequal radii the radius and the angle both interpolate linearly; settle with the observe step on this row.
+  - Guess: An automatic centre is the midpoint of the centres of the bounding boxes (of all nodes) of the node's path on the lower and the upper layer, and a rotation without a centre uses it too; settle by saving a rotation with `rc = auto` and reading the knob's position in the reference app.
+  - Guess: A rotation of exactly half a turn with Automatic direction goes counterclockwise; settle by rotating a node half a turn in the reference app.
+  - Guess: A node that lies on the centre on either layer has no angle and moves in a straight line; settle by placing the centre on a node in the reference app.
+  - Observe: Give a node a rotation whose centre is nearer one of its two positions, then preview the instance halfway: note the node's distance from the centre and its angle.
 - [ ] `variable.originMaster` (behavior, M9, handbook): A variable font stores the outlines of one origin master in full…
   - Observe: In F4 (three named masters), export the variable font without Variable Font Origin and read `fvar`: note whether the default is Light (the first master) or Regular.
 - [ ] `variable.originNeedsMinimalSetup` (behavior, M9, handbook): A variable font needs the origin master and at least one further…
@@ -3349,6 +3381,17 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `window.compareFamily` (panel, M9, handbook): Compare Family
   - Guess: Values of a row that differ between documents are drawn in the accent colour. Settle by comparing two documents whose anchors differ on one glyph.
   - Guess: Changing the attribute or the filter reads the documents again, as Update does. Settle by editing a glyph, then switching the attribute without pressing Update.
+- [ ] `glyph.matchMasters` (M9, docs, live): Match Masters
+  - Guess: Match Masters never adds or removes nodes: a layer whose paths differ in node structure from the reference's is reported and left alone; settled by watching the reference app on a glyph with a missing node.
+  - Guess: Without `strong`, a layer already compatible with the reference is left alone; `strong` matches it too (start nodes and orders that interpolate but do not correspond). Settled by running both modes in the reference app on a glyph whose master starts at a different corner.
+  - Guess: Paths pair up by the centroid of their on-curve nodes and their area, both measured in the layer's node box scaled to a unit square; settled by scrambling the contours of a glyph with similar contours in the reference app.
+  - Observe: Rotate the start node of one master's contour, keep the masters compatible, then run Match Masters weak and strong: note which mode restores the start.
+  - Observe: Add a node to one master's contour and run Match Masters: note whether it adds a node elsewhere, reports the glyph, or does nothing.
+- [ ] `glyph.relocateStartPoints` (M9, docs, live): Relocate Start Points
+  - Guess: The bottom-left of the glyph is the bottom-left corner of the bounding box of the layer's paths (components left out), and nearest is the straight-line distance, ties going to the lower, then the leftmost node; settled by running the command in the reference app on an O with a counter.
+  - Observe: Run Relocate Start Points on an O whose counter is offset to the right: note which counter node becomes the start.
+- [ ] `hoi.timingGraph` (behavior, M13, handbook): The timing graph plots progress against axis position for the selected curve:…
+  - Guess: Progress is the fraction of the curve's length travelled; settle by comparing the graph of a Handles curve with zero amplitudes and of a Point curve in the reference app.
 - [ ] `hoi.setControlPoints` (M13, inferred): Set Interpolation Control Points
   - Open (our design, not confirmed): Headless form of dragging a knob or handle: sets the intermediate point (one point), the two handles (two points) or the rotation centre (one point) of a node's interpolation curve.
 - [ ] `font.interpolateFonts` (M13, docs, live): Interpolate Fonts…
