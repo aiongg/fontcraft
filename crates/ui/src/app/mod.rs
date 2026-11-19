@@ -23,7 +23,7 @@ use craft::ui::runtime::frame::{FrameInput, FrameOutput};
 use craft::ui::shell::app::ShellApp;
 use craft::ui::shell::embed::CloseDecision;
 use fontcraft_engine::Session;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use self::catalog::{Catalog, Kind, TOOL_PREFIX};
 use self::files::Picks;
@@ -98,6 +98,8 @@ pub struct FontCraftApp {
     pub status: String,
     pub closing: Closing,
     picks: Picks,
+    /// The control channel: its listener, the window its input goes to, the replies waiting on frames.
+    pub control: crate::control::Control,
     #[cfg(not(target_arch = "wasm32"))]
     file_panels: Option<craft::dialogs::service::FilePanels>,
 }
@@ -114,8 +116,11 @@ impl FontCraftApp {
         app
     }
 
-    /// The app over `session` with `host`; no window needed (tests, other front ends).
-    pub fn new(session: Session, host: Arc<Host>) -> FontCraftApp {
+    /// The app over `session` with `host`; no window needed (tests, other front ends). What the user runs here may
+    /// export where an Export Folder parameter climbs out of the destination (`Session::set_export_outside`); the
+    /// control channel turns that off for its requests.
+    pub fn new(mut session: Session, host: Arc<Host>) -> FontCraftApp {
+        session.set_export_outside(true);
         let mut app = FontCraftApp {
             session,
             host,
@@ -130,6 +135,7 @@ impl FontCraftApp {
             status: String::new(),
             closing: Closing::Idle,
             picks: Picks::default(),
+            control: crate::control::Control::default(),
             #[cfg(not(target_arch = "wasm32"))]
             file_panels: None,
         };
@@ -153,22 +159,9 @@ impl FontCraftApp {
             self.sent.push(Msg::Run(command));
         }
         for msg in std::mem::take(&mut self.sent) {
-            match msg {
-                Msg::Run(command) => {
-                    if self.picks.ask(&self.host, &command) {
-                        continue;
-                    }
-                    let params = if command.params.is_null() { json!({}) } else { command.params.clone() };
-                    if let Err(error) = self.session.execute(&command.id, &params) {
-                        failed.push(format!("{}: {error}", command.id));
-                    }
-                }
-                Msg::Shell(command) => {
-                    if let Err(error) = crate::shell::commands::run(self, &command) {
-                        failed.push(format!("{}: {error}", command.id));
-                    }
-                }
-                Msg::View(view) => self.apply_view(view),
+            let id = msg.command_id().map(str::to_owned);
+            if let Err(error) = self.apply(msg, true) {
+                failed.push(format!("{}: {error}", id.unwrap_or_default()));
             }
         }
         if let Some(last) = failed.pop() {
@@ -178,6 +171,39 @@ impl FontCraftApp {
             self.closing = if self.has_unsaved_changes() { Closing::Idle } else { Closing::Confirmed };
         }
         self.project();
+    }
+
+    /// Runs `msg` now, as `drain` would after the frame, and returns the command's result: what views posted
+    /// before it is applied first. The control channel runs its requests here. With `ask_files`, a command of
+    /// [`files::PICKED`] without its path opens the file picker and returns `{"picker": true}`; without, it runs
+    /// as given and the engine reports the missing path. A failure also goes to the status line.
+    pub fn run_now(&mut self, msg: Msg, ask_files: bool) -> Result<Value, String> {
+        self.drain();
+        let id = msg.command_id().map(str::to_owned);
+        let result = self.apply(msg, ask_files);
+        if let Err(error) = &result {
+            self.status = format!("{}: {error}", id.unwrap_or_default());
+        }
+        self.drain();
+        result
+    }
+
+    /// Applies one message: the only code that runs `Session::execute`.
+    fn apply(&mut self, msg: Msg, ask_files: bool) -> Result<Value, String> {
+        match msg {
+            Msg::Run(command) => {
+                if ask_files && self.picks.ask(&self.host, &command) {
+                    return Ok(json!({ "picker": true }));
+                }
+                let params = if command.params.is_null() { json!({}) } else { command.params.clone() };
+                self.session.execute(&command.id, &params).map_err(|e| e.to_string())
+            }
+            Msg::Shell(command) => crate::shell::commands::run(self, &command).map(|()| Value::Null),
+            Msg::View(view) => {
+                self.apply_view(view);
+                Ok(Value::Null)
+            }
+        }
     }
 
     /// Copies what each panel shows into its view model when the engine or the view state moved.
@@ -203,7 +229,7 @@ impl FontCraftApp {
     }
 
     /// The message a fired command posts.
-    fn route(command: CommandRef) -> Msg {
+    pub fn route(command: CommandRef) -> Msg {
         match catalog::kind(&command.id) {
             Kind::Tool(tool) => Msg::View(ViewMsg::SelectTool(tool)),
             Kind::Shell => Msg::Shell(command),
@@ -240,7 +266,8 @@ impl ShellApp for FontCraftApp {
     }
 
     fn logic(&mut self, ctx: &egui::Context) {
-        self.drain();
+        crate::control::logic(self, ctx);
+        crate::control::drain(self);
         if self.closing == Closing::Confirmed {
             self.closing = Closing::Sent;
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -253,6 +280,7 @@ impl ShellApp for FontCraftApp {
         if let Some(panels) = self.file_panels.as_mut() {
             panels.pump::<eframe::Frame>(None);
         }
+        crate::control::after_ui(self, ui.ctx());
     }
 
     fn close_requested(&mut self) -> CloseDecision {

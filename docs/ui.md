@@ -133,7 +133,16 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   when app state asks for it and takes the answer on a later pass (`dialogs/unsaved.rs` is the
   example: the close question).
 - **Control channel.** `control::dispatch(app, method, params)` looks the method up in
-  `control::MODULES`. A method that changes the engine posts a `Msg`.
+  `control::MODULES`. A method that changes the engine runs it through `FontCraftApp::run_now`,
+  the path `drain` takes, and returns the command's result. A package whose methods are not built
+  yet is in `control::LATER`, which names it in the error; the package removes its line when it adds
+  its module. `ui.inspect` keys come from `control::INSPECT`, `ui.set` switches from
+  `control::SWITCHES`, one line per package each. `ui.click {id}` runs `ui.dialog.click`.
+  `apps/fontcraft-next --control PORT` listens on the loopback port (same protocol and flags as
+  `apps/fontcraft`); window input is replied to once the frames have carried it.
+- **Control-driven tests.** `crate::testing::TestApp` runs the whole app headless at 1280 × 800:
+  `t.ok(method, params)` returns a request's result, `t.error(…)` its error, and window input
+  (`ui.click`, `ui.drag`, `ui.move`, `ui.wheel`) has run when they return.
 - **File pickers.** A command listed in `app::files::PICKED` that arrives without its path opens
   the host's picker; the answer posts the command again with the path.
 

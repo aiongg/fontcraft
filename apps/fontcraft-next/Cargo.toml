@@ -12,4 +12,5 @@ workspace = true
 
 [dependencies]
 fontcraft-ui.workspace = true
+fontcraft-engine.workspace = true
 eframe = { version = "0.37", default-features = false, features = ["wayland"] }

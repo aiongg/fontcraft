@@ -1,0 +1,256 @@
+use std::io::{BufRead, BufReader, Write};
+use std::sync::Arc;
+
+use craft::host::Host;
+use fontcraft_engine::Session;
+use serde_json::{Value, json};
+
+use super::handle;
+use crate::app::{APP, FontCraftApp, Msg};
+use crate::testing::TestApp;
+
+/// Engine commands, the documents, the menus, refused requests and the methods of later packages, as an agent
+/// sees them.
+#[test]
+fn the_control_protocol_drives_the_app() {
+    let mut t = TestApp::new();
+    let made = t.ok("engine.execute", json!({"command": "glyph.newGlyph", "params": {"name": "agent"}}));
+    assert_eq!(made["name"], "agent");
+    assert_eq!(t.ok("document.inspect", json!({}))["documents"][0]["undo"], json!(["New Glyph"]));
+    let commands = t.ok("engine.commands", json!({}));
+    let shell: usize = crate::shell::commands::MODULES.iter().map(|m| m.commands.len()).sum();
+    let expected = fontcraft_engine::command_specs().len() + shell + fontcraft_tools::tool::TOOLS.len();
+    assert_eq!(commands["commands"].as_array().map(Vec::len), Some(expected));
+
+    let menus = t.ok("ui.menu.list", json!({}));
+    let menus = menus.as_array().cloned().unwrap_or_default();
+    assert!(menus.len() >= 4, "{menus:?}");
+    assert_eq!(menus[0]["title"], "File");
+    let items: Vec<&Value> = menus.iter().flat_map(|m| m["items"].as_array().into_iter().flatten()).collect();
+    assert!(items.iter().any(|i| i["command"] == "edit.undo"), "Undo is in a menu");
+    assert!(items.iter().all(|i| i["enabled"] == true || i["disabled_reason"].is_string()), "a greyed item says why");
+
+    t.ok("ui.menu.invoke", json!({"command": "edit.undo"}));
+    assert!(t.ok("document.inspect", json!({}))["documents"][0]["undo"].as_array().is_some_and(Vec::is_empty), "the menu undid New Glyph");
+    assert!(t.error("ui.menu.invoke", json!({"command": "glyph.newGlyph.nope"})).contains("not a menu item"));
+
+    // A tool's command makes the tool current.
+    t.ok("engine.execute", json!({"command": "tool.draw"}));
+    assert_eq!(t.ok("ui.inspect", json!({}))["tool"], "draw");
+
+    for bad in [
+        json!({"method": "nope"}),
+        json!({"id": 2}),
+        json!({"method": 5}),
+        json!({"method": "engine.execute"}),
+        json!({"method": "engine.execute", "params": {"command": "no.such"}}),
+        json!({"method": "ui.render", "params": [1]}),
+        json!([]),
+        json!("x"),
+    ] {
+        let reply = handle(&mut t.app, &bad);
+        assert_eq!(reply["ok"], false, "{bad}");
+        assert!(reply["error"].as_str().is_some_and(|e| !e.is_empty()), "{bad}: {reply}");
+    }
+    assert_eq!(handle(&mut t.app, &json!({"id": 9, "method": "nope"}))["id"], 9, "the reply carries the request's id");
+
+    // Methods of packages not built yet say which package brings them.
+    for (method, package) in
+        [("ui.pointer", "UI.3"), ("ui.key", "UI.3"), ("ui.tool.select", "UI.3"), ("ui.dialog.inspect", "UI.7"), ("ui.contextMenu.list", "UI.25")]
+    {
+        let error = t.error(method, json!({}));
+        assert!(error.contains("not built yet") && error.contains(package), "{method}: {error}");
+    }
+    assert!(t.error("ui.click", json!({"id": "ok"})).contains("UI.7"), "a dialog control press waits for the dialogs");
+
+    // Every method of the protocol the skeleton answers is in the table.
+    let methods = t.ok("control.methods", json!({}));
+    for method in [
+        "engine.execute",
+        "engine.commands",
+        "document.inspect",
+        "ui.inspect",
+        "ui.set",
+        "ui.render",
+        "ui.resize",
+        "ui.focus",
+        "ui.click",
+        "ui.drag",
+        "ui.move",
+        "ui.wheel",
+        "ui.menu.list",
+        "ui.menu.invoke",
+    ] {
+        assert!(methods["methods"].as_array().is_some_and(|m| m.contains(&json!(method))), "{method}");
+    }
+}
+
+/// `ui.render` draws filled glyphs without a window, the same bytes each time; a headless app cannot screenshot.
+#[test]
+fn ui_render_draws_glyph_pixels_and_a_headless_app_has_no_screenshot() {
+    let mut t = TestApp::new();
+    t.ok(
+        "engine.execute",
+        json!({"command": "path.addPath", "params": {"glyph": "A", "nodes": [{"x": 60, "y": 0}, {"x": 560, "y": 0}, {"x": 310, "y": 700}]}}),
+    );
+    let first = t.ok("ui.render", json!({"glyphs": ["A"], "size": 100}));
+    assert_eq!((first["width"].as_u64(), first["height"].as_u64()), (Some(76), Some(116)), "{first}");
+    assert_eq!(t.ok("ui.render", json!({"glyphs": ["A"], "size": 100}))["png"], first["png"], "the same bytes twice");
+    assert_eq!(t.ok("ui.render", json!({"text": "AB", "scale": 0.1}))["glyphs"], json!(["A", "B"]));
+    t.app.sent.push(Msg::View(crate::app::ViewMsg::SelectGlyph("A".into())));
+    t.frame();
+    assert_eq!(t.ok("ui.render", json!({}))["glyphs"], json!(["A"]), "nothing named: the shown glyph");
+    for bad in [
+        json!({"glyphs": ["nope"]}),
+        json!({"text": "\u{1F600}"}),
+        json!({"size": -1}),
+        json!({"scale": 1e9}),
+        json!({"glyphs": 5}),
+        json!({"path": 5}),
+        json!({"master": "nope"}),
+        json!({"glyphs": ["A", "B"], "layer": "x"}),
+    ] {
+        t.error("ui.render", bad);
+    }
+    assert!(t.error("ui.screenshot", json!({})).starts_with("ui.screenshot:"));
+}
+
+/// What the user runs may export outside the destination; a control request runs with that off and leaves the
+/// app's setting as it was.
+#[test]
+fn control_requests_export_inside_the_destination_and_keep_the_setting() {
+    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    assert!(app.session.export_outside());
+    let _ = handle(&mut app, &json!({"id": 1, "method": "engine.execute", "params": {"command": "glyph.getInfo", "params": {}}}));
+    assert!(app.session.export_outside());
+}
+
+/// Requests read and write only inside the automation roots; the person at the keyboard is not confined.
+#[test]
+fn control_requests_honour_the_automation_roots() {
+    let base = std::env::temp_dir().join(format!("fontcraft-ui-control-roots-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    for d in ["in", "out", "outside"] {
+        std::fs::create_dir_all(base.join(d)).unwrap();
+    }
+    let at = |p: &str| base.join(p).to_str().unwrap().to_string();
+    let mut t = TestApp::new();
+    t.app.control.roots = fontcraft_engine::file_access::AutomationRoots::new(Some(&base.join("in")), Some(&base.join("out"))).unwrap();
+    let save = |path: String| json!({"command": "file.saveAs", "params": {"path": path}});
+
+    assert!(t.error("engine.execute", save(at("outside/x.fontcraft"))).contains("outside the write root"));
+    assert!(!base.join("outside/x.fontcraft").exists());
+    t.ok("engine.execute", save(at("out/x.fontcraft")));
+    assert!(base.join("out/x.fontcraft").exists());
+    t.ok(
+        "engine.execute",
+        json!({"command": "path.addPath", "params": {"glyph": "A", "nodes": [{"x": 0, "y": 0}, {"x": 100, "y": 0}, {"x": 50, "y": 100}]}}),
+    );
+    assert!(t.error("ui.render", json!({"path": at("outside/r.png"), "glyphs": ["A"]})).contains("outside the write root"));
+    t.ok("ui.render", json!({"path": at("out/r.png"), "glyphs": ["A"]}));
+    assert!(base.join("out/r.png").exists());
+    assert!(t.error("ui.screenshot", json!({"path": at("in/s.png")})).contains("outside the write root"));
+    // The frame is written a frame later, outside the roots: to the path that was checked.
+    let checked = std::fs::canonicalize(base.join("out")).unwrap().join("s.png");
+    let roots = t.app.control.roots.clone();
+    let path = fontcraft_engine::file_access::confine(roots.as_ref(), || super::screenshot::path(&json!({"path": at("in/../out/s.png")})));
+    assert_eq!(path.unwrap().as_deref(), checked.to_str());
+    assert!(t.error("engine.execute", json!({"command": "script.run", "params": {"macro": "m"}})).contains("automation roots"));
+    // The person at the keyboard is not confined.
+    t.app.run_now(Msg::run("file.saveAs", json!({"path": at("outside/y.fontcraft")})), false).unwrap();
+    assert!(base.join("outside/y.fontcraft").exists());
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// `ui.set` shows and hides panels with their command; a bad key changes nothing.
+#[test]
+fn ui_set_turns_panels_on_and_off() {
+    let mut t = TestApp::new();
+    let shown = |t: &mut TestApp| t.ok("ui.inspect", json!({}))["panels"].clone();
+    assert!(shown(&mut t).as_array().is_some_and(|p| p.contains(&json!("layers")) && !p.contains(&json!("textPreview"))));
+    assert_eq!(t.ok("ui.set", json!({"layers": false, "textPreview": true})), json!({"layers": false, "textPreview": true}));
+    let panels = shown(&mut t);
+    assert!(panels.as_array().is_some_and(|p| !p.contains(&json!("layers")) && p.contains(&json!("textPreview"))), "{panels}");
+    assert!(t.error("ui.set", json!({"layers": true, "nope": true})).contains("unknown key `nope`"));
+    assert!(t.error("ui.set", json!({"layers": "yes"})).contains("true or false"));
+    assert_eq!(shown(&mut t), panels, "a refused request moved nothing");
+    t.error("ui.set", json!({}));
+    t.error("ui.set", json!([1]));
+}
+
+/// Clicks, drags, moves and wheel turns reach the frames at window points; a bad request queues nothing.
+#[test]
+fn window_input_reaches_the_frames() {
+    let mut t = TestApp::new();
+    assert_eq!(t.ok("ui.move", json!({"x": 300, "y": 200})), json!({"queued": 1}));
+    assert_eq!(t.pointer(), Some(egui::pos2(300.0, 200.0)));
+    t.ok("ui.drag", json!({"x": 400, "y": 300, "toX": 500, "toY": 350, "steps": 4, "mods": ["shift"]}));
+    assert_eq!(t.pointer(), Some(egui::pos2(500.0, 350.0)));
+    t.ok("ui.click", json!({"x": 600, "y": 410, "button": "right", "count": 2, "alt": true}));
+    assert_eq!(t.pointer(), Some(egui::pos2(600.0, 410.0)));
+    t.ok("ui.wheel", json!({"x": 640, "y": 400, "dy": -3}));
+    assert_eq!(t.pointer(), Some(egui::pos2(640.0, 400.0)));
+    assert_eq!(t.ok("ui.inspect", json!({}))["pendingInput"], false);
+    for (method, bad) in [
+        ("ui.click", json!({"x": 1e9, "y": 0})),
+        ("ui.click", json!({"x": 1, "y": 1, "count": 17})),
+        ("ui.click", json!({"x": 1, "y": 1, "button": "up"})),
+        ("ui.click", json!({"x": 1, "y": 1, "mods": ["hyper"]})),
+        ("ui.click", json!({"x": 1})),
+        ("ui.drag", json!({"x": 1, "y": 1, "toX": 2, "toY": 2, "steps": 257})),
+        ("ui.drag", json!({"x": 1, "y": 1})),
+        ("ui.wheel", json!({"x": 1, "y": 1, "dy": 101})),
+        ("ui.wheel", json!({"x": 1, "y": 1, "unit": "page"})),
+        ("ui.move", json!({"x": "a", "y": 1})),
+        ("ui.resize", json!({"width": 100, "height": 400})),
+    ] {
+        t.error(method, bad.clone());
+        assert_eq!(t.pointer(), Some(egui::pos2(640.0, 400.0)), "{method} {bad} moved the pointer");
+    }
+    let mut windowless = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let reply = handle(&mut windowless, &json!({"method": "ui.click", "params": {"x": 1, "y": 1}}));
+    assert!(reply["error"].as_str().is_some_and(|e| e.contains("no window")), "{reply}");
+}
+
+/// Over TCP: replies carry the request's id, window input is replied to once the frames carried it, and a line
+/// that is no request closes the connection.
+#[test]
+fn the_listener_answers_between_frames() {
+    let mut t = TestApp::new();
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let ctx = t.frames.ctx.clone();
+    let addr = t.app.control.listen(listener, &ctx).unwrap();
+    let client = std::thread::spawn(move || {
+        let stream = std::net::TcpStream::connect(addr).unwrap();
+        stream.set_read_timeout(Some(std::time::Duration::from_secs(20))).unwrap();
+        let mut writer = stream.try_clone().unwrap();
+        let mut reader = BufReader::new(stream);
+        let mut replies = Vec::new();
+        for line in [
+            r#"{"id": 7, "method": "engine.execute", "params": {"command": "glyph.newGlyph", "params": {"name": "wire"}}}"#,
+            r#"{"id": "m", "method": "ui.move", "params": {"x": 111, "y": 222}}"#,
+            "[1, 2]",
+        ] {
+            writeln!(writer, "{line}").unwrap();
+            let mut reply = String::new();
+            reader.read_line(&mut reply).unwrap();
+            replies.push(serde_json::from_str::<Value>(&reply).unwrap());
+        }
+        let mut rest = String::new();
+        let closed = reader.read_line(&mut rest).map(|n| n == 0).unwrap_or(true);
+        (replies, closed)
+    });
+    for _ in 0..2_000 {
+        if client.is_finished() {
+            break;
+        }
+        t.frame();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    let (replies, closed) = client.join().unwrap();
+    assert_eq!((&replies[0]["id"], &replies[0]["ok"], &replies[0]["result"]["name"]), (&json!(7), &json!(true), &json!("wire")), "{}", replies[0]);
+    assert_eq!(replies[1], json!({"id": "m", "ok": true, "result": {"queued": 1}}));
+    assert_eq!(t.pointer(), Some(egui::pos2(111.0, 222.0)), "the reply came after the move ran");
+    assert_eq!(replies[2]["ok"], false);
+    assert!(closed, "a line that is no request closes the connection");
+}
