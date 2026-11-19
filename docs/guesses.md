@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2924 guesses on 1559 rows (634 of them live commands).**
+**2931 guesses on 1559 rows (634 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -2185,6 +2185,13 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `merge` (cli) | M12 | docs | – | HVAR or VVAR is left out, with a warning, when one font lacks it (the advances then vary through gvar's phantom points), and a side-bearing or origin map is kept only when every font has it; a fontTools rule for variable merging would settle it. |
 | `merge` (cli) | M12 | docs | – | Two identical glyphs are shared under --duplicates first, last or error only when their gvar data is identical too; HVAR deltas are not compared, as gvar's phantom points carry the same advances. |
 | `merge` (cli) | M12 | docs | – | When the result is static (--drop-tables fvar, or no font is variable) the GDEF variation stores are dropped and every variation-index device goes, so GPOS values, anchors and ligature carets keep their default values, as a full instance at the default location does; fontTools refuses fonts with GDEF stores, so a user who merges such fonts would settle whether they should be refused instead. |
+| `merge` (cli) | M12 | docs | – | Without a cidfontinfo file, a CID-keyed result from a name-keyed first font is Adobe-Identity-0 and takes the first font's name and Top DICT values, with a warning; a CID-keyed first font gives its own ROS; running mergefonts with numeric map names and no -cid would settle it. |
+| `merge` (cli) | M12 | docs | – | The cidfontinfo AdobeCopyright and Trademark go into the Top DICT Notice, joined by a space, and version into the version string; no CIDFontVersion is written; tx -dump of mergefonts' -cid output would settle it. |
+| `merge` (cli) | M12 | docs | – | In a CID-keyed result each font's map header names the Font DICTs made from that font and sets their LanguageGroup, and --ps-name and --language-group replace the first font's header; in a name-keyed result only the first font's header counts; the mergefonts help says only that the header overrides values of the first source font's dictionary, so its -cid output would settle it. |
+| `merge` (cli) | M12 | docs | – | The result's Font DICTs are ordered by input font, then by that font's Font DICT index; mergefonts' output would settle it. |
+| `merge` (cli) | M12 | docs | – | --hint-dict-from takes the hint values of the hint font's first Private DICT and its underline position and thickness, for any number of inputs and for CID-keyed results too (one hint dictionary for every Font DICT); mergefonts' -hints works only on two Type 1 fonts and names only 'global metrics and hint data'. |
+| `merge` (cli) | M12 | docs | – | --fd and --exclude-fd keep no glyph specially: .notdef is dropped with its Font DICT, and the CID 0 check then asks for it from another font; mergefonts' -gx never excludes .notdef. |
+| `merge` (cli) | M12 | docs | – | A Type 1 first font gives a bare CFF result (with a note), as FontCraft writes no Type 1; mergefonts writes Type 1. |
 | `transform` (cli) | M12 | docs | – | --glyphs and --fd choose the glyphs a matrix transforms and leave the others in the font, where rotatefont writes only the chosen glyphs; a user who expects the subset would settle it. |
 | `transform` (cli) | M12 | docs | – | A Private DICT changes when any glyph using it is transformed, even if others using it are not; a font mixing transformed and untouched glyphs in one Font DICT would settle it. |
 | `transform` (cli) | M12 | docs | – | Renamed glyphs from a glyph table keep their cmap entries; rotatefont removes their codes from the CFF Encoding, which an OpenType font does not use; a vertical-text user would settle it. |
