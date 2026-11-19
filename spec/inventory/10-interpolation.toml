@@ -1650,6 +1650,21 @@ guesses = [
 ]
 
 [[command]]
+id = "compareFonts.setView"
+label = "Compare Fonts: Select Row"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{selected?: {category: fontInfo|masterMetrics|glyph|kerning, key: string}|null, collapsed?: [category]}"
+area = "interpolation"
+milestone = "M9"
+summary = "Selects a row of the Compare Fonts panel, the row Use Left and Use Right act on, and sets which category headings are collapsed."
+ref = "Our design"
+status = "inferred"
+own = true
+notes = "View state only: a click on a row or a heading's disclosure in the Compare Fonts panel posts it."
+
+[[command]]
 id = "compareFonts.useLeft"
 label = "Use Left"
 menu = []
@@ -1819,6 +1834,7 @@ status = "handbook"
 notes = "Documented, not yet observed. The document is named by its position among the open documents, its title or its path; a glyph the document lacks is refused."
 guesses = [
   "The glyph opens in a new Edit View tab of that document, which becomes the active one. Settle by double-clicking a cell twice and counting the tabs.",
+  "In the panel UI a double click or Enter on a row opens the glyph in the first document that has it, and a secondary click on a cell opens it in that cell's document, since the table reports activation per row. Settle by double-clicking cells of different columns in the reference app.",
 ]
 
 [[command]]

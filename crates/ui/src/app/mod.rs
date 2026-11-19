@@ -91,6 +91,12 @@ pub struct ViewState {
     pub changed_on_disk: Option<crate::dialogs::changed_on_disk::Asked>,
     /// The document the unsaved-changes dialog shows.
     pub unsaved_shown: crate::dialogs::unsaved::Shown,
+    /// The Table Viewer's font, table, view, search, tree and what it read.
+    pub table_viewer: crate::shell::table_viewer::TableViewerState,
+    /// Compare Fonts' sides, collapsed headings and selected row.
+    pub compare_fonts: crate::shell::compare_fonts::CompareFontsState,
+    /// Compare Family's attribute, filter and reads.
+    pub compare_family: crate::shell::compare_family::CompareFamilyState,
 }
 
 impl Default for ViewState {
@@ -119,6 +125,9 @@ impl Default for ViewState {
             settings: Default::default(),
             changed_on_disk: None,
             unsaved_shown: Default::default(),
+            table_viewer: Default::default(),
+            compare_fonts: Default::default(),
+            compare_family: Default::default(),
         }
     }
 }
@@ -319,6 +328,7 @@ impl FontCraftApp {
         self.models.project(stamp, &mut cx);
         models::console::project(&mut self.models.console, &mut cx);
         models::palette::project(&mut self.models.palette, &mut cx, &self.tools, stamp);
+        models::compare::project_fonts(&mut self.models.compare_fonts, &mut cx);
         let engine = Stamp::of(&self.session, 0);
         if self.enabled_at != Some(engine) {
             self.enabled_at = Some(engine);

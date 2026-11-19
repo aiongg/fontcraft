@@ -22,6 +22,9 @@ pub const INSPECT: &[Inspect] = &[
     crate::app::close::inspect,
     crate::shell::start::inspect,
     crate::shell::settings::inspect,
+    crate::shell::table_viewer::inspect,
+    crate::shell::compare_fonts::inspect,
+    crate::shell::compare_family::inspect,
 ];
 
 /// `{}` → `{tool, glyph, panels, canvas: {zoom, center, rect}, status, closing, unsaved, pendingInput}`, plus

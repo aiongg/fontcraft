@@ -4,6 +4,7 @@
 //! one of them with a one-line arm, and only when the [`Stamp`] moved since the last call.
 
 pub mod canvas;
+pub mod compare;
 pub mod console;
 pub mod font_exports;
 pub mod font_features;
@@ -20,6 +21,7 @@ pub mod layers;
 pub mod palette;
 pub mod sidebar;
 pub mod space_center;
+pub mod table_viewer;
 pub mod text;
 
 use craft::ui::contract::Tracked;
@@ -78,6 +80,12 @@ pub struct Models {
     pub text: Tracked<text::TextModel>,
     /// The Space Center (`panels::space_center`).
     pub space_center: Tracked<space_center::SpaceCenterModel>,
+    /// The Table Viewer (`panels::table_viewer`).
+    pub table_viewer: Tracked<table_viewer::TableViewerModel>,
+    /// Compare Fonts (`panels::compare_fonts`); projected outside the stamp, since it reads two documents.
+    pub compare_fonts: Tracked<compare::CompareFontsModel>,
+    /// Compare Family (`panels::compare_family`).
+    pub compare_family: Tracked<compare::CompareFamilyModel>,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -136,6 +144,8 @@ impl Models {
         glyph_props::project_selection_info(&mut self.selection_info, cx);
         text::project(&mut self.text, cx);
         space_center::project(&mut self.space_center, cx);
+        table_viewer::project(&mut self.table_viewer, cx);
+        compare::project_family(&mut self.compare_family, cx);
         true
     }
 }

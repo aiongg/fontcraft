@@ -327,6 +327,15 @@ impl DockPanels<PanelId> for Panels<'_> {
                 ui,
                 panels::space_center::Props { model: &self.models.space_center, tokens: &self.models.canvas_tokens, sent: self.sent },
             ),
+            PanelId::TableViewer => {
+                panels::table_viewer::show(ui, panels::table_viewer::Props { model: &self.models.table_viewer, sent: self.sent });
+            }
+            PanelId::CompareFonts => {
+                panels::compare_fonts::show(ui, panels::compare_fonts::Props { model: &self.models.compare_fonts, sent: self.sent });
+            }
+            PanelId::CompareFamily => {
+                panels::compare_family::show(ui, panels::compare_family::Props { model: &self.models.compare_family, sent: self.sent });
+            }
             // Drawn by `group_view`.
             PanelId::Document => {}
             other => panels::stub::show(ui, panels::stub::Props { title: other.title(&self.words) }),
