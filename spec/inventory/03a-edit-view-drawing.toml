@@ -1357,7 +1357,7 @@ milestone = "M6"
 summary = "A component's origin point is the position of an anchor named origin in the referenced glyph when there is one. Otherwise, for upright masters it is where the baseline meets the left sidebearing; for slanted masters it is where the baseline is met by a vertical line drawn through the point at which the slanted left sidebearing reaches half the x-height."
 ref = "Edit View › Aligning"
 status = "handbook"
-notes = "Documented, not yet observed. Only the base glyph's own anchors on the component's master are searched for origin, not anchors propagated from its components."
+notes = "Documented, not yet observed. Only the base glyph's own anchors on the component's master are searched for origin, not anchors propagated from its components. Written sources (M6.25, docs/spec/09-reusing-shapes.md § 8.6): the corner tutorial (W8) gives the same rule for a corner glyph without an origin anchor, the point (0, 0) where the baseline meets the left sidebearing, on an upright master. A staff answer (forum 18125) says cap glyphs keep an unslanted bounding box so that their zero point is known; no written source covers a slanted master for ordinary components."
 guesses = [
   "The left sidebearing line is x = 0 of the base glyph, and on a slanted master it is slanted about half the x-height, so without an origin anchor the origin point is the base glyph's (0, 0) on every master; aligning a component on an italic master in the reference app settles it.",
 ]
