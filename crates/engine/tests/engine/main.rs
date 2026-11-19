@@ -128,6 +128,7 @@ mod metrics_keys;
 mod metrics_report;
 mod native_corpus;
 mod nodes;
+mod overlay_fonts;
 mod pathops;
 mod pixel;
 mod plugins;

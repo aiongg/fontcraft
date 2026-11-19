@@ -2049,14 +2049,40 @@ label = "Overlay Fonts…"
 menu = ["Font"]
 shortcut = ""
 kind = "engine"
-params = "{layers: [{font: fontRef | path, color: color, opacity?: number, offset?: [x, y], scale?: number}], output: 'colorLayers' | 'masters'}"
+params = "{layers: [{font: index | title | path (an open document), master?: id | name | index, color?: color, opacity?: number, offset?: [x, y], scale?: number}], output: 'colorLayers' | 'masters'}"
 area = "color"
 milestone = "M13"
 summary = "Stacks the matching glyphs of several monochrome fonts (the parts of a chromatic family) into one colour font, each source with its own colour, opacity, offset and scale. The bottom source supplies metrics and kerning. Output is either one colour-layered glyph set or one master per source."
 ref = "FontLab 8 What's new › Color › Overlay Fonts"
 status = "docs"
-notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). Built in M13.66 (`crates/engine/src/cmd/overlay.rs`) from the secondary reference's release notes; not observed. `layers` runs from the bottom up; glyphs match by name, and the new font has every glyph some source has. colorLayers: one master, a Color Palette layer per source in palette row = source position, one palette of the sources' colours with alpha × opacity. masters: one master per source, each with the bottom source's widths, metrics and kerning. Outlines are copied with components resolved to paths; a source with another units per em is scaled to the bottom source's first. `font.overlayPreview` returns the stacked outlines for a view to paint. Not built: the dialog and its canvas preview (UI)."
 origin = "fontlab"
+guesses = [
+  "The result opens as a new untitled document and no source changes; watching the reference's command would settle whether it fills the current font instead.",
+  "Sources are open documents only, as Add Other Font takes them; whether the reference also reads files that are not open is not documented.",
+  "In colorLayers output each glyph's master layer holds every source's outlines, as the drawing shown where colour is not supported; the reference's choice (bottom source only, or all) would settle it.",
+  "A glyph the bottom source lacks is added, with its record and width from the lowest source that has it and no kerning groups; the reference may keep only the bottom source's glyphs.",
+  "The bottom source's scale also scales the widths, vertical metrics and kerning; its offset moves only the outlines.",
+  "Components are always resolved to paths, so a scaled or moved source draws correctly; the reference may keep components where the transform allows it.",
+  "In masters output each master is named after its source's family and master name, and colour and opacity are not stored, since a master has no colour.",
+  "The new font keeps the bottom source's family name and drops its axes and instances.",
+  "`color` defaults to opaque black and `output` has no default.",
+]
+
+[[command]]
+id = "font.overlayPreview"
+label = "Overlay Fonts Preview"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{layers: [as font.overlayFonts], glyphs: [names]}"
+area = "color"
+milestone = "M13"
+summary = "Query: the outlines Overlay Fonts would stack for a list of glyphs, one per source from the bottom up, each with its colour (alpha × opacity) and its outline as SVG path data in the bottom source's units, scaled and moved, plus the advance width the new font would give the glyph. Our addition so the Overlay Fonts dialog, or an agent, can show the result before the font is made."
+ref = "FontLab 8 What's new › Color › Overlay Fonts"
+status = "inferred"
+notes = "Built in M13.66. At most 1000 glyphs and 2,000,000 path elements per call; a source whose outline cannot be drawn is left out with a warning."
+own = true
 
 [[command]]
 id = "color.generateDarkPalette"

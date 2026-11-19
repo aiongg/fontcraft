@@ -128,6 +128,7 @@ mod tests {
         ("file.reviewExternalChanges", &["font"], "an open document, whose own file is read again"),
         ("file.saveExportProfile", &["folder", "settings"], "a subfolder of a later export's destination, never climbing out of it"),
         ("font.master.addFromOtherFont", &["sources", "font"], "an open document's position, title or path; no file is opened"),
+        ("font.overlayFonts", &["font"], "inside a `layers` item: an open document's position, title or path; no file is opened"),
         ("hint.ps.*", &["nodes", "node"], "[outline path index, node index] pairs"),
         ("path.replaceOutlinePattern", &["replacement"], "outline paths given inline"),
         ("font.setCrossAxisMappings", &["input", "output"], "axis locations by tag"),

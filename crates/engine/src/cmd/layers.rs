@@ -181,7 +181,7 @@ fn date_time(secs: i64) -> String {
 
 /// A new layer id, in the 8-4-4-4-12 hex form layer ids usually take, that `taken` refuses for
 /// none of the glyphs. It depends only on `seed`, so replaying a journal gives the same id.
-fn new_layer_id(seed: &str, taken: impl Fn(&str) -> bool) -> Option<String> {
+pub(super) fn new_layer_id(seed: &str, taken: impl Fn(&str) -> bool) -> Option<String> {
     fn fnv(basis: u64, text: &str) -> u64 {
         text.bytes().fold(basis, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01B3))
     }
