@@ -264,7 +264,7 @@ const NAME_PARAMS: [(&str, &str); 8] = [
 
 /// The font's parameters as version 2 holds them: [`params_with_axes`], then the properties
 /// version 2 keeps in parameters ([`NAME_PARAMS`]) where the font has no parameter of that name,
-/// and `Color Palettes` colours as version 2's `"r,g,b,a"` strings.
+/// and `Color Palettes` as version 2 holds it ([`crate::palettes::for_version`]).
 fn v2_params(font: &Font) -> Result<Params> {
     let mut params = params_with_axes(font)?.into_owned();
     for (name, property) in NAME_PARAMS {
@@ -274,17 +274,12 @@ fn v2_params(font: &Font) -> Result<Params> {
             params.0.push(Param::new(name, string(v)));
         }
     }
-    for p in params.0.iter_mut().filter(|p| p.name == "Color Palettes") {
-        if let Some(v) = palettes_v2(&p.value) {
-            p.value = v;
-        }
-    }
-    Ok(params)
+    Ok(crate::palettes::for_version(&params, 2).into_owned())
 }
 
 /// Palettes whose colours are lists of numbers, with each colour as a string of its numbers;
 /// `None` when any colour is in another form.
-fn palettes_v2(v: &Value) -> Option<Value> {
+pub(crate) fn palettes_v2(v: &Value) -> Option<Value> {
     let mut changed = false;
     let mut palettes = Vec::new();
     for palette in &v.as_array()?.items {
@@ -874,7 +869,7 @@ fn write_master(font: &Font, m: &Master) -> Result<Value> {
         zones.sort_by(|a, b| b.0.total_cmp(&a.0));
         e.push(("alignmentZones".into(), list(zones.into_iter().map(|(_, z)| z).collect())));
     }
-    crate::push_master_info(&mut e, m);
+    crate::push_master_info(&mut e, m, 2);
     Ok(Value::Dict(finish_ordered(e, &crate::without_key(&m.extra, "name", stale_name), MASTER_ORDER)))
 }
 

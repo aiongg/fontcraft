@@ -226,6 +226,20 @@ pub struct CpalPlan {
     pub color_names: Vec<Option<String>>,
 }
 
+impl CpalPlan {
+    /// Each palette's `CPAL` palette type: bit 0 for the `light` background style, bit 1 for
+    /// `dark`; 0 for a palette with neither.
+    pub fn palette_types(&self) -> Vec<u32> {
+        (0..self.palettes.palettes().len()).map(|i| self.info.get(i).map_or(0, |p| u32::from(p.light) | (u32::from(p.dark) << 1))).collect()
+    }
+
+    /// Whether `CPAL` is version 1: a palette has a background style or a name, or a colour has a
+    /// name.
+    pub fn labelled(&self) -> bool {
+        self.info.iter().any(|p| p.light || p.dark || p.name.is_some()) || self.color_names.iter().any(Option::is_some)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ColrVersion {
     #[default]

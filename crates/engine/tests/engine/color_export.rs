@@ -63,7 +63,11 @@ fn color_describe_export_reports_the_tables_layers_and_switches_of_each_instance
     assert_eq!(regular["colr"]["version"], json!(0));
     // Only the glyph with colour layers, its layers bottom first.
     assert_eq!(regular["colr"]["glyphs"], json!([{"glyph": "heart", "layers": ["back", "front"]}]));
-    assert_eq!(regular["cpal"], json!({"palettes": 2, "colors": 2}));
+    assert_eq!(
+        regular["cpal"],
+        json!({"palettes": 2, "colors": 2, "version": 0, "types": [0, 0], "labels": [null, null], "colorLabels": 0}),
+        "list-form palettes: CPAL version 0"
+    );
     assert_eq!(regular["switches"]["exportColrTable"], json!(true));
     assert_eq!(regular["sbix"], Value::Null);
     assert_eq!(regular["refused"], json!(false));
