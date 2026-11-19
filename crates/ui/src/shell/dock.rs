@@ -288,7 +288,7 @@ impl DockPanels<PanelId> for Panels<'_> {
         }
         match at {
             GroupAt::Show(rect) => {
-                canvas::show(ui, &mut self.canvas);
+                canvas::show(ui, &mut self.canvas, self.sent);
                 Some(rect.height())
             }
             // The protected document group never sits in a flyout, which is what measures.
@@ -300,10 +300,22 @@ impl DockPanels<PanelId> for Panels<'_> {
 /// Shows the dock and applies what the user did to it.
 pub fn show(ui: &mut Ui, app: &mut FontCraftApp) {
     let words = Env::of(ui).words::<PanelWords>();
-    let FontCraftApp { view, models, sent, status, .. } = app;
+    let FontCraftApp { view, models, sent, status, active_tool, .. } = app;
     let given = view.workspace.clone();
     let label = words.dock.clone();
-    let mut panels = Panels { models, canvas: canvas::CanvasProps { view: &mut view.canvas, tool: view.tool }, sent, words };
+    let mut panels = Panels {
+        models,
+        canvas: canvas::CanvasProps {
+            view: &mut view.canvas,
+            model: &models.canvas,
+            tokens: &models.canvas_tokens,
+            display: view.display,
+            edit_background: view.edit_background,
+            tool: active_tool.as_mut(),
+        },
+        sent,
+        words,
+    };
     let out = DockArea::new(label, Bind::given(given), &mut panels, DockConfig::default()).show(ui);
     let actions: Vec<_> = out.actions.into_iter().chain(out.requested).collect();
     if !actions.is_empty()

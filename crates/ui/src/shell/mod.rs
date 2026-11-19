@@ -6,6 +6,7 @@ pub mod bars;
 pub mod commands;
 pub mod dock;
 pub mod rail;
+pub mod view;
 pub mod window;
 
 use craft::menu::MenuBarUi;

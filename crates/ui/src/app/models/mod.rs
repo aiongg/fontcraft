@@ -3,6 +3,7 @@
 //! One file per area. Each file owns its model types and a `project` function; [`Models::project`] calls every
 //! one of them with a one-line arm, and only when the [`Stamp`] moved since the last call.
 
+pub mod canvas;
 pub mod glyph;
 
 use craft::ui::contract::Tracked;
@@ -17,6 +18,10 @@ pub struct Models {
     seen: Option<Stamp>,
     /// The shown glyph's width and sidebearings (`panels::glyph_metrics`).
     pub glyph_metrics: Tracked<glyph::GlyphMetrics>,
+    /// The edited glyph as the canvas draws it (`canvas`).
+    pub canvas: Tracked<canvas::CanvasModel>,
+    /// The canvas's colours and sizes, from the appearance settings.
+    pub canvas_tokens: crate::canvas::tokens::Tokens,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -26,19 +31,25 @@ pub struct ProjectCx<'a> {
     pub view: &'a ViewState,
 }
 
-/// When the models need projecting again: the open documents, the active one and its revision, and the view
-/// state's revision.
+/// When the models need projecting again: the open documents, the active one and its revision, the user settings'
+/// revision and the view state's revision.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Stamp {
     documents: usize,
     active: Option<(u64, u64)>,
+    settings: u64,
     view: u64,
 }
 
 impl Stamp {
     /// The stamp of `session` and the view state at `view_revision`.
     pub fn of(session: &Session, view_revision: u64) -> Stamp {
-        Stamp { documents: session.documents().len(), active: session.active().map(|d| (d.id, d.revision)), view: view_revision }
+        Stamp {
+            documents: session.documents().len(),
+            active: session.active().map(|d| (d.id, d.revision)),
+            settings: session.settings().revision(),
+            view: view_revision,
+        }
     }
 }
 
@@ -50,6 +61,8 @@ impl Models {
         }
         self.seen = Some(stamp);
         glyph::project(&mut self.glyph_metrics, cx);
+        canvas::project(&mut self.canvas, cx);
+        self.canvas_tokens = crate::canvas::tokens::Tokens::from_settings(cx.session.settings(), false);
         true
     }
 }

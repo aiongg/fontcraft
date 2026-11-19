@@ -256,12 +256,17 @@ id = "appearance.handleSize"
 label = "Handle size"
 kind = "choice"
 section = "Appearance"
-values = ""
+values = "small, regular, large"
 area = "drawing"
 milestone = "M14"
 summary = "Drawn size of on-curve nodes, off-curve handles and anchors; smaller is tidier, larger is easier to see and hit. The available steps are not listed in the source."
 ref = "Settings › Appearance"
 status = "handbook"
+notes = "Documented, not yet observed. The canvas scales node, handle, start-arrow, duplicate-ring, metric-highlight, Extra Node and anchor sizes by the step (`crates/ui/src/canvas/tokens.rs`)."
+guesses = [
+  "Three steps, small, regular and large, at 0.75, 1 and 1.5 times the regular sizes; the handbook lists no steps. Settled by opening the reference's Appearance settings and measuring a node at each step.",
+  "The appearance colour settings default to the canvas colours FontCraft drew before they existed, the same value for light and dark; the handbook states no defaults. Settled by reading the reference's colour wells after Standard.",
+]
 
 [[setting]]
 id = "appearance.displayMarkCloud"

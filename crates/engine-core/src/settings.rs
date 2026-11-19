@@ -54,6 +54,8 @@ pub enum Kind {
     },
     /// A string of at most [`MAX_TEXT_BYTES`].
     Text,
+    /// A colour as `#rrggbb` or `#rrggbbaa` (hexadecimal, alpha last).
+    Color,
 }
 
 impl Kind {
@@ -63,6 +65,7 @@ impl Kind {
             Kind::Choice(_) => "one of the listed choices",
             Kind::Number { .. } => "a number",
             Kind::Text => "text",
+            Kind::Color => "a colour as #rrggbb or #rrggbbaa",
         }
     }
 }
@@ -98,7 +101,22 @@ pub struct SettingDef {
 pub const SETTINGS: &[SettingDef] = &[
     SettingDef { id: "addons.alternatePluginRepos", kind: Kind::Text, default: DefaultValue::Text("") },
     SettingDef { id: "addons.useSystemConsoleForScriptOutput", kind: Kind::Bool, default: DefaultValue::Bool(false) },
+    SettingDef { id: "appearance.color.alignmentZones.dark", kind: Kind::Color, default: DefaultValue::Text("#9ab8dc38") },
+    SettingDef { id: "appearance.color.alignmentZones.light", kind: Kind::Color, default: DefaultValue::Text("#9ab8dc38") },
+    SettingDef { id: "appearance.color.backgroundStroke.dark", kind: Kind::Color, default: DefaultValue::Text("#e0404090") },
+    SettingDef { id: "appearance.color.backgroundStroke.light", kind: Kind::Color, default: DefaultValue::Text("#e0404090") },
+    SettingDef { id: "appearance.color.canvas.dark", kind: Kind::Color, default: DefaultValue::Text("#f4f4f4") },
+    SettingDef { id: "appearance.color.canvas.light", kind: Kind::Color, default: DefaultValue::Text("#f4f4f4") },
+    SettingDef { id: "appearance.color.cornerNodes.dark", kind: Kind::Color, default: DefaultValue::Text("#2d6cdf") },
+    SettingDef { id: "appearance.color.cornerNodes.light", kind: Kind::Color, default: DefaultValue::Text("#2d6cdf") },
+    SettingDef { id: "appearance.color.foregroundStroke.dark", kind: Kind::Color, default: DefaultValue::Text("#202020") },
+    SettingDef { id: "appearance.color.foregroundStroke.light", kind: Kind::Color, default: DefaultValue::Text("#202020") },
+    SettingDef { id: "appearance.color.otherLayersStroke.dark", kind: Kind::Color, default: DefaultValue::Text("#2d8cebb0") },
+    SettingDef { id: "appearance.color.otherLayersStroke.light", kind: Kind::Color, default: DefaultValue::Text("#2d8cebb0") },
+    SettingDef { id: "appearance.color.smoothNodes.dark", kind: Kind::Color, default: DefaultValue::Text("#2fa84f") },
+    SettingDef { id: "appearance.color.smoothNodes.light", kind: Kind::Color, default: DefaultValue::Text("#2fa84f") },
     SettingDef { id: "appearance.displayUnicodeValue", kind: Kind::Bool, default: DefaultValue::Bool(false) },
+    SettingDef { id: "appearance.handleSize", kind: Kind::Choice(&["small", "regular", "large"]), default: DefaultValue::Text("regular") },
     SettingDef { id: "editing.leverRatio", kind: Kind::Number { min: 1.0, max: 100.0 }, default: DefaultValue::Number(6.0) },
     SettingDef { id: "editing.powerNudge", kind: Kind::Bool, default: DefaultValue::Bool(false) },
     SettingDef { id: "export.ttfAutohintBinary", kind: Kind::Text, default: DefaultValue::Text("") },
@@ -240,6 +258,11 @@ fn check_size(id: &str, v: &Value) -> Result<(), SettingsError> {
     Ok(())
 }
 
+/// Whether `s` reads as `#rrggbb` or `#rrggbbaa`.
+fn is_color(s: &str) -> bool {
+    s.strip_prefix('#').is_some_and(|hex| (hex.len() == 6 || hex.len() == 8) && hex.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
 /// Checks a value against a live setting's kind.
 fn check_kind(def: &SettingDef, v: &Value) -> Result<(), SettingsError> {
     let bad = |expected: String| SettingsError::BadValue { id: def.id.to_string(), expected, got: kind_of(v).to_string() };
@@ -259,6 +282,7 @@ fn check_kind(def: &SettingDef, v: &Value) -> Result<(), SettingsError> {
         (Kind::Text, Value::String(s)) => {
             Err(SettingsError::TooLarge { what: format!("setting `{}`", def.id), size: s.len(), limit: MAX_TEXT_BYTES })
         }
+        (Kind::Color, Value::String(s)) if is_color(s) => Ok(()),
         (kind, _) => Err(bad(kind.name().to_string())),
     }
 }
@@ -464,6 +488,21 @@ mod tests {
         let mut back = back;
         back.set("appearance.displayUnicodeValue", Value::Null).unwrap();
         assert_eq!(back.get("appearance.displayUnicodeValue").unwrap(), json!(false));
+    }
+
+    #[test]
+    fn colour_and_handle_size_settings_check_their_values() {
+        let mut s = UserSettings::new();
+        assert_eq!(s.get("appearance.color.cornerNodes.light").unwrap(), json!("#2d6cdf"));
+        s.set("appearance.color.cornerNodes.light", json!("#FF000080")).unwrap();
+        assert_eq!(s.get("appearance.color.cornerNodes.light").unwrap(), json!("#FF000080"));
+        for bad in [json!("red"), json!("#12345"), json!("#gg0000"), json!(3)] {
+            let e = s.set("appearance.color.cornerNodes.dark", bad).unwrap_err().to_string();
+            assert!(e.contains("#rrggbb"), "{e}");
+        }
+        assert_eq!(s.get("appearance.handleSize").unwrap(), json!("regular"));
+        s.set("appearance.handleSize", json!("large")).unwrap();
+        assert!(s.set("appearance.handleSize", json!("huge")).is_err());
     }
 
     #[test]
