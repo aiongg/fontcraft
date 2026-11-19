@@ -71,7 +71,49 @@ fn set_glyph_key(f: &mut Font, glyph: &str, field: Field, text: &str) {
         Field::Width => &mut keys.width,
         Field::Top => &mut keys.top,
         Field::Bottom => &mut keys.bottom,
+        Field::VertWidth => &mut keys.vert_width,
+        Field::VertOrigin => &mut keys.vert_origin,
     } = Some(text.into());
+}
+
+/// The vertical width and origin take keys like the width: a glyph name, a constant or a
+/// calculation, no `|` and no `@`. A stale vertical-width key is found by the scan, and the
+/// metric with nothing stored is the master's ascender to descender.
+#[test]
+fn vertical_width_and_origin_keys_evaluate_and_scan() {
+    let mut f = font();
+    {
+        let mut g = f.glyph_mut("n").unwrap();
+        g.layers[0].info.vert_width = Some(900.0);
+        g.layers[0].info.vert_origin = Some(-20.0);
+    }
+    assert_eq!(eval(&f, "n", Field::VertWidth), Ok(900.0));
+    assert_eq!(eval(&f, "=n+100", Field::VertWidth), Ok(1000.0));
+    assert_eq!(eval(&f, "=n", Field::VertOrigin), Ok(-20.0));
+    assert_eq!(eval(&f, "=-30", Field::VertOrigin), Ok(-30.0));
+    assert!(matches!(eval(&f, "=n*100", Field::VertWidth), Err(EvalError::OutOfRange { .. })));
+    let exists = |n: &str| f.glyph(n).is_some();
+    for field in [Field::VertWidth, Field::VertOrigin] {
+        for text in ["=|n", "=|", "=n@10"] {
+            let e = parse_field(text, field, exists).unwrap_err();
+            assert!(matches!(e.kind, KeyErrorKind::NotInField { .. }), "{text} in {field:?}: {e}");
+        }
+    }
+    let o = f.glyph("o").unwrap();
+    let m = &f.masters[0];
+    let upm = f64::from(f.units_per_em);
+    let default = f.metric_pos(m, fontcraft_model::metric::ASCENDER, upm * 0.8) - f.metric_pos(m, fontcraft_model::metric::DESCENDER, -upm * 0.2);
+    assert_eq!(metric(&f, &o.layers[0], Field::VertWidth), Ok(Some(default)));
+    assert_eq!(metric(&f, &o.layers[0], Field::VertOrigin), Ok(Some(0.0)));
+    assert_ne!(default, 900.0, "the fixture's default must differ from n's vertical width");
+    set_glyph_key(&mut f, "o", Field::VertWidth, "n");
+    let all = scan(&f);
+    let found: Vec<&Finding> = all.iter().filter(|x| x.glyph == "o" && x.layer == "m01").collect();
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].field, Field::VertWidth);
+    assert_eq!(found[0].problem, Problem::OutOfSync { value: 900.0, actual: default });
+    f.glyph_mut("o").unwrap().layers[0].info.vert_width = Some(900.0);
+    assert!(scan(&f).iter().all(|x| !(x.glyph == "o" && x.layer == "m01")), "an updated vertical width is in sync");
 }
 
 #[test]

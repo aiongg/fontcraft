@@ -157,4 +157,5 @@ mod ufo_color_layers;
 mod ufo_images;
 mod undo_steps;
 mod url_scheme;
+mod vertical_metrics;
 mod woff2;

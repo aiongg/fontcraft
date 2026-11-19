@@ -8,7 +8,7 @@ use fontcraft_model::{Font, Glyph, Layer, MAX_COMPONENT_DEPTH, Shape};
 use crate::aligned::derived_field;
 use crate::keys::{Body, Key, KeyError, Op, Scope, parse_stored};
 use crate::measure::{at_height, bounds, metric_from, outline};
-use crate::{Field, MAX_CHAIN, SIDEBEARING_RANGE, WIDTH_RANGE, referenced_layer, round_half_up};
+use crate::{Field, MAX_CHAIN, referenced_layer, round_half_up};
 
 #[derive(Clone, Debug, PartialEq, thiserror::Error)]
 pub enum EvalError {
@@ -136,11 +136,11 @@ impl<'a> Ctx<'a> {
 
     /// A layer's current metric (`None`: a sidebearing of an empty layer).
     pub(crate) fn metric(&mut self, glyph: &Glyph, layer: &Layer, field: Field) -> Result<Option<f64>, EvalError> {
-        let b = if field == Field::Width {
+        let b = if field.is_sidebearing() {
+            self.bounds(glyph, layer)?
+        } else {
             self.read(glyph, layer);
             None
-        } else {
-            self.bounds(glyph, layer)?
         };
         Ok(metric_from(self.font, layer, field, b))
     }
@@ -188,7 +188,7 @@ impl<'a> Ctx<'a> {
             return Err(EvalError::NotFinite);
         }
         let value = round_half_up(raw);
-        let range = if field.is_sidebearing() { SIDEBEARING_RANGE } else { WIDTH_RANGE };
+        let range = field.range();
         if !range.contains(&value) {
             return Err(EvalError::OutOfRange { value, min: *range.start(), max: *range.end() });
         }

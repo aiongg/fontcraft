@@ -92,6 +92,7 @@ pub mod stroke;
 mod tokens;
 pub mod transform;
 mod transform_metrics;
+mod vertical_metrics;
 mod widths;
 pub(crate) use widths::color_layers_follow_master;
 // M12: whole-file tools and the audit services; file plumbing in `file_io`.
@@ -324,6 +325,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(glyph_set::specs());
         v.extend(path::specs());
         v.extend(spacing::specs());
+        v.extend(vertical_metrics::specs());
         v.extend(metrics_keys::specs());
         v.extend(transform_metrics::specs());
         v.extend(kerning::specs());

@@ -1,9 +1,11 @@
 //! Spacing: the five metric setters (a number or a metrics key, as typed into the Info box) and
-//! the twelve spacing shortcuts of the Text tool. Behaviour notes: `docs/spec/08-spacing-kerning.md`
+//! the twelve spacing shortcuts of the Text tool, which act on the top and bottom sidebearings in
+//! top-to-bottom text. The vertical width and origin setters (`cmd/vertical_metrics.rs`) share
+//! [`set_metric`]. Behaviour notes: `docs/spec/08-spacing-kerning.md`
 //! § 1 and § 2.
 
 use fontcraft_model::{Font, Glyph, Layer, MAX_COORDINATE, MetricsKeys, Shape, Transform};
-use fontcraft_spacing::{self as spacing, Entry, Field, SIDEBEARING_RANGE, Scope, WIDTH_RANGE};
+use fontcraft_spacing::{self as spacing, Entry, Field, Scope, WIDTH_RANGE};
 use serde_json::{Map, Value, json};
 
 use super::common::in_range;
@@ -17,10 +19,10 @@ const MAX_AMOUNT: f64 = 32_767.0;
 /// it takes `amount`.
 macro_rules! nudge_spec {
     ($id:literal, $label:literal, $sc:literal, $what:literal, true, $run:expr) => {
-        nudge_spec!(@spec $id, $label, $sc, $run, concat!("{glyphs: [names], layer?: layer id (default: the first master), amount?: units (default 1)} ", $what, ". Metrics keys stay and may then be out of sync; glyphs aligned automatically on that layer are skipped, as alignment sets their metrics; a master that takes its metrics from another is refused → {glyphs: [names moved], layer, widths: {glyph: width}, skipped: [names]}"))
+        nudge_spec!(@spec $id, $label, $sc, $run, concat!("{glyphs: [names], layer?: layer id (default: the first master), amount?: units (default 1), vertical?: bool (default false)} ", $what, ". Metrics keys stay and may then be out of sync; glyphs aligned automatically on that layer are skipped, as alignment sets their metrics; a master that takes its metrics from another is refused. With `vertical: true` (top-to-bottom text) the left-sidebearing shortcuts act on the top sidebearing, the right-sidebearing ones on the bottom sidebearing, and the shifts move the outline up (left) or down (right) inside the vertical width by moving the vertical origin; the horizontal metrics stay and automatic alignment does not apply → {glyphs: [names moved], layer, widths: {glyph: width}, verticalWidths?: {glyph: vertical width} (with `vertical`), skipped: [names]}"))
     };
     ($id:literal, $label:literal, $sc:literal, $what:literal, false, $run:expr) => {
-        nudge_spec!(@spec $id, $label, $sc, $run, concat!("{glyphs: [names], layer?: layer id (default: the first master)} ", $what, ". Metrics keys stay and may then be out of sync; glyphs aligned automatically on that layer are skipped, as alignment sets their metrics; a master that takes its metrics from another is refused → {glyphs: [names moved], layer, widths: {glyph: width}, skipped: [names]}"))
+        nudge_spec!(@spec $id, $label, $sc, $run, concat!("{glyphs: [names], layer?: layer id (default: the first master), vertical?: bool (default false)} ", $what, ". Metrics keys stay and may then be out of sync; glyphs aligned automatically on that layer are skipped, as alignment sets their metrics; a master that takes its metrics from another is refused. With `vertical: true` (top-to-bottom text) the left-sidebearing shortcuts act on the top sidebearing, the right-sidebearing ones on the bottom sidebearing, and the shifts move the outline up (left) or down (right) inside the vertical width by moving the vertical origin; the horizontal metrics stay and automatic alignment does not apply → {glyphs: [names moved], layer, widths: {glyph: width}, verticalWidths?: {glyph: vertical width} (with `vertical`), skipped: [names]}"))
     };
     (@spec $id:literal, $label:literal, $sc:literal, $run:expr, $params:expr) => {
         CommandSpec {
@@ -141,7 +143,7 @@ fn set_bottom(s: &mut Session, v: &Value) -> Result<Value> {
     set_metric(s, v, "spacing.setBottomSidebearing", "Set Bottom Sidebearing", Field::Bottom)
 }
 
-fn set_metric(s: &mut Session, v: &Value, id: &'static str, label: &str, field: Field) -> Result<Value> {
+pub(crate) fn set_metric(s: &mut Session, v: &Value, id: &'static str, label: &str, field: Field) -> Result<Value> {
     let p = Params::new(id, v)?;
     let font = s.font()?;
     let names = glyph_names(&p, font)?;
@@ -192,7 +194,8 @@ fn set_metric(s: &mut Session, v: &Value, id: &'static str, label: &str, field: 
             };
             let vertical = match field {
                 Field::Top | Field::Bottom => vertical_width(font, l).map_err(|e| p.bad(format!("glyph `{name}`: {e}")))?,
-                Field::Left | Field::Right | Field::Width => None,
+                Field::VertWidth => Some(current),
+                Field::Left | Field::Right | Field::Width | Field::VertOrigin => None,
             };
             let shown = spacing::effective_key(glyph, l, field).map(|(scope, _)| scope);
             let mut gm = font.glyph_mut(name)?;
@@ -238,7 +241,7 @@ fn set_offset(p: &Params, font: &mut Font, name: &str, layer: &str, field: Field
     let what = match field {
         Field::Left => "left sidebearing",
         Field::Right => "right sidebearing",
-        Field::Width | Field::Top | Field::Bottom => "width",
+        Field::Width | Field::Top | Field::Bottom | Field::VertWidth | Field::VertOrigin => "width",
     };
     let key = match entry {
         Entry::Key(k) if spacing::is_offset(k, field) => k,
@@ -273,7 +276,7 @@ fn set_offset(p: &Params, font: &mut Font, name: &str, layer: &str, field: Field
     Ok(derived.and_then(|d| match field {
         Field::Left => d.lsb,
         Field::Right => d.rsb,
-        Field::Width | Field::Top | Field::Bottom => Some(d.width),
+        Field::Width | Field::Top | Field::Bottom | Field::VertWidth | Field::VertOrigin => Some(d.width),
     }))
 }
 
@@ -295,7 +298,7 @@ fn beam_height(p: &Params, field: Field, entry: &Entry) -> Result<Option<f64>> {
 
 /// A typed number must lie in the field's range.
 fn check_value(p: &Params, field: Field, n: f64) -> Result<()> {
-    let range = if field == Field::Width { WIDTH_RANGE } else { SIDEBEARING_RANGE };
+    let range = field.range();
     if range.contains(&n) { Ok(()) } else { Err(p.bad(format!("`value` must be between {} and {}, got {n}", range.start(), range.end()))) }
 }
 
@@ -310,8 +313,9 @@ fn vertical_width(font: &Font, layer: &Layer) -> std::result::Result<Option<f64>
 
 /// Changes one metric of `layer` by `delta`. A left sidebearing moves the contents and the width
 /// with them; a right one moves the width; a top one moves the vertical origin up and lengthens
-/// the vertical width; a bottom one lengthens the vertical width. `vertical` is the current
-/// vertical width (needed for top and bottom).
+/// the vertical width; a bottom one or the vertical width itself lengthens the vertical width;
+/// the vertical origin moves the vertical box and keeps its height. `vertical` is the current
+/// vertical width (needed for top, bottom and the vertical width).
 fn apply(layer: &mut Layer, field: Field, delta: f64, vertical: Option<f64>) -> std::result::Result<(), String> {
     if delta == 0.0 {
         return Ok(());
@@ -322,22 +326,27 @@ fn apply(layer: &mut Layer, field: Field, delta: f64, vertical: Option<f64>) -> 
             set_layer_width(layer, layer.width + delta)
         }
         Field::Right | Field::Width => set_layer_width(layer, layer.width + delta),
-        Field::Top | Field::Bottom => {
+        Field::VertOrigin => set_vert_origin(layer, layer.info.vert_origin.unwrap_or(0.0) + delta),
+        Field::Top | Field::Bottom | Field::VertWidth => {
             let vw = vertical.ok_or("the layer is empty, so it has no vertical sidebearings")? + delta;
             if !WIDTH_RANGE.contains(&vw) {
                 return Err(format!("the vertical width would be {vw}, outside {} to {}", WIDTH_RANGE.start(), WIDTH_RANGE.end()));
             }
             if field == Field::Top {
-                let origin = layer.info.vert_origin.unwrap_or(0.0) - delta;
-                if !in_range(origin) {
-                    return Err(format!("the vertical origin would be {origin}, beyond ±{MAX_COORDINATE}"));
-                }
-                layer.info.vert_origin = Some(origin);
+                set_vert_origin(layer, layer.info.vert_origin.unwrap_or(0.0) - delta)?;
             }
             layer.info.vert_width = Some(vw);
             Ok(())
         }
     }
+}
+
+fn set_vert_origin(layer: &mut Layer, origin: f64) -> std::result::Result<(), String> {
+    if !in_range(origin) {
+        return Err(format!("the vertical origin would be {origin}, beyond ±{MAX_COORDINATE}"));
+    }
+    layer.info.vert_origin = Some(origin);
+    Ok(())
 }
 
 fn set_layer_width(layer: &mut Layer, width: f64) -> std::result::Result<(), String> {
@@ -356,6 +365,8 @@ fn slot(keys: &mut MetricsKeys, field: Field) -> &mut Option<String> {
         Field::Width => &mut keys.width,
         Field::Top => &mut keys.top,
         Field::Bottom => &mut keys.bottom,
+        Field::VertWidth => &mut keys.vert_width,
+        Field::VertOrigin => &mut keys.vert_origin,
     }
 }
 
@@ -432,11 +443,30 @@ fn nudge(s: &mut Session, v: &Value, id: &'static str, label: &str, edge: Nudge,
         return Err(p.bad(format!("`amount` must be between -{MAX_AMOUNT} and {MAX_AMOUNT}, got {amount}")));
     }
     let d = sign * amount;
+    let vertical = p.bool_or("vertical", false)?;
     let mut widths = Map::new();
+    let mut vertical_widths = Map::new();
     let mut moved_glyphs = Vec::new();
     let mut skipped = Vec::new();
     s.edit(label, |font| {
         for name in &names {
+            if vertical {
+                let (_, l) = find_layer(&p, font, name, &layer)?;
+                let height = spacing::metric(font, l, Field::VertWidth).map_err(|e| p.bad(format!("glyph `{name}`: {e}")))?;
+                let mut g = font.glyph_mut(name)?;
+                let l = g.layers.iter_mut().find(|l| l.id == layer).ok_or_else(|| p.bad(format!("glyph `{name}` has no layer `{layer}`")))?;
+                let moved = match edge {
+                    Nudge::Left => apply(l, Field::Top, d, height),
+                    Nudge::Right => apply(l, Field::Bottom, d, height),
+                    // Moving the box up moves the outline down inside it.
+                    Nudge::Shift => apply(l, Field::VertOrigin, -d, height),
+                };
+                moved.map_err(|e| p.bad(format!("glyph `{name}`: {e}")))?;
+                widths.insert(name.clone(), json!(l.width));
+                vertical_widths.insert(name.clone(), json!(l.info.vert_width.or(height)));
+                moved_glyphs.push(name.clone());
+                continue;
+            }
             // Alignment would put the components and the width back at once.
             if font.glyph(name).and_then(|g| g.layers.iter().find(|l| l.id == layer)).is_some_and(|l| spacing::derives_metrics(font, l)) {
                 skipped.push(name.clone());
@@ -455,7 +485,11 @@ fn nudge(s: &mut Session, v: &Value, id: &'static str, label: &str, edge: Nudge,
         }
         Ok(())
     })?;
-    Ok(json!({ "glyphs": moved_glyphs, "layer": layer, "widths": widths, "skipped": skipped }))
+    let mut out = json!({ "glyphs": moved_glyphs, "layer": layer, "widths": widths, "skipped": skipped });
+    if let (true, Some(o)) = (vertical, out.as_object_mut()) {
+        o.insert("verticalWidths".into(), Value::Object(vertical_widths));
+    }
+    Ok(out)
 }
 
 // ── Shared ─────────────────────────────────────────────────────────────────────────────────────

@@ -5,7 +5,8 @@
 //! value the way the setters do: a left sidebearing moves everything drawn in the layer
 //! (`spacing::shift_layer`) and keeps the right sidebearing; a right sidebearing or a width
 //! moves the right edge; a top sidebearing moves the vertical origin and keeps the bottom one; a
-//! bottom sidebearing changes the vertical width.
+//! bottom sidebearing or a vertical width changes the vertical width; a vertical origin moves the
+//! vertical box and keeps its height.
 
 use std::collections::HashSet;
 
@@ -27,7 +28,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Update Metrics Key",
             [],
             None,
-            "{glyph: name, layer?: id (default: the first master's layer), field: \"left\" | \"right\" | \"width\" | \"top\" | \"bottom\"} set that metric of the layer to the value of the metrics key that applies to it (the layer's own key, else the glyph's). Refused when the field has no key, the key cannot be evaluated, the layer is empty (for a sidebearing), the glyph is locked, or the layer's master takes its metrics from another master. A metric already in sync is left as it is → {glyph, layer, field, value, previous, changed: bool}",
+            "{glyph: name, layer?: id (default: the first master's layer), field: \"left\" | \"right\" | \"width\" | \"top\" | \"bottom\" | \"vertWidth\" | \"vertOrigin\"} set that metric of the layer to the value of the metrics key that applies to it (the layer's own key, else the glyph's). Refused when the field has no key, the key cannot be evaluated, the layer is empty (for a sidebearing), the glyph is locked, or the layer's master takes its metrics from another master. A metric already in sync is left as it is → {glyph, layer, field, value, previous, changed: bool}",
             has_doc,
             update_metrics_key
         )
@@ -57,7 +58,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Get Metrics",
             [],
             None,
-            "{glyph: name, layer?: id (default: the first master's layer)} the layer's width and sidebearings (null for a sidebearing of an empty layer), and for each field the metrics key that applies, where it is stored, its value and whether the metric matches it → {glyph, layer, master, linkedTo: master id | null, width, left, right, top, bottom, keys: {left|right|width|top|bottom: {key (as a field shows it, `==` for a layer's own key), scope: \"glyph\" | \"local\", value: number | null, inSync: bool | null, error: string | null} | null}, derived: [fields that automatic alignment sets on this layer, shown greyed: width, left, right]}",
+            "{glyph: name, layer?: id (default: the first master's layer)} the layer's width and sidebearings (null for a sidebearing of an empty layer), and for each field the metrics key that applies, where it is stored, its value and whether the metric matches it → {glyph, layer, master, linkedTo: master id | null, width, left, right, top, bottom, vertWidth, vertOrigin (the stored values, else the ascender to descender and 0), keys: {left|right|width|top|bottom|vertWidth|vertOrigin: {key (as a field shows it, `==` for a layer's own key), scope: \"glyph\" | \"local\", value: number | null, inSync: bool | null, error: string | null} | null}, derived: [fields that automatic alignment sets on this layer, shown greyed: width, left, right]}",
             has_doc,
             get_metrics
         )
@@ -67,7 +68,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Evaluate Metrics Key",
             [],
             None,
-            "{key: string (a number, a glyph name, `=…` or `==…`; at most 256 bytes), glyph: name, layer?: id (default: the first master's layer), field: \"left\" | \"right\" | \"width\" | \"top\" | \"bottom\"} the value the text gives in that field of the layer, rounded half up for a key, without changing anything. A key that cannot be read names the byte where reading stopped → {value, key: text as a field shows it | null (a plain number), scope: \"glyph\" | \"local\" | null}",
+            "{key: string (a number, a glyph name, `=…` or `==…`; at most 256 bytes), glyph: name, layer?: id (default: the first master's layer), field: \"left\" | \"right\" | \"width\" | \"top\" | \"bottom\" | \"vertWidth\" | \"vertOrigin\"} the value the text gives in that field of the layer, rounded half up for a key, without changing anything. A key that cannot be read names the byte where reading stopped → {value, key: text as a field shows it | null (a plain number), scope: \"glyph\" | \"local\" | null}",
             has_doc,
             evaluate_metrics_key
         )
@@ -88,7 +89,9 @@ pub fn specs() -> Vec<CommandSpec> {
 
 fn field(p: &Params) -> Result<Field> {
     let name = p.str("field")?;
-    Field::from_name(name).ok_or_else(|| p.bad(format!("`field` must be \"left\", \"right\", \"width\", \"top\" or \"bottom\", got \"{name}\"")))
+    Field::from_name(name).ok_or_else(|| {
+        p.bad(format!("`field` must be \"left\", \"right\", \"width\", \"top\", \"bottom\", \"vertWidth\" or \"vertOrigin\", got \"{name}\""))
+    })
 }
 
 /// `glyph` and `layer?`, checked against `font`.
@@ -137,6 +140,8 @@ enum Change {
         origin: Option<f64>,
         width: f64,
     },
+    /// The vertical origin alone: the vertical box moves and keeps its height.
+    Origin(f64),
 }
 
 /// How to bring `field` of `layer` from `actual` to `value`.
@@ -169,6 +174,13 @@ fn plan(font: &Font, layer: &Layer, field: Field, value: f64, actual: f64) -> st
             };
             Ok(Change::Vertical { origin, width: vertical })
         }
+        Field::VertWidth => {
+            if !WIDTH_RANGE.contains(&value) {
+                return Err(format!("the vertical width would be {value}, outside 0 to 65535"));
+            }
+            Ok(Change::Vertical { origin: layer.info.vert_origin, width: value })
+        }
+        Field::VertOrigin => Ok(Change::Origin(value)),
     }
 }
 
@@ -185,6 +197,7 @@ fn apply(layer: &mut Layer, change: &Change) -> std::result::Result<(), String> 
             }
             layer.info.vert_width = Some(width);
         }
+        Change::Origin(origin) => layer.info.vert_origin = Some(origin),
     }
     Ok(())
 }

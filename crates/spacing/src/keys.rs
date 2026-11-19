@@ -9,8 +9,9 @@
 //!         | "|"                               ; own opposite side  =|
 //!         | ["|"] name [op unsigned]          ; reference          =|n*0.5
 //! ```
-//! One operation at most; `@` comes last, after the operation (`=H+8@200`). The width field takes
-//! no `|` and no `@`; the top and bottom fields take no `@`. In a `=` key a name ends at `+`, `*`,
+//! One operation at most; `@` comes last, after the operation (`=H+8@200`). The width, vertical
+//! width and vertical origin fields take no `|` and no `@`; the top and bottom fields take no
+//! `@`. In a `=` key a name ends at `+`, `*`,
 //! `/`, `@`, `|`, `=` or a parenthesis; a `-` may belong to the name or be the operator, and the
 //! longest leading part that names a glyph of the font decides. When no part names a glyph, the
 //! shortest reading that leaves a valid rest is taken (`=n-20` with no `n`: glyph `n`, minus 20).
@@ -193,7 +194,7 @@ fn parse_at(c: &Compact, start: usize, scope: Scope, field: Field, exists: &dyn 
 
 fn check_field(c: &Compact, key: &Key, field: Field) -> Result<(), KeyError> {
     let mirror = matches!(key.body, Body::SelfMirror | Body::Name { mirrored: true, .. });
-    let what = if field == Field::Width && mirror {
+    let what = if !field.is_sidebearing() && mirror {
         Some("`|`")
     } else if key.at.is_some() && !matches!(field, Field::Left | Field::Right) {
         Some("`@`")
