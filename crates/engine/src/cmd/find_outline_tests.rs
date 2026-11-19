@@ -231,3 +231,42 @@ fn bad_requests_change_nothing() {
     assert!(e.contains("within"), "{e}");
     assert!(s.font().unwrap().same_as(&before));
 }
+
+/// PostScript hints count paths, not shapes: with a component before the paths and a square
+/// replaced by two paths, a stem hint on the path after it follows that path to its new path
+/// index, and the hint on the square has its ends turned into numbers.
+#[test]
+fn replace_outline_keeps_stem_hints_on_their_paths_past_a_component() {
+    use fontcraft_hinting::{Edge, NodeRef, PsHint, ps_hints, set_ps_hints};
+    use fontcraft_model::Component;
+    let mut s = Session::with_document();
+    add(&mut s, "a", rect(0.0, 0.0, 40.0, 40.0));
+    add(&mut s, "i", rect(300.0, 600.0, 340.0, 640.0));
+    add(&mut s, "i", rect(0.0, 100.0, 40.0, 500.0));
+    let node = |path, n| Edge::Node(NodeRef::new(path, n));
+    s.edit("component and stems", |f| {
+        let mut g = f.glyph_mut("i")?;
+        let l = &mut g.layers[0];
+        l.shapes.insert(0, Shape::Component(Component::new("a", 0.0, 0.0)));
+        set_ps_hints(l, &[PsHint::stem(false, node(0, 0), node(0, 1)), PsHint::stem(false, node(1, 0), node(1, 1))]).unwrap();
+        Ok(())
+    })
+    .unwrap();
+    let before = s.font().unwrap().glyph("i").unwrap().layers[0].clone();
+    let square = ps_hints(&before).unwrap()[0].1.edges(&before).unwrap();
+    let stem = ps_hints(&before).unwrap()[1].1.edges(&before).unwrap();
+
+    let two = json!([{"nodes": rect(0.0, 0.0, 10.0, 10.0)}, {"nodes": rect(20.0, 0.0, 30.0, 10.0)}]);
+    let r = run(&mut s, REPLACE, json!({"patternGlyph": "a", "replacement": two, "glyph": "i"}));
+    assert_eq!(r["replaced"], 1, "{r}");
+    let l = &s.font().unwrap().glyph("i").unwrap().layers[0];
+    assert_eq!(paths(&s, "i").len(), 3, "{:?}", l.shapes);
+    let ps = ps_hints(l).unwrap();
+    assert_eq!(ps.len(), 2, "both stems are kept: {:?}", l.info.hints);
+    let linked = ps.iter().find(|(_, h)| matches!(h.origin, Edge::Node(_))).map(|(_, h)| h).unwrap();
+    assert_eq!((linked.origin, linked.other), (node(2, 0), Some(node(2, 1))), "the stem's path is path 2 now");
+    assert_eq!(linked.edges(l).unwrap(), stem);
+    let unlinked = ps.iter().find(|(_, h)| matches!(h.origin, Edge::Value(_))).map(|(_, h)| h).unwrap();
+    assert_eq!(unlinked.edges(l).unwrap(), square, "the square's stem keeps its place as numbers");
+    assert_eq!(r["hintUpkeep"]["unlinked"], json!(2), "{r}");
+}
