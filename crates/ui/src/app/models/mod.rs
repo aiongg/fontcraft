@@ -18,6 +18,7 @@ pub mod kerning_review;
 pub mod kerning_window;
 pub mod layers;
 pub mod palette;
+pub mod preview;
 pub mod sidebar;
 pub mod text;
 
@@ -75,6 +76,9 @@ pub struct Models {
     /// stamp, since they read the canvas's selection.
     pub palette: palette::PaletteModels,
     pub text: Tracked<text::TextModel>,
+    /// The Preview Area's and the Preview Panel's lines (`panels::preview`).
+    pub preview_area: Tracked<preview::PreviewModel>,
+    pub preview_panel: Tracked<preview::PreviewModel>,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -132,6 +136,7 @@ impl Models {
         glyph_props::project_inspector(&mut self.inspector, cx);
         glyph_props::project_selection_info(&mut self.selection_info, cx);
         text::project(&mut self.text, cx);
+        preview::project_both(&mut self.preview_area, &mut self.preview_panel, cx);
         true
     }
 }

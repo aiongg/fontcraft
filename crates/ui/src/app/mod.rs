@@ -76,6 +76,8 @@ pub struct ViewState {
     pub palette: crate::shell::palette::PaletteView,
     /// The edit view's text, its cursor and layout options (`canvas::text`).
     pub text: crate::canvas::text::EditText,
+    /// The Preview Area's and the Preview Panel's settings (`shell::preview`).
+    pub preview: crate::shell::preview::PreviewState,
 }
 
 impl Default for ViewState {
@@ -99,6 +101,7 @@ impl Default for ViewState {
             kerning: Default::default(),
             palette: Default::default(),
             text: Default::default(),
+            preview: Default::default(),
         }
     }
 }

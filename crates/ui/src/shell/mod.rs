@@ -16,6 +16,7 @@ pub mod kerning_window;
 pub mod masters;
 pub mod palette;
 pub mod params;
+pub mod preview;
 pub mod rail;
 pub mod reference_font;
 pub mod selection;
