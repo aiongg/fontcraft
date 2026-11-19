@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2986 guesses on 1575 rows (636 of them live commands).**
+**2989 guesses on 1576 rows (637 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -200,7 +200,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `path.clearBackground` | M3 | handbook | yes | Clear Background is its own Path menu item and acts on the active layer of the targeted glyphs, image included (03b question 2). |
 | `path.assignBackground` | M3 | handbook | yes | Glyphs are matched by name and masters by name, then by position; a source with fewer masters gives its first (03b question 3). |
 | `editView.toggleTextMode` | M5 | handbook | yes | Leaving text mode makes the Select tool active, and returning puts the text cursor before the glyph that was edited (at the end of the text, when the last glyph was edited, the cursor stays at the end); no source names either, and the toolbar after Escape, in the running app or a video, settles it. |
+| `editView.toggleTextMode` | M5 | handbook | yes | The edit view keeps one text rather than one per tab, so the `tab` parameter is not used, and the text is read through the control channel's ui.inspect key `editText` rather than an editView.getText command. |
+| `editView.toggleTextMode` | M5 | handbook | yes | Escape is handled by the tools' key handling while the edit view has focus, not as a global shortcut, so it does not reach other panels or dialogs. |
 | `editView.insertText` | M5 | handbook | yes | A `/name` escape ends at the next slash, space or line break, and one space after it is consumed; the corpus files show the escape but not how it ends. |
+| `editView.getText` | M5 | inferred | yes | The edit view keeps one text rather than one per tab, so the `tab` parameter is not used, and the text is read through the control channel's ui.inspect key `editText` rather than an editView.getText command. |
 | `editView.setCursor` | M5 | inferred | yes | Shift+click extends the selection to the click, keeping the end of the selection away from it; the reference app settles it. |
 | `editView.setCursor` | M5 | inferred | yes | A double-click on a glyph in text mode also makes the Select tool active; the reference app settles it. |
 | `edit.find` | M5 | handbook | yes | The pop-up opens with an empty search field each time; whether the reference keeps the last query would settle it. |

@@ -966,6 +966,8 @@ status = "handbook"
 notes = "Documented, not yet observed: Escape switches between entering text and editing the current glyph, the glyph after the cursor (spacing.currentGlyphFollowsCursor). The mode is tab state (`Tab::text_mode`) and goes with the Text tool. Outside text mode Escape first cancels a gesture in progress; with none, it enters text mode."
 guesses = [
   "Leaving text mode makes the Select tool active, and returning puts the text cursor before the glyph that was edited (at the end of the text, when the last glyph was edited, the cursor stays at the end); no source names either, and the toolbar after Escape, in the running app or a video, settles it.",
+  "The edit view keeps one text rather than one per tab, so the `tab` parameter is not used, and the text is read through the control channel's ui.inspect key `editText` rather than an editView.getText command.",
+  "Escape is handled by the tools' key handling while the edit view has focus, not as a global shortcut, so it does not reach other panels or dialogs.",
 ]
 
 [[command]]
@@ -1013,6 +1015,9 @@ summary = "Query returning the tab's string as a glyph name list with placeholde
 ref = "Edit View › Entering Text › Text Tool"
 status = "inferred"
 notes = "The tab text is view state that the shell holds, as the tab glyph list has been since M3, so this is a shell command (docs/plans/M5.md § 3). Items are glyph names, `{placeholder: true}`, `{lineBreak: true}` and `{missing: char}`; the reply also gives the display string, the selection, the text mode and the kerning mode. Every text command answers with this reply."
+guesses = [
+  "The edit view keeps one text rather than one per tab, so the `tab` parameter is not used, and the text is read through the control channel's ui.inspect key `editText` rather than an editView.getText command.",
+]
 own = true
 
 [[command]]

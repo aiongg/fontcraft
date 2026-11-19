@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1474 rows to check: 2516 guesses and 593 observe steps.**
+**1474 rows to check: 2518 guesses and 593 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -418,6 +418,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Vertical text previews on a horizontal line, and right-to-left text from the right; the reference app with a vertical tab settles it.
 - [ ] `editView.toggleTextMode` (M5, handbook, live): Toggle Text Mode
   - Guess: Leaving text mode makes the Select tool active, and returning puts the text cursor before the glyph that was edited (at the end of the text, when the last glyph was edited, the cursor stays at the end); no source names either, and the toolbar after Escape, in the running app or a video, settles it.
+  - Guess: The edit view keeps one text rather than one per tab, so the `tab` parameter is not used, and the text is read through the control channel's ui.inspect key `editText` rather than an editView.getText command.
+  - Guess: Escape is handled by the tools' key handling while the edit view has focus, not as a global shortcut, so it does not reach other panels or dialogs.
 - [ ] `editView.insertText` (M5, handbook, live): Insert Text
   - Guess: A `/name` escape ends at the next slash, space or line break, and one space after it is consumed; the corpus files show the escape but not how it ends.
 - [ ] `edit.find` (M5, handbook, live): Find…
