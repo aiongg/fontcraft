@@ -7,6 +7,7 @@
 
 pub mod catalog;
 pub mod files;
+pub mod font_view;
 pub mod models;
 mod msg;
 
@@ -46,6 +47,8 @@ pub struct ViewState {
     pub workspace: Workspace<PanelId>,
     /// The document canvas's view.
     pub canvas: CanvasView,
+    /// Font View's mode, sort, columns, search and glyph selection.
+    pub font_view: font_view::FontViewState,
 }
 
 impl Default for ViewState {
@@ -56,6 +59,7 @@ impl Default for ViewState {
             glyph: None,
             workspace: dock::default_workspace(),
             canvas: CanvasView::new(egui::Rect::NOTHING, Point::ZERO, 1.0),
+            font_view: font_view::FontViewState::default(),
         }
     }
 }
@@ -149,6 +153,8 @@ impl FontCraftApp {
     /// leaves its message in the status line.
     pub fn drain(&mut self) {
         let mut failed = Vec::new();
+        let mut notices = Vec::new();
+        let mut ran = false;
         for command in self.picks.poll(&self.host, &mut failed) {
             self.sent.push(Msg::Run(command));
         }
@@ -159,11 +165,17 @@ impl FontCraftApp {
                         continue;
                     }
                     let params = if command.params.is_null() { json!({}) } else { command.params.clone() };
-                    if let Err(error) = self.session.execute(&command.id, &params) {
-                        failed.push(format!("{}: {error}", command.id));
+                    match self.session.execute(&command.id, &params) {
+                        Ok(reply) => {
+                            ran = true;
+                            notices.extend(self.after_command(&command, &reply));
+                        }
+                        Err(error) => failed.push(format!("{}: {error}", command.id)),
                     }
                 }
                 Msg::Shell(command) => {
+                    // Shell commands change view state, which the projection reads.
+                    self.view_revision += 1;
                     if let Err(error) = crate::shell::commands::run(self, &command) {
                         failed.push(format!("{}: {error}", command.id));
                     }
@@ -171,7 +183,10 @@ impl FontCraftApp {
                 Msg::View(view) => self.apply_view(view),
             }
         }
-        if let Some(last) = failed.pop() {
+        if ran {
+            self.prune_font_view_selection();
+        }
+        if let Some(last) = failed.pop().or_else(|| notices.pop()) {
             self.status = last;
         }
         if self.closing == Closing::SaveThenClose {
@@ -234,7 +249,8 @@ impl ShellApp for FontCraftApp {
         for fired in output.fired {
             // A held tool key fires again on release; the tool stays.
             if fired.phase != FirePhase::Release {
-                self.sent.push(FontCraftApp::route(fired.command));
+                let command = self.with_font_view_targets(fired.command);
+                self.sent.push(FontCraftApp::route(command));
             }
         }
     }
