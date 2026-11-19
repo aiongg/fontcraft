@@ -13,6 +13,7 @@ pub mod after;
 pub mod audit_profile;
 pub mod changed_on_disk;
 pub mod color_palettes;
+mod component_name;
 pub mod custom_parameter_picker;
 pub mod export;
 pub mod feature_picker;
@@ -21,6 +22,7 @@ pub mod fields;
 mod filters;
 pub mod font_data;
 pub mod form;
+pub mod glyph_picker;
 mod glyph_set;
 mod guide_properties;
 mod host;
@@ -36,6 +38,7 @@ pub mod rule_tree;
 pub mod settings;
 pub mod shape_order;
 pub mod sidebar_filters;
+pub mod smart_settings;
 pub mod spec;
 pub mod start_window;
 pub mod tt;
@@ -69,11 +72,25 @@ pub const MODULES: &[Module] = &[
     review_hints::run,
     actions::run_dialog,
     audit_profile::run,
+    glyph_picker::run_dialog,
+    smart_settings::run,
 ];
 
 /// Every package's dialog specs, one line each.
-pub const SPECS: &[&[DialogSpec]] =
-    &[filters::SPECS, glyph_set::SPECS, export::SPECS, import::SPECS, font_data::SPECS, shape_order::SPECS, path::SPECS, guide_properties::SPECS, color_palettes::SPECS, master_color::SPECS, sidebar_filters::SPECS];
+pub const SPECS: &[&[DialogSpec]] = &[
+    filters::SPECS,
+    glyph_set::SPECS,
+    export::SPECS,
+    import::SPECS,
+    font_data::SPECS,
+    shape_order::SPECS,
+    path::SPECS,
+    guide_properties::SPECS,
+    color_palettes::SPECS,
+    master_color::SPECS,
+    sidebar_filters::SPECS,
+    component_name::SPECS,
+];
 
 /// Runs every dialog module for this pass.
 pub fn run(host: &mut DialogHost, app: &mut FontCraftApp) {

@@ -9,7 +9,6 @@ use std::collections::HashSet;
 use craft::ui::contract::{PlainData, Tracked};
 use fontcraft_engine::cmd::stroke::{format_version, layer_outline, mask_mode, shapes_outline, stroke_style};
 use fontcraft_engine::components::align::{AlignMode, component_alignment};
-use fontcraft_engine::model::corner::{CornerTarget, corner_hint, is_corner};
 use fontcraft_engine::model::glyphdata::GlyphData;
 use fontcraft_engine::model::{Font, Glyph, Layer, LayerSide, Master, MetricDef, Shape, metric};
 use fontcraft_engine::pathops::geometry_helpers::segment_crossings;
@@ -67,8 +66,9 @@ pub struct EditedGlyph {
     pub other_layers: Vec<BezPath>,
     /// Where paths of the edited side cross: Extra Nodes.
     pub extra_nodes: Vec<[f64; 2]>,
-    /// The nodes that carry a corner component.
-    pub corners: Vec<[f64; 2]>,
+    /// The highlight bands of the corner and cap components: the parts of their host paths that fitting them put in.
+    #[plain_data(assume = "kurbo paths: owned points")]
+    pub attachments: Vec<BezPath>,
     /// The colour (RGBA from 0 to 1) of the status the glyph is in: its stored status, else the font's default.
     pub status: Option<[f64; 4]>,
 }
@@ -156,7 +156,7 @@ pub fn edited_glyph(font: &Font, data: Option<&GlyphData>, glyph: &Glyph, master
         lines,
         zones,
         extra_nodes: extra_nodes(&layer),
-        corners: corners(&layer),
+        attachments: super::components::attachment_bands(font, &layer),
         status: fontcraft_engine::cmd::status::effective_status(font, &glyph.name).map(|def| def.color),
         layer,
         outline,
@@ -315,23 +315,6 @@ fn component_mark(font: &Font, glyph: &str, layer: &Layer, shape: usize) -> Opti
     }
     let outline = font.component_outline(component, &layer.master).ok()?;
     Some(ComponentMark { base, state, outline, placeholder: None })
-}
-
-/// The nodes of `layer` that carry a corner component.
-fn corners(layer: &Layer) -> Vec<[f64; 2]> {
-    let mut out = Vec::new();
-    for hint in layer.info.hints.iter().filter(|h| is_corner(h)) {
-        let Ok(Some(corner)) = corner_hint(hint) else { continue };
-        let CornerTarget::Node { shape, node } = corner.target else { continue };
-        let Some(Shape::Path(path)) = layer.shapes.get(shape) else { continue };
-        // The hint counts a closed path's nodes with the start node last.
-        let len = path.nodes.len();
-        let index = if path.closed && len > 0 { (node + 1) % len } else { node };
-        if let Some(n) = path.nodes.get(index) {
-            out.push([n.x, n.y]);
-        }
-    }
-    out
 }
 
 /// Where the paths of `layer` cross one another or themselves, away from their nodes: Extra Nodes.

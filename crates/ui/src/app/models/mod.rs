@@ -6,6 +6,7 @@
 pub mod canvas;
 pub mod color;
 pub mod compare;
+pub mod components;
 pub mod console;
 pub mod font_audit;
 pub mod font_exports;

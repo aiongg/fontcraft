@@ -10,6 +10,8 @@
 //! | one handle | X, Y, dX, dY and its length, measured from its node | `selection.setPosition` on the handle |
 //! | anything else | X, Y of the box at the reference point, width, height, lock | `selection.setPosition`; `transform.scale` about the reference point |
 //!
+//! A selected component, corner component or cap component adds its part below (`info_box_component`).
+//!
 //! The nine-point grid chooses the reference point (`infoBox.setReferencePoint`); the lock makes a width or height
 //! edit scale both (`infoBox.setSizeLock`). A master that takes its metrics from another shows that master's values,
 //! read only.
@@ -97,6 +99,15 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
         super::info_box_ps_hint::view(ui, hint, sent);
     } else if let Some(selection) = &model.selection {
         Section::new(words.selection.clone()).show(ui, |ui, _| selection_part(ui, &words, selection, sent));
+    }
+    if let Some(b) = &model.component {
+        super::info_box_component::component_part(ui, b, sent);
+    }
+    if let Some(b) = &model.corner {
+        super::info_box_component::corner_part(ui, b, sent);
+    }
+    if let Some(b) = &model.cap {
+        super::info_box_component::cap_part(ui, b, sent);
     }
 }
 
@@ -289,7 +300,7 @@ mod tests {
     /// A key typed into a sidebearing field goes to its setter as text; a number as a number.
     #[test]
     fn metrics_fields_take_keys_and_numbers() {
-        let model = InfoBoxModel { glyph: Some(glyph(false)), selection: None, ps_hint: None, tt: None };
+        let model = InfoBoxModel { glyph: Some(glyph(false)), ..Default::default() };
         assert_eq!(
             posted_after(model.clone(), "LSB", "=O"),
             vec![Msg::run("spacing.setLeftSidebearing", json!({"glyphs": ["A"], "layer": "m01", "value": "=O"}))]
@@ -300,7 +311,7 @@ mod tests {
     /// The vertical layout edits the vertical origin and width (M5.20).
     #[test]
     fn the_vertical_layout_sets_origin_and_height() {
-        let model = InfoBoxModel { glyph: Some(glyph(true)), selection: None, ps_hint: None, tt: None };
+        let model = InfoBoxModel { glyph: Some(glyph(true)), ..Default::default() };
         assert_eq!(
             posted_after(model.clone(), "O", "120"),
             vec![Msg::run("spacing.setVerticalOrigin", json!({"glyphs": ["A"], "layer": "m01", "value": 120.0}))]
@@ -324,7 +335,7 @@ mod tests {
             place: Targets { json: json!({"glyph": "A", "layer": "m01", "points": [[0, 0]]}).to_string() },
             ..Default::default()
         };
-        let model = InfoBoxModel { glyph: Some(glyph(false)), selection: Some(selection), ps_hint: None, tt: None };
+        let model = InfoBoxModel { glyph: Some(glyph(false)), selection: Some(selection), ..Default::default() };
         assert_eq!(
             posted_after(model, "X", "140"),
             vec![Msg::run(

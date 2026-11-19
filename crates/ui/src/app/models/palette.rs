@@ -10,6 +10,7 @@ use fontcraft_engine::model::{Dimension, Shape};
 use fontcraft_tools::Selection;
 use serde_json::{Map, Value, json};
 
+use super::components::{self, CapBox, ComponentBox, CornerBox, SmartModel};
 use super::{ProjectCx, Stamp};
 use crate::canvas::tools::{Tools, scene, targets};
 use crate::panels::widgets::{KeyState, KeyedNumber, format_number};
@@ -111,6 +112,10 @@ pub struct InfoBoxModel {
     pub ps_hint: Option<super::hint_canvas::PsHintBox>,
     /// The TrueType Instructor's box, in place of the whole box while it is the chosen tool (`panels::info_box_tt`).
     pub tt: Option<super::hint_canvas::TtBox>,
+    /// The selected component, the corner and the cap on the selected nodes (`super::components`).
+    pub component: Option<ComponentBox>,
+    pub corner: Option<CornerBox>,
+    pub cap: Option<CapBox>,
 }
 
 /// The Transformations section: its settings and what its buttons act on.
@@ -250,6 +255,7 @@ pub struct PaletteModels {
     pub fit_curve: Tracked<FitCurveModel>,
     pub anchor_context: Tracked<AnchorContextModel>,
     pub stroke: Tracked<StrokeModel>,
+    pub smart: Tracked<SmartModel>,
 }
 
 /// Projects the Info box and Palette models when the stamp, the selection or the focus moved.
@@ -268,6 +274,7 @@ pub fn project(models: &mut PaletteModels, cx: &mut ProjectCx<'_>, tools: &Tools
     super::set(&mut models.fit_curve, fit_curve(cx, edit.as_ref()));
     super::set(&mut models.anchor_context, anchor(edit.as_ref()));
     super::set(&mut models.stroke, edit.as_ref().map(|e| e.stroke.clone()).unwrap_or_default());
+    super::set(&mut models.smart, smart(cx, tools).unwrap_or_default());
 }
 
 /// What the selection gives, read once per projection.
@@ -330,7 +337,28 @@ fn has_lists(targets: &Map<String, Value>) -> bool {
 
 fn info_box(cx: &mut ProjectCx<'_>, edit: Option<&Edit>) -> InfoBoxModel {
     let Some(edit) = edit else { return InfoBoxModel::default() };
-    InfoBoxModel { glyph: glyph_box(cx, edit), selection: selection_box(cx, edit), ps_hint: None, tt: None }
+    let mut b = InfoBoxModel { glyph: glyph_box(cx, edit), selection: selection_box(cx, edit), ..Default::default() };
+    // Component setters act on the foreground only.
+    if let Ok(font) = cx.session.font()
+        && let Some(layer) = font.glyph(&edit.glyph).and_then(|g| g.layers.iter().find(|l| l.id == edit.layer))
+        && !cx.view.edit_background
+    {
+        let data = cx.session.glyph_data().ok();
+        b.component = components::component_box(font, data.as_deref(), &edit.glyph, layer, &edit.selection);
+        b.corner = components::corner_box(font, &edit.glyph, layer, &edit.selection);
+        b.cap = components::cap_box(font, &edit.glyph, layer, &edit.selection);
+    }
+    b
+}
+
+/// The Smart Component controls for the selected smart components of the edited side.
+fn smart(cx: &ProjectCx<'_>, tools: &Tools) -> Option<SmartModel> {
+    let font = cx.session.font().ok()?;
+    let scene = scene(font, cx.view, tools.focus.as_ref())?;
+    let glyph = font.glyph(&scene.glyph)?;
+    let layer = glyph.layers.iter().find(|l| l.id == scene.layer_id)?;
+    let shapes: Vec<usize> = tools.selection.shapes.iter().copied().collect();
+    components::smart_model(font, &scene.glyph, layer, scene.side, &shapes)
 }
 
 /// The fields of `spacing.getMetrics`'s reply for `field`.

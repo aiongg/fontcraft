@@ -8,6 +8,7 @@ pub mod command_surfaces;
 pub mod commands;
 pub mod compare_family;
 pub mod compare_fonts;
+pub mod components;
 pub mod context_menu;
 pub mod dock;
 pub mod font_audit;

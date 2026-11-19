@@ -106,6 +106,8 @@ pub struct ViewState {
     /// The Actions window's state.
     pub actions: crate::dialogs::actions::ActionsState,
     pub font_audit: crate::shell::font_audit::FontAuditView,
+    /// The component glyph picker and the smart settings windows.
+    pub components: crate::shell::components::ComponentsView,
 }
 
 impl Default for ViewState {
@@ -142,6 +144,7 @@ impl Default for ViewState {
             hinting: Default::default(),
             actions: Default::default(),
             font_audit: Default::default(),
+            components: Default::default(),
         }
     }
 }
