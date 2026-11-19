@@ -29,6 +29,7 @@ mod compare;
 pub(crate) mod compile;
 mod compile_cid;
 mod compile_export;
+mod compile_features;
 mod compile_layout;
 mod compile_project;
 mod compile_select;

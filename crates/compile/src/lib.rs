@@ -238,6 +238,9 @@ pub struct Options {
     pub pass_through_tables: bool,
     /// The CMap files and Macintosh `cmap` ids of a CID-keyed CFF build ([`cid`]).
     pub cid: cid::CidOptions,
+    /// Write an empty `GSUB` table when the layout stage gives none, for software that expects
+    /// one (`--stub-gsub`). Not with the features skipped.
+    pub stub_gsub: bool,
 }
 
 /// The asset store a compile reads ([`Options::assets`]). Two are equal when they are the same
@@ -321,6 +324,7 @@ impl Default for Options {
             stub_dsig: false,
             pass_through_tables: false,
             cid: cid::CidOptions::default(),
+            stub_gsub: false,
         }
     }
 }
@@ -333,6 +337,10 @@ pub struct Compiled {
     pub glyph_order: Vec<String>,
     /// Things the user should know that did not stop the compile.
     pub warnings: Vec<String>,
+    /// The feature code the layout stage compiled
+    /// ([`layout::LayoutTables::assembled_code`]); `None` without code or with the features
+    /// skipped.
+    pub feature_code: Option<String>,
 }
 
 /// Compiles `font` at `target` (a master, or a static instance anywhere) to a static font.
@@ -597,7 +605,7 @@ pub(crate) fn compile_stages_with(
         options,
         &mut warnings,
     )?;
-    let mut compiled = Compiled { bytes, glyph_order: glyphs.into_iter().map(|g| g.name).collect(), warnings };
+    let mut compiled = Compiled { bytes, glyph_order: glyphs.into_iter().map(|g| g.name).collect(), warnings, feature_code: layout.code.clone() };
     if let Some(plan) = &extra.cid {
         cid::finish(&mut compiled, plan)?;
     }
@@ -643,8 +651,16 @@ pub(crate) fn layout_tables(
     };
     // A project compile groups rules into lookups as the reference's feature compiler does.
     let layout_options = layout::LayoutOptions { lookup_per_rule_type: options.project.is_some(), ..Default::default() };
-    layout::build(&input, &layout_options, warnings)
+    let mut tables = layout::build(&input, &layout_options, warnings)?;
+    if options.stub_gsub && tables.compiled.gsub.is_none() {
+        tables.compiled.gsub = Some(STUB_GSUB.to_vec());
+    }
+    Ok(tables)
 }
+
+/// An empty `GSUB` table, version 1.0: a script list, feature list and lookup list with no
+/// records, each right after the header.
+const STUB_GSUB: [u8; 16] = [0, 1, 0, 0, 0, 10, 0, 12, 0, 14, 0, 0, 0, 0, 0, 0];
 
 /// Fills what the glyphs do not store from the glyph database ([`Resolved::apply_glyph_data`])
 /// and gives non-spacing marks no advance (`compile.nonSpacingMarkWidth`), as fontc and glyphsLib

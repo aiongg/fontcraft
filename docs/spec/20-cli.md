@@ -3000,6 +3000,13 @@ before implementation.
     `--feature-writer` must be defined so that the specs found in existing UFO libs
     (`com.github.googlei18n.ufo2ft.filters`, `…featureWriters`) can be translated.
    **Not M12:** belongs to `compile` (M2) and the feature writers (M8).
+   **Answered for `--feature-writer` (M2.12, our decision):** the names are `kern`, `mark` (which
+   writes mark, mkmk, abvm and blwm), `curs` and `gdef`, or ufo2ft's class names
+   (`KernFeatureWriter`, `MarkFeatureWriter`, `CursFeatureWriter`, `GdefFeatureWriter`), with or
+   without a module (`module::Class`), each optionally followed by `(mode=append)` or
+   `(mode=skip)`; `none` (or fontmake's `None`) runs no writer and `...` keeps the source's
+   writers. They become the source's `…featureWriters` setting, so a UFO lib's entries and the
+   option are read by one reader. Other writer options are refused.
 16. **Compatibility shims.** Should the binary react to being invoked as `makeotf`, `tx`, `ttx`,
     `pyftsubset` and translate the old option syntax? Not designed here; the mapping tables would make
     it mechanical.

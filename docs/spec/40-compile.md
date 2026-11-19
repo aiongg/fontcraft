@@ -193,6 +193,28 @@ dropped. Where fontc refuses to build (a value that is not a list, `ignoreMarks`
 quantization other than 1, the legacy `kernFeatureWriter2`), FontCraft builds with the standard
 settings and warns; a value that is not a list turns the kerning off, as in fontmake.
 
+The `features` group of `font.compile` (M2.12; the command line's feature options) changes the
+source for one build, before any stage runs:
+
+- `file` (`--features`) and `mtiSource` (`--mti-source`) replace the feature code with one
+  entry. FontDame files are converted to feature code first (§ 4b), and no feature writer runs,
+  as ufo2ft's MTI compiler runs none.
+- `writers` (`--feature-writer`) replaces the feature-writer setting above; `...` stands for the
+  source's list, or the four default writers (kern, mark, GDEF, cursive) without one, as ufo2ft
+  reads it. `generateGdef: false` (`--no-generate-gdef`) drops the GDEF writer, so `GDEF` holds
+  only what the code states. In fontmake the option stops glyphsLib from writing a `GDEF` block
+  into the master UFOs, and ufo2ft's GDEF writer still runs; a corpus run with the option is the
+  measure that shows whether the two differ.
+- `debugFile` (`--debug-feature-file`) receives the code the first font compiled: the assembled
+  entries and any contextual mark code. fontmake's file also holds the generated kerning and mark
+  features as code; ours merges them as lookups, so they are not in it. `font.compilePlan`'s
+  `features` section returns the same text per static output.
+- `stubGsub` (`--stub-gsub`) writes an empty `GSUB` (no scripts, features or lookups) when the
+  layout stage gives none.
+- `variable: false` (`--no-variable-features`, per-master layout merged by varLib) and
+  `expandToInstances` (`--expand-features-to-instances`) are refused: one variable feature set is
+  compiled, and instances compile the source's code with includes resolved against its folder.
+
 ### 1.7 Variation tables
 
 Only when at least one axis has a range (`compile.variableOnlyTables`).

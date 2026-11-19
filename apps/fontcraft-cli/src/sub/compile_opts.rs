@@ -99,6 +99,21 @@ pub const OPTIONS: &[CompileOpt] = &[
     row(&["--drop-implied-oncurves"], "outlines.dropImpliedOnCurves", Kind::Flag(true), ""),
     row(&["--keep-implied-oncurves"], "outlines.dropImpliedOnCurves", Kind::Flag(false), ""),
     row(&["--conversion-error"], "outlines.conversionError", Kind::Number, "EM"),
+    // Features.
+    row(&["--skip-features"], "skipFeatures", Kind::Flag(true), ""),
+    row(&["--features"], "features.file", Kind::Text, "FILE"),
+    row(&["--include-dir", "--fea-include-dir"], "features.includeDir", Kind::Text, "DIR"),
+    row(&["--mti-source"], "features.mtiSource", Kind::Text, "FILE"),
+    row(&["--feature-writer"], "features.writers", Kind::List, "NAME[(mode=append)],...|none|..."),
+    row(&["--generate-gdef"], "features.generateGdef", Kind::Flag(true), ""),
+    row(&["--no-generate-gdef", "--no-generate-GDEF"], "features.generateGdef", Kind::Flag(false), ""),
+    row(&["--variable-features"], "features.variable", Kind::Flag(true), ""),
+    row(&["--no-variable-features"], "features.variable", Kind::Flag(false), ""),
+    row(&["--expand-features-to-instances"], "features.expandToInstances", Kind::Flag(true), ""),
+    row(&["--debug-feature-file"], "features.debugFile", Kind::Text, "FILE"),
+    row(&["--stub-gsub"], "features.stubGsub", Kind::Flag(true), ""),
+    row(&["--no-stub-gsub"], "features.stubGsub", Kind::Flag(false), ""),
+    row(&["--feature-names-override"], "features.namesOverride", Kind::Flag(true), ""),
     // Tables and files of static fonts.
     row(&["--subset"], "subset", Kind::Flag(true), ""),
     row(&["--no-subset"], "subset", Kind::Flag(false), ""),
@@ -354,6 +369,28 @@ mod tests {
         assert_eq!(p["instances"], json!(["Bold", "Light"]));
         assert_eq!(p["formats"], json!(["variable"]));
         assert!(is_project(p.as_object().unwrap()));
+    }
+
+    #[test]
+    fn feature_options_fill_the_features_group() {
+        let (_, p) = parsed(&[
+            "--features",
+            "f.fea",
+            "--fea-include-dir=inc",
+            "--feature-writer",
+            "kern,...",
+            "--feature-writer=mark(mode=append)",
+            "--no-generate-GDEF",
+            "--debug-feature-file",
+            "debug.fea",
+            "--stub-gsub",
+            "--skip-features",
+        ]);
+        let f = &p["features"];
+        assert_eq!((&f["file"], &f["includeDir"], &f["debugFile"]), (&json!("f.fea"), &json!("inc"), &json!("debug.fea")));
+        assert_eq!(f["writers"], json!(["kern", "...", "mark(mode=append)"]));
+        assert_eq!((&f["generateGdef"], &f["stubGsub"], &p["skipFeatures"]), (&json!(false), &json!(true), &json!(true)));
+        assert!(!is_project(p.as_object().unwrap()));
     }
 
     #[test]
