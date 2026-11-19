@@ -25,12 +25,13 @@ use fontcraft_hinting::Renumbered;
 use fontcraft_model::corner::{self, CornerTarget};
 use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{
-    Anchor, Component, Font, Glyph, Layer, LayerSide, MAX_COMPONENT_DEPTH, MAX_COORDINATE, MAX_GLYPHS, MAX_OUTLINE_ELEMENTS, Shape, Transform, smart,
+    Anchor, Component, Font, Glyph, Hint, Layer, LayerSide, MAX_COMPONENT_DEPTH, MAX_COORDINATE, MAX_GLYPHS, MAX_OUTLINE_ELEMENTS, Shape, Transform,
+    smart,
 };
 use serde_json::{Value, json};
 
 use super::common::{Outcome, Scope, in_range, scope};
-use super::shared::{MAX_LAYER_SHAPES, hint_shapes, remap_hint, renumber_hints};
+use super::shared::{MAX_LAYER_SHAPES, hint_shapes_on, renumber_hints};
 use super::*;
 use crate::EngineError;
 use crate::params::{MAX_TARGETS, Params, TargetKind, Targets, kind};
@@ -602,13 +603,18 @@ struct Split {
     part: Layer,
     /// The original layer with a component in their place.
     rest: Layer,
-    /// Whether a hint linked moved and kept shapes and was removed.
+    /// Hints without node tracking (caps, segments…) that linked moved and kept shapes and were
+    /// removed.
     dropped_hints: usize,
 }
 
-/// Moves the shapes of `layer` at `picked` (sorted, all present) into a new layer and puts a
-/// component of `name` where the first of them was.
-fn split(layer: &Layer, picked: &BTreeSet<usize>, name: &str) -> Split {
+/// Moves the shapes of `layer` (of glyph `glyph`) at `picked` (sorted, all present) into a new
+/// layer of glyph `name` and puts a component of `name` where the first of them was. Hints on
+/// moved shapes only go with them; the others stay, kept on their nodes ([`renumber_hints`]): a
+/// PostScript end on a moved path becomes a number, a TrueType instruction or corner component on
+/// one is removed and reported in `done`. The original layer is added to `done`, so the session's
+/// hint upkeep leaves it alone.
+fn split(layer: &Layer, picked: &BTreeSet<usize>, name: &str, glyph: &str, done: &mut Renumbered) -> Split {
     let first = picked.first().copied().unwrap_or(0);
     let mut part = Layer::new(layer.master.as_str(), layer.width);
     let mut rest = layer.clone();
@@ -637,19 +643,31 @@ fn split(layer: &Layer, picked: &BTreeSet<usize>, name: &str) -> Split {
         let (mut stay, mut go) = (Vec::new(), Vec::new());
         let in_map = |map: &[Option<usize>], i: usize| map.get(i).is_some_and(Option::is_some);
         for h in layer.info.hints.iter() {
-            let refs = hint_shapes(h);
+            let refs = hint_shapes_on(h, &layer.shapes);
             if refs.iter().all(|&i| i >= len || in_map(kept.as_slice(), i)) {
-                // A reference past the old shapes pointed at nothing before and is left as it is.
-                stay.extend(remap_hint(h, &|i| kept.get(i).map_or(Some(i), |m| *m)));
+                stay.push(h.clone());
             } else if refs.iter().all(|&i| in_map(moved.as_slice(), i)) {
-                go.extend(remap_hint(h, &|i| moved.get(i).copied().flatten()));
+                go.push(h.clone());
+            } else if fontcraft_hinting::follows_nodes(h, &layer.shapes) {
+                // Kept on its nodes on the kept shapes; what sits on moved ones is unlinked or reported.
+                stay.push(h.clone());
             } else {
                 dropped_hints += 1;
             }
         }
-        rest.info.hints = stay;
+        // `renumber_hints` reads the hints from the layer before the edit and from the new one.
+        let with_hints = |hints: &[Hint]| {
+            let mut l = layer.clone();
+            l.info.hints = hints.to_vec();
+            l
+        };
+        // A reference past the old shapes pointed at nothing before and is left as it is.
+        rest.info.hints = stay.clone();
+        renumber_hints(&with_hints(&stay), &mut rest, LayerSide::Foreground, glyph, &|i| kept.get(i).map_or(Some(i), |m| *m), &mut done.report);
+        done.insert(glyph, &layer.id, LayerSide::Foreground);
         if !go.is_empty() {
-            part.info.hints = go;
+            part.info.hints = go.clone();
+            renumber_hints(&with_hints(&go), &mut part, LayerSide::Foreground, name, &|i| moved.get(i).copied().flatten(), &mut done.report);
         }
     }
     Split { part, rest, dropped_hints }
@@ -673,7 +691,8 @@ fn component_from_selection(s: &mut Session, value: &Value) -> Result<Value> {
     if s.font()?.glyph(&name).is_some() {
         return Err(p.bad(format!("there is already a glyph `{name}`: choose another name")));
     }
-    let (layer_id, first, skipped, warnings) = s.edit("Component from Selection", |font| {
+    let (layer_id, first, skipped, warnings, done) = s.edit("Component from Selection", |font| {
+        let mut done = Renumbered::default();
         let (layer_id, first, width, part_layers, rewrites, skipped, warnings) = {
             let r = t.resolve(font)?;
             crate::check_unlocked(r.glyph)?;
@@ -713,7 +732,7 @@ fn component_from_selection(s: &mut Session, value: &Value) -> Result<Value> {
                     skipped.push(json!({"layer": m.id, "reason": "the layer has no shapes of the same kinds at those indices"}));
                     continue;
                 }
-                let sp = split(layer, &picked, &name);
+                let sp = split(layer, &picked, &name, &t.glyph, &mut done);
                 if sp.dropped_hints > 0 {
                     warnings.push(format!("layer `{}`: {} hints linked moved and kept shapes and were removed", m.id, sp.dropped_hints));
                 }
@@ -735,8 +754,9 @@ fn component_from_selection(s: &mut Session, value: &Value) -> Result<Value> {
                 *slot = layer;
             }
         }
-        Ok((layer_id, first, skipped, warnings))
+        Ok((layer_id, first, skipped, warnings, done))
     })?;
+    s.hints_renumbered(done);
     t.layer = Some(layer_id.clone());
     t.shapes = vec![first];
     Ok(json!({

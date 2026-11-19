@@ -306,6 +306,46 @@ fn component_from_selection_moves_mixed_shapes_on_every_master() {
     assert_eq!(corner_shapes(layer(f, "_part.B", "m01")), [0], "the moved square's hint moves with it");
 }
 
+/// PostScript hints count paths, not shapes. Moving `B`'s first square and component into a part:
+/// a stem on the kept square (path 1) stays on it as path 0, a stem on the moved square goes with
+/// it, and a stem across both squares keeps its kept end and unlinks the moved one at its place.
+#[test]
+fn component_from_selection_keeps_stem_hints_on_their_paths() {
+    use fontcraft_hinting::{Edge, NodeRef, PsHint, ps_hints, set_ps_hints};
+    let mut s = parts_session();
+    let node = |path, n| Edge::Node(NodeRef::new(path, n));
+    s.edit("stems", |f| {
+        let mut g = f.glyph_mut("B")?;
+        let l = g.layer_mut("m01").unwrap();
+        let stems =
+            [PsHint::stem(false, node(1, 0), node(1, 1)), PsHint::stem(false, node(0, 0), node(0, 1)), PsHint::stem(false, node(0, 1), node(1, 0))];
+        set_ps_hints(l, &stems).unwrap();
+        Ok(())
+    })
+    .unwrap();
+    let r = run(&mut s, "glyph.componentFromSelection", json!({"glyph": "B", "shapes": [0, 1]}));
+    assert_eq!(r["warnings"], json!([]), "{r}");
+    assert_eq!(r["hintUpkeep"]["unlinked"], json!(1), "{r}");
+    let f = s.font().unwrap();
+    let ps = |l: &Layer| -> Vec<PsHint> { ps_hints(l).unwrap().into_iter().map(|(_, h)| h).collect() };
+    let corners =
+        |l: &Layer| -> Vec<CornerTarget> { l.info.hints.iter().filter_map(|h| corner::corner_hint(h).unwrap()).map(|c| c.target).collect() };
+
+    let rest = layer(f, "B", "m01");
+    let kept = ps(rest);
+    assert_eq!(kept.len(), 2, "{kept:?}");
+    assert_eq!((kept[0].origin, kept[0].other), (node(0, 0), Some(node(0, 1))), "the kept square is path 0 now");
+    assert_eq!(kept[0].edges(rest).unwrap(), (400.0, 450.0));
+    assert_eq!((kept[1].origin, kept[1].other), (Edge::Value(50.0), Some(node(0, 0))), "the end on the moved square is a number");
+    assert_eq!(corners(rest), [CornerTarget::Node { shape: 1, node: 0 }]);
+
+    let part = layer(f, "_part.B", "m01");
+    let moved = ps(part);
+    assert_eq!(moved.len(), 1, "{moved:?}");
+    assert_eq!(moved[0].edges(part).unwrap(), (0.0, 50.0), "the moved square's stem goes with it");
+    assert_eq!(corners(part), [CornerTarget::Node { shape: 0, node: 0 }]);
+}
+
 #[test]
 fn a_part_with_an_underscore_name_does_not_export() {
     let mut s = parts_session();

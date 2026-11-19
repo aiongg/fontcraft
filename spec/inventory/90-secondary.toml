@@ -1154,6 +1154,7 @@ guesses = [
   "The first glyph in font order whose same-id layer has only closed paths equal to the selection wins, within 0.5 unit after a translation (and a flip with `flips`); selecting an outline shared by two glyphs in the reference app would settle which one it picks.",
   "No matching glyph is an error that changes nothing; the reference app's message or silence when nothing matches would settle it.",
   "The new component keeps the default automatic alignment unless aligning would move it beyond the tolerance or change the width, and then alignment is off on it; alignment is judged on the layer as it ends up, so a component next to remaining paths keeps the default. Checking the alignment setting of a component the reference app detected would settle it.",
+  "Hints keep their nodes: the ends of PostScript hints on the replaced paths become numbers at their places, TrueType instructions and corner components on them are removed and reported; a hinted glyph in the reference app settles it.",
 ]
 observe = [
   "Draw a copy of a glyph's outline in another glyph, select it and run Detect Component: note which glyph the component names and where it sits.",
