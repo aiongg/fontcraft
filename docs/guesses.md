@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2983 guesses on 1572 rows (636 of them live commands).**
+**2984 guesses on 1573 rows (636 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -159,6 +159,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `dialog.primitiveMeasurements` (panel) | M3 | handbook | – | The width and height fields run from 1 to 2,000,000 units and open at 100. |
 | `dialog.primitiveMeasurements` (panel) | M3 | handbook | – | The click is the shape's bottom-left corner (03a question 5). |
 | `editView.toolbar` (panel) | M3 | handbook | – | A secondary click on a shared button also opens its menu; no source shows the reference doing so. |
+| `palette.stroke` (panel) | M3 | handbook | – | Cap axis is chosen with a select; the handbook's click-and-hold on the cap control needs a hold/flyout control the UI kit lacks. |
 | `dialog.shapeOrder` (panel) | M3 | handbook | – | The first row is the bottom shape (shape 0, drawn first). |
 | `dialog.shapeOrder` (panel) | M3 | handbook | – | Rows read `<index>: Path (<n> nodes)`, `<index>: Component <name>` or `<index>: Image`; what the reference's rows show and which end is the top are not observed (03a open question 24). |
 | `palette.anchorContext` (panel) | M8 | handbook | – | The field is multi-line, since a context may hold several lines, commits when it loses the focus, and Escape restores the stored text; the running app would show its size and when it commits. |

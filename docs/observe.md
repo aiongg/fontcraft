@@ -32,12 +32,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1471 rows to check: 2513 guesses and 593 observe steps.**
+**1472 rows to check: 2514 guesses and 593 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **524** |
-| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 114 |
+| **Built milestones (M0 to M6)** | all | **525** |
+| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 115 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
 | Built milestones (M0 to M6) | Filters | 36 |
@@ -65,9 +65,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
-## Built milestones (M0 to M6) (524)
+## Built milestones (M0 to M6) (525)
 
-### Edit View: drawing, guides, layers and the Palette (114)
+### Edit View: drawing, guides, layers and the Palette (115)
 
 - [ ] `dialog.fieldKeys` (behavior, M3, inferred): In a dialog's number field, Return takes the typed value, Escape drops…
   - Guess: Dialog number fields follow the Info box's editing and arrow-key rules (infoBox.fieldEditing, infoBox.arrowKeyStepping); the handbook documents them for the Info box only.
@@ -220,6 +220,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The click is the shape's bottom-left corner (03a question 5).
 - [ ] `editView.toolbar` (panel, M3, handbook): Edit View Toolbar
   - Guess: A secondary click on a shared button also opens its menu; no source shows the reference doing so.
+- [ ] `palette.stroke` (panel, M3, handbook): Stroke
+  - Guess: Cap axis is chosen with a select; the handbook's click-and-hold on the cap control needs a hold/flyout control the UI kit lacks.
 - [ ] `dialog.shapeOrder` (panel, M3, handbook): Shape Order
   - Guess: The first row is the bottom shape (shape 0, drawn first).
   - Guess: Rows read `<index>: Path (<n> nodes)`, `<index>: Component <name>` or `<index>: Image`; what the reference's rows show and which end is the top are not observed (03a open question 24).
