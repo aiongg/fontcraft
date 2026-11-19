@@ -1678,7 +1678,7 @@ milestone = "M5"
 summary = "The inspector shows LSB, RSB and width of the selected glyph on the current master, or TSB, BSB, vertical origin and vertical width after switching orientation. The fields accept numbers or metrics keys as defined in the spacing chapter."
 ref = "Font View › Glyph Properties › Metrics"
 status = "handbook"
-notes = "Documented, not yet observed. LSB, RSB, width, TSB and BSB edit through spacing.setLeftSidebearing, setRightSidebearing, setWidth, setTopSidebearing and setBottomSidebearing, one command for all selected glyphs, on the layer of Font View's master. Vertical origin and vertical width are shown read-only: no command sets them."
+notes = "Documented, not yet observed. LSB, RSB, width, TSB and BSB edit through spacing.setLeftSidebearing, setRightSidebearing, setWidth, setTopSidebearing and setBottomSidebearing, one command for all selected glyphs, on the layer of Font View's master. Vertical origin and vertical width have the engine commands spacing.setVerticalOrigin and spacing.setVerticalWidth (M5.20); the inspector still shows them read-only."
 guesses = [
   "A field shows the metrics key that governs it (the layer's own key first, written with ==), else the measured value with up to two decimals; a screenshot of the reference inspector on a glyph with a key would settle it.",
   "The orientation icon sits after the first field; the vertical set puts TSB and BSB on the first row and vertical origin and vertical width on a second row; a screenshot of the reference inspector would settle it.",

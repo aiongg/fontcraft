@@ -21,7 +21,7 @@ controls = [
   "left sidebearing field (number or metrics key), left of the metrics icon",
   "right sidebearing field (number or metrics key), right of the metrics icon",
   "width field (number or metrics key)",
-  "vertical layout: T (top sidebearing) and B (bottom sidebearing) fields instead",
+  "vertical layout: T (top sidebearing) and B (bottom sidebearing) fields instead, with O (vertical origin) and H (vertical width)",
   "per-field update button, shown beside a metrics key whose value is out of date",
   "auto-aligned glyphs: fields read 'auto' with the derived value in parentheses",
 ]
@@ -30,7 +30,7 @@ milestone = "M5"
 summary = "The part of the Edit View Info box (View › Show Info, Cmd+Shift+I) that shows and edits the sidebearings and width of the current glyph. Horizontal scripts, both left-to-right and right-to-left, show left and right sidebearings; top-to-bottom text shows top and bottom sidebearings."
 ref = "Spacing & Kerning › Spacing › Info Box"
 status = "handbook"
-notes = "Documented, not yet observed. Built in M5.8a (`panels/info_box_metrics.rs`): each field shows the key that applies, else the number, from `spacing.getMetrics`, and typing runs the field's setter on the current glyph's active layer. On an automatically aligned layer `spacing.getMetrics` lists the derived fields (`derived`) for the panel to grey out."
+notes = "Documented, not yet observed. Built in M5.8a (`panels/info_box_metrics.rs`): each field shows the key that applies, else the number, from `spacing.getMetrics`, and typing runs the field's setter on the current glyph's active layer. On an automatically aligned layer `spacing.getMetrics` lists the derived fields (`derived`) for the panel to grey out. The handbook's vertical Info box has O and H besides T and B; M5.20 added their setters (`spacing.setVerticalOrigin`, `spacing.setVerticalWidth`) and their values and keys in `spacing.getMetrics` (`vertOrigin`, `vertWidth`); the panel does not show them yet."
 guesses = [
   "The glyph box hangs under the current glyph's descender, centred on its advance, separate from the selection box at the foot of the canvas; a screenshot of the reference app with a selection settles it.",
   "Emptying a field that holds a key stores the metric's current number, so the key goes and nothing moves; emptying such a field in the reference app settles it.",
@@ -172,6 +172,49 @@ ref = "Spacing & Kerning › Spacing › Info Box"
 status = "inferred"
 guesses = [
   "Setting the bottom sidebearing changes the vertical width only.",
+]
+
+[[command]]
+id = "spacing.setVerticalOrigin"
+label = "Set Vertical Origin"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{glyphs: [names], layer?: id, value: number|string}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Sets the vertical origin of a glyph layer (the O field of the vertical Info box and of the Font View inspector) to a number or stores a metrics key for it. The origin is stored as `vertOrigin`, measured down from the master's ascender; the vertical width stays, so the top and bottom sidebearings change in opposite directions."
+ref = "Edit View › Info Box › Vertical Layout; Font View › Glyph Properties › Metrics"
+status = "inferred"
+notes = "The handbook documents the O field in the vertical Info box and the inspector; editing it is assumed by analogy with the other fields. Built in M5.20 (`cmd/vertical_metrics.rs`, sharing the setter of `cmd/spacing.rs`); the key is stored in `vertOrigin` metrics keys, glyph-level or, with `==`, on the layer. One undo step."
+guesses = [
+  "Setting the vertical origin keeps the vertical width, so the whole vertical box moves; a glyph with a vertical origin typed into the reference Info box settles it.",
+  "The vertical origin field takes the width's key forms (a glyph name, a constant, a calculation, `==` for the layer); `|` and `@` are refused.",
+  "A layer with no stored vertical origin reads 0.",
+]
+observe = [
+  "In top-to-bottom text, type 50 into the O field of a glyph and read T, B and H: which of them change?",
+]
+
+[[command]]
+id = "spacing.setVerticalWidth"
+label = "Set Vertical Width"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{glyphs: [names], layer?: id, value: number|string}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Sets the vertical width (the H field of the vertical Info box and of the Font View inspector) of a glyph layer to a number or stores a metrics key for it; the handbook lists `vertWidthMetricsKey` among the stored metrics keys. The vertical origin stays, so the bottom sidebearing takes the change."
+ref = "Edit View › Info Box › Vertical Layout; Font View › Glyph Properties › Metrics"
+status = "inferred"
+notes = "The handbook documents the H field and the `vertWidthMetricsKey` attribute; editing the field is assumed by analogy with the width. Built in M5.20 (`cmd/vertical_metrics.rs`). Update Metrics and the out-of-sync scan cover the key; a layer with no stored vertical width reads the master's ascender minus its descender. One undo step."
+guesses = [
+  "A numeric vertical width change is absorbed by the bottom sidebearing, as the width's is by the right one.",
+  "A vertical width key may be a glyph name, a constant or a calculation; `|` and `@` are refused, as in the width field.",
+]
+observe = [
+  "Give a glyph the vertical width key =n+100 in the H field, then change n's vertical width: does the field show the key as out of sync, and does Update Metrics set it?",
 ]
 
 [[command]]
@@ -392,7 +435,7 @@ milestone = "M5"
 summary = "The spacing shortcuts act only while the Text tool is active, on the current glyph (the one after the cursor). They are disabled in the locked kerning mode."
 ref = "Spacing & Kerning › Spacing › Spacing Shortcuts; Kerning › Kerning Modes"
 status = "handbook"
-notes = "Documented, not yet observed. The commands take `glyphs` and `layer`; in text mode the shell fills them with the current glyph and the tab's master. Outside text mode the keys run nothing; in locked kerning mode and in top-to-bottom text the key changes nothing and the status line says why."
+notes = "Documented, not yet observed. The commands take `glyphs` and `layer`; in text mode the shell fills them with the current glyph and the tab's master. Outside text mode the keys run nothing; in locked kerning mode the key changes nothing and the status line says why. With `vertical: true` the commands act on the top and bottom sidebearings (M5.20); the shell does not pass it yet, so in top-to-bottom text the key still changes nothing."
 guesses = [
   "A spacing shortcut on a metric that holds a metrics key changes the number and keeps the key, which then shows as out of sync; no source says whether the reference keeps the key, removes it or ignores the keypress.",
 ]
@@ -404,8 +447,13 @@ milestone = "M5"
 summary = "Modifier scheme for the arrow-key spacing shortcuts: Ctrl addresses the left sidebearing, Cmd the right one, Ctrl and Cmd together shift the outline within the width, and Shift multiplies the 1-unit step to 10. Left/Right arrows give the direction in which the addressed edge moves."
 ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
 status = "handbook"
+notes = "Documented, not yet observed. In top-to-bottom text the commands take `vertical: true` (M5.20): the left-side shortcuts set the top sidebearing, the right-side ones the bottom sidebearing, and a shift moves the outline up (Left) or down (Right) by changing the vertical origin, so the outline's coordinates and the horizontal metrics stay."
 guesses = [
-  "In right-to-left text the shortcuts address the visual left and right sidebearings, as in left-to-right text; in top-to-bottom text they do nothing in M5. No source says.",
+  "In right-to-left text the shortcuts address the visual left and right sidebearings, as in left-to-right text. No source says.",
+  "In top-to-bottom text the spacing shortcuts act on the top and bottom sidebearings: Ctrl on the top one, Cmd on the bottom one, both together shift the outline vertically. No source says; trying the shortcuts in top-to-bottom text settles it.",
+]
+observe = [
+  "In top-to-bottom text with the Text tool, press Ctrl+Left, Cmd+Right and Cmd+Ctrl+Right (and the Up/Down arrows with the same modifiers) on a glyph and read T, B, O and H after each: what changes?",
 ]
 
 [[behavior]]

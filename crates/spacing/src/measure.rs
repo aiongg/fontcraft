@@ -102,13 +102,18 @@ pub(crate) fn metric_from(font: &Font, layer: &Layer, field: Field, b: Option<Re
         Field::Right => b.map(|b| layer.width - b.x1),
         Field::Top => b.map(|b| vertical_box(font, layer).0 - b.y1),
         Field::Bottom => b.map(|b| b.y0 - vertical_box(font, layer).1),
+        Field::VertWidth => {
+            let (top, bottom) = vertical_box(font, layer);
+            Some(top - bottom)
+        }
+        Field::VertOrigin => Some(layer.info.vert_origin.unwrap_or(0.0)),
     }
 }
 
-/// A layer's metric as it is: its width, or a sidebearing from its outline's bounds (`None` for
-/// an empty layer).
+/// A layer's metric as it is: its width, vertical width or vertical origin, or a sidebearing from
+/// its outline's bounds (`None` for an empty layer).
 pub fn metric(font: &Font, layer: &Layer, field: Field) -> Result<Option<f64>, EvalError> {
-    let b = if field == Field::Width { None } else { bounds(font, layer)? };
+    let b = if field.is_sidebearing() { bounds(font, layer)? } else { None };
     Ok(metric_from(font, layer, field, b))
 }
 

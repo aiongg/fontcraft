@@ -97,11 +97,6 @@ fn every_corpus_metrics_key_parses_and_evaluates() {
                     }
                 }
             }
-            for (name, k) in [("vertWidth", &g.info.metrics_keys.vert_width), ("vertOrigin", &g.info.metrics_keys.vert_origin)] {
-                if k.is_some() {
-                    tally.add(&format!("key on {name} (not evaluated)"), || format!("{short}: {}", g.name));
-                }
-            }
             for (scope, field, text, layer) in &stored {
                 tally.add("key", String::new);
                 match parse_stored(text, *scope, *field, exists) {

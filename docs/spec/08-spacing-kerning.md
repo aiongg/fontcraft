@@ -14,13 +14,21 @@ the text cursor (`spacing.currentGlyphFollowsCursor`).
   and width (`spacing.metricsOverlayInTextMode`).
 - Info box (View › Show Info, Cmd+Shift+I), `infoBox.spacing`: for horizontal text in either
   direction, LSB and RSB sit left and right of a central metrics icon; for top-to-bottom text
-  the fields are T and B, top and bottom sidebearing (`spacing.infoBoxFollowsLayoutDirection`).
+  the fields are T and B, top and bottom sidebearing (`spacing.infoBoxFollowsLayoutDirection`),
+  with O, the vertical origin, and H, the vertical width (height).
 
 ### 1.2 Editing in the Info box
 
 - Fields accept a number or a metrics key (section 2). Engine commands:
   `spacing.setLeftSidebearing`, `spacing.setRightSidebearing`, `spacing.setWidth`,
-  `spacing.setTopSidebearing`, `spacing.setBottomSidebearing`.
+  `spacing.setTopSidebearing`, `spacing.setBottomSidebearing`, and for O and H
+  `spacing.setVerticalOrigin` and `spacing.setVerticalWidth`.
+- The vertical origin is stored as `vertOrigin`, measured down from the master's ascender (0
+  when the layer has none); the vertical width as `vertWidth` (the ascender to the descender
+  when the layer has none). Setting the origin moves the vertical box and keeps its height, so
+  TSB and BSB change in opposite directions; setting the vertical width moves the bottom edge.
+  Their keys (`metricVertOrigin` and `metricVertWidth` in format 3; format 2 has only
+  `vertWidthMetricsKey`) take the width's forms: no `|`, no `@`.
 - Up/Down in a field: ±1. With Shift: ±10. With Cmd+Shift: ±100 (`spacing.infoBoxArrowSteps`).
 
 ### 1.3 Spacing shortcuts (Text tool)
@@ -43,6 +51,10 @@ the text cursor (`spacing.currentGlyphFollowsCursor`).
 - Scheme: Ctrl = left side, Cmd = right side, both = shift within the width, Shift = ×10
   (`spacing.shortcutModifierScheme`). The arrow shows which way the addressed edge moves.
 - There is no 100-unit shortcut step; that exists only in Info box fields.
+- In top-to-bottom text (`vertical: true`) the left-side shortcuts act on TSB and the right-side
+  ones on BSB; a shift moves the outline up (Left) or down (Right) inside the vertical width by
+  changing the vertical origin, so the outline's coordinates and the horizontal metrics stay.
+  Our guess; no source says (`spacing.shortcutModifierScheme`).
 - Text tool required; disabled in locked-kerning mode (`spacing.shortcutsNeedTextTool`).
 - macOS reserves Ctrl+Left/Right for Mission Control by default (`spacing.ctrlArrowSystemConflict`).
 

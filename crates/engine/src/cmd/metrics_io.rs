@@ -68,6 +68,8 @@ fn key_slot(keys: &mut MetricsKeys, field: Field) -> &mut Option<String> {
         Field::Width => &mut keys.width,
         Field::Top => &mut keys.top,
         Field::Bottom => &mut keys.bottom,
+        Field::VertWidth => &mut keys.vert_width,
+        Field::VertOrigin => &mut keys.vert_origin,
     }
 }
 

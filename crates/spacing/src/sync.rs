@@ -339,14 +339,18 @@ pub struct Slot {
 
 /// The fields whose update changes `field` as measured: setting the left sidebearing moves the
 /// outline and keeps the right one (the width follows); setting the right sidebearing or the
-/// width moves the right edge.
+/// width moves the right edge. Vertically, setting the top sidebearing moves the vertical origin
+/// and keeps the bottom edge (the vertical width follows); setting the bottom sidebearing or the
+/// vertical width moves the bottom edge; setting the vertical origin moves the whole box.
 fn writers(field: Field) -> &'static [Field] {
     match field {
         Field::Left => &[Field::Left],
         Field::Right => &[Field::Right, Field::Width],
         Field::Width => &[Field::Left, Field::Right, Field::Width],
-        Field::Top => &[Field::Top],
-        Field::Bottom => &[Field::Bottom],
+        Field::Top => &[Field::Top, Field::VertOrigin],
+        Field::Bottom => &[Field::Bottom, Field::VertWidth, Field::VertOrigin],
+        Field::VertWidth => &[Field::Top, Field::Bottom, Field::VertWidth],
+        Field::VertOrigin => &[Field::Top, Field::VertOrigin],
     }
 }
 

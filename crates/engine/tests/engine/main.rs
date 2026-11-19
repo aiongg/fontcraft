@@ -164,4 +164,5 @@ mod ufo_images;
 mod undo_steps;
 mod url_scheme;
 mod variation_tools;
+mod vertical_metrics;
 mod woff2;

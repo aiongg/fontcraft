@@ -14,7 +14,8 @@
 //!
 //! # Sidebearings ([`measure`])
 //! [`metric`] measures LSB, RSB, TSB and BSB from the bounds of a layer's outline with its
-//! components resolved, and gives the width; [`sidebearings_at_height`] measures from the first
+//! components resolved, and gives the width, the vertical width and the vertical origin (the
+//! stored values, else the master's ascender to descender and 0); [`sidebearings_at_height`] measures from the first
 //! and last crossing of a horizontal line (the metrics beam). [`measure::measured_outline`] is
 //! the outline they are measured on, slanted back in an italic master. An empty layer has no
 //! sidebearings.
@@ -128,24 +129,29 @@ pub enum Field {
     Width,
     Top,
     Bottom,
+    /// The vertical width (the height of the vertical advance box).
+    VertWidth,
+    /// The vertical origin, measured down from the ascender.
+    VertOrigin,
 }
 
 impl Field {
-    pub const ALL: [Field; 5] = [Field::Left, Field::Right, Field::Width, Field::Top, Field::Bottom];
+    pub const ALL: [Field; 7] = [Field::Left, Field::Right, Field::Width, Field::Top, Field::Bottom, Field::VertWidth, Field::VertOrigin];
 
-    /// The other side: left and right, top and bottom. The width is its own.
+    /// The other side: left and right, top and bottom. The widths and the vertical origin are
+    /// their own.
     pub fn opposite(self) -> Field {
         match self {
             Field::Left => Field::Right,
             Field::Right => Field::Left,
-            Field::Width => Field::Width,
             Field::Top => Field::Bottom,
             Field::Bottom => Field::Top,
+            Field::Width | Field::VertWidth | Field::VertOrigin => self,
         }
     }
 
     /// The name used in parameters and in [`MetricsKeys::all`]: `left`, `right`, `width`, `top`,
-    /// `bottom`.
+    /// `bottom`, `vertWidth`, `vertOrigin`.
     pub fn name(self) -> &'static str {
         match self {
             Field::Left => "left",
@@ -153,6 +159,8 @@ impl Field {
             Field::Width => "width",
             Field::Top => "top",
             Field::Bottom => "bottom",
+            Field::VertWidth => "vertWidth",
+            Field::VertOrigin => "vertOrigin",
         }
     }
 
@@ -160,8 +168,18 @@ impl Field {
         Field::ALL.into_iter().find(|f| f.name() == name)
     }
 
-    fn is_sidebearing(self) -> bool {
-        self != Field::Width
+    /// Left, right, top or bottom: a metric measured from the outline's bounds.
+    pub fn is_sidebearing(self) -> bool {
+        matches!(self, Field::Left | Field::Right | Field::Top | Field::Bottom)
+    }
+
+    /// The values a key may give in this field: [`WIDTH_RANGE`] for the two widths,
+    /// [`SIDEBEARING_RANGE`] for the sidebearings and the vertical origin.
+    pub fn range(self) -> std::ops::RangeInclusive<f64> {
+        match self {
+            Field::Width | Field::VertWidth => WIDTH_RANGE,
+            Field::Left | Field::Right | Field::Top | Field::Bottom | Field::VertOrigin => SIDEBEARING_RANGE,
+        }
     }
 
     /// This field's key in a set of keys.
@@ -172,6 +190,8 @@ impl Field {
             Field::Width => keys.width.as_deref(),
             Field::Top => keys.top.as_deref(),
             Field::Bottom => keys.bottom.as_deref(),
+            Field::VertWidth => keys.vert_width.as_deref(),
+            Field::VertOrigin => keys.vert_origin.as_deref(),
         }
     }
 }

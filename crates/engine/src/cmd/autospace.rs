@@ -596,6 +596,8 @@ fn clear_key(g: &mut Glyph, id: &str, field: Field) {
         Field::Width => keys.width = None,
         Field::Top => keys.top = None,
         Field::Bottom => keys.bottom = None,
+        Field::VertWidth => keys.vert_width = None,
+        Field::VertOrigin => keys.vert_origin = None,
     };
     match scope {
         Some(Scope::Local) => {
