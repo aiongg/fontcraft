@@ -9,7 +9,7 @@
 //! | New Group field, Enter | starts a new, empty group of that name |
 //! | Clear Group | clears the current group from every member (`kerning.setLeftGroup` or `kerning.setRightGroup` with `null`) |
 //! | drag glyphs from the font onto the members | adds them to the current group |
-//! | Delete, Remove from Group (List) | takes the selected members out of the group |
+//! | − beside a member (List) | takes it out of the group |
 //! | Propose Groups, Apply, Discard | `kerning.buildGroups` without applying, its proposal shown for review; Apply stores it |
 //!
 //! The stacked view draws every member over the others, aligned where the group's side meets the pair: a left group
@@ -19,7 +19,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use craft::behavior::{Selection, keyed};
+use craft::behavior::{IconId, Selection, keyed};
 use craft::ui::buttons::Button;
 use craft::ui::choice::Segmented;
 use craft::ui::contract::{
@@ -27,7 +27,7 @@ use craft::ui::contract::{
 };
 use craft::ui::display::{Picture, PictureSize, Shade, Text};
 use craft::ui::layout_components::{Row, Stack};
-use craft::ui::list::{List, ListRow, ThumbAspect, ThumbSize};
+use craft::ui::list::{List, ListRow, RowEvent, ThumbAspect, ThumbSize, TrailingFace, TrailingPart};
 use craft::ui::primitives::StrokeWidth;
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::Env;
@@ -74,6 +74,9 @@ craft::ui::words! {
         no_font: "fontcraftGroupsEditor.noFont" = "No font is open";
     }
 }
+
+/// The member row's remove button.
+const REMOVE: TrailingPart = TrailingPart::new(1);
 
 /// What a glyph dragged from the font's glyphs carries: the dragged glyph names.
 #[derive(Clone, Debug, PartialEq)]
@@ -211,22 +214,18 @@ fn members(ui: &mut Ui, words: &GroupsEditorWords, model: &GroupsEditorModel, se
             dropped(model, &out.response.events)
         }
         GroupsView::List => {
-            let mut picked = Selection::default();
             let out = List::<String>::new(words.members.clone())
                 .empty(words.no_members.clone())
-                .select(SelectMode::Multi)
-                .deletable(true)
-                .selection(Bind::bound(&mut picked))
                 .takes_drop(DropKind::new::<GlyphDrag>(DropPlace::Between, |_, _| true))
-                .show_items(ui, &source, &mut |name, _| ListRow::new(name.clone()));
+                .show_items(ui, &source, &mut |name, _| {
+                    ListRow::new(name.clone()).trailing_part(REMOVE, TrailingFace::Icon(IconId::new("minus").into()), words.remove.clone())
+                });
             for event in &out.events {
-                if let CollectionEvent::Delete(names) = event {
-                    sent.push(set_group(model, names, None));
+                if let CollectionEvent::Item(name, RowEvent::Trailing { part, .. }) = event
+                    && *part == REMOVE
+                {
+                    sent.push(set_group(model, std::slice::from_ref(name), None));
                 }
-            }
-            let remove = Button::new(words.remove.clone()).enabled(!picked.items.is_empty()).show(ui);
-            if remove.clicked() {
-                sent.push(set_group(model, &picked.items, None));
             }
             dropped(model, &out.events)
         }

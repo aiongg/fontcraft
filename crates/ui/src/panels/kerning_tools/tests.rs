@@ -244,7 +244,7 @@ fn groups_model(view: GroupsView) -> Tracked<GroupsEditorModel> {
     })
 }
 
-/// Picking a group, Clear Group, Remove from Group and a glyph dragged onto the members post the editor's commands.
+/// Picking a group, Clear Group, a member's remove button and a glyph dragged onto the members post the editor's commands.
 #[test]
 fn the_groups_editor_posts_group_picks_member_changes_and_drops() {
     let (mut fixture, posted) = fixture_of(groups_model(GroupsView::List), show_editor);
@@ -254,10 +254,7 @@ fn the_groups_editor_posts_group_picks_member_changes_and_drops() {
     let clear = fixture.by_label("Clear Group").expect("Clear Group");
     fixture.click(&clear).settle();
     assert!(posted.borrow().contains(&Msg::run("kerning.setLeftGroup", json!({"glyphs": ["e", "o"], "group": null}))), "{:?}", posted.borrow());
-    posted.borrow_mut().clear();
-    let e = fixture.by_label("e").expect("the e member");
-    fixture.click(&e).settle();
-    let remove = fixture.by_label("Remove from Group").expect("Remove from Group");
+    let remove = fixture.by_label("Remove from Group").expect("the remove button of the e row");
     fixture.click(&remove).settle();
     assert!(posted.borrow().contains(&Msg::run("kerning.setLeftGroup", json!({"glyphs": ["e"], "group": null}))), "{:?}", posted.borrow());
 
