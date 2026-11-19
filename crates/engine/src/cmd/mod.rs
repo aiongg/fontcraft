@@ -67,6 +67,7 @@ mod kerning_window;
 mod layer;
 mod layers;
 pub mod masters;
+mod match_masters;
 mod measure;
 mod measure_line;
 mod meta;
@@ -377,6 +378,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(axes::specs());
         v.extend(special_layers::specs());
         v.extend(interpolation::specs());
+        v.extend(match_masters::specs());
         v.extend(instance_masters::specs());
         v.extend(compare::specs());
         v.extend(preview::specs());

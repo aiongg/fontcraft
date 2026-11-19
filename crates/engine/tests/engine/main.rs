@@ -118,6 +118,7 @@ mod layout_normalize;
 mod linked_sources;
 mod macros;
 mod masters;
+mod match_masters;
 mod math_base;
 mod measure_line;
 mod measurements;
