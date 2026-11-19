@@ -440,5 +440,9 @@ bundled, the file says so in its header and the project is listed here with its 
   (https://www.w3.org/TR/filter-effects-1/). Copyright © 2018 W3C® (MIT, ERCIM, Keio, Beihang).
   Used under the W3C Software and Document License; its full notice is in LICENSE-W3C.txt.
 
+  vendor/egui-winit-0.36 is egui-winit 0.36.2 (https://github.com/emilk/egui, MIT OR Apache-2.0,
+  Copyright (c) 2018-2021 Emil Ernerfeldt), with two match arms added for the window event of the
+  winit fork that the craft libraries use.
+
 Product names mentioned in the documentation are trademarks of their owners and are used only to
 identify the products FontCraft is compared with or interoperates with.

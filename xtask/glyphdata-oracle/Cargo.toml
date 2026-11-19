@@ -1,0 +1,15 @@
+# fontc's glyph database as an oracle for `cargo xtask glyphdata --check`. Its own workspace and
+# lockfile: glyphs-reader pins an icu_properties that the main workspace cannot share.
+[package]
+name = "glyphdata-oracle"
+version = "0.0.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[workspace]
+
+[dependencies]
+# fontc's glyph database (MIT OR Apache-2.0); never a dependency of shipped crates.
+glyphs-reader = "=1.0.0"
+serde_json = "1"

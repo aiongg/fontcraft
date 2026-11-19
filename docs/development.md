@@ -14,6 +14,8 @@ cargo run -p fontcraft-cli -- commands           # the command catalogue as JSON
 cargo run -p fontcraft-cli -- run --cmd glyph.newGlyph --params '{"name":"A.alt"}' --export out.ttf
 cargo run -p fontcraft-cli -- mcp --headless     # the MCP server on stdio
 cargo xtask testfonts [--out DIR]                # synthetic test fonts as .glyphs files for the reference-app checks (default plan/local/testfonts/)
+cargo xtask glyphdata --check                    # the glyph database against fontc (runs xtask/glyphdata-oracle, its own workspace, with cargo run --manifest-path) and glyphsLib
+cargo run -p fontcraft-next                      # the desktop app on the craft framework (in progress; docs/ui.md)
 ```
 
 Speed measures and oracle runs use `--profile measure` (release optimisation, no link-time
@@ -73,6 +75,7 @@ README.md  ROADMAP.md     what it is; where it stands
 ASSETS.md  NOTICE         every asset's origin and licence; third-party notices
 crates/                   libraries, by layer (docs/architecture.md)
 apps/fontcraft            the desktop app (eframe) and the control server
+apps/fontcraft-next       the desktop app on the craft framework (crates/ui, docs/ui.md)
 apps/fontcraft-cli        the command-line tool and MCP entry point
 xtask/                    the gate, the parity report, the corpus fetcher
 spec/                     the feature inventory as data

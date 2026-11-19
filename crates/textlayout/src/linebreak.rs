@@ -126,6 +126,9 @@ const CLASSES: [Class; 49] = {
     ]
 };
 
+// icu_properties 2.3 deprecates the ICU4C value without a replacement (icu4x#6067); CLASSES is
+// indexed by it.
+#[allow(deprecated)]
 fn class_of(data: &icu_properties::CodePointMapDataBorrowed<'static, LineBreak>, c: char) -> Class {
     CLASSES.get(usize::from(data.get(c).to_icu4c_value())).copied().unwrap_or(Class::Al)
 }

@@ -24,5 +24,3 @@ fontcraft-plist.workspace = true
 fontcraft-io-glyphs.workspace = true
 fontcraft-io-ufo.workspace = true
 fontcraft-ui-egui.workspace = true
-# Oracle for `cargo xtask glyphdata --check` only (MIT OR Apache-2.0); never a dependency of shipped crates.
-glyphs-reader = "=1.0.0"

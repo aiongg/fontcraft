@@ -62,10 +62,12 @@ pub const TABLE: &[(&str, Class)] = &[
     ("engine-core", Class::Layer(5)),
     ("engine", Class::Layer(5)),
     ("ui-egui", Class::Layer(6)),
+    ("ui", Class::Layer(6)),
     ("mcp", Class::Layer(6)),
     ("testkit", Class::Testkit),
     // L7: apps and tooling
     ("fontcraft", Class::Exempt),
+    ("next", Class::Exempt),
     ("cli", Class::Exempt),
     ("web", Class::Exempt),
     ("xtask", Class::Exempt),
