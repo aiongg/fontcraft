@@ -4,8 +4,8 @@
 //! one of them with a one-line arm, and only when the [`Stamp`] moved since the last call.
 
 pub mod canvas;
-pub mod font_view;
 pub mod font_info;
+pub mod font_view;
 pub mod glyph;
 
 use craft::ui::contract::Tracked;
