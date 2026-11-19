@@ -1,0 +1,234 @@
+//! The Exports tab's view model: the export list, the selection, and the fields and rows of the selected entries.
+//!
+//! It is projected only while the Exports tab shows; `font.instance.placement` (the extrapolation warnings) runs then.
+
+use craft::ui::contract::PlainData;
+use fontcraft_engine::fontinfo::Scope;
+use fontcraft_engine::fontinfo::rows::RowKind;
+use fontcraft_engine::model::axes::design_value;
+use fontcraft_engine::model::{Font, Instance, StyleClass};
+use serde_json::{Value, json};
+
+use super::ProjectCx;
+use super::font_info::{MAX_SHOWN, RowModel, rows};
+use crate::shell::font_info::Target;
+
+/// Most axes the Axes Coordinates rows list.
+const MAX_AXES_SHOWN: usize = 64;
+/// Most extrapolation warnings shown.
+pub const MAX_WARNINGS_SHOWN: usize = 8;
+
+/// The plus menu's commands. Add Instance is always there; the others are enabled once the engine has their command.
+pub const PLUS_MENU: [&str; 4] =
+    ["font.instance.add", "font.instance.addForEachMaster", "font.instance.toMaster", "font.instance.addVariableFontSetting"];
+
+/// The standard weight and width classes the class menus list.
+pub const WEIGHT_CLASSES: [u16; 9] = [100, 200, 300, 400, 500, 600, 700, 800, 900];
+pub const WIDTH_CLASSES: [u16; 9] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+/// Class names older sources store instead of numbers: letters and digits only, lower case.
+const WEIGHT_NAMES: &[(&str, u16)] = &[
+    ("thin", 100),
+    ("hairline", 100),
+    ("extralight", 200),
+    ("ultralight", 200),
+    ("light", 300),
+    ("normal", 400),
+    ("regular", 400),
+    ("medium", 500),
+    ("semibold", 600),
+    ("demibold", 600),
+    ("bold", 700),
+    ("extrabold", 800),
+    ("ultrabold", 800),
+    ("black", 900),
+    ("heavy", 900),
+];
+const WIDTH_NAMES: &[(&str, u16)] = &[
+    ("ultracondensed", 1),
+    ("extracondensed", 2),
+    ("condensed", 3),
+    ("semicondensed", 4),
+    ("medium", 5),
+    ("mediumnormal", 5),
+    ("normal", 5),
+    ("semiexpanded", 6),
+    ("expanded", 7),
+    ("extraexpanded", 8),
+    ("ultraexpanded", 9),
+];
+/// The class an instance has when its source states none (as `font.instance.list` reports it).
+const DEFAULT_WEIGHT_CLASS: f64 = 400.0;
+const DEFAULT_WIDTH_CLASS: f64 = 5.0;
+
+/// What the Exports tab shows.
+#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+pub struct ExportsModel {
+    pub entries: Vec<ExportEntry>,
+    /// The selected entries, in list order; the first entry when none is selected.
+    pub selected: Vec<usize>,
+    /// Which plus menu commands the engine has, in [`PLUS_MENU`] order.
+    pub plus: Vec<bool>,
+    /// The selected entries' fields; `None` without entries.
+    pub fields: Option<ExportFields>,
+    /// The added General fields and the custom parameters of the selected entries.
+    pub rows: Vec<RowModel>,
+    pub params: Vec<RowModel>,
+}
+
+/// One entry of the list.
+#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+pub struct ExportEntry {
+    pub name: String,
+    /// Exported with File › Export.
+    pub active: bool,
+    /// A variable font setting rather than a static instance.
+    pub variable: bool,
+}
+
+/// A yes-or-no value of the selected entries: `mixed` when they differ.
+#[derive(PlainData, Clone, Copy, Debug, Default, PartialEq)]
+pub struct Flag {
+    pub on: bool,
+    pub mixed: bool,
+}
+
+/// The built-in fields of the selected entries. A field whose entries differ is mixed; the static-only fields read
+/// and edit the selected static instances.
+#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+pub struct ExportFields {
+    /// The first selected entry is a variable font setting: the static-only fields do not show.
+    pub variable: bool,
+    pub active: Flag,
+    pub name: String,
+    pub name_mixed: bool,
+    /// The selected static instances, which the static-only fields edit.
+    pub statics: Vec<usize>,
+    /// The class as a number; `None` when mixed or a name the tables do not know.
+    pub weight: Option<f64>,
+    pub width: Option<f64>,
+    pub bold: Flag,
+    pub italic: Flag,
+    pub link_style: String,
+    pub link_mixed: bool,
+    /// One per font axis: its name and the shared coordinate (`None` when mixed).
+    pub axes: Vec<(String, Option<f64>)>,
+    /// The extrapolation warnings of the selected static instances.
+    pub warnings: Vec<String>,
+}
+
+pub fn project(cx: &mut ProjectCx<'_>) -> ExportsModel {
+    let placement = cx.session.query("font.instance.placement", &json!({})).unwrap_or(Value::Null);
+    let Ok(font) = cx.session.font() else { return ExportsModel::default() };
+    let count = font.instances.len();
+    let selected = shown_selection(&cx.view.font_info.exports.selected, count);
+    let entries = font
+        .instances
+        .iter()
+        .take(MAX_SHOWN)
+        .map(|i| ExportEntry { name: i.name.trim().to_string(), active: i.exports, variable: is_variable(i) })
+        .collect();
+    let plus = PLUS_MENU.iter().map(|id| fontcraft_engine::find_command(id).is_some() && (*id != "font.instance.toMaster" || count > 0)).collect();
+    let target = Target { scope: Scope::Instance, indices: selected.clone() };
+    let (fields, rows_, params) = if selected.is_empty() {
+        (None, Vec::new(), Vec::new())
+    } else {
+        (fields(font, &selected, &placement), rows(font, &target, RowKind::Field), rows(font, &target, RowKind::Param))
+    };
+    ExportsModel { entries, selected, plus, fields, rows: rows_, params }
+}
+
+/// The entries the tab acts on: the selected ones the font has, else the first.
+pub fn shown_selection(wanted: &[usize], count: usize) -> Vec<usize> {
+    let mut out: Vec<usize> = wanted.iter().copied().filter(|i| *i < count).collect();
+    out.sort_unstable();
+    out.dedup();
+    if out.is_empty() && count > 0 {
+        out.push(0);
+    }
+    out
+}
+
+/// Whether the entry is a variable font setting rather than a static instance.
+pub fn is_variable(instance: &Instance) -> bool {
+    instance.kind.as_deref() == Some("variable")
+}
+
+/// Whether the entries in `all` differ in what `f` reads.
+fn differs<T: PartialEq>(all: &[&Instance], f: impl Fn(&Instance) -> T) -> bool {
+    let mut values = all.iter().map(|i| f(i));
+    match values.next() {
+        Some(first) => values.any(|v| v != first),
+        None => false,
+    }
+}
+
+fn flag(all: &[&Instance], f: impl Fn(&Instance) -> bool) -> Flag {
+    Flag { on: all.first().is_some_and(|i| f(i)), mixed: differs(all, f) }
+}
+
+fn fields(font: &Font, selected: &[usize], placement: &Value) -> Option<ExportFields> {
+    let all: Vec<&Instance> = selected.iter().filter_map(|i| font.instances.get(*i)).collect();
+    let first = *all.first()?;
+    let statics: Vec<usize> = selected.iter().copied().filter(|i| font.instances.get(*i).is_some_and(|x| !is_variable(x))).collect();
+    let stat: Vec<&Instance> = statics.iter().filter_map(|i| font.instances.get(*i)).collect();
+    let class = |read: &dyn Fn(&Instance) -> Option<f64>| {
+        let mixed = differs(&stat, |i| read(i).map(f64::to_bits));
+        stat.first().and_then(|i| read(i)).filter(|_| !mixed)
+    };
+    let weight = class(&|i: &Instance| class_value(i.weight_class.as_ref(), WEIGHT_NAMES, DEFAULT_WEIGHT_CLASS));
+    let width = class(&|i: &Instance| class_value(i.width_class.as_ref(), WIDTH_NAMES, DEFAULT_WIDTH_CLASS));
+    let stat_first = stat.first().copied();
+    let axes = font
+        .axes
+        .iter()
+        .take(MAX_AXES_SHOWN)
+        .enumerate()
+        .map(|(at, axis)| {
+            let mixed = differs(&stat, |i| design_value(&i.location, at).to_bits());
+            (axis.name.clone(), stat_first.filter(|_| !mixed).map(|i| design_value(&i.location, at)))
+        })
+        .collect();
+    let warnings = placement
+        .get("instances")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|e| e.get("index").and_then(Value::as_u64).and_then(|i| usize::try_from(i).ok()).is_some_and(|i| statics.contains(&i)))
+        .filter_map(|e| e.get("warning").and_then(Value::as_str).map(sentence))
+        .take(MAX_WARNINGS_SHOWN.saturating_add(1))
+        .collect();
+    Some(ExportFields {
+        variable: is_variable(first),
+        active: flag(&all, |i| i.exports),
+        name: first.name.clone(),
+        name_mixed: differs(&all, |i| i.name.clone()),
+        weight,
+        width,
+        bold: flag(&stat, |i| i.is_bold),
+        italic: flag(&stat, |i| i.is_italic),
+        link_style: stat_first.and_then(|i| i.link_style.clone()).unwrap_or_default(),
+        link_mixed: differs(&stat, |i| i.link_style.clone()),
+        statics,
+        axes,
+        warnings,
+    })
+}
+
+/// A class as the field shows it: its number, a known name's number, or the default when the source states none.
+/// `None` for a name the tables do not know.
+pub fn class_value(class: Option<&StyleClass>, names: &[(&str, u16)], default: f64) -> Option<f64> {
+    match class {
+        None => Some(default),
+        Some(StyleClass::Number(n)) => n.is_finite().then_some(*n),
+        Some(StyleClass::Name(name)) => {
+            let key: String = name.chars().filter(char::is_ascii_alphanumeric).map(|c| c.to_ascii_lowercase()).collect();
+            names.iter().find(|(k, _)| *k == key).map(|(_, n)| f64::from(*n))
+        }
+    }
+}
+
+/// `text` with its first letter capitalised, as a line on its own reads.
+fn sentence(text: &str) -> String {
+    let mut chars = text.chars();
+    chars.next().map(|c| c.to_uppercase().chain(chars).collect()).unwrap_or_default()
+}

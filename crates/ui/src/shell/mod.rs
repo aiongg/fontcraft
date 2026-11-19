@@ -8,6 +8,7 @@ pub mod command_surfaces;
 pub mod commands;
 pub mod dock;
 pub mod font_info;
+pub mod font_info_tabs;
 pub mod font_view;
 pub mod glyph_info;
 pub mod kerning_review;

@@ -8,15 +8,23 @@
 //! | [`font_tab`] | General (Family Name, Units per Em, Version, Creation Date, added fields), Axes, Custom Parameters |
 //! | [`other_tab`] | Other Settings |
 //! | [`notes_tab`] | the font note |
+//! | [`exports_tab`] | Exports: the export list and the selected entries' fields and parameters |
+//! | [`features_tab`] | Features: the sidebar of prefixes, classes and features, and the shown entry |
+//! | [`code_editor`] | the Features tab's code field and its diagnostics |
 //!
-//! A tab click posts `font.info.selectTab`; every edit posts an engine command. The Masters, Exports and Features
-//! tabs come with their own packages.
+//! A tab click posts `font.info.selectTab`; every edit posts an engine command. The Masters tab comes with its own
+//! package.
 
+pub mod code_editor;
+pub mod exports_tab;
+pub mod features_tab;
 pub mod font_tab;
 pub mod notes_tab;
 pub mod other_tab;
 pub mod param_value;
 pub mod rows;
+#[cfg(test)]
+mod tabs_tests;
 #[cfg(test)]
 mod tests;
 
@@ -109,7 +117,9 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
             FontInfoTab::Font => font_tab::view(ui, model, sent),
             FontInfoTab::Other => other_tab::view(ui, &model.other, sent),
             FontInfoTab::Notes => notes_tab::view(ui, &model.note, sent),
-            FontInfoTab::Masters | FontInfoTab::Exports | FontInfoTab::Features => {
+            FontInfoTab::Exports => exports_tab::view(ui, &model.exports, &model.masters, sent),
+            FontInfoTab::Features => features_tab::view(ui, &model.features, sent),
+            FontInfoTab::Masters => {
                 Text::new(words.not_yet.clone()).shade(Shade::Muted).show(ui);
             }
         }

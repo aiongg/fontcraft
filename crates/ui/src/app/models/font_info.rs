@@ -32,6 +32,10 @@ pub struct FontInfoModel {
     pub note: String,
     /// The font's masters as (id, name), for the parameters whose value names one.
     pub masters: Vec<(String, String)>,
+    /// The Features tab; empty while another tab shows.
+    pub features: super::font_features::FeaturesModel,
+    /// The Exports tab; empty while another tab shows.
+    pub exports: super::font_exports::ExportsModel,
 }
 
 /// The Font tab.
@@ -181,6 +185,8 @@ pub fn project(model: &mut Tracked<FontInfoModel>, cx: &mut ProjectCx<'_>) {
     let predefined = predefined_axes(cx);
     let warnings = axis_warnings(cx);
     let settings = cx.session.query("font.settings.get", &json!({})).unwrap_or(Json::Null);
+    let features = if tab == FontInfoTab::Features { super::font_features::project(cx) } else { Default::default() };
+    let exports = if tab == FontInfoTab::Exports { super::font_exports::project(cx) } else { Default::default() };
     let Ok(font) = cx.session.font() else {
         super::set(model, FontInfoModel { tab, ..FontInfoModel::default() });
         return;
@@ -217,6 +223,8 @@ pub fn project(model: &mut Tracked<FontInfoModel>, cx: &mut ProjectCx<'_>) {
         other: other(&settings),
         note: font.note.clone(),
         masters: font.masters.iter().take(MAX_SHOWN).map(|m| (m.id.clone(), m.name.clone())).collect(),
+        features,
+        exports,
     };
     super::set(model, value);
 }

@@ -1,0 +1,225 @@
+//! The Features tab's view model: the sidebar groups, the selection, the shown entry with its stylistic-set names and
+//! the last compile's diagnostics, and the snippets menu.
+//!
+//! It is projected only while the Features tab shows: `font.features.listErrors`, `font.features.openSpec` and
+//! `font.features.listSnippets` (which reads the snippet folder) run then and not otherwise.
+
+use std::collections::HashSet;
+
+use craft::ui::contract::PlainData;
+use fontcraft_engine::model::{Features, Font};
+use serde_json::{Value, json};
+
+use super::ProjectCx;
+use crate::shell::font_info_tabs::{EntryKey, EntryKind};
+
+/// Most entries listed per sidebar group.
+pub const MAX_SHOWN_ENTRIES: usize = 5_000;
+/// Most diagnostics read from the last compile, and most listed under the code.
+const MAX_DIAGNOSTICS: usize = 1_000;
+const MAX_SHOWN_ERRORS: usize = 50;
+/// Most stylistic-set names shown.
+const MAX_SHOWN_LABELS: usize = 100;
+/// Most snippets kept per menu group, and most groups.
+const MAX_MENU_SNIPPETS: usize = 1_000;
+/// Most fix labels kept per diagnostic.
+const MAX_FIXES: usize = 16;
+
+/// What the Features tab shows.
+#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+pub struct FeaturesModel {
+    /// The groups in sidebar order: prefixes, classes, features.
+    pub groups: Vec<GroupModel>,
+    /// The selected entries, resolved against the font; the last shows in the editor.
+    pub selected: Vec<EntryKey>,
+    pub entry: Option<EntryPane>,
+    /// The master Compile previews for: the current master.
+    pub master: Option<String>,
+    pub snippets: SnippetsModel,
+}
+
+/// One sidebar group.
+#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+pub struct GroupModel {
+    pub kind: EntryKind,
+    pub entries: Vec<EntryRow>,
+    /// Entries past [`MAX_SHOWN_ENTRIES`].
+    pub hidden: usize,
+}
+
+/// One sidebar entry.
+#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+pub struct EntryRow {
+    pub name: String,
+    pub automatic: bool,
+    pub disabled: bool,
+    /// The last compile, still current, found an error in it.
+    pub error: bool,
+}
+
+/// The entry the editor shows.
+#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+pub struct EntryPane {
+    pub key: EntryKey,
+    pub code: String,
+    pub notes: String,
+    pub automatic: bool,
+    /// A feature ss01 to ss20, whose names the tab edits.
+    pub stylistic_set: bool,
+    /// The set's names as (language, name).
+    pub labels: Vec<(String, String)>,
+    /// The feature's section of the OpenType specification.
+    pub spec_url: Option<String>,
+    pub diagnostics: Vec<DiagnosticModel>,
+}
+
+/// One error or warning of the last compile in the shown entry.
+#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+pub struct DiagnosticModel {
+    pub id: u64,
+    pub error: bool,
+    pub message: String,
+    pub line: u64,
+    /// Labels of the suggested fixes.
+    pub fixes: Vec<String>,
+}
+
+/// The snippets menu: built-in titles, then one group of titles per user file.
+#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+pub struct SnippetsModel {
+    pub built_in: Vec<String>,
+    pub groups: Vec<(String, Vec<String>)>,
+    pub folder: Option<String>,
+    pub warnings: Vec<String>,
+    pub error: Option<String>,
+}
+
+pub fn project(cx: &mut ProjectCx<'_>) -> FeaturesModel {
+    let errors = cx.session.query("font.features.listErrors", &json!({})).ok();
+    let snippets = snippets(cx.session.query("font.features.listSnippets", &json!({})));
+    let Ok(font) = cx.session.font() else { return FeaturesModel::default() };
+    let f = &font.features;
+    let diagnostics = diagnostics(errors.as_ref());
+    let with_errors: HashSet<(EntryKind, usize)> =
+        diagnostics.iter().filter(|(_, d)| d.error).filter_map(|(e, _)| e.as_ref().map(|e| (e.kind, e.index))).collect();
+    let groups = EntryKind::ALL
+        .into_iter()
+        .map(|kind| {
+            let group = kind.group(f);
+            GroupModel {
+                kind,
+                entries: group
+                    .iter()
+                    .take(MAX_SHOWN_ENTRIES)
+                    .enumerate()
+                    .map(|(index, e)| EntryRow {
+                        name: e.name.clone(),
+                        automatic: e.automatic,
+                        disabled: e.disabled,
+                        error: with_errors.contains(&(kind, index)),
+                    })
+                    .collect(),
+                hidden: group.len().saturating_sub(MAX_SHOWN_ENTRIES),
+            }
+        })
+        .collect();
+    let selected = selection(f, &cx.view.font_info.features.selected);
+    let master = crate::shell::masters::current_master(font, &cx.view.layers).map(|m| m.id.clone());
+    let entry = selected.last().and_then(|key| pane(font, key, &diagnostics));
+    let spec_url = match &entry {
+        Some(e) if e.key.kind == EntryKind::Feature => cx
+            .session
+            .query("font.features.openSpec", &json!({ "tag": e.key.name }))
+            .ok()
+            .and_then(|r| r.get("url").and_then(Value::as_str).map(str::to_string)),
+        _ => None,
+    };
+    let entry = entry.map(|e| EntryPane { spec_url, ..e });
+    FeaturesModel { groups, selected, entry, master, snippets }
+}
+
+/// The selection resolved against the font, without repeats; the first entry when nothing is selected.
+fn selection(f: &Features, wanted: &[EntryKey]) -> Vec<EntryKey> {
+    let mut seen = HashSet::new();
+    let out: Vec<EntryKey> = wanted.iter().filter_map(|k| k.resolve(f)).filter(|k| seen.insert(k.clone())).collect();
+    if !out.is_empty() {
+        return out;
+    }
+    EntryKind::ALL.into_iter().find_map(|kind| kind.group(f).first().map(|e| EntryKey { kind, name: e.name.clone(), index: 0 })).into_iter().collect()
+}
+
+/// Whether `tag` is one of ss01 to ss20.
+pub fn is_stylistic_set(tag: &str) -> bool {
+    tag.strip_prefix("ss").filter(|n| n.len() == 2).and_then(|n| n.parse::<u8>().ok()).is_some_and(|n| (1..=20).contains(&n))
+}
+
+fn pane(font: &Font, key: &EntryKey, diagnostics: &[(Option<EntryKey>, DiagnosticModel)]) -> Option<EntryPane> {
+    let e = key.snippet(&font.features)?;
+    let stylistic_set = key.kind == EntryKind::Feature && is_stylistic_set(&e.name);
+    Some(EntryPane {
+        key: key.clone(),
+        code: e.code.clone(),
+        notes: e.notes.clone(),
+        automatic: e.automatic,
+        stylistic_set,
+        labels: if stylistic_set {
+            e.labels.iter().take(MAX_SHOWN_LABELS).map(|l| (l.language.clone(), l.value.clone())).collect()
+        } else {
+            Vec::new()
+        },
+        spec_url: None,
+        diagnostics: diagnostics.iter().filter(|(k, _)| k.as_ref() == Some(key)).map(|(_, d)| d.clone()).take(MAX_SHOWN_ERRORS).collect(),
+    })
+}
+
+/// The diagnostics of a `font.features.listErrors` result with the entry each is in; none once the font changed since
+/// the compile.
+fn diagnostics(result: Option<&Value>) -> Vec<(Option<EntryKey>, DiagnosticModel)> {
+    let Some(r) = result else { return Vec::new() };
+    if !r.get("current").and_then(Value::as_bool).unwrap_or(false) {
+        return Vec::new();
+    }
+    let list = r.get("diagnostics").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
+    list.iter()
+        .take(MAX_DIAGNOSTICS)
+        .filter_map(|d| {
+            let model = DiagnosticModel {
+                id: d.get("id")?.as_u64()?,
+                error: d.get("severity").and_then(Value::as_str) == Some("error"),
+                message: d.get("message").and_then(Value::as_str).unwrap_or_default().to_string(),
+                line: d.get("line").and_then(Value::as_u64).unwrap_or(0),
+                fixes: strings(d.get("fixes")).into_iter().take(MAX_FIXES).collect(),
+            };
+            Some((d.get("entry").and_then(EntryKey::from_json), model))
+        })
+        .collect()
+}
+
+fn snippets(result: Result<Value, fontcraft_engine::EngineError>) -> SnippetsModel {
+    let r = match result {
+        Ok(r) => r,
+        Err(e) => return SnippetsModel { error: Some(e.to_string()), ..SnippetsModel::default() },
+    };
+    let groups = r
+        .get("groups")
+        .and_then(Value::as_array)
+        .map(|g| g.iter().take(MAX_MENU_SNIPPETS).filter_map(|g| Some((g.get("name")?.as_str()?.to_string(), titles(g.get("snippets"))))).collect())
+        .unwrap_or_default();
+    SnippetsModel {
+        built_in: titles(r.get("builtIn")),
+        groups,
+        folder: r.get("folder").and_then(Value::as_str).map(str::to_string),
+        warnings: strings(r.get("warnings")),
+        error: None,
+    }
+}
+
+fn titles(v: Option<&Value>) -> Vec<String> {
+    v.and_then(Value::as_array)
+        .map(|a| a.iter().take(MAX_MENU_SNIPPETS).filter_map(|s| s.get("title")?.as_str().map(str::to_string)).collect())
+        .unwrap_or_default()
+}
+
+fn strings(v: Option<&Value>) -> Vec<String> {
+    v.and_then(Value::as_array).map(|a| a.iter().take(MAX_MENU_SNIPPETS).filter_map(Value::as_str).map(str::to_string).collect()).unwrap_or_default()
+}
