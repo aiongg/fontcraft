@@ -49,7 +49,10 @@ pub fn show(app: &mut FontCraftApp, ui: &mut Ui) {
     AppShell::new(WindowKey::main())
         .title_bar(title_bar)
         .options_bar(true, |ui, _, app: &mut FontCraftApp| bars::options(ui, bars::OptionsProps { tool: app.view.tool }))
-        .status(true, |ui, _, app: &mut FontCraftApp| bars::status(ui, bars::StatusProps { status: &app.status }))
+        .status(true, |ui, _, app: &mut FontCraftApp| {
+            let FontCraftApp { status, models, sent, .. } = app;
+            bars::status(ui, bars::StatusProps { status, features: &models.features, sent });
+        })
         .start(Slot::new("fontcraft.tools").size(SlotSize::RailWidth), |ui, _, app: &mut FontCraftApp| {
             let FontCraftApp { tool_slots, view, sent, .. } = app;
             rail::show(ui, rail::RailProps { slots: tool_slots, current: &view.tool, last_used: &view.tools_last_used, sent });
@@ -78,6 +81,7 @@ fn title_bar(ui: &mut Ui, _: &mut BodyCx<'_>, app: &mut FontCraftApp) {
 fn body(ui: &mut Ui, cx: &mut BodyCx<'_>, app: &mut FontCraftApp) {
     dock::show(ui, app);
     command_palette::show(ui, cx, app);
+    crate::canvas::text::edit::shell_pass(ui, cx, app);
     if let Some(dialogs) = cx.dialogs() {
         dialogs.with(|host| crate::dialogs::run(host, app));
     }

@@ -61,6 +61,8 @@ pub struct Models {
     /// The Kerning window (`panels::kerning_window`).
     pub kerning_window: Tracked<kerning_window::KerningWindowModel>,
     pub text: Tracked<text::TextModel>,
+    /// The Features menu.
+    pub features: Tracked<text::FeaturesModel>,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -78,6 +80,8 @@ pub struct Stamp {
     active: Option<(u64, u64)>,
     settings: u64,
     view: u64,
+    /// The active document's last feature compile.
+    compile: Option<(u64, u64, bool)>,
 }
 
 impl Stamp {
@@ -88,6 +92,7 @@ impl Stamp {
             active: session.active().map(|d| (d.id, d.revision)),
             settings: session.settings().revision(),
             view: view_revision,
+            compile: crate::canvas::text::features::compile_stamp(session),
         }
     }
 }
@@ -115,6 +120,7 @@ impl Models {
         layers::project_masters(&mut self.masters, cx);
         kerning_window::project(&mut self.kerning_window, cx);
         text::project(&mut self.text, cx);
+        text::project_features(&mut self.features, &self.text, cx);
         true
     }
 }

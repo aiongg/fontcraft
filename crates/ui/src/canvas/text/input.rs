@@ -57,7 +57,10 @@ fn layout(app: &mut FontCraftApp) -> Option<Arc<Layout>> {
     let current = model::key(&app.session, &app.view);
     match (&app.models.text.layout, &app.models.text.key) {
         (Some(layout), Some(key)) if current.as_ref() == Some(key) => Some(layout.clone()),
-        _ => model::layout(&mut app.session, &app.view),
+        _ => {
+            let shaper = app.models.text.shaper.for_preview(super::features::preview(&app.session, &app.view.text.features));
+            model::layout(&mut app.session, &app.view, &shaper)
+        }
     }
 }
 

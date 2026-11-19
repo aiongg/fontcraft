@@ -31,6 +31,9 @@ fn options_view(props: &mut OptionsProps, ui: &mut Ui) {
 pub struct StatusProps<'a> {
     /// The last error or notice; empty when there is none.
     pub status: &'a str,
+    /// The Features menu, at the bar's start.
+    pub features: &'a craft::ui::contract::Tracked<crate::app::models::text::FeaturesModel>,
+    pub sent: &'a mut Vec<crate::app::Msg>,
 }
 
 pub fn status(ui: &mut Ui, mut props: StatusProps<'_>) {
@@ -40,6 +43,7 @@ pub fn status(ui: &mut Ui, mut props: StatusProps<'_>) {
 fn status_view(props: &mut StatusProps<'_>, ui: &mut Ui) {
     let words = Env::of(ui).words::<ChromeWords>();
     let _ = Bar::new(words.status.clone(), BarKind::Status).show(ui, |ui, _| {
+        crate::panels::features_menu::show(ui, crate::panels::features_menu::Props { model: props.features, sent: props.sent });
         if props.status.is_empty() {
             Text::new(words.ready.clone()).show(ui);
         } else {

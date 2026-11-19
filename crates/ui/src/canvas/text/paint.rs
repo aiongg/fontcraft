@@ -146,3 +146,58 @@ pub fn number(value: f64) -> String {
     let rounded = (value * 10.0).round() / 10.0;
     if rounded.fract() == 0.0 { format!("{rounded:.0}") } else { format!("{rounded:.1}") }
 }
+
+pub fn metrics_labels(cx: &PaintCx<'_>) {
+    let t = TextTokens::standard();
+    let font = FontId::proportional(t.metrics_label_size);
+    for (at, align, text) in metrics_label_places(cx) {
+        cx.painter.text(at, align, text, font.clone(), t.metrics_label);
+    }
+}
+
+/// Where each metrics label goes on screen (`spacing.metricsOverlayInTextMode`). Horizontal text: under the
+/// descender, the left sidebearing at the glyph's left edge, the right one at its right edge, the width centred under
+/// them; a glyph too narrow for both sidebearings shows only its width. Vertical text: along the column's left edge,
+/// the top and bottom sidebearings at the advance's ends and the width between them. Glyphs narrower on screen than
+/// `metrics_min_advance` get no labels.
+pub fn metrics_label_places(cx: &PaintCx<'_>) -> Vec<(Pos2, Align2, String)> {
+    let model = cx.text;
+    if !model.shown || !model.text_mode {
+        return Vec::new();
+    }
+    let t = TextTokens::standard();
+    let (pad, row) = (t.metrics_label_pad, t.metrics_label_size + t.metrics_label_pad);
+    // An estimate of a label's width; the painter lays the text out itself.
+    let width_of = |s: &str| s.chars().count() as f32 * t.metrics_label_size * 0.6;
+    let scale = cx.camera.to_screen((1.0, 0.0).into()).x - cx.camera.to_screen((0.0, 0.0).into()).x;
+    let mut out = Vec::new();
+    for label in &model.labels {
+        let [x0, y0, x1, y1] = label.bounds;
+        let a = cx.camera.to_screen((x0, y0).into());
+        let b = cx.camera.to_screen((x1, y1).into());
+        let r = Rect::from_two_pos(a, b);
+        let along = if label.vertical { r.height() } else { r.width() };
+        if !r.is_finite() || along < t.metrics_min_advance || !r.expand(row * 2.0).intersects(cx.rect) {
+            continue;
+        }
+        let (first, second) = label.sides.map_or((String::new(), String::new()), |(a, b)| (number(a), number(b)));
+        let width = number(label.advance);
+        let (before, after) = ((label.overlap.0 as f32) * scale.abs(), (label.overlap.1 as f32) * scale.abs());
+        if label.vertical {
+            let x = r.left() + pad;
+            out.push((Pos2::new(x, r.top() + before + pad), Align2::LEFT_TOP, first));
+            out.push((Pos2::new(x, r.bottom() - after - pad), Align2::LEFT_BOTTOM, second));
+            out.push((Pos2::new(x, r.center().y), Align2::LEFT_CENTER, width));
+        } else {
+            // The box runs from the descender up; its bottom edge on screen is the larger y.
+            let y = r.bottom() + pad;
+            let (start, end) = (r.left() + before + pad, r.right() - after - pad);
+            if !first.is_empty() && width_of(&first) + width_of(&second) + pad <= end - start {
+                out.push((Pos2::new(start, y), Align2::LEFT_TOP, first));
+                out.push((Pos2::new(end, y), Align2::RIGHT_TOP, second));
+            }
+            out.push((Pos2::new(r.center().x, y + row), Align2::CENTER_TOP, width));
+        }
+    }
+    out
+}

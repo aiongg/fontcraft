@@ -55,7 +55,7 @@ fn the_control_protocol_drives_the_app() {
     assert_eq!(handle(&mut t.app, &json!({"id": 9, "method": "nope"}))["id"], 9, "the reply carries the request's id");
 
     // Methods of packages not built yet say which package brings them.
-    for (method, package) in [("ui.text", "UI.3"), ("ui.contextMenu.list", "UI.25")] {
+    for (method, package) in [("ui.contextMenu.list", "UI.25")] {
         let error = t.error(method, json!({}));
         assert!(error.contains("not built yet") && error.contains(package), "{method}: {error}");
     }

@@ -147,12 +147,21 @@ fn key(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
         } else if let Some(id) = Binding::parse(&chord_text(name, mods)).ok().as_ref().and_then(shortcut_command) {
             handled = true;
             command = Some(id);
-            let msg = match FontCraftApp::route(CommandRef::new(id)) {
-                Msg::Run(c) => Msg::Run(app.with_targets(c)),
-                other => other,
+            let msgs = match crate::canvas::text::edit::fired(app, &CommandRef::new(id)) {
+                Some(Ok(msgs)) => msgs,
+                Some(Err(e)) => {
+                    errors.push(e);
+                    Vec::new()
+                }
+                None => vec![match FontCraftApp::route(CommandRef::new(id)) {
+                    Msg::Run(c) => Msg::Run(app.with_targets(c)),
+                    other => other,
+                }],
             };
-            if let Err(e) = app.apply_msg(msg) {
-                errors.push(e);
+            for msg in msgs {
+                if let Err(e) = app.apply_msg(msg) {
+                    errors.push(e);
+                }
             }
         }
     }

@@ -13,12 +13,14 @@ pub mod custom_parameter_picker;
 pub mod field_picker;
 pub mod fields;
 mod filters;
+pub mod find_glyphs;
 pub mod form;
 mod host;
 pub mod kerning_audit;
 pub mod kerning_questions;
 pub mod os2_bits;
 pub mod panose;
+pub mod sample_strings;
 pub mod spec;
 pub mod tt;
 mod unsaved;
@@ -44,6 +46,8 @@ pub const MODULES: &[Module] = &[
     host::run,
     kerning_questions::run,
     kerning_audit::run,
+    sample_strings::run_dialog,
+    find_glyphs::run_dialog,
 ];
 
 /// Every package's dialog specs, one line each.

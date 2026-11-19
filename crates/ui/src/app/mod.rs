@@ -366,6 +366,14 @@ impl ShellApp for FontCraftApp {
             }
             let msg = match FontCraftApp::route(fired.command) {
                 Msg::Run(command) => {
+                    // Text mode's Edit menu acts on the text.
+                    if let Some(result) = crate::canvas::text::edit::fired(self, &command) {
+                        match result {
+                            Ok(msgs) => self.sent.extend(msgs),
+                            Err(error) => self.status = error,
+                        }
+                        continue;
+                    }
                     let command = self.with_targets(command);
                     // A command with a dialog that the selection gives no parameters opens its dialog.
                     if crate::dialogs::after::fired(self, &command.id, &command.params) {

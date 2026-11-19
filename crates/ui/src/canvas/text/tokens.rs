@@ -29,6 +29,12 @@ pub struct TextTokens {
     pub measurement_advance_width: f32,
     /// Below this many points of advance a glyph gets no numbers: they would overlap.
     pub measurement_min_advance: f32,
+    /// The metrics labels of text mode (`spacing.metricsOverlayInTextMode`): colour, size, padding, and the advance
+    /// in points below which a glyph gets none.
+    pub metrics_label: Color32,
+    pub metrics_label_size: f32,
+    pub metrics_label_pad: f32,
+    pub metrics_min_advance: f32,
 }
 
 impl TextTokens {
@@ -51,6 +57,10 @@ impl TextTokens {
             measurement_advance: Color32::from_rgb(0xb8, 0xb8, 0xbc),
             measurement_advance_width: 0.5,
             measurement_min_advance: 24.0,
+            metrics_label: Color32::from_rgb(0x5a, 0x5a, 0x60),
+            metrics_label_size: 10.0,
+            metrics_label_pad: 2.0,
+            metrics_min_advance: 24.0,
         }
     }
 }

@@ -60,6 +60,7 @@ pub const LAYERS: &[PaintLayer] = &[
     PaintLayer { id: "toolOverlays", paint: tools::overlays::paint },
     PaintLayer { id: "textCursor", paint: super::text::paint::cursor },
     PaintLayer { id: "measurementLine", paint: super::text::paint::measurement },
+    PaintLayer { id: "textMetricsLabels", paint: super::text::paint::metrics_labels },
 ];
 
 /// Paints every layer.
