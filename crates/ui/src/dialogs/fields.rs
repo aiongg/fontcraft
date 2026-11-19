@@ -68,6 +68,11 @@ pub enum Kind {
     /// A folder path, typed or picked with the folder chooser. An empty path is no folder: the field is left out of
     /// the parameters.
     Folder,
+    /// A file path, typed or picked with the file chooser: an existing file to read, or with `save` a file to write.
+    /// `extensions` are the types the chooser offers (lowercase, without the dot; empty offers every file); a file to
+    /// write gets the first when the person types none. An empty path is no file: the field is left out of the
+    /// parameters.
+    File { save: bool, extensions: Vec<String> },
     /// An order of the rows `labels`: the value lists every row index once, the first row on top.
     Order { labels: Vec<String> },
     /// A list of `rows`. With `select`, the value lists the selected rows in the list's order; without, the list only
@@ -144,6 +149,16 @@ impl Field {
         Self::of(key, label, Kind::Folder, json!(""), doc)
     }
 
+    /// A path of an existing file to read, empty at first.
+    pub fn open_file(key: &str, label: &str, extensions: &[&str], doc: &str) -> Self {
+        Self::of(key, label, Kind::File { save: false, extensions: extensions.iter().map(|e| e.to_string()).collect() }, json!(""), doc)
+    }
+
+    /// A path of a file to write, empty at first.
+    pub fn save_file(key: &str, label: &str, extensions: &[&str], doc: &str) -> Self {
+        Self::of(key, label, Kind::File { save: true, extensions: extensions.iter().map(|e| e.to_string()).collect() }, json!(""), doc)
+    }
+
     /// An order of the rows `labels`, at first as listed.
     pub fn order(key: &str, label: &str, labels: Vec<String>, doc: &str) -> Self {
         let labels: Vec<String> = labels.into_iter().take(MAX_LIST_ROWS).collect();
@@ -177,7 +192,7 @@ impl Field {
 
     /// A field that takes typed text (numbers, text, paths): `ui.dialog.click` gives it the keyboard.
     pub fn is_text(&self) -> bool {
-        matches!(self.kind, Kind::Number { .. } | Kind::Integer { .. } | Kind::Text { .. } | Kind::Folder)
+        matches!(self.kind, Kind::Number { .. } | Kind::Integer { .. } | Kind::Text { .. } | Kind::Folder | Kind::File { .. })
     }
 
     /// A text field of more than one line, where Return starts a new line.
@@ -188,15 +203,21 @@ impl Field {
     /// The longest text the field takes.
     pub fn max_text(&self) -> usize {
         match self.kind {
-            Kind::Folder => MAX_PATH_TEXT,
+            Kind::Folder | Kind::File { .. } => MAX_PATH_TEXT,
             Kind::Text { max, .. } => max,
             _ => MAX_FIELD_TEXT,
         }
     }
 
-    /// A folder field with no folder in `value`.
-    pub fn is_empty_folder(&self, value: &Value) -> bool {
-        matches!(self.kind, Kind::Folder) && value.as_str().is_none_or(str::is_empty)
+    /// A folder or file field with no path in `value`: it is left out of the parameters.
+    pub fn is_empty_path(&self, value: &Value) -> bool {
+        matches!(self.kind, Kind::Folder | Kind::File { .. }) && value.as_str().is_none_or(str::is_empty)
+    }
+
+    /// Where the output goes, still empty: a folder or a file to write with no path. OK in the window asks the chooser
+    /// for it.
+    pub fn needs_destination(&self, value: &Value) -> bool {
+        matches!(self.kind, Kind::Folder | Kind::File { save: true, .. }) && self.is_empty_path(value)
     }
 
     /// `value` as this field stores it, or why it does not fit. Number fields also take the text typed into them.
@@ -240,6 +261,10 @@ impl Field {
             Kind::Folder => match value.as_str() {
                 Some(path) if path.len() <= MAX_PATH_TEXT && !path.contains('\0') => Ok(json!(path.trim())),
                 _ => Err(format!("`{key}` must be a folder path of at most {MAX_PATH_TEXT} bytes")),
+            },
+            Kind::File { .. } => match value.as_str() {
+                Some(path) if path.len() <= MAX_PATH_TEXT && !path.contains('\0') => Ok(json!(path.trim())),
+                _ => Err(format!("`{key}` must be a file path of at most {MAX_PATH_TEXT} bytes")),
             },
             Kind::Order { labels } => {
                 let count = labels.len();
@@ -313,6 +338,10 @@ impl Field {
                 if matches!(self.kind, Kind::Multi { .. }) { "multi" } else { "choice" }
             }
             Kind::Folder => "folder",
+            Kind::File { save, extensions } => {
+                m.insert("extensions".into(), json!(extensions));
+                if *save { "saveFile" } else { "openFile" }
+            }
             Kind::Order { labels } => {
                 m.insert("labels".into(), json!(labels));
                 "order"
@@ -361,6 +390,11 @@ impl Field {
                 Param::new(self.key.clone(), label, ParamKind::choice(options, self.default.as_str().map(str::to_string)))
             }
             Kind::Folder => Param::new(self.key.clone(), label, ParamKind::text("")).browse(PathKind::Folder),
+            Kind::File { save: true, .. } => Param::new(self.key.clone(), label, ParamKind::text("")).browse(PathKind::SaveFile),
+            Kind::File { save: false, extensions } => {
+                let extensions: Vec<&str> = extensions.iter().map(String::as_str).collect();
+                Param::new(self.key.clone(), label, ParamKind::text("")).browse(PathKind::open_file(&extensions))
+            }
             Kind::Multi { .. } | Kind::List { .. } | Kind::Order { .. } | Kind::Custom { .. } => {
                 let field = self.clone();
                 Param::custom(self.key.clone(), label, move |ui, fields, cx| custom_row(ui, fields, cx, &field))
@@ -376,7 +410,9 @@ impl Field {
             Kind::Number { .. } => FieldValue::Number(value.as_f64().unwrap_or(0.0)),
             Kind::Integer { .. } => FieldValue::Int(value.as_i64().unwrap_or(0)),
             Kind::Bool | Kind::Lock => FieldValue::Bool(value.as_bool().unwrap_or(false)),
-            Kind::Text { .. } | Kind::Choice { .. } | Kind::Folder => FieldValue::Text(value.as_str().unwrap_or_default().to_string()),
+            Kind::Text { .. } | Kind::Choice { .. } | Kind::Folder | Kind::File { .. } => {
+                FieldValue::Text(value.as_str().unwrap_or_default().to_string())
+            }
             Kind::Multi { .. } | Kind::List { .. } | Kind::Order { .. } | Kind::Custom { .. } => FieldValue::Json(value.clone()),
         }
     }

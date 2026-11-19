@@ -34,6 +34,8 @@ pub struct DialogSpec {
     pub message: &'static str,
     /// The items of the actions menu at the bottom left.
     pub actions: &'static [Action],
+    /// Parameters the window supplies when `dialog.open` or the menu item leaves them out (what a tab shows).
+    pub window: Option<FromWindow>,
 }
 
 impl DialogSpec {
@@ -51,6 +53,7 @@ impl DialogSpec {
             third: None,
             message: "",
             actions: &[],
+            window: None,
         }
     }
 
@@ -77,6 +80,11 @@ impl DialogSpec {
     /// The items of the actions menu.
     pub const fn actions(self, actions: &'static [Action]) -> Self {
         DialogSpec { actions, ..self }
+    }
+
+    /// Parameters the window supplies for those the dialog is opened without.
+    pub const fn from_window(self, window: FromWindow) -> Self {
+        DialogSpec { window: Some(window), ..self }
     }
 
     /// A question asked after `after.command` when its result calls for it; never opened from its own command.
@@ -136,6 +144,10 @@ pub struct Tab {
     pub label: &'static str,
     pub dialog: DialogSpec,
 }
+
+/// Parameters read from the window's view state (the edited glyph, the current master); see
+/// [`DialogSpec::from_window`].
+pub type FromWindow = fn(&crate::app::FontCraftApp) -> Map<String, Value>;
 
 /// Builds the fields of [`Fields::Targeted`] from the session and the dialog's targets.
 pub type TargetedFields = fn(&mut Session, &Map<String, Value>) -> Result<Vec<Field>, String>;

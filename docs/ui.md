@@ -189,14 +189,17 @@ Then add `mod kerning_questions;` and one line to `dialogs::SPECS`. The spec's `
 |---|---|
 | `Fields` | `Filter` (the filter's `filter.list` schema), `Fixed(fn(&Session) -> Vec<Field>)`, `Targeted(fn(&mut Session, &targets) -> Result<Vec<Field>, String>)` (fields that depend on what the command acts on), `Shaped(Shaped)` (fields turned into the parameters: `given`, `params`, `link`), `Tabs(&[Tab])` (one dialog per tab; values come back when a tab shows again) |
 | `Mode` | `Preview` (default): every change previews on the font as it was at open; OK is one undo step; Cancel puts the font back. `.run_on_ok()`: nothing runs while open; OK runs the command once; a failure keeps the dialog open |
-| Builders | `.buttons(ok, cancel)` captions (empty: the common words), `.message(line)`, `.third(Third)` (a third answer to the field `key`), `.actions(&[Action])` (queries whose `text` goes to the clipboard), `.after(After)` (a follow-up question asked when `After::command`'s result calls for it; never opened from its own menu item) |
+| Builders | `.buttons(ok, cancel)` captions (empty: the common words), `.message(line)`, `.third(Third)` (a third answer to the field `key`), `.actions(&[Action])` (queries whose `text` goes to the clipboard), `.after(After)` (a follow-up question asked when `After::command`'s result calls for it; never opened from its own menu item), `.from_window(fn(&FontCraftApp) -> Map)` (parameters the window supplies when the dialog opens without them: what the canvas shows) |
 
 Fields (`dialogs/fields.rs`): `Field::number`, `integer`, `bool`, `lock`, `text`, `text_area`,
-`choice`, `multi`, `folder`, `order`, `rows`, `select_list`, and `custom` for a kind the package
+`choice`, `multi`, `folder`, `open_file`, `save_file`, `order`, `rows`, `select_list`, and `custom` for a kind the package
 defines (`Custom { name, check, row }`: the check and the control cell; rule trees, palettes,
 colours). `.in_group(heading)` puts a heading over a run of fields. A field's `key` is the
 parameter's key and its id for `ui.dialog.set` and `ui.dialog.click`. Each field shows as a craft
 `Param` row of a `FormDialog`; checking stays in the app layer, so a refused value changes nothing.
+
+A field keyed `master` opens on the current master unless it was given. In a run-on-OK dialog, OK in the window with
+an empty folder or save-file field asks the chooser for it first; over the control channel that is an error.
 
 Without a `glyph` or `glyphs` in `dialog.open`'s params, the targets come from
 `form::selection_targets`: the glyph the glyph panels show. The canvas and Font View selections

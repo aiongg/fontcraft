@@ -108,12 +108,12 @@ impl DialogKey {
 
 impl OpenDialog {
     /// The command's parameters: the targets and every field's value (shaped, for a [`Fields::Shaped`] dialog). An
-    /// empty folder field is left out.
+    /// empty folder or file field is left out.
     pub fn params(&self) -> Value {
         let values: Map<String, Value> = self
             .values
             .iter()
-            .filter(|(k, v)| !self.fields.iter().any(|f| f.key == **k && f.is_empty_folder(v)))
+            .filter(|(k, v)| !self.fields.iter().any(|f| f.key == **k && f.is_empty_path(v)))
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
         let mut m = self.targets.clone();
@@ -227,6 +227,11 @@ fn open_one(app: &mut FontCraftApp, spec: &DialogSpec, given: &Map<String, Value
     }
     let mut shaped = None;
     let mut given = given.clone();
+    if let Some(window) = spec.window {
+        for (key, value) in window(app) {
+            given.entry(key).or_insert(value);
+        }
+    }
     let fields = match spec.fields {
         Fields::Filter => fields::filter_fields(&super::filter_entry(spec.command).ok_or_else(|| format!("`{}` is not a filter", spec.command))?)?,
         Fields::Fixed(list) => list(&app.session),
@@ -264,6 +269,17 @@ fn open_one(app: &mut FontCraftApp, spec: &DialogSpec, given: &Map<String, Value
                 values.insert(f.key.clone(), v);
             }
         }
+    }
+    // A master field opens on the current master, unless it was given or the tab shown before had one.
+    let carried = tabs
+        .as_ref()
+        .is_some_and(|t| t.saved.get(spec.id).or_else(|| t.saved.get(CARRY)).and_then(Value::as_object).is_some_and(|m| m.contains_key("master")));
+    if !given.contains_key("master")
+        && !carried
+        && let Some(field) = fields.iter().find(|f| f.key == "master")
+        && let Some(v) = current_master(app).and_then(|m| field.check(&json!(m)).ok())
+    {
+        values.insert("master".into(), v);
     }
     if spec.mode == Mode::Preview && targets.is_empty() {
         return Err(format!("{}: select a glyph first", spec.title));
@@ -338,6 +354,12 @@ pub fn switch_tab(app: &mut FontCraftApp, index: usize) -> Result<Value, String>
             Err(e)
         }
     }
+}
+
+/// The id of the master the glyph panels and the canvas show.
+pub fn current_master(app: &FontCraftApp) -> Option<String> {
+    let font = app.session.font().ok()?;
+    crate::shell::masters::current_master(font, &app.view.layers).map(|m| m.id.clone())
 }
 
 /// What the command acts on when the dialog names nothing: the glyph the glyph panels show, as `glyph` for a command
@@ -452,7 +474,7 @@ fn confirm_by(app: &mut FontCraftApp, person: bool) -> Result<Value, String> {
 /// when the person pressed OK, and OK follows the folder chosen; over the control channel it is an error.
 fn run_on_ok(app: &mut FontCraftApp, person: bool) -> Result<Value, String> {
     let Some(d) = &app.dialogs.open else { return Err("no dialog is open".into()) };
-    let missing = d.fields.iter().find(|f| f.is_empty_folder(d.values.get(&f.key).unwrap_or(&Value::Null))).map(|f| f.key.clone());
+    let missing = d.fields.iter().find(|f| f.needs_destination(d.values.get(&f.key).unwrap_or(&Value::Null))).map(|f| f.key.clone());
     if let Some(key) = missing {
         if person {
             choose(app, &key, true)?;
@@ -487,22 +509,34 @@ fn run_on_ok(app: &mut FontCraftApp, person: bool) -> Result<Value, String> {
     }
 }
 
-/// The folder chooser for the folder field `key`; the answer arrives on a later pass ([`poll_chooser`]). `then_ok`:
-/// OK follows the folder chosen.
+/// The chooser for the folder or file field `key`; the answer arrives on a later pass ([`poll_chooser`]). `then_ok`:
+/// OK follows the path chosen.
 pub fn choose(app: &mut FontCraftApp, key: &str, then_ok: bool) -> Result<(), String> {
     let d = app.dialogs.open.as_ref().ok_or("no dialog is open")?;
     let field = d.field(key)?;
-    if !matches!(field.kind, Kind::Folder) {
-        return Err(format!("`{key}` is not a folder field"));
-    }
+    let request = match &field.kind {
+        Kind::Folder => PickRequest::folder(field.label.clone()),
+        Kind::File { save, extensions } => {
+            let mut request = if *save { PickRequest::save(field.label.clone()) } else { PickRequest::open(field.label.clone()) };
+            for extension in extensions {
+                request = request.filter(extension.to_ascii_uppercase(), &[extension.as_str()]);
+            }
+            match extensions.first() {
+                Some(first) if *save => request.suggested_extension(first.as_str()),
+                _ => request,
+            }
+        }
+        _ => return Err(format!("`{key}` is not a folder or file field")),
+    };
+    let request = request.title(field.label.clone());
     let serial = d.serial;
-    let pick = app.host.files().pick(PickRequest::folder(field.label.clone()));
+    let pick = app.host.files().pick(request);
     app.dialogs.choosing = Some((pick, serial, key.to_string(), then_ok));
     Ok(())
 }
 
-/// Takes the folder chooser's answer: the field gets the folder, and OK follows when the person pressed it. A
-/// cancelled chooser changes nothing.
+/// Takes the chooser's answer: the field gets the path, and OK follows when the person pressed it. A cancelled chooser
+/// changes nothing.
 pub fn poll_chooser(app: &mut FontCraftApp) {
     let Some((pick, serial, key, then_ok)) = app.dialogs.choosing.take() else { return };
     let Some(answer) = app.host.files().take_answer(pick) else {
@@ -520,7 +554,7 @@ pub fn poll_chooser(app: &mut FontCraftApp) {
             None => Ok(()),
         },
         Picked::Cancelled => Ok(()),
-        other => Err(format!("`{key}`: no folder chooser ({other:?}); set the folder with ui.dialog.set")),
+        other => Err(format!("`{key}`: no chooser ({other:?}); set the path with ui.dialog.set")),
     };
     if let Err(e) = result {
         app.status = e;
@@ -618,7 +652,7 @@ pub fn inspect(app: &FontCraftApp) -> Value {
 
 /// `ui.dialog.click {id}`: presses a control of the open dialog: `ok`, `cancel`, the third button, a tab or an action
 /// by its id, or a field by its key (a checkbox or lock toggles; a text field takes the keyboard with its text
-/// selected; a folder field opens the folder chooser).
+/// selected; a folder or file field opens the chooser).
 pub fn click(app: &mut FontCraftApp, id: &str) -> Result<Value, String> {
     let d = app.dialogs.open.as_ref().ok_or_else(|| format!("no control `{id}`: no dialog is open"))?;
     let third = d.third();
@@ -641,7 +675,7 @@ pub fn click(app: &mut FontCraftApp, id: &str) -> Result<Value, String> {
             commit_edit(app)?;
             set(app, id, &json!(!on))
         }
-        Kind::Folder => {
+        Kind::Folder | Kind::File { .. } => {
             commit_edit(app)?;
             choose(app, id, false)?;
             Ok(inspect(app))

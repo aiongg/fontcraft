@@ -21,7 +21,7 @@ milestone = "M2"
 summary = "Opens the export dialog for the frontmost document, with one tab per output kind (static OpenType, variable fonts, UFO, metrics). The dialog collects options and then runs the matching file.export* engine command."
 ref = "Import & Export › Exporting Font Files"
 status = "handbook"
-notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 4:28–4:39: File › Export opens the dialog with the static OpenType tab set to PostScript (CFF) outlines. Not shown: Cmd+E, the other tabs. FontCraft: a shell command that opens dialog.export on the OTF tab (`tab: \"otf\"`, the default) or the UFO tab (`tab: \"ufo\"`); the Variable Fonts and Metrics tabs are not built and answer with an error."
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 4:28–4:39: File › Export opens the dialog with the static OpenType tab set to PostScript (CFF) outlines. Not shown: Cmd+E, the other tabs. FontCraft: a shell command that opens dialog.export on the tab `tab` names: OTF (the default), Variable Fonts, UFO or Metrics."
 
 [[command]]
 id = "file.exportAll"
@@ -159,7 +159,7 @@ milestone = "M9"
 summary = "Options for variable font export. The handbook only says file formats and destination are set as on the OTF tab; there is no flavour choice because the output is always TrueType. Whether Remove Overlap and Autohint appear here is not stated."
 ref = "Import & Export › Exporting Font Files › Exporting Variable Fonts"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: the Variable Fonts tab of the export dialog, crates/ui-egui/src/dialogs/export.rs, running file.exportVariable on Next…. It offers the OTF tab's File Format checkboxes and export folder and no outline flavour. FontCraft has no Test Install; Remove Overlap and Autohint are not offered."
+notes = "Documented, not yet observed. FontCraft: the Variable Fonts tab of the export dialog, crates/ui/src/dialogs/export.rs, running file.exportVariable on Next…. It offers the OTF tab's File Format checkboxes and export folder and no outline flavour. FontCraft has no Test Install; Remove Overlap and Autohint are not offered."
 
 [[panel]]
 id = "dialog.exportUfo"
@@ -176,7 +176,7 @@ milestone = "M1"
 summary = "Options for UFO export: which masters to write and how to treat glyph names and editor-only constructs. Next… asks for the destination folder."
 ref = "Import & Export › Exporting Font Files › Exporting UFO"
 status = "handbook"
-notes = "Built (M3.14) as a tab of dialog.export running file.exportUfo. Masters: one checkbox per master, all ticked (the handbook's list with multiple selection). Convert Glyph Names to Production Names: off; the engine refuses it until the glyph database exists (M4). Decompose Smart Stuff: on. Export Folder: a path with Choose…; Next… with no folder opens the folder chooser, as the handbook describes. Documented, not yet observed."
+notes = "Built (M3.14) as a tab of dialog.export running file.exportUfo. Masters: one checkbox per master, all ticked (the handbook's list with multiple selection). Convert Glyph Names to Production Names: off until ticked; on, file.exportUfo writes each glyph under its production name (its own, else the glyph data's), with components, kerning, groups and the glyph order following. Decompose Smart Stuff: on. Export Folder: a path with Choose…; Next… with no folder opens the folder chooser, as the handbook describes. Documented, not yet observed."
 
 [[panel]]
 id = "dialog.exportMetrics"
@@ -194,7 +194,7 @@ milestone = "M5"
 summary = "Exports the metrics of the master currently active in the toolbar. The tab itself has no stated options; destination and format are picked in the save dialog that follows."
 ref = "Import & Export › Exporting Font Files › Exporting Metrics"
 status = "handbook"
-notes = "Built (M5.14) as the Metrics tab of dialog.export (`crates/ui-egui/src/dialogs/export.rs`), running file.exportMetrics on Next…; Next… with no folder asks for one, as the other tabs do. Documented, not yet observed."
+notes = "Built (M5.14) as the Metrics tab of dialog.export (`crates/ui/src/dialogs/export.rs`), running file.exportMetrics on Next…; Next… with no folder asks for one, as the other tabs do. Documented, not yet observed."
 guesses = [
   "The format, file name and folder sit on the tab, with the folder chooser for the folder, because the dialog framework has no save-file chooser; the handbook puts them in a save dialog after Next…. A save-file chooser in the shell would settle it.",
   "The tab shows a Master pop-up that starts on the toolbar's master, so a master can be exported without changing the toolbar; the handbook names no such control.",

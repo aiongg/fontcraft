@@ -10,15 +10,20 @@
 mod about;
 pub mod after;
 pub mod custom_parameter_picker;
+pub mod export;
 pub mod field_picker;
 pub mod fields;
 mod filters;
+pub mod font_data;
 pub mod form;
 mod host;
+pub mod import;
 pub mod kerning_audit;
 pub mod kerning_questions;
 pub mod os2_bits;
 pub mod panose;
+pub mod path;
+pub mod shape_order;
 pub mod spec;
 pub mod tt;
 mod unsaved;
@@ -47,7 +52,7 @@ pub const MODULES: &[Module] = &[
 ];
 
 /// Every package's dialog specs, one line each.
-pub const SPECS: &[&[DialogSpec]] = &[filters::SPECS];
+pub const SPECS: &[&[DialogSpec]] = &[filters::SPECS, export::SPECS, import::SPECS, font_data::SPECS, shape_order::SPECS, path::SPECS];
 
 /// Runs every dialog module for this pass.
 pub fn run(host: &mut DialogHost, app: &mut FontCraftApp) {
@@ -56,10 +61,18 @@ pub fn run(host: &mut DialogHost, app: &mut FontCraftApp) {
     }
 }
 
-/// The dialog with this id: a spec, else one generated for a filter.
+/// The dialog with this id: a spec or a tab of one, else one generated for a filter.
 pub fn find(id: &str) -> Option<DialogSpec> {
-    if let Some(d) = SPECS.iter().flat_map(|specs| specs.iter()).find(|d| d.id == id) {
+    let specs = || SPECS.iter().flat_map(|specs| specs.iter());
+    if let Some(d) = specs().find(|d| d.id == id) {
         return Some(*d);
+    }
+    let tab = |d: &DialogSpec| match d.fields {
+        Fields::Tabs(list) => list.iter().find(|t| t.dialog.id == id).map(|t| t.dialog),
+        _ => None,
+    };
+    if let Some(d) = specs().find_map(tab) {
+        return Some(d);
     }
     filters_with_params().into_iter().find(|(command, _)| generated_id(command) == id).map(|(command, title)| generated(command, title))
 }
