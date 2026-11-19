@@ -348,6 +348,7 @@ impl DockPanels<PanelId> for Panels<'_> {
 pub fn show(ui: &mut Ui, app: &mut FontCraftApp) {
     let words = Env::of(ui).words::<PanelWords>();
     let FontCraftApp { view, models, sent, status, active_tool, tools, .. } = app;
+    let hinting = canvas::hinting::HintPaint { model: &models.hint_canvas, view: &view.hinting, tokens: &models.hint_tokens };
     let given = view.workspace.clone();
     let label = words.dock.clone();
     let mut panels = Panels {
@@ -360,6 +361,7 @@ pub fn show(ui: &mut Ui, app: &mut FontCraftApp) {
             edit_background: view.edit_background,
             tools: &tools.view,
             tool: active_tool.as_mut(),
+            hinting,
         },
         sent,
         words,

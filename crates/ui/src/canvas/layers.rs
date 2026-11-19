@@ -6,7 +6,7 @@ use egui::{Painter, Rect};
 
 use super::camera::Camera;
 use super::tokens::Tokens;
-use super::{Display, paint, tools};
+use super::{Display, hinting, paint, tools};
 use crate::app::models::canvas::{CanvasModel, EditedGlyph};
 
 /// What a paint layer reads.
@@ -24,6 +24,8 @@ pub struct PaintCx<'a> {
     pub words: &'a paint::CanvasWords,
     /// The selection and the active tool's overlays.
     pub tools: &'a super::tools::ToolView,
+    /// The hint layers' model and state.
+    pub hinting: super::hinting::HintPaint<'a>,
 }
 
 impl PaintCx<'_> {
@@ -45,12 +47,19 @@ pub const LAYERS: &[PaintLayer] = &[
     PaintLayer { id: "background", paint: paint::background::tint },
     PaintLayer { id: "status", paint: paint::status::paint },
     PaintLayer { id: "metrics", paint: paint::metrics::paint },
+    PaintLayer { id: "ttPixels", paint: hinting::pixels::backdrop },
+    PaintLayer { id: "psHintBars", paint: hinting::ps::bars },
     PaintLayer { id: "otherLayers", paint: paint::background::paint },
+    PaintLayer { id: "ttPreviewOutlines", paint: hinting::pixels::outlines },
     PaintLayer { id: "outline", paint: paint::outline::paint },
     PaintLayer { id: "components", paint: paint::components::paint },
     PaintLayer { id: "selectedSegments", paint: tools::overlays::segments },
     PaintLayer { id: "nodes", paint: paint::nodes::paint },
     PaintLayer { id: "anchors", paint: paint::anchors::paint },
+    PaintLayer { id: "ttNodes", paint: hinting::badges::nodes },
+    PaintLayer { id: "ttBadges", paint: hinting::badges::badge_layer },
+    PaintLayer { id: "ttPointNumbers", paint: hinting::badges::numbers },
+    PaintLayer { id: "psHintMarks", paint: hinting::ps::marks_layer },
     PaintLayer { id: "selection", paint: tools::overlays::selection },
     PaintLayer { id: "toolOverlays", paint: tools::overlays::paint },
 ];

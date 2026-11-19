@@ -19,6 +19,7 @@ pub mod kerning_audit;
 pub mod kerning_questions;
 pub mod os2_bits;
 pub mod panose;
+pub mod review_hints;
 pub mod spec;
 pub mod tt;
 mod unsaved;
@@ -44,6 +45,7 @@ pub const MODULES: &[Module] = &[
     host::run,
     kerning_questions::run,
     kerning_audit::run,
+    review_hints::run,
 ];
 
 /// Every package's dialog specs, one line each.

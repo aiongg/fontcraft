@@ -6,6 +6,7 @@
 //! the background press, hover and keys and paints its feedback over the layers.
 
 pub mod camera;
+pub mod hinting;
 pub mod layers;
 pub mod paint;
 pub mod tokens;
@@ -40,6 +41,8 @@ pub struct Display {
     pub annotations: bool,
     pub fill_preview: bool,
     pub info: bool,
+    /// The edited layer's PostScript hints (`view.showHints`).
+    pub hints: bool,
 }
 
 impl Default for Display {
@@ -57,6 +60,7 @@ impl Default for Display {
             annotations: true,
             fill_preview: true,
             info: true,
+            hints: false,
         }
     }
 }
@@ -71,6 +75,9 @@ pub trait ActiveTool: CanvasTool {
 
     /// The camera of the coming pass, before the host runs the tool: font units to screen points.
     fn set_camera(&mut self, _camera: Camera) {}
+
+    /// The chosen tool's id, before each event the tool posts is handled: some tools take more keys than others.
+    fn set_tool(&mut self, _tool: &'static str) {}
 }
 
 impl ActiveTool for NoTool {}
@@ -89,6 +96,8 @@ pub struct CanvasProps<'a> {
     pub tools: &'a tools::ToolView,
     /// The active-tool slot.
     pub tool: &'a mut dyn ActiveTool,
+    /// The hint layers' model and state.
+    pub hinting: hinting::HintPaint<'a>,
 }
 
 /// Shows the canvas; what the active tool's gestures posted goes to `sent`.
@@ -103,7 +112,8 @@ pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
     if let Some(size) = document {
         canvas = canvas.document(size);
     }
-    let (model, tokens, display, edit_background, tool_view) = (props.model, props.tokens, props.display, props.edit_background, props.tools);
+    let (model, tokens, display, edit_background, tool_view, hinting) =
+        (props.model, props.tokens, props.display, props.edit_background, props.tools, props.hinting);
     let tool = &mut *props.tool;
     let mut reply = None;
     let _ = canvas.show(ui, |ui, body| {
@@ -120,6 +130,7 @@ pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
             edit_background,
             words: &paint_words,
             tools: tool_view,
+            hinting,
         };
         layers::paint(&cx);
         tool.set_camera(camera);

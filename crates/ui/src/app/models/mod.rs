@@ -11,6 +11,7 @@ pub mod glyph;
 pub mod glyph_info;
 pub mod glyph_props;
 pub mod glyph_sections;
+pub mod hint_canvas;
 pub mod hinting;
 pub mod kerning_review;
 pub mod kerning_window;
@@ -54,6 +55,11 @@ pub struct Models {
     glyph_info_search: glyph_info::SearchCache,
     /// The Hinting Preview's rows (`panels::hinting_waterfall`).
     pub hinting_waterfall: Tracked<hinting::Waterfall>,
+    /// What the hint layers draw (`canvas::hinting`).
+    pub hint_canvas: Tracked<hint_canvas::HintCanvas>,
+    hint_cache: hint_canvas::HintCache,
+    /// The hint layers' colours and sizes.
+    pub hint_tokens: crate::canvas::hinting::tokens::HintTokens,
     /// The shown glyph's layers (`panels::layers`).
     pub layers: Tracked<layers::LayersModel>,
     /// The masters and the current one (`panels::master_switcher`).
@@ -121,6 +127,7 @@ impl Models {
         kerning_review::project(&mut self.pairs_phrases, cx);
         glyph_info::project(&mut self.glyph_info, &mut self.glyph_info_search, cx);
         hinting::project(&mut self.hinting_waterfall, cx);
+        hint_canvas::project(&mut self.hint_canvas, &mut self.hint_cache, cx);
         layers::project(&mut self.layers, cx);
         layers::project_masters(&mut self.masters, cx);
         kerning_window::project(&mut self.kerning_window, cx);
