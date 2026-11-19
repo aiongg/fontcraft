@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2979 guesses on 1571 rows (636 of them live commands).**
+**2983 guesses on 1572 rows (636 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -553,6 +553,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontView.image.dropOnCell` (behavior) | M11 | handbook | – | Several files dropped on Font View are matched to glyph names, whatever cell they land on, as Add Image does with several files. Settled by dropping two files on one cell in the reference. |
 | `fontView.image.batchByFileName` (behavior) | M11 | handbook | – | Files with no glyph of their name are skipped and listed in the result; no glyph is created. Settled by Add Image with an unmatched file in the reference. |
 | `fontView.image.caseSensitivity` (behavior) | M11 | handbook | – | File names are matched to glyph names exactly, case included, on every platform. Settled by Add Image with `a.png` in a font with `A` and `a` in the reference. |
+| `fontView.setSidebarEntryOpen` | M4 | inferred | no | The sections start open and every other entry with children starts closed. Settled by opening a new document in the reference. |
 | `glyphDataEditor.show` | M14 | inferred | no | The editor opens from the Window menu with no shortcut; the companion tool is a separate application, so nothing settles a menu place. |
 | `fontView.grid` (panel) | M4 | handbook | – | Shift+click adds every visible glyph from the last clicked glyph to the clicked one; Cmd+click adds or removes one glyph; a click on empty space clears the selection. Settled by observation. |
 | `fontView.grid` (panel) | M4 | handbook | – | Dragging across the grid draws a rectangle that selects the cells it touches, added to the selection while Shift or Cmd is held. Settled by observation. |
@@ -565,6 +566,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontView.inspector` (panel) | M4 | handbook | – | The orientation icon between the metric fields is left out until M5 (fontView.toggleMetricsOrientation). Settled by M5. |
 | `window.selectionInfo` (panel) | M4 | handbook | – | Turning on the sort name check box only enables the field; the field's value is stored when it is committed. Turning it off removes the stored sort name (glyph.setSortName with null). Settled by observation. |
 | `window.selectionInfo` (panel) | M4 | handbook | – | The window is not modal and follows the selection while it is open. Settled by observation. |
+| `window.selectionInfo` (panel) | M4 | handbook | – | The fields are in the order name, exports, glyph colour, layer colour, tags, Unicode, production name, script, category, subcategory, case, direction, sort name, note, the three metrics keys and the two kerning groups. Settled by opening Info for Selection in the reference. |
+| `window.selectionInfo` (panel) | M4 | handbook | – | The layer colour field edits the layer of Font View's master. Settled by observation. |
 | `fontView.glyphContextMenu` (panel) | M4 | handbook | – | A right-click on a glyph that is not selected selects it alone first; on a selected glyph the menu acts on the whole selection. Settled by observation. |
 | `fontView.glyphContextMenu` (panel) | M4 | handbook | – | The items come in this order: the colour swatches under a caption (Glyph Color, or Layer Color with Alt), then Tags, then Copy Glyph Names. Settled by observation. |
 | `fontView.glyphContextMenu` (panel) | M4 | handbook | – | With Alt held the swatches set the layer colour of Font View's master. Settled by observation. |
@@ -2859,6 +2862,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `font.interpolateFonts` | M13 | docs | yes | The new font keeps only the master layer of each glyph, and its family name, Font Info, features and other data are the first font's; the secondary reference's result on two fonts with different names and extra layers would settle it. |
 | `font.interpolateFonts` | M13 | docs | yes | Interpolated numbers are not rounded; the secondary reference's result at 50 between odd coordinates would settle it. |
 | `font.interpolateFonts` | M13 | docs | yes | A kerning pair only one font has counts as 0 in the other; the secondary reference's result on fonts with different pairs would settle it. |
+| `font.interpolateFonts` | M13 | docs | yes | The menu bar has a Font menu, between Edit and Glyph, holding this and the other font-wide commands whose rows give the menu path Font › …; the primary reference has no Font menu, and the menu stays until these rows' menu paths are settled. |
 | `glyph.listDependencies` | M13 | docs | yes | Glyphs that use the glyph through other composites are listed too, with their depth and the glyph they reach it through, nearest first; the reference's documentation does not say whether nested references are shown. |
 | `file.revertGlyph` | M13 | docs | yes | Without glyphs, every glyph that differs from the saved file is reverted; glyphs added since the save are left alone and naming one is refused. Reverting a glyph added since the save in the secondary reference would settle it. |
 | `file.revertGlyph` | M13 | docs | yes | With layers, a layer added since the save is removed and a deleted one is put back. The secondary reference reverts whole glyphs only, so nothing there settles it. |

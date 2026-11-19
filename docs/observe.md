@@ -32,18 +32,18 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1470 rows to check: 2509 guesses and 593 observe steps.**
+**1471 rows to check: 2513 guesses and 593 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **523** |
+| **Built milestones (M0 to M6)** | all | **524** |
 | Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 114 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
 | Built milestones (M0 to M6) | Filters | 36 |
 | Built milestones (M0 to M6) | Spacing and metrics keys | 23 |
 | Built milestones (M0 to M6) | Kerning and the Kerning window | 42 |
-| Built milestones (M0 to M6) | Font View | 111 |
+| Built milestones (M0 to M6) | Font View | 112 |
 | Built milestones (M0 to M6) | Font Info and features | 20 |
 | Built milestones (M0 to M6) | Files: open, import, export | 48 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
@@ -65,7 +65,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
-## Built milestones (M0 to M6) (523)
+## Built milestones (M0 to M6) (524)
 
 ### Edit View: drawing, guides, layers and the Palette (114)
 
@@ -994,7 +994,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Overwrite is the default button that Return presses; the warning in the reference app settles it.
   - Guess: The warning lists the conflicting pairs with the pasted and the current value; the handbook names no list, and a screenshot of the warning settles it.
 
-### Font View (111)
+### Font View (112)
 
 - [ ] `import.keepGlyphNames` (behavior, M1, handbook): When a compiled OTF or TTF is opened with the user setting…
   - Guess: The glyphOrder parameter is added whatever the setting says, following the Opening Font Files page rather than the Glyph Order page, which ties it to the setting; opening a TTF with the setting off would settle it.
@@ -1208,6 +1208,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Without a selected entry in its section, a Shift-clicked entry is added as Cmd-click adds it. Settled by Shift-clicking an entry of an unused section in the reference.
   - Guess: Glyphs that a new sidebar selection hides are deselected. Settled by observing whether the reference keeps hidden glyphs selected after choosing a sidebar entry.
   - Guess: A selected entry that disappears (a removed or renamed filter, a category with no glyph left) is deselected. Settled by removing a selected filter in the reference.
+- [ ] `fontView.setSidebarEntryOpen` (M4, inferred): Open Sidebar Entry
+  - Guess: The sections start open and every other entry with children starts closed. Settled by opening a new document in the reference.
 - [ ] `fontView.queryGlyphs` (M4, inferred, live): Query Glyphs
   - Guess: Our own query for agents; it must give the glyphs the sidebar and search would show for the same entries and text.
 - [ ] `fontView.addSmartFilter` (M4, handbook, live): Add Smart Filter
@@ -1227,6 +1229,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `window.selectionInfo` (panel, M4, handbook): Selection Info
   - Guess: Turning on the sort name check box only enables the field; the field's value is stored when it is committed. Turning it off removes the stored sort name (glyph.setSortName with null). Settled by observation.
   - Guess: The window is not modal and follows the selection while it is open. Settled by observation.
+  - Guess: The fields are in the order name, exports, glyph colour, layer colour, tags, Unicode, production name, script, category, subcategory, case, direction, sort name, note, the three metrics keys and the two kerning groups. Settled by opening Info for Selection in the reference.
+  - Guess: The layer colour field edits the layer of Font View's master. Settled by observation.
 - [ ] `fontView.glyphContextMenu` (panel, M4, handbook): Glyph Context Menu
   - Guess: A right-click on a glyph that is not selected selects it alone first; on a selected glyph the menu acts on the whole selection. Settled by observation.
   - Guess: The items come in this order: the colour swatches under a caption (Glyph Color, or Layer Color with Alt), then Tags, then Copy Glyph Names. Settled by observation.
@@ -3538,6 +3542,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The new font keeps only the master layer of each glyph, and its family name, Font Info, features and other data are the first font's; the secondary reference's result on two fonts with different names and extra layers would settle it.
   - Guess: Interpolated numbers are not rounded; the secondary reference's result at 50 between odd coordinates would settle it.
   - Guess: A kerning pair only one font has counts as 0 in the other; the secondary reference's result on fonts with different pairs would settle it.
+  - Guess: The menu bar has a Font menu, between Edit and Glyph, holding this and the other font-wide commands whose rows give the menu path Font › …; the primary reference has no Font menu, and the menu stays until these rows' menu paths are settled.
 - [ ] `font.setCrossAxisMappings` (M13, docs, live): Set Cross-Axis Mappings
   - Guess: Locations are design coordinates, as the designspace format stores them, not user coordinates; the secondary reference's fields on a font whose axes have a user-to-design map would settle it.
 - [ ] `window.crossAxisMappings` (panel, M13, docs): Cross-Axis Mappings
