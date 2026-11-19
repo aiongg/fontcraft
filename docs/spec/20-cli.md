@@ -1096,7 +1096,7 @@ Engine command: `font.convert`.
 | ttx | `-b` | --no-recalc-bounds |  |
 | ttx | `--recalc-timestamp / --no-recalc-timestamp` | --timestamp now / --timestamp keep |  |
 | ttx | `--flavor` | --container woff\|woff2 |  |
-| ttx | `--with-zopfli` | --zopfli |  |
+| ttx | `--with-zopfli` | --zopfli (refused with a WOFF result: no zopfli compressor) |  |
 | ttx | `--optimize-font-speed` | --optimize-for speed |  |
 | ttx | `-a` | --allow-virtual-gids |  |
 | ttLib | font -o / --output | convert FONT -o OUT (same format: load and save) |  |

@@ -141,6 +141,31 @@ fn run_scripts_stop_at_a_failing_step_unless_told_to_keep_going() {
 }
 
 #[test]
+fn prefixes_name_subcommands_and_the_options_of_every_parser() {
+    let (code, stdout, _) = cli(&["transf", "--help"]);
+    assert_eq!(code, 0);
+    assert!(stdout.starts_with("fontcraft-cli transform: ") && stdout.contains("--exclude-fd"), "{stdout}");
+    let (code, _, stderr) = cli(&["co", "x"]);
+    assert_eq!(code, 2);
+    assert!(stderr.contains("ambiguous") && stderr.contains("convert"), "{stderr}");
+    // The subcommands that read their own arguments resolve prefixes too: each message names the
+    // option in full.
+    for (args, message) in [
+        (&["oracle", "--diff", "many"][..], "--differences must be a whole number"),
+        (&["mcp", "--trans", "pigeon"], "--transport takes stdio or http"),
+        (&["compile", "F.glyphs", "--output-l", "nested"], "--output-layout takes flat or by-format"),
+        (&["run", "--cm"], "--cmd needs a command id"),
+    ] {
+        let (code, _, stderr) = cli(args);
+        assert_eq!(code, 2, "{args:?}: {stderr}");
+        assert!(stderr.contains(message), "{args:?}: {stderr}");
+    }
+    let (code, stdout, _) = cli(&["oracle", "--vers"]);
+    assert_eq!(code, 0, "a prefix of a common option reaches it past a hand parser");
+    assert!(stdout.starts_with("fontcraft-cli "), "{stdout}");
+}
+
+#[test]
 fn help_and_the_cli_listing_cover_every_subcommand() {
     let (code, stdout, _) = cli(&["help", "--all"]);
     assert_eq!(code, 0);

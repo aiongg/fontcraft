@@ -12,11 +12,13 @@ pub const SUBCOMMAND: Subcommand =
     Subcommand { name: "transform", summary: "Transform every glyph or change units per em", usage: USAGE, options: OPTIONS, actions: &[], run };
 
 const USAGE: &str = "\
-  fontcraft-cli transform FONT [--rotate DEG] [--translate X,Y] [--scale SX[,SY]] [--slant DEG] [--matrix A,B,C,D,E,F] [--upem N] [--glyph-table FILE] [--widths auto|keep|transform|em] [--to ttf|otf|otf-cff2] [-o OUT]
+  fontcraft-cli transform FONT [--rotate DEG] [--translate X,Y] [--scale SX[,SY]] [--slant DEG] [--matrix A,B,C,D,E,F] [--upem N] [--glyph-table FILE] [--widths auto|keep|transform|em] [--glyphs NAMES] [--exclude-glyphs NAMES] [--fd N,...] [--exclude-fd N,...] [--to ttf|otf|otf-cff2] [-o OUT]
       Apply one transformation to the glyphs of a compiled font (scale, slant, rotate
       clockwise and translate, in that order, or a matrix), or set a new units per em and
-      scale the whole font to it. A source takes --upem only. The output is
-      FONT.transformed.EXT unless -o, --output-dir or --in-place says otherwise.
+      scale the whole font to it. A source takes --upem only. --glyphs, --exclude-glyphs,
+      --fd and --exclude-fd choose the glyphs the transformation changes (--fd: the glyphs of
+      these Font DICTs of a CID-keyed CFF or a CFF2 font); the others stay as they are. The
+      output is FONT.transformed.EXT unless -o, --output-dir or --in-place says otherwise.
 ";
 
 /// The options, as data (M12.24).
@@ -37,6 +39,8 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::value("widths", "auto|keep|transform|em", "auto", "advance widths of transformed glyphs"),
     OptSpec::list("glyphs", "NAMES", "", "transform only these glyphs"),
     OptSpec::list("exclude-glyphs", "NAMES", "", "leave these glyphs alone"),
+    OptSpec::list("fd", "N,...", "", "transform only the glyphs of these Font DICTs of a CID-keyed CFF or a CFF2 font (from 0)"),
+    OptSpec::list("exclude-fd", "N,...", "", "leave the glyphs of these Font DICTs alone"),
     OptSpec::value("to", "ttf|otf|otf-cff2", "", "convert the outlines of the result to this format"),
     OptSpec::value("output", "OUT", "", "the output file").short('o'),
     OptSpec::value("output-dir", "DIR", "", "the folder the output goes into"),
@@ -99,6 +103,16 @@ fn params(parsed: &Parsed) -> Result<Map<String, Value>, Failure> {
     for (key, name) in [("glyphs", "glyphs"), ("excludeGlyphs", "exclude-glyphs")] {
         if !parsed.list(name).is_empty() {
             p.insert(key.into(), json!(parsed.list(name)));
+        }
+    }
+    for (key, name) in [("fd", "fd"), ("excludeFd", "exclude-fd")] {
+        let fds = parsed
+            .list(name)
+            .iter()
+            .map(|i| i.trim().parse::<u16>().map_err(|_| usage(format!("--{name} needs Font DICT indexes: `{i}` is not one"))))
+            .collect::<Result<Vec<u16>, Failure>>()?;
+        if !fds.is_empty() {
+            p.insert(key.into(), json!(fds));
         }
     }
     for (key, name) in [("output", "output"), ("outputDir", "output-dir")] {
@@ -169,5 +183,16 @@ mod tests {
         assert!(params(&parse(&["A.ttf", "--translate", "5"])).is_err());
         assert!(params(&parse(&["A.ttf", "--upem", "big"])).is_err());
         assert!(params(&parse(&["A.ttf", "--scale", "1,2,3"])).is_err());
+    }
+
+    #[test]
+    fn font_dict_options_choose_the_transformed_glyphs() {
+        let p = params(&parse(&["A.otf", "--scale", "2", "--fd", "0,2", "--exclude-fd=1"])).unwrap();
+        assert_eq!(p["fd"], json!([0, 2]));
+        assert_eq!(p["excludeFd"], json!([1]));
+        let p = params(&parse(&["A.otf", "--scale", "2"])).unwrap();
+        assert!(p.get("fd").is_none() && p.get("excludeFd").is_none(), "left out, the engine transforms every Font DICT");
+        assert!(params(&parse(&["A.otf", "--fd", "x"])).is_err());
+        assert!(params(&parse(&["A.otf", "--exclude-fd", "70000"])).is_err(), "an index CFF cannot hold");
     }
 }

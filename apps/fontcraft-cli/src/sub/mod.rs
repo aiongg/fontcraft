@@ -98,6 +98,30 @@ pub fn find(name: &str) -> Option<&'static Subcommand> {
     ALL.iter().find(|s| s.name == name)
 }
 
+/// The name `given` stands for among the subcommands and `extra` (`help`): the name itself, or
+/// in another letter case, or the one name it begins (`conv` → `convert`). `None` when it names
+/// none; a prefix of several names is a usage error that lists them.
+pub fn full_name(given: &str, extra: &[&'static str]) -> Result<Option<&'static str>, Failure> {
+    let names: Vec<&'static str> = ALL.iter().map(|s| s.name).chain(extra.iter().copied()).collect();
+    args::pick(&names, given).map_err(|e| usage(format!("subcommand {}", e.message())))
+}
+
+/// The subcommand `given` names, in full or by a prefix ([`full_name`]).
+pub fn lookup(given: &str) -> Result<Option<&'static Subcommand>, Failure> {
+    Ok(full_name(given, &[])?.and_then(find))
+}
+
+/// The option spellings of a subcommand in [`OWN_PARSERS`], so that [`args::take_globals`]
+/// leaves a prefix of one of them to the subcommand.
+fn own_spellings(name: &str) -> Vec<&'static str> {
+    match name {
+        "compile" => compile_opts::OPTIONS.iter().flat_map(|o| o.flags.iter().copied()).collect(),
+        "mcp" => mcp::SPELLINGS.to_vec(),
+        "oracle" => oracle::SPELLINGS.to_vec(),
+        _ => Vec::new(),
+    }
+}
+
 /// Runs `sub` on its arguments.
 pub fn run(sub: &Subcommand, args: &[String]) -> Outcome {
     if !OWN_PARSERS.contains(&sub.name) {
@@ -106,7 +130,7 @@ pub fn run(sub: &Subcommand, args: &[String]) -> Outcome {
     if args.iter().take_while(|a| *a != "--").any(|a| a == "-h" || a == "--help") {
         return out(&help(sub));
     }
-    (sub.run)(&args::take_globals(args, &[])?)
+    (sub.run)(&args::take_globals(args, &own_spellings(sub.name))?)
 }
 
 /// The help text of a subcommand: its usage and options, the engine command it runs, and a
@@ -164,6 +188,18 @@ mod tests {
             }
             assert!(help(sub).contains(&format!("fontcraft-cli {name}")), "{name}");
         }
+    }
+
+    #[test]
+    fn a_subcommand_may_be_named_by_a_unique_prefix() {
+        assert_eq!(full_name("conv", &[]).unwrap(), Some("convert"));
+        assert_eq!(full_name("transform", &[]).unwrap(), Some("transform"));
+        assert_eq!(full_name("he", &["help"]).unwrap(), Some("help"));
+        assert_eq!(full_name("nosuch", &[]).unwrap(), None);
+        assert_eq!(lookup("orac").unwrap().map(|s| s.name), Some("oracle"));
+        let e = full_name("co", &[]).unwrap_err();
+        assert_eq!(e.exit_code(), 2);
+        assert!(e.message().contains("compile") && e.message().contains("convert"), "{e:?}");
     }
 
     #[test]

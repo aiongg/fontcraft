@@ -25,6 +25,9 @@ const USAGE: &str = "\
       compiles it to a font, both only when every step succeeded.
 ";
 
+/// The option spellings of `run`, which reads its own arguments.
+const SPELLINGS: &[&str] = &["--help", "--in", "--cmd", "--params", "--params-file", "--script", "--keep-going", "--save", "--export"];
+
 /// Most steps one script file holds.
 pub const MAX_SCRIPT_STEPS: usize = 10_000;
 
@@ -41,7 +44,7 @@ enum Step {
 type Planned = (Option<String>, Step);
 
 fn run(args: &[String]) -> Outcome {
-    let args = args::take_globals(args, &[])?;
+    let args = args::take_globals(args, SPELLINGS)?;
     let mut input = None;
     let mut steps: Vec<Planned> = Vec::new();
     // The `--cmd` step that a `--params` would set.
@@ -51,6 +54,7 @@ fn run(args: &[String]) -> Outcome {
     let mut keep_going = false;
     let mut it = args.iter().peekable();
     while let Some(arg) = it.next() {
+        let arg = args::spell_long(SPELLINGS, arg)?;
         match arg.as_str() {
             "-h" | "--help" => return out(&super::help(&SUBCOMMAND)),
             "--in" => input = Some(it.next().ok_or_else(|| usage("--in needs a file"))?.clone()),
@@ -168,11 +172,10 @@ fn read_script(path: &str) -> Result<Vec<Planned>, Failure> {
         let step = if words.first().is_some_and(|w| w == "fontcraft-cli") {
             let rest: Vec<String> = words.into_iter().skip(1).collect();
             let name = rest.first().ok_or_else(|| usage(format!("{origin}: a subcommand must follow fontcraft-cli")))?;
-            if super::find(name).is_none() {
-                return Err(usage(format!("{origin}: unknown subcommand `{name}`")));
-            }
-            if name == "run" || name == "mcp" {
-                return Err(usage(format!("{origin}: a script cannot run `{name}`")));
+            let sub = super::lookup(name).map_err(|e| usage(format!("{origin}: {}", e.message())))?;
+            let Some(sub) = sub else { return Err(usage(format!("{origin}: unknown subcommand `{name}`"))) };
+            if sub.name == "run" || sub.name == "mcp" {
+                return Err(usage(format!("{origin}: a script cannot run `{}`", sub.name)));
             }
             Step::Cli(rest)
         } else {
@@ -197,7 +200,7 @@ fn run_step(session: &mut Session, step: &Step) -> Outcome {
         }
         Step::Cli(words) => {
             let Some((name, rest)) = words.split_first() else { return Err(usage("an empty command line")) };
-            let sub = super::find(name).ok_or_else(|| usage(format!("unknown subcommand `{name}`")))?;
+            let sub = super::lookup(name)?.ok_or_else(|| usage(format!("unknown subcommand `{name}`")))?;
             match super::run(sub, rest) {
                 Err(Failure::Done) => Ok(()),
                 other => other,

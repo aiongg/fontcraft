@@ -52,11 +52,14 @@ const USAGE: &str = "\
       --svg-standalone, --svg-absolute or --svg-glyph-names say otherwise; glyphs without a
       character get private-use ones; --newline sets the line ending. UFOs: --ufo-structure zip
       writes a UFOZ.
+      --zopfli asks for zopfli compression of a WOFF result; no zopfli compressor is built in,
+      so it is refused with a WOFF result and has no effect on others.
 ";
 
 const OPTIONS: &[OptSpec] = &[
     OptSpec::value("to", "FORMAT", "", "ttf, otf, otf-cff2, cff, cff2, ufo or svg-font"),
     OptSpec::value("container", "plain|woff|woff2", "plain", "wrap the result"),
+    OptSpec::switch("zopfli", false, "compress a WOFF result with zopfli (not available: refused with a WOFF result, ignored with others)"),
     OptSpec::value("max-error", "EM", "", "largest curve conversion error, as a fraction of the em (default: one font unit)"),
     OptSpec::value(
         "curve-conversion",
@@ -132,6 +135,8 @@ const OPTIONS: &[OptSpec] = &[
 ];
 
 fn convert(raw: &[String]) -> Outcome {
+    // Written out in full, so the checks below for `--no-…` forms see shortened ones too.
+    let raw = &args::spell_out(OPTIONS, raw)?;
     let parsed = args::parse(OPTIONS, raw)?;
     if parsed.help {
         return out(&super::help(&SUBCOMMAND));
@@ -193,6 +198,7 @@ fn convert(raw: &[String]) -> Outcome {
     if smart.is_some() && !matches!(extension.as_str(), "ufo" | "designspace") {
         return Err(usage("--smart-components applies to .ufo and .designspace output"));
     }
+    refuse_zopfli(&parsed, &extension)?;
     let result = match extension.as_str() {
         "ttf" | "otf" | "woff" | "woff2" => execute(&mut session, "file.exportStatic", &json!({"destination": output}))?,
         "fontcraft" | "glyphs" | "glyphspackage" | "ufo" | "designspace" => {
@@ -209,6 +215,16 @@ fn convert(raw: &[String]) -> Outcome {
         }
     };
     out(&result.to_string())
+}
+
+/// `--zopfli` with a result of `container` (`plain`, `woff`, `woff2`): no zopfli compressor is
+/// built in, so a WOFF result is refused rather than written with zlib behind the user's back.
+/// Other results use no zlib and ignore it, as the reference converter does.
+fn refuse_zopfli(parsed: &args::Parsed, container: &str) -> Result<(), Failure> {
+    if parsed.switch("zopfli") && container == "woff" {
+        return Err(Failure::Failed("--zopfli: zopfli compression for WOFF is not available; leave out --zopfli to compress with zlib".into()));
+    }
+    Ok(())
 }
 
 /// A file whose first bytes say it is a compiled font (sfnt, collection, WOFF, WOFF2).
@@ -359,6 +375,7 @@ fn font_params(parsed: &args::Parsed, raw: &[String]) -> Result<Map<String, Valu
     };
     params.insert("inputs".into(), json!(inputs));
     params.insert("to".into(), json!(to));
+    refuse_zopfli(parsed, &container)?;
     params.insert("container".into(), json!(container));
     let mut curves = Map::new();
     if let Some(v) = parsed.value("max-error").filter(|v| !v.is_empty()) {
@@ -616,5 +633,25 @@ mod tests {
         assert_eq!(p["optimizeFor"], json!("speed"));
         assert_eq!(params(&["A.ttf", "--to", "ttf", "--rebuild-tables", "all"]).unwrap()["rebuildTables"], json!("all"));
         assert!(!params(&["A.ttf", "--to", "ttf"]).unwrap().contains_key("recalcBounds"), "left out, the command's default applies");
+    }
+
+    #[test]
+    fn zopfli_is_refused_only_where_it_would_compress() {
+        let e = params(&["A.ttf", "--to", "ttf", "--container", "woff", "--zopfli"]).unwrap_err();
+        assert_eq!(e.exit_code(), 4, "{e:?}");
+        assert!(e.message().contains("zopfli"), "{e:?}");
+        let p = params(&["A.ttf", "--to", "ttf", "--container", "woff2", "--zopfli"]).unwrap();
+        assert_eq!(p["container"], json!("woff2"), "WOFF2 uses no zlib: --zopfli has no effect");
+        assert!(params(&["A.ttf", "--to", "otf", "--zopfli"]).is_ok());
+    }
+
+    #[test]
+    fn shortened_negative_switches_reach_the_engine() {
+        let raw: Vec<String> = ["A.ttf", "--to", "otf", "--no-recalc", "--No-Warn-Hints", "--no-subr"].iter().map(|s| s.to_string()).collect();
+        let raw = args::spell_out(OPTIONS, &raw).unwrap();
+        assert_eq!(raw, ["A.ttf", "--to", "otf", "--no-recalc-bounds", "--no-warn-hints", "--no-subroutinize"]);
+        let p = font_params(&args::parse(OPTIONS, &raw).unwrap(), &raw).unwrap();
+        assert_eq!(p["recalcBounds"], json!(false));
+        assert_eq!(p["cff"], json!({ "subroutinize": false, "warnHints": false }));
     }
 }
