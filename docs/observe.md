@@ -32,12 +32,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1466 rows to check: 2504 guesses and 592 observe steps.**
+**1470 rows to check: 2509 guesses and 593 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **522** |
-| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 113 |
+| **Built milestones (M0 to M6)** | all | **523** |
+| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 114 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
 | Built milestones (M0 to M6) | Filters | 36 |
@@ -48,26 +48,26 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 48 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **944** |
+| **Later milestones (after M6)** | all | **947** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 86 |
 | Later milestones (after M6) | Edit View: text mode and preview | 27 |
 | Later milestones (after M6) | Components and anchors | 43 |
 | Later milestones (after M6) | Filters | 5 |
 | Later milestones (after M6) | Spacing and metrics keys | 12 |
-| Later milestones (after M6) | Kerning and the Kerning window | 14 |
+| Later milestones (after M6) | Kerning and the Kerning window | 16 |
 | Later milestones (after M6) | Font View | 19 |
 | Later milestones (after M6) | Font Info and features | 292 |
 | Later milestones (after M6) | Interpolation | 86 |
 | Later milestones (after M6) | Hinting | 110 |
 | Later milestones (after M6) | Colour fonts | 68 |
 | Later milestones (after M6) | Files: open, import, export | 68 |
-| Later milestones (after M6) | Settings and the window | 26 |
+| Later milestones (after M6) | Settings and the window | 27 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
-## Built milestones (M0 to M6) (522)
+## Built milestones (M0 to M6) (523)
 
-### Edit View: drawing, guides, layers and the Palette (113)
+### Edit View: drawing, guides, layers and the Palette (114)
 
 - [ ] `dialog.fieldKeys` (behavior, M3, inferred): In a dialog's number field, Return takes the typed value, Escape drops…
   - Guess: Dialog number fields follow the Info box's editing and arrow-key rules (infoBox.fieldEditing, infoBox.arrowKeyStepping); the handbook documents them for the Info box only.
@@ -81,6 +81,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: When several flavours are given, JSON is read first, then SVG, then PDF, and one that cannot be read gives way to the next; which flavour the reference prefers when a drawing app offers both SVG and PDF is not documented.
   - Guess: The desktop shell passes the clipboard's PDF only when its text cannot be pasted, so readable text wins over a PDF; copying a shape from a drawing app that offers both and pasting it into the reference would settle it.
   - Guess: A paste made while the clipboard's PDF is still being read for the previous one is dropped with a message in the status bar; pasting twice quickly from a drawing app into the reference would settle what it does.
+- [ ] `menus.optionRevealsAlternateItems` (behavior, M3, handbook): Holding Option while a menu or context menu is open swaps some…
+  - Guess: Clear Background is the Alt alternate of Assign Background; the handbook says only that it shows while Alt is held. Holding Option in the reference app's Path menu settles it.
+  - Observe: Open the Path menu, hold Option, and note which items change, their labels, and whether each keeps its shortcut with Option added.
 - [ ] `menus.switchCheckMarks` (behavior, M3, handbook): A menu item that switches something on and off shows a check…
   - Guess: Every on/off switch shows a check mark, including Lock Outline, Power Nudge, Edit Background, Palette, Preview Panel and Font Audit; opening the reference app's View, Path and Window menus with each switch on and off settles which ones do.
   - Guess: View › Show Indexes shows a check mark while any kind of index is shown. Settled by turning on a single kind in the reference app and opening the View menu.
@@ -1560,7 +1563,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (944)
+## Later milestones (after M6) (947)
 
 ### Edit View: drawing, guides, layers and the Palette (86)
 
@@ -2206,7 +2209,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The Space Center draws the showing Edit View tab's master, else the first master; how the reference picks the master of a multi-master font would settle it.
   - Guess: Matrix columns are the text's own glyphs; control glyphs get none. Opening a text with control glyphs in the reference would settle it.
 
-### Kerning and the Kerning window (14)
+### Kerning and the Kerning window (16)
 
 - [ ] `kerning.groupClassNames` (behavior, M8, handbook): Every kerning group is available in feature code as a glyph class…
   - Guess: Only the `@MMK_L_`/`@MMK_R_` classes the code refers to and no class entry defines are written, before the first entry, with the glyphs the target exports in font order, and a group without such glyphs stays undefined so the compiler names the reference; the expanded code of a reference export settles it.
@@ -2231,6 +2234,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Without `pairs` or glyph lists, every class pair stored in the master is expanded to its members; FontLab applies the command to the pairs selected in its window.
   - Guess: The default threshold is 0, so only outlines that overlap are reported; touching outlines (distance 0) are not.
   - Guess: `fix` adds a glyph–glyph exception set to the threshold minus the distance without kerning, rounded up to a whole unit; it never adds a glyph–group exception.
+- [ ] `dialog.auditKerningExceptions` (M13, docs): Audit Kerning Exceptions…
+  - Guess: The audit runs once with the default settings as the dialog opens; FontLab's page does not say whether its dialog lists pairs before a button is pressed.
+- [ ] `dialog.matchKerning` (M13, docs): Match Kerning…
+  - Guess: The summary gives the pairs filled, the exceptions added and each master's pair count before and after; FontLab's page names no summary.
 - [ ] `kerning.removePairsByRule` (M13, docs, live): Remove Pairs…
   - Guess: An exception is a stored pair with a glyph side whose glyph has a kerning group on the side facing the pair; its class value is the value that applies once it is removed (glyph–group, then group–glyph, then group–group; 0 when none applies). FontLab does not define either term on its page.
   - Guess: Every pair is judged on the kerning as it stood before the call, so removing a small group pair does not change which exceptions are removed.
@@ -4445,7 +4452,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Every item starts ticked, so Accept Selected with no change of the ticks takes everything; the reference's manual does not say which state the ticks start in, and opening the window there settles it.
   - Guess: The stored-text view on double-click shows the glyph in FontCraft's native JSON form rather than as a .glif file, since the comparison is between models; the reference shows the file text, and a file-per-glyph text view would follow it more closely.
 
-### Settings and the window (26)
+### Settings and the window (27)
 
 - [ ] `sharing.confirmConnectionOnHost` (behavior, M13, handbook): A first connection attempt from a device must be confirmed on the…
   - Guess: Devices are known by their IP address, so a device that gets a new address must be confirmed again; what the reference keys them by is not documented.
@@ -4522,6 +4529,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Use Versions is stored and does nothing, because the system's version browser is a macOS service FontCraft does not use.
 - [ ] `user.sendCrashReports` (setting, M14, handbook): Send Crash Reports
   - Guess: Send Crash Reports and its two contact fields are stored and do nothing, because FontCraft has no crash-report service.
+- [ ] `app.commandPalette` (M14, docs): Commands…
+  - Guess: The palette lists the commands that have a menu row; the others take parameters and are reached through the Command Console. The secondary reference's list would settle it.
+  - Guess: The shortcut Cmd+Shift+P comes from the secondary reference; the reference app has none.
 
 ### Scripts, plug-ins and URLs (62)
 

@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2974 guesses on 1567 rows (636 of them live commands).**
+**2979 guesses on 1571 rows (636 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -108,6 +108,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `guide.displayLines` | M3 | inferred | yes | The design grid parameter is read as a horizontal and a vertical step in units, drawn over the CJK box, or over the glyph's width and metric span when no CJK grid is set; the handbook does not explain it. |
 | `app.launchWithoutPlugins` (behavior) | M13 | handbook | – | The launch keys are read on the window's first frame, since the toolkit reports modifier keys only once the window exists; whether the reference also offers a way back without relaunching would settle Load Extensions. |
 | `start.shownAtLaunchWithoutDocuments` (behavior) | M4 | handbook | – | With Show window on startup off, the app opens a new document at launch, as File › New does. Settled by observing a launch with the checkbox cleared. |
+| `menus.optionRevealsAlternateItems` (behavior) | M3 | handbook | – | Clear Background is the Alt alternate of Assign Background; the handbook says only that it shows while Alt is held. Holding Option in the reference app's Path menu settles it. |
 | `menus.switchCheckMarks` (behavior) | M3 | handbook | – | Every on/off switch shows a check mark, including Lock Outline, Power Nudge, Edit Background, Palette, Preview Panel and Font Audit; opening the reference app's View, Path and Window menus with each switch on and off settles which ones do. |
 | `menus.switchCheckMarks` (behavior) | M3 | handbook | – | View › Show Indexes shows a check mark while any kind of index is shown. Settled by turning on a single kind in the reference app and opening the View menu. |
 | `tools.sharedButtonCycling` (behavior) | M3 | handbook | – | Holding a shared toolbar button for 0.4 s opens its menu; the reference's hold time is not documented. |
@@ -3036,6 +3037,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `constructions.ruleGrammar` (behavior) | M13 | docs | – | A number before a position name works with + and * (`10+top`), and position names may hold dots (`top.alt`); the original fails on both. |
 | `drag.ghostOutline` (behavior) | M13 | docs | – | The grey outline shows only the shapes the running interaction changed, and it also shows under a dialog's live preview, which runs as the same kind of interaction. The reference app during a dialog preview would settle the second part. |
 | `drag.ghostOutline` (behavior) | M13 | docs | – | The dotted cross-hair through the pointer is not offered. The reference app's appearance settings would settle whether it is worth a switch. |
+| `app.commandPalette` | M14 | docs | no | The palette lists the commands that have a menu row; the others take parameters and are reached through the Command Console. The secondary reference's list would settle it. |
+| `app.commandPalette` | M14 | docs | no | The shortcut Cmd+Shift+P comes from the secondary reference; the reference app has none. |
+| `dialog.auditKerningExceptions` | M13 | docs | no | The audit runs once with the default settings as the dialog opens; FontLab's page does not say whether its dialog lists pairs before a button is pressed. |
+| `dialog.matchKerning` | M13 | docs | no | The summary gives the pairs filled, the exceptions added and each master's pair count before and after; FontLab's page names no summary. |
 | `palette.selections` (panel) | M13 | docs | – | The section sits after Transformations in the Palette and shows only the edited glyph's entries; FontLab's panel placement would settle it. |
 | `palette.selections` (panel) | M13 | docs | – | Add with a name that already exists replaces that entry rather than refusing; observing the panel's Add on a duplicate name would settle it. |
 | `palette.measurements` (panel) | M13 | docs | – | The section shows the current master only, not a table of all masters, to fit the Palette's width. |
