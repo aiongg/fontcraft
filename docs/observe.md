@@ -32,11 +32,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1457 rows to check: 2483 guesses and 586 observe steps.**
+**1458 rows to check: 2485 guesses and 586 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **519** |
+| **Built milestones (M0 to M6)** | all | **520** |
 | Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 112 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
@@ -45,7 +45,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Kerning and the Kerning window | 42 |
 | Built milestones (M0 to M6) | Font View | 110 |
 | Built milestones (M0 to M6) | Font Info and features | 20 |
-| Built milestones (M0 to M6) | Files: open, import, export | 47 |
+| Built milestones (M0 to M6) | Files: open, import, export | 48 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
 | **Later milestones (after M6)** | all | **938** |
@@ -65,7 +65,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
-## Built milestones (M0 to M6) (519)
+## Built milestones (M0 to M6) (520)
 
 ### Edit View: drawing, guides, layers and the Palette (112)
 
@@ -1356,7 +1356,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `Decompose Glyphs` (parameter, M6, handbook): List of glyph names whose components are turned into outlines at export
   - Guess: A text value is read as glyph names separated by commas or spaces, besides the documented list; the reference app with a text value would settle it.
 
-### Files: open, import, export (47)
+### Files: open, import, export (48)
 
 - [ ] `file.save` (M1, handbook, live): Save
   - Guess: The save chooser offers one filter with every source extension, and the chosen extension picks the format (no extension: the native format); the reference's format pop-up in its save sheet is documented but its layout is not observed.
@@ -1407,6 +1407,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: An export of both flavours at once puts them into ttf and otf subfolders; how the reference lays out such an export is not documented.
 - [ ] `file.exportAll` (M2, handbook, live): Export All
   - Guess: The reference's settings for Export All are not documented; using each document's last-used export settings is our assumption, and until FontCraft remembers settings the command takes them as parameters.
+- [ ] `font.compile` (M2, docs, live): Compile Fonts
+  - Guess: Several masters with an axis and no formats build a variable TTF, as fontc does; fontmake builds static masters there. A static-only parameter, a project compile or a .otf destination file keeps the static default.
+  - Guess: With familyName the instances of other families are listed as skipped; fontmake leaves them out silently.
 - [ ] `compile.removeOverlapsStatic` (behavior, M2, docs): fontmake removes overlaps by default when building static fonts and skips it…
   - Guess: A composite glyph keeps its components at export, so components that overlap each other keep their overlaps, following fontmake; how the reference app exports such a glyph is not documented.
 - [ ] `compile.cffSubroutinisation` (behavior, M2, docs): Repeated charstring sequences are moved into subroutines
