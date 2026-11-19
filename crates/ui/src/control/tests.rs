@@ -55,11 +55,11 @@ fn the_control_protocol_drives_the_app() {
     assert_eq!(handle(&mut t.app, &json!({"id": 9, "method": "nope"}))["id"], 9, "the reply carries the request's id");
 
     // Methods of packages not built yet say which package brings them.
-    for (method, package) in [("ui.text", "UI.3"), ("ui.dialog.inspect", "UI.7"), ("ui.contextMenu.list", "UI.25")] {
+    for (method, package) in [("ui.text", "UI.3"), ("ui.contextMenu.list", "UI.25")] {
         let error = t.error(method, json!({}));
         assert!(error.contains("not built yet") && error.contains(package), "{method}: {error}");
     }
-    assert!(t.error("ui.click", json!({"id": "ok"})).contains("UI.7"), "a dialog control press waits for the dialogs");
+    assert!(t.error("ui.click", json!({"id": "ok"})).contains("no dialog is open"), "a dialog control press needs an open dialog");
 
     // Every method of the protocol the skeleton answers is in the table.
     let methods = t.ok("control.methods", json!({}));
