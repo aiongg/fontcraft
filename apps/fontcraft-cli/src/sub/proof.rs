@@ -65,7 +65,7 @@ const OPTIONS: &[OptSpec] = &[
 ];
 
 fn run(args: &[String]) -> Outcome {
-    let Taken { rest, settings, show, hide, panels } = take_settings(args)?;
+    let Taken { rest, settings, show, hide, panels } = take_settings(&args::spell_out(OPTIONS, args)?)?;
     let parsed = args::parse(OPTIONS, &rest)?;
     if parsed.help {
         return out(&super::help(&SUBCOMMAND));

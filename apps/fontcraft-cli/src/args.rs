@@ -20,7 +20,10 @@
 //!   nested at most [`MAX_RESPONSE_DEPTH`] deep, a file that includes itself refused.
 //! - Later options win: the command line is read left to right after expansion.
 //! - A long option may be shortened to any prefix that names one option only; a name that
-//!   differs from an option only in letter case names that option (`--name-IDs`).
+//!   differs from an option only in letter case names that option (`--name-IDs`). Subcommands
+//!   that look for some options before [`parse`] first write the names out with [`spell_out`];
+//!   those that read their own arguments resolve them with [`spell_long`], and [`take_globals`]
+//!   leaves a prefix of one of their own options to them.
 //! - `--` ends the options; `-h` and `--help` ask for help; a lone `-` is a positional (stdin).
 //! - Where a subcommand reads queries ([`parse_with_queries`]), `--opt?` records the value
 //!   `opt` has at that point of the line; elsewhere it is an unknown option.
@@ -456,24 +459,38 @@ pub fn leading_globals(args: &[String]) -> usize {
     i.min(args.len())
 }
 
-/// Whether `arg` is a common option that `own` does not claim, spelled out in full, and if so
-/// whether its value is the next argument.
+/// Whether `arg` is a common option that `own` does not claim, and if so whether its value is
+/// the next argument. A long name is read as [`parse`] reads it, `own`'s long spellings tried
+/// before the common options at each step: exact, letter case, prefix. A prefix of one of `own`'s
+/// spellings, or of several common options, is left to the subcommand.
 fn global_arg(arg: &str, own: &[&str]) -> Option<bool> {
-    let claimed = |form: String| own.contains(&form.as_str());
     if let Some(body) = arg.strip_prefix("--") {
         let (name, inline) = match body.split_once('=') {
             Some((n, _)) => (n, true),
             None => (body, false),
         };
-        let (spec, negated) = match GLOBAL.iter().find(|g| g.name == name) {
-            Some(g) => (g, false),
-            None => (GLOBAL.iter().find(|g| g.kind == Kind::Switch && name.strip_prefix("no-") == Some(g.name))?, true),
-        };
-        if claimed(format!("--{}", spec.name)) {
+        if name.is_empty() {
             return None;
         }
-        return Some(spec.kind != Kind::Switch && !inline && !negated);
+        let given = format!("--{name}");
+        let own_long: Vec<&str> = own.iter().copied().filter(|o| o.starts_with("--")).collect();
+        let common: Vec<(String, &OptSpec, bool)> = forms(GLOBAL).map(|(n, s, on)| (format!("--{n}"), s, on)).collect();
+        let steps: [fn(&str, &str) -> bool; 3] =
+            [|c: &str, g: &str| c == g, |c: &str, g: &str| c.eq_ignore_ascii_case(g), |c: &str, g: &str| c.starts_with(g)];
+        for step in steps {
+            if own_long.iter().any(|o| step(o, &given)) {
+                return None;
+            }
+            let hits: Vec<&(String, &OptSpec, bool)> = common.iter().filter(|(form, _, _)| step(form, &given)).collect();
+            match hits.as_slice() {
+                [] => continue,
+                [(_, spec, on)] => return Some(spec.kind != Kind::Switch && !inline && *on),
+                _ => return None,
+            }
+        }
+        return None;
     }
+    let claimed = |form: String| own.contains(&form.as_str());
     let c = if verbose_cluster(arg).is_some() {
         'v'
     } else {
@@ -601,20 +618,25 @@ fn split_list(text: &str) -> Vec<String> {
 /// tiers in order (the subcommand's own options, then the common ones): the exact name, then the
 /// name in another letter case, then a prefix that names one option only.
 fn resolve<'a>(tiers: &[&'a [OptSpec]], name: &str) -> Result<(&'a OptSpec, bool), Failure> {
+    lookup(tiers, name)?.ok_or_else(|| usage(format!("unknown option --{name}")))
+}
+
+/// As [`resolve`], with `None` for a name that is no option and begins none.
+fn lookup<'a>(tiers: &[&'a [OptSpec]], name: &str) -> Result<Option<(&'a OptSpec, bool)>, Failure> {
     for &specs in tiers {
         if let Some((_, s, on)) = forms(specs).find(|(n, _, _)| n == name) {
-            return Ok((s, on));
+            return Ok(Some((s, on)));
         }
     }
     for &specs in tiers {
         if let Some((_, s, on)) = forms(specs).find(|(n, _, _)| n.eq_ignore_ascii_case(name)) {
-            return Ok((s, on));
+            return Ok(Some((s, on)));
         }
     }
     for &specs in tiers {
         let matches: Vec<(String, &OptSpec, bool)> = forms(specs).filter(|(n, _, _)| n.starts_with(name)).collect();
         match matches.as_slice() {
-            [(_, s, on)] => return Ok((s, *on)),
+            [(_, s, on)] => return Ok(Some((s, *on))),
             [] => continue,
             many => {
                 let names: Vec<String> = many.iter().map(|(n, _, _)| format!("--{n}")).collect();
@@ -622,7 +644,124 @@ fn resolve<'a>(tiers: &[&'a [OptSpec]], name: &str) -> Result<(&'a OptSpec, bool
             }
         }
     }
-    Err(usage(format!("unknown option --{name}")))
+    Ok(None)
+}
+
+/// Whether the argument after an option is its value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Next {
+    No,
+    Always,
+    /// When it does not start with `-` and holds no `=` ([`optional_value`]).
+    Maybe,
+}
+
+/// `args` with response files read and every long option written out in full as [`parse`]
+/// reads it (`--retain` → `--retain-gids`, `--No-Hinting` → `--no-hinting`), for a subcommand that
+/// looks for some options itself before calling [`parse`]. Values, `--opt?` queries and
+/// everything after `--` stay as given; a name that is no option stays for [`parse`] to refuse,
+/// and a prefix of several options is refused here.
+pub fn spell_out(specs: &[OptSpec], args: &[String]) -> Result<Vec<String>, Failure> {
+    let args = expand(args, 0, &mut Vec::new())?;
+    let globals = globals_for(specs);
+    let tiers: [&[OptSpec]; 2] = [specs, &globals];
+    let mut spelled = Vec::with_capacity(args.len());
+    let mut it = args.into_iter().peekable();
+    while let Some(arg) = it.next() {
+        if arg == "--" {
+            spelled.push(arg);
+            spelled.extend(it.by_ref());
+            break;
+        }
+        let (written, next) = spell_one(&tiers, &arg)?;
+        spelled.push(written.unwrap_or(arg));
+        match next {
+            Next::No => {}
+            Next::Always => spelled.extend(it.next()),
+            Next::Maybe => spelled.extend(it.next_if(|n| !n.starts_with('-') && !n.contains('='))),
+        }
+    }
+    Ok(spelled)
+}
+
+/// How [`spell_out`] writes `arg`: its full spelling (`None`: as given), and whether the next
+/// argument is its value.
+fn spell_one(tiers: &[&[OptSpec]], arg: &str) -> Result<(Option<String>, Next), Failure> {
+    let takes = |spec: &OptSpec| match spec.kind {
+        Kind::Switch => Next::No,
+        Kind::OptionalValue => Next::Maybe,
+        Kind::Value | Kind::List => Next::Always,
+    };
+    if let Some(body) = arg.strip_prefix("--") {
+        if body.is_empty() || (!body.contains('=') && body.ends_with('?')) {
+            return Ok((None, Next::No));
+        }
+        let (name, edit, inline) = match body.split_once('=') {
+            Some((n, v)) => match (n.strip_suffix('+'), n.strip_suffix('-')) {
+                (Some(n), _) => (n, "+=", Some(v)),
+                (_, Some(n)) => (n, "-=", Some(v)),
+                _ => (n, "=", Some(v)),
+            },
+            None => (body, "", None),
+        };
+        let Some((spec, on)) = lookup(tiers, name)? else { return Ok((None, Next::No)) };
+        let full = if on { spec.name.to_string() } else { format!("no-{}", spec.name) };
+        return Ok(match inline {
+            Some(v) => (Some(format!("--{full}{edit}{v}")), Next::No),
+            None if on => (Some(format!("--{full}")), takes(spec)),
+            None => (Some(format!("--{full}")), Next::No),
+        });
+    }
+    let mut chars = arg.chars();
+    if let (Some('-'), Some(c), None) = (chars.next(), chars.next(), chars.next()) {
+        let next = tiers.iter().flat_map(|t| t.iter()).find(|s| s.short == Some(c)).map_or(Next::No, takes);
+        return Ok((None, next));
+    }
+    Ok((None, Next::No))
+}
+
+/// The candidate `given` names: the one spelled so, else the one equal to it in another letter
+/// case, else the one it begins. `None` when it names none; a prefix of several candidates is a
+/// usage error that lists them.
+pub fn pick<'a>(candidates: &[&'a str], given: &str) -> Result<Option<&'a str>, Failure> {
+    if given.is_empty() {
+        return Ok(None);
+    }
+    if let Some(c) = candidates.iter().find(|c| **c == given) {
+        return Ok(Some(*c));
+    }
+    if let Some(c) = candidates.iter().find(|c| c.eq_ignore_ascii_case(given)) {
+        return Ok(Some(*c));
+    }
+    let mut matches: Vec<&'a str> = candidates.iter().copied().filter(|c| c.starts_with(given)).collect();
+    matches.sort_unstable();
+    matches.dedup();
+    match matches.as_slice() {
+        [] => Ok(None),
+        [one] => Ok(Some(*one)),
+        many => Err(usage(format!("`{given}` is ambiguous: {}", many.join(", ")))),
+    }
+}
+
+/// `arg` with its long option name written out in full among `spellings` (`--out=x` →
+/// `--output=x` when `--output` is the one spelling it begins), for a subcommand that reads its
+/// own arguments. Only the `--` spellings take part. Anything else, and a name no spelling
+/// matches, comes back as given; a prefix of several spellings is a usage error.
+pub fn spell_long(spellings: &[&str], arg: &str) -> Result<String, Failure> {
+    let Some(body) = arg.strip_prefix("--") else { return Ok(arg.to_string()) };
+    let (name, value) = match body.split_once('=') {
+        Some((n, v)) => (n, Some(v)),
+        None => (body, None),
+    };
+    if name.is_empty() {
+        return Ok(arg.to_string());
+    }
+    let long: Vec<&str> = spellings.iter().copied().filter(|s| s.starts_with("--")).collect();
+    Ok(match (pick(&long, &format!("--{name}"))?, value) {
+        (Some(full), Some(v)) => format!("{full}={v}"),
+        (Some(full), None) => full.to_string(),
+        (None, _) => arg.to_string(),
+    })
 }
 
 /// The spellings of each option: its name, and `no-NAME` for a switch.
@@ -866,6 +1005,67 @@ mod tests {
         assert_eq!(leading_globals(&args(&["--jobs", "2", "-vv", "--log-file=x", "convert", "-q"])), 4);
         assert_eq!(leading_globals(&args(&["convert", "--jobs", "2"])), 0);
         assert_eq!(leading_globals(&args(&["--jobs"])), 1, "a missing value is left to the parser");
+    }
+
+    #[test]
+    fn hand_parsers_leave_prefixes_of_their_own_options_to_them() {
+        let rest = take_globals(&args(&["--tim", "5", "--job", "3", "--jo", "x"]), &["--timestamp", "--json"]).unwrap();
+        assert_eq!(rest, ["--tim", "5", "--jo", "x"], "--tim and --jo begin options of the subcommand; --job names the common --jobs");
+        assert_eq!(leading_globals(&args(&["--job", "2", "--Quiet", "convert"])), 3, "prefixes and letter case, as parse reads them");
+        assert_eq!(leading_globals(&args(&["--ver", "convert"])), 0, "--ver begins --verbose and --version");
+    }
+
+    #[test]
+    fn spell_out_writes_names_in_full_and_leaves_values_alone() {
+        let given = args(&[
+            "in.ttf",
+            "--retain",
+            "--No-Hinting",
+            "--layout-f+=smcp",
+            "--output-d",
+            "--retain",
+            "-o",
+            "--hinting",
+            "--tim",
+            "--bogus",
+            "--",
+            "--retain",
+        ]);
+        let spelled = spell_out(SPECS, &given).unwrap();
+        assert_eq!(
+            spelled,
+            [
+                "in.ttf",
+                "--retain-gids",
+                "--no-hinting",
+                "--layout-features+=smcp",
+                "--output-dir",
+                "--retain",
+                "-o",
+                "--hinting",
+                "--timing",
+                "--bogus",
+                "--",
+                "--retain"
+            ]
+        );
+        let parsed = parse(SPECS, &spell_out(SPECS, &args(&["--output-d", "--retain", "-o", "--hinting"])).unwrap()).unwrap();
+        assert_eq!((parsed.value("output-dir"), parsed.value("output")), (Some("--retain"), Some("--hinting")), "values are never read as options");
+        assert!(spell_out(SPECS, &args(&["--out", "x"])).is_err(), "a prefix of several options is refused");
+    }
+
+    #[test]
+    fn spell_long_resolves_the_spellings_of_a_hand_parser() {
+        const OWN: &[&str] = &["--output", "--output-dir", "--json", "-o"];
+        assert_eq!(spell_long(OWN, "--js").unwrap(), "--json");
+        assert_eq!(spell_long(OWN, "--output-d=x").unwrap(), "--output-dir=x");
+        assert_eq!(spell_long(OWN, "--OUTPUT").unwrap(), "--output");
+        assert_eq!(spell_long(OWN, "--output").unwrap(), "--output", "an exact name wins over the longer ones it begins");
+        for unchanged in ["--nope", "file.ttf", "-o", "--"] {
+            assert_eq!(spell_long(OWN, unchanged).unwrap(), unchanged);
+        }
+        let e = spell_long(OWN, "--out").unwrap_err();
+        assert!(e.message().contains("--output, --output-dir"), "{e:?}");
     }
 
     #[test]

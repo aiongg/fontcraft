@@ -56,8 +56,9 @@ fn run(args: &[String]) -> Outcome {
     // `--cff-widths=exhaustive`, `--varstore=QUANTUM` and `--no-gvar-iup` carry more than a
     // switch says; they are read here and handed to the parser as plain switches.
     let mut params = Map::new();
+    let args = args::spell_out(OPTIONS, args)?;
     let mut rest = Vec::with_capacity(args.len());
-    for a in args {
+    for a in &args {
         if let Some(v) = a.strip_prefix("--cff-widths=") {
             if v != "exhaustive" {
                 return Err(usage(format!("--cff-widths takes no value but `exhaustive`, got `{v}`")));

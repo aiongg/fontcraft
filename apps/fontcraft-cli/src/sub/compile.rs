@@ -101,7 +101,8 @@ const USAGE: &str = "\
       the script --mac-script N (-cs; default: from the ordering) and the language
       --mac-language N (-cl; default 0). --uvs FILE (-ci) adds the Unicode Variation Sequences
       the file lists, for any SOURCE, as a cmap format 14 subtable.
-      Long options also take their value as --opt=VALUE. One JSON line per SOURCE.
+      Long options also take their value as --opt=VALUE and may be shortened to a prefix of one
+      option only. One JSON line per SOURCE.
 ";
 
 /// `compile`: each source is opened as a document and built by `font.compile` (or described by

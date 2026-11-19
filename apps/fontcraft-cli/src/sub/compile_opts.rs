@@ -5,10 +5,12 @@
 //! new row.
 //!
 //! Long options take their value as `--opt VALUE` or `--opt=VALUE`; the single-dash spellings of
-//! the reference's project tool (`-ff`, `-osbOn`) take it as the next argument.
+//! the reference's project tool (`-ff`, `-osbOn`) take it as the next argument. A long option may
+//! be given in another letter case or shortened to a prefix of one spelling only.
 
 use serde_json::{Map, Value, json};
 
+use crate::args;
 use crate::io::{Failure, usage};
 
 /// What an option does with its value.
@@ -174,6 +176,7 @@ pub fn is_folder_value(arg: &str) -> bool {
 /// Reads `args` into the sources and the `font.compile` parameters, with the subcommand's own
 /// settings under `cli`.
 pub fn parse(args: &[String]) -> Result<(Vec<String>, Map<String, Value>), Failure> {
+    let long: Vec<&'static str> = OPTIONS.iter().flat_map(|o| o.flags.iter().copied()).filter(|f| f.starts_with("--")).collect();
     let mut sources = Vec::new();
     let mut params = Map::new();
     let mut it = args.iter().peekable();
@@ -189,6 +192,10 @@ pub fn parse(args: &[String]) -> Result<(Vec<String>, Map<String, Value>), Failu
         let (name, inline) = match arg.split_once('=') {
             Some((name, value)) if name.starts_with("--") => (name, Some(value)),
             _ => (arg.as_str(), None),
+        };
+        let name = match name.strip_prefix("--") {
+            Some(rest) if !rest.is_empty() => args::pick(&long, name)?.unwrap_or(name),
+            _ => name,
         };
         let opt = find(name).ok_or_else(|| usage(format!("unknown compile option `{name}`")))?;
         let value = match opt.kind {
@@ -354,6 +361,17 @@ mod tests {
         assert_eq!(p["instances"], json!(["Bold", "Light"]));
         assert_eq!(p["formats"], json!(["variable"]));
         assert!(is_project(p.as_object().unwrap()));
+    }
+
+    #[test]
+    fn long_options_take_a_unique_prefix_or_another_letter_case() {
+        let (_, p) = parsed(&["F.glyphs", "--output-l=by-format", "--KEEP-OVERLAPS", "--rel", "--no-subr"]);
+        assert_eq!(p["outputLayout"], "by-format");
+        assert_eq!(p["outlines"]["removeOverlaps"], false);
+        assert_eq!(p["projectOptions"], json!(["release", "no-subroutinize"]), "the words recorded are the full spellings");
+        let args: Vec<String> = ["--out", "x"].iter().map(|s| s.to_string()).collect();
+        let e = parse(&args).unwrap_err();
+        assert!(e.message().contains("--output-dir"), "a prefix of several options lists them: {e:?}");
     }
 
     #[test]

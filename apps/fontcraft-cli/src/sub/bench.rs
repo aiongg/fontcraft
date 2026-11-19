@@ -92,11 +92,9 @@ fn run(args: &[String]) -> Outcome {
         .ok_or_else(|| usage(format!("--threshold takes a percentage from 0 to {MAX_THRESHOLD}")))?;
 
     let Some(name) = command.first() else { return Err(usage(super::help(&SUBCOMMAND))) };
-    if name == SUBCOMMAND.name {
+    let Some(sub) = super::lookup(name)? else { return Err(usage(format!("unknown subcommand `{name}`"))) };
+    if sub.name == SUBCOMMAND.name {
         return Err(usage("bench cannot time itself"));
-    }
-    if super::find(name).is_none() {
-        return Err(usage(format!("unknown subcommand `{name}`")));
     }
     let baseline = parsed.value("baseline").map(read_baseline).transpose()?;
     let exe = std::env::current_exe().map_err(|e| Failure::Failed(format!("cannot find this program's path: {e}")))?.into_os_string();

@@ -17,7 +17,8 @@
 //! messages on stderr. Exit status, shared by every subcommand (`cli.global.exitCodes`): 0 success,
 //! 2 usage error, 3 an input could not be read, 4 the operation failed, 5 some inputs of a batch
 //! failed. (1 is reserved for "it ran and found something": differences, failed checks.) Every
-//! subcommand takes the common options of [`args::GLOBAL`], before or after its name.
+//! subcommand takes the common options of [`args::GLOBAL`], before or after its name. A
+//! subcommand name, like a long option, may be shortened to a prefix that names one only.
 #![forbid(unsafe_code)]
 
 mod args;
@@ -129,10 +130,14 @@ fn dispatch(args: &[String]) -> io::Outcome {
     match rest.first().map(String::as_str) {
         Some("-h" | "--help") | None => print_usage(),
         Some("help") => help(tail),
-        Some(name) => match sub::find(name) {
-            Some(sub) => sub::run(sub, tail),
-            None => Err(usage(format!("unknown subcommand `{name}`\n\n{USAGE}"))),
-        },
+        Some(name) => {
+            let full = sub::full_name(name, &["help"])?;
+            match full.map(|f| (f, sub::find(f))) {
+                Some(("help", _)) => help(tail),
+                Some((_, Some(sub))) => sub::run(sub, tail),
+                _ => Err(usage(format!("unknown subcommand `{name}`\n\n{USAGE}"))),
+            }
+        }
     }
 }
 
@@ -152,7 +157,7 @@ fn help(args: &[String]) -> io::Outcome {
     match parsed.positional.as_slice() {
         [] => print_usage(),
         [name, action @ ..] if action.len() <= 1 => {
-            let sub = sub::find(name).ok_or_else(|| usage(format!("unknown subcommand `{name}`")))?;
+            let sub = sub::lookup(name)?.ok_or_else(|| usage(format!("unknown subcommand `{name}`")))?;
             let mut rest: Vec<String> = action.to_vec();
             rest.push("--help".to_string());
             // An action that reads its own arguments may not know --help: the general text then.
