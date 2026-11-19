@@ -129,6 +129,8 @@ mod outlines_file;
 mod proof;
 mod sources;
 mod subset;
+#[cfg(not(target_arch = "wasm32"))]
+mod subset_source;
 mod tables_file;
 mod tables_import;
 mod transform_file;

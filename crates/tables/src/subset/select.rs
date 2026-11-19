@@ -34,7 +34,7 @@ pub(super) fn apply(font: &SfntFont, filter: &GlyphFilter, names: &[String], eve
 
 /// `share` of `candidates`, rounded to whole glyphs and at least one when there are any,
 /// chosen without repeats by a partial Fisher-Yates shuffle.
-fn random_share(candidates: &BTreeSet<u32>, share: RandomShare, names: &[String]) -> BTreeSet<u32> {
+pub fn random_share(candidates: &BTreeSet<u32>, share: RandomShare, names: &[String]) -> BTreeSet<u32> {
     let mut pool: Vec<u32> = candidates.iter().copied().collect();
     let m = pool.len() as u64;
     let wanted = (m * u64::from(share.millionths.min(1_000_000)) + 500_000) / 1_000_000;
