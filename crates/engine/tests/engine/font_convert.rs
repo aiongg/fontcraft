@@ -274,3 +274,66 @@ fn font_convert_puts_back_a_replaced_ufo_when_a_later_output_fails() {
     assert!(left.is_empty(), "{left:?}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn font_convert_applies_the_cff_writing_switches() {
+    let dir = std::env::temp_dir().join(format!("fontcraft-convert-switches-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut s = Session::with_document();
+    let square = json!([{"x": 60, "y": 0}, {"x": 560, "y": 0}, {"x": 560, "y": 700}, {"x": 60, "y": 700}]);
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": square}));
+    run(&mut s, "path.addPath", json!({"glyph": "B", "nodes": square}));
+    let ttf = dir.join("Font.ttf");
+    run(&mut s, "file.exportStatic", json!({ "destination": ttf, "timestamp": 0 }));
+    let n = fontcraft_tables::reorder::glyph_names(&fontcraft_tables::read(&std::fs::read(&ttf).unwrap(), 0).unwrap()).unwrap().len();
+
+    // tx +H by default: glyphs from TrueType outlines carry no stem hints.
+    let r = run(&mut s, "font.convert", json!({ "input": ttf, "to": "otf", "output": dir.join("Font.otf") }));
+    let warnings = r["results"][0]["warnings"].as_array().unwrap();
+    assert!(warnings.iter().any(|w| w.as_str().unwrap().contains("without stem hints")), "{r}");
+    let r = run(&mut s, "font.convert", json!({ "input": ttf, "to": "otf", "output": dir.join("Quiet.otf"), "cff": {"warnHints": false} }));
+    assert_eq!(r["results"][0]["warnings"], json!([]));
+
+    // -decid: a CID-keyed font back to names cidN, one Private DICT.
+    let cid_otf = dir.join("Font-CID.otf");
+    run(&mut s, "font.convert", json!({ "input": ttf, "to": "otf", "output": cid_otf, "cid": {"keyed": true}, "cff": {"warnHints": false} }));
+    let named = dir.join("Font-Named.otf");
+    run(&mut s, "font.convert", json!({ "input": cid_otf, "to": "otf", "output": named, "cid": {"decid": true} }));
+    let font = fontcraft_tables::read(&std::fs::read(&named).unwrap(), 0).unwrap();
+    assert_eq!(fontcraft_tables::convert::glyph_cids(&font).unwrap(), None, "the CFF table is name-keyed");
+    let cff_names = fontcraft_tables::reorder::glyph_names(&font).unwrap();
+    assert_eq!(cff_names.len(), n);
+    assert!(cff_names[1].starts_with("cid"), "{cff_names:?}");
+    let r = run(&mut s, "font.convert", json!({ "input": cid_otf, "to": "cff", "output": dir.join("Forced.cff"), "cid": {"decid": true, "fd": 0} }));
+    assert_eq!(r["results"][0]["glyphs"], json!(n));
+
+    // tx -A: the output is named after the font's PostScript name.
+    let ps = fontcraft_tables::convert::postscript_name(&fontcraft_tables::read(&std::fs::read(&ttf).unwrap(), 0).unwrap());
+    let out_dir = dir.join("named");
+    let r = run(&mut s, "font.convert", json!({ "input": ttf, "to": "otf", "outputDir": out_dir, "nameBy": "postscript-name" }));
+    assert_eq!(PathBuf::from(r["results"][0]["output"].as_str().unwrap()), out_dir.join(format!("{ps}.otf")));
+
+    // General charstrings, unsubroutinised, are larger than the specialised ones.
+    let mut size = |cff: &serde_json::Value| -> usize {
+        let r = run(&mut s, "font.convert", json!({ "input": ttf, "to": "cff", "output": dir.join("size.cff"), "cff": cff }));
+        r["results"][0]["bytes"].as_u64().unwrap() as usize
+    };
+    let specialised = size(&json!({"charstringOptimize": "specialize", "subroutinize": false}));
+    let general = size(&json!({"charstringOptimize": "none", "subroutinize": false}));
+    assert!(general > specialised, "{general} vs {specialised}");
+
+    for bad in [
+        json!({ "input": cid_otf, "to": "otf", "output": dir.join("x.otf"), "cid": {"fd": 0} }),
+        json!({ "input": cid_otf, "to": "otf", "output": dir.join("x.otf"), "cid": {"decid": true, "fd": 7} }),
+        json!({ "input": ttf, "to": "otf", "output": dir.join("x.otf"), "cid": {"decid": true} }),
+        json!({ "input": ttf, "to": "ttf", "output": dir.join("x.ttf"), "cff": {"warnHints": true} }),
+        json!({ "input": ttf, "to": "otf-cff2", "output": dir.join("x.otf"), "cff": {"flattenSeac": true} }),
+        json!({ "input": ttf, "to": "otf", "output": dir.join("x.otf"), "cff": {"charstringOptimize": "tight"} }),
+        json!({ "input": ttf, "to": "otf", "output": dir.join("x.otf"), "nameBy": "family" }),
+    ] {
+        assert!(s.execute("font.convert", &bad).is_err(), "{bad}");
+    }
+    assert!(!dir.join("x.otf").exists() && !dir.join("x.ttf").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}

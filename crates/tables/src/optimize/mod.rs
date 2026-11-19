@@ -64,6 +64,30 @@ pub struct OptimizeOptions {
     pub colr_layer_reuse: bool,
     /// Split class-kerning subtables at this level, 1 to 9; 0 leaves them alone.
     pub gpos_compaction: u8,
+    /// Rewrite every CFF and CFF2 charstring in this form (`tx +T` or `-no_opt`); applied even
+    /// when the table grows, since it is asked for by name.
+    pub charstrings: Option<fontcraft_cff::write_options::CharstringForm>,
+}
+
+impl OptimizeOptions {
+    /// The speed preset: structures that are cheaper to read rather than smaller. CFF and CFF2
+    /// charstrings lose their subroutines and every `gvar` delta is written; the size steps
+    /// (widths, variation store, COLR layer sharing, GPOS compaction) do not run.
+    pub fn speed() -> Self {
+        Self {
+            cff_widths: false,
+            subroutines: false,
+            variation_store: false,
+            quantum: 1,
+            desubroutinize: true,
+            max_subrs: None,
+            gvar: Some(DeltaMode::All),
+            drop_implied_oncurves: false,
+            colr_layer_reuse: false,
+            gpos_compaction: 0,
+            charstrings: None,
+        }
+    }
 }
 
 impl Default for OptimizeOptions {
@@ -80,6 +104,7 @@ impl Default for OptimizeOptions {
             colr_layer_reuse: true,
             // The reference tool's level defaults to 0.
             gpos_compaction: 0,
+            charstrings: None,
         }
     }
 }
@@ -87,7 +112,7 @@ impl Default for OptimizeOptions {
 /// One step run on one table: its size before and after, and whether the result was kept.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OptimizeStep {
-    /// `desubroutinize`, `cffWidths`, `subroutinize`, `dropImpliedOncurves`, `gvarIup`,
+    /// `desubroutinize`, `charstrings`, `cffWidths`, `subroutinize`, `dropImpliedOncurves`, `gvarIup`,
     /// `varstore`, `gposCompaction` or `colrLayerReuse`.
     pub step: &'static str,
     pub table: Tag,
@@ -279,6 +304,17 @@ fn optimize_cff(
         }
     }
     let mut flattened = false;
+    if let Some(form) = options.charstrings {
+        let w = fontcraft_cff::write_options::CffWriteOptions { charstrings: Some(form), ..fontcraft_cff::write_options::CffWriteOptions::none() };
+        match fontcraft_cff::write_options::apply(&current, cff2, &w) {
+            Ok(r) => {
+                record("charstrings", current.len(), r.bytes.len(), true);
+                current = r.bytes;
+                flattened = had_subrs && !options.desubroutinize;
+            }
+            Err(e) => notes.push(format!("{name}: charstrings kept as they were: {e}")),
+        }
+    }
     if options.cff_widths && !cff2 {
         match optimize_widths_table(&current) {
             Ok((t, report)) => {
@@ -286,7 +322,7 @@ fn optimize_cff(
                 if report.changed > 0 {
                     record("cffWidths", current.len(), t.len(), true);
                     current = t;
-                    flattened = had_subrs && !options.desubroutinize;
+                    flattened |= had_subrs && !options.desubroutinize;
                 } else {
                     record("cffWidths", current.len(), current.len(), false);
                 }
@@ -308,7 +344,7 @@ fn optimize_cff(
             Err(e) => notes.push(format!("{name}: written without new subroutines: {e}")),
         }
     }
-    if current.len() > original.len() && !options.desubroutinize && options.max_subrs.is_none() {
+    if current.len() > original.len() && !options.desubroutinize && options.max_subrs.is_none() && options.charstrings.is_none() {
         notes.push(format!(
             "{name}: the optimised table came out larger ({} bytes, not {}), so it was kept as it was",
             current.len(),

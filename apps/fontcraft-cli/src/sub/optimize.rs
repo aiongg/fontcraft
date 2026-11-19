@@ -22,7 +22,10 @@ const USAGE: &str = "\
       --gpos-compaction 1 to 9 splits class-kerning subtables (default 0: left alone).
       --drop-implied-oncurves runs only when named: it renumbers points, so glyphs whose
       points instructions, composites, anchors or carets number keep them.
-      Not built yet: --for speed and --charstrings.
+      --charstrings rewrites CFF and CFF2 charstrings with the compact operators (specialize)
+      or with rmoveto, rlineto and rrcurveto only (generalize), even when the table grows.
+      --for speed expands CFF and CFF2 subroutines and writes every gvar delta, with no size
+      step; it takes no other optimisation.
 ";
 
 /// The options, as data (M12.26).
