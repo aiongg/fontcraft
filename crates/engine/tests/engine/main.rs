@@ -74,6 +74,7 @@ mod external_changes;
 mod extra_census;
 mod feature_compile;
 mod feature_entries;
+mod features_entries;
 mod features_io;
 mod file_helpers;
 mod files;

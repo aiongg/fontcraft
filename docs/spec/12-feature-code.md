@@ -758,7 +758,8 @@ Editor
    deleting it?
    **Partly answered:** the file format stores a `disabled` flag on prefixes, classes and features
    (corpus: 8 disabled entries, all in fixtures); both reference compilers leave disabled entries
-   out. Dragging is our guess (`font.features.reorder`).
+   out. Dragging is our guess (`font.features.reorder`), and so is a Disable item in the sidebar's
+   context menu (`font.features.setDisabled`, `fontInfo.features.contextMenu`).
 5. The built-in snippet list and the location of the snippet folder.
    **Decision:** our own list and folder (guesses on `snippet.builtIn` and
    `font.features.showSnippetFolder`); to check in the reference app.

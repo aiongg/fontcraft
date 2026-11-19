@@ -2507,6 +2507,69 @@ guesses = [
   "An entry whose glyphs are gone keeps its place with empty code rather than being removed; pressing the entry's update button after deleting its glyphs would settle it.",
 ]
 
+
+[[command]]
+id = "font.features.setDisabled"
+label = "Disable Feature Entries"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{entries: [{kind: 'prefix'|'class'|'feature', name: string, index?: integer}], disabled: boolean}"
+area = "features"
+milestone = "M8"
+summary = "Disables or enables prefixes, classes and features, as Disable and Enable in the sidebar's context menu do. A disabled entry stays in the font and the sidebar, drawn struck through, but the compiled font and exported feature files leave it out. One undo step."
+ref = "Font Info › Features"
+status = "inferred"
+notes = "Not in the handbook. The file format stores a disabled flag on each entry, and both reference compilers leave disabled entries out (docs/spec/12-feature-code.md, open question 4). Entries already in the asked state are left alone and make no undo step."
+guesses = [
+  "A Disable and Enable item in the sidebar's context menu sets the flag; opening the context menu on a sidebar entry in the reference app would settle whether it is there.",
+  "Disabling a class that an enabled feature uses is allowed and gives a compile error; disabling such a class in the reference app would settle whether it warns first.",
+]
+observe = [
+  "In F1 (Latin features), right-click a feature in Font Info › Features and note whether the menu has Disable (or a similar item) and what the entry looks like afterwards.",
+]
+
+[[command]]
+id = "font.features.copyEntries"
+label = "Copy Feature Entries"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{entries: [{kind: 'prefix'|'class'|'feature', name: string, index?: integer}]}"
+area = "features"
+milestone = "M8"
+summary = "Returns the selected entries as clipboard text: feature code with a marker comment before each entry that keeps its kind, name, automatic and disabled flags, notes and stylistic-set names. Cmd+C in the sidebar and Copy in its context menu run it; the shell puts the text on the system clipboard."
+ref = "Font Info › Features"
+status = "inferred"
+notes = "Not in the handbook. Classes come first, then prefixes, then features, the order export assembles them in; a disabled entry's code is commented out so the text compiles as the font does. Text over 16 MB, more than Paste reads, is refused."
+guesses = [
+  "Entries travel as feature-file text with `# entry:` marker lines, so they paste into a text editor too; copying a feature in the reference app and pasting it into a text editor would settle the format it uses.",
+]
+observe = [
+  "In F1 (Latin features), select a class and a feature in Font Info › Features, press Cmd+C, and paste into a text editor: note the text.",
+]
+
+[[command]]
+id = "font.features.pasteEntries"
+label = "Paste Feature Entries"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{text: string}"
+area = "features"
+milestone = "M8"
+summary = "Adds the entries of clipboard text after the font's, as one undo step. Text from Copy Feature Entries gives each entry back with its code, flags, notes and names; other feature code is split into entries as Import Features splits it. A taken class or prefix name gets a numeric suffix, and pasted references to a renamed class follow it. Cmd+V in the sidebar and Paste in its context menu run it."
+ref = "Font Info › Features"
+status = "inferred"
+notes = "Not in the handbook. The marked form is read only when it is exactly what Copy writes (line breaks may be CRLF); any other text goes through the import's reader. A feature keeps its tag when the font has one, as import does, since a suffix would not be a tag."
+guesses = [
+  "Pasted entries go to the end of their groups rather than after the selected entry; pasting into a sidebar with a selection in the reference app would settle it.",
+  "A pasted feature whose tag the font has is added as a second entry with that tag rather than renamed or merged; pasting liga into a font with liga in the reference app would settle it.",
+]
+observe = [
+  "In F1 (Latin features), copy a class and a feature in Font Info › Features and paste them into a new font's Features tab, then into F1 again: note the names they get, and whether notes and the automatic flag come along.",
+]
+
 [[command]]
 id = "font.features.compile"
 label = "Compile"
@@ -2706,6 +2769,38 @@ summary = "Automatic entries carry an update button beside their name in the sid
 ref = "Font Info › Features › Automatic Feature Code"
 status = "handbook"
 notes = "Documented, not yet observed."
+
+
+[[behavior]]
+id = "fontInfo.features.contextMenu"
+area = "features"
+milestone = "M8"
+summary = "Right-clicking a sidebar entry opens a menu with Disable or Enable, Update Entry (automatic entries), Rename, Copy, Paste and Delete, acting on the selected entries; Cmd+C and Cmd+V copy and paste while the sidebar has focus. A disabled entry's name is drawn struck through."
+ref = "Font Info › Features"
+status = "inferred"
+notes = "Not in the handbook. The items run font.features.setDisabled, updateEntry, rename, copyEntries, pasteEntries and remove."
+guesses = [
+  "The context menu's items and their order are ours; right-clicking a sidebar entry in the reference app would settle them.",
+  "A disabled entry is drawn struck through; disabling an entry in the reference app would settle how it is shown.",
+]
+observe = [
+  "In F1 (Latin features), right-click a prefix, a class and a feature in Font Info › Features and note each menu's items in order.",
+]
+
+[[behavior]]
+id = "fontInfo.features.sidebarFilter"
+area = "features"
+milestone = "M8"
+summary = "A search field above the sidebar shows only the entries whose name or code holds the typed text, ignoring case; the groups stay in their order and clearing the field shows every entry."
+ref = "Font Info › Features"
+status = "inferred"
+notes = "Not in the handbook. View state only: it filters what font.features.list and font.features.get return."
+guesses = [
+  "The filter matches code as well as names; typing a glyph name into the reference app's sidebar search, if it has one, would settle it.",
+]
+observe = [
+  "In F1 (Latin features), in Font Info › Features, look for a search field over the sidebar; type a glyph name used in one feature's code and note which entries stay.",
+]
 
 [[behavior]]
 id = "fontInfo.features.updateDetectsNew"
