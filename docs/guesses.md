@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2989 guesses on 1576 rows (637 of them live commands).**
+**2990 guesses on 1577 rows (637 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -3051,6 +3051,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `app.commandPalette` | M14 | docs | no | The shortcut Cmd+Shift+P comes from the secondary reference; the reference app has none. |
 | `dialog.auditKerningExceptions` | M13 | docs | no | The audit runs once with the default settings as the dialog opens; FontLab's page does not say whether its dialog lists pairs before a button is pressed. |
 | `dialog.matchKerning` | M13 | docs | no | The summary gives the pairs filled, the exceptions added and each master's pair count before and after; FontLab's page names no summary. |
+| `spaceCenter.setValue` | M13 | docs | no | A matrix entry is its own command that evaluates the text and then runs the spacing setter as a second step; the reference's undo history after one entry would settle whether it is one step. |
 | `palette.selections` (panel) | M13 | docs | – | The section sits after Transformations in the Palette and shows only the edited glyph's entries; FontLab's panel placement would settle it. |
 | `palette.selections` (panel) | M13 | docs | – | Add with a name that already exists replaces that entry rather than refusing; observing the panel's Add on a duplicate name would settle it. |
 | `palette.measurements` (panel) | M13 | docs | – | The section shows the current master only, not a table of all masters, to fit the Palette's width. |

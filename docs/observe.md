@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1474 rows to check: 2518 guesses and 593 observe steps.**
+**1475 rows to check: 2519 guesses and 593 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,12 +48,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 48 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **949** |
+| **Later milestones (after M6)** | all | **950** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 86 |
 | Later milestones (after M6) | Edit View: text mode and preview | 27 |
 | Later milestones (after M6) | Components and anchors | 43 |
 | Later milestones (after M6) | Filters | 5 |
-| Later milestones (after M6) | Spacing and metrics keys | 12 |
+| Later milestones (after M6) | Spacing and metrics keys | 13 |
 | Later milestones (after M6) | Kerning and the Kerning window | 16 |
 | Later milestones (after M6) | Font View | 19 |
 | Later milestones (after M6) | Font Info and features | 294 |
@@ -1571,7 +1571,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (949)
+## Later milestones (after M6) (950)
 
 ### Edit View: drawing, guides, layers and the Palette (86)
 
@@ -2151,7 +2151,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A segment is split in half, at most 10 times, until its mapped curve is within the tolerance (default 0.5 units) of the mapped outline at a quarter, half and three quarters, and a bent straight segment becomes a curve; an affine expression only moves points. Settled by comparing results with the reference on our own fonts.
   - Guess: Unlocked anchors move with the outline; locked paths and anchors, components and images stay. Settled by running the reference on a glyph with anchors and components.
 
-### Spacing and metrics keys (12)
+### Spacing and metrics keys (13)
 
 - [ ] `spaceCenter.inputSyntax` (behavior, M13, docs): The spacing text accepts plain characters, /name for a glyph by name,…
   - Guess: Space Center takes the reference spellings /name, /name@layer, /?, /!, /:group and \n unchanged; Edit View's text mode keeps the primary reference's escapes only.
@@ -2208,6 +2208,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: Turn on Upside Down: note whether the text is turned or mirrored, and press Right with a glyph selected: note which margin grows.
   - Observe: Turn on Beam: note its default height, whether it can be dragged, and whether Edit View's beam moves with it.
   - Observe: Turn on Guides with a horizontal font guide: note whether it runs across the line or within each glyph.
+- [ ] `spaceCenter.setValue` (M13, docs): Set Space Center Value
+  - Guess: A matrix entry is its own command that evaluates the text and then runs the spacing setter as a second step; the reference's undo history after one entry would settle whether it is one step.
 - [ ] `palette.pairsAndPhrases` (panel, M13, docs): Pairs & Phrases
   - Guess: Automatic mode shows the pairs list while the showing tab is in text mode and the phrases list otherwise; the reference switches by its kerning tool, which FontCraft does not have.
   - Guess: A loaded list lasts for the session and is not stored with the window state.
