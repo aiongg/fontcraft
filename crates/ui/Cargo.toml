@@ -18,6 +18,7 @@ fontcraft-tools.workspace = true
 fontcraft-model.workspace = true
 fontcraft-render.workspace = true
 fontcraft-spacing.workspace = true
+fontcraft-textlayout.workspace = true
 base64.workspace = true
 craft = { workspace = true, features = ["ui-app", "keymap", "menu", "tracked", "settings", "platform-clipboard", "quit", "automation"] }
 # egui 0.37 is the craft fork (the workspace's `[patch.crates-io]`). Not a workspace dependency

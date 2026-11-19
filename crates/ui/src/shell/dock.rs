@@ -350,15 +350,17 @@ pub fn show(ui: &mut Ui, app: &mut FontCraftApp) {
     let FontCraftApp { view, models, sent, status, active_tool, tools, .. } = app;
     let given = view.workspace.clone();
     let label = words.dock.clone();
+    let display = canvas::text::display(view);
     let mut panels = Panels {
         models,
         canvas: canvas::CanvasProps {
             view: &mut view.canvas,
             model: &models.canvas,
             tokens: &models.canvas_tokens,
-            display: view.display,
+            display,
             edit_background: view.edit_background,
             tools: &tools.view,
+            text: &models.text,
             tool: active_tool.as_mut(),
         },
         sent,

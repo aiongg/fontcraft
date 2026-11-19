@@ -3378,6 +3378,7 @@ dependencies = [
  "fontcraft-model",
  "fontcraft-render",
  "fontcraft-spacing",
+ "fontcraft-textlayout",
  "fontcraft-tools",
  "log",
  "serde_json",

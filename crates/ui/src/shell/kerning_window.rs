@@ -364,6 +364,11 @@ fn pairs_arg(p: &Map<String, Value>, key: &str) -> Result<Option<Vec<String>>, S
 fn window(app: &mut FontCraftApp, p: &Map<String, Value>) -> Result<(), String> {
     let open = flag(p, "open")?.unwrap_or(true);
     let select = pairs_arg(p, "select")?;
+    // Showing the pair is the part that can fail, so it goes first.
+    if let Some(last) = select.as_ref().and_then(|ids| ids.last()) {
+        let (left, right) = split_id(last);
+        show_pair(app, left, right)?;
+    }
     // A refused move (the layout has no room) leaves the panel where it was.
     let _ = app.view.workspace.set_visible(PanelId::KerningWindow, open, None, false, |panel| panel.permissions());
     if let Some(ids) = select {
@@ -429,9 +434,17 @@ fn step(app: &mut FontCraftApp, forward: bool) -> Result<(), String> {
     };
     let row = model.rows.get(at).ok_or("the Kerning window lists no pairs")?;
     let id = row_id(&row.left, &row.right);
+    let (left, right) = (row.left.clone(), row.right.clone());
+    show_pair(app, &left, &right)?;
     app.view.kerning.selected = vec![id.clone()];
     app.view.kerning.current = Some(id);
     Ok(())
+}
+
+/// Shows the pair in the edit view (`kerning.showPairInEditView`).
+fn show_pair(app: &mut FontCraftApp, left: &str, right: &str) -> Result<(), String> {
+    let params = json!({"left": left, "right": right});
+    crate::canvas::text::commands::show_pair(app, params.as_object().ok_or("a pair is an object")?)
 }
 
 fn rename(app: &mut FontCraftApp, p: &Map<String, Value>) -> Result<(), String> {

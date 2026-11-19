@@ -135,7 +135,7 @@ fn pairs_panel_clicks_step_select_and_set_the_mode() {
         let mut sent = Vec::new();
         show(ui, Props { model: &model, sent: &mut sent });
         seen.borrow_mut().extend(sent.iter().cloned());
-        // Only the list's own commands run: the edit view's follow-ups have no handler here.
+        // Only the list's own commands run: the edit view's follow-ups are dropped.
         app.sent.extend(sent);
         app.drain();
         app.sent.clear();

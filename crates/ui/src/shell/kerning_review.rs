@@ -127,13 +127,12 @@ impl KerningReviewState {
         if pairs { &mut self.pairs } else { &mut self.phrases }
     }
 
-    /// Whether the panel shows the pairs list (else the phrases list).
-    pub fn shows_pairs(&self) -> bool {
+    /// Whether the panel shows the pairs list (else the phrases list); `text_mode`: the edit view is in text mode.
+    pub fn shows_pairs(&self, text_mode: bool) -> bool {
         match self.mode {
             ListMode::Pairs => true,
             ListMode::Phrases => false,
-            // The edit view has no text mode yet: phrases.
-            ListMode::Auto => false,
+            ListMode::Auto => text_mode,
         }
     }
 }
@@ -155,9 +154,9 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
 }
 
 /// The list a command names with `list`, else the one shown.
-fn list_arg(state: &KerningReviewState, p: &Value) -> Result<bool, String> {
+fn list_arg(app: &FontCraftApp, p: &Value) -> Result<bool, String> {
     match string(p, "list")? {
-        None => Ok(state.shows_pairs()),
+        None => Ok(app.view.kerning_review.shows_pairs(crate::canvas::text::text_mode(&app.view))),
         Some("pairs") => Ok(true),
         Some("phrases") => Ok(false),
         Some(other) => Err(format!("`list` must be pairs or phrases, got `{}`", quoted(other))),
@@ -165,7 +164,7 @@ fn list_arg(state: &KerningReviewState, p: &Value) -> Result<bool, String> {
 }
 
 fn load(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
-    let pairs = list_arg(&app.view.kerning_review, p)?;
+    let pairs = list_arg(app, p)?;
     let reset = flag(p, "reset")?.unwrap_or(false);
     let (rows, source) = match (string(p, "path")?, string(p, "text")?, reset) {
         (Some(path), None, false) => {
@@ -212,7 +211,7 @@ fn target(rows: &[PairListRow], current: Option<usize>, line: usize, forward: bo
 }
 
 fn step(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
-    let pairs = list_arg(&app.view.kerning_review, p)?;
+    let pairs = list_arg(app, p)?;
     let rows = app.view.kerning_review.list(pairs).rows(pairs);
     if let Some(picked) = row_list(p, "select", rows.len())? {
         app.view.kerning_review.list_mut(pairs).selected = picked;
@@ -348,7 +347,7 @@ fn auto_kern(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
         app.view.kerning_review.auto_kern = None;
         return Ok(());
     }
-    let pairs = list_arg(&app.view.kerning_review, p)?;
+    let pairs = list_arg(app, p)?;
     let mut options = Map::new();
     if let Some(given) = p.get("options").filter(|v| !v.is_null()) {
         let given = given.as_object().ok_or("`options` must be an object")?;
