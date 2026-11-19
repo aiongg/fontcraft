@@ -338,7 +338,7 @@ guesses = [
   "Autohint replaces any hints the layer already has and acts on every glyph selected in Edit View or Font View; the reference app would settle both.",
   "Only the stems are stored (an export rebuilds the hint masks from them; counter masks and flex stay export-only), each edge linked to the layer's first on-curve node at that position, else stored as a number; a reference glyph autohinted from the context menu and read back would show which nodes it links.",
 ]
-notes = "`layer` names a master (default the first); the glyph is hinted as a CFF export of that master hints it, against the zones and stems of the Private dict that export writes."
+notes = "`layer` names a master (default the first); the glyph is hinted as a CFF export of that master hints it, against the zones and stems of the Private dict that export writes. The Edit View canvas menu runs it on the edited glyph in the master of the edited layer (menu_params in crates/tools/src/hint_drag.rs)."
 observe = [
   "T1: give n two manual hints and choose Autohint from the context menu; note whether the old hints are replaced or kept. Then select n, m and o and choose Autohint again; note whether only one glyph or all three get hints.",
 ]
@@ -390,7 +390,7 @@ milestone = "M10"
 summary = "Context-menu item on the badge of an existing hint that converts it into a ghost hint: the hint keeps its origin and loses its size in favour of a top or bottom orientation. Which orientation the conversion picks by default is not stated."
 ref = "PostScript Hinting › Ghost Hints"
 status = "handbook"
-notes = "M10.4: a vertical hint is refused; hints are named by their position in hint.ps.listHints. Documented, not yet observed in the reference app."
+notes = "M10.4: a vertical hint is refused; hints are named by their position in hint.ps.listHints. Documented, not yet observed in the reference app. The badge context menu runs it on the selected hints, the list the Delete key deletes (menu_params in crates/tools/src/hint_drag.rs); a click on a badge selects that hint alone first, Shift+click adds to the selection."
 guesses = ["Make Ghost Hint keeps the hint's origin edge with its node link and makes a top ghost when that edge lies in or nearer to a top zone than to a bottom zone (the baseline zone counts as a bottom zone), else a bottom ghost; a ghost hint becomes a stem hint again when hint.ps.setHintValues gives it a size; the reference app would settle both."]
 observe = [
   "T1: in n, select the hint on the x-height stem and choose Make Ghost Hint; note whether it becomes a top or a bottom ghost. Then type a size for the ghost in the Info box and note whether it turns back into a stem hint.",
@@ -640,14 +640,16 @@ milestone = "M10"
 summary = "Dropping a hint marker on a node links that end of the hint to the node. A linked end has no number of its own: it takes the node's Y (horizontal hints) or X (vertical hints), so moving the node moves the hint. A ghost hint is linked by dropping its circle on a node."
 ref = "PostScript Hinting › Stem Hints; Ghost Hints"
 status = "handbook"
-notes = "M10.3 keeps links on their nodes after every outline edit, in the command's undo step (crates/hinting/src/remap.rs, run by the engine after each font-changing command): a node is found again by its index, then by its place and class, then by index when its path keeps the same node classes; inserting nodes, deleting others, reversing a contour, changing the start point, Remove Overlap and Expand Outline renumber the links. An end whose node is deleted becomes a number at the node's last position, and the command result counts it under hintUpkeep. The handbook says links make hints follow their nodes; what happens on deletion is our choice, from the format notes. Stored links count a closed path's nodes in the file's order, start node last, as `.glyphs` files write them and glyphsLib copies them into a UFO glyph's lib; the format 3 sample's `A` stem only lands on its nodes read this way. Typed hints count in the model's order, start node first, and convert on read and write (crates/hinting/src/noderef.rs), so every format stores the same indexes. In Edit View a marker dropped on a node runs hint.ps.attachHintToNode for that end, in the drag's undo step; while the pointer is over a node, the preview already shows the link (crates/tools/src/hint_drag.rs)."
+notes = "M10.3 keeps links on their nodes after every outline edit, in the command's undo step (crates/hinting/src/remap.rs, run by the engine after each font-changing command): a node is found again by its index, then by its place and class, then by index when its path keeps the same node classes; inserting nodes, deleting others, reversing a contour, changing the start point, Remove Overlap and Expand Outline renumber the links. An end whose node is deleted becomes a number at the node's last position, and the command result counts it under hintUpkeep. The handbook says links make hints follow their nodes; what happens on deletion is our choice, from the format notes. Stored links count a closed path's nodes in the file's order, start node last, as `.glyphs` files write them and glyphsLib copies them into a UFO glyph's lib; the format 3 sample's `A` stem only lands on its nodes read this way. Typed hints count in the model's order, start node first, and convert on read and write (crates/hinting/src/noderef.rs), so every format stores the same indexes. In Edit View a marker dropped on a node runs hint.ps.attachHintToNode for that end, in the drag's undo step; while the pointer is over a node, the preview already shows the link (crates/tools/src/hint_drag.rs). A layer's background keeps the links of its own hints the same way, against the background before the edit. Corner components follow their nodes by the same steps (cornerComponent.add); caps, segments and brushes are not kept yet."
 guesses = [
   "An edit that deletes the node a hint end is linked to turns that end into a number at the node's last position; deleting a linked node in the reference app would settle it.",
   "After an edit, a linked node is found again by index, then by place and on- or off-curve class within half a unit, then by index when its path keeps the same node classes; reversing a contour and changing its start point with linked hints in the reference app would settle whether links follow the node.",
+  "Hints in a layer's background keep their links through background edits as the layer's own do; inserting a node before a linked node in the background of a hinted glyph in the reference app would settle it.",
 ]
 observe = [
   "T1: link a stem hint of I to two nodes, delete one of them, and note whether the hint keeps its position as a number, is deleted, or moves.",
   "T1: link a stem hint of O to two nodes, reverse the contour, then make another node first, and note whether the hint stays on the same nodes.",
+  "T1: in I, choose Edit › Copy to Background (or swap with the background), link a background stem hint to two background nodes, insert a node before one of them in the background, and note whether the hint stays on the same nodes.",
 ]
 
 [[behavior]]

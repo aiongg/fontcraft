@@ -264,7 +264,8 @@ impl Syntax {
         }
     }
 
-    fn indexes(self, items: &[usize]) -> Value {
+    /// An index path (`(0,3)`, `"{0, 3}"`).
+    pub(crate) fn indexes(self, items: &[usize]) -> Value {
         match self {
             Syntax::Glyphs2 => Value::String(Str::new(braced(&items.iter().map(|i| i.to_string()).collect::<Vec<_>>()))),
             Syntax::Glyphs3 | Syntax::Ufo => {
