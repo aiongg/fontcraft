@@ -99,6 +99,8 @@ pub struct ViewState {
     pub compare_family: crate::shell::compare_family::CompareFamilyState,
     /// The Text Preview's text, style, size, layout and find bar.
     pub text_preview: crate::shell::text_preview::TextPreviewState,
+    /// Show Hints aside: the TrueType Instructor's state, the badge under a drag, the Review Hints dialog.
+    pub hinting: crate::canvas::hinting::HintingView,
 }
 
 impl Default for ViewState {
@@ -131,6 +133,7 @@ impl Default for ViewState {
             compare_fonts: Default::default(),
             compare_family: Default::default(),
             text_preview: Default::default(),
+            hinting: Default::default(),
         }
     }
 }

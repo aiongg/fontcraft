@@ -107,6 +107,10 @@ pub struct InfoBoxModel {
     pub glyph: Option<GlyphBox>,
     /// `None` while nothing is selected.
     pub selection: Option<SelectionBox>,
+    /// The first selected PostScript hint, in place of the selection part (`panels::info_box_ps_hint`).
+    pub ps_hint: Option<super::hint_canvas::PsHintBox>,
+    /// The TrueType Instructor's box, in place of the whole box while it is the chosen tool (`panels::info_box_tt`).
+    pub tt: Option<super::hint_canvas::TtBox>,
 }
 
 /// The Transformations section: its settings and what its buttons act on.
@@ -256,7 +260,10 @@ pub fn project(models: &mut PaletteModels, cx: &mut ProjectCx<'_>, tools: &Tools
     }
     models.seen = Some(key);
     let edit = Edit::read(cx, tools);
-    super::set(&mut models.info_box, info_box(cx, edit.as_ref()));
+    let mut info = info_box(cx, edit.as_ref());
+    info.ps_hint = super::hint_canvas::ps_hint_box(cx, &tools.selection);
+    info.tt = super::hint_canvas::tt_box(cx);
+    super::set(&mut models.info_box, info);
     super::set(&mut models.transform, transform(cx, edit.as_ref()));
     super::set(&mut models.fit_curve, fit_curve(cx, edit.as_ref()));
     super::set(&mut models.anchor_context, anchor(edit.as_ref()));
@@ -323,7 +330,7 @@ fn has_lists(targets: &Map<String, Value>) -> bool {
 
 fn info_box(cx: &mut ProjectCx<'_>, edit: Option<&Edit>) -> InfoBoxModel {
     let Some(edit) = edit else { return InfoBoxModel::default() };
-    InfoBoxModel { glyph: glyph_box(cx, edit), selection: selection_box(cx, edit) }
+    InfoBoxModel { glyph: glyph_box(cx, edit), selection: selection_box(cx, edit), ps_hint: None, tt: None }
 }
 
 /// The fields of `spacing.getMetrics`'s reply for `field`.

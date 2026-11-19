@@ -7,6 +7,7 @@
 
 pub mod annotation_editor;
 pub mod camera;
+pub mod hinting;
 pub mod layers;
 pub mod overlays;
 pub mod paint;
@@ -44,6 +45,8 @@ pub struct Display {
     pub annotations: bool,
     pub fill_preview: bool,
     pub info: bool,
+    /// The edited layer's PostScript hints (`view.showHints`).
+    pub hints: bool,
 }
 
 impl Default for Display {
@@ -61,6 +64,7 @@ impl Default for Display {
             annotations: true,
             fill_preview: true,
             info: true,
+            hints: false,
         }
     }
 }
@@ -75,6 +79,9 @@ pub trait ActiveTool: CanvasTool {
 
     /// The camera of the coming pass, before the host runs the tool: font units to screen points.
     fn set_camera(&mut self, _camera: Camera) {}
+
+    /// The chosen tool's id, before each event the tool posts is handled: some tools take more keys than others.
+    fn set_tool(&mut self, _tool: &'static str) {}
 }
 
 impl ActiveTool for NoTool {}
@@ -99,6 +106,8 @@ pub struct CanvasProps<'a> {
     pub overlays: &'a overlays::OverlayData,
     /// The text note being typed, with its field over the note.
     pub note: &'a mut Option<annotation_editor::NoteEdit>,
+    /// The hint layers' model and state.
+    pub hinting: hinting::HintPaint<'a>,
 }
 
 /// Shows the canvas; what the active tool's gestures posted goes to `sent`.
@@ -114,8 +123,8 @@ pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
     if let Some(size) = document {
         canvas = canvas.document(size);
     }
-    let (model, tokens, display, edit_background, tool_view, text) =
-        (props.model, props.tokens, props.display, props.edit_background, props.tools, props.text);
+    let (model, tokens, display, edit_background, tool_view, text, hinting) =
+        (props.model, props.tokens, props.display, props.edit_background, props.tools, props.text, props.hinting);
     let overlay_data = props.overlays;
     let note = &mut *props.note;
     let tool = &mut *props.tool;
@@ -136,6 +145,7 @@ pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
             tools: tool_view,
             text,
             overlays: overlays::Painted { data: overlay_data, words: &overlay_words },
+            hinting,
         };
         layers::paint(&cx);
         if let Some(edit) = note.as_mut() {

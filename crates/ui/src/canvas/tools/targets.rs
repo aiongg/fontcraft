@@ -19,12 +19,21 @@ fn takes_param(spec: &CommandSpec, param: &str) -> bool {
 pub fn with_targets(app: &mut FontCraftApp, command: CommandRef) -> CommandRef {
     let empty = command.params.is_null() || command.params.as_object().is_some_and(Map::is_empty);
     let Some(spec) = fontcraft_engine::find_command(&command.id) else { return command };
-    if !empty || spec.targets.is_empty() {
+    let hinting = command.id.starts_with("hint.ps.") || command.id.starts_with("hint.tt.");
+    if !empty || (spec.targets.is_empty() && !hinting) {
         return command;
     }
     super::apply::sync(app);
+    let marks = crate::canvas::hinting::ps_marks(&mut app.session, &app.view);
     let Ok(font) = app.session.font() else { return command };
-    let Some(scene) = super::scene(font, &app.view, app.tools.focus.as_ref()) else { return command };
+    let Some(mut scene) = super::scene(font, &app.view, app.tools.focus.as_ref()) else { return command };
+    scene.ps_hints = marks;
+    if let Some(params) = crate::canvas::hinting::targets(&scene, &app.tools.selection, &app.view.hinting, &command.id) {
+        return CommandRef::with_params(command.id, params);
+    }
+    if spec.targets.is_empty() {
+        return command;
+    }
     let targets = selection_targets(&scene, &app.tools.selection, spec);
     CommandRef::with_params(command.id, Value::Object(targets))
 }

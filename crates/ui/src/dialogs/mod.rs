@@ -27,6 +27,7 @@ pub mod kerning_questions;
 pub mod os2_bits;
 pub mod panose;
 pub mod path;
+pub mod review_hints;
 pub mod settings;
 pub mod shape_order;
 pub mod spec;
@@ -59,6 +60,7 @@ pub const MODULES: &[Module] = &[
     start_window::run,
     settings::run,
     changed_on_disk::run,
+    review_hints::run,
 ];
 
 /// Every package's dialog specs, one line each.

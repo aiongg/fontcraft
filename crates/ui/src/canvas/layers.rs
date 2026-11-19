@@ -6,7 +6,7 @@ use egui::{Painter, Rect};
 
 use super::camera::Camera;
 use super::tokens::Tokens;
-use super::{Display, overlays, paint, tools};
+use super::{Display, hinting, overlays, paint, tools};
 use crate::app::models::canvas::{CanvasModel, EditedGlyph};
 use crate::app::models::text::TextModel;
 
@@ -29,6 +29,8 @@ pub struct PaintCx<'a> {
     pub text: &'a Tracked<TextModel>,
     /// Guides, measurement labels, annotations, display aids, the auto-meter and audit markers.
     pub overlays: super::overlays::Painted<'a>,
+    /// The hint layers' model and state.
+    pub hinting: super::hinting::HintPaint<'a>,
 }
 
 impl PaintCx<'_> {
@@ -50,11 +52,14 @@ pub const LAYERS: &[PaintLayer] = &[
     PaintLayer { id: "background", paint: paint::background::tint },
     PaintLayer { id: "status", paint: paint::status::paint },
     PaintLayer { id: "metrics", paint: paint::metrics::paint },
+    PaintLayer { id: "ttPixels", paint: hinting::pixels::backdrop },
     PaintLayer { id: "grid", paint: overlays::guides::grid },
     PaintLayer { id: "guides", paint: overlays::guides::guides },
+    PaintLayer { id: "psHintBars", paint: hinting::ps::bars },
     PaintLayer { id: "textBehind", paint: super::text::paint::behind },
     PaintLayer { id: "otherLayers", paint: paint::background::paint },
     PaintLayer { id: "textGlyphs", paint: super::text::paint::glyphs },
+    PaintLayer { id: "ttPreviewOutlines", paint: hinting::pixels::outlines },
     PaintLayer { id: "outline", paint: paint::outline::paint },
     PaintLayer { id: "components", paint: paint::components::paint },
     PaintLayer { id: "auditHighlights", paint: overlays::audit::highlights },
@@ -64,6 +69,10 @@ pub const LAYERS: &[PaintLayer] = &[
     PaintLayer { id: "annotations", paint: overlays::annotations::annotations },
     PaintLayer { id: "editAids", paint: overlays::aids::aids },
     PaintLayer { id: "autometer", paint: overlays::autometer::autometer },
+    PaintLayer { id: "ttNodes", paint: hinting::badges::nodes },
+    PaintLayer { id: "ttBadges", paint: hinting::badges::badge_layer },
+    PaintLayer { id: "ttPointNumbers", paint: hinting::badges::numbers },
+    PaintLayer { id: "psHintMarks", paint: hinting::ps::marks_layer },
     PaintLayer { id: "selection", paint: tools::overlays::selection },
     PaintLayer { id: "measurement", paint: overlays::guides::measurement },
     PaintLayer { id: "auditMarkers", paint: overlays::audit::markers },

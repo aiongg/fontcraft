@@ -64,6 +64,7 @@ fn drawn(app: &FontCraftApp, layer: fn(&PaintCx<'_>) -> Drawn) -> Drawn {
         tools: &app.tools.view,
         text: &app.models.text,
         overlays: Painted { data: &app.overlays.data, words: &overlay_words },
+        hinting: crate::canvas::hinting::HintPaint { model: &app.models.hint_canvas, view: &app.view.hinting, tokens: &app.models.hint_tokens },
     };
     layer(&cx)
 }

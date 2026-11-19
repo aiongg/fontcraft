@@ -49,6 +49,7 @@ fn painted(app: &FontCraftApp, layer: fn(&PaintCx<'_>) -> Vec<Shape>) -> Vec<Sha
     let top = app.models.canvas.glyph.as_ref().map_or(0.0, |g| g.ascender);
     let words = CanvasWords::default();
     let overlay_words = super::overlays::OverlayWords::default();
+    let hint_tokens = crate::canvas::hinting::tokens::HintTokens::standard();
     let cx = PaintCx {
         painter: &painter,
         rect: RECT,
@@ -61,6 +62,7 @@ fn painted(app: &FontCraftApp, layer: fn(&PaintCx<'_>) -> Vec<Shape>) -> Vec<Sha
         tools: &app.tools.view,
         text: &app.models.text,
         overlays: super::overlays::Painted { data: &app.overlays.data, words: &overlay_words },
+        hinting: crate::canvas::hinting::HintPaint { model: &app.models.hint_canvas, view: &app.view.hinting, tokens: &hint_tokens },
     };
     layer(&cx)
 }

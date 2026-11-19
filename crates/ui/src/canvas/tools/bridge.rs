@@ -50,6 +50,46 @@ const KEYS: &[Chord] = &[
     Chord::new(Mods::ALT, CKey::Backspace),
 ];
 
+/// The chords the TrueType Instructor takes: every plain letter (its instruction keys, and no letter switches tools
+/// while it is active), the pixel-size keys, and from [`KEYS`] Space, Cmd+Space, Tab and Shift+Tab.
+const INSTRUCTOR_KEYS: &[Chord] = &[
+    Chord::new(Mods::NONE, CKey::A),
+    Chord::new(Mods::NONE, CKey::B),
+    Chord::new(Mods::NONE, CKey::C),
+    Chord::new(Mods::NONE, CKey::D),
+    Chord::new(Mods::NONE, CKey::E),
+    Chord::new(Mods::NONE, CKey::F),
+    Chord::new(Mods::NONE, CKey::G),
+    Chord::new(Mods::NONE, CKey::H),
+    Chord::new(Mods::NONE, CKey::I),
+    Chord::new(Mods::NONE, CKey::J),
+    Chord::new(Mods::NONE, CKey::K),
+    Chord::new(Mods::NONE, CKey::L),
+    Chord::new(Mods::NONE, CKey::M),
+    Chord::new(Mods::NONE, CKey::N),
+    Chord::new(Mods::NONE, CKey::O),
+    Chord::new(Mods::NONE, CKey::P),
+    Chord::new(Mods::NONE, CKey::Q),
+    Chord::new(Mods::NONE, CKey::R),
+    Chord::new(Mods::NONE, CKey::S),
+    Chord::new(Mods::NONE, CKey::T),
+    Chord::new(Mods::NONE, CKey::U),
+    Chord::new(Mods::NONE, CKey::V),
+    Chord::new(Mods::NONE, CKey::W),
+    Chord::new(Mods::NONE, CKey::X),
+    Chord::new(Mods::NONE, CKey::Y),
+    Chord::new(Mods::NONE, CKey::Z),
+    Chord::new(Mods::NONE, CKey::Period),
+    Chord::new(Mods::NONE, CKey::Comma),
+    Chord::new(Mods::NONE, CKey::Minus),
+    Chord::new(Mods::NONE, CKey::Plus),
+    Chord::new(Mods::NONE, CKey::Equals),
+    Chord::new(Mods::NONE, CKey::Space),
+    Chord::new(Mods::CMD, CKey::Space),
+    Chord::new(Mods::NONE, CKey::Tab),
+    Chord::new(Mods::SHIFT, CKey::Tab),
+];
+
 /// The canvas's active tool over the toolbox.
 #[derive(Debug, Default)]
 pub struct ToolBridge {
@@ -61,6 +101,8 @@ pub struct ToolBridge {
     mods: Option<Modifiers>,
     /// Space went down and its release has not been posted.
     space: bool,
+    /// The TrueType Instructor is the chosen tool: it takes [`INSTRUCTOR_KEYS`].
+    instructor: bool,
 }
 
 /// Modifiers of a pointer event. Off the Mac, Control is the command key and also counts as `ctrl`, which suspends
@@ -137,7 +179,7 @@ impl CanvasTool for ToolBridge {
     }
 
     fn claims(&self) -> ToolClaims {
-        ToolClaims::NONE.deletes().keys(KEYS)
+        ToolClaims::NONE.deletes().keys(if self.instructor { INSTRUCTOR_KEYS } else { KEYS })
     }
 
     fn key(&mut self, key: &ToolKey, cx: &mut ToolContext<'_>) -> bool {
@@ -195,5 +237,9 @@ impl ActiveTool for ToolBridge {
 
     fn set_camera(&mut self, camera: Camera) {
         self.camera = Some(camera);
+    }
+
+    fn set_tool(&mut self, tool: &'static str) {
+        self.instructor = tool == fontcraft_tools::tt_instructor::ID;
     }
 }

@@ -49,6 +49,7 @@ fn settings(session: &Session, font: &Font, app: &FontCraftApp) -> ToolSettings 
         bounding_box: app.view.display.bounding_box,
         tunni_lines: app.overlays.switches.tunni_lines,
         curve_tension,
+        tt_direction: app.view.hinting.instructor.direction,
         ..ToolSettings::default()
     }
     .with_font(font)
@@ -59,8 +60,10 @@ fn settings(session: &Session, font: &Font, app: &FontCraftApp) -> ToolSettings 
 fn with_tool<R>(app: &mut FontCraftApp, f: impl FnOnce(&mut Toolbox, &Context<'_>) -> R) -> Result<R, String> {
     sync(app);
     let view = tools_view(&camera(app));
+    let marks = crate::canvas::hinting::ps_marks(&mut app.session, &app.view);
     let font = app.session.font().map_err(|e| e.to_string())?;
-    let scene = scene(font, &app.view, app.tools.focus.as_ref()).ok_or("no glyph is being edited")?;
+    let mut scene = scene(font, &app.view, app.tools.focus.as_ref()).ok_or("no glyph is being edited")?;
+    scene.ps_hints = marks;
     let settings = settings(&app.session, font, app);
     let cx = Context { scene: &scene, view, selection: &app.tools.selection, settings };
     Ok(f(&mut app.tools.toolbox, &cx))
@@ -104,6 +107,17 @@ pub fn sync(app: &mut FontCraftApp) {
     {
         let _ = apply(app, switch.output);
     }
+    if !app.tools.selection.hints.is_empty() {
+        // Hidden hints cannot be acted on; hints an edit removed are no longer selected.
+        let marks = crate::canvas::hinting::ps_marks(&mut app.session, &app.view);
+        if marks.shown {
+            app.tools.selection.hints.retain(|&i| marks.get(i).is_some());
+        } else {
+            app.tools.selection.hints.clear();
+        }
+    }
+    let base = app.tools.toolbox.base_id();
+    app.active_tool.set_tool(base);
 }
 
 /// Hands `input` to the toolbox and carries out its answer. Returns the errors, in order.
@@ -126,6 +140,9 @@ pub fn input(app: &mut FontCraftApp, input: ToolInput) -> Vec<String> {
     let out = match input {
         ToolInput::Pointer(ev) => {
             app.tools.mods = ev.mods;
+            if let Some(errors) = crate::canvas::hinting::badges::pointer(app, &ev) {
+                return errors;
+            }
             with_tool(app, |toolbox, cx| toolbox.pointer(cx, &ev))
         }
         ToolInput::Modifiers(mods) => {
@@ -139,7 +156,12 @@ pub fn input(app: &mut FontCraftApp, input: ToolInput) -> Vec<String> {
             }
             with_tool(app, |toolbox, cx| toolbox.modifiers(cx, mods))
         }
-        ToolInput::Key(ev) => with_tool(app, |toolbox, cx| toolbox.key(cx, &ev)),
+        ToolInput::Key(ev) => {
+            if let Some(errors) = crate::canvas::hinting::badges::key(app, &ev) {
+                return errors;
+            }
+            with_tool(app, |toolbox, cx| toolbox.key(cx, &ev))
+        }
     };
     let errors = match out {
         Ok(out) => apply(app, out),

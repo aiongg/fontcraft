@@ -61,6 +61,7 @@ pub const MODULES: &[Module] = &[
     super::compare_family::MODULE,
     super::overlays::MODULE,
     super::text_preview::MODULE,
+    crate::canvas::hinting::commands::MODULE,
 ];
 
 /// The module and description of the shell command `id`.

@@ -84,12 +84,18 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
     let words = Env::of(ui).words::<InfoBoxWords>();
     let model: &InfoBoxModel = props.model;
     let sent = &mut *props.sent;
+    if let Some(tt) = &model.tt {
+        super::info_box_tt::view(ui, tt, sent);
+        return;
+    }
     let Some(glyph) = &model.glyph else {
         Text::new(words.nothing.clone()).shade(Shade::Muted).show(ui);
         return;
     };
     Section::new(words.glyph.clone()).show(ui, |ui, _| glyph_part(ui, &words, glyph, sent));
-    if let Some(selection) = &model.selection {
+    if let Some(hint) = &model.ps_hint {
+        super::info_box_ps_hint::view(ui, hint, sent);
+    } else if let Some(selection) = &model.selection {
         Section::new(words.selection.clone()).show(ui, |ui, _| selection_part(ui, &words, selection, sent));
     }
 }
@@ -283,7 +289,7 @@ mod tests {
     /// A key typed into a sidebearing field goes to its setter as text; a number as a number.
     #[test]
     fn metrics_fields_take_keys_and_numbers() {
-        let model = InfoBoxModel { glyph: Some(glyph(false)), selection: None };
+        let model = InfoBoxModel { glyph: Some(glyph(false)), selection: None, ps_hint: None, tt: None };
         assert_eq!(
             posted_after(model.clone(), "LSB", "=O"),
             vec![Msg::run("spacing.setLeftSidebearing", json!({"glyphs": ["A"], "layer": "m01", "value": "=O"}))]
@@ -294,7 +300,7 @@ mod tests {
     /// The vertical layout edits the vertical origin and width (M5.20).
     #[test]
     fn the_vertical_layout_sets_origin_and_height() {
-        let model = InfoBoxModel { glyph: Some(glyph(true)), selection: None };
+        let model = InfoBoxModel { glyph: Some(glyph(true)), selection: None, ps_hint: None, tt: None };
         assert_eq!(
             posted_after(model.clone(), "O", "120"),
             vec![Msg::run("spacing.setVerticalOrigin", json!({"glyphs": ["A"], "layer": "m01", "value": 120.0}))]
@@ -318,7 +324,7 @@ mod tests {
             place: Targets { json: json!({"glyph": "A", "layer": "m01", "points": [[0, 0]]}).to_string() },
             ..Default::default()
         };
-        let model = InfoBoxModel { glyph: Some(glyph(false)), selection: Some(selection) };
+        let model = InfoBoxModel { glyph: Some(glyph(false)), selection: Some(selection), ps_hint: None, tt: None };
         assert_eq!(
             posted_after(model, "X", "140"),
             vec![Msg::run(
