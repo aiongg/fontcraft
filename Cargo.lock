@@ -1036,11 +1036,14 @@ dependencies = [
 name = "fontcraft"
 version = "0.0.1"
 dependencies = [
+ "clipboard-win",
  "craft-quit",
  "eframe",
  "fontcraft-engine",
  "fontcraft-ui-egui",
  "log",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
  "rfd",
  "serde_json",
  "ureq",
