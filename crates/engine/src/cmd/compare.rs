@@ -87,7 +87,7 @@ fn active_index(s: &Session) -> Result<usize> {
 }
 
 /// An open document named by its position, its title or the path it was opened from.
-fn document_index(s: &Session, p: &Params, what: &str, v: &Value) -> Result<usize> {
+pub(super) fn document_index(s: &Session, p: &Params, what: &str, v: &Value) -> Result<usize> {
     let docs = s.documents();
     match v {
         Value::Number(n) => n
