@@ -95,6 +95,40 @@ fn path_erase_open_corners_trims_the_loop_to_one_corner_node() {
     assert_eq!(coords(&s, "C"), vec![(0.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0)]);
 }
 
+/// Flattening one component into two moves the shapes after it but no path: a stem hint on the
+/// path after it stays on its nodes and a corner component on that path follows it to shape 2.
+#[test]
+fn component_flatten_keeps_hints_on_the_path_after_the_component() {
+    use fontcraft_engine::model::Path;
+    use fontcraft_engine::model::corner::{self, CornerHint, CornerTarget};
+    use fontcraft_hinting::{Edge, NodeRef, PsHint, ps_hints, set_ps_hints};
+    let mut s = Session::with_document();
+    add(&mut s, "a", rect(0.0, 0.0, 100.0, 100.0));
+    run(&mut s, "glyph.newGlyph", json!({"name": "_corner.one"}));
+    s.edit("components", |font| {
+        font.glyph_mut("b")?.layers[0].shapes =
+            vec![Shape::Component(Component::new("a", 0.0, 0.0)), Shape::Component(Component::new("a", 200.0, 0.0))];
+        let mut c = font.glyph_mut("c")?;
+        let l = &mut c.layers[0];
+        l.shapes = vec![Shape::Component(Component::new("b", 0.0, 0.0)), Shape::Path(Path::rect(400.0, 0.0, 500.0, 700.0))];
+        let node = |n| Edge::Node(NodeRef::new(0, n));
+        set_ps_hints(l, &[PsHint::stem(true, node(0), node(3))]).unwrap();
+        l.info.hints.push(CornerHint::new("_corner.one", 1, 1).to_hint());
+        Ok(())
+    })
+    .unwrap();
+    let r = run(&mut s, "component.flatten", json!({"glyph": "c"}));
+    assert_eq!(r["replaced"], json!(1), "{r}");
+    let font = s.font().unwrap();
+    let l = &font.glyph("c").unwrap().layers[0];
+    assert_eq!(l.shapes.len(), 3, "{:?}", l.shapes);
+    let ps = ps_hints(l).unwrap();
+    assert_eq!(ps.len(), 1, "the stem is kept: {:?}", l.info.hints);
+    assert_eq!(ps[0].1.edges(l).unwrap(), (0.0, 700.0));
+    let corners: Vec<CornerTarget> = l.info.hints.iter().filter_map(|h| corner::corner_hint(h).unwrap()).map(|c| c.target).collect();
+    assert_eq!(corners, [CornerTarget::Node { shape: 2, node: 1 }]);
+}
+
 /// Glyph c uses b, which is made of a component of a, and a itself.
 fn nested_document() -> Session {
     let mut s = Session::with_document();

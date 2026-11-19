@@ -22,10 +22,12 @@ use fontcraft_components::compose;
 use fontcraft_components::propagate::{base_layer, effective_anchors_with};
 use fontcraft_components::{ComponentIndex, MAX_ANCHOR_NAME_LEN, MAX_LAYER_COMPONENTS};
 use fontcraft_geom::round_to_grid;
-use fontcraft_model::{Alignment, Component, Font, Layer, MAX_COORDINATE, Shape, Transform};
+use fontcraft_hinting::Renumbered;
+use fontcraft_model::{Alignment, Component, Font, Layer, LayerSide, MAX_COORDINATE, Shape, Transform};
 use serde_json::{Value, json};
 
 use super::common::{grid, in_range};
+use super::shared::renumber_hints;
 use super::*;
 use crate::params::{MAX_TARGETS, Params, TargetKind as K, Targets, codepoint, kind};
 
@@ -365,16 +367,16 @@ fn run_create_composite(s: &mut Session, v: &Value, id: &'static str, all: Optio
         let composite = compose::composite_glyph(&font, &data, name, &parts).map_err(|e| components_error(&p, e))?;
         built.push((name.clone(), parts, composite));
     }
-    s.edit(if all_masters { "Create Composite (all masters)" } else { "Create Composite" }, |f| {
+    let done = s.edit(if all_masters { "Create Composite (all masters)" } else { "Create Composite" }, |f| {
+        let mut done = Renumbered::default();
         for (name, _, composite) in &built {
             let mut g = f.glyph_mut(name)?;
             if all_masters {
                 for new in composite.layers.iter().filter(|l| l.is_master_layer()) {
                     match g.layers.iter_mut().find(|l| l.id == new.id) {
                         Some(layer) => {
-                            layer.shapes = new.shapes.clone();
+                            replace_all_shapes(layer, new.shapes.clone(), name, &mut done);
                             layer.width = new.width;
-                            drop_shape_hints(layer);
                         }
                         None => g.layers.push(new.clone()),
                     }
@@ -383,25 +385,31 @@ fn run_create_composite(s: &mut Session, v: &Value, id: &'static str, all: Optio
                 let layer =
                     g.layers.iter_mut().find(|l| l.id == layer_id).ok_or_else(|| p.bad(format!("glyph `{name}` has no layer `{layer_id}`")))?;
                 let new = composite.layer(&layer.master).ok_or_else(|| p.bad(format!("`{name}` has no composite for master `{}`", layer.master)))?;
-                layer.shapes = new.shapes.clone();
+                replace_all_shapes(layer, new.shapes.clone(), name, &mut done);
                 layer.width = new.width;
-                drop_shape_hints(layer);
             }
         }
-        Ok(())
+        Ok(done)
     })?;
+    s.hints_renumbered(done);
     let out: Vec<Value> = built.iter().map(|(name, parts, _)| json!({"glyph": name, "components": parts})).collect();
     Ok(json!({ "glyphs": out }))
 }
 
-/// Drops the hints that point at nodes of the shapes a layer had: its shapes were all replaced.
-/// Hints without node references stay.
-fn drop_shape_hints(layer: &mut Layer) {
+/// Puts `shapes` in place of every shape of `layer` (of glyph `glyph`), with its hints kept where
+/// they can be ([`renumber_hints`]): a PostScript end on an old path becomes a number at its node's
+/// place, a TrueType instruction or corner component on one is removed and reported in `done`,
+/// other hints on old shapes are dropped, and hints without node references stay. The layer is
+/// added to `done`, so the session's hint upkeep leaves it alone.
+fn replace_all_shapes(layer: &mut Layer, shapes: Vec<Shape>, glyph: &str, done: &mut Renumbered) {
     if layer.info.hints.is_empty() {
+        layer.shapes = shapes;
         return;
     }
-    let hints: Vec<_> = layer.info.hints.iter().filter_map(|h| super::shared::remap_hint(h, &|_| None)).collect();
-    layer.info.hints = hints;
+    let before = layer.clone();
+    layer.shapes = shapes;
+    renumber_hints(&before, layer, LayerSide::Foreground, glyph, &|_| None, &mut done.report);
+    done.insert(glyph, &layer.id, LayerSide::Foreground);
 }
 
 // ── Add Component ───────────────────────────────────────────────────────────────────────────────
@@ -857,15 +865,22 @@ fn set_components(s: &mut Session, v: &Value) -> Result<Value> {
     }
     let r = t.resolve(&font)?;
     let layer_id = r.layer.id.clone();
-    let result = s.edit("Edit Components List", |f| t.edit_layer(f, |layer| match_components(layer, &wanted).map_err(|m| p.bad(m))))?;
+    let (result, done) = s.edit("Edit Components List", |f| {
+        let mut done = Renumbered::default();
+        let result = t.edit_layer(f, |layer| match_components(layer, &wanted, &t.glyph, &mut done).map_err(|m| p.bad(m)))?;
+        Ok((result, done))
+    })?;
+    s.hints_renumbered(done);
     Ok(json!({ "glyph": t.glyph, "layer": layer_id, "components": result }))
 }
 
 /// Makes the components of `layer` match `wanted` by count per name: extra components of a name
 /// go from the end, missing ones are appended in the list's order. The layer's hints follow their
-/// shapes to their new places; a hint on a removed component goes with it. A locked component
-/// that would go refuses the change. The component names after.
-fn match_components(layer: &mut Layer, wanted: &[String]) -> std::result::Result<Vec<String>, String> {
+/// shapes to their new places ([`renumber_hints`]: paths keep their indices, so PostScript hints
+/// and TrueType instructions stay as they are); a hint on a removed component goes with it, and the
+/// layer of glyph `glyph` is added to `done`. A locked component that would go refuses the change.
+/// The component names after.
+fn match_components(layer: &mut Layer, wanted: &[String], glyph: &str, done: &mut Renumbered) -> std::result::Result<Vec<String>, String> {
     let mut want: HashMap<&str, usize> = HashMap::new();
     for n in wanted {
         *want.entry(n.as_str()).or_default() += 1;
@@ -911,14 +926,15 @@ fn match_components(layer: &mut Layer, wanted: &[String]) -> std::result::Result
             Some(at)
         })
         .collect();
-    if !layer.info.hints.is_empty() && map.iter().any(Option::is_none) {
-        // A reference past the old shapes pointed at nothing before and is left as it is.
-        let to = |i: usize| map.get(i).map_or(Some(i), |m| *m);
-        let hints: Vec<_> = layer.info.hints.iter().filter_map(|h| super::shared::remap_hint(h, &to)).collect();
-        layer.info.hints = hints;
-    }
+    let before = (!layer.info.hints.is_empty() && map.iter().any(Option::is_none)).then(|| layer.clone());
     let mut flags = keep.into_iter();
     layer.shapes.retain(|_| flags.next().unwrap_or(true));
+    if let Some(before) = before {
+        // A reference past the old shapes pointed at nothing before and is left as it is.
+        let to = |i: usize| map.get(i).map_or(Some(i), |m| *m);
+        renumber_hints(&before, layer, LayerSide::Foreground, glyph, &to, &mut done.report);
+        done.insert(glyph, &layer.id, LayerSide::Foreground);
+    }
     let mut seen: HashMap<&str, usize> = HashMap::new();
     for n in wanted {
         let k = seen.entry(n.as_str()).or_default();
@@ -1280,5 +1296,53 @@ mod tests {
         .unwrap();
         let e = refused(&mut s, "glyph.setComponents", json!({"glyph": "Acomp", "components": ["A"]}));
         assert!(e.contains("locked") && e.contains("acutecomb"), "{e}");
+    }
+
+    /// PostScript hints count paths: removing the component before a path moves its shape index
+    /// but not its path index, so a stem hint on the path stays on its nodes.
+    #[test]
+    fn set_components_keeps_a_stem_hint_on_the_path_after_a_removed_component() {
+        use fontcraft_hinting::{Edge, NodeRef, PsHint, ps_hints, set_ps_hints};
+        let mut s = session();
+        let node = |n| Edge::Node(NodeRef::new(0, n));
+        s.edit("path and stem", |f| {
+            let mut g = f.glyph_mut("Acomp")?;
+            let l = &mut g.layers[0];
+            l.shapes.insert(1, Shape::Path(Path::rect(0.0, -100.0, 10.0, -90.0)));
+            set_ps_hints(l, &[PsHint::stem(false, node(0), node(1))]).unwrap();
+            Ok(())
+        })
+        .unwrap();
+        let r = run(&mut s, "glyph.setComponents", json!({"glyph": "Acomp", "components": ["acutecomb"]}));
+        let l = layer(&s, "Acomp");
+        let ps = ps_hints(l).unwrap();
+        assert_eq!(ps.len(), 1, "the stem is kept: {:?}", l.info.hints);
+        assert_eq!((ps[0].1.origin, ps[0].1.other), (node(0), Some(node(1))));
+        assert_eq!(ps[0].1.edges(l).unwrap(), (0.0, 10.0));
+        assert!(r.get("hintUpkeep").is_none(), "nothing is unlinked or removed: {r}");
+    }
+
+    /// Create Composite replaces every path: a stem hint's ends become numbers at their places,
+    /// and the result says so.
+    #[test]
+    fn create_composite_unlinks_the_stem_hints_on_the_replaced_paths() {
+        use fontcraft_hinting::{Edge, NodeRef, PsHint, ps_hints, set_ps_hints};
+        let mut s = session();
+        s.edit("path and stem", |f| {
+            let mut g = f.glyph_mut("Aacute")?;
+            let l = &mut g.layers[0];
+            l.shapes.push(Shape::Path(Path::rect(100.0, 0.0, 180.0, 700.0)));
+            let node = |n| Edge::Node(NodeRef::new(0, n));
+            set_ps_hints(l, &[PsHint::stem(false, node(0), node(1))]).unwrap();
+            Ok(())
+        })
+        .unwrap();
+        let r = run(&mut s, "glyph.createComposite", json!({"glyph": "Aacute"}));
+        let l = layer(&s, "Aacute");
+        assert!(l.shapes.iter().all(|sh| matches!(sh, Shape::Component(_))), "{:?}", l.shapes);
+        let ps = ps_hints(l).unwrap();
+        assert_eq!(ps.len(), 1, "the stem is kept: {:?}", l.info.hints);
+        assert_eq!((ps[0].1.origin, ps[0].1.other), (Edge::Value(100.0), Some(Edge::Value(180.0))));
+        assert_eq!(r["hintUpkeep"]["unlinked"], json!(2), "{r}");
     }
 }

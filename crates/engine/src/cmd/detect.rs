@@ -33,14 +33,15 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use fontcraft_components::AnchorCache;
 use fontcraft_components::compose;
 use fontcraft_geom::{Affine, Point};
+use fontcraft_hinting::Renumbered;
 use fontcraft_model::glyphdata::{Case, Category, GlyphData, Info, SubCategory};
-use fontcraft_model::{Alignment, Component, Font, Glyph, Layer, Node, NodeKind, Path, Shape, Transform};
+use fontcraft_model::{Alignment, Component, Font, Glyph, Layer, LayerSide, Node, NodeKind, Path, Shape, Transform};
 use fontcraft_pathops::matcher::{MAX_PATTERN_NODES, Match, MatchOptions, Signature, match_outline_within, signature};
 use fontcraft_pathops::{Contour, Node as PNode, NodeKind as PKind};
 use serde_json::{Value, json};
 
 use super::common::{Outcome, grid};
-use super::shared::remap_hint;
+use super::shared::renumber_hints;
 use super::*;
 use crate::params::{MAX_TARGETS, Params, TargetKind, Targets, kind};
 
@@ -432,10 +433,12 @@ fn settle_alignment(font: &Font, glyph: &Glyph, layer: &mut Layer, created: &[us
     }
 }
 
-/// `layer` with the paths of each entry replaced by its component, which takes the place of the
-/// first of them, and its hints renumbered (hints on replaced paths are dropped). Also returns
-/// the new index of each component, in entry order.
-fn replace_paths(layer: &Layer, entries: &[(Vec<usize>, Component)]) -> (Layer, Vec<usize>) {
+/// `layer` (of glyph `glyph`) with the paths of each entry replaced by its component, which takes
+/// the place of the first of them, and its hints kept on their nodes ([`renumber_hints`]): a
+/// PostScript end on a replaced path becomes a number, a TrueType instruction or corner component
+/// on one is removed and reported. Also returns the new index of each component, in entry order,
+/// and the renumbered layer side for the session's hint upkeep to leave alone.
+fn replace_paths(layer: &Layer, glyph: &str, entries: &[(Vec<usize>, Component)]) -> (Layer, Vec<usize>, Renumbered) {
     let mut at_first: BTreeMap<usize, usize> = BTreeMap::new();
     let mut gone: HashSet<usize> = HashSet::new();
     for (e, (shapes, _)) in entries.iter().enumerate() {
@@ -465,11 +468,14 @@ fn replace_paths(layer: &Layer, entries: &[(Vec<usize>, Component)]) -> (Layer, 
     }
     let mut out = layer.clone();
     out.shapes = shapes;
+    let mut done = Renumbered::default();
     if !layer.info.hints.is_empty() {
+        // A reference past the old shapes pointed at nothing before and is left as it is.
         let map = |i: usize| map.get(i).map_or(Some(i), |m| *m);
-        out.info.hints = layer.info.hints.iter().filter_map(|h| remap_hint(h, &map)).collect();
+        renumber_hints(layer, &mut out, LayerSide::Foreground, glyph, &map, &mut done.report);
+        done.insert(glyph, &layer.id, LayerSide::Foreground);
     }
-    (out, placed)
+    (out, placed, done)
 }
 
 // ── Parameters ──────────────────────────────────────────────────────────────────────────────────
@@ -534,6 +540,8 @@ struct Detected {
     components: Vec<String>,
     /// Shape indices of the new components in `layer`.
     created: Vec<usize>,
+    /// The side whose hints [`replace_paths`] renumbered, with what that removed or unlinked.
+    renumbered: Renumbered,
 }
 
 /// Takes `units` from `work`; when it holds fewer, empties it and returns false.
@@ -822,9 +830,9 @@ fn finish(layer: &Layer, name: &str, t: Target, bases: &Bases, opts: &MatchOptio
     if entries.is_empty() {
         return None;
     }
-    let (layer, created) = replace_paths(layer, &entries);
+    let (layer, created, renumbered) = replace_paths(layer, name, &entries);
     let components = entries.into_iter().map(|(_, c)| c.glyph).collect();
-    Some(Detected { layer, components, created })
+    Some(Detected { layer, components, created, renumbered })
 }
 
 /// What detection makes of `layer` of glyph `name` (at `order`). A base glyph's layer is worked
@@ -859,6 +867,8 @@ fn detect_composites(s: &mut Session, value: &Value) -> Result<Value> {
     let mut out = Outcome::default();
     let mut warnings: Vec<String> = Vec::new();
     let mut changes: Vec<(String, Layer)> = Vec::new();
+    // The hints of the changed layers, renumbered by detection itself.
+    let mut done = Renumbered::default();
     let mut count = 0usize;
     let mut stopped: Option<String> = None;
     let mut work = MAX_DETECT_WORK;
@@ -884,6 +894,7 @@ fn detect_composites(s: &mut Session, value: &Value) -> Result<Value> {
                     settle_alignment(font, glyph, &mut d.layer, &d.created, opts.tolerance, &mut anchors);
                     count += d.components.len();
                     per_layer.push(d.components);
+                    done.extend(d.renumbered);
                     changes.push((name.clone(), d.layer));
                     changed = true;
                 }
@@ -910,6 +921,7 @@ fn detect_composites(s: &mut Session, value: &Value) -> Result<Value> {
             }
             Ok(())
         })?;
+        s.hints_renumbered(done);
     }
     Ok(json!({"glyphs": out.glyphs, "components": count, "skipped": out.skipped, "warnings": warnings, "stopped": stopped}))
 }
@@ -925,7 +937,7 @@ fn detect_component(s: &mut Session, value: &Value) -> Result<Value> {
         (a, b) => a.or(b),
     };
     let mut t = Targets::new(ID, p.str("glyph")?, p.opt_str("layer")?.map(str::to_string));
-    let (new_layer, base_name, affine) = {
+    let (new_layer, base_name, affine, done) = {
         let font = s.font()?;
         let r = t.resolve(font)?;
         crate::check_unlocked(r.glyph)?;
@@ -969,11 +981,11 @@ fn detect_component(s: &mut Session, value: &Value) -> Result<Value> {
             let why = if work == 0 { "the search reached its work limit before finding" } else { "there is" };
             return Err(p.bad(format!("{why} no glyph whose whole outline equals the chosen paths")));
         };
-        let (mut new_layer, placed) = replace_paths(layer, &[(which, component(&base_name, affine))]);
+        let (mut new_layer, placed, done) = replace_paths(layer, &t.glyph, &[(which, component(&base_name, affine))]);
         settle_alignment(font, r.glyph, &mut new_layer, &placed, opts.tolerance, &mut AnchorCache::new());
         t.layer = Some(layer.id.clone());
         t.shapes = placed;
-        (new_layer, base_name, affine)
+        (new_layer, base_name, affine, done)
     };
     s.edit("Detect Component", |font| {
         t.edit_layer(font, |l| {
@@ -981,5 +993,6 @@ fn detect_component(s: &mut Session, value: &Value) -> Result<Value> {
             Ok(())
         })
     })?;
+    s.hints_renumbered(done);
     Ok(json!({"glyph": t.glyph, "layer": t.layer, "component": base_name, "transform": affine.as_coeffs(), "selection": t.to_json()}))
 }

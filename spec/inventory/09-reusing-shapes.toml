@@ -40,7 +40,7 @@ notes = "Documented, not yet observed. The list of components comes from the gly
 guesses = [
   "The components are the full Unicode canonical decomposition of the glyph's code point, each code point mapped to its glyph name through the glyph database (U+0301 to acutecomb), suffixes carried over and the preferred-mark rules applied, plus our own table for glyphs Unicode does not decompose (i, j and ligatures by their name parts); the composites stored in corpus files saved by the reference app measure it (M6 plan § 5).",
   "A glyph the database cannot decompose, or one whose parts are missing from the font, is refused with a message naming the missing parts and nothing changes; running it on such a glyph in the reference app settles it.",
-  "The hints that pointed at nodes of the replaced shapes (stems, corner and cap components) are removed with them, and hints without node references stay; running it on a glyph with corner components in the reference app settles it.",
+  "The ends of PostScript hints on the replaced paths become numbers at their places; TrueType instructions and corner components on them are removed and reported, other hints on the replaced shapes (cap components…) are removed with them, and hints without node references stay; running it on a hinted glyph with corner components in the reference app settles it.",
   "Create Composite keeps the layer's anchors and the glyph's metrics keys; the reference app settles it.",
 ]
 
@@ -110,7 +110,7 @@ guesses = [
   "On each other master the shapes with the same indices move into the new glyph's layer of that master, and a master whose layer lacks them gets an empty layer; a two-master font in the reference app settles it.",
   "Without a name the command takes the suggested one; each layer of the new glyph takes the width of the original glyph's layer of its master; the reference app's new glyph settles it.",
   "Only master layers are split: a non-master layer is refused, and images in the selection are refused; the reference app with a brace layer or an image selected settles it.",
-  "Hints move with the paths they point at, and a hint that links a moved and a kept path is removed; a hinted glyph in the reference app settles it.",
+  "Hints move with the paths they point at; a PostScript hint that links a moved and a kept path stays with its end on the moved path turned into a number, a TrueType instruction or corner component that does is removed and reported, and any other hint that does is removed with a warning; a hinted glyph in the reference app settles it.",
 ]
 
 [[panel]]

@@ -14,11 +14,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use fontcraft_audit::Finding;
 use fontcraft_components::propagate::base_layer;
 use fontcraft_geom::{Affine, Piece, Point, Segment, Vec2, round_point};
-use fontcraft_model::{Alignment, Component, Font, Glyph, Layer, MAX_COMPONENT_DEPTH, Node, NodeKind, Path, Shape, Transform};
+use fontcraft_hinting::Renumbered;
+use fontcraft_model::{Alignment, Component, Font, Glyph, Layer, LayerSide, MAX_COMPONENT_DEPTH, Node, NodeKind, Path, Shape, Transform};
 use serde_json::{Value, json};
 
 use super::common::grid;
-use super::shared::{MAX_LAYER_SHAPES, remap_hint};
+use super::shared::{MAX_LAYER_SHAPES, renumber_hints};
 use super::*;
 use crate::params::{MAX_TARGETS, Params, TargetKind as K, Targets, kind};
 
@@ -392,7 +393,8 @@ fn flatten_components(s: &mut Session, v: &Value) -> Result<Value> {
             Some(set)
         }
     };
-    let (replaced, skipped, added) = s.edit("Flatten Components", |font| {
+    let (replaced, skipped, added, done) = s.edit("Flatten Components", |font| {
+        let mut done = Renumbered::default();
         let (layer, replaced, skipped, added) = {
             let r = t.resolve(font)?;
             crate::check_unlocked(r.glyph)?;
@@ -443,8 +445,12 @@ fn flatten_components(s: &mut Session, v: &Value) -> Result<Value> {
             let mut out = layer.clone();
             out.shapes = shapes;
             if !layer.info.hints.is_empty() {
+                // Components replace components: paths keep their indices, so PostScript hints and
+                // TrueType instructions stay as they are and corner components follow their shapes.
+                // A reference past the old shapes pointed at nothing before and is left as it is.
                 let remap = |i: usize| map.get(i).map_or(Some(i), |m| *m);
-                out.info.hints = layer.info.hints.iter().filter_map(|h| remap_hint(h, &remap)).collect();
+                renumber_hints(layer, &mut out, LayerSide::Foreground, &t.glyph, &remap, &mut done.report);
+                done.insert(&t.glyph, &layer.id, LayerSide::Foreground);
             }
             (out, replaced, skipped, added)
         };
@@ -452,8 +458,9 @@ fn flatten_components(s: &mut Session, v: &Value) -> Result<Value> {
             *l = layer;
             Ok(())
         })?;
-        Ok((replaced, skipped, added))
+        Ok((replaced, skipped, added, done))
     })?;
+    s.hints_renumbered(done);
     t.layer = Some(t.layer_id(s.font()?)?);
     t.shapes = added;
     Ok(json!({"replaced": replaced, "skipped": skipped, "selection": t.to_json()}))
