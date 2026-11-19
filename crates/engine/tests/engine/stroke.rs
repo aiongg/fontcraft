@@ -8,8 +8,10 @@ use std::sync::Arc;
 use fontcraft_engine::Session;
 use fontcraft_engine::cmd::stroke::{CAP_AXIS_KEY, layer_outline};
 use fontcraft_engine::io::{SaveFormat, open, save};
+use fontcraft_engine::model::corner::{self, CornerHint, CornerTarget};
 use fontcraft_engine::model::{Component, Dimension, Family, Layer, Node, NodeKind, Path, Shape, ShapeAttrs};
 use fontcraft_geom::{BezPath, Point, Shape as _};
+use fontcraft_hinting::{Edge, NodeRef, PsHint, ps_hints, set_ps_hints};
 use fontcraft_testkit::temp_dir;
 use serde_json::{Value, json};
 
@@ -185,6 +187,46 @@ fn expand_outline_replaces_a_stroke_by_its_outline() {
     assert_eq!(r["glyphs"], json!(["C"]));
     let skipped: Vec<&str> = r["skipped"].as_array().unwrap().iter().map(|v| v["glyph"].as_str().unwrap()).collect();
     assert_eq!(skipped, ["A", "B"]);
+}
+
+/// Glyph `I`: a stroked square (path 0), a component and a stem (path 1, shape 2). A stem hint
+/// and a corner component sit on the stem, another stem hint on the stroked square.
+fn hinted() -> Session {
+    let mut s = Session::with_document();
+    run(&mut s, "glyph.newGlyph", json!({"name": "_corner.one"}));
+    s.edit("setup", |font| {
+        let mut g = font.glyph_mut("I")?;
+        let layer = g.layer_mut("m01").unwrap();
+        let mut square = Path::rect(0.0, 0.0, 100.0, 100.0);
+        square.info.attrs.stroke_width = Some(Dimension::Number(20.0));
+        layer.shapes = vec![Shape::Path(square), Shape::Component(Component::new("B", 0.0, 0.0)), Shape::Path(Path::rect(400.0, 0.0, 500.0, 700.0))];
+        let node = |path, node| Edge::Node(NodeRef::new(path, node));
+        set_ps_hints(layer, &[PsHint::stem(true, node(1, 0), node(1, 3)), PsHint::stem(false, node(0, 0), node(0, 1))]).unwrap();
+        layer.info.hints.push(CornerHint::new("_corner.one", 2, 1).to_hint());
+        Ok(())
+    })
+    .unwrap();
+    s
+}
+
+#[test]
+fn expand_outline_keeps_hints_on_their_nodes() {
+    let mut s = hinted();
+    let r = run(&mut s, "path.expandOutline", json!({"glyph": "I"}));
+    assert_eq!(r["selection"]["shapes"], json!([0, 1]), "the ring is two paths");
+    let l = layer(&s, "I", "m01");
+    assert_eq!(l.shapes.len(), 4);
+    let ps: Vec<PsHint> = ps_hints(&l).unwrap().into_iter().map(|(_, h)| h).collect();
+    assert_eq!(ps.len(), 1, "the hint on the expanded square is gone: {ps:?}");
+    let node = |path, node| Edge::Node(NodeRef::new(path, node));
+    assert_eq!((ps[0].origin, ps[0].other), (node(2, 0), Some(node(2, 3))), "the stem is the third path now");
+    assert_eq!(ps[0].edges(&l).unwrap(), (0.0, 700.0));
+    let corners: Vec<CornerTarget> = l.info.hints.iter().filter_map(|h| corner::corner_hint(h).unwrap()).map(|c| c.target).collect();
+    assert_eq!(corners, [CornerTarget::Node { shape: 3, node: 1 }], "a corner counts shapes, the component included");
+
+    // Undo puts the hints back with the stroke.
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(ps_hints(&layer(&s, "I", "m01")).unwrap().len(), 2);
 }
 
 /// `A` with a stroked open line in both masters; a second master `m02`.
