@@ -28,6 +28,7 @@ pub mod sidebar;
 pub mod space_center;
 pub mod start;
 pub mod table_viewer;
+pub mod text_preview;
 pub mod url;
 pub mod view;
 pub mod window;

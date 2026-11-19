@@ -23,6 +23,7 @@ pub mod sidebar;
 pub mod space_center;
 pub mod table_viewer;
 pub mod text;
+pub mod text_preview;
 
 use craft::ui::contract::Tracked;
 use fontcraft_engine::Session;
@@ -86,6 +87,9 @@ pub struct Models {
     pub compare_fonts: Tracked<compare::CompareFontsModel>,
     /// Compare Family (`panels::compare_family`).
     pub compare_family: Tracked<compare::CompareFamilyModel>,
+    /// The Text Preview (`panels::text_preview`); projected outside the stamp, since its font builds land between
+    /// frames.
+    pub text_preview: text_preview::TextPreviewModels,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.

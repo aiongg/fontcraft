@@ -336,6 +336,9 @@ impl DockPanels<PanelId> for Panels<'_> {
             PanelId::CompareFamily => {
                 panels::compare_family::show(ui, panels::compare_family::Props { model: &self.models.compare_family, sent: self.sent });
             }
+            PanelId::TextPreview => {
+                panels::text_preview::show(ui, panels::text_preview::Props { model: &self.models.text_preview.view, sent: self.sent });
+            }
             // Drawn by `group_view`.
             PanelId::Document => {}
             other => panels::stub::show(ui, panels::stub::Props { title: other.title(&self.words) }),
