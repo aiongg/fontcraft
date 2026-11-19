@@ -329,6 +329,7 @@ bundled, the file says so in its header and the project is listed here with its 
   language and feature tags come from opentypespec 1.9.2
   (https://github.com/simoncozens/opentypespec-py, Apache License 2.0), which types the OpenType
   tag registry.
+  The proof layouts of crates/proof/src/layouts (M12.78) follow fontpdf.py and proofpdf.py in AFDKO 5.0.1, Apache License 2.0, Copyright 2014 Adobe: the drawing-setting names and defaults, the elements each layout turns on, the hint, zone and metrics label texts, and the font-set row order.
   The collection layout of crates/tables/src/collection.rs (M12.3) follows otf2otc.py in AFDKO 5.0.1, Apache License 2.0, Copyright 2014, 2017 Adobe.
   The normalised dump (crates/tables/src/text/ttxn.rs and ttxn_otl.rs, M12.10) is ported from ttxn.py in AFDKO 5.0.1, Apache License 2.0, Copyright 2014 Adobe; the abstract-font dump (text/txdump.rs) follows the output of AFDKO's tx -dump.
   The spot table listings (crates/tables/src/text/spot.rs and spot_desc.rs, M12.10b) are ported from c/spot (cmap.c, hmtx.c, name.c, desc.c, tto.c, glyf.c, VORG.c and kern.c), and the CFF literal view (text/cff_literal.rs) from the dcf mode of c/shared/tx_shared.cpp, in AFDKO 5.0.1, Apache License 2.0, Copyright 2014 Adobe.

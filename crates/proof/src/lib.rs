@@ -9,6 +9,9 @@
 //! - `svg`: one SVG document per page; glyphs as paths, waterfall text in the embedded font.
 //! - `pdf`: one PDF document with every page (through `pdf-writer`); glyphs as paths, waterfall
 //!   text as outlines placed by `cmap`, advances and pair kerning (`kern`).
+//! - `layouts`: the proof sheets ported from the reference proof script: the drawing settings
+//!   ([`SETTINGS`]), glyph tiles with em boxes, hints, zones and point labels
+//!   (`boxes`, `hints`, `digi`), the font-set comparison and the palette linked to outline pages.
 //! - `html`: the browser specimen with the font embedded (WOFF2 when the input is WOFF2), sample
 //!   text, waterfall, character set, feature switches and axis stops; it carries no script.
 //!
@@ -21,14 +24,17 @@
 #![forbid(unsafe_code)]
 
 mod font;
+mod helvetica;
 mod html;
 mod kern;
+mod layouts;
 mod page;
 mod pdf;
 mod select;
 mod svg;
 mod text;
 
+pub use layouts::{MAX_SET_FONTS, Metrics, SETTINGS, Setting, SettingValue};
 pub use page::grid_size_for;
 pub use select::{GlyphSort, Selection, select_glyphs};
 
@@ -58,6 +64,16 @@ pub enum Sheet {
     Waterfall { text: String },
     /// Each selected glyph alone on a page, with metrics lines.
     GlyphPerPage,
+    /// A glyph grid whose cells link to one outline page per glyph, which follow the grid.
+    GridWithOutlines,
+    /// Filled glyphs in tiles with an advance-width box and centre marks.
+    Boxes,
+    /// Outlines in tiles with stem hints and alignment zones.
+    Hints,
+    /// Each glyph twice: in its em box, and as an outline with labelled points.
+    Digi,
+    /// One row per font of a font set, the glyphs of each index in one column.
+    Compare,
 }
 
 /// What [`proof`] makes.
@@ -73,6 +89,21 @@ pub struct ProofOptions {
     pub sizes: Vec<f64>,
     /// The location of a variable font, by axis tag in user coordinates.
     pub location: Vec<([u8; 4], f64)>,
+    /// Glyphs per page of the tile layouts when `sizes` is empty; each layout has its default.
+    pub glyphs_per_page: Option<usize>,
+    /// The y of the em box's bottom edge in font units, for the tile layouts; by default -120
+    /// for a CID-keyed font and 0 otherwise.
+    pub baseline: Option<f64>,
+    /// Draw in black and grey only, for printing.
+    pub black: bool,
+    /// Which side bearings the tile layouts print; `None` keeps each layout's choice.
+    pub metrics: Option<Metrics>,
+    /// The hint-replacement groups the hints layout draws (zero-based); empty draws every stem.
+    pub hint_groups: Vec<usize>,
+    /// Drawing settings by name ([`SETTINGS`]), applied after the layout's own.
+    pub settings: Vec<(String, SettingValue)>,
+    /// Settings for one copy of the digi layout (0 left, 1 right), applied after `settings`.
+    pub panels: Vec<(usize, Vec<(String, SettingValue)>)>,
 }
 
 impl Default for ProofOptions {
@@ -84,6 +115,13 @@ impl Default for ProofOptions {
             page_size: [612.0, 792.0],
             sizes: vec![72.0],
             location: Vec::new(),
+            glyphs_per_page: None,
+            baseline: None,
+            black: false,
+            metrics: None,
+            hint_groups: Vec::new(),
+            settings: Vec::new(),
+            panels: Vec::new(),
         }
     }
 }
@@ -111,22 +149,42 @@ pub enum ProofError {
 
 /// Makes the proof of the compiled font `bytes` (face `face` of a collection).
 pub fn proof(bytes: &[u8], face: u32, options: &ProofOptions) -> Result<Proof, ProofError> {
-    let font::FontBytes { sfnt, embed, container } = font::load(bytes, face)?;
-    let font = font::font_ref(&sfnt)?;
-    let location = font::location(&font, &options.location)?;
-    let face = font::Face::new(font, &location)?;
+    proof_set(&[bytes], face, options)
+}
+
+/// Makes the proof of a font set: the [`Sheet::Compare`] sheet shows every font of `fonts`, the
+/// other sheets and the HTML specimen show the first.
+pub fn proof_set(fonts: &[&[u8]], face: u32, options: &ProofOptions) -> Result<Proof, ProofError> {
+    if fonts.is_empty() || fonts.len() > MAX_SET_FONTS {
+        return Err(ProofError::BadOptions(format!("a proof takes from 1 to {MAX_SET_FONTS} fonts")));
+    }
+    let mut loaded = Vec::with_capacity(fonts.len());
+    for bytes in fonts {
+        loaded.push(font::load(bytes, face)?);
+    }
+    let mut locations = Vec::with_capacity(loaded.len());
+    for l in &loaded {
+        locations.push(font::location(&font::font_ref(&l.sfnt)?, &options.location)?);
+    }
+    let mut faces = Vec::with_capacity(loaded.len());
+    for (l, location) in loaded.iter().zip(&locations) {
+        faces.push(font::Face::new(font::font_ref(&l.sfnt)?, location)?);
+    }
+    let (Some(first), Some(face)) = (loaded.first(), faces.first()) else {
+        return Err(ProofError::BadOptions("a proof needs a font".into()));
+    };
     let gids = face.resolve(&options.glyphs)?;
     match options.format {
-        ProofFormat::Html => Ok(Proof { files: vec![html::write(&face, &gids, options, &embed, container)?], pages: 1 }),
+        ProofFormat::Html => Ok(Proof { files: vec![html::write(face, &gids, options, &first.embed, first.container)?], pages: 1 }),
         ProofFormat::Svg => {
-            let doc = page::layout(&face, &gids, options, Some(embedded(embed, container, options)))?;
+            let doc = page::layout(&faces, &gids, options, Some(embedded(first.embed.clone(), first.container, options)))?;
             let files = svg::write(&doc);
             Ok(Proof { pages: files.len(), files })
         }
         // The PDF draws waterfall text as outlines, so it embeds no font.
         ProofFormat::Pdf => {
-            let doc = page::layout(&face, &gids, options, None)?;
-            Ok(Proof { pages: doc.pages.len(), files: vec![pdf::write(&doc, &face)?] })
+            let doc = page::layout(&faces, &gids, options, None)?;
+            Ok(Proof { pages: doc.pages.len(), files: vec![pdf::write(&doc, face)?] })
         }
     }
 }

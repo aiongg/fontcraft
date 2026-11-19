@@ -5,13 +5,16 @@
 //! is written, so a failure leaves nothing behind. The command changes no document, so it is not
 //! journalled: replaying a session does not write proofs again.
 //!
-//! Built: the layouts `palette`, `outline` and `waterfall` as PDF (one file) and SVG (one file per
-//! page), and the HTML specimen (any layout; it embeds the font as WOFF2). The other layouts and
-//! the drawing options refuse with a message until their packages land.
+//! Built: the layouts `palette`, `outline`, `waterfall`, `palette+outline`, `boxes`, `hints`,
+//! `digi` and `compare` as PDF (one file) and SVG (one file per page), with `metrics`, `baseline`,
+//! `hintGroups`, `black`, `settings` and `panels`; and the HTML specimen (any layout; it embeds
+//! the font as WOFF2). `compare` makes one proof of all the fonts, named after the first. The
+//! other layouts and options refuse with a message until their packages land. `listSettings`
+//! returns the drawing settings instead of making a proof.
 
 use std::path::{Path, PathBuf};
 
-use fontcraft_proof::{GlyphSort, ProofFormat, ProofOptions, Selection, Sheet};
+use fontcraft_proof::{GlyphSort, Metrics, ProofFormat, ProofOptions, Selection, SettingValue, Sheet};
 use serde_json::{Value, json};
 
 use super::file_io::{self, InputKind, OutputRequest};
@@ -23,30 +26,19 @@ use crate::params::Params;
 const MAX_FONTS: usize = 256;
 /// Default glyphs per page of the palette layout, as the reference's overview proof.
 const PALETTE_GLYPHS_PER_PAGE: usize = 156;
+/// Default glyphs per page of the palette with outline pages, as the reference's linked palette.
+const LINKED_GLYPHS_PER_PAGE: usize = 320;
+/// Most hint-replacement groups `hintGroups` names (the charstring limit of stems).
+const MAX_HINT_GROUPS: usize = 96;
+/// Most drawing settings one call sets, in all and per panel.
+const MAX_SETTINGS: usize = 256;
 /// Default waterfall sizes, as the reference's waterfall proof.
 const WATERFALL_SIZES: [f64; 12] = [36.0, 24.0, 20.0, 18.0, 16.0, 14.0, 12.0, 10.0, 9.0, 8.0, 7.0, 6.0];
 /// Parameters of the row that no built package handles yet.
-const NOT_BUILT_PARAMS: &[&str] = &[
-    "metrics",
-    "vertical",
-    "baseline",
-    "show",
-    "hide",
-    "pointLabels",
-    "hintGroups",
-    "panels",
-    "cidLayout",
-    "errorLog",
-    "fitBbox",
-    "scale",
-    "units",
-    "paltInKern",
-    "black",
-    "header",
-    "margins",
-    "settings",
-    "features",
-];
+const NOT_BUILT_PARAMS: &[&str] =
+    &["vertical", "show", "hide", "pointLabels", "cidLayout", "errorLog", "fitBbox", "scale", "units", "paltInKern", "header", "margins", "features"];
+/// The layouts drawn in tiles, which read `metrics` and `baseline`.
+const TILE_LAYOUTS: &[&str] = &["boxes", "hints", "digi"];
 const LAYOUTS: &[&str] =
     &["palette", "outline", "palette+outline", "digi", "boxes", "hints", "waterfall", "compare", "synopsis", "features", "cmap", "vorg", "text"];
 
@@ -56,7 +48,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Make Proof Sheet",
         [],
         None,
-        "{fonts: [path], face?: int|name, layout: \"palette\"|\"outline\"|\"palette+outline\"|\"digi\"|\"boxes\"|\"hints\"|\"waterfall\"|\"compare\"|\"synopsis\"|\"features\"|\"cmap\"|\"vorg\"|\"text\", format?: \"pdf\"|\"svg\"|\"html\", output?: path, outputDir?: path, noClobber?: bool, glyphs?: selector, excludeGlyphs?: selector, glyphsPerPage?: int, size?: number, sizes?: [number], sort?: \"gid\"|\"name\"|\"unicode\"|\"lookup\", text?: string, features?: [tag]|\"*\", location?: {axis: number}, metrics?: \"h\"|\"v\"|\"both\", vertical?: bool, baseline?: number, show?: [string], hide?: [string], pointLabels?: [\"index\"|\"type\"|\"position\"], hintGroups?: [int], panels?: [{index: int, show?: [string], hide?: [string], settings?: object}], cidLayout?: path, errorLog?: path, fitBbox?: [l, b, r, t], scale?: {x: number, y?: number}, units?: \"font\"|1000, paltInKern?: bool, black?: bool, header?: bool, pageSize?: [w, h], margins?: [t, r, b, l], settings?: {name: value}} proof sheets of compiled fonts, written next to each input as NAME.proof.svg (NAME.proof-001.svg … for several pages), .html or .pdf; format defaults to pdf; a selector is a list of glyph names or ranges (a-b, a..b, by glyph index) or one comma-separated string; the HTML specimen embeds the font as WOFF2 and shows sample text, a waterfall, the character set, feature switches and axis stops; built so far: palette, outline and waterfall as PDF and SVG, and HTML → {proofs: [{font, format, layout, pages, files: [path]}]}",
+        "{fonts: [path], face?: int|name, layout: \"palette\"|\"outline\"|\"palette+outline\"|\"digi\"|\"boxes\"|\"hints\"|\"waterfall\"|\"compare\"|\"synopsis\"|\"features\"|\"cmap\"|\"vorg\"|\"text\", format?: \"pdf\"|\"svg\"|\"html\", output?: path, outputDir?: path, noClobber?: bool, listSettings?: bool, glyphs?: selector, excludeGlyphs?: selector, glyphsPerPage?: int, size?: number, sizes?: [number], sort?: \"gid\"|\"name\"|\"unicode\"|\"lookup\", text?: string, features?: [tag]|\"*\", location?: {axis: number}, metrics?: \"h\"|\"v\"|\"both\", vertical?: bool, baseline?: number, show?: [string], hide?: [string], pointLabels?: [\"index\"|\"type\"|\"position\"], hintGroups?: [int], panels?: [{index: int, show?: [string], hide?: [string], settings?: object}], cidLayout?: path, errorLog?: path, fitBbox?: [l, b, r, t], scale?: {x: number, y?: number}, units?: \"font\"|1000, paltInKern?: bool, black?: bool, header?: bool, pageSize?: [w, h], margins?: [t, r, b, l], settings?: {name: value}} proof sheets of compiled fonts, written next to each input as NAME.proof.svg (NAME.proof-001.svg … for several pages), .html or .pdf; format defaults to pdf; a selector is a list of glyph names or ranges (a-b, a..b, by glyph index) or one comma-separated string; the HTML specimen embeds the font as WOFF2 and shows sample text, a waterfall, the character set, feature switches and axis stops; built so far: palette, outline, waterfall, palette+outline, boxes, hints, digi and compare as PDF and SVG, and HTML; compare makes one proof of every font, named after the first; metrics and baseline apply to boxes, hints and digi, hintGroups to hints, panels (settings only) to digi; settings take the names listSettings returns, with a number, true/false or [r, g, b] (parts from 0 to 1) → {proofs: [{font, format, layout, pages, files: [path]}]}, or with listSettings {settings: [{name, default, about}]}",
         always,
         proof
     ).files(const { &[FileParam::read("fonts"), FileParam::read("cidLayout"), FileParam::write("errorLog"), FileParam::write("output"), FileParam::write("outputDir")] }).writes_files()]
@@ -73,6 +65,11 @@ struct Made {
 
 fn proof(_: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("font.proof", p)?;
+    if p.bool_or("listSettings", false)? {
+        let settings: Vec<Value> =
+            fontcraft_proof::SETTINGS.iter().map(|s| json!({ "name": s.name, "default": s.default, "about": s.about })).collect();
+        return Ok(json!({ "settings": settings }));
+    }
     let fonts = p.strings("fonts")?;
     if fonts.is_empty() || fonts.len() > MAX_FONTS {
         return Err(p.bad(format!("`fonts` must name from 1 to {MAX_FONTS} files")));
@@ -101,7 +98,8 @@ fn proof(_: &mut Session, p: &Value) -> Result<Value> {
     if req.in_place {
         return Err(p.bad("a proof never replaces its font: give `output` or `outputDir`"));
     }
-    if req.output.is_some() && fonts.len() > 1 {
+    let set = layout == "compare" && format != ProofFormat::Html;
+    if req.output.is_some() && fonts.len() > 1 && !set {
         return Err(p.bad("`output` names one file: give `outputDir` for several fonts"));
     }
     let page_size = match p.opt_array("pageSize")? {
@@ -117,9 +115,50 @@ fn proof(_: &mut Session, p: &Value) -> Result<Value> {
         ("palette", _) => Sheet::GlyphGrid,
         ("outline", _) => Sheet::GlyphPerPage,
         ("waterfall", _) => Sheet::Waterfall { text: p.opt_str("text")?.unwrap_or("").to_string() },
+        ("palette+outline", _) => Sheet::GridWithOutlines,
+        ("boxes", _) => Sheet::Boxes,
+        ("hints", _) => Sheet::Hints,
+        ("digi", _) => Sheet::Digi,
+        ("compare", _) => Sheet::Compare,
         (other, _) => return Err(EngineError::Unsupported(format!("the `{other}` proof layout"))),
     };
+    let tiles = TILE_LAYOUTS.contains(&layout) && format != ProofFormat::Html;
+    for key in ["metrics", "baseline"] {
+        if p.get(key).is_some() && !tiles {
+            return Err(p.bad(format!("`{key}` applies to the boxes, hints and digi layouts")));
+        }
+    }
+    if p.get("hintGroups").is_some() && layout != "hints" {
+        return Err(p.bad("`hintGroups` applies to the hints layout"));
+    }
+    if p.get("panels").is_some() && layout != "digi" {
+        return Err(p.bad("`panels` applies to the digi layout"));
+    }
+    let metrics = match p.opt_str("metrics")? {
+        None => None,
+        Some("h") => Some(Metrics::Horizontal),
+        Some("v") => Some(Metrics::Vertical),
+        Some("both") => Some(Metrics::Both),
+        Some(other) => return Err(p.bad(format!("`metrics` must be \"h\", \"v\" or \"both\", got \"{other}\""))),
+    };
+    let baseline = p.opt_f64("baseline")?;
+    let hint_groups = match p.opt_array("hintGroups")? {
+        None => Vec::new(),
+        Some(list) if list.len() > MAX_HINT_GROUPS => return Err(p.bad(format!("`hintGroups` names at most {MAX_HINT_GROUPS} groups"))),
+        Some(list) => list
+            .iter()
+            .map(|v| v.as_u64().filter(|n| *n < MAX_HINT_GROUPS as u64).map(|n| n as usize))
+            .collect::<Option<Vec<usize>>>()
+            .ok_or_else(|| p.bad(format!("`hintGroups` holds group numbers from 0 to {}", MAX_HINT_GROUPS - 1)))?,
+    };
+    let settings = match p.get("settings") {
+        None => Vec::new(),
+        Some(v) => settings(&p, v, "settings")?,
+    };
+    let panels = panels(&p)?;
+    let black = p.bool_or("black", false)?;
     let sizes = sizes(&p, &sheet, format, page_size)?;
+    let glyphs_per_page = if tiles { p.opt_int("glyphsPerPage", 1, fontcraft_proof::MAX_SHEET_GLYPHS as i64)?.map(|n| n as usize) } else { None };
     let location = location(&p)?;
     let sort = match p.opt_str("sort")?.unwrap_or("gid") {
         "gid" => GlyphSort::Gid,
@@ -131,16 +170,44 @@ fn proof(_: &mut Session, p: &Value) -> Result<Value> {
     let selection = Selection { glyphs: selector(&p, "glyphs")?, exclude: selector(&p, "excludeGlyphs")?, sort };
     let select = !selection.glyphs.is_empty() || !selection.exclude.is_empty() || sort != GlyphSort::Gid;
 
+    let options = |glyphs: Vec<String>| ProofOptions {
+        format,
+        sheets: vec![sheet.clone()],
+        glyphs,
+        page_size,
+        sizes: sizes.clone(),
+        location: location.clone(),
+        glyphs_per_page,
+        baseline,
+        black,
+        metrics,
+        hint_groups: hint_groups.clone(),
+        settings: settings.clone(),
+        panels: panels.clone(),
+    };
     let mut made: Vec<Made> = Vec::with_capacity(fonts.len());
+    let mut inputs = Vec::with_capacity(fonts.len());
     for path in &fonts {
         let input = file_io::read_input(Path::new(path))?;
         if !input.kind.is_font() {
             return Err(EngineError::Unsupported(format!("proofs of {path}: give a compiled font (proofs of sources and Type 1 fonts come later)")));
         }
-        let (bytes, font_face) = if format == ProofFormat::Html { (as_woff2(&input, face)?, 0) } else { (input.bytes.clone(), face) };
+        inputs.push(input);
+    }
+    if set {
+        // One proof of the whole set, named after the first font; the selection is read on it.
+        let (Some(first), Some(first_path)) = (inputs.first(), fonts.first()) else { return Err(p.bad("`fonts` is empty")) };
+        let glyphs = if select { fontcraft_proof::select_glyphs(&first.bytes, face, &selection)? } else { Vec::new() };
+        let all: Vec<&[u8]> = inputs.iter().map(|i| i.bytes.as_slice()).collect();
+        let proof = fontcraft_proof::proof_set(&all, face, &options(glyphs))?;
+        let base = file_io::output_path(&first.path, &req, ".proof", Some(extension))?;
+        let files = page_paths(&base, proof.files.len()).into_iter().zip(proof.files).collect();
+        made.push(Made { font: first_path.to_string(), format: format_name, layout: layout.to_string(), pages: proof.pages, files });
+    }
+    for (path, input) in fonts.iter().zip(&inputs).filter(|_| !set) {
+        let (bytes, font_face) = if format == ProofFormat::Html { (as_woff2(input, face)?, 0) } else { (input.bytes.clone(), face) };
         let glyphs = if select { fontcraft_proof::select_glyphs(&bytes, font_face, &selection)? } else { Vec::new() };
-        let options = ProofOptions { format, sheets: vec![sheet.clone()], glyphs, page_size, sizes: sizes.clone(), location: location.clone() };
-        let proof = fontcraft_proof::proof(&bytes, font_face, &options)?;
+        let proof = fontcraft_proof::proof(&bytes, font_face, &options(glyphs))?;
         let base = file_io::output_path(&input.path, &req, ".proof", Some(extension))?;
         let files = page_paths(&base, proof.files.len()).into_iter().zip(proof.files).collect();
         made.push(Made { font: path.to_string(), format: format_name, layout: layout.to_string(), pages: proof.pages, files });
@@ -188,11 +255,65 @@ fn sizes(p: &Params<'_>, sheet: &Sheet, format: ProofFormat, page_size: [f64; 2]
     if matches!(sheet, Sheet::Waterfall { .. }) || format == ProofFormat::Html {
         return Ok(WATERFALL_SIZES.to_vec());
     }
-    if *sheet == Sheet::GlyphGrid {
-        let n = p.opt_int("glyphsPerPage", 1, fontcraft_proof::MAX_SHEET_GLYPHS as i64)?.map(|n| n as usize).unwrap_or(PALETTE_GLYPHS_PER_PAGE);
-        return Ok(vec![fontcraft_proof::grid_size_for(page_size, n)?]);
+    let grid_default = match sheet {
+        Sheet::GlyphGrid => PALETTE_GLYPHS_PER_PAGE,
+        Sheet::GridWithOutlines => LINKED_GLYPHS_PER_PAGE,
+        // The tile layouts take `glyphsPerPage` themselves; compare has its own default size.
+        _ => return Ok(Vec::new()),
+    };
+    let n = p.opt_int("glyphsPerPage", 1, fontcraft_proof::MAX_SHEET_GLYPHS as i64)?.map(|n| n as usize).unwrap_or(grid_default);
+    Ok(vec![fontcraft_proof::grid_size_for(page_size, n)?])
+}
+
+/// Drawing settings from an object of names and values: a number, true or false, `[r, g, b]`, or
+/// text such as `"12"` or `"(0, 0.75, 0)"`.
+fn settings(p: &Params<'_>, v: &Value, key: &str) -> Result<Vec<(String, SettingValue)>> {
+    let Some(map) = v.as_object() else { return Err(p.bad(format!("`{key}` must be an object of setting names and values"))) };
+    if map.len() > MAX_SETTINGS {
+        return Err(p.bad(format!("`{key}` holds at most {MAX_SETTINGS} settings")));
     }
-    Ok(Vec::new())
+    map.iter()
+        .map(|(name, value)| {
+            let parsed = match value {
+                Value::Bool(b) => Some(SettingValue::Number(if *b { 1.0 } else { 0.0 })),
+                Value::Number(n) => n.as_f64().filter(|f| f.is_finite()).map(SettingValue::Number),
+                Value::Array(parts) => match parts.iter().map(|x| x.as_f64().filter(|f| f.is_finite())).collect::<Option<Vec<f64>>>().as_deref() {
+                    Some([r, g, b]) => Some(SettingValue::Rgb([*r, *g, *b])),
+                    _ => None,
+                },
+                Value::String(text) => SettingValue::parse(text),
+                _ => None,
+            };
+            let value = parsed.ok_or_else(|| p.bad(format!("setting `{name}` needs a number, true or false, or a colour [r, g, b]")))?;
+            Ok((name.clone(), value))
+        })
+        .collect()
+}
+
+/// `panels`: per copy of the digi layout, its settings. Showing and hiding elements per copy
+/// comes with the `show` and `hide` options.
+fn panels(p: &Params<'_>) -> Result<Vec<(usize, Vec<(String, SettingValue)>)>> {
+    let Some(list) = p.opt_array("panels")? else { return Ok(Vec::new()) };
+    if list.len() > 2 {
+        return Err(p.bad("`panels` describes at most the two copies of the digi layout"));
+    }
+    list.iter()
+        .map(|panel| {
+            let Some(obj) = panel.as_object() else { return Err(p.bad("each of `panels` is an object {index, settings}")) };
+            let index =
+                obj.get("index").and_then(Value::as_u64).filter(|i| *i < 2).ok_or_else(|| p.bad("a panel's `index` is 0 (left) or 1 (right)"))?;
+            for key in ["show", "hide"] {
+                if obj.contains_key(key) {
+                    return Err(EngineError::Unsupported(format!("`{key}` in a panel of font.proof")));
+                }
+            }
+            let settings = match obj.get("settings") {
+                None => Vec::new(),
+                Some(v) => settings(p, v, "panels.settings")?,
+            };
+            Ok((index as usize, settings))
+        })
+        .collect()
 }
 
 fn location(p: &Params<'_>) -> Result<Vec<([u8; 4], f64)>> {

@@ -13,6 +13,7 @@
 //!   comes from `cmap` (`.notdef` when unmapped), its advance from the font at the proof's
 //!   location, and the space between two glyphs gets their pair kerning ([`crate::kern`]). Each
 //!   line carries its text as `/ActualText`, so it can be searched and copied.
+//! - A link item becomes a `/Link` annotation that opens its target page.
 //! - Content streams are written uncompressed.
 //!
 //! Page items are in points from the top left with y growing downwards; PDF's origin is the
@@ -20,12 +21,13 @@
 
 use std::collections::{BTreeMap, HashMap};
 
+use pdf_writer::types::{ActionType, AnnotationType};
 use pdf_writer::{Content, Name, Pdf, Rect, Ref, Str, TextStr};
 
 use crate::ProofError;
 use crate::font::{El, Face, Outline};
 use crate::kern::Kerning;
-use crate::page::{Anchor, Document, GlyphStyle, Ink, Item, LINE_WIDTH, OUTLINED_FILL, POINT_RADIUS, Page};
+use crate::page::{Anchor, Document, GlyphStyle, Item, LINE_WIDTH, OUTLINED_FILL, POINT_RADIUS, Page};
 
 /// The resource name of the label font.
 const LABEL_FONT: Name<'static> = Name(b"F1");
@@ -92,22 +94,34 @@ pub(crate) fn write(doc: &Document, face: &Face<'_>) -> Result<Vec<u8>, ProofErr
     let mut writer =
         Writer { doc, face, glyphs: Glyphs::new(doc), kerning: Kerning::new(&face.font), shaped: HashMap::new(), forms: BTreeMap::new(), next };
     for (page, &page_ref) in doc.pages.iter().zip(&page_refs) {
-        let (content, used) = writer.page(page)?;
+        let (content, used, links) = writer.page(page)?;
         let content_ref = writer.next.bump();
         pdf.stream(content_ref, &content);
+        let annotations: Vec<(Ref, Rect, Ref)> =
+            links.into_iter().filter_map(|(rect, target)| page_refs.get(target).map(|t| (writer.next.bump(), rect, *t))).collect();
         let mut p = pdf.page(page_ref);
         p.parent(tree).media_box(Rect::new(0.0, 0.0, coord(page.width), coord(page.height))).contents(content_ref);
+        if !annotations.is_empty() {
+            p.annotations(annotations.iter().map(|a| a.0));
+        }
         let mut resources = p.resources();
         resources.fonts().pair(LABEL_FONT, label_font);
         if !used.is_empty() {
             let mut objects = resources.x_objects();
-            for (gid, form) in &used {
-                objects.pair(Name(form_name(*gid).as_bytes()), *form);
+            for (key, form) in &used {
+                objects.pair(Name(form_name(*key).as_bytes()), *form);
             }
         }
+        drop(resources);
+        drop(p);
+        for (id, rect, target) in annotations {
+            let mut annotation = pdf.annotation(id);
+            annotation.subtype(AnnotationType::Link).rect(rect).border(0.0, 0.0, 0.0, None);
+            annotation.action().action_type(ActionType::GoTo).destination().page(target).fit();
+        }
     }
-    for (gid, form) in &writer.forms {
-        let Some(outline) = writer.glyphs.get(*gid) else { continue };
+    for (key, form) in &writer.forms {
+        let Some(outline) = writer.glyphs.get(*key) else { continue };
         let mut c = Content::new();
         path(&mut c, &outline.els);
         c.fill_nonzero();
@@ -123,7 +137,8 @@ pub(crate) fn write(doc: &Document, face: &Face<'_>) -> Result<Vec<u8>, ProofErr
 /// The outlines the pages draw, by glyph id: the shown glyphs' from the document, the others
 /// (waterfall text) read from the font when first needed.
 struct Glyphs<'d> {
-    shown: HashMap<u32, &'d Outline>,
+    /// By font of the set and glyph id.
+    shown: HashMap<GlyphKey, &'d Outline>,
     loaded: HashMap<u32, Outline>,
     /// Outline segments the waterfall glyphs may still use.
     budget: usize,
@@ -131,16 +146,16 @@ struct Glyphs<'d> {
 
 impl<'d> Glyphs<'d> {
     fn new(doc: &'d Document) -> Self {
-        let shown = doc.glyphs.iter().map(|g| (g.gid, &g.outline)).collect();
+        let shown = doc.glyphs.iter().map(|g| ((g.font, g.gid), &g.outline)).collect();
         Glyphs { shown, loaded: HashMap::new(), budget: crate::font::MAX_TOTAL_ELEMENTS }
     }
 
-    fn get(&self, gid: u32) -> Option<&Outline> {
-        self.shown.get(&gid).copied().or_else(|| self.loaded.get(&gid))
+    fn get(&self, key: GlyphKey) -> Option<&Outline> {
+        self.shown.get(&key).copied().or_else(|| if key.0 == 0 { self.loaded.get(&key.1) } else { None })
     }
 
     fn load(&mut self, face: &Face<'_>, gid: u32) -> Result<(), ProofError> {
-        if self.shown.contains_key(&gid) || self.loaded.contains_key(&gid) {
+        if self.shown.contains_key(&(0, gid)) || self.loaded.contains_key(&gid) {
             return Ok(());
         }
         let outline = face.outline(gid, &mut self.budget)?;
@@ -157,16 +172,18 @@ struct Writer<'d, 'f> {
     /// Waterfall lines already set: each glyph with its x offset in font units.
     shaped: HashMap<String, Vec<(u32, f64)>>,
     /// The form XObject of each filled glyph, written after the pages.
-    forms: BTreeMap<u32, Ref>,
+    forms: BTreeMap<GlyphKey, Ref>,
     next: Ref,
 }
 
 impl Writer<'_, '_> {
-    /// The content stream of `page` and the glyph forms it uses.
-    fn page(&mut self, page: &Page) -> Result<(Vec<u8>, BTreeMap<u32, Ref>), ProofError> {
+    /// The content stream of `page`, the glyph forms it uses and its links (area, target page).
+    #[allow(clippy::type_complexity)]
+    fn page(&mut self, page: &Page) -> Result<(Vec<u8>, BTreeMap<GlyphKey, Ref>, Vec<(Rect, usize)>), ProofError> {
         let h = page.height;
         let mut c = Content::new();
         let mut used = BTreeMap::new();
+        let mut links = Vec::new();
         for item in &page.items {
             match item {
                 Item::Glyph { glyph, x, y, scale, style, primary } => {
@@ -182,12 +199,13 @@ impl Writer<'_, '_> {
                     let matrix = [coord(*scale), 0.0, 0.0, coord(*scale), coord(*x), coord(h - y)];
                     match style {
                         GlyphStyle::Filled => {
-                            if let Some(form) = self.form(g.gid) {
-                                used.insert(g.gid, form);
+                            let key = (g.font, g.gid);
+                            if let Some(form) = self.form(key) {
+                                used.insert(key, form);
                                 c.save_state();
                                 c.set_fill_rgb(0.0, 0.0, 0.0);
                                 c.transform(matrix);
-                                c.x_object(Name(form_name(g.gid).as_bytes()));
+                                c.x_object(Name(form_name(key).as_bytes()));
                                 c.restore_state();
                             }
                         }
@@ -224,14 +242,14 @@ impl Writer<'_, '_> {
                     c.rect(coord(*x), coord(h - y - rh), coord(*w), coord(*rh));
                     c.stroke();
                 }
-                Item::Point { x, y, on_curve: true } => {
-                    let (r, g, b) = rgb(Ink::Point.rgb());
+                Item::Point { x, y, on_curve: true, ink } => {
+                    let (r, g, b) = rgb(ink.rgb());
                     c.set_fill_rgb(r, g, b);
                     c.rect(coord(x - POINT_RADIUS), coord(h - y - POINT_RADIUS), coord(2.0 * POINT_RADIUS), coord(2.0 * POINT_RADIUS));
                     c.fill_nonzero();
                 }
-                Item::Point { x, y, on_curve: false } => {
-                    let (r, g, b) = rgb(Ink::Handle.rgb());
+                Item::Point { x, y, on_curve: false, ink } => {
+                    let (r, g, b) = rgb(ink.rgb());
                     c.set_fill_rgb(1.0, 1.0, 1.0);
                     c.set_stroke_rgb(r, g, b);
                     c.set_line_width(width(LINE_WIDTH));
@@ -241,6 +259,8 @@ impl Writer<'_, '_> {
                 Item::Label { x, y, size, text, anchor, ink } => {
                     let dx = match anchor {
                         Anchor::Start => 0.0,
+                        // Labels are set in Helvetica, so its widths place the end of the text.
+                        Anchor::End => -crate::helvetica::width(text, *size),
                     };
                     let (r, g, b) = rgb(ink.rgb());
                     c.begin_text();
@@ -250,6 +270,9 @@ impl Writer<'_, '_> {
                     c.show(Str(&win_ansi(text)));
                     c.end_text();
                 }
+                Item::Link { x, y, w, h: lh, page } => {
+                    links.push((Rect::new(coord(*x), coord(h - y - lh), coord(x + w), coord(h - y)), *page));
+                }
                 Item::Sample { x, y, size, text } => {
                     let placed = self.shape(text)?;
                     let k = size / self.face.upem;
@@ -257,11 +280,11 @@ impl Writer<'_, '_> {
                     c.save_state();
                     c.set_fill_rgb(0.0, 0.0, 0.0);
                     for (gid, pen) in placed {
-                        let Some(form) = self.form(gid) else { continue };
-                        used.insert(gid, form);
+                        let Some(form) = self.form((0, gid)) else { continue };
+                        used.insert((0, gid), form);
                         c.save_state();
                         c.transform([coord(k), 0.0, 0.0, coord(k), coord(x + pen * k), coord(h - y)]);
-                        c.x_object(Name(form_name(gid).as_bytes()));
+                        c.x_object(Name(form_name((0, gid)).as_bytes()));
                         c.restore_state();
                     }
                     c.restore_state();
@@ -269,19 +292,19 @@ impl Writer<'_, '_> {
                 }
             }
         }
-        Ok((c.finish().into_vec(), used))
+        Ok((c.finish().into_vec(), used, links))
     }
 
-    /// The form XObject of glyph `gid`, made on first use; `None` for a glyph with no contours.
-    fn form(&mut self, gid: u32) -> Option<Ref> {
-        if self.glyphs.get(gid).is_none_or(|o| o.els.is_empty()) {
+    /// The form XObject of a glyph, made on first use; `None` for a glyph with no contours.
+    fn form(&mut self, key: GlyphKey) -> Option<Ref> {
+        if self.glyphs.get(key).is_none_or(|o| o.els.is_empty()) {
             return None;
         }
-        if let Some(form) = self.forms.get(&gid) {
+        if let Some(form) = self.forms.get(&key) {
             return Some(*form);
         }
         let form = self.next.bump();
-        self.forms.insert(gid, form);
+        self.forms.insert(key, form);
         Some(form)
     }
 
@@ -301,7 +324,7 @@ impl Writer<'_, '_> {
                 pen += self.kerning.pair(left, gid);
             }
             placed.push((gid, pen));
-            pen += self.glyphs.get(gid).map_or(0.0, |o| o.advance);
+            pen += self.glyphs.get((0, gid)).map_or(0.0, |o| o.advance);
             previous = Some(gid);
         }
         self.shaped.insert(text.to_string(), placed.clone());
@@ -309,9 +332,12 @@ impl Writer<'_, '_> {
     }
 }
 
-/// The resource name of glyph `gid`'s form.
-fn form_name(gid: u32) -> String {
-    format!("G{gid}")
+/// A glyph of the document: the font of the set it comes from, and its glyph id.
+type GlyphKey = (usize, u32);
+
+/// The resource name of a glyph's form.
+fn form_name((font, gid): GlyphKey) -> String {
+    if font == 0 { format!("G{gid}") } else { format!("G{gid}F{font}") }
 }
 
 /// An outline as path construction operators, in font units.

@@ -8,7 +8,7 @@
 use std::collections::BTreeSet;
 
 use crate::font::El;
-use crate::page::{Anchor, Document, GlyphStyle, Ink, Item, LINE_WIDTH, OUTLINED_FILL, POINT_RADIUS, Page};
+use crate::page::{Anchor, Document, GlyphStyle, Item, LINE_WIDTH, OUTLINED_FILL, POINT_RADIUS, Page};
 use crate::text::{base64, escape, num, push};
 
 /// The font family name the embedded font gets inside the page.
@@ -130,30 +130,31 @@ fn item_svg(doc: &Document, item: &Item, out: &mut String) {
                 num(LINE_WIDTH)
             ),
         ),
-        Item::Point { x, y, on_curve: true } => push(
+        Item::Point { x, y, on_curve: true, ink } => push(
             out,
             format_args!(
                 "<rect x=\"{}\" y=\"{}\" width=\"{d}\" height=\"{d}\" fill=\"{}\"/>\n",
                 num(x - POINT_RADIUS),
                 num(y - POINT_RADIUS),
-                Ink::Point.hex(),
+                ink.hex(),
                 d = num(2.0 * POINT_RADIUS)
             ),
         ),
-        Item::Point { x, y, on_curve: false } => push(
+        Item::Point { x, y, on_curve: false, ink } => push(
             out,
             format_args!(
                 "<circle cx=\"{}\" cy=\"{}\" r=\"{}\" fill=\"#ffffff\" stroke=\"{}\" stroke-width=\"{}\"/>\n",
                 num(*x),
                 num(*y),
                 num(POINT_RADIUS),
-                Ink::Handle.hex(),
+                ink.hex(),
                 num(LINE_WIDTH)
             ),
         ),
         Item::Label { x, y, size, text, anchor, ink } => {
             let anchor = match anchor {
                 Anchor::Start => "start",
+                Anchor::End => "end",
             };
             push(
                 out,
@@ -167,6 +168,18 @@ fn item_svg(doc: &Document, item: &Item, out: &mut String) {
                 ),
             )
         }
+        // Pages are separate files, so a link names the page it opens rather than linking to it.
+        Item::Link { x, y, w, h, page } => push(
+            out,
+            format_args!(
+                "<rect class=\"link\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"none\" stroke=\"none\" data-link-page=\"{}\"/>\n",
+                num(*x),
+                num(*y),
+                num(*w),
+                num(*h),
+                page + 1
+            ),
+        ),
         Item::Sample { x, y, size, text } => push(
             out,
             format_args!(
