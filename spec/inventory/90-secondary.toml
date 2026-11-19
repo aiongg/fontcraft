@@ -4241,14 +4241,14 @@ label = "Review External Changes…"
 menu = ["File"]
 shortcut = ""
 kind = "ui"
-params = "{font?: number, action?: 'review' | 'updateAll' | 'rejectAll' | 'acceptSelected' | 'showText' | 'close', glyph?: name}"
+params = "{font?: number, action?: 'review' | 'updateAll' | 'rejectAll' | 'acceptSelected' | 'showText' | 'selectFont' | 'tick' | 'close', glyph?: name, index?: number, keys?: [item key], on?: bool}"
 area = "import-export"
 milestone = "M13"
 summary = "Shows the External Changes window for the open documents whose files changed on disk; its actions answer the window as its buttons do."
 ref = "RoboFont reference › External Changes window"
 status = "docs"
 origin = "robofont"
-notes = "Our shell command for the dialog.externalChanges window, so the menu, shortcuts and agents can open and answer it; the work is file.reviewExternalChanges."
+notes = "Our shell command for the dialog.externalChanges window, so the menu, shortcuts and agents can open and answer it; the work is file.reviewExternalChanges. selectFont shows another listed font's items and tick ticks or unticks items by key, so every click in the window is a command a script can make too."
 
 [[command]]
 id = "file.reviewExternalChanges"

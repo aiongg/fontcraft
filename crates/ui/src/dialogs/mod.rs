@@ -10,6 +10,7 @@
 mod about;
 pub mod after;
 pub mod custom_parameter_picker;
+pub mod external_changes;
 pub mod feature_picker;
 pub mod field_picker;
 pub mod fields;
@@ -46,6 +47,7 @@ pub const MODULES: &[Module] = &[
     host::run,
     kerning_questions::run,
     kerning_audit::run,
+    external_changes::run,
 ];
 
 /// Every package's dialog specs, one line each.

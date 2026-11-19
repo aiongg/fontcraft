@@ -7,9 +7,11 @@
 
 pub mod catalog;
 pub mod console;
+pub mod dropped;
 pub mod files;
 pub mod font_view;
 pub mod menu_alternates;
+pub mod menus_dynamic;
 pub mod models;
 mod msg;
 pub mod sidebar;
@@ -74,6 +76,10 @@ pub struct ViewState {
     pub kerning: crate::shell::kerning_window::KerningView,
     /// The Info box's reference point and size lock, the Transformations settings and the Fit Curve range.
     pub palette: crate::shell::palette::PaletteView,
+    /// The shown reporters and the External Changes dialog.
+    pub extensions: crate::shell::extensions::ExtensionsView,
+    /// The project the Project panel shows and its selected instances.
+    pub project: crate::shell::project::ProjectWindowView,
 }
 
 impl Default for ViewState {
@@ -96,6 +102,8 @@ impl Default for ViewState {
             commands: console::CommandSurfaces::default(),
             kerning: Default::default(),
             palette: Default::default(),
+            extensions: Default::default(),
+            project: Default::default(),
         }
     }
 }
@@ -260,6 +268,7 @@ impl FontCraftApp {
                 let reply = self.session.execute(&command.id, &params).map_err(|e| e.to_string())?;
                 crate::canvas::tools::apply::adopt(self, &reply);
                 crate::dialogs::after::after_run(self, &command.id, &params, &reply);
+                crate::shell::project::after_run(self, &command.id, &reply);
                 if let Some(notice) = self.after_command(&command, &reply) {
                     self.status = notice;
                 }
@@ -283,12 +292,14 @@ impl FontCraftApp {
         let mut cx = ProjectCx { session: &mut self.session, view: &self.view };
         self.models.project(stamp, &mut cx);
         models::console::project(&mut self.models.console, &mut cx);
+        self.models.project.project(&mut cx);
         models::palette::project(&mut self.models.palette, &mut cx, &self.tools, stamp);
         let engine = Stamp::of(&self.session, 0);
         if self.enabled_at != Some(engine) {
             self.enabled_at = Some(engine);
             self.catalog.refresh(&self.session);
         }
+        menus_dynamic::refresh(self);
     }
 
     /// Records a change to view state that a projection reads, made outside [`ViewMsg`] (a shell command).
@@ -369,6 +380,7 @@ impl ShellApp for FontCraftApp {
             }
             let msg = match FontCraftApp::route(fired.command) {
                 Msg::Run(command) => {
+                    let command = menus_dynamic::fill_targets(self, command);
                     let command = self.with_targets(command);
                     // A command with a dialog that the selection gives no parameters opens its dialog.
                     if crate::dialogs::after::fired(self, &command.id, &command.params) {
@@ -383,6 +395,8 @@ impl ShellApp for FontCraftApp {
     }
 
     fn logic(&mut self, ctx: &egui::Context) {
+        dropped::take(self, ctx);
+        crate::shell::external_changes::on_focus(self, ctx);
         crate::control::logic(self, ctx);
         crate::control::drain(self);
         if self.closing == Closing::Confirmed {

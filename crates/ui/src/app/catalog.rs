@@ -36,6 +36,11 @@ pub struct Catalog {
     /// Why the catalog could not be built.
     pub error: Option<String>,
     generation: u64,
+    /// Each engine command's enabled state, in `command_specs()` order, as last asked.
+    enabled: Vec<bool>,
+    /// The rows that come from the extensions (`menus_dynamic`), after the catalog's own, and what they were made for.
+    dynamic: Vec<Row>,
+    dynamic_key: Option<u64>,
 }
 
 impl Catalog {
@@ -47,7 +52,7 @@ impl Catalog {
             Err(e) => (None, Some(format!("command catalog: {e:?}"))),
         };
         let input = app.clone().map_or_else(CommandInput::new, |app| CommandInput::new().catalog(app));
-        Catalog { app, input, menu: menu(|_| true), error, generation }
+        Catalog { app, input, menu: menu(|_| true, &[]), error, generation, enabled: Vec::new(), dynamic: Vec::new(), dynamic_key: None }
     }
 
     /// The commands of this frame: the catalog and each command's state.
@@ -64,7 +69,24 @@ impl Catalog {
             input = input.state(CommandRef::new(spec.id), CommandState::new().enabled(*on));
         }
         self.input = input;
-        self.menu = menu(|at| enabled.get(at).copied().unwrap_or(true));
+        self.enabled = enabled;
+        self.rebuild_menu();
+    }
+
+    /// Puts the extensions' rows at the end of their menus. `key` names what they show; the rows are made and the
+    /// menu bar rebuilt only when it changed.
+    pub fn set_dynamic(&mut self, key: u64, rows: impl FnOnce() -> Vec<Row>) {
+        if self.dynamic_key == Some(key) {
+            return;
+        }
+        self.dynamic_key = Some(key);
+        self.dynamic = rows();
+        self.rebuild_menu();
+    }
+
+    fn rebuild_menu(&mut self) {
+        let enabled = &self.enabled;
+        self.menu = menu(|at| enabled.get(at).copied().unwrap_or(true), &self.dynamic);
     }
 
     /// The catalog's generation: it changes only when the definitions do.
@@ -125,9 +147,9 @@ fn shell_def(command: &UiCommand) -> CommandDef {
     def
 }
 
-/// The menu bar: one row per engine and shell command with a menu path. `enabled(at)` answers for the engine
-/// command at index `at` of `command_specs()`.
-fn menu(enabled: impl Fn(usize) -> bool) -> MenuBar {
+/// The menu bar: one row per engine and shell command with a menu path, then the `extra` rows. `enabled(at)` answers
+/// for the engine command at index `at` of `command_specs()`.
+fn menu(enabled: impl Fn(usize) -> bool, extra: &[Row]) -> MenuBar {
     let mut rows = Vec::new();
     for (at, spec) in fontcraft_engine::cmd::command_specs().iter().enumerate() {
         if spec.menu.is_empty() || super::menu_alternates::alternate_of(spec.id).is_some() {
@@ -143,5 +165,6 @@ fn menu(enabled: impl Fn(usize) -> bool) -> MenuBar {
             rows.push(Row::new(command.menu, CommandRef::new(command.id), command.label));
         }
     }
+    rows.extend(extra.iter().cloned());
     craft::menu::from_items(MENU_ORDER, &rows)
 }
