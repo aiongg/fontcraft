@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**2948 guesses on 1562 rows (635 of them live commands).**
+**2956 guesses on 1562 rows (635 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -2260,6 +2260,14 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `proof` (cli) | M12 | docs | – | In SVG, where each page is its own file, a palette+outline cell names its outline page (data-link-page) instead of linking to it. Nothing in the references fixes it. |
 | `proof` (cli) | M12 | docs | – | --list-settings lists only the settings FontCraft draws; the reference's font, margin, error-log and metadata-placement parameters are refused by --set. Settled by the owner if more are wanted. |
 | `proof` (cli) | M12 | docs | – | --metrics on digi changes both copies. Settled by a digiplot -vh run of the reference script. |
+| `proof` (cli) | M12 | docs | – | Each --show and --hide element switches a group of the reference script's settings (sidebearings both the horizontal and vertical lines, path-counts the contour and segment counts); they apply after the layout's preset and --black and before --metrics and --set, so --set has the last word. Nothing in the references fixes the names or the order. |
+| `proof` (cli) | M12 | docs | – | The cmap sheet reads the font's best Unicode mapping once, where the reference proofs every cmap subtable in turn, and prints the code in hex (the reference's cmap=9); the decimal variant (cmap=10) is not offered. Settled by the owner if per-subtable sheets are wanted. |
+| `proof` (cli) | M12 | docs | – | The vorg sheet shows the glyphs with a VORG record among those selected, and every selected glyph when there are none (a TrueType font or a VORG without records), with the origin from vmtx or the em box. Settled by running the reference's VORG proof on a font without records. |
+| `proof` (cli) | M12 | docs | – | A feature sheet shows each lookup once per feature with every language system that uses it, where the reference repeats it for each script and language. Settled by the owner if the repetition is wanted. |
+| `proof` (cli) | M12 | docs | – | Contextual, chained, reverse, cursive and mark lookups are named in the feature sheet but not drawn, and a class pair subtable is drawn as every pair of its class members without the second glyph's class 0, at most 50,000 rules per sheet. Settled by running the reference's feature proof on a font with contextual and class kerning. |
+| `proof` (cli) | M12 | docs | – | With --glyphs, a feature sheet keeps the rules whose first glyph is selected. Settled by running the reference's feature proof with -g. |
+| `proof` (cli) | M12 | docs | – | --no-header removes the title line but keeps its room at the top of the page, so the layout of the rest does not move. Settled by comparing a spot -d page with one without -d. |
+| `proof` (cli) | M12 | docs | – | The text sheet breaks lines at the right margin glyph by glyph, not at spaces, at 48 points unless --size is given, and draws a character the font does not map as .notdef. Settled by the owner. |
 | `features list` (cli) | M12 | docs | – | The text layout is ours (one line per table and feature, then an indented script/language line each, lookups after a colon; --by script swaps the two levels), since no reference prints this list in one format; JSON is the stable form. A request for spot's or comparefamily's layout would change it. |
 | `features compile` (cli) | M12 | docs | – | Without -o the result goes beside the font as NAME.features.EXT, where feaLib's command line writes NAME#1.EXT; a request for the reference's naming would change it. |
 | `features compile` (cli) | M12 | docs | – | With --debug-lookups, feature code converted from FontDame or VOLT is named in the Debg table by the --emit-fea file, or <features> (feaLib's name for code without a file) when there is none; a request to name the original source would change it. |
