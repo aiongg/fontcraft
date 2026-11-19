@@ -179,6 +179,7 @@ pub mod tt_assembly;
 mod tt_debug;
 mod ttvm;
 mod url;
+mod view_export;
 
 use serde::Serialize;
 use serde_json::Value;
@@ -476,6 +477,7 @@ pub const COMMAND_TABLES: &[CommandTable] = &[
     attach_cap::specs,
     attach_segment::specs,
     export_profiles::specs,
+    view_export::specs,
     file_helpers::specs,
     external_changes::specs,
     encodings::specs,

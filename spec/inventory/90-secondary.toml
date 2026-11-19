@@ -2275,13 +2275,26 @@ label = "Export Window Contents…"
 menu = ["File", "Export"]
 shortcut = ""
 kind = "engine"
-params = "{view?: 'edit' | 'fontView' | 'preview', format: 'pdf' | 'svg', path: path}"
+params = "{text: display string, format: 'pdf' | 'svg', master?: id or name, layers?: {glyph: layer id}, direction?: 'ltr' | 'rtl' | 'ttb', kerning?: 'none' | 'kerning' | 'locked', lineWidth?: units, edited?: [item index], size?: points per em, path?: path}"
 area = "proofing"
-milestone = "M14"
-summary = "Writes what a view currently shows to a vector file: PDF gives the filled preview of the text, SVG gives the editing view with nodes and guides, like a vector screenshot."
+milestone = "M13"
+summary = "Writes what an Edit View tab shows as one vector page: PDF gives the filled preview of the text, SVG gives the editing view with nodes, handles and guides, like a vector screenshot."
 ref = "FontLab 8 What's new › Formats (File › Export › Window Contents; Preview panel as PDF)"
 status = "docs"
 origin = "fontlab"
+notes = "Documented, not yet observed. The shell owns the tabs, so the command takes the tab's contents (text, master, layer picks, direction, kerning mode, line width, edited glyphs) as parameters and lays the text out as Edit View does; the UI passes the active tab. Without a path the file comes back in the result (the web app and agents). Drawn by the proof writers (fontcraft_proof::write_vector)."
+guesses = [
+  "Only Edit View tabs are exported; the reference's Font View and Preview panel exports are not followed. Exporting a Font View window in the reference would settle whether it is offered there.",
+  "The page spans every glyph's advance from the master's descender to its ascender, widened to the outlines, with a tenth of the em around it; an export in the reference would settle the frame.",
+  "One point per font unit by default (size defaults to the units per em), scaled down so no side passes 14400 points.",
+  "SVG draws each glyph with a light fill and a thin contour, and nodes, handles and guides on every glyph unless `edited` names some; metric lines, anchors, open paths and the canvas background are left out.",
+  "Feature substitutions active in the tab are not applied: the text is laid out by code point.",
+  "Global guides are drawn at every edited glyph's origin, whatever their glyph filter says.",
+]
+observe = [
+  "Open a tab with two glyphs, File › Export › Window Contents as SVG: note whether nodes show on every glyph or only the edited one, and whether metric lines and anchors are drawn.",
+  "Export the same tab as PDF and measure the page against the text: note the margins and the scale.",
+]
 
 [[command]]
 id = "glyph.exportArtwork"
