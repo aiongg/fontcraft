@@ -1,5 +1,6 @@
 //! Export profiles and glyph artwork. Rows: `file.exportWithProfiles`, `file.saveExportProfile`,
-//! `file.removeExportProfile`, `file.listExportProfiles`, `glyph.exportArtwork`.
+//! `file.removeExportProfile`, `file.listExportProfiles`, `glyph.exportArtwork`,
+//! `filter.glyphAsImage`, `color.fullColor.imageOnlyEffects`.
 //!
 //! A profile is a named, saved set of the static export's settings: an output subfolder, the
 //! outline format, the containers, overlap removal, autohinting and the `CBDT` bitmap tables. Built-in profiles are fixed
@@ -14,17 +15,25 @@
 //! move fails, so a failure leaves the folders as they were. A profile's subfolder is a relative path that
 //! never climbs out of the destination, whoever calls.
 //!
-//! `glyph.exportArtwork` writes one picture per glyph: SVG, PDF or PNG. Every picture spans the
-//! glyph's advance width (or its outline, where that reaches further) and the master's descender
-//! to ascender, so pictures of one font line up.
+//! `glyph.exportArtwork` (and its Filter-menu name `filter.glyphAsImage`) writes one picture per
+//! glyph: SVG, PDF or PNG. Every picture spans the glyph's advance width (or what it draws, where
+//! that reaches further) and the master's descender to ascender, so pictures of one font line up.
+//! A palette or full-colour layer is drawn in colour in PNG and PDF through
+//! `fontcraft_render::color::artwork`, with the shadows, inner shadows and pattern images of
+//! full-colour paths, which no font table holds; SVG pictures are the outline. A PDF keeps
+//! outlines and one-colour fills as vector paths and draws gradients (clipped by their outlines)
+//! and the image-only effects as images at `pixelsPerEm`.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use base64::Engine as _;
+use fontcraft_color::{AssetStore, ColorLayerKind};
 use fontcraft_compile::{Flavour, Options};
 use fontcraft_geom::{Affine, BezPath, PathEl, Point, Rect, Shape as _};
-use fontcraft_model::{Font, Layer};
+use fontcraft_model::{Family, Font, Glyph, Layer, Shape, ShapeAttrs};
+use fontcraft_render::color::artwork::{self, Drawable, Item, Leaf, Pattern, Sources};
 use serde_json::{Map, Value, json};
 
 use super::compile::{self, Container, Dest, Pick, Report, Request, Sink};
@@ -51,6 +60,10 @@ pub const MAX_RETURNED_ARTWORK: usize = 256 << 20;
 const MAX_FILE_STEM: usize = 200;
 /// Largest PDF page side, in points; larger pictures are scaled down to fit.
 const PDF_MAX_PAGE: f64 = 14_400.0;
+/// Most pixels of a decoded pattern image.
+const MAX_PATTERN_PIXELS: u64 = 1 << 22;
+/// Most bytes of images in one PDF picture.
+const MAX_PDF_IMAGE_BYTES: usize = 256 << 20;
 
 /// Most entries of a profile's `containers`.
 const MAX_CONTAINERS: usize = 3;
@@ -105,9 +118,19 @@ pub fn specs() -> Vec<CommandSpec> {
             "Export Artwork…",
             ["File", "Export"],
             None,
-            "{glyphs?: [name] (default: every glyph), layer?: id (default: the first master's layer), format: \"svg\"|\"pdf\"|\"png\", directory?: folder, pixelsPerEm?: number (PNG only, 1 to 16384, default 256)} write one picture per glyph of the chosen layer, named after the glyph (characters a file name cannot hold become `_`; a dot-separated part that is a reserved device name such as CON or NUL gets a leading `_`; names that differ only in case get a number). A picture replaces an existing file of the same name. A picture spans the advance width and the master's descender to ascender, widened to the outline where it reaches further; components are drawn, open paths are not. SVG and PDF are in font units (one point per unit, a PDF scaled down to at most 14400 points a side); PNG is black on a transparent background. Glyphs without the layer are skipped and listed. Without a directory the pictures are returned as dataBase64. A failing export writes nothing and leaves replaced files as they were → {format, files: [{glyph, name, bytes, path? | dataBase64?}], skipped: [{glyph, reason}]}",
+            "{glyphs?: [name] (default: every glyph), layer?: id (default: the first master's layer), format: \"svg\"|\"pdf\"|\"png\", directory?: folder, pixelsPerEm?: number (1 to 16384, default 256; PNG pictures and the image parts of PDF pictures)} write one picture per glyph of the chosen layer, named after the glyph (characters a file name cannot hold become `_`; a dot-separated part that is a reserved device name such as CON or NUL gets a leading `_`; names that differ only in case get a number). A picture replaces an existing file of the same name. A picture spans the advance width and the master's descender to ascender, widened to what it draws; components are drawn, open paths are not. When the layer is a palette or full-colour layer, PNG and PDF pictures draw the glyph's colour layers of that master in colour (text colour black), with the shadows, inner shadows and pattern images of full-colour paths; SVG pictures, and pictures of any other layer, are the outline in black. SVG and PDF are in font units (one point per unit, a PDF scaled down to at most 14400 points a side); a PDF holds outlines and one-colour fills as vector paths, gradients and the image-only effects as images. PNG has a transparent background. Glyphs without the layer are skipped and listed; a pattern image that cannot be read is left out and named in warnings. Without a directory the pictures are returned as dataBase64. A failing export writes nothing and leaves replaced files as they were → {format, files: [{glyph, name, bytes, path? | dataBase64?}], skipped: [{glyph, reason}], warnings: [text]}",
             has_doc,
             export_artwork
+        ).files(const { &[FileParam::write("directory")] }).writes_files()
+        .targets(&[TargetKind::Glyphs]),
+        cmd!(
+            "filter.glyphAsImage",
+            "Glyph as Image…",
+            ["Filter"],
+            None,
+            "{glyphs?: [name] (default: every glyph), layer?: id, format: \"svg\"|\"pdf\"|\"png\", directory?: folder, pixelsPerEm?: number} the pictures of glyph.exportArtwork under the Filter menu, with the same parameters, files and result: one picture per glyph, a palette or full-colour layer in colour with the shadows, inner shadows and pattern images of its paths in PNG and PDF; SVG pictures have none of them → {format, files, skipped, warnings}",
+            has_doc,
+            glyph_as_image
         ).files(const { &[FileParam::write("directory")] }).writes_files()
         .targets(&[TargetKind::Glyphs]),
     ]
@@ -574,8 +597,18 @@ impl Artwork {
 }
 
 fn export_artwork(s: &mut Session, v: &Value) -> Result<Value> {
-    let p = Params::new("glyph.exportArtwork", v)?;
+    artwork_command(s, v, "glyph.exportArtwork")
+}
+
+/// `filter.glyphAsImage`: [`export_artwork`] under its menu name.
+fn glyph_as_image(s: &mut Session, v: &Value) -> Result<Value> {
+    artwork_command(s, v, "filter.glyphAsImage")
+}
+
+fn artwork_command(s: &mut Session, v: &Value, id: &'static str) -> Result<Value> {
+    let p = Params::new(id, v)?;
     let font = s.font()?;
+    let mut art = ArtSources { store: s.assets(), patterns: HashMap::new(), warnings: Vec::new() };
     let format = match p.str("format")? {
         "svg" => Artwork::Svg,
         "pdf" => Artwork::Pdf,
@@ -620,7 +653,7 @@ fn export_artwork(s: &mut Session, v: &Value) -> Result<Value> {
             skipped.push(json!({ "glyph": name, "reason": format!("the glyph has no layer `{layer_id}`") }));
             continue;
         };
-        let bytes = artwork(font, layer, format, ppem).map_err(|e| p.bad(format!("glyph `{name}`: {e}")))?;
+        let bytes = artwork(font, glyph, layer, format, ppem, &mut art).map_err(|e| p.bad(format!("glyph `{name}`: {e}")))?;
         let file = names.next(name, format.extension());
         let mut entry = json!({ "glyph": name, "name": file, "bytes": bytes.len() });
         match staged.as_mut() {
@@ -651,7 +684,7 @@ fn export_artwork(s: &mut Session, v: &Value) -> Result<Value> {
     if let Some(stage) = staged {
         stage.commit()?;
     }
-    Ok(json!({ "format": format.extension(), "files": files, "skipped": skipped }))
+    Ok(json!({ "format": format.extension(), "files": files, "skipped": skipped, "warnings": art.warnings }))
 }
 
 /// File names for pictures: the glyph name with characters a file name cannot hold replaced, a
@@ -688,27 +721,100 @@ impl FileNames {
     }
 }
 
-/// One picture of `layer`.
-fn artwork(font: &Font, layer: &Layer, format: Artwork, ppem: f64) -> std::result::Result<Vec<u8>, String> {
+/// Where a picture's pattern images come from, with the files read so far and what could not be
+/// read.
+struct ArtSources {
+    store: Arc<dyn AssetStore>,
+    patterns: HashMap<String, Option<Pattern>>,
+    warnings: Vec<String>,
+}
+
+impl ArtSources {
+    /// The pattern image `attrs` name, decoded once per file; a file that cannot be read is
+    /// reported once and left out.
+    fn pattern(&mut self, attrs: &ShapeAttrs) -> Option<Pattern> {
+        let file = attrs.extra.get(Family::Native, super::attributes::PATTERN_IMAGE_KEY)?.as_str()?.trim();
+        if file.is_empty() {
+            return None;
+        }
+        if let Some(known) = self.patterns.get(file) {
+            return known.clone();
+        }
+        let read =
+            self.store.read(file).map_err(|e| e.to_string()).and_then(|bytes| super::image::decode_pixels(&bytes, MAX_PATTERN_PIXELS)).and_then(
+                |d| {
+                    (d.image.width > 0 && d.image.height > 0 && d.units_per_pixel.is_finite() && d.units_per_pixel > 0.0)
+                        .then(|| Pattern { image: Arc::new(d.image), unit: d.units_per_pixel })
+                        .ok_or_else(|| "the image is empty".to_string())
+                },
+            );
+        let pattern = match read {
+            Ok(p) => Some(p),
+            Err(e) => {
+                self.warnings.push(format!("the pattern image `{file}` cannot be read ({e}); the paths that use it are drawn without it"));
+                None
+            }
+        };
+        self.patterns.insert(file.to_string(), pattern.clone());
+        pattern
+    }
+}
+
+/// The artwork of `glyph` when `layer` is a palette or full-colour layer: the glyph's vector
+/// colour layers of the layer's master with their image-only effects, in black text colour.
+/// `None` for any other layer.
+fn colour_items(font: &Font, glyph: &Glyph, layer: &Layer, art: &mut ArtSources) -> Option<Vec<Item>> {
+    let kind = fontcraft_color::layers::export_kind(layer)?;
+    if !matches!(kind, ColorLayerKind::Palette(_) | ColorLayerKind::FullColor) {
+        return None;
+    }
+    let outline = |f: &Font, shapes: &[Shape], master: &str| {
+        super::stroke::shapes_outline(f, shapes, master).ok().map(|parts| {
+            parts.into_iter().fold(BezPath::new(), |mut all, p| {
+                all.extend(p.elements().iter().copied());
+                all
+            })
+        })
+    };
+    let mut pattern = |attrs: &ShapeAttrs| art.pattern(attrs);
+    let mut src = Sources { outline: &outline, pattern: &mut pattern, text: [0.0, 0.0, 0.0, 1.0] };
+    artwork::collect(font, glyph, &layer.master, &mut src)
+}
+
+/// One picture of `layer` of `glyph`. A palette or full-colour layer is drawn in colour in PNG
+/// and PDF ([`colour_items`]); everything else, and every SVG, is the layer's outline in black.
+fn artwork(font: &Font, glyph: &Glyph, layer: &Layer, format: Artwork, ppem: f64, art: &mut ArtSources) -> std::result::Result<Vec<u8>, String> {
     let outline = fontcraft_render::layer_outline(font, layer).map_err(|e| e.to_string())?;
     let outline = fontcraft_render::closed_contours(&outline);
-    let frame = frame(font, layer, &outline)?;
+    let items = match format {
+        Artwork::Svg => None,
+        Artwork::Pdf | Artwork::Png => colour_items(font, glyph, layer, art),
+    };
+    let content = match &items {
+        Some(items) => artwork::bounds(items),
+        None => (!outline.elements().is_empty()).then(|| outline.bounding_box()),
+    };
+    let frame = frame(font, layer, content)?;
+    let scale = ppem / f64::from(font.units_per_em.max(1));
+    let marks: Vec<Mark> = match &items {
+        Some(items) => items.iter().map(Mark::Item).collect(),
+        None => vec![Mark::Outline(&outline)],
+    };
     match format {
         Artwork::Svg => Ok(fontcraft_io_svg::bez_to_svg(&outline, Some(frame)).into_bytes()),
-        Artwork::Pdf => Ok(pdf(&outline, frame)),
-        Artwork::Png => png(&outline, frame, ppem / f64::from(font.units_per_em.max(1))),
+        Artwork::Pdf => pdf(frame, &marks, scale),
+        Artwork::Png => png(&marks, frame, scale),
     }
 }
 
 /// The area a picture shows: the advance width and the master's descender to ascender, widened
-/// to the outline, at least one unit each way.
-fn frame(font: &Font, layer: &Layer, outline: &BezPath) -> std::result::Result<Rect, String> {
+/// to what it draws (`content`), at least one unit each way.
+fn frame(font: &Font, layer: &Layer, content: Option<Rect>) -> std::result::Result<Rect, String> {
     let master = font.master(&layer.master).or_else(|_| font.default_master()).map_err(|e| e.to_string())?;
     let metrics = super::common::master_metrics(font, master);
     let (mut x0, mut x1) = (0.0f64.min(layer.width), 0.0f64.max(layer.width));
     let (mut y0, mut y1) = (metrics.descender.min(metrics.ascender), metrics.descender.max(metrics.ascender));
-    if !outline.elements().is_empty() {
-        let b = outline.bounding_box();
+    if let Some(b) = content {
         (x0, x1, y0, y1) = (x0.min(b.x0), x1.max(b.x1), y0.min(b.y0), y1.max(b.y1));
     }
     if ![x0, x1, y0, y1].iter().all(|v| v.is_finite()) {
@@ -723,17 +829,46 @@ fn frame(font: &Font, layer: &Layer, outline: &BezPath) -> std::result::Result<R
     Ok(Rect::new(x0, y0, x1, y1))
 }
 
-/// Black on transparent, `scale` pixels per unit.
-fn png(outline: &BezPath, frame: Rect, scale: f64) -> std::result::Result<Vec<u8>, String> {
-    let (w, h) = ((frame.width() * scale).ceil(), (frame.height() * scale).ceil());
+/// What a picture draws, in font units, bottom first.
+enum Mark<'a> {
+    /// An outline filled in black.
+    Outline(&'a BezPath),
+    /// A piece of colour artwork.
+    Item(&'a Item),
+}
+
+/// Pixels per unit `scale` over `rect` (font units): the image size and the map from font units
+/// to its pixels.
+fn raster_grid(rect: Rect, scale: f64) -> std::result::Result<(u32, u32, Affine), String> {
+    let (w, h) = ((rect.width() * scale).ceil(), (rect.height() * scale).ceil());
     let side = f64::from(fontcraft_render::MAX_SIDE);
     if !(w.is_finite() && h.is_finite()) || w > side || h > side {
         return Err(format!("the picture would be larger than {side} pixels on a side; choose fewer pixels per em"));
     }
-    let (width, height) = ((w as u32).max(1), (h as u32).max(1));
-    let transform = Affine::translate((-frame.x0 * scale, frame.y1 * scale)) * Affine::scale_non_uniform(scale, -scale);
-    let style = fontcraft_render::Style { ink: [0, 0, 0, 255], background: [0, 0, 0, 0], anti_alias: true };
-    let image = fontcraft_render::render_path(outline, transform, width, height, &style).map_err(|e| e.to_string())?;
+    let transform = Affine::translate((-rect.x0 * scale, rect.y1 * scale)) * Affine::scale_non_uniform(scale, -scale);
+    Ok(((w as u32).max(1), (h as u32).max(1), transform))
+}
+
+/// `marks` on a transparent background, `scale` pixels per unit; outlines in black.
+fn png(marks: &[Mark], frame: Rect, scale: f64) -> std::result::Result<Vec<u8>, String> {
+    let (width, height, transform) = raster_grid(frame, scale)?;
+    let image = match marks {
+        [Mark::Outline(outline)] => {
+            let style = fontcraft_render::Style { ink: [0, 0, 0, 255], background: [0, 0, 0, 0], anti_alias: true };
+            fontcraft_render::render_path(outline, transform, width, height, &style)
+        }
+        _ => {
+            let items: Vec<Item> = marks
+                .iter()
+                .filter_map(|m| match m {
+                    Mark::Item(i) => Some((*i).clone()),
+                    Mark::Outline(_) => None,
+                })
+                .collect();
+            artwork::rasterize(&items, transform, width, height)
+        }
+    }
+    .map_err(|e| e.to_string())?;
     image.png().map_err(|e| e.to_string())
 }
 
@@ -743,59 +878,229 @@ fn num(v: f64) -> String {
     if r == 0.0 { "0".to_string() } else { format!("{r}") }
 }
 
-/// A one-page PDF that fills the outline, one point per unit (scaled down to fit the largest page).
-fn pdf(outline: &BezPath, frame: Rect) -> Vec<u8> {
+/// The path operators of `outline`'s closed contours.
+fn path_ops(content: &mut String, outline: &BezPath) {
+    use std::fmt::Write as _;
+    let (mut current, mut start) = (Point::ZERO, Point::ZERO);
+    let pt = |q: Point| format!("{} {}", num(q.x), num(q.y));
+    for el in fontcraft_render::closed_contours(outline).elements() {
+        match *el {
+            PathEl::MoveTo(q) => {
+                let _ = writeln!(content, "{} m", pt(q));
+                (current, start) = (q, q);
+            }
+            PathEl::LineTo(q) => {
+                let _ = writeln!(content, "{} l", pt(q));
+                current = q;
+            }
+            PathEl::QuadTo(c, q) => {
+                let c1 = current + (c - current) * (2.0 / 3.0);
+                let c2 = q + (c - q) * (2.0 / 3.0);
+                let _ = writeln!(content, "{} {} {} c", pt(c1), pt(c2), pt(q));
+                current = q;
+            }
+            PathEl::CurveTo(c1, c2, q) => {
+                let _ = writeln!(content, "{} {} {} c", pt(c1), pt(c2), pt(q));
+                current = q;
+            }
+            PathEl::ClosePath => {
+                content.push_str("h\n");
+                current = start;
+            }
+        }
+    }
+}
+
+/// The objects of a one-page PDF after the catalog, the page tree, the page and its content.
+#[derive(Default)]
+struct PdfParts {
+    content: String,
+    objects: Vec<Vec<u8>>,
+    /// Image objects, named `/Im<index>`.
+    images: Vec<usize>,
+    /// Fill opacities in thousandths and their graphics state objects, named `/A<thousandths>`.
+    alphas: Vec<(u32, usize)>,
+    image_bytes: usize,
+}
+
+/// Objects 1 to 4 are the catalog, the page tree, the page and its content.
+const PDF_FIXED_OBJECTS: usize = 4;
+
+fn pdf_stream(dict: &str, data: &[u8]) -> Vec<u8> {
+    let mut out = format!("<< {dict} /Length {} >>\nstream\n", data.len()).into_bytes();
+    out.extend_from_slice(data);
+    out.extend_from_slice(b"\nendstream");
+    out
+}
+
+impl PdfParts {
+    /// Adds an object; answers its number.
+    fn add(&mut self, body: Vec<u8>) -> usize {
+        self.objects.push(body);
+        PDF_FIXED_OBJECTS + self.objects.len()
+    }
+
+    /// The operator that sets fill opacity `a` (below 1).
+    fn alpha(&mut self, a: f32) -> String {
+        let key = (a.clamp(0.0, 1.0) * 1000.0).round() as u32;
+        if !self.alphas.iter().any(|(k, _)| *k == key) {
+            let n = self.add(format!("<< /Type /ExtGState /ca {} >>", num(f64::from(key) / 1000.0)).into_bytes());
+            self.alphas.push((key, n));
+        }
+        format!("/A{key} gs\n")
+    }
+
+    /// Draws `image` (premultiplied) over `place` (font units), with its alpha as a soft mask.
+    fn image(&mut self, image: &fontcraft_render::Image, place: Rect) -> std::result::Result<(), String> {
+        use std::fmt::Write as _;
+        let pixels = image.pixels.as_chunks::<4>().0;
+        if pixels.iter().all(|p| p[3] == 0) {
+            return Ok(());
+        }
+        self.image_bytes = self.image_bytes.saturating_add(pixels.len().saturating_mul(4));
+        if self.image_bytes > MAX_PDF_IMAGE_BYTES {
+            return Err(format!("the PDF would hold more than {} MB of images; choose fewer pixels per em", MAX_PDF_IMAGE_BYTES >> 20));
+        }
+        let mut rgb = Vec::with_capacity(pixels.len() * 3);
+        let mut alpha = Vec::with_capacity(pixels.len());
+        for p in pixels {
+            let a = u32::from(p[3]);
+            let straight = |c: u8| if a == 0 { 0 } else { ((u32::from(c) * 255 + a / 2) / a).min(255) as u8 };
+            rgb.extend([straight(p[0]), straight(p[1]), straight(p[2])]);
+            alpha.push(p[3]);
+        }
+        let (w, h) = (image.width, image.height);
+        let mask = self
+            .add(pdf_stream(&format!("/Type /XObject /Subtype /Image /Width {w} /Height {h} /ColorSpace /DeviceGray /BitsPerComponent 8"), &alpha));
+        let n = self.add(pdf_stream(
+            &format!("/Type /XObject /Subtype /Image /Width {w} /Height {h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /SMask {mask} 0 R"),
+            &rgb,
+        ));
+        let _ = writeln!(
+            self.content,
+            "q {} 0 0 {} {} {} cm /Im{} Do Q",
+            num(place.width()),
+            num(place.height()),
+            num(place.x0),
+            num(place.y0),
+            self.images.len()
+        );
+        self.images.push(n);
+        Ok(())
+    }
+
+    /// `item` rasterised at `scale` pixels per unit over its own area within `frame`.
+    fn raster(&mut self, item: &Item, frame: Rect, scale: f64, leaf_only: Option<&Leaf>) -> std::result::Result<(), String> {
+        let Some(rect) = item.bounds().map(|b| b.intersect(frame)).filter(|r| r.width() > 0.0 && r.height() > 0.0) else { return Ok(()) };
+        let (w, h, transform) = raster_grid(rect, scale)?;
+        let image = match leaf_only {
+            Some(leaf) => artwork::leaf_image(leaf, transform, w, h),
+            None => artwork::rasterize(std::slice::from_ref(item), transform, w, h),
+        }
+        .map_err(|e| e.to_string())?;
+        let (pw, ph) = (f64::from(w) / scale, f64::from(h) / scale);
+        self.image(&image, Rect::new(rect.x0, rect.y1 - ph, rect.x0 + pw, rect.y1))
+    }
+
+    /// Draws `mark`: outlines and one-colour fills as vector paths, gradient fills as an image
+    /// clipped by their outlines, and the image-only effects as images.
+    fn mark(&mut self, mark: &Mark, frame: Rect, scale: f64) -> std::result::Result<(), String> {
+        match mark {
+            Mark::Outline(outline) => {
+                if !outline.elements().is_empty() {
+                    path_ops(&mut self.content, outline);
+                    self.content.push_str("f\n");
+                }
+                Ok(())
+            }
+            Mark::Item(item) => match item {
+                Item::Fill(d) => self.fill(item, d, frame, scale),
+                _ => self.raster(item, frame, scale, None),
+            },
+        }
+    }
+
+    fn fill(&mut self, item: &Item, d: &Drawable, frame: Rect, scale: f64) -> std::result::Result<(), String> {
+        use std::fmt::Write as _;
+        let Some((last, outer)) = d.clips.split_last() else { return Ok(()) };
+        match d.leaf.solid() {
+            Some([_, _, _, a]) if a <= 0.0 => {}
+            Some([r, g, b, a]) => {
+                self.content.push_str("q\n");
+                for clip in outer {
+                    path_ops(&mut self.content, clip);
+                    self.content.push_str("W n\n");
+                }
+                let _ = writeln!(self.content, "{} {} {} rg", num(f64::from(r)), num(f64::from(g)), num(f64::from(b)));
+                if a < 1.0 {
+                    let state = self.alpha(a);
+                    self.content.push_str(&state);
+                }
+                path_ops(&mut self.content, last);
+                self.content.push_str("f\nQ\n");
+            }
+            None => {
+                self.content.push_str("q\n");
+                for clip in &d.clips {
+                    path_ops(&mut self.content, clip);
+                    self.content.push_str("W n\n");
+                }
+                self.raster(item, frame, scale, Some(&d.leaf))?;
+                self.content.push_str("Q\n");
+            }
+        }
+        Ok(())
+    }
+}
+
+/// A one-page PDF of `marks`, one point per unit (scaled down to fit the largest page); the
+/// image parts drawn at `scale` pixels per unit.
+fn pdf(frame: Rect, marks: &[Mark], scale: f64) -> std::result::Result<Vec<u8>, String> {
     use std::fmt::Write as _;
     let longest = frame.width().max(frame.height());
     let s = if longest > PDF_MAX_PAGE { PDF_MAX_PAGE / longest } else { 1.0 };
-    let mut content = String::new();
-    if !outline.elements().is_empty() {
-        let _ = writeln!(content, "{} 0 0 {} {} {} cm", num(s), num(s), num(-frame.x0 * s), num(-frame.y0 * s));
-        let (mut current, mut start) = (Point::ZERO, Point::ZERO);
-        let pt = |q: Point| format!("{} {}", num(q.x), num(q.y));
-        for el in outline.elements() {
-            match *el {
-                PathEl::MoveTo(q) => {
-                    let _ = writeln!(content, "{} m", pt(q));
-                    (current, start) = (q, q);
-                }
-                PathEl::LineTo(q) => {
-                    let _ = writeln!(content, "{} l", pt(q));
-                    current = q;
-                }
-                PathEl::QuadTo(c, q) => {
-                    let c1 = current + (c - current) * (2.0 / 3.0);
-                    let c2 = q + (c - q) * (2.0 / 3.0);
-                    let _ = writeln!(content, "{} {} {} c", pt(c1), pt(c2), pt(q));
-                    current = q;
-                }
-                PathEl::CurveTo(c1, c2, q) => {
-                    let _ = writeln!(content, "{} {} {} c", pt(c1), pt(c2), pt(q));
-                    current = q;
-                }
-                PathEl::ClosePath => {
-                    content.push_str("h\n");
-                    current = start;
-                }
-            }
+    let mut parts = PdfParts::default();
+    if !marks.is_empty() {
+        let _ = writeln!(parts.content, "{} 0 0 {} {} {} cm", num(s), num(s), num(-frame.x0 * s), num(-frame.y0 * s));
+        for mark in marks {
+            parts.mark(mark, frame, scale)?;
         }
-        content.push_str("f\n");
     }
-    let objects = [
-        "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
-        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
+    let mut resources = String::new();
+    if !parts.images.is_empty() {
+        resources.push_str("/XObject <<");
+        for (i, n) in parts.images.iter().enumerate() {
+            let _ = write!(resources, " /Im{i} {n} 0 R");
+        }
+        resources.push_str(" >> ");
+    }
+    if !parts.alphas.is_empty() {
+        resources.push_str("/ExtGState <<");
+        for (key, n) in &parts.alphas {
+            let _ = write!(resources, " /A{key} {n} 0 R");
+        }
+        resources.push_str(" >> ");
+    }
+    let content = parts.content;
+    let mut objects: Vec<Vec<u8>> = vec![
+        b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_vec(),
         format!(
-            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {} {}] /Resources << >> /Contents 4 0 R >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {} {}] /Resources << {resources}>> /Contents 4 0 R >>",
             num(frame.width() * s),
             num(frame.height() * s)
-        ),
-        format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()),
+        )
+        .into_bytes(),
+        format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()).into_bytes(),
     ];
+    objects.extend(parts.objects);
     let mut out: Vec<u8> = b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n".to_vec();
     let mut offsets = Vec::with_capacity(objects.len());
     for (i, body) in objects.iter().enumerate() {
         offsets.push(out.len());
-        out.extend_from_slice(format!("{} 0 obj\n{body}\nendobj\n", i + 1).as_bytes());
+        out.extend_from_slice(format!("{} 0 obj\n", i + 1).as_bytes());
+        out.extend_from_slice(body);
+        out.extend_from_slice(b"\nendobj\n");
     }
     let xref = out.len();
     let mut tail = format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1);
@@ -804,7 +1109,7 @@ fn pdf(outline: &BezPath, frame: Rect) -> Vec<u8> {
     }
     let _ = writeln!(tail, "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF", objects.len() + 1);
     out.extend_from_slice(tail.as_bytes());
-    out
+    Ok(out)
 }
 
 // ---------- staging pictures on disk ----------
@@ -894,7 +1199,7 @@ mod tests {
         path.move_to((0.0, 0.0));
         path.quad_to((50.0, 100.0), (100.0, 0.0));
         path.close_path();
-        let bytes = pdf(&path, Rect::new(0.0, -200.0, 500.0, 800.0));
+        let bytes = pdf(Rect::new(0.0, -200.0, 500.0, 800.0), &[Mark::Outline(&path)], 1.0).unwrap();
         // One character per byte, so string offsets are file offsets (the header's second line
         // holds bytes above 127).
         let text: String = bytes.iter().map(|&b| if b.is_ascii() { b as char } else { '?' }).collect();
