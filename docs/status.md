@@ -374,7 +374,7 @@ _Updated: 2026-11-20, during the sixteenth batch: 47 writer packages of depth wa
     `docs/control-protocol.md` › View switches.
 - **Decisions of the sixteenth batch:**
   - A source with several masters and an axis compiles to a variable TrueType font unless a static format is asked
-    for, as fontc does; fontmake builds statics (M2.8). The owner has to confirm this.
+    for, as fontc does; fontmake builds statics (M2.8). The owner confirmed this default.
   - The CLI's `open` keeps the source's glyph names (`keepGlyphNames`), for parity with fontmake; the window renames
     to nice names on import unless the setting says otherwise (M1.9).
   - Overlapping multi-master glyphs are autohinted on their overlap-free outline by default, as otfautohint does
@@ -865,11 +865,8 @@ Wave 1 needs a build on the Mac: Cmd+Q and the app menu's Quit with unsaved work
 dropping a file on the window (see "Where to start", item 1). X.pdf3 needs the same build on the Mac and one on
 Windows for the clipboard's PDF.
 
-Two questions from the sixteenth batch:
+One question from the sixteenth batch:
 
-- **The default output of a multi-master source** (M2.8). `compile` on a source with several masters and an axis
-  builds a variable TrueType font unless a static format is asked for, as fontc does; fontmake builds static fonts.
-  Keep fontc's default, or follow fontmake?
 - **The suite's token-authenticated control protocol.** The craft-next control server requires a token; FontCraft's
   control channel has none, and the new window keeps FontCraft's transport so MCP attach works unchanged. Adopting
   the suite's protocol changes the protocol and the MCP backend. Adopt it, and when?
