@@ -36,7 +36,8 @@ fn dump_writes_unicode_names_maps_glyph_names_and_checks_the_glyphs_options() {
 
     let (code, stdout, _) = cli(&["dump", "--help"]);
     assert_eq!(code, 0);
-    for option in ["--unicode-data", "--allow-virtual-gids", "--fd", "--exclude-fd", "--flatten-seac", "--names", "--goadb", "avar=designspace"] {
+    // Switches are listed as --[no-]NAME.
+    for option in ["--unicode-data", "allow-virtual-gids", "--fd", "--exclude-fd", "flatten-seac", "--names", "--goadb", "avar=designspace"] {
         assert!(stdout.contains(option), "{option} is in the help: {stdout}");
     }
 

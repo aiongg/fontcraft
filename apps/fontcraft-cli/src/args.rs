@@ -660,28 +660,50 @@ enum Next {
 /// reads it (`--retain` → `--retain-gids`, `--No-Hinting` → `--no-hinting`), for a subcommand that
 /// looks for some options itself before calling [`parse`]. Values, `--opt?` queries and
 /// everything after `--` stay as given; a name that is no option stays for [`parse`] to refuse,
-/// and a prefix of several options is refused here.
+/// and a prefix of several options is refused here. A response file is read only where an
+/// option or a positional argument may stand: an option's value that starts with `@`
+/// (`dump -t @glyphs`) is a value.
 pub fn spell_out(specs: &[OptSpec], args: &[String]) -> Result<Vec<String>, Failure> {
-    let args = expand(args, 0, &mut Vec::new())?;
     let globals = globals_for(specs);
     let tiers: [&[OptSpec]; 2] = [specs, &globals];
     let mut spelled = Vec::with_capacity(args.len());
-    let mut it = args.into_iter().peekable();
+    spell_into(&tiers, args, &mut spelled)?;
+    Ok(spelled)
+}
+
+/// [`spell_out`] of `args` into `out`; `true` once `--` has ended the options.
+fn spell_into(tiers: &[&[OptSpec]], args: &[String], out: &mut Vec<String>) -> Result<bool, Failure> {
+    let mut it = args.iter().peekable();
     while let Some(arg) = it.next() {
         if arg == "--" {
-            spelled.push(arg);
-            spelled.extend(it.by_ref());
-            break;
+            out.push(arg.clone());
+            out.extend(it.by_ref().cloned());
+            return Ok(true);
         }
-        let (written, next) = spell_one(&tiers, &arg)?;
-        spelled.push(written.unwrap_or(arg));
+        let response = if arg.strip_prefix('@').is_some_and(|p| !p.is_empty()) || arg.starts_with("--options=") {
+            Some(vec![arg.clone()])
+        } else if arg == "--options" {
+            Some(std::iter::once(arg.clone()).chain(it.next().cloned()).collect())
+        } else {
+            None
+        };
+        if let Some(response) = response {
+            // `expand` reads nested files and bounds their depth.
+            if spell_into(tiers, &expand(&response, 0, &mut Vec::new())?, out)? {
+                out.extend(it.by_ref().cloned());
+                return Ok(true);
+            }
+            continue;
+        }
+        let (written, next) = spell_one(tiers, arg)?;
+        out.push(written.unwrap_or_else(|| arg.clone()));
         match next {
             Next::No => {}
-            Next::Always => spelled.extend(it.next()),
-            Next::Maybe => spelled.extend(it.next_if(|n| !n.starts_with('-') && !n.contains('='))),
+            Next::Always => out.extend(it.next().cloned()),
+            Next::Maybe => out.extend(it.next_if(|n| !n.starts_with('-') && !n.contains('=')).cloned()),
         }
     }
-    Ok(spelled)
+    Ok(false)
 }
 
 /// How [`spell_out`] writes `arg`: its full spelling (`None`: as given), and whether the next
@@ -867,6 +889,8 @@ pub fn option_lines(specs: &[OptSpec]) -> String {
     for s in specs {
         let short = s.short.map(|c| format!("-{c}, ")).unwrap_or_default();
         let form = match s.kind {
+            // A switch named `no-…` is already the negative form.
+            Kind::Switch if s.name.starts_with("no-") => format!("{short}--{}", s.name),
             Kind::Switch => format!("{short}--[no-]{}", s.name),
             Kind::Value | Kind::OptionalValue | Kind::List => format!("{short}--{} {}", s.name, s.value_name),
         };
@@ -1009,7 +1033,7 @@ mod tests {
 
     #[test]
     fn hand_parsers_leave_prefixes_of_their_own_options_to_them() {
-        let rest = take_globals(&args(&["--tim", "5", "--job", "3", "--jo", "x"]), &["--timestamp", "--json"]).unwrap();
+        let rest = take_globals(&args(&["--tim", "5", "--job", "3", "--jo", "x"]), &["--timestamp", "--joined"]).unwrap();
         assert_eq!(rest, ["--tim", "5", "--jo", "x"], "--tim and --jo begin options of the subcommand; --job names the common --jobs");
         assert_eq!(leading_globals(&args(&["--job", "2", "--Quiet", "convert"])), 3, "prefixes and letter case, as parse reads them");
         assert_eq!(leading_globals(&args(&["--ver", "convert"])), 0, "--ver begins --verbose and --version");
@@ -1052,6 +1076,16 @@ mod tests {
         let parsed = parse(SPECS, &spell_out(SPECS, &args(&["--output-d", "--retain", "-o", "--hinting"])).unwrap()).unwrap();
         assert_eq!((parsed.value("output-dir"), parsed.value("output")), (Some("--retain"), Some("--hinting")), "values are never read as options");
         assert!(spell_out(SPECS, &args(&["--out", "x"])).is_err(), "a prefix of several options is refused");
+
+        // A value starting with `@` is a value; a response file elsewhere is read and spelled out.
+        assert_eq!(spell_out(SPECS, &args(&["-o", "@glyphs"])).unwrap(), ["-o", "@glyphs"]);
+        let dir = std::env::temp_dir().join(format!("fontcraft-cli-spell-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("words");
+        std::fs::write(&file, "--retain --output-d out").unwrap();
+        let at = format!("@{}", file.display());
+        assert_eq!(spell_out(SPECS, &args(&["in.ttf", &at, "-o", "x"])).unwrap(), ["in.ttf", "--retain-gids", "--output-dir", "out", "-o", "x"]);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
