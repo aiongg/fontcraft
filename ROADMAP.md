@@ -1046,10 +1046,16 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
    person's copy only reaching the system clipboard, and the instruction badge menu (UI.31); Info box kern fields
    and locks, the Modules panel and View › Audit › Live Audit (UI.32). All built and tested once together. The
    export dialog gets no feature-compiler section: the reference's export dialog has none, and the options stay
-   on `font.compile`. The ports left:
-   - UI.33: Space Center drags and arrow nudges (a tool kept by the app, as the edit view's is), colour in Text
-     Preview, the Compare pickers, the TrueType preview address dialog, user settings kept between runs.
-   - UI.20b: the Extension Manager, project copy and paste, custom parameters added, reporter drawing.
+   on `font.compile`. Then: Space Center drags and arrow nudges, colour in Text Preview, the Table Viewer's file
+   pickers, the TrueType preview address dialog and user settings kept between runs (UI.33); the Extension
+   Manager, Project panel copy and paste (also Cmd+C and Cmd+V), custom parameters added to project entries and
+   reporter drawing (UI.20b); the first framework pieces in `crates/craft-ext`: struck list rows, edit commands
+   reaching a focused list, a mixed mark on menu entries (UI.34). The ports left:
+   - Text Preview colour from the compiled font, as its spec row says (UI.33 draws the editor's colour layers);
+     Compare Fonts in List (`font.compareInTable`); the Extension Manager's Indexes tab and downloads; reporter
+     switches kept between runs; the old Instructor menu section.
+   - Framework pieces still to stage: the danger tone, modifiers on context-menu requests, a three-state check in
+     the canvas menu.
    - Smaller follow-ups: the Metrics panel, hinting waterfall, metrics beam and component fallbacks still read the
      first master; the old Instructor menu section; open-path thumbnails in Shape Order; svg filters and PDF
      images in colour layers.
