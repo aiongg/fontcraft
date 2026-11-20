@@ -17,6 +17,7 @@ use serde_json::{Map, Value, json};
 use super::fields::{self, Field, Kind, format_value};
 use super::spec::{Action, DialogSpec, Fields, Mode, Shaped, Tab, Third};
 use crate::app::FontCraftApp;
+use crate::shell::masters::current_master_id;
 use craft::ui::runtime::commands::CommandRef;
 
 /// The dialog state the app keeps: the open dialog and the folder chooser it waits for.
@@ -278,7 +279,7 @@ fn open_one(app: &mut FontCraftApp, spec: &DialogSpec, given: &Map<String, Value
     if !given.contains_key("master")
         && !carried
         && let Some(field) = fields.iter().find(|f| f.key == "master")
-        && let Some(v) = current_master(app).and_then(|m| field.check(&json!(m)).ok())
+        && let Some(v) = app.session.font().ok().and_then(|f| current_master_id(f, &app.view.layers)).and_then(|m| field.check(&json!(m)).ok())
     {
         values.insert("master".into(), v);
     }
@@ -355,12 +356,6 @@ pub fn switch_tab(app: &mut FontCraftApp, index: usize) -> Result<Value, String>
             Err(e)
         }
     }
-}
-
-/// The id of the master the glyph panels and the canvas show.
-pub fn current_master(app: &FontCraftApp) -> Option<String> {
-    let font = app.session.font().ok()?;
-    crate::shell::masters::current_master(font, &app.view.layers).map(|m| m.id.clone())
 }
 
 /// What the command acts on when the dialog names nothing: when the person chose glyphs

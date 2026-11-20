@@ -263,11 +263,6 @@ impl SpaceCenterState {
     }
 }
 
-/// The master the window draws: the current master.
-pub fn shown_master(font: &Font, view: &crate::app::ViewState) -> Option<String> {
-    super::masters::current_master(font, &view.layers).map(|m| m.id.clone())
-}
-
 /// What `/?` and `/!` stand for: the glyph the glyph panels show and the Font View selection.
 pub fn context_names(font: &Font, view: &crate::app::ViewState) -> (Option<String>, Vec<String>) {
     let current = match &view.glyph {
@@ -279,7 +274,7 @@ pub fn context_names(font: &Font, view: &crate::app::ViewState) -> (Option<Strin
 
 /// `state`'s text read for the master shown.
 pub fn resolved(font: &Font, view: &crate::app::ViewState, state: &SpaceCenterState) -> Option<(String, Resolved)> {
-    let master = shown_master(font, view)?;
+    let master = super::masters::current_master_id(font, &view.layers)?;
     let (current, selection) = context_names(font, view);
     let cx = Context { current: current.as_deref(), selection: &selection };
     let r = text::resolve(font, &master, &state.input(), &cx);

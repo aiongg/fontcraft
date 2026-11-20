@@ -130,6 +130,20 @@ fn the_glyph_panels_read_the_shown_layer_and_master() {
     assert_eq!(app.models.measurements.master.as_deref(), Some(first_master(&app).as_str()), "the picked layer's master");
 }
 
+/// The Metrics panel reads and edits the layer the shown glyph shows in the current master.
+#[test]
+fn the_metrics_panel_follows_the_current_master() {
+    let mut app = two_master_app();
+    let first = first_master(&app);
+    assert_eq!(app.models.glyph_metrics.layer.as_deref(), Some(first.as_str()));
+    app.session.execute("spacing.setWidth", &json!({"glyphs": ["A"], "layer": "m02", "value": 640})).unwrap();
+    app.drain();
+    assert_ne!(app.models.glyph_metrics.width, Some(640.0), "the first master's width shows");
+    shell(&mut app, "view.selectMaster", json!({"master": "m02"}));
+    assert_eq!(app.models.glyph_metrics.layer.as_deref(), Some("m02"));
+    assert_eq!(app.models.glyph_metrics.width, Some(640.0));
+}
+
 /// `edit.copy` named over the control channel returns its text and leaves the system clipboard alone; the same copy
 /// from a person (a menu item, or the control channel playing one) puts the text there.
 #[test]

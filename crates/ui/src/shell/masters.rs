@@ -91,6 +91,11 @@ pub fn current_master<'f>(font: &'f Font, view: &LayersView) -> Option<&'f Maste
     view.master.as_deref().and_then(|id| font.masters.iter().find(|m| m.id == id)).or_else(|| font.masters.first())
 }
 
+/// The id of [`current_master`]: the master the glyph panels, Font View and the Space Center draw in.
+pub fn current_master_id(font: &Font, view: &LayersView) -> Option<String> {
+    current_master(font, view).map(|m| m.id.clone())
+}
+
 /// The layer `glyph` is shown in: the one picked for it, else its layer of the current master.
 pub fn shown_layer<'f>(font: &'f Font, view: &LayersView, glyph: &'f Glyph) -> Option<&'f Layer> {
     if let Some(id) = view.layers.get(&glyph.name)

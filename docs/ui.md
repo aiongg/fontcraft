@@ -106,13 +106,14 @@ rules for what a typed text sets: a number, a key, or for an emptied field the c
 
 | Message | Use |
 |---|---|
-| `Msg::run("spacing.setWidth", json!({"glyphs": [name], "value": 640}))` | an engine command; one undo step |
+| `Msg::run("spacing.setWidth", json!({"glyphs": [name], "layer": layer, "value": 640}))` | an engine command; one undo step |
 | `Msg::Shell(CommandRef::with_params("window.togglePanel", json!({"panel": "layers"})))` | a shell command |
 | `Msg::View(ViewMsg::SelectGlyph(name))` | view state that is no command |
 | `Msg::Preview(Preview::Begin(label))`, `Update(command)`, `Commit`, `Cancel` | an interaction: previews on a snapshot that end as one undo step or as nothing |
 | `Msg::Tool(ToolInput::Pointer(event))` | input for the canvas tools, in the edited glyph's font units |
 
-Commands take explicit targets in their parameters. Post on commit (`events.committed()`), not on
+Commands take explicit targets in their parameters: the glyph and the layer it shows, never the first master by
+default (`shell::masters::current_master` and `shown_layer` give the master and layer the window shows). Post on commit (`events.committed()`), not on
 every keystroke. Menu rows, keys and the tool rail fire commands through the same catalog; a
 fired command becomes one of these messages in `FontCraftApp::output`.
 
@@ -126,7 +127,7 @@ is on in dev-dependencies). Build the model, show the view, act as the user, and
 messages:
 
 ```rust
-let model = Tracked::new(GlyphMetrics { glyph: Some("A".into()), width: Some(600.0), ..Default::default() });
+let model = Tracked::new(GlyphMetrics { glyph: Some("A".into()), layer: Some("m02".into()), width: Some(600.0), ..Default::default() });
 let posted = Rc::new(RefCell::new(Vec::new()));
 let seen = Rc::clone(&posted);
 let mut fixture = Fixture::new(move |ui| {
@@ -137,7 +138,7 @@ let mut fixture = Fixture::new(move |ui| {
 fixture.settle();
 let width = fixture.by_label("Width").expect("the Width field");
 fixture.click(&width).key(Key::A, Modifiers::COMMAND).type_text("640").key(Key::Enter, Modifiers::NONE).settle();
-assert_eq!(*posted.borrow(), vec![Msg::run("spacing.setWidth", json!({"glyphs": ["A"], "value": 640.0}))]);
+assert_eq!(*posted.borrow(), vec![Msg::run("spacing.setWidth", json!({"glyphs": ["A"], "layer": "m02", "value": 640.0}))]);
 ```
 
 Find controls by their label or role, never by position or size. App-layer behaviour (a message

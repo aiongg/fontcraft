@@ -27,13 +27,13 @@ use std::collections::BTreeMap;
 
 use egui::{Align2, Color32, FontId, Pos2};
 use fontcraft_engine::Session;
-use fontcraft_engine::model::{Font, Guide, LayerSide, Shape};
+use fontcraft_engine::model::{Font, Guide, LayerSide, Master, Shape};
 use fontcraft_geom::{BezPath, Point};
 use fontcraft_tools::{Action, Output, Overlay, OverlayKind, PointerKind};
 use serde_json::{Value, json};
 
 use super::tools::{Target, ToolInput};
-use crate::app::FontCraftApp;
+use crate::app::{FontCraftApp, ViewState};
 
 craft::ui::words! {
     /// The words the overlays paint.
@@ -238,7 +238,7 @@ pub fn refresh(app: &mut FontCraftApp) {
     if fresh {
         let mut data = OverlayData { switches: base.switches.clone(), ..OverlayData::default() };
         read_base(&mut app.session, &base, &mut data, &mut app.overlays.audit_runs);
-        data.beam = beam_height(&app.session, &base.switches);
+        data.beam = beam_height(&app.session, &app.view, &base.switches);
         app.overlays.data = data;
         app.overlays.base = Some(base.clone());
     }
@@ -348,8 +348,8 @@ fn ghost(now: &Font, before: &Font, target: &Target) -> Option<BezPath> {
 }
 
 /// The metrics beam's height while it shows: the height kept for the active document, else half the x-height of the
-/// first master.
-fn beam_height(session: &Session, sw: &Switches) -> Option<f64> {
+/// active layer's master (the current master without an edited glyph).
+fn beam_height(session: &Session, view: &ViewState, sw: &Switches) -> Option<f64> {
     if !sw.beam {
         return None;
     }
@@ -357,12 +357,12 @@ fn beam_height(session: &Session, sw: &Switches) -> Option<f64> {
     if let Some(y) = sw.beam_heights.get(&doc.id).copied().filter(|y| y.is_finite()) {
         return Some(y);
     }
-    default_beam_height(&doc.font)
+    let master = super::tools::active_master(&doc.font, view)?;
+    default_beam_height(&doc.font, master)
 }
 
-/// Half the x-height of the font's first master.
-pub fn default_beam_height(font: &Font) -> Option<f64> {
-    let master = font.masters.first()?;
+/// Half the x-height of `master`.
+pub fn default_beam_height(font: &Font, master: &Master) -> Option<f64> {
     let x_height = font.metric(master, "x-height").map_or(500.0, |m| m.pos);
     let y = x_height / 2.0;
     y.is_finite().then_some(y)

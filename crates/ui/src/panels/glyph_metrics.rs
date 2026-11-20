@@ -40,6 +40,7 @@ pub fn show(ui: &mut Ui, mut props: Props<'_>) {
 fn view(props: &mut Props<'_>, ui: &mut Ui) {
     let words = Env::of(ui).words::<MetricsWords>();
     let Some(glyph) = props.model.glyph.clone() else { return };
+    let layer = props.model.layer.clone();
     let fields = [
         (words.width.clone(), props.model.width, "spacing.setWidth"),
         (words.left.clone(), props.model.left, "spacing.setLeftSidebearing"),
@@ -49,7 +50,13 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
     Section::new(words.metrics.clone()).show(ui, |ui, _| {
         for (label, value, command) in &fields {
             let (value, command) = (*value, *command);
-            field(ui, label.clone(), value, |value| sent.push(Msg::run(command, json!({ "glyphs": [glyph], "value": value }))));
+            field(ui, label.clone(), value, |value| {
+                let mut params = json!({ "glyphs": [glyph], "value": value });
+                if let Some(id) = &layer {
+                    params["layer"] = json!(id);
+                }
+                sent.push(Msg::run(command, params));
+            });
         }
     });
 }
@@ -76,10 +83,16 @@ mod tests {
     use crate::app::Msg;
     use crate::app::models::glyph::GlyphMetrics;
 
-    /// Typing a width and pressing Enter posts one `spacing.setWidth` for the shown glyph.
+    /// Typing a width and pressing Enter posts one `spacing.setWidth` for the shown glyph's shown layer.
     #[test]
     fn a_typed_width_posts_set_width() {
-        let model = Tracked::new(GlyphMetrics { glyph: Some("A".into()), width: Some(600.0), left: Some(20.0), right: Some(30.0) });
+        let model = Tracked::new(GlyphMetrics {
+            glyph: Some("A".into()),
+            layer: Some("m02".into()),
+            width: Some(600.0),
+            left: Some(20.0),
+            right: Some(30.0),
+        });
         let posted = Rc::new(RefCell::new(Vec::new()));
         let seen = Rc::clone(&posted);
         let mut fixture = Fixture::new(move |ui| {
@@ -90,6 +103,6 @@ mod tests {
         fixture.settle();
         let width = fixture.by_label("Width").expect("the Width field");
         fixture.click(&width).key(Key::A, Modifiers::COMMAND).type_text("640").key(Key::Enter, Modifiers::NONE).settle();
-        assert_eq!(*posted.borrow(), vec![Msg::run("spacing.setWidth", json!({ "glyphs": ["A"], "value": 640.0 }))]);
+        assert_eq!(*posted.borrow(), vec![Msg::run("spacing.setWidth", json!({ "glyphs": ["A"], "layer": "m02", "value": 640.0 }))]);
     }
 }

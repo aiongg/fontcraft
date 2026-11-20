@@ -1054,17 +1054,12 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
    font of the shown master or instance, the Compare Fonts in List panel, reporter switches kept between runs in
    the user's settings and the Instructor section of the canvas menu (UI.35). The ports left:
    - The Extension Manager's Indexes tab and downloads.
-   - Framework pieces still to stage: the danger tone, modifiers on context-menu requests, a three-state check in
-     the canvas menu.
-   - Smaller follow-ups: the Metrics panel, hinting waterfall, metrics beam and component fallbacks still read the
-     first master; open-path thumbnails in Shape Order; svg filters and PDF
-     images in colour layers.
+   - Smaller follow-ups: open-path thumbnails in Shape Order; svg filters and PDF images in colour layers.
    - Framework gaps, built in `crates/craft-ext` in craft-libs' layout so they can move there later (decision
-     0009). Built (UI.34): a strikethrough list row, edit commands reaching a focused list and a mixed mark on menu
-     entries. Left: a text-field hook for syntax colour and error underlines, caret and selection access, an async
+     0009). Built (UI.34, UI.36): a strikethrough list row, edit commands reaching a focused list, a mixed mark on
+     menu entries, a danger tone on menu entries and modifiers on context-menu requests. Left: a text-field hook for syntax colour and error underlines, caret and selection access, an async
      completer and Up/Down stepping; a press-and-hold flyout; union, intersect and slant icons; open URL and reveal
-     in the file manager; alternate menu rows with their own label and shortcut; an app-level paste event and
-     modifiers on context-menu requests; a danger tone. The craft pin stays at `4bd0107` for these.
+     in the file manager; alternate menu rows with their own label and shortcut; an app-level paste event. The craft pin stays at `4bd0107` for these.
 3. **The engine split, step 4 on.** ES.4 moves the kerning-index and metrics-sync readers outside the spacing crate
    behind its extension and moves the slots with `Session`; the later steps move command areas out of the engine
    crate along command ownership.

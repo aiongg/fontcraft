@@ -18,6 +18,7 @@ use fontcraft_engine::model::{Font, Layer, LayerSide, Shape};
 use serde_json::Value;
 
 use super::commands::{Module, UiCommand};
+use super::masters::shown_layer;
 use super::params::{flag, quoted, string};
 use crate::app::FontCraftApp;
 use crate::app::models::components::{MAX_SMART_COMPONENTS, smart_model};
@@ -62,7 +63,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Smart Component Settings",
         menu: &[],
         shortcut: None,
-        params: "{glyph?: name, layer?: id (default the first master's layer, or the edited layer when `glyph` is not given), side?: \"foreground\" | \"background\", components?: [indices] (default the selected smart components of the edited layer; required with `glyph`), open?: bool (false closes the window)} open the settings of the smart components: one control per property of their smart glyphs",
+        params: "{glyph?: name, layer?: id (default the edited layer when `glyph` is the edited glyph or not given, else the layer the glyph shows: the Layers panel's pick, else its layer of the current master), side?: \"foreground\" | \"background\", components?: [indices] (default the selected smart components of the edited layer; required with `glyph`), open?: bool (false closes the window)} open the settings of the smart components: one control per property of their smart glyphs",
     },
 ];
 
@@ -129,7 +130,8 @@ fn edited(app: &FontCraftApp) -> Result<(String, String, LayerSide), String> {
     Ok((scene.glyph.clone(), scene.layer_id.clone(), scene.side))
 }
 
-/// The layer `layer` of `glyph`, else the edited one when `glyph` is the edited glyph, else the first master's.
+/// The layer `layer` of `glyph`, else the edited one when `glyph` is the edited glyph, else the one it shows (the
+/// Layers panel's pick, else its layer of the current master).
 fn layer_of<'f>(app: &FontCraftApp, font: &'f Font, glyph: &str, layer: Option<&str>) -> Result<&'f Layer, String> {
     let g = font.glyph(glyph).ok_or_else(|| format!("no glyph is named `{}`", quoted(glyph)))?;
     if let Some(id) = layer {
@@ -138,7 +140,7 @@ fn layer_of<'f>(app: &FontCraftApp, font: &'f Font, glyph: &str, layer: Option<&
     let shown = edited(app).ok().filter(|(name, ..)| name == glyph).and_then(|(_, id, _)| g.layers.iter().find(|l| l.id == id));
     match shown {
         Some(l) => Ok(l),
-        None => font.masters.first().and_then(|m| g.layer(&m.id)).ok_or_else(|| format!("glyph `{glyph}` has no master layer")),
+        None => shown_layer(font, &app.view.layers, g).ok_or_else(|| format!("glyph `{glyph}` has no master layer")),
     }
 }
 
