@@ -365,7 +365,7 @@ fn drawable(field: &Field) -> bool {
     match &field.kind {
         Kind::Number { .. } | Kind::Integer { .. } | Kind::Bool | Kind::Lock | Kind::Choice { .. } | Kind::Multi { .. } => true,
         Kind::Text { lines, .. } => *lines <= 1,
-        Kind::Folder | Kind::Order { .. } | Kind::List { .. } | Kind::Custom { .. } => false,
+        Kind::Folder | Kind::File { .. } | Kind::Order { .. } | Kind::List { .. } | Kind::Custom { .. } => false,
     }
 }
 
