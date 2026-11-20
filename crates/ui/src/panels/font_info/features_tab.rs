@@ -9,6 +9,7 @@
 //! | double-click on an entry, then a new name | `font.features.rename` |
 //! | drag an entry | `font.features.reorder` |
 //! | context menu: Disable or Enable, Update Entry, Rename, Copy, Paste, Delete | `font.features.setDisabled`, `font.features.updateEntry`, the rename field, `font.features.copyEntries` (its text goes to the clipboard), `font.info.features.paste` (the clipboard's text to `font.features.pasteEntries`), `font.features.remove` |
+//! | Copy, Paste, Select All (Cmd+C, Cmd+V, Cmd+A) while a group's list has the keyboard focus | as the menu's Copy and Paste; Select All `font.info.features.select` with every entry of the group |
 //! | minus, Update, Compile under the sidebar | `font.features.remove`, `font.features.update`, `font.features.compile` |
 //! | Generate Feature Automatically, Update Entry | `font.features.setAutomatic`, `font.features.updateEntry` |
 //! | the stylistic set name rows | `font.features.setLabel`, `font.features.removeLabel` |
@@ -17,8 +18,8 @@
 //! | Snippets | `font.features.insertSnippet` (at the end of the code), `font.features.showSnippetFolder` |
 //!
 //! An entry with an error from the last compile shows a mark in the sidebar while the font is unchanged since. A
-//! disabled entry draws dimmed. The context menu acts on the selected entries; a right click on an entry outside the
-//! selection selects it first.
+//! disabled entry's name is struck through and dimmed. The context menu acts on the selected entries; a right click on
+//! an entry outside the selection selects it first.
 
 use std::borrow::Cow;
 
@@ -37,6 +38,7 @@ use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::{Env, Label};
 use craft::ui::style::TypeRole;
 use craft::ui::text::TextField;
+use craft_ext::ui::list::{CollectionEdits as _, EditCommand, Strike, StrikeRows as _};
 use egui::Ui;
 use fontcraft_engine::model::{DEFAULT_LANGUAGE, LANGUAGES};
 use serde_json::{Value, json};
@@ -97,6 +99,8 @@ craft::ui::words! {
 
 /// Lines the notes field shows.
 const NOTES_LINES: usize = 4;
+/// The Edit commands a group's list takes while it has the keyboard focus.
+const SIDEBAR_EDITS: [EditCommand; 3] = [EditCommand::Copy, EditCommand::Paste, EditCommand::SelectAll];
 /// The name the plus button gives a new class, numbered when taken.
 const NEW_CLASS: &str = "NewClass";
 /// Most numbers tried for a free class name.
@@ -240,6 +244,23 @@ fn sidebar_group(ui: &mut Ui, model: &FeaturesModel, group: &GroupModel, words: 
                 }
                 row
             });
+        out.strike_rows(ui, |at| {
+            let e = entries.get(*at).filter(|e| e.disabled)?;
+            Some(Strike::new(shown_name(kind, &e.name)).ink(RowInk::Dimmed).selected(after.items.contains(at)))
+        });
+        for command in out.edit_commands(ui, &SIDEBAR_EDITS) {
+            match command {
+                EditCommand::Copy if !model.selected.is_empty() => {
+                    posted.push(Msg::run("font.features.copyEntries", json!({ "entries": entries_param(model) })))
+                }
+                EditCommand::Paste => posted.push(Msg::Shell(CommandRef::new(PASTE_ENTRIES))),
+                EditCommand::SelectAll => {
+                    let all: Vec<EntryKey> = (0..entries.len()).filter_map(key_of).collect();
+                    posted.push(Msg::Shell(select_entries(&all)));
+                }
+                _ => {}
+            }
+        }
         let toggled = out.events.iter().any(|e| matches!(e, CollectionEvent::Selection(SelectionChange::Toggle(_))));
         if after.items != before.items || after.lead != before.lead {
             let mut picked: Vec<usize> = after.items.clone();

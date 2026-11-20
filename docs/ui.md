@@ -252,6 +252,22 @@ leaves the dialog open.
 A dialog that is not a form over parameters (a picker, a table, a question with its own layout)
 stays a `dialogs::MODULES` module with its own `StackDialog`.
 
+## Framework pieces staged in craft-ext
+
+Pieces craft does not have yet live in `crates/craft-ext` (library `craft_ext`), in the module craft-libs would
+hold them in ([decision 0009](decisions/0009-framework-gaps-staged-here.md)). Views use them through `craft_ext`
+only; each module's doc names the craft file the piece is meant for.
+
+| Piece | Stands in for | Used in |
+|---|---|---|
+| `craft_ext::ui::list::StrikeRows` (`strike_rows`, `Strike`) | a struck `RowInk` on `ListRow` | Font Info › Features: a disabled entry is struck through |
+| `craft_ext::ui::list::CollectionEdits` (`edit_commands`), `deliver` | a collection taking `Intent::Edit` (`CollectionEvent::Edit`) | the Features sidebar's lists take Copy, Paste and Select All; `app::clipboard::to_focused_list` hands the fired Edit command to them |
+| `craft_ext::ui::menu::{MarkedEntry, EntryMark, entry_rows}` | a mixed state on `Entry` and a dash mark on `MenuItem` | the glyph menu's Tags: a tag some of the glyphs carry |
+
+The stand-ins paint over what craft drew, so they cover the plain forms only (a row without icon, toggles or
+indent; a menu row's mark column), and a screen reader hears a mixed menu row as unchecked. An Edit command reaches
+the focused list one pass after it fired.
+
 ## Forbidden in UI code
 
 | Do not use | Use instead |

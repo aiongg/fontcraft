@@ -1,0 +1,24 @@
+[package]
+name = "fontcraft-craft-ext"
+description = "Framework pieces the craft framework lacks, staged in craft-libs' layout so they can move there (L6)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+name = "craft_ext"
+
+# Nothing of FontCraft's: only craft, its egui fork and general crates craft already uses
+# (docs/decisions/0009-framework-gaps-staged-here.md).
+[dependencies]
+craft = { workspace = true, features = ["ui"] }
+# egui 0.37 is the craft fork (the workspace's `[patch.crates-io]`), named as `fontcraft-ui` names it.
+egui = { version = "0.37", default-features = false }
+
+[dev-dependencies]
+craft = { workspace = true, features = ["ui", "screen-testing"] }
