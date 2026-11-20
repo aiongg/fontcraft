@@ -1037,23 +1037,22 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
    (M12.36); tx against mergefonts (M12.69); Match Masters on the corpus, target 95% (M9.34, an ignored test); a drag
    timed on a large colour UFO for the format warnings (M1.11, X.fix82). Checks on the Mac (it builds and runs): wave 1's quit
    path, chooser and drop, and X.pdf3's pasteboard; on Windows (not built yet), X.pdf3's clipboard.
-2. **The second window to parity, then retire the egui window.** The ports left:
-   - UI.24b: the Shape Order window and drag reordering in order fields.
-   - UI.27b: iColor and svg layers, colour previews, a colour picker, Master Color from the Masters tab, and colour
-     drawing through `render::color::artwork` (M11.21).
+2. **The second window to parity, then retire the egui window.** Landed since batch 20: the Shape Order window
+   and drag reordering in order fields (UI.24b); colour drawn through `render::color::artwork`, iColor and svg
+   layers, colour in the text and Font View cells, a colour picker and a gradient stop bar (UI.27b); Font and
+   Exports tab warnings, the Number Values editor and the Features sidebar menu (UI.30a); multi-glyph Info box
+   fields, `.ufoz` saving with format warnings in the status line, the Glyph as Image and Overlay Fonts dialogs
+   and result notices (UI.30b); the current master and shown layer in Font View, menus, paste and panels, a
+   person's copy only reaching the system clipboard, and the instruction badge menu (UI.31); Info box kern fields
+   and locks, the Modules panel and View › Audit › Live Audit (UI.32). All built and tested once together. The
+   export dialog gets no feature-compiler section: the reference's export dialog has none, and the options stay
+   on `font.compile`. The ports left:
+   - UI.33: Space Center drags and arrow nudges (a tool kept by the app, as the edit view's is), colour in Text
+     Preview, the Compare pickers, the TrueType preview address dialog, user settings kept between runs.
    - UI.20b: the Extension Manager, project copy and paste, custom parameters added, reporter drawing.
-   - UI.30, this batch's engine packages in the window: Font and Exports tab warnings (M7.23), the Number Values
-     editor (M8.28), multi-glyph Info box fields (M5.22), the Features sidebar menu with copy and paste (M8.29),
-     `.ufoz` in the save chooser and format warnings in the status bar (M1.11), Generate Dark Palette (M13.65), Glyph
-     as Image (M11.21), the export features section (M2.12), Match Masters and Relocate Start Points (M9.34), Round
-     Coordinates (M3.29), the kerning audit dialogs (M13.21b) and the Overlay Fonts dialog (M13.66).
-   - The hint badge context menu, now that UI.25 and UI.28 are both in.
-   - Canvas follow-ups of X.fix83: the Font View glyph menu, clipboard paste and the other view models still take the
-     first master, not the active layer. Dialog follow-ups of X.fix84: copy over the control channel writes the
-     system clipboard, and `ui.menu.invoke` bypasses the fired-command path.
-   - Smaller gaps the writers listed: Info box kern values and locks, the Palette's Modules section, Space Center
-     drags and arrow nudges, colour glyphs and pinning in Text Preview, the Compare pickers, the Live Audit menu row,
-     the TrueType preview address dialog, user settings kept between runs, and the second window's wasm build.
+   - Smaller follow-ups: the Metrics panel, hinting waterfall, metrics beam and component fallbacks still read the
+     first master; the old Instructor menu section; open-path thumbnails in Shape Order; svg filters and PDF
+     images in colour layers.
    - Framework gaps, built in `crates/craft-ext` in craft-libs' layout so they can move there later (decision
      0009): a strikethrough list row and edit commands reaching a focused list; a text-field hook for syntax
      colour and error underlines, caret and selection access, an async completer and Up/Down stepping; a
