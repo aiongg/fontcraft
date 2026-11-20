@@ -364,8 +364,9 @@ pub fn picture(preview: &OverlayPreview, paper: [u8; 4]) -> ColorImage {
 
 /// Puts premultiplied `src` over `dst`, pixel by pixel.
 fn over(dst: &mut [u8], src: &[u8]) {
-    for (d, s) in dst.chunks_exact_mut(4).zip(src.chunks_exact(4)) {
-        let alpha = u16::from(s.get(3).copied().unwrap_or(0));
+    for (d, s) in dst.as_chunks_mut::<4>().0.iter_mut().zip(src.as_chunks::<4>().0) {
+        let [.., a] = *s;
+        let alpha = u16::from(a);
         for (dc, sc) in d.iter_mut().zip(s) {
             let mixed = u16::from(*sc) + u16::from(*dc) * (255 - alpha) / 255;
             *dc = u8::try_from(mixed.min(255)).unwrap_or(u8::MAX);

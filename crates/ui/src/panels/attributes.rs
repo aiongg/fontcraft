@@ -182,7 +182,7 @@ pub fn stop_edit(old: &[(f64, Rgba8)], new: &GradientStops) -> Option<(&'static 
         if c != *colour {
             params.insert("color".into(), json!(hex(c)));
         }
-        (params.len() > 1).then(|| ("attributes.setGradientStopColor", Value::Object(params)))
+        (params.len() > 1).then_some(("attributes.setGradientStopColor", Value::Object(params)))
     })
 }
 
