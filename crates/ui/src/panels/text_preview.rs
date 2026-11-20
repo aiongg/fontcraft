@@ -35,7 +35,7 @@ use serde_json::{Value, json};
 use super::widgets;
 use crate::app::models::text_preview::{Page, PageDirection, PageGlyph, TextPreviewModel};
 use crate::app::{Msg, ViewMsg};
-use crate::canvas::color::{self, paint};
+use crate::canvas::color::{TEXT as COLOR_TEXT, paint};
 use crate::shell::text_preview::{Area, BaseDirection, FIELD_LIMIT, MAX_QUERY_CHARS, Matching, Orientation, SIZE_RANGE, grouped};
 
 /// Rows of the text field.
@@ -345,7 +345,7 @@ fn fill(ui: &Ui, page: &Page, place: Placement, clip: Rect, lines: &std::ops::Ra
     // The colour glyphs over the outlines, each from its own texture (`canvas::color::paint`).
     for g in page.glyphs.iter().filter(|g| lines.contains(&g.line)) {
         if let Some(Some(art)) = page.colors.arts.get(&g.name) {
-            paint::draw(&painter, art, place.affine() * Affine::translate((g.x, g.y)), color::TEXT);
+            paint::draw(&painter, art, place.affine() * Affine::translate((g.x, g.y)), COLOR_TEXT);
         }
     }
 }
