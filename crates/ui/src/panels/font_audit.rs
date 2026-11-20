@@ -327,7 +327,7 @@ fn filters(ui: &mut Ui, words: &FontAuditWords, model: &FontAuditModel, sent: &m
             let groups: Vec<&str> = if picked.is_empty() {
                 Vec::new()
             } else {
-                let on = f.groups.iter().any(|g| *g == picked);
+                let on = f.groups.contains(&picked);
                 GROUPS.iter().copied().filter(|g| if *g == picked { !on } else { f.groups.iter().any(|x| x == g) }).collect()
             };
             sent.push(shell("audit.filterResults", json!({ "groups": groups })));

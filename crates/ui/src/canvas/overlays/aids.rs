@@ -188,7 +188,7 @@ pub fn sidebearings_at(outline: &fontcraft_geom::BezPath, width: f64, y: f64) ->
             }
         }
     }
-    (lo <= hi).then(|| (lo, width - hi))
+    (lo <= hi).then_some((lo, width - hi))
 }
 
 /// One label beside the font point `p`, while the label budget lasts. Labels off the canvas are skipped and do not

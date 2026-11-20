@@ -58,7 +58,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
     let words = Env::of(ui).words::<FeaturesWords>();
     let model = &**props.model;
     let on = !model.active.is_empty() || model.localized;
-    let label: Label = if model.active.is_empty() { words.features.clone().into() } else { model.active.join(" ").into() };
+    let label: Label = if model.active.is_empty() { words.features.clone() } else { model.active.join(" ").into() };
     let button = ToggleButton::new(label, Bind::given(on)).tooltip(words.tip.clone()).show(ui);
     let entries = entries(model, &words);
     let menu = Menu::new(words.menu.clone()).opened_by(&button.response, Trigger::Click).pick(ui, &entries);

@@ -198,8 +198,11 @@ fn selection_part(ui: &mut Ui, words: &InfoBoxWords, s: &SelectionBox, sent: &mu
     }
 }
 
+/// Sends the messages that move a handle to (x, y), each `None` left as it is.
+type Place<'a> = dyn Fn(&mut Vec<Msg>, Option<f64>, Option<f64>) + 'a;
+
 /// dX, dY and the length of one handle: each moves the handle, measured from its node.
-fn handle_fields(ui: &mut Ui, words: &InfoBoxWords, s: &SelectionBox, sent: &mut Vec<Msg>, place: &dyn Fn(&mut Vec<Msg>, Option<f64>, Option<f64>)) {
+fn handle_fields(ui: &mut Ui, words: &InfoBoxWords, s: &SelectionBox, sent: &mut Vec<Msg>, place: &Place<'_>) {
     let node = s.x.zip(s.dx).map(|(h, d)| h - d).zip(s.y.zip(s.dy).map(|(h, d)| h - d));
     let _ = Row::new().show(ui, |ui, _| {
         if let Some(v) = widgets::number(ui, words.dx.clone(), s.dx)

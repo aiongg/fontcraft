@@ -164,11 +164,14 @@ fn reach(blur: f64) -> f64 {
     blur.max(0.0) * 1.5
 }
 
+/// Makes the outline of some shapes on a master.
+pub type OutlineOf<'a> = dyn Fn(&Font, &[Shape], &str) -> Option<BezPath> + 'a;
+
 /// Where outlines and pattern images come from.
 pub struct Sources<'a> {
     /// The outline of `shapes` on master `master` as the canvas draws them (strokes expanded,
     /// components resolved, masks applied); `None` when it cannot be made.
-    pub outline: &'a dyn Fn(&Font, &[Shape], &str) -> Option<BezPath>,
+    pub outline: &'a OutlineOf<'a>,
     /// The pattern image a path's attributes name, decoded; `None` when they name none or it
     /// cannot be read.
     pub pattern: &'a mut dyn FnMut(&ShapeAttrs) -> Option<Pattern>,

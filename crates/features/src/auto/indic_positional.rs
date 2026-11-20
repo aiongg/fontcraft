@@ -123,7 +123,7 @@ fn vatu(cx: &AutoContext) -> Result<Code, FeatureError> {
             if lookups.len() >= MAX_LOOKUPS {
                 break;
             }
-            if !lookups.iter().any(|l| *l == name) {
+            if !lookups.contains(&name) {
                 lookups.push(name);
             }
         }

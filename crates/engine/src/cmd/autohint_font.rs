@@ -22,6 +22,7 @@
 //! A whole-file command as `super::file_io` describes: the input never changes and the output is
 //! written atomically; a refusal writes nothing.
 
+use std::collections::hash_map::Entry;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use fontcraft_autohint::fontinfo::{self, FontInfo};
@@ -229,7 +230,7 @@ fn hint_cff2(run: &Run<'_, '_>, font: &SfntFont, setup: &patch::Cff2HintSetup, w
     let mut notes: Vec<String> = Vec::new();
     let mut cache: HashMap<(usize, u16), Vec<FontDictSets>> = HashMap::new();
     let r = patch::autohint_cff2(font, setup, run.cff, run.select, &mut |g| {
-        if !cache.contains_key(&(g.fd, g.vsindex)) {
+        if let Entry::Vacant(slot) = cache.entry((g.fd, g.vsindex)) {
             let mut list = Vec::with_capacity(g.privates.len());
             for (m, private) in g.privates.iter().enumerate() {
                 // The default location's warnings were given above.
@@ -241,7 +242,7 @@ fn hint_cff2(run: &Run<'_, '_>, font: &SfntFont, setup: &patch::Cff2HintSetup, w
                 }
                 list.push(with_overrides(base, run.fontinfo, &setup.names, setup.y_range)?);
             }
-            cache.insert((g.fd, g.vsindex), list);
+            slot.insert(list);
         }
         let sets = cache.get(&(g.fd, g.vsindex)).map_or(&[][..], Vec::as_slice);
         let dicts: Vec<&FdDict> = sets

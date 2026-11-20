@@ -18,7 +18,7 @@ use serde_json::json;
 fn devanagari(s: &mut Session) {
     s.edit("devanagari", |font| {
         let master = font.masters.first().map(|m| m.id.clone()).unwrap_or_default();
-        let mut glyphs: Vec<(String, Vec<u32>, f64, Vec<(&str, f64)>)> = vec![
+        let mut glyphs: Vec<GlyphSpec> = vec![
             ("ka-deva".into(), vec![0x0915], 500.0, vec![("top", 420.0)]),
             ("ssa-deva".into(), vec![0x0937], 500.0, vec![("top", 420.0)]),
             ("ya-deva".into(), vec![0x092F], 500.0, vec![("top", 420.0)]),
@@ -86,3 +86,6 @@ fn update_registers_the_devanagari_features_under_dev2_and_deva() {
         }
     }
 }
+
+/// Name, code points, width and anchors.
+type GlyphSpec = (String, Vec<u32>, f64, Vec<(&'static str, f64)>);

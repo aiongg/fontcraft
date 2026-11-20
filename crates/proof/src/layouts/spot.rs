@@ -228,7 +228,7 @@ impl Flow {
 
     /// The label of a glyph placed at `origin`, on the next of the two label rows.
     pub(crate) fn label(&mut self, origin: [f64; 2], text: String, colour: [u8; 3]) {
-        let row = if self.placed % 2 == 0 { LABEL_ROW_1 } else { LABEL_ROW_2 };
+        let row = if self.placed.is_multiple_of(2) { LABEL_ROW_1 } else { LABEL_ROW_2 };
         self.placed += 1;
         let size = self.size * LABEL;
         self.items.push(Item::Label { x: origin[0], y: origin[1] + self.size * row, size, text, anchor: Anchor::Start, ink: Ink::Rgb(colour) });

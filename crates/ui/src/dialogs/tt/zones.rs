@@ -623,8 +623,10 @@ mod tests {
         }
     }
 
+    type Posted = Rc<RefCell<Vec<(&'static str, Value)>>>;
+
     /// Shows the editor body over `list` and collects the commands its controls stand for.
-    fn fixture(list: List) -> (Fixture, Rc<RefCell<Vec<(&'static str, Value)>>>) {
+    fn fixture(list: List) -> (Fixture, Posted) {
         let posted = Rc::new(RefCell::new(Vec::new()));
         let seen = Rc::clone(&posted);
         let mut editor = Editor::default();

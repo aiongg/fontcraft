@@ -203,9 +203,12 @@ fn tag_text(tag: &[u8; 4]) -> String {
     String::from_utf8_lossy(tag).trim_end().to_string()
 }
 
+/// A feature tag and its lookups, each with the language systems that use it.
+type FeatureLookups = ([u8; 4], BTreeMap<u16, Vec<String>>);
+
 /// For each feature tag of a table, in the feature list's order, its lookups in lookup-list
 /// order with the language systems (`script/language`) that use each one.
-fn features_of(scripts: &ScriptList<'_>, features: &FeatureList<'_>) -> Vec<([u8; 4], BTreeMap<u16, Vec<String>>)> {
+fn features_of(scripts: &ScriptList<'_>, features: &FeatureList<'_>) -> Vec<FeatureLookups> {
     let records = features.feature_records();
     let mut users: Vec<Vec<String>> = vec![Vec::new(); records.len().min(MAX_RECORDS)];
     let mut add = |index: u16, who: &str| {
@@ -235,7 +238,7 @@ fn features_of(scripts: &ScriptList<'_>, features: &FeatureList<'_>) -> Vec<([u8
             }
         }
     }
-    let mut out: Vec<([u8; 4], BTreeMap<u16, Vec<String>>)> = Vec::new();
+    let mut out: Vec<FeatureLookups> = Vec::new();
     for (i, record) in records.iter().enumerate().take(MAX_RECORDS) {
         let Ok(feature) = record.feature(features.offset_data()) else { continue };
         let tag = record.feature_tag().to_be_bytes();

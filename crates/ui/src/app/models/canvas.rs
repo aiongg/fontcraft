@@ -211,9 +211,12 @@ pub fn vertical_span(font: &Font, master: &Master) -> (f64, f64) {
     if ascender > descender { (descender, ascender) } else { (-upm * 0.2, upm * 0.8) }
 }
 
+/// Named metric lines and (bottom, top) zones.
+type MetricLines = (Vec<(String, f64)>, Vec<(f64, f64)>);
+
 /// The master's horizontal metric lines and alignment zones, without the metrics at `hidden`. The zones are read as
 /// `Font::alignment_zones` reads them: each metric's overshoot, then the master's own.
-fn metric_lines(font: &Font, master: &Master, hidden: &[usize]) -> (Vec<(String, f64)>, Vec<(f64, f64)>) {
+fn metric_lines(font: &Font, master: &Master, hidden: &[usize]) -> MetricLines {
     let defs = || font.metrics.iter().zip(master.metric_values.iter()).enumerate().filter(|(i, _)| !hidden.contains(i)).map(|(_, dv)| dv);
     let lines = defs()
         .filter(|(d, v)| d.kind != metric::ITALIC_ANGLE && v.pos.is_finite())

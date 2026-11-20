@@ -965,7 +965,7 @@ impl PdfParts {
         let mut alpha = Vec::with_capacity(pixels.len());
         for p in pixels {
             let a = u32::from(p[3]);
-            let straight = |c: u8| if a == 0 { 0 } else { ((u32::from(c) * 255 + a / 2) / a).min(255) as u8 };
+            let straight = |c: u8| (u32::from(c) * 255 + a / 2).checked_div(a).map_or(0, |v| v.min(255) as u8);
             rgb.extend([straight(p[0]), straight(p[1]), straight(p[2])]);
             alpha.push(p[3]);
         }

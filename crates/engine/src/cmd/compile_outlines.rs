@@ -59,6 +59,9 @@ const REFUSED: [(&str, &str); 9] = [
 
 /// Most files `glyphData` may name.
 const MAX_GLYPH_DATA_FILES: usize = crate::glyph_data::MAX_FILES;
+
+/// Tables by tag, each with its bytes.
+type TableBytes = Vec<(Tag, Vec<u8>)>;
 /// Most tags `excludeTables` or `tables` may hold.
 const MAX_TAGS: usize = 64;
 /// The tables a font cannot be read without, which `excludeTables` refuses.
@@ -88,7 +91,7 @@ enum Bump {
 }
 
 /// The raw tables taken from one built font: its job label, its format and the tables by tag.
-pub(super) type RawTables = (String, fontcraft_compile::Flavour, Vec<(Tag, Vec<u8>)>);
+pub(super) type RawTables = (String, fontcraft_compile::Flavour, TableBytes);
 
 /// What the M2.13 options ask for.
 #[derive(Clone, Default)]
@@ -217,11 +220,6 @@ impl OutputRequest {
         self.quiet
     }
 
-    /// The glyph data the build reads, when `glyphData` adds to the document's.
-    pub(super) fn glyph_data(&self) -> Option<Arc<GlyphData>> {
-        self.glyph_data.clone()
-    }
-
     /// `font` with the glyph subset, the `.notdef`, the production-name setting and the version
     /// applied; `None` when the request changes none of them.
     pub(super) fn font(&self, p: &Params, font: &Font, warnings: &mut Vec<String>) -> Result<Option<Font>> {
@@ -265,7 +263,7 @@ impl OutputRequest {
     /// `bytes` (one static font) with the `post` format and the tables left out applied, and the
     /// raw tables `tables` asks for taken from the result. `warnings` gets the tables asked for
     /// that the font does not have.
-    pub(super) fn rewrite(&self, bytes: Vec<u8>, warnings: &mut Vec<String>) -> Result<(Vec<u8>, Vec<(Tag, Vec<u8>)>)> {
+    pub(super) fn rewrite(&self, bytes: Vec<u8>, warnings: &mut Vec<String>) -> Result<(Vec<u8>, TableBytes)> {
         if !self.rewrites() {
             return Ok((bytes, Vec::new()));
         }

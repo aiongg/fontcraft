@@ -74,7 +74,9 @@ pub struct MetricsLabel {
 /// A preview font and its shaper, or why the shaper could not be made. Two slots are equal when they hold the same
 /// font and shaper.
 #[derive(Clone, Default)]
-pub struct ShaperSlot(Option<(Arc<PreviewFont>, Result<Arc<PreviewShaper>, String>)>);
+pub struct ShaperSlot(Option<(Arc<PreviewFont>, ShaperResult)>);
+
+type ShaperResult = Result<Arc<PreviewShaper>, String>;
 
 impl PartialEq for ShaperSlot {
     fn eq(&self, other: &Self) -> bool {

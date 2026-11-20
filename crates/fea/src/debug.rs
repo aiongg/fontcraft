@@ -185,7 +185,7 @@ pub(crate) fn build(tree: &ParseTree, c: &Compilation, files: &Loaded, positions
     lookup_blocks(tree.root(), 0, &mut first_rules);
     // A named lookup moves from its label to its block's first rule. The inline lookups of a
     // named contextual lookup carry the label's place without the name, and move with it.
-    let mut moved: HashMap<(bool, &str, usize, usize), Option<(String, usize)>> = HashMap::new();
+    let mut moved: HashMap<LabelPlace<'_>, Option<(String, usize)>> = HashMap::new();
     for entry in &raw {
         let first = entry.name.as_deref().and_then(|name| first_rules.get(name));
         if let (Some(&at), Some((file, line, column))) = (first, &entry.place) {
@@ -319,11 +319,16 @@ fn first_rule(node: &Node, depth: usize) -> Option<usize> {
         .find_map(|child| if is_rule(child.kind()) { Some(child.range().start) } else { first_rule(child, depth + 1) })
 }
 
+type LabelPlace<'a> = (bool, &'a str, usize, usize);
+
+/// (feature tag, language tag, script tag, feature index).
+type FeatureKey = ([u8; 4], [u8; 4], [u8; 4], usize);
+
 /// Gives each lookup the language system and feature feaLib records for it: feaLib visits
 /// its (script, language, feature) keys sorted by feature tag, then language, then script, and
 /// each key overwrites the record of every lookup its feature lists.
 fn assign_features(scripts: &ScriptList, features: &FeatureList, origins: &mut [LookupOrigin]) {
-    let mut keys: BTreeSet<([u8; 4], [u8; 4], [u8; 4], usize)> = BTreeSet::new();
+    let mut keys: BTreeSet<FeatureKey> = BTreeSet::new();
     for record in &scripts.script_records {
         let script = &record.script;
         let systems = script.default_lang_sys.as_ref().map(|d| (*b"dflt", d)).into_iter();

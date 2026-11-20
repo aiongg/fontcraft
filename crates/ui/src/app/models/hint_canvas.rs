@@ -106,11 +106,14 @@ pub struct TtCanvas {
 /// The point numbers of a layer: `paths[path][node]`, paths counted without components.
 type PointNumbers = Vec<Vec<Option<u16>>>;
 
+/// What the point numbers were computed for.
+type NumbersKey = ((u64, u64), String, String);
+
 /// What the projection keeps between runs: the pixel preview and the point numbers, both slow to compute.
 #[derive(Default)]
 pub struct HintCache {
     preview: pixels::Cache,
-    numbers: Option<(((u64, u64), String, String), PointNumbers)>,
+    numbers: Option<(NumbersKey, PointNumbers)>,
 }
 
 pub fn project(model: &mut Tracked<HintCanvas>, cache: &mut HintCache, cx: &mut ProjectCx<'_>) {

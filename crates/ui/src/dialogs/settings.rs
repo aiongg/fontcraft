@@ -69,8 +69,11 @@ craft::ui::words! {
     }
 }
 
+/// A switch's label and note.
+type SwitchWords = fn(&SettingsWords) -> (&Label, &Label);
+
 /// The `user.*` switches, with their notes.
-const USER_SWITCHES: [(&str, fn(&SettingsWords) -> (&Label, &Label)); 4] = [
+const USER_SWITCHES: [(&str, SwitchWords); 4] = [
     ("user.keepGlyphNamesFromImportedFiles", |w| (&w.keep_names, &w.keep_names_note)),
     ("user.disableAutomaticAlignmentForImportedFiles", |w| (&w.no_alignment, &w.no_alignment_note)),
     ("user.disableLocalization", |w| (&w.no_localization, &w.no_localization_note)),

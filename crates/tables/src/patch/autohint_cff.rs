@@ -530,8 +530,8 @@ fn decode(code: &[u8]) -> std::result::Result<Decoded, String> {
             HMOVETO => pen.move_by(arg(&args, 0), 0.0)?,
             VMOVETO => pen.move_by(0.0, arg(&args, 0))?,
             RLINETO => {
-                for p in args.chunks_exact(2) {
-                    pen.line_by(arg(p, 0), arg(p, 1))?;
+                for &[x, y] in args.as_chunks::<2>().0 {
+                    pen.line_by(x, y)?;
                 }
             }
             HLINETO | VLINETO => {
@@ -546,22 +546,22 @@ fn decode(code: &[u8]) -> std::result::Result<Decoded, String> {
                 }
             }
             RRCURVETO => {
-                for c in args.chunks_exact(6) {
-                    pen.curve_by([arg(c, 0), arg(c, 1), arg(c, 2), arg(c, 3), arg(c, 4), arg(c, 5)])?;
+                for c in args.as_chunks::<6>().0 {
+                    pen.curve_by(*c)?;
                 }
             }
             RCURVELINE => {
                 let curves = n.saturating_sub(2) / 6;
-                for c in args.chunks_exact(6).take(curves) {
-                    pen.curve_by([arg(c, 0), arg(c, 1), arg(c, 2), arg(c, 3), arg(c, 4), arg(c, 5)])?;
+                for c in args.as_chunks::<6>().0.iter().take(curves) {
+                    pen.curve_by(*c)?;
                 }
                 let rest = args.get(curves * 6..).unwrap_or_default();
                 pen.line_by(arg(rest, 0), arg(rest, 1))?;
             }
             RLINECURVE => {
                 let lines = n.saturating_sub(6) / 2;
-                for p in args.chunks_exact(2).take(lines) {
-                    pen.line_by(arg(p, 0), arg(p, 1))?;
+                for &[x, y] in args.as_chunks::<2>().0.iter().take(lines) {
+                    pen.line_by(x, y)?;
                 }
                 let c = args.get(lines * 2..).unwrap_or_default();
                 pen.curve_by([arg(c, 0), arg(c, 1), arg(c, 2), arg(c, 3), arg(c, 4), arg(c, 5)])?;
@@ -569,11 +569,11 @@ fn decode(code: &[u8]) -> std::result::Result<Decoded, String> {
             VVCURVETO | HHCURVETO => {
                 let (first, rest) = if n % 2 == 1 { (arg(&args, 0), args.get(1..).unwrap_or_default()) } else { (0.0, args.as_slice()) };
                 let mut off = first;
-                for c in rest.chunks_exact(4) {
+                for &[a, b, c, d] in rest.as_chunks::<4>().0 {
                     if op == VVCURVETO {
-                        pen.curve_by([off, arg(c, 0), arg(c, 1), arg(c, 2), 0.0, arg(c, 3)])?;
+                        pen.curve_by([off, a, b, c, 0.0, d])?;
                     } else {
-                        pen.curve_by([arg(c, 0), off, arg(c, 1), arg(c, 2), arg(c, 3), 0.0])?;
+                        pen.curve_by([a, off, b, c, d, 0.0])?;
                     }
                     off = 0.0;
                 }

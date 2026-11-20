@@ -285,9 +285,9 @@ fn kerning_match_keeps_every_value_of_inter() {
                 .map(|lp| (lp.left().command(), lp.right().command()))
                 .collect()
         };
-        let first = own.first().map(|id| usable(&after, &ia, *id)).unwrap_or_default();
+        let first = own.first().map(|id| usable(&after, &ia, id)).unwrap_or_default();
         for id in &own {
-            assert_eq!(usable(&after, &ia, *id), first, "{} pairs of master {id} differ from the first master's", direction.name());
+            assert_eq!(usable(&after, &ia, id), first, "{} pairs of master {id} differ from the first master's", direction.name());
         }
     }
     assert!(changed.is_empty(), "values changed: {changed:#?}");

@@ -242,8 +242,7 @@ fn the_audit_dialog_buttons_ask_for_a_run() {
         fixture.room(egui::vec2(900.0, 640.0)).settle();
         let button = fixture.by_label(press).expect("the button");
         fixture.click(&button).settle();
-        let request = dialog.borrow_mut().request.take();
-        request
+        dialog.borrow_mut().request.take()
     };
     assert_eq!(asked("Add Exceptions").map(|p| p["fix"].clone()), Some(json!(true)));
     assert_eq!(asked("Audit").map(|p| p["fix"].clone()), Some(json!(false)));

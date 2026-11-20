@@ -134,7 +134,7 @@ fn column_request(model: &FontViewModel, change: &ColumnEvent, sent: &mut Vec<Ms
                 sent.push(shell("fontView.sortByColumn", json!({ "column": column.id(), "ascending": !descending })));
             }
         }
-        ColumnEvent::Unsorted { .. } => sent.push(shell("fontView.sortByColumn", json!({ "column": "id", "ascending": true }))),
+        ColumnEvent::Unsorted => sent.push(shell("fontView.sortByColumn", json!({ "column": "id", "ascending": true }))),
         ColumnEvent::Shown { key, shown, .. } => {
             let Some(column) = column_of(key) else { return };
             let mut visible = model.columns.clone();
@@ -154,7 +154,7 @@ fn column_request(model: &FontViewModel, change: &ColumnEvent, sent: &mut Vec<Ms
             order.insert((*to).min(order.len()), column);
             sent.push(shell("fontView.setColumns", json!({ "order": ids(&order) })));
         }
-        ColumnEvent::Reset { .. } => sent.push(shell("fontView.setColumns", json!({ "visible": ids(&Column::ALL), "order": ids(&Column::ALL) }))),
+        ColumnEvent::Reset => sent.push(shell("fontView.setColumns", json!({ "visible": ids(&Column::ALL), "order": ids(&Column::ALL) }))),
         _ => {}
     }
 }

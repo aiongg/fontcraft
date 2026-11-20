@@ -66,7 +66,7 @@ mod tests {
         let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(crate::app::APP).build()));
         assert!(ext::open_folders(app.session.extensions_mut(), Some(&data), false).is_empty());
         // A text file dropped beside it is left for the views.
-        post(&mut app, &[file.clone()]);
+        post(&mut app, std::slice::from_ref(&file));
         assert!(!is_extension(Path::new("/tmp/notes.txt")));
         app.drain();
         assert!(data.join("Macros").join("tighten.fcmacro").exists(), "{}", app.status);

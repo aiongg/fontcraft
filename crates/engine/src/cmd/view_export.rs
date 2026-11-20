@@ -13,6 +13,7 @@
 //! The page spans every glyph's advance from the master's descender to its ascender, widened to
 //! the outlines, with a tenth of the em around it. Guides are drawn across the page.
 
+use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 
@@ -148,7 +149,7 @@ fn export_window(s: &mut Session, v: &Value) -> Result<Value> {
     }
     for d in &drawn {
         let key = (d.name, d.layer.id.as_str());
-        if !outlines.contains_key(&key) {
+        if let Entry::Vacant(slot) = outlines.entry(key) {
             let entry = match fontcraft_render::layer_outline(font, d.layer) {
                 Ok(outline) => {
                     let outline = fontcraft_render::closed_contours(&outline);
@@ -161,7 +162,7 @@ fn export_window(s: &mut Session, v: &Value) -> Result<Value> {
                     None
                 }
             };
-            outlines.insert(key, entry);
+            slot.insert(entry);
         }
         let width = if d.layer.width.is_finite() { d.layer.width.max(0.0) } else { 0.0 };
         widen(Rect::new(d.x, d.y + low, d.x + width, d.y + high));

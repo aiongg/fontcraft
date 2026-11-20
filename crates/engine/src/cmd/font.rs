@@ -164,7 +164,7 @@ fn list_glyphs(s: &mut Session, p: &Value) -> Result<Value> {
     };
     let source_names = source_names(&p)?;
     let chosen = chosen_glyphs(&p, font)?;
-    let wants = |c: &str| columns.as_ref().is_none_or(|cols| cols.iter().any(|x| *x == c));
+    let wants = |c: &str| columns.as_ref().is_none_or(|cols| cols.contains(&c));
     let glyphs: Vec<Value> = font
         .glyphs
         .iter()

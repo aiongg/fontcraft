@@ -1086,8 +1086,6 @@ pub fn shown(s: &str) -> std::borrow::Cow<'_, str> {
     }
 }
 
-/// What the person did in the window this frame, applied after it is drawn.
-
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {

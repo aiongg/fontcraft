@@ -53,7 +53,7 @@ pub(crate) fn read(face: &Face<'_>) -> FontHints {
 }
 
 fn from_ps(font: &PsFont) -> FontHints {
-    let mut zones: Vec<(f64, f64)> = font.private.blue_values.chunks_exact(2).filter_map(|p| Some((*p.first()?, *p.get(1)?))).collect();
+    let mut zones: Vec<(f64, f64)> = font.private.blue_values.as_chunks::<2>().0.iter().map(|&[a, b]| (a, b)).collect();
     zones.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
     let glyphs = font
         .glyphs

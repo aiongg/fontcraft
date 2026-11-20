@@ -189,13 +189,16 @@ impl Built {
 /// What a preview font is built from: the document id and revision, the glyph, the edited master, the target.
 type FontKey = ((u64, u64), String, String, Target);
 
+/// A preview at (pixels per em, rendering), or why it could not be made.
+type PreviewEntry = ((u16, RenderingIntent), Result<Arc<PixelPreview>, String>);
+
 /// The last preview font and its previews: compiling runs the export's outline preparation and the hinting programs,
 /// too slow for every projection.
 #[derive(Default)]
 pub struct Cache {
     key: Option<FontKey>,
     built: Option<Result<Built, String>>,
-    previews: Vec<((u16, RenderingIntent), Result<Arc<PixelPreview>, String>)>,
+    previews: Vec<PreviewEntry>,
     /// Counts preview fonts, for texture keys.
     builds: u64,
 }

@@ -156,7 +156,7 @@ fn table(ui: &mut Ui, words: &GlyphInfoWords, model: &GlyphInfoModel, sent: &mut
                     sent.push(command(json!({ "sortBy": column.id() })));
                 }
             }
-            CollectionEvent::Column(ColumnEvent::Unsorted { .. }) => sent.push(command(json!({ "sortBy": Column::Name.id() }))),
+            CollectionEvent::Column(ColumnEvent::Unsorted) => sent.push(command(json!({ "sortBy": Column::Name.id() }))),
             _ => {}
         }
     }

@@ -346,6 +346,10 @@ impl Listing {
     pub fn len(&self) -> usize {
         self.groups.iter().map(|g| g.items.len()).sum()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.groups.iter().all(|g| g.items.is_empty())
+    }
 }
 
 /// Whether `filter` lists `item`; `glyph` is the glyph Current Glyph Only keeps.
