@@ -4,15 +4,28 @@
 //! the last space that fits, else before the glyph that overflows. Outlines are flattened by the canvas's paint
 //! helper and filled by the nonzero rule in horizontal bands, so counters stay open. Upside down, the whole preview
 //! turns half a circle about its middle.
+//!
+//! The preview is a craft `Canvas` whose document is the laid-out text in points: the canvas scrolls it, and craft's
+//! `ToolHost` runs the drag tool (`shell::space_center::drag`) on the canvas's pass, as the edit view runs its tool.
+//! Painting hands the tool where each glyph sits, so its hit test sees wrapping, right-to-left placement and the half
+//! turn as drawn.
 
-use craft::behavior::kurbo::Affine;
-use craft::ui::contract::{Scroll, ShowContainer as _};
+use craft::behavior::CanvasView;
+use craft::behavior::kurbo::{Affine, Point, Size};
+use craft::ui::canvas::{Canvas, ToolHost, canvas_space, tool_pass};
+use craft::ui::contract::{Bind, ShowContainer as _};
 use craft::ui::layout_components::Stack;
-use egui::{Color32, FontId, Mesh, Painter, Pos2, Rect, Sense, Shape, Stroke, Ui, pos2, vec2};
+use craft::ui::runtime::commands::CommandRef;
+use craft::ui::runtime::env::Env;
+use egui::{Color32, FontId, Mesh, Painter, Pos2, Rect, Shape, Stroke, Ui, pos2, vec2};
+use serde_json::json;
 
+use super::SpaceCenterWords;
+use crate::app::Msg;
 use crate::app::models::space_center::{PlacedGlyph, SpaceCenterModel, SpaceLine};
 use crate::canvas::paint::flatten;
 use crate::canvas::tokens::Tokens;
+use crate::shell::space_center::drag::{GlyphBox, MAX_BOXES, PreviewFrame, SpaceEdit, SpacePreview, drag_message};
 use crate::shell::space_center::{LineMode, waterfall_sizes};
 
 /// Most rows painted.
@@ -119,48 +132,113 @@ fn rows<'m>(model: &'m SpaceCenterModel, span: f32) -> Vec<PreviewRow<'m>> {
     out
 }
 
-/// Paints the preview into a scrolling area that shares the panel's room with the matrix.
-pub fn show(ui: &mut Ui, model: &SpaceCenterModel, tokens: &Tokens) {
+/// Shows the preview as a canvas that shares the panel's room with the matrix. The canvas scrolls over the lines;
+/// its tool (`shell::space_center::drag::SpaceTool`) takes the presses, drags and arrows, whose edits become messages in `sent`.
+pub fn show(ui: &mut Ui, words: &SpaceCenterWords, model: &SpaceCenterModel, tokens: &Tokens, preview: &mut SpacePreview, sent: &mut Vec<Msg>) {
     let pad = tokens.label_size;
-    let _ = Stack::new().scroll(Scroll::both()).fill().show(ui, |ui, _| {
+    let SpacePreview { view, tool } = preview;
+    let drag_at = tool.drag_at();
+    let _ = Stack::new().fill().show(ui, |ui, _| {
         let span = (ui.available_width() - 2.0 * pad).max(pad);
         let rows = rows(model, span);
-        let wide = rows.iter().map(|r| r.length as f32 * r.scale).fold(span, f32::max);
-        let tall: f32 = rows.iter().map(|r| model.line_height as f32 * r.scale).sum();
-        let size = vec2(wide + 2.0 * pad, tall + 2.0 * pad);
-        let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
-        if !ui.is_rect_visible(rect) {
-            return;
+        let wide = rows.iter().map(|r| r.length as f32 * r.scale).fold(span, f32::max) + 2.0 * pad;
+        let tall: f32 = rows.iter().map(|r| model.line_height as f32 * r.scale).sum::<f32>() + 2.0 * pad;
+        // A view never shown starts with the first line at the top left, at one point per preview unit.
+        if !view.rect.is_positive() {
+            let room = ui.available_rect_before_wrap();
+            *view = CanvasView::new(room, Point::new(f64::from(room.width()) / 2.0, f64::from(room.height()) / 2.0), 1.0);
         }
-        let painter = ui.painter_at(rect);
-        paint(&painter, rect, pad, wide, &rows, model, tokens);
+        // At least as tall as the view, so short text starts at the top instead of in the middle.
+        let content = Rect::from_min_size(Pos2::ZERO, vec2(wide, tall.max(view.rect.height())));
+        let canvas = Canvas::new(words.preview.clone())
+            .view(Bind::bound(&mut *view))
+            .document(Size::new(f64::from(content.width()), f64::from(content.height())));
+        let mut reply = None;
+        let tool = &mut *tool;
+        let _ = canvas.show(ui, |ui, body| {
+            let Some(space) = canvas_space(&Env::of(ui).view()) else { return };
+            let clip = space.view.rect;
+            let painter = ui.painter_at(clip);
+            let frame = paint(&painter, clip, content, space.view.affine(), pad, &rows, model, tokens);
+            if let Some(at) = drag_at {
+                painter
+                    .line_segment([pos2(at.x, clip.min.y), pos2(at.x, clip.max.y)], Stroke::new(tokens.metric_line_width, tokens.metric_highlight));
+            }
+            tool.set_frame(frame);
+            if let Some(pass) = tool_pass(&body.env) {
+                reply = Some(ToolHost::new().run(ui, &pass, &mut *tool));
+            }
+        });
+        if let Some(moved) = reply.and_then(|r| r.view) {
+            *view = moved;
+        }
     });
+    // The Space Center's size sets the scale.
+    view.zoom = 1.0;
+    view.rotation = 0.0;
+    view.flip_x = false;
+    for edit in tool.take_edits() {
+        if let Some(message) = edit_message(model, edit) {
+            sent.push(message);
+        }
+    }
 }
 
-fn paint(painter: &Painter, rect: Rect, pad: f32, wide: f32, rows: &[PreviewRow<'_>], model: &SpaceCenterModel, t: &Tokens) {
+/// The message an edit of the preview's tool posts, with the glyph and layers of its matrix column.
+fn edit_message(model: &SpaceCenterModel, edit: SpaceEdit) -> Option<Msg> {
+    match edit {
+        SpaceEdit::Select(column) => Some(Msg::Shell(CommandRef::with_params("window.spaceCenter", json!({ "select": column })))),
+        SpaceEdit::Drag { drag, column, dx, every } => {
+            let col = model.columns.get(column)?;
+            let layers = if every && !col.master_layers.is_empty() { col.master_layers.clone() } else { vec![col.layer.clone()] };
+            drag_message(drag, &col.glyph, &layers, dx)
+        }
+        SpaceEdit::Nudge { column, command, amount } => {
+            let col = model.columns.get(column)?;
+            Some(Msg::run(command, json!({"glyphs": [col.glyph], "layer": col.layer, "amount": amount})))
+        }
+    }
+}
+
+/// Paints the rows of `content` (preview units, y down) through `view` (preview units to screen points) into `clip`,
+/// and returns where each glyph with a matrix column sits.
+#[allow(clippy::too_many_arguments)]
+fn paint(
+    painter: &Painter,
+    clip: Rect,
+    content: Rect,
+    view: Affine,
+    pad: f32,
+    rows: &[PreviewRow<'_>],
+    model: &SpaceCenterModel,
+    t: &Tokens,
+) -> PreviewFrame {
     let display = &model.state.display;
     let (ground, ink) = if display.inverse { (t.outline, t.canvas) } else { (t.canvas, t.outline) };
-    painter.rect_filled(rect, 0.0, ground);
+    painter.rect_filled(clip, 0.0, ground);
+    let wide = content.width() - 2.0 * pad;
     // Upside down, every point turns about the middle of the content.
     let turn = if display.upside_down {
-        let c = rect.center();
+        let c = content.center();
         Affine::new([-1.0, 0.0, 0.0, -1.0, 2.0 * f64::from(c.x), 2.0 * f64::from(c.y)])
     } else {
         Affine::IDENTITY
     };
+    let to_screen = view * turn;
     let turned = |p: Pos2| {
-        let q = turn * craft::behavior::kurbo::Point::new(f64::from(p.x), f64::from(p.y));
+        let q = to_screen * Point::new(f64::from(p.x), f64::from(p.y));
         pos2(q.x as f32, q.y as f32)
     };
     let selected = model.state.selected;
+    let mut frame = PreviewFrame { boxes: Vec::new(), to_screen, selected, grip: f64::from(t.node_size.max(1.0)) };
     let mut labels = 0usize;
-    let mut top = rect.top() + pad;
+    let mut top = content.top() + pad;
     for row in rows {
         let s = row.scale;
         let height = model.line_height as f32 * s;
         let baseline = top + model.ascender as f32 * s;
         let length = row.length as f32 * s;
-        let left = rect.left()
+        let left = content.left()
             + pad
             + match (display.right_to_left, display.centered) {
                 (false, false) => 0.0,
@@ -168,7 +246,8 @@ fn paint(painter: &Painter, rect: Rect, pad: f32, wide: f32, rows: &[PreviewRow<
                 (true, false) => wide - length,
             };
         let y_of = |units: f64| baseline - units as f32 * s;
-        let band_rect = |bottom: f64, up: f64| Rect::from_two_pos(turned(pos2(rect.left(), y_of(bottom))), turned(pos2(rect.right(), y_of(up))));
+        let band_rect =
+            |bottom: f64, up: f64| Rect::from_two_pos(turned(pos2(content.left(), y_of(bottom))), turned(pos2(content.right(), y_of(up))));
         for (bottom, up) in &model.zones {
             painter.rect_filled(band_rect(*bottom, *up), 0.0, t.zone_fill);
         }
@@ -182,7 +261,22 @@ fn paint(painter: &Painter, rect: Rect, pad: f32, wide: f32, rows: &[PreviewRow<
             let x = left + ((g.offset - row.start) as f32) * s;
             let advance = g.advance as f32 * s;
             let box_top = baseline - model.ascender as f32 * s;
+            if let Some(column) = g.column
+                && frame.boxes.len() < MAX_BOXES
+            {
+                frame.boxes.push(GlyphBox {
+                    column,
+                    left: f64::from(x),
+                    right: f64::from(x + advance),
+                    top: f64::from(box_top),
+                    bottom: f64::from(box_top + height),
+                    scale: f64::from(s),
+                });
+            }
             let box_rect = Rect::from_two_pos(turned(pos2(x, box_top)), turned(pos2(x + advance, box_top + height)));
+            if !clip.intersects(box_rect) {
+                continue;
+            }
             if display.metrics {
                 for edge in [x, x + advance] {
                     marks.push(Shape::line_segment(
@@ -195,10 +289,10 @@ fn paint(painter: &Painter, rect: Rect, pad: f32, wide: f32, rows: &[PreviewRow<
                 marks.push(Shape::rect_stroke(box_rect, 0.0, Stroke::new(t.outline_width, t.metric_highlight), egui::StrokeKind::Inside));
             }
             let Some(art) = g.glyph.as_ref().and_then(|name| model.art.get(name)) else { continue };
-            let affine = turn * Affine::new([f64::from(s), 0.0, 0.0, -f64::from(s), f64::from(x), f64::from(baseline)]);
+            let affine = to_screen * Affine::new([f64::from(s), 0.0, 0.0, -f64::from(s), f64::from(x), f64::from(baseline)]);
             let contours = flatten(&art.outline, affine);
             if display.fill
-                && let Some(mesh) = fill(&contours, rect, ink)
+                && let Some(mesh) = fill(&contours, clip, ink)
             {
                 ink_shapes.push(Shape::mesh(mesh));
             }
@@ -231,19 +325,20 @@ fn paint(painter: &Painter, rect: Rect, pad: f32, wide: f32, rows: &[PreviewRow<
         painter.extend(marks);
         if let Some(y) = model.beam_y {
             painter.line_segment(
-                [turned(pos2(rect.left(), y_of(y))), turned(pos2(rect.right(), y_of(y)))],
+                [turned(pos2(content.left(), y_of(y))), turned(pos2(content.right(), y_of(y)))],
                 Stroke::new(t.metric_line_width, t.metric_highlight),
             );
         }
         // The cut-off band shows the row again in the inverse colours.
         if let Some((bottom, up)) = model.band {
-            let band = band_rect(bottom, up).intersect(rect);
+            let band = band_rect(bottom, up).intersect(clip);
             let clipped = painter.with_clip_rect(band);
             clipped.rect_filled(band, 0.0, ink);
             clipped.extend(ink_shapes.into_iter().map(|shape| recolour(shape, ground)));
         }
         top += height;
     }
+    frame
 }
 
 /// `shape` painted in `colour`: a mesh's vertices or a line's stroke.

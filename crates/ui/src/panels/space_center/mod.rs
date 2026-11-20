@@ -8,6 +8,7 @@
 //! | Display menu, line space, tracking | `view.setSpaceCenterDisplay` with the option changed |
 //! | matrix row press, arrows | selects the glyph (`window.spaceCenter {select}`) |
 //! | Left Margin, Advance Width and Right Margin fields | `spaceCenter.setValue` for the selected glyph: a number or `=` and an expression |
+//! | press, drag or arrow keys in the preview | selects the glyph; drags and arrows change its margins (`shell::space_center::drag`) |
 //!
 //! The preview ([`preview`]) paints the projected lines (`app::models::space_center`) and wraps multi-line text at
 //! the panel's width.
@@ -34,6 +35,7 @@ use serde_json::{Value, json};
 use crate::app::Msg;
 use crate::app::models::space_center::{MatrixColumn, SpaceCenterModel};
 use crate::canvas::tokens::Tokens;
+use crate::shell::space_center::drag::SpacePreview;
 use crate::shell::space_center::text::Row as MatrixRow;
 use crate::shell::space_center::{DISPLAY_FLAGS, LineMode};
 
@@ -64,6 +66,8 @@ craft::ui::words! {
         line_space: "fontcraftSpaceCenter.lineSpace" = "Line Space";
         tracking: "fontcraftSpaceCenter.tracking" = "Tracking";
         matrix: "fontcraftSpaceCenter.matrix" = "Spacing matrix";
+        /// The preview canvas.
+        preview: "fontcraftSpaceCenter.preview" = "Preview";
         glyph: "fontcraftSpaceCenter.glyph" = "Glyph";
         width: "fontcraftSpaceCenter.width" = "Width";
         left: "fontcraftSpaceCenter.left" = "Left";
@@ -86,6 +90,8 @@ pub struct Props<'a> {
     pub model: &'a Tracked<SpaceCenterModel>,
     /// The canvas's colours and sizes: the preview draws glyphs as the canvas does.
     pub tokens: &'a Tokens,
+    /// The preview canvas's view and drag tool (`shell::space_center::drag`).
+    pub preview: &'a mut SpacePreview,
     pub sent: &'a mut Vec<Msg>,
 }
 
@@ -107,6 +113,7 @@ pub fn format_value(v: Option<f64>) -> String {
 fn view(props: &mut Props<'_>, ui: &mut Ui) {
     let model: &SpaceCenterModel = props.model;
     let tokens = props.tokens;
+    let space_preview = &mut *props.preview;
     let sent = &mut *props.sent;
     let words = Env::of(ui).words::<SpaceCenterWords>();
     let _ = Stack::new().fill().show(ui, |ui, _| {
@@ -121,7 +128,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
         }
         // The selected glyph's fields come before the two parts that share the room left.
         cells(ui, &words, model, sent);
-        preview::show(ui, model, tokens);
+        preview::show(ui, &words, model, tokens, space_preview, sent);
         matrix(ui, &words, model, sent);
     });
 }

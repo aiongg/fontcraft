@@ -190,6 +190,8 @@ pub struct FontCraftApp {
     pub view: ViewState,
     /// The canvas's active-tool slot.
     pub active_tool: Box<dyn crate::canvas::ActiveTool>,
+    /// The Space Center preview's view and its drag tool.
+    pub space_preview: crate::shell::space_center::drag::SpacePreview,
     /// The toolbox, the selection and the running interaction.
     pub tools: crate::canvas::tools::Tools,
     /// The gradient knob drag in progress (`canvas::color::knobs`).
@@ -252,6 +254,7 @@ impl FontCraftApp {
             tool_slots: tool_slots(),
             view: ViewState::default(),
             active_tool: Box::new(crate::canvas::tools::bridge::ToolBridge::default()),
+            space_preview: Default::default(),
             tools: crate::canvas::tools::Tools::default(),
             knobs: Default::default(),
             view_revision: 0,
