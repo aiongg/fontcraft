@@ -8,8 +8,8 @@ use super::camera::Camera;
 use super::tokens::Tokens;
 use super::{Display, color, hinting, overlays, paint, tools};
 use crate::app::models::canvas::{CanvasModel, EditedGlyph};
-use crate::app::models::text::TextModel;
 use crate::app::models::compatibility::CompatibilityModel;
+use crate::app::models::text::TextModel;
 
 /// What a paint layer reads.
 pub struct PaintCx<'a> {
