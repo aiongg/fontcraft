@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**3095 guesses on 1613 rows (645 of them live commands).**
+**3100 guesses on 1613 rows (645 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -328,6 +328,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `infoBox.image` (panel) | M11 | handbook | – | Width and height are edited independently, without a proportion lock. Settled by typing a new width for a selected image in the reference's Info box and reading its height. |
 | `editView.contextMenu` (panel) | M4 | handbook | – | The swatches open the glyph section of the menu as a Glyph Color submenu (Layer Color when Alt was held at the click). Settled by observation. |
 | `editView.contextMenu` (panel) | M4 | handbook | – | The glyph section offers Exports, Locked and Show Glyph in Font View, and the menu ends with Copy Glyph Names, as the Glyphs 3 video lists them; the other entries of that list follow with their milestones. Settled by observation. |
+| `editView.contextMenu` (panel) | M4 | handbook | – | Items that remove something (Delete Guide, Delete Hints, Clear Hints, Delete Instructions) show a danger tone, a trash icon in the error colour; the video shows no such mark, so it is ours. Settled by observation. |
 | `window.textPreview` (panel) | M5 | handbook | – | The text is edited in a plain field above the area that draws it in the font, since FontCraft has no text field that draws in the font being edited; the field edits texts of up to 100,000 characters, longer ones change through Set Preview Text and Find and Replace. The reference field both edits and draws; a FontCraft field that draws in the font would settle it. |
 | `window.textPreview` (panel) | M5 | handbook | – | The style pop-up starts on the master of the showing Edit View tab and follows it until a style is picked; the reference app's first choice would settle it. |
 | `window.textPreview` (panel) | M5 | handbook | – | Find opens with Cmd+F while the pointer is over the window and with the window's Find button, because Edit › Find… with Cmd+F belongs to the Edit View Find command; a focused Text Preview in the reference app would settle it. |
@@ -579,6 +580,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontView.glyphContextMenu` (panel) | M4 | handbook | – | A right-click on a glyph that is not selected selects it alone first; on a selected glyph the menu acts on the whole selection. Settled by observation. |
 | `fontView.glyphContextMenu` (panel) | M4 | handbook | – | The items come in this order: the colour swatches under a caption (Glyph Color, or Layer Color with Alt), then Tags, then Copy Glyph Names. Settled by observation. |
 | `fontView.glyphContextMenu` (panel) | M4 | handbook | – | With Alt held the swatches set the layer colour of Font View's master. Settled by observation. |
+| `fontView.glyphContextMenu` (panel) | M4 | handbook | – | Alt counts when it is held at the click that opens the menu; pressing or releasing it while the menu is open changes nothing, where native macOS menus swap their alternate items live. Settled by observation. |
 | `fontView.glyphContextMenu` (panel) | M4 | handbook | – | The swatches sit in a Glyph Color submenu, Exports follows them, then Tags and Copy Glyph Names. Settled by observation. |
 | `fontView.glyphContextMenu` (panel) | M4 | handbook | – | Exports shows no mark when only some of the glyphs export, and choosing it then makes them all export; with all exporting it turns export off. Settled by observation. |
 | `fontView.glyphContextMenu` (panel) | M4 | handbook | – | Exports is in this menu as the Glyphs 3 video shows it in the canvas menu. Settled by observation. |
@@ -586,6 +588,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontView.sidebar` (panel) | M4 | handbook | – | The sections start open; categories, scripts, folders and groups start closed. Settled by opening a new document in the reference. |
 | `fontView.sidebar` (panel) | M4 | handbook | – | The actions menu sits at the foot of the sidebar, below the entries. Settled by a screenshot of the reference's Font View. |
 | `fontView.sidebar` (panel) | M4 | handbook | – | A script entry shows the Unicode Script property value its glyph-data id stands for (`Latin`, `Tibetan`, `Canadian Aboriginal`), not the id; paths and parameters keep the id. Settled by a screenshot of the reference's Languages section. |
+| `fontView.sidebar` (panel) | M4 | handbook | – | Remove Filter shows a danger tone in both menus, a trash icon in the error colour; no source shows the reference marking it. Settled by a screenshot of the reference's actions menu. |
 | `fontView.sidebar.languages` (panel) | M4 | handbook | – | A language requires its CLDR main exemplar characters only; the auxiliary, index, numbers and punctuation sets are not counted. Settled by comparing a language's badge total in the reference with its CLDR sets. |
 | `fontView.sidebar.languages` (panel) | M4 | handbook | – | CLDR lists letters in lowercase, so each character's single-character uppercase form is added (ß gets none; Georgian gets no Mtavruli capitals). Settled by observing whether the reference's badge for a Latin-script language counts capitals. |
 | `fontView.sidebar.languages` (panel) | M4 | handbook | – | A language is listed under the glyph database's script that most of its exemplar characters belong to, ignoring Common and Inherited characters (Japanese falls under han, Korean under hangul). Settled by observing where the reference lists Japanese and other mixed-script languages. |
@@ -744,6 +747,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontInfo.features.contextMenu` (behavior) | M8 | inferred | – | The context menu's items and their order are ours; right-clicking a sidebar entry in the reference app would settle them. |
 | `fontInfo.features.contextMenu` (behavior) | M8 | inferred | – | A disabled entry is drawn struck through; disabling an entry in the reference app would settle how it is shown. |
 | `fontInfo.features.contextMenu` (behavior) | M8 | inferred | – | Cmd+A in a focused sidebar group selects that group's entries; pressing Cmd+A in the reference app's sidebar would settle it. |
+| `fontInfo.features.contextMenu` (behavior) | M8 | inferred | – | Delete shows a danger tone, a trash icon in the error colour; the same right-click in the reference app would show whether it marks the item. |
 | `fontInfo.features.sidebarFilter` (behavior) | M8 | inferred | – | The filter matches code as well as names; typing a glyph name into the reference app's sidebar search, if it has one, would settle it. |
 | `fontInfo.features.inlineErrors` (behavior) | M8 | handbook | – | Error ranges are underlined in the code and each error is listed under the code with its line and an icon, not drawn between the code lines; a screenshot of an error in the reference app settles it. |
 | `fontInfo.features.notesDivider` (behavior) | M8 | handbook | – | The notes field starts four rows tall and the divider keeps it between two rows and half the tab's height; dragging the divider in the reference app settles the limits. |
@@ -1947,6 +1951,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `plugin.installFromFile` | M13 | inferred | yes | A module keeps the file name it had (or `<id>.wasm`); installing the same module again only turns it on, and a different module with an installed id needs `replace`; the reference's handling of a second copy is not documented. |
 | `plugin.runFilter` | M13 | inferred | yes | Without `layer` or `layers` the module runs on every master layer of each glyph; a locked glyph among `glyphs` refuses the whole run rather than being skipped. |
 | `plugin.runFilter` | M13 | inferred | yes | With `selectionOnly`, only the paths that hold a selected node take the module's result, and the module must return the layer's shapes in their order; the reference leaves selection handling to each plug-in. |
+| `view.showReporter` | M13 | inferred | yes | Which reporters are shown is kept between runs, as other view switches are; relaunching the reference with a reporter shown would settle it. |
 | `view.showReporter` | M13 | inferred | yes | Reporter entries are listed at the foot of the View menu in the order of their names, below a separator; the handbook does not give the order. |
 | `view.showReporter` | M13 | inferred | yes | Reporters draw only the glyph being edited (with `active` true), not the other glyphs of the Edit View text; observing a reporter plug-in on a line of several glyphs would settle it. |
 | `view.showReporter` | M13 | inferred | yes | A reporter that fails is not run again until its layer, scale or module changes, and its error is written at the top left of the canvas; the reference's handling of a failing reporter is not documented. |

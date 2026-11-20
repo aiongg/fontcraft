@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1509 rows to check: 2596 guesses and 618 observe steps.**
+**1509 rows to check: 2601 guesses and 618 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -361,6 +361,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `editView.contextMenu` (panel, M4, handbook): Edit View canvas context menu
   - Guess: The swatches open the glyph section of the menu as a Glyph Color submenu (Layer Color when Alt was held at the click). Settled by observation.
   - Guess: The glyph section offers Exports, Locked and Show Glyph in Font View, and the menu ends with Copy Glyph Names, as the Glyphs 3 video lists them; the other entries of that list follow with their milestones. Settled by observation.
+  - Guess: Items that remove something (Delete Guide, Delete Hints, Clear Hints, Delete Instructions) show a danger tone, a trash icon in the error colour; the video shows no such mark, so it is ours. Settled by observation.
 - [ ] `view.showMeasurementLine` (M5, handbook, live): Show Measurement Line
   - Guess: The numbers sit just above the line, each centred between the advance edge and the crossing it measures, and a glyph narrower than 24 screen points gets none; watching the reference app with a known glyph would settle it.
   - Guess: In top-to-bottom text the line is not drawn; the handbook only describes horizontal text.
@@ -1249,6 +1250,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A right-click on a glyph that is not selected selects it alone first; on a selected glyph the menu acts on the whole selection. Settled by observation.
   - Guess: The items come in this order: the colour swatches under a caption (Glyph Color, or Layer Color with Alt), then Tags, then Copy Glyph Names. Settled by observation.
   - Guess: With Alt held the swatches set the layer colour of Font View's master. Settled by observation.
+  - Guess: Alt counts when it is held at the click that opens the menu; pressing or releasing it while the menu is open changes nothing, where native macOS menus swap their alternate items live. Settled by observation.
   - Guess: The swatches sit in a Glyph Color submenu, Exports follows them, then Tags and Copy Glyph Names. Settled by observation.
   - Guess: Exports shows no mark when only some of the glyphs export, and choosing it then makes them all export; with all exporting it turns export off. Settled by observation.
   - Guess: Exports is in this menu as the Glyphs 3 video shows it in the canvas menu. Settled by observation.
@@ -1257,6 +1259,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The sections start open; categories, scripts, folders and groups start closed. Settled by opening a new document in the reference.
   - Guess: The actions menu sits at the foot of the sidebar, below the entries. Settled by a screenshot of the reference's Font View.
   - Guess: A script entry shows the Unicode Script property value its glyph-data id stands for (`Latin`, `Tibetan`, `Canadian Aboriginal`), not the id; paths and parameters keep the id. Settled by a screenshot of the reference's Languages section.
+  - Guess: Remove Filter shows a danger tone in both menus, a trash icon in the error colour; no source shows the reference marking it. Settled by a screenshot of the reference's actions menu.
 - [ ] `fontView.sidebar.languages` (panel, M4, handbook): Languages
   - Guess: A language requires its CLDR main exemplar characters only; the auxiliary, index, numbers and punctuation sets are not counted. Settled by comparing a language's badge total in the reference with its CLDR sets.
   - Guess: CLDR lists letters in lowercase, so each character's single-character uppercase form is added (ß gets none; Georgian gets no Mtavruli capitals). Settled by observing whether the reference's badge for a Latin-script language counts capitals.
@@ -2716,6 +2719,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The context menu's items and their order are ours; right-clicking a sidebar entry in the reference app would settle them.
   - Guess: A disabled entry is drawn struck through; disabling an entry in the reference app would settle how it is shown.
   - Guess: Cmd+A in a focused sidebar group selects that group's entries; pressing Cmd+A in the reference app's sidebar would settle it.
+  - Guess: Delete shows a danger tone, a trash icon in the error colour; the same right-click in the reference app would show whether it marks the item.
   - Observe: In F1 (Latin features), right-click a prefix, a class and a feature in Font Info › Features and note each menu's items in order.
 - [ ] `fontInfo.features.sidebarFilter` (behavior, M8, inferred): A search field above the sidebar shows only the entries whose name…
   - Guess: The filter matches code as well as names; typing a glyph name into the reference app's sidebar search, if it has one, would settle it.
@@ -4827,6 +4831,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `plugin.installFromFile` (M13, inferred, live): Install Plug-in from File
   - Guess: A module keeps the file name it had (or `<id>.wasm`); installing the same module again only turns it on, and a different module with an installed id needs `replace`; the reference's handling of a second copy is not documented.
 - [ ] `view.showReporter` (M13, inferred, live): Show (reporter name)
+  - Guess: Which reporters are shown is kept between runs, as other view switches are; relaunching the reference with a reporter shown would settle it.
   - Guess: Reporter entries are listed at the foot of the View menu in the order of their names, below a separator; the handbook does not give the order.
   - Guess: Reporters draw only the glyph being edited (with `active` true), not the other glyphs of the Edit View text; observing a reporter plug-in on a line of several glyphs would settle it.
   - Guess: A reporter that fails is not run again until its layer, scale or module changes, and its error is written at the top left of the canvas; the reference's handling of a failing reporter is not documented.
