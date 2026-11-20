@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**3082 guesses on 1607 rows (645 of them live commands).**
+**3084 guesses on 1608 rows (645 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -3131,6 +3131,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `constructions.ruleGrammar` (behavior) | M13 | docs | – | A number before a position name works with + and * (`10+top`), and position names may hold dots (`top.alt`); the original fails on both. |
 | `drag.ghostOutline` (behavior) | M13 | docs | – | The grey outline shows only the shapes the running interaction changed, and it also shows under a dialog's live preview, which runs as the same kind of interaction. The reference app during a dialog preview would settle the second part. |
 | `drag.ghostOutline` (behavior) | M13 | docs | – | The dotted cross-hair through the pointer is not offered. The reference app's appearance settings would settle whether it is worth a switch. |
+| `view.showCurvature` | M13 | inferred | no | The comb sits on the outside of each curve and its length scales with curvature times a user factor, not with the square root of curvature or with zoom. |
+| `view.showCurvature` | M13 | inferred | no | Combs show for cubic and quadratic segments alike, and on every master layer in the edit view text, not only the active glyph. |
 | `app.commandPalette` | M14 | docs | no | The palette lists the commands that have a menu row; the others take parameters and are reached through the Command Console. The secondary reference's list would settle it. |
 | `app.commandPalette` | M14 | docs | no | The shortcut Cmd+Shift+P comes from the secondary reference; the reference app has none. |
 | `dialog.auditKerningExceptions` | M13 | docs | no | The audit runs once with the default settings as the dialog opens; FontLab's page does not say whether its dialog lists pairs before a button is pressed. |

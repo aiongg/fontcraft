@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1501 rows to check: 2583 guesses and 616 observe steps.**
+**1502 rows to check: 2585 guesses and 618 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,8 +48,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 49 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **973** |
-| Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 86 |
+| **Later milestones (after M6)** | all | **974** |
+| Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 87 |
 | Later milestones (after M6) | Edit View: text mode and preview | 28 |
 | Later milestones (after M6) | Components and anchors | 43 |
 | Later milestones (after M6) | Filters | 5 |
@@ -1590,9 +1590,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (973)
+## Later milestones (after M6) (974)
 
-### Edit View: drawing, guides, layers and the Palette (86)
+### Edit View: drawing, guides, layers and the Palette (87)
 
 - [ ] `anchors.ccmpAlongsideMark` (behavior, M8, handbook): When the mark feature is generated and glyphs such as idotless and…
   - Guess: ccmp follows from the glyph names alone, whether or not the marks carry anchors for the mark feature; Update in the reference app on a font with idotless and an anchorless acutecomb would settle it.
@@ -1690,6 +1690,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The dotted cross-hair through the pointer is not offered. The reference app's appearance settings would settle whether it is worth a switch.
 - [ ] `view.showTunniLines` (M13, docs, live): Tunni Lines
   - Guess: Tunni lines show for cubic segments only; quadratic segments get none. Watching the reference app on a font with quadratic curves would settle it.
+- [ ] `view.showCurvature` (M13, inferred): Curvature
+  - Guess: The comb sits on the outside of each curve and its length scales with curvature times a user factor, not with the square root of curvature or with zoom.
+  - Guess: Combs show for cubic and quadratic segments alike, and on every master layer in the edit view text, not only the active glyph.
+  - Observe: Install the Speed Punk plug-in from Window › Plugin Manager, open a glyph with curves and switch it on: note which side of the curve the comb sits on and whether its length changes with zoom.
+  - Observe: With Speed Punk on, compare a smooth node before and after harmonizing it: note whether the comb's step at the node disappears.
 - [ ] `path.selectTunniLines` (M13, docs, live): Edit Tunni Lines
   - Guess: A segment counts as inside the selection when one of its handles is selected, both its end nodes are, or the segment itself is, as for Fit Curve; FontLab does not define it, and selecting nodes in FontLab with Tunni lines on would settle it.
 - [ ] `path.setCurveTension` (M13, docs, live): Set Curve Tension

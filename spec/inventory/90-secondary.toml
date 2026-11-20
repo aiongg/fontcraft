@@ -40,6 +40,28 @@ guesses = [
 ]
 
 [[command]]
+id = "view.showCurvature"
+label = "Curvature"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool, scale?: number}"
+area = "drawing"
+milestone = "M13"
+summary = "Toggles a curvature comb on every curve segment of the shown layers: short lines drawn along the curve, perpendicular to it, whose lengths follow the curvature at each point, with their ends joined into an outline. Breaks in curvature at smooth nodes show as steps in the comb, which makes it the visual check for Harmonize Nodes and Harmonize Handles."
+ref = "Glyphs tutorial › Harmonization (names the Speed Punk plug-in for curvature combs)"
+status = "inferred"
+notes = "Display only. The reference app has no built-in comb; its tutorial points to a plug-in, so the look and the controls are our design. Curvature comes from the segment's first and second derivatives (fontcraft-geom); straight segments draw nothing."
+guesses = [
+  "The comb sits on the outside of each curve and its length scales with curvature times a user factor, not with the square root of curvature or with zoom.",
+  "Combs show for cubic and quadratic segments alike, and on every master layer in the edit view text, not only the active glyph.",
+]
+observe = [
+  "Install the Speed Punk plug-in from Window › Plugin Manager, open a glyph with curves and switch it on: note which side of the curve the comb sits on and whether its length changes with zoom.",
+  "With Speed Punk on, compare a smooth node before and after harmonizing it: note whether the comb's step at the node disappears.",
+]
+
+[[command]]
 id = "path.selectTunniLines"
 label = "Edit Tunni Lines"
 menu = ["Path"]
