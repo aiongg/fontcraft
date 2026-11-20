@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1502 rows to check: 2585 guesses and 618 observe steps.**
+**1507 rows to check: 2592 guesses and 618 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,18 +48,18 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 49 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **974** |
-| Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 87 |
+| **Later milestones (after M6)** | all | **979** |
+| Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 89 |
 | Later milestones (after M6) | Edit View: text mode and preview | 28 |
 | Later milestones (after M6) | Components and anchors | 43 |
 | Later milestones (after M6) | Filters | 5 |
 | Later milestones (after M6) | Spacing and metrics keys | 13 |
 | Later milestones (after M6) | Kerning and the Kerning window | 16 |
 | Later milestones (after M6) | Font View | 19 |
-| Later milestones (after M6) | Font Info and features | 304 |
+| Later milestones (after M6) | Font Info and features | 305 |
 | Later milestones (after M6) | Interpolation | 90 |
 | Later milestones (after M6) | Hinting | 113 |
-| Later milestones (after M6) | Colour fonts | 72 |
+| Later milestones (after M6) | Colour fonts | 74 |
 | Later milestones (after M6) | Files: open, import, export | 69 |
 | Later milestones (after M6) | Settings and the window | 27 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
@@ -1587,12 +1587,13 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A compiled font fixed with inPlace through a symbolic link replaces the file the link points to and keeps the link, with that file's permissions; fixing a linked font with the reference tools would settle whether the link should be replaced instead.
 - [ ] `audit.toggleLiveAudit` (M3, inferred, live): Live Audit
   - Guess: Live audit is off when the app starts; the default is ours.
+  - Guess: The menu row sits in a View › Audit submenu, beside the other edit view display switches; the reference app has no audit, so no source places it.
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (974)
+## Later milestones (after M6) (979)
 
-### Edit View: drawing, guides, layers and the Palette (87)
+### Edit View: drawing, guides, layers and the Palette (89)
 
 - [ ] `anchors.ccmpAlongsideMark` (behavior, M8, handbook): When the mark feature is generated and glyphs such as idotless and…
   - Guess: ccmp follows from the glyph names alone, whether or not the marks carry anchors for the mark feature; Update in the reference app on a font with idotless and an anchorless acutecomb would settle it.
@@ -1660,6 +1661,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Module sections follow the built-in sections in the order of the modules' names; the handbook does not say where plug-in sections go.
   - Guess: Values typed into a module's form are kept for the session only, and a module replaced by another version starts again from its defaults.
   - Observe: Install a palette plug-in from the Plugin Manager, relaunch and note where its section appears among the built-in Palette sections and whether it collapses like them.
+- [ ] `palette.setModuleValue` (M13, inferred): Set Module Parameter
+  - Open (our design, not confirmed): Sets one field of a filter module's Palette section, held to the parameter's range. The value is kept for the session.
+- [ ] `palette.applyModule` (M13, inferred): Apply Module
+  - Open (our design, not confirmed): The Apply button of a filter module's Palette section: runs the module with the section's values on what its Filter menu item acts on (the edited glyph and its selected nodes, or the glyphs selected in Font View).
 - [ ] `image-pdf` (format, M13, handbook): PDF page placed as an image
   - Guess: The page is drawn on a transparent background, not white, so the glyph shows through around the artwork; placing a PDF in the reference app would show which it uses.
   - Guess: Text and images inside the PDF are not drawn; the reference draws them through the operating system, and a PDF with text placed in the reference app would show the difference.
@@ -2383,7 +2388,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.
   - Guess: Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.
 
-### Font Info and features (304)
+### Font Info and features (305)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
@@ -2726,6 +2731,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Choosing another language for a name row removes the name and adds it in the new language, as two undo steps; changing a row's language in the reference app settles whether it is one step.
 - [ ] `font.info.features.select` (M8, inferred): Select Feature Entries
   - Guess: Our own command for scripts and the window's clicks; nothing to observe, the reference app selects sidebar entries only by clicking them.
+- [ ] `font.info.features.paste` (M8, inferred): Paste Feature Entries
+  - Guess: Our own command that carries the sidebar's Paste to font.features.pasteEntries; nothing to observe beyond the context menu row fontInfo.features.contextMenu.
 - [ ] `font.numbers.list` (M8, inferred, live): List Number Values
   - Guess: Numbers are listed in the font's order, plus one master's values when asked; the Masters tab in the running app would settle the order.
 - [ ] `font.numbers.add` (M8, handbook, live): Add Number Value
@@ -3555,6 +3562,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `window.shapeOrder` (panel, M9, handbook): Shape Order
   - Guess: The window opens from Window › Shape Order; Filter › Shape Order keeps the one-layer dialog. Choosing Filter › Shape Order in the reference app opens the all-layers window, so the two may have to merge.
   - Guess: Columns run left to right, one per layer, thumbnails top to bottom with shape 0 on top; seeing the window would settle the layout.
+  - Guess: In the dock panel the layers are sections from top to bottom, since a docked panel is narrow; seeing the window would settle whether layers sit side by side.
   - Observe: In F5 (incompatible), open Filter › Shape Order: note the layout, whether special layers appear, and how a drag reorders shapes.
 - [ ] `editView.masterCompatibility` (panel, M9, handbook): Master Compatibility view
   - Guess: The edited layer stays in place and every other source layer is drawn beside it in source order (master layers, then intermediate layers), each starting a quarter em after the previous layer's advance and a twelfth of an em higher, so the connecting lines slant. Settle by opening the view on a glyph with three masters.
@@ -3941,6 +3949,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Remove Hints in the TrueType Instructor removes TrueType instructions only and leaves PostScript hints, since the handbook names it in the TrueType section; running it on a glyph with both in the reference app would settle it.
 - [ ] `hint.tt.deleteInstructions` (M10, inferred, live): Delete Instructions
   - Guess: The Delete key removes the selected instructions, as for PostScript hints; the reference app would settle it.
+  - Guess: A badge's context menu offers Delete Instructions beside Reverse and Make Triple Hint, which the handbook names there; right-clicking a Snap badge in the reference app would settle it.
   - Guess: Deleting an instruction that later ones build on deletes it and reports those later ones, which stay in the list; the reference app would settle whether it refuses, deletes them too or keeps them silently.
   - Guess: Deleting one member of a triple hint dissolves the triple hint and keeps the other two Stem instructions; the reference app would settle it.
   - Observe: T3: with the TrueType Instructor, select an instruction badge and press Delete; note whether the instruction is removed.
@@ -4041,7 +4050,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In the secondary reference, open Review Hints on a glyph with ghost hints and note what the width field shows for one.
   - Observe: Press Next on the last hint in the secondary reference's Review Hints and check whether it wraps to the first.
 
-### Colour fonts (72)
+### Colour fonts (74)
 
 - [ ] `color.fourKinds` (behavior, M11, handbook): Four colour workflows are supported: layered fonts (one font file per colour),…
   - Guess: A glyph may mix kinds: its palette and full-colour layers feed COLR, its iColor layers sbix and its svg layer the SVG table, each written by its own rule; an svg layer wins over a conversion by Color Layers to SVG for that glyph. Settled by exporting a glyph with a palette layer and an svg layer from the reference.
@@ -4261,6 +4270,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `dialog.masterColorPicker` (panel, M11, handbook): Master Color picker
   - Guess: The colour is stored as the text `R,G,B,A` with components from 0 to 255 (the picker also reads `#RRGGBBAA` and a list of numbers). Settled by saving a font with a Master Color from the reference and reading the stored value.
   - Guess: Opacity is the alpha slider of the colour picker. Settled by opening the picker in the reference.
+- [ ] `dialog.glyphAsImage` (panel, M11, handbook): Glyph as Image
+  - Guess: The dialog offers the format (PNG first), the master, the pixel size and the folder, as Export Artwork does; opening Filter › Glyph as Image in the reference app settles it.
 - [ ] `bitmap.widthOnlyInBitmapFonts` (behavior, M13, docs): A bitmap glyph's advance can be edited directly only when the font…
   - Guess: A font has outlines when any glyph has a path or component on any layer; a font opened from a bitmap file has none.
   - Guess: The advance follows the outline when a bitmap is edited or regenerated, not at once when the glyph's width changes; the secondary reference's bitmap view after a width change would settle it.
@@ -4278,6 +4289,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: In masters output each master is named after its source's family and master name, and colour and opacity are not stored, since a master has no colour.
   - Guess: The new font keeps the bottom source's family name and drops its axes and instances.
   - Guess: `color` defaults to opaque black and `output` has no default.
+- [ ] `dialog.overlayFonts` (M13, docs): Overlay Fonts…
+  - Guess: The dialog opens with one source per open document, bottom first, each in its own colour from a fixed list; settled by opening Overlay Fonts in the reference app with three fonts open.
+  - Guess: The preview shows the shown glyph, or the first three glyphs of the active font, side by side; settled by the reference app's dialog.
 - [ ] `color.generateDarkPalette` (M13, docs, live): Generate Dark Palette
   - Guess: The dark colour of each entry inverts its OKLab lightness (L' = 1 - L) and keeps its hue and alpha, losing chroma, not hue, when the result falls outside sRGB; the reference's palettes for a set of known colours would settle it.
   - Guess: The new palette is named after its source with " Dark" added ("Dark" when the source has no name), and only the new palette is marked; the source palette gets no `light` style. Settled by the names and CPAL palette types of a font the reference exports with a dark palette.

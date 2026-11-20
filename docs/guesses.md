@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**3084 guesses on 1608 rows (645 of them live commands).**
+**3091 guesses on 1611 rows (645 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -756,6 +756,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontInfo.exports.instancePreview` (behavior) | M7 | handbook | – | The default `Aang126` is read as characters and drawn with the glyphs mapped to them, skipping characters the font lacks; the reference app settles whether it names glyphs instead. |
 | `font.info.features.select` | M8 | inferred | no | Our own command for scripts and the window's clicks; nothing to observe, the reference app selects sidebar entries only by clicking them. |
 | `font.info.exports.select` | M7 | inferred | no | Our own command for scripts and the window's clicks; nothing to observe, the reference app selects exports only by clicking them. |
+| `font.info.features.paste` | M8 | inferred | no | Our own command that carries the sidebar's Paste to font.features.pasteEntries; nothing to observe beyond the context menu row fontInfo.features.contextMenu. |
 | `fontInfo` (panel) | M7 | handbook | – | Font Info opens on the tab it last showed for that document, and on the Font tab the first time; opening it twice in the reference app settles it. |
 | `fontInfo` (panel) | M7 | handbook | – | One Font Info window shows the active document, and switching documents shows the other document's information in it; opening Font Info in two documents of the reference app settles whether each keeps a window of its own. |
 | `fontInfo.font` (panel) | M7 | handbook | – | The double-arrow button opens a prompt under the field that asks for the new units per em, starting at the current value, with Scale and Cancel buttons; clicking the button in the reference app settles the prompt's form. |
@@ -1297,6 +1298,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `axisMappings.fontAndExportLevel` (behavior) | M9 | handbook | – | A setting's Axis Mappings replaces the font's whole value, not axis by axis; settle by giving a setting a mapping for one axis of a two-axis font and reading `avar`. |
 | `window.shapeOrder` (panel) | M9 | handbook | – | The window opens from Window › Shape Order; Filter › Shape Order keeps the one-layer dialog. Choosing Filter › Shape Order in the reference app opens the all-layers window, so the two may have to merge. |
 | `window.shapeOrder` (panel) | M9 | handbook | – | Columns run left to right, one per layer, thumbnails top to bottom with shape 0 on top; seeing the window would settle the layout. |
+| `window.shapeOrder` (panel) | M9 | handbook | – | In the dock panel the layers are sections from top to bottom, since a docked panel is narrow; seeing the window would settle whether layers sit side by side. |
 | `editView.masterCompatibility` (panel) | M9 | handbook | – | The edited layer stays in place and every other source layer is drawn beside it in source order (master layers, then intermediate layers), each starting a quarter em after the previous layer's advance and a twelfth of an em higher, so the connecting lines slant. Settle by opening the view on a glyph with three masters. |
 | `editView.masterCompatibility` (panel) | M9 | handbook | – | Shape tints are drawn as wide translucent strokes along each shape's outline and components get a dashed tint in place of a checkered fill. Settle by comparing a screenshot of the reference app's view. |
 | `popover.intermediateLayer` (panel) | M9 | handbook | – | The editor is a dialog in the middle of the window, not a popover attached to the row; settle by choosing Intermediate on a layer in the reference app and noting where the fields appear. |
@@ -1645,6 +1647,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `hint.tt.autohintGlyph` | M10 | handbook | yes | The Instructor's Autohint writes vertical Snap on every extreme in a TT zone and vertical Stem for each horizontal stem the PostScript stem analysis finds, and nothing horizontal, as ttfautohint hints heights only; a glyph hinted by the reference app would show which points and directions it picks. |
 | `hint.tt.removeHints` | M10 | handbook | yes | Remove Hints in the TrueType Instructor removes TrueType instructions only and leaves PostScript hints, since the handbook names it in the TrueType section; running it on a glyph with both in the reference app would settle it. |
 | `hint.tt.deleteInstructions` | M10 | inferred | yes | The Delete key removes the selected instructions, as for PostScript hints; the reference app would settle it. |
+| `hint.tt.deleteInstructions` | M10 | inferred | yes | A badge's context menu offers Delete Instructions beside Reverse and Make Triple Hint, which the handbook names there; right-clicking a Snap badge in the reference app would settle it. |
 | `hint.tt.deleteInstructions` | M10 | inferred | yes | Deleting an instruction that later ones build on deletes it and reports those later ones, which stay in the list; the reference app would settle whether it refuses, deletes them too or keeps them silently. |
 | `hint.tt.deleteInstructions` | M10 | inferred | yes | Deleting one member of a triple hint dissolves the triple hint and keeps the other two Stem instructions; the reference app would settle it. |
 | `hint.tt.moveInstruction` | M10 | handbook | yes | Repositioning an instruction moves the point it acts on, not only its badge; a drop away from any node changes nothing; dragging a Snap badge onto another node in the reference app would settle it. |
@@ -1880,6 +1883,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `inspector.attributes.gradientBar` (panel) | M11 | handbook | – | A knob released more than two bar heights above or below the bar removes its stop. Settled by dragging a stop away in the reference and noting the distance. |
 | `dialog.masterColorPicker` (panel) | M11 | handbook | – | The colour is stored as the text `R,G,B,A` with components from 0 to 255 (the picker also reads `#RRGGBBAA` and a list of numbers). Settled by saving a font with a Master Color from the reference and reading the stored value. |
 | `dialog.masterColorPicker` (panel) | M11 | handbook | – | Opacity is the alpha slider of the colour picker. Settled by opening the picker in the reference. |
+| `dialog.glyphAsImage` (panel) | M11 | handbook | – | The dialog offers the format (PNG first), the master, the pixel size and the folder, as Export Artwork does; opening Filter › Glyph as Image in the reference app settles it. |
 
 ## `16-settings.toml`
 
@@ -2450,6 +2454,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `audit.nextIssue` | M12 | inferred | yes | No menu item and no shortcut: the panel's arrow buttons and the Edit View marker badges run it, because the reference app has no audit panel (21-qa.md question 1). |
 | `audit.previousIssue` | M12 | inferred | yes | No menu item and no shortcut: the panel's arrow buttons and the Edit View marker badges run it, because the reference app has no audit panel (21-qa.md question 1). |
 | `audit.toggleLiveAudit` | M3 | inferred | yes | Live audit is off when the app starts; the default is ours. |
+| `audit.toggleLiveAudit` | M3 | inferred | yes | The menu row sits in a View › Audit submenu, beside the other edit view display switches; the reference app has no audit, so no source places it. |
 | `audit.toggleMarkers` | M3 | inferred | yes | Markers are on when the app starts; the default is ours. |
 | `audit.filterResults` | M12 | inferred | yes | The severity filter is three choices (all, warnings and failures, failures) rather than a toggle per severity, because the command takes a minimum severity; a later design review would settle it. |
 | `audit.editProfile` | M12 | inferred | yes | The reference app has no audit profile editor, so the dialog is our design: it opens on the panel's profile, else the default one; people using it would settle whether that is the profile they expect. |
@@ -3137,6 +3142,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `app.commandPalette` | M14 | docs | no | The shortcut Cmd+Shift+P comes from the secondary reference; the reference app has none. |
 | `dialog.auditKerningExceptions` | M13 | docs | no | The audit runs once with the default settings as the dialog opens; FontLab's page does not say whether its dialog lists pairs before a button is pressed. |
 | `dialog.matchKerning` | M13 | docs | no | The summary gives the pairs filled, the exceptions added and each master's pair count before and after; FontLab's page names no summary. |
+| `dialog.overlayFonts` | M13 | docs | no | The dialog opens with one source per open document, bottom first, each in its own colour from a fixed list; settled by opening Overlay Fonts in the reference app with three fonts open. |
+| `dialog.overlayFonts` | M13 | docs | no | The preview shows the shown glyph, or the first three glyphs of the active font, side by side; settled by the reference app's dialog. |
 | `spaceCenter.setValue` | M13 | docs | no | A matrix entry is its own command that evaluates the text and then runs the spacing setter as a second step; the reference's undo history after one entry would settle whether it is one step. |
 | `palette.selections` (panel) | M13 | docs | – | The section sits after Transformations in the Palette and shows only the edited glyph's entries; FontLab's panel placement would settle it. |
 | `palette.selections` (panel) | M13 | docs | – | Add with a name that already exists replaces that entry rather than refusing; observing the panel's Add on a duplicate name would settle it. |
