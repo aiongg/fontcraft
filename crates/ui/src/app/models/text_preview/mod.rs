@@ -10,6 +10,9 @@
 //! break on widths shaped through the same font. Until a font is ready, and when it cannot be built, the text shows
 //! as laid out by code point, with the reason in [`TextPreviewModel::message`].
 //!
+//! A glyph with colour layers in the shown master (or every glyph of a layered font with Master Colors) carries its
+//! colour drawing from `canvas::color` in [`Page::colors`], which the panel draws in place of its outline.
+//!
 //! The projection runs on every `FontCraftApp::project`, outside the stamp, because a font build lands between
 //! frames; its own keys keep an unchanged preview from being placed again.
 
@@ -33,6 +36,7 @@ use fontcraft_textlayout::{
 
 use self::shaping::{FontKey, FontSlot};
 use super::{ProjectCx, set};
+use crate::canvas::color::{self, ColorArt, ColorFiles, Sources};
 use crate::shell::text_preview::{self as tp, Area, BaseDirection, FindState, MAX_CHARS, Orientation, TextPreviewState, base_is_rtl, find_matches};
 
 /// Lines placed before the view reports which lines it shows.
@@ -45,6 +49,8 @@ const MAX_PLACED: usize = 60_000;
 const MAX_SHAPED_LINES: usize = 4_096;
 /// Distinct glyph outlines kept for one document revision and master.
 const MAX_OUTLINES: usize = 65_536;
+/// Most distinct glyphs drawn in colour for one document revision and master.
+const MAX_COLOR_GLYPHS: usize = 4_096;
 
 /// One glyph to draw, at its origin in layout coordinates (font units, y up).
 #[derive(PlainData, Clone, Debug, Default, PartialEq)]
@@ -90,6 +96,25 @@ impl PartialEq for Outlines {
     }
 }
 
+/// The colour drawings of the glyphs placed, by name, in font units: `None` for a glyph with nothing in colour. Two
+/// sets with the same `id` hold the same drawings.
+#[derive(Clone, Debug, Default)]
+pub struct Colors {
+    pub id: u64,
+    pub arts: HashMap<Arc<str>, Option<Arc<ColorArt>>>,
+    /// Drawings of `arts` that are `Some`.
+    pub drawn: usize,
+}
+
+// Colour drawings are compared by their key; the set by its id.
+impl PlainData for Colors {}
+
+impl PartialEq for Colors {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
 /// The laid-out text, placed for the lines around the view.
 #[derive(PlainData, Clone, Debug, Default, PartialEq)]
 pub struct Page {
@@ -111,6 +136,8 @@ pub struct Page {
     pub fallback: Vec<PageChar>,
     pub highlights: Vec<PageBox>,
     pub outlines: Arc<Outlines>,
+    /// The glyphs placed that draw in colour (`canvas::color`), in place of their outline.
+    pub colors: Arc<Colors>,
 }
 
 /// The direction lines run in.
@@ -173,6 +200,8 @@ struct Cache {
     matches: Arc<Vec<usize>>,
     outlines_key: Option<(u64, u64, String)>,
     outlines: Arc<Outlines>,
+    colors: Arc<Colors>,
+    color_files: ColorFiles,
     page_key: Option<u64>,
     page: Option<Arc<Page>>,
     model_key: Option<u64>,
@@ -329,6 +358,7 @@ pub fn project(models: &mut TextPreviewModels, cx: &mut ProjectCx<'_>, host: &Ho
         if cache.outlines_key.as_ref() != Some(&outlines_key) {
             cache.outlines_key = Some(outlines_key);
             cache.outlines = Arc::new(Outlines { id: cache.outlines.id.wrapping_add(1), paths: HashMap::new() });
+            cache.colors = Arc::new(Colors { id: cache.colors.id.wrapping_add(1), ..Colors::default() });
         }
         let shaped_lines = placed.clone().filter(|l| cache.shaped.contains_key(l)).count();
         let page_key =
@@ -347,7 +377,11 @@ pub fn project(models: &mut TextPreviewModels, cx: &mut ProjectCx<'_>, host: &Ho
                 current: state.find.current,
                 length: state.length,
             };
-            cache.page = Some(Arc::new(page(&input, &mut cache.outlines, page_key, scale, upm, shaped_lines)));
+            cache.color_files.follow(Some(doc.0));
+            let assets = cx.session.assets();
+            let mut src = Sources { assets: assets.as_ref(), files: &mut cache.color_files, text: color::TEXT };
+            let drawn = Drawn { outlines: &mut cache.outlines, colors: &mut cache.colors, src: &mut src };
+            cache.page = Some(Arc::new(page(&input, drawn, page_key, scale, upm, shaped_lines)));
         }
     } else {
         cache.page = None;
@@ -445,9 +479,17 @@ impl PageInput<'_> {
     }
 }
 
+/// The drawings `page` adds the glyphs it places to, and where colour drawings read their files.
+struct Drawn<'a, 's> {
+    outlines: &'a mut Arc<Outlines>,
+    colors: &'a mut Arc<Colors>,
+    src: &'a mut Sources<'s>,
+}
+
 /// Places the lines of `input.placed`: glyphs, the characters the font lacks and the match highlights, with the
-/// outlines of the glyphs placed added to `outlines`.
-fn page(input: &PageInput<'_>, outlines: &mut Arc<Outlines>, key: u64, scale: f64, upm: f64, shaped: usize) -> Page {
+/// outlines and colour drawings of the glyphs placed added to `drawn`.
+fn page(input: &PageInput<'_>, drawn: Drawn<'_, '_>, key: u64, scale: f64, upm: f64, shaped: usize) -> Page {
+    let Drawn { outlines, colors, src } = drawn;
     let layout = input.layout;
     let items = match (layout.lines.get(input.placed.start), input.placed.end.checked_sub(1).and_then(|l| layout.lines.get(l))) {
         (Some(a), Some(b)) if input.placed.start < input.placed.end => a.items.start..b.items.end,
@@ -486,6 +528,7 @@ fn page(input: &PageInput<'_>, outlines: &mut Arc<Outlines>, key: u64, scale: f6
         }
         set.id = set.id.wrapping_add(1);
     }
+    add_colors(input, &glyphs, colors, src);
     let mut highlights = Vec::new();
     let qlen = input.query_len;
     let shown = input.matches.partition_point(|s| s + qlen <= items.start)..input.matches.partition_point(|s| *s < items.end);
@@ -515,7 +558,33 @@ fn page(input: &PageInput<'_>, outlines: &mut Arc<Outlines>, key: u64, scale: f6
         fallback,
         highlights,
         outlines: outlines.clone(),
+        colors: colors.clone(),
     }
+}
+
+/// Adds to `colors` the colour drawing of each glyph of `glyphs` it has not looked at: the glyph's colour layers in
+/// the shown master, or a layered font's Master Colors, as Font View cells draw them (`color::cell_mode`). Past
+/// [`MAX_COLOR_GLYPHS`] drawings, glyphs draw as their outlines.
+fn add_colors(input: &PageInput<'_>, glyphs: &[PageGlyph], colors: &mut Arc<Colors>, src: &mut Sources<'_>) {
+    let unseen: Vec<&Arc<str>> = glyphs.iter().map(|g| &g.name).filter(|n| !colors.arts.contains_key(*n)).collect();
+    if unseen.is_empty() {
+        return;
+    }
+    let mode = color::cell_mode(input.font, input.master, false);
+    let set = Arc::make_mut(colors);
+    if set.arts.len() > MAX_OUTLINES {
+        set.arts.clear();
+        set.drawn = 0;
+    }
+    for name in unseen {
+        if set.arts.contains_key(name) {
+            continue;
+        }
+        let art = if set.drawn < MAX_COLOR_GLYPHS { input.font.glyph(name).and_then(|g| color::cell_color(input.font, g, &mode, src)) } else { None };
+        set.drawn += usize::from(art.is_some());
+        set.arts.insert(name.clone(), art);
+    }
+    set.id = set.id.wrapping_add(1);
 }
 
 #[cfg(test)]
