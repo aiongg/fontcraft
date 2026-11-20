@@ -206,6 +206,10 @@ fn the_controls_post_their_commands_and_the_strip_scrolls_and_edits_on_double_cl
     posted.borrow_mut().clear();
 
     let strip = f.by_label("Preview Area").expect("the strip");
+    // The strip takes the room the controls leave; the controls stay inside the area.
+    let invert = f.by_label("Invert").expect("the Invert button");
+    assert!(strip.rect.height() > 100.0 && strip.rect.bottom() <= invert.rect.top(), "{:?} {:?}", strip.rect, invert.rect);
+    assert!(invert.rect.bottom() <= 200.0, "{:?} {:?}", strip.rect, invert.rect);
     // Always Center Active Glyph puts the edited glyph (item 0) in the strip's middle.
     let middle = strip.rect.center();
     f.click_at(middle).click_at(middle).settle();
