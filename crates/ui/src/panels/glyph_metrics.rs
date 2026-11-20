@@ -52,8 +52,10 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
             let (value, command) = (*value, *command);
             field(ui, label.clone(), value, |value| {
                 let mut params = json!({ "glyphs": [glyph], "value": value });
-                if let Some(id) = &layer {
-                    params["layer"] = json!(id);
+                if let Some(id) = &layer
+                    && let Some(map) = params.as_object_mut()
+                {
+                    map.insert("layer".into(), json!(id));
                 }
                 sent.push(Msg::run(command, params));
             });

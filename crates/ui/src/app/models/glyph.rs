@@ -40,8 +40,10 @@ pub fn project(model: &mut Tracked<GlyphMetrics>, cx: &mut ProjectCx<'_>) {
         masters::shown_layer(font, &cx.view.layers, shown).map(|l| l.id.clone())
     });
     let mut params = json!({ "glyph": glyph });
-    if let Some(id) = &layer {
-        params["layer"] = json!(id);
+    if let Some(id) = &layer
+        && let Some(map) = params.as_object_mut()
+    {
+        map.insert("layer".into(), json!(id));
     }
     let reply = cx.session.query("spacing.getMetrics", &params).unwrap_or(Value::Null);
     let number = |key: &str| reply.get(key).and_then(Value::as_f64).filter(|v| v.is_finite());

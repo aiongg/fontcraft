@@ -381,7 +381,7 @@ fn instructor_section(app: &FontCraftApp) -> Section {
             "hint.tt.showPointIndexes" => Some(state.point_indexes),
             _ => None,
         };
-        ContextItem { command: *id, label, enabled: true, disabled_reason: None, checked, alternate: false }
+        ContextItem { command: id, label, enabled: true, disabled_reason: None, checked, alternate: false }
     };
     let scales = PREVIEW_SCALES.iter().map(|&(id, label, s)| ContextItem {
         command: id,

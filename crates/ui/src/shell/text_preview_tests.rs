@@ -159,7 +159,7 @@ fn text_preview_draws_colour_glyphs_from_the_compiled_font() {
     let p = page(&app);
     let Some(Some(a)) = p.colors.rasters.get("A") else { panic!("A draws in colour: {:?}", app.models.text_preview.view.message) };
     assert!((p.colors.pixel_scale - p.scale).abs() < 1e-9, "drawn at one pixel per point until the view reports its own");
-    let red = a.image.pixels.chunks_exact(4).filter(|px| px == &[255, 0, 0, 255]).count();
+    let red = a.image.pixels.as_chunks::<4>().0.iter().filter(|px| **px == [255, 0, 0, 255]).count();
     assert!(red > 0, "palette row 0 fills the square");
     assert!(matches!(p.colors.rasters.get("V"), Some(None)), "V draws its outline");
     assert_eq!(app.models.text_preview.view.message, None);
