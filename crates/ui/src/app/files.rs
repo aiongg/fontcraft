@@ -14,6 +14,9 @@
 //! | `project.save` | a `.fontcraftproject` file, for a project never saved |
 //! | `project.linkFont` | a font source for the project to link, into `font` |
 //! | `project.setExportDestination` | a folder to export into, into `folder` |
+//! | `tableViewer.openFont`, `tableViewer.compareWithFile` | a compiled font for the Table Viewer ([`COMPILED_EXTENSIONS`]) |
+//!
+//! Engine and shell commands alike: a shell command of the table asks before it runs, as an engine command does.
 //!
 //! A chosen save name without an extension gets the offered one (the file service's extension policy).
 
@@ -33,6 +36,8 @@ pub const PICKED: &[(&str, &str)] = &[
     ("project.save", "path"),
     ("project.linkFont", "font"),
     ("project.setExportDestination", "folder"),
+    ("tableViewer.openFont", "path"),
+    ("tableViewer.compareWithFile", "path"),
 ];
 
 /// Most files one picker answer opens; the rest are left alone.
@@ -44,6 +49,8 @@ const SAVE_EXTENSIONS: [&str; 6] = ["fontcraft", "glyphs", "glyphspackage", "ufo
 const NATIVE_EXTENSION: &str = "fontcraft";
 /// A project file's extension.
 const PROJECT_EXTENSION: &str = "fontcraftproject";
+/// The compiled fonts the Table Viewer reads.
+pub const COMPILED_EXTENSIONS: [&str; 6] = ["ttf", "otf", "ttc", "otc", "woff", "woff2"];
 /// The file kinds a project can link.
 pub const FONT_EXTENSIONS: [&str; 5] = ["glyphs", "glyphspackage", "ufo", "designspace", "fontcraft"];
 
@@ -119,6 +126,8 @@ fn request(session: &Session, command: &CommandRef) -> Option<(PickRequest, &'st
         }
         "project.linkFont" => (PickRequest::open("document").filter("Font sources", &FONT_EXTENSIONS), Fill::One),
         "project.setExportDestination" => (PickRequest::folder("export"), Fill::One),
+        "tableViewer.openFont" => (PickRequest::open("document").title("Open Font").filter("Fonts", &COMPILED_EXTENSIONS), Fill::One),
+        "tableViewer.compareWithFile" => (PickRequest::open("document").title("Compare With").filter("Fonts", &COMPILED_EXTENSIONS), Fill::One),
         _ => return None,
     };
     Some((request.0, param, request.1))

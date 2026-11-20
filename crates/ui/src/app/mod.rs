@@ -380,6 +380,9 @@ impl FontCraftApp {
                 Ok(reply)
             }
             Msg::Shell(command) => {
+                if ask_files && self.picks.ask(&self.host, &self.session, &command) {
+                    return Ok(json!({ "picker": true }));
+                }
                 // Shell commands change view state, which the projection reads.
                 self.view_revision += 1;
                 crate::shell::commands::run(self, &command).map(|()| Value::Null)

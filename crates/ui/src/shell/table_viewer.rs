@@ -1,6 +1,8 @@
 //! The Table Viewer (M12.38): a compiled font's tables as a tree of decoded fields with a hex pane, the TTX text of a
-//! table, and a second font compared table by table. This module holds its view state and the command
-//! `tableViewer.show`; the panel is `panels::table_viewer`, its view model `app::models::table_viewer`.
+//! table, and a second font compared table by table. This module holds its view state and the commands
+//! `tableViewer.show`, `tableViewer.openFont` and `tableViewer.compareWithFile` (the last two ask for their file through
+//! `app::files` when they come without one); the panel is `panels::table_viewer`, its view model
+//! `app::models::table_viewer`.
 //!
 //! Every view is what an engine query returns: the table list and the tree are `tables.show`, the TTX and hex texts
 //! `font.dumpTables`, the marks and the Differences view `font.diff`. They are read when the command changes a
@@ -43,13 +45,29 @@ const MAX_SHOWN_CHARS: usize = 400;
 
 pub const MODULE: Module = Module { commands: COMMANDS, run };
 
-const COMMANDS: &[UiCommand] = &[UiCommand {
-    id: "tableViewer.show",
-    label: "Table Viewer",
-    menu: &["Window"],
-    shortcut: None,
-    params: "{font?: path, face?: number, compareWith?: path|null, table?: tag, view?: \"fields\"|\"ttx\"|\"differences\", path?: string, record?: [index], expand?: bool, search?: string, reload?: bool} show the Table Viewer. font reads the font's table list (tables.show) and keeps the selected table when the font has it; reload reads the font and the compared font again; compareWith compares the font with a second one table by table (font.diff) and marks the tables that differ, null stops comparing; table selects a table and reads it for the view: fields is the tree of tables.show with the hex pane (font.dumpTables hex), ttx the TTX text (font.dumpTables), differences the decoded comparison of that table (font.diff); path (as tables.show writes it, GPOS.lookupList.lookups[3]) or record (child positions from the table's root, [2, 0]) selects a record, reading deeper levels when needed; expand true also reads and opens its children, false closes it; search keeps the records or lines whose name or value contains the text, ignoring case. A refused change leaves the viewer as it was. ui.inspect reports it under tableViewer",
-}];
+const COMMANDS: &[UiCommand] = &[
+    UiCommand {
+        id: "tableViewer.openFont",
+        label: "Open Font in Table Viewer",
+        menu: &[],
+        shortcut: None,
+        params: "{path?: path} read a compiled font into the Table Viewer, as tableViewer.show {font: path}; without a path the window asks for the file (Open… in the viewer)",
+    },
+    UiCommand {
+        id: "tableViewer.compareWithFile",
+        label: "Compare With File",
+        menu: &[],
+        shortcut: None,
+        params: "{path?: path} compare the Table Viewer's font with a second compiled font, as tableViewer.show {compareWith: path}; without a path the window asks for the file (Compare With… in the viewer)",
+    },
+    UiCommand {
+        id: "tableViewer.show",
+        label: "Table Viewer",
+        menu: &["Window"],
+        shortcut: None,
+        params: "{font?: path, face?: number, compareWith?: path|null, table?: tag, view?: \"fields\"|\"ttx\"|\"differences\", path?: string, record?: [index], expand?: bool, search?: string, reload?: bool} show the Table Viewer. font reads the font's table list (tables.show) and keeps the selected table when the font has it; reload reads the font and the compared font again; compareWith compares the font with a second one table by table (font.diff) and marks the tables that differ, null stops comparing; table selects a table and reads it for the view: fields is the tree of tables.show with the hex pane (font.dumpTables hex), ttx the TTX text (font.dumpTables), differences the decoded comparison of that table (font.diff); path (as tables.show writes it, GPOS.lookupList.lookups[3]) or record (child positions from the table's root, [2, 0]) selects a record, reading deeper levels when needed; expand true also reads and opens its children, false closes it; search keeps the records or lines whose name or value contains the text, ignoring case. A refused change leaves the viewer as it was. ui.inspect reports it under tableViewer",
+    },
+];
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct TableRow {
@@ -187,6 +205,11 @@ impl Default for TableViewerState {
 fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
     match command.id.as_str() {
         "tableViewer.show" => show_command(app, &command.params),
+        "tableViewer.openFont" | "tableViewer.compareWithFile" => {
+            let path = text_param(&command.params, "path")?.filter(|p| !p.is_empty()).ok_or("`path` is required")?;
+            let key = if command.id == "tableViewer.openFont" { "font" } else { "compareWith" };
+            show_command(app, &json!({ key: path }))
+        }
         other => Err(format!("no Table Viewer command `{other}`")),
     }
 }
@@ -1094,7 +1117,7 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::Arc;
 
-    use craft::host::Host;
+    use craft::host::{Host, Picked, ScriptedFiles};
     use fontcraft_engine::Session;
     use serde_json::{Value, json};
 
@@ -1114,6 +1137,28 @@ mod tests {
             path
         };
         (export(500, "First.ttf"), export(300, "Second.ttf"))
+    }
+
+    /// Open… and Compare With… ask for their file and read the one picked; over the control channel, without a path,
+    /// they are refused.
+    #[test]
+    fn open_and_compare_with_ask_for_their_files() {
+        let (first, second) = two_fonts("pick");
+        let answers = [Picked::Paths(vec![first.clone()]), Picked::Paths(vec![second.clone()])];
+        let chooser = Arc::new(ScriptedFiles::answering(answers));
+        let host = Host::builder(APP).files(chooser.clone()).build();
+        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(host));
+        for id in ["tableViewer.openFont", "tableViewer.compareWithFile"] {
+            app.sent.push(Msg::Shell(CommandRef::new(id)));
+            // The first pass asks; the next runs the command with the file picked.
+            app.drain();
+            app.drain();
+        }
+        assert_eq!(chooser.requests().len(), 2);
+        assert_eq!(app.view.table_viewer.font, first.to_string_lossy());
+        assert_eq!(app.view.table_viewer.compare_with, second.to_string_lossy());
+        assert!(app.run_now(Msg::Shell(CommandRef::new("tableViewer.openFont")), false).is_err());
+        let _ = std::fs::remove_dir_all(first.parent().unwrap());
     }
 
     fn viewer(app: &mut FontCraftApp, params: Value) -> Result<Value, String> {
