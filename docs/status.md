@@ -21,8 +21,9 @@ _Updated: 2026-11-20, during the sixteenth batch: 47 writer packages of depth wa
   | The gate, `cargo xtask ci` | green: 5,310 tests pass; wasm after X.fix90 (craft's OS clipboard is native-only in `crates/ui`). `pathops` `random_paths_through_every_operation_never_panic` can miss its one-second limit on a loaded machine |
 
   The writers ran no builds and most branches were merged without one, so most of this code has been run only by its
-  tests, not in the app. Built on Linux x86-64 only. macOS and Windows were not
-  compiled: the Mac check of wave 1 and X.pdf3's clipboard readers wait for the owner's builds there.
+  tests, not in the app. Built and run on Linux x86-64 and on macOS 15 (Apple Silicon:
+  both windows build with no changes and open; a font opens). Windows was not compiled. Still to check on the Mac:
+  the quit prompt with unsaved work, the Open chooser and drop, X.pdf3's pasteboard PDF.
 - **Two windows.** `apps/fontcraft` on `crates/ui-egui` is still the app. The new window, `apps/fontcraft-next` on
   `crates/ui`, is built on the Craft suite's craft-next framework (pinned at `4bd0107`; egui 0.37 from the suite's
   fork beside egui 0.36 for the old window; a vendored egui-winit 0.36 under `vendor/` keeps the old window building
@@ -532,8 +533,8 @@ linked file is checked against it, and a linked file outside the read root reads
 ## Where to start
 
 1. **Finish the sixteenth batch.** The gate is green and the batch is reviewed and pushed. Next, the measures in "State of the tree" › Measures of the sixteenth batch.
-   The owner's builds: on a Mac, wave 1's Cmd+Q, app-menu Quit, File › Open… chooser and drop with unsaved work, and
-   X.pdf3's pasteboard PDF; on Windows, X.pdf3's clipboard PDF.
+   Checks on the Mac, which builds and runs: wave 1's Cmd+Q, app-menu Quit, File › Open… chooser and drop with unsaved
+   work, and X.pdf3's pasteboard PDF; on Windows (not built yet), X.pdf3's clipboard PDF.
 2. **Then, in this order** (ROADMAP.md › What to build next, items 2 to 4): the new window's remaining ports
    (UI.24b, UI.27b, UI.20b, UI.30 wiring this batch's engine packages into the window, the hint badge menu, the
    X.fix83 and X.fix84 follow-ups) until it reaches parity and the egui window can go; the framework gaps sent to the
