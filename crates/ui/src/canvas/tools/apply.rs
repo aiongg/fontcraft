@@ -126,6 +126,9 @@ pub fn input(app: &mut FontCraftApp, input: ToolInput) -> Vec<String> {
         return crate::canvas::text::input::input(app, input);
     }
     if let ToolInput::Key(ev) = input {
+        if let Some(errors) = crate::canvas::hinting::badges::key(app, &ev) {
+            return errors;
+        }
         let out = match with_tool(app, |toolbox, cx| toolbox.key(cx, &ev)) {
             Ok(out) => out,
             Err(e) => return vec![e],
@@ -159,12 +162,7 @@ pub fn input(app: &mut FontCraftApp, input: ToolInput) -> Vec<String> {
             }
             with_tool(app, |toolbox, cx| toolbox.modifiers(cx, mods))
         }
-        ToolInput::Key(ev) => {
-            if let Some(errors) = crate::canvas::hinting::badges::key(app, &ev) {
-                return errors;
-            }
-            with_tool(app, |toolbox, cx| toolbox.key(cx, &ev))
-        }
+        ToolInput::Key(ev) => with_tool(app, |toolbox, cx| toolbox.key(cx, &ev)),
     };
     let errors = match out {
         Ok(out) => apply(app, out),
@@ -178,6 +176,9 @@ pub fn input(app: &mut FontCraftApp, input: ToolInput) -> Vec<String> {
 pub fn key(app: &mut FontCraftApp, ev: fontcraft_tools::KeyEvent) -> Option<Vec<String>> {
     if crate::canvas::text::text_mode(&app.view) {
         return crate::canvas::text::input::takes_key(&ev).then(|| crate::canvas::text::input::input(app, ToolInput::Key(ev)));
+    }
+    if let Some(errors) = crate::canvas::hinting::badges::key(app, &ev) {
+        return Some(errors);
     }
     let out = with_tool(app, |toolbox, cx| toolbox.key(cx, &ev)).ok()?;
     if !out.handled {
