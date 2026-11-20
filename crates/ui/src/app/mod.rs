@@ -17,6 +17,7 @@ pub mod menu_alternates;
 pub mod menus_dynamic;
 pub mod models;
 mod msg;
+mod notices;
 pub mod open;
 pub mod preview_host;
 pub mod sidebar;
@@ -127,6 +128,8 @@ pub struct ViewState {
     pub project: crate::shell::project::ProjectWindowView,
     /// The Preview Area's and the Preview Panel's settings (`shell::preview`).
     pub preview: crate::shell::preview::PreviewState,
+    /// The Overlay Fonts dialog's settings and preview.
+    pub overlay_fonts: crate::dialogs::overlay_fonts::OverlayState,
 }
 
 impl Default for ViewState {
@@ -167,6 +170,7 @@ impl Default for ViewState {
             extensions: Default::default(),
             project: Default::default(),
             preview: Default::default(),
+            overlay_fonts: Default::default(),
         }
     }
 }
@@ -362,7 +366,7 @@ impl FontCraftApp {
                 }
                 clipboard::after_run(self, &command.id, &reply);
                 crate::shell::project::after_run(self, &command.id, &reply);
-                if let Some(notice) = self.after_command(&command, &reply) {
+                if let Some(notice) = self.after_command(&command, &reply).or_else(|| notices::notice(&command.id, &reply)) {
                     self.status = notice;
                 }
                 self.prune_font_view_selection();

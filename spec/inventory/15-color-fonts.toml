@@ -1208,6 +1208,21 @@ observe = [
   "Run it on a full-colour glyph as PDF and open the file: note whether the outlines are paths or text, and whether the shadow is an image.",
 ]
 
+[[panel]]
+id = "dialog.glyphAsImage"
+label = "Glyph as Image"
+location = "dialog"
+controls = ["format: SVG, PDF or PNG", "master", "pixels per em (PNG)", "export folder with Choose…"]
+area = "color"
+milestone = "M11"
+summary = "Options dialog of Filter › Glyph as Image: writes one picture per selected glyph of one master into a folder (filter.glyphAsImage)."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs"
+status = "handbook"
+notes = "The handbook names the filter but not its dialog; the fields are those of Export Artwork, since the command takes the same parameters."
+guesses = [
+  "The dialog offers the format (PNG first), the master, the pixel size and the folder, as Export Artwork does; opening Filter › Glyph as Image in the reference app settles it.",
+]
+
 [[behavior]]
 id = "color.export.fullColorToSvg"
 area = "compile"

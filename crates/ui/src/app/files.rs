@@ -39,7 +39,7 @@ pub const PICKED: &[(&str, &str)] = &[
 pub const MAX_OPENED: usize = 64;
 
 /// The formats the save commands write (the `format` names of `file.saveAs`).
-const SAVE_EXTENSIONS: [&str; 5] = ["fontcraft", "glyphs", "glyphspackage", "ufo", "designspace"];
+const SAVE_EXTENSIONS: [&str; 6] = ["fontcraft", "glyphs", "glyphspackage", "ufo", "ufoz", "designspace"];
 /// A new document's format, and the format a document Save cannot write back to is saved in.
 const NATIVE_EXTENSION: &str = "fontcraft";
 /// A project file's extension.
@@ -48,7 +48,7 @@ const PROJECT_EXTENSION: &str = "fontcraftproject";
 pub const FONT_EXTENSIONS: [&str; 5] = ["glyphs", "glyphspackage", "ufo", "designspace", "fontcraft"];
 
 /// The extension of the format a document read from `source` is saved in; `None` for a source Save cannot write back
-/// to (a compiled font, a zipped UFO).
+/// to (a compiled font).
 fn save_extension(source: SourceFormat) -> Option<&'static str> {
     match source {
         SourceFormat::Native => Some(NATIVE_EXTENSION),
@@ -56,7 +56,8 @@ fn save_extension(source: SourceFormat) -> Option<&'static str> {
         SourceFormat::GlyphsPackage => Some("glyphspackage"),
         SourceFormat::Ufo => Some("ufo"),
         SourceFormat::Designspace => Some("designspace"),
-        SourceFormat::Ufoz | SourceFormat::Binary => None,
+        SourceFormat::Ufoz => Some("ufoz"),
+        SourceFormat::Binary => None,
     }
 }
 
@@ -173,5 +174,20 @@ impl Picks {
             false
         });
         ready
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fontcraft_model::SourceFormat;
+
+    use super::{SAVE_EXTENSIONS, save_extension};
+
+    /// A UFOZ document saves back to a UFOZ, and the save chooser offers the format (M1.11).
+    #[test]
+    fn ufoz_is_a_save_format() {
+        assert_eq!(save_extension(SourceFormat::Ufoz), Some("ufoz"));
+        assert!(SAVE_EXTENSIONS.contains(&"ufoz"));
+        assert_eq!(save_extension(SourceFormat::Binary), None);
     }
 }

@@ -2208,6 +2208,25 @@ notes = "Built in M13.66. At most 1000 glyphs and 2,000,000 path elements per ca
 own = true
 
 [[command]]
+id = "dialog.overlayFonts"
+label = "Overlay Fonts…"
+menu = ["Font"]
+shortcut = ""
+kind = "ui"
+params = "{layers?: [as font.overlayFonts], output?: 'colorLayers' | 'masters', glyphs?: [names], run?: bool}"
+area = "color"
+milestone = "M13"
+summary = "The dialog over font.overlayFonts: one row per source (open document, colour, opacity, scale, offset), the output kind, and a preview of a few glyphs stacked as the new font would draw them (font.overlayPreview). Overlay makes the new document."
+ref = "FontLab 8 What's new › Color › Overlay Fonts"
+status = "docs"
+origin = "fontlab"
+notes = "Built in the new UI (UI.30b) for M13.66. Documented, not yet observed."
+guesses = [
+  "The dialog opens with one source per open document, bottom first, each in its own colour from a fixed list; settled by opening Overlay Fonts in the reference app with three fonts open.",
+  "The preview shows the shown glyph, or the first three glyphs of the active font, side by side; settled by the reference app's dialog.",
+]
+
+[[command]]
 id = "color.generateDarkPalette"
 label = "Generate Dark Palette"
 menu = ["Font"]

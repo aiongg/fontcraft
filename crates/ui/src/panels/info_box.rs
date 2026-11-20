@@ -70,6 +70,10 @@ craft::ui::words! {
         selected: "fontcraftInfoBox.selected" = "Selected points";
         /// Before the layer's point count.
         total: "fontcraftInfoBox.total" = "Points in the layer";
+        /// After the count of glyphs selected in text mode.
+        several: "fontcraftInfoBox.several" = "glyphs selected";
+        /// The placeholder of a field whose glyphs differ.
+        multiple: "fontcraftInfoBox.multiple" = "Multiple Values";
     }
 }
 
@@ -116,9 +120,11 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
 
 fn glyph_part(ui: &mut Ui, words: &InfoBoxWords, g: &GlyphBox, sent: &mut Vec<Msg>) {
     let title = match g.unicode {
+        _ if !g.glyphs.is_empty() => format!("{} {}", g.glyphs.len(), words.several.as_str()),
         Some(u) => format!("{}  {u:04X}", g.glyph),
         None => g.glyph.clone(),
     };
+    let targets = g.targets();
     Text::new(title).show(ui);
     let fields: Vec<(&Label, &KeyedNumber, &str, &str)> = if g.vertical {
         vec![
@@ -136,33 +142,52 @@ fn glyph_part(ui: &mut Ui, words: &InfoBoxWords, g: &GlyphBox, sent: &mut Vec<Ms
     };
     let read_only = g.linked.is_some();
     for (label, metric, field, command) in fields {
-        let out = widgets::key_or_number(ui, label.clone(), metric, read_only);
+        let out = if g.is_mixed(field) {
+            mixed_field(ui, label.clone(), words.multiple.clone())
+        } else {
+            widgets::key_or_number(ui, label.clone(), metric, read_only)
+        };
         if let Some(value) = out.commit {
-            sent.push(Msg::run(command, json!({"glyphs": [g.glyph], "layer": g.layer, "value": value})));
+            sent.push(Msg::run(command, json!({"glyphs": targets, "layer": g.layer, "value": value})));
         }
         if out.update {
             sent.push(Msg::run("spacing.updateMetricsKey", json!({"glyph": g.glyph, "layer": g.layer, "field": field})));
         }
     }
     let [left, right, top, bottom] = &g.groups;
+    let [left_mixed, right_mixed, top_mixed, bottom_mixed] = g.mixed_groups;
     let groups = if g.vertical {
-        [(&words.top_group, top, "kerning.setTopGroup"), (&words.bottom_group, bottom, "kerning.setBottomGroup")]
+        [(&words.top_group, top, top_mixed, "kerning.setTopGroup"), (&words.bottom_group, bottom, bottom_mixed, "kerning.setBottomGroup")]
     } else {
-        [(&words.left_group, left, "kerning.setLeftGroup"), (&words.right_group, right, "kerning.setRightGroup")]
+        [(&words.left_group, left, left_mixed, "kerning.setLeftGroup"), (&words.right_group, right, right_mixed, "kerning.setRightGroup")]
     };
     let _ = Row::new().show(ui, |ui, _| {
-        for (label, group, command) in groups {
-            let out = TextField::new(label.clone(), Bind::given(group.clone())).select_on_focus().show(ui);
+        for (label, group, mixed, command) in groups {
+            let mut field = TextField::new(label.clone(), Bind::given(group.clone())).select_on_focus();
+            if mixed {
+                field = field.placeholder(words.multiple.clone());
+            }
+            let out = field.show(ui);
+            // A mixed field starts empty: committing it empty leaves the groups as they are.
             if let Some(text) = out.events.committed()
                 && text != group
+                && !(mixed && text.trim().is_empty())
             {
-                sent.push(Msg::run(command, json!({"glyphs": [g.glyph], "group": text.trim()})));
+                sent.push(Msg::run(command, json!({"glyphs": targets, "group": text.trim()})));
             }
         }
     });
     if let Some(master) = &g.linked {
         Text::new(format!("{} {master}", words.linked.as_str())).shade(Shade::Muted).show(ui);
     }
+}
+
+/// A metric field whose glyphs differ: empty, with the *Multiple Values* placeholder; any value typed goes to every
+/// glyph, and an emptied field sets nothing.
+fn mixed_field(ui: &mut Ui, label: Label, placeholder: Label) -> widgets::KeyedOutput {
+    let edit = TextField::new(label, Bind::given(String::new())).select_on_focus().limit(widgets::MAX_KEY_CHARS).placeholder(placeholder).show(ui);
+    let commit = edit.events.committed().and_then(|text| KeyedNumber::default().commit_value(text));
+    widgets::KeyedOutput { commit, update: false }
 }
 
 fn selection_part(ui: &mut Ui, words: &InfoBoxWords, s: &SelectionBox, sent: &mut Vec<Msg>) {
@@ -312,6 +337,26 @@ mod tests {
             vec![Msg::run("spacing.setLeftSidebearing", json!({"glyphs": ["A"], "layer": "m01", "value": "=O"}))]
         );
         assert_eq!(posted_after(model, "Width", "640"), vec![Msg::run("spacing.setWidth", json!({"glyphs": ["A"], "layer": "m01", "value": 640.0}))]);
+    }
+
+    /// With several glyphs selected, a typed metric and group go to every glyph, and a mixed field shows empty (M5.22).
+    #[test]
+    fn several_glyphs_edit_together() {
+        let shared =
+            GlyphBox { glyphs: vec!["A".into(), "B".into()], mixed: vec!["width".into()], mixed_groups: [true, false, false, false], ..glyph(false) };
+        let model = InfoBoxModel { glyph: Some(shared), ..Default::default() };
+        assert_eq!(
+            posted_after(model.clone(), "Width", "640"),
+            vec![Msg::run("spacing.setWidth", json!({"glyphs": ["A", "B"], "layer": "m01", "value": 640.0}))]
+        );
+        assert_eq!(
+            posted_after(model.clone(), "LSB", "=O"),
+            vec![Msg::run("spacing.setLeftSidebearing", json!({"glyphs": ["A", "B"], "layer": "m01", "value": "=O"}))]
+        );
+        assert_eq!(
+            posted_after(model, "Left Group", "round"),
+            vec![Msg::run("kerning.setLeftGroup", json!({"glyphs": ["A", "B"], "group": "round"}))]
+        );
     }
 
     /// The vertical layout edits the vertical origin and width (M5.20).

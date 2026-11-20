@@ -152,7 +152,7 @@ fn shell_def(command: &UiCommand) -> CommandDef {
 fn menu(enabled: impl Fn(usize) -> bool, extra: &[Row]) -> MenuBar {
     let mut rows = Vec::new();
     for (at, spec) in fontcraft_engine::cmd::command_specs().iter().enumerate() {
-        if spec.menu.is_empty() || super::menu_alternates::alternate_of(spec.id).is_some() {
+        if spec.menu.is_empty() || super::menu_alternates::alternate_of(spec.id).is_some() || super::menu_alternates::row_taken_by_dialog(spec.id) {
             continue;
         }
         let mut row = Row::new(spec.menu, CommandRef::new(spec.id), spec.label);

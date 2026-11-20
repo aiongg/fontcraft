@@ -24,6 +24,19 @@ pub const ALTERNATES: &[(&str, &str)] = &[
     ("path.assignBackground", "path.clearBackground"),
 ];
 
+/// `(engine command, dialog)`: engine commands whose menu row the dialog's own row takes. The dialog runs the command
+/// and shows its result; the engine command keeps its id for keys, the command palette and agents.
+pub const DIALOG_ROWS: &[(&str, &str)] = &[
+    ("kerning.auditExceptions", "dialog.auditKerningExceptions"),
+    ("kerning.matchAcrossMasters", "dialog.matchKerning"),
+    ("font.overlayFonts", "dialog.overlayFonts"),
+];
+
+/// Whether the menu row of the engine command `id` is left out for a dialog's row ([`DIALOG_ROWS`]).
+pub fn row_taken_by_dialog(id: &str) -> bool {
+    DIALOG_ROWS.iter().any(|(command, _)| *command == id)
+}
+
 /// The command the row of `id` runs while Alt is held.
 pub fn alternate(id: &str) -> Option<&'static str> {
     ALTERNATES.iter().find(|(base, _)| *base == id).map(|(_, alt)| *alt)
@@ -76,5 +89,20 @@ mod tests {
             assert!(!items.iter().any(|i| i.command.id == *alt), "`{alt}` has no row of its own");
         }
         assert_eq!(alternate_of("path.forceExtremes"), Some("path.addExtremes"));
+    }
+
+    /// Audit Kerning Exceptions…, Match Kerning… and Overlay Fonts… show once each: the dialogs' rows, not the engine
+    /// commands' (M13.21b, M13.66).
+    #[test]
+    fn dialog_rows_take_the_engine_rows() {
+        let catalog = Catalog::build();
+        let mut items = Vec::new();
+        for menu in &catalog.menu.menus {
+            rows(&menu.children, &mut items);
+        }
+        for (command, dialog) in super::DIALOG_ROWS {
+            assert!(items.iter().any(|i| i.command.id == *dialog), "a row for `{dialog}`");
+            assert!(!items.iter().any(|i| i.command.id == *command), "no row for `{command}`");
+        }
     }
 }

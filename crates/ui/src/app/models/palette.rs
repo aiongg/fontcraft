@@ -62,6 +62,25 @@ pub struct GlyphBox {
     pub linked: Option<String>,
     /// The glyph's kerning groups: left, right, top, bottom.
     pub groups: [String; 4],
+    /// With several glyphs selected in text mode: every glyph the setters change (`glyph` is the edited one). Empty
+    /// for one glyph.
+    pub glyphs: Vec<String>,
+    /// The metric fields (`left`, `width`, `vertOrigin`, …) whose values differ between the selected glyphs.
+    pub mixed: Vec<String>,
+    /// The kerning group sides (left, right, top, bottom) whose groups differ between the selected glyphs.
+    pub mixed_groups: [bool; 4],
+}
+
+impl GlyphBox {
+    /// The glyphs a setter changes: the selected glyphs, else the edited one.
+    pub fn targets(&self) -> Vec<String> {
+        if self.glyphs.is_empty() { vec![self.glyph.clone()] } else { self.glyphs.clone() }
+    }
+
+    /// Whether the metric field `field` shows *Multiple Values*.
+    pub fn is_mixed(&self, field: &str) -> bool {
+        self.mixed.iter().any(|f| f == field)
+    }
 }
 
 /// What kind of selection the Info box shows.
@@ -339,7 +358,9 @@ fn has_lists(targets: &Map<String, Value>) -> bool {
 
 fn info_box(cx: &mut ProjectCx<'_>, edit: Option<&Edit>) -> InfoBoxModel {
     let Some(edit) = edit else { return InfoBoxModel::default() };
-    let mut b = InfoBoxModel { glyph: glyph_box(cx, edit), selection: selection_box(cx, edit), ..Default::default() };
+    let selected = text_selection_glyphs(cx);
+    let glyph = if selected.len() > 1 { shared_glyph_box(cx, edit, selected) } else { glyph_box(cx, edit) };
+    let mut b = InfoBoxModel { glyph, selection: selection_box(cx, edit), ..Default::default() };
     // Component setters act on the foreground only.
     if let Ok(font) = cx.session.font()
         && let Some(layer) = font.glyph(&edit.glyph).and_then(|g| g.layers.iter().find(|l| l.id == edit.layer))
@@ -417,9 +438,81 @@ fn glyph_box(cx: &mut ProjectCx<'_>, edit: &Edit) -> Option<GlyphBox> {
         vert_width: keyed(&reply, "vertWidth"),
         linked,
         groups,
+        ..Default::default()
     };
     mark_derived(cx, &mut b);
     Some(b)
+}
+
+/// Most text items the Info box reads for the glyphs of a text selection.
+const MAX_SELECTED_ITEMS: usize = 10_000;
+
+/// The distinct glyphs of the text selection in text mode, in text order. Empty outside text mode.
+fn text_selection_glyphs(cx: &ProjectCx<'_>) -> Vec<String> {
+    if !crate::canvas::text::text_mode(cx.view) {
+        return Vec::new();
+    }
+    let text = &cx.view.text;
+    let mut names: Vec<String> = Vec::new();
+    for index in text.text.selection().take(MAX_SELECTED_ITEMS) {
+        if let Some(name) = text.item_glyph(index)
+            && !names.iter().any(|n| n == name)
+        {
+            names.push(name.to_string());
+        }
+    }
+    names
+}
+
+/// The glyph part for several glyphs, from `spacing.getSharedMetrics` on the edited glyph's master: a field shows
+/// what every glyph shares, and the fields that differ are listed as mixed.
+fn shared_glyph_box(cx: &mut ProjectCx<'_>, edit: &Edit, glyphs: Vec<String>) -> Option<GlyphBox> {
+    let font = cx.session.font().ok()?;
+    let master = font.glyph(&edit.glyph)?.layers.iter().find(|l| l.id == edit.layer).map(|l| l.master.clone())?;
+    let reply = cx.session.query("spacing.getSharedMetrics", &json!({"glyphs": glyphs, "layer": master})).ok()?;
+    let read: Vec<String> =
+        reply.get("glyphs").and_then(Value::as_array).map(|l| l.iter().filter_map(Value::as_str).map(str::to_string).collect()).unwrap_or_default();
+    let fields = reply.get("fields");
+    let mut mixed = Vec::new();
+    let mut shared = |name: &str| -> KeyedNumber {
+        let entry = fields.and_then(|f| f.get(name));
+        if entry.and_then(|e| e.get("mixed")).and_then(Value::as_bool) == Some(true) {
+            mixed.push(name.to_string());
+            return KeyedNumber::default();
+        }
+        let key = entry.and_then(|e| e.get("key")).and_then(Value::as_str).map(str::to_string);
+        let value = entry.and_then(|e| e.get("value")).and_then(Value::as_f64).filter(|v| v.is_finite());
+        let state = if key.is_some() { KeyState::InSync } else { KeyState::Number };
+        KeyedNumber { value, key, state, message: None }
+    };
+    let (left, right, width) = (shared("left"), shared("right"), shared("width"));
+    let (top, bottom) = (shared("top"), shared("bottom"));
+    let (vert_origin, vert_width) = (shared("vertOrigin"), shared("vertWidth"));
+    let groups_reply = reply.get("groups");
+    let group = |side: &str| -> (String, bool) {
+        let entry = groups_reply.and_then(|g| g.get(side));
+        let value = entry.and_then(|e| e.get("value")).and_then(Value::as_str).unwrap_or_default().to_string();
+        (value, entry.and_then(|e| e.get("mixed")).and_then(Value::as_bool) == Some(true))
+    };
+    let [(l, lm), (r, rm), (t, tm), (b, bm)] = ["left", "right", "top", "bottom"].map(group);
+    Some(GlyphBox {
+        glyph: edit.glyph.clone(),
+        unicode: None,
+        layer: master,
+        vertical: false,
+        left,
+        right,
+        width,
+        top,
+        bottom,
+        vert_origin,
+        vert_width,
+        linked: None,
+        groups: [l, r, t, b],
+        glyphs: if read.is_empty() { glyphs } else { read },
+        mixed,
+        mixed_groups: [lm, rm, tm, bm],
+    })
 }
 
 /// The left, right and width fields of a layer aligned automatically show the derived values and the offset keys.
