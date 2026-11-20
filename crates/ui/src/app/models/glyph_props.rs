@@ -2,7 +2,7 @@
 //! show for a set of glyphs, and the commands their edits run.
 //!
 //! A field whose value differs between the glyphs is mixed: it shows *Multiple Values*, and a typed value goes to
-//! every glyph in one command. The metric fields read the glyphs' layers in Font View's master (the font's first):
+//! every glyph in one command. The metric fields read the glyphs' layers in Font View's master (the current master):
 //! the metrics key that governs a metric (the layer's own key written with `==`), else the measured value.
 //!
 //! | Field | Edit runs |
@@ -331,7 +331,7 @@ fn project(model: &mut Tracked<GlyphPropsModel>, cx: &mut ProjectCx<'_>, shows: 
         super::set(model, base);
         return;
     }
-    let master = font.masters.first().map(|m| m.id.clone()).unwrap_or_default();
+    let master = crate::shell::masters::current_master(&font, &cx.view.layers).map(|m| m.id.clone()).unwrap_or_default();
     let keep = keeps_alternates(&font);
     let data = cx.session.glyph_data().ok();
     let cache = cx.session.effective_props().ok().filter(|c| data.as_deref().is_some_and(|d| c.is_for(d, keep)));

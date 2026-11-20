@@ -8,7 +8,7 @@
 //! | Cmd-click, Shift-click | add a row to the selection, or the rows up to it (`{select}`) |
 //! | Auto Kern | `kerning.autoKernPairList` on the selected rows, for review; Apply, Discard |
 //!
-//! Pair rows show the value stored for the pair in the first master.
+//! Pair rows show the value stored for the pair in the current master.
 
 use std::borrow::Cow;
 

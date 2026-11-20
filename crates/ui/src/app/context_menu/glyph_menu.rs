@@ -1,7 +1,7 @@
 //! Font View's glyph menu (`fontView.glyphContextMenu`): a secondary click on a cell or a List View row opens it. A
 //! glyph that is not selected becomes the selection first; on a selected glyph the menu acts on the whole selection.
 //!
-//! It holds the colour swatches (Alt: the layer colour in Font View's master), the Exports check item
+//! It holds the colour swatches (Alt: the colour of the layer shown), the Exports check item
 //! (`glyph.setExport`, no mark when the glyphs differ), the Tags submenu (`fontView.contextMenu.tags`), which ends with
 //! More Tags… when the font has more tags than [`MAX_MENU_TAGS`], and the Copy Glyph Names submenu, whose text goes to
 //! the system clipboard (`app::clipboard`).
@@ -9,9 +9,11 @@
 use std::collections::{BTreeSet, HashMap};
 
 use craft::ui::runtime::commands::CommandRef;
+use fontcraft_engine::model::Font;
 use serde_json::{Map, Value, json};
 
 use crate::app::{FontCraftApp, Msg};
+use crate::shell::masters;
 
 /// Most tags the Tags submenu lists; past this it ends with More Tags….
 pub const MAX_MENU_TAGS: usize = 512;
@@ -61,7 +63,7 @@ pub struct GlyphMenu {
     pub more_tags: bool,
     /// How many of `glyphs` export.
     pub exports: Mark,
-    /// The layer the swatches colour while Alt is held: Font View's master.
+    /// The layer the swatches colour while Alt is held: the one glyph's shown layer, else the current master's.
     pub layer: Option<String>,
 }
 
@@ -102,9 +104,22 @@ pub fn open(app: &FontCraftApp, glyphs: &[String], screen: [f32; 2]) -> GlyphMen
         exports: Mark::of(exporting, total),
         tags,
         screen,
-        layer: font.masters.first().map(|m| m.id.clone()),
+        layer: menu_layer(app, font, &glyphs),
         glyphs,
     }
+}
+
+/// The layer the Alt swatches colour: for one glyph the layer it shows (the Layers panel's pick, else its layer of the
+/// current master), for several the current master's.
+fn menu_layer(app: &FontCraftApp, font: &Font, glyphs: &[String]) -> Option<String> {
+    let layers = &app.view.layers;
+    if let [one] = glyphs
+        && let Some(glyph) = font.glyph(one)
+        && let Some(layer) = masters::shown_layer(font, layers, glyph)
+    {
+        return Some(layer.id.clone());
+    }
+    masters::current_master(font, layers).map(|m| m.id.clone())
 }
 
 /// The messages `action` posts for the menu's glyphs.

@@ -60,7 +60,7 @@ pub struct Models {
     pub related_glyphs: Tracked<glyph_sections::RelatedModel>,
     /// The shown glyph's stored selections (`panels::selections`).
     pub selections: Tracked<glyph_sections::SelectionsModel>,
-    /// The first master's metrics and stems (`panels::measurements`).
+    /// The shown master's metrics and stems (`panels::measurements`).
     pub measurements: Tracked<glyph_sections::MeasurementsModel>,
     /// The reference fonts (`panels::reference_font`).
     pub reference_font: Tracked<glyph_sections::ReferenceFontModel>,

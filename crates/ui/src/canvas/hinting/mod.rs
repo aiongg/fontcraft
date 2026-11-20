@@ -205,7 +205,7 @@ pub fn ps_marks(session: &mut Session, view: &ViewState) -> HintMarks {
     let bottom = session
         .font()
         .ok()
-        .and_then(|font| font.masters.first().map(|m| crate::app::models::canvas::vertical_span(font, m).0))
+        .and_then(|font| super::tools::active_master(font, view).map(|m| crate::app::models::canvas::vertical_span(font, m).0))
         .filter(|b| b.is_finite())
         .unwrap_or(0.0);
     let Ok(list) = session.query("hint.ps.listHints", &json!({"glyph": target.glyph, "layer": target.layer})) else { return out };
@@ -245,6 +245,7 @@ pub fn targets(scene: &Scene, selection: &Selection, view: &HintingView, id: &st
             Some(Value::Object(m))
         }
         "hint.tt.deleteInstructions"
+        | "hint.tt.reverse"
         | "hint.tt.setRounding"
         | "hint.tt.setSnapZone"
         | "hint.tt.setStemReference"

@@ -10,7 +10,12 @@
 //! - Copy Glyph Names (the glyph menus) puts the `text` of `glyph.copyGlyphNames` on the clipboard.
 //! - Edit › Paste and Paste Special fired without text ask the window for the clipboard's text ([`Clipboard::request`]);
 //!   the shell takes the text when it arrives and calls [`paste`]. Paste Special opens `dialog.pasteSpecial` on
-//!   copied glyphs, with the selected glyphs as its `targets` and Font View's master.
+//!   copied glyphs, with the selected glyphs as its `targets` and Font View's master, or on the canvas the edited glyph
+//!   and the master of the layer it shows.
+//! - Font View's master is the current master (`view.selectMaster`). A drawing pastes into the layer the canvas shows
+//!   (the Layers panel's pick), as the tools edit it.
+//! - Only a person's copy reaches the system clipboard: a copy the control channel names (`engine.execute`) returns
+//!   its text in the reply and leaves the clipboard alone.
 //!
 //! The text goes out through [`Clipboard::out`], which the shell hands to the window's clipboard.
 
@@ -88,8 +93,16 @@ fn in_font_view(app: &FontCraftApp) -> bool {
     !app.view.font_view.selected.is_empty() && app.font_view_shows()
 }
 
+/// Font View's master: the current master (`view.selectMaster`).
 fn font_view_master(app: &FontCraftApp) -> Option<String> {
-    app.session.font().ok()?.masters.first().map(|m| m.id.clone())
+    let font = app.session.font().ok()?;
+    crate::shell::masters::current_master(font, &app.view.layers).map(|m| m.id.clone())
+}
+
+/// The master of the layer the canvas shows (the Layers panel's pick), else the current master.
+fn canvas_master(app: &FontCraftApp) -> Option<String> {
+    let font = app.session.font().ok()?;
+    crate::canvas::tools::active_master(font, &app.view).map(|m| m.id.clone())
 }
 
 /// Whether clipboard text holds copied glyphs rather than a drawing.
@@ -125,7 +138,8 @@ pub fn paste_msg(app: &mut FontCraftApp, text: &str, kind: PasteKind) -> Result<
         if !targets.is_empty() {
             params.insert("targets".into(), json!(targets));
         }
-        if let Some(master) = font_view_master(app) {
+        let master = if !in_font_view(app) && app.targets_chosen() { canvas_master(app) } else { font_view_master(app) };
+        if let Some(master) = master {
             params.insert("master".into(), json!(master));
         }
         return Ok(Msg::Shell(CommandRef::with_params("dialog.open", json!({"dialog": "dialog.pasteSpecial", "params": params}))));

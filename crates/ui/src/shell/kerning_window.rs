@@ -13,7 +13,7 @@
 //! | `dialog.auditKerningExceptions {threshold?, masters?, direction?, fix?}` | runs `kerning.auditExceptions` and shows what it found |
 //! | `dialog.matchKerning {run?, mainMaster?, masters?}` | asks for the main master, then runs `kerning.matchAcrossMasters` and shows a summary |
 //!
-//! The list itself is the projection's (`app::models::kerning_window`): the stored pairs of the font's first master,
+//! The list itself is the projection's (`app::models::kerning_window`): the stored pairs of the current master,
 //! left to right. The dialogs module (`dialogs::kerning_questions`, `dialogs::kerning_audit`) opens what these
 //! commands ask for on its next pass.
 
@@ -46,7 +46,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Kerning",
         menu: &["Window"],
         shortcut: Some("Cmd+Alt+K"),
-        params: "{open?: bool (default true), select?: [{left: name|\"@group\", right: name|\"@group\"}]} show or hide the Kerning window: the stored pairs of the font's first master, left to right. select sets the selected rows; rows not listed are dropped. ui.inspect reports the window under kerningWindow",
+        params: "{open?: bool (default true), select?: [{left: name|\"@group\", right: name|\"@group\"}]} show or hide the Kerning window: the stored pairs of the current master (view.selectMaster), left to right. select sets the selected rows; rows not listed are dropped. ui.inspect reports the window under kerningWindow",
     },
     UiCommand {
         id: "kerning.filterPairs",

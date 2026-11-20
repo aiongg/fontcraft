@@ -359,8 +359,9 @@ impl FontCraftApp {
                 crate::canvas::tools::apply::adopt(self, &reply);
                 if origin == Origin::Person {
                     crate::dialogs::after::after_run(self, &command.id, &params, &reply);
+                    // A request that names a copy gets the text in its reply; the system clipboard stays the person's.
+                    clipboard::after_run(self, &command.id, &reply);
                 }
-                clipboard::after_run(self, &command.id, &reply);
                 crate::shell::project::after_run(self, &command.id, &reply);
                 if let Some(notice) = self.after_command(&command, &reply) {
                     self.status = notice;
@@ -594,3 +595,7 @@ impl ShellApp for FontCraftApp {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
+mod active_layer_tests;

@@ -84,7 +84,7 @@ pub fn project(model: &mut Tracked<KerningWindowModel>, cx: &mut ProjectCx<'_>) 
         super::set(model, KerningWindowModel { search: cx.view.kerning.search.clone(), sort: cx.view.kerning.sort, ..Default::default() });
         return;
     };
-    let master = cx.session.font().ok().and_then(|f| f.masters.first()).map(|m| m.id.clone());
+    let master = cx.session.font().ok().and_then(|f| crate::shell::masters::current_master(f, &cx.view.layers)).map(|m| m.id.clone());
     let params = list_params(cx, master.as_deref());
     let asked = Some((doc.0, doc.1, params.to_string()));
     if next.asked != asked {
