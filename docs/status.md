@@ -2,11 +2,11 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-20, after batches 21 and 22: the second window's ports UI.30a to UI.36d (UI.30a, UI.30b, UI.24b, UI.27b, UI.31 to UI.34, UI.20b, UI.35a to UI.35d, UI.36a, UI.36b, UI.36d) and `crates/craft-ext` (decision 0009), merged on `master` as of `f99ee43`; the gate is green (5,382 tests). The sixteenth batch's entries below stay as written._
+_Updated: 2026-11-20, after the seventeenth and eighteenth batches: the second window's ports UI.30a to UI.36d (UI.30a, UI.30b, UI.24b, UI.27b, UI.31 to UI.34, UI.20b, UI.35a to UI.35d, UI.36a, UI.36b, UI.36d) and `crates/craft-ext` (decision 0009), merged on `master` as of `f99ee43`; the gate is green (5,382 tests). The sixteenth batch's entries below stay as written._
 
 ## State of the tree
 
-- **Where batches 21 and 22 stand.** Every branch is merged on `master` and pushed; the gate (`cargo xtask ci`) is green
+- **Where the seventeenth and eighteenth batches stand.** Every branch is merged on `master` and pushed; the gate (`cargo xtask ci`) is green
   on `f99ee43` with 5,382 tests. The writers ran no builds; one integrator built several branches at once (X.integ81
   to X.integ97). The new window (`crates/ui`) gained:
   - Font Info field warnings, the Number Values editor and the Features sidebar menu (UI.30a); multi-glyph Info box
@@ -1602,10 +1602,10 @@ Append one terse entry per session: what landed, numbers, what is still open.
   Numbers: 960 of 1,039 commands live; feature parity about 38% (38.4, was 37.2); depth packages 55 of 167; CLI
   option coverage 672 of 770. Open: the second test run, the gate, review, push; the measures listed under "State
   of the tree"; the owner's two questions.
-- **2026-11-20, batches 21 and 22.** Writers in worktrees without builds; one integrator built several branches at
+- **2026-11-20, the seventeenth and eighteenth batches.** Writers in worktrees without builds; one integrator built several branches at
   once (X.integ81 to X.integ97). Landed: UI.30a, UI.30b, UI.24b, UI.27b, UI.31, UI.32, UI.34, UI.33 and UI.20b
-  (batch 21); UI.35a to UI.35d, UI.36a, UI.36b and UI.36d (batch 22); `crates/craft-ext` with decision 0009 (UI.34,
-  UI.36); the window's contents are listed in "State of the tree" › Where batches 21 and 22 stand. Decisions:
+  (the seventeenth batch); UI.35a to UI.35d, UI.36a, UI.36b and UI.36d (the eighteenth batch); `crates/craft-ext` with decision 0009 (UI.34,
+  UI.36); the window's contents are listed in "State of the tree" › Where the seventeenth and eighteenth batches stand. Decisions:
   - Writers don't build; one integrator builds several branches at once. One agent works at a time on the window.
   - The export dialog gets no feature-compiler section; the reference's has none, and the options stay on
     `font.compile`.

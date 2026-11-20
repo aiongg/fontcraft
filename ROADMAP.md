@@ -1037,7 +1037,7 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
    (M12.36); tx against mergefonts (M12.69); Match Masters on the corpus, target 95% (M9.34, an ignored test); a drag
    timed on a large colour UFO for the format warnings (M1.11, X.fix82). Checks on the Mac (it builds and runs): wave 1's quit
    path, chooser and drop, and X.pdf3's pasteboard; on Windows (not built yet), X.pdf3's clipboard.
-2. **The second window to parity, then retire the egui window.** Landed since batch 20: the Shape Order window
+2. **The second window to parity, then retire the egui window.** Landed since the sixteenth batch: the Shape Order window
    and drag reordering in order fields (UI.24b); colour drawn through `render::color::artwork`, iColor and svg
    layers, colour in the text and Font View cells, a colour picker and a gradient stop bar (UI.27b); Font and
    Exports tab warnings, the Number Values editor and the Features sidebar menu (UI.30a); multi-glyph Info box
