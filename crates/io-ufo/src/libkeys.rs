@@ -497,18 +497,36 @@ pub(crate) fn read(font: &mut Font, designspace: bool, default_id: &str) {
         let typed = apply(&mut f, designspace, default_id, &excluded);
         let written = written_by_master(&f, designspace, default_id);
         let said = |at: &At| -> Option<&Value> { f.masters.iter().find(|m| m.id == at.0).and_then(|m| m.user_data.get(&at.1)) };
-        let bad: Vec<At> = typed.into_iter().filter(|at| written.get(&at.0).and_then(|w| w.get(&at.1)) != said(at) || said(at).is_none()).collect();
+        let bad: Vec<At> = typed
+            .into_iter()
+            .filter(|at| match (written.get(&at.0).and_then(|w| w.get(&at.1)), said(at)) {
+                (Some(w), Some(v)) => !writes_back(&at.1, w, v),
+                _ => true,
+            })
+            .collect();
         if bad.is_empty() {
             let masters = Arc::make_mut(&mut f.masters);
             for m in masters.iter_mut() {
                 let Some(w) = written.get(&m.id) else { continue };
-                m.user_data.0.entries.retain(|(k, v)| w.get(k.as_str()) != Some(v));
+                m.user_data.0.entries.retain(|(k, v)| !w.get(k.as_str()).is_some_and(|w| writes_back(k.as_str(), w, v)));
             }
             *font = f;
             return;
         }
         excluded.extend(bad);
     }
+}
+
+/// Whether the writer's value `written` for key `key` gives back the value `read` from the file.
+/// Palette colours compare as the 8-bit components the model and `CPAL` hold: a colour written
+/// with fewer decimals (`0.502` for 128, as a decompiled version 4 dictionary has it) is the
+/// same colour.
+fn writes_back(key: &str, written: &Value, read: &Value) -> bool {
+    if written == read {
+        return true;
+    }
+    let palettes = OWN_KEYS.iter().any(|(_, k, conv)| *k == key && *conv == Conv::Palettes);
+    palettes && to_model(Conv::Palettes, written).is_some_and(|w| to_model(Conv::Palettes, read).is_some_and(|r| r == w))
 }
 
 /// What the writer gives each master read from a UFO, by master id.
@@ -950,6 +968,14 @@ mod tests {
             )),
             "{lost:?}"
         );
+        // Four-place components, as a decompiled version 4 dictionary has them (128 → 0.502),
+        // are the same 8-bit colours: the key is typed, not left as user data.
+        let decompiled = fontcraft_plist::openstep::parse("{palettes = ({colors = ((0,0.502,0,1),(1,1,1,0.502));});}").unwrap().root;
+        Arc::make_mut(&mut font.info).params.set("Color Palettes", decompiled);
+        let back = ufo::read(&ufo::write(&font).unwrap()).unwrap();
+        let want_half = fontcraft_plist::openstep::parse("(((0,128,0,255),(255,128)))").unwrap().root;
+        assert_eq!(back.info.params.get("Color Palettes"), Some(&want_half));
+        assert!(back.masters.iter().all(|m| m.user_data.get("com.github.googlei18n.ufo2ft.colorPalettes").is_none()), "typed, not user data");
         // The list forms lose nothing.
         Arc::make_mut(&mut font.info).params.set("Color Palettes", want.clone());
         assert!(!ufo::info_losses(&font).iter().any(|l| l.contains("Color Palettes")), "{:?}", ufo::info_losses(&font));

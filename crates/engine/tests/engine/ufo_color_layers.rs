@@ -28,6 +28,11 @@ fn glif(name: &str, x: i32) -> Vec<u8> {
 /// `a` in two colours drawn by `a.color0` and `a.color1`, `b` in one by `b.color0`, two
 /// palettes of two colours.
 fn ufo() -> Files {
+    ufo_with([[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0], [0.0, 1.0, 0.0, 1.0], [1.0, 1.0, 0.0, 1.0]])
+}
+
+/// [`ufo`] with the palettes' colours given: the first two make palette 0, the others palette 1.
+fn ufo_with(colours: [[f64; 4]; 4]) -> Files {
     let names = ["a", "a.color0", "a.color1", "b", "b.color0"];
     let mut files = Files::new();
     files.insert(
@@ -59,10 +64,10 @@ fn ufo() -> Files {
             pair("a.color0", 0),
             pair("a.color1", 1),
             pair("b.color0", 0),
-            colour([1.0, 0.0, 0.0, 1.0]),
-            colour([0.0, 0.0, 1.0, 1.0]),
-            colour([0.0, 1.0, 0.0, 1.0]),
-            colour([1.0, 1.0, 0.0, 1.0]),
+            colour(colours[0]),
+            colour(colours[1]),
+            colour(colours[2]),
+            colour(colours[3]),
         )),
     );
     files
@@ -104,15 +109,31 @@ fn a_ufo_colour_layer_list_exports_colr_and_cpal_as_the_lib_says() {
         .collect();
     assert_eq!(got, [("a", vec![("a.color0", 0), ("a.color1", 1)]), ("b", vec![("b.color0", 0)])]);
 
+    assert_eq!(cpal_palettes(&f), [vec![(255, 0, 0, 255), (0, 0, 255, 255)], vec![(0, 255, 0, 255), (255, 255, 0, 255)]]);
+}
+
+/// The colours of each palette of the font's `CPAL` table.
+fn cpal_palettes(f: &FontRef) -> Vec<Vec<(u8, u8, u8, u8)>> {
     let cpal = f.cpal().unwrap();
     let colours = cpal.color_records_array().unwrap().unwrap();
     let entries = usize::from(cpal.num_palette_entries());
-    let palettes: Vec<Vec<(u8, u8, u8, u8)>> = cpal
-        .color_record_indices()
+    cpal.color_record_indices()
         .iter()
         .map(|i| colours[usize::from(i.get())..usize::from(i.get()) + entries].iter().map(|c| (c.red, c.green, c.blue, c.alpha)).collect())
-        .collect();
-    assert_eq!(palettes, [vec![(255, 0, 0, 255), (0, 0, 255, 255)], vec![(0, 255, 0, 255), (255, 255, 0, 255)]]);
+        .collect()
+}
+
+#[test]
+fn palette_colours_with_four_decimals_open_as_color_palettes_and_export_cpal() {
+    // Four-place components, as a decompiled font's version 4 palettes are written (128 → 0.502):
+    // the lib key is typed as the font's Color Palettes rather than kept as user data.
+    let font =
+        fontcraft_io_ufo::ufo::read(&ufo_with([[0.502, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 0.502], [0.0, 0.2, 0.0, 1.0], [1.0, 1.0, 0.0, 1.0]])).unwrap();
+    assert!(font.info.params.get("Color Palettes").is_some(), "{:?}", font.masters[0].user_data);
+    assert!(font.masters[0].user_data.get("com.github.googlei18n.ufo2ft.colorPalettes").is_none());
+    let out = compile(&font, &font.default_target().unwrap(), Flavour::TrueType, &Options::default()).unwrap();
+    let f = FontRef::new(&out.bytes).unwrap();
+    assert_eq!(cpal_palettes(&f), [vec![(128, 0, 0, 255), (0, 0, 255, 128)], vec![(0, 51, 0, 255), (255, 255, 0, 255)]]);
 }
 
 #[test]
