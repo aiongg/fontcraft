@@ -14,7 +14,7 @@ pub const COMMANDS: &[UiCommand] = &[
     (
         "audit.toggleLiveAudit",
         "Live Audit",
-        &[],
+        &["View", "Audit"],
         "",
         "{on?: bool} re-run the outlines profile on the edited layer after each change to the document while it is on (omitted: toggle) → {on}",
     ),
