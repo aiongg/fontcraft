@@ -1,8 +1,12 @@
 //! The outline dialogs give the font their command gives; Shape Order lists the layer's shapes.
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use craft::host::Host;
+use craft::ui::dialog::DialogHost;
+use craft::ui::testing::Fixture;
 use fontcraft_engine::Session;
 use fontcraft_engine::model::Font;
 use serde_json::{Value, json};
@@ -207,4 +211,28 @@ fn shape_order_lists_the_shapes_and_previews_the_order() {
     let mut direct = three();
     direct.session.execute("filter.shapeOrder", &json!({"glyph": "A", "order": [2, 0, 1]})).unwrap();
     assert!(font(&app).same_as(&font(&direct)));
+}
+
+/// The person's order field: a row dragged above the first row of the list moves there, and the order previews.
+#[test]
+fn an_order_row_dragged_in_the_window_dialog_reorders_and_previews() {
+    let three = || drawn("A", &[SQUARE, &[(150, 100), (250, 100), (250, 200), (150, 200)], &[(400, 100), (450, 100), (450, 150), (400, 150)]]);
+    let app = Rc::new(RefCell::new(three()));
+    let original = font(&app.borrow());
+    open(&mut app.borrow_mut(), json!({"command": "filter.shapeOrder"}));
+    let host = Rc::new(RefCell::new(DialogHost::new()));
+    let (shown_app, shown_host) = (Rc::clone(&app), Rc::clone(&host));
+    let mut fixture = Fixture::new(move |ui| {
+        let (mut app, mut host) = (shown_app.borrow_mut(), shown_host.borrow_mut());
+        super::super::run(&mut host, &mut app);
+        host.run(ui);
+    });
+    fixture.settle();
+    let first = fixture.by_label("0: Path (4 nodes)").expect("the row of shape 0");
+    let last = fixture.by_label("2: Path (4 nodes)").expect("the row of shape 2");
+    let above_first = egui::pos2(first.center().x, first.rect.top() + first.rect.height() / 4.0);
+    fixture.drag(&last, above_first - last.center()).settle();
+    let shown = super::super::form::inspect(&app.borrow());
+    assert_eq!(value(&shown, "order"), json!([2, 0, 1]), "{shown}");
+    assert!(!font(&app.borrow()).same_as(&original), "the canvas shows the new order");
 }

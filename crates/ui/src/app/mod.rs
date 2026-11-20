@@ -130,6 +130,8 @@ pub struct ViewState {
     pub preview: crate::shell::preview::PreviewState,
     /// The Overlay Fonts dialog's settings and preview.
     pub overlay_fonts: crate::dialogs::overlay_fonts::OverlayState,
+    /// The glyph the Shape Order panel was opened on (`shell::shape_order`).
+    pub shape_order: crate::shell::shape_order::ShapeOrderView,
 }
 
 impl Default for ViewState {
@@ -171,6 +173,7 @@ impl Default for ViewState {
             project: Default::default(),
             preview: Default::default(),
             overlay_fonts: Default::default(),
+            shape_order: Default::default(),
         }
     }
 }

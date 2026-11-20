@@ -59,6 +59,7 @@ pub enum PanelId {
     CompareFamily,
     Project,
     FontInfo,
+    ShapeOrder,
 }
 
 impl PanelId {
@@ -101,6 +102,7 @@ impl PanelId {
         PanelId::CompareFamily,
         PanelId::Project,
         PanelId::FontInfo,
+        PanelId::ShapeOrder,
     ];
 
     /// The stable id commands and saved layouts use.
@@ -143,6 +145,7 @@ impl PanelId {
             PanelId::CompareFamily => "compareFamily",
             PanelId::Project => "project",
             PanelId::FontInfo => "fontInfo",
+            PanelId::ShapeOrder => "shapeOrder",
         }
     }
 
@@ -191,6 +194,7 @@ impl PanelId {
             PanelId::CompareFamily => w.compare_family.clone(),
             PanelId::Project => w.project.clone(),
             PanelId::FontInfo => w.font_info.clone(),
+            PanelId::ShapeOrder => w.shape_order.clone(),
         }
     }
 
@@ -245,6 +249,7 @@ craft::ui::words! {
         compare_family: "fontcraftPanel.compareFamily" = "Compare Family";
         project: "fontcraftPanel.project" = "Project";
         font_info: "fontcraftPanel.fontInfo" = "Font Info";
+        shape_order: "fontcraftPanel.shapeOrder" = "Shape Order";
     }
 }
 
@@ -371,6 +376,10 @@ impl DockPanels<PanelId> for Panels<'_> {
             PanelId::Preview => panels::preview::show(
                 ui,
                 panels::preview::Props { model: &self.models.preview_panel, target: crate::shell::preview::Target::Panel, sent: self.sent },
+            ),
+            PanelId::ShapeOrder => panels::shape_order::show(
+                ui,
+                panels::shape_order::Props { model: &self.models.shape_order, tokens: &self.models.canvas_tokens, sent: self.sent },
             ),
             // Drawn by `group_view`.
             PanelId::Document => {}

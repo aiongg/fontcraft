@@ -32,6 +32,7 @@ pub mod reference_font;
 pub mod related_glyphs;
 pub mod selection_info;
 pub mod selections;
+pub mod shape_order;
 pub mod smart_component;
 pub mod space_center;
 pub mod stroke;

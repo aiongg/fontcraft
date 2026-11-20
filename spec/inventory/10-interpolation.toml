@@ -453,10 +453,11 @@ milestone = "M9"
 summary = "Shows every path and component of every layer of the current glyph and lets the shapes be rearranged until all layers use the same order. The exact layout and whether it colours shapes like Master Compatibility view are not described."
 ref = "Interpolation › Outline Compatibility › Reordering Shapes"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/dialogs/shape_order_window.rs, shown by window.shapeOrder. One column per master layer, each followed by its master's intermediate and alternate layers; numbered thumbnails in stacking order, each shape in a colour that follows its index over the dim layer. Dropping a thumbnail on another in the same column runs glyph.setShapeOrder for that layer. The window follows the glyph being edited unless it is opened on a named glyph."
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/dialogs/shape_order_window.rs, shown by window.shapeOrder. One column per master layer, each followed by its master's intermediate and alternate layers; numbered thumbnails in stacking order, each shape in a colour that follows its index over the dim layer. Dropping a thumbnail on another in the same column runs glyph.setShapeOrder for that layer. The window follows the glyph being edited unless it is opened on a named glyph. In crates/ui it is the dock panel `shapeOrder` (crates/ui/src/panels/shape_order.rs): one section per layer in the same order, each a list of rows with the thumbnail and the shape's index and kind; a row dropped between two others, or moved with the list's reorder keys, runs glyph.setShapeOrder; the tints are the Master Compatibility view's."
 guesses = [
   "The window opens from Window › Shape Order; Filter › Shape Order keeps the one-layer dialog. Choosing Filter › Shape Order in the reference app opens the all-layers window, so the two may have to merge.",
   "Columns run left to right, one per layer, thumbnails top to bottom with shape 0 on top; seeing the window would settle the layout.",
+  "In the dock panel the layers are sections from top to bottom, since a docked panel is narrow; seeing the window would settle whether layers sit side by side.",
 ]
 observe = [
   "In F5 (incompatible), open Filter › Shape Order: note the layout, whether special layers appear, and how a drag reorders shapes.",
@@ -1875,7 +1876,7 @@ milestone = "M9"
 summary = "Shows or hides the Shape Order window on a glyph, by default the one being edited."
 ref = "Interpolation › Outline Compatibility › Reordering Shapes"
 status = "inferred"
-notes = "Our shell command for the window.shapeOrder window. Its reply lists each layer's shapes, so agents can read the order before running glyph.setShapeOrder."
+notes = "Our shell command for the window.shapeOrder window. In crates/ui-egui its reply lists each layer's shapes; in crates/ui shell commands reply with nothing and ui.inspect reports the same list under `shapeOrder`, so agents can read the order before running glyph.setShapeOrder."
 guesses = [
   "A shell command of ours that opens the window on a named glyph or the one being edited and replies with each layer's shapes; the reference app opens the window only from its menu.",
 ]
