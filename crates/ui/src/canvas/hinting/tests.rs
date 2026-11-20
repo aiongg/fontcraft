@@ -270,7 +270,7 @@ fn a_ps_hint_badge_menu_makes_ghosts_and_deletes() {
 /// Instructions clears the instruction selection. Each acts as its command does.
 #[test]
 fn an_instruction_badge_menu_reverses_links_and_deletes() {
-    use crate::app::context_menu::{CANVAS, TT_INSTRUCTION};
+    use crate::app::context_menu::{CANVAS, TT_INSTRUCTION, TT_INSTRUCTOR};
     let mut app = new_app();
     let mut headless = new_app();
     for a in [&mut app, &mut headless] {
@@ -285,7 +285,7 @@ fn an_instruction_badge_menu_reverses_links_and_deletes() {
     // On the Snap badge: only Delete Instructions applies.
     let at = badge_at(&app, 0);
     let menu = open_menu_at(&mut app, at);
-    assert_eq!(menu.sections.iter().map(|s| s.context).collect::<Vec<_>>(), vec![TT_INSTRUCTION, CANVAS]);
+    assert_eq!(menu.sections.iter().map(|s| s.context).collect::<Vec<_>>(), vec![TT_INSTRUCTION, CANVAS, TT_INSTRUCTOR]);
     let items: Vec<&str> = menu.sections[0].items.iter().map(|i| i.command).collect();
     assert_eq!(items, vec!["hint.tt.reverse", "hint.tt.makeTripleHint", "hint.tt.deleteInstructions"]);
     assert_eq!(selected(&app), vec![0], "the clicked instruction is selected first");
