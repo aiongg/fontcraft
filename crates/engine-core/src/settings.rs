@@ -152,10 +152,13 @@ pub enum Reserved {
     /// The devices trusted to see External Preview, `[IP address]`, oldest first
     /// (`sharing.answerDevice`, `settings.resetTrustedDevices`).
     TrustedDevices,
+    /// The reporter modules Edit View draws, `[module id]`, in the order they were switched on
+    /// (`view.showReporter`).
+    ShownReporters,
 }
 
 impl Reserved {
-    pub const ALL: [Reserved; 8] = [
+    pub const ALL: [Reserved; 9] = [
         Reserved::Filters,
         Reserved::VisibleScripts,
         Reserved::RecentDocuments,
@@ -164,6 +167,7 @@ impl Reserved {
         Reserved::AuditProfiles,
         Reserved::ExportProfiles,
         Reserved::TrustedDevices,
+        Reserved::ShownReporters,
     ];
 
     pub fn id(self) -> &'static str {
@@ -176,6 +180,7 @@ impl Reserved {
             Reserved::AuditProfiles => "audit.userProfiles",
             Reserved::ExportProfiles => fontcraft_model::fc_keys::EXPORT_PROFILES,
             Reserved::TrustedDevices => "sharing.trustedDevices",
+            Reserved::ShownReporters => "view.shownReporters",
         }
     }
 
@@ -190,6 +195,7 @@ impl Reserved {
             Reserved::AuditProfiles => "the audit.profile commands",
             Reserved::ExportProfiles => "file.saveExportProfile and file.removeExportProfile",
             Reserved::TrustedDevices => "sharing.answerDevice and settings.resetTrustedDevices",
+            Reserved::ShownReporters => "view.showReporter",
         }
     }
 

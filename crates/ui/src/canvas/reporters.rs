@@ -326,6 +326,7 @@ mod tests {
     use craft::ui::runtime::commands::CommandRef;
     use fontcraft_engine::Session;
     use fontcraft_engine::plugins::fixtures;
+    use fontcraft_engine::settings::{Reserved, UserSettings};
     use serde_json::json;
 
     use super::*;
@@ -385,5 +386,39 @@ mod tests {
         assert_eq!(drawn.len(), 1);
         assert!(drawn[0].error.as_deref().is_some_and(|e| e.contains("no stems found")), "{:?}", drawn[0].error);
         assert_eq!(app.session.extensions().reporter_cache.len(), 1, "the failure is cached");
+    }
+
+    /// The settings a window loads at open, as the desktop app's store reads them from the settings folder.
+    struct Saved(UserSettings);
+
+    impl crate::app::user_store::UserStore for Saved {
+        fn load(&mut self, session: &mut Session) -> Vec<String> {
+            *session.settings_mut() = self.0.clone();
+            Vec::new()
+        }
+
+        fn save_if_changed(&mut self, _session: &Session) -> Option<String> {
+            None
+        }
+    }
+
+    /// The switches are kept in the user's settings, and the next window that loads them draws the same reporters.
+    #[test]
+    fn reporter_switches_are_kept_between_runs() {
+        let mut app = editing_a();
+        install_reporter(&mut app, &json!({"background": [], "foreground": []}));
+        show(&mut app, true);
+        let saved = app.session.settings().clone();
+        assert_eq!(saved.reserved::<Vec<String>>(Reserved::ShownReporters).unwrap(), Some(vec![BOX.to_string()]));
+
+        let mut next = editing_a();
+        install_reporter(&mut next, &json!({"background": [], "foreground": []}));
+        next.user_store = Some(Box::new(Saved(saved)));
+        crate::app::user_store::load(&mut next);
+        assert_eq!(next.view.extensions.reporters, vec![BOX.to_string()]);
+        assert_eq!(next.overlays.data.reporters.len(), 1, "the kept reporter is drawn");
+
+        show(&mut next, false);
+        assert_eq!(next.session.settings().reserved::<Vec<String>>(Reserved::ShownReporters).unwrap(), Some(Vec::new()));
     }
 }

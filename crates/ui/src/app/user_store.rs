@@ -3,7 +3,9 @@
 //! The settings live in the session's settings store (`settings.get`, `settings.set`, the Settings window, every
 //! switch that is a setting). The desktop app supplies a [`UserStore`] that reads them, with the user's custom glyph
 //! data, from the settings folder when the window opens ([`load`]), and writes them back whenever they change
-//! ([`save`], once per frame). The UI crate reads and writes no files itself; without a store nothing is kept.
+//! ([`save`], once per frame). The UI crate reads and writes no files itself; without a store nothing is kept. View
+//! state kept between runs lives in the settings too (the reporter switches, `view.shownReporters`); [`load`] puts it
+//! back in the view.
 
 use fontcraft_engine::Session;
 
@@ -29,6 +31,8 @@ pub fn load(app: &mut FontCraftApp) {
     if let Some(last) = problems.last() {
         app.status = last.clone();
     }
+    // View state kept in the settings.
+    app.view.extensions.reporters = crate::shell::extensions::stored_reporters(&app.session);
     // Loaded settings may carry the same revision as the defaults: the projection reads them again.
     app.view_changed();
     app.project();
