@@ -20,6 +20,9 @@
 //!   selects that instruction first (unless it is selected) and opens the instruction section ([`TT_INSTRUCTION`]):
 //!   Reverse on Stem instructions, Make Triple Hint on three vertical Stem instructions, and Delete Instructions,
 //!   which then clears the instruction selection ([`TT_ITEMS`]). They act on the selected instructions.
+//! - While the TrueType Instructor is the active tool, a last section ([`TT_INSTRUCTOR`]) offers its view items: Show
+//!   Pixel Preview, the Hinting Preview's three scales ([`PREVIEW_SCALES`]), Show Preview Address… and Show Point
+//!   Indexes, checked as their state is. Other tools' menus leave them out.
 //! - Items that need a choice first ask for it through `dialog.open` ([`ASKS`]).
 //! - An item runs with its targets from the selection, plus what the click adds: the clicked segment, node or guide,
 //!   and the click position for the commands that place something ([`params_for`], [`steps_for`]).
@@ -59,6 +62,19 @@ pub const GUIDE: &str = "canvas.guide";
 pub const HINT: &str = "canvas.hint";
 /// A TrueType instruction's badge, while the TrueType Instructor is the active tool.
 pub const TT_INSTRUCTION: &str = "canvas.ttInstruction";
+/// The TrueType Instructor's view items, the last section while that tool is active.
+pub const TT_INSTRUCTOR: &str = "canvas.ttInstructor";
+
+/// The Hinting Preview scale items: (item id, label, `hint.tt.setPreviewScale` scale).
+pub const PREVIEW_SCALES: [(&str, &str, u8); 3] = [
+    ("contextMenu.hintingPreviewScale1x", "Hinting Preview 1×", 1),
+    ("contextMenu.hintingPreviewScale2x", "Hinting Preview 2×", 2),
+    ("contextMenu.hintingPreviewScale4x", "Hinting Preview 4×", 4),
+];
+
+/// The Instructor section's shell commands, before and after the scale items.
+const TT_VIEW_BEFORE: &[&str] = &["hint.tt.showPixelPreview"];
+const TT_VIEW_AFTER: &[&str] = &[crate::dialogs::tt::preview_address::ID, "hint.tt.showPointIndexes"];
 
 /// Largest coordinate, in font units or window points, a menu opens at.
 pub const MAX_COORDINATE: f64 = 100_000.0;
@@ -319,7 +335,7 @@ pub fn open_canvas(app: &mut FontCraftApp, at: Point, space: Space) -> Result<()
         let kinds = if hint.is_some() { vec![HINT, CANVAS] } else { kinds(&scene, selection, hit.as_ref()) };
         (scene.glyph.clone(), kinds)
     };
-    let sections = sections(app, &kinds);
+    let sections = sections(app, &with_instructor(app, kinds));
     app.context_menus.canvas = Some(CanvasMenu { glyph, screen, at: [pos.x, pos.y], hit, sections, alt: false });
     Ok(())
 }
@@ -333,9 +349,61 @@ fn open_on_instruction(app: &mut FontCraftApp, index: usize, screen: [f32; 2], p
         state.selected = SelectedInstructions { glyph: glyph.clone(), layer, instructions: [index].into_iter().collect() };
         app.view_changed();
     }
-    let sections = sections(app, &[TT_INSTRUCTION, CANVAS]);
+    let sections = sections(app, &with_instructor(app, vec![TT_INSTRUCTION, CANVAS]));
     app.context_menus.canvas = Some(CanvasMenu { glyph, screen, at: [pos.x, pos.y], hit: None, sections, alt: false });
     Ok(())
+}
+
+/// Whether the TrueType Instructor is the active tool.
+fn instructor_active(app: &FontCraftApp) -> bool {
+    app.view.tool == crate::canvas::hinting::INSTRUCTOR
+}
+
+/// `kinds` with the Instructor's section last while that tool is active.
+fn with_instructor(app: &FontCraftApp, mut kinds: Vec<&'static str>) -> Vec<&'static str> {
+    if instructor_active(app) && !kinds.contains(&TT_INSTRUCTOR) {
+        kinds.push(TT_INSTRUCTOR);
+    }
+    kinds
+}
+
+/// The TrueType Instructor's view items, checked as their state is.
+fn instructor_section(app: &FontCraftApp) -> Section {
+    let state = &app.view.hinting.instructor;
+    let scale = app.models.hinting_waterfall.scale();
+    let command = |id: &&'static str| {
+        let label = crate::shell::commands::find(id).map_or(*id, |(_, c)| c.label);
+        let checked = match *id {
+            "hint.tt.showPixelPreview" => Some(state.pixel_preview),
+            "hint.tt.showPointIndexes" => Some(state.point_indexes),
+            _ => None,
+        };
+        ContextItem { command: *id, label, enabled: true, disabled_reason: None, checked, alternate: false }
+    };
+    let scales = PREVIEW_SCALES.iter().map(|&(id, label, s)| ContextItem {
+        command: id,
+        label,
+        enabled: true,
+        disabled_reason: None,
+        checked: Some(s == scale),
+        alternate: false,
+    });
+    let items = TT_VIEW_BEFORE.iter().map(command).chain(scales).chain(TT_VIEW_AFTER.iter().map(command)).collect();
+    Section { context: TT_INSTRUCTOR, items }
+}
+
+/// The messages an item of the Instructor section posts: a toggle sets the state its check mark does not show.
+fn instructor_steps(app: &FontCraftApp, id: &str) -> Option<Vec<Msg>> {
+    if let Some(&(_, _, scale)) = PREVIEW_SCALES.iter().find(|(item, _, _)| *item == id) {
+        return Some(vec![shell(crate::app::models::hinting::SCALE_COMMAND, json!({ "scale": scale }))]);
+    }
+    let state = &app.view.hinting.instructor;
+    match id {
+        "hint.tt.showPixelPreview" => Some(vec![shell(id, json!({ "on": !state.pixel_preview }))]),
+        "hint.tt.showPointIndexes" => Some(vec![shell(id, json!({ "on": !state.point_indexes }))]),
+        _ if TT_VIEW_AFTER.contains(&id) => Some(vec![shell(id, json!({}))]),
+        _ => None,
+    }
 }
 
 /// The context menus a click shows, object first, `canvas` last.
@@ -425,6 +493,12 @@ pub fn sections(app: &FontCraftApp, kinds: &[&'static str]) -> Vec<Section> {
     let mut shown: Vec<&'static str> = Vec::new();
     let mut out = Vec::new();
     for &kind in kinds {
+        if kind == TT_INSTRUCTOR {
+            if instructor_active(app) {
+                out.push(instructor_section(app));
+            }
+            continue;
+        }
         let items: Vec<ContextItem> = all
             .iter()
             .filter(|c| c.context.contains(&kind) && !shown.contains(&c.id) && visible(c.id))
@@ -621,6 +695,11 @@ pub fn steps_for(app: &mut FontCraftApp, menu: &CanvasMenu, id: &str) -> Vec<Msg
     }
     if id == SHOW_IN_FONT_VIEW {
         return vec![shell("fontView.setSelection", json!({"glyphs": [menu.glyph]})), shell("fontView.show", json!({}))];
+    }
+    if menu.sections.iter().any(|s| s.context == TT_INSTRUCTOR)
+        && let Some(steps) = instructor_steps(app, id)
+    {
+        return steps;
     }
     if id == SMART_GLYPH_SETTINGS {
         let base = match menu.hit.as_ref().map(|h| &h.hit) {

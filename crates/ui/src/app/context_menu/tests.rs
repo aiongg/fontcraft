@@ -152,3 +152,50 @@ fn the_glyph_menu_marks_exports_and_tags_and_its_items_run_their_commands() {
     }
     assert_ne!(many.view.workspace.layout.panel_state(&crate::shell::dock::PanelId::Sidebar), craft::behavior::dock::PanelState::Hidden);
 }
+
+/// While the TrueType Instructor is the active tool the menu ends with its view items, checked as their state is, and
+/// each runs its command; other tools' menus leave them out.
+#[test]
+fn the_instructor_section_lists_its_view_items_checked_as_their_state_is() {
+    use super::TT_INSTRUCTOR;
+    let mut app = edit_app();
+    let menu = call(&mut app, "ui.contextMenu.list", json!({"x": 700, "y": 700}));
+    assert!(!menu["sections"].as_array().unwrap().iter().any(|s| s["context"] == TT_INSTRUCTOR), "{menu}");
+
+    app.sent.push(Msg::View(ViewMsg::SelectTool(crate::canvas::hinting::INSTRUCTOR)));
+    app.drain();
+    let list = |app: &mut FontCraftApp| call(app, "ui.contextMenu.list", json!({"x": 700, "y": 700}));
+    let menu = list(&mut app);
+    let last = menu["sections"].as_array().unwrap().last().cloned().unwrap();
+    assert_eq!(last["context"], TT_INSTRUCTOR, "{menu}");
+    let ids: Vec<&str> = last["items"].as_array().unwrap().iter().map(|i| i["command"].as_str().unwrap()).collect();
+    assert_eq!(
+        ids,
+        [
+            "hint.tt.showPixelPreview",
+            "contextMenu.hintingPreviewScale1x",
+            "contextMenu.hintingPreviewScale2x",
+            "contextMenu.hintingPreviewScale4x",
+            "hint.tt.showPreviewAddress",
+            "hint.tt.showPointIndexes"
+        ]
+    );
+    let checked = |menu: &Value, id: &str| {
+        menu["sections"].as_array().unwrap().iter().flat_map(|s| s["items"].as_array().unwrap()).find(|i| i["command"] == id).unwrap()["checked"]
+            .clone()
+    };
+    assert_eq!(checked(&menu, "hint.tt.showPixelPreview"), json!(app.view.hinting.instructor.pixel_preview));
+    assert_eq!(checked(&menu, "hint.tt.showPointIndexes"), json!(false));
+    assert_eq!(checked(&menu, "contextMenu.hintingPreviewScale1x"), json!(true));
+    assert_eq!(checked(&menu, "hint.tt.showPreviewAddress"), Value::Null, "not a toggle");
+
+    call(&mut app, "ui.contextMenu.invoke", json!({"command": "hint.tt.showPointIndexes"}));
+    assert!(app.view.hinting.instructor.point_indexes);
+    list(&mut app);
+    call(&mut app, "ui.contextMenu.invoke", json!({"command": "contextMenu.hintingPreviewScale4x"}));
+    assert_eq!(app.models.hinting_waterfall.scale(), 4);
+    let menu = list(&mut app);
+    assert_eq!(checked(&menu, "hint.tt.showPointIndexes"), json!(true));
+    assert_eq!(checked(&menu, "contextMenu.hintingPreviewScale4x"), json!(true));
+    assert_eq!(checked(&menu, "contextMenu.hintingPreviewScale1x"), json!(false));
+}
