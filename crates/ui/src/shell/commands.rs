@@ -76,6 +76,7 @@ pub const MODULES: &[Module] = &[
     super::extensions::MODULE,
     super::project::MODULE,
     super::preview::MODULE,
+    super::shape_order::MODULE,
 ];
 
 /// The module and description of the shell command `id`.

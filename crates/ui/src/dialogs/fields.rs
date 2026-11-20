@@ -8,9 +8,9 @@
 use std::borrow::Cow;
 use std::collections::HashSet;
 
-use craft::behavior::{Selection, keyed};
+use craft::behavior::{EditEvent, GesturePhase, Selection, keyed};
 use craft::ui::choice::Checkbox;
-use craft::ui::contract::{Bind, Props as _, Show as _, ShowCollection as _, ShowContainer as _};
+use craft::ui::contract::{Bind, CollectionEvent, Props as _, ReorderMove, ReorderRule, Show as _, ShowCollection as _, ShowContainer as _};
 use craft::ui::display::Text;
 use craft::ui::layout_components::Stack;
 use craft::ui::list::{List, ListRow};
@@ -465,12 +465,7 @@ fn custom_row(ui: &mut Ui, fields: &mut DialogFields, cx: &mut CustomContext, fi
             }
             return Text::new(Label::from(current.to_string())).show(ui);
         }
-        Kind::Order { labels } => {
-            let order: Vec<usize> =
-                current.as_array().map(|l| l.iter().filter_map(|i| i.as_u64().and_then(|n| usize::try_from(n).ok())).collect()).unwrap_or_default();
-            let lines: Vec<&str> = order.iter().filter_map(|i| labels.get(*i).map(String::as_str)).collect();
-            return Text::new(Label::from(lines.join("\n"))).show(ui);
-        }
+        Kind::Order { labels } => return order_rows(ui, fields, field, labels, &current),
         Kind::List { rows, .. } => return Text::new(Label::from(rows.join("\n"))).show(ui),
         _ => return Text::new(Label::Empty).show(ui),
     };
@@ -512,6 +507,59 @@ fn select_rows(ui: &mut Ui, fields: &mut DialogFields, field: &Field, rows: &[St
         fields.set(field.key.clone(), FieldValue::Json(json!(next)));
     }
     out.response
+}
+
+/// The rows of an order field in their current order, dragged (or moved with the list's reorder keys) into a new one.
+/// Rows are keyed by their index in `labels`, so the selection stays on the same rows when they move.
+fn order_rows(ui: &mut Ui, fields: &mut DialogFields, field: &Field, labels: &[String], current: &Value) -> Response {
+    let mut order: Vec<usize> =
+        current.as_array().map(|l| l.iter().filter_map(|i| i.as_u64().and_then(|n| usize::try_from(n).ok())).collect()).unwrap_or_default();
+    // A value that is not an order of every row (none is stored, since `check` refuses it) shows the rows as listed.
+    if order.len() != labels.len() || order.iter().any(|i| *i >= labels.len()) {
+        order = (0..labels.len()).collect();
+    }
+    let text = |at: &usize| labels.get(*at).cloned().unwrap_or_default();
+    let source = keyed(&order, |at| *at).with_text(|at| Cow::Owned(text(at)));
+    let out = List::<usize>::new(Label::from(field.label.clone()))
+        .max_rows(LIST_ROWS)
+        .reorder(ReorderRule::new())
+        .id_salt(("fontcraftDialogOrder", field.key.as_str()))
+        .show_items(ui, &source, &mut |at, icx| ListRow::new(text(at)).state(icx.row.clone()));
+    let mut moved_to: Option<Vec<usize>> = None;
+    for event in &out.events {
+        if let CollectionEvent::Reorder(edit) = event
+            && let Some(moved) = committed(edit)
+            && let Some(next) = reordered(moved_to.as_deref().unwrap_or(&order), moved)
+        {
+            moved_to = Some(next);
+        }
+    }
+    if let Some(next) = moved_to {
+        fields.set(field.key.clone(), FieldValue::Json(json!(next)));
+    }
+    out.response
+}
+
+/// The value of a finished edit: a drop or a key move, not a drag still under way.
+fn committed<T>(event: &EditEvent<T>) -> Option<&T> {
+    match event.phase() {
+        Some(GesturePhase::Commit) | None => event.value(),
+        _ => None,
+    }
+}
+
+/// `order` with the moved rows taken out and put back together at `moved.to`, counted in the rows that remain; `None`
+/// when nothing moves or the move names rows `order` lacks.
+pub fn reordered(order: &[usize], moved: &ReorderMove<usize>) -> Option<Vec<usize>> {
+    if moved.keys.is_empty() || moved.keys.iter().any(|k| !order.contains(k)) {
+        return None;
+    }
+    let mut rest: Vec<usize> = order.iter().copied().filter(|k| !moved.keys.contains(k)).collect();
+    let at = moved.to.min(rest.len());
+    let tail = rest.split_off(at);
+    rest.extend(moved.keys.iter().copied());
+    rest.extend(tail);
+    (rest != order).then_some(rest)
 }
 
 /// The fields of a filter, from its entry in `filter.list`.
@@ -572,5 +620,24 @@ pub fn format_value(value: &Value) -> String {
         Value::String(s) => s.clone(),
         Value::Bool(b) => b.to_string(),
         _ => String::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use craft::ui::contract::ReorderMove;
+
+    use super::reordered;
+
+    /// Moved rows land together at `to`, counted in the rows left once they are taken out; a move that changes nothing
+    /// or names a row the order lacks gives nothing.
+    #[test]
+    fn reordered_puts_the_moved_rows_together_at_their_place() {
+        let order = [0, 1, 2, 3];
+        assert_eq!(reordered(&order, &ReorderMove::new(3, vec![3], 0, false)), Some(vec![3, 0, 1, 2]));
+        assert_eq!(reordered(&order, &ReorderMove::new(0, vec![0, 2], 2, false)), Some(vec![1, 3, 0, 2]));
+        assert_eq!(reordered(&order, &ReorderMove::new(1, vec![1], 9, false)), Some(vec![0, 2, 3, 1]));
+        assert_eq!(reordered(&order, &ReorderMove::new(1, vec![1], 1, false)), None);
+        assert_eq!(reordered(&order, &ReorderMove::new(7, vec![7], 0, false)), None);
     }
 }

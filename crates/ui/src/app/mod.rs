@@ -127,6 +127,8 @@ pub struct ViewState {
     pub project: crate::shell::project::ProjectWindowView,
     /// The Preview Area's and the Preview Panel's settings (`shell::preview`).
     pub preview: crate::shell::preview::PreviewState,
+    /// The glyph the Shape Order panel was opened on (`shell::shape_order`).
+    pub shape_order: crate::shell::shape_order::ShapeOrderView,
 }
 
 impl Default for ViewState {
@@ -167,6 +169,7 @@ impl Default for ViewState {
             extensions: Default::default(),
             project: Default::default(),
             preview: Default::default(),
+            shape_order: Default::default(),
         }
     }
 }

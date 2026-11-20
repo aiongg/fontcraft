@@ -29,6 +29,7 @@ pub mod layers;
 pub mod palette;
 pub mod preview;
 pub mod project;
+pub mod shape_order;
 pub mod sidebar;
 pub mod space_center;
 pub mod table_viewer;
@@ -120,6 +121,8 @@ pub struct Models {
     /// The Preview Area's and the Preview Panel's lines (`panels::preview`).
     pub preview_area: Tracked<preview::PreviewModel>,
     pub preview_panel: Tracked<preview::PreviewModel>,
+    /// The Shape Order panel (`panels::shape_order`).
+    pub shape_order: Tracked<shape_order::ShapeOrderModel>,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -190,6 +193,7 @@ impl Models {
         compatibility::project(&mut self.compatibility, cx);
         text::project_features(&mut self.features, &self.text, cx);
         preview::project_both(&mut self.preview_area, &mut self.preview_panel, cx);
+        shape_order::project(&mut self.shape_order, cx);
         true
     }
 }

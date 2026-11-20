@@ -2176,7 +2176,7 @@ milestone = "M3"
 summary = "Dialog of Filter › Shape Order used to rearrange the shapes of a layer; this chapter describes it only as far as masking needs."
 ref = "Edit View › Masking"
 status = "handbook"
-notes = "Built (M3.14): a list of the layer's shapes. Each row reads `<index>: Path (<n> nodes)`, `<index>: Component <name>` or `<index>: Image`, the index from when the dialog opened. A row dragged onto another takes its place; the canvas previews the order and OK is one undo step. Agents give `order` with ui.dialog.set."
+notes = "Built (M3.14): a list of the layer's shapes. Each row reads `<index>: Path (<n> nodes)`, `<index>: Component <name>` or `<index>: Image`, the index from when the dialog opened. A row dragged onto another takes its place; the canvas previews the order and OK is one undo step. Agents give `order` with ui.dialog.set. In crates/ui the field is a list that reorders by drag (rows land between rows) and by the list's reorder keys; every dialog order field works this way."
 guesses = [
   "The first row is the bottom shape (shape 0, drawn first).",
   "Rows read `<index>: Path (<n> nodes)`, `<index>: Component <name>` or `<index>: Image`; what the reference's rows show and which end is the top are not observed (03a open question 24).",
