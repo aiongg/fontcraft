@@ -551,7 +551,7 @@ mod tests {
         let subs = ask("fontcraft-cli co", 1);
         assert!(subs.split(' ').any(|w| w == "completion") && subs.split(' ').any(|w| w == "compile"), "{subs}");
         assert_eq!(ask("fontcraft-cli completion ''", 2), "bash zsh fish powershell");
-        assert_eq!(ask("fontcraft-cli compile in.glyphs --format ''", 4), "ttf otf");
+        assert_eq!(ask("fontcraft-cli compile in.glyphs --format ''", 4), "ttf otf variable variable-cff2");
         assert!(ask("fontcraft-cli tables ''", 2).split(' ').any(|w| w == "list"));
         assert!(ask("fontcraft-cli bench --ru", 2).contains("--runs"));
         let _ = std::fs::remove_dir_all(&dir);

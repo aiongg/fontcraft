@@ -386,8 +386,8 @@ pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<Strin
         return Ok(LayoutTables::default());
     }
     let code = match (&assembly, &contextual) {
-        (Some(a), Some(found)) => Some(format!("{}\n{}", a.files.root_text(), found.code)),
-        (Some(a), None) => Some(a.files.root_text().to_string()),
+        (Some(a), Some(found)) => Some(format!("{}\n{}", a.expanded_text(), found.code)),
+        (Some(a), None) => Some(a.expanded_text()),
         (None, Some(found)) => Some(found.code.clone()),
         (None, None) => None,
     };

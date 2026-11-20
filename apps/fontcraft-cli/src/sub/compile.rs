@@ -12,8 +12,8 @@ pub const SUBCOMMAND: Subcommand =
     Subcommand { name: "compile", summary: "Compile sources to static or variable fonts", usage: USAGE, options: &[], actions: &[], run: compile };
 
 const USAGE: &str = "\
-  fontcraft-cli compile SOURCE... [--format FMT]... [--variable] [--container plain|woff|woff2]...
-                        [-o FILE | --output-dir DIR] [--output-layout flat|by-format]
+  fontcraft-cli compile SOURCE... [--format ttf|otf|variable|variable-cff2]... [--variable]
+                        [--container plain|woff|woff2]... [-o FILE | --output-dir DIR] [--output-layout flat|by-format]
                         [--name-by filename|postscript-name] [--instances[=NAME,...|=REGEX]]
                         [--masters-as-instances] [--variable-fonts REGEX | --settings NAME,...]
                         [--family-name NAME] [--keep-overlaps] [--keep-direction] [--conversion-error EM]

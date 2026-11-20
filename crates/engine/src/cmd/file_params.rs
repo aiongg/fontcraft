@@ -140,8 +140,8 @@ mod tests {
         ),
         (
             "font.compile",
-            &["file", "includeDir", "mtiSource", "debugFile"],
-            "inside the `features` group; each is checked against the automation roots when it is read or written",
+            &["features", "file", "includeDir", "mtiSource", "debugFile"],
+            "the `features` group and the paths inside it; each is checked against the automation roots when it is read or written",
         ),
         ("font.compile", &["glyphData"], "a list of glyph data files, each checked against the automation roots when it is read"),
         ("font.compilePlan", &["glyphData"], "a list of glyph data files, each checked against the automation roots when it is read"),

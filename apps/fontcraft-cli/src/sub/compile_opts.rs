@@ -423,7 +423,9 @@ mod tests {
         assert_eq!(p["instances"], "Reg.*");
         assert_eq!(p["interpolateBinaryLayout"], true);
         assert_eq!((&p["subroutinize"], &p["projectOptions"]), (&json!(true), &json!(["subroutinize"])));
-        assert!(!is_project(p.as_object().unwrap()));
+        assert!(is_project(p.as_object().unwrap()), "the OS/2 bits ask for a project compile");
+        let (_, p) = parsed(&["F.glyphs", "--subroutinize"]);
+        assert!(!is_project(p.as_object().unwrap()), "the subroutinize word alone does not");
         let (_, p) = parsed(&["--instances=Bold,Light", "--release", "--variable"]);
         assert_eq!(p["instances"], json!(["Bold", "Light"]));
         assert_eq!(p["formats"], json!(["variable"]));
