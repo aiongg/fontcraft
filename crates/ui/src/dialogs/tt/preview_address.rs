@@ -366,9 +366,12 @@ mod tests {
     use crate::app::APP;
     use crate::app::preview_host::PreviewHost;
 
+    /// One request to the server: what to serve, or `None` for stop.
+    type Served = Option<(Site, Scope)>;
+
     /// A server that records what it was asked to serve.
     #[derive(Clone, Default)]
-    struct Recorder(Arc<Mutex<Vec<Option<(Site, Scope)>>>>);
+    struct Recorder(Arc<Mutex<Vec<Served>>>);
 
     impl PreviewHost for Recorder {
         fn serve(&mut self, site: Site, scope: Scope) -> Result<String, String> {
