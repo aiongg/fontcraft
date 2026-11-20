@@ -190,7 +190,8 @@ fn apply(app: &mut FontCraftApp, entries: Vec<Vec<String>>) -> Result<(), String
         query.insert("search".into(), search);
     }
     if !query.is_empty() {
-        if let Some(master) = app.session.font().ok().and_then(|f| f.masters.first()).map(|m| m.id.clone()) {
+        let master = app.session.font().ok().and_then(|f| crate::shell::masters::current_master(f, &app.view.layers)).map(|m| m.id.clone());
+        if let Some(master) = master {
             query.insert("master".into(), json!(master));
         }
         let result = app.session.query("fontView.queryGlyphs", &Value::Object(query)).map_err(|e| e.to_string())?;

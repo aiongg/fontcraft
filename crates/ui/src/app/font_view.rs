@@ -270,9 +270,10 @@ impl FontCraftApp {
         self.view.workspace.layout.panel_state(&PanelId::FontView) != craft::behavior::dock::PanelState::Hidden
     }
 
-    /// The master Font View draws: the font's first.
+    /// Font View's master: the current master (`view.selectMaster`).
     fn font_view_master(&self) -> Option<String> {
-        self.session.font().ok()?.masters.first().map(|m| m.id.clone())
+        let font = self.session.font().ok()?;
+        crate::shell::masters::current_master(font, &self.view.layers).map(|m| m.id.clone())
     }
 
     /// `command` fired from a menu or a key with its targets filled from the Font View selection: the selected

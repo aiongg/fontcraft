@@ -259,15 +259,33 @@ pub fn pointer(app: &mut FontCraftApp, ev: &PointerEvent) -> Option<Vec<String>>
     if ev.kind != PointerKind::Down || app.tools.toolbox.busy() {
         return None;
     }
+    let index = badge_hit(app, &camera, at)?;
+    app.view.hinting.drag = Some(BadgeDrag { index, from: at, at, shift: ev.mods.shift, moved: false });
+    Some(Vec::new())
+}
+
+/// The instruction whose badge of the current direction lies under `at` (screen points), the topmost one, while the
+/// Instructor is active.
+fn badge_hit(app: &FontCraftApp, camera: &Camera, at: Pos2) -> Option<usize> {
     let tt = active(app)?;
     let t = HintTokens::standard();
     let direction = app.view.hinting.instructor.direction;
-    let hit = badges(&tt.instructions, &camera, &t, direction)
+    badges(&tt.instructions, camera, &t, direction)
         .into_iter()
         .rev()
-        .find(|b| b.current && b.at.distance(at) <= t.tt_badge_radius + ToolTokens::standard().hit_tolerance * 0.5)?;
-    app.view.hinting.drag = Some(BadgeDrag { index: hit.index, from: at, at, shift: ev.mods.shift, moved: false });
-    Some(Vec::new())
+        .find(|b| b.current && b.at.distance(at) <= t.tt_badge_radius + ToolTokens::standard().hit_tolerance * 0.5)
+        .map(|b| b.index)
+}
+
+/// The instruction whose badge a click at `at` (screen points) lands on, as a press on it would take it: the context
+/// menu's hit test.
+pub fn badge_at(app: &FontCraftApp, at: Pos2) -> Option<usize> {
+    badge_hit(app, &crate::canvas::tools::apply::camera(app), at)
+}
+
+/// The Instructor is the active tool and its badges show.
+pub fn instructor_shows(app: &FontCraftApp) -> bool {
+    active(app).is_some()
 }
 
 /// The end of a press on a badge: a click selects, a drop on a node or handle moves the instruction there.

@@ -24,7 +24,8 @@ pub(super) fn command_ref(method: &str, params: &Value) -> Result<CommandRef, St
 
 /// `{command, params?}`: runs an engine command, a shell command or a tool's command, as a fired command runs, and
 /// returns its result. A command that takes a path from the file picker needs the path here. The question a result
-/// asks (pasted outline far outside the glyph, names the font has) opens only after the person's own run, not here.
+/// asks (pasted outline far outside the glyph, names the font has) opens only after the person's own run, not here,
+/// and a copy returns its text without putting it on the system clipboard.
 fn execute(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
     let command = command_ref("engine.execute", params)?;
     app.run_request(FontCraftApp::route(command))

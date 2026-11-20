@@ -19,9 +19,16 @@ fn shows(cx: &ProjectCx<'_>, panel: PanelId) -> bool {
     cx.view.workspace.layout.panel_state(&panel) != PanelState::Hidden
 }
 
-/// The first master's id: the master the glyph panels show.
-fn first_master(cx: &ProjectCx<'_>) -> Option<String> {
-    cx.session.font().ok()?.masters.first().map(|m| m.id.clone())
+/// The layer the canvas shows for the shown glyph: the Layers panel's pick, else its layer of the current master.
+fn shown_layer(cx: &ProjectCx<'_>) -> Option<String> {
+    let font = cx.session.font().ok()?;
+    crate::canvas::tools::active_layer(font, cx.view).map(|l| l.id.clone())
+}
+
+/// The master of the layer the canvas shows, else the current master: the master the glyph panels show.
+fn shown_master(cx: &ProjectCx<'_>) -> Option<String> {
+    let font = cx.session.font().ok()?;
+    crate::canvas::tools::active_master(font, cx.view).map(|m| m.id.clone())
 }
 
 /// Which list of related glyphs a section shows.
@@ -118,7 +125,7 @@ impl SelectionLists {
     }
 }
 
-/// The shown glyph's stored selections in its first master's layer.
+/// The shown glyph's stored selections in the layer the canvas shows.
 #[derive(PlainData, Clone, Debug, Default, PartialEq)]
 pub struct SelectionsModel {
     pub glyph: Option<String>,
@@ -130,7 +137,7 @@ pub struct SelectionsModel {
 }
 
 pub fn project_selections(model: &mut Tracked<SelectionsModel>, cx: &mut ProjectCx<'_>) {
-    let (glyph, layer) = (shown_glyph(cx), first_master(cx));
+    let (glyph, layer) = (shown_glyph(cx), shown_layer(cx));
     let mut value = SelectionsModel { glyph: glyph.clone(), layer: layer.clone(), ..SelectionsModel::default() };
     if let (Some(glyph), Some(layer), true) = (glyph, layer, shows(cx, PanelId::Selections)) {
         let found = cx.session.query("edit.getStoredSelections", &json!({ "glyph": glyph, "layer": layer })).unwrap_or(Value::Null);
@@ -169,7 +176,7 @@ pub struct StemRow {
     pub value: Option<f64>,
 }
 
-/// The design values of the first master.
+/// The design values of the master the glyph panels show.
 #[derive(PlainData, Clone, Debug, Default, PartialEq)]
 pub struct MeasurementsModel {
     pub master: Option<String>,
@@ -178,7 +185,7 @@ pub struct MeasurementsModel {
 }
 
 pub fn project_measurements(model: &mut Tracked<MeasurementsModel>, cx: &mut ProjectCx<'_>) {
-    let master = first_master(cx);
+    let master = shown_master(cx);
     let mut value = MeasurementsModel { master: master.clone(), ..MeasurementsModel::default() };
     if let (Some(master), true) = (master, shows(cx, PanelId::Measurements)) {
         let number = |v: &Value, key: &str| v.get(key).and_then(Value::as_f64).filter(|n| n.is_finite());

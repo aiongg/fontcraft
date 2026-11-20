@@ -205,3 +205,110 @@ fn review_hints_opens_on_the_first_hint_and_steps() {
     app.drain();
     assert!(app.status.contains("last"), "{}", app.status);
 }
+
+fn open_menu_at(app: &mut FontCraftApp, at: Pos2) -> crate::app::context_menu::CanvasMenu {
+    use crate::app::context_menu::{Space, open_canvas};
+    open_canvas(app, fontcraft_geom::Point::new(f64::from(at.x), f64::from(at.y)), Space::Screen).unwrap();
+    app.context_menus.canvas.clone().expect("the canvas menu opened")
+}
+
+fn pick(app: &mut FontCraftApp, id: &str) {
+    crate::app::context_menu::invoke(app, id, |app, msg| app.run_now(msg, false)).unwrap_or_else(|e| panic!("{id}: {e}"));
+}
+
+fn ps_badge(app: &FontCraftApp, index: usize) -> Pos2 {
+    let marks = app.models.hint_canvas.ps.clone();
+    let view = crate::canvas::tools::apply::tools_view(&camera(app));
+    let b = marks.badge(&view, &marks.hints[index]).expect("the badge").center();
+    Pos2::new(b.x as f32, b.y as f32)
+}
+
+/// A right-click on a PostScript hint's badge selects that hint and opens the hint section, whose Make Ghost Hint and
+/// Delete Hints act on it as the commands do.
+#[test]
+fn a_ps_hint_badge_menu_makes_ghosts_and_deletes() {
+    use crate::app::context_menu::{CANVAS, HINT};
+    let mut app = new_app();
+    let mut headless = new_app();
+    for a in [&mut app, &mut headless] {
+        squares(a);
+        run(a, "hint.ps.addHorizontalHint", json!({"glyph": "A", "origin": 100, "size": 100}));
+        run(a, "hint.ps.addHorizontalHint", json!({"glyph": "A", "origin": 300, "size": 40}));
+    }
+    shell(&mut app, "view.showHints", json!({"on": true}));
+
+    let at = ps_badge(&app, 1);
+    let menu = open_menu_at(&mut app, at);
+    assert_eq!(menu.sections.iter().map(|s| s.context).collect::<Vec<_>>(), vec![HINT, CANVAS]);
+    let hint_items: Vec<&str> = menu.sections[0].items.iter().map(|i| i.command).collect();
+    assert_eq!(hint_items, vec!["hint.ps.makeGhostHint", "hint.ps.deleteHints"]);
+    assert!(menu.sections[0].items.iter().all(|i| i.enabled), "{menu:?}");
+    assert_eq!(app.tools.selection.hints.iter().copied().collect::<Vec<_>>(), vec![1], "the clicked hint is selected first");
+    pick(&mut app, "hint.ps.makeGhostHint");
+    run(&mut headless, "hint.ps.makeGhostHint", json!({"glyph": "A", "hints": [1]}));
+    assert_eq!(layer(&app), layer(&headless));
+
+    let at = ps_badge(&app, 0);
+    open_menu_at(&mut app, at);
+    assert_eq!(app.tools.selection.hints.iter().copied().collect::<Vec<_>>(), vec![0]);
+    pick(&mut app, "hint.ps.deleteHints");
+    run(&mut headless, "hint.ps.deleteHints", json!({"glyph": "A", "hints": [0]}));
+    assert_eq!(layer(&app), layer(&headless));
+}
+
+/// With the Instructor active, a right-click on an instruction's badge selects it unless it is selected and opens the
+/// instruction section: Reverse wants Stem instructions, Make Triple Hint three vertical ones, and Delete
+/// Instructions clears the instruction selection. Each acts as its command does.
+#[test]
+fn an_instruction_badge_menu_reverses_links_and_deletes() {
+    use crate::app::context_menu::{CANVAS, TT_INSTRUCTION};
+    let mut app = new_app();
+    let mut headless = new_app();
+    for a in [&mut app, &mut headless] {
+        squares(a);
+        run(a, "hint.tt.snapPoint", json!({"glyph": "A", "nodes": [[0, 0]], "direction": "vertical"}));
+        run(a, "hint.tt.addStemHint", json!({"glyph": "A", "nodes": [[0, 1], [0, 2], [1, 1], [1, 2], [2, 1], [2, 2]], "direction": "vertical"}));
+    }
+    instructor(&mut app);
+    let kinds: Vec<BadgeKind> = app.models.hint_canvas.tt.as_ref().unwrap().instructions.iter().map(|m| m.kind).collect();
+    assert_eq!(kinds, vec![BadgeKind::Snap, BadgeKind::Stem, BadgeKind::Stem, BadgeKind::Stem]);
+
+    // On the Snap badge: only Delete Instructions applies.
+    let at = badge_at(&app, 0);
+    let menu = open_menu_at(&mut app, at);
+    assert_eq!(menu.sections.iter().map(|s| s.context).collect::<Vec<_>>(), vec![TT_INSTRUCTION, CANVAS]);
+    let items: Vec<&str> = menu.sections[0].items.iter().map(|i| i.command).collect();
+    assert_eq!(items, vec!["hint.tt.reverse", "hint.tt.makeTripleHint", "hint.tt.deleteInstructions"]);
+    assert_eq!(selected(&app), vec![0], "the clicked instruction is selected first");
+    let enabled = |menu: &crate::app::context_menu::CanvasMenu, id: &str| menu.item(id).unwrap().enabled;
+    assert!(!enabled(&menu, "hint.tt.reverse") && !enabled(&menu, "hint.tt.makeTripleHint"));
+    assert!(enabled(&menu, "hint.tt.deleteInstructions"));
+    assert!(crate::app::context_menu::invoke(&mut app, "hint.tt.reverse", |app, msg| app.run_now(msg, false)).is_err(), "a greyed item refuses");
+
+    // On a selected Stem badge the three Stems stay selected: Make Triple Hint, then Reverse.
+    shell(&mut app, "hint.tt.selectInstructions", json!({"instructions": [1, 2, 3]}));
+    let at = badge_at(&app, 2);
+    let menu = open_menu_at(&mut app, at);
+    assert_eq!(selected(&app), vec![1, 2, 3]);
+    assert!(enabled(&menu, "hint.tt.reverse") && enabled(&menu, "hint.tt.makeTripleHint"));
+    pick(&mut app, "hint.tt.makeTripleHint");
+    run(&mut headless, "hint.tt.makeTripleHint", json!({"glyph": "A", "instructions": [1, 2, 3]}));
+    assert_eq!(layer(&app), layer(&headless));
+    shell(&mut app, "hint.tt.selectInstructions", json!({"instructions": [1, 2, 3]}));
+    let at = badge_at(&app, 1);
+    let menu = open_menu_at(&mut app, at);
+    assert_eq!(selected(&app), vec![1, 2, 3]);
+    assert!(!enabled(&menu, "hint.tt.makeTripleHint"), "they belong to a triple hint already");
+    pick(&mut app, "hint.tt.reverse");
+    run(&mut headless, "hint.tt.reverse", json!({"glyph": "A", "instructions": [1, 2, 3]}));
+    assert_eq!(layer(&app), layer(&headless));
+
+    // Delete Instructions on the Snap badge deletes it alone and clears the selection.
+    let at = badge_at(&app, 0);
+    open_menu_at(&mut app, at);
+    assert_eq!(selected(&app), vec![0]);
+    pick(&mut app, "hint.tt.deleteInstructions");
+    run(&mut headless, "hint.tt.deleteInstructions", json!({"glyph": "A", "instructions": [0]}));
+    assert_eq!(layer(&app), layer(&headless));
+    assert!(selected(&app).is_empty());
+}

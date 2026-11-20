@@ -1,4 +1,4 @@
-//! Measurements: the design values of the first master. Each metric shows its height and its overshoot zone, each stem
+//! Measurements: the design values of the shown master. Each metric shows its height and its overshoot zone, each stem
 //! its width; typing a number writes it (`font.master.setMetric`, `font.master.setStem`). Recalculate measures them again
 //! from the master's outlines (`font.recalculateMeasurements`).
 
@@ -97,7 +97,7 @@ mod tests {
     use crate::app::{APP, FontCraftApp, Msg, ViewMsg};
     use crate::shell::dock::PanelId;
 
-    /// The panel lists the first master's metrics; typing a height posts `font.master.setMetric` for that master.
+    /// The panel lists the shown master's metrics; typing a height posts `font.master.setMetric` for that master.
     #[test]
     fn a_typed_metric_height_posts_set_metric() {
         let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));

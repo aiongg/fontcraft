@@ -1,5 +1,5 @@
-//! The Pairs & Phrases view model: the shown work list, each pair row with the value stored for it in the first
-//! master, and the auto-kerning proposal under review.
+//! The Pairs & Phrases view model: the shown work list, each pair row with the value stored for it in the
+//! current master, and the auto-kerning proposal under review.
 
 use std::collections::HashMap;
 
@@ -99,9 +99,12 @@ pub fn project(model: &mut Tracked<PairsModel>, cx: &mut ProjectCx<'_>) {
     super::set(model, value);
 }
 
-/// The left-to-right pairs stored in the first master, by their sides as written (`@group` for a group).
+/// The left-to-right pairs stored in the current master, by their sides as written (`@group` for a group).
 fn stored_values(cx: &mut ProjectCx<'_>) -> HashMap<(String, String), f64> {
-    let Some(master) = cx.session.font().ok().and_then(|f| f.masters.first().map(|m| m.id.clone())) else { return HashMap::new() };
+    let font = cx.session.font().ok();
+    let Some(master) = font.and_then(|f| crate::shell::masters::current_master(f, &cx.view.layers)).map(|m| m.id.clone()) else {
+        return HashMap::new();
+    };
     let reply = cx.session.query("kerning.listPairs", &json!({ "master": master })).unwrap_or(Value::Null);
     let list = reply.get("pairs").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
     list.iter()

@@ -1,4 +1,4 @@
-//! The Kerning window (`window.kerning`): the stored pairs of the font's first master, left to right, listed by
+//! The Kerning window (`window.kerning`): the stored pairs of the current master, left to right, listed by
 //! `kerning.listPairs`, with the search options, sorting, editing, deletion and the clean-up actions.
 //!
 //! | Input | Does |

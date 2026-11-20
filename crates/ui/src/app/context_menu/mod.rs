@@ -16,6 +16,10 @@
 //! - Add Global Guide replaces Add Guide while Alt is held ([`ContextItem::alternate`]).
 //! - While the layer's PostScript hints show, the hint items join the menu ([`HINT_ITEMS`]); a click on a hint's badge
 //!   or marker selects that hint first. Their parameters come from `fontcraft_tools::hint_drag::menu_params`.
+//! - While the TrueType Instructor is the active tool, a click on an instruction's badge of the current direction
+//!   selects that instruction first (unless it is selected) and opens the instruction section ([`TT_INSTRUCTION`]):
+//!   Reverse on Stem instructions, Make Triple Hint on three vertical Stem instructions, and Delete Instructions,
+//!   which then clears the instruction selection ([`TT_ITEMS`]). They act on the selected instructions.
 //! - Items that need a choice first ask for it through `dialog.open` ([`ASKS`]).
 //! - An item runs with its targets from the selection, plus what the click adds: the clicked segment, node or guide,
 //!   and the click position for the commands that place something ([`params_for`], [`steps_for`]).
@@ -39,7 +43,9 @@ use serde_json::{Map, Value, json};
 
 use self::glyph_menu::GlyphMenu;
 use self::item_state::GUIDE_PROPERTIES;
+use crate::app::models::hint_canvas::{BadgeKind, TtMark};
 use crate::app::{FontCraftApp, Msg};
+use crate::canvas::hinting::SelectedInstructions;
 use crate::canvas::tools::{self, apply};
 
 pub const CANVAS: &str = "canvas";
@@ -51,6 +57,8 @@ pub const COMPONENT: &str = "canvas.component";
 pub const GUIDE: &str = "canvas.guide";
 /// A PostScript hint's badge or marker, while the hints show.
 pub const HINT: &str = "canvas.hint";
+/// A TrueType instruction's badge, while the TrueType Instructor is the active tool.
+pub const TT_INSTRUCTION: &str = "canvas.ttInstruction";
 
 /// Largest coordinate, in font units or window points, a menu opens at.
 pub const MAX_COORDINATE: f64 = 100_000.0;
@@ -65,6 +73,11 @@ pub const HINT_ITEMS: &[(&str, &[&str])] = &[
     ("hint.ps.autohintGlyph", &[CANVAS]),
     ("hint.ps.clearGlyphHints", &[CANVAS]),
 ];
+
+/// The TrueType instruction commands the instruction section shows while the Instructor is active (their rows name no
+/// `context`: the section exists only on an instruction's badge).
+pub const TT_ITEMS: &[(&str, &[&str])] =
+    &[("hint.tt.reverse", &[TT_INSTRUCTION]), ("hint.tt.makeTripleHint", &[TT_INSTRUCTION]), ("hint.tt.deleteInstructions", &[TT_INSTRUCTION])];
 
 /// The component section's Show Smart Glyph Settings: the settings of the clicked component's glyph.
 const SMART_GLYPH_SETTINGS: &str = "smartGlyph.showSettings";
@@ -134,6 +147,9 @@ const ORDER: &[&str] = &[
     "hint.ps.deleteHints",
     "hint.ps.autohintGlyph",
     "hint.ps.clearGlyphHints",
+    "hint.tt.reverse",
+    "hint.tt.makeTripleHint",
+    "hint.tt.deleteInstructions",
 ];
 
 /// One entry of a context menu.
@@ -278,6 +294,9 @@ pub fn open_canvas(app: &mut FontCraftApp, at: Point, space: Space) -> Result<()
             (at, [s.x, s.y])
         }
     };
+    if let Some(index) = crate::canvas::hinting::badges::badge_at(app, egui::pos2(screen[0], screen[1])) {
+        return open_on_instruction(app, index, screen, pos);
+    }
     let tolerance = f64::from(crate::canvas::tools::tokens::ToolTokens::standard().hit_tolerance);
     let (hint, hit) = {
         let (scene, _) = scene_of(app).ok_or("no glyph is being edited")?;
@@ -302,6 +321,20 @@ pub fn open_canvas(app: &mut FontCraftApp, at: Point, space: Space) -> Result<()
     };
     let sections = sections(app, &kinds);
     app.context_menus.canvas = Some(CanvasMenu { glyph, screen, at: [pos.x, pos.y], hit, sections, alt: false });
+    Ok(())
+}
+
+/// Opens the canvas menu on instruction `index`'s badge: the instruction becomes the selection unless it is selected.
+fn open_on_instruction(app: &mut FontCraftApp, index: usize, screen: [f32; 2], pos: Point) -> Result<(), String> {
+    let tt = app.models.hint_canvas.tt.as_ref().ok_or("the Instructor shows no instructions")?;
+    let (glyph, layer) = (tt.glyph.clone(), tt.layer.clone());
+    let state = &mut app.view.hinting.instructor;
+    if !state.selected_in(&glyph, &layer).contains(&index) {
+        state.selected = SelectedInstructions { glyph: glyph.clone(), layer, instructions: [index].into_iter().collect() };
+        app.view_changed();
+    }
+    let sections = sections(app, &[TT_INSTRUCTION, CANVAS]);
+    app.context_menus.canvas = Some(CanvasMenu { glyph, screen, at: [pos.x, pos.y], hit: None, sections, alt: false });
     Ok(())
 }
 
@@ -335,7 +368,7 @@ struct Candidate {
 }
 
 /// Every command a menu may show, in menu order.
-fn candidates(hints_shown: bool) -> Vec<Candidate> {
+fn candidates(hints_shown: bool, instructor: bool) -> Vec<Candidate> {
     let mut all: Vec<Candidate> = command_specs()
         .iter()
         .filter(|c| !c.context.is_empty())
@@ -363,6 +396,13 @@ fn candidates(hints_shown: bool) -> Vec<Candidate> {
             }
         }
     }
+    if instructor {
+        for (id, context) in TT_ITEMS {
+            if let Some(spec) = find_command(id) {
+                all.push(Candidate { id: spec.id, label: spec.label, context, spec: Some(spec) });
+            }
+        }
+    }
     let rank = |id: &str| ORDER.iter().position(|o| *o == id).unwrap_or(ORDER.len());
     all.sort_by_key(|c| rank(c.id));
     all
@@ -373,7 +413,7 @@ fn candidates(hints_shown: bool) -> Vec<Candidate> {
 pub fn sections(app: &FontCraftApp, kinds: &[&'static str]) -> Vec<Section> {
     let scene = scene_of(app);
     let hints_shown = scene.as_ref().is_some_and(|(s, _)| s.ps_hints.shown);
-    let all = candidates(hints_shown);
+    let all = candidates(hints_shown, crate::canvas::hinting::badges::instructor_shows(app));
     // On a guide the menu offers the guide's commands; adding a guide is for clicks off guides.
     let on_guide = kinds.contains(&GUIDE);
     let visible = |id: &str| match &scene {
@@ -403,7 +443,8 @@ fn item(app: &FontCraftApp, at: Option<&(Scene<'_>, &Selection)>, c: &Candidate)
     let check = match c.spec {
         Some(spec) => (spec.enabled)(&app.session)
             .and_then(|()| at.map_or(Ok(()), |(scene, selection)| item_state::supplies(scene, selection, spec)))
-            .and_then(|()| hint_ready(selection, c.id)),
+            .and_then(|()| hint_ready(selection, c.id))
+            .and_then(|()| instruction_ready(app, c.id)),
         None => ui_enabled(app, c.id),
     };
     ContextItem {
@@ -423,6 +464,28 @@ fn item(app: &FontCraftApp, at: Option<&(Scene<'_>, &Selection)>, c: &Candidate)
 fn hint_ready(selection: Option<&Selection>, id: &str) -> Result<(), String> {
     match id {
         "hint.ps.makeGhostHint" | "hint.ps.deleteHints" if selection.is_none_or(|s| s.hints.is_empty()) => Err("select a hint first".into()),
+        _ => Ok(()),
+    }
+}
+
+/// The instruction items need selected instructions of the edited layer: Reverse Stem instructions only, Make Triple
+/// Hint three vertical Stem instructions outside any triple hint.
+fn instruction_ready(app: &FontCraftApp, id: &str) -> Result<(), String> {
+    if !TT_ITEMS.iter().any(|(item, _)| *item == id) {
+        return Ok(());
+    }
+    let Some(tt) = app.models.hint_canvas.tt.as_ref() else { return Err("select an instruction first".into()) };
+    let chosen = app.view.hinting.instructor.selected_in(&tt.glyph, &tt.layer);
+    let marks: Vec<&TtMark> = tt.instructions.iter().filter(|m| chosen.contains(&m.index)).collect();
+    if marks.is_empty() {
+        return Err("select an instruction first".into());
+    }
+    let stem = |m: &&TtMark| matches!(m.kind, BadgeKind::Stem | BadgeKind::TripleStem);
+    match id {
+        "hint.tt.reverse" if !marks.iter().all(stem) => Err("Reverse swaps the points of Stem instructions; select only Stem instructions".into()),
+        "hint.tt.makeTripleHint" if marks.len() != 3 || !marks.iter().all(|m| m.kind == BadgeKind::Stem && !m.horizontal) => {
+            Err("select three vertical Stem instructions that belong to no triple hint".into())
+        }
         _ => Ok(()),
     }
 }
@@ -582,6 +645,10 @@ pub fn steps_for(app: &mut FontCraftApp, menu: &CanvasMenu, id: &str) -> Vec<Msg
     let mut out = vec![FontCraftApp::route(CommandRef::with_params(id, params))];
     if let Some(guide) = new_guide {
         out.push(shell("selection.set", json!({ "guides": [guide] })));
+    }
+    // The positions after deleted instructions move, so no instruction stays selected.
+    if id == "hint.tt.deleteInstructions" {
+        out.push(shell("hint.tt.selectInstructions", json!({"instructions": [], "mode": "replace"})));
     }
     out
 }

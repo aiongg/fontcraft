@@ -123,7 +123,8 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, fil
         super::set(model, FontViewModel { has_font: true, ..FontViewModel::default() });
         return;
     }
-    let master = font.masters.first().map(|m| m.id.clone()).unwrap_or_default();
+    // Font View draws the current master (`fontView.cell.followsMaster`), not the layer the Layers panel picked.
+    let master = crate::shell::masters::current_master(&font, &cx.view.layers).map(|m| m.id.clone()).unwrap_or_default();
     let props = Props::of(cx);
     let order = glyph_order(&font);
     let arcs = font.glyphs.as_arcs();

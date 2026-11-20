@@ -104,7 +104,7 @@ pub fn project(model: &mut Tracked<SidebarModel>, cx: &mut ProjectCx<'_>) {
         super::set(model, SidebarModel { has_font: true, ..SidebarModel::default() });
         return;
     }
-    let master = font.masters.first().map(|m| m.id.clone());
+    let master = crate::shell::masters::current_master(font, &cx.view.layers).map(|m| m.id.clone());
     let mut params = Map::new();
     params.insert("sidebar".into(), json!(true));
     if let Some(m) = master {
