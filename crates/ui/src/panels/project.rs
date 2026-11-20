@@ -9,10 +9,12 @@
 //! | Choose… beside the font | `project.linkFont` without `font`: the file picker asks for it |
 //! | list entry: click, Cmd-click, Shift-click | `window.project.select` |
 //! | list entry: drag onto another | `project.moveInstances` |
+//! | list entry: context menu › Copy, Paste, Duplicate | `window.project.copy`, `window.project.paste`, `project.duplicateInstances` on the selection |
 //! | plus menu › Add Instance, Duplicate | `project.addInstance`, `project.duplicateInstances` on the selection |
 //! | minus | `project.removeInstances` on the selection |
 //! | revert | `project.revertInstances` |
 //! | Active, Style Name, Weight Class, Width Class, Style Linking | `project.editInstance` with those keys, once per selected entry |
+//! | Custom Parameters: plus | `window.project.addCustomParameter`: the picker, whose Add runs `project.editInstance` |
 //! | Custom Parameters: checkbox, value, minus | `project.editInstance` with `customParameters` |
 //! | Choose… beside Export Destination | `project.setExportDestination` without `folder`: the folder picker asks |
 //! | Save | `project.save`; a project never saved asks the save picker for its file |
@@ -35,6 +37,7 @@ use craft::ui::layout_components::{Row, Stack};
 use craft::ui::list::{List, ListRow, RowInk};
 use craft::ui::menu::Menu;
 use craft::ui::pickers::Select;
+use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::{Env, Label};
 use craft::ui::text::{NumberField, TextField};
 use egui::Ui;
@@ -47,7 +50,7 @@ use crate::app::Msg;
 use crate::app::models::font_exports::{ExportFields, WEIGHT_CLASSES, WIDTH_CLASSES};
 use crate::app::models::font_info::RowModel;
 use crate::app::models::project::{Blocked, ProjectModel, ShownProject};
-use crate::shell::project::select;
+use crate::shell::project::{ADD_PARAMETER, COPY, PASTE, select};
 
 craft::ui::words! {
     /// The words of the Project panel.
@@ -79,6 +82,9 @@ craft::ui::words! {
         close: "fontcraftProject.close" = "Close";
         close_tip: "fontcraftProject.closeTip" = "Close the project; one with unsaved changes stays open";
         axes_read_only: "fontcraftProject.axesReadOnly" = "Axes Coordinates (read-only)";
+        entry_menu: "fontcraftProject.entryMenu" = "Instance";
+        copy: "fontcraftProject.copy" = "Copy";
+        paste: "fontcraftProject.paste" = "Paste";
     }
 }
 
@@ -121,8 +127,12 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
                 };
                 Text::new(exports.general.clone()).show(ui);
                 general(ui, p, fields, &words, &exports, sent);
-                Text::new(exports.parameters.clone()).show(ui);
-                parameter_rows(ui, p, sent);
+                let plus = rows::section(ui, "projectParameters", exports.parameters.clone(), exports.add_parameter.clone(), |ui| {
+                    parameter_rows(ui, p, sent);
+                });
+                if plus {
+                    sent.push(Msg::Shell(CommandRef::with_params(ADD_PARAMETER, json!({ "project": p.id }))));
+                }
             });
         });
         export_row(ui, p, &words, sent);
@@ -186,16 +196,36 @@ fn instance_list(ui: &mut Ui, p: &ShownProject, words: &ProjectWords, exports: &
         sent.push(Msg::Shell(select(p.id, &picked)));
     }
     for event in &out.events {
-        if let CollectionEvent::Reorder(edit) = event
-            && let Some(moved) = done(edit)
-            && moved.keys.len() == 1
-            && moved.to != moved.key
-        {
-            sent.push(Msg::run("project.moveInstances", json!({ "project": p.id, "instances": [moved.key], "to": moved.to })));
-            sent.push(Msg::Shell(select(p.id, &[moved.to])));
+        match event {
+            CollectionEvent::Reorder(edit) => {
+                if let Some(moved) = done(edit)
+                    && moved.keys.len() == 1
+                    && moved.to != moved.key
+                {
+                    sent.push(Msg::run("project.moveInstances", json!({ "project": p.id, "instances": [moved.key], "to": moved.to })));
+                    sent.push(Msg::Shell(select(p.id, &[moved.to])));
+                }
+            }
+            // A right click outside the selection selects that entry, so the menu acts on it.
+            CollectionEvent::ContextMenu(request) if !before.items.contains(&request.key) => {
+                sent.push(Msg::Shell(select(p.id, &[request.key])));
+            }
+            _ => {}
         }
     }
     let count = entries.len();
+    let items = [
+        Entry::new("copy", words.copy.clone()).enabled(count > 0),
+        Entry::new("paste", words.paste.clone()),
+        Entry::new("duplicate", words.duplicate.clone()).enabled(count > 0),
+    ];
+    let shell = |id: &str| Msg::Shell(CommandRef::with_params(id, json!({ "project": p.id })));
+    match Menu::context(words.entry_menu.clone(), &out.response).id_salt("fontcraftProject.entryMenu").pick(ui, &items).picked {
+        Some("copy") => sent.push(shell(COPY)),
+        Some("paste") => sent.push(shell(PASTE)),
+        Some("duplicate") => sent.push(Msg::run("project.duplicateInstances", json!({ "project": p.id, "instances": p.selected }))),
+        _ => {}
+    }
     Row::new().show(ui, |ui, _| {
         let plus = IconButton::new(IconId::new("plus")).label(exports.add.clone()).tooltip(exports.add.clone()).show(ui);
         let items = [
@@ -396,6 +426,38 @@ mod tests {
         fixture.click(&export).settle();
         let edit = |k: usize| Msg::run("project.editInstance", json!({"project": 7, "instance": k, "changes": {"active": false}}));
         assert_eq!(*posted.borrow(), vec![edit(0), edit(1), Msg::run("project.save", json!({"project": 7}))], "Export is disabled until saved");
+    }
+
+    /// A right click on a selected entry opens its menu: Copy and Paste post the project's commands. The plus beside
+    /// Custom Parameters asks for the picker.
+    #[test]
+    fn project_panel_context_menu_copies_and_pastes_and_the_plus_opens_the_picker() {
+        let model = Tracked::new(shown());
+        let posted = Rc::new(RefCell::new(Vec::new()));
+        let seen = Rc::clone(&posted);
+        let mut fixture = Fixture::new(move |ui| {
+            let mut sent = Vec::new();
+            show(ui, Props { model: &model, sent: &mut sent });
+            seen.borrow_mut().extend(sent);
+        });
+        fixture.room(egui::vec2(900.0, 700.0)).settle();
+        let mut pick = |item: &str| {
+            let at = fixture.by_label("Regular").expect("the Regular entry").center();
+            let button =
+                |pressed| egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed, modifiers: egui::Modifiers::NONE };
+            fixture.frame(vec![egui::Event::PointerMoved(at), button(true)]).frame(vec![button(false)]).settle();
+            let row = fixture.by_label(item).unwrap_or_else(|| panic!("the context menu's {item}"));
+            fixture.click(&row).settle();
+        };
+        pick("Copy");
+        pick("Paste");
+        let plus = fixture.by_label("Add a custom parameter").expect("the Custom Parameters plus");
+        fixture.click(&plus).settle();
+        let got = posted.borrow().clone();
+        let shell = |id: &str| Msg::Shell(CommandRef::with_params(id, json!({"project": 7})));
+        for want in [shell(COPY), shell(PASTE), shell(ADD_PARAMETER)] {
+            assert!(got.contains(&want), "{want:?} missing from {got:?}");
+        }
     }
 
     #[test]

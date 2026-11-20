@@ -401,6 +401,7 @@ impl FontCraftApp {
         models::color::project(&mut self.models.color, &mut cx, &self.tools, stamp);
         // Last: it takes the whole app, so `cx` must be done.
         crate::canvas::overlays::refresh(self);
+        crate::canvas::reporters::refresh(self);
         let engine = Stamp::of(&self.session, 0);
         if self.enabled_at != Some(engine) {
             self.enabled_at = Some(engine);

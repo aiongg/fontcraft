@@ -13,6 +13,7 @@ pub mod hinting;
 pub mod layers;
 pub mod overlays;
 pub mod paint;
+pub mod reporters;
 pub mod text;
 pub mod tokens;
 pub mod tools;

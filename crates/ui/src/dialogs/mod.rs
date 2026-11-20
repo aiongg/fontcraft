@@ -16,6 +16,7 @@ pub mod color_palettes;
 mod component_name;
 pub mod custom_parameter_picker;
 pub mod export;
+pub mod extension_manager;
 pub mod external_changes;
 pub mod feature_picker;
 pub mod field_picker;
@@ -83,6 +84,7 @@ pub const MODULES: &[Module] = &[
     sample_strings::run_dialog,
     find_glyphs::run_dialog,
     external_changes::run,
+    extension_manager::run,
 ];
 
 /// Every package's dialog specs, one line each.

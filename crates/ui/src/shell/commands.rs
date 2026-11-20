@@ -75,6 +75,7 @@ pub const MODULES: &[Module] = &[
     crate::dialogs::sample_strings::MODULE,
     crate::dialogs::find_glyphs::MODULE,
     super::extensions::MODULE,
+    super::extension_manager::MODULE,
     super::project::MODULE,
     super::preview::MODULE,
     crate::dialogs::overlay_fonts::MODULE,

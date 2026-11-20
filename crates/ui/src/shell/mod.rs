@@ -12,6 +12,7 @@ pub mod compatibility;
 pub mod components;
 pub mod context_menu;
 pub mod dock;
+pub mod extension_manager;
 pub mod extensions;
 pub mod external_changes;
 pub mod font_audit;

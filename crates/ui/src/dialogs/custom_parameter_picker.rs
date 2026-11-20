@@ -2,6 +2,9 @@
 //! of parameters allowed at the tab's scope (`font.customParameters.describe`, which matches names, other spellings
 //! and descriptions in any case); the list is in alphabetical order. The last selected parameter's description shows
 //! under the list. Add posts `font.customParameters.add` for each selected parameter, in list order.
+//!
+//! The Project panel's plus (`window.project.addCustomParameter`) opens the same picker on the selected entries of a
+//! project's instance list; there Add posts one `project.editInstance` per entry, adding every picked parameter.
 
 use std::borrow::Cow;
 
@@ -15,6 +18,7 @@ use craft::ui::runtime::env::Env;
 use craft::ui::table::Table;
 use craft::ui::text::TextField;
 use egui::Ui;
+use fontcraft_engine::fontinfo::Scope;
 use serde_json::{Value, json};
 
 use crate::app::{FontCraftApp, Msg};
@@ -57,6 +61,8 @@ pub struct ParamChoice {
 pub struct ParameterPicker {
     id: DialogId,
     pub target: Target,
+    /// The project whose instances `target` names; `None`: the font's.
+    pub project: Option<u64>,
     pub query: String,
     /// The search text the list was made for; `None` before the first listing.
     pub listed: Option<String>,
@@ -71,6 +77,7 @@ impl ParameterPicker {
         ParameterPicker {
             id: dialog_id("fontInfo.customParameterPicker"),
             target,
+            project: None,
             query: String::new(),
             listed: None,
             choices: Vec::new(),
@@ -78,6 +85,13 @@ impl ParameterPicker {
             error: None,
             open: true,
         }
+    }
+
+    /// The picker over the entries `instances` of the project `project`.
+    pub fn for_project(project: u64, instances: Vec<usize>) -> ParameterPicker {
+        let mut picker = ParameterPicker::new(Target { scope: Scope::Instance, indices: instances });
+        picker.project = Some(project);
+        picker
     }
 
     /// Whether the list is older than the search text.
@@ -121,7 +135,7 @@ impl ParameterPicker {
 }
 
 impl StackDialog for ParameterPicker {
-    type Result = (Target, Vec<String>);
+    type Result = (Target, Option<u64>, Vec<String>);
 
     fn id(&self) -> DialogId {
         self.id
@@ -160,7 +174,7 @@ impl StackDialog for ParameterPicker {
             },
         );
         match (shown.accepted, shown.closed) {
-            (Some(selection), _) => Some(DialogResult::Ok((self.target.clone(), self.picked(&selection)))),
+            (Some(selection), _) => Some(DialogResult::Ok((self.target.clone(), self.project, self.picked(&selection)))),
             (None, Some(_)) => Some(DialogResult::Cancel),
             (None, None) => None,
         }
@@ -174,6 +188,9 @@ pub fn run(host: &mut DialogHost, app: &mut FontCraftApp) {
         app.view.font_info.request = None;
         host.open(picker);
     }
+    if let Some((project, instances)) = app.view.project.picker.take() {
+        host.open(ParameterPicker::for_project(project, instances));
+    }
     if let Some(picker) = host.get_mut::<ParameterPicker>()
         && picker.needs_listing()
     {
@@ -185,11 +202,27 @@ pub fn run(host: &mut DialogHost, app: &mut FontCraftApp) {
             }
         }
     }
-    if let Some(DialogResult::Ok((target, names))) = host.take::<ParameterPicker>() {
+    if let Some(DialogResult::Ok((target, project, names))) = host.take::<ParameterPicker>() {
+        if let Some(project) = project {
+            app.sent.extend(project_adds(project, &target.indices, &names));
+            return;
+        }
         for name in names {
             let mut p = target.params();
             p.insert("name".into(), json!(name));
             app.sent.push(Msg::run("font.customParameters.add", Value::Object(p)));
         }
     }
+}
+
+/// One `project.editInstance` per entry of `instances`, adding each of `names` as a custom parameter.
+pub fn project_adds(project: u64, instances: &[usize], names: &[String]) -> Vec<Msg> {
+    if names.is_empty() {
+        return Vec::new();
+    }
+    let adds: Vec<Value> = names.iter().map(|name| json!({"action": "add", "name": name})).collect();
+    instances
+        .iter()
+        .map(|k| Msg::run("project.editInstance", json!({"project": project, "instance": k, "changes": {"customParameters": adds}})))
+        .collect()
 }

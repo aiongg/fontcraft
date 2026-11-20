@@ -1410,8 +1410,56 @@ status = "inferred"
 notes = "Our own command so the shown project and the selection are view state a script can set; the reference app opens one window per project and selects by clicking. The Project panel shows one project at a time, the last opened unless one is picked."
 guesses = [
   "One Project panel shows one open project at a time, with a choice between them when several are open, instead of one window per project; opening two projects in the reference app shows its window arrangement, and the dock has no free-floating windows.",
-  "The Duplicate item sits in the list's plus menu rather than a context menu on the entry; right-clicking a project instance in the reference app settles where it lives.",
+  "The Duplicate item sits in the list's plus menu and in the entry's context menu; right-clicking a project instance in the reference app settles where it lives.",
 ]
+
+[[command]]
+id = "window.project.copy"
+label = "Copy Project Instances"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{project?: id}"
+area = "font-info"
+milestone = "M7"
+summary = "Copies the selected entries of a project's instance list (the first with none selected) to the clipboard, so Paste can duplicate them. Runs from the instance list's context menu."
+ref = "Import & Export › Projects"
+status = "handbook"
+notes = "Documented, not yet observed: the handbook says Command-C and Command-V duplicate the selected instances. The clipboard text is fontcraft-instances JSON. The keys reach the list only once Edit › Copy can be routed to a focused list; until then the context menu runs it."
+guesses = [
+  "Copy and Paste of instances run from the instance list's context menu as well as the keys; right-clicking a project instance in the reference app settles whether it has such a menu.",
+]
+
+[[command]]
+id = "window.project.paste"
+label = "Paste Project Instances"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{project?: id, text?: string}"
+area = "font-info"
+milestone = "M7"
+summary = "Duplicates the instances Copy took, after the selection (at the end with none selected), when the clipboard still holds the text Copy wrote in this project; the copies are selected. Runs project.duplicateInstances."
+ref = "Import & Export › Projects"
+status = "handbook"
+notes = "Documented, not yet observed. A copied entry that changed or went since is left out; other clipboard text, or instances copied in another project, paste nothing and say so in the status line. Without `text` the window's clipboard is read."
+guesses = [
+  "Pasted copies go after the last selected instance rather than at the end of the list; pasting with one instance selected in the reference app settles it.",
+]
+
+[[command]]
+id = "window.project.addCustomParameter"
+label = "Add Custom Parameter to Project Instances"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{project?: id}"
+area = "font-info"
+milestone = "M7"
+summary = "Opens the Add Custom Parameter picker for the selected entries of a project's instance list, as the plus beside Custom Parameters does; Add adds each picked parameter to each selected entry with project.editInstance."
+ref = "Import & Export › Projects"
+status = "handbook"
+notes = "Documented, not yet observed: the handbook says instance parameters are edited in the project window as in Font Info › Exports. The picker is the one of Font Info (fontInfo.customParameterPicker) at the instance scope."
 
 [[behavior]]
 id = "project.separateFromFont"
