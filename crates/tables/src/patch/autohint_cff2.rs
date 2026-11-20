@@ -731,7 +731,7 @@ fn decode(code: &[u8], vsindex: u16, regions: &[usize]) -> std::result::Result<D
         }
         let args = std::mem::take(&mut stack);
         let n = args.len();
-        let z: &[f64] = z;
+        let z: &[f64] = &zero;
         let a = |j: usize| args.get(j).map_or(z, Vec::as_slice);
         match op {
             HSTEM | VSTEM | HSTEMHM | VSTEMHM => {
