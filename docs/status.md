@@ -2,10 +2,36 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-20, during the sixteenth batch: 47 writer packages of depth waves 2 to 11 (with M10.37b, M10.37c and M13.65b), the engine split's steps ES.1 to ES.3, and the craft-next window (UI.1 to UI.29 with UI.4b, UI.9b, UI.14b, UI.15b and UI.21b), all merged on `master`, with the test fixes X.fix86 and X.fix87, the review fixes X.fix88 and X.fix89, and the wasm fix X.fix90; the gate is green._
+_Updated: 2026-11-20, after batches 21 and 22: the second window's ports UI.30a to UI.36d (UI.30a, UI.30b, UI.24b, UI.27b, UI.31 to UI.34, UI.20b, UI.35a to UI.35d, UI.36a, UI.36b, UI.36d) and `crates/craft-ext` (decision 0009), merged on `master` as of `f99ee43`; the gate is green (5,382 tests). The sixteenth batch's entries below stay as written._
 
 ## State of the tree
 
+- **Where batches 21 and 22 stand.** Every branch is merged on `master` and pushed; the gate (`cargo xtask ci`) is green
+  on `f99ee43` with 5,382 tests. The writers ran no builds; one integrator built several branches at once (X.integ81
+  to X.integ97). The new window (`crates/ui`) gained:
+  - Font Info field warnings, the Number Values editor and the Features sidebar menu (UI.30a); multi-glyph Info box
+    fields, `.ufoz` saving with format warnings, reply notices in the status line, the Glyph as Image and Overlay
+    Fonts dialogs (UI.30b).
+  - The Shape Order panel and drag reordering in order fields (UI.24b).
+  - Colour glyphs drawn through the render artwork, iColor and svg layers, colour in text and Font View cells, a
+    colour picker and a gradient stop bar (UI.27b); Text Preview colour from the compiled colour font of the shown
+    master or instance (UI.35a).
+  - The shown layer and master used by Font View, menus, paste and panels, a person's copy reaching the system
+    clipboard only, and the instruction badge menu (UI.31); the Metrics panel, the hinting waterfall, the metrics
+    beam and the picker fallbacks read the current master and shown layer (UI.36d).
+  - Info box kern fields and locks, the Modules panel and View › Audit › Live Audit (UI.32).
+  - Space Center drags and arrow nudges, Table Viewer file pickers, the TrueType preview address dialog, user
+    settings kept between runs, custom glyph data read from the settings folder (UI.33).
+  - The Extension Manager window, Project panel copy and paste, Add Custom Parameter and reporter drawings (UI.20b);
+    the Compare Fonts in List panel (UI.35b); reporter switches kept in `view.shownReporters` (UI.35c); the
+    Instructor section at the end of the canvas menu while that tool is active (UI.35d).
+  - Alt in the Font View glyph menu colours the layer (UI.36b); menu rows that remove something show a danger tone
+    (UI.36a).
+
+  `crates/craft-ext` (decision 0009) stages the framework pieces craft lacks, in craft-libs' layout. It has: a struck
+  list row, edit commands (copy, paste) reaching a focused list, a mixed mark on menu entries, a danger tone on menu
+  rows (icon only; the label ink needs a change in craft), and modifiers on context-menu requests. The new window's
+  ports have headless tests only; none has been tried in the running window.
 - **Where the sixteenth batch stands.** Every branch is merged on `master` (over 250 commits on top of `9f8f3e5`,
   the last pushed commit, X.docs19). Nothing of this batch is pushed. The tests honour `TMPDIR`; point it at a disk
   with room when the system's temporary directory is full.
@@ -27,7 +53,7 @@ _Updated: 2026-11-20, during the sixteenth batch: 47 writer packages of depth wa
 - **Two windows.** `apps/fontcraft` on `crates/ui-egui` is still the app. The new window, `apps/fontcraft-next` on
   `crates/ui`, is built on the Craft suite's craft-next framework (pinned at `4bd0107`; egui 0.37 from the suite's
   fork beside egui 0.36 for the old window; a vendored egui-winit 0.36 under `vendor/` keeps the old window building
-  against the shared winit fork). It sits beside the egui window until it reaches parity; then the egui window goes.
+  against the shared winit fork). It sits beside the egui window until it reaches parity; then the egui window goes (the ports left are in "Where to start").
   Its ports have headless tests only, and none has been tried in the running window. Conventions for writing it are
   in `docs/ui.md`. Leave `crates/ui-egui` alone except for compile fixes.
 - 960 of the 1,039 inventory commands exist (`docs/parity.md`). Per milestone: M1 (11), M2 (5), M3 (185), M5 (100),
@@ -535,16 +561,24 @@ linked file is checked against it, and a linked file outside the read root reads
 1. **Finish the sixteenth batch.** The gate is green and the batch is reviewed and pushed. Next, the measures in "State of the tree" › Measures of the sixteenth batch.
    Checks on the Mac, which builds and runs: wave 1's Cmd+Q, app-menu Quit, File › Open… chooser and drop with unsaved
    work, and X.pdf3's pasteboard PDF; on Windows (not built yet), X.pdf3's clipboard PDF.
-2. **Then, in this order** (ROADMAP.md › What to build next, items 2 to 4): the new window's remaining ports
-   (UI.24b, UI.27b, UI.20b, UI.30 wiring this batch's engine packages into the window, the hint badge menu, the
-   X.fix83 and X.fix84 follow-ups) until it reaches parity and the egui window can go; the framework gaps sent to the
-   Craft suite and the framework repinned to `d65336a8`; the engine split from ES.4; and the depth writers left in
-   waves 2 to 11, with the builder queue from M8.25. Each package is written out in its milestone plan's section
-   "Depth packages" (`docs/plans/M<n>.md`). Check the disk: build output is large (`cargo clean` or delete the target
-   directory when the disk passes about 75%; incremental builds are off, `CARGO_INCREMENTAL=0`). Parallel agents
-   that share one check directory across worktrees see false errors: give each its own `CARGO_TARGET_DIR`.
-   The measure-only builders (M12.71, M12.72, M12.83, M8.34, M2.11, M10.39) can run in a second lane with their own
-   clone and target directory.
+2. **Then, in this order** (ROADMAP.md › What to build next, items 2 to 5):
+   - The new window's ports left (item 2): the Extension Manager's Indexes tab and downloads; and the framework gaps
+     in `crates/craft-ext` (a text-field hook for syntax colour and error underlines, caret and selection access, an
+     async completer, Up/Down stepping, a press-and-hold flyout, union, intersect and slant icons, open URL and
+     reveal in the file manager, alternate menu rows with their own label and shortcut, an app-level paste event);
+     then the small follow-ups listed there.
+   - Retire the egui window: remove `crates/ui-egui` and `apps/fontcraft`. `cargo xtask parity` must then read the
+     commands of `crates/ui`.
+   - The engine split from ES.4.
+   - The oracle measures already listed and the depth writers left in waves 2 to 11, with the builder queue from
+     M8.25.
+
+   Each depth package is written out in its milestone plan's section "Depth packages" (`docs/plans/M<n>.md`). Check
+   the disk: build output is large (`cargo clean` or delete the target directory when the disk passes about 75%;
+   incremental builds are off, `CARGO_INCREMENTAL=0`). Parallel agents that share one check directory across
+   worktrees see false errors: give each its own `CARGO_TARGET_DIR`. Run one agent at a time on the new window's
+   crates. The measure-only builders (M12.71, M12.72, M12.83, M8.34, M2.11, M10.39) can run in a second lane with
+   their own clone and target directory.
 3. **Open decisions** (`docs/plans/depth.md` › Open decisions): eight questions for the owner. The packages that
    wait on them sit at the end of the waves (M3.27, M3.28, M3.38, M4.22, M4.23, M5.31, M5.32, M13.72 to M13.77,
    M14.7, M14.8); the auto-spacing and auto-kerning targets do not hold up M13.20b or M13.21c.
@@ -1568,3 +1602,19 @@ Append one terse entry per session: what landed, numbers, what is still open.
   Numbers: 960 of 1,039 commands live; feature parity about 38% (38.4, was 37.2); depth packages 55 of 167; CLI
   option coverage 672 of 770. Open: the second test run, the gate, review, push; the measures listed under "State
   of the tree"; the owner's two questions.
+- **2026-11-20, batches 21 and 22.** Writers in worktrees without builds; one integrator built several branches at
+  once (X.integ81 to X.integ97). Landed: UI.30a, UI.30b, UI.24b, UI.27b, UI.31, UI.32, UI.34, UI.33 and UI.20b
+  (batch 21); UI.35a to UI.35d, UI.36a, UI.36b and UI.36d (batch 22); `crates/craft-ext` with decision 0009 (UI.34,
+  UI.36); the window's contents are listed in "State of the tree" › Where batches 21 and 22 stand. Decisions:
+  - Writers don't build; one integrator builds several branches at once. One agent works at a time on the window.
+  - The export dialog gets no feature-compiler section; the reference's has none, and the options stay on
+    `font.compile`.
+  - Font View cells draw the current master and shown layer (UI.31, UI.36d).
+  - The Space Center matrix shows at most eight rows before it scrolls (a guess, recorded on the panel's row).
+  - Compare Fonts in List is a dock panel.
+  - Reporter switches persist through the reserved setting `view.shownReporters`.
+  - Alt in the Font View glyph menu is read when the menu opens (a guess).
+  - The danger tone on menu rows is our own choice (a guess); it colours the icon only, because the label ink needs
+    a change in craft.
+  Gate: green on `f99ee43`, 5,382 tests. Open: the ports left in "Where to start" item 2, then retiring the egui
+  window, the engine split from ES.4 and the oracle measures.
