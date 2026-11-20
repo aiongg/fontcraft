@@ -4,9 +4,11 @@
 //! `font.customParameters.set`, `font.info.removeField`…).
 
 use craft::behavior::IconId;
+use craft::theme::variant::Tone;
 use craft::ui::buttons::IconButton;
 use craft::ui::choice::Checkbox;
 use craft::ui::contract::{Bind, Entry, Props as _, Show as _, ShowContainer as _};
+use craft::ui::display::Text;
 use craft::ui::form::Field;
 use craft::ui::layout_components::Row;
 use craft::ui::runtime::commands::CommandRef;
@@ -20,7 +22,8 @@ use serde_json::{Map, Value as Json, json};
 use super::FontInfoWords;
 use super::param_value::{self, Edit};
 use crate::app::Msg;
-use crate::app::models::font_info::{RowDialog, RowModel, RowSort};
+use crate::app::models::font_exports::sentence;
+use crate::app::models::font_info::{FieldWarning, RowDialog, RowModel, RowSort};
 use crate::shell::font_info::{InfoDialog, Target, open_params};
 
 /// What the user did to a row.
@@ -49,6 +52,13 @@ pub fn section(ui: &mut Ui, salt: &str, title: Label, plus: Label, body: impl Fn
             }
         });
     clicked
+}
+
+/// The warnings of `list` that belong under the field `field`, one line each.
+pub fn warnings(ui: &mut Ui, list: &[FieldWarning], field: &str) {
+    for warning in list.iter().filter(|w| w.field == field) {
+        Text::new(sentence(&warning.message)).tone(Tone::Warn).show(ui);
+    }
 }
 
 /// The languages a localizable field may take: the default language, then the language tags the name table knows.

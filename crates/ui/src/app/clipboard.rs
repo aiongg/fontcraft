@@ -12,6 +12,10 @@
 //!   the shell takes the text when it arrives and calls [`paste`]. Paste Special opens `dialog.pasteSpecial` on
 //!   copied glyphs, with the selected glyphs as its `targets` and Font View's master.
 //!
+//! - In Font Info's Features sidebar, Copy runs `font.features.copyEntries` on the selected entries and puts its `text`
+//!   on the clipboard; Paste (`font.info.features.paste`) asks for the clipboard's text and runs
+//!   `font.features.pasteEntries` with it.
+//!
 //! The text goes out through [`Clipboard::out`], which the shell hands to the window's clipboard.
 
 use craft::ui::runtime::commands::CommandRef;
@@ -33,6 +37,8 @@ pub const MAX_PASTE_BYTES: usize = 16 * 1024 * 1024;
 pub enum PasteKind {
     Paste,
     Special,
+    /// Feature entries into the Features sidebar.
+    FeatureEntries,
 }
 
 /// The clipboard's state on the app.
@@ -50,7 +56,7 @@ pub struct Clipboard {
 pub fn after_run(app: &mut FontCraftApp, id: &str, result: &Value) {
     let key = match id {
         COPY | CUT => "json",
-        "glyph.copyGlyphNames" => "text",
+        "glyph.copyGlyphNames" | "font.features.copyEntries" => "text",
         _ => return,
     };
     if let Some(text) = result.get(key).and_then(Value::as_str) {
@@ -106,6 +112,9 @@ pub fn paste_msg(app: &mut FontCraftApp, text: &str, kind: PasteKind) -> Result<
     }
     if text.trim().is_empty() {
         return Err("Paste: the clipboard holds no text".into());
+    }
+    if kind == PasteKind::FeatureEntries {
+        return Ok(Msg::run("font.features.pasteEntries", json!({ "text": text })));
     }
     let glyphs = holds_glyphs(text);
     if kind == PasteKind::Special {

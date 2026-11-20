@@ -8,6 +8,7 @@
 //! | a click, Cmd-click, Shift-click on an entry | `font.info.features.select` |
 //! | double-click on an entry, then a new name | `font.features.rename` |
 //! | drag an entry | `font.features.reorder` |
+//! | context menu: Disable or Enable, Update Entry, Rename, Copy, Paste, Delete | `font.features.setDisabled`, `font.features.updateEntry`, the rename field, `font.features.copyEntries` (its text goes to the clipboard), `font.info.features.paste` (the clipboard's text to `font.features.pasteEntries`), `font.features.remove` |
 //! | minus, Update, Compile under the sidebar | `font.features.remove`, `font.features.update`, `font.features.compile` |
 //! | Generate Feature Automatically, Update Entry | `font.features.setAutomatic`, `font.features.updateEntry` |
 //! | the stylistic set name rows | `font.features.setLabel`, `font.features.removeLabel` |
@@ -15,7 +16,9 @@
 //! | the notes field | `font.features.setNotes` when it loses the keyboard |
 //! | Snippets | `font.features.insertSnippet` (at the end of the code), `font.features.showSnippetFolder` |
 //!
-//! An entry with an error from the last compile shows a mark in the sidebar while the font is unchanged since.
+//! An entry with an error from the last compile shows a mark in the sidebar while the font is unchanged since. A
+//! disabled entry draws dimmed. The context menu acts on the selected entries; a right click on an entry outside the
+//! selection selects it first.
 
 use std::borrow::Cow;
 
@@ -41,9 +44,9 @@ use serde_json::{Value, json};
 use super::code_editor;
 use super::rows;
 use crate::app::Msg;
-use crate::app::models::font_features::{EntryPane, FeaturesModel, GroupModel, SnippetsModel};
+use crate::app::models::font_features::{EntryPane, EntryRow, FeaturesModel, GroupModel, SnippetsModel};
 use crate::shell::font_info::{InfoDialog, open_params};
-use crate::shell::font_info_tabs::{EntryKey, EntryKind, select_entries};
+use crate::shell::font_info_tabs::{EntryKey, EntryKind, PASTE_ENTRIES, select_entries};
 
 craft::ui::words! {
     /// The words of the Features tab.
@@ -78,6 +81,17 @@ craft::ui::words! {
         notes_hint: "fontcraftFeatures.notesHint" = "Notes about this entry, kept in the source and never exported";
         snippets: "fontcraftFeatures.snippets" = "Snippets";
         show_folder: "fontcraftFeatures.showFolder" = "Show Snippet Folder";
+        /// The sidebar's context menu.
+        entry_menu: "fontcraftFeatures.entryMenu" = "Entry Menu";
+        disable: "fontcraftFeatures.disable" = "Disable";
+        enable: "fontcraftFeatures.enable" = "Enable";
+        rename: "fontcraftFeatures.rename" = "Rename";
+        copy: "fontcraftFeatures.copy" = "Copy";
+        paste: "fontcraftFeatures.paste" = "Paste";
+        delete: "fontcraftFeatures.delete" = "Delete";
+        not_automatic: "fontcraftFeatures.notAutomatic" = "The entry is not generated automatically";
+        one_entry: "fontcraftFeatures.oneEntry" = "Select one entry of this group to rename it";
+        nothing_selected: "fontcraftFeatures.nothingSelected" = "Select an entry first";
     }
 }
 
@@ -104,6 +118,51 @@ impl EntryKind {
             EntryKind::Feature => words.add_feature.clone(),
         }
     }
+}
+
+/// The items of the sidebar's context menu.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum MenuItem {
+    Disable,
+    Enable,
+    UpdateEntry,
+    Rename,
+    Copy,
+    Paste,
+    Delete,
+}
+
+/// The sidebar row of `key`.
+fn row_of<'a>(model: &'a FeaturesModel, key: &EntryKey) -> Option<&'a EntryRow> {
+    model.groups.iter().find(|g| g.kind == key.kind).and_then(|g| g.entries.get(key.index))
+}
+
+/// The context menu's items for the selected entries of `model`, opened from the group of `kind`. Disable while any
+/// selected entry is enabled, else Enable; Update Entry for an automatic last-selected entry; Rename for one selected
+/// entry of this group.
+fn menu_entries(model: &FeaturesModel, kind: EntryKind, words: &FeaturesWords) -> Vec<Entry<MenuItem>> {
+    let some = !model.selected.is_empty();
+    let any_enabled = model.selected.iter().any(|k| row_of(model, k).is_some_and(|r| !r.disabled));
+    let toggle =
+        if any_enabled || !some { Entry::new(MenuItem::Disable, words.disable.clone()) } else { Entry::new(MenuItem::Enable, words.enable.clone()) };
+    let lead_automatic = model.selected.last().and_then(|k| row_of(model, k)).is_some_and(|r| r.automatic);
+    let update = Entry::new(MenuItem::UpdateEntry, words.update_entry.clone());
+    let one = model.selected.len() == 1 && model.selected.first().is_some_and(|k| k.kind == kind);
+    let rename = Entry::new(MenuItem::Rename, words.rename.clone());
+    let with = |entry: Entry<MenuItem>, on: bool, why: &Label| if on { entry } else { entry.disabled_reason(why.clone()) };
+    vec![
+        with(toggle, some, &words.nothing_selected),
+        with(update, lead_automatic, &words.not_automatic),
+        with(rename, one, &words.one_entry),
+        with(Entry::new(MenuItem::Copy, words.copy.clone()), some, &words.nothing_selected),
+        Entry::new(MenuItem::Paste, words.paste.clone()),
+        with(Entry::new(MenuItem::Delete, words.delete.clone()), some, &words.nothing_selected),
+    ]
+}
+
+/// The selected entries as the `entries` parameter of the entry commands.
+fn entries_param(model: &FeaturesModel) -> Value {
+    Value::Array(model.selected.iter().map(|k| Value::Object(k.params())).collect())
 }
 
 /// How an entry shows: a class with its `@`.
@@ -197,6 +256,13 @@ fn sidebar_group(ui: &mut Ui, model: &FeaturesModel, group: &GroupModel, words: 
         for event in &out.events {
             match event {
                 CollectionEvent::Activate(at) => request_rename(ui.ctx(), out.response.id, at),
+                CollectionEvent::ContextMenu(request) => {
+                    if !before.items.contains(&request.key)
+                        && let Some(key) = key_of(request.key)
+                    {
+                        posted.push(Msg::Shell(select_entries(&[key])));
+                    }
+                }
                 CollectionEvent::Rename(edit) => {
                     if let Some(rename) = done(edit)
                         && let Some(key) = key_of(rename.key)
@@ -221,6 +287,29 @@ fn sidebar_group(ui: &mut Ui, model: &FeaturesModel, group: &GroupModel, words: 
                 }
                 _ => {}
             }
+        }
+        let menu = Menu::context(words.entry_menu.clone(), &out.response).id_salt((kind.name(), "entryMenu"));
+        match menu.pick(ui, &menu_entries(model, kind, words)).picked {
+            Some(MenuItem::Disable) => {
+                posted.push(Msg::run("font.features.setDisabled", json!({ "entries": entries_param(model), "disabled": true })))
+            }
+            Some(MenuItem::Enable) => {
+                posted.push(Msg::run("font.features.setDisabled", json!({ "entries": entries_param(model), "disabled": false })))
+            }
+            Some(MenuItem::UpdateEntry) => {
+                if let Some(key) = model.selected.last() {
+                    posted.push(Msg::run("font.features.updateEntry", Value::Object(key.params())));
+                }
+            }
+            Some(MenuItem::Rename) => {
+                if let Some(key) = model.selected.first().filter(|k| k.kind == kind) {
+                    request_rename(ui.ctx(), out.response.id, &key.index);
+                }
+            }
+            Some(MenuItem::Copy) => posted.push(Msg::run("font.features.copyEntries", json!({ "entries": entries_param(model) }))),
+            Some(MenuItem::Paste) => posted.push(Msg::Shell(CommandRef::new(PASTE_ENTRIES))),
+            Some(MenuItem::Delete) => posted.push(Msg::run("font.features.remove", json!({ "entries": entries_param(model) }))),
+            None => {}
         }
         if group.hidden > 0 {
             Text::new(format!("{} {}", group.hidden, words.more.as_str())).shade(Shade::Muted).show(ui);

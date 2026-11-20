@@ -4,6 +4,7 @@
 //! |---|---|
 //! | `font.info.features.select {entries: [{kind, name, index}]}` | selects sidebar entries of the Features tab; the last one shows in the editor |
 //! | `font.info.exports.select {instances: [index]}` | selects entries of the Exports list; the rows at the right edit all of them |
+//! | `font.info.features.paste` | asks the window for the clipboard's text and pastes it with `font.features.pasteEntries` |
 //!
 //! The selection is view state: the projection resolves it against the font (an entry that moved or was renamed
 //! keeps its place in the selection), so a stale selection never names an entry the font lacks.
@@ -15,6 +16,7 @@ use serde_json::{Map, Value, json};
 
 use super::commands::{Module, UiCommand};
 use crate::app::FontCraftApp;
+use crate::app::clipboard::PasteKind;
 
 pub const MODULE: Module = Module { commands: COMMANDS, run };
 
@@ -33,7 +35,18 @@ const COMMANDS: &[UiCommand] = &[
         shortcut: None,
         params: "{instances: [index]} select entries of the Exports tab's list; the fields at the right edit every selected entry. An empty list selects the first entry",
     },
+    UiCommand {
+        id: PASTE_ENTRIES,
+        label: "Paste Feature Entries",
+        menu: &[],
+        shortcut: None,
+        params: "{} paste the clipboard's text into the Features tab's sidebar: the entries it holds go after the font's, as one undo step",
+    },
 ];
+
+/// The shell command the sidebar's Paste posts: the clipboard's text, once the window hands it over, goes to
+/// `font.features.pasteEntries`.
+pub const PASTE_ENTRIES: &str = "font.info.features.paste";
 
 /// Most entries one selection names.
 const MAX_SELECTED: usize = 4096;
@@ -178,6 +191,10 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
             selected.sort_unstable();
             selected.dedup();
             app.view.font_info.exports.selected = selected;
+            Ok(())
+        }
+        PASTE_ENTRIES => {
+            app.clipboard.request = Some(PasteKind::FeatureEntries);
             Ok(())
         }
         other => Err(format!("no Font Info command `{other}`")),

@@ -15,7 +15,7 @@ use fontcraft_engine::Session;
 use serde_json::json;
 
 use super::{Props, param_value, show};
-use crate::app::models::font_info::{Editor, FontInfoModel, RowModel, RowSort};
+use crate::app::models::font_info::{Editor, FieldWarning, FontInfoModel, RowModel, RowSort};
 use crate::app::{APP, FontCraftApp, Msg};
 use crate::dialogs::os2_bits::{BitSet, Os2BitsDialog, toggle};
 use crate::shell::dock::PanelId;
@@ -64,15 +64,22 @@ fn a_tab_click_selects_the_tab() {
     assert_eq!(*posted.borrow(), vec![Msg::Shell(CommandRef::with_params("font.info.selectTab", json!({ "tab": "notes" })))]);
 }
 
-/// The family name field sets the field, the stepper steps the version, and a family name the command warns about
-/// shows the same warning.
+/// The family name field sets the field, the stepper steps the version, and the warnings `font.info.get` gives show
+/// under their own fields.
 #[test]
 fn font_tab_fields_post_their_commands() {
     let mut model = font_model(Vec::new());
     model.font.family_name = "Sämple".into();
-    model.font.family_warning = true;
+    model.font.warnings = vec![
+        FieldWarning { field: "familyName".into(), message: "the family name should hold only ASCII letters".into() },
+        FieldWarning { field: "unitsPerEm".into(), message: "some applications have trouble with more than 3000 units per em".into() },
+    ];
     let (mut fixture, posted) = panel(model);
-    assert!(fixture.texts().iter().any(|t| t.text.starts_with("Only ASCII letters")), "the family name warning shows");
+    let texts = fixture.texts();
+    let at = |start: &str| texts.iter().find(|t| t.text.starts_with(start)).map(|t| t.rect.top());
+    let family = at("The family name should hold").expect("the family name warning shows, sentence-cased");
+    let upm = at("Some applications have trouble").expect("the units per em warning shows");
+    assert!(family < upm, "each warning shows under its own field");
     let family = fixture.by_label("Family Name").expect("the Family Name field");
     fixture.click(&family).key(Key::A, Modifiers::COMMAND).type_text("Other").key(Key::Enter, Modifiers::NONE).settle();
     let raise = fixture.by_label("Raise the minor version by one").expect("the stepper");

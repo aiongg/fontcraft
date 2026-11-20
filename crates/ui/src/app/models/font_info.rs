@@ -43,8 +43,8 @@ pub struct FontInfoModel {
 #[derive(PlainData, Clone, Debug, Default, PartialEq)]
 pub struct FontTabModel {
     pub family_name: String,
-    /// The family name holds a character `font.info.set` warns about.
-    pub family_warning: bool,
+    /// The warnings `font.info.get` gives for the General fields (`familyName`, `unitsPerEm`).
+    pub warnings: Vec<FieldWarning>,
     pub units_per_em: u16,
     pub version_major: u16,
     pub version_minor: u16,
@@ -55,6 +55,23 @@ pub struct FontTabModel {
     pub axes: Vec<AxisModel>,
     /// The axes the name picker offers.
     pub predefined: Vec<PredefinedAxis>,
+}
+
+/// A Font Info warning and the field it shows under, as `font.info.get` and `font.instance.list` give it.
+#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+pub struct FieldWarning {
+    /// The field's key: `familyName`, `unitsPerEm`, `styleName`, `styleLinking` or `weightClass`.
+    pub field: String,
+    pub message: String,
+}
+
+/// Most warnings one model holds.
+pub const MAX_WARNINGS: usize = 32;
+
+/// The `warnings` list of a `font.info.get` or `font.instance.list` entry.
+pub fn field_warnings(entry: &Json) -> Vec<FieldWarning> {
+    let read = |w: &Json| Some(FieldWarning { field: w.get("field")?.as_str()?.to_string(), message: w.get("message")?.as_str()?.to_string() });
+    entry.get("warnings").and_then(Json::as_array).map(|list| list.iter().take(MAX_WARNINGS).filter_map(read).collect()).unwrap_or_default()
 }
 
 /// One design axis and the warnings `font.axes.list` gives for it.
@@ -186,6 +203,7 @@ pub fn project(model: &mut Tracked<FontInfoModel>, cx: &mut ProjectCx<'_>) {
     let predefined = predefined_axes(cx);
     let warnings = axis_warnings(cx);
     let settings = cx.session.query("font.settings.get", &json!({})).unwrap_or(Json::Null);
+    let info_warnings = cx.session.query("font.info.get", &json!({"keys": ["warnings"]})).map(|reply| field_warnings(&reply)).unwrap_or_default();
     let features = if tab == FontInfoTab::Features { super::font_features::project(cx) } else { Default::default() };
     let exports = if tab == FontInfoTab::Exports { super::font_exports::project(cx) } else { Default::default() };
     let Ok(font) = cx.session.font() else {
@@ -207,7 +225,7 @@ pub fn project(model: &mut Tracked<FontInfoModel>, cx: &mut ProjectCx<'_>) {
         .collect();
     let font_tab = FontTabModel {
         family_name: font.family_name.clone(),
-        family_warning: family_name_needs_warning(&font.family_name),
+        warnings: info_warnings,
         units_per_em: font.units_per_em,
         version_major: font.version_major,
         version_minor: font.version_minor,
@@ -229,11 +247,6 @@ pub fn project(model: &mut Tracked<FontInfoModel>, cx: &mut ProjectCx<'_>) {
         masters_tab: super::font_masters::project(font, &cx.view.font_info.masters),
     };
     super::set(model, value);
-}
-
-/// Whether `name` holds a character other than an ASCII letter, a digit or a space, the test `font.info.set` warns on.
-pub fn family_name_needs_warning(name: &str) -> bool {
-    !name.chars().all(|c| c.is_ascii_alphanumeric() || c == ' ')
 }
 
 /// The keys of the number and yes-or-no settings the Other Settings tab shows.

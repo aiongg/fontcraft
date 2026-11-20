@@ -239,3 +239,65 @@ fn the_tabs_project_the_selected_entries() {
     assert!(exports.fields.is_some());
     assert_eq!(app.models.font_info.features, FeaturesModel::default(), "the Features tab is not projected while hidden");
 }
+
+/// The warnings `font.info.get` and `font.instance.list` give land in the model under their fields: the family name
+/// on the Font tab, the weight class of the selected export on the Exports tab.
+#[test]
+fn font_info_warnings_project_by_field() {
+    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    app.sent.push(Msg::run("font.info.set", json!({ "scope": "font", "values": { "familyName": "Sämple" } })));
+    app.sent.push(Msg::run("font.instance.add", json!({})));
+    app.sent.push(Msg::run("font.instance.setWeightClass", json!({ "instances": [0], "weightClass": 450 })));
+    app.sent.push(shell("font.info.selectTab", json!({ "tab": "exports" })));
+    app.drain();
+    let font = &app.models.font_info.font;
+    assert!(font.warnings.iter().any(|w| w.field == "familyName"), "{:?}", font.warnings);
+    let fields = app.models.font_info.exports.fields.clone().expect("the selected export's fields");
+    assert!(fields.field_warnings.iter().any(|w| w.field == "weightClass"), "{:?}", fields.field_warnings);
+}
+
+/// A right click on a selected sidebar entry opens its menu: Disable, Copy and Paste post their commands on the
+/// selected entries.
+#[test]
+fn the_sidebar_context_menu_disables_copies_and_pastes() {
+    let (mut fixture, posted) = panel(features_model());
+    let mut pick = |item: &str| {
+        let at = fixture.by_label("ss01").expect("the ss01 entry").center();
+        let button = |pressed| egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed, modifiers: Modifiers::NONE };
+        fixture.frame(vec![egui::Event::PointerMoved(at), button(true)]).frame(vec![button(false)]).settle();
+        let row = fixture.by_label(item).unwrap_or_else(|| panic!("the context menu's {item}"));
+        fixture.click(&row).settle();
+    };
+    pick("Disable");
+    pick("Copy");
+    pick("Paste");
+    let ss01 = json!([{ "kind": "feature", "name": "ss01", "index": 1 }]);
+    let got = posted.borrow().clone();
+    for want in [
+        Msg::run("font.features.setDisabled", json!({ "entries": ss01, "disabled": true })),
+        Msg::run("font.features.copyEntries", json!({ "entries": ss01 })),
+        shell("font.info.features.paste", json!(null)),
+    ] {
+        assert!(got.contains(&want), "{want:?} missing from {got:?}");
+    }
+}
+
+/// Copy puts `font.features.copyEntries`' text on the clipboard; Paste asks for the clipboard's text and pastes it with
+/// `font.features.pasteEntries`, which adds the entries again.
+#[test]
+fn copied_feature_entries_paste_back() {
+    use crate::app::clipboard::{self, PasteKind};
+    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    app.sent.push(Msg::run("font.features.addFeature", json!({ "tag": "liga", "automatic": false })));
+    app.sent.push(Msg::run("font.features.setCode", json!({ "kind": "feature", "name": "liga", "code": "sub f i by f_i;" })));
+    app.sent.push(Msg::run("font.features.copyEntries", json!({ "entries": [{ "kind": "feature", "name": "liga", "index": 0 }] })));
+    app.drain();
+    let text = app.clipboard.out.clone().expect("the copied entries on the clipboard");
+    app.sent.push(Msg::Shell(CommandRef::new("font.info.features.paste")));
+    app.drain();
+    assert_eq!(app.clipboard.request, Some(PasteKind::FeatureEntries), "Paste asks for the clipboard's text");
+    clipboard::paste(&mut app, &text, PasteKind::FeatureEntries);
+    app.drain();
+    assert!(app.status.is_empty(), "{}", app.status);
+    assert_eq!(app.session.font().map(|f| f.features.features.len()).unwrap_or(0), 2, "the pasted feature joins the font");
+}

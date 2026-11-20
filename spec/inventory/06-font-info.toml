@@ -109,6 +109,23 @@ guesses = [
 ]
 
 [[command]]
+id = "font.info.features.paste"
+label = "Paste Feature Entries"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "features"
+milestone = "M8"
+summary = "Asks the window for the clipboard's text and pastes it into the Features tab's sidebar with font.features.pasteEntries, as one undo step. Paste in the sidebar's context menu runs it."
+ref = "Font Info › Features"
+status = "inferred"
+notes = "Our own command: the window holds the clipboard, so the sidebar's Paste goes through the shell to reach the engine command with the text."
+guesses = [
+  "Our own command that carries the sidebar's Paste to font.features.pasteEntries; nothing to observe beyond the context menu row fontInfo.features.contextMenu.",
+]
+
+[[command]]
 id = "font.info.get"
 label = "Get Font Info"
 menu = []

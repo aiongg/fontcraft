@@ -17,7 +17,8 @@
 //!
 //! Every edit goes to all selected entries; a field whose entries differ shows mixed. The static-only fields (classes,
 //! coordinates, style linking) edit the selected static instances and do not show when the first selected entry is
-//! a variable font setting. A selected instance beyond the masters on some axis shows the extrapolation warning.
+//! a variable font setting. A selected instance beyond the masters on some axis shows the extrapolation warning; the
+//! warnings `font.instance.list` gives (style name, weight class, style linking) show under their fields.
 
 use std::borrow::Cow;
 
@@ -267,6 +268,7 @@ fn general(ui: &mut Ui, f: &ExportFields, selected: &[usize], words: &ExportsWor
             sent.push(all("font.instance.set", "styleName", json!(text)));
         }
     });
+    rows::warnings(ui, &f.field_warnings, "styleName");
     if f.variable {
         return;
     }
@@ -274,6 +276,7 @@ fn general(ui: &mut Ui, f: &ExportFields, selected: &[usize], words: &ExportsWor
     if let Some(v) = class_row(ui, &words.weight_class, "weight", f.weight, &WEIGHT_CLASSES, &names, &words.standard_values) {
         sent.push(statics("font.instance.setWeightClass", "weightClass", number_json(v)));
     }
+    rows::warnings(ui, &f.field_warnings, "weightClass");
     let names: Vec<Label> = words.widths().into_iter().cloned().collect();
     if let Some(v) = class_row(ui, &words.width_class, "width", f.width, &WIDTH_CLASSES, &names, &words.standard_values) {
         sent.push(statics("font.instance.setWidthClass", "widthClass", number_json(v)));
@@ -312,6 +315,7 @@ fn general(ui: &mut Ui, f: &ExportFields, selected: &[usize], words: &ExportsWor
             }
         });
     });
+    rows::warnings(ui, &f.field_warnings, "styleLinking");
 }
 
 /// A class field with its menu of standard values; the value the user chose.
