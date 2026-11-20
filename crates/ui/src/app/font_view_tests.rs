@@ -169,3 +169,38 @@ fn dialogs_target_the_view_in_front() {
     let fired = app.with_targets(CommandRef::new("path.correctPathDirection"));
     assert_ne!(fired.params["glyphs"], json!(["B"]), "Font View's selection behind the edit view is no target: {}", fired.params);
 }
+
+/// The glyph names in what firing `id` posts, or the status line when it posted nothing.
+fn fired_on(app: &mut FontCraftApp, id: &str) -> Result<String, String> {
+    app.status.clear();
+    app.sent.clear();
+    app.fire(CommandRef::new(id));
+    match app.sent.as_slice() {
+        [Msg::Run(command)] => Ok(command.params.to_string()),
+        [] => Err(app.status.clone()),
+        other => Ok(format!("{other:?}")),
+    }
+}
+
+/// A glyph command fired with no glyph shown and nothing selected in Font View refuses and changes nothing, rather
+/// than acting on the font's first glyph; with Font View's selection or a glyph shown it runs on those. A font-level
+/// command still runs.
+#[test]
+fn a_glyph_command_fired_with_nothing_chosen_refuses() {
+    let mut app = app();
+    assert!(!app.targets_chosen());
+    assert_eq!(fired_on(&mut app, "path.removeOverlap"), Err("Remove Overlap: select a glyph first".into()));
+    app.drain();
+    assert!(!app.has_unsaved_changes());
+    let font_level = fired_on(&mut app, "font.info.syncVersion");
+    assert!(font_level.is_ok(), "{font_level:?}");
+
+    shell(&mut app, "fontView.setSelection", json!({"glyphs": ["A"]}));
+    let selected = fired_on(&mut app, "path.removeOverlap");
+    assert!(selected.as_ref().is_ok_and(|p| p.contains("\"A\"")), "{selected:?}");
+
+    shell(&mut app, "view.editSelectedGlyphs", json!({"glyphs": ["B"]}));
+    shell(&mut app, "fontView.setSelection", json!({"glyphs": []}));
+    let shown = fired_on(&mut app, "path.removeOverlap");
+    assert!(shown.as_ref().is_ok_and(|p| p.contains("\"B\"") && !p.contains(".notdef")), "{shown:?}");
+}

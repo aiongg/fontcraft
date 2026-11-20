@@ -32,18 +32,18 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1500 rows to check: 2582 guesses and 616 observe steps.**
+**1501 rows to check: 2583 guesses and 616 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **527** |
+| **Built milestones (M0 to M6)** | all | **528** |
 | Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 116 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
 | Built milestones (M0 to M6) | Filters | 36 |
 | Built milestones (M0 to M6) | Spacing and metrics keys | 23 |
 | Built milestones (M0 to M6) | Kerning and the Kerning window | 42 |
-| Built milestones (M0 to M6) | Font View | 112 |
+| Built milestones (M0 to M6) | Font View | 113 |
 | Built milestones (M0 to M6) | Font Info and features | 20 |
 | Built milestones (M0 to M6) | Files: open, import, export | 49 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
@@ -65,7 +65,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
-## Built milestones (M0 to M6) (527)
+## Built milestones (M0 to M6) (528)
 
 ### Edit View: drawing, guides, layers and the Palette (116)
 
@@ -1006,7 +1006,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Overwrite is the default button that Return presses; the warning in the reference app settles it.
   - Guess: The warning lists the conflicting pairs with the pasted and the current value; the handbook names no list, and a screenshot of the warning settles it.
 
-### Font View (112)
+### Font View (113)
 
 - [ ] `import.keepGlyphNames` (behavior, M1, handbook): When a compiled OTF or TTF is opened with the user setting…
   - Guess: The glyphOrder parameter is added whatever the setting says, following the Opening Font Files page rather than the Glyph Order page, which ties it to the setting; opening a TTF with the setting off would settle it.
@@ -1086,6 +1086,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A click on the name of the glyph that is already the only one selected starts editing; a click on another glyph's name selects it. Return or a click elsewhere commits through glyph.rename, Escape cancels. Settled by observation.
 - [ ] `fontView.invertSelection` (behavior, M4, handbook): In Font View, edit.invertSelection (Cmd+Alt+Shift+I) selects exactly the glyphs that were not…
   - Guess: Invert Selection works among the visible glyphs, as Select All does. Settled by observation (05 question 12).
+- [ ] `fontView.batch.appliesToSelection` (behavior, M4, handbook): Glyph-menu and Path-menu commands run from Font View act on every selected…
+  - Guess: With no glyph shown and nothing selected, a glyph command refuses with a status message instead of acting on the font's first glyph or on every glyph; whether the reference greys such menu items out would settle it.
 - [ ] `fontView.batch.palette` (behavior, M4, handbook): Palette (Cmd+Alt+P) sections work from Font View: Fit Curve and Transformations act…
   - Guess: Fit Curve applies each glyph's remembered node indices to its layer of Font View's master; glyphs never edited, or whose nodes are gone, are skipped; the run is one undo step. Settled by observation.
 - [ ] `fontView.search.fields` (behavior, M4, handbook): A search term matches a glyph by name (thorn), by hexadecimal code…

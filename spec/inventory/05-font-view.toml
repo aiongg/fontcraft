@@ -2646,7 +2646,10 @@ milestone = "M4"
 summary = "Glyph-menu and Path-menu commands run from Font View act on every selected glyph, on the layer of the current master. Commands marked as master-wide act on all masters when Option is held."
 ref = "Font View › Batch-Processing › Batch Commands"
 status = "handbook"
-notes = "The shell fills `glyphs` from the Font View selection, and `layer` with Font View's master for commands that take one, for every command whose targets include glyphs. Option for all masters is not wired to the key yet; the ForAllMasters commands do it."
+notes = "The shell fills `glyphs` from the Font View selection, and `layer` with Font View's master for commands that take one, for every command whose targets include glyphs. Option for all masters is not wired to the key yet; the ForAllMasters commands do it. In `crates/ui`, a glyph command fired from the window (menu, shortcut, context menu, ui.menu.invoke) with no glyph in the edit view and nothing selected in Font View changes nothing and puts \"<label>: select a glyph first\" in the status line, as its dialog does (`FontCraftApp::fired`); Paste of a drawing refuses the same way, and a command whose `glyphs` default to every glyph refuses too. Commands with explicit parameters (`engine.execute`, the CLI) are unaffected."
+guesses = [
+  "With no glyph shown and nothing selected, a glyph command refuses with a status message instead of acting on the font's first glyph or on every glyph; whether the reference greys such menu items out would settle it.",
+]
 
 [[behavior]]
 id = "fontView.batch.updateMetrics"
@@ -2844,7 +2847,7 @@ milestone = "M13"
 summary = "Plug-ins and scripts may operate on the Font View glyph selection, so the selection must be exposed to extensions as the default target set."
 ref = "Font View › Batch-Processing › Plug-ins & Scripts"
 status = "handbook"
-notes = "Documented, not yet observed. Built in M13.6: in Font View the selection is the `glyphs` of plugin.runFilter (in Font View's master as `layer`) and the `glyphs` argument of script.run; in Edit View the edited glyph and layer (with the selected nodes for filters) take their place, and in text mode the selected glyphs in the tab's master. A filter module's item is greyed out while nothing is selected; a macro runs without `glyphs` then."
+notes = "Documented, not yet observed. Built in M13.6: in Font View the selection is the `glyphs` of plugin.runFilter (in Font View's master as `layer`) and the `glyphs` argument of script.run; in Edit View the edited glyph and layer (with the selected nodes for filters) take their place, and in text mode the selected glyphs in the tab's master. A filter module's item is greyed out while nothing is selected (in `crates/ui` it refuses with \"select a glyph first\"); a macro runs without `glyphs` then."
 guesses = [
   "A filter module run from Font View acts on the selected glyphs' layers of Font View's master only, not on every master; observing a filter plug-in run on a Font View selection in a font with two masters would settle it.",
 ]

@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**3081 guesses on 1606 rows (645 of them live commands).**
+**3082 guesses on 1607 rows (645 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -532,6 +532,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `glyphName.invalidBlocksExport` (behavior) | M4 | handbook | – | The glyph's name is checked, not a production name it stores; a stored production name with bad characters is cleaned at export like any other. Settled by exporting a font with such a production name. |
 | `glyphName.clickToEdit` (behavior) | M4 | handbook | – | A click on the name of the glyph that is already the only one selected starts editing; a click on another glyph's name selects it. Return or a click elsewhere commits through glyph.rename, Escape cancels. Settled by observation. |
 | `fontView.invertSelection` (behavior) | M4 | handbook | – | Invert Selection works among the visible glyphs, as Select All does. Settled by observation (05 question 12). |
+| `fontView.batch.appliesToSelection` (behavior) | M4 | handbook | – | With no glyph shown and nothing selected, a glyph command refuses with a status message instead of acting on the font's first glyph or on every glyph; whether the reference greys such menu items out would settle it. |
 | `fontView.batch.addComponent` (behavior) | M6 | handbook | – | When the component cannot go into one selected glyph (it would contain itself), the whole batch is refused and no glyph changes; adding a glyph to a selection that includes it in the reference app settles it. |
 | `fontView.batch.palette` (behavior) | M4 | handbook | – | Fit Curve applies each glyph's remembered node indices to its layer of Font View's master; glyphs never edited, or whose nodes are gone, are skipped; the run is one undo step. Settled by observation. |
 | `fontView.batch.pluginsAndScripts` (behavior) | M13 | handbook | – | A filter module run from Font View acts on the selected glyphs' layers of Font View's master only, not on every master; observing a filter plug-in run on a Font View selection in a font with two masters would settle it. |

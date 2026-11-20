@@ -98,7 +98,8 @@ fn holds_glyphs(text: &str) -> bool {
 }
 
 /// The message that pastes `text` as `kind` asks: `edit.paste` into the edited glyph (on the canvas) or the copied
-/// glyphs into the font (in Font View), or Paste Special's dialog. Errors when there is nothing to paste.
+/// glyphs into the font (in Font View), or Paste Special's dialog. Errors when there is nothing to paste, or no glyph
+/// to paste a drawing into ([`FontCraftApp::targets_chosen`]).
 pub fn paste_msg(app: &mut FontCraftApp, text: &str, kind: PasteKind) -> Result<Msg, String> {
     if text.len() > MAX_PASTE_BYTES {
         return Err(format!("Paste: the clipboard's text is larger than {} MiB", MAX_PASTE_BYTES >> 20));
@@ -111,10 +112,13 @@ pub fn paste_msg(app: &mut FontCraftApp, text: &str, kind: PasteKind) -> Result<
         if !glyphs {
             return Err("Paste Special: the clipboard holds no copied glyphs".into());
         }
+        // With no glyph chosen the copied glyphs go over the glyphs of their names, not over the font's first glyph.
         let targets: Vec<String> = if in_font_view(app) {
             app.view.font_view.selected.clone()
-        } else {
+        } else if app.targets_chosen() {
             crate::canvas::tools::target(&app.session, &app.view).map(|t| t.glyph).into_iter().collect()
+        } else {
+            Vec::new()
         };
         let mut params = Map::new();
         params.insert("text".into(), json!(text));
@@ -131,6 +135,9 @@ pub fn paste_msg(app: &mut FontCraftApp, text: &str, kind: PasteKind) -> Result<
     }
     if app.font_view_shows() && in_font_view(app) {
         return Err("Paste: the clipboard holds no copied glyphs to add to the font".into());
+    }
+    if !app.targets_chosen() {
+        return Err(super::select_glyph_first(PASTE));
     }
     let mut command = crate::canvas::tools::targets::with_targets(app, CommandRef::new(PASTE));
     let mut params = match command.params {

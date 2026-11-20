@@ -142,27 +142,30 @@ fn reporter_rows(session: &Session, reporters: &[String]) -> Vec<Row> {
 /// A filter or macro row's command with the selection's targets added, when its parameters name none: the targets a
 /// menu command gets (Font View's selected glyphs in its master, or the edited glyph and layer with the selected
 /// nodes). A macro takes them as `glyphs`, and in Edit View their layer as `layers`. Any other command is returned as
-/// it is.
-pub fn fill_targets(app: &mut FontCraftApp, command: CommandRef) -> CommandRef {
+/// it is. With no glyph chosen ([`FontCraftApp::targets_chosen`]) a macro runs without targets and a filter refuses.
+pub fn fill_targets(app: &mut FontCraftApp, command: CommandRef) -> Result<CommandRef, String> {
     let is_macro = command.id == RUN_MACRO;
     if !is_macro && command.id != RUN_FILTER {
-        return command;
+        return Ok(command);
     }
-    let Value::Object(mut params) = command.params.clone() else { return command };
+    let Value::Object(mut params) = command.params.clone() else { return Ok(command) };
     if ["glyph", "glyphs", "layer", "layers"].iter().any(|k| params.contains_key(*k)) {
-        return command;
+        return Ok(command);
+    }
+    if !app.targets_chosen() {
+        return if is_macro { Ok(command) } else { Err(super::select_glyph_first(&command.id)) };
     }
     let found = app.with_targets(CommandRef::new(RUN_FILTER));
-    let Value::Object(targets) = found.params else { return command };
+    let Value::Object(targets) = found.params else { return Ok(command) };
     if found.id != RUN_FILTER {
-        return command;
+        return Ok(command);
     }
     if is_macro {
         params.extend(macro_targets(&targets));
     } else {
         params.extend(targets);
     }
-    CommandRef::with_params(command.id, Value::Object(params))
+    Ok(CommandRef::with_params(command.id, Value::Object(params)))
 }
 
 /// The arguments a macro gets from a filter's targets: the edited glyph and its layer as one-item lists, or the

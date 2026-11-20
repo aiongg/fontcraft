@@ -441,10 +441,10 @@ impl FontCraftApp {
         if self.font_view_targets() { self.with_font_view_targets(command) } else { crate::canvas::tools::targets::with_targets(self, command) }
     }
 
-    /// Whether the person chose what a dialog acts on: glyphs selected in Font View while it is in front, or a glyph
-    /// opened in the edit view while the edit view is in front. With neither, a dialog takes no targets from
-    /// [`Self::with_targets`], whose canvas part falls back to the font's first glyph; its command then acts on every
-    /// glyph, or the dialog asks for a glyph.
+    /// Whether the person chose what a fired command acts on: glyphs selected in Font View while it is in front, or a
+    /// glyph opened in the edit view while the edit view is in front. With neither, [`Self::fired`] takes no targets
+    /// from [`Self::with_targets`], whose canvas part falls back to the font's first glyph: a dialog's command then acts
+    /// on every glyph or the dialog asks for a glyph, and any other glyph command refuses ([`select_glyph_first`]).
     pub(crate) fn targets_chosen(&self) -> bool {
         // `view.glyph` keeps the glyph opened last after its edit view went behind a tab.
         let glyph_shown = self.view.glyph.is_some() && self.in_front(PanelId::Document);
@@ -489,16 +489,22 @@ impl FontCraftApp {
                     return Ok(None);
                 }
                 // An extension's menu row fills in the filter or macro it runs.
-                let fired = menus_dynamic::fill_targets(self, fired);
+                let fired = menus_dynamic::fill_targets(self, fired)?;
+                let given = !is_empty(&fired.params);
                 let targeted = self.with_targets(fired.clone());
                 let Some(command) = clipboard::fired(self, targeted) else { return Ok(None) };
+                let chosen = self.targets_chosen();
                 // Font View's per-glyph batch is no target list for the dialog, which then reads the selection itself.
                 let targets = match &command.params {
-                    Value::Object(m) if command.id == fired.id && self.targets_chosen() => m.clone(),
+                    Value::Object(m) if command.id == fired.id && chosen => m.clone(),
                     _ => Map::new(),
                 };
                 if crate::dialogs::after::fired(self, &fired.id, &fired.params, &targets) {
                     return Ok(None);
+                }
+                // Targets filled with nothing chosen come from the font's first glyph, which the person never picked.
+                if !chosen && !given && command.id == fired.id && !is_empty(&command.params) {
+                    return Err(select_glyph_first(&fired.id));
                 }
                 Msg::Run(command)
             }
@@ -506,6 +512,16 @@ impl FontCraftApp {
         };
         Ok(Some(msg))
     }
+}
+
+/// What the status line says when a glyph command is fired with no glyph shown and none selected in Font View.
+pub(crate) fn select_glyph_first(id: &str) -> String {
+    let label = fontcraft_engine::find_command(id).map_or(id, |spec| spec.label);
+    format!("{label}: select a glyph first")
+}
+
+fn is_empty(params: &Value) -> bool {
+    params.is_null() || params.as_object().is_some_and(Map::is_empty)
 }
 
 /// `error` with the id of the command that failed in front, when the message ran one.
