@@ -26,6 +26,7 @@ pub mod kerning_window;
 pub mod masters;
 pub mod overlays;
 pub mod palette;
+pub mod palette_modules;
 pub mod params;
 pub mod preview;
 pub mod project;

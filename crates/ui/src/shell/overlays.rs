@@ -116,7 +116,7 @@ const COMMANDS: &[UiCommand] = &[
     command(
         "audit.toggleLiveAudit",
         "Live Audit",
-        &[],
+        &["View", "Audit"],
         "{on?: bool} re-run the outlines profile on the edited layer after each change to the document while it is on (omitted: toggle)",
     ),
     command(
@@ -277,4 +277,48 @@ fn beam(app: &mut FontCraftApp, args: &Args<'_>) -> Result<(), String> {
     }
     sw.beam = on;
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod live_audit_tests {
+    use std::sync::Arc;
+
+    use craft::host::Host;
+    use craft::menu::Node;
+    use craft::ui::runtime::commands::CommandRef;
+    use fontcraft_engine::Session;
+    use serde_json::json;
+
+    use crate::app::{APP, FontCraftApp, Msg};
+
+    /// View › Audit › Live Audit fires `audit.toggleLiveAudit`, which switches live audit on and off.
+    #[test]
+    fn the_view_menu_has_the_live_audit_switch() {
+        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let view = app.catalog.menu.menus.iter().find(|m| m.title == "View").expect("the View menu");
+        let audit = view
+            .children
+            .iter()
+            .find_map(|n| match n {
+                Node::Submenu { label, children, .. } if label == "Audit" => Some(children),
+                _ => None,
+            })
+            .expect("the Audit submenu");
+        let row = audit
+            .iter()
+            .find_map(|n| match n {
+                Node::Item(item) if item.command.id == "audit.toggleLiveAudit" => Some(item.label.clone()),
+                _ => None,
+            })
+            .expect("the Live Audit row");
+        assert_eq!(row, "Live Audit");
+
+        app.fire(CommandRef::new("audit.toggleLiveAudit"));
+        app.drain();
+        assert!(app.overlays.switches.live_audit, "the row toggles live audit on");
+        app.sent.push(Msg::Shell(CommandRef::with_params("audit.toggleLiveAudit", json!({"on": false}))));
+        app.drain();
+        assert!(!app.overlays.switches.live_audit);
+    }
 }

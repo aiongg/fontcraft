@@ -387,6 +387,7 @@ impl FontCraftApp {
         models::console::project(&mut self.models.console, &mut cx);
         self.models.project.project(&mut cx);
         models::palette::project(&mut self.models.palette, &mut cx, &self.tools, stamp);
+        models::palette_modules::project(&mut self.models.modules, &mut cx);
         models::compare::project_fonts(&mut self.models.compare_fonts, &mut cx);
         models::text_preview::project(&mut self.models.text_preview, &mut cx, &self.host);
         models::color::project(&mut self.models.color, &mut cx, &self.tools, stamp);

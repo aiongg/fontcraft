@@ -118,6 +118,8 @@ pub struct InfoBoxModel {
     pub cap: Option<CapBox>,
     /// The timing graph of the one selected node's interpolation curve.
     pub timing: Option<super::hoi::TimingGraph>,
+    /// The edited glyph's kerning towards its neighbours in the edit view's text (`panels::info_box_kerning`).
+    pub kerning: Option<super::info_box_kerning::KernBox>,
 }
 
 /// The Transformations section: its settings and what its buttons act on.
@@ -271,6 +273,7 @@ pub fn project(models: &mut PaletteModels, cx: &mut ProjectCx<'_>, tools: &Tools
     let mut info = info_box(cx, edit.as_ref());
     info.ps_hint = super::hint_canvas::ps_hint_box(cx, &tools.selection);
     info.tt = super::hint_canvas::tt_box(cx);
+    info.kerning = info.glyph.as_ref().and_then(|_| super::info_box_kerning::kern_box(cx));
     super::set(&mut models.info_box, info);
     super::set(&mut models.transform, transform(cx, edit.as_ref()));
     super::set(&mut models.fit_curve, fit_curve(cx, edit.as_ref()));

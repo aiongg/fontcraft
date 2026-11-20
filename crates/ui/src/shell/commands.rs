@@ -49,6 +49,7 @@ pub const MODULES: &[Module] = &[
     super::kerning_tools::MODULE,
     super::sidebar::MODULE,
     super::palette::MODULE,
+    super::palette_modules::MODULE,
     crate::canvas::text::commands::MODULE,
     super::space_center::MODULE,
     super::context_menu::MODULE,

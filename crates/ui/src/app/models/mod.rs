@@ -22,11 +22,13 @@ pub mod glyph_sections;
 pub mod hint_canvas;
 pub mod hinting;
 pub mod hoi;
+pub mod info_box_kerning;
 pub mod kerning_review;
 pub mod kerning_tools;
 pub mod kerning_window;
 pub mod layers;
 pub mod palette;
+pub mod palette_modules;
 pub mod preview;
 pub mod project;
 pub mod sidebar;
@@ -99,6 +101,7 @@ pub struct Models {
     /// The Info box and the Palette sections (`panels::info_box`, `panels::transformations`, …); projected outside the
     /// stamp, since they read the canvas's selection.
     pub palette: palette::PaletteModels,
+    pub modules: palette_modules::ModulesModels,
     pub text: Tracked<text::TextModel>,
     /// The Space Center (`panels::space_center`).
     pub space_center: Tracked<space_center::SpaceCenterModel>,
