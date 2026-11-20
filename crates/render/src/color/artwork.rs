@@ -218,8 +218,9 @@ fn finite(p: Point) -> bool {
     p.x.is_finite() && p.y.is_finite()
 }
 
-/// The fill a leaf paint gives; `None` for a node that is not a leaf or cannot be drawn.
-fn leaf(paint: &Paint, palette: &[Rgba], text: [f32; 4]) -> Option<Leaf> {
+/// The fill a leaf paint gives; `None` for a node that is not a leaf or cannot be drawn. Palette
+/// rows `palette` lacks, and the foreground, take `text`.
+pub fn leaf(paint: &Paint, palette: &[Rgba], text: [f32; 4]) -> Option<Leaf> {
     match paint {
         Paint::Solid(c) => Some(Leaf::Solid(resolve(*c, palette, text))),
         Paint::Linear { p0, p1, p2, line } => {

@@ -232,7 +232,7 @@ fn art_of(font: &Font, glyph: &str, master: &str) -> Option<Arc<CellArt>> {
     let g = font.glyph(glyph)?;
     let width = g.layer(master).map_or(0.0, |l| l.width) as f32;
     let contours = font.outline_of(g, master).map(|p| flatten(&p)).unwrap_or_default();
-    Some(Arc::new(CellArt { width: if width.is_finite() { width } else { 0.0 }, contours }))
+    Some(Arc::new(CellArt { width: if width.is_finite() { width } else { 0.0 }, contours, color: None }))
 }
 
 /// Adds the outlines of `names` that `art` lacks, up to [`MAX_ART`].

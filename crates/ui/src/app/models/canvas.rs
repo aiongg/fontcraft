@@ -107,7 +107,7 @@ pub enum State {
     Placeholder(Placeholder),
 }
 
-pub fn project(model: &mut Tracked<CanvasModel>, cx: &mut ProjectCx<'_>) {
+pub fn project(model: &mut Tracked<CanvasModel>, files: &mut crate::canvas::color::ColorFiles, cx: &mut ProjectCx<'_>) {
     let glyph = super::glyph::shown_glyph(cx);
     let side = if cx.view.edit_background { LayerSide::Background } else { LayerSide::Foreground };
     let data = cx.session.glyph_data().ok();
@@ -116,7 +116,7 @@ pub fn project(model: &mut Tracked<CanvasModel>, cx: &mut ProjectCx<'_>) {
         let master = masters::layer_master(font, &cx.view.layers, layer)?;
         edited_glyph(font, data.as_deref(), glyph, layer, master, side)
     });
-    super::set(model, CanvasModel { glyph: edited, color: crate::canvas::color::project(cx) });
+    super::set(model, CanvasModel { glyph: edited, color: crate::canvas::color::project(cx, files) });
 }
 
 /// The canvas's picture of `glyph`'s layer `full`, editing its `side`, with the metric lines and zones of `master`.

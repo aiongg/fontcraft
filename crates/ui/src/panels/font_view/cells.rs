@@ -1,6 +1,6 @@
 //! The outline of a grid cell. A glyph's contours overlap and hold counters, which a polygon fill cannot show, so
 //! the outline is filled by the nonzero rule in horizontal bands: each band's spans become quads of one mesh, in the
-//! surface's ink.
+//! surface's ink. A glyph with a colour drawing (`canvas::color::cell_color`) is drawn in colour instead.
 
 use craft::ui::primitives::ContentPainterCx;
 use egui::{Mesh, Pos2, Rect, Shape, pos2};
@@ -45,9 +45,15 @@ fn placement(art: &CellArt, ascender: f32, descender: f32, rect: Rect) -> Option
     (scale.is_finite() && scale > 0.0).then_some((scale, pos2(left, baseline)))
 }
 
-/// Fills `art` in `rect` with the painter's ink.
+/// Fills `art` in `rect` with the painter's ink, or draws the glyph in colour when it has a colour drawing.
 pub fn paint(cx: &ContentPainterCx<'_>, rect: Rect, art: &CellArt, ascender: f32, descender: f32) {
     let Some((scale, origin)) = placement(art, ascender, descender, rect) else { return };
+    if let Some(color) = &art.color {
+        let (s, x, y) = (f64::from(scale), f64::from(origin.x), f64::from(origin.y));
+        let to_screen = fontcraft_geom::Affine::new([s, 0.0, 0.0, -s, x, y]);
+        crate::canvas::color::paint::draw(&cx.painter.with_clip_rect(rect), color, to_screen, crate::canvas::color::TEXT);
+        return;
+    }
     let to_screen = |[x, y]: [f32; 2]| pos2(origin.x + x * scale, origin.y - y * scale);
     let mut edges = Vec::new();
     for contour in &art.contours {

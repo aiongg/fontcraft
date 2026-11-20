@@ -74,6 +74,8 @@ pub struct Models {
     /// What the hint layers draw (`canvas::hinting`).
     pub hint_canvas: Tracked<hint_canvas::HintCanvas>,
     hint_cache: hint_canvas::HintCache,
+    /// The files colour glyphs draw from (`canvas::color::files`), shared by the canvas, its text and Font View.
+    color_files: crate::canvas::color::ColorFiles,
     /// The hint layers' colours and sizes.
     pub hint_tokens: crate::canvas::hinting::tokens::HintTokens,
     /// The shown glyph's layers (`panels::layers`).
@@ -162,9 +164,9 @@ impl Models {
         }
         self.seen = Some(stamp);
         glyph::project(&mut self.glyph_metrics, cx);
-        canvas::project(&mut self.canvas, cx);
+        canvas::project(&mut self.canvas, &mut self.color_files, cx);
         self.canvas_tokens = crate::canvas::tokens::Tokens::from_settings(cx.session.settings(), false);
-        font_view::project(&mut self.font_view, &mut self.font_view_outlines, cx);
+        font_view::project(&mut self.font_view, &mut self.font_view_outlines, &mut self.color_files, cx);
         font_info::project(&mut self.font_info, cx);
         glyph_sections::project_related(&mut self.related_glyphs, cx);
         glyph_sections::project_selections(&mut self.selections, cx);
@@ -182,7 +184,7 @@ impl Models {
         sidebar::project(&mut self.sidebar, cx);
         glyph_props::project_inspector(&mut self.inspector, cx);
         glyph_props::project_selection_info(&mut self.selection_info, cx);
-        text::project(&mut self.text, cx);
+        text::project(&mut self.text, &mut self.color_files, cx);
         space_center::project(&mut self.space_center, cx);
         table_viewer::project(&mut self.table_viewer, cx);
         compare::project_family(&mut self.compare_family, cx);
