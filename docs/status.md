@@ -2,7 +2,7 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-20, during the sixteenth batch: 47 writer packages of depth waves 2 to 11 (with M10.37b, M10.37c and M13.65b), the engine split's steps ES.1 to ES.3, and the craft-next window (UI.1 to UI.29 with UI.4b, UI.9b, UI.14b, UI.15b and UI.21b), all merged on `master`, with the test fixes X.fix86 and X.fix87; the gate, a review and the push are still to do._
+_Updated: 2026-11-20, during the sixteenth batch: 47 writer packages of depth waves 2 to 11 (with M10.37b, M10.37c and M13.65b), the engine split's steps ES.1 to ES.3, and the craft-next window (UI.1 to UI.29 with UI.4b, UI.9b, UI.14b, UI.15b and UI.21b), all merged on `master`, with the test fixes X.fix86 and X.fix87, the review fixes X.fix88 and X.fix89, and the wasm fix X.fix90; the gate is green._
 
 ## State of the tree
 
@@ -16,14 +16,12 @@ _Updated: 2026-11-20, during the sixteenth batch: 47 writer packages of depth wa
   | Command ids blessed, generated lists (`cli-options`, guesses, observe, parity), fmt | done (X.integ78 to X.integ80) |
   | First full test run (cargo nextest) | 5,304 run, 5,271 passed, 33 failed |
   | The 24 failures outside the window crates (tables, compile, io-ufo, proof, engine, cli) | fixed by X.fix86; a filtered run of them passes |
-  | The 9 failures in `crates/ui`, `apps/fontcraft` and `apps/fontcraft-next` | UI test fixes (X.fix87) |
-  | Second full test run | to do |
-  | The gate, `cargo xtask ci` | to do |
-  | Review pass | to do |
-  | Push | to do, after a green gate and the review |
+  | The 9 failures in `crates/ui`, `apps/fontcraft` and `apps/fontcraft-next` | fixed by X.fix87 (three were code bugs: the Instructor's Delete, dialogs targeting `.notdef`, a zero-height Preview Area strip) |
+  | Review pass | 7 findings, fixed by X.fix88 (CFF2 region cap, revisions never reused after a rollback, CLI `@` values, palette round trip) and X.fix89 (`ui.menu.invoke` plays as a click, dialogs target the view in front, Preview Area height) |
+  | The gate, `cargo xtask ci` | green: 5,310 tests pass; wasm after X.fix90 (craft's OS clipboard is native-only in `crates/ui`). `pathops` `random_paths_through_every_operation_never_panic` can miss its one-second limit on a loaded machine |
 
-  The writers ran no builds and most branches were merged without one, so the full test run was the first for most
-  of this code; expect more failures in the second run. Built on Linux x86-64 only. macOS and Windows were not
+  The writers ran no builds and most branches were merged without one, so most of this code has been run only by its
+  tests, not in the app. Built on Linux x86-64 only. macOS and Windows were not
   compiled: the Mac check of wave 1 and X.pdf3's clipboard readers wait for the owner's builds there.
 - **Two windows.** `apps/fontcraft` on `crates/ui-egui` is still the app. The new window, `apps/fontcraft-next` on
   `crates/ui`, is built on the Craft suite's craft-next framework (pinned at `4bd0107`; egui 0.37 from the suite's
@@ -396,7 +394,7 @@ _Updated: 2026-11-20, during the sixteenth batch: 47 writer packages of depth wa
   `crates/io-pdf` (lopdf, with a hand-written reader and rasteriser under limits). `ureq` with rustls serves
   HTTPS downloads in the desktop app only. `craft-print` is a workspace dependency and is not in the
   lock file until M12.36 uses it (that needs network).
-- **Known failures:** the sixteenth batch's first full test run had 33 failures; X.fix86 fixed the 24 outside the window crates, and the 9 in `crates/ui` and the apps are X.fix87's UI test fixes. The gate has not run. Doubts the integrators left for the test runs: component commands open the new glyph only for a person's run (X.integ72); select lists in dialogs became craft lists (UI.9b), which tests that click their checkboxes may not reach.
+- **Known failures:** none in the gate. `pathops` `random_paths_through_every_operation_never_panic` can miss its one-second limit per case when the machine is loaded; it passes on a quiet machine. A plain command fired from a menu with no glyph shown and nothing selected still targets the font's first glyph; dialogs ask instead (X.fix87c) — whether plain runs should do the same is open.
 - **New crates and dependencies of the sixteenth batch:** `crates/engine-core` (errors, guard, clock, parameters, settings) and `crates/ui` (the new window), with `apps/fontcraft-next`; the craft-next framework from the suite's craft-libs, pinned by git commit; icu 2.3.0 across the workspace, with the glyph-data comparison against glyphs-reader moved into an excluded crate under `xtask`; `tools` depends on `components` and `pathops`, `proof` on `decompile` (and lopdf), `engine` on `textlayout`, `ui` on `spacing` and `textlayout`; `apps/fontcraft` takes clipboard-win on Windows and objc2-app-kit and objc2-foundation on macOS (X.pdf3); the CLI takes `log`.
 - Test layout: the gate runs the tests with cargo nextest (all test binaries in parallel,
   doctests apart). The command sweep is 16 tests (4 states times 4 chunks, chunked by a stable
@@ -533,9 +531,7 @@ linked file is checked against it, and a linked file outside the read root reads
 
 ## Where to start
 
-1. **Close the sixteenth batch.** Wait for X.fix87 (UI test fixes), then run the full test suite again
-   (`cargo nextest run --workspace`), fix what fails, run the gate (`cargo xtask ci`), have the batch reviewed, and
-   push once the gate is green. After that, the measures in "State of the tree" › Measures of the sixteenth batch.
+1. **Finish the sixteenth batch.** The gate is green and the batch is reviewed and pushed. Next, the measures in "State of the tree" › Measures of the sixteenth batch.
    The owner's builds: on a Mac, wave 1's Cmd+Q, app-menu Quit, File › Open… chooser and drop with unsaved work, and
    X.pdf3's pasteboard PDF; on Windows, X.pdf3's clipboard PDF.
 2. **Then, in this order** (ROADMAP.md › What to build next, items 2 to 4): the new window's remaining ports

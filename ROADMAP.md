@@ -937,8 +937,8 @@ M10.37b, M10.37c, M13.65b, ES.1 to ES.3, UI.1 to UI.29 with UI.4b, UI.9b, UI.14b
 X.fix87, X.integ26 to X.integ80, X.inte1).**
 Merged on `master`; the package list is under "Shipped so far". The writers ran no builds, and most branches were
 merged without one; a workspace check and clippy at the end are clean. The first full test run (5,304 tests) had 33
-failures: X.fix86 fixed the 24 outside the window crates and X.fix87 takes the 9 in `crates/ui` and the apps. The
-gate has not run on this batch. None of the oracle measures the packages name has run (see "What to build next").
+failures: X.fix86 fixed the 24 outside the window crates and X.fix87 the 9 in `crates/ui` and the apps. A review
+found 7 more (X.fix88, X.fix89) and the wasm check one (X.fix90); the gate is green. None of the oracle measures the packages name has run (see "What to build next").
 
 | Area | What works |
 |---|---|
@@ -1029,8 +1029,7 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
 
 ### What to build next (in priority order)
 
-1. **Close the sixteenth batch.** Everything is merged on `master` and not pushed. Left: the UI test fixes
-   (X.fix87), a second full test run, the gate (`cargo xtask ci`), a review pass and the push. Then the oracle
+1. **Finish the sixteenth batch.** Merged, reviewed, gate green and pushed. Left: the oracle
    measures the packages name: `COLR` over the corpus colour sources compared with ttx (M13.65); the autohinted
    charstrings decoded by fontTools (M10.37); `GPOS` and `GDEF` against `fontmake --feature-writer KernFeatureWriter
    --no-generate-GDEF` on three sources (M2.12); subset of sources against the compiled subset on 10 corpus sources
@@ -1724,7 +1723,8 @@ on, so the engine track, where oracles prove correctness, goes first.
   - Integration and test fixes: X.integ26 to X.integ80 and X.inte1 (merge fixes, clippy, blessed command ids,
     generated lists, fmt); X.fix86 (24 test failures: fixtures that assumed an empty new font, `head` checksum
     compares, palette and compile-option tests, response files after option prefixes, proof title metadata);
-    X.fix87 (UI test fixes).
+    X.fix87 (UI test fixes: the Instructor's Delete, dialog targets, the Preview Area strip); X.fix88 and X.fix89
+    (review fixes); X.fix90 (wasm).
   Numbers are under "What is real: the sixteenth batch".
 
 ## Milestones
