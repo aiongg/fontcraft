@@ -335,7 +335,6 @@ mod tests {
     #[test]
     fn external_preview_waits_for_confirmation_shows_the_tab_and_forgets_on_reset() {
         let mut session = Session::with_document();
-        session.execute("glyph.newGlyph", &json!({"name": "A"})).unwrap();
         let woken = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let counter = Arc::clone(&woken);
         let mut preview = ExternalPreview::new(
