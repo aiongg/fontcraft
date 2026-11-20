@@ -10,6 +10,7 @@
 //! | list entry: click, Cmd-click, Shift-click | `window.project.select` |
 //! | list entry: drag onto another | `project.moveInstances` |
 //! | list entry: context menu › Copy, Paste, Duplicate | `window.project.copy`, `window.project.paste`, `project.duplicateInstances` on the selection |
+//! | Copy, Paste (Cmd+C, Cmd+V) while the instance list has the keyboard focus | `window.project.copy`, `window.project.paste` |
 //! | plus menu › Add Instance, Duplicate | `project.addInstance`, `project.duplicateInstances` on the selection |
 //! | minus | `project.removeInstances` on the selection |
 //! | revert | `project.revertInstances` |
@@ -40,6 +41,7 @@ use craft::ui::pickers::Select;
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::{Env, Label};
 use craft::ui::text::{NumberField, TextField};
+use craft_ext::ui::list::{CollectionEdits as _, EditCommand};
 use egui::Ui;
 use serde_json::{Value, json};
 
@@ -87,6 +89,9 @@ craft::ui::words! {
         paste: "fontcraftProject.paste" = "Paste";
     }
 }
+
+/// The Edit commands the instance list takes while it has the keyboard focus.
+const LIST_EDITS: [EditCommand; 2] = [EditCommand::Copy, EditCommand::Paste];
 
 pub struct Props<'a> {
     pub model: &'a Tracked<ProjectModel>,
@@ -220,6 +225,13 @@ fn instance_list(ui: &mut Ui, p: &ShownProject, words: &ProjectWords, exports: &
         Entry::new("duplicate", words.duplicate.clone()).enabled(count > 0),
     ];
     let shell = |id: &str| Msg::Shell(CommandRef::with_params(id, json!({ "project": p.id })));
+    for edit in out.edit_commands(ui, &LIST_EDITS) {
+        match edit {
+            EditCommand::Copy if count > 0 => sent.push(shell(COPY)),
+            EditCommand::Paste => sent.push(shell(PASTE)),
+            _ => {}
+        }
+    }
     match Menu::context(words.entry_menu.clone(), &out.response).id_salt("fontcraftProject.entryMenu").pick(ui, &items).picked {
         Some("copy") => sent.push(shell(COPY)),
         Some("paste") => sent.push(shell(PASTE)),
@@ -458,6 +470,33 @@ mod tests {
         for want in [shell(COPY), shell(PASTE), shell(ADD_PARAMETER)] {
             assert!(got.contains(&want), "{want:?} missing from {got:?}");
         }
+    }
+
+    /// Copy and Paste fired while the instance list has the keyboard focus reach the list, which posts the project's
+    /// commands; Select All stays with the document.
+    #[test]
+    fn edit_commands_reach_the_focused_instance_list() {
+        use craft_ext::ui::list::deliver;
+        let model = Tracked::new(shown());
+        let posted = Rc::new(RefCell::new(Vec::new()));
+        let seen = Rc::clone(&posted);
+        let mut fixture = Fixture::new(move |ui| {
+            let mut sent = Vec::new();
+            show(ui, Props { model: &model, sent: &mut sent });
+            seen.borrow_mut().extend(sent);
+        });
+        fixture.room(egui::vec2(900.0, 700.0)).settle();
+        let regular = fixture.by_label("Regular").expect("the Regular entry");
+        fixture.click(&regular).settle();
+        posted.borrow_mut().clear();
+        let ctx = fixture.ctx().clone();
+        for edit in [EditCommand::Copy, EditCommand::Paste] {
+            assert!(deliver(&ctx, edit), "{edit:?}");
+            fixture.settle();
+        }
+        assert!(!deliver(&ctx, EditCommand::SelectAll));
+        let shell = |id: &str| Msg::Shell(CommandRef::with_params(id, json!({"project": 7})));
+        assert_eq!(*posted.borrow(), vec![shell(COPY), shell(PASTE)]);
     }
 
     #[test]

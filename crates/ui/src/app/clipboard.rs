@@ -22,7 +22,8 @@
 //!   `font.features.pasteEntries` with it. Copy and Paste fired while one of the sidebar's lists holds the keyboard
 //!   focus (Cmd+C, Cmd+V) go to that list, which posts the same commands ([`to_focused_list`]).
 //! - In the Project panel, Copy and Paste (`window.project.copy`, `window.project.paste`) copy and duplicate instances;
-//!   Paste asks for the clipboard's text and hands it back to `window.project.paste`.
+//!   Paste asks for the clipboard's text and hands it back to `window.project.paste`. Copy and Paste fired while the
+//!   instance list holds the keyboard focus go to that list, which posts the same commands.
 //!
 //! The text goes out through [`Clipboard::out`], which the shell hands to the window's clipboard.
 
@@ -113,7 +114,8 @@ fn edit_command(id: &str) -> Option<EditCommand> {
 }
 
 /// Hands an Edit command the person fired with no parameters to the list that holds the keyboard focus and takes it
-/// (the Features sidebar takes Copy and Paste); `true` when the list took it, and the document is left alone.
+/// (the Features sidebar and the Project panel's instance list take Copy and Paste); `true` when the list took it, and
+/// the document is left alone.
 pub fn to_focused_list(app: &FontCraftApp, command: &CommandRef) -> bool {
     let Some(edit) = edit_command(&command.id) else { return false };
     is_empty(&command.params) && app.window.as_ref().is_some_and(|ctx| deliver(ctx, edit))
