@@ -151,11 +151,19 @@ pub struct PaletteView {
     pub transform: TransformSettings,
     /// The Fit Curve range fields; `None`: the font's range.
     pub fit_curve_range: Option<[f64; 2]>,
+    /// The values typed into the Modules panel's forms (`super::palette_modules`).
+    pub modules: super::palette_modules::ModuleForms,
 }
 
 impl Default for PaletteView {
     fn default() -> Self {
-        PaletteView { reference_point: "bottomLeft".into(), size_locked: false, transform: TransformSettings::default(), fit_curve_range: None }
+        PaletteView {
+            reference_point: "bottomLeft".into(),
+            size_locked: false,
+            transform: TransformSettings::default(),
+            fit_curve_range: None,
+            modules: Default::default(),
+        }
     }
 }
 

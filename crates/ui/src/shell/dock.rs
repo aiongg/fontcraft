@@ -348,6 +348,9 @@ impl DockPanels<PanelId> for Panels<'_> {
             PanelId::AnchorContext => {
                 panels::anchor_context::show(ui, panels::anchor_context::Props { model: &self.models.palette.anchor_context, sent: self.sent });
             }
+            PanelId::Modules => {
+                panels::palette_modules::show(ui, panels::palette_modules::Props { model: &self.models.modules.model, sent: self.sent })
+            }
             PanelId::Attributes => {
                 panels::attributes::show(ui, panels::attributes::Props { model: &self.models.color.attributes, sent: self.sent });
             }

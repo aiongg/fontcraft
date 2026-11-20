@@ -4203,7 +4203,7 @@ guesses = ["No menu item and no shortcut: the panel's arrow buttons and the Edit
 [[command]]
 id = "audit.toggleLiveAudit"
 label = "Live Audit"
-menu = []
+menu = ["View", "Audit"]
 shortcut = ""
 kind = "ui"
 params = "{on?: bool}"
@@ -4212,9 +4212,10 @@ milestone = "M3"
 summary = "Turns on or off the automatic re-run of the outlines profile on the glyph being edited."
 ref = "Our design"
 status = "inferred"
-notes = "Built in M3.17. While on, every change to the document re-runs the outlines profile on the edited layer (audit.liveAudit)."
+notes = "Built in M3.17. While on, every change to the document re-runs the outlines profile on the edited layer (audit.liveAudit). The row is View › Audit › Live Audit."
 guesses = [
   "Live audit is off when the app starts; the default is ours.",
+  "The menu row sits in a View › Audit submenu, beside the other edit view display switches; the reference app has no audit, so no source places it.",
 ]
 
 [[command]]

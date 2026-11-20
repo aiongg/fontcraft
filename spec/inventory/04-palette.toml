@@ -67,6 +67,34 @@ observe = [
   "Install a palette plug-in from the Plugin Manager, relaunch and note where its section appears among the built-in Palette sections and whether it collapses like them.",
 ]
 
+[[command]]
+id = "palette.setModuleValue"
+label = "Set Module Parameter"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{id: filter module id, name: parameter name, value: number|bool|string}"
+area = "extensions"
+milestone = "M13"
+summary = "Sets one field of a filter module's Palette section, held to the parameter's range. The value is kept for the session."
+ref = "Palette"
+status = "inferred"
+notes = "The command id and label are ours: the handbook describes plug-in Palette sections, not how their fields are stored. The form values are view state."
+
+[[command]]
+id = "palette.applyModule"
+label = "Apply Module"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{id: filter module id}"
+area = "extensions"
+milestone = "M13"
+summary = "The Apply button of a filter module's Palette section: runs the module with the section's values on what its Filter menu item acts on (the edited glyph and its selected nodes, or the glyphs selected in Font View)."
+ref = "Palette"
+status = "inferred"
+notes = "The command id and label are ours. It runs plugin.runFilter, one undo step; with no glyph chosen it refuses as the Filter menu item does."
+
 # ───────────────────────────── Dimensions ─────────────────────────────
 
 [[panel]]

@@ -6,6 +6,7 @@
 //! | glyph, top to bottom | T, B, O (vertical origin), H (vertical width) | `spacing.setTopSidebearing`, `…BottomSidebearing`, `spacing.setVerticalOrigin`, `spacing.setVerticalWidth` |
 //! | an out-of-sync key | the update button beside its field | `spacing.updateMetricsKey` |
 //! | kerning groups | one field per side | `kerning.setLeftGroup`, `…RightGroup`, `…TopGroup`, `…BottomGroup` |
+//! | kerning, while the glyph shows in the edit view's text | kern fields and locks towards its neighbours (`info_box_kerning`) | `kerning.setPair`, `…removePair`, `…addException`, `…removeException` |
 //! | one node | X, Y | `selection.setPosition` |
 //! | one handle | X, Y, dX, dY and its length, measured from its node | `selection.setPosition` on the handle |
 //! | anything else | X, Y of the box at the reference point, width, height, lock | `selection.setPosition`; `transform.scale` about the reference point |
@@ -99,6 +100,9 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
         return;
     };
     Section::new(words.glyph.clone()).show(ui, |ui, _| glyph_part(ui, &words, glyph, sent));
+    if let Some(k) = &model.kerning {
+        super::info_box_kerning::view(ui, k, sent);
+    }
     if let Some(hint) = &model.ps_hint {
         super::info_box_ps_hint::view(ui, hint, sent);
     } else if let Some(selection) = &model.selection {
