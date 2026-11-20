@@ -45,6 +45,7 @@ pub mod spacing_state;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub use cmd::{CommandInfo, CommandSpec, command_specs, find_command};
 pub use fontcraft_color as color;
@@ -219,7 +220,9 @@ pub struct DocState {
     /// Where the document is saved (`None`: never saved).
     pub path: Option<PathBuf>,
     pub title: String,
-    /// Bumped by every change; agents compare it to notice edits.
+    /// Set from [`next_revision`] by every change; agents and caches compare it to notice edits.
+    /// A command that fails puts the document's revision back with its font, so numbers are
+    /// never reused: a later change cannot get the number of a font that was rolled back.
     pub revision: u64,
     /// The font as it is on disk (for a new document: as it was created). Undoing back to it
     /// makes the document unmodified again.
@@ -234,7 +237,19 @@ pub struct DocState {
     pub(crate) glyph_data: glyph_data::CustomData,
 }
 
+/// A revision number no document or project has had: the counter is shared by the whole
+/// process and only grows, so rollback never makes two different fonts share one revision.
+pub(crate) fn next_revision() -> u64 {
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    NEXT.fetch_add(1, Ordering::Relaxed)
+}
+
 impl DocState {
+    /// Marks the document as changed: it gets a revision number not used before.
+    pub(crate) fn bump_revision(&mut self) {
+        self.revision = next_revision();
+    }
+
     pub fn modified(&self) -> bool {
         !Arc::ptr_eq(&self.font, &self.saved)
     }
@@ -423,7 +438,7 @@ impl Session {
         }
         next.check_changed(&doc.font)?;
         let before = std::mem::replace(&mut doc.font, Arc::new(next));
-        doc.revision += 1;
+        doc.bump_revision();
         match &mut self.batch {
             Some(batch) => {
                 if !batch.before.iter().any(|(id, _)| *id == doc.id) {
@@ -821,7 +836,7 @@ impl Session {
         let doc = self.docs.get_mut(i).ok_or(EngineError::NoDocument)?;
         match result {
             Ok(value) => {
-                doc.revision = if Arc::ptr_eq(&doc.font, &shown) { shown_revision } else { shown_revision + 1 };
+                doc.revision = if Arc::ptr_eq(&doc.font, &shown) { shown_revision } else { next_revision() };
                 if let Some(it) = &mut self.interaction {
                     it.last = Some((id.to_string(), params.clone()));
                 }
@@ -851,12 +866,12 @@ impl Session {
         match realigned(&it.label, &it.before, &doc.font, stamp.as_deref()) {
             Ok(Some(font)) => {
                 doc.font = font;
-                doc.revision += 1;
+                doc.bump_revision();
             }
             Ok(None) => {}
             Err(e) => {
                 doc.font = it.before;
-                doc.revision += 1;
+                doc.bump_revision();
                 return Err(e);
             }
         }
@@ -882,7 +897,7 @@ impl Session {
             && !Arc::ptr_eq(&doc.font, &it.before)
         {
             doc.font = it.before;
-            doc.revision += 1;
+            doc.bump_revision();
         }
         Ok(())
     }

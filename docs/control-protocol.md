@@ -254,7 +254,9 @@ pressing OK in the window is asked for the folder. Follow-up questions (`dialog.
 {dialog}` and the parameters from the command's result.
 
 `revision` in `document.inspect` grows with every change to a document, whoever made it. Compare
-it to learn whether the font changed since you last looked.
+it to learn whether the font changed since you last looked. The numbers come from one counter for
+all documents, so they are not consecutive, and a command that fails puts the number back with
+the font.
 
 ## Clients
 

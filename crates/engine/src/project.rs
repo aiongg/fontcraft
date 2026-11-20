@@ -56,7 +56,7 @@ pub struct ProjectDoc {
     pub data: Arc<ProjectData>,
     /// The contents as on disk (for a new project: as it was created).
     pub saved: Arc<ProjectData>,
-    /// Bumped by every change.
+    /// Set from the process's revision counter by every change, like [`crate::DocState::revision`].
     pub revision: u64,
     /// The linked font as last read from disk; `None` when no font is linked or it could not be
     /// read.
@@ -148,7 +148,7 @@ impl Session {
         let doc = self.projects.docs.get_mut(i).ok_or_else(|| EngineError::Disabled("project".into(), "no project open".into()))?;
         if *doc.data != data {
             doc.data = Arc::new(data);
-            doc.revision += 1;
+            doc.revision = crate::next_revision();
         }
         if let Some(font) = font {
             doc.font = font;

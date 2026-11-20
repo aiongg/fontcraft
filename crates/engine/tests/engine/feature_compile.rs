@@ -640,3 +640,26 @@ fn a_compile_whose_includes_are_not_keyed_reads_them_again() {
     assert_eq!(r["ok"], json!(false), "the changed file is read again: {r}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_compile_inside_a_rolled_back_batch_is_not_current_after_a_later_edit() {
+    // The batch compiles code that never survives: its last step fails, so the font and its
+    // revision go back. A different edit afterwards must not count that compile as current, or
+    // listErrors and applyFix would serve diagnostics of a font that never existed.
+    let mut s = Session::with_document();
+    run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": "sub a by b;"}));
+    let failing = s.execute(
+        "command.batch",
+        &json!({"steps": [
+            {"command": "font.features.setCode", "params": {"kind": "feature", "name": "liga", "code": "sub c by zzz;"}},
+            {"command": "font.features.compile", "params": {}},
+            {"command": "spacing.setWidth", "params": {"glyphs": ["no.such.glyph"], "value": 640}},
+        ]}),
+    );
+    assert!(failing.is_err(), "{failing:?}");
+    assert_eq!(code_of(&mut s, "feature", "liga"), "sub a by b;");
+    set_code(&mut s, "feature", "liga", "sub a by c;");
+    let errors = run(&mut s, "font.features.listErrors", json!({}));
+    assert_eq!(errors["current"], false, "{errors}");
+    assert!(!s.feature_state().unwrap().is_current(s.doc().unwrap()));
+}

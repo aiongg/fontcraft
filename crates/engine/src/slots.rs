@@ -4,7 +4,9 @@
 //! - Session slots ([`Session::slot`], [`Session::slot_mut`]) hold one value per type for the
 //!   whole session: caches and settings of an area. They are not part of a command's rollback
 //!   snapshot, so an area keeps only what stays correct if the command fails afterwards (caches
-//!   keyed by document id and revision) or changes its slot only once it has succeeded.
+//!   keyed by document id and revision: a rollback puts a document's revision back, and a later
+//!   change gets a number never used before, so a key never names two fonts) or changes its
+//!   slot only once it has succeeded.
 //! - Document extensions ([`DocState::ext`], [`DocState::set_ext`]) hold one shared value per type
 //!   for one document. They are cloned with the document, so a failing command rolls them back
 //!   with it, and closing the document drops them.

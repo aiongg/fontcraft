@@ -662,7 +662,7 @@ fn replace_font(s: &mut Session, i: usize, label: &str, next: Font) -> Result<()
         }
         next.check_changed(&doc.font)?;
         let before = std::mem::replace(&mut doc.font, Arc::new(next));
-        doc.revision += 1;
+        doc.bump_revision();
         (doc.id, before)
     };
     match &mut s.batch {
