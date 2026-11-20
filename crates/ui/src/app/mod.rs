@@ -223,6 +223,9 @@ pub struct FontCraftApp {
     pub overlays: crate::canvas::overlays::Overlays,
     /// The control channel: its listener, the window its input goes to, the replies waiting on frames.
     pub control: crate::control::Control,
+    /// The window's context, kept from the last frame, so an edit command the person fires can reach the list that
+    /// holds the keyboard focus ([`clipboard::to_focused_list`]).
+    pub(crate) window: Option<egui::Context>,
     #[cfg(not(target_arch = "wasm32"))]
     file_panels: Option<craft::dialogs::service::FilePanels>,
 }
@@ -269,6 +272,7 @@ impl FontCraftApp {
             frame_hook: None,
             preview_host: None,
             control: crate::control::Control::default(),
+            window: None,
             #[cfg(not(target_arch = "wasm32"))]
             file_panels: None,
         };
@@ -562,13 +566,16 @@ impl ShellApp for FontCraftApp {
     fn output(&mut self, output: FrameOutput) {
         for fired in output.fired {
             // A held tool key fires again on release; the tool stays.
-            if fired.phase != FirePhase::Release {
+            if fired.phase != FirePhase::Release && !clipboard::to_focused_list(self, &fired.command) {
                 self.fire(fired.command);
             }
         }
     }
 
     fn logic(&mut self, ctx: &egui::Context) {
+        if self.window.is_none() {
+            self.window = Some(ctx.clone());
+        }
         models::text_preview::logic(&mut self.models.text_preview, ctx);
         dropped::take(self, ctx);
         crate::shell::external_changes::on_focus(self, ctx);

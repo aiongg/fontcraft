@@ -74,6 +74,7 @@ Nothing below L6 may depend on a UI toolkit. Everything from L0 to L6 builds for
 | L5 | `engine-core` | today | the session-free parts of the engine: `EngineError`, command parameters, user settings, the edit clock and the panic guard. Same-layer order: `engine` builds on it and re-exports each at its old path |
 | L5 | `engine` | today | sessions, history, the command registry |
 | L6 | `ui-egui` | today (shell) | the UI |
+| L6 | `craft-ext` | today (UI.34) | framework pieces craft lacks, in craft-libs' layout and free of FontCraft code, used by `ui` ([decision 0009](decisions/0009-framework-gaps-staged-here.md)) |
 | L6 | `mcp` | today | the MCP server |
 | – | `testkit` | today | fixtures, junk parameters, invariants |
 | L7 | `fontcraft`, `fontcraft-cli`, `xtask` | today | apps and tooling. `fontcraft-web` (the same app in the browser) joins at M3 |

@@ -1054,11 +1054,11 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
      first master; the old Instructor menu section; open-path thumbnails in Shape Order; svg filters and PDF
      images in colour layers.
    - Framework gaps, built in `crates/craft-ext` in craft-libs' layout so they can move there later (decision
-     0009): a strikethrough list row and edit commands reaching a focused list; a text-field hook for syntax
-     colour and error underlines, caret and selection access, an async completer and Up/Down stepping; a
-     press-and-hold flyout; union, intersect and slant icons; open URL and reveal in the file manager; alternate
-     menu rows with their own label and shortcut; an app-level paste event and modifiers on context-menu
-     requests; a mixed mark on menu entries; a danger tone. The craft pin stays at `4bd0107` for these.
+     0009). Built (UI.34): a strikethrough list row, edit commands reaching a focused list and a mixed mark on menu
+     entries. Left: a text-field hook for syntax colour and error underlines, caret and selection access, an async
+     completer and Up/Down stepping; a press-and-hold flyout; union, intersect and slant icons; open URL and reveal
+     in the file manager; alternate menu rows with their own label and shortcut; an app-level paste event and
+     modifiers on context-menu requests; a danger tone. The craft pin stays at `4bd0107` for these.
 3. **The engine split, step 4 on.** ES.4 moves the kerning-index and metrics-sync readers outside the spacing crate
    behind its extension and moves the slots with `Session`; the later steps move command areas out of the engine
    crate along command ownership.

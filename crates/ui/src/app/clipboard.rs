@@ -19,11 +19,13 @@
 //!
 //! - In Font Info's Features sidebar, Copy runs `font.features.copyEntries` on the selected entries and puts its `text`
 //!   on the clipboard; Paste (`font.info.features.paste`) asks for the clipboard's text and runs
-//!   `font.features.pasteEntries` with it.
+//!   `font.features.pasteEntries` with it. Copy and Paste fired while one of the sidebar's lists holds the keyboard
+//!   focus (Cmd+C, Cmd+V) go to that list, which posts the same commands ([`to_focused_list`]).
 //!
 //! The text goes out through [`Clipboard::out`], which the shell hands to the window's clipboard.
 
 use craft::ui::runtime::commands::CommandRef;
+use craft_ext::ui::list::{EditCommand, deliver};
 use serde_json::{Map, Value, json};
 
 use super::{FontCraftApp, Msg};
@@ -32,6 +34,7 @@ const COPY: &str = "edit.copy";
 const CUT: &str = "edit.cut";
 const PASTE: &str = "edit.paste";
 const PASTE_SPECIAL: &str = "edit.pasteSpecial";
+const SELECT_ALL: &str = "edit.selectAll";
 /// The `format` the engine writes into copied glyphs (`edit.copy` with `glyphs`).
 const GLYPHS_FORMAT: &str = "fontcraft-glyphs";
 /// Longest clipboard text a paste takes.
@@ -92,6 +95,24 @@ pub fn fired(app: &mut FontCraftApp, command: CommandRef) -> Option<CommandRef> 
         }
         _ => Some(command),
     }
+}
+
+/// The edit command a fired Edit menu command stands for.
+fn edit_command(id: &str) -> Option<EditCommand> {
+    match id {
+        COPY => Some(EditCommand::Copy),
+        CUT => Some(EditCommand::Cut),
+        PASTE => Some(EditCommand::Paste),
+        SELECT_ALL => Some(EditCommand::SelectAll),
+        _ => None,
+    }
+}
+
+/// Hands an Edit command the person fired with no parameters to the list that holds the keyboard focus and takes it
+/// (the Features sidebar takes Copy and Paste); `true` when the list took it, and the document is left alone.
+pub fn to_focused_list(app: &FontCraftApp, command: &CommandRef) -> bool {
+    let Some(edit) = edit_command(&command.id) else { return false };
+    is_empty(&command.params) && app.window.as_ref().is_some_and(|ctx| deliver(ctx, edit))
 }
 
 /// Font View shows with glyphs selected: copying and pasting act on whole glyphs.

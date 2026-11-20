@@ -5,13 +5,14 @@
 //! Both menus hang from the point they were opened at. The canvas menu's sections are split by rules; its glyph
 //! section starts with the colour swatches (Glyph Color, or Layer Color when Alt was held at the click) and the menu
 //! ends with Copy Glyph Names. The glyph menu holds the swatches, Exports, Tags (ending with More Tags… past
-//! `MAX_MENU_TAGS`) and Copy Glyph Names.
+//! `MAX_MENU_TAGS`) and Copy Glyph Names. A tag carries a check when every glyph has it and a dash when some do.
 
 use craft::theme::Srgba;
 use craft::ui::contract::overlay::Anchor;
 use craft::ui::contract::{Bind, Entry, Props as _, ShowContainer as _};
 use craft::ui::menu::{Menu, entry_rows};
 use craft::ui::runtime::env::{Env, Label};
+use craft_ext::ui::menu::{EntryMark, MarkedEntry, entry_rows as marked_entry_rows};
 use egui::{Response, Ui};
 
 use crate::app::context_menu::glyph_menu::{COPY_FORMATS, GlyphMenu, Mark};
@@ -154,18 +155,18 @@ pub fn glyph_menu(ui: &mut Ui, opener: &Response, menu: &GlyphMenu) -> Answer {
             }
             if !menu.tags.is_empty() {
                 let _ = Menu::submenu_row(ui, words.tags.clone(), |ui, _| {
-                    let mut entries: Vec<Entry<Option<usize>>> = menu
+                    let mut entries: Vec<MarkedEntry<Option<usize>>> = menu
                         .tags
                         .iter()
                         .enumerate()
-                        .map(|(i, (tag, mark))| Entry::new(Some(i), Label::from(tag.clone())).checked(*mark == Mark::All))
+                        .map(|(i, (tag, mark))| MarkedEntry::new(Entry::new(Some(i), Label::from(tag.clone()))).mark(entry_mark(*mark)))
                         .collect();
                     if menu.more_tags {
-                        entries.push(Entry::separator());
-                        entries.push(Entry::new(None, words.more_tags.clone()));
+                        entries.push(Entry::separator().into());
+                        entries.push(Entry::new(None, words.more_tags.clone()).into());
                     }
-                    if let Some(i) = entry_rows(ui, &entries) {
-                        picked = picked.clone().or(match entries.get(i).and_then(Entry::value) {
+                    if let Some(i) = marked_entry_rows(ui, &entries) {
+                        picked = picked.clone().or(match entries.get(i).and_then(MarkedEntry::value) {
                             Some(Some(tag)) => menu.tags.get(*tag).map(|(t, _)| Pick::Tag(t.clone())),
                             Some(None) => Some(Pick::MoreTags),
                             None => None,
@@ -177,6 +178,15 @@ pub fn glyph_menu(ui: &mut Ui, opener: &Response, menu: &GlyphMenu) -> Answer {
         });
     let picked = shown.inner.flatten();
     Answer { open: open && picked.is_none() && shown.output.closed.is_none(), picked }
+}
+
+/// The menu mark of a switch that is on for all, some or none of the menu's glyphs.
+fn entry_mark(mark: Mark) -> EntryMark {
+    match mark {
+        Mark::All => EntryMark::Checked,
+        Mark::Some => EntryMark::Mixed,
+        Mark::None => EntryMark::Unchecked,
+    }
 }
 
 /// The swatches' submenu: the twelve label colours and No Color.

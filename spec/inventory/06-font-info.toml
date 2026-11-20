@@ -2803,13 +2803,14 @@ notes = "Documented, not yet observed."
 id = "fontInfo.features.contextMenu"
 area = "features"
 milestone = "M8"
-summary = "Right-clicking a sidebar entry opens a menu with Disable or Enable, Update Entry (automatic entries), Rename, Copy, Paste and Delete, acting on the selected entries; Cmd+C and Cmd+V copy and paste while the sidebar has focus. A disabled entry's name is drawn struck through."
+summary = "Right-clicking a sidebar entry opens a menu with Disable or Enable, Update Entry (automatic entries), Rename, Copy, Paste and Delete, acting on the selected entries; Cmd+C and Cmd+V copy and paste while the sidebar has focus, and Cmd+A selects every entry of the focused group. A disabled entry's name is drawn struck through."
 ref = "Font Info › Features"
 status = "inferred"
 notes = "Not in the handbook. The items run font.features.setDisabled, updateEntry, rename, copyEntries, pasteEntries and remove."
 guesses = [
   "The context menu's items and their order are ours; right-clicking a sidebar entry in the reference app would settle them.",
   "A disabled entry is drawn struck through; disabling an entry in the reference app would settle how it is shown.",
+  "Cmd+A in a focused sidebar group selects that group's entries; pressing Cmd+A in the reference app's sidebar would settle it.",
 ]
 observe = [
   "In F1 (Latin features), right-click a prefix, a class and a feature in Font Info › Features and note each menu's items in order.",

@@ -126,6 +126,59 @@ fn features_entry_pane_posts_code_fixes_and_names() {
     assert!(got.contains(&Msg::run("font.features.removeLabel", json!({ "tag": "ss01", "index": 1, "language": "dflt" }))), "{got:?}");
 }
 
+/// A disabled entry's name is struck through: one rule across the middle of its row, none on the enabled rows.
+#[test]
+fn a_disabled_feature_is_struck_through() {
+    let mut model = features_model();
+    if let Some(group) = model.features.groups.iter_mut().find(|g| g.kind == EntryKind::Feature)
+        && let Some(liga) = group.entries.first_mut()
+    {
+        liga.disabled = true;
+    }
+    let (mut fixture, _) = panel(model);
+    let rules_in = |shapes: &[egui::Shape], row: egui::Rect| {
+        shapes
+            .iter()
+            .filter(|shape| {
+                matches!(shape, egui::Shape::LineSegment { points: [a, b], .. }
+                    if row.contains(*a) && row.contains(*b) && (a.y - b.y).abs() < f32::EPSILON && (a.y - row.center().y).abs() < 1.0)
+            })
+            .count()
+    };
+    let liga = fixture.by_label("liga").expect("the liga entry").rect;
+    let ss01 = fixture.by_label("ss01").expect("the ss01 entry").rect;
+    let shapes = fixture.frame_shapes();
+    assert_eq!(rules_in(&shapes, liga), 1);
+    assert_eq!(rules_in(&shapes, ss01), 0);
+}
+
+/// Copy, Paste and Select All fired while a group's list has the keyboard focus reach the list, which posts the entry
+/// commands; Cut stays with the document.
+#[test]
+fn edit_commands_reach_the_focused_sidebar_list() {
+    use craft_ext::ui::list::{EditCommand, deliver};
+    let (mut fixture, posted) = panel(features_model());
+    let liga = fixture.by_label("liga").expect("the liga entry");
+    fixture.click(&liga).settle();
+    posted.borrow_mut().clear();
+    let ctx = fixture.ctx().clone();
+    for edit in [EditCommand::Copy, EditCommand::Paste, EditCommand::SelectAll] {
+        assert!(deliver(&ctx, edit), "{edit:?}");
+        fixture.settle();
+    }
+    assert!(!deliver(&ctx, EditCommand::Cut));
+    let ss01 = json!({ "kind": "feature", "name": "ss01", "index": 1 });
+    let all = json!([{ "kind": "feature", "name": "liga", "index": 0 }, ss01.clone()]);
+    assert_eq!(
+        *posted.borrow(),
+        vec![
+            Msg::run("font.features.copyEntries", json!({ "entries": [ss01] })),
+            Msg::Shell(CommandRef::new("font.info.features.paste")),
+            shell("font.info.features.select", json!({ "entries": all })),
+        ]
+    );
+}
+
 /// The picker adds the selected feature, automatic when Update can write it; a tag the font has cannot be added.
 #[test]
 fn feature_picker_adds_the_selected_feature_and_cancel_adds_nothing() {
