@@ -34,6 +34,15 @@ fn run(app: &mut FontCraftApp, id: &str, params: Value) {
     assert!(app.status.is_empty(), "{id}: {}", app.status);
 }
 
+/// Runs a PostScript hint command whose hint edges miss every node: the reply's warning reaches the status line, and
+/// the hint is still added.
+fn run_off_nodes(app: &mut FontCraftApp, id: &str, params: Value) {
+    app.sent.push(Msg::run(id, params));
+    app.drain();
+    assert!(app.status.contains("no node lies exactly"), "{id}: {}", app.status);
+    app.status.clear();
+}
+
 fn shell(app: &mut FontCraftApp, id: &str, params: Value) {
     app.sent.push(Msg::Shell(CommandRef::with_params(id, params)));
     app.drain();
@@ -193,7 +202,7 @@ fn review_hints_opens_on_the_first_hint_and_steps() {
     let mut app = new_app();
     squares(&mut app);
     for y in [0, 340] {
-        run(&mut app, "hint.ps.addHorizontalHint", json!({"glyph": "A", "origin": y, "size": 20}));
+        run_off_nodes(&mut app, "hint.ps.addHorizontalHint", json!({"glyph": "A", "origin": y, "size": 20}));
     }
     shell(&mut app, "hint.ps.reviewHints", json!({}));
     let r = app.view.hinting.review.clone();
@@ -233,7 +242,7 @@ fn a_ps_hint_badge_menu_makes_ghosts_and_deletes() {
     for a in [&mut app, &mut headless] {
         squares(a);
         run(a, "hint.ps.addHorizontalHint", json!({"glyph": "A", "origin": 100, "size": 100}));
-        run(a, "hint.ps.addHorizontalHint", json!({"glyph": "A", "origin": 300, "size": 40}));
+        run_off_nodes(a, "hint.ps.addHorizontalHint", json!({"glyph": "A", "origin": 300, "size": 40}));
     }
     shell(&mut app, "view.showHints", json!({"on": true}));
 
