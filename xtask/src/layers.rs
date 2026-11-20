@@ -82,7 +82,7 @@ pub const TABLE: &[(&str, Class)] = &[
 /// and stem filters through `glyphquery`. `tables` uses the glyph encoders of `compile` and the
 /// decoders of `decompile`; `proof` draws through `render` and reads `tables`; `oracle` compares
 /// layout tables through the decompiler of `tables`. `engine` builds on the session-free parts in
-/// `engine-core`.
+/// `engine-core`. `ui` builds on the framework pieces staged in `craft-ext` (decision 0009).
 pub const INTRA_LAYER_ORDER: &[&[&str]] = &[
     &["spacing", "textlayout"],
     &["spacing", "features"],
@@ -96,6 +96,7 @@ pub const INTRA_LAYER_ORDER: &[&[&str]] = &[
     &["tables", "oracle"],
     &["render", "proof"],
     &["engine-core", "engine"],
+    &["craft-ext", "ui"],
 ];
 
 /// External crates that are a UI toolkit, windowing or GPU dependency. A trailing `*` is a prefix.
