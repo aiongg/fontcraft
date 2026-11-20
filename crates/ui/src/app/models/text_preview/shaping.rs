@@ -13,6 +13,7 @@ use fontcraft_engine::Session;
 use fontcraft_engine::compile::CompileError;
 use fontcraft_engine::compile::preview::PreviewBuild;
 use fontcraft_engine::feature_state::{PreviewBuilds, SharedBuild};
+use fontcraft_engine::prelude::*;
 use fontcraft_model::Font;
 use fontcraft_textlayout::PreviewShaper;
 

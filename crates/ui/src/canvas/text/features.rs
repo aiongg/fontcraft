@@ -13,6 +13,7 @@ use craft::ui::runtime::commands::CommandRef;
 use fontcraft_engine::Session;
 use fontcraft_engine::fea::LayoutTable;
 use fontcraft_engine::feature_state::FeatureState;
+use fontcraft_engine::prelude::*;
 use fontcraft_textlayout::shaping::Tag;
 use serde_json::{Map, Value, json};
 

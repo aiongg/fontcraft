@@ -7,6 +7,7 @@ use std::sync::Arc;
 use craft::host::{Host, InlineJobs};
 use craft::ui::runtime::commands::CommandRef;
 use fontcraft_engine::Session;
+use fontcraft_engine::prelude::*;
 use serde_json::{Value, json};
 
 use crate::app::models::text_preview::{Page, PageDirection, set_now};

@@ -23,6 +23,7 @@ use std::sync::Arc;
 
 use craft::host::Host;
 use craft::ui::contract::{PlainData, Tracked};
+use fontcraft_engine::prelude::*;
 use fontcraft_geom::BezPath;
 use fontcraft_model::Font;
 use fontcraft_spacing::kerning::KernIndex;

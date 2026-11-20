@@ -22,6 +22,7 @@ use fontcraft_engine::Session;
 use fontcraft_engine::cmd::preview::preview_range;
 use fontcraft_engine::interp_cache::view_master_id;
 use fontcraft_engine::model::Font;
+use fontcraft_engine::prelude::*;
 use fontcraft_geom::{Affine, BezPath};
 use fontcraft_textlayout::{Direction, Item, Layout, Options, Text};
 
