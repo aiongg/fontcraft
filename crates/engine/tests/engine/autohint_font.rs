@@ -100,6 +100,12 @@ fn tables_except(bytes: &[u8], skip: &[u8; 4]) -> Vec<(Tag, Vec<u8>)> {
         .filter(|t| *t != Tag::new(skip))
         .map(|t| (t, font.table_data(t).unwrap().as_bytes().to_vec()))
         .collect();
+    // head.checkSumAdjustment covers the whole file, so it follows the changed outline table.
+    for (tag, data) in &mut out {
+        if *tag == Tag::new(b"head") {
+            data[8..12].fill(0);
+        }
+    }
     out.sort_by_key(|(t, _)| *t);
     out
 }

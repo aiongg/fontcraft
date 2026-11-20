@@ -80,8 +80,16 @@ fn outlines_repairs_on_a_cff_font() {
     assert_eq!(r["changed"], json!(["A"]));
     let before = fontcraft_tables::read(&std::fs::read(&binary).unwrap(), 0).unwrap();
     let after = fontcraft_tables::read(&std::fs::read(&out).unwrap(), 0).unwrap();
+    // head.checkSumAdjustment covers the whole file, so it follows the changed CFF.
+    let blank_adjustment = |t: [u8; 4], data: Option<&[u8]>| {
+        let mut data = data.map(<[u8]>::to_vec);
+        if let (b"head", Some(d)) = (&t, data.as_mut()) {
+            d[8..12].fill(0);
+        }
+        data
+    };
     for tag in before.tags().into_iter().filter(|t| *t != *b"CFF ") {
-        assert_eq!(before.get(tag), after.get(tag), "{} is copied", fontcraft_tables::sfnt::tag_str(tag));
+        assert_eq!(blank_adjustment(tag, before.get(tag)), blank_adjustment(tag, after.get(tag)), "{} is copied", fontcraft_tables::sfnt::tag_str(tag));
     }
     assert_ne!(before.get(*b"CFF "), after.get(*b"CFF "));
 
