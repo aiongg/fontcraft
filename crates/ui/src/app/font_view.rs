@@ -241,7 +241,7 @@ craft::ui::words! {
 const REPORTS_INCOMPATIBLE: [&str; 4] =
     ["path.tidyUpPaths", "path.tidyUpPathsForAllMasters", "path.roundCoordinates", "path.roundCoordinatesForAllMasters"];
 /// Most glyph names a status notice spells out.
-const MAX_NOTICE_NAMES: usize = 20;
+pub(super) const MAX_NOTICE_NAMES: usize = 20;
 
 /// The status message for `reply` of command `id`: the glyphs it left incompatible across masters, when there are
 /// any.

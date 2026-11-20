@@ -34,6 +34,7 @@ pub mod kerning_audit;
 pub mod kerning_questions;
 pub mod master_color;
 pub mod os2_bits;
+pub mod overlay_fonts;
 pub mod panose;
 pub mod path;
 pub mod review_hints;
@@ -70,6 +71,7 @@ pub const MODULES: &[Module] = &[
     host::run,
     kerning_questions::run,
     kerning_audit::run,
+    overlay_fonts::run,
     start_window::run,
     settings::run,
     changed_on_disk::run,
