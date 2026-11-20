@@ -8,9 +8,10 @@
 //!
 //! A typed value unlinks the edge it sets, as `hint.ps.setHintValues` says. Under the fields, the hint's warnings.
 
+use craft::theme::variant::Tone;
 use craft::ui::buttons::toggle_button::ToggleButton;
 use craft::ui::contract::{Bind, Props as _, Show as _, ShowContainer as _};
-use craft::ui::display::{Shade, Text};
+use craft::ui::display::Text;
 use craft::ui::layout_components::{Row, Stack};
 use craft::ui::runtime::env::Env;
 use craft::ui::sections::Section;
@@ -78,7 +79,7 @@ pub fn view(ui: &mut Ui, h: &PsHintBox, sent: &mut Vec<Msg>) {
                 }
             });
             for w in &h.warnings {
-                Text::new(w.clone()).shade(Shade::Normal).show(ui);
+                Text::new(w.clone()).tone(Tone::Warn).show(ui);
             }
         });
     });

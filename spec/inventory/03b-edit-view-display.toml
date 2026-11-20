@@ -771,6 +771,7 @@ notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 
 guesses = [
   "The swatches open the glyph section of the menu as a Glyph Color submenu (Layer Color when Alt was held at the click). Settled by observation.",
   "The glyph section offers Exports, Locked and Show Glyph in Font View, and the menu ends with Copy Glyph Names, as the Glyphs 3 video lists them; the other entries of that list follow with their milestones. Settled by observation.",
+  "Items that remove something (Delete Guide, Delete Hints, Clear Hints, Delete Instructions) show a danger tone, a trash icon in the error colour; the video shows no such mark, so it is ours. Settled by observation.",
 ]
 
 [[command]]

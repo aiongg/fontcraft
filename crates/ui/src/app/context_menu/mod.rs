@@ -126,6 +126,9 @@ pub const SHOW_IN_FONT_VIEW: &str = "contextMenu.showGlyphInFontView";
 /// Items drawn only while Alt is held, in place of the item before them.
 const ALTERNATES: &[&str] = &["guide.addGlobal"];
 
+/// Items whose command removes something from the glyph: their rows show the danger tone.
+pub const DESTRUCTIVE: &[&str] = &["guide.remove", "hint.ps.deleteHints", "hint.ps.clearGlyphHints", "hint.tt.deleteInstructions"];
+
 /// The order of context menu items: the order of their inventory rows. A command missing here comes after these, in
 /// registry order.
 const ORDER: &[&str] = &[

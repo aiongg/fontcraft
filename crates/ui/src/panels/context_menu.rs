@@ -4,7 +4,8 @@
 //!
 //! Both menus hang from the point they were opened at. The canvas menu's sections are split by rules; its glyph
 //! section starts with the colour swatches (Glyph Color, or Layer Color when Alt was held at the click) and the menu
-//! ends with Copy Glyph Names. The glyph menu holds the swatches, Exports, Tags (ending with More Tags… past
+//! ends with Copy Glyph Names. Items that remove something (Delete Guide, the hint removals) show the danger tone
+//! (`craft_ext::ui::menu::danger_icon`). The glyph menu holds the swatches, Exports, Tags (ending with More Tags… past
 //! `MAX_MENU_TAGS`) and Copy Glyph Names. A tag carries a check when every glyph has it and a dash when some do.
 
 use craft::theme::Srgba;
@@ -16,7 +17,7 @@ use craft_ext::ui::menu::{EntryMark, MarkedEntry, entry_rows as marked_entry_row
 use egui::{Response, Ui};
 
 use crate::app::context_menu::glyph_menu::{COPY_FORMATS, GlyphMenu, Mark};
-use crate::app::context_menu::{CANVAS, CanvasMenu};
+use crate::app::context_menu::{CANVAS, CanvasMenu, DESTRUCTIVE};
 use crate::app::models::font_view::COLOR_LABEL_NAMES;
 
 craft::ui::words! {
@@ -108,7 +109,7 @@ pub fn canvas_menu(ui: &mut Ui, opener: &Response, menu: &CanvasMenu, alt: bool)
             if index > 0 {
                 let _ = entry_rows(ui, &[Entry::<()>::separator()]);
             }
-            let mut entries: Vec<Entry<&'static str>> = Vec::new();
+            let mut entries: Vec<MarkedEntry<&'static str>> = Vec::new();
             if section.context == CANVAS {
                 let caption = if alt { words.layer_color.clone() } else { words.glyph_color.clone() };
                 picked = picked.or(swatches(ui, caption, &words));
@@ -126,10 +127,10 @@ pub fn canvas_menu(ui: &mut Ui, opener: &Response, menu: &CanvasMenu, alt: bool)
                     Some(why) => entry.disabled_reason(Label::from(why.clone())),
                     None => entry.enabled(item.enabled),
                 };
-                entries.push(entry);
+                entries.push(MarkedEntry::new(entry).danger(DESTRUCTIVE.contains(&item.command)));
             }
-            if let Some(i) = entry_rows(ui, &entries) {
-                picked = picked.or(entries.get(i).and_then(Entry::value).map(|id| Pick::Item(id)));
+            if let Some(i) = marked_entry_rows(ui, &entries) {
+                picked = picked.or(entries.get(i).and_then(MarkedEntry::value).map(|id| Pick::Item(id)));
             }
         }
         picked.or(copy_names(ui, &words))

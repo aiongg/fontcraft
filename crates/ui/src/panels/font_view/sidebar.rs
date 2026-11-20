@@ -26,6 +26,7 @@ use craft::ui::list::{List, ListRow};
 use craft::ui::menu::{Menu, MenuItem};
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::Env;
+use craft_ext::ui::menu::{MarkedEntry, PickMarked as _, danger_icon};
 use egui::Ui;
 use serde_json::{Value, json};
 
@@ -215,7 +216,7 @@ fn entries(ui: &mut Ui, model: &SidebarModel, words: &SidebarWords, sent: &mut V
     }
     let row = menu_row.and_then(|i| model.rows.get(i)).filter(|r| !r.is_section());
     if let Some(row) = row {
-        let menu = Menu::context(words.row_menu.clone(), &out.response).pick(ui, &row_entries(row, words));
+        let menu = Menu::context(words.row_menu.clone(), &out.response).pick_marked(ui, &row_entries(row, words));
         if let Some(picked) = menu.picked.as_deref().and_then(|id| row_command(row, id)) {
             sent.push(picked);
         }
@@ -229,13 +230,14 @@ fn entries(ui: &mut Ui, model: &SidebarModel, words: &SidebarWords, sent: &mut V
 }
 
 /// The rows of an entry's context menu.
-fn row_entries(row: &SidebarRow, words: &SidebarWords) -> Vec<Entry<String>> {
+fn row_entries(row: &SidebarRow, words: &SidebarWords) -> Vec<MarkedEntry<String>> {
     let show = Entry::new(MISSING.to_string(), words.show_missing.clone());
-    let mut entries = vec![if row.lacks_glyphs() { show } else { show.disabled_reason(words.nothing_missing.clone()) }];
+    let mut entries: Vec<MarkedEntry<String>> =
+        vec![if row.lacks_glyphs() { show } else { show.disabled_reason(words.nothing_missing.clone()) }.into()];
     if row.is_filter() {
         let edit = Entry::new(EDIT.to_string(), words.edit_filter.clone());
-        entries.push(if editor(row).is_some() { edit } else { edit.disabled_reason(words.no_editor.clone()) });
-        entries.push(Entry::new(REMOVE.to_string(), words.remove_filter.clone()));
+        entries.push(if editor(row).is_some() { edit } else { edit.disabled_reason(words.no_editor.clone()) }.into());
+        entries.push(MarkedEntry::new(Entry::new(REMOVE.to_string(), words.remove_filter.clone())).danger(true));
     }
     entries
 }
@@ -311,7 +313,8 @@ fn actions(ui: &mut Ui, model: &SidebarModel, selected: &[String], words: &Sideb
         {
             sent.push(open.clone());
         }
-        if MenuItem::new(words.remove_filter.clone()).enabled(chosen.is_some()).show(ui).ran
+        let danger = danger_icon(ui, chosen.is_some(), None);
+        if MenuItem::new(words.remove_filter.clone()).enabled(chosen.is_some()).icon(danger).show(ui).ran
             && let Some(row) = chosen
         {
             sent.push(Msg::run("fontView.removeFilter", json!({ "filter": path_value(&row.path) })));

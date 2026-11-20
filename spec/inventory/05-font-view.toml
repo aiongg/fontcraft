@@ -1187,6 +1187,7 @@ guesses = [
   "The sections start open; categories, scripts, folders and groups start closed. Settled by opening a new document in the reference.",
   "The actions menu sits at the foot of the sidebar, below the entries. Settled by a screenshot of the reference's Font View.",
   "A script entry shows the Unicode Script property value its glyph-data id stands for (`Latin`, `Tibetan`, `Canadian Aboriginal`), not the id; paths and parameters keep the id. Settled by a screenshot of the reference's Languages section.",
+  "Remove Filter shows a danger tone in both menus, a trash icon in the error colour; no source shows the reference marking it. Settled by a screenshot of the reference's actions menu.",
 ]
 
 [[panel]]

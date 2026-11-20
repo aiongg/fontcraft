@@ -2811,6 +2811,7 @@ guesses = [
   "The context menu's items and their order are ours; right-clicking a sidebar entry in the reference app would settle them.",
   "A disabled entry is drawn struck through; disabling an entry in the reference app would settle how it is shown.",
   "Cmd+A in a focused sidebar group selects that group's entries; pressing Cmd+A in the reference app's sidebar would settle it.",
+  "Delete shows a danger tone, a trash icon in the error colour; the same right-click in the reference app would show whether it marks the item.",
 ]
 observe = [
   "In F1 (Latin features), right-click a prefix, a class and a feature in Font Info › Features and note each menu's items in order.",

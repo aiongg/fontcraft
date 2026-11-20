@@ -272,9 +272,13 @@ only; each module's doc names the craft file the piece is meant for.
 | `craft_ext::ui::list::StrikeRows` (`strike_rows`, `Strike`) | a struck `RowInk` on `ListRow` | Font Info › Features: a disabled entry is struck through |
 | `craft_ext::ui::list::CollectionEdits` (`edit_commands`), `deliver` | a collection taking `Intent::Edit` (`CollectionEvent::Edit`) | the Features sidebar's lists take Copy, Paste and Select All; `app::clipboard::to_focused_list` hands the fired Edit command to them |
 | `craft_ext::ui::menu::{MarkedEntry, EntryMark, entry_rows}` | a mixed state on `Entry` and a dash mark on `MenuItem` | the glyph menu's Tags: a tag some of the glyphs carry |
+| `craft_ext::ui::menu::{MarkedEntry::danger, danger_icon}` | a danger flag on `Entry` and a danger tone on `MenuItem` | items that remove something: the canvas menu's Delete Guide and hint removals, Remove Filter, the Features sidebar's Delete |
+| `craft_ext::ui::menu::PickMarked` (`pick_marked`) | `Menu::pick` over entries with those states | the Features sidebar and Font View sidebar context menus |
 
 The stand-ins paint over what craft drew, so they cover the plain forms only (a row without icon, toggles or
-indent; a menu row's mark column), and a screen reader hears a mixed menu row as unchecked. An Edit command reaches
+indent; a menu row's mark column), and a screen reader hears a mixed menu row as unchecked. A danger row shows the
+tone on its icon only (the label keeps its ink). Dialog buttons take craft's own danger look:
+`DialogRole::Destructive` on a `FooterButton`, `Variant::DANGER` on a `Button`. An Edit command reaches
 the focused list one pass after it fired.
 
 ## Forbidden in UI code
