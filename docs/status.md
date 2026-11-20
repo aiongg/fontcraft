@@ -2,35 +2,48 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-21, after the fifteenth batch: wave 1 of the depth plans (`docs/plans/depth.md`), ten packages (the builder M14.3 and the writers M1.8, M9.27, M13.78, M3.19, M7.21, M4.17, M3.40, M14.1 and M3.21), with the integration rounds X.integ23 and X.integ24, the review fixes X.fix73 to X.fix77 and the gate X.gate19, integrated and gated on `master`._
+_Updated: 2026-11-20, during the sixteenth batch: 47 writer packages of depth waves 2 to 11 (with M10.37b, M10.37c and M13.65b), the engine split's steps ES.1 to ES.3, and the craft-next window (UI.1 to UI.29 with UI.4b, UI.9b, UI.14b, UI.15b and UI.21b), all merged on `master`, with the test fixes X.fix86 and X.fix87; the gate, a review and the push are still to do._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all eleven steps (4,767 tests passed, 0 failed, 49 skipped). The test step runs on cargo
-  nextest. Built and run on Linux x86-64 with Rust 1.97. macOS and Windows were not compiled: the macOS quit path
-  that M14.3 adds through `craft-quit` waits for the owner's build on a Mac (see "Where to start").
-- `master` holds 34 commits on top of `f9628ec` (X.docs18, the last pushed commit), plus the documentation commit
-  X.docs19: the ten packages, their merges, X.integ23, X.integ24, the review fixes X.fix73 to X.fix77 and X.gate19
-  (the package lists are in ROADMAP.md › Shipped so far). The gate X.gate19 ran at `29f2eee`. The tests honour
-  `TMPDIR`; point it at a disk with room when the system's temporary directory is full. The batch is pushed with
-  these commits.
-- 926 of the 1,009 inventory commands exist (`docs/parity.md`; new: `app.quit`, `window.closePrompt`,
-  `app.settings`, `file.openFolder`, `path.reshapeSegment` and the query `font.instance.placement`). Per milestone:
-  M1 (11), M3 (185), M4, M5, M6 (47), M7 (66), M8 (41), M10 (59), M11 (41) and M12 (99) are all live; M9 52 of 53,
-  M13 153 of 200, M14 3 of 34. The inventory has 3,744 rows. Feature parity is about 37% (ROADMAP.md › Parity
-  estimate; 37.2, was 36.0: Font Info 33% → 38%, Window 24% → 28%, Agent surfaces 55% → 60%, Font View 42% → 45%,
-  Source formats 67% → 70%, Layers 37% → 40%, Drawing 31% → 33%, Interpolation 29% → 30%; the depth plan expected
-  38.1%). 2,738 guesses on 1,504 rows are listed in `docs/guesses.md`; `docs/observe.md` lists 1,418 rows.
+- **Where the sixteenth batch stands.** Every branch is merged on `master` (over 250 commits on top of `9f8f3e5`,
+  the last pushed commit, X.docs19). Nothing of this batch is pushed. The tests honour `TMPDIR`; point it at a disk
+  with room when the system's temporary directory is full.
+
+  | Step | State |
+  |---|---|
+  | Workspace check and clippy with the no-panic lints | clean (X.integ73 to X.integ80) |
+  | Command ids blessed, generated lists (`cli-options`, guesses, observe, parity), fmt | done (X.integ78 to X.integ80) |
+  | First full test run (cargo nextest) | 5,304 run, 5,271 passed, 33 failed |
+  | The 24 failures outside the window crates (tables, compile, io-ufo, proof, engine, cli) | fixed by X.fix86; a filtered run of them passes |
+  | The 9 failures in `crates/ui`, `apps/fontcraft` and `apps/fontcraft-next` | UI test fixes (X.fix87) |
+  | Second full test run | to do |
+  | The gate, `cargo xtask ci` | to do |
+  | Review pass | to do |
+  | Push | to do, after a green gate and the review |
+
+  The writers ran no builds and most branches were merged without one, so the full test run was the first for most
+  of this code; expect more failures in the second run. Built on Linux x86-64 only. macOS and Windows were not
+  compiled: the Mac check of wave 1 and X.pdf3's clipboard readers wait for the owner's builds there.
+- **Two windows.** `apps/fontcraft` on `crates/ui-egui` is still the app. The new window, `apps/fontcraft-next` on
+  `crates/ui`, is built on the Craft suite's craft-next framework (pinned at `4bd0107`; egui 0.37 from the suite's
+  fork beside egui 0.36 for the old window; a vendored egui-winit 0.36 under `vendor/` keeps the old window building
+  against the shared winit fork). It sits beside the egui window until it reaches parity; then the egui window goes.
+  Its ports have headless tests only, and none has been tried in the running window. Conventions for writing it are
+  in `docs/ui.md`. Leave `crates/ui-egui` alone except for compile fixes.
+- 960 of the 1,039 inventory commands exist (`docs/parity.md`). Per milestone: M1 (11), M2 (5), M3 (185), M5 (100),
+  M6 (47), M10 (60) and M11 (42) are all live; M4 62 of 68, M7 66 of 69, M8 44 of 45, M9 64 of 66, M12 99 of 103,
+  M13 167 of 197, M14 3 of 32. The inventory has 3,786 rows. Feature parity is about 38% (ROADMAP.md › Parity
+  estimate; 38.4, was 37.2), graded on the egui window and on engine and CLI behaviour; the new window counts once it
+  replaces the old one. 3,081 guesses on 1,606 rows are listed in `docs/guesses.md`; `docs/observe.md` lists 1,500 rows. CLI option coverage: 672 of
+  770 reference options present (`docs/cli-options.md`).
 - Packages built (done of total, counted from commit subjects; the totals include the depth packages that carry a
-  new number): M6 19 of 26, M7 20 of 24, M8 23 of 36, M9 26 of 40, M10 31 of 42, M11 19 of 22, M12 63 of 87, M13 57
-  of 83; 258 of 360 in all. Depth packages (`docs/plans/depth.md`): 10 of 167, all of wave 1; this line leaves
-  out the seven of them in M1, M3, M4 and M14 (M1.8, M3.19, M3.21, M3.40, M4.17, M14.1, M14.3). The follow-ups
-  M8.20b, M8.20c, M8.23b, M10.19b, M10.21b, M11.5b, M11.5c,
-  M11.7b, M11.13b, M11.14b, M11.17b to M11.17e, M12.7b to M12.7f, M12.10b, M12.13b, M12.18b, M12.18c, M12.19b to
-  M12.19d, M12.20b, M12.21b, M12.22b to M12.22e, M12.23b, M12.23c, M12.24b, M12.24c, M12.25b to M12.25e, M12.30b to
-  M12.30d, M12.40b to M12.40d, M12.41b, M12.64b, M13.15b, M13.15c, M13.23b and M13.55b to M13.55f are not counted;
-  nor are the lettered depth packages (M10.21c, M13.20b, M13.21b, M13.21c, M13.23c) and X.pdf3, X.suite3.
-- **Baselines after this batch** (a later change that moves one of these numbers needs a reason):
+  new number): M6 21 of 26, M7 21 of 24, M8 27 of 36, M9 30 of 40, M10 35 of 42, M11 20 of 22, M12 77 of 87, M13 63
+  of 83; 294 of 360 in all. Depth packages (`docs/plans/depth.md`): 57 of 167 (wave 1 and 47 writers of waves 2 to
+  11, listed in ROADMAP.md › Where we are); no builder of waves 2 to 13. M3.22, M3.23, M4.18, M4.19, M5.29, M7.22 and
+  M9.32 have editor parts in the new window only and are not counted. The lettered follow-ups (M10.37b, M10.37c,
+  M13.65b and those of earlier batches) are not counted.
+- **Baselines** (from the fifteenth batch; the sixteenth ran none of them, and a later change that moves one of these numbers needs a reason):
 
   | Measure | Result |
   |---|---|
@@ -139,8 +152,23 @@ _Updated: 2026-10-21, after the fifteenth batch: wave 1 of the depth plans (`doc
   the `autohint` shell and over the corpus (target 99.5%), FontBakery over the corpus, and the § 5 measures of
   M6 (but mark attachment), M7 (but names) and M8. The TrueType debugger's end points are tested against the hinted preview's.
 - **Measures that need AFDKO's tools** (tx, makeotf, rotatefont, cffsubr) write temporary files the agent sessions
-  cannot write, so the owner runs them outside the sessions' sandbox. All of them ran for this batch at `601ebf0`;
-  the results are in the baselines table above.
+  cannot write, so the owner runs them outside the sessions' sandbox. They last ran at `601ebf0`; the results are in
+  the baselines table above.
+- **Measures of the sixteenth batch, not yet run** (run them once the gate is green, with the oracles):
+
+  | Package | Measure |
+  |---|---|
+  | M13.65 | `CPAL` version 1 and `COLR` over the 5 corpus COLRv0 sources, compared with ttx |
+  | M10.37 | fontTools decodes every charstring of autohinted compiled CFF fonts |
+  | M2.12 | `GPOS` and `GDEF` against `fontmake --feature-writer KernFeatureWriter --no-generate-GDEF` on 3 sources |
+  | M12.74 | subset of 10 corpus sources, compiled, against the compiled font's subset (`--no-layout-closure`) |
+  | M12.78, M12.36 | page counts against AFDKO's proof tool on Oswald; 20 corpus PDF proofs read back |
+  | M12.69 | tx dumps of the merged font against mergefonts' (needs AFDKO's tools) |
+  | M9.34 | Match Masters on the corpus, target 95%: `cargo test --release -p fontcraft-engine --test engine match_masters:: -- --ignored --nocapture` |
+  | M13.21b | the kerning audit on the corpus, and `GPOS` of variable Inter before and after Match Kerning: `kerning_audit::` in the same binary |
+  | M1.11, X.fix82 | a node drag timed on a large colour UFO with the format warnings on |
+  | M12.75 | SVG fonts against `tx -svg -gn2` |
+  | M12.66 | outline repairs against fontTools' removeOverlaps and checkoutlinesufo |
 - **Decisions:**
   - A trusted ttfautohint binary runs only when it comes from the `export.ttfAutohintBinary` setting or
     `--ttfautohint`. The document cannot name one. This departs from the reference, for safety (the
@@ -346,13 +374,30 @@ _Updated: 2026-10-21, after the fifteenth batch: wave 1 of the depth plans (`doc
     person's own press or the save question drops waiting synthetic input; `ui.resize` clamps to the monitor and
     the GPU's texture size (M13.78, X.fix77). The `ui.set` key names are our own, listed in
     `docs/control-protocol.md` › View switches.
+- **Decisions of the sixteenth batch:**
+  - A source with several masters and an axis compiles to a variable TrueType font unless a static format is asked
+    for, as fontc does; fontmake builds statics (M2.8). The owner has to confirm this.
+  - The CLI's `open` keeps the source's glyph names (`keepGlyphNames`), for parity with fontmake; the window renames
+    to nice names on import unless the setting says otherwise (M1.9).
+  - Overlapping multi-master glyphs are autohinted on their overlap-free outline by default, as otfautohint does
+    (M10.36); every CFF the converter writes takes tx's defaults, which may move the convert measures (M12.70).
+  - Source includes apply only when no feature folder is given (M2.12). Color Palettes of versions 2 and 3 become
+    the version 4 dictionary when `color.generateDarkPalette` runs; the writers write lists back with a loss report
+    (M13.65, M13.65b).
+  - Commands that rebuild shapes renumber hints themselves and the general hint upkeep skips them; mixed PostScript,
+    TrueType and corner hints on a split stay and are unlinked (X.fix78, X.fix79, a guess).
+  - The new window: one audit step per frame (UI.17); Return in a dialog field confirms the dialog (UI.7); fired
+    dialogs open on the Font View selection and runs over the control channel ask no follow-up questions (X.fix84);
+    canvas tools edit the layer the Layers panel shows (X.fix83). Its control server keeps FontCraft's own transport
+    without a token, so MCP attach is unchanged; the suite's server needs a token (see "Waiting on the owner").
 - **New dependencies between crates:** `engine` and `textlayout` depend on `shaping`, `ui-egui` on `io-pdf` (all internal); `hinting` re-exports `ttasm`; `engine` re-exports `fea`. This batch: `engine` depends on `io-pdf` (PDF page sizes), `io-bitmap` (strikes); `render` on `container`, which holds the gzip reader; `textlayout` on `icu_properties` (line breaking); `tables` takes `miniz_oxide` as a dev-dependency. `io-bitmap` depends on `container` for gzip (`.pcf.gz`, `.bdf.gz`). The fourteenth batch: `sha2` is a workspace dependency (the PDF cache key; it was in the lock through lopdf); the desktop app starts the platform's clipboard tools.
 - **New crates and dependencies:** `craft-quit` from the suite's craft-libs, pinned by git commit, with its
   `egui` feature, and its `menu` feature on macOS for the app menu's Quit (M14.3). `crates/shaping` (harfrust), `crates/io-bitmap` (BDF and PCF),
   `crates/io-pdf` (lopdf, with a hand-written reader and rasteriser under limits). `ureq` with rustls serves
   HTTPS downloads in the desktop app only. `craft-print` is a workspace dependency and is not in the
   lock file until M12.36 uses it (that needs network).
-- **Known failures:** none in the gate.
+- **Known failures:** the sixteenth batch's first full test run had 33 failures; X.fix86 fixed the 24 outside the window crates, and the 9 in `crates/ui` and the apps are X.fix87's UI test fixes. The gate has not run. Doubts the integrators left for the test runs: component commands open the new glyph only for a person's run (X.integ72); select lists in dialogs became craft lists (UI.9b), which tests that click their checkboxes may not reach.
+- **New crates and dependencies of the sixteenth batch:** `crates/engine-core` (errors, guard, clock, parameters, settings) and `crates/ui` (the new window), with `apps/fontcraft-next`; the craft-next framework from the suite's craft-libs, pinned by git commit; icu 2.3.0 across the workspace, with the glyph-data comparison against glyphs-reader moved into an excluded crate under `xtask`; `tools` depends on `components` and `pathops`, `proof` on `decompile` (and lopdf), `engine` on `textlayout`, `ui` on `spacing` and `textlayout`; `apps/fontcraft` takes clipboard-win on Windows and objc2-app-kit and objc2-foundation on macOS (X.pdf3); the CLI takes `log`.
 - Test layout: the gate runs the tests with cargo nextest (all test binaries in parallel,
   doctests apart). The command sweep is 16 tests (4 states times 4 chunks, chunked by a stable
   hash of the command id), and one randomised pathops test reserves 8 threads
@@ -488,18 +533,21 @@ linked file is checked against it, and a linked file outside the read root reads
 
 ## Where to start
 
-1. **The owner's check on a Mac, before wave 2.** Pull `master` on the Mac and build the app: macOS was not
-   compiled for wave 1, as it needs the platform SDK. Check with unsaved work: Cmd+Q, the app menu's Quit and the
-   window's close box each ask about every unsaved document and Cancel keeps the window; then File › Open… shows
-   the chooser, and a font file dropped on the window opens. Report a failure as a fix task before wave 2.
-2. **Wave 2 of `docs/plans/depth.md`.** Wave 1 is built (ten packages, gated at `29f2eee`). Wave 2: the builder
-   M8.25 and the writers M12.67 (first), M7.22, M3.23, M13.80, M5.29, M4.18, M3.22, M9.29 and M12.36; integrate in
-   that order. Each package is written out in its milestone plan's section "Depth packages" (`docs/plans/M<n>.md`);
-   built packages say "built" in their headings. Then wave 3 and on, with the builder queue beside the writers. The
-   builder queue is the longest path; measure-only builders (M12.71, M12.72, M12.83, M8.34, M2.11, M10.39) can run
-   in a second lane with their own clone and target directory. Check the disk: build output is large (`cargo clean`
-   or delete the target directory when the disk passes about 75%; incremental builds are off,
-   `CARGO_INCREMENTAL=0`).
+1. **Close the sixteenth batch.** Wait for X.fix87 (UI test fixes), then run the full test suite again
+   (`cargo nextest run --workspace`), fix what fails, run the gate (`cargo xtask ci`), have the batch reviewed, and
+   push once the gate is green. After that, the measures in "State of the tree" › Measures of the sixteenth batch.
+   The owner's builds: on a Mac, wave 1's Cmd+Q, app-menu Quit, File › Open… chooser and drop with unsaved work, and
+   X.pdf3's pasteboard PDF; on Windows, X.pdf3's clipboard PDF.
+2. **Then, in this order** (ROADMAP.md › What to build next, items 2 to 4): the new window's remaining ports
+   (UI.24b, UI.27b, UI.20b, UI.30 wiring this batch's engine packages into the window, the hint badge menu, the
+   X.fix83 and X.fix84 follow-ups) until it reaches parity and the egui window can go; the framework gaps sent to the
+   Craft suite and the framework repinned to `d65336a8`; the engine split from ES.4; and the depth writers left in
+   waves 2 to 11, with the builder queue from M8.25. Each package is written out in its milestone plan's section
+   "Depth packages" (`docs/plans/M<n>.md`). Check the disk: build output is large (`cargo clean` or delete the target
+   directory when the disk passes about 75%; incremental builds are off, `CARGO_INCREMENTAL=0`). Parallel agents
+   that share one check directory across worktrees see false errors: give each its own `CARGO_TARGET_DIR`.
+   The measure-only builders (M12.71, M12.72, M12.83, M8.34, M2.11, M10.39) can run in a second lane with their own
+   clone and target directory.
 3. **Open decisions** (`docs/plans/depth.md` › Open decisions): eight questions for the owner. The packages that
    wait on them sit at the end of the waves (M3.27, M3.28, M3.38, M4.22, M4.23, M5.31, M5.32, M13.72 to M13.77,
    M14.7, M14.8); the auto-spacing and auto-kerning targets do not hold up M13.20b or M13.21c.
@@ -508,7 +556,7 @@ linked file is checked against it, and a linked file outside the read root reads
    against 95% (M13.15c); the rest needs anchor or source hints, and no package is queued. Measure: `cargo test
    --release -p fontcraft-engine --test engine detect:: -- --ignored --nocapture`.
 5. **The close builders, last:** M6.19 (after M6.24), M7.20, M8.24, M9.26, M10.32, M11.20, M12.65, M13.61. The
-   other packages the first plans left are in the waves: M12.36 (wave 2), M13.40 to M13.42 (waves 4 to 6), and
+   other packages the first plans left are in the waves: M12.36 (built), M13.40 to M13.42 (waves 4 to 6), and
    M13.59 in a spare slot of wave 11 or 12. M12.1a to M12.1c are built.
 6. **Follow-up packages the writers named:**
    - TTX: the TrueType `post` table compiled again when a dump lacks it; glyph-order renames in a TTX import into a
@@ -763,7 +811,7 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
   pairs).
 - **6 rows are from memory** (`docs/parity.md` › By source): 3 in `00-…`, 2 in `90-…` and 1 in
   `07-…`. Verify or drop them before implementing.
-- **The reference app has not been run.** 61 rows are `observed`: 56 compiled-output rows
+- **The reference app has not been run.** 62 rows are `observed`: 57 compiled-output rows
   checked against fontc, fontmake and makeotf, and 5 editor rows confirmed by public tutorial videos.
   About 450 open questions are listed at the ends of the notes.
 - **No M3 behaviour has been compared with the reference app.** Tools, panels and dialogs
@@ -818,7 +866,17 @@ standards (O3), the application id (rest of O4), FontLab (O5), platforms (O6). O
 licence; tutorial videos watched by the owner) and so is the repository's home.
 
 Wave 1 needs a build on the Mac: Cmd+Q and the app menu's Quit with unsaved work, the File › Open… chooser and
-dropping a file on the window (see "Where to start", item 1).
+dropping a file on the window (see "Where to start", item 1). X.pdf3 needs the same build on the Mac and one on
+Windows for the clipboard's PDF.
+
+Two questions from the sixteenth batch:
+
+- **The default output of a multi-master source** (M2.8). `compile` on a source with several masters and an axis
+  builds a variable TrueType font unless a static format is asked for, as fontc does; fontmake builds static fonts.
+  Keep fontc's default, or follow fontmake?
+- **The suite's token-authenticated control protocol.** The craft-next control server requires a token; FontCraft's
+  control channel has none, and the new window keeps FontCraft's transport so MCP attach works unchanged. Adopting
+  the suite's protocol changes the protocol and the MCP backend. Adopt it, and when?
 
 MCP and the control channel are unrestricted unless `--automation-read-root` and
 `--automation-write-root` are given, as in the sibling apps (owner's decision).
@@ -1504,3 +1562,15 @@ Append one terse entry per session: what landed, numbers, what is still open.
   it (X.fix73 to X.fix77). Numbers: 926 of 1,009 commands live; feature parity about 37% (37.2, was 36.0; the plan
   expected 38.1); depth packages 10 of 167; round trips and compile output unchanged. Gate: 4,767 tests passed, 0
   failed, 49 skipped. Open: the owner's Mac check, then wave 2.
+- **2026-11-19 and 2026-11-20, the sixteenth batch.** Writers in worktrees without builds, integrators merging in
+  rounds, one check at the end. Landed: 47 writer packages of depth waves 2 to 11 (compile options, CLI common
+  options and listings, subsets, mergefonts, convert and dump extras, PDF proofs, autohint of compiled CFF and CFF2,
+  higher-order interpolation, Match Masters, designspace helpers, Indic positional features, `CPAL` version 1,
+  colour artwork, bitmap commands, External Preview, MCP window tools, nice names, UFOZ save), with M10.37b, M10.37c
+  and M13.65b; ES.1 to ES.3 (`engine-core`, the command registry, extension slots); the craft-next window, UI.1 to
+  UI.29 with five lettered parts; fixes X.fix78 to X.fix85 (hint renumbering, CLI prefixes, Indic languagesystems,
+  format-warning cost, active layer, dialog targets). Integration X.integ26 to X.integ80 and X.inte1; check and
+  clippy clean. First full test run: 5,304 run, 33 failed; X.fix86 fixed 24, X.fix87 takes the 9 UI failures.
+  Numbers: 960 of 1,039 commands live; feature parity about 38% (38.4, was 37.2); depth packages 57 of 167; CLI
+  option coverage 672 of 770. Open: the second test run, the gate, review, push; the measures listed under "State
+  of the tree"; the owner's two questions.
