@@ -14,7 +14,6 @@ use craft::behavior::CanvasView;
 use craft::behavior::kurbo::{Affine, Point, Size};
 use craft::ui::canvas::{Canvas, ToolHost, canvas_space, tool_pass};
 use craft::ui::contract::{Bind, ShowContainer as _};
-use craft::ui::layout_components::Stack;
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::Env;
 use egui::{Color32, FontId, Mesh, Painter, Pos2, Rect, Shape, Stroke, Ui, pos2, vec2};
@@ -138,7 +137,7 @@ pub fn show(ui: &mut Ui, words: &SpaceCenterWords, model: &SpaceCenterModel, tok
     let pad = tokens.label_size;
     let SpacePreview { view, tool } = preview;
     let drag_at = tool.drag_at();
-    let _ = Stack::new().fill().show(ui, |ui, _| {
+    {
         let span = (ui.available_width() - 2.0 * pad).max(pad);
         let rows = rows(model, span);
         let wide = rows.iter().map(|r| r.length as f32 * r.scale).fold(span, f32::max) + 2.0 * pad;
@@ -172,7 +171,7 @@ pub fn show(ui: &mut Ui, words: &SpaceCenterWords, model: &SpaceCenterModel, tok
         if let Some(moved) = reply.and_then(|r| r.view) {
             *view = moved;
         }
-    });
+    }
     // The Space Center's size sets the scale.
     view.zoom = 1.0;
     view.rotation = 0.0;

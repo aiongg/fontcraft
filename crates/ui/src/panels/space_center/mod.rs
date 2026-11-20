@@ -232,6 +232,9 @@ impl DisplayOrder<usize> for Columns<'_> {
 
 impl ItemSource<usize> for Columns<'_> {}
 
+/// Rows the matrix shows before it scrolls; a table with no cap takes all the room and leaves the preview none.
+const MATRIX_ROWS: u16 = 8;
+
 fn matrix(ui: &mut Ui, words: &SpaceCenterWords, model: &SpaceCenterModel, sent: &mut Vec<Msg>) {
     let columns = vec![
         ColumnSpec::new(GLYPH, words.glyph.clone(), ColumnWidth::Content).resizable(),
@@ -244,6 +247,7 @@ fn matrix(ui: &mut Ui, words: &SpaceCenterWords, model: &SpaceCenterModel, sent:
     let mut after = before.clone();
     let rows = &model.columns;
     let _ = Table::<usize>::new(words.matrix.clone(), columns)
+        .max_rows(MATRIX_ROWS)
         .empty(words.empty.clone())
         .striped(true)
         .selection(Bind::bound(&mut after))
