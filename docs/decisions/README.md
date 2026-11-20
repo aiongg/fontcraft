@@ -13,3 +13,4 @@ would change it. Add a page when you make such a choice; never rewrite an old on
 | [0006](0006-fonts-in-the-repository.md) | No compiled fonts in the repository; test fonts in code, real fonts from a pinned corpus | accepted 2026-10-07 |
 | [0007](0007-feature-compiler-and-shaper.md) | fea-rs 1.0.0 behind the `fea` crate, with pre-checks and the guard; harfrust and unicode-bidi in `shaping` | accepted 2026-10-11 |
 | [0008](0008-shared-suite-libraries.md) | The Craft suite's shared libraries, pinned by git commit; craft-atomic adopted, craft-quit, craft-settings, craft-ui and craft-print planned | accepted 2026-10-13 |
+| [0009](0009-framework-gaps-staged-here.md) | Framework pieces craft lacks are built in `crates/craft-ext`, in craft-libs' layout and free of FontCraft code, so they can move there later | accepted 2026-11-20 |

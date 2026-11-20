@@ -1054,11 +1054,12 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
    - Smaller gaps the writers listed: Info box kern values and locks, the Palette's Modules section, Space Center
      drags and arrow nudges, colour glyphs and pinning in Text Preview, the Compare pickers, the Live Audit menu row,
      the TrueType preview address dialog, user settings kept between runs, and the second window's wasm build.
-   - Framework gaps to send to the Craft suite: a text-field hook for syntax colour and error underlines, caret and
-     selection access, an async completer and Up/Down stepping; a press-and-hold flyout; union, intersect and slant
-     icons; open URL and reveal in the file manager; alternate menu rows with their own label and shortcut; an
-     app-level paste event and modifiers on context-menu requests. Then repin the framework from `4bd0107` to the
-     commit that carries the changes the port needs (`d65336a8`).
+   - Framework gaps, built in `crates/craft-ext` in craft-libs' layout so they can move there later (decision
+     0009): a strikethrough list row and edit commands reaching a focused list; a text-field hook for syntax
+     colour and error underlines, caret and selection access, an async completer and Up/Down stepping; a
+     press-and-hold flyout; union, intersect and slant icons; open URL and reveal in the file manager; alternate
+     menu rows with their own label and shortcut; an app-level paste event and modifiers on context-menu
+     requests; a mixed mark on menu entries; a danger tone. The craft pin stays at `4bd0107` for these.
 3. **The engine split, step 4 on.** ES.4 moves the kerning-index and metrics-sync readers outside the spacing crate
    behind its extension and moves the slots with `Session`; the later steps move command areas out of the engine
    crate along command ownership.
