@@ -10,6 +10,8 @@
 use craft::behavior::{EditEvent, Selection};
 use craft::ui::contract::CollectionEvent;
 use craft::ui::runtime::commands::CommandRef;
+use craft_ext::ui::contract::RequestMods as _;
+use egui::Context;
 use serde_json::json;
 
 use crate::app::Msg;
@@ -21,8 +23,9 @@ pub fn selection(model: &FontViewModel) -> Selection<usize> {
     Selection::new(model.selected.clone(), lead, lead)
 }
 
-/// The messages for what the grid or the list reported: `after` is the selection it left, `events` its events.
-pub fn requests<E>(model: &FontViewModel, after: &Selection<usize>, events: &[CollectionEvent<usize, E>], sent: &mut Vec<Msg>) {
+/// The messages for what the grid or the list reported: `after` is the selection it left, `events` its events. `ctx`
+/// gives the modifiers a context menu request was made with: with Alt the glyph menu's swatches colour the layer.
+pub fn requests<E>(ctx: &Context, model: &FontViewModel, after: &Selection<usize>, events: &[CollectionEvent<usize, E>], sent: &mut Vec<Msg>) {
     let names = |rows: &[usize]| rows.iter().filter_map(|&i| model.name(i)).map(str::to_string).collect::<Vec<_>>();
     if after.items != model.selected {
         let mut glyphs = names(&after.items);
@@ -64,7 +67,7 @@ pub fn requests<E>(model: &FontViewModel, after: &Selection<usize>, events: &[Co
                     sent.push(Msg::Shell(CommandRef::with_params("fontView.setSelection", json!({ "glyphs": glyphs }))));
                 }
                 if !glyphs.is_empty() {
-                    let params = json!({ "glyphs": glyphs, "x": request.at.x, "y": request.at.y });
+                    let params = json!({ "glyphs": glyphs, "x": request.at.x, "y": request.at.y, "alt": request.mods(ctx).alt });
                     sent.push(Msg::Shell(CommandRef::with_params("fontView.openGlyphMenu", params)));
                 }
             }

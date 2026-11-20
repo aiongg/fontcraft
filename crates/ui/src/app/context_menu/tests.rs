@@ -153,6 +153,34 @@ fn the_glyph_menu_marks_exports_and_tags_and_its_items_run_their_commands() {
     assert_ne!(many.view.workspace.layout.panel_state(&crate::shell::dock::PanelId::Sidebar), craft::behavior::dock::PanelState::Hidden);
 }
 
+/// A glyph menu opened with Alt held colours the layer each glyph shows in the current master; without Alt the glyph.
+#[test]
+fn the_glyph_menu_opened_with_alt_colours_the_layer() {
+    use crate::panels::context_menu::Pick;
+    use crate::shell::context_menu::glyph_action;
+    use fontcraft_engine::model::ColorLabel;
+
+    let mut app = glyphs_app();
+    app.sent.push(Msg::Shell(CommandRef::with_params("fontView.openGlyphMenu", json!({"glyphs": ["A"], "alt": true}))));
+    app.drain();
+    let menu = app.context_menus.glyph.clone().expect("the glyph menu is open");
+    assert!(menu.alt);
+    let action = glyph_action(&menu, Pick::Color(Some(3))).expect("a swatch acts");
+    assert_eq!(action, GlyphAction::LayerColor(Some(3)));
+    for msg in glyph_menu::steps(&menu, &action) {
+        app.run_now(msg, false).unwrap();
+    }
+    let font = font(&app);
+    let glyph = font.glyph("A").unwrap();
+    assert_eq!(glyph.layer(&font.masters[0].id).unwrap().info.color, Some(ColorLabel::Index(3)));
+    assert_eq!(glyph.info.color, None, "the glyph keeps no colour");
+
+    app.sent.push(Msg::Shell(CommandRef::with_params("fontView.openGlyphMenu", json!({"glyphs": ["A"]}))));
+    app.drain();
+    let plain = app.context_menus.glyph.clone().expect("the glyph menu is open");
+    assert_eq!(glyph_action(&plain, Pick::Color(Some(3))), Some(GlyphAction::Color(Some(3))));
+}
+
 /// While the TrueType Instructor is the active tool the menu ends with its view items, checked as their state is, and
 /// each runs its command; other tools' menus leave them out.
 #[test]

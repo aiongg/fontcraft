@@ -274,6 +274,7 @@ only; each module's doc names the craft file the piece is meant for.
 | `craft_ext::ui::menu::{MarkedEntry, EntryMark, entry_rows}` | a mixed state on `Entry` and a dash mark on `MenuItem` | the glyph menu's Tags: a tag some of the glyphs carry |
 | `craft_ext::ui::menu::{MarkedEntry::danger, danger_icon}` | a danger flag on `Entry` and a danger tone on `MenuItem` | items that remove something: the canvas menu's Delete Guide and hint removals, Remove Filter, the Features sidebar's Delete |
 | `craft_ext::ui::menu::PickMarked` (`pick_marked`) | `Menu::pick` over entries with those states | the Features sidebar and Font View sidebar context menus |
+| `craft_ext::ui::contract::RequestMods` (`mods`, `held_mods`) | a `mods` field on `ContextMenuRequest` | Font View's glyph menu: Alt held at the click makes the swatches colour the layer |
 
 The stand-ins paint over what craft drew, so they cover the plain forms only (a row without icon, toggles or
 indent; a menu row's mark column), and a screen reader hears a mixed menu row as unchecked. A danger row shows the

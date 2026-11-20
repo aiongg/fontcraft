@@ -1,7 +1,7 @@
 //! Font View's glyph menu (`fontView.glyphContextMenu`): a secondary click on a cell or a List View row opens it. A
 //! glyph that is not selected becomes the selection first; on a selected glyph the menu acts on the whole selection.
 //!
-//! It holds the colour swatches (Alt: the colour of the layer shown), the Exports check item
+//! It holds the colour swatches (with Alt held at the click: the colour of the layer shown), the Exports check item
 //! (`glyph.setExport`, no mark when the glyphs differ), the Tags submenu (`fontView.contextMenu.tags`), which ends with
 //! More Tags… when the font has more tags than [`MAX_MENU_TAGS`], and the Copy Glyph Names submenu, whose text goes to
 //! the system clipboard (`app::clipboard`).
@@ -65,6 +65,8 @@ pub struct GlyphMenu {
     pub exports: Mark,
     /// The layer the swatches colour while Alt is held: the one glyph's shown layer, else the current master's.
     pub layer: Option<String>,
+    /// Alt was held when the menu opened: the swatches colour `layer` instead of the glyphs.
+    pub alt: bool,
 }
 
 /// What an item of a glyph menu does.
@@ -106,6 +108,7 @@ pub fn open(app: &FontCraftApp, glyphs: &[String], screen: [f32; 2]) -> GlyphMen
         screen,
         layer: menu_layer(app, font, &glyphs),
         glyphs,
+        alt: false,
     }
 }
 

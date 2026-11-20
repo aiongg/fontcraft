@@ -5,7 +5,7 @@
 //! | `contextMenu.open {x, y, space?, alt?}` | opens the canvas menu at a point, as a secondary click does (`app::context_menu`) |
 //! | `contextMenu.invoke {command}` | runs an item of the open canvas menu, as a click on it does |
 //! | `contextMenu.close` | closes the open menus |
-//! | `fontView.openGlyphMenu {glyphs, x?, y?}` | opens Font View's glyph menu on these glyphs |
+//! | `fontView.openGlyphMenu {glyphs, x?, y?, alt?}` | opens Font View's glyph menu on these glyphs; with `alt` its swatches colour the layer |
 //! | `fontView.showTags` | shows the sidebar, whose glyph inspector holds the Tags field (the glyph menu's More Tags…) |
 //!
 //! [`show`] runs every pass from the window's body: it hands clipboard text to the window, takes the clipboard's text
@@ -54,7 +54,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Open Glyph Menu",
         menu: &[],
         shortcut: None,
-        params: "{glyphs: [names], x?: number, y?: number} open Font View's glyph context menu on these glyphs at this window point",
+        params: "{glyphs: [names], x?: number, y?: number, alt?: bool (Alt held at the click: the swatches set the layer colour instead of the glyph colour)} open Font View's glyph context menu on these glyphs at this window point",
     },
     UiCommand {
         id: SHOW_TAGS,
@@ -105,7 +105,8 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
             if at.iter().any(|v| v.abs() > menus::MAX_COORDINATE) {
                 return Err(format!("`x` and `y` are at most {} either way", menus::MAX_COORDINATE));
             }
-            let menu = glyph_menu::open(app, &glyphs, [at[0] as f32, at[1] as f32]);
+            let mut menu = glyph_menu::open(app, &glyphs, [at[0] as f32, at[1] as f32]);
+            menu.alt = p.get("alt").and_then(Value::as_bool).unwrap_or(false);
             if menu.glyphs.is_empty() {
                 return Err("none of these glyphs is in the font".into());
             }
@@ -154,17 +155,22 @@ pub fn show(ui: &mut Ui, cx: &mut BodyCx<'_>, app: &mut FontCraftApp) {
         if !answer.open {
             app.context_menus.glyph = None;
         }
-        let action = match answer.picked {
-            Some(Pick::Color(c)) => Some(GlyphAction::Color(c)),
-            Some(Pick::Export) => Some(GlyphAction::Export),
-            Some(Pick::Tag(tag)) => Some(GlyphAction::Tag(tag)),
-            Some(Pick::MoreTags) => Some(GlyphAction::MoreTags),
-            Some(Pick::CopyNames(format)) => Some(GlyphAction::CopyNames(format)),
-            Some(Pick::Item(_)) | None => None,
-        };
-        if let Some(action) = action {
+        if let Some(action) = answer.picked.and_then(|pick| glyph_action(&menu, pick)) {
             app.sent.extend(glyph_menu::steps(&menu, &action));
         }
+    }
+}
+
+/// What a pick in the glyph menu does: a swatch colours the glyphs, or their layer when Alt was held at the click.
+pub(crate) fn glyph_action(menu: &glyph_menu::GlyphMenu, pick: Pick) -> Option<GlyphAction> {
+    match pick {
+        Pick::Color(c) if menu.alt => Some(GlyphAction::LayerColor(c)),
+        Pick::Color(c) => Some(GlyphAction::Color(c)),
+        Pick::Export => Some(GlyphAction::Export),
+        Pick::Tag(tag) => Some(GlyphAction::Tag(tag)),
+        Pick::MoreTags => Some(GlyphAction::MoreTags),
+        Pick::CopyNames(format) => Some(GlyphAction::CopyNames(format)),
+        Pick::Item(_) => None,
     }
 }
 

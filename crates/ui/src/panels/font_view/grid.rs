@@ -82,5 +82,5 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, sent: &mut Vec<Msg>) {
             }
             tile
         });
-    keys::requests(model, &selection, &out.response.events, sent);
+    keys::requests(ui.ctx(), model, &selection, &out.response.events, sent);
 }

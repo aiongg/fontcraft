@@ -165,10 +165,10 @@ label = "Open Glyph Menu"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{glyphs: [names], x?: number, y?: number}"
+params = "{glyphs: [names], x?: number, y?: number, alt?: bool}"
 area = "font-view"
 milestone = "M4"
-summary = "Our headless equivalent of a secondary click on a Font View cell or row: opens the glyph context menu on these glyphs at a window point."
+summary = "Our headless equivalent of a secondary click on a Font View cell or row: opens the glyph context menu on these glyphs at a window point. With alt, as with Alt held at the click, the swatches set the layer colour."
 ref = "Font View › Glyph Properties"
 status = "inferred"
 own = true
@@ -1160,6 +1160,7 @@ guesses = [
   "A right-click on a glyph that is not selected selects it alone first; on a selected glyph the menu acts on the whole selection. Settled by observation.",
   "The items come in this order: the colour swatches under a caption (Glyph Color, or Layer Color with Alt), then Tags, then Copy Glyph Names. Settled by observation.",
   "With Alt held the swatches set the layer colour of Font View's master. Settled by observation.",
+  "Alt counts when it is held at the click that opens the menu; pressing or releasing it while the menu is open changes nothing, where native macOS menus swap their alternate items live. Settled by observation.",
   "The swatches sit in a Glyph Color submenu, Exports follows them, then Tags and Copy Glyph Names. Settled by observation.",
   "Exports shows no mark when only some of the glyphs export, and choosing it then makes them all export; with all exporting it turns export off. Settled by observation.",
   "Exports is in this menu as the Glyphs 3 video shows it in the canvas menu. Settled by observation.",

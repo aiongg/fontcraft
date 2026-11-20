@@ -111,3 +111,16 @@ fn a_destructive_item_runs_like_any_other() {
     fixture.click(&delete).settle();
     assert!(answers.borrow().iter().any(|a| a.picked == Some(Pick::Item("guide.remove"))), "{:?}", answers.borrow().last());
 }
+
+/// The glyph menu opened with Alt held captions its swatches Layer Color.
+#[test]
+fn the_glyph_menu_opened_with_alt_captions_its_swatches_layer_color() {
+    let menu = GlyphMenu { glyphs: vec!["a".into()], screen: [40.0, 40.0], alt: true, ..GlyphMenu::default() };
+    let mut fixture = Fixture::new(move |ui| {
+        let opener = ui.response();
+        let _ = glyph_menu(ui, &opener, &menu);
+    });
+    fixture.settle();
+    assert!(fixture.by_label("Layer Color").is_some());
+    assert!(fixture.by_label("Glyph Color").is_none());
+}

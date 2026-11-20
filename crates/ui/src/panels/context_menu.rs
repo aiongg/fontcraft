@@ -5,7 +5,7 @@
 //! Both menus hang from the point they were opened at. The canvas menu's sections are split by rules; its glyph
 //! section starts with the colour swatches (Glyph Color, or Layer Color when Alt was held at the click) and the menu
 //! ends with Copy Glyph Names. Items that remove something (Delete Guide, the hint removals) show the danger tone
-//! (`craft_ext::ui::menu::danger_icon`). The glyph menu holds the swatches, Exports, Tags (ending with More Tags… past
+//! (`craft_ext::ui::menu::danger_icon`). The glyph menu holds the swatches (Layer Color when Alt was held at the click), Exports, Tags (ending with More Tags… past
 //! `MAX_MENU_TAGS`) and Copy Glyph Names. A tag carries a check when every glyph has it and a dash when some do.
 
 use craft::theme::Srgba;
@@ -149,7 +149,8 @@ pub fn glyph_menu(ui: &mut Ui, opener: &Response, menu: &GlyphMenu) -> Answer {
         .anchor(Anchor::Point(at))
         .open(Bind::bound(&mut open))
         .show(ui, |ui, _| {
-            let mut picked = swatches(ui, words.glyph_color.clone(), &words);
+            let caption = if menu.alt { words.layer_color.clone() } else { words.glyph_color.clone() };
+            let mut picked = swatches(ui, caption, &words);
             let exports = [Entry::new((), words.exports.clone()).checked(menu.exports == Mark::All)];
             if entry_rows(ui, &exports).is_some() {
                 picked = picked.or(Some(Pick::Export));
