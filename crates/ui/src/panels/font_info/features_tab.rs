@@ -39,6 +39,7 @@ use craft::ui::runtime::env::{Env, Label};
 use craft::ui::style::TypeRole;
 use craft::ui::text::TextField;
 use craft_ext::ui::list::{CollectionEdits as _, EditCommand, Strike, StrikeRows as _};
+use craft_ext::ui::menu::{MarkedEntry, PickMarked as _};
 use egui::Ui;
 use fontcraft_engine::model::{DEFAULT_LANGUAGE, LANGUAGES};
 use serde_json::{Value, json};
@@ -144,7 +145,7 @@ fn row_of<'a>(model: &'a FeaturesModel, key: &EntryKey) -> Option<&'a EntryRow> 
 /// The context menu's items for the selected entries of `model`, opened from the group of `kind`. Disable while any
 /// selected entry is enabled, else Enable; Update Entry for an automatic last-selected entry; Rename for one selected
 /// entry of this group.
-fn menu_entries(model: &FeaturesModel, kind: EntryKind, words: &FeaturesWords) -> Vec<Entry<MenuItem>> {
+fn menu_entries(model: &FeaturesModel, kind: EntryKind, words: &FeaturesWords) -> Vec<MarkedEntry<MenuItem>> {
     let some = !model.selected.is_empty();
     let any_enabled = model.selected.iter().any(|k| row_of(model, k).is_some_and(|r| !r.disabled));
     let toggle =
@@ -155,12 +156,12 @@ fn menu_entries(model: &FeaturesModel, kind: EntryKind, words: &FeaturesWords) -
     let rename = Entry::new(MenuItem::Rename, words.rename.clone());
     let with = |entry: Entry<MenuItem>, on: bool, why: &Label| if on { entry } else { entry.disabled_reason(why.clone()) };
     vec![
-        with(toggle, some, &words.nothing_selected),
-        with(update, lead_automatic, &words.not_automatic),
-        with(rename, one, &words.one_entry),
-        with(Entry::new(MenuItem::Copy, words.copy.clone()), some, &words.nothing_selected),
-        Entry::new(MenuItem::Paste, words.paste.clone()),
-        with(Entry::new(MenuItem::Delete, words.delete.clone()), some, &words.nothing_selected),
+        with(toggle, some, &words.nothing_selected).into(),
+        with(update, lead_automatic, &words.not_automatic).into(),
+        with(rename, one, &words.one_entry).into(),
+        with(Entry::new(MenuItem::Copy, words.copy.clone()), some, &words.nothing_selected).into(),
+        Entry::new(MenuItem::Paste, words.paste.clone()).into(),
+        MarkedEntry::new(with(Entry::new(MenuItem::Delete, words.delete.clone()), some, &words.nothing_selected)).danger(true),
     ]
 }
 
@@ -310,7 +311,7 @@ fn sidebar_group(ui: &mut Ui, model: &FeaturesModel, group: &GroupModel, words: 
             }
         }
         let menu = Menu::context(words.entry_menu.clone(), &out.response).id_salt((kind.name(), "entryMenu"));
-        match menu.pick(ui, &menu_entries(model, kind, words)).picked {
+        match menu.pick_marked(ui, &menu_entries(model, kind, words)).picked {
             Some(MenuItem::Disable) => {
                 posted.push(Msg::run("font.features.setDisabled", json!({ "entries": entries_param(model), "disabled": true })))
             }

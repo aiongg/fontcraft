@@ -810,7 +810,7 @@ summary = "Edit View context-menu toggle that shows or hides the blue (unhinted 
 ref = "TrueType Hinting › Hinting Outlines"
 status = "handbook"
 guesses = ["The toggle hides only the blue and red outlines, as the handbook says; the pixel backdrop stays while the Instructor is active. Choosing an instance turns the preview on. The reference app would settle whether the backdrop goes with the outlines."]
-notes = "M10.26, crates/ui-egui/src/canvas/tt_pixels.rs: {on?: bool, instance?: name or #n or \"master\"}; the outlines are on when the Instructor starts. The canvas context menu offers it, checked while the outlines show, in its Instructor section (shell/context_menu.rs). Documented, not yet observed."
+notes = "M10.26, crates/ui-egui/src/canvas/tt_pixels.rs: {on?: bool, instance?: name or #n or \"master\"}; the outlines are on when the Instructor starts. The canvas context menu offers it, checked while the outlines show, in its Instructor section (shell/context_menu.rs; `app/context_menu` in `crates/ui`). Documented, not yet observed."
 
 [[command]]
 id = "hint.tt.setRenderingIntent"

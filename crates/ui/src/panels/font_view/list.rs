@@ -116,7 +116,7 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, sent: &mut Vec<Msg>) {
             }
             list_row
         });
-    keys::requests(model, &selection, &out.events, sent);
+    keys::requests(ui.ctx(), model, &selection, &out.events, sent);
     for event in &out.events {
         if let CollectionEvent::Column(change) = event {
             column_request(model, change, sent);

@@ -13,7 +13,9 @@
 //! The text area reports its line length and the lines in view (`ViewMsg::TextPreviewArea`) when they leave what the
 //! projection placed; the projection (`app::models::text_preview`) lays the text out, shapes it and places the
 //! glyphs. The area fills the glyphs in view into one texture, drawn again only when what shows changes; a glyph with
-//! a colour drawing in the page (`Page::colors`) draws in colour through `canvas::color::paint` instead.
+//! a colour drawing from the compiled colour font (`Page::colors`) is laid onto that texture in place of its outline,
+//! its origin on a whole pixel. The area also reports the window's pixels per point and the text colour, which the
+//! colour drawings are made with.
 
 use craft::theme::{Rgba, Srgba};
 use craft::ui::buttons::{Button, ToggleButton};
@@ -29,13 +31,13 @@ use craft::ui::runtime::env::{Env, Label};
 use craft::ui::text::TextField;
 use egui::{Align2, Color32, ColorImage, FontId, Pos2, Rect, Sense, TextureOptions, Ui, pos2, vec2};
 use fontcraft_geom::{Affine, BezPath};
+use fontcraft_render::color::composite;
 use fontcraft_render::{Style, render_path};
 use serde_json::{Value, json};
 
 use super::widgets;
 use crate::app::models::text_preview::{Page, PageDirection, PageGlyph, TextPreviewModel};
 use crate::app::{Msg, ViewMsg};
-use crate::canvas::color::{TEXT as COLOR_TEXT, paint};
 use crate::shell::text_preview::{Area, BaseDirection, FIELD_LIMIT, MAX_QUERY_CHARS, Matching, Orientation, SIZE_RANGE, grouped};
 
 /// Rows of the text field.
@@ -251,8 +253,10 @@ fn area(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, sent: &
     let vertical = model.orientation == Orientation::Vertical;
     let span = if vertical { size.y } else { size.x } - 3.0 * pad;
     let span = ((span / SPAN_STEP).floor() * SPAN_STEP).max(SPAN_STEP) as u32;
+    let ppp = ui.ctx().pixels_per_point().to_bits();
+    let ink_rgba = color(ink).to_srgba_unmultiplied();
     let Some(page) = model.page.as_deref() else {
-        report(model, Area { span, first: 0, last: 0 }, sent);
+        report(model, Area { span, first: 0, last: 0, ppp, ink: ink_rgba }, sent);
         return;
     };
     let scale = page.scale as f32;
@@ -297,9 +301,9 @@ fn area(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, sent: &
         context_menu(ui, model, words, &response, sent);
     });
     if let Some((first, last)) = seen {
-        let wanted = Area { span, first, last };
+        let wanted = Area { span, first, last, ppp, ink: ink_rgba };
         let covered = page.placed.start <= first && last <= page.placed.end;
-        if span != model.area.span || !covered {
+        if span != model.area.span || ppp != model.area.ppp || ink_rgba != model.area.ink || !covered {
             report(model, wanted, sent);
         }
     }
@@ -308,23 +312,28 @@ fn area(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, sent: &
 /// Posts the area when it differs from what the projection read, so an area the projection cannot cover is not
 /// posted on every frame.
 fn report(model: &TextPreviewModel, area: Area, sent: &mut Vec<Msg>) {
-    if area != model.area && (area.span != model.area.span || area.last > 0) {
+    let moved = area.span != model.area.span || area.ppp != model.area.ppp || area.ink != model.area.ink;
+    if area != model.area && (moved || area.last > 0) {
         sent.push(Msg::View(ViewMsg::TextPreviewArea(area)));
     }
 }
 
-/// Fills the outlines of the glyphs on `lines` into one texture of the area in view.
+/// Fills the outlines of the glyphs on `lines` into one texture of the area in view, with the colour glyphs laid over
+/// it in place of their outlines.
 fn fill(ui: &Ui, page: &Page, place: Placement, clip: Rect, lines: &std::ops::Range<usize>, ink: Rgba) {
     let ppp = ui.ctx().pixels_per_point();
     let (w, h) = ((clip.width() * ppp).round(), (clip.height() * ppp).round());
     if !(w >= 1.0 && h >= 1.0) {
         return;
     }
+    // Drawings made at another pixel size wait for the projection to make them again.
+    let sized = (page.colors.pixel_scale - f64::from(place.scale) * f64::from(ppp)).abs() <= 1e-9 * page.colors.pixel_scale.abs().max(1.0);
+    let in_color = |g: &PageGlyph| sized && matches!(page.colors.rasters.get(&g.name), Some(Some(_)));
     let bits = [place.ax, place.ay, place.scale, clip.min.x, clip.min.y, w, h, ppp].map(f32::to_bits);
     let key = ("fontcraftTextPreview", page.key, page.outlines.id, page.colors.id, lines.start, lines.end, bits, ink.0);
     let image = || {
         let mut outline = BezPath::new();
-        for g in page.glyphs.iter().filter(|g| lines.contains(&g.line) && !in_color(page, g)) {
+        for g in page.glyphs.iter().filter(|g| lines.contains(&g.line) && !in_color(g)) {
             if let Some(path) = page.outlines.paths.get(&g.name) {
                 let mut glyph = path.clone();
                 glyph.apply_affine(Affine::translate((g.x, g.y)));
@@ -334,7 +343,17 @@ fn fill(ui: &Ui, page: &Page, place: Placement, clip: Rect, lines: &std::ops::Ra
         let to_pixels = Affine::scale(f64::from(ppp)) * Affine::translate((-f64::from(clip.min.x), -f64::from(clip.min.y))) * place.affine();
         let style = Style { ink: ink.0, background: [0, 0, 0, 0], anti_alias: true };
         match render_path(&outline, to_pixels, w as u32, h as u32, &style) {
-            Ok(image) => ColorImage::from_rgba_premultiplied([w as usize, h as usize], &image.pixels),
+            Ok(mut image) => {
+                for g in page.glyphs.iter().filter(|g| lines.contains(&g.line) && in_color(g)) {
+                    if let Some(Some(raster)) = page.colors.rasters.get(&g.name) {
+                        let at = place.screen(g.x, g.y);
+                        let x = (f64::from(at.x - clip.min.x) * f64::from(ppp)).round() as i64;
+                        let y = (f64::from(at.y - clip.min.y) * f64::from(ppp)).round() as i64;
+                        composite(&mut image, raster, x, y);
+                    }
+                }
+                ColorImage::from_rgba_premultiplied([w as usize, h as usize], &image.pixels)
+            }
             Err(_) => ColorImage::filled([1, 1], Color32::TRANSPARENT),
         }
     };
@@ -342,17 +361,6 @@ fn fill(ui: &Ui, page: &Page, place: Placement, clip: Rect, lines: &std::ops::Ra
     // White is the identity tint: the texture's own colours show.
     let painter = ui.painter_at(clip);
     painter.image(texture, clip, Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0)), Color32::WHITE);
-    // The colour glyphs over the outlines, each from its own texture (`canvas::color::paint`).
-    for g in page.glyphs.iter().filter(|g| lines.contains(&g.line)) {
-        if let Some(Some(art)) = page.colors.arts.get(&g.name) {
-            paint::draw(&painter, art, place.affine() * Affine::translate((g.x, g.y)), COLOR_TEXT);
-        }
-    }
-}
-
-/// Whether `g` draws in colour instead of as its outline.
-fn in_color(page: &Page, g: &PageGlyph) -> bool {
-    matches!(page.colors.arts.get(&g.name), Some(Some(_)))
 }
 
 fn context_menu(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, response: &egui::Response, sent: &mut Vec<Msg>) {

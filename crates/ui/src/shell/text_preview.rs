@@ -240,6 +240,10 @@ pub struct Area {
     /// The first line in view and the one after the last.
     pub first: usize,
     pub last: usize,
+    /// The window's pixels per point, as `f32` bits: the size colour glyphs are drawn at.
+    pub ppp: u32,
+    /// The text colour as straight sRGB RGBA: the colour of `CPAL` palette index 65,535.
+    pub ink: [u8; 4],
 }
 
 impl Default for TextPreviewState {

@@ -4,12 +4,16 @@ use craft::ui::contract::{PlainData, Tracked};
 use serde_json::{Value, json};
 
 use super::ProjectCx;
+use crate::shell::masters;
 
-/// The shown glyph's metrics in the default master, as `spacing.getMetrics` reports them.
+/// The shown glyph's metrics in the layer it shows (the Layers panel's pick, else its layer of the current master), as
+/// `spacing.getMetrics` reports them.
 #[derive(PlainData, Clone, Debug, Default, PartialEq)]
 pub struct GlyphMetrics {
     /// The glyph's name; `None` without an open document or glyph.
     pub glyph: Option<String>,
+    /// The id of the layer the values are read from and edits go to; `None` leaves the choice to the commands.
+    pub layer: Option<String>,
     pub width: Option<f64>,
     /// `None` for an empty layer.
     pub left: Option<f64>,
@@ -31,7 +35,15 @@ pub fn project(model: &mut Tracked<GlyphMetrics>, cx: &mut ProjectCx<'_>) {
         super::set(model, GlyphMetrics::default());
         return;
     };
-    let reply = cx.session.query("spacing.getMetrics", &json!({ "glyph": glyph })).unwrap_or(Value::Null);
+    let layer = cx.session.font().ok().and_then(|font| {
+        let shown = font.glyph(&glyph)?;
+        masters::shown_layer(font, &cx.view.layers, shown).map(|l| l.id.clone())
+    });
+    let mut params = json!({ "glyph": glyph });
+    if let Some(id) = &layer {
+        params["layer"] = json!(id);
+    }
+    let reply = cx.session.query("spacing.getMetrics", &params).unwrap_or(Value::Null);
     let number = |key: &str| reply.get(key).and_then(Value::as_f64).filter(|v| v.is_finite());
-    super::set(model, GlyphMetrics { width: number("width"), left: number("left"), right: number("right"), glyph: Some(glyph) });
+    super::set(model, GlyphMetrics { width: number("width"), left: number("left"), right: number("right"), glyph: Some(glyph), layer });
 }

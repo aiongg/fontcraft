@@ -61,6 +61,7 @@ pub const MODULES: &[Module] = &[
     super::table_viewer::MODULE,
     super::compare_fonts::MODULE,
     super::compare_family::MODULE,
+    super::compare_in_list::MODULE,
     super::overlays::MODULE,
     super::text_preview::MODULE,
     crate::canvas::hinting::commands::MODULE,

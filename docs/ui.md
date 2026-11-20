@@ -106,13 +106,14 @@ rules for what a typed text sets: a number, a key, or for an emptied field the c
 
 | Message | Use |
 |---|---|
-| `Msg::run("spacing.setWidth", json!({"glyphs": [name], "value": 640}))` | an engine command; one undo step |
+| `Msg::run("spacing.setWidth", json!({"glyphs": [name], "layer": layer, "value": 640}))` | an engine command; one undo step |
 | `Msg::Shell(CommandRef::with_params("window.togglePanel", json!({"panel": "layers"})))` | a shell command |
 | `Msg::View(ViewMsg::SelectGlyph(name))` | view state that is no command |
 | `Msg::Preview(Preview::Begin(label))`, `Update(command)`, `Commit`, `Cancel` | an interaction: previews on a snapshot that end as one undo step or as nothing |
 | `Msg::Tool(ToolInput::Pointer(event))` | input for the canvas tools, in the edited glyph's font units |
 
-Commands take explicit targets in their parameters. Post on commit (`events.committed()`), not on
+Commands take explicit targets in their parameters: the glyph and the layer it shows, never the first master by
+default (`shell::masters::current_master` and `shown_layer` give the master and layer the window shows). Post on commit (`events.committed()`), not on
 every keystroke. Menu rows, keys and the tool rail fire commands through the same catalog; a
 fired command becomes one of these messages in `FontCraftApp::output`.
 
@@ -126,7 +127,7 @@ is on in dev-dependencies). Build the model, show the view, act as the user, and
 messages:
 
 ```rust
-let model = Tracked::new(GlyphMetrics { glyph: Some("A".into()), width: Some(600.0), ..Default::default() });
+let model = Tracked::new(GlyphMetrics { glyph: Some("A".into()), layer: Some("m02".into()), width: Some(600.0), ..Default::default() });
 let posted = Rc::new(RefCell::new(Vec::new()));
 let seen = Rc::clone(&posted);
 let mut fixture = Fixture::new(move |ui| {
@@ -137,7 +138,7 @@ let mut fixture = Fixture::new(move |ui| {
 fixture.settle();
 let width = fixture.by_label("Width").expect("the Width field");
 fixture.click(&width).key(Key::A, Modifiers::COMMAND).type_text("640").key(Key::Enter, Modifiers::NONE).settle();
-assert_eq!(*posted.borrow(), vec![Msg::run("spacing.setWidth", json!({"glyphs": ["A"], "value": 640.0}))]);
+assert_eq!(*posted.borrow(), vec![Msg::run("spacing.setWidth", json!({"glyphs": ["A"], "layer": "m02", "value": 640.0}))]);
 ```
 
 Find controls by their label or role, never by position or size. App-layer behaviour (a message
@@ -272,9 +273,14 @@ only; each module's doc names the craft file the piece is meant for.
 | `craft_ext::ui::list::StrikeRows` (`strike_rows`, `Strike`) | a struck `RowInk` on `ListRow` | Font Info › Features: a disabled entry is struck through |
 | `craft_ext::ui::list::CollectionEdits` (`edit_commands`), `deliver` | a collection taking `Intent::Edit` (`CollectionEvent::Edit`) | the Features sidebar's lists take Copy, Paste and Select All; `app::clipboard::to_focused_list` hands the fired Edit command to them |
 | `craft_ext::ui::menu::{MarkedEntry, EntryMark, entry_rows}` | a mixed state on `Entry` and a dash mark on `MenuItem` | the glyph menu's Tags: a tag some of the glyphs carry |
+| `craft_ext::ui::menu::{MarkedEntry::danger, danger_icon}` | a danger flag on `Entry` and a danger tone on `MenuItem` | items that remove something: the canvas menu's Delete Guide and hint removals, Remove Filter, the Features sidebar's Delete |
+| `craft_ext::ui::menu::PickMarked` (`pick_marked`) | `Menu::pick` over entries with those states | the Features sidebar and Font View sidebar context menus |
+| `craft_ext::ui::contract::RequestMods` (`mods`, `held_mods`) | a `mods` field on `ContextMenuRequest` | Font View's glyph menu: Alt held at the click makes the swatches colour the layer |
 
 The stand-ins paint over what craft drew, so they cover the plain forms only (a row without icon, toggles or
-indent; a menu row's mark column), and a screen reader hears a mixed menu row as unchecked. An Edit command reaches
+indent; a menu row's mark column), and a screen reader hears a mixed menu row as unchecked. A danger row shows the
+tone on its icon only (the label keeps its ink). Dialog buttons take craft's own danger look:
+`DialogRole::Destructive` on a `FooterButton`, `Variant::DANGER` on a `Button`. An Edit command reaches
 the focused list one pass after it fired.
 
 ## Forbidden in UI code

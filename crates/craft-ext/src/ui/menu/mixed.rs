@@ -14,6 +14,8 @@ use craft::ui::runtime::env::Env;
 use craft::ui::style::StyleCx;
 use egui::{Color32, Pos2, Rect, Stroke, Ui, Vec2};
 
+use super::danger_icon;
+
 /// The share of the mark's side the dash spans, as craft's check box dash.
 const DASH: f32 = 0.5;
 
@@ -46,13 +48,14 @@ impl EntryMark {
 pub struct MarkedEntry<T> {
     entry: Entry<T>,
     mark: EntryMark,
+    danger: bool,
 }
 
 impl<T> MarkedEntry<T> {
     /// `entry` with the mark its checked state gives it.
     pub fn new(entry: Entry<T>) -> Self {
         let mark = if entry.is_checked() { EntryMark::Checked } else { EntryMark::Unchecked };
-        MarkedEntry { entry, mark }
+        MarkedEntry { entry, mark, danger: false }
     }
 
     /// The entry carries `mark`.
@@ -61,6 +64,18 @@ impl<T> MarkedEntry<T> {
         self.entry = self.entry.checked(mark == EntryMark::Checked);
         self.mark = mark;
         self
+    }
+
+    /// The entry's command destroys something: the row shows the danger tone ([`super::danger_icon`]).
+    #[must_use]
+    pub fn danger(mut self, on: bool) -> Self {
+        self.danger = on;
+        self
+    }
+
+    /// Whether the row shows the danger tone.
+    pub fn is_danger(&self) -> bool {
+        self.danger
     }
 
     /// The entry it wraps.
@@ -98,12 +113,13 @@ pub fn mixed_dash(row: Rect, pad: f32, side: f32, rtl: bool) -> Option<[Pos2; 2]
 }
 
 /// [`craft::ui::menu::entry_rows`] over marked entries: one row per entry, a caption for a heading, a rule for a
-/// separator; a checked entry carries the check and a mixed one the dash. Returns the index of the entry that ran.
+/// separator; a checked entry carries the check, a mixed one the dash, and a danger one the danger tone. Returns the
+/// index of the entry that ran.
 pub fn entry_rows<T>(ui: &mut Ui, entries: &[MarkedEntry<T>]) -> Option<usize> {
     let mut ran = None;
     for (at, marked) in entries.iter().enumerate() {
-        let picked = if marked.mark == EntryMark::Mixed && marked.entry.is_item() {
-            mixed_row(ui, &marked.entry)
+        let picked = if (marked.mark == EntryMark::Mixed || marked.danger) && marked.entry.is_item() {
+            marked_row(ui, marked)
         } else {
             craft_entry_rows(ui, std::slice::from_ref(&marked.entry)).is_some()
         };
@@ -114,16 +130,29 @@ pub fn entry_rows<T>(ui: &mut Ui, entries: &[MarkedEntry<T>]) -> Option<usize> {
     ran
 }
 
-/// Shows `entry` as a row that keeps its mark column empty, paints the dash there, and returns whether it ran.
-fn mixed_row<T>(ui: &mut Ui, entry: &Entry<T>) -> bool {
-    let mut row = MenuItem::new(entry.label().clone()).enabled(entry.is_enabled()).check(false);
-    if let Some(icon) = entry.icon_spec() {
+/// Shows a mixed or danger entry as a row of its own and returns whether it ran. A mixed row keeps its mark column
+/// empty and paints the dash there; a danger row carries the danger icon.
+fn marked_row<T>(ui: &mut Ui, marked: &MarkedEntry<T>) -> bool {
+    let entry = &marked.entry;
+    let mixed = marked.mark == EntryMark::Mixed;
+    let mut row = MenuItem::new(entry.label().clone()).enabled(entry.is_enabled());
+    row = match marked.mark {
+        EntryMark::Mixed => row.check(false),
+        EntryMark::Checked => row.check(true),
+        EntryMark::Unchecked => row,
+    };
+    if marked.danger {
+        row = row.icon(danger_icon(ui, entry.is_enabled(), entry.icon_spec()));
+    } else if let Some(icon) = entry.icon_spec() {
         row = row.icon(icon.clone());
     }
     if let Some(reason) = entry.why_disabled() {
         row = row.description(reason.as_str()).tooltip(TooltipSpec::new(reason.clone()).disabled_text(reason.clone()));
     }
     let shown = row.show(ui);
+    if !mixed {
+        return shown.ran;
+    }
     let env = Env::of(ui);
     let cx = StyleCx::of_env(ui.ctx(), &env);
     let text = &env.tokens.color.text;

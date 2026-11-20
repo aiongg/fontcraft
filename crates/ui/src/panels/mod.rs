@@ -5,6 +5,7 @@ pub mod attributes;
 pub mod command_console;
 pub mod compare_family;
 pub mod compare_fonts;
+pub mod compare_in_list;
 pub mod context_menu;
 pub mod features_menu;
 pub mod fit_curve;

@@ -370,7 +370,7 @@ impl StackDialog for ProfileDialog {
         let read_only = self.draft.read_only;
         let saved = self.draft.original.is_some();
         let duplicate = FooterButton::new(words.duplicate.clone(), DialogRole::Other);
-        let delete = FooterButton::new(words.delete.clone(), DialogRole::Other).enabled(saved);
+        let delete = FooterButton::new(words.delete.clone(), DialogRole::Destructive).enabled(saved);
         let ProfileDialog { draft, open, .. } = self;
         let mut value = false;
         let shown = FormDialog::new(words.title.clone(), Bind::bound(&mut value))

@@ -7,7 +7,7 @@ use craft::ui::testing::Fixture;
 
 use super::{Answer, Pick, canvas_menu, glyph_menu};
 use crate::app::context_menu::glyph_menu::{GlyphMenu, Mark};
-use crate::app::context_menu::{CANVAS, CanvasMenu, ContextItem, NODE, Section};
+use crate::app::context_menu::{CANVAS, CanvasMenu, ContextItem, GUIDE, NODE, Section};
 
 fn item(command: &'static str, label: &'static str, enabled: bool) -> ContextItem {
     ContextItem {
@@ -86,4 +86,41 @@ fn a_tag_some_glyphs_carry_shows_the_mixed_mark() {
     let alternate = fixture.by_label("alternate").expect("the mixed tag");
     fixture.click(&alternate).settle();
     assert!(answers.borrow().iter().any(|a| a.picked == Some(Pick::Tag("alternate".into()))), "{:?}", answers.borrow().last());
+}
+
+/// Delete Guide is one of the items that show the danger tone; its row still runs as a plain one does.
+#[test]
+fn a_destructive_item_runs_like_any_other() {
+    assert!(crate::app::context_menu::DESTRUCTIVE.contains(&"guide.remove"));
+    let menu = CanvasMenu {
+        glyph: "A".into(),
+        screen: [40.0, 40.0],
+        at: [300.0, 300.0],
+        hit: None,
+        sections: vec![Section { context: GUIDE, items: vec![item("guide.lock", "Lock Guide", true), item("guide.remove", "Delete Guide", true)] }],
+        alt: false,
+    };
+    let answers = Rc::new(RefCell::new(Vec::<Answer>::new()));
+    let seen = Rc::clone(&answers);
+    let mut fixture = Fixture::new(move |ui| {
+        let opener = ui.response();
+        seen.borrow_mut().push(canvas_menu(ui, &opener, &menu, false));
+    });
+    fixture.settle();
+    let delete = fixture.by_label("Delete Guide").expect("the Delete Guide item");
+    fixture.click(&delete).settle();
+    assert!(answers.borrow().iter().any(|a| a.picked == Some(Pick::Item("guide.remove"))), "{:?}", answers.borrow().last());
+}
+
+/// The glyph menu opened with Alt held captions its swatches Layer Color.
+#[test]
+fn the_glyph_menu_opened_with_alt_captions_its_swatches_layer_color() {
+    let menu = GlyphMenu { glyphs: vec!["a".into()], screen: [40.0, 40.0], alt: true, ..GlyphMenu::default() };
+    let mut fixture = Fixture::new(move |ui| {
+        let opener = ui.response();
+        let _ = glyph_menu(ui, &opener, &menu);
+    });
+    fixture.settle();
+    assert!(fixture.by_label("Layer Color").is_some());
+    assert!(fixture.by_label("Glyph Color").is_none());
 }

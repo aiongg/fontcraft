@@ -10,7 +10,7 @@ use fontcraft_engine::Session;
 use fontcraft_engine::prelude::*;
 use serde_json::{Value, json};
 
-use crate::app::models::text_preview::{Page, PageDirection, set_now};
+use crate::app::models::text_preview::{Page, PageDirection, fail_color_font, set_now};
 use crate::app::{APP, FontCraftApp, Msg};
 
 /// A new font whose preview fonts build at once, on the calling thread; the Text Preview open.
@@ -142,19 +142,33 @@ fn text_preview_shapes_through_the_preview_font_and_rebuilds_once_editing_pauses
     assert!((x[1] - x[0] - 600.0).abs() < 0.01, "the new width, kerned: {x:?}");
 }
 
-/// A glyph with a colour layer in the shown master carries its colour drawing, which the panel draws in place of its
-/// outline; a glyph without one has none.
+/// A colour glyph draws from the compiled colour font: palette row 0 of `CPAL` fills A's square, V (no colour) draws
+/// its outline. When the colour font cannot be built, every glyph is an outline and the reason shows under the text.
 #[test]
-fn text_preview_carries_the_colour_drawing_of_colour_glyphs() {
+fn text_preview_draws_colour_glyphs_from_the_compiled_font() {
     let mut app = app();
+    exec(&mut app, "colorPalette.addColor", json!({"color": "#FF0000"}));
     let master = app.session.font().unwrap().masters[0].id.clone();
     exec(&mut app, "layers.addBackupLayer", json!({"glyphs": ["A"], "master": master}));
     let layer = app.session.font().unwrap().glyph("A").unwrap().layers.iter().find(|l| !l.is_master_layer()).unwrap().id.clone();
-    exec(&mut app, "layer.convertToColor", json!({"glyph": "A", "layer": layer}));
-    exec(&mut app, "path.addRectangle", json!({"glyph": "A", "layer": layer, "x": 100, "y": 100, "width": 200, "height": 200}));
-    exec(&mut app, "attributes.setFillColor", json!({"glyph": "A", "layer": layer, "shapes": [0], "color": "#FF0000FF"}));
+    exec(&mut app, "layer.convertToColorPalette", json!({"glyph": "A", "layer": layer}));
     shell(&mut app, "textPreview.setText", json!({"text": "AV"})).unwrap();
+    // The colour font of the edited document builds once editing has paused.
+    set_now(&mut app.models.text_preview, 1.0);
+    app.drain();
     let p = page(&app);
-    assert!(matches!(p.colors.arts.get("A"), Some(Some(_))), "A draws in colour: {:?}", p.colors.arts.keys().collect::<Vec<_>>());
-    assert!(matches!(p.colors.arts.get("V"), Some(None)), "V draws its outline");
+    let Some(Some(a)) = p.colors.rasters.get("A") else { panic!("A draws in colour: {:?}", app.models.text_preview.view.message) };
+    assert!((p.colors.pixel_scale - p.scale).abs() < 1e-9, "drawn at one pixel per point until the view reports its own");
+    let red = a.image.pixels.chunks_exact(4).filter(|px| px == &[255, 0, 0, 255]).count();
+    assert!(red > 0, "palette row 0 fills the square");
+    assert!(matches!(p.colors.rasters.get("V"), Some(None)), "V draws its outline");
+    assert_eq!(app.models.text_preview.view.message, None);
+
+    let reason = "The colour glyphs are drawn as outlines: the font could not be built";
+    fail_color_font(&mut app.models.text_preview, reason);
+    app.drain();
+    let p = page(&app);
+    assert!(p.colors.rasters.values().all(Option::is_none), "every glyph is an outline");
+    assert_eq!(p.glyphs.len(), 2);
+    assert_eq!(app.models.text_preview.view.message.as_deref(), Some(reason), "the reason shows under the text");
 }

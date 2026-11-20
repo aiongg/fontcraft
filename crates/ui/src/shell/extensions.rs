@@ -1,4 +1,5 @@
-//! The extension commands of the window: reporter switches (`view.showReporter`) and the External Changes dialog
+//! The extension commands of the window: reporter switches (`view.showReporter`, kept between runs in the user's
+//! settings as `view.shownReporters`) and the External Changes dialog
 //! (`dialog.externalChanges`, [`super::external_changes`]). The Extension Manager's state is kept here; its commands are
 //! [`super::extension_manager`] and its window `dialogs::extension_manager`. Module and macro menu rows are built in
 //! `app::menus_dynamic`; dropped module files are installed by `app::dropped`.
@@ -6,6 +7,7 @@
 use craft::ui::runtime::commands::CommandRef;
 use fontcraft_engine::Session;
 use fontcraft_engine::plugins::Kind;
+use fontcraft_engine::settings::Reserved;
 use serde_json::Value;
 
 use super::commands::{Module, UiCommand};
@@ -23,7 +25,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Show (reporter name)",
         menu: &[],
         shortcut: None,
-        params: "{id: reporter module id, on?: bool (omitted: toggle)} show or hide an installed reporter module's drawing in Edit View; the View menu lists one Show row per reporter module. The switch is view state",
+        params: "{id: reporter module id, on?: bool (omitted: toggle)} show or hide an installed reporter module's drawing in Edit View; the View menu lists one Show row per reporter module. The switch is view state, kept between runs in the user's settings",
     },
     external_changes::COMMAND,
 ];
@@ -80,6 +82,24 @@ fn show_reporter(app: &mut FontCraftApp, params: &Value) -> Result<(), String> {
         }
         list.push(id.to_string());
     }
+    app.session.settings_mut().set_reserved(Reserved::ShownReporters, &list).map_err(|e| e.to_string())?;
     app.view.extensions.reporters = list;
     Ok(())
+}
+
+/// The reporter switches the user's settings keep, at most [`MAX_SHOWN_REPORTERS`], each once. A stored value that is
+/// not a list gives none. Modules not installed stay listed: the canvas draws only installed reporters, so a module
+/// installed later draws again.
+pub fn stored_reporters(session: &Session) -> Vec<String> {
+    let stored = session.settings().reserved::<Vec<Value>>(Reserved::ShownReporters).ok().flatten().unwrap_or_default();
+    let mut list: Vec<String> = Vec::new();
+    for id in stored.iter().filter_map(Value::as_str) {
+        if list.len() >= MAX_SHOWN_REPORTERS {
+            break;
+        }
+        if !list.iter().any(|s| s == id) {
+            list.push(id.to_string());
+        }
+    }
+    list
 }

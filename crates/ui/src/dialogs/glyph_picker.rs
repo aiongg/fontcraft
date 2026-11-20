@@ -36,6 +36,7 @@ use crate::app::models::components::{caps_on_nodes, corners_on_nodes};
 use crate::app::{FontCraftApp, Msg};
 use crate::canvas::tools::scene;
 use crate::shell::commands::{Module, UiCommand};
+use crate::shell::masters::shown_layer;
 use crate::shell::params::{flag, quoted, string};
 
 craft::ui::words! {
@@ -239,7 +240,7 @@ fn targets(app: &FontCraftApp, p: &Value, purpose: Purpose) -> Result<Map<String
         Some(id) => g.layers.iter().find(|l| l.id == id).ok_or_else(|| format!("glyph `{glyph}` has no layer `{}`", quoted(id)))?,
         None => match edited {
             Some(l) => l,
-            None => font.masters.first().and_then(|m| g.layer(&m.id)).ok_or_else(|| format!("glyph `{glyph}` has no master layer"))?,
+            None => shown_layer(font, &app.view.layers, g).ok_or_else(|| format!("glyph `{glyph}` has no master layer"))?,
         },
     };
     let mut m = Map::new();

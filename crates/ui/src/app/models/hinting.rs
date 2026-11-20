@@ -1,6 +1,6 @@
 //! The Hinting Preview's view model: a hinted waterfall of the shown glyph from 8 to 80 PPM.
 //!
-//! Each row is the glyph at one pixel size in the first master, built as TrueType in memory and grid-fitted by
+//! Each row is the glyph at one pixel size in the current master, built as TrueType in memory and grid-fitted by
 //! `hint.tt.renderPreview`, then filled one image pixel per device pixel, black ink on white paper whatever the theme,
 //! as the device would show it. The scale (`hint.tt.setPreviewScale`) only changes how large those pixels are drawn.
 //! The rows are built only while the panel shows.
@@ -17,6 +17,7 @@ use serde_json::{Value, json};
 
 use super::ProjectCx;
 use crate::shell::dock::PanelId;
+use crate::shell::masters;
 
 /// The shell command that sets the scale.
 pub const SCALE_COMMAND: &str = "hint.tt.setPreviewScale";
@@ -83,8 +84,9 @@ pub fn project(model: &mut Tracked<Waterfall>, cx: &mut ProjectCx<'_>) {
         super::set(model, Waterfall { scale, ..Waterfall::default() });
         return;
     };
+    let master = cx.session.font().ok().and_then(|font| masters::current_master(font, &cx.view.layers)).map(|m| m.id.clone());
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    (cx.session.active().map(|d| (d.id, d.revision)), &glyph).hash(&mut hasher);
+    (cx.session.active().map(|d| (d.id, d.revision)), &glyph, &master).hash(&mut hasher);
     let key = hasher.finish();
     let (rows, message) = match render(cx, &glyph) {
         Ok(rows) => (rows, None),
@@ -93,10 +95,10 @@ pub fn project(model: &mut Tracked<Waterfall>, cx: &mut ProjectCx<'_>) {
     super::set(model, Waterfall { glyph: Some(glyph), scale, rows, message, key });
 }
 
-/// Renders the rows of `glyph` in the first master.
+/// Renders the rows of `glyph` in the current master.
 fn render(cx: &mut ProjectCx<'_>, glyph: &str) -> Result<Vec<WaterfallRow>, String> {
     let font = cx.session.font().map_err(|e| e.to_string())?;
-    let master = font.masters.first().ok_or("the font has no master")?;
+    let master = masters::current_master(font, &cx.view.layers).ok_or("the font has no master")?;
     let (range, upm, instance) = (preview_range(font, master), f64::from(font.units_per_em), master.id.clone());
     if !(upm.is_finite() && upm > 0.0) {
         return Err("the font's units per em are not usable".into());
