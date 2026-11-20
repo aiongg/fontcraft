@@ -454,41 +454,49 @@ impl FontCraftApp {
 }
 
 impl FontCraftApp {
-    /// A command the person fired (menu item, shortcut): an engine command takes its targets from the selection
-    /// ([`Self::with_targets`]); one that has a dialog and was fired without parameters opens the dialog on those
-    /// targets instead of running.
+    /// A command the person fired (menu item, shortcut): posts what [`Self::fired`] gives, or leaves its failure in
+    /// the status line.
     pub(crate) fn fire(&mut self, command: CommandRef) {
+        match self.fired(command) {
+            Ok(Some(msg)) => self.sent.push(msg),
+            Ok(None) => {}
+            Err(error) => self.status = error,
+        }
+    }
+
+    /// What a command the person fired (menu item, shortcut, `ui.menu.invoke`) runs: an engine command takes its
+    /// targets from the selection ([`Self::with_targets`]); one that has a dialog and was fired without parameters
+    /// opens the dialog on those targets instead of running. `None` when the click was handled here: a question or
+    /// dialog opened, or text mode posted its edits.
+    pub(crate) fn fired(&mut self, command: CommandRef) -> Result<Option<Msg>, String> {
         // Quit and Close with unsaved work, and New from Glyph Sets from the menu, ask first.
         if close::fired(self, &command) || crate::shell::start::fired(self, &command) {
-            return;
+            return Ok(None);
         }
         let msg = match FontCraftApp::route(command) {
             Msg::Run(fired) => {
                 // Text mode's Edit menu acts on the text.
                 if let Some(result) = crate::canvas::text::edit::fired(self, &fired) {
-                    match result {
-                        Ok(msgs) => self.sent.extend(msgs),
-                        Err(error) => self.status = error,
-                    }
-                    return;
+                    self.sent.extend(result?);
+                    return Ok(None);
                 }
                 // An extension's menu row fills in the filter or macro it runs.
                 let fired = menus_dynamic::fill_targets(self, fired);
                 let targeted = self.with_targets(fired.clone());
-                let Some(command) = clipboard::fired(self, targeted) else { return };
+                let Some(command) = clipboard::fired(self, targeted) else { return Ok(None) };
                 // Font View's per-glyph batch is no target list for the dialog, which then reads the selection itself.
                 let targets = match &command.params {
                     Value::Object(m) if command.id == fired.id && self.targets_chosen() => m.clone(),
                     _ => Map::new(),
                 };
                 if crate::dialogs::after::fired(self, &fired.id, &fired.params, &targets) {
-                    return;
+                    return Ok(None);
                 }
                 Msg::Run(command)
             }
             other => other,
         };
-        self.sent.push(msg);
+        Ok(Some(msg))
     }
 }
 

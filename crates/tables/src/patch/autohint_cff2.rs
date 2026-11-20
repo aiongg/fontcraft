@@ -638,8 +638,13 @@ impl Pen {
 fn decode(code: &[u8], vsindex: u16, regions: &[usize]) -> std::result::Result<Decoded, String> {
     let cut = || "the charstring is cut short".to_string();
     let byte = |i: usize| code.get(i).copied().ok_or_else(cut);
+    // Every operand carries one value per master, so the region count is capped before any
+    // operand is read: a font may claim up to 65,535 regions.
     let count = |vsindex: u16| -> std::result::Result<usize, String> {
         match regions.get(usize::from(vsindex)) {
+            Some(&k) if k >= MAX_HINT_MASTERS => {
+                Err(format!("its region list has {k} regions; at most {MAX_HINT_MASTERS} masters are hinted together"))
+            }
             Some(&k) => Ok(k),
             None if vsindex == 0 && regions.is_empty() => Ok(0),
             None => Err(format!("it uses region list {vsindex}, which does not exist")),

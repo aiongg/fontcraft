@@ -151,3 +151,18 @@ fn decode_reads_blends_and_vsindex() {
     assert!(decode(&[n(3), 15], 0, &[1]).is_err());
     assert!(decode(&[n(1), n(1), n(1), 16, 16], 0, &[1]).is_err());
 }
+
+#[test]
+fn decode_refuses_more_regions_than_are_hinted_together() {
+    // Each operand holds a value per master, so a list of 65,535 regions would make every number
+    // a 512 KB vector. The count is refused before any operand is read, from the Private DICT's
+    // list and from a vsindex.
+    let n = |v: i32| (v + 139) as u8;
+    let draw = [n(1), n(1), 21];
+    let e = decode(&draw, 0, &[65_535]).unwrap_err();
+    assert!(e.contains("65535 regions"), "{e}");
+    let mut chosen = vec![n(1), 15];
+    chosen.extend(draw);
+    assert!(decode(&chosen, 0, &[1, MAX_HINT_MASTERS]).unwrap_err().contains("regions"));
+    assert!(decode(&chosen, 0, &[1, MAX_HINT_MASTERS - 1]).is_ok());
+}

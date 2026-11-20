@@ -83,6 +83,25 @@ fn the_control_protocol_drives_the_app() {
     }
 }
 
+/// `ui.menu.invoke` plays a click: a filter with a dialog opens it on the shown glyph instead of running, and Close
+/// with unsaved work asks about it instead of failing.
+#[test]
+fn a_menu_invoke_is_a_click() {
+    let mut t = TestApp::new();
+    t.ok("engine.execute", json!({"command": "path.addRectangle", "params": {"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200}}));
+    t.app.sent.push(Msg::View(crate::app::ViewMsg::SelectGlyph("A".into())));
+    t.frame();
+    let revision = t.ok("document.inspect", json!({}))["documents"][0]["revision"].clone();
+    assert_eq!(t.ok("ui.menu.invoke", json!({"command": "filter.roundCorners"})), json!({"dialog": "dialog.filterRoundCorners"}));
+    assert_eq!(t.ok("ui.dialog.inspect", json!({}))["dialog"], "dialog.filterRoundCorners");
+    assert_eq!(t.ok("document.inspect", json!({}))["documents"][0]["revision"], revision, "the filter did not run");
+    t.ok("ui.dialog.cancel", json!({}));
+
+    assert!(t.ok("ui.menu.invoke", json!({"command": "file.close"})).is_null());
+    assert!(t.app.closing.is_open(), "Close asks about the unsaved square");
+    assert_eq!(t.app.session.documents().len(), 1, "the document stays open");
+}
+
 /// `ui.render` draws filled glyphs without a window, the same bytes each time; a headless app cannot screenshot.
 #[test]
 fn ui_render_draws_glyph_pixels_and_a_headless_app_has_no_screenshot() {

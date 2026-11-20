@@ -76,14 +76,30 @@ fn in_menu(nodes: &[Node], id: &str, depth: usize) -> bool {
         })
 }
 
-/// `{command, params?}`: runs a menu item as a click on it does, and returns the command's result. A command that
-/// takes its path from the file picker opens the picker and returns `{picker: true}`. An id in no menu is an
-/// error.
+/// `{command, params?}`: runs a menu item as a click on it does ([`FontCraftApp::fired`]), and returns the command's
+/// result. A click that opens a dialog instead of running returns `{dialog: id}`; one that asks a question of its own
+/// (unsaved changes, a glyph picker) or edits text returns null. A command that takes its path from the file picker
+/// opens the picker and returns `{picker: true}`. An id in no menu is an error.
 fn invoke(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
     const M: &str = "ui.menu.invoke";
     let command = command_ref(M, params)?;
     if !app.catalog.menu.menus.iter().any(|menu| in_menu(&menu.children, &command.id, 0)) {
         return Err(format!("{M}: `{}` is not a menu item", command.id));
     }
-    app.run_now(FontCraftApp::route(command), true)
+    // What views posted before the click applies first, as the click's frame would.
+    app.drain();
+    let before = app.dialogs.open.as_ref().map(|d| d.id.clone());
+    let result = match app.fired(command) {
+        Ok(Some(msg)) => return app.run_now(msg, true),
+        Ok(None) => match app.dialogs.open.as_ref().map(|d| d.id.clone()) {
+            Some(id) if before.as_ref() != Some(&id) => Ok(json!({ "dialog": id })),
+            _ => Ok(Value::Null),
+        },
+        Err(error) => {
+            app.status = error.clone();
+            Err(error)
+        }
+    };
+    app.drain();
+    result
 }
