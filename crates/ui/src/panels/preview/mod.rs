@@ -84,13 +84,14 @@ fn view(props: &mut Props<'_>, height: Option<f32>, ui: &mut Ui) {
         None => Stack::new().fill(),
     };
     stack = stack.footer(|ui, _| controls(ui, model, target, &mut controls_sent));
-    stack.show(ui, |ui, _| strip(ui, model, target, &mut strip_sent));
+    stack.show(ui, |ui, _| strip(ui, model, target, height, &mut strip_sent));
     props.sent.extend(strip_sent);
     props.sent.extend(controls_sent);
 }
 
-/// The strip: the line filled on the ground, dragged to scroll, double-clicked to edit a glyph.
-fn strip(ui: &mut Ui, model: &PreviewModel, target: Target, sent: &mut Vec<Msg>) {
+/// The strip: the line filled on the ground, dragged to scroll, double-clicked to edit a glyph. `height`: the room of
+/// the Preview Area, whose stack sizes from its content.
+fn strip(ui: &mut Ui, model: &PreviewModel, target: Target, height: Option<f32>, sent: &mut Vec<Msg>) {
     let words = Env::of(ui).words::<PreviewWords>();
     let tokens = PreviewTokens::standard();
     let label = match target {
@@ -101,6 +102,10 @@ fn strip(ui: &mut Ui, model: &PreviewModel, target: Target, sent: &mut Vec<Msg>)
     let mut placed = None;
     let canvas = Canvas::new(label).id_salt(("fontcraftPreview", target.name())).view(Bind::given(CanvasView::new(Rect::NOTHING, Point::ZERO, 1.0)));
     let out = canvas.show(ui, |ui, _| {
+        // The canvas takes its content height, held to the room the controls leave.
+        if let Some(h) = height.filter(|h| h.is_finite() && *h > 0.0) {
+            ui.allocate_space(egui::vec2(ui.available_width().max(0.0), h));
+        }
         let Some(space) = canvas_space(&Env::of(ui).view()) else { return };
         let rect = space.view.rect;
         let painter = ui.painter_at(rect);
