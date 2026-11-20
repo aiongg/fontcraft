@@ -236,7 +236,7 @@ mod tests {
         assert_eq!(built.names, [(300, "Day".to_string()), (301, "Night".to_string())]);
 
         // Types alone still make version 1, without label arrays.
-        let plan = CpalPlan { info: vec![PaletteInfo { dark: true, ..PaletteInfo::default() }], ..plan };
+        let plan = CpalPlan { info: vec![PaletteInfo { dark: true, ..PaletteInfo::default() }], color_names: Vec::new(), ..plan };
         let built = build(&plan, &[], 256, &mut Vec::new()).unwrap();
         let cpal = Cpal::read(FontData::new(&built.table)).unwrap();
         assert_eq!(cpal.version(), 1);

@@ -929,7 +929,7 @@ mod tests {
     #[test]
     fn a_version_4_palette_dictionary_keeps_its_colours_and_reports_its_names() {
         let dict = fontcraft_plist::openstep::parse(
-            "{names = {\"0\" = Ink;}; palettes = ({backgroundStyle = (light); colors = ((1,0,0,1),(0.2,1)); name = Day;},{backgroundStyle = (dark); colors = ((0,0.502,0,1),(1,1,1,0.502)); name = Night;});}",
+            "{names = {\"0\" = Ink;}; palettes = ({backgroundStyle = (light); colors = ((1,0,0,1),(0.2,1)); name = Day;},{backgroundStyle = (dark); colors = ((0,0.6,0,1),(1,1,1,0.4)); name = Night;});}",
         )
         .unwrap()
         .root;
@@ -938,8 +938,10 @@ mod tests {
         Arc::make_mut(&mut font.info).params.set("Color Palettes", dict.clone());
         let files = ufo::write(&font).unwrap();
         assert!(text(&files, "lib.plist").contains("<key>com.github.googlei18n.ufo2ft.colorPalettes</key>"));
+        // Components that are whole 8-bit steps, so the reader types the key: a value that would
+        // not be written back the same stays in the master's user data.
         let back = ufo::read(&files).unwrap();
-        let want = fontcraft_plist::openstep::parse("(((255,0,0,255),(51,255)),((0,128,0,255),(255,128)))").unwrap().root;
+        let want = fontcraft_plist::openstep::parse("(((255,0,0,255),(51,255)),((0,153,0,255),(255,102)))").unwrap().root;
         assert_eq!(back.info.params.get("Color Palettes"), Some(&want), "the colours come back as 8-bit lists, greys as two components");
         let lost = ufo::info_losses(&font);
         assert!(
