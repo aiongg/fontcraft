@@ -61,6 +61,7 @@ pub const LAYERS: &[PaintLayer] = &[
     PaintLayer { id: "psHintBars", paint: hinting::ps::bars },
     PaintLayer { id: "textBehind", paint: super::text::paint::behind },
     PaintLayer { id: "otherLayers", paint: paint::background::paint },
+    PaintLayer { id: "textColor", paint: color::paint::text },
     PaintLayer { id: "textGlyphs", paint: super::text::paint::glyphs },
     PaintLayer { id: "color", paint: color::paint::paint },
     PaintLayer { id: "ttPreviewOutlines", paint: hinting::pixels::outlines },

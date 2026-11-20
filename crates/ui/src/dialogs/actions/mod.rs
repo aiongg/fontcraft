@@ -789,6 +789,7 @@ pub fn preview_art(shown: &Shown) -> [Option<CellArt>; 2] {
         side.map(|contours| CellArt {
             width: 1.0,
             contours: contours.into_iter().map(|c| c.into_iter().map(|[x, y]| [(x - cx) / span + 0.5, (y - cy) / span + 0.5]).collect()).collect(),
+            color: None,
         })
     })
 }

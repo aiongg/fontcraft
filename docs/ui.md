@@ -152,7 +152,9 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   projected `models.canvas` (the edited glyph in font units, resolved once per engine revision) with
   `models.canvas_tokens` (colours and sizes; the appearance settings feed them). A paint layer is one
   line in `canvas::layers::LAYERS` and a `fn(&PaintCx)` in `canvas/paint/<layer>.rs`; drawing uses
-  `PaintCx::painter`. The active-tool slot is `FontCraftApp::active_tool`, a `canvas::ActiveTool`
+  `PaintCx::painter`. Colour glyphs are `canvas/color/`: content comes from `fontcraft_render::color::artwork`
+  (and iColor and svg layer files, read once per document through `ColorFiles`) for the edited glyph, the text's
+  other glyphs and Font View cells, and `color::paint::draw` draws it on any painter. The active-tool slot is `FontCraftApp::active_tool`, a `canvas::ActiveTool`
   (a craft `CanvasTool` that also hands over the commands its gestures made): craft's `ToolHost`
   runs it on the canvas's pass, after the layers. View commands and display toggles are
   `shell/view.rs`. Guides, grids, measurement labels, annotations, display aids, the auto-meter and audit markers

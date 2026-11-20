@@ -17,6 +17,7 @@ use serde_json::Value;
 
 use super::ProjectCx;
 use crate::app::font_view::{Column, Sort, ViewMode};
+use crate::canvas::color;
 use crate::shell::dock::PanelId;
 
 /// Most points one cell outline keeps; the rest of a larger outline is left out of the cell.
@@ -84,6 +85,9 @@ pub struct CellArt {
     /// The advance width.
     pub width: f32,
     pub contours: Vec<Vec<[f32; 2]>>,
+    /// The glyph in colour, drawn in place of the outline (`color.preview.paletteDrivesFontView`).
+    #[plain_data(assume = "a colour drawing behind an Arc, never changed after it is made")]
+    pub color: Option<Arc<color::ColorArt>>,
 }
 
 impl FontViewModel {
@@ -103,10 +107,12 @@ impl FontViewModel {
 #[derive(Default)]
 pub struct OutlineCache {
     master: String,
+    /// What the colour drawings were made with (`canvas::color::stamp`).
+    color: u64,
     entries: HashMap<String, (Vec<Arc<Glyph>>, Arc<CellArt>)>,
 }
 
-pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, cx: &mut ProjectCx<'_>) {
+pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, files: &mut color::ColorFiles, cx: &mut ProjectCx<'_>) {
     let state = &cx.view.font_view;
     let shows = cx.view.workspace.layout.panel_state(&PanelId::FontView) != PanelState::Hidden;
     let Ok(font) = cx.session.font().cloned() else {
@@ -122,9 +128,14 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, cx:
     let order = glyph_order(&font);
     let arcs = font.glyphs.as_arcs();
     let by_name: HashMap<&str, &Arc<Glyph>> = arcs.iter().map(|g| (g.name.as_str(), g)).collect();
-    if cache.master != master || cache.entries.len() > MAX_CACHED {
-        *cache = OutlineCache { master: master.clone(), entries: HashMap::new() };
+    let stamp = color::stamp(&font, &master);
+    if cache.master != master || cache.color != stamp || cache.entries.len() > MAX_CACHED {
+        *cache = OutlineCache { master: master.clone(), color: stamp, entries: HashMap::new() };
     }
+    files.follow(cx.session.active().map(|d| d.id));
+    let assets = cx.session.assets();
+    let mode = color::cell_mode(&font, &master, false);
+    let mut src = color::Sources { assets: assets.as_ref(), files, text: color::TEXT };
     let mut glyphs: Vec<&Arc<Glyph>> = Vec::with_capacity(order.len());
     let mut rows = Vec::with_capacity(order.len());
     for (id, &i) in order.iter().enumerate() {
@@ -136,7 +147,7 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, cx:
             ..GlyphRow::default()
         };
         match state.mode {
-            ViewMode::Grid => row.art = Some(art(&font, glyph, &master, &by_name, cache)),
+            ViewMode::Grid => row.art = Some(art(&font, glyph, &master, &by_name, cache, &mode, &mut src)),
             ViewMode::List => {
                 let cell = Cell { font: &font, glyph, id, master: &master, props: props.get(glyph) };
                 row.cells = Column::ALL.iter().map(|c| cell.text(*c)).collect();
@@ -399,7 +410,15 @@ fn dependencies(glyph: &Arc<Glyph>, master: &str, by_name: &HashMap<&str, &Arc<G
 }
 
 /// The cell outline of `glyph`: the cached one while none of the glyphs it was made from changed.
-fn art(font: &Font, glyph: &Arc<Glyph>, master: &str, by_name: &HashMap<&str, &Arc<Glyph>>, cache: &mut OutlineCache) -> Arc<CellArt> {
+fn art(
+    font: &Font,
+    glyph: &Arc<Glyph>,
+    master: &str,
+    by_name: &HashMap<&str, &Arc<Glyph>>,
+    cache: &mut OutlineCache,
+    mode: &color::Mode,
+    src: &mut color::Sources<'_>,
+) -> Arc<CellArt> {
     let deps = dependencies(glyph, master, by_name);
     if let Some((held, art)) = cache.entries.get(&glyph.name)
         && held.len() == deps.len()
@@ -409,7 +428,8 @@ fn art(font: &Font, glyph: &Arc<Glyph>, master: &str, by_name: &HashMap<&str, &A
     }
     let width = glyph.layer(master).map_or(0.0, |l| l.width) as f32;
     let contours = font.outline_of(glyph, master).map(|p| flatten(&p)).unwrap_or_default();
-    let art = Arc::new(CellArt { width: if width.is_finite() { width } else { 0.0 }, contours });
+    let color = color::cell_color(font, glyph, mode, src);
+    let art = Arc::new(CellArt { width: if width.is_finite() { width } else { 0.0 }, contours, color });
     cache.entries.insert(glyph.name.clone(), (deps, Arc::clone(&art)));
     art
 }

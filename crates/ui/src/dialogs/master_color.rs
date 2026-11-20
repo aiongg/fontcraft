@@ -192,4 +192,28 @@ mod tests {
         assert_eq!(master_color(&app).as_deref(), Some("0,255,0,255"));
         assert!(form::set(&mut app, "color", &json!("green")).is_err(), "no dialog is open");
     }
+
+    /// On Font Info's Masters tab, a Master Color parameter row's Edit button opens the picker on the row's masters,
+    /// at the stored colour.
+    #[test]
+    fn the_masters_tab_row_opens_the_picker() {
+        use fontcraft_engine::fontinfo::Scope;
+
+        use crate::app::models::font_info::{RowDialog, RowModel, row_dialog};
+        use crate::panels::font_info::rows::dialog_message;
+        use crate::shell::font_info::Target;
+
+        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let add = json!({"scope": "master", "targets": [0], "name": "Master Color", "value": "255,0,0,128"});
+        app.run_now(Msg::run("font.customParameters.add", add), false).unwrap();
+        assert_eq!(row_dialog("Master Color", Scope::Master), Some(RowDialog::MasterColor));
+        assert_eq!(row_dialog("Master Color Dark", Scope::Master), Some(RowDialog::MasterColor));
+        let row = RowModel { key: "Master Color".into(), ..RowModel::default() };
+        let target = Target { scope: Scope::Master, indices: vec![0] };
+        let open = dialog_message(&target, &row, RowDialog::MasterColor).expect("the row opens a dialog");
+        app.run_now(open, false).unwrap();
+        let shown = form::inspect(&app);
+        assert_eq!(shown["dialog"], json!("dialog.masterColorPicker"), "{shown}");
+        assert_eq!(shown["fields"][0]["value"], json!("#FF000080"), "{shown}");
+    }
 }

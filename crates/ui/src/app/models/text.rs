@@ -41,6 +41,8 @@ pub struct TextModel {
     pub key: Option<LayoutKey>,
     /// The other glyphs of the text, each placed.
     pub glyphs: Vec<TextGlyph>,
+    /// The other glyphs of the text drawn in colour (`canvas::color::text_colors`).
+    pub colors: Vec<crate::canvas::color::PlacedColor>,
     /// The kerned gaps as `[x0, y0, x1, y1]` and whether the kerning closes the gap.
     pub kerned: Vec<([f64; 4], bool)>,
     /// The selected items' advance boxes.
@@ -177,6 +179,8 @@ pub struct TextGlyph {
     pub name: String,
     #[plain_data(assume = "a kurbo path: owned points")]
     pub outline: BezPath,
+    /// Where the glyph's origin lies, in the edited glyph's font units.
+    pub at: [f64; 2],
 }
 
 /// What a layout depends on besides the text's items and options.
@@ -190,9 +194,11 @@ pub struct LayoutKey {
     pub compile: Option<(u64, u64, bool)>,
 }
 
-pub fn project(model: &mut Tracked<TextModel>, cx: &mut ProjectCx<'_>) {
+pub fn project(model: &mut Tracked<TextModel>, files: &mut crate::canvas::color::ColorFiles, cx: &mut ProjectCx<'_>) {
     let shaper = model.shaper.for_preview(text::features::preview(cx.session, &cx.view.text.features));
     let mut value = build(cx.session, cx.view, &shaper).unwrap_or_default();
+    let placed: Vec<(&str, [f64; 2])> = value.glyphs.iter().map(|g| (g.name.as_str(), g.at)).collect();
+    value.colors = crate::canvas::color::text_colors(cx.session, cx.view, files, &placed);
     value.shaper = shaper;
     super::set(model, value);
 }
@@ -285,7 +291,7 @@ fn build(session: &mut Session, view: &ViewState, shaper: &ShaperSlot) -> Option
         if let Some(outline) = outline {
             let mut placed_outline = outline.clone();
             placed_outline.apply_affine(shift * Affine::translate((placed.x, placed.y)));
-            glyphs.push(TextGlyph { item, name: name.to_string(), outline: placed_outline });
+            glyphs.push(TextGlyph { item, name: name.to_string(), outline: placed_outline, at: [placed.x - origin[0], placed.y - origin[1]] });
         }
     }
 
@@ -326,6 +332,7 @@ fn build(session: &mut Session, view: &ViewState, shaper: &ShaperSlot) -> Option
         layout: Some(layout.clone()),
         key: Some(key),
         glyphs,
+        colors: Vec::new(),
         kerned,
         selection,
         cursor,
