@@ -126,7 +126,7 @@ fn project(cx: &mut ProjectCx<'_>) -> ProjectModel {
         (None, Vec::new())
     } else {
         let target = Target { scope: Scope::Instance, indices: selected.clone() };
-        (fields(&scratch, &selected, &serde_json::Value::Null), rows(&scratch, &target, RowKind::Param))
+        (fields(&scratch, &selected, &serde_json::Value::Null, &serde_json::Value::Null), rows(&scratch, &target, RowKind::Param))
     };
     let path = |p: &std::path::Path| p.to_string_lossy().into_owned();
     let shown = ShownProject {

@@ -162,5 +162,5 @@ fn entry(font: &Font, layer: &Layer, shape: &Shape, budget: &mut usize) -> Shape
     };
     let contours = outline.map(|p| flatten(&p)).unwrap_or_default();
     *budget = budget.saturating_sub(contours.iter().map(Vec::len).sum());
-    ShapeEntry { kind, art: Arc::new(CellArt { width: 0.0, contours }) }
+    ShapeEntry { kind, art: Arc::new(CellArt { width: 0.0, contours, color: None }) }
 }

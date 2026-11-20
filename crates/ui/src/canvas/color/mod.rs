@@ -333,7 +333,7 @@ pub fn cell_color(font: &Font, glyph: &Glyph, mode: &Mode, src: &mut Sources<'_>
 pub fn stamp(font: &Font, master: &str) -> u64 {
     let mut h = DefaultHasher::new();
     format!("{:?}", fontcraft_engine::color::palette::read(font, Some(master)).ok()).hash(&mut h);
-    for m in &font.masters {
+    for m in font.masters.iter() {
         format!("{:?}{:?}", m.params.get(export::MASTER_COLOR), m.params.get(MASTER_COLOR_DARK)).hash(&mut h);
     }
     h.finish()

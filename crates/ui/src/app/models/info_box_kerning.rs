@@ -259,6 +259,6 @@ mod tests {
         assert_eq!(pair.edited_side(PairSide::Left), "@T");
         assert_eq!(pair.edited_side(PairSide::Right), "o");
         let none = KernPair::from_reply("a", "b", &json!({"value": 0, "step": null, "pair": null}));
-        assert_eq!((none.value, none.applied, none.lock(PairSide::Right)), (None, None, KernLock::Ungrouped));
+        assert_eq!((none.lock(PairSide::Right), none.value, none.applied), (KernLock::Ungrouped, None, None));
     }
 }

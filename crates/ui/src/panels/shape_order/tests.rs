@@ -114,7 +114,7 @@ fn the_window_command_shows_each_layers_shapes_and_follows_the_edited_glyph() {
 
 fn rectangle_art(x: f32) -> Arc<crate::app::models::font_view::CellArt> {
     let contours = vec![vec![[x, 0.0], [x + 50.0, 0.0], [x + 50.0, 50.0], [x, 50.0]]];
-    Arc::new(crate::app::models::font_view::CellArt { width: 0.0, contours })
+    Arc::new(crate::app::models::font_view::CellArt { width: 0.0, contours, color: None })
 }
 
 /// A row dropped above the first row of its list posts `glyph.setShapeOrder` with that layer's new order.
