@@ -114,6 +114,8 @@ pub struct ViewState {
     pub compare_fonts: crate::shell::compare_fonts::CompareFontsState,
     /// Compare Family's attribute, filter and reads.
     pub compare_family: crate::shell::compare_family::CompareFamilyState,
+    /// Compare Fonts in List's documents, property and Only Differences.
+    pub compare_in_list: crate::shell::compare_in_list::CompareInListState,
     /// The Text Preview's text, style, size, layout and find bar.
     pub text_preview: crate::shell::text_preview::TextPreviewState,
     /// Show Hints aside: the TrueType Instructor's state, the badge under a drag, the Review Hints dialog.
@@ -165,6 +167,7 @@ impl Default for ViewState {
             table_viewer: Default::default(),
             compare_fonts: Default::default(),
             compare_family: Default::default(),
+            compare_in_list: Default::default(),
             text_preview: Default::default(),
             hinting: Default::default(),
             actions: Default::default(),

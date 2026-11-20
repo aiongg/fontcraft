@@ -2453,14 +2453,14 @@ label = "Compare Fonts in List"
 menu = ["Window"]
 shortcut = ""
 kind = "ui"
-params = "{fonts?: [fontRef], property?: name}"
+params = "{fonts?: [fontRef], property?: name, onlyDifferences?: bool}"
 area = "font-view"
 milestone = "M13"
 summary = "Shows the glyph list with one column per selected open font for a chosen property (advance width, sidebearings, node count, and so on), so differences between fonts of a family can be read across a row."
 ref = "FontLab 8 What's new › Glyphs & fonts › Font window (Font comparison)"
 status = "docs"
 origin = "fontlab"
-notes = "Documented, not yet observed. A window with one row per glyph (the first font's order, then other fonts' extra glyphs) and one column per font; properties width, lsb, rsb, nodes, paths, components, anchors and unicodes, read from each font's first master; rows that differ are highlighted and Only Differences hides the rest. A fontRef is a position in the open-document list, a title or a path; at most 64 fonts. This is not the two-document Compare Fonts window."
+notes = "Documented, not yet observed. A window with one row per glyph (the first font's order, then other fonts' extra glyphs) and one column per font; properties width, lsb, rsb, nodes, paths, components, anchors and unicodes, read from each font's first master; rows that differ are highlighted and Only Differences hides the rest; the property and Only Differences are kept for the next run when not given. The table is built again when a compared font changes. A fontRef is a position in the open-document list, a title or a path; at most 64 fonts. This is not the two-document Compare Fonts window."
 guesses = [
   "Each font is read in its first master, and without `fonts` every open document is compared; FontLab's Font window comparison mode would settle which master and fonts it uses.",
   "Measured values are rounded to hundredths of a unit before rows are marked as differing; the reference's own comparison display would settle the precision.",

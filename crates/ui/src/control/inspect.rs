@@ -25,6 +25,7 @@ pub const INSPECT: &[Inspect] = &[
     crate::shell::table_viewer::inspect,
     crate::shell::compare_fonts::inspect,
     crate::shell::compare_family::inspect,
+    crate::shell::compare_in_list::inspect,
     crate::shell::text_preview::inspect,
     crate::dialogs::actions::inspect,
     crate::shell::font_audit::inspect,

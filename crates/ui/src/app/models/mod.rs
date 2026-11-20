@@ -6,6 +6,7 @@
 pub mod canvas;
 pub mod color;
 pub mod compare;
+pub mod compare_list;
 pub mod compatibility;
 pub mod components;
 pub mod console;
@@ -114,6 +115,8 @@ pub struct Models {
     pub compare_fonts: Tracked<compare::CompareFontsModel>,
     /// Compare Family (`panels::compare_family`).
     pub compare_family: Tracked<compare::CompareFamilyModel>,
+    /// Compare Fonts in List (`panels::compare_in_list`).
+    pub compare_list: Tracked<compare_list::CompareListModel>,
     /// The Text Preview (`panels::text_preview`); projected outside the stamp, since its font builds land between
     /// frames.
     pub text_preview: text_preview::TextPreviewModels,
@@ -194,6 +197,7 @@ impl Models {
         space_center::project(&mut self.space_center, cx);
         table_viewer::project(&mut self.table_viewer, cx);
         compare::project_family(&mut self.compare_family, cx);
+        compare_list::project(&mut self.compare_list, cx);
         font_audit::project(&mut self.font_audit, cx);
         compatibility::project(&mut self.compatibility, cx);
         text::project_features(&mut self.features, &self.text, cx);

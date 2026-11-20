@@ -57,6 +57,7 @@ pub enum PanelId {
     TableViewer,
     CompareFonts,
     CompareFamily,
+    CompareInList,
     Project,
     FontInfo,
     ShapeOrder,
@@ -100,6 +101,7 @@ impl PanelId {
         PanelId::TableViewer,
         PanelId::CompareFonts,
         PanelId::CompareFamily,
+        PanelId::CompareInList,
         PanelId::Project,
         PanelId::FontInfo,
         PanelId::ShapeOrder,
@@ -143,6 +145,7 @@ impl PanelId {
             PanelId::TableViewer => "tableViewer",
             PanelId::CompareFonts => "compareFonts",
             PanelId::CompareFamily => "compareFamily",
+            PanelId::CompareInList => "compareInList",
             PanelId::Project => "project",
             PanelId::FontInfo => "fontInfo",
             PanelId::ShapeOrder => "shapeOrder",
@@ -192,6 +195,7 @@ impl PanelId {
             PanelId::TableViewer => w.table_viewer.clone(),
             PanelId::CompareFonts => w.compare_fonts.clone(),
             PanelId::CompareFamily => w.compare_family.clone(),
+            PanelId::CompareInList => w.compare_in_list.clone(),
             PanelId::Project => w.project.clone(),
             PanelId::FontInfo => w.font_info.clone(),
             PanelId::ShapeOrder => w.shape_order.clone(),
@@ -247,6 +251,7 @@ craft::ui::words! {
         table_viewer: "fontcraftPanel.tableViewer" = "Table Viewer";
         compare_fonts: "fontcraftPanel.compareFonts" = "Compare Fonts";
         compare_family: "fontcraftPanel.compareFamily" = "Compare Family";
+        compare_in_list: "fontcraftPanel.compareInList" = "Compare Fonts in List";
         project: "fontcraftPanel.project" = "Project";
         font_info: "fontcraftPanel.fontInfo" = "Font Info";
         shape_order: "fontcraftPanel.shapeOrder" = "Shape Order";
@@ -374,6 +379,9 @@ impl DockPanels<PanelId> for Panels<'_> {
             }
             PanelId::CompareFamily => {
                 panels::compare_family::show(ui, panels::compare_family::Props { model: &self.models.compare_family, sent: self.sent });
+            }
+            PanelId::CompareInList => {
+                panels::compare_in_list::show(ui, panels::compare_in_list::Props { model: &self.models.compare_list, sent: self.sent });
             }
             PanelId::TextPreview => {
                 panels::text_preview::show(ui, panels::text_preview::Props { model: &self.models.text_preview.view, sent: self.sent });
