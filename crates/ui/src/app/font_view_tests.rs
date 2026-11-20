@@ -141,3 +141,31 @@ fn the_incompatible_notice_names_the_glyphs() {
     assert_eq!(incompatible_notice("path.roundCoordinates", &json!({"incompatible": []})), None);
     assert_eq!(incompatible_notice("path.removeOverlap", &reply), None);
 }
+
+/// Font View and the edit view as tabs of one group, `front` the one showing.
+fn tabbed(app: &mut FontCraftApp, front: usize) {
+    use crate::shell::dock::PanelId;
+    use craft::behavior::dock::{Layout, Node, Workspace};
+    app.view.workspace = Workspace::new(Layout::new(Some(Node::tabs(vec![PanelId::Document, PanelId::FontView], front)), Vec::new()));
+}
+
+/// A dialog targets the view in front: the glyph opened in the edit view only while the edit view shows, Font View's
+/// selection only while Font View shows.
+#[test]
+fn dialogs_target_the_view_in_front() {
+    let mut app = app();
+    assert!(!app.targets_chosen(), "no glyph opened, nothing selected");
+    shell(&mut app, "view.editSelectedGlyphs", json!({"glyphs": ["A"]}));
+    assert!(app.targets_chosen(), "the edit view beside Font View shows A");
+
+    tabbed(&mut app, 1);
+    assert!(!app.targets_chosen(), "A is behind Font View, which has nothing selected");
+    shell(&mut app, "fontView.setSelection", json!({"glyphs": ["B"]}));
+    assert!(app.targets_chosen());
+    assert_eq!(app.with_targets(CommandRef::new("path.correctPathDirection")).params["glyphs"], json!(["B"]));
+
+    tabbed(&mut app, 0);
+    assert!(app.targets_chosen(), "the edit view in front shows A");
+    let fired = app.with_targets(CommandRef::new("path.correctPathDirection"));
+    assert_ne!(fired.params["glyphs"], json!(["B"]), "Font View's selection behind the edit view is no target: {}", fired.params);
+}
