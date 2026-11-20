@@ -41,8 +41,11 @@ fn drawn(font: &SfntFont) -> Vec<Vec<String>> {
     (0..cff.num_glyphs())
         .map(|g| {
             let mut rec = Record::default();
-            let width = cff.evaluate_charstring(&sub, GlyphId::new(g), &[], &mut rec).unwrap();
-            rec.0.insert(0, format!("width {width:?}"));
+            // The `seac` glyph names components the font lacks, so the reader refuses it.
+            match cff.evaluate_charstring(&sub, GlyphId::new(g), &[], &mut rec) {
+                Ok(width) => rec.0.insert(0, format!("width {width:?}")),
+                Err(e) => return vec![format!("error {e:?}")],
+            }
             rec.0
         })
         .collect()
@@ -148,6 +151,8 @@ fn autohint_cff_hints_unhinted_glyphs_and_keeps_every_outline_and_width() {
     assert!(after[1].iter().any(|c| c == "vstem 100 180"), "{:?}", after[1]);
     assert!(after[4].iter().any(|c| c == "vstem 100 180"), "{:?}", after[4]);
     assert_eq!(after[2], before[2], "a hinted glyph keeps its hints");
+    let charstrings = |f: &SfntFont| subr::charstrings_of_table(f.get(*b"CFF ").unwrap(), false).unwrap().charstrings;
+    assert_eq!(charstrings(&r.font)[3], charstrings(&font)[3], "the seac glyph keeps its charstring");
 
     // Hinting the result again changes nothing unless hintAll.
     let again = run(&r.font, false);

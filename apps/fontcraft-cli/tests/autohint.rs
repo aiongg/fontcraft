@@ -235,7 +235,8 @@ fn autohint_passes_the_overlap_and_master_options_through() {
     };
     for options in [
         &[][..],
-        &["--force-overlap", "--keep-conflicts", "--decimal", "--allow-changes", "-w"][..],
+        // --allow-changes is refused with --report-only (the reference refuses the pair).
+        &["--force-overlap", "--keep-conflicts", "--decimal", "-w"][..],
         &["--overlap-glyphs", "t"][..],
         &["--force-no-overlap"][..],
         &["--loose-overlap-mapping"][..],

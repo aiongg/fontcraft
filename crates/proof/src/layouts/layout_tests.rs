@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use fontcraft_compile::{Flavour, Options, compile, compile_ttf};
+use fontcraft_compile::{Flavour, HintingOptions, Options, compile, compile_ttf};
 use fontcraft_model::{Font, Path, Shape, Snippet};
 
 use crate::font::{self, Face};
@@ -30,7 +30,8 @@ fn ttf(family: &str, glyphs: &[(&str, u32, f64, f64)]) -> Vec<u8> {
 /// The same glyphs as CFF, hinted by the export's autohinter.
 fn otf(family: &str, glyphs: &[(&str, u32, f64, f64)]) -> Vec<u8> {
     let f = model(family, glyphs);
-    compile(&f, &f.default_target().unwrap(), Flavour::Cff, &Options::default()).unwrap().bytes
+    let options = Options { hinting: HintingOptions { autohint: true, strip: false }, ..Options::default() };
+    compile(&f, &f.default_target().unwrap(), Flavour::Cff, &options).unwrap().bytes
 }
 
 const ABC: &[(&str, u32, f64, f64)] = &[("A", 0x41, 60.0, 540.0), ("B", 0x42, 70.0, 520.0), ("I", 0x49, 100.0, 180.0)];
