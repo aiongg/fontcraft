@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**3091 guesses on 1611 rows (645 of them live commands).**
+**3095 guesses on 1613 rows (645 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -743,6 +743,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontInfo.styleLinking.sameFamily` (behavior) | M7 | handbook | – | font.instance.setStyleLinking and font.instance.set link anyway but warn when the base instance named in the same file exports under another family name (its familyNames field); a base in another file is not checked. Linking two instances with different familyNames in the reference app settles whether it warns. |
 | `fontInfo.features.contextMenu` (behavior) | M8 | inferred | – | The context menu's items and their order are ours; right-clicking a sidebar entry in the reference app would settle them. |
 | `fontInfo.features.contextMenu` (behavior) | M8 | inferred | – | A disabled entry is drawn struck through; disabling an entry in the reference app would settle how it is shown. |
+| `fontInfo.features.contextMenu` (behavior) | M8 | inferred | – | Cmd+A in a focused sidebar group selects that group's entries; pressing Cmd+A in the reference app's sidebar would settle it. |
 | `fontInfo.features.sidebarFilter` (behavior) | M8 | inferred | – | The filter matches code as well as names; typing a glyph name into the reference app's sidebar search, if it has one, would settle it. |
 | `fontInfo.features.inlineErrors` (behavior) | M8 | handbook | – | Error ranges are underlined in the code and each error is listed under the code with its line and an icon, not drawn between the code lines; a screenshot of an error in the reference app settles it. |
 | `fontInfo.features.notesDivider` (behavior) | M8 | handbook | – | The notes field starts four rows tall and the divider keeps it between two rows and half the tab's height; dragging the divider in the reference app settles the limits. |
@@ -888,7 +889,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `import.metricsBreaksAutoAlignment` (behavior) | M6 | handbook | – | Alignment is switched off only on the layer of the master being imported, for every component of that layer; the other masters' layers stay aligned; importing into one master of a two-master font in the reference app settles it. |
 | `paste.strokeAndFillMayDouble` (behavior) | M3 | inferred | – | A pasted shape with both fill and stroke may arrive as two contours; this is our reading of the handbook's advice, which gives no cause. |
 | `window.project.select` | M7 | inferred | no | One Project panel shows one open project at a time, with a choice between them when several are open, instead of one window per project; opening two projects in the reference app shows its window arrangement, and the dock has no free-floating windows. |
-| `window.project.select` | M7 | inferred | no | The Duplicate item sits in the list's plus menu rather than a context menu on the entry; right-clicking a project instance in the reference app settles where it lives. |
+| `window.project.select` | M7 | inferred | no | The Duplicate item sits in the list's plus menu and in the entry's context menu; right-clicking a project instance in the reference app settles where it lives. |
+| `window.project.copy` | M7 | handbook | no | Copy and Paste of instances run from the instance list's context menu as well as the keys; right-clicking a project instance in the reference app settles whether it has such a menu. |
+| `window.project.paste` | M7 | handbook | no | Pasted copies go after the last selected instance rather than at the end of the list; pasting with one instance selected in the reference app settles it. |
 | `dialog.exportMetrics` (panel) | M5 | handbook | – | The format, file name and folder sit on the tab, with the folder chooser for the folder, because the dialog framework has no save-file chooser; the handbook puts them in a save dialog after Next…. A save-file chooser in the shell would settle it. |
 | `dialog.exportMetrics` (panel) | M5 | handbook | – | The tab shows a Master pop-up that starts on the toolbar's master, so a master can be exported without changing the toolbar; the handbook names no such control. |
 | `dialog.importOutlinesMissingGlyph` (panel) | M3 | handbook | – | One question covers every unmatched file, with the buttons Add Glyphs and Skip; the handbook asks once per file, with Add Glyph and OK (skip). |
@@ -3125,7 +3128,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `spaceCenter.matrixEntry` (behavior) | M13 | docs | – | A matrix entry's result rounds halves up, as metrics keys do; entering a fraction in the reference would settle it. |
 | `spaceCenter.matrixEntry` (behavior) | M13 | docs | – | Up and Down in a matrix cell set the cell's value plus or minus the step as one command; the reference's undo history after several steps would settle it. |
 | `spaceCenter.pointerAndKeys` (behavior) | M13 | docs | – | Each side's arrow moves its edge that way: Right grows the right margin and Left shrinks it, Alt+Left grows the left margin and Alt+Right shrinks it, as the primary reference's text-mode spacing shortcuts do; the reference app would settle the direction of the Alt keys. |
-| `spaceCenter.pointerAndKeys` (behavior) | M13 | docs | – | A press within the selection-ring radius of a glyph's left or right edge drags that margin, anywhere else inside its box drags the outline; the reference's grab distance would settle it. |
+| `spaceCenter.pointerAndKeys` (behavior) | M13 | docs | – | A press within a few points of a glyph's left or right edge (the canvas's node size) drags that margin, anywhere else inside its box drags the outline; the reference's grab distance would settle it. |
 | `spaceCenter.pointerAndKeys` (behavior) | M13 | docs | – | Ctrl+Cmd with Shift shifts the outline by 10; the reference gives no 100 step for the outline, and pressing Ctrl+Cmd+Shift there would settle it. |
 | `io.watchSourceOnDisk` (behavior) | M13 | docs | – | Every source with a file is watched, single-file sources (.glyphs, .fontcraft, .designspace) and compiled fonts included, not only file-per-glyph sources; the manual names UFOs only. |
 | `io.watchSourceOnDisk` (behavior) | M13 | docs | – | A file that is only touched (same content) refreshes the stamp without a prompt; touching an open UFO in the reference settles it. |
@@ -3182,6 +3185,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `window.spaceCenter` (panel) | M13 | docs | – | A new Space Center shows `hamburgefontsiv` at 72 points; the reference's default text and size would settle it. |
 | `window.spaceCenter` (panel) | M13 | docs | – | The Space Center draws the showing Edit View tab's master, else the first master; how the reference picks the master of a multi-master font would settle it. |
 | `window.spaceCenter` (panel) | M13 | docs | – | Matrix columns are the text's own glyphs; control glyphs get none. Opening a text with control glyphs in the reference would settle it. |
+| `window.spaceCenter` (panel) | M13 | docs | – | The matrix shows at most eight glyph rows and scrolls the rest, and the preview takes the room above it; the reference's matrix height with a long text would settle it. |
 | `dialog.externalChanges` (panel) | M13 | docs | – | Every item starts ticked, so Accept Selected with no change of the ticks takes everything; the reference's manual does not say which state the ticks start in, and opening the window there settles it. |
 | `dialog.externalChanges` (panel) | M13 | docs | – | The stored-text view on double-click shows the glyph in FontCraft's native JSON form rather than as a .glif file, since the comparison is between models; the reference shows the file text, and a file-per-glyph text view would follow it more closely. |
 | `window.crossAxisMappings` (panel) | M13 | docs | – | Edits collect in a draft that Apply writes, rather than each edit changing the font at once; watching the secondary reference's undo after editing a card would settle it. |

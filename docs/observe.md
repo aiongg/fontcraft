@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1507 rows to check: 2592 guesses and 618 observe steps.**
+**1509 rows to check: 2596 guesses and 618 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 49 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **979** |
+| **Later milestones (after M6)** | all | **981** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 89 |
 | Later milestones (after M6) | Edit View: text mode and preview | 28 |
 | Later milestones (after M6) | Components and anchors | 43 |
@@ -60,7 +60,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Interpolation | 90 |
 | Later milestones (after M6) | Hinting | 113 |
 | Later milestones (after M6) | Colour fonts | 74 |
-| Later milestones (after M6) | Files: open, import, export | 69 |
+| Later milestones (after M6) | Files: open, import, export | 71 |
 | Later milestones (after M6) | Settings and the window | 27 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
@@ -1591,7 +1591,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (979)
+## Later milestones (after M6) (981)
 
 ### Edit View: drawing, guides, layers and the Palette (89)
 
@@ -2197,7 +2197,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Up and Down in a matrix cell set the cell's value plus or minus the step as one command; the reference's undo history after several steps would settle it.
 - [ ] `spaceCenter.pointerAndKeys` (behavior, M13, docs): In the preview, dragging a margin changes it (with Alt, in all…
   - Guess: Each side's arrow moves its edge that way: Right grows the right margin and Left shrinks it, Alt+Left grows the left margin and Alt+Right shrinks it, as the primary reference's text-mode spacing shortcuts do; the reference app would settle the direction of the Alt keys.
-  - Guess: A press within the selection-ring radius of a glyph's left or right edge drags that margin, anywhere else inside its box drags the outline; the reference's grab distance would settle it.
+  - Guess: A press within a few points of a glyph's left or right edge (the canvas's node size) drags that margin, anywhere else inside its box drags the outline; the reference's grab distance would settle it.
   - Guess: Ctrl+Cmd with Shift shifts the outline by 10; the reference gives no 100 step for the outline, and pressing Ctrl+Cmd+Shift there would settle it.
 - [ ] `spacing.autoSpace` (M13, docs, live): Auto Space
   - Guess: Method optical is FontCraft's own (open decision D11, docs/plans/M13.md § 3): for each side, the side profile sampled every `step` units (default 5) over a band from the baseline less its overshoot to the reference height plus its overshoot is clipped to `depth` inward from its extreme; the distance from the advance edge to the extreme plus a weight times the clipped profile's mean depth equals `area`. Neither FontLab nor FontForge documents its method; comparing the results on a font spaced in either app would show how far they differ.
@@ -2251,6 +2251,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A new Space Center shows `hamburgefontsiv` at 72 points; the reference's default text and size would settle it.
   - Guess: The Space Center draws the showing Edit View tab's master, else the first master; how the reference picks the master of a multi-master font would settle it.
   - Guess: Matrix columns are the text's own glyphs; control glyphs get none. Opening a text with control glyphs in the reference would settle it.
+  - Guess: The matrix shows at most eight glyph rows and scrolls the rest, and the preview takes the room above it; the reference's matrix height with a long text would settle it.
 
 ### Kerning and the Kerning window (16)
 
@@ -2714,6 +2715,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `fontInfo.features.contextMenu` (behavior, M8, inferred): Right-clicking a sidebar entry opens a menu with Disable or Enable, Update…
   - Guess: The context menu's items and their order are ours; right-clicking a sidebar entry in the reference app would settle them.
   - Guess: A disabled entry is drawn struck through; disabling an entry in the reference app would settle how it is shown.
+  - Guess: Cmd+A in a focused sidebar group selects that group's entries; pressing Cmd+A in the reference app's sidebar would settle it.
   - Observe: In F1 (Latin features), right-click a prefix, a class and a feature in Font Info › Features and note each menu's items in order.
 - [ ] `fontInfo.features.sidebarFilter` (behavior, M8, inferred): A search field above the sidebar shows only the entries whose name…
   - Guess: The filter matches code as well as names; typing a glyph name into the reference app's sidebar search, if it has one, would settle it.
@@ -4325,7 +4327,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A property name given twice is refused, since a BDF file names each property once.
   - Guess: Changing the strike's ascent or descent does not edit a `FONT_ASCENT` or `FONT_DESCENT` entry in `properties`; the two are set separately. The secondary reference's BDF Info dialog after a change of line metrics would settle whether it keeps them in step.
 
-### Files: open, import, export (69)
+### Files: open, import, export (71)
 
 - [ ] `export.instanceExportFolder` (behavior, M7, handbook): An instance carrying the Export Folder custom parameter is written to that…
   - Guess: The sub-path is used as written, `..` segments included, as the handbook says; an absolute path, an empty segment, a folder name with a character such as `:` or `\`, or a path of more than 32 segments makes export skip that instance with the reason, one trailing `/` is ignored, and the warnings name every file written outside the export destination; an Export Folder of `../x` and one of `/tmp/x` in the reference app settle it.
@@ -4369,7 +4371,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A query of ours listing each open project's font link, destination, instances and saved state; the reference app shows the same facts only in each project window.
 - [ ] `window.project.select` (M7, inferred): Select Project Instances
   - Guess: One Project panel shows one open project at a time, with a choice between them when several are open, instead of one window per project; opening two projects in the reference app shows its window arrangement, and the dock has no free-floating windows.
-  - Guess: The Duplicate item sits in the list's plus menu rather than a context menu on the entry; right-clicking a project instance in the reference app settles where it lives.
+  - Guess: The Duplicate item sits in the list's plus menu and in the entry's context menu; right-clicking a project instance in the reference app settles where it lives.
+- [ ] `window.project.copy` (M7, handbook): Copy Project Instances
+  - Guess: Copy and Paste of instances run from the instance list's context menu as well as the keys; right-clicking a project instance in the reference app settles whether it has such a menu.
+- [ ] `window.project.paste` (M7, handbook): Paste Project Instances
+  - Guess: Pasted copies go after the last selected instance rather than at the end of the list; pasting with one instance selected in the reference app settles it.
 - [ ] `window.project` (panel, M7, handbook): Project
   - Guess: A Save button beside Export saves the project, and a project never saved asks the save chooser for its file, offering a name after its title; the handbook only names File › Save. Saving a project in the reference app settles where saving lives.
   - Guess: Closing the window closes the project, and a project with unsaved changes stays open with the reason in the status bar; the reference app's close prompt is not documented. Closing an edited project in the reference app settles it.
