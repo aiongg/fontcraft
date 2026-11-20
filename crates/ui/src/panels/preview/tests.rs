@@ -140,7 +140,7 @@ fn the_area_options_take_targets_and_clamp_their_values() {
     run(&mut app, shell("preview.setBlur", json!({"target": "panel", "amount": 99}))).unwrap();
     run(&mut app, shell("preview.setOffset", json!({"dx": 20}))).unwrap();
     run(&mut app, shell("preview.setOffset", json!({"dx": 5}))).unwrap();
-    run(&mut app, shell("view.togglePreviewArea", json!({"height": 1}))).unwrap();
+    run(&mut app, shell("view.togglePreviewArea", json!({"on": true, "height": 1}))).unwrap();
     let p = &app.view.preview;
     assert!(p.area.invert && !p.panel.invert);
     assert_eq!((p.panel.blur, p.area.blur, p.area.offset), (10.0, 0.0, 25.0));

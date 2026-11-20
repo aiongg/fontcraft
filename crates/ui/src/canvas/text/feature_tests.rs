@@ -59,10 +59,11 @@ fn features_shape_the_text_through_the_compiled_preview_font() {
     assert_eq!(menu["compiled"], json!(true), "{menu}");
     assert_eq!(menu["features"].as_array().map(Vec::len), Some(2), "{menu}");
 
+    let revision = app.session.doc().unwrap().revision;
     shell(&mut app, "editView.toggleFeature", json!({"tag": "smcp"}));
     assert_eq!(shown(&app), [some("zz.sc"), some("zz.sc"), some("yy")]);
     assert_eq!(app.models.features.active, ["smcp"]);
-    assert!(!app.session.doc().unwrap().modified(), "a preview feature changes no document");
+    assert_eq!(app.session.doc().unwrap().revision, revision, "a preview feature changes no document");
 
     // A feature code edit shows after the next compile.
     run(&mut app, "font.features.setCode", json!({"kind": "feature", "name": "smcp", "code": "sub yy by zz.sc;"}));

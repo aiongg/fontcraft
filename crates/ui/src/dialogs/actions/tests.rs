@@ -62,7 +62,7 @@ fn dialog_actions_runs_three_actions_as_their_commands_do() {
     // (action, how its parameters are given, which form edits them)
     let cases = [
         ("filter.roundCorners", json!({"set": {"radius": 30}}), "dialog"),
-        ("path.transformations", json!({"params": {"scale": {"x": 50}}}), "json"),
+        ("path.transformations", json!({"params": {"scale": {"x": 50}}}), "dialog"),
         ("path.removeOverlap", json!({"params": {"keepOpenPaths": false}}), "json"),
     ];
     for (command, given, form) in cases {
