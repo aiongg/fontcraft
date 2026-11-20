@@ -4,7 +4,7 @@
 //! |---|---|
 //! | `glyph.matchMasters`, `glyph.relocateStartPoints`: `skipped` | the label, then each skipped glyph with its reason |
 //! | `color.generateDarkPalette`: `palette`, `name` | the new palette's number and name |
-//! | any edit of a UFO, UFOZ or designspace document: `formatWarnings`, else `warnings` | the first warning, and how many follow |
+//! | any command: `formatWarnings` (what a UFO, UFOZ or designspace save would lose), else the command's own `warnings` | the first warning, and how many follow |
 //!
 //! The notices of the Font View commands (`font_view::incompatible_notice`) come first.
 
@@ -76,7 +76,7 @@ fn dark_palette(reply: &Value) -> Option<String> {
     })
 }
 
-/// The first format warning of an edit: `formatWarnings` when the command's own `warnings` is no list, else
+/// The first warning of a reply: from `formatWarnings` when the reply has it, else from the command's own
 /// `warnings`.
 fn format_warning(reply: &Value) -> Option<String> {
     let list = reply.get("formatWarnings").or_else(|| reply.get("warnings"))?.as_array()?;
