@@ -277,8 +277,8 @@ pub(super) fn build(fonts: &[Expanded<'_>], plan: &Plan, cids: &[u16], setup: &S
             let (registry, ordering, supplement) = if first.cff.is_cid() {
                 first.cff.ros().ok_or_else(|| TablesError::invalid("the first font's CID-keyed CFF table has no readable ROS"))?
             } else {
-                warnings.push("without cidfontinfo the CID-keyed result is Adobe-Identity-0, named after the first font".into());
-                ("Adobe".to_string(), "Identity".to_string(), 0)
+                warnings.push("without cidfontinfo the CID-keyed result is Adobe-Identity-0, named after the first font".into()); // brand-ok: the registry-ordering name
+                ("Adobe".to_string(), "Identity".to_string(), 0) // brand-ok: the registry-ordering name
             };
             CidTop {
                 font_name: first.cff.font_name().unwrap_or_else(|| "Untitled".into()),

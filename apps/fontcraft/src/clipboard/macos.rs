@@ -14,7 +14,7 @@ use super::read_named;
 /// The pasteboard types a PDF goes under, in the order they are tried. These are the values of
 /// AppKit's `NSPasteboardTypePDF` and `NSPDFPboardType`, which are extern statics that only
 /// unsafe code can read; the workspace forbids it.
-const PDF_TYPES: &[&str] = &["com.adobe.pdf", "Apple PDF pasteboard type"];
+const PDF_TYPES: &[&str] = &["com.adobe.pdf", "Apple PDF pasteboard type"]; // brand-ok: the system pasteboard type
 
 /// The pasteboard types a MIME type goes under.
 fn types(mime: &str) -> &'static [&'static str] {
