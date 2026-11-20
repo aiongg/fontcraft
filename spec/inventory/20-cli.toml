@@ -87,7 +87,7 @@ status = "docs"
 id = "cli.global.responseFiles"
 area = "cli-tools"
 milestone = "M12"
-summary = "An argument of the form @FILE is replaced by the arguments read from FILE: whitespace-separated, double quotes group words, '#' starts a comment, newlines are ordinary whitespace. Response files do not nest. A file holding several complete command lines is run with 'fontcraft-cli run --script'."
+summary = "An argument of the form @FILE is replaced by the arguments read from FILE: whitespace-separated, double quotes group words, '#' starts a comment, newlines are ordinary whitespace. @FILE is read only where an option or a positional argument may stand: an option's value and the arguments after '--' are taken as given. A response file holds whole options (one that ends with an option needing its value is refused) and nests at most 8 deep. A file holding several complete command lines is run with 'fontcraft-cli run --script'."
 ref = "tx -s; sfntedit -X; spot -X; sfntdiff -X; pyftmerge --input-file"
 status = "docs"
 

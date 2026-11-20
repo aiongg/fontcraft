@@ -204,9 +204,11 @@ pub fn parse_with_queries(specs: &[OptSpec], args: &[String]) -> Result<Parsed, 
 }
 
 fn parse_inner(specs: &[OptSpec], args: &[String], queries: bool) -> Result<Parsed, Failure> {
-    let args = expand(args, 0, &mut Vec::new())?;
     let globals = globals_for(specs);
     let tiers: [&[OptSpec]; 2] = [specs, &globals];
+    let mut expanded = Vec::with_capacity(args.len());
+    walk(&tiers, args, &mut Walk { spell: false, ..Walk::default() }, &mut expanded)?;
+    let args = expanded;
     let mut parsed = Parsed::default();
     for spec in specs {
         let value = match spec.kind {
@@ -660,19 +662,33 @@ enum Next {
 /// reads it (`--retain` → `--retain-gids`, `--No-Hinting` → `--no-hinting`), for a subcommand that
 /// looks for some options itself before calling [`parse`]. Values, `--opt?` queries and
 /// everything after `--` stay as given; a name that is no option stays for [`parse`] to refuse,
-/// and a prefix of several options is refused here. A response file is read only where an
-/// option or a positional argument may stand: an option's value that starts with `@`
-/// (`dump -t @glyphs`) is a value.
+/// and a prefix of several options is refused here. Response files are read as [`parse`] reads
+/// them ([`walk`]).
 pub fn spell_out(specs: &[OptSpec], args: &[String]) -> Result<Vec<String>, Failure> {
     let globals = globals_for(specs);
     let tiers: [&[OptSpec]; 2] = [specs, &globals];
     let mut spelled = Vec::with_capacity(args.len());
-    spell_into(&tiers, args, &mut spelled)?;
+    walk(&tiers, args, &mut Walk { spell: true, ..Walk::default() }, &mut spelled)?;
     Ok(spelled)
 }
 
-/// [`spell_out`] of `args` into `out`; `true` once `--` has ended the options.
-fn spell_into(tiers: &[&[OptSpec]], args: &[String], out: &mut Vec<String>) -> Result<bool, Failure> {
+/// The state of one [`walk`] over a command line.
+#[derive(Default)]
+struct Walk {
+    /// Write long option names out in full ([`spell_out`]); else keep them as given.
+    spell: bool,
+    /// The response files being read, outermost first, to refuse one that includes itself.
+    stack: Vec<PathBuf>,
+}
+
+/// Copies `args` into `out` with every response file replaced by its arguments, and `true` once
+/// `--` has ended the options. `@FILE` and `--options FILE` are read only where an option or a
+/// positional argument may stand: an option's value that starts with `@` (`-o @out.otf`) and
+/// everything after `--` are arguments as given. A response file holds whole options: one that
+/// ends with an option needing a value is refused, and an option whose value may be left out
+/// ends with an empty value instead of taking the next argument of the line around the file.
+fn walk(tiers: &[&[OptSpec]], args: &[String], w: &mut Walk, out: &mut Vec<String>) -> Result<bool, Failure> {
+    let inside = w.stack.last().map(|p| p.display().to_string());
     let mut it = args.iter().peekable();
     while let Some(arg) = it.next() {
         if arg == "--" {
@@ -680,35 +696,47 @@ fn spell_into(tiers: &[&[OptSpec]], args: &[String], out: &mut Vec<String>) -> R
             out.extend(it.by_ref().cloned());
             return Ok(true);
         }
-        let response = if arg.strip_prefix('@').is_some_and(|p| !p.is_empty()) || arg.starts_with("--options=") {
-            Some(vec![arg.clone()])
+        let file = if let Some(path) = arg.strip_prefix('@').filter(|p| !p.is_empty()) {
+            Some(path.to_string())
         } else if arg == "--options" {
-            Some(std::iter::once(arg.clone()).chain(it.next().cloned()).collect())
+            Some(it.next().ok_or_else(|| usage("--options needs a file"))?.clone())
         } else {
-            None
+            arg.strip_prefix("--options=").map(str::to_string)
         };
-        if let Some(response) = response {
-            // `expand` reads nested files and bounds their depth.
-            if spell_into(tiers, &expand(&response, 0, &mut Vec::new())?, out)? {
+        if let Some(file) = file {
+            if w.stack.len() >= MAX_RESPONSE_DEPTH {
+                return Err(usage(format!("response files nest more than {MAX_RESPONSE_DEPTH} deep at {file}")));
+            }
+            let key = std::fs::canonicalize(&file).map_err(|e| Failure::Input(format!("cannot read {file}: {e}")))?;
+            if w.stack.contains(&key) {
+                return Err(usage(format!("{file} includes itself")));
+            }
+            let words = split_words(&read_small(&file)?);
+            w.stack.push(key);
+            let ended = walk(tiers, &words, w, out);
+            w.stack.pop();
+            if ended? {
                 out.extend(it.by_ref().cloned());
                 return Ok(true);
             }
             continue;
         }
-        let (written, next) = spell_one(tiers, arg)?;
-        out.push(written.unwrap_or_else(|| arg.clone()));
-        match next {
-            Next::No => {}
-            Next::Always => out.extend(it.next().cloned()),
-            Next::Maybe => out.extend(it.next_if(|n| !n.starts_with('-') && !n.contains('=')).cloned()),
+        let (written, next, name) = spell_one(tiers, arg)?;
+        let written = if w.spell { written.unwrap_or_else(|| arg.clone()) } else { arg.clone() };
+        match (next, it.peek().is_some(), &inside) {
+            (Next::Always, false, Some(file)) => return Err(usage(format!("{arg} at the end of {file} needs its value in the file"))),
+            (Next::Maybe, false, Some(_)) => out.push(format!("--{name}=")),
+            (Next::No, ..) => out.push(written),
+            (Next::Always, ..) => out.extend(std::iter::once(written).chain(it.next().cloned())),
+            (Next::Maybe, ..) => out.extend(std::iter::once(written).chain(it.next_if(|n| !n.starts_with('-') && !n.contains('=')).cloned())),
         }
     }
     Ok(false)
 }
 
-/// How [`spell_out`] writes `arg`: its full spelling (`None`: as given), and whether the next
-/// argument is its value.
-fn spell_one(tiers: &[&[OptSpec]], arg: &str) -> Result<(Option<String>, Next), Failure> {
+/// How [`spell_out`] writes `arg`: its full spelling (`None`: as given), whether the next
+/// argument is its value, and the name of the option it gives.
+fn spell_one(tiers: &[&[OptSpec]], arg: &str) -> Result<(Option<String>, Next, &'static str), Failure> {
     let takes = |spec: &OptSpec| match spec.kind {
         Kind::Switch => Next::No,
         Kind::OptionalValue => Next::Maybe,
@@ -716,7 +744,7 @@ fn spell_one(tiers: &[&[OptSpec]], arg: &str) -> Result<(Option<String>, Next), 
     };
     if let Some(body) = arg.strip_prefix("--") {
         if body.is_empty() || (!body.contains('=') && body.ends_with('?')) {
-            return Ok((None, Next::No));
+            return Ok((None, Next::No, ""));
         }
         let (name, edit, inline) = match body.split_once('=') {
             Some((n, v)) => match (n.strip_suffix('+'), n.strip_suffix('-')) {
@@ -726,20 +754,22 @@ fn spell_one(tiers: &[&[OptSpec]], arg: &str) -> Result<(Option<String>, Next), 
             },
             None => (body, "", None),
         };
-        let Some((spec, on)) = lookup(tiers, name)? else { return Ok((None, Next::No)) };
+        let Some((spec, on)) = lookup(tiers, name)? else { return Ok((None, Next::No, "")) };
         let full = if on { spec.name.to_string() } else { format!("no-{}", spec.name) };
         return Ok(match inline {
-            Some(v) => (Some(format!("--{full}{edit}{v}")), Next::No),
-            None if on => (Some(format!("--{full}")), takes(spec)),
-            None => (Some(format!("--{full}")), Next::No),
+            Some(v) => (Some(format!("--{full}{edit}{v}")), Next::No, spec.name),
+            None if on => (Some(format!("--{full}")), takes(spec), spec.name),
+            None => (Some(format!("--{full}")), Next::No, spec.name),
         });
     }
     let mut chars = arg.chars();
     if let (Some('-'), Some(c), None) = (chars.next(), chars.next(), chars.next()) {
-        let next = tiers.iter().flat_map(|t| t.iter()).find(|s| s.short == Some(c)).map_or(Next::No, takes);
-        return Ok((None, next));
+        return Ok(match tiers.iter().flat_map(|t| t.iter()).find(|s| s.short == Some(c)) {
+            Some(spec) => (None, takes(spec), spec.name),
+            None => (None, Next::No, ""),
+        });
     }
-    Ok((None, Next::No))
+    Ok((None, Next::No, ""))
 }
 
 /// The candidate `given` names: the one spelled so, else the one equal to it in another letter
@@ -792,37 +822,6 @@ fn forms(specs: &[OptSpec]) -> impl Iterator<Item = (String, &OptSpec, bool)> {
         let negative = (s.kind == Kind::Switch).then(|| (format!("no-{}", s.name), s, false));
         std::iter::once((s.name.to_string(), s, true)).chain(negative)
     })
-}
-
-/// `args` with every `@FILE` and `--options FILE` replaced by the file's arguments.
-fn expand(args: &[String], depth: usize, stack: &mut Vec<PathBuf>) -> Result<Vec<String>, Failure> {
-    let mut out = Vec::with_capacity(args.len());
-    let mut it = args.iter();
-    while let Some(arg) = it.next() {
-        let file = if let Some(path) = arg.strip_prefix('@').filter(|p| !p.is_empty()) {
-            Some(path.to_string())
-        } else if arg == "--options" {
-            Some(it.next().ok_or_else(|| usage("--options needs a file"))?.clone())
-        } else {
-            arg.strip_prefix("--options=").map(str::to_string)
-        };
-        let Some(file) = file else {
-            out.push(arg.clone());
-            continue;
-        };
-        if depth >= MAX_RESPONSE_DEPTH {
-            return Err(usage(format!("response files nest more than {MAX_RESPONSE_DEPTH} deep at {file}")));
-        }
-        let key = std::fs::canonicalize(&file).map_err(|e| Failure::Input(format!("cannot read {file}: {e}")))?;
-        if stack.contains(&key) {
-            return Err(usage(format!("{file} includes itself")));
-        }
-        let text = read_small(&file)?;
-        stack.push(key);
-        out.extend(expand(&split_words(&text), depth + 1, stack)?);
-        stack.pop();
-    }
-    Ok(out)
 }
 
 /// A text file of at most [`MAX_RESPONSE_FILE`] bytes of UTF-8.
@@ -982,6 +981,45 @@ mod tests {
         std::fs::write(&looped, format!("@{}", looped.display())).unwrap();
         let e = parse(SPECS, &args(&[&format!("@{}", looped.display())])).unwrap_err();
         assert!(e.message().contains("includes itself"), "{e:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_response_file_stands_where_an_option_may_and_holds_whole_options() {
+        const OWN: &[OptSpec] =
+            &[OptSpec::value("output", "FILE", "", "output file").short('o'), OptSpec::optional_value("report", "FILE", "report")];
+        // An option's value and an argument after `--` that start with `@` are taken as given.
+        let p = parse(OWN, &args(&["in.otf", "-o", "@out.otf"])).unwrap();
+        assert_eq!((p.value("output"), p.positional.as_slice()), (Some("@out.otf"), &["in.otf".to_string()][..]));
+        assert_eq!(parse(OWN, &args(&["--output", "@out.otf"])).unwrap().value("output"), Some("@out.otf"));
+        assert_eq!(parse(OWN, &args(&["--", "@in.otf"])).unwrap().positional, ["@in.otf"]);
+
+        let dir = std::env::temp_dir().join(format!("fontcraft-cli-at-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let at = |name: &str, text: &str| {
+            let path = dir.join(name);
+            std::fs::write(&path, text).unwrap();
+            format!("@{}", path.display())
+        };
+        // A file ending with an option that needs its value does not take it from the line.
+        let cut = at("cut", "in.otf -o");
+        for e in [parse(OWN, &args(&[&cut, "x.otf"])).unwrap_err(), spell_out(OWN, &args(&[&cut, "x.otf"])).unwrap_err()] {
+            assert!(e.message().contains("needs its value in the file"), "{e:?}");
+        }
+        // One whose value may be left out ends with an empty value, in both readings.
+        let bare = at("bare", "--rep");
+        let p = parse(OWN, &args(&[&bare, "x.otf"])).unwrap();
+        assert_eq!((p.value("report"), p.positional.as_slice()), (Some(""), &["x.otf".to_string()][..]));
+        assert_eq!(spell_out(OWN, &args(&[&bare, "x.otf"])).unwrap(), ["--report=", "x.otf"]);
+
+        // Nesting stops at the depth limit; a file over the size limit is refused.
+        let mut chain = at("level0", "in.otf");
+        for level in 1..=MAX_RESPONSE_DEPTH {
+            chain = at(&format!("level{level}"), &chain);
+        }
+        assert!(parse(OWN, &args(&[&chain])).unwrap_err().message().contains("nest more than"));
+        let big = at("big", &"x ".repeat(MAX_RESPONSE_FILE / 2 + 1));
+        assert!(parse(OWN, &args(&[&big])).unwrap_err().message().contains("larger than"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
