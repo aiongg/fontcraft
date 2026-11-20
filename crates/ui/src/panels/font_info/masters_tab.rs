@@ -17,8 +17,12 @@
 //! | a stem's scope button | the stem scope dialog (`font.stems.set`) |
 //! | the plus beside Stems, a stem's minus | `font.stems.add`, `font.stems.remove` |
 //! | Custom Parameters | the shared rows; the plus opens the parameter picker |
+//! | the plus beside Number Values | `font.numbers.add` without a name (the engine picks `value`, `value1`…) |
+//! | a number's name | `font.numbers.rename` |
+//! | a number's value | `font.master.setNumber` |
+//! | a number's minus | `font.numbers.remove` |
 //!
-//! Every edit goes to all selected masters; a field whose masters differ shows mixed. Number Values are read-only.
+//! Every edit goes to all selected masters; a field whose masters differ shows mixed.
 
 use std::borrow::Cow;
 
@@ -43,7 +47,6 @@ use super::rows;
 use crate::app::Msg;
 use crate::app::models::font_masters::MastersTabModel;
 use crate::panels::master_icons::{MasterGlyph, paint_icon};
-use crate::panels::widgets::format_number;
 use crate::shell::font_info::{InfoDialog, open_params};
 use crate::shell::font_info_masters::select_masters;
 
@@ -78,6 +81,9 @@ craft::ui::words! {
         parameters: "fontcraftMasters.parameters" = "Custom Parameters";
         add_parameter: "fontcraftMasters.addParameter" = "Add a custom parameter";
         numbers: "fontcraftMasters.numbers" = "Number Values";
+        add_number: "fontcraftMasters.addNumber" = "Add a number value";
+        number_name: "fontcraftMasters.numberName" = "Number Name";
+        remove_number: "fontcraftMasters.removeNumber" = "Remove this number value from every master";
         none: "fontcraftMasters.none" = "None";
         multiple: "fontcraftMasters.multiple" = "Multiple Values";
         scope: "fontcraftMasters.scope" = "Scope:";
@@ -168,17 +174,11 @@ pub fn view(ui: &mut Ui, model: &MastersTabModel, masters: &[(String, String)], 
             if plus {
                 posted.push(shell("font.info.openDialog", open_params(&InfoDialog::ParameterPicker(target.clone()))));
             }
-            Section::new(words.numbers.clone()).id_salt("mastersNumbers").show(ui, |ui, _| {
-                if model.numbers.is_empty() {
-                    Text::new(words.none.clone()).shade(Shade::Muted).show(ui);
-                }
-                for (at, (name, value)) in model.numbers.iter().enumerate() {
-                    Field::new(name.clone()).id_salt(("fontcraftMasters.number", at)).show(ui, |ui, _| match value {
-                        Some(v) => Text::new(format_number(*v)).show(ui),
-                        None => Text::new(words.multiple.clone()).shade(Shade::Muted).show(ui),
-                    });
-                }
-            });
+            let plus =
+                rows::section(ui, "mastersNumbers", words.numbers.clone(), words.add_number.clone(), |ui| numbers(ui, model, &words, &mut posted));
+            if plus {
+                posted.push(Msg::run("font.numbers.add", json!({})));
+            }
             sent.extend(posted);
         });
     });
@@ -322,6 +322,31 @@ fn stems(ui: &mut Ui, model: &MastersTabModel, words: &MastersWords, sent: &mut 
     }
 }
 
+/// Number Values: per number its name, the selection's value and minus.
+fn numbers(ui: &mut Ui, model: &MastersTabModel, words: &MastersWords, sent: &mut Vec<Msg>) {
+    if model.numbers.is_empty() {
+        Text::new(words.none.clone()).shade(Shade::Muted).show(ui);
+    }
+    let sel = &model.selected;
+    for (at, (name, value)) in model.numbers.iter().enumerate() {
+        Row::new().id_salt(("fontcraftMasters.number", at)).show(ui, |ui, _| {
+            if let Some(text) = TextField::new(words.number_name.clone(), Bind::given(name.clone())).show(ui).events.committed() {
+                let text = text.trim();
+                if !text.is_empty() && text != name {
+                    sent.push(Msg::run("font.numbers.rename", json!({ "number": at, "name": text })));
+                }
+            }
+            if let Some(v) = number(ui, &Label::from(name.clone()), *value) {
+                sent.push(Msg::run("font.master.setNumber", json!({ "masters": sel, "number": at, "value": v })));
+            }
+            let minus = IconButton::new(IconId::new("minus")).label(words.remove_number.clone()).tooltip(words.remove_number.clone());
+            if minus.id_salt(("numberRemove", at)).show(ui).clicked() {
+                sent.push(Msg::run("font.numbers.remove", json!({ "number": at })));
+            }
+        });
+    }
+}
+
 /// A tooltip with the scope after it, when there is one.
 fn scoped(tip: &Label, word: &Label, scope: &str) -> Label {
     if scope.is_empty() { tip.clone() } else { Label::from(format!("{} ({} {scope})", tip.as_str(), word.as_str())) }
@@ -381,5 +406,39 @@ mod tests {
         let bold = fixture.by_label("Bold").expect("the Bold master");
         fixture.click(&bold).settle();
         assert!(posted.borrow().contains(&Msg::Shell(select_masters(&[1]))), "{:?}", posted.borrow());
+    }
+
+    /// Number Values: the plus adds a number without a name, a typed value goes to every selected master, a new name
+    /// renames the number and the minus removes it.
+    #[test]
+    fn number_values_add_set_rename_and_remove() {
+        let model = Tracked::new(MastersTabModel { numbers: vec![("value".into(), Some(10.0))], ..model() });
+        let posted = Rc::new(RefCell::new(Vec::new()));
+        let seen = Rc::clone(&posted);
+        let mut fixture = Fixture::new(move |ui| {
+            let mut sent = Vec::new();
+            view(ui, &model, &[], &mut sent);
+            seen.borrow_mut().extend(sent);
+        });
+        fixture.settle();
+        let plus = fixture.by_label("Add a number value").expect("the Number Values plus");
+        fixture.click(&plus).settle();
+        assert!(posted.borrow().contains(&Msg::run("font.numbers.add", json!({}))), "{:?}", posted.borrow());
+        posted.borrow_mut().clear();
+        let value = fixture.by_label("value").expect("the number's value field");
+        fixture.click(&value).key(Key::A, Modifiers::COMMAND).type_text("24").key(Key::Enter, Modifiers::NONE).settle();
+        assert!(
+            posted.borrow().contains(&Msg::run("font.master.setNumber", json!({"masters": [0, 1], "number": 0, "value": 24.0}))),
+            "{:?}",
+            posted.borrow()
+        );
+        posted.borrow_mut().clear();
+        let name = fixture.by_label("Number Name").expect("the number's name field");
+        fixture.click(&name).key(Key::A, Modifiers::COMMAND).type_text("stem").key(Key::Enter, Modifiers::NONE).settle();
+        assert!(posted.borrow().contains(&Msg::run("font.numbers.rename", json!({"number": 0, "name": "stem"}))), "{:?}", posted.borrow());
+        posted.borrow_mut().clear();
+        let minus = fixture.by_label("Remove this number value from every master").expect("the number's minus");
+        fixture.click(&minus).settle();
+        assert!(posted.borrow().contains(&Msg::run("font.numbers.remove", json!({"number": 0}))), "{:?}", posted.borrow());
     }
 }

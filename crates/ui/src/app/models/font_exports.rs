@@ -10,7 +10,7 @@ use fontcraft_engine::model::{Font, Instance, StyleClass};
 use serde_json::{Value, json};
 
 use super::ProjectCx;
-use super::font_info::{MAX_SHOWN, RowModel, rows};
+use super::font_info::{FieldWarning, MAX_SHOWN, MAX_WARNINGS, RowModel, field_warnings, rows};
 use crate::shell::font_info::Target;
 
 /// Most axes the Axes Coordinates rows list.
@@ -114,10 +114,14 @@ pub struct ExportFields {
     pub axes: Vec<(String, Option<f64>)>,
     /// The extrapolation warnings of the selected static instances.
     pub warnings: Vec<String>,
+    /// The warnings `font.instance.list` gives for the selected entries' fields (`styleName`, `styleLinking`,
+    /// `weightClass`), each once.
+    pub field_warnings: Vec<FieldWarning>,
 }
 
 pub fn project(cx: &mut ProjectCx<'_>) -> ExportsModel {
     let placement = cx.session.query("font.instance.placement", &json!({})).unwrap_or(Value::Null);
+    let listed = cx.session.query("font.instance.list", &json!({})).unwrap_or(Value::Null);
     let Ok(font) = cx.session.font() else { return ExportsModel::default() };
     let count = font.instances.len();
     let selected = shown_selection(&cx.view.font_info.exports.selected, count);
@@ -132,7 +136,7 @@ pub fn project(cx: &mut ProjectCx<'_>) -> ExportsModel {
     let (fields, rows_, params) = if selected.is_empty() {
         (None, Vec::new(), Vec::new())
     } else {
-        (fields(font, &selected, &placement), rows(font, &target, RowKind::Field), rows(font, &target, RowKind::Param))
+        (fields(font, &selected, &placement, &listed), rows(font, &target, RowKind::Field), rows(font, &target, RowKind::Param))
     };
     ExportsModel { entries, selected, plus, fields, rows: rows_, params }
 }
@@ -166,8 +170,9 @@ fn flag(all: &[&Instance], f: impl Fn(&Instance) -> bool) -> Flag {
     Flag { on: all.first().is_some_and(|i| f(i)), mixed: differs(all, f) }
 }
 
-/// The built-in fields of the `selected` instances of `font`; `placement` is `font.instance.placement`'s result (the warnings).
-pub fn fields(font: &Font, selected: &[usize], placement: &Value) -> Option<ExportFields> {
+/// The built-in fields of the `selected` instances of `font`; `placement` is `font.instance.placement`'s result (the
+/// extrapolation warnings), `listed` is `font.instance.list`'s (the field warnings).
+pub fn fields(font: &Font, selected: &[usize], placement: &Value, listed: &Value) -> Option<ExportFields> {
     let all: Vec<&Instance> = selected.iter().filter_map(|i| font.instances.get(*i)).collect();
     let first = *all.first()?;
     let statics: Vec<usize> = selected.iter().copied().filter(|i| font.instances.get(*i).is_some_and(|x| !is_variable(x))).collect();
@@ -198,6 +203,21 @@ pub fn fields(font: &Font, selected: &[usize], placement: &Value) -> Option<Expo
         .filter_map(|e| e.get("warning").and_then(Value::as_str).map(sentence))
         .take(MAX_WARNINGS_SHOWN.saturating_add(1))
         .collect();
+    let mut by_field: Vec<FieldWarning> = Vec::new();
+    let of_selected = listed
+        .get("instances")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|e| e.get("index").and_then(Value::as_u64).and_then(|i| usize::try_from(i).ok()).is_some_and(|i| selected.contains(&i)));
+    for warning in of_selected.flat_map(field_warnings) {
+        if by_field.len() >= MAX_WARNINGS {
+            break;
+        }
+        if !by_field.contains(&warning) {
+            by_field.push(warning);
+        }
+    }
     Some(ExportFields {
         variable: is_variable(first),
         active: flag(&all, |i| i.exports),
@@ -212,6 +232,7 @@ pub fn fields(font: &Font, selected: &[usize], placement: &Value) -> Option<Expo
         statics,
         axes,
         warnings,
+        field_warnings: by_field,
     })
 }
 
@@ -229,7 +250,7 @@ pub fn class_value(class: Option<&StyleClass>, names: &[(&str, u16)], default: f
 }
 
 /// `text` with its first letter capitalised, as a line on its own reads.
-fn sentence(text: &str) -> String {
+pub fn sentence(text: &str) -> String {
     let mut chars = text.chars();
     chars.next().map(|c| c.to_uppercase().chain(chars).collect()).unwrap_or_default()
 }

@@ -1,4 +1,4 @@
-//! The Font tab: General (Family Name with its warning, Units per Em with Scale, Version with its stepper, Creation
+//! The Font tab: General (Family Name and Units per Em with their warnings, Scale, Version with its stepper, Creation
 //! Date with Update, the added fields), Axes and the font's Custom Parameters.
 //!
 //! | Control | Posts |
@@ -14,7 +14,6 @@
 //! | an axis's minus | `font.axes.remove` |
 
 use craft::behavior::IconId;
-use craft::theme::variant::Tone;
 use craft::ui::buttons::{Button, IconButton};
 use craft::ui::choice::Checkbox;
 use craft::ui::contract::{Bind, Props as _, Show as _, ShowContainer as _};
@@ -40,8 +39,6 @@ craft::ui::words! {
         general: "fontcraftFontInfoFont.general" = "General";
         add_field: "fontcraftFontInfoFont.addField" = "Add a field";
         family_name: "fontcraftFontInfoFont.familyName" = "Family Name";
-        /// Under a family name with characters other than ASCII letters, digits and spaces.
-        family_warning: "fontcraftFontInfoFont.familyWarning" = "Only ASCII letters, digits and spaces are safe in a family name: other characters can keep the fonts from exporting or installing. Add a Family Names field for names in other scripts or languages.";
         units_per_em: "fontcraftFontInfoFont.unitsPerEm" = "Units per Em";
         scale_to: "fontcraftFontInfoFont.scaleTo" = "Scale to";
         scale: "fontcraftFontInfoFont.scale" = "Scale";
@@ -91,9 +88,7 @@ pub fn view(ui: &mut Ui, model: &FontInfoModel, sent: &mut Vec<Msg>) {
                 posted.push(set("familyName", json!(text.trim())));
             }
         });
-        if font.family_warning {
-            Text::new(words.family_warning.clone()).tone(Tone::Warn).show(ui);
-        }
+        rows::warnings(ui, &font.warnings, "familyName");
         Field::new(words.units_per_em.clone()).show(ui, |ui, _| {
             Row::new().show(ui, |ui, _| {
                 let upm = Some(f64::from(font.units_per_em));
@@ -109,6 +104,7 @@ pub fn view(ui: &mut Ui, model: &FontInfoModel, sent: &mut Vec<Msg>) {
                 }
             });
         });
+        rows::warnings(ui, &font.warnings, "unitsPerEm");
         Field::new(words.version.clone()).show(ui, |ui, _| {
             Row::new().show(ui, |ui, _| {
                 let major = Some(f64::from(font.version_major));
