@@ -177,6 +177,8 @@ pub struct OverlayData {
     pub beam: Option<f64>,
     /// The text note whose field is open: its text is the field's.
     pub editing: Option<usize>,
+    /// The shown reporter modules' drawings of the edited layer (`canvas::reporters`).
+    pub reporters: Vec<super::reporters::ReporterDrawing>,
 }
 
 /// The overlays' side of the app.

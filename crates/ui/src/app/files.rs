@@ -15,6 +15,7 @@
 //! | `project.linkFont` | a font source for the project to link, into `font` |
 //! | `project.setExportDestination` | a folder to export into, into `folder` |
 //! | `tableViewer.openFont`, `tableViewer.compareWithFile` | a compiled font for the Table Viewer ([`COMPILED_EXTENSIONS`]) |
+//! | `plugin.installFromFile` | a `.wasm` module or `.fcmacro` macro, unless `dataBase64` or `name` names the file |
 //!
 //! Engine and shell commands alike: a shell command of the table asks before it runs, as an engine command does.
 //!
@@ -38,6 +39,7 @@ pub const PICKED: &[(&str, &str)] = &[
     ("project.setExportDestination", "folder"),
     ("tableViewer.openFont", "path"),
     ("tableViewer.compareWithFile", "path"),
+    ("plugin.installFromFile", "path"),
 ];
 
 /// Most files one picker answer opens; the rest are left alone.
@@ -51,6 +53,8 @@ const NATIVE_EXTENSION: &str = "fontcraft";
 const PROJECT_EXTENSION: &str = "fontcraftproject";
 /// The compiled fonts the Table Viewer reads.
 pub const COMPILED_EXTENSIONS: [&str; 6] = ["ttf", "otf", "ttc", "otc", "woff", "woff2"];
+/// The file kinds `plugin.installFromFile` installs: modules and macros.
+const EXTENSION_FILES: [&str; 2] = ["wasm", "fcmacro"];
 /// The file kinds a project can link.
 pub const FONT_EXTENSIONS: [&str; 5] = ["glyphs", "glyphspackage", "ufo", "designspace", "fontcraft"];
 
@@ -128,6 +132,12 @@ fn request(session: &Session, command: &CommandRef) -> Option<(PickRequest, &'st
         "project.setExportDestination" => (PickRequest::folder("export"), Fill::One),
         "tableViewer.openFont" => (PickRequest::open("document").title("Open Font").filter("Fonts", &COMPILED_EXTENSIONS), Fill::One),
         "tableViewer.compareWithFile" => (PickRequest::open("document").title("Compare With").filter("Fonts", &COMPILED_EXTENSIONS), Fill::One),
+        "plugin.installFromFile" => {
+            if ["dataBase64", "name"].iter().any(|k| command.params.get(*k).is_some_and(|v| !v.is_null())) {
+                return None;
+            }
+            (PickRequest::open("extension").title("Install from File").filter("Modules and macros", &EXTENSION_FILES), Fill::One)
+        }
         _ => return None,
     };
     Some((request.0, param, request.1))

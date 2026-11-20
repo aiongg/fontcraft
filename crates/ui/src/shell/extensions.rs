@@ -1,5 +1,6 @@
 //! The extension commands of the window: reporter switches (`view.showReporter`) and the External Changes dialog
-//! (`dialog.externalChanges`, [`super::external_changes`]). Module and macro menu rows are built in
+//! (`dialog.externalChanges`, [`super::external_changes`]). The Extension Manager's state is kept here; its commands are
+//! [`super::extension_manager`] and its window `dialogs::extension_manager`. Module and macro menu rows are built in
 //! `app::menus_dynamic`; dropped module files are installed by `app::dropped`.
 
 use craft::ui::runtime::commands::CommandRef;
@@ -34,6 +35,10 @@ pub struct ExtensionsView {
     pub reporters: Vec<String>,
     /// The External Changes dialog.
     pub external: ExternalChanges,
+    /// The Extension Manager.
+    pub manager: super::extension_manager::ManagerView,
+    /// The last error of each shown reporter's run, by module id; the canvas writes it at its top left.
+    pub reporter_errors: std::collections::BTreeMap<String, String>,
 }
 
 /// Whether the module `id` is an installed reporter.

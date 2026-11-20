@@ -159,7 +159,8 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   runs it on the canvas's pass, after the layers. View commands and display toggles are
   `shell/view.rs`. Guides, grids, measurement labels, annotations, display aids, the auto-meter and audit markers
   are `canvas/overlays/`: `overlays::refresh` (after `drain`) reads what they need from the engine into
-  `OverlayData`, which layers read as `PaintCx::overlays`; their switches are `shell/overlays.rs`. A text note is
+  `OverlayData`, which layers read as `PaintCx::overlays`; their switches are `shell/overlays.rs`. Reporter module
+  drawings are read the same way (`canvas/reporters.rs`) and paint as `reportersBack` and `reportersFront`. A text note is
   typed in a field over its box (`canvas/annotation_editor.rs`).
 - **Tools.** The slot holds `canvas::tools::bridge::ToolBridge`. It posts the canvas's press, drags,
   hover and keys as `Msg::Tool`; `drain` runs `fontcraft_tools::Toolbox` on them

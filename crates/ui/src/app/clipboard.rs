@@ -21,6 +21,8 @@
 //!   on the clipboard; Paste (`font.info.features.paste`) asks for the clipboard's text and runs
 //!   `font.features.pasteEntries` with it. Copy and Paste fired while one of the sidebar's lists holds the keyboard
 //!   focus (Cmd+C, Cmd+V) go to that list, which posts the same commands ([`to_focused_list`]).
+//! - In the Project panel, Copy and Paste (`window.project.copy`, `window.project.paste`) copy and duplicate instances;
+//!   Paste asks for the clipboard's text and hands it back to `window.project.paste`.
 //!
 //! The text goes out through [`Clipboard::out`], which the shell hands to the window's clipboard.
 
@@ -47,6 +49,8 @@ pub enum PasteKind {
     Special,
     /// Feature entries into the Features sidebar.
     FeatureEntries,
+    /// Instances copied in the Project panel, into the project with this id (`window.project.paste`).
+    ProjectInstances(u64),
 }
 
 /// The clipboard's state on the app.
@@ -149,6 +153,10 @@ pub fn paste_msg(app: &mut FontCraftApp, text: &str, kind: PasteKind) -> Result<
     }
     if kind == PasteKind::FeatureEntries {
         return Ok(Msg::run("font.features.pasteEntries", json!({ "text": text })));
+    }
+    if let PasteKind::ProjectInstances(project) = kind {
+        let params = json!({ "project": project, "text": text });
+        return Ok(Msg::Shell(CommandRef::with_params(crate::shell::project::PASTE, params)));
     }
     let glyphs = holds_glyphs(text);
     if kind == PasteKind::Special {
