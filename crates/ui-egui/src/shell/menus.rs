@@ -97,6 +97,7 @@ fn build(session: &Session, state: Option<&UiState>) -> Vec<Menu> {
 /// The menu commands that flip an on/off switch: each shows a check mark while its switch is on.
 /// A command that only opens a window (its menu item never closes it) is not a switch.
 pub const SWITCHES: &[&str] = &[
+    "audit.toggleLiveAudit",
     "view.showNodes",
     "view.showNodesInForeground",
     "view.showNodesInBackground",
@@ -177,6 +178,7 @@ pub fn checked(session: &Session, state: &UiState, id: &str) -> Option<bool> {
         "window.palette" => state.show_palette,
         "window.previewPanel" => state.panels.preview.panel_open,
         "audit.showPanel" => state.panels.font_audit.open,
+        "audit.toggleLiveAudit" => state.audit.live,
         _ => return None,
     })
 }
