@@ -58,6 +58,7 @@ glyph.updateMetricsForAllMasters
 spacing.getMetrics
 spacing.evaluateMetricsKey
 spacing.listOutOfSyncMetrics
+spacing.getSharedMetrics
 glyph.transformMetrics
 kerning.setPair
 kerning.removePair
@@ -343,6 +344,9 @@ font.features.setLabel
 font.features.removeLabel
 font.features.openSpec
 font.features.expandCode
+font.features.setDisabled
+font.features.copyEntries
+font.features.pasteEntries
 font.numbers.list
 font.numbers.add
 font.numbers.rename
@@ -469,12 +473,14 @@ hint.tt.autohintGlyph
 autohint.ps.reportStems
 autohint.ps.reportZones
 autohint.ps.listFdDicts
+autohint.ps.runFont
 colorPalette.list
 colorPalette.addColor
 colorPalette.removeColor
 colorPalette.setColor
 colorPalette.addPalette
 colorPalette.removePalette
+color.generateDarkPalette
 layer.convertToColorPalette
 layer.setColorPaletteIndex
 layer.convertToIColor
@@ -687,6 +693,7 @@ file.saveExportProfile
 file.removeExportProfile
 file.listExportProfiles
 glyph.exportArtwork
+filter.glyphAsImage
 file.exportWindowContents
 file.revertGlyph
 edit.copyLayerToLayer
