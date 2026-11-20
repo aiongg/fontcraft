@@ -264,7 +264,7 @@ fn fresh_seed() -> u64 {
         nanos ^ (u64::from(std::process::id()) << 32)
     };
     #[cfg(target_arch = "wasm32")]
-    let base = super::file::clock() as u64;
+    let base = super::shared::clock() as u64;
     base ^ count.wrapping_mul(0x9E37_79B9_7F4A_7C15)
 }
 
