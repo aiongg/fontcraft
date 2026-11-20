@@ -444,6 +444,13 @@ impl FontCraftApp {
             crate::canvas::tools::targets::with_targets(self, command)
         }
     }
+
+    /// Whether the person chose what a dialog acts on: glyphs selected in Font View while it shows, or a glyph shown
+    /// in the edit view. With neither, a dialog takes no targets from [`Self::with_targets`], whose canvas part falls
+    /// back to the font's first glyph; its command then acts on every glyph, or the dialog asks for a glyph.
+    pub(crate) fn targets_chosen(&self) -> bool {
+        self.view.glyph.is_some() || (!self.view.font_view.selected.is_empty() && self.font_view_shows())
+    }
 }
 
 impl FontCraftApp {
@@ -471,7 +478,7 @@ impl FontCraftApp {
                 let Some(command) = clipboard::fired(self, targeted) else { return };
                 // Font View's per-glyph batch is no target list for the dialog, which then reads the selection itself.
                 let targets = match &command.params {
-                    Value::Object(m) if command.id == fired.id => m.clone(),
+                    Value::Object(m) if command.id == fired.id && self.targets_chosen() => m.clone(),
                     _ => Map::new(),
                 };
                 if crate::dialogs::after::fired(self, &fired.id, &fired.params, &targets) {

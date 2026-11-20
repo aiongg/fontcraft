@@ -363,11 +363,15 @@ pub fn current_master(app: &FontCraftApp) -> Option<String> {
     crate::shell::masters::current_master(font, &app.view.layers).map(|m| m.id.clone())
 }
 
-/// What the command acts on when the dialog names nothing: what a fired command takes ([`FontCraftApp::with_targets`]:
-/// Font View's selection while Font View shows with glyphs selected, else the canvas selection), else the glyph the
-/// glyph panels show, as `glyph` for a command that acts on one layer and as `glyphs` for one that acts on glyphs.
+/// What the command acts on when the dialog names nothing: when the person chose glyphs
+/// ([`FontCraftApp::targets_chosen`]), what a fired command takes ([`FontCraftApp::with_targets`]: Font View's
+/// selection while Font View shows with glyphs selected, else the canvas selection), else the glyph the glyph panels
+/// show, as `glyph` for a command that acts on one layer and as `glyphs` for one that acts on glyphs.
 fn selection_targets(app: &mut FontCraftApp, command: &str) -> Map<String, Value> {
     use fontcraft_engine::params::TargetKind;
+    if !app.targets_chosen() {
+        return Map::new();
+    }
     let targeted = app.with_targets(CommandRef::new(command));
     if targeted.id == command
         && let Value::Object(m) = targeted.params
