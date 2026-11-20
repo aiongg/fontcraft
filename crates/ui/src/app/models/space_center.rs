@@ -54,6 +54,8 @@ pub struct MatrixColumn {
     pub width: Option<f64>,
     pub left: Option<f64>,
     pub right: Option<f64>,
+    /// The glyph's master layers: a drag with Alt held edits every one.
+    pub master_layers: Vec<String>,
 }
 
 impl MatrixColumn {
@@ -127,6 +129,10 @@ fn build(font: &Font, master: &str, resolved: &Resolved, state: SpaceCenterState
             width: value(font, &c.glyph, &c.layer, Row::Width),
             left: value(font, &c.glyph, &c.layer, Row::Left),
             right: value(font, &c.glyph, &c.layer, Row::Right),
+            master_layers: font
+                .glyph(&c.glyph)
+                .map(|g| font.masters.iter().filter_map(|m| g.layer(&m.id).map(|l| l.id.clone())).collect())
+                .unwrap_or_default(),
         })
         .collect();
     let shown_master = font.masters.iter().find(|m| m.id == master);

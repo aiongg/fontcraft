@@ -5,6 +5,7 @@
 //! |---|---|
 //! | the Font field (Enter), Reload | `tableViewer.show {font}`, `{reload: true}` |
 //! | the Compare With field (Enter), Stop Comparing | `tableViewer.show {compareWith}`, `{compareWith: null}` |
+//! | Open…, Compare With… | `tableViewer.openFont`, `tableViewer.compareWithFile`: the window asks for the file |
 //! | a row of the table list | `tableViewer.show {table}` |
 //! | Fields, TTX, Differences | `tableViewer.show {view}` |
 //! | a record of the tree | `tableViewer.show {record}`: the hex pane marks its bytes |
@@ -41,6 +42,10 @@ craft::ui::words! {
         font_file: "fontcraftTableViewer.fontFile" = "Font file";
         reload: "fontcraftTableViewer.reload" = "Reload";
         reload_tip: "fontcraftTableViewer.reloadTip" = "Read the font files again";
+        /// Asks for the font file.
+        open: "fontcraftTableViewer.open" = "Open…";
+        /// Asks for the second font file.
+        compare_pick: "fontcraftTableViewer.comparePick" = "Compare With…";
         compare_with: "fontcraftTableViewer.compareWith" = "Compare With";
         second_file: "fontcraftTableViewer.secondFile" = "Second font file";
         stop: "fontcraftTableViewer.stop" = "Stop Comparing";
@@ -136,6 +141,9 @@ fn files(ui: &mut Ui, words: &TableViewerWords, model: &TableViewerModel, sent: 
         if let Some(path) = field.show(ui).events.committed().filter(|p| !p.is_empty() && **p != model.font) {
             sent.push(show_msg(json!({ "font": path })));
         }
+        if Button::new(words.open.clone()).show(ui).clicked() {
+            sent.push(Msg::Shell(CommandRef::new("tableViewer.openFont")));
+        }
         if !model.font.is_empty() && Button::new(words.reload.clone()).tooltip(words.reload_tip.clone()).show(ui).clicked() {
             sent.push(show_msg(json!({ "reload": true })));
         }
@@ -144,6 +152,9 @@ fn files(ui: &mut Ui, words: &TableViewerWords, model: &TableViewerModel, sent: 
         let field = TextField::new(words.compare_with.clone(), Bind::given(model.compare_with.clone())).placeholder(words.second_file.clone());
         if let Some(path) = field.show(ui).events.committed().filter(|p| !p.is_empty() && **p != model.compare_with) {
             sent.push(show_msg(json!({ "compareWith": path })));
+        }
+        if Button::new(words.compare_pick.clone()).show(ui).clicked() {
+            sent.push(Msg::Shell(CommandRef::new("tableViewer.compareWithFile")));
         }
         if !model.compare_with.is_empty() && Button::new(words.stop.clone()).show(ui).clicked() {
             sent.push(show_msg(json!({ "compareWith": null })));
@@ -485,5 +496,15 @@ mod tests {
         fixture.click(&units).settle();
         let shell = |p| Msg::Shell(CommandRef::with_params("tableViewer.show", p));
         assert_eq!(*posted.borrow(), vec![shell(json!({"table": "hmtx"})), shell(json!({"record": [1]}))]);
+
+        posted.borrow_mut().clear();
+        let open = fixture.by_label("Open…").expect("the Open… button");
+        fixture.click(&open).settle();
+        let compare = fixture.by_label("Compare With…").expect("the Compare With… button");
+        fixture.click(&compare).settle();
+        assert_eq!(
+            *posted.borrow(),
+            vec![Msg::Shell(CommandRef::new("tableViewer.openFont")), Msg::Shell(CommandRef::new("tableViewer.compareWithFile"))]
+        );
     }
 }

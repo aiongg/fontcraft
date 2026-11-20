@@ -4116,10 +4116,10 @@ summary = "In the preview, dragging a margin changes it (with Alt, in all layers
 ref = "RoboFont reference › Space Center › Editing spacing with the mouse; Arrow key increments"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5). Documented in the RoboFont reference, not yet observed. The keys and drags run the spacing nudges (`spacing.increaseRightSidebearing`, `spacing.increaseLeftSidebearing`, `spacing.shiftOutlineRight`) with a signed amount; a drag runs its command once, when the button is released."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5). Documented in the RoboFont reference, not yet observed. The keys and drags run the spacing nudges (`spacing.increaseRightSidebearing`, `spacing.increaseLeftSidebearing`, `spacing.shiftOutlineRight`) with a signed amount; a drag runs its command once, when the button is released, and with Alt held the commands for every master layer run as one `command.batch`, so a drag is one undo step."
 guesses = [
   "Each side's arrow moves its edge that way: Right grows the right margin and Left shrinks it, Alt+Left grows the left margin and Alt+Right shrinks it, as the primary reference's text-mode spacing shortcuts do; the reference app would settle the direction of the Alt keys.",
-  "A press within the selection-ring radius of a glyph's left or right edge drags that margin, anywhere else inside its box drags the outline; the reference's grab distance would settle it.",
+  "A press within a few points of a glyph's left or right edge (the canvas's node size) drags that margin, anywhere else inside its box drags the outline; the reference's grab distance would settle it.",
   "Ctrl+Cmd with Shift shifts the outline by 10; the reference gives no 100 step for the outline, and pressing Ctrl+Cmd+Shift there would settle it.",
 ]
 

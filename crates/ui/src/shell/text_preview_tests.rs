@@ -1,6 +1,6 @@
 //! The Text Preview through the app layer: each command changes what the projection places, characters the font
 //! lacks are placed for the interface font, the text limit, shaping through the preview font, and the rebuild once
-//! editing pauses.
+//! editing pauses, and colour glyphs.
 
 use std::sync::Arc;
 
@@ -140,4 +140,21 @@ fn text_preview_shapes_through_the_preview_font_and_rebuilds_once_editing_pauses
     assert!(app.session.preview_builds().get(doc.0, doc.1, &master).is_some(), "built once editing paused");
     let x = xs(&page(&app));
     assert!((x[1] - x[0] - 600.0).abs() < 0.01, "the new width, kerned: {x:?}");
+}
+
+/// A glyph with a colour layer in the shown master carries its colour drawing, which the panel draws in place of its
+/// outline; a glyph without one has none.
+#[test]
+fn text_preview_carries_the_colour_drawing_of_colour_glyphs() {
+    let mut app = app();
+    let master = app.session.font().unwrap().masters[0].id.clone();
+    exec(&mut app, "layers.addBackupLayer", json!({"glyphs": ["A"], "master": master}));
+    let layer = app.session.font().unwrap().glyph("A").unwrap().layers.iter().find(|l| !l.is_master_layer()).unwrap().id.clone();
+    exec(&mut app, "layer.convertToColor", json!({"glyph": "A", "layer": layer}));
+    exec(&mut app, "path.addRectangle", json!({"glyph": "A", "layer": layer, "x": 100, "y": 100, "width": 200, "height": 200}));
+    exec(&mut app, "attributes.setFillColor", json!({"glyph": "A", "layer": layer, "shapes": [0], "color": "#FF0000FF"}));
+    shell(&mut app, "textPreview.setText", json!({"text": "AV"})).unwrap();
+    let p = page(&app);
+    assert!(matches!(p.colors.arts.get("A"), Some(Some(_))), "A draws in colour: {:?}", p.colors.arts.keys().collect::<Vec<_>>());
+    assert!(matches!(p.colors.arts.get("V"), Some(None)), "V draws its outline");
 }

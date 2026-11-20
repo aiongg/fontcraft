@@ -167,6 +167,11 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   the one before it did. The selection lives in `FontCraftApp::tools` (the engine never stores it);
   the selection and the tool's overlays paint as layers (`canvas/tools/overlays.rs`). A menu or key
   command run without parameters gets its targets from the selection (`canvas/tools/targets.rs`).
+- **Space Center preview.** `panels/space_center/preview.rs` is a second craft `Canvas` whose document is the laid-out
+  text in points. Its view and its tool (`shell::space_center::drag::SpacePreview`) live in
+  `FontCraftApp::space_preview` and reach the panel through the dock, as the edit view's tool does. Painting hands
+  the tool each glyph's box (`PreviewFrame`); the tool's edits become messages: a selection, one command or one
+  `command.batch` per drag, a nudge per arrow.
 - **Dialogs.** `dialogs::run` gets the window's `DialogHost` every pass. A module opens its dialog
   when app state asks for it and takes the answer on a later pass (`dialogs/unsaved.rs` is the
   example: the close question). A form over one command's parameters is a spec instead
@@ -183,8 +188,11 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
 - **Control-driven tests.** `crate::testing::TestApp` runs the whole app headless at 1280 × 800:
   `t.ok(method, params)` returns a request's result, `t.error(…)` its error, and window input
   (`ui.click`, `ui.drag`, `ui.move`, `ui.wheel`) has run when they return.
-- **File pickers.** A command listed in `app::files::PICKED` that arrives without its path opens
+- **File pickers.** A command listed in `app::files::PICKED` (engine or shell) that arrives without its path opens
   the host's picker; the answer posts the command again with the path.
+- **User settings.** The settings live in the session's settings store. `apps/fontcraft-next` supplies an
+  `app::user_store::UserStore` that reads them from the settings folder when the window opens and writes them back
+  when they change (once per frame); `crates/ui` reads and writes no files itself.
 - **Closing.** `app/close.rs` keeps the question asked before unsaved work closes (the close box,
   `app.quit`, File › Close): one document at a time, then the window or the document closes.
   `dialogs/unsaved.rs` shows it; `window.closePrompt` answers it from the control channel.

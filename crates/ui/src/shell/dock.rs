@@ -278,6 +278,8 @@ pub fn toggle(workspace: &mut Workspace<PanelId>, panel: PanelId) {
 struct Panels<'a> {
     models: &'a Models,
     canvas: canvas::CanvasProps<'a>,
+    /// The Space Center preview's view and drag tool.
+    space_preview: &'a mut crate::shell::space_center::drag::SpacePreview,
     sent: &'a mut Vec<Msg>,
     words: std::sync::Arc<PanelWords>,
     /// The Preview Area's height while it shows under the edit view.
@@ -357,7 +359,12 @@ impl DockPanels<PanelId> for Panels<'_> {
             PanelId::Stroke => panels::stroke::show(ui, panels::stroke::Props { model: &self.models.palette.stroke, sent: self.sent }),
             PanelId::SpaceCenter => panels::space_center::show(
                 ui,
-                panels::space_center::Props { model: &self.models.space_center, tokens: &self.models.canvas_tokens, sent: self.sent },
+                panels::space_center::Props {
+                    model: &self.models.space_center,
+                    tokens: &self.models.canvas_tokens,
+                    preview: self.space_preview,
+                    sent: self.sent,
+                },
             ),
             PanelId::TableViewer => {
                 panels::table_viewer::show(ui, panels::table_viewer::Props { model: &self.models.table_viewer, sent: self.sent });
@@ -428,7 +435,7 @@ fn preview_area_height(view: &crate::app::ViewState) -> Option<f32> {
 /// Shows the dock and applies what the user did to it.
 pub fn show(ui: &mut Ui, app: &mut FontCraftApp) {
     let words = Env::of(ui).words::<PanelWords>();
-    let FontCraftApp { view, models, sent, status, active_tool, tools, overlays, .. } = app;
+    let FontCraftApp { view, models, sent, status, active_tool, space_preview, tools, overlays, .. } = app;
     let hinting = canvas::hinting::HintPaint { model: &models.hint_canvas, view: &view.hinting, tokens: &models.hint_tokens };
     let given = view.workspace.clone();
     let label = words.dock.clone();
@@ -450,6 +457,7 @@ pub fn show(ui: &mut Ui, app: &mut FontCraftApp) {
             note: &mut overlays.note,
             hinting,
         },
+        space_preview,
         sent,
         words,
         preview_area,

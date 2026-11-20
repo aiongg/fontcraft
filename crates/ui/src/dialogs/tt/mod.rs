@@ -1,5 +1,5 @@
 //! The TrueType hinting dialogs: the TTFZones and TTFStems editors, the Delta table they share, the TrueType
-//! Instructions dialog and the TrueType Debugger; and the shell commands that open them and set the Hinting Preview's
+//! Instructions dialog, the TrueType Debugger and the Preview Address dialog; and the shell commands that open them and set the Hinting Preview's
 //! scale.
 //!
 //! A shell command records what to open in [`TtState`] (app state); [`run`] opens the dialog on the window's host on
@@ -9,6 +9,7 @@
 pub mod debugger;
 pub mod deltas;
 pub mod instructions;
+pub mod preview_address;
 pub mod zones;
 
 use craft::ui::dialog::DialogHost;
@@ -26,6 +27,8 @@ use crate::shell::commands::{Module, UiCommand};
 #[derive(Default)]
 pub struct TtState {
     pub debugger: DebuggerState,
+    /// The Preview Address dialog (`hint.tt.showPreviewAddress`).
+    pub preview_address: preview_address::PreviewAddressState,
     /// What a shell command asked to open or close, taken by [`run`].
     pub asks: Vec<Ask>,
     /// The document revision the open dialogs last read.
@@ -80,6 +83,7 @@ const COMMANDS: &[UiCommand] = &[
         shortcut: None,
         params: "{scale: 1 | 2 | 4} draw the Hinting Preview's pixels at 1x (one screen pixel per device pixel), 2x or 4x",
     },
+    UiCommand { id: preview_address::ID, label: "Show Preview Address…", menu: &[], shortcut: None, params: preview_address::PARAMS },
 ];
 
 fn shell(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
@@ -113,6 +117,7 @@ fn shell(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
             Ok(())
         }
         crate::app::models::hinting::SCALE_COMMAND => crate::app::models::hinting::set_scale(&mut app.models.hinting_waterfall, &params),
+        preview_address::ID => preview_address::command(app, &params),
         other => Err(format!("no hinting command `{other}`")),
     }
 }
@@ -146,6 +151,7 @@ pub fn run(host: &mut DialogHost, app: &mut FontCraftApp) {
     let _ = host.take::<InstructionsDialog>();
     let _ = host.take::<DefinitionsDialog>();
     debugger_window(host, app);
+    preview_address::run(host, app);
     let revision = app.session.active().map(|d| (d.id, d.revision));
     let moved = app.tt.read_at != revision;
     app.tt.read_at = revision;

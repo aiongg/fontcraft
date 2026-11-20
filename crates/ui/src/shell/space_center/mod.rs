@@ -12,6 +12,7 @@
 //! The text is read by [`text`]; the projection (`app::models::space_center`) lays it out for the master shown. The
 //! font changes only through engine commands with a number, so nothing stays linked as a metrics key would.
 
+pub mod drag;
 pub mod text;
 
 use std::ops::RangeInclusive;

@@ -3322,6 +3322,36 @@ own = true
 notes = "reload reads the font and the compared font again. expand true reads and opens a record's children; expand false closes the record and keeps the selection. In the panel UI the command shows the Table Viewer panel and ui.inspect reports the viewer under tableViewer."
 guesses = ["The Table Viewer opens from the Window menu with no shortcut; the companion tool is a separate application, so nothing settles a menu place."]
 
+[[command]]
+id = "tableViewer.openFont"
+label = "Open Font in Table Viewer"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{path?: path} → nothing; the viewer as tableViewer.show {font: path} leaves it"
+area = "cli-tools"
+milestone = "M12"
+summary = "Reads a compiled font into the Table Viewer; without a path the window asks for the file first. It is the viewer's Open… button."
+ref = "Our design"
+status = "inferred"
+own = true
+notes = "The file picker offers ttf, otf, ttc, otc, woff and woff2 files. Over the control channel the path is required."
+
+[[command]]
+id = "tableViewer.compareWithFile"
+label = "Compare With File"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{path?: path} → nothing; the viewer as tableViewer.show {compareWith: path} leaves it"
+area = "cli-tools"
+milestone = "M12"
+summary = "Compares the Table Viewer's font with a second compiled font; without a path the window asks for the file first. It is the viewer's Compare With… button."
+ref = "Our design"
+status = "inferred"
+own = true
+notes = "The file picker offers ttf, otf, ttc, otc, woff and woff2 files. Over the control channel the path is required."
+
 [[panel]]
 id = "window.sourceDiff"
 label = "Compare Sources"
