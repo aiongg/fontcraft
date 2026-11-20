@@ -202,7 +202,8 @@ fn font_instance_style_name_warnings() {
 #[test]
 fn font_instance_queries_carry_the_edit_warnings() {
     let mut regular = instance("Regular");
-    regular.properties.set("familyNames", "Test Sans Display", true);
+    // Another family, short enough that the Regular itself draws no length warning.
+    regular.properties.set("familyNames", "Test Display", true);
     let mut s = font(vec![regular, instance("Italic")]);
     let messages = |out: &Value| out["warnings"].as_array().unwrap().iter().map(|w| w.as_str().unwrap().to_string()).collect::<Vec<_>>();
 

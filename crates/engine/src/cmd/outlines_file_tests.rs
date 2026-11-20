@@ -89,7 +89,12 @@ fn outlines_repairs_on_a_cff_font() {
         data
     };
     for tag in before.tags().into_iter().filter(|t| *t != *b"CFF ") {
-        assert_eq!(blank_adjustment(tag, before.get(tag)), blank_adjustment(tag, after.get(tag)), "{} is copied", fontcraft_tables::sfnt::tag_str(tag));
+        assert_eq!(
+            blank_adjustment(tag, before.get(tag)),
+            blank_adjustment(tag, after.get(tag)),
+            "{} is copied",
+            fontcraft_tables::sfnt::tag_str(tag)
+        );
     }
     assert_ne!(before.get(*b"CFF "), after.get(*b"CFF "));
 

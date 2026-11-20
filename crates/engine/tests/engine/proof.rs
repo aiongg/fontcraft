@@ -205,9 +205,14 @@ fn proof_spot_layouts_take_show_hide_and_header() {
     assert_eq!(pages.len(), 1);
     let page = std::fs::read_to_string(&pages[0]).unwrap();
     assert_eq!(shown(&page), glyph_order(&mut s, &ttf), "every glyph in glyph order");
-    assert!(!page.contains("page 1 of"), "no title line");
+    // The SVG's <title> metadata still names the page; no drawn line does.
+    assert!(!page.lines().any(|l| l.contains("page 1 of") && !l.starts_with("<title>")), "no title line");
 
-    let cmap = run(&mut s, "font.proof", json!({ "fonts": [ttf], "layout": "cmap", "format": "svg", "outputDir": dir.join("cmap") }));
+    let cmap = run(
+        &mut s,
+        "font.proof",
+        json!({ "fonts": [ttf], "layout": "cmap", "format": "svg", "glyphs": ["O", "B", "A"], "outputDir": dir.join("cmap") }),
+    );
     let page = std::fs::read_to_string(&files(&cmap)[0]).unwrap();
     assert_eq!(shown(&page), ["A", "B", "O"], "code-point order");
 

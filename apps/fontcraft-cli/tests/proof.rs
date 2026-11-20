@@ -51,7 +51,9 @@ fn proof_draws_the_dumper_sheets_with_shown_and_hidden_elements() {
     assert_eq!(code, 0, "{stderr}");
     assert_eq!(stdout.trim(), out.to_str().unwrap());
     let page = std::fs::read_to_string(&out).unwrap();
-    assert!(page.contains("data-glyph=\"A\"") && !page.contains("page 1 of"), "the glyphs without a title line");
+    // The SVG's <title> metadata still names the page; no drawn line does.
+    let titled = page.lines().any(|l| l.contains("page 1 of") && !l.starts_with("<title>"));
+    assert!(page.contains("data-glyph=\"A\"") && !titled, "the glyphs without a title line");
 
     let cmap = dir.join("cmap.pdf");
     let (code, _, stderr) = cli(&["proof", font_s, "--layout", "cmap", "-o", cmap.to_str().unwrap()]);
