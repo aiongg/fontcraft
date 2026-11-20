@@ -4075,6 +4075,7 @@ guesses = [
   "A new Space Center shows `hamburgefontsiv` at 72 points; the reference's default text and size would settle it.",
   "The Space Center draws the showing Edit View tab's master, else the first master; how the reference picks the master of a multi-master font would settle it.",
   "Matrix columns are the text's own glyphs; control glyphs get none. Opening a text with control glyphs in the reference would settle it.",
+  "The matrix shows at most eight glyph rows and scrolls the rest, and the preview takes the room above it; the reference's matrix height with a long text would settle it.",
 ]
 
 [[behavior]]
