@@ -91,10 +91,10 @@ fn a_menu_invoke_is_a_click() {
     t.ok("engine.execute", json!({"command": "path.addRectangle", "params": {"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200}}));
     t.app.sent.push(Msg::View(crate::app::ViewMsg::SelectGlyph("A".into())));
     t.frame();
-    let revision = t.ok("document.inspect", json!({}))["documents"][0]["revision"].clone();
+    let undo = t.ok("document.inspect", json!({}))["documents"][0]["undo"].clone();
     assert_eq!(t.ok("ui.menu.invoke", json!({"command": "filter.roundCorners"})), json!({"dialog": "dialog.filterRoundCorners"}));
     assert_eq!(t.ok("ui.dialog.inspect", json!({}))["dialog"], "dialog.filterRoundCorners");
-    assert_eq!(t.ok("document.inspect", json!({}))["documents"][0]["revision"], revision, "the filter did not run");
+    assert_eq!(t.ok("document.inspect", json!({}))["documents"][0]["undo"], undo, "the filter did not run");
     t.ok("ui.dialog.cancel", json!({}));
 
     assert!(t.ok("ui.menu.invoke", json!({"command": "file.close"})).is_null());
