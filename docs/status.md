@@ -39,7 +39,7 @@ _Updated: 2026-11-20, during the sixteenth batch: 47 writer packages of depth wa
   770 reference options present (`docs/cli-options.md`).
 - Packages built (done of total, counted from commit subjects; the totals include the depth packages that carry a
   new number): M6 21 of 26, M7 21 of 24, M8 27 of 36, M9 30 of 40, M10 35 of 42, M11 20 of 22, M12 77 of 87, M13 63
-  of 83; 294 of 360 in all. Depth packages (`docs/plans/depth.md`): 57 of 167 (wave 1 and 47 writers of waves 2 to
+  of 83; 294 of 360 in all. Depth packages (`docs/plans/depth.md`): 55 of 167 (wave 1 and 45 writers of waves 2 to
   11, listed in ROADMAP.md › Where we are); no builder of waves 2 to 13. M3.22, M3.23, M4.18, M4.19, M5.29, M7.22 and
   M9.32 have editor parts in the new window only and are not counted. The lettered follow-ups (M10.37b, M10.37c,
   M13.65b and those of earlier batches) are not counted.
@@ -1571,6 +1571,6 @@ Append one terse entry per session: what landed, numbers, what is still open.
   UI.29 with five lettered parts; fixes X.fix78 to X.fix85 (hint renumbering, CLI prefixes, Indic languagesystems,
   format-warning cost, active layer, dialog targets). Integration X.integ26 to X.integ80 and X.inte1; check and
   clippy clean. First full test run: 5,304 run, 33 failed; X.fix86 fixed 24, X.fix87 takes the 9 UI failures.
-  Numbers: 960 of 1,039 commands live; feature parity about 38% (38.4, was 37.2); depth packages 57 of 167; CLI
+  Numbers: 960 of 1,039 commands live; feature parity about 38% (38.4, was 37.2); depth packages 55 of 167; CLI
   option coverage 672 of 770. Open: the second test run, the gate, review, push; the measures listed under "State
   of the tree"; the owner's two questions.
