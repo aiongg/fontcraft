@@ -7,7 +7,7 @@ use std::borrow::Cow;
 use craft::behavior::{ColumnKey, ColumnWidth, Selection, keyed};
 use craft::ui::buttons::Button;
 use craft::ui::choice::{Checkbox, Segmented};
-use craft::ui::contract::{Bind, ColumnSpec, Entry, SelectMode, Show as _, ShowCollection as _};
+use craft::ui::contract::{Bind, ColumnSpec, Entry, Props as _, SelectMode, Show as _, ShowCollection as _, ShowContainer as _};
 use craft::ui::dialog::{DialogHost, DialogId, DialogResult, DialogStack, StackDialog, dialog_id};
 use craft::ui::display::{Shade, Text};
 use craft::ui::layout_components::Row;

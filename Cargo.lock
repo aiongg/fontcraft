@@ -2937,6 +2937,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "fontcraft-craft-ext"
+version = "0.0.1"
+dependencies = [
+ "craft",
+ "egui 0.37.0",
+]
+
+[[package]]
 name = "fontcraft-decompile"
 version = "0.0.1"
 dependencies = [
@@ -3374,6 +3382,7 @@ dependencies = [
  "craft",
  "eframe 0.37.0",
  "egui 0.37.0",
+ "fontcraft-craft-ext",
  "fontcraft-engine",
  "fontcraft-geom",
  "fontcraft-glyphquery",

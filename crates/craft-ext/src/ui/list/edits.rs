@@ -42,7 +42,7 @@ impl EditClaim {
 }
 
 fn claim_key() -> Id {
-    Id::new("craft_ext.list.editClaim")
+    Id::unique("craft_ext.list.editClaim")
 }
 
 fn queue_key(id: Id) -> Id {

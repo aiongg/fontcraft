@@ -81,7 +81,7 @@ impl<K, E> StrikeRows<K> for CollectionResponse<K, E> {
         let painter = ui.painter_at(self.response.rect);
         for row in &self.shown {
             let Some(strike) = struck(&row.key) else { continue };
-            let label = env.resolve(&strike.text);
+            let label = strike.text.resolved(&env.words);
             let Some(points) = strike_line(row.rect, pad, cx.text_width(TypeRole::Body, label.as_str()), rtl) else { continue };
             let ink = if strike.selected {
                 text.on_selected
