@@ -317,7 +317,7 @@ fn draw(session: &mut Session, tab: Option<&Tab>) -> View {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::string_slice)]
 
     use std::io::{Read, Write};
     use std::net::{SocketAddr, TcpStream};

@@ -274,7 +274,7 @@ fn new_losses(before: &Font, after: &Font) -> Vec<String> {
     };
     let mut out = Vec::new();
     for entry in &new {
-        let was = old.iter().find(|b| key(*b) == key(entry));
+        let was = old.iter().find(|b| key(b) == key(entry));
         let had: HashSet<String> = was.map(items).unwrap_or_default().into_iter().collect();
         let added: Vec<String> = items(entry).into_iter().filter(|i| !had.contains(i)).collect();
         let grew = entries(entry).saturating_sub(was.map(entries).unwrap_or(0));
@@ -315,6 +315,7 @@ fn loss_reports_differ(_: &Font, _: &Font) -> bool {
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use fontcraft_model::Family;
     use fontcraft_model::plist::{Str, Value as Plist};

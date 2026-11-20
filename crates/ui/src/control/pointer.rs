@@ -116,7 +116,7 @@ fn key(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
         params.get("key").and_then(Value::as_str).ok_or_else(|| format!("{M}: `key` (a key name such as `v`, `ArrowLeft`, `Escape`) is required"))?;
     if app.dialogs.open.is_some() {
         let reply = super::dialogs::key(app, params).map_err(|e| format!("{M}: {e}"))?;
-        if reply["handled"] == true {
+        if reply.get("handled").and_then(Value::as_bool) == Some(true) {
             return Ok(reply);
         }
     }

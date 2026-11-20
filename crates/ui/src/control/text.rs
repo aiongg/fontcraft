@@ -20,7 +20,7 @@ fn text(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
     }
     if app.dialogs.open.is_some() {
         let reply = super::dialogs::text(app, params).map_err(|e| format!("{M}: {e}"))?;
-        if reply["field"] == true {
+        if reply.get("field").and_then(Value::as_bool) == Some(true) {
             return Ok(reply);
         }
     }
