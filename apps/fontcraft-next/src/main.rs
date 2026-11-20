@@ -7,13 +7,17 @@
 //!
 //! While `sharing.enableExternalPreview` is on, it serves External Preview to the local network
 //! ([`external_preview`], run each frame through the UI's frame hook). [`preview_server`] is the
-//! web server behind it and behind the TrueType preview page.
+//! web server behind it and behind the TrueType preview page. The user's settings and custom glyph data are read
+//! from the settings folder when the window opens and the settings written back whenever they change
+//! ([`user_files`]; `FONTCRAFT_SETTINGS_DIR` replaces the folder).
 #![forbid(unsafe_code)]
 
 #[cfg(not(target_arch = "wasm32"))]
 mod external_preview;
 #[cfg(not(target_arch = "wasm32"))]
 mod preview_server;
+#[cfg(not(target_arch = "wasm32"))]
+mod user_files;
 
 use std::process::ExitCode;
 
@@ -34,6 +38,9 @@ USAGE:
                    window is not confined. Without --control they are ignored.
   -h, --help       this text
   -V, --version    the version
+
+  Settings and custom glyph data are read from the settings folder (FONTCRAFT_SETTINGS_DIR
+  replaces it), and the settings are written back there when they change.
 ";
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -123,7 +130,12 @@ fn desktop(options: fontcraft_ui::Options) -> fontcraft_ui::Options {
         let wake = std::sync::Arc::new(move || ctx.request_repaint());
         Box::new(external_preview::Hook(external_preview::ExternalPreview::new(fontcraft_ui::app::preview_host::Scope::LocalNetwork, wake)))
     });
-    fontcraft_ui::Options { frame_hook: Some(frame_hook), preview_host: Some(Box::new(preview_server::Host::default())), ..options }
+    fontcraft_ui::Options {
+        frame_hook: Some(frame_hook),
+        preview_host: Some(Box::new(preview_server::Host::default())),
+        user_store: Some(Box::new(user_files::UserFiles::in_settings_folder())),
+        ..options
+    }
 }
 
 #[cfg(target_arch = "wasm32")]

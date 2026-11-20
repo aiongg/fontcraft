@@ -39,6 +39,8 @@ pub struct Options {
     pub frame_hook: Option<MakeFrameHook>,
     /// The web server for the TrueType preview page.
     pub preview_host: Option<Box<dyn app::preview_host::PreviewHost>>,
+    /// Where the user's settings are kept between runs (the settings folder).
+    pub user_store: Option<Box<dyn app::user_store::UserStore>>,
 }
 
 /// Opens the desktop window and runs it until it closes.
@@ -56,6 +58,8 @@ pub fn run(options: Options) -> Result<(), String> {
         app.control.roots = options.roots;
         app.frame_hook = options.frame_hook.map(|make| make(ctx));
         app.preview_host = options.preview_host;
+        app.user_store = options.user_store;
+        app::user_store::load(&mut app);
         app.view.start.reveal = Some(craft::platform::open::reveal);
         if app.session.settings().get_bool(shell::start::SHOW_AT_LAUNCH).unwrap_or(true) {
             app.sent.push(app::Msg::Shell(craft::ui::runtime::commands::CommandRef::with_params("window.startWindow", serde_json::json!({}))));

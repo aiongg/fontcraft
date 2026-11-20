@@ -21,6 +21,7 @@ mod notices;
 pub mod open;
 pub mod preview_host;
 pub mod sidebar;
+pub mod user_store;
 
 use std::sync::Arc;
 
@@ -221,6 +222,8 @@ pub struct FontCraftApp {
     pub frame_hook: Option<Box<dyn preview_host::FrameHook>>,
     /// The web server for the TrueType preview page; `None` where no port can be opened.
     pub preview_host: Option<Box<dyn preview_host::PreviewHost>>,
+    /// Where the user's settings are kept between runs; `None` keeps nothing (tests, the browser).
+    pub user_store: Option<Box<dyn user_store::UserStore>>,
     /// The canvas overlays' switches, data and the text note being typed (`canvas::overlays`).
     pub overlays: crate::canvas::overlays::Overlays,
     /// The control channel: its listener, the window its input goes to, the replies waiting on frames.
@@ -271,6 +274,7 @@ impl FontCraftApp {
             picks: Picks::default(),
             frame_hook: None,
             preview_host: None,
+            user_store: None,
             control: crate::control::Control::default(),
             #[cfg(not(target_arch = "wasm32"))]
             file_panels: None,
@@ -588,6 +592,7 @@ impl ShellApp for FontCraftApp {
             }
             self.frame_hook = Some(hook);
         }
+        user_store::save(self);
         if self.closing.take_close_window() {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
