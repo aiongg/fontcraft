@@ -17,6 +17,8 @@ use crate::sfnt::{Flavour, read};
 /// .notdef, A, V, acute, Aacute (A + acute as components), parenleft and parenright.
 fn truetype() -> SfntFont {
     let mut f = Font::new("Select Sans");
+    // A new font holds `space` and the basic Latin letters; only `.notdef` stays.
+    f.glyphs.retain(|g| g.name == ".notdef");
     for (name, cp) in [("A", 0x41), ("V", 0x56), ("acute", 0xB4), ("Aacute", 0xC1), ("parenleft", 0x28), ("parenright", 0x29)] {
         if f.glyph(name).is_none() {
             f.add_glyph(name, vec![cp], 500.0).unwrap();

@@ -18,7 +18,7 @@ fn files() -> (PathBuf, PathBuf, PathBuf, PathBuf) {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let mut s = Session::with_document();
-    s.execute("glyph.newGlyph", &json!({ "name": "A" })).unwrap();
+    // A new font already holds `A`.
     s.execute("glyph.setUnicodes", &json!({ "glyphs": ["A"], "unicodes": ["0041"] })).unwrap();
     let ttf = dir.join("Font.ttf");
     s.execute("file.exportStatic", &json!({ "destination": ttf, "timestamp": 0 })).unwrap();

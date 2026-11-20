@@ -26,6 +26,12 @@ fn temp(name: &str) -> PathBuf {
 /// `A`, `acutecomb`, `B`, and `Aacute` made of the components `A` and `acutecomb`.
 fn composites() -> Session {
     let mut s = Session::with_document();
+    // A new font holds `.notdef`, `space` and the basic Latin letters; start from none.
+    s.edit("fixture", |f| {
+        f.glyphs.retain(|_| false);
+        Ok(())
+    })
+    .unwrap();
     for name in ["A", "acutecomb", "B", "Aacute"] {
         run(&mut s, "glyph.newGlyph", json!({ "name": name }));
     }
