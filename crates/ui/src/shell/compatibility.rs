@@ -111,8 +111,6 @@ mod tests {
         run("font.master.add", json!({}));
         run("font.master.setAxisLocation", json!({"masters": [0], "location": [30]}));
         run("font.master.setAxisLocation", json!({"masters": [1], "location": [120]}));
-        run("glyph.newGlyph", json!({"name": "n"}));
-        run("glyph.newGlyph", json!({"name": "o"}));
         let ids: Vec<String> = s.font().unwrap().masters.iter().map(|m| m.id.clone()).collect();
         for (id, width) in ids.iter().zip([100, 300]) {
             s.execute("path.addRectangle", &json!({"glyph": "n", "layer": id, "x": 50, "y": 0, "width": width, "height": 500})).unwrap();

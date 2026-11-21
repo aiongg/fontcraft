@@ -46,7 +46,7 @@ fn mapped() -> FontCraftApp {
     ]);
     let template = f.masters[0].clone();
     f.masters = Arc::new(vec![
-        Master { id: "light".into(), name: "Light".into(), location: vec![30.0, 100.0], ..template.clone() },
+        Master { name: "Light".into(), location: vec![30.0, 100.0], ..template.clone() },
         Master { id: "bold".into(), name: "Bold".into(), location: vec![120.0, 100.0], ..template },
     ]);
     f.instances = Arc::new(vec![
