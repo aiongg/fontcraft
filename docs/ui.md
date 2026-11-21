@@ -187,6 +187,13 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   types with, and a menu row or tooltip that names the command with the same parameters shows the chord. `ui.key`
   reads the same list. A handler of its own for unbound chords would have needed its own focus rules and could not
   show the chord on any surface.
+- **Window menu and Palette.** Window › Panels has a check row per dock panel (`shell/window.rs`, `refresh_menu`,
+  rebuilt when a panel opens or closes), so a closed panel can come back; craft's `WindowMenuRows` draws into a menu
+  body of its own, which the data-driven menu bar has no place for. Window › Palette (`window.palette`, Cmd+Alt+P)
+  hides or shows every panel docked at the end edge. A new panel needs no menu line: `PanelId::ALL` lists it.
+- **Edit View controls.** While an Edit View tab shows, the status bar holds the Preview Area button after the
+  Features menu and, at its end, the writing direction, kerning mode and zoom controls (`panels/edit_bar.rs`), read
+  from the live tab each frame (`shell::bars::edit_state`).
 - **Tools.** The slot holds `canvas::tools::bridge::ToolBridge`. It posts the canvas's press, drags,
   hover and keys as `Msg::Tool`; `drain` runs `fontcraft_tools::Toolbox` on them
   (`canvas/tools/apply.rs`) and applies its answer before the next message, so each event sees what

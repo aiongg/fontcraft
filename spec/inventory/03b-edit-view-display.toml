@@ -833,7 +833,7 @@ milestone = "M3"
 summary = "Toggles between editing the layer's foreground and its background. While the background is the active side the canvas is drawn slightly darker."
 ref = "Edit View › Background"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Edit Background with Cmd+B. Not run. Built in M3.10 as the handbook describes it, not yet observed: a shell command that sets the tab's edited side and clears the selection. While the background is edited the canvas draws it as the outline with its nodes, the tools and the Palette work on it, and every command the shell runs that takes `side` gets `side: \"background\"`."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Edit Background with Cmd+B. Not run. Built in M3.10 as the handbook describes it, not yet observed: a shell command that sets the tab's edited side and clears the selection. In `crates/ui` Cmd+B runs it (UI.41c). While the background is edited the canvas draws it as the outline with its nodes, the tools and the Palette work on it, and every command the shell runs that takes `side` gets `side: \"background\"`."
 guesses = [
   "The edited side belongs to the tab and stays when another glyph, layer or master is edited.",
   "Audit markers are not drawn on the background.",

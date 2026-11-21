@@ -37,6 +37,28 @@ milestone = "M3"
 summary = "Shows or hides the Palette sidebar. The sidebar button at the top right of the window does the same."
 ref = "Palette"
 status = "handbook"
+notes = "In `crates/ui` (UI.41c) the Palette sections are dock panels, and the Palette is every panel docked at the window's end edge: hiding closes them and keeps their list, showing opens that list again where each panel was, with the same tabs in front, or the panels the default layout docks there. No sidebar button yet. Documented, not yet observed."
+guesses = [
+  "With every Palette panel closed one at a time, Window › Palette opens the panels the default layout docks at the end edge; settle by closing the reference app's Palette sections one by one and choosing Window › Palette.",
+]
+
+[[command]]
+id = "window.togglePanel"
+label = "Show or Hide Panel"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{panel: id}"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Opens a dock panel that is closed, or closes it. Window › Panels lists every panel but the document area as a check row, checked while the panel is open."
+ref = "Palette"
+status = "inferred"
+own = true
+notes = "`crates/ui` only (UI.41c): the panel ids are `PanelId::id`. A panel open behind another tab of its group counts as open, so its row closes it."
+guesses = [
+  "The panel rows sit in a Panels submenu of the Window menu rather than in the Window menu itself, which keeps the windows the reference lists there apart; settle against the reference app's Window menu.",
+]
 
 [[command]]
 id = "palette.toggleSection"

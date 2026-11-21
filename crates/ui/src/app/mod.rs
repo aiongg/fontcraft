@@ -439,6 +439,7 @@ impl FontCraftApp {
             self.catalog.refresh(&self.session);
         }
         menus_dynamic::refresh(self);
+        crate::shell::window::refresh_menu(self);
     }
 
     /// Records a change to view state that a projection reads, made outside [`ViewMsg`] (a shell command).

@@ -83,7 +83,7 @@ const COMMANDS: &[UiCommand] = &[
         "path.editBackground",
         "Edit Background",
         &["Path"],
-        None,
+        Some("Cmd+B"),
         "{on?: bool} edit the background of the layer instead of its foreground (omitted: switch sides)",
     ),
 ];
