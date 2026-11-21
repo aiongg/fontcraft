@@ -1055,7 +1055,9 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
    the user's settings and the Instructor section of the canvas menu (UI.35); the Extension Manager's Indexes tab,
    shared with Settings › Extensions, its HTTPS downloads of indexes, entry files and screenshots, Website and
    Donate (UI.37); Edit View tabs beside Font View in a document tab strip, each with its own glyph, camera, text,
-   master, layers, selection and Preview Area, and the seven tab commands (UI.40). The ports left:
+   master, layers, selection and Preview Area, and the seven tab commands (UI.40); the Edit View controls in the
+   status bar, numbered shortcuts (Cmd+1 to Cmd+9, Cmd+Alt+2 to Cmd+Alt+9), Cmd+B, Window › Palette and Window ›
+   Panels (UI.41). The ports left:
    - Smaller follow-ups: open-path thumbnails in Shape Order; svg filters and PDF images in colour layers; the image
      Info box with Reveal Image File (`image.revealFile` through `FontCraftApp::opener`).
    - Framework gaps, built in `crates/craft-ext` in craft-libs' layout so they can move there later (decision
@@ -1063,19 +1065,25 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
      a mixed mark on menu entries, a danger tone on menu entries, modifiers on context-menu requests, open URL and
      reveal in the file manager, a text-field highlight hook (feature code colours and error underlines), caret and
      selection access, Up/Down stepping on text fields that hold a number, an async completer (feature code
-     completion), union, intersect and slant icons, and alternate menu rows with their own label and shortcut. Taken
+     completion), union, intersect and slant icons, alternate menu rows with their own label and shortcut, and
+     (UI.41a) catalog definitions per parameter set, for shortcuts that run a command with a number. Taken
      from craft itself (UI.39): the Stroke palette's click-and-hold Cap Axis menu (a menu opened by `Trigger::Hold`)
      and paste outside a text field (`craft::platform::clipboard`, which reads the system clipboard on the desktop;
      the browser build still waits for a paste event that craft drops). The craft pin stays at `4bd0107`.
    - Parity audit gaps (old window against new, by how much a person would miss them):
-     1. Done (UI.40): the multi-tab Edit View. Left from it: Cmd+Alt+2 to Cmd+Alt+9 (craft's catalog binds no
-        parameters), tabs kept per document, tabs opened from the document's display strings and written on save,
-        and a removed glyph leaving its tabs.
-     2. The Edit View bottom bar (writing direction, kerning mode, zoom, Preview Area) and the shortcuts Cmd+B,
-        Cmd+1 to Cmd+9 and Cmd+Alt+P, with a Window › Palette row.
-     3. Menu fidelity: check marks on the switch rows, rows greyed when the selection supplies no targets, and a
-        Window menu row for each dock panel.
-     4. The Dimensions panel, and the Kerning and Kerning Review panel ids filled or removed.
+     1. Done (UI.40): the multi-tab Edit View. Left from it: tabs kept per document, tabs opened from the
+        document's display strings and written on save, and a removed glyph leaving its tabs.
+     2. Done (UI.41): the Edit View controls in the status bar (Preview Area, writing direction, kerning mode, zoom
+        out, zoom field, zoom in) while an Edit View tab shows; Cmd+1 to Cmd+9 and Cmd+Alt+2 to Cmd+Alt+9 through
+        one catalog definition per parameter set (`craft_ext::ui::runtime::commands`); Cmd+B; Window › Palette
+        (Cmd+Alt+P) over the end-edge panels; Window › Panels with a check row per dock panel. Left: the master
+        icons' tooltips do not name Cmd+1 to Cmd+9, and the Palette has no sidebar button.
+     3. Done (UI.42a, UI.42b): check marks on the switch rows (`app/menu_states.rs`, `SWITCHES`), and engine rows
+        greyed when firing them would be refused for their targets, with the reason as tooltip and as
+        `disabled_reason` in `ui.menu.list`. Left: Show Image and Keep Layer Selection in Sync join the switch list
+        when their commands exist (items 5 and 9).
+     4. Done (UI.42c): Palette › Dimensions; the Kerning and Kerning Review panel ids are removed (the Info box holds
+        the kerning fields, Pairs & Phrases the review lists), and no panel shows a stub.
      5. Placed images: drawn, selected, dragged, cropped and locked on the canvas, the image Info box, the canvas
         menu's image section, View › Show Image, Reveal Image File, drops, and Font View cell images.
      6. Snapping suggestions, the reference font glyph and power guides drawn on the canvas.

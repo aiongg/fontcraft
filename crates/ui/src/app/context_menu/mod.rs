@@ -278,7 +278,7 @@ impl Space {
 
 /// The edited glyph's scene and the selection, as the tools see them; the PostScript hints come from the hint canvas
 /// model.
-fn scene_of(app: &FontCraftApp) -> Option<(Scene<'_>, &Selection)> {
+pub(crate) fn scene_of(app: &FontCraftApp) -> Option<(Scene<'_>, &Selection)> {
     let font = app.session.font().ok()?;
     let mut scene = tools::scene(font, &app.view, app.tools.focus.as_ref())?;
     scene.ps_hints = app.models.hint_canvas.ps.clone();

@@ -62,11 +62,16 @@ impl TestApp {
     /// One frame as the desktop app runs it: `logic` (control requests, then `drain`), the passes of `ui`, and the
     /// commands the frame fired into `output`.
     pub fn frame(&mut self) -> &mut Self {
+        self.frame_with(Vec::new())
+    }
+
+    /// One frame, as [`Self::frame`], whose input holds `events` (keys from `craft::ui::testing::input`).
+    pub fn frame_with(&mut self, events: Vec<egui::Event>) -> &mut Self {
         let ctx = self.frames.ctx.clone();
         self.app.logic(&ctx);
         self.frames.commands(self.app.catalog.input());
         let app = &mut self.app;
-        self.frames.frame(Vec::new(), |ui| app.ui(ui));
+        self.frames.frame(events, |ui| app.ui(ui));
         self.app.output(take_output(&ctx));
         self
     }

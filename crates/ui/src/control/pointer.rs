@@ -101,11 +101,15 @@ fn chord_text(name: &str, mods: Modifiers) -> String {
     text
 }
 
-/// The engine or shell command whose shortcut is `chord`.
-fn shortcut_command(chord: &Binding) -> Option<&'static str> {
+/// The engine or shell command whose shortcut is `chord`, then the numbered shortcuts with their parameters.
+fn shortcut_command(chord: &Binding) -> Option<CommandRef> {
     let engine = fontcraft_engine::cmd::command_specs().iter().filter_map(|spec| Some((spec.id, spec.shortcut?)));
     let shell = crate::shell::commands::MODULES.iter().flat_map(|m| m.commands.iter()).filter_map(|c| Some((c.id, c.shortcut?)));
-    engine.chain(shell).find(|(_, text)| Binding::parse(text).ok().as_ref() == Some(chord)).map(|(id, _)| id)
+    let matches = |text: &str| Binding::parse(text).ok().as_ref() == Some(chord);
+    if let Some((id, _)) = engine.chain(shell).find(|(_, text)| matches(text)) {
+        return Some(CommandRef::new(id));
+    }
+    crate::shell::numbered_keys::all().into_iter().find(|key| matches(&key.shortcut)).map(|key| key.command)
 }
 
 /// `{key, shift?, alt?, cmd?, ctrl?, mods?, action?: tap | press | release}`: a key as the keyboard gives it, the
@@ -144,16 +148,16 @@ fn key(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
         {
             handled = true;
             errors.extend(errs);
-        } else if let Some(id) = Binding::parse(&chord_text(name, mods)).ok().as_ref().and_then(shortcut_command) {
+        } else if let Some(fired) = Binding::parse(&chord_text(name, mods)).ok().as_ref().and_then(shortcut_command) {
             handled = true;
-            command = Some(id);
-            let msgs = match crate::canvas::text::edit::fired(app, &CommandRef::new(id)) {
+            command = Some(fired.id.clone());
+            let msgs = match crate::canvas::text::edit::fired(app, &fired) {
                 Some(Ok(msgs)) => msgs,
                 Some(Err(e)) => {
                     errors.push(e);
                     Vec::new()
                 }
-                None => vec![match FontCraftApp::route(CommandRef::new(id)) {
+                None => vec![match FontCraftApp::route(fired) {
                     Msg::Run(c) => Msg::Run(app.with_targets(c)),
                     other => other,
                 }],

@@ -480,6 +480,11 @@ milestone = "M3"
 summary = "Row of controls along the lower edge of an Edit View tab: feature preview menu and preview toggle on the left, writing direction and zoom controls on the right. The exact order and the position of the kerning mode button are not described in this chapter."
 ref = "Edit View › Glyph Display › Zooming; Entering Text › Writing Direction; Previewing & Testing"
 status = "handbook"
+notes = "In `crates/ui` (UI.41b, `panels/edit_bar.rs`) the controls sit in the window's status bar while an Edit View tab shows and read that tab's state: the Features menu and the Preview Area button at the start, then the status text; at the end the three writing direction buttons, the kerning mode button, and zoom out, the zoom field and zoom in. The zoom buttons run `view.zoomOut` and `view.zoomIn`, the field `view.setZoom`. Documented, not yet observed."
+guesses = [
+  "The controls share the window's status bar with the status text instead of a bar of their own under each tab; settle by looking at where the reference app's bottom bar ends and whether Font View has one.",
+  "The icons come from the framework's catalog: pilcrows for left to right and right to left, a vertical type mark for top to bottom, unlink, link and lock for the three kerning modes, an eye for the Preview Area; settle by comparing with the reference app's bottom bar.",
+]
 notes = "Built in M3.15: zoom out, the zoom field and zoom in, at the right. The features menu, preview, writing direction and kerning mode buttons wait for their commands."
 
 [[behavior]]
@@ -828,7 +833,7 @@ milestone = "M3"
 summary = "Toggles between editing the layer's foreground and its background. While the background is the active side the canvas is drawn slightly darker."
 ref = "Edit View › Background"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Edit Background with Cmd+B. Not run. Built in M3.10 as the handbook describes it, not yet observed: a shell command that sets the tab's edited side and clears the selection. While the background is edited the canvas draws it as the outline with its nodes, the tools and the Palette work on it, and every command the shell runs that takes `side` gets `side: \"background\"`."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Edit Background with Cmd+B. Not run. Built in M3.10 as the handbook describes it, not yet observed: a shell command that sets the tab's edited side and clears the selection. In `crates/ui` Cmd+B runs it (UI.41c). While the background is edited the canvas draws it as the outline with its nodes, the tools and the Palette work on it, and every command the shell runs that takes `side` gets `side: \"background\"`."
 guesses = [
   "The edited side belongs to the tab and stays when another glyph, layer or master is edited.",
   "Audit markers are not drawn on the background.",
@@ -2386,7 +2391,10 @@ milestone = "M3"
 summary = "Makes a master the one Edit View draws all glyphs in. Cmd+1 to Cmd+9 select the first nine masters; clicking a master's icon in the toolbar selects any of them."
 ref = "Edit View › Previewing & Testing › Previewing Masters"
 status = "handbook"
-notes = "Built in M3.10; the toolbar's master icons (`preview.masterIconsInToolbar`, M9.20) run it with the master's index. The master belongs to the tab; a new tab takes the master of the tab it was opened from, or Font View's master when it was opened from Font View. `master` as an index counts from 0. Selecting a master drops the per-glyph layers `layers.select` chose. While Font View shows, the command picks Font View's master instead (M4): the master its cells, layer colours, smart-filter layer rules and Paste Special's Content of Active Layer use (`fontView.cell.followsMaster`)."
+notes = "Built in M3.10; the toolbar's master icons (`preview.masterIconsInToolbar`, M9.20) run it with the master's index. The master belongs to the tab; a new tab takes the master of the tab it was opened from, or Font View's master when it was opened from Font View. `master` as an index counts from 0; Cmd+1 runs it with master 0 (`crates/ui`: `shell/numbered_keys.rs`), and a digit past the font's last master is refused with a message in the status line. Selecting a master drops the per-glyph layers `layers.select` chose. While Font View shows, the command picks Font View's master instead (M4): the master its cells, layer colours, smart-filter layer rules and Paste Special's Content of Active Layer use (`fontView.cell.followsMaster`)."
+guesses = [
+  "A Cmd+digit past the font's last master changes nothing and says so in the status line; settle by pressing Cmd+3 in a two-master font in the reference app.",
+]
 
 [[behavior]]
 id = "preview.masterIconsInToolbar"

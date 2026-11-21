@@ -566,10 +566,9 @@ linked file is checked against it, and a linked file outside the read root reads
 2. **Then, in this order** (ROADMAP.md › What to build next, items 2 to 5):
    - The new window's ports left (item 2). The framework gaps in `crates/craft-ext` are built; paste outside a
      text field still waits for craft in the browser build. Then the parity audit gaps, in ROADMAP's order: what
-     the Edit View tabs left (Cmd+Alt+2 to Cmd+Alt+9, tabs per document, tabs from the document's display strings
-     and written on save, a removed glyph leaving its tabs); the Edit View bottom bar with Cmd+B, Cmd+1 to Cmd+9,
-     Cmd+Alt+P and a Window › Palette row; menu check marks, greyed rows and a Window row per dock panel; the
-     Dimensions panel and the Kerning and Kerning Review panel ids; placed images on the canvas, in the Info box,
+     the Edit View tabs left (tabs per document, tabs from the document's display strings and written on save, a
+     removed glyph leaving its tabs); what the Edit View controls and shortcuts left (the master icons' tooltips
+     naming Cmd+1 to Cmd+9, the Palette's sidebar button); placed images on the canvas, in the Info box,
      menus and Font View; snapping suggestions, the reference font glyph and power guides; the Axis Mappings dialog
      and the Cross-Axis Mappings window; the Primitive Measurements and Add Pixel Glyph dialogs; the small commands
      listed there; and the `ui.inspect` keys and getter commands for control parity. The smaller follow-ups

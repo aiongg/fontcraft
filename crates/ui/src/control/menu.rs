@@ -46,10 +46,15 @@ fn flatten(app: &FontCraftApp, nodes: &[Node], path: &mut Vec<String>, out: &mut
                     "shortcut": shortcut.unwrap_or(""),
                     "enabled": item.enabled,
                 });
-                if !item.enabled
-                    && let Some(Err(reason)) = spec.map(|s| (s.enabled)(&app.session))
-                {
-                    super::set(&mut entry, "disabled_reason", json!(reason));
+                if !item.enabled {
+                    // A row the engine allows is greyed out by the selection, which put why in its tooltip.
+                    let reason = match spec.map(|s| (s.enabled)(&app.session)) {
+                        Some(Err(reason)) => Some(reason),
+                        _ => item.tooltip.clone(),
+                    };
+                    if let Some(reason) = reason {
+                        super::set(&mut entry, "disabled_reason", json!(reason));
+                    }
                 }
                 if let ItemKind::Check(on) | ItemKind::Radio(on) = item.kind {
                     super::set(&mut entry, "checked", json!(on));

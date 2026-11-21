@@ -14,6 +14,7 @@ pub mod dropped;
 pub mod files;
 pub mod font_view;
 pub mod menu_alternates;
+pub mod menu_states;
 pub mod menus_dynamic;
 pub mod models;
 mod msg;
@@ -439,6 +440,8 @@ impl FontCraftApp {
             self.catalog.refresh(&self.session);
         }
         menus_dynamic::refresh(self);
+        crate::shell::window::refresh_menu(self);
+        menu_states::refresh(self);
     }
 
     /// Records a change to view state that a projection reads, made outside [`ViewMsg`] (a shell command).
@@ -591,9 +594,11 @@ impl ShellApp for FontCraftApp {
 
     fn output(&mut self, output: FrameOutput) {
         for fired in output.fired {
+            // A numbered shortcut fires its catalog definition, whose id holds the parameters.
+            let command = craft_ext::ui::runtime::commands::fired_command(fired.command);
             // A held tool key fires again on release; the tool stays.
-            if fired.phase != FirePhase::Release && !clipboard::to_focused_list(self, &fired.command) {
-                self.fire(fired.command);
+            if fired.phase != FirePhase::Release && !clipboard::to_focused_list(self, &command) {
+                self.fire(command);
             }
         }
     }

@@ -1,10 +1,14 @@
 //! The command catalog, the menu bar and the enabled state of every command.
 //!
 //! Engine commands come from `fontcraft_engine::command_specs()`: label, menu path, default shortcut and `enabled`.
-//! Shell commands come from `shell::commands::MODULES`, tools from `fontcraft_tools::TOOLS`. All three reach the
-//! framework as one `AppCatalog`, so keys, menu rows and the tool rail fire them the same way.
+//! Shell commands come from `shell::commands::MODULES`, tools from `fontcraft_tools::TOOLS`, the shortcuts that run a
+//! command with a number from `shell::numbered_keys`. All of them reach the framework as one `AppCatalog`, so keys,
+//! menu rows and the tool rail fire them the same way.
+//!
+//! A menu row is greyed out when its engine command's `enabled` refuses or the selection gives it nothing to act on,
+//! and an on/off switch's row shows a check mark while the switch is on (`menu_states`).
 
-use craft::menu::{MenuBar, Row};
+use craft::menu::{ItemKind, MenuBar, Row};
 use craft::ui::runtime::commands::{AppCatalog, Binding, CommandDef, CommandInput, CommandKind, CommandRef, CommandState, Scope};
 use fontcraft_engine::Session;
 use fontcraft_engine::cmd::CommandSpec;
@@ -41,6 +45,16 @@ pub struct Catalog {
     /// The rows that come from the extensions (`menus_dynamic`), after the catalog's own, and what they were made for.
     dynamic: Vec<Row>,
     dynamic_key: Option<u64>,
+    /// The Window menu's panel rows (`shell::window::refresh_menu`), after the dynamic rows, and what they were made for.
+    panels: Vec<Row>,
+    panels_key: Option<u64>,
+    /// Each switch row's state (`menu_states::SWITCHES`), as last read.
+    checks: Vec<(&'static str, bool)>,
+    /// The engine rows the selection greys out, with why, and what they were worked out for.
+    greyed: Vec<(&'static str, String)>,
+    greyed_key: Option<u64>,
+    /// The commands that open a dialog when fired without parameters (`dialogs::for_command`), asked once.
+    dialogs: Vec<&'static str>,
 }
 
 impl Catalog {
@@ -52,7 +66,22 @@ impl Catalog {
             Err(e) => (None, Some(format!("command catalog: {e:?}"))),
         };
         let input = app.clone().map_or_else(CommandInput::new, |app| CommandInput::new().catalog(app));
-        Catalog { app, input, menu: menu(|_| true, &[]), error, generation, enabled: Vec::new(), dynamic: Vec::new(), dynamic_key: None }
+        Catalog {
+            app,
+            input,
+            menu: menu(|_| true, &MenuStates::default(), &[]),
+            error,
+            generation,
+            enabled: Vec::new(),
+            dynamic: Vec::new(),
+            dynamic_key: None,
+            panels: Vec::new(),
+            panels_key: None,
+            checks: Vec::new(),
+            greyed: Vec::new(),
+            greyed_key: None,
+            dialogs: crate::dialogs::commands_with_dialogs(),
+        }
     }
 
     /// The commands of this frame: the catalog and each command's state.
@@ -84,9 +113,51 @@ impl Catalog {
         self.rebuild_menu();
     }
 
+    /// Puts the Window menu's panel rows after the dynamic rows; rebuilt only when `key` changed.
+    pub fn set_panel_rows(&mut self, key: u64, rows: impl FnOnce() -> Vec<Row>) {
+        if self.panels_key == Some(key) {
+            return;
+        }
+        self.panels_key = Some(key);
+        self.panels = rows();
+        self.rebuild_menu();
+    }
+
+    /// Sets the switch rows' check marks; the menu bar is rebuilt only when one changed.
+    pub fn set_checks(&mut self, checks: Vec<(&'static str, bool)>) {
+        if self.checks == checks {
+            return;
+        }
+        self.checks = checks;
+        self.rebuild_menu();
+    }
+
+    /// Whether the command `id` opens a dialog when fired without parameters.
+    pub fn has_dialog(&self, id: &str) -> bool {
+        self.dialogs.contains(&id)
+    }
+
+    /// Whether the rows the selection greys out were last worked out for `key`.
+    pub fn greyed_for(&self, key: u64) -> bool {
+        self.greyed_key == Some(key)
+    }
+
+    /// Sets the engine rows the selection greys out, with why, worked out for `key`; the menu bar is rebuilt only when
+    /// they changed.
+    pub fn set_greyed(&mut self, key: u64, greyed: Vec<(&'static str, String)>) {
+        self.greyed_key = Some(key);
+        if self.greyed == greyed {
+            return;
+        }
+        self.greyed = greyed;
+        self.rebuild_menu();
+    }
+
     fn rebuild_menu(&mut self) {
         let enabled = &self.enabled;
-        self.menu = menu(|at| enabled.get(at).copied().unwrap_or(true), &self.dynamic);
+        let extra: Vec<Row> = self.dynamic.iter().chain(&self.panels).cloned().collect();
+        let states = MenuStates { checks: &self.checks, greyed: &self.greyed };
+        self.menu = menu(|at| enabled.get(at).copied().unwrap_or(true), &states, &extra);
     }
 
     /// The catalog's generation: it changes only when the definitions do.
@@ -111,6 +182,12 @@ fn definitions() -> Vec<CommandDef> {
     for module in shell_commands::MODULES {
         for command in module.commands {
             defs.push(shell_def(command));
+        }
+    }
+    // One definition per numbered shortcut (Cmd+1 for the first master), its parameters folded into the id.
+    for key in crate::shell::numbered_keys::all() {
+        if let Ok(binding) = Binding::parse(&key.shortcut) {
+            defs.push(craft_ext::ui::runtime::commands::param_def(CommandDef::new(key.command, key.label, Scope::app()).with_default(binding)));
         }
     }
     for tool in fontcraft_tools::tool::TOOLS {
@@ -147,22 +224,50 @@ fn shell_def(command: &UiCommand) -> CommandDef {
     def
 }
 
+/// What the live state says about the catalog's own rows.
+#[derive(Default)]
+struct MenuStates<'a> {
+    checks: &'a [(&'static str, bool)],
+    greyed: &'a [(&'static str, String)],
+}
+
+impl MenuStates<'_> {
+    /// `row` with its check mark when it is a switch's.
+    fn checked(&self, mut row: Row, id: &str) -> Row {
+        if let Some((_, on)) = self.checks.iter().find(|(c, _)| *c == id) {
+            row.kind = ItemKind::Check(*on);
+        }
+        row
+    }
+
+    /// Why the selection greys out the row of `id`, if it does.
+    fn greyed(&self, id: &str) -> Option<&str> {
+        self.greyed.iter().find(|(g, _)| *g == id).map(|(_, why)| why.as_str())
+    }
+}
+
 /// The menu bar: one row per engine and shell command with a menu path, then the `extra` rows. `enabled(at)` answers
-/// for the engine command at index `at` of `command_specs()`.
-fn menu(enabled: impl Fn(usize) -> bool, extra: &[Row]) -> MenuBar {
+/// for the engine command at index `at` of `command_specs()`; a row the selection greys out carries why as its tooltip.
+fn menu(enabled: impl Fn(usize) -> bool, states: &MenuStates<'_>, extra: &[Row]) -> MenuBar {
     let mut rows = Vec::new();
     for (at, spec) in fontcraft_engine::cmd::command_specs().iter().enumerate() {
         if spec.menu.is_empty() || super::menu_alternates::alternate_of(spec.id).is_some() || super::menu_alternates::row_taken_by_dialog(spec.id) {
             continue;
         }
-        let mut row = Row::new(spec.menu, CommandRef::new(spec.id), spec.label);
+        let mut row = states.checked(Row::new(spec.menu, CommandRef::new(spec.id), spec.label), spec.id);
         row.enabled = enabled(at);
+        if row.enabled
+            && let Some(why) = states.greyed(spec.id)
+        {
+            row.enabled = false;
+            row.tooltip = Some(why.to_string());
+        }
         row.alternate = super::menu_alternates::menu_alternate(spec.id);
         rows.push(row);
     }
     for module in shell_commands::MODULES {
         for command in module.commands.iter().filter(|c| !c.menu.is_empty()) {
-            rows.push(Row::new(command.menu, CommandRef::new(command.id), command.label));
+            rows.push(states.checked(Row::new(command.menu, CommandRef::new(command.id), command.label), command.id));
         }
     }
     rows.extend(extra.iter().cloned());

@@ -153,6 +153,9 @@ pub struct PaletteView {
     pub fit_curve_range: Option<[f64; 2]>,
     /// The values typed into the Modules panel's forms (`super::palette_modules`).
     pub modules: super::palette_modules::ModuleForms,
+    /// The panels `window.palette` closed, which showing the Palette opens again, and whether each was in front of its
+    /// group.
+    pub hidden: Vec<(super::dock::PanelId, bool)>,
 }
 
 impl Default for PaletteView {
@@ -163,6 +166,7 @@ impl Default for PaletteView {
             transform: TransformSettings::default(),
             fit_curve_range: None,
             modules: Default::default(),
+            hidden: Vec::new(),
         }
     }
 }

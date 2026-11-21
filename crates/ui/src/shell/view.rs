@@ -83,13 +83,13 @@ const COMMANDS: &[UiCommand] = &[
         "path.editBackground",
         "Edit Background",
         &["Path"],
-        None,
+        Some("Cmd+B"),
         "{on?: bool} edit the background of the layer instead of its foreground (omitted: switch sides)",
     ),
 ];
 
 /// The display toggle a command flips.
-fn flag<'a>(display: &'a mut Display, id: &str) -> Option<&'a mut bool> {
+pub(crate) fn flag<'a>(display: &'a mut Display, id: &str) -> Option<&'a mut bool> {
     Some(match id {
         "view.showNodes" | "view.showNodesInForeground" => &mut display.nodes,
         "view.showNodesInBackground" => &mut display.nodes_in_background,
