@@ -58,10 +58,6 @@ pub const COMMANDS: &[UiCommand] = &[
 
 pub const MODULE: Module = Module { commands: COMMANDS, run };
 
-/// Shows a file in the system's file manager. The desktop app supplies one; without it (tests, other front ends)
-/// Show in Finder says it cannot.
-pub type RevealFn = fn(&Path) -> Result<(), String>;
-
 /// One script of the chooser: included in the new document or not, and its checked glyph sets (ids, in the built-in
 /// order).
 #[derive(Clone, Debug, PartialEq)]
@@ -107,7 +103,6 @@ pub struct StartState {
     pub selected_recent: Option<String>,
     /// Why the last Create Document failed.
     pub error: Option<String>,
-    pub reveal: Option<RevealFn>,
 }
 
 /// The recent documents whose files still exist, newest first (the engine keeps the list).
@@ -346,11 +341,9 @@ fn show_in_finder(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
     if path.is_empty() || path.len() > MAX_PATH_BYTES {
         return Err(format!("`path` must be from 1 to {MAX_PATH_BYTES} bytes"));
     }
-    if !Path::new(path).exists() {
-        return Err(format!("`{}` does not exist", params::quoted(path)));
-    }
-    let reveal = app.view.start.reveal.ok_or("this window cannot show files in the file manager")?;
-    reveal(Path::new(path))
+    // The opener refuses a path that does not exist and says so when this build has no file manager (tests, the
+    // browser build).
+    app.opener.reveal(Path::new(path))
 }
 
 /// After an engine command ran: a document opened or created closes the window.

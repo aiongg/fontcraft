@@ -39,6 +39,8 @@ pub struct ExtensionsView {
     pub external: ExternalChanges,
     /// The Extension Manager.
     pub manager: super::extension_manager::ManagerView,
+    /// The Extension Manager's downloads and the fetch that runs them.
+    pub downloads: super::extension_downloads::Downloads,
     /// The last error of each shown reporter's run, by module id; the canvas writes it at its top left.
     pub reporter_errors: std::collections::BTreeMap<String, String>,
 }

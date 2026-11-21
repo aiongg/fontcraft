@@ -6,6 +6,7 @@
 //! | User Settings | the `user.*` switches and the crash-report contact fields (`settings.set`) |
 //! | Sample Strings | the groups, plus and minus, the shown group's strings one per line, Default (`settings.*SampleString*`) |
 //! | Sharing | Enable External Preview (`settings.set`), the page's address, the devices waiting with Accept and Refuse (`sharing.answerDevice`), Reset while a device is trusted (`settings.resetTrustedDevices`) |
+//! | Extensions | the Extension Manager's Indexes tab (`super::extension_indexes`) and Open Extension Manager… (`window.pluginManager`) |
 //!
 //! A device that asks to see External Preview while the window is closed gets a notice that asks Accept or Refuse
 //! ([`run`]); Later leaves it waiting in the Sharing section.
@@ -26,13 +27,16 @@ use egui::Ui;
 use fontcraft_engine::cmd::sharing::{self, ENABLE_SETTING};
 use serde_json::{Value, json};
 
+use super::extension_indexes;
 use crate::app::{FontCraftApp, Msg};
+use crate::shell::extension_manager::{self, IndexesModel};
 use crate::shell::settings::{self as settings_state, Group, SECTIONS};
 
 craft::ui::words! {
     /// The words of the Settings window.
     pub struct SettingsWords {
         title: "fontcraftSettings.title" = "Settings";
+        open_manager: "fontcraftSettings.openManager" = "Open Extension Manager…";
         sections: "fontcraftSettings.sections" = "Section";
         done: "fontcraftSettings.done" = "Done";
         close: "fontcraftSettings.close" = "Close";
@@ -106,6 +110,8 @@ pub struct SettingsModel {
     /// The group the Sample Strings section shows.
     pub group: usize,
     pub sharing: SharingModel,
+    /// The Extensions section: the Extension Manager's Indexes tab.
+    pub indexes: IndexesModel,
 }
 
 impl SettingsModel {
@@ -129,6 +135,7 @@ impl SettingsModel {
                 pending: state.pending.clone(),
                 trusted: sharing::trusted_devices(settings),
             },
+            indexes: extension_manager::indexes_model(app),
         }
     }
 }
@@ -141,8 +148,8 @@ fn set(id: &str, value: Value) -> Msg {
     Msg::run("settings.set", json!({ "id": id, "value": value }))
 }
 
-/// The window's body: the section switcher, then the shown section.
-pub fn body(ui: &mut Ui, model: &SettingsModel, sent: &mut Vec<Msg>) {
+/// The window's body: the section switcher, then the shown section. `new_index` is the Extensions section's Add field.
+pub fn body(ui: &mut Ui, model: &SettingsModel, new_index: &mut String, sent: &mut Vec<Msg>) {
     let words = Env::of(ui).words::<SettingsWords>();
     let entries: Vec<Entry<String>> = SECTIONS.iter().map(|s| Entry::new(s.id.to_string(), Label::Static(s.label)).enabled(s.available)).collect();
     let mut section = model.section.clone();
@@ -153,6 +160,12 @@ pub fn body(ui: &mut Ui, model: &SettingsModel, sent: &mut Vec<Msg>) {
     Stack::new().show(ui, |ui, _| match model.section.as_str() {
         "sampleStrings" => sample_strings(ui, model, sent, &words),
         "sharing" => sharing_section(ui, &model.sharing, sent, &words),
+        "addons" => {
+            extension_indexes::show(ui, &model.indexes, new_index, sent);
+            if Button::new(words.open_manager.clone()).show(ui).clicked() {
+                sent.push(shell("window.pluginManager", json!({})));
+            }
+        }
         _ => user_settings(ui, model, sent, &words),
     });
 }
@@ -263,11 +276,13 @@ pub struct SettingsDialog {
     /// The app closed the window: the next pass ends the dialog.
     pub close: bool,
     open: bool,
+    /// The Extensions section's Add field.
+    new_index: String,
 }
 
 impl SettingsDialog {
     pub fn new(model: SettingsModel) -> SettingsDialog {
-        SettingsDialog { id: dialog_id("fontcraft.settings"), model, outbox: Vec::new(), close: false, open: true }
+        SettingsDialog { id: dialog_id("fontcraft.settings"), model, outbox: Vec::new(), close: false, open: true, new_index: String::new() }
     }
 }
 
@@ -283,7 +298,7 @@ impl StackDialog for SettingsDialog {
             return Some(DialogResult::Cancel);
         }
         let words = Env::of(ui).words::<SettingsWords>();
-        let SettingsDialog { model, outbox, open, .. } = self;
+        let SettingsDialog { model, outbox, open, new_index, .. } = self;
         let mut value = false;
         let shown = FormDialog::new(words.title.clone(), Bind::bound(&mut value))
             .opened(Bind::bound(open))
@@ -291,7 +306,7 @@ impl StackDialog for SettingsDialog {
             .cancel_label(words.close.clone())
             .enter_confirms(false)
             .show(ui, |ui, _, _| {
-                body(ui, model, outbox);
+                body(ui, model, new_index, outbox);
                 true
             });
         shown.closed.map(|_| DialogResult::Cancel)
@@ -377,7 +392,7 @@ mod tests {
         let seen = Rc::clone(&posted);
         let mut fixture = Fixture::new(move |ui| {
             let mut sent = Vec::new();
-            body(ui, &model, &mut sent);
+            body(ui, &model, &mut String::new(), &mut sent);
             seen.borrow_mut().extend(sent);
         });
         fixture.settle();

@@ -24,6 +24,7 @@ use craft::ui::pickers::{TreeEntry, TreePicker};
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::Env;
 use craft::ui::text::{NumberField, TextField};
+use craft_ext::ui::text::{ArrowSteps, StepKeys as _};
 use egui::Ui;
 use serde_json::{Value as Json, json};
 
@@ -113,10 +114,16 @@ pub fn view(ui: &mut Ui, model: &FontInfoModel, sent: &mut Vec<Msg>) {
                 }
                 Text::new(words.version_dot.clone()).show(ui);
                 let minor = format!("{:03}", font.version_minor);
-                if let Some(text) = TextField::new(words.version_minor.clone(), Bind::given(minor)).show(ui).events.committed() {
+                let minor_field = TextField::new(words.version_minor.clone(), Bind::given(minor)).show(ui);
+                if let Some(text) = minor_field.events.committed() {
                     // A text that is no number goes to the command, which refuses it with a message.
                     let value = text.trim().parse::<u64>().map_or_else(|_| json!(text.trim()), |n| json!(n));
                     posted.push(set("versionMinor", value));
+                }
+                // The arrows step the minor version as the steppers beside it do.
+                if let Some(delta) = minor_field.arrow_steps(ui, ArrowSteps::UNITS) {
+                    let next = (f64::from(font.version_minor) + delta).round().max(0.0);
+                    posted.push(set("versionMinor", json!(next as u64)));
                 }
                 for (icon, label, delta) in [("plus", &words.raise_minor, 1), ("minus", &words.lower_minor, -1)] {
                     if IconButton::new(IconId::new(icon)).label(label.clone()).tooltip(label.clone()).show(ui).clicked() {

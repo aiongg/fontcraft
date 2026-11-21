@@ -16,6 +16,7 @@ pub mod color_palettes;
 mod component_name;
 pub mod custom_parameter_picker;
 pub mod export;
+pub mod extension_indexes;
 pub mod extension_manager;
 pub mod external_changes;
 pub mod feature_picker;

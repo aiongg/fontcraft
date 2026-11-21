@@ -2872,7 +2872,10 @@ milestone = "M8"
 summary = "The code editor colours keywords, glyph names, numbers, lookup names and comments differently."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed. The token classes come from `features::edit::highlight`: keywords, tags, glyph, class and lookup names, numbers, strings, comments, tokens and punctuation."
+notes = "Documented, not yet observed. The token classes come from `features::edit::highlight`: keywords, tags, glyph, class and lookup names, numbers, strings, comments, tokens and punctuation. Code longer than 256 KB shows plain."
+guesses = [
+  "The colours come from the theme, which has no syntax colours: keywords and tags take the accent, glyph names the text colour, comments and punctuation the muted text, the other classes colours of the data series; a screenshot of feature code in the reference app settles them.",
+]
 
 [[behavior]]
 id = "fontInfo.features.autocomplete"
@@ -2881,7 +2884,7 @@ milestone = "M8"
 summary = "Typing where a glyph, class or lookup name is expected opens a suggestion menu. Up and Down move through it, further typing narrows it and Return inserts the highlighted suggestion."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed. The suggestions come from `font.features.complete`."
+notes = "Documented, not yet observed. The suggestions come from `font.features.complete`. Typing a name character, `@`, `$` or `{` asks for them; Tab, Return or a click inserts the highlighted one, Escape closes the list until the code changes."
 
 [[behavior]]
 id = "fontInfo.features.inlineErrors"

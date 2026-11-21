@@ -40,6 +40,7 @@ use craft::ui::style::TypeRole;
 use craft::ui::text::TextField;
 use craft_ext::ui::list::{CollectionEdits as _, EditCommand, Strike, StrikeRows as _};
 use craft_ext::ui::menu::{MarkedEntry, PickMarked as _};
+use craft_ext::ui::text::TextSelection;
 use egui::Ui;
 use fontcraft_engine::model::{DEFAULT_LANGUAGE, LANGUAGES};
 use serde_json::{Value, json};
@@ -387,7 +388,8 @@ fn entry_pane(ui: &mut Ui, entry: &EntryPane, snippets: &SnippetsModel, words: &
     if entry.stylistic_set {
         label_rows(ui, entry, words, sent);
     }
-    sent.extend(code_editor::view(ui, entry));
+    let code = code_editor::view(ui, entry);
+    sent.extend(code.sent);
     let notes = TextField::new(words.notes.clone(), Bind::given(entry.notes.clone()))
         .lines(NOTES_LINES)
         .placeholder(words.notes_hint.clone())
@@ -397,7 +399,7 @@ fn entry_pane(ui: &mut Ui, entry: &EntryPane, snippets: &SnippetsModel, words: &
     {
         sent.push(Msg::run("font.features.setNotes", key.with(&[("notes", json!(text))])));
     }
-    snippet_menu(ui, entry, snippets, words, sent);
+    snippet_menu(ui, entry, snippets, code.selection, words, sent);
 }
 
 /// The language a name row shows.
@@ -458,7 +460,16 @@ fn label_rows(ui: &mut Ui, entry: &EntryPane, words: &FeaturesWords, sent: &mut 
 
 /// The Snippets menu: the built-in snippets, one group per user file, and Show Snippet Folder. A snippet goes at the
 /// end of the shown entry's code; an automatic entry takes none.
-fn snippet_menu(ui: &mut Ui, entry: &EntryPane, snippets: &SnippetsModel, words: &FeaturesWords, sent: &mut Vec<Msg>) {
+/// The snippets menu: a pick puts the snippet in place of `selection` (the code field's last selection, in characters),
+/// or at the end of the code without one.
+fn snippet_menu(
+    ui: &mut Ui,
+    entry: &EntryPane,
+    snippets: &SnippetsModel,
+    selection: Option<TextSelection>,
+    words: &FeaturesWords,
+    sent: &mut Vec<Msg>,
+) {
     const FOLDER: &str = "#folder";
     let button = Button::new(words.snippets.clone()).show(ui);
     let mut entries: Vec<Entry<String>> = Vec::new();
@@ -485,6 +496,11 @@ fn snippet_menu(ui: &mut Ui, entry: &EntryPane, snippets: &SnippetsModel, words:
     let mut extra = vec![("snippet", json!(title))];
     if !group.is_empty() {
         extra.push(("group", json!(group)));
+    }
+    if let Some(s) = selection {
+        let range = s.range();
+        extra.push(("position", json!(range.start)));
+        extra.push(("end", json!(range.end)));
     }
     sent.push(Msg::run("font.features.insertSnippet", entry.key.with(&extra)));
 }

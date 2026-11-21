@@ -195,6 +195,10 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
 - **User settings.** The settings live in the session's settings store. `apps/fontcraft-next` supplies an
   `app::user_store::UserStore` that reads them from the settings folder when the window opens and writes them back
   when they change (once per frame); `crates/ui` reads and writes no files itself.
+- **Network and the system.** `apps/fontcraft-next` hands over `Options::fetch` (a blocking HTTPS GET for the
+  Extension Manager's indexes, entry files and screenshots, run on the host's jobs by `shell/extension_downloads.rs`)
+  and `Options::opener` (`FontCraftApp::opener`: links in the browser, files in the file manager). Tests set fakes; the
+  browser build has neither, and what needs them says so.
 - **Closing.** `app/close.rs` keeps the question asked before unsaved work closes (the close box,
   `app.quit`, File › Close): one document at a time, then the window or the document closes.
   `dialogs/unsaved.rs` shows it; `window.closePrompt` answers it from the control channel.
@@ -276,6 +280,11 @@ only; each module's doc names the craft file the piece is meant for.
 | `craft_ext::ui::menu::{MarkedEntry::danger, danger_icon}` | a danger flag on `Entry` and a danger tone on `MenuItem` | items that remove something: the canvas menu's Delete Guide and hint removals, Remove Filter, the Features sidebar's Delete |
 | `craft_ext::ui::menu::PickMarked` (`pick_marked`) | `Menu::pick` over entries with those states | the Features sidebar and Font View sidebar context menus |
 | `craft_ext::ui::contract::RequestMods` (`mods`, `held_mods`) | a `mods` field on `ContextMenuRequest` | Font View's glyph menu: Alt held at the click makes the swatches colour the layer |
+| `craft_ext::platform::open` (`Opener`, `open_url`, `reveal`) | checked, wasm-safe forms of `craft::platform::open::{open_external, reveal}` | `FontCraftApp::opener`: Show in Finder, the Extension Manager's Website and Donate and its folder buttons; `apps/fontcraft-next` hands over `Opener::system()`, tests a fake |
+| `craft_ext::ui::text::{HighlightText, Highlight}` (`highlight_text`) | a `highlight` option on `TextOptions` that the text widget's layouter turns into sections | Font Info › Features: the code editor's syntax colours and the underlined ranges of the compile's diagnostics |
+| `craft_ext::ui::text::{FieldSelection, TextSelection}` (`selection`, `last_selection`, `select`) | a `selection` on `EditResponse` and a `TextField::selection` prop | Text Preview: the Selection Direction items of the text's context menu; Font Info › Features: a snippet replaces the code field's selection |
+| `craft_ext::ui::text::{AsyncCompleter, CompletionQuery, CompletionAnswer}` (`kept`, `take_query`, `answer`) | a `Completer` that may answer in a later pass | Font Info › Features: the code editor's name completion, asked through `ViewMsg::FeatureCompletion` and answered by the projection with `font.features.complete` |
+| `craft_ext::ui::text::{StepKeys, ArrowSteps}` (`arrow_steps`, `stepped`) | a `steps` prop on `TextField` that keeps the arrows for a stepped value, as `NumberField` does | the metric fields that take a number or a key (`panels::widgets::key_or_number`), Font Info's minor version field |
 
 The stand-ins paint over what craft drew, so they cover the plain forms only (a row without icon, toggles or
 indent; a menu row's mark column), and a screen reader hears a mixed menu row as unchecked. A danger row shows the

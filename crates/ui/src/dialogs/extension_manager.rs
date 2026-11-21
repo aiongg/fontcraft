@@ -1,5 +1,8 @@
 //! The Extension Manager window: shows `shell::extension_manager`'s state while it is open. The filters post their
-//! shell commands; the buttons under the list act on the selected row through engine commands. Install from File…
+//! shell commands; the buttons under the list act on the selected row through engine commands, and Website and Donate
+//! through `pluginManager.openWebsite` and `pluginManager.openDonationPage`. Install and Update go through
+//! `shell::extension_downloads::install_entry`, which downloads an entry's file when it is on the network. The Indexes
+//! tab is `super::extension_indexes`, shared with Settings › Extensions. Install from File…
 //! posts `plugin.installFromFile` without a path, so the file picker asks for it.
 
 use std::borrow::Cow;
@@ -9,25 +12,37 @@ use craft::ui::buttons::Button;
 use craft::ui::choice::{Checkbox, Segmented};
 use craft::ui::contract::{Bind, ColumnSpec, Entry, Props as _, SelectMode, Show as _, ShowCollection as _, ShowContainer as _};
 use craft::ui::dialog::{DialogHost, DialogId, DialogResult, DialogStack, StackDialog, dialog_id};
-use craft::ui::display::{Shade, Text};
+use craft::ui::display::{Picture, PictureSize, Shade, Text};
 use craft::ui::layout_components::Row;
-use craft::ui::list::ListRow;
+use craft::ui::list::{ListRow, ThumbAspect, ThumbSize};
 use craft::ui::patterns::form_dialogs::FormDialog;
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::{Env, Label};
 use craft::ui::sections::{DialogRole, FooterButton};
+use craft::ui::style::TypeRole;
 use craft::ui::table::Table;
 use craft::ui::text::TextField;
 use egui::Ui;
 use serde_json::json;
 
+use super::extension_indexes;
 use crate::app::{FontCraftApp, Msg};
-use crate::shell::extension_manager::{self, KINDS, MAX_QUERY_CHARS, ManagerEntry, ManagerView, STATES};
+use crate::shell::extension_downloads;
+use crate::shell::extension_manager::{self, KINDS, MAX_QUERY_CHARS, ManagerEntry, ManagerView, STATES, Tab};
 
 craft::ui::words! {
     /// The words of the Extension Manager.
     pub struct ManagerWords {
         title: "fontcraftExtensionManager.title" = "Extension Manager";
+        tabs: "fontcraftExtensionManager.tabs" = "Tab";
+        extensions_tab: "fontcraftExtensionManager.extensionsTab" = "Extensions";
+        indexes_tab: "fontcraftExtensionManager.indexesTab" = "Indexes";
+        preview: "fontcraftExtensionManager.preview" = "Preview";
+        preview_tip: "fontcraftExtensionManager.previewTip" = "Show the extension's screenshot";
+        preview_of: "fontcraftExtensionManager.previewOf" = "Screenshot of";
+        close_preview: "fontcraftExtensionManager.closePreview" = "Close Preview";
+        downloading: "fontcraftExtensionManager.downloading" = "Downloading…";
+        bytes: "fontcraftExtensionManager.bytes" = "bytes";
         install_state: "fontcraftExtensionManager.installState" = "Show";
         all: "fontcraftExtensionManager.all" = "All";
         installed: "fontcraftExtensionManager.installed" = "Installed";
@@ -48,6 +63,10 @@ craft::ui::words! {
         new_module: "fontcraftExtensionManager.newModule" = "New, off";
         update_to: "fontcraftExtensionManager.updateTo" = "Update offered, installed:";
         none: "fontcraftExtensionManager.none" = "No extension matches. Install a module or macro from a file, or add an extension index.";
+        website: "fontcraftExtensionManager.website" = "Website";
+        website_tip: "fontcraftExtensionManager.websiteTip" = "Open the extension's website in the browser";
+        donate: "fontcraftExtensionManager.donate" = "Donate";
+        donate_tip: "fontcraftExtensionManager.donateTip" = "Open the vendor's donation page in the browser";
         install: "fontcraftExtensionManager.install" = "Install";
         update: "fontcraftExtensionManager.update" = "Update";
         remove: "fontcraftExtensionManager.remove" = "Remove";
@@ -64,6 +83,10 @@ craft::ui::words! {
 
 /// Rows the list shows before it scrolls: the dialog body scrolls too, so the list must be capped.
 const LIST_ROWS: u16 = 14;
+/// Characters of a checksum shown.
+const SHORT_SHA: usize = 12;
+/// The screenshot picture's texture key; the shot's own key is mixed in, so a new image makes a new texture.
+const PREVIEW_KEY: u64 = 0x6578_7473_686f_7400;
 /// The footer button positions `FormDialog` reports.
 const OK: usize = 0;
 const FIRST_EXTRA: usize = 2;
@@ -78,9 +101,12 @@ const PROBLEM: ColumnKey = ColumnKey::new("problem");
 pub struct ManagerDialog {
     id: DialogId,
     view: ManagerView,
+    tab: usize,
     state: usize,
     kind: usize,
     query: String,
+    /// The Indexes tab's Add field.
+    new_index: String,
     /// The search text posted and not yet in the app's state.
     posted_query: Option<String>,
     /// The selected row's id.
@@ -96,9 +122,11 @@ impl ManagerDialog {
         let mut dialog = ManagerDialog {
             id: dialog_id("fontcraft.extensionManager"),
             view: ManagerView::default(),
+            tab: 0,
             state: 0,
             kind: 0,
             query: view.query.clone(),
+            new_index: String::new(),
             posted_query: None,
             selected: None,
             posted: Vec::new(),
@@ -111,6 +139,7 @@ impl ManagerDialog {
 
     /// Shows `view` from now on. The search text the person is typing stays until the app has taken it.
     fn take(&mut self, view: &ManagerView) {
+        self.tab = usize::from(view.tab == Tab::Indexes);
         self.state = STATES.iter().position(|s| *s == view.state).unwrap_or(0);
         self.kind = KINDS.iter().position(|k| *k == view.kind).unwrap_or(0);
         match &self.posted_query {
@@ -204,11 +233,30 @@ impl ManagerDialog {
         if !entry.description.is_empty() {
             Text::new(entry.description.clone()).show(ui);
         }
+        if let Some(size) = entry.size {
+            let sha: String = entry.sha256.chars().take(SHORT_SHA).collect();
+            let line = format!("{} · {size} {} · SHA-256 {sha}…", entry.id, words.bytes.as_str());
+            Text::new(line).role(TypeRole::Caption).shade(Shade::Muted).show(ui);
+        }
         if let Some(error) = &entry.error {
             Text::new(error.clone()).show(ui);
         }
         let id = entry.id.clone();
         Row::new().show(ui, |ui, _| {
+            if entry.from_index {
+                let website = Button::new(words.website.clone()).tooltip(words.website_tip.clone()).id_salt("fontcraftExtensionManager.website");
+                if website.show(ui).clicked() {
+                    self.post_shell("pluginManager.openWebsite", json!({ "id": id }));
+                }
+                let donate = Button::new(words.donate.clone()).tooltip(words.donate_tip.clone()).id_salt("fontcraftExtensionManager.donate");
+                if donate.show(ui).clicked() {
+                    self.post_shell("pluginManager.openDonationPage", json!({ "id": id }));
+                }
+                let preview = Button::new(words.preview.clone()).tooltip(words.preview_tip.clone()).id_salt("fontcraftExtensionManager.preview");
+                if preview.show(ui).clicked() {
+                    self.post_shell("pluginManager.enlargePreview", json!({ "id": id }));
+                }
+            }
             if entry.from_index
                 && !entry.installed
                 && Button::new(words.install.clone()).id_salt("fontcraftExtensionManager.install").show(ui).clicked()
@@ -230,13 +278,51 @@ impl ManagerDialog {
         });
     }
 
+    /// The screenshot under the list, while one is shown.
+    fn preview(&mut self, ui: &mut Ui, words: &ManagerWords) {
+        let Some(shot) = self.view.preview.clone() else { return };
+        Text::new(format!("{} {}", words.preview_of.as_str(), shot.id)).role(TypeRole::Heading).show(ui);
+        match (&shot.image, &shot.error) {
+            (_, Some(error)) => {
+                Text::new(error.clone()).show(ui);
+            }
+            (Some(image), None) => {
+                let make = || (**image).clone();
+                Picture::new(words.preview_of.clone(), PREVIEW_KEY ^ shot.key, &make)
+                    .aspect(ThumbAspect::new(4, 3))
+                    .extent(PictureSize::Thumb(ThumbSize::Large))
+                    .show(ui);
+            }
+            (None, None) => {
+                Text::new(words.downloading.clone()).shade(Shade::Muted).show(ui);
+            }
+        }
+        if Button::new(words.close_preview.clone()).id_salt("fontcraftExtensionManager.closePreview").show(ui).clicked() {
+            self.post_shell("pluginManager.enlargePreview", json!({}));
+        }
+    }
+
     fn body(&mut self, ui: &mut Ui, words: &ManagerWords) {
+        let tabs = [Entry::new(0, words.extensions_tab.clone()), Entry::new(1, words.indexes_tab.clone())];
+        let shown = self.tab;
+        Segmented::new(words.tabs.clone(), Bind::bound(&mut self.tab), &tabs).show(ui);
+        if self.tab != shown {
+            let tab = if self.tab == 1 { "indexes" } else { "extensions" };
+            self.post_shell("window.pluginManager", json!({ "tab": tab }));
+        }
+        if shown == 1 {
+            let mut sent = Vec::new();
+            extension_indexes::show(ui, &self.view.indexes, &mut self.new_index, &mut sent);
+            self.posted.extend(sent);
+            return;
+        }
         self.filters(ui, words);
         if self.view.safe_mode {
             Text::new(words.safe_mode.clone()).shade(Shade::Muted).show(ui);
         }
         self.list(ui, words);
         self.actions(ui, words);
+        self.preview(ui, words);
         if !self.view.failures.is_empty() {
             Text::new(words.failed.clone()).show(ui);
             for (file, reason) in &self.view.failures {
@@ -245,6 +331,9 @@ impl ManagerDialog {
         }
         if let Some(note) = &self.view.note {
             Text::new(note.clone()).show(ui);
+        }
+        if let Some(problem) = &self.view.problem {
+            Text::new(problem.clone()).show(ui);
         }
     }
 }
@@ -306,12 +395,15 @@ impl StackDialog for ManagerDialog {
 
 /// Opens the window while the app's state asks for it, shows each change of the list, and posts what the person did.
 pub fn run(host: &mut DialogHost, app: &mut FontCraftApp) {
+    extension_downloads::step(app);
     extension_manager::refresh(app);
     if let Some(answer) = host.take::<ManagerDialog>() {
         if let DialogResult::Ok(posted) = answer {
-            app.sent.extend(posted);
+            post(app, posted);
         }
-        app.view.extensions.manager.open = false;
+        let view = &mut app.view.extensions.manager;
+        view.open = false;
+        view.preview = None;
         app.view_changed();
         return;
     }
@@ -327,7 +419,7 @@ pub fn run(host: &mut DialogHost, app: &mut FontCraftApp) {
             // Reload and Install can change what the indexes offer, which the extension fingerprint does not cover.
             let changes_list =
                 posted.iter().any(|m| matches!(m, Msg::Run(c) if c.id.starts_with("pluginManager.") || c.id == "plugin.installFromFile"));
-            app.sent.extend(posted);
+            post(app, posted);
             if changes_list {
                 app.view.extensions.manager.invalidate();
             }
@@ -336,6 +428,24 @@ pub fn run(host: &mut DialogHost, app: &mut FontCraftApp) {
             host.open(ManagerDialog::new(view));
         }
         None => {}
+    }
+}
+
+/// Posts what the window did. Install and Update of an index entry go to the downloader, which installs a local file
+/// at once and an entry on the network once its file has arrived.
+fn post(app: &mut FontCraftApp, posted: Vec<Msg>) {
+    for msg in posted {
+        let install = match &msg {
+            Msg::Run(c) if c.id == "pluginManager.install" && c.params.get("dataBase64").is_none() => {
+                let text = |key: &str| c.params.get(key).and_then(serde_json::Value::as_str).map(str::to_string);
+                text("id").map(|id| (id, text("version")))
+            }
+            _ => None,
+        };
+        match install {
+            Some((id, version)) => extension_downloads::install_entry(app, &id, version.as_deref()),
+            None => app.sent.push(msg),
+        }
     }
 }
 
@@ -364,7 +474,7 @@ mod tests {
     }
 
     /// Selecting a row shows its buttons: the switch turns an installed module off, Remove removes it, Install
-    /// installs an index entry; Install from File… asks the picker and a filter button posts its command.
+    /// installs an index entry, Website and Preview post their commands; a filter button posts its command.
     #[test]
     fn extension_manager_acts_on_the_selected_row() {
         let mut view = ManagerView::default();
@@ -390,6 +500,10 @@ mod tests {
         fixture.click(&row).settle();
         let install = fixture.by_label("Install").expect("Install for an index entry");
         fixture.click(&install).settle();
+        let website = fixture.by_label("Website").expect("Website for an index entry");
+        fixture.click(&website).settle();
+        let preview = fixture.by_label("Preview").expect("Preview for an index entry");
+        fixture.click(&preview).settle();
         let reporters = fixture.by_label("Reporters").expect("the Reporters filter");
         fixture.click(&reporters).settle();
         assert_eq!(
@@ -398,6 +512,8 @@ mod tests {
                 Msg::run("plugin.setEnabled", json!({"id": "square", "enabled": false})),
                 Msg::run("pluginManager.remove", json!({"id": "square"})),
                 Msg::run("pluginManager.install", json!({"id": "tighten"})),
+                Msg::Shell(CommandRef::with_params("pluginManager.openWebsite", json!({"id": "tighten"}))),
+                Msg::Shell(CommandRef::with_params("pluginManager.enlargePreview", json!({"id": "tighten"}))),
                 Msg::Shell(CommandRef::with_params("pluginManager.filterByType", json!({"type": "reporter"}))),
             ]
         );

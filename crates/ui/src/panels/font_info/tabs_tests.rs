@@ -17,10 +17,10 @@ use super::{Props, show};
 use crate::app::models::font_exports::{ExportEntry, ExportFields, ExportsModel, Flag};
 use crate::app::models::font_features::{DiagnosticModel, EntryPane, EntryRow, FeaturesModel, GroupModel};
 use crate::app::models::font_info::FontInfoModel;
-use crate::app::{APP, FontCraftApp, Msg};
+use crate::app::{APP, FontCraftApp, Msg, ViewMsg};
 use crate::dialogs::feature_picker::FeaturePicker;
 use crate::shell::font_info::FontInfoTab;
-use crate::shell::font_info_tabs::{EntryKey, EntryKind};
+use crate::shell::font_info_tabs::{CompletionAsk, EntryKey, EntryKind};
 
 const ROOM: egui::Vec2 = egui::vec2(1280.0, 900.0);
 
@@ -64,7 +64,14 @@ fn features_model() -> FontInfoModel {
             code: "sub a by b;".into(),
             stylistic_set: true,
             labels: vec![("dflt".into(), "Swash".into())],
-            diagnostics: vec![DiagnosticModel { id: 7, error: true, message: "unknown glyph".into(), line: 1, fixes: vec!["Remove".into()] }],
+            diagnostics: vec![DiagnosticModel {
+                id: 7,
+                error: true,
+                message: "unknown glyph".into(),
+                line: 1,
+                range: Some((4, 5)),
+                fixes: vec!["Remove".into()],
+            }],
             ..EntryPane::default()
         }),
         master: Some("m01".into()),
@@ -95,6 +102,61 @@ fn features_sidebar_and_buttons_post_their_commands() {
             Msg::run("font.features.compile", json!({ "master": "m01" })),
             shell("font.info.features.select", json!({ "entries": [{ "kind": "feature", "name": "liga", "index": 0 }] })),
         ]
+    );
+}
+
+/// The feature code is coloured by class, and the range of the compile's diagnostic is underlined.
+#[test]
+fn feature_code_is_coloured_and_its_errors_underlined() {
+    let (mut fixture, _) = panel(features_model());
+    fixture.settle();
+    let shapes = fixture.frame_shapes();
+    let galley = shapes
+        .iter()
+        .find_map(|shape| match shape {
+            egui::Shape::Text(t) if t.galley.job.text == "sub a by b;" => Some(t.galley.clone()),
+            _ => None,
+        })
+        .expect("the code is painted");
+    let sections = &galley.job.sections;
+    let underlined: Vec<(usize, usize)> =
+        sections.iter().filter(|s| s.format.underline.width > 0.0).map(|s| (s.byte_range.start.0, s.byte_range.end.0)).collect();
+    assert_eq!(underlined, vec![(4, 5)]);
+    let mut colors: Vec<egui::Color32> = sections.iter().map(|s| s.format.color).collect();
+    colors.dedup();
+    assert!(colors.len() > 1, "the keyword and the glyph names differ in colour: {colors:?}");
+}
+
+/// Typing a name in the code asks for the names that fit at the caret.
+#[test]
+fn typing_a_name_asks_for_completions() {
+    let (mut fixture, posted) = panel(features_model());
+    let code = fixture.by_label("Feature Code").expect("the code field");
+    fixture.click(&code).key(Key::A, Modifiers::COMMAND).type_text("sub a").settle();
+    let ask = CompletionAsk { key: key(EntryKind::Feature, "ss01", 1), code: "sub a".into(), position: 5 };
+    assert!(posted.borrow().contains(&Msg::View(ViewMsg::FeatureCompletion(Some(ask)))), "{:?}", posted.borrow());
+}
+
+/// A snippet goes in place of the code field's selection, which the field keeps after the Snippets button takes the
+/// keyboard.
+#[test]
+fn a_snippet_replaces_the_selected_code() {
+    let mut model = features_model();
+    model.features.snippets.built_in = vec!["Ligature".into()];
+    let (mut fixture, posted) = panel(model);
+    let code = fixture.by_label("Feature Code").expect("the code field");
+    fixture.click(&code).key(Key::A, Modifiers::COMMAND).settle();
+    let button = fixture.by_label("Snippets").expect("the Snippets button");
+    fixture.click(&button).settle();
+    let snippet = fixture.by_label("Ligature").expect("the snippet");
+    fixture.click(&snippet).settle();
+    let insert = posted.borrow().iter().find(|m| m.command_id() == Some("font.features.insertSnippet")).cloned();
+    assert_eq!(
+        insert,
+        Some(Msg::run(
+            "font.features.insertSnippet",
+            json!({ "kind": "feature", "name": "ss01", "index": 1, "snippet": "Ligature", "position": 0, "end": 11 })
+        ))
     );
 }
 

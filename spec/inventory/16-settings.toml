@@ -975,7 +975,7 @@ milestone = "M13"
 summary = "Section that configures how scripts, plug-ins and modules run and where the Plugin Manager finds them."
 ref = "Settings › Addons"
 status = "handbook"
-notes = "FontCraft (docs/plans/M13.md, M13.10; M14.1): a Settings › Extensions section (app.settings {section: \"addons\"}) with the paths of the Macros and Modules folders, the standard-error log switch, the list of extension indexes with an automatic-updates switch per index, and a button that opens the Extension Manager. There is no Python version field. The Extension Manager's Indexes tab draws the same body."
+notes = "FontCraft (docs/plans/M13.md, M13.10; M14.1): a Settings › Extensions section (app.settings {section: \"addons\"}) with the paths of the Macros and Modules folders, the standard-error log switch, the list of extension indexes with an automatic-updates switch per index, and a button that opens the Extension Manager. There is no Python version field. The Extension Manager's Indexes tab draws the same body, in both windows (`crates/ui`: `dialogs/extension_indexes.rs`); each folder has a Show button that opens it in the file manager."
 guesses = [
   "The section is called Extensions, because FontCraft has no add-on kinds that need Python; the reference calls it Addons.",
 ]
