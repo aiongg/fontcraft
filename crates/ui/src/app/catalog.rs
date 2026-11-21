@@ -1,8 +1,9 @@
 //! The command catalog, the menu bar and the enabled state of every command.
 //!
 //! Engine commands come from `fontcraft_engine::command_specs()`: label, menu path, default shortcut and `enabled`.
-//! Shell commands come from `shell::commands::MODULES`, tools from `fontcraft_tools::TOOLS`. All three reach the
-//! framework as one `AppCatalog`, so keys, menu rows and the tool rail fire them the same way.
+//! Shell commands come from `shell::commands::MODULES`, tools from `fontcraft_tools::TOOLS`, the shortcuts that run a
+//! command with a number from `shell::numbered_keys`. All of them reach the framework as one `AppCatalog`, so keys,
+//! menu rows and the tool rail fire them the same way.
 
 use craft::menu::{MenuBar, Row};
 use craft::ui::runtime::commands::{AppCatalog, Binding, CommandDef, CommandInput, CommandKind, CommandRef, CommandState, Scope};
@@ -111,6 +112,12 @@ fn definitions() -> Vec<CommandDef> {
     for module in shell_commands::MODULES {
         for command in module.commands {
             defs.push(shell_def(command));
+        }
+    }
+    // One definition per numbered shortcut (Cmd+1 for the first master), its parameters folded into the id.
+    for key in crate::shell::numbered_keys::all() {
+        if let Ok(binding) = Binding::parse(&key.shortcut) {
+            defs.push(craft_ext::ui::runtime::commands::param_def(CommandDef::new(key.command, key.label, Scope::app()).with_default(binding)));
         }
     }
     for tool in fontcraft_tools::tool::TOOLS {

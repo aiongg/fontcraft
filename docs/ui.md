@@ -178,8 +178,15 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   glyphs for editing calls `tabs::edit_glyphs` (the tab holding exactly those glyphs, else a new one),
   `tabs::open_glyphs` (always a new tab) or `tabs::show_glyph` (the live tab); `app.font_view_shows()` says whether
   Font View is the showing tab. A window opens with one Edit View tab. The tabs belong to the window, not to the
-  active document. Cmd+Alt+2 to Cmd+Alt+9 are not bound yet: craft's catalog takes one definition per command id
-  and its bindings carry no parameters.
+  active document. Cmd+Alt+2 to Cmd+Alt+9 show tabs 2 to 9 (numbered shortcuts, below).
+- **Numbered shortcuts.** A shortcut that stands for a numbered series runs one command with the number as a
+  parameter: Cmd+1 to Cmd+9 run `view.selectMaster {master}`, Cmd+Alt+2 to Cmd+Alt+9 run `view.showTab {index}`.
+  `shell/numbered_keys.rs` lists them; `app::catalog` gives each its own catalog definition through
+  `craft_ext::ui::runtime::commands::param_def`, and `FontCraftApp::output` takes fired commands through
+  `fired_command`. craft's keymap routes them like every other shortcut, so a focused text field keeps the chords it
+  types with, and a menu row or tooltip that names the command with the same parameters shows the chord. `ui.key`
+  reads the same list. A handler of its own for unbound chords would have needed its own focus rules and could not
+  show the chord on any surface.
 - **Tools.** The slot holds `canvas::tools::bridge::ToolBridge`. It posts the canvas's press, drags,
   hover and keys as `Msg::Tool`; `drain` runs `fontcraft_tools::Toolbox` on them
   (`canvas/tools/apply.rs`) and applies its answer before the next message, so each event sees what
@@ -303,6 +310,7 @@ only; each module's doc names the craft file the piece is meant for.
 | `craft_ext::ui::text::{AsyncCompleter, CompletionQuery, CompletionAnswer}` (`kept`, `take_query`, `answer`) | a `Completer` that may answer in a later pass | Font Info › Features: the code editor's name completion, asked through `ViewMsg::FeatureCompletion` and answered by the projection with `font.features.complete` |
 | `craft_ext::menu::{alternate_labels, held_alternate_labels}` | a `label` on `craft::menu::Alternate` that the bar's row shows while the alternate is selected | the menu bar: with Alt held, Tidy Up Paths reads Tidy Up Paths for All Masters (`app::menu_alternates::alternate_label`) |
 | `craft_ext::ui::primitives::ShapeIcon` (`spec`) | named icons `union`, `intersect`, `slant_left`, `slant_right`, `slant_down`, `slant_up` in craft's icon set | Palette › Transformations: the slant buttons and the Union and Intersect buttons (Subtract takes craft's `squares_subtract`) |
+| `craft_ext::ui::runtime::commands::{param_def, fired_command}` | an `AppCatalog` indexed by the binding key (`CommandRef::key`: id and parameters), so one id takes a definition and a default binding per parameter set | the numbered shortcuts: Cmd+1 to Cmd+9 select a master, Cmd+Alt+2 to Cmd+Alt+9 show a tab |
 | `craft_ext::ui::text::{StepKeys, ArrowSteps}` (`arrow_steps`, `stepped`) | a `steps` prop on `TextField` that keeps the arrows for a stepped value, as `NumberField` does | the metric fields that take a number or a key (`panels::widgets::key_or_number`), Font Info's minor version field |
 
 The stand-ins paint over what craft drew, so they cover the plain forms only (a row without icon, toggles or

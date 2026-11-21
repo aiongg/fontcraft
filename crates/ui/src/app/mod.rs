@@ -591,9 +591,11 @@ impl ShellApp for FontCraftApp {
 
     fn output(&mut self, output: FrameOutput) {
         for fired in output.fired {
+            // A numbered shortcut fires its catalog definition, whose id holds the parameters.
+            let command = craft_ext::ui::runtime::commands::fired_command(fired.command);
             // A held tool key fires again on release; the tool stays.
-            if fired.phase != FirePhase::Release && !clipboard::to_focused_list(self, &fired.command) {
-                self.fire(fired.command);
+            if fired.phase != FirePhase::Release && !clipboard::to_focused_list(self, &command) {
+                self.fire(command);
             }
         }
     }

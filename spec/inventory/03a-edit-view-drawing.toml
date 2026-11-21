@@ -264,7 +264,7 @@ milestone = "M3"
 summary = "Switches to the tab at the given position. The reference binds Cmd+Alt+2 through Cmd+Alt+9 to tab positions 2 to 9 (position 1 is Font View); the shortcut field holds only the first of that range."
 ref = "Edit View"
 status = "handbook"
-notes = "Built in M3.2. In `crates/ui` a click on a tab title runs it. The craft command catalog takes one definition per command id and its key bindings carry no parameters, so Cmd+Alt+2 to Cmd+Alt+9 are not bound there yet (the same gap leaves Cmd+1 to Cmd+9 for view.selectMaster unbound)."
+notes = "Built in M3.2. In `crates/ui` a click on a tab title runs it, and Cmd+Alt+2 to Cmd+Alt+9 run it with their position (`shell/numbered_keys.rs`)."
 
 [[command]]
 id = "view.showNextTab"

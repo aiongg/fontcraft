@@ -27,6 +27,7 @@ pub mod kerning_review;
 pub mod kerning_tools;
 pub mod kerning_window;
 pub mod masters;
+pub mod numbered_keys;
 pub mod overlays;
 pub mod palette;
 pub mod palette_modules;
