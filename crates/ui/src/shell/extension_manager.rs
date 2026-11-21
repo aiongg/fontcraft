@@ -467,8 +467,8 @@ pub fn refresh(app: &mut FontCraftApp) {
     view.safe_mode = safe_mode;
     view.note = note;
     view.seen = Some(key);
-    mark_downloads(app);
     view.revision = view.revision.wrapping_add(1);
+    mark_downloads(app);
     app.view_changed();
 }
 

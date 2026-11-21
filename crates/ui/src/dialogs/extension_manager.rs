@@ -61,7 +61,6 @@ craft::ui::words! {
         on: "fontcraftExtensionManager.on" = "On";
         off: "fontcraftExtensionManager.off" = "Off";
         new_module: "fontcraftExtensionManager.newModule" = "New, off";
-        downloading: "fontcraftExtensionManager.downloading" = "Downloading…";
         update_to: "fontcraftExtensionManager.updateTo" = "Update offered, installed:";
         none: "fontcraftExtensionManager.none" = "No extension matches. Install a module or macro from a file, or add an extension index.";
         website: "fontcraftExtensionManager.website" = "Website";
