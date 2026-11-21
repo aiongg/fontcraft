@@ -43,8 +43,7 @@ queries through `Session::query`, which refuses edits.
 
 ## Adding a panel
 
-1. **PanelId.** Every panel of `crates/ui-egui` already has a `PanelId` and a title, and shows a
-   stub. A new panel adds, in `shell/dock.rs`, the variant to `PanelId` and `PanelId::ALL`, its id in
+1. **PanelId.** A new panel adds, in `shell/dock.rs`, the variant to `PanelId` and `PanelId::ALL`, its id in
    `PanelId::id`, and its title in `PanelWords` and `PanelId::title`. A panel in
    `default_workspace` shows at start; the others start hidden, and
    `window.togglePanel {panel: "<id>"}` shows them.
@@ -82,8 +81,8 @@ queries through `Session::query`, which refuses edits.
    `Vec`, `Option`, `BTreeMap` and `&mut Vec<Msg>`. No `Cell`, `RefCell`, `Mutex`, atomics, `dyn`,
    closures, `&Session` or `&FontCraftApp`.
 5. **Register.** Add `pub mod <panel>;` to `panels/mod.rs`. In `Panels::body` (`shell/dock.rs`),
-   replace the stub arm with
-   `PanelId::Kerning => panels::kerning::show(ui, Props { model: &self.models.kerning, sent: self.sent })`.
+   add its arm (the match has no fallback, so a panel without a body does not compile):
+   `PanelId::Dimensions => panels::dimensions::show(ui, Props { model: &self.models.dimensions, sent: self.sent })`.
 
 ## Shared controls
 

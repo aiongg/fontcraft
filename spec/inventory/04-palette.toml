@@ -133,7 +133,10 @@ milestone = "M3"
 summary = "Notepad for recurring measurements of the design such as stem and bowl thicknesses. The numbers are stored per master and are reference only: they change nothing in the outlines or the exported font."
 ref = "Palette › Dimensions"
 status = "handbook"
-notes = "Built in M3.15: one labelled field per key of the script of the current glyph, without the letter diagram."
+notes = "Built in M3.15: one labelled field per key of the script of the current glyph, without the letter diagram. In `crates/ui` (`panels/dimensions.rs`) the notepad is the one of the master the canvas shows, in Font View too; it docks with Transformations and Fit Curve in the default layout."
+guesses = [
+  "In Font View the panel shows the notepad of the current master rather than the first master's; switching masters in Font View in the reference app with the Dimensions section open settles it.",
+]
 
 [[command]]
 id = "dimensions.setValue"

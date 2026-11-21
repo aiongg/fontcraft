@@ -10,6 +10,7 @@ pub mod compare_list;
 pub mod compatibility;
 pub mod components;
 pub mod console;
+pub mod dimensions;
 pub mod font_audit;
 pub mod font_exports;
 pub mod font_features;
@@ -69,6 +70,8 @@ pub struct Models {
     pub selections: Tracked<glyph_sections::SelectionsModel>,
     /// The shown master's metrics and stems (`panels::measurements`).
     pub measurements: Tracked<glyph_sections::MeasurementsModel>,
+    /// The shown master's Dimensions notepad (`panels::dimensions`).
+    pub dimensions: Tracked<dimensions::DimensionsModel>,
     /// The reference fonts (`panels::reference_font`).
     pub reference_font: Tracked<glyph_sections::ReferenceFontModel>,
     /// The Pairs & Phrases work list (`panels::pairs_phrases`).
@@ -184,6 +187,7 @@ impl Models {
         glyph_sections::project_related(&mut self.related_glyphs, cx);
         glyph_sections::project_selections(&mut self.selections, cx);
         glyph_sections::project_measurements(&mut self.measurements, cx);
+        dimensions::project(&mut self.dimensions, cx);
         glyph_sections::project_reference_font(&mut self.reference_font, cx);
         kerning_review::project(&mut self.pairs_phrases, cx);
         glyph_info::project(&mut self.glyph_info, &mut self.glyph_info_search, cx);

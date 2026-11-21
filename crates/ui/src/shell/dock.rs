@@ -26,7 +26,6 @@ pub enum PanelId {
     /// The glyph part of the Info box: name, width and sidebearings.
     GlyphMetrics,
     InfoBox,
-    Kerning,
     Dimensions,
     FitCurve,
     Layers,
@@ -48,7 +47,6 @@ pub enum PanelId {
     Preview,
     SpaceCenter,
     KerningWindow,
-    KerningReview,
     KerningPairsPreview,
     KerningGroupsEditor,
     GlyphInfo,
@@ -69,7 +67,6 @@ impl PanelId {
         PanelId::Sidebar,
         PanelId::GlyphMetrics,
         PanelId::InfoBox,
-        PanelId::Kerning,
         PanelId::Dimensions,
         PanelId::FitCurve,
         PanelId::Layers,
@@ -91,7 +88,6 @@ impl PanelId {
         PanelId::Preview,
         PanelId::SpaceCenter,
         PanelId::KerningWindow,
-        PanelId::KerningReview,
         PanelId::KerningPairsPreview,
         PanelId::KerningGroupsEditor,
         PanelId::GlyphInfo,
@@ -112,7 +108,6 @@ impl PanelId {
             PanelId::Sidebar => "sidebar",
             PanelId::GlyphMetrics => "glyphMetrics",
             PanelId::InfoBox => "infoBox",
-            PanelId::Kerning => "kerning",
             PanelId::Dimensions => "dimensions",
             PanelId::FitCurve => "fitCurve",
             PanelId::Layers => "layers",
@@ -134,7 +129,6 @@ impl PanelId {
             PanelId::Preview => "preview",
             PanelId::SpaceCenter => "spaceCenter",
             PanelId::KerningWindow => "kerningWindow",
-            PanelId::KerningReview => "kerningReview",
             PanelId::KerningPairsPreview => "kerningPairsPreview",
             PanelId::KerningGroupsEditor => "kerningGroupsEditor",
             PanelId::GlyphInfo => "glyphInfo",
@@ -161,7 +155,6 @@ impl PanelId {
             PanelId::Sidebar => w.sidebar.clone(),
             PanelId::GlyphMetrics => w.glyph_metrics.clone(),
             PanelId::InfoBox => w.info_box.clone(),
-            PanelId::Kerning => w.kerning.clone(),
             PanelId::Dimensions => w.dimensions.clone(),
             PanelId::FitCurve => w.fit_curve.clone(),
             PanelId::Layers => w.layers.clone(),
@@ -183,7 +176,6 @@ impl PanelId {
             PanelId::Preview => w.preview.clone(),
             PanelId::SpaceCenter => w.space_center.clone(),
             PanelId::KerningWindow => w.kerning_window.clone(),
-            PanelId::KerningReview => w.kerning_review.clone(),
             PanelId::KerningPairsPreview => w.kerning_pairs_preview.clone(),
             PanelId::KerningGroupsEditor => w.kerning_groups_editor.clone(),
             PanelId::GlyphInfo => w.glyph_info.clone(),
@@ -217,7 +209,6 @@ craft::ui::words! {
         sidebar: "fontcraftPanel.sidebar" = "Sidebar";
         glyph_metrics: "fontcraftPanel.glyphMetrics" = "Metrics";
         info_box: "fontcraftPanel.infoBox" = "Info";
-        kerning: "fontcraftPanel.kerning" = "Kerning";
         dimensions: "fontcraftPanel.dimensions" = "Dimensions";
         fit_curve: "fontcraftPanel.fitCurve" = "Fit Curve";
         layers: "fontcraftPanel.layers" = "Layers";
@@ -239,7 +230,6 @@ craft::ui::words! {
         preview: "fontcraftPanel.preview" = "Preview";
         space_center: "fontcraftPanel.spaceCenter" = "Space Center";
         kerning_window: "fontcraftPanel.kerningWindow" = "Kerning Window";
-        kerning_review: "fontcraftPanel.kerningReview" = "Kerning Review";
         kerning_pairs_preview: "fontcraftPanel.kerningPairsPreview" = "Kerning Pairs Preview";
         kerning_groups_editor: "fontcraftPanel.kerningGroupsEditor" = "Kerning Groups Editor";
         glyph_info: "fontcraftPanel.glyphInfo" = "Glyph Info";
@@ -259,7 +249,7 @@ craft::ui::words! {
 pub fn default_workspace() -> Workspace<PanelId> {
     let start = Column::new(vec![Group::new(vec![PanelId::Sidebar], 0)]);
     let end = Column::new(vec![
-        Group::new(vec![PanelId::GlyphMetrics, PanelId::InfoBox, PanelId::Kerning], 0),
+        Group::new(vec![PanelId::GlyphMetrics, PanelId::InfoBox], 0),
         Group::new(vec![PanelId::Layers], 0),
         Group::new(vec![PanelId::Dimensions, PanelId::Transformations, PanelId::FitCurve], 0),
     ]);
@@ -394,9 +384,9 @@ impl DockPanels<PanelId> for Panels<'_> {
                 ui,
                 panels::shape_order::Props { model: &self.models.shape_order, tokens: &self.models.canvas_tokens, sent: self.sent },
             ),
+            PanelId::Dimensions => panels::dimensions::show(ui, panels::dimensions::Props { model: &self.models.dimensions, sent: self.sent }),
             // Drawn by `group_view`.
             PanelId::Document => {}
-            other => panels::stub::show(ui, panels::stub::Props { title: other.title(&self.words) }),
         }
     }
 
