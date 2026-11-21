@@ -355,9 +355,10 @@ milestone = "M3"
 summary = "Holding Option while a menu or context menu is open swaps some items for an alternate form, typically the same action applied to all masters (Tidy up Paths, Correct Path Direction, Reverse Contours, Set/Reset Anchors, Expand Outline), plus Force Extremes, Add Global Guide and Reopen Last Closed Tab."
 ref = "Edit View › Editing Paths"
 status = "handbook"
-notes = "The new UI (`crates/ui`, `app/menu_alternates.rs`, `ALTERNATES`) puts each pair on the base row of the menu bar: choosing the row with Alt held runs the alternate, and the alternate has no row of its own. The framework swaps the command only, so the row keeps the base's label and shortcut while Alt is held. Not yet in the table: the tab pair and the Font View batch forms, whose commands the new UI does not have yet, and the delete and Expand Outline pairs, whose commands have no menu path in the engine."
+notes = "The new UI (`crates/ui`, `app/menu_alternates.rs`, `ALTERNATES`) puts each pair on the base row of the menu bar: choosing the row with Alt held runs the alternate, and the alternate has no row of its own. While Alt is held the row shows the alternate command's own label and shortcut (`craft_ext::menu::held_alternate_labels`); the label updates as Alt goes down and up while the menu is open. Not yet in the table: the tab pair and the Font View batch forms, whose commands the new UI does not have yet, and the delete and Expand Outline pairs, whose commands have no menu path in the engine."
 guesses = [
   "Clear Background is the Alt alternate of Assign Background; the handbook says only that it shows while Alt is held. Holding Option in the reference app's Path menu settles it.",
+  "An alternate row shows its own command's label and shortcut, as native macOS alternate items do; the handbook names the alternates but not their labels. The observe step below settles it.",
 ]
 observe = [
   "Open the Path menu, hold Option, and note which items change, their labels, and whether each keeps its shortcut with Option added.",
