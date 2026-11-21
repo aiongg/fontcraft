@@ -564,7 +564,7 @@ linked file is checked against it, and a linked file outside the read root reads
 2. **Then, in this order** (ROADMAP.md › What to build next, items 2 to 5):
    - The new window's ports left (item 2): the Extension Manager's Indexes tab and downloads; and the framework gaps
      in `crates/craft-ext` (a text-field hook for syntax colour and error underlines, caret and selection access, an
-     async completer, Up/Down stepping, a press-and-hold flyout, union, intersect and slant icons, open URL and
+     async completer, Up/Down stepping, union, intersect and slant icons, open URL and
      reveal in the file manager, alternate menu rows with their own label and shortcut, an app-level paste event);
      then the small follow-ups listed there.
    - Retire the egui window: remove `crates/ui-egui` and `apps/fontcraft`. `cargo xtask parity` must then read the

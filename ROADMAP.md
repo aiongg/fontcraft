@@ -1061,7 +1061,7 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
       mark on menu entries, a danger tone on menu entries, modifiers on context-menu requests, open URL and
       reveal in the file manager, a text-field highlight hook (feature code colours and error underlines), caret and
       selection access, Up/Down stepping on text fields that hold a number, and an async completer (feature code
-      completion). Left: a press-and-hold flyout; union, intersect and slant icons; alternate menu rows with their own label and shortcut; an app-level paste event. The craft pin stays at `4bd0107` for these.
+      completion). Left: union, intersect and slant icons; alternate menu rows with their own label and shortcut; an app-level paste event. The craft pin stays at `4bd0107` for these.
 3. **The engine split, step 4 on.** ES.4 moves the kerning-index and metrics-sync readers outside the spacing crate
    behind its extension and moves the slots with `Session`; the later steps move command areas out of the engine
    crate along command ownership.
