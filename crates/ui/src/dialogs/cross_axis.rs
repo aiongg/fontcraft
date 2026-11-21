@@ -5,7 +5,7 @@
 //! | Control | Does |
 //! |---|---|
 //! | Description field at the top | the description of the whole list |
-//! | disclosure of a card | shows or hides the card's axes |
+//! | disclosure of a card | shows or hides the card's axes; with Alt held, every card's |
 //! | description field of a card | the mapping's description |
 //! | `−` on a card | removes the mapping |
 //! | tick in the Input or Output column | the axis takes part in that side of the mapping |
@@ -289,8 +289,12 @@ pub fn view(ui: &mut Ui, m: &CrossModel, draft: &mut Draft, sent: &mut Vec<Msg>)
             draft.description = text.clone();
         }
         let mut remove = None;
+        let mut every_card = None;
         for (i, card) in draft.cards.iter_mut().enumerate() {
-            card_view(ui, &words, m, i, card, &mut remove);
+            card_view(ui, &words, m, i, card, &mut remove, &mut every_card);
+        }
+        if let Some(open) = every_card {
+            draft.cards.iter_mut().for_each(|card| card.open = open);
         }
         if let Some(i) = remove.filter(|i| *i < draft.cards.len()) {
             draft.cards.remove(i);
@@ -315,13 +319,25 @@ pub fn view(ui: &mut Ui, m: &CrossModel, draft: &mut Draft, sent: &mut Vec<Msg>)
     }
 }
 
-/// One card: its disclosure, description and remove button, then a row per axis with a tick and a value per side.
-fn card_view(ui: &mut Ui, words: &CrossAxisWords, m: &CrossModel, i: usize, card: &mut Card, remove: &mut Option<usize>) {
+/// One card: its disclosure, description and remove button, then a row per axis with a tick and a value per side. A
+/// disclosure clicked with Alt held asks for every card to open or close (`every_card`).
+fn card_view(
+    ui: &mut Ui,
+    words: &CrossAxisWords,
+    m: &CrossModel,
+    i: usize,
+    card: &mut Card,
+    remove: &mut Option<usize>,
+    every_card: &mut Option<bool>,
+) {
     let number = i.saturating_add(1);
     Row::new().show(ui, |ui, _| {
         let out = Disclosure::new(Bind::given(card.open)).label(words.axes.clone()).id_salt(("fontcraftCrossAxis.open", i)).show(ui);
         if let Some(open) = out.events.committed() {
             card.open = *open;
+            if craft_ext::ui::contract::held_mods(ui.ctx()).alt {
+                *every_card = Some(*open);
+            }
         }
         let name = Label::from(format!("{} {number}", words.mapping.as_str()));
         let typed = TextField::new(name.clone(), Bind::given(card.description.clone()))
@@ -509,5 +525,27 @@ mod tests {
         fixture.click(&revert).settle();
         assert!(draft.borrow().cards.is_empty(), "Revert drops the draft's changes");
         assert!(!draft.borrow().changed);
+    }
+
+    /// A card's disclosure opens or closes that card; with Alt held it opens or closes every card.
+    #[test]
+    fn alt_click_on_a_disclosure_opens_or_closes_every_card() {
+        let app = variable_app();
+        let m = model(&app);
+        let mut start = m.read_draft();
+        start.cards = vec![m.new_card(), m.new_card()];
+        let draft = Rc::new(RefCell::new(start));
+        let kept = Rc::clone(&draft);
+        let mut fixture = Fixture::new(move |ui| view(ui, &m, &mut kept.borrow_mut(), &mut Vec::new()));
+        fixture.settle();
+        let opens = |d: &Draft| d.cards.iter().map(|c| c.open).collect::<Vec<_>>();
+        let first = fixture.by_label("Axes").expect("the first card's disclosure");
+        fixture.click(&first).settle();
+        assert_eq!(opens(&draft.borrow()), [false, true], "a plain click closes its own card");
+        fixture.click(&first).settle();
+        fixture.hold(egui::Modifiers::ALT);
+        let first = fixture.by_label("Axes").expect("the first card's disclosure");
+        fixture.click(&first).settle();
+        assert_eq!(opens(&draft.borrow()), [false, false], "Alt closes every card");
     }
 }
