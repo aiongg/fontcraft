@@ -149,6 +149,24 @@ fn arrows_move_the_selected_image_and_delete_removes_it() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// With only the placed image selected, no menu row of a command that takes the image is greyed out.
+#[test]
+fn a_selected_image_supplies_the_menu_rows_of_the_commands_that_take_it() {
+    let (mut app, dir) = image_app("menu-rows");
+    pointer(&mut app, PointerKind::Down, 20.0, 20.0, Modifiers::NONE);
+    pointer(&mut app, PointerKind::Up, 20.0, 20.0, Modifiers::NONE);
+    app.drain();
+    assert!(is_selected(&app) && app.tools.selection.is_empty());
+    let greyed = crate::app::menu_states::greyed(&app);
+    let takes_image: Vec<&str> = greyed
+        .iter()
+        .filter(|(id, _)| fontcraft_engine::find_command(id).is_some_and(|spec| crate::canvas::tools::targets::takes_param(spec, "image?: bool")))
+        .map(|(id, _)| *id)
+        .collect();
+    assert!(takes_image.is_empty(), "greyed although the image supplies them: {takes_image:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// A file whose header states more pixels than are drawn is refused from its header; a missing file is the marker.
 #[test]
 fn files_past_the_limits_are_refused_without_decoding() {
