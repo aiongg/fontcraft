@@ -4,15 +4,6 @@ version = 4
 
 [[package]]
 name = "accesskit"
-version = "0.24.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3b7f7f85a7e5f68090000ed7622545829afd484d210358702ae4cb97dd0c320"
-dependencies = [
- "uuid",
-]
-
-[[package]]
-name = "accesskit"
 version = "0.25.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e883d1d28c5fd5568c79ed2d2bd48d9f2fd3945c8974ed0f53690ceddb051be"
@@ -26,7 +17,7 @@ version = "0.39.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3da8f27636015191b2264ee1df681503170a632cafd832fdc1edfdd4e3a2fd3"
 dependencies = [
- "accesskit 0.25.2",
+ "accesskit",
  "hashbrown 0.17.1",
 ]
 
@@ -639,37 +630,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "calloop"
-version = "0.14.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43b32313e937c8721c9d17ee9bf60699a6402b4b7c2cb6ac1bee0ffcaa4b4e5e"
-dependencies = [
- "bitflags 2.13.2",
- "polling",
- "rustix 1.1.5",
- "tracing",
-]
-
-[[package]]
 name = "calloop-wayland-source"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95a66a987056935f7efce4ab5668920b5d0dac4a7c99991a67395f13702ddd20"
 dependencies = [
- "calloop 0.13.0",
+ "calloop",
  "rustix 0.38.44",
- "wayland-backend",
- "wayland-client",
-]
-
-[[package]]
-name = "calloop-wayland-source"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "138efcf0940a02ebf0cc8d1eff41a1682a46b431630f4c52450d6265876021fa"
-dependencies = [
- "calloop 0.14.5",
- "rustix 1.1.5",
  "wayland-backend",
  "wayland-client",
 ]
@@ -1095,7 +1062,7 @@ dependencies = [
  "craft-pages",
  "craft-platform",
  "craft-print",
- "craft-quit 0.1.0 (git+https://github.com/storytold/craft-libs?rev=4bd0107b9215e2903069b98debd9316e2a9238ae)",
+ "craft-quit",
  "craft-review",
  "craft-settings",
  "craft-table",
@@ -1108,7 +1075,7 @@ dependencies = [
  "craft-ui",
  "craft-update",
  "craft-window",
- "egui 0.37.0",
+ "egui",
  "toml",
 ]
 
@@ -1153,7 +1120,7 @@ dependencies = [
  "craft-platform",
  "craft-theme",
  "craft-ui",
- "egui 0.37.0",
+ "egui",
  "getrandom 0.3.4",
  "hmac",
  "log",
@@ -1169,12 +1136,12 @@ name = "craft-behavior"
 version = "0.1.0"
 source = "git+https://github.com/storytold/craft-libs?rev=4bd0107b9215e2903069b98debd9316e2a9238ae#4bd0107b9215e2903069b98debd9316e2a9238ae"
 dependencies = [
- "accesskit 0.25.2",
+ "accesskit",
  "bitflags 2.13.2",
  "craft-host",
  "craft-keymap",
  "craft-theme",
- "emath 0.37.0",
+ "emath",
  "kurbo",
  "serde",
  "smallvec",
@@ -1193,7 +1160,7 @@ dependencies = [
  "craft-settings",
  "craft-theme",
  "craft-ui",
- "egui 0.37.0",
+ "egui",
  "kurbo",
  "serde",
 ]
@@ -1203,7 +1170,7 @@ name = "craft-cloud-ui"
 version = "0.1.0"
 source = "git+https://github.com/storytold/craft-libs?rev=4bd0107b9215e2903069b98debd9316e2a9238ae#4bd0107b9215e2903069b98debd9316e2a9238ae"
 dependencies = [
- "egui 0.37.0",
+ "egui",
 ]
 
 [[package]]
@@ -1230,7 +1197,7 @@ dependencies = [
  "craft-theme",
  "craft-ui",
  "craft-window",
- "egui 0.37.0",
+ "egui",
  "serde",
  "serde_json",
 ]
@@ -1247,7 +1214,7 @@ dependencies = [
  "craft-i18n",
  "craft-platform",
  "craft-ui",
- "egui 0.37.0",
+ "egui",
  "futures-lite",
  "log",
  "objc2 0.6.5",
@@ -1279,7 +1246,7 @@ dependencies = [
  "craft-settings",
  "craft-theme",
  "craft-ui",
- "egui 0.37.0",
+ "egui",
  "kurbo",
  "serde",
  "serde_json",
@@ -1322,8 +1289,8 @@ dependencies = [
  "craft-i18n",
  "craft-theme",
  "craft-ui",
- "egui 0.37.0",
- "epaint_default_fonts 0.37.0",
+ "egui",
+ "epaint_default_fonts",
  "log",
  "serde",
  "skrifa 0.44.0",
@@ -1362,7 +1329,7 @@ source = "git+https://github.com/storytold/craft-libs?rev=4bd0107b9215e2903069b9
 dependencies = [
  "bitflags 2.13.2",
  "craft-i18n",
- "egui 0.37.0",
+ "egui",
  "serde",
  "toml",
  "web-time",
@@ -1408,7 +1375,7 @@ dependencies = [
  "craft-keymap",
  "craft-theme",
  "craft-ui",
- "egui 0.37.0",
+ "egui",
  "kurbo",
  "serde",
  "serde_json",
@@ -1422,7 +1389,7 @@ dependencies = [
  "craft-host",
  "craft-i18n",
  "craft-xml",
- "egui 0.37.0",
+ "egui",
  "serde",
  "serde_json",
 ]
@@ -1437,7 +1404,7 @@ dependencies = [
  "craft-keymap",
  "craft-theme",
  "craft-ui",
- "egui 0.37.0",
+ "egui",
  "serde",
 ]
 
@@ -1450,11 +1417,11 @@ dependencies = [
  "craft-host",
  "craft-i18n",
  "craft-keymap",
- "craft-quit 0.1.0 (git+https://github.com/storytold/craft-libs?rev=4bd0107b9215e2903069b98debd9316e2a9238ae)",
+ "craft-quit",
  "craft-theme",
  "craft-ui",
  "craft-window",
- "egui 0.37.0",
+ "egui",
  "serde",
  "serde_json",
 ]
@@ -1468,7 +1435,7 @@ dependencies = [
  "craft-text",
  "craft-theme",
  "craft-ui",
- "egui 0.37.0",
+ "egui",
  "kurbo",
  "serde",
 ]
@@ -1520,7 +1487,7 @@ dependencies = [
  "craft-behavior",
  "craft-ui",
  "craft-winprint-gdi",
- "egui 0.37.0",
+ "egui",
  "log",
  "miniz_oxide 0.9.1",
  "roxmltree",
@@ -1536,19 +1503,7 @@ version = "0.1.0"
 source = "git+https://github.com/storytold/craft-libs?rev=4bd0107b9215e2903069b98debd9316e2a9238ae#4bd0107b9215e2903069b98debd9316e2a9238ae"
 dependencies = [
  "dispatch2",
- "egui 0.37.0",
- "objc2 0.6.5",
- "objc2-app-kit 0.3.2",
-]
-
-[[package]]
-name = "craft-quit"
-version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?rev=e9546e191dd62f2bc1d61eca45dbdc2f1b3c1d8e#e9546e191dd62f2bc1d61eca45dbdc2f1b3c1d8e"
-dependencies = [
- "dispatch2",
- "egui 0.36.2",
- "muda",
+ "egui",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
 ]
@@ -1564,7 +1519,7 @@ dependencies = [
  "craft-keymap",
  "craft-theme",
  "craft-ui",
- "egui 0.37.0",
+ "egui",
  "image",
  "kurbo",
  "serde",
@@ -1610,7 +1565,7 @@ dependencies = [
  "craft-keymap",
  "craft-theme",
  "craft-ui",
- "egui 0.37.0",
+ "egui",
 ]
 
 [[package]]
@@ -1623,7 +1578,7 @@ dependencies = [
  "craft-keymap",
  "craft-theme",
  "craft-ui",
- "egui 0.37.0",
+ "egui",
  "hypher",
  "miniz_oxide 0.8.9",
  "serde",
@@ -1641,7 +1596,7 @@ version = "0.1.0"
 source = "git+https://github.com/storytold/craft-libs?rev=4bd0107b9215e2903069b98debd9316e2a9238ae#4bd0107b9215e2903069b98debd9316e2a9238ae"
 dependencies = [
  "bitflags 2.13.2",
- "ecolor 0.37.0",
+ "ecolor",
  "log",
  "serde",
  "serde_json",
@@ -1656,7 +1611,7 @@ dependencies = [
  "craft-behavior",
  "craft-theme",
  "craft-ui",
- "egui 0.37.0",
+ "egui",
 ]
 
 [[package]]
@@ -1669,7 +1624,7 @@ dependencies = [
  "craft-theme",
  "craft-ui",
  "dirs",
- "egui 0.37.0",
+ "egui",
  "serde",
  "serde_json",
 ]
@@ -1693,7 +1648,7 @@ dependencies = [
  "craft-theme",
  "craft-time",
  "craft-ui",
- "egui 0.37.0",
+ "egui",
  "serde",
  "web-time",
 ]
@@ -1728,7 +1683,7 @@ dependencies = [
  "craft-theme",
  "craft-ui-macros",
  "craft-ui-panels",
- "egui 0.37.0",
+ "egui",
  "serde",
  "serde_json",
 ]
@@ -1738,7 +1693,7 @@ name = "craft-ui-contract"
 version = "0.1.0"
 source = "git+https://github.com/storytold/craft-libs?rev=4bd0107b9215e2903069b98debd9316e2a9238ae#4bd0107b9215e2903069b98debd9316e2a9238ae"
 dependencies = [
- "accesskit 0.25.2",
+ "accesskit",
  "craft-behavior",
  "craft-font-catalog",
  "craft-fonts-build",
@@ -1746,16 +1701,16 @@ dependencies = [
  "craft-i18n",
  "craft-keymap",
  "craft-platform",
- "craft-quit 0.1.0 (git+https://github.com/storytold/craft-libs?rev=4bd0107b9215e2903069b98debd9316e2a9238ae)",
+ "craft-quit",
  "craft-settings",
  "craft-svg",
  "craft-theme",
  "craft-tracked",
  "craft-ui-macros",
  "craft-window",
- "egui 0.37.0",
+ "egui",
  "egui_kittest",
- "epaint_default_fonts 0.37.0",
+ "epaint_default_fonts",
  "flate2",
  "image",
  "inventory",
@@ -1790,11 +1745,11 @@ dependencies = [
  "craft-host",
  "craft-i18n",
  "craft-keymap",
- "craft-quit 0.1.0 (git+https://github.com/storytold/craft-libs?rev=4bd0107b9215e2903069b98debd9316e2a9238ae)",
+ "craft-quit",
  "craft-theme",
  "craft-ui-macros",
  "craft-ui-widgets",
- "egui 0.37.0",
+ "egui",
  "serde",
  "serde_json",
 ]
@@ -1812,7 +1767,7 @@ dependencies = [
  "craft-theme",
  "craft-ui-macros",
  "craft-ui-panels",
- "egui 0.37.0",
+ "egui",
  "serde",
  "serde_json",
  "toml",
@@ -1834,8 +1789,8 @@ dependencies = [
  "craft-ui-macros",
  "craft-ui-panels",
  "craft-window",
- "eframe 0.37.0",
- "egui 0.37.0",
+ "eframe",
+ "egui",
  "serde",
  "web-time",
 ]
@@ -1852,7 +1807,7 @@ dependencies = [
  "craft-theme",
  "craft-ui-contract",
  "craft-ui-macros",
- "egui 0.37.0",
+ "egui",
  "serde",
  "smallvec",
 ]
@@ -1867,7 +1822,7 @@ dependencies = [
  "craft-theme",
  "craft-ui",
  "dunce",
- "egui 0.37.0",
+ "egui",
  "flate2",
  "image",
  "log",
@@ -1904,7 +1859,7 @@ dependencies = [
  "craft-host",
  "craft-settings",
  "craft-win32",
- "egui 0.37.0",
+ "egui",
  "muda",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
@@ -2230,56 +2185,11 @@ dependencies = [
 
 [[package]]
 name = "ecolor"
-version = "0.36.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0656a7530b9e2841ee7a5f983965bdd9840c32f4012f759cfd44b912cced6b34"
-dependencies = [
- "bytemuck",
- "emath 0.36.2",
-]
-
-[[package]]
-name = "ecolor"
 version = "0.37.0"
 source = "git+https://github.com/storytold/egui.git?rev=e9711ca9b69772f875ae0d1cef1977ff8c16234d#e9711ca9b69772f875ae0d1cef1977ff8c16234d"
 dependencies = [
  "bytemuck",
- "emath 0.37.0",
-]
-
-[[package]]
-name = "eframe"
-version = "0.36.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55ad41fac6e3149abb4866e93df37dbd33baa95db525c3368c944584e95a5dc2"
-dependencies = [
- "ahash",
- "bytemuck",
- "document-features",
- "egui 0.36.2",
- "egui-wgpu 0.36.2",
- "egui-winit 0.36.2",
- "egui_glow 0.36.2",
- "glutin",
- "glutin-winit",
- "image",
- "js-sys",
- "log",
- "objc2 0.6.5",
- "objc2-app-kit 0.3.2",
- "objc2-foundation 0.3.2",
- "parking_lot",
- "percent-encoding",
- "pollster 1.0.1",
- "profiling",
- "raw-window-handle",
- "static_assertions",
- "wasm-bindgen",
- "web-sys",
- "web-time",
- "wgpu",
- "windows-sys 0.61.2",
- "winit",
+ "emath",
 ]
 
 [[package]]
@@ -2290,10 +2200,10 @@ dependencies = [
  "ahash",
  "bytemuck",
  "document-features",
- "egui 0.37.0",
- "egui-wgpu 0.37.0",
- "egui-winit 0.37.0",
- "egui_glow 0.37.0",
+ "egui",
+ "egui-wgpu",
+ "egui-winit",
+ "egui_glow",
  "glutin",
  "glutin-winit",
  "image",
@@ -2319,34 +2229,14 @@ dependencies = [
 
 [[package]]
 name = "egui"
-version = "0.36.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc938cc27cd911415e1e4d151bc56ff9df063d8db081374e87aeb805ea74b2ba"
-dependencies = [
- "accesskit 0.24.1",
- "ahash",
- "bitflags 2.13.2",
- "emath 0.36.2",
- "epaint 0.36.2",
- "itertools 0.15.0",
- "log",
- "nohash-hasher",
- "profiling",
- "smallvec",
- "unicode-segmentation",
- "web-sys",
-]
-
-[[package]]
-name = "egui"
 version = "0.37.0"
 source = "git+https://github.com/storytold/egui.git?rev=e9711ca9b69772f875ae0d1cef1977ff8c16234d#e9711ca9b69772f875ae0d1cef1977ff8c16234d"
 dependencies = [
- "accesskit 0.25.2",
+ "accesskit",
  "ahash",
  "bitflags 2.13.2",
- "emath 0.37.0",
- "epaint 0.37.0",
+ "emath",
+ "epaint",
  "itertools 0.15.0",
  "log",
  "nohash-hasher",
@@ -2358,58 +2248,20 @@ dependencies = [
 
 [[package]]
 name = "egui-wgpu"
-version = "0.36.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5cef1f6d1bba40b09a4d0d62cb822b81030922cfbf65c5373398c3a3caafc5bd"
-dependencies = [
- "ahash",
- "bytemuck",
- "document-features",
- "egui 0.36.2",
- "epaint 0.36.2",
- "log",
- "profiling",
- "thiserror 2.0.21",
- "type-map",
- "web-time",
- "wgpu",
- "winit",
-]
-
-[[package]]
-name = "egui-wgpu"
 version = "0.37.0"
 source = "git+https://github.com/storytold/egui.git?rev=e9711ca9b69772f875ae0d1cef1977ff8c16234d#e9711ca9b69772f875ae0d1cef1977ff8c16234d"
 dependencies = [
  "ahash",
  "bytemuck",
  "document-features",
- "egui 0.37.0",
- "epaint 0.37.0",
+ "egui",
+ "epaint",
  "log",
  "profiling",
  "thiserror 2.0.21",
  "type-map",
  "web-time",
  "wgpu",
- "winit",
-]
-
-[[package]]
-name = "egui-winit"
-version = "0.36.2"
-dependencies = [
- "arboard",
- "bytemuck",
- "egui 0.36.2",
- "log",
- "objc2 0.6.5",
- "objc2-foundation 0.3.2",
- "objc2-ui-kit 0.3.2",
- "profiling",
- "raw-window-handle",
- "smithay-clipboard",
- "web-time",
  "winit",
 ]
 
@@ -2421,7 +2273,7 @@ dependencies = [
  "arboard",
  "block2 0.6.2",
  "bytemuck",
- "egui 0.37.0",
+ "egui",
  "log",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
@@ -2436,25 +2288,11 @@ dependencies = [
 
 [[package]]
 name = "egui_glow"
-version = "0.36.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "606ed4167daf341e5753d703285c4c1d562324b2c07aa8f405cd7d066fe58f3b"
-dependencies = [
- "bytemuck",
- "egui 0.36.2",
- "glow",
- "log",
- "profiling",
- "winit",
-]
-
-[[package]]
-name = "egui_glow"
 version = "0.37.0"
 source = "git+https://github.com/storytold/egui.git?rev=e9711ca9b69772f875ae0d1cef1977ff8c16234d#e9711ca9b69772f875ae0d1cef1977ff8c16234d"
 dependencies = [
  "bytemuck",
- "egui 0.37.0",
+ "egui",
  "glow",
  "log",
  "profiling",
@@ -2466,9 +2304,9 @@ name = "egui_kittest"
 version = "0.37.0"
 source = "git+https://github.com/storytold/egui.git?rev=e9711ca9b69772f875ae0d1cef1977ff8c16234d#e9711ca9b69772f875ae0d1cef1977ff8c16234d"
 dependencies = [
- "eframe 0.37.0",
- "egui 0.37.0",
- "egui-wgpu 0.37.0",
+ "eframe",
+ "egui",
+ "egui-wgpu",
  "image",
  "kittest",
  "log",
@@ -2483,15 +2321,6 @@ name = "either"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e9c71c2167ca323c882b99918929403426e2373ea17242ff5653e0d5e1058be"
-
-[[package]]
-name = "emath"
-version = "0.36.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52c8d4141cf0f60fb2f7aefaf352d3ffa5171ef0ab09731c64391801e95e48f1"
-dependencies = [
- "bytemuck",
-]
 
 [[package]]
 name = "emath"
@@ -2556,39 +2385,14 @@ dependencies = [
 
 [[package]]
 name = "epaint"
-version = "0.36.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0ec0308dc23130fc1a7d4623a8534c2ed069c6dc84e258ee4f3de99615aa1a3"
-dependencies = [
- "ahash",
- "bytemuck",
- "ecolor 0.36.2",
- "emath 0.36.2",
- "epaint_default_fonts 0.36.2",
- "font-types",
- "harfrust 0.12.0",
- "log",
- "nohash-hasher",
- "parking_lot",
- "profiling",
- "self_cell",
- "skrifa 0.44.0",
- "smallvec",
- "unicode-general-category",
- "unicode-segmentation",
- "vello_cpu 0.1.0",
-]
-
-[[package]]
-name = "epaint"
 version = "0.37.0"
 source = "git+https://github.com/storytold/egui.git?rev=e9711ca9b69772f875ae0d1cef1977ff8c16234d#e9711ca9b69772f875ae0d1cef1977ff8c16234d"
 dependencies = [
  "ahash",
  "bytemuck",
- "ecolor 0.37.0",
- "emath 0.37.0",
- "epaint_default_fonts 0.37.0",
+ "ecolor",
+ "emath",
+ "epaint_default_fonts",
  "font-types",
  "harfrust 0.12.0",
  "log",
@@ -2602,14 +2406,8 @@ dependencies = [
  "unicode-general-category",
  "unicode-properties",
  "unicode-segmentation",
- "vello_cpu 0.2.0",
+ "vello_cpu",
 ]
-
-[[package]]
-name = "epaint_default_fonts"
-version = "0.36.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "773fa9c96dd0dbef887e39d0ed6177f141cce4d68e6041df77570aa3702dfa13"
 
 [[package]]
 name = "epaint_default_fonts"
@@ -2828,14 +2626,11 @@ name = "fontcraft"
 version = "0.0.1"
 dependencies = [
  "clipboard-win",
- "craft-quit 0.1.0 (git+https://github.com/storytold/craft-libs?rev=e9546e191dd62f2bc1d61eca45dbdc2f1b3c1d8e)",
- "eframe 0.36.2",
+ "eframe",
  "fontcraft-engine",
- "fontcraft-ui-egui",
- "log",
+ "fontcraft-ui",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
- "rfd",
  "serde_json",
  "ureq",
 ]
@@ -2941,7 +2736,7 @@ name = "fontcraft-craft-ext"
 version = "0.0.1"
 dependencies = [
  "craft",
- "egui 0.37.0",
+ "egui",
 ]
 
 [[package]]
@@ -3215,17 +3010,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fontcraft-next"
-version = "0.0.1"
-dependencies = [
- "eframe 0.37.0",
- "fontcraft-engine",
- "fontcraft-ui",
- "serde_json",
- "ureq",
-]
-
-[[package]]
 name = "fontcraft-oracle"
 version = "0.0.1"
 dependencies = [
@@ -3381,8 +3165,8 @@ version = "0.0.1"
 dependencies = [
  "base64 0.22.1",
  "craft",
- "eframe 0.37.0",
- "egui 0.37.0",
+ "eframe",
+ "egui",
  "fontcraft-craft-ext",
  "fontcraft-engine",
  "fontcraft-geom",
@@ -3394,27 +3178,6 @@ dependencies = [
  "fontcraft-tools",
  "log",
  "serde_json",
-]
-
-[[package]]
-name = "fontcraft-ui-egui"
-version = "0.0.1"
-dependencies = [
- "base64 0.22.1",
- "egui 0.36.2",
- "fontcraft-engine",
- "fontcraft-geom",
- "fontcraft-glyphquery",
- "fontcraft-io-pdf",
- "fontcraft-model",
- "fontcraft-render",
- "fontcraft-spacing",
- "fontcraft-textlayout",
- "fontcraft-tools",
- "log",
- "serde",
- "serde_json",
- "skrifa 0.48.0",
 ]
 
 [[package]]
@@ -3674,22 +3437,6 @@ dependencies = [
 
 [[package]]
 name = "glifo"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed4a1bb24121291d27230c1b1b44e07d6a9b28cefdb32fe1581dfb84e14f940a"
-dependencies = [
- "bytemuck",
- "foldhash 0.2.0",
- "hashbrown 0.17.1",
- "log",
- "peniko",
- "skrifa 0.44.0",
- "smallvec",
- "vello_common 0.1.0",
-]
-
-[[package]]
-name = "glifo"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "282a26c1e23de04bdab3e34a21b6f877a479b96737792516b9b8b8f69b6661be"
@@ -3701,7 +3448,7 @@ dependencies = [
  "peniko",
  "skrifa 0.44.0",
  "smallvec",
- "vello_common 0.2.0",
+ "vello_common",
 ]
 
 [[package]]
@@ -4579,7 +4326,7 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bb81a721ba76aa095b7f45deb180504f786904e56ca4b8e141f66eb89a78b75"
 dependencies = [
- "accesskit 0.25.2",
+ "accesskit",
  "accesskit_consumer",
 ]
 
@@ -7101,8 +6848,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3457dea1f0eb631b4034d61d4d8c32074caa6cd1ab2d59f2327bd8461e2c0016"
 dependencies = [
  "bitflags 2.13.2",
- "calloop 0.13.0",
- "calloop-wayland-source 0.3.0",
+ "calloop",
+ "calloop-wayland-source",
  "cursor-icon",
  "libc",
  "log",
@@ -7117,44 +6864,6 @@ dependencies = [
  "wayland-protocols-wlr",
  "wayland-scanner",
  "xkeysym",
-]
-
-[[package]]
-name = "smithay-client-toolkit"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0512da38f5e2b31201a93524adb8d3136276fa4fe4aafab4e1f727a82b534cc0"
-dependencies = [
- "bitflags 2.13.2",
- "calloop 0.14.5",
- "calloop-wayland-source 0.4.1",
- "cursor-icon",
- "libc",
- "log",
- "memmap2",
- "rustix 1.1.5",
- "thiserror 2.0.21",
- "wayland-backend",
- "wayland-client",
- "wayland-csd-frame",
- "wayland-cursor",
- "wayland-protocols",
- "wayland-protocols-experimental",
- "wayland-protocols-misc",
- "wayland-protocols-wlr",
- "wayland-scanner",
- "xkeysym",
-]
-
-[[package]]
-name = "smithay-clipboard"
-version = "0.7.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71704c03f739f7745053bde45fa203a46c58d25bc5c4efba1d9a60e9dba81226"
-dependencies = [
- "libc",
- "smithay-client-toolkit 0.20.0",
- "wayland-backend",
 ]
 
 [[package]]
@@ -7742,7 +7451,6 @@ version = "0.1.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63e71662fa4b2a2c3a26f570f037eb95bb1f85397f3cd8076caed2f026a6d100"
 dependencies = [
- "log",
  "pin-project-lite",
  "tracing-attributes",
  "tracing-core",
@@ -8076,21 +7784,6 @@ dependencies = [
 
 [[package]]
 name = "vello_common"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2e9aed918117e8152c9eddfd8362d73c465c23f26c44786aa331707b8a64fa2"
-dependencies = [
- "bytemuck",
- "fearless_simd",
- "guillotiere",
- "log",
- "peniko",
- "smallvec",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "vello_common"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbb2141a2bca6e6d598e471fd4d1d7eed8e020aad6a28187edda07f091a325dd"
@@ -8106,26 +7799,14 @@ dependencies = [
 
 [[package]]
 name = "vello_cpu"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac7349e1f55f6b801c7c277958df4ea53e7f20f21e8014910ad888b2ecda93ea"
-dependencies = [
- "bytemuck",
- "glifo 0.2.0",
- "hashbrown 0.17.1",
- "vello_common 0.1.0",
-]
-
-[[package]]
-name = "vello_cpu"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ace506ca414548966fcf3c283be94eb1cad8254de488791ee698bf438b0890a9"
 dependencies = [
  "bytemuck",
- "glifo 0.3.0",
+ "glifo",
  "hashbrown 0.17.1",
- "vello_common 0.2.0",
+ "vello_common",
 ]
 
 [[package]]
@@ -8390,32 +8071,6 @@ dependencies = [
  "bitflags 2.13.2",
  "wayland-backend",
  "wayland-client",
- "wayland-scanner",
-]
-
-[[package]]
-name = "wayland-protocols-experimental"
-version = "20250721.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40a1f863128dcaaec790d7b4b396cc9b9a7a079e878e18c47e6c2d2c5a8dcbb1"
-dependencies = [
- "bitflags 2.13.2",
- "wayland-backend",
- "wayland-client",
- "wayland-protocols",
- "wayland-scanner",
-]
-
-[[package]]
-name = "wayland-protocols-misc"
-version = "0.3.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e9567599ef23e09b8dad6e429e5738d4509dfc46b3b21f32841a304d16b29c8"
-dependencies = [
- "bitflags 2.13.2",
- "wayland-backend",
- "wayland-client",
- "wayland-protocols",
  "wayland-scanner",
 ]
 
@@ -9050,7 +8705,7 @@ dependencies = [
  "bitflags 2.13.2",
  "block2 0.5.1",
  "bytemuck",
- "calloop 0.13.0",
+ "calloop",
  "cfg_aliases",
  "concurrent-queue",
  "core-foundation 0.9.4",
@@ -9071,7 +8726,7 @@ dependencies = [
  "raw-window-handle",
  "redox_syscall 0.4.1",
  "rustix 0.38.44",
- "smithay-client-toolkit 0.19.2",
+ "smithay-client-toolkit",
  "smol_str 0.2.2",
  "tracing",
  "unicode-segmentation",
@@ -9376,7 +9031,7 @@ dependencies = [
  "fontcraft-oracle",
  "fontcraft-pathops",
  "fontcraft-plist",
- "fontcraft-ui-egui",
+ "fontcraft-ui",
  "serde",
  "serde_json",
  "toml",

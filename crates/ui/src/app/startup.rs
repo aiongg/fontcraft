@@ -133,7 +133,7 @@ mod tests {
     /// A frame at input time `time`, with the window focused or not and `modifiers` held.
     fn frame(ctx: &egui::Context, app: &mut FontCraftApp, time: f64, focused: bool, modifiers: egui::Modifiers) {
         let input =
-            egui::RawInput { time: Some(time), focused, modifiers, events: vec![egui::Event::ModifiersChanged(modifiers)], ..Default::default() };
+            egui::RawInput { time: Some(time), focused, events: vec![egui::Event::ModifiersChanged(modifiers)], ..Default::default() };
         let _ = ctx.run_ui(input, |ui| poll_folders(app, ui.ctx()));
     }
 
