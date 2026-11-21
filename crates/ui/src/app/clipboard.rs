@@ -396,7 +396,7 @@ mod tests {
     use serde_json::json;
 
     use super::{ClipboardFlavours, PasteKind, PdfRead, ReadClipboardFn, Wake, finish_pdf, read_waiting};
-    use crate::app::{APP, FontCraftApp, Msg};
+    use crate::app::{APP, FontCraftApp, Msg, ViewMsg};
 
     fn copied() -> Result<Option<String>, String> {
         Ok(Some("feature liga { sub f i by f_i; } liga;".to_string()))
@@ -488,10 +488,12 @@ mod tests {
         Ok(Some(r#"<svg xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="10" height="10"/></svg>"#.to_string()))
     }
 
-    /// An Edit View tab over a clipboard whose text `text` gives and whose PDF (`pdf`) is read in `delay` calls; and
-    /// the count of reads started.
+    /// An Edit View tab on glyph A over a clipboard whose text `text` gives and whose PDF (`pdf`) is read in `delay`
+    /// calls; and the count of reads started.
     fn pdf_app(text: ReadClipboardFn, pdf: Option<Vec<u8>>, delay: usize) -> (FontCraftApp, Arc<AtomicUsize>) {
         let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        app.sent.push(Msg::View(ViewMsg::SelectGlyph("A".into())));
+        app.drain();
         let requests = Arc::new(AtomicUsize::new(0));
         app.clipboard_reader = Some(text);
         app.clipboard_flavours = Some(Box::new(PdfClipboard { pdf, delay, waiting: None, requests: Arc::clone(&requests) }));
