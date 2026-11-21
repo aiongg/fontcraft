@@ -14,6 +14,12 @@
 //!   a paste event and takes the text when it arrives. Paste Special opens `dialog.pasteSpecial` on
 //!   copied glyphs, with the selected glyphs as its `targets` and Font View's master, or on the canvas the edited glyph
 //!   and the master of the layer it shows.
+//! - Drawing apps put a PDF on the clipboard, which the text reader does not carry. On the canvas the desktop app's
+//!   [`ClipboardFlavours`] (`FontCraftApp::clipboard_flavours`) reads it off the window's thread: Paste whose text is
+//!   neither our fragment nor SVG, or that finds no text, starts the read with the edited glyph's targets and document
+//!   as they are then ([`read_waiting`]). When the read ends, a later frame runs `edit.paste` with the PDF as base64 on
+//!   those targets, or with the text when the clipboard holds no PDF ([`finish_pdf`]). Paste Special and Font View
+//!   never read the PDF; without a reader (tests, the browser) only text is pasted.
 //! - Font View's master is the current master (`view.selectMaster`). A drawing pastes into the layer the canvas shows
 //!   (the Layers panel's pick), as the tools edit it.
 //! - Only a person's copy reaches the system clipboard: a copy the control channel names (`engine.execute`) returns
@@ -36,6 +42,9 @@
 //! would hand the dropped text to the app with the fired command (a `paste` on the fired command or on `FrameOutput`),
 //! which also covers the browser build, where the clipboard can only be read from a paste event.
 
+use base64::Engine as _;
+/// Wakes the window when a clipboard read that runs off its thread ends.
+pub use craft::host::Wake;
 use craft::ui::runtime::commands::CommandRef;
 use craft_ext::ui::list::{EditCommand, deliver};
 use serde_json::{Map, Value, json};
@@ -52,8 +61,37 @@ const GLYPHS_FORMAT: &str = "fontcraft-glyphs";
 /// Longest clipboard text a paste takes.
 pub const MAX_PASTE_BYTES: usize = 16 * 1024 * 1024;
 
+/// Largest PDF a paste takes from the clipboard: `edit.paste`'s limit.
+pub const MAX_PASTE_PDF_BYTES: usize = 64 << 20;
+/// How often a frame looks for the end of a clipboard read, should the reader not wake the window.
+pub const READ_POLL: std::time::Duration = std::time::Duration::from_millis(100);
+
 /// Reads the system clipboard's text: `Ok(None)` when it holds none.
 pub type ReadClipboardFn = fn() -> Result<Option<String>, String>;
+
+/// What reading the clipboard's PDF gave: the PDF, `None` when the clipboard holds none, or why it could not be read
+/// (data larger than the limit included).
+pub type PdfRead = Result<Option<Vec<u8>>, String>;
+
+/// Clipboard data the text reader does not carry. The desktop app gives `FontCraftApp::clipboard_flavours` one;
+/// without it (the browser, tests) only text is pasted.
+pub trait ClipboardFlavours: Send {
+    /// Starts reading the PDF on the system clipboard, refusing more than `max_bytes`, unless a read is running
+    /// already. The read must not hold up the caller: the desktop app runs it on a thread of its own and calls `wake`
+    /// when it ends.
+    fn request_pdf(&mut self, max_bytes: usize, wake: Wake);
+    /// The result of the read started last, once it has ended; `None` while it runs, and after its result was taken.
+    fn take_pdf(&mut self) -> Option<PdfRead>;
+}
+
+/// A clipboard read under way: `edit.paste` with the targets of the moment it started, the document they are in, and
+/// the text to paste when the clipboard holds no PDF.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PendingPdf {
+    pub command: CommandRef,
+    pub document: Option<u64>,
+    pub text: Option<String>,
+}
 
 /// The system clipboard's text, through craft's clipboard (size limits included). Not in the browser build, whose
 /// clipboard is read from paste events only.
@@ -83,6 +121,8 @@ pub struct Clipboard {
     pub request: Option<PasteKind>,
     /// The pass the window was asked for the clipboard's text in.
     pub asked: Option<u64>,
+    /// The clipboard's PDF is being read for this paste.
+    pub pending: Option<PendingPdf>,
 }
 
 /// After a run of `id`: Copy and Cut put their `json` text on the clipboard, Copy Glyph Names its `text`.
@@ -224,17 +264,118 @@ pub fn paste_msg(app: &mut FontCraftApp, text: &str, kind: PasteKind) -> Result<
 }
 
 /// Takes the clipboard's text for the paste that waits for it from `FontCraftApp::clipboard_reader` and pastes it.
-/// `false` when no paste waits or the app has no reader: the shell then asks the window for a paste event.
+/// On the canvas, text that is neither our fragment nor SVG, or no text, starts reading the clipboard's PDF instead
+/// ([`start_pdf`]). `false` when no paste waits or the app has no reader: the shell then asks the window for a paste
+/// event.
 pub fn read_waiting(app: &mut FontCraftApp) -> bool {
     let (Some(kind), Some(read)) = (app.clipboard.request, app.clipboard_reader) else { return false };
     app.clipboard.request = None;
     app.clipboard.asked = None;
-    match read() {
+    let read = read();
+    if kind == PasteKind::Paste && reads_pdf(app) {
+        match &read {
+            Ok(Some(text)) if !pasteable(text) && text.len() <= MAX_PASTE_BYTES => {
+                start_pdf(app, Some(text.clone()));
+                return true;
+            }
+            Ok(None) => {
+                start_pdf(app, None);
+                return true;
+            }
+            _ => {}
+        }
+    }
+    match read {
         Ok(Some(text)) => paste(app, &text, kind),
         Ok(None) => app.status = "Paste: the clipboard holds no text".into(),
         Err(e) => app.status = format!("Paste: {e}"),
     }
     true
+}
+
+/// Whether `edit.paste` can read clipboard text: JSON (our fragment or copied glyphs) or an SVG document. Other text
+/// gives way to the clipboard's PDF.
+fn pasteable(text: &str) -> bool {
+    let t = text.trim_start_matches('\u{feff}').trim_start();
+    t.starts_with('{') || (t.starts_with('<') && t.contains("<svg"))
+}
+
+/// Whether a paste may read the clipboard's PDF: the app has a reader, and the paste goes into a glyph on the canvas.
+fn reads_pdf(app: &FontCraftApp) -> bool {
+    app.clipboard_flavours.is_some() && !app.font_view_shows() && app.targets_chosen()
+}
+
+/// Starts reading the clipboard's PDF for a paste into the edited glyph, with `text` to paste should the clipboard
+/// hold no PDF. While another read runs, this paste is dropped with a message.
+fn start_pdf(app: &mut FontCraftApp, text: Option<String>) {
+    if app.clipboard.pending.is_some() {
+        app.status = "Paste: the clipboard is still being read for the last paste".into();
+        return;
+    }
+    let command = crate::canvas::tools::targets::with_targets(app, CommandRef::new(PASTE));
+    let document = app.session.active().map(|d| d.id);
+    let wake = match &app.window {
+        Some(ctx) => {
+            let ctx = ctx.clone();
+            Wake::new(move || ctx.request_repaint())
+        }
+        None => Wake::none(),
+    };
+    let Some(reader) = app.clipboard_flavours.as_mut() else { return };
+    reader.request_pdf(MAX_PASTE_PDF_BYTES, wake);
+    app.clipboard.pending = Some(PendingPdf { command, document, text });
+}
+
+/// Once the running clipboard read has ended, posts `edit.paste` with the PDF on the targets taken when the read
+/// started, or with the text when the clipboard holds no PDF. It waits while a dialog is open. A PDF that cannot be
+/// read, or a document closed or switched meanwhile, leaves a message in the status line. Returns whether a read still
+/// runs, so the window looks again after [`READ_POLL`].
+pub fn finish_pdf(app: &mut FontCraftApp) -> bool {
+    if app.clipboard.pending.is_none() {
+        return false;
+    }
+    if app.dialogs.open.is_some() {
+        return true;
+    }
+    let read = match app.clipboard_flavours.as_mut() {
+        Some(reader) => match reader.take_pdf() {
+            Some(read) => read,
+            None => return true,
+        },
+        None => Ok(None),
+    };
+    let Some(PendingPdf { mut command, document, text }) = app.clipboard.pending.take() else { return false };
+    let (key, value) = match read {
+        Ok(Some(bytes)) if bytes.len() > MAX_PASTE_PDF_BYTES => {
+            app.status = format!("Paste: the clipboard's PDF is larger than {} MiB", MAX_PASTE_PDF_BYTES >> 20);
+            return false;
+        }
+        Ok(Some(bytes)) => ("pdf", Value::String(base64::engine::general_purpose::STANDARD.encode(bytes))),
+        Ok(None) => match text {
+            Some(text) => ("text", Value::String(text)),
+            None => {
+                app.status = "Paste: the clipboard holds no text".into();
+                return false;
+            }
+        },
+        // The text, if any, is neither our fragment nor SVG, so the reason the PDF failed is the one worth showing.
+        Err(e) => {
+            app.status = format!("Paste: the clipboard's PDF cannot be read: {e}");
+            return false;
+        }
+    };
+    if app.session.active().map(|d| d.id) != document {
+        app.status = "Paste: the document changed while the clipboard was read; nothing was pasted".into();
+        return false;
+    }
+    let mut params = match command.params {
+        Value::Object(m) => m,
+        _ => Map::new(),
+    };
+    params.insert(key.into(), value);
+    command.params = Value::Object(params);
+    app.sent.push(Msg::Run(command));
+    false
 }
 
 /// Pastes `text` as `kind` asks, after what views posted: the shell calls it when the clipboard's text arrives.
@@ -248,12 +389,13 @@ pub fn paste(app: &mut FontCraftApp, text: &str, kind: PasteKind) {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use craft::host::Host;
     use fontcraft_engine::Session;
     use serde_json::json;
 
-    use super::{PasteKind, read_waiting};
+    use super::{ClipboardFlavours, PasteKind, PdfRead, ReadClipboardFn, Wake, finish_pdf, read_waiting};
     use crate::app::{APP, FontCraftApp, Msg};
 
     fn copied() -> Result<Option<String>, String> {
@@ -284,5 +426,172 @@ mod tests {
         assert!(read_waiting(&mut app));
         assert!(app.sent.is_empty());
         assert_eq!(app.status, "Paste: the clipboard holds no text");
+    }
+
+    /// A one-page PDF with a 100-point page drawing a 50-point black square.
+    fn square_pdf() -> Vec<u8> {
+        let content = "0 0 0 rg 0 0 50 50 re f";
+        let objects = [
+            "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 100 100] >>".to_string(),
+            "<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>".to_string(),
+            format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()),
+        ];
+        let mut out = b"%PDF-1.5\n".to_vec();
+        let mut offsets = Vec::new();
+        for (i, body) in objects.iter().enumerate() {
+            offsets.push(out.len());
+            out.extend_from_slice(format!("{} 0 obj\n{body}\nendobj\n", i + 1).as_bytes());
+        }
+        let xref = out.len();
+        out.extend_from_slice(b"xref\n0 5\n0000000000 65535 f \n");
+        for o in offsets {
+            out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+        }
+        out.extend_from_slice(format!("trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n").as_bytes());
+        out
+    }
+
+    /// A clipboard holding `pdf` beside the text of the app's reader. A read ends once `delay` calls have looked for
+    /// it, as a read on another thread would; `requests` counts the reads started.
+    struct PdfClipboard {
+        pdf: Option<Vec<u8>>,
+        delay: usize,
+        waiting: Option<usize>,
+        requests: Arc<AtomicUsize>,
+    }
+
+    impl ClipboardFlavours for PdfClipboard {
+        fn request_pdf(&mut self, _: usize, _: Wake) {
+            if self.waiting.is_none() {
+                self.requests.fetch_add(1, Ordering::Relaxed);
+                self.waiting = Some(self.delay);
+            }
+        }
+
+        fn take_pdf(&mut self) -> Option<PdfRead> {
+            let left = self.waiting?;
+            if left > 0 {
+                self.waiting = Some(left - 1);
+                return None;
+            }
+            self.waiting = None;
+            Some(Ok(self.pdf.clone()))
+        }
+    }
+
+    fn caption() -> Result<Option<String>, String> {
+        Ok(Some("a caption".to_string()))
+    }
+
+    fn svg() -> Result<Option<String>, String> {
+        Ok(Some(r#"<svg xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="10" height="10"/></svg>"#.to_string()))
+    }
+
+    /// An Edit View tab over a clipboard whose text `text` gives and whose PDF (`pdf`) is read in `delay` calls; and
+    /// the count of reads started.
+    fn pdf_app(text: ReadClipboardFn, pdf: Option<Vec<u8>>, delay: usize) -> (FontCraftApp, Arc<AtomicUsize>) {
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let requests = Arc::new(AtomicUsize::new(0));
+        app.clipboard_reader = Some(text);
+        app.clipboard_flavours = Some(Box::new(PdfClipboard { pdf, delay, waiting: None, requests: Arc::clone(&requests) }));
+        (app, requests)
+    }
+
+    /// Edit › Paste or the paste key: the paste waits for the clipboard and the shell reads it.
+    fn paste(app: &mut FontCraftApp, kind: PasteKind) {
+        app.clipboard.request = Some(kind);
+        assert!(read_waiting(app));
+    }
+
+    /// The `edit.paste` posted last and its `key` parameter.
+    fn posted(app: &FontCraftApp, key: &str) -> Option<serde_json::Value> {
+        app.sent.iter().rev().find_map(|m| match m {
+            Msg::Run(c) if c.id == "edit.paste" => c.params.get(key).cloned(),
+            _ => None,
+        })
+    }
+
+    /// On the canvas, text that is neither our fragment nor SVG, or no text, gives way to the clipboard's PDF, which a
+    /// later frame pastes as `pdf`; SVG pastes as text without a read, Paste Special and Font View never read it,
+    /// and with no PDF on the clipboard the text is pasted.
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn the_canvas_pastes_the_clipboards_pdf_when_no_readable_text_comes() {
+        use base64::Engine as _;
+
+        let (mut app, requests) = pdf_app(caption, Some(square_pdf()), 0);
+        paste(&mut app, PasteKind::Paste);
+        assert_eq!(requests.load(Ordering::Relaxed), 1);
+        assert!(app.sent.is_empty(), "nothing is pasted before the read ends");
+        assert!(!finish_pdf(&mut app), "the read ended");
+        assert_eq!(posted(&app, "pdf"), Some(json!(base64::engine::general_purpose::STANDARD.encode(square_pdf()))));
+        let glyph = posted(&app, "glyph").and_then(|g| g.as_str().map(str::to_string)).unwrap();
+        let shapes = |app: &FontCraftApp| app.session.font().unwrap().glyph(&glyph).unwrap().layers.first().unwrap().shapes.len();
+        let before = shapes(&app);
+        app.drain();
+        assert_eq!(shapes(&app), before + 1, "the PDF's square was pasted");
+
+        // No text on the clipboard reads the PDF too.
+        app.clipboard_reader = Some(empty);
+        paste(&mut app, PasteKind::Paste);
+        assert_eq!(requests.load(Ordering::Relaxed), 2);
+        assert!(!finish_pdf(&mut app));
+
+        // SVG pastes as it is; Paste Special never reads the PDF.
+        app.sent.clear();
+        app.clipboard_reader = Some(svg);
+        paste(&mut app, PasteKind::Paste);
+        assert!(posted(&app, "text").is_some());
+        app.clipboard_reader = Some(caption);
+        paste(&mut app, PasteKind::Special);
+        assert_eq!(requests.load(Ordering::Relaxed), 2, "no PDF read for SVG or Paste Special");
+
+        // With no PDF on the clipboard the text is pasted.
+        let (mut app, _) = pdf_app(caption, None, 0);
+        paste(&mut app, PasteKind::Paste);
+        assert!(!finish_pdf(&mut app));
+        assert_eq!(posted(&app, "text"), Some(json!("a caption")));
+
+        // Font View takes no drawing, from the PDF or else.
+        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let requests = Arc::new(AtomicUsize::new(0));
+        app.clipboard_reader = Some(caption);
+        app.clipboard_flavours = Some(Box::new(PdfClipboard { pdf: Some(square_pdf()), delay: 0, waiting: None, requests: Arc::clone(&requests) }));
+        paste(&mut app, PasteKind::Paste);
+        assert_eq!(requests.load(Ordering::Relaxed), 0);
+        assert!(app.clipboard.pending.is_none());
+    }
+
+    /// A slow read pastes later, into the targets taken when it started; a paste made meanwhile is dropped with a
+    /// message, and a document switched meanwhile pastes nothing.
+    #[test]
+    #[allow(clippy::unwrap_used, clippy::panic)]
+    fn a_slow_clipboard_read_pastes_later_into_the_targets_it_started_with() {
+        let (mut app, requests) = pdf_app(caption, Some(square_pdf()), 2);
+        paste(&mut app, PasteKind::Paste);
+        let started = app.clipboard.pending.clone().unwrap().command;
+        assert!(finish_pdf(&mut app), "the read runs");
+        paste(&mut app, PasteKind::Paste);
+        assert_eq!(app.status, "Paste: the clipboard is still being read for the last paste");
+        assert_eq!(requests.load(Ordering::Relaxed), 1);
+        assert!(finish_pdf(&mut app));
+        assert!(!finish_pdf(&mut app));
+        match app.sent.last() {
+            Some(Msg::Run(c)) => {
+                assert_eq!(c.id, "edit.paste");
+                assert_eq!(c.params.get("glyph"), started.params.get("glyph"));
+                assert!(c.params.get("pdf").is_some());
+            }
+            other => panic!("expected edit.paste, got {other:?}"),
+        }
+
+        let (mut app, _) = pdf_app(caption, Some(square_pdf()), 1);
+        paste(&mut app, PasteKind::Paste);
+        app.run_now(Msg::run("file.new", json!({})), false).unwrap();
+        assert!(finish_pdf(&mut app));
+        assert!(!finish_pdf(&mut app));
+        assert!(posted(&app, "pdf").is_none());
+        assert_eq!(app.status, "Paste: the document changed while the clipboard was read; nothing was pasted");
     }
 }

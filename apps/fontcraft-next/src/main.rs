@@ -14,10 +14,13 @@
 //! web server behind it and behind the TrueType preview page. The user's settings and custom glyph data are read
 //! from the settings folder when the window opens and the settings written back whenever they change
 //! ([`user_files`]; `FONTCRAFT_SETTINGS_DIR` replaces the folder); the snippets and the extension folders (Modules
-//! and Macros) are in it too. The engine gets the system clock for Last Changed stamps. The Extension Manager's
+//! and Macros) are in it too. The engine gets the system clock for Last Changed stamps. The PDF a drawing app puts on
+//! the clipboard is read off the window's thread for a paste on the canvas ([`clipboard`]). The Extension Manager's
 //! HTTPS downloads are [`net`].
 #![forbid(unsafe_code)]
 
+#[cfg(not(target_arch = "wasm32"))]
+mod clipboard;
 #[cfg(not(target_arch = "wasm32"))]
 mod external_preview;
 #[cfg(not(target_arch = "wasm32"))]
@@ -170,7 +173,7 @@ fn control(port: u16, read_root: Option<&std::path::Path>, write_root: Option<&s
 
 /// `options` with what only the desktop app supplies: the system clock, External Preview's frame hook, the preview web
 /// server, the settings folder (settings, snippets and extension folders), the system browser and file manager, the
-/// system clipboard, and the HTTPS downloads of the Extension Manager.
+/// system clipboard's text and PDF ([`clipboard`]), and the HTTPS downloads of the Extension Manager.
 #[cfg(not(target_arch = "wasm32"))]
 fn desktop(options: fontcraft_ui::Options) -> fontcraft_ui::Options {
     let frame_hook: fontcraft_ui::MakeFrameHook = Box::new(|ctx| {
@@ -184,6 +187,7 @@ fn desktop(options: fontcraft_ui::Options) -> fontcraft_ui::Options {
         user_store: Some(Box::new(user_files::UserFiles::in_settings_folder())),
         opener: fontcraft_ui::Opener::system(),
         clipboard_reader: Some(fontcraft_ui::app::clipboard::system_text),
+        clipboard_flavours: Some(Box::new(clipboard::SystemClipboard::default())),
         fetch: Some(net::fetch),
         settings_dir: user_files::settings_dir(),
         clock: Some(fontcraft_engine::clock::system_clock()),

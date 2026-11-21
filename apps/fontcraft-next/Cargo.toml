@@ -16,3 +16,12 @@ fontcraft-engine.workspace = true
 serde_json.workspace = true
 ureq.workspace = true
 eframe = { version = "0.37", default-features = false, features = ["wayland"] }
+
+# The pasteboard's PDF for a paste on the canvas, in the versions the clipboard crate of eframe already pulls in.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSPasteboard"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSData", "NSString"] }
+
+# The clipboard's PDF for a paste on the canvas, in the version the clipboard crate of eframe already pulls in.
+[target.'cfg(windows)'.dependencies]
+clipboard-win = { version = "5.4", features = ["std"] }

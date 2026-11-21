@@ -247,6 +247,9 @@ pub struct FontCraftApp {
     /// Reads the system clipboard's text for a paste outside a text field; the desktop app supplies
     /// [`clipboard::system_text`], tests and the browser build have none and wait for the window's paste event.
     pub clipboard_reader: Option<clipboard::ReadClipboardFn>,
+    /// Reads the clipboard's PDF off the window's thread for a paste on the canvas; the desktop app supplies the
+    /// system's, tests and the browser build have none and paste text only.
+    pub clipboard_flavours: Option<Box<dyn clipboard::ClipboardFlavours>>,
     /// When the extension folders were last read ([`startup::poll_folders`]); the desktop app polls them, tests and the
     /// browser build do not.
     pub folder_poll: Option<startup::FolderPoll>,
@@ -308,6 +311,7 @@ impl FontCraftApp {
             user_store: None,
             opener: craft_ext::platform::open::Opener::NONE,
             clipboard_reader: None,
+            clipboard_flavours: None,
             folder_poll: None,
             control: crate::control::Control::default(),
             window: None,
@@ -668,6 +672,9 @@ impl ShellApp for FontCraftApp {
         crate::canvas::images::drop::take(self, ctx);
         crate::shell::font_audit::logic(self, ctx);
         startup::poll_folders(self, ctx);
+        if clipboard::finish_pdf(self) {
+            ctx.request_repaint_after(clipboard::READ_POLL);
+        }
         crate::control::drain(self);
         if let Some(mut hook) = self.frame_hook.take() {
             if let Some(after) = hook.frame(self) {

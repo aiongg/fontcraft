@@ -47,6 +47,8 @@ pub struct Options {
     pub opener: Opener,
     /// Reads the system clipboard's text for Paste outside a text field (`app::clipboard::system_text` on the desktop).
     pub clipboard_reader: Option<app::clipboard::ReadClipboardFn>,
+    /// Reads the system clipboard's PDF off the window's thread for a paste on the canvas.
+    pub clipboard_flavours: Option<Box<dyn app::clipboard::ClipboardFlavours>>,
     /// Downloads extension indexes, entry files and screenshots over HTTPS for the Extension Manager.
     pub fetch: Option<shell::extension_downloads::FetchFn>,
     /// The settings folder, which holds the snippets folder and the extension folders (Modules and Macros).
@@ -81,6 +83,7 @@ pub fn run(options: Options) -> Result<(), String> {
         app.folder_poll = Some(app::startup::FolderPoll::default());
         app.opener = options.opener;
         app.clipboard_reader = options.clipboard_reader;
+        app.clipboard_flavours = options.clipboard_flavours;
         app.view.extensions.downloads.fetch = options.fetch;
         app::startup::launch(&mut app, options.launch.as_ref());
         if let Some(listener) = options.control {
