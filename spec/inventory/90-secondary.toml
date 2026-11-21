@@ -4568,6 +4568,7 @@ guesses = [
   "The language code picks a glyph named like the found one plus .locl and the code in capitals (A.loclTRK for TRK); applying the reference font's own locl substitutions through the shaper would settle what the reference app does.",
   "Adding a path selects that font and turns the display on; the reference app's panel would settle whether adding also shows it.",
   "Any font the open path reads (sources too, not only compiled fonts) can be a reference, drawn from its first master.",
+  "The reference glyph is drawn as a thin translucent green outline behind the edited glyph, with no fill; the reference app's colour is not documented, and its observe step would settle it.",
 ]
 observe = [
   "In Fontra, drop a compiled font on the Reference font panel, type a character in the custom character field and a language code such as 'tr', and note which glyph is drawn behind the edited one and in what colour.",

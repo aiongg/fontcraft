@@ -10,9 +10,11 @@ pub mod camera;
 pub mod color;
 pub mod compatibility;
 pub mod hinting;
+pub mod images;
 pub mod layers;
 pub mod overlays;
 pub mod paint;
+pub mod reference_font;
 pub mod reporters;
 pub mod text;
 pub mod tokens;
@@ -52,6 +54,8 @@ pub struct Display {
     pub hints: bool,
     /// Every source layer of the edited glyph beside it (`view.showMasterCompatibility`).
     pub master_compatibility: bool,
+    /// View › Show Image: placed images show (a side with no paths and no components shows its image regardless).
+    pub image: bool,
 }
 
 impl Default for Display {
@@ -71,6 +75,7 @@ impl Default for Display {
             info: true,
             hints: false,
             master_compatibility: false,
+            image: true,
         }
     }
 }

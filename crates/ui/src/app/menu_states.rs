@@ -41,6 +41,7 @@ pub const SWITCHES: &[&str] = &[
     "view.showAnnotations",
     "view.showAnchors",
     "view.fillPreview",
+    "view.showImage",
     "view.showMasterCompatibility",
     "view.showGroupMembers",
     "view.showHints",

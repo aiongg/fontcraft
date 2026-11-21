@@ -24,6 +24,7 @@ pub mod glyph_sections;
 pub mod hint_canvas;
 pub mod hinting;
 pub mod hoi;
+pub mod image_box;
 pub mod info_box_kerning;
 pub mod kerning_review;
 pub mod kerning_tools;
@@ -59,6 +60,8 @@ pub struct Models {
     pub canvas_tokens: crate::canvas::tokens::Tokens,
     /// Font View's glyphs, their order, the selection and the cell outlines (`panels::font_view`).
     pub font_view: Tracked<font_view::FontViewModel>,
+    /// The placed images Font View cells draw (`canvas::images::cells`).
+    pub cell_images: Tracked<crate::canvas::images::cells::CellImages>,
     /// The document area's tab strip (`panels::tab_strip`).
     pub tabs: Tracked<tabs::TabsModel>,
     font_view_outlines: font_view::OutlineCache,

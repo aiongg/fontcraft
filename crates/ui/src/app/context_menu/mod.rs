@@ -13,6 +13,9 @@
 //! - Items are the commands whose inventory row names the section in `context`, in the order of their rows
 //!   ([`ORDER`]), greyed out as menu bar items are ([`item_state::supplies`]). The selection also hides items that do
 //!   not apply (Unlock Path on an unlocked path) and checks checkable ones ([`item_state`]).
+//! - A click on the edited side's shown image, where no other object lies, opens the image section (`canvas.image`)
+//!   and the glyph section: Unlock Image on a locked image, Set Crop to Layer Bounds and Reset Crop on an unlocked one,
+//!   which the click selects (`canvas::images`).
 //! - Add Global Guide replaces Add Guide while Alt is held ([`ContextItem::alternate`]).
 //! - While the layer's PostScript hints show, the hint items join the menu ([`HINT_ITEMS`]); a click on a hint's badge
 //!   or marker selects that hint first. Their parameters come from `fontcraft_tools::hint_drag::menu_params`.
@@ -58,6 +61,10 @@ pub const PATH: &str = "canvas.path";
 pub const ANCHOR: &str = "canvas.anchor";
 pub const COMPONENT: &str = "canvas.component";
 pub const GUIDE: &str = "canvas.guide";
+/// The edited side's placed image.
+pub const IMAGE: &str = "canvas.image";
+/// The image section's items: Unlock Image shows on a locked image, the others on an unlocked one.
+const IMAGE_ITEMS: &[&str] = &["image.unlock", "image.setCropToLayerBounds", "image.resetCrop"];
 /// A PostScript hint's badge or marker, while the hints show.
 pub const HINT: &str = "canvas.hint";
 /// A TrueType instruction's badge, while the TrueType Instructor is the active tool.
@@ -323,6 +330,8 @@ pub fn open_canvas(app: &mut FontCraftApp, at: Point, space: Space) -> Result<()
         let hit = if hint.is_some() { None } else { hit_test(&scene, &view, pos, tolerance) };
         (hint, hit)
     };
+    // The image lies under every other object.
+    let on_image = hint.is_none() && hit.is_none() && image_hit(app, pos);
     if let Some(index) = hint {
         if !app.tools.selection.hints.contains(&index) {
             app.tools.selection = Selection::from_items([Item::Hint(index)]);
@@ -335,12 +344,40 @@ pub fn open_canvas(app: &mut FontCraftApp, at: Point, space: Space) -> Result<()
     app.tools.refresh();
     let (glyph, kinds) = {
         let (scene, selection) = scene_of(app).ok_or("no glyph is being edited")?;
-        let kinds = if hint.is_some() { vec![HINT, CANVAS] } else { kinds(&scene, selection, hit.as_ref()) };
+        let kinds = if hint.is_some() {
+            vec![HINT, CANVAS]
+        } else if on_image {
+            vec![IMAGE, CANVAS]
+        } else {
+            kinds(&scene, selection, hit.as_ref())
+        };
         (scene.glyph.clone(), kinds)
     };
     let sections = sections(app, &with_instructor(app, kinds));
     app.context_menus.canvas = Some(CanvasMenu { glyph, screen, at: [pos.x, pos.y], hit, sections, alt: false });
     Ok(())
+}
+
+/// Whether a click at `pos` (font units) lies on the edited side's shown image, locked or not. An unlocked image
+/// becomes the selection.
+fn image_hit(app: &mut FontCraftApp, pos: Point) -> bool {
+    let Some((_, geom, on)) = crate::canvas::images::current(app) else { return false };
+    if !on || !geom.covers(pos) {
+        return false;
+    }
+    if !geom.locked {
+        crate::canvas::images::select(app);
+    }
+    true
+}
+
+/// Whether image item `id` shows: Unlock Image on a locked image, the crop items on an unlocked one.
+fn image_item_visible(app: &FontCraftApp, id: &str) -> bool {
+    match (id, crate::canvas::images::current(app).map(|(_, geom, _)| geom.locked)) {
+        (_, None) => false,
+        ("image.unlock", Some(locked)) => locked,
+        (_, Some(locked)) => !locked,
+    }
 }
 
 /// Opens the canvas menu on instruction `index`'s badge: the instruction becomes the selection unless it is selected.
@@ -490,6 +527,7 @@ pub fn sections(app: &FontCraftApp, kinds: &[&'static str]) -> Vec<Section> {
     let visible = |id: &str| match &scene {
         _ if on_guide && matches!(id, "guide.add" | "guide.addGlobal") => false,
         _ if HIDDEN.contains(&id) => false,
+        _ if IMAGE_ITEMS.contains(&id) => image_item_visible(app, id),
         Some((scene, selection)) => item_state::visible(scene, selection, id),
         None => id != GUIDE_PROPERTIES,
     };

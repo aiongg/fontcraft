@@ -5,12 +5,14 @@
 //! |---|---|---|
 //! | [`guides`] | the grid, metric lines that parameters set, CJK and design grids | `grid` |
 //! | [`guides`] | local and global guides, their knobs and names, measurement guides' crossings | `guides` |
+//! | [`power_guides`] | guide thickness edges, guide markers, power guide rhombi and link lines | `powerGuides` |
 //! | [`audit`] | the segments, paths and areas audit results report | `auditHighlights` |
 //! | [`annotations`] | the edited layer's annotations | `annotations` |
 //! | [`aids`] | ghost outline, Tunni lines, tension, curve lengths, indexes, the metrics beam, the Lock Outline badge | `editAids` |
 //! | [`autometer`] | stem and counter widths, corner angles, the quick measurement | `autometer` |
 //! | [`guides`] | the Measurement tool's coordinates, deltas, overlaps and ruler crossings | `measurement` |
 //! | [`audit`] | the rings and badges of audit results | `auditMarkers` |
+//! | [`suggest`] | Suggest Distance's parallel outlines near the pointer while a drag runs | `suggestOutlines` |
 //!
 //! The switches are view state ([`Switches`], `shell::overlays`). What the layers paint comes from engine queries
 //! (`guide.displayLines`, `measure.ruler`, `measure.coordinates`, `audit.run`, `audit.results`) and the auto-meter,
@@ -21,6 +23,8 @@ pub mod annotations;
 pub mod audit;
 pub mod autometer;
 pub mod guides;
+pub mod power_guides;
+pub mod suggest;
 pub mod tokens;
 
 use std::collections::BTreeMap;
@@ -179,6 +183,10 @@ pub struct OverlayData {
     pub editing: Option<usize>,
     /// The shown reporter modules' drawings of the edited layer (`canvas::reporters`).
     pub reporters: Vec<super::reporters::ReporterDrawing>,
+    /// Suggest Distance's parallel outlines near the pointer while a drag runs, as polylines ([`suggest::outlines`]).
+    pub suggest_outlines: Vec<Vec<Point>>,
+    /// The reference font's glyph in the edited glyph's font units (`canvas::reference_font`).
+    pub reference: Option<std::sync::Arc<BezPath>>,
 }
 
 /// The overlays' side of the app.
@@ -192,9 +200,13 @@ pub struct Overlays {
     pub data: OverlayData,
     /// How many times live audit has run.
     pub audit_runs: u64,
+    /// The reference font's outline and what it was built from (`canvas::reference_font`).
+    pub reference: super::reference_font::ReferenceCache,
     base: Option<BaseKey>,
     ruler: Option<(BaseKey, Point, Point)>,
     quick: Option<(BaseKey, Point, bool)>,
+    /// What Suggest Distance's outlines were last found for: the base, the pointer and the zoom.
+    suggest: Option<(BaseKey, Point, f64)>,
 }
 
 /// What the data read from the engine depends on.
@@ -268,6 +280,19 @@ pub fn refresh(app: &mut FontCraftApp) {
         None => {
             app.overlays.data.quick = None;
             app.overlays.quick = None;
+        }
+    }
+    match app.overlays.hover.filter(|_| base.switches.suggest.distance && base.interaction) {
+        Some((at, _)) => {
+            let key = (base.clone(), at, app.view.canvas.zoom);
+            if fresh || app.overlays.suggest.as_ref() != Some(&key) {
+                app.overlays.data.suggest_outlines = suggest::outlines(app);
+                app.overlays.suggest = Some(key);
+            }
+        }
+        None => {
+            app.overlays.data.suggest_outlines = Vec::new();
+            app.overlays.suggest = None;
         }
     }
 }

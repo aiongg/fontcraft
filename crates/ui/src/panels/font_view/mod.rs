@@ -63,6 +63,8 @@ craft::ui::words! {
 /// What Font View reads and sends.
 pub struct Props<'a> {
     pub model: &'a Tracked<FontViewModel>,
+    /// The placed images the cells draw behind their glyphs.
+    pub images: &'a Tracked<crate::canvas::images::cells::CellImages>,
     pub sent: &'a mut Vec<Msg>,
 }
 
@@ -73,6 +75,7 @@ pub fn show(ui: &mut Ui, mut props: Props<'_>) {
 fn view(props: &mut Props<'_>, ui: &mut Ui) {
     let words = Env::of(ui).words::<FontViewWords>();
     let model: &FontViewModel = props.model;
+    let images = props.images;
     if !model.has_font {
         Text::new(words.no_font.clone()).show(ui);
         return;
@@ -81,7 +84,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
     let _ = Stack::new().fill().header(|ui, _| search::show(ui, model, &mut top)).footer(|ui, _| status::show(ui, model, &mut bottom)).show(
         ui,
         |ui, _| match model.mode {
-            ViewMode::Grid => grid::show(ui, model, &mut body),
+            ViewMode::Grid => grid::show(ui, model, images, &mut body),
             ViewMode::List => list::show(ui, model, &mut body),
         },
     );

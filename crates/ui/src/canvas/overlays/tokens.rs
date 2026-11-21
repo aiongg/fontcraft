@@ -12,6 +12,11 @@ pub struct OverlayTokens {
     pub guide_width: f32,
     pub guide_knob_radius: f32,
     pub guide_name_size: f32,
+    /// Length of a guide marker's tick on each side of the guide.
+    pub guide_marker_tick: f32,
+    /// Dash and gap of a power guide's link lines and a thick guide's centre line.
+    pub guide_link_dash: f32,
+    pub guide_link_gap: f32,
     pub grid_line: Color32,
     /// A grid or design grid draws once its step is this many points on screen.
     pub grid_min_spacing: f32,
@@ -93,6 +98,9 @@ impl OverlayTokens {
             guide_width: 1.0,
             guide_knob_radius: 4.0,
             guide_name_size: 10.0,
+            guide_marker_tick: 5.0,
+            guide_link_dash: 4.0,
+            guide_link_gap: 3.0,
             grid_line: Color32::from_rgba_unmultiplied(0x90, 0x98, 0xa4, 0x30),
             grid_min_spacing: 8.0,
             cjk_grid: Color32::from_rgba_unmultiplied(0x6a, 0x9a, 0x6a, 0x90),

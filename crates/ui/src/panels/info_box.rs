@@ -11,7 +11,8 @@
 //! | one handle | X, Y, dX, dY and its length, measured from its node | `selection.setPosition` on the handle |
 //! | anything else | X, Y of the box at the reference point, width, height, lock | `selection.setPosition`; `transform.scale` about the reference point |
 //!
-//! A selected component, corner component or cap component adds its part below (`info_box_component`).
+//! A selected component, corner component or cap component adds its part below (`info_box_component`). A selected
+//! placed image shows its own part in place of the selection part (`info_box_image`).
 //!
 //! The nine-point grid chooses the reference point (`infoBox.setReferencePoint`); the lock makes a width or height
 //! edit scale both (`infoBox.setSizeLock`). A master that takes its metrics from another shows that master's values,
@@ -103,7 +104,9 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
     if let Some(k) = &model.kerning {
         super::info_box_kerning::view(ui, k, sent);
     }
-    if let Some(hint) = &model.ps_hint {
+    if let Some(image) = &model.image {
+        super::info_box_image::view(ui, image, sent);
+    } else if let Some(hint) = &model.ps_hint {
         super::info_box_ps_hint::view(ui, hint, sent);
     } else if let Some(selection) = &model.selection {
         Section::new(words.selection.clone()).show(ui, |ui, _| selection_part(ui, &words, selection, sent));
