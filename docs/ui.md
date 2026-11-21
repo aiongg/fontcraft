@@ -202,7 +202,8 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
 - **Window menu and Palette.** Window › Panels has a check row per dock panel (`shell/window.rs`, `refresh_menu`,
   rebuilt when a panel opens or closes), so a closed panel can come back; craft's `WindowMenuRows` draws into a menu
   body of its own, which the data-driven menu bar has no place for. Window › Palette (`window.palette`, Cmd+Alt+P)
-  hides or shows every panel docked at the end edge. A new panel needs no menu line: `PanelId::ALL` lists it.
+  hides or shows every panel docked at the end edge, as does the sidebar button at the options bar's end (the window's
+  top right, `shell/bars.rs`), lit while the Palette shows. A new panel needs no menu line: `PanelId::ALL` lists it.
 - **Menu row state.** `app/menu_states.rs` reads, after each drain, what the live state says about menu bar rows
   beyond the engine's `enabled`: every on/off switch in `SWITCHES` gets a check mark from its state (the display
   flags, the overlay switches, the panel it shows). `Catalog::set_checks` rebuilds the bar only when a mark changed.

@@ -73,6 +73,8 @@ craft::ui::words! {
         ready: "fontcraftShell.ready" = "Ready";
         /// The document area's name.
         document: "fontcraftShell.document" = "Glyphs";
+        /// The options bar's button that shows or hides the Palette.
+        palette: "fontcraftShell.palette" = "Palette";
     }
 }
 
@@ -80,7 +82,10 @@ craft::ui::words! {
 pub fn show(app: &mut FontCraftApp, ui: &mut Ui) {
     AppShell::new(WindowKey::main())
         .title_bar(title_bar)
-        .options_bar(true, |ui, _, app: &mut FontCraftApp| bars::options(ui, bars::OptionsProps { tool: app.view.tool }))
+        .options_bar(true, |ui, _, app: &mut FontCraftApp| {
+            let palette = window::palette_shows(app);
+            bars::options(ui, bars::OptionsProps { tool: app.view.tool, palette, sent: &mut app.sent })
+        })
         .status(true, |ui, _, app: &mut FontCraftApp| {
             let edit = bars::edit_state(app);
             let FontCraftApp { status, models, sent, .. } = app;

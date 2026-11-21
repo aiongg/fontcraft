@@ -37,7 +37,7 @@ milestone = "M3"
 summary = "Shows or hides the Palette sidebar. The sidebar button at the top right of the window does the same."
 ref = "Palette"
 status = "handbook"
-notes = "In `crates/ui` (UI.41c) the Palette sections are dock panels, and the Palette is every panel docked at the window's end edge: hiding closes them and keeps their list, showing opens that list again where each panel was, with the same tabs in front, or the panels the default layout docks there. No sidebar button yet. Documented, not yet observed."
+notes = "In `crates/ui` (UI.41c) the Palette sections are dock panels, and the Palette is every panel docked at the window's end edge: hiding closes them and keeps their list, showing opens that list again where each panel was, with the same tabs in front, or the panels the default layout docks there. The sidebar button sits at the options bar's end, the window's top right (`shell/bars.rs`), lit while the Palette shows, its tooltip naming Cmd+Alt+P. Documented, not yet observed."
 guesses = [
   "With every Palette panel closed one at a time, Window › Palette opens the panels the default layout docks at the end edge; settle by closing the reference app's Palette sections one by one and choosing Window › Palette.",
 ]
