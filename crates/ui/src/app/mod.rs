@@ -262,13 +262,14 @@ pub struct FontCraftApp {
 }
 
 impl FontCraftApp {
-    /// The app for the desktop window of `ctx`: a new font, the system file pickers.
+    /// The app for the desktop window of `ctx`: no document yet ([`startup::launch`] opens the first), the system file
+    /// pickers.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn open(ctx: &egui::Context) -> FontCraftApp {
         let ctx = ctx.clone();
         let (files, panels) = craft::dialogs::service::FileService::new(craft::host::Wake::new(move || ctx.request_repaint()));
         let host = Host::builder(APP).jobs(craft::host::default_jobs()).files(Arc::new(files)).build();
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(host));
+        let mut app = FontCraftApp::new(Session::new(), Arc::new(host));
         app.file_panels = Some(panels);
         app
     }

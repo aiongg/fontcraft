@@ -1,6 +1,9 @@
 //! FontCraft on the craft framework: the desktop window of `fontcraft-ui`, while it is built up
 //! to replace `apps/fontcraft`.
 //!
+//! A FILE argument opens that font with a tab per display string it stores; a `fontcraft://show/?…` URL opens its
+//! files and shows its glyphs (`url.show`). Either takes the place of the Start Window, which also shows when they
+//! open nothing.
 //! `--safe-mode`, or Alt and Shift held as the window opens, lists the extension modules but runs none.
 //! `--control PORT` listens on `127.0.0.1:PORT` for the JSON control protocol
 //! (`docs/control-protocol.md`). `--automation-read-root` and `--automation-write-root` (or
@@ -31,9 +34,13 @@ const USAGE: &str = "\
 FontCraft, the font editor (craft framework build, in progress)
 
 USAGE:
-  fontcraft-next [--safe-mode] [--control PORT [--automation-read-root DIR]
+  fontcraft-next [FILE | URL] [--safe-mode] [--control PORT [--automation-read-root DIR]
                  [--automation-write-root DIR]]
 
+  FILE             a font file to open (default: the Start Window, or a new font when the
+                   Start Window is turned off)
+  URL              a fontcraft://show/?path=…&glyph=… URL: open its files and show its glyphs
+                   in a new tab
   --safe-mode      start with every extension module off (also: hold Alt and Shift while the
                    window opens); Help › Load Extensions turns them on for the session
   --control PORT   listen on 127.0.0.1:PORT for the JSON control protocol (no authentication:
@@ -80,6 +87,7 @@ fn options(mut args: impl Iterator<Item = String>) -> Result<Option<fontcraft_ui
     let (mut read_given, mut write_given) = (false, false);
     let mut port = None;
     let mut safe_mode = false;
+    let mut launch = None;
     while let Some(arg) = args.next() {
         // The roots also come as `--flag=DIR`.
         let (flag, inline) = match arg.split_once('=') {
@@ -110,14 +118,28 @@ fn options(mut args: impl Iterator<Item = String>) -> Result<Option<fontcraft_ui
                 let value = args.next().ok_or("--control needs a port number")?;
                 port = Some(value.parse::<u16>().map_err(|_| format!("--control: `{value}` is not a port number"))?);
             }
-            other => return Err(format!("unknown argument `{other}`\n\n{USAGE}")),
+            other => launch = Some(launch_arg(other)?),
         }
     }
     let (control, roots) = match port {
         Some(port) => control(port, read_root.as_deref(), write_root.as_deref())?,
         None => (None, None),
     };
-    Ok(Some(desktop(fontcraft_ui::Options { control, roots, safe_mode, ..Default::default() })))
+    Ok(Some(desktop(fontcraft_ui::Options { control, roots, safe_mode, launch, ..Default::default() })))
+}
+
+/// What a command-line argument that is no option opens: a `fontcraft:` URL, else a font file. An unknown option is
+/// refused.
+#[cfg(not(target_arch = "wasm32"))]
+fn launch_arg(arg: &str) -> Result<fontcraft_ui::app::startup::Launch, String> {
+    use fontcraft_ui::app::startup::Launch;
+    if arg.starts_with('-') {
+        return Err(format!("unknown option `{arg}`\n\n{USAGE}"));
+    }
+    if arg.get(..10).is_some_and(|s| s.eq_ignore_ascii_case("fontcraft:")) {
+        return Ok(Launch::Url(arg.to_string()));
+    }
+    Ok(Launch::File(arg.to_string()))
 }
 
 /// The control channel's listener, `None` when the port could not be bound, and the folders its requests may use.
@@ -172,4 +194,19 @@ fn desktop(options: fontcraft_ui::Options) -> fontcraft_ui::Options {
 #[cfg(target_arch = "wasm32")]
 fn main() -> ExitCode {
     ExitCode::SUCCESS
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use fontcraft_ui::app::startup::Launch;
+
+    use super::launch_arg;
+
+    #[test]
+    fn an_argument_names_a_url_or_a_file_and_an_unknown_option_is_refused() {
+        let url = "FontCraft://show/?path=/fonts/a.glyphs&glyph=A";
+        assert_eq!(launch_arg(url), Ok(Launch::Url(url.to_string())));
+        assert_eq!(launch_arg("fonts/a.glyphs"), Ok(Launch::File("fonts/a.glyphs".to_string())));
+        assert!(launch_arg("--safe").is_err_and(|e| e.starts_with("unknown option `--safe`")));
+    }
 }

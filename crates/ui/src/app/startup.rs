@@ -2,15 +2,29 @@
 //!
 //! - [`open_extensions`]: the snippets folder and the extension folders (Modules and Macros) inside the settings
 //!   folder, the module switches, and when the session started.
+//! - [`launch`]: what the window opens with. A file named on the command line opens with its display-string tabs; a
+//!   `fontcraft://show/` URL runs `url.show`. With neither, the Start Window shows while `start.showAtLaunch` is on,
+//!   else a new font opens. When nothing opened, the Start Window shows.
 //! - [`poll_folders`], every frame: reads the extension folders again on the first frame, when the window gains focus
 //!   and every [`FOLDER_POLL_MS`] while it has it. Alt and Shift held on the first frame start safe mode, as
 //!   `--safe-mode` does.
 //!
 //! The desktop app hands these facts over in `fontcraft_ui::Options`; tests and the browser build have none of them.
 
+use craft::ui::runtime::commands::CommandRef;
 use fontcraft_engine::extensions::FOLDER_POLL_MS;
+use serde_json::{Value, json};
 
-use super::FontCraftApp;
+use super::{FontCraftApp, Msg};
+
+/// What the window opens with in place of the Start Window or a new font.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Launch {
+    /// A font file to open (`fontcraft FILE`).
+    File(String),
+    /// A `fontcraft://show/?…` URL: open its files and show its glyphs in a new tab.
+    Url(String),
+}
 
 /// The status line after Alt and Shift held as the window opened turned safe mode on.
 pub const SAFE_MODE: &str = "Safe mode: extension modules are off. Help › Load Extensions turns them on.";
@@ -39,6 +53,24 @@ pub fn open_extensions(app: &mut FontCraftApp, dir: Option<&std::path::Path>, sa
     app.session.extensions_mut().started_at = started;
     let problems = fontcraft_engine::extensions::open_folders(app.session.extensions_mut(), dir, safe_mode);
     report(app, &problems);
+}
+
+/// Opens what the window starts with, after the settings were read: the file or URL of `launch`; without one, the
+/// Start Window while `start.showAtLaunch` is on, else a new font. When no document is open after that, the Start
+/// Window shows. A failure goes to the log and the status line.
+pub fn launch(app: &mut FontCraftApp, launch: Option<&Launch>) {
+    let result = match launch {
+        Some(Launch::File(path)) => app.run_now(Msg::run("file.open", json!({ "path": path })), false),
+        Some(Launch::Url(url)) => app.run_now(Msg::Shell(CommandRef::with_params("url.show", json!({ "url": url }))), false),
+        None if app.session.settings().get_bool(crate::shell::start::SHOW_AT_LAUNCH).unwrap_or(true) => Ok(Value::Null),
+        None => app.run_now(Msg::run("file.new", json!({})), false),
+    };
+    if let Err(e) = result {
+        log::error!("{e}");
+    }
+    if app.session.documents().is_empty() {
+        app.sent.push(Msg::Shell(CommandRef::with_params("window.startWindow", json!({}))));
+    }
 }
 
 /// Logs every problem and puts the first in the status line.
@@ -86,8 +118,11 @@ mod tests {
     use craft::host::Host;
     use fontcraft_engine::Session;
 
-    use super::{FolderPoll, SAFE_MODE, poll_folders};
-    use crate::app::{APP, FontCraftApp};
+    use craft::ui::runtime::commands::CommandRef;
+    use serde_json::json;
+
+    use super::{FolderPoll, Launch, SAFE_MODE, launch, poll_folders};
+    use crate::app::{APP, FontCraftApp, Msg};
 
     fn polled_app() -> FontCraftApp {
         let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
@@ -146,5 +181,47 @@ mod tests {
         frame(&ctx, &mut app, 0.0, true, egui::Modifiers::NONE);
         frame(&ctx, &mut app, 1.0, true, keys);
         assert!(!app.session.extensions().safe_mode, "only the first frame counts");
+    }
+
+    fn start_window() -> Msg {
+        Msg::Shell(CommandRef::with_params("window.startWindow", json!({})))
+    }
+
+    fn empty_app() -> FontCraftApp {
+        FontCraftApp::new(Session::new(), Arc::new(Host::builder(APP).build()))
+    }
+
+    /// A file opens in place of the Start Window; one that cannot be opened says why and the Start Window shows.
+    /// Without a file the Start Window shows, or a new font opens while Show at Launch is off.
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn the_window_opens_the_file_given_else_the_start_window_or_a_new_font() {
+        let dir = std::env::temp_dir().join(format!("fontcraft-ui-launch-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("launch.glyphs").to_string_lossy().into_owned();
+        Session::with_document().execute("file.saveAs", &json!({ "path": path })).unwrap();
+
+        let mut app = empty_app();
+        launch(&mut app, Some(&Launch::File(path.clone())));
+        assert_eq!(app.session.documents().len(), 1);
+        assert!(app.sent.is_empty(), "no Start Window: {:?}", app.sent);
+
+        let mut app = empty_app();
+        launch(&mut app, Some(&Launch::File(dir.join("missing.glyphs").to_string_lossy().into_owned())));
+        assert!(app.session.documents().is_empty());
+        assert!(app.status.starts_with("file.open: "), "{}", app.status);
+        assert_eq!(app.sent, vec![start_window()]);
+
+        let mut app = empty_app();
+        launch(&mut app, None);
+        assert!(app.session.documents().is_empty());
+        assert_eq!(app.sent, vec![start_window()]);
+
+        let mut app = empty_app();
+        app.session.execute("settings.set", &json!({ "id": crate::shell::start::SHOW_AT_LAUNCH, "value": false })).unwrap();
+        launch(&mut app, None);
+        assert_eq!(app.session.documents().len(), 1, "a new font");
+        assert!(app.sent.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

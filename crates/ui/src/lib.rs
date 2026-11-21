@@ -55,6 +55,8 @@ pub struct Options {
     pub safe_mode: bool,
     /// The clock behind Last Changed stamps (the system clock on the desktop).
     pub clock: Option<fontcraft_engine::Clock>,
+    /// The file or URL named on the command line, opened in place of the Start Window or a new font.
+    pub launch: Option<app::startup::Launch>,
 }
 
 /// Opens the desktop window and runs it until it closes.
@@ -80,9 +82,7 @@ pub fn run(options: Options) -> Result<(), String> {
         app.opener = options.opener;
         app.clipboard_reader = options.clipboard_reader;
         app.view.extensions.downloads.fetch = options.fetch;
-        if app.session.settings().get_bool(shell::start::SHOW_AT_LAUNCH).unwrap_or(true) {
-            app.sent.push(app::Msg::Shell(craft::ui::runtime::commands::CommandRef::with_params("window.startWindow", serde_json::json!({}))));
-        }
+        app::startup::launch(&mut app, options.launch.as_ref());
         if let Some(listener) = options.control {
             match app.control.listen(listener, ctx) {
                 Ok(addr) => {
