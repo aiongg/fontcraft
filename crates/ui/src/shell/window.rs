@@ -78,6 +78,11 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
     }
 }
 
+/// Whether the Palette shows: a panel is docked at the window's end edge.
+pub(crate) fn palette_shows(app: &FontCraftApp) -> bool {
+    !palette_panels(&app.view.workspace.layout).is_empty()
+}
+
 /// The panels docked at the window's end edge, in layout order.
 fn palette_panels(layout: &Layout<PanelId>) -> Vec<PanelId> {
     let at_end =

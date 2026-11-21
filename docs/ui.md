@@ -191,6 +191,11 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   rebuilt when a panel opens or closes), so a closed panel can come back; craft's `WindowMenuRows` draws into a menu
   body of its own, which the data-driven menu bar has no place for. Window › Palette (`window.palette`, Cmd+Alt+P)
   hides or shows every panel docked at the end edge. A new panel needs no menu line: `PanelId::ALL` lists it.
+- **Menu row state.** `app/menu_states.rs` reads, after each drain, what the live state says about menu bar rows
+  beyond the engine's `enabled`: every on/off switch in `SWITCHES` gets a check mark from its state (the display
+  flags, the overlay switches, the panel it shows). `Catalog::set_checks` rebuilds the bar only when a mark changed.
+  A new switch command needs one line in `SWITCHES` and, if its state is not a `flag` or `switch` field, one arm in
+  `checked`.
 - **Edit View controls.** While an Edit View tab shows, the status bar holds the Preview Area button after the
   Features menu and, at its end, the writing direction, kerning mode and zoom controls (`panels/edit_bar.rs`), read
   from the live tab each frame (`shell::bars::edit_state`).

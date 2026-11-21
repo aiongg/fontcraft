@@ -14,6 +14,7 @@ pub mod dropped;
 pub mod files;
 pub mod font_view;
 pub mod menu_alternates;
+pub mod menu_states;
 pub mod menus_dynamic;
 pub mod models;
 mod msg;
@@ -440,6 +441,7 @@ impl FontCraftApp {
         }
         menus_dynamic::refresh(self);
         crate::shell::window::refresh_menu(self);
+        menu_states::refresh(self);
     }
 
     /// Records a change to view state that a projection reads, made outside [`ViewMsg`] (a shell command).

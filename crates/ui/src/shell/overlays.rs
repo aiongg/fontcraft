@@ -173,7 +173,7 @@ impl Args<'_> {
 }
 
 /// The plain switch a command flips.
-fn switch<'a>(sw: &'a mut Switches, id: &str) -> Option<&'a mut bool> {
+pub(crate) fn switch<'a>(sw: &'a mut Switches, id: &str) -> Option<&'a mut bool> {
     if let Some(flag) = sw.suggest.get_mut(id) {
         return Some(flag);
     }
