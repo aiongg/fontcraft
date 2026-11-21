@@ -1097,9 +1097,15 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
         are drawn over the guides (`canvas/overlays/power_guides.rs`). Left: nothing the old window had; built in
         neither window are centreline snapping on thick guides, snap lines at markers and a switch that hides link
         lines.
-     7. The Axis Mappings dialog (the Font Info button that opens it does nothing yet) and the Cross-Axis Mappings
-        window with its Font menu row.
-     8. The Primitive Measurements and Add Pixel Glyph follow-up dialogs.
+     7. Done (UI.45a, UI.45b): the Axis Mappings dialog (`dialogs/axis_mappings.rs`: `axisMappings.showDialog`,
+        `dialogEdit`, `closeDialog`, opened by the Font Info button; the edits preview as one batch, OK keeps one
+        undo step) and the Cross-Axis Mappings window with its Font menu row (`dialogs/cross_axis.rs`). Left: the
+        mapping graph shows the points but takes no click on its line and no point drag (points are added with +
+        and moved with the selected point's fields); no arrow-key nudge of the selected point outside the fields;
+        no Alt-click on a card's disclosure to open or close every card.
+     8. Done (UI.45c, UI.45d): a Primitives tool click opens Primitive Measurements (`dialogs/primitive_measurements.rs`,
+        routed in `canvas/tools/apply.rs`), and a Pixel tool click in a font without the pixel glyph offers to add it
+        (`dialogs/add_pixel_glyph.rs`, a follow-up of `pixel.setPixels`).
      9. Small commands: Filter by Encoding File, Keep Layer Selection in Sync, Next and Previous Group Member, Show
         All Glyphs in the Kerning window, and focusing Font View's search.
      10. Control parity: the `display`, `selectedGlyphs`, `editing`, `interaction` and `dialog` keys of `ui.inspect`,

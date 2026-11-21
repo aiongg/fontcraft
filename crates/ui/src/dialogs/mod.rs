@@ -9,6 +9,7 @@
 
 mod about;
 pub mod actions;
+mod add_pixel_glyph;
 pub mod after;
 pub mod audit_profile;
 pub mod axis_mappings;
@@ -109,6 +110,7 @@ pub const SPECS: &[&[DialogSpec]] = &[
     component_name::SPECS,
     interp::SPECS,
     primitive_measurements::SPECS,
+    add_pixel_glyph::SPECS,
 ];
 
 /// Runs every dialog module for this pass.
