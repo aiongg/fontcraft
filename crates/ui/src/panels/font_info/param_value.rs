@@ -161,7 +161,8 @@ fn choice_json(choice: &str) -> Json {
     choice.trim().parse::<i64>().map_or_else(|_| Json::String(choice.to_string()), |n| json!(n))
 }
 
-/// One field per entry whose value is a text or a number; the new dictionary when one changed.
+/// One field per entry whose value is a text or a number; the new dictionary when one changed. A field's text goes
+/// through the command's check of the whole dictionary first, so a refused entry shows its message under its field.
 fn dict(ui: &mut Ui, name: &str, entries: &[DictEntry], mixed: bool, words: &FontInfoWords) -> Option<Edit> {
     if mixed {
         Text::new(words.multiple.clone()).shade(Shade::Muted).show(ui);
@@ -172,15 +173,10 @@ fn dict(ui: &mut Ui, name: &str, entries: &[DictEntry], mixed: bool, words: &Fon
         for (at, entry) in entries.iter().enumerate() {
             match &entry.text {
                 Some(text) => {
-                    let out = TextField::new(entry.key.clone(), Bind::given(text.clone())).id_salt((name, "entry", at)).show(ui);
+                    let bind = Bind::given(text.clone()).check(move |t: &String| validity(Some(name), &dict_value(entries, at, t)));
+                    let out = TextField::new(entry.key.clone(), bind).id_salt((name, "entry", at)).show(ui);
                     if let Some(typed) = out.events.committed() {
-                        let value = match entry.number {
-                            true => {
-                                typed.trim().parse::<f64>().ok().filter(|n| n.is_finite()).map_or_else(|| Json::String(typed.clone()), number_json)
-                            }
-                            false => Json::String(typed.clone()),
-                        };
-                        changed = Some((at, value));
+                        changed = Some(dict_value(entries, at, typed));
                     }
                 }
                 None => {
@@ -189,17 +185,27 @@ fn dict(ui: &mut Ui, name: &str, entries: &[DictEntry], mixed: bool, words: &Fon
             }
         }
     });
-    let (at, new) = changed?;
-    let mut out = Map::new();
-    for (i, entry) in entries.iter().enumerate() {
-        let value = if i == at { new.clone() } else { serde_json::from_str(&entry.json).unwrap_or(Json::Null) };
-        out.insert(entry.key.clone(), value);
-    }
-    let value = Json::Object(out);
+    let value = changed?;
     refusal(name, &value).is_none().then_some(Edit::Value(value))
 }
 
+/// The dictionary of `entries` with the entry at `at` holding `typed`: a number when the entry holds one and the
+/// text reads as one.
+fn dict_value(entries: &[DictEntry], at: usize, typed: &str) -> Json {
+    let mut out = Map::new();
+    for (i, entry) in entries.iter().enumerate() {
+        let value = match (i == at, entry.number) {
+            (true, true) => typed.trim().parse::<f64>().ok().filter(|n| n.is_finite()).map_or_else(|| Json::String(typed.to_string()), number_json),
+            (true, false) => Json::String(typed.to_string()),
+            (false, _) => serde_json::from_str(&entry.json).unwrap_or(Json::Null),
+        };
+        out.insert(entry.key.clone(), value);
+    }
+    Json::Object(out)
+}
+
 /// One field per language of a localized parameter; the new list of `{language, value}` entries when one changed.
+/// A field's text goes through the command's check of the whole list first.
 fn localized(ui: &mut Ui, name: &str, entries: &[(String, String)], mixed: bool, words: &FontInfoWords) -> Option<Edit> {
     if mixed {
         Text::new(words.multiple.clone()).shade(Shade::Muted).show(ui);
@@ -208,19 +214,25 @@ fn localized(ui: &mut Ui, name: &str, entries: &[(String, String)], mixed: bool,
     let mut changed = None;
     Stack::new().show(ui, |ui, _| {
         for (at, (language, text)) in entries.iter().enumerate() {
-            let out = TextField::new(language.clone(), Bind::given(text.clone())).id_salt((name, "language", at)).show(ui);
+            let bind = Bind::given(text.clone()).check(move |t: &String| validity(Some(name), &localized_value(entries, at, t)));
+            let out = TextField::new(language.clone(), bind).id_salt((name, "language", at)).show(ui);
             if let Some(typed) = out.events.committed() {
-                changed = Some((at, typed.clone()));
+                changed = Some(localized_value(entries, at, typed));
             }
         }
     });
-    let (at, new) = changed?;
-    let items: Vec<Json> = entries
+    let value = changed?;
+    refusal(name, &value).is_none().then_some(Edit::Value(value))
+}
+
+/// The `{language, value}` list of `entries` with the entry at `at` holding `typed`.
+fn localized_value(entries: &[(String, String)], at: usize, typed: &str) -> Json {
+    let items = entries
         .iter()
         .enumerate()
-        .map(|(i, (language, text))| json!({"language": language, "value": if i == at { new.as_str() } else { text.as_str() }}))
+        .map(|(i, (language, text))| json!({"language": language, "value": if i == at { typed } else { text.as_str() }}))
         .collect();
-    Some(Edit::Value(Json::Array(items)))
+    Json::Array(items)
 }
 
 /// One line per language of a localizable field: the language menu, the text and the minus button; then the plus
