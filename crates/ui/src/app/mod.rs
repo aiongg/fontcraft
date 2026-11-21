@@ -424,6 +424,8 @@ impl FontCraftApp {
 
     /// Copies what each panel shows into its view model when the engine or the view state moved.
     pub fn project(&mut self) {
+        // First: the Info box reads whether the image is still selected.
+        crate::canvas::images::refresh(self);
         let stamp = Stamp::of(&self.session, self.view_revision);
         let mut cx = ProjectCx { session: &mut self.session, view: &self.view };
         self.models.project(stamp, &mut cx);
@@ -437,7 +439,6 @@ impl FontCraftApp {
         // Last: it takes the whole app, so `cx` must be done.
         crate::canvas::overlays::refresh(self);
         crate::canvas::reporters::refresh(self);
-        crate::canvas::images::refresh(self);
         let engine = Stamp::of(&self.session, 0);
         if self.enabled_at != Some(engine) {
             self.enabled_at = Some(engine);
@@ -617,6 +618,7 @@ impl ShellApp for FontCraftApp {
         crate::canvas::images::logic(self, ctx);
         crate::control::logic(self, ctx);
         open::take_dropped(self, ctx);
+        crate::canvas::images::drop::take(self, ctx);
         crate::shell::font_audit::logic(self, ctx);
         crate::control::drain(self);
         if let Some(mut hook) = self.frame_hook.take() {

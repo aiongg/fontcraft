@@ -24,6 +24,7 @@ pub mod glyph_sections;
 pub mod hint_canvas;
 pub mod hinting;
 pub mod hoi;
+pub mod image_box;
 pub mod info_box_kerning;
 pub mod kerning_review;
 pub mod kerning_tools;

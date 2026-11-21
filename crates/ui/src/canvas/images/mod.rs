@@ -26,6 +26,7 @@
 //!   Shift, Cmd), and Delete or Backspace runs `edit.delete` with `image: true`. Commands run from menus, shortcuts and
 //!   the Palette that take the `image` flag get it while the image is selected (`tools::targets::with_targets`).
 
+pub mod drop;
 pub mod files;
 pub mod tokens;
 

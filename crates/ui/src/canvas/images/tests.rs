@@ -180,3 +180,64 @@ fn shrinking_averages_whole_blocks() {
     assert_eq!((small.width, small.height), (2, 1));
     assert_eq!(&small.pixels[..4], &[127, 127, 127, 255]);
 }
+
+/// A right-click on an unlocked image selects it and offers the crop items, and the Info box shows its part; on a
+/// locked image the menu offers Unlock Image, which unlocks it.
+#[test]
+fn the_context_menu_on_the_image_offers_its_items_and_the_info_box_shows_it() {
+    use crate::app::context_menu::{self as menus, Space};
+    let (mut app, dir) = image_app("menu");
+    let items = |app: &FontCraftApp| -> (String, Vec<&'static str>) {
+        let menu = app.context_menus.canvas.clone().expect("the canvas menu");
+        let first = menu.sections.first().expect("a section");
+        (first.context.to_string(), first.items.iter().map(|i| i.command).collect())
+    };
+    menus::open_canvas(&mut app, fontcraft_geom::Point::new(20.0, 20.0), Space::Font).unwrap();
+    assert_eq!(items(&app), ("canvas.image".to_string(), vec!["image.setCropToLayerBounds", "image.resetCrop"]));
+    assert!(is_selected(&app));
+    app.drain();
+    let part = app.models.palette.info_box.image.clone().expect("the image part of the Info box");
+    assert_eq!((part.x, part.width, part.height), (Some(0.0), Some(100.0), Some(50.0)));
+
+    run(&mut app, "image.lock", json!({"glyph": "A"}));
+    assert!(app.models.palette.info_box.image.is_none(), "a locked image is not selected");
+    menus::open_canvas(&mut app, fontcraft_geom::Point::new(20.0, 20.0), Space::Font).unwrap();
+    assert_eq!(items(&app).1, vec!["image.unlock"]);
+    menus::invoke(&mut app, "image.unlock", |app, msg| app.run_now(msg, false)).unwrap();
+    assert_eq!(image_info(&mut app)["locked"], json!(false));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Reveal Image File shows the edited image's file through the window's opener; without a file manager it says so.
+#[test]
+fn reveal_image_file_goes_through_the_opener() {
+    let (mut app, dir) = image_app("reveal");
+    app.sent.push(Msg::Shell(CommandRef::with_params("image.revealFile", json!({}))));
+    app.drain();
+    assert!(!app.status.is_empty(), "tests have no file manager: {}", app.status);
+    app.status.clear();
+    app.sent.push(Msg::Shell(CommandRef::with_params("image.revealFile", json!({"glyph": "B"}))));
+    app.drain();
+    assert!(app.status.contains("no image") || app.status.contains("no glyph") || app.status.contains("no layer"), "{}", app.status);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// One file dropped on the canvas goes on the edited layer's edited side; several go on the glyphs their names match.
+#[test]
+fn dropped_files_place_as_add_image_does() {
+    use super::drop::{canvas_params, cell_params};
+    let (mut app, dir) = image_app("drop");
+    let one = vec![dir.join("x.png")];
+    let master = app.session.font().unwrap().masters[0].id.clone();
+    let layer = crate::canvas::tools::target(&app.session, &app.view).unwrap().layer;
+    assert_eq!(canvas_params(&app, &one), Some(json!({"files": [dir.join("x.png").to_string_lossy()], "glyphs": ["A"], "layer": layer})));
+    shell(&mut app, "path.editBackground", json!({"on": true}));
+    assert_eq!(canvas_params(&app, &one).unwrap()["side"], json!("background"));
+    let two = vec![dir.join("A.png"), dir.join("B.jpeg"), dir.join("notes.txt")];
+    let params = canvas_params(&app, &two).unwrap();
+    assert_eq!(params["files"].as_array().map(Vec::len), Some(2));
+    assert_eq!(params["layer"], json!(master));
+    assert_eq!(cell_params("C", &master, &one), Some(json!({"files": [dir.join("x.png").to_string_lossy()], "glyphs": ["C"], "layer": master})));
+    assert_eq!(cell_params("C", &master, &[dir.join("notes.txt")]), None);
+    let _ = std::fs::remove_dir_all(dir);
+}

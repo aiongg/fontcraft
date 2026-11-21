@@ -57,6 +57,7 @@ pub const MODULES: &[Module] = &[
     crate::app::close::MODULE,
     crate::app::open::MODULE,
     super::start::MODULE,
+    super::images::MODULE,
     super::settings::MODULE,
     super::url::MODULE,
     super::table_viewer::MODULE,

@@ -139,6 +139,8 @@ pub struct InfoBoxModel {
     pub timing: Option<super::hoi::TimingGraph>,
     /// The edited glyph's kerning towards its neighbours in the edit view's text (`panels::info_box_kerning`).
     pub kerning: Option<super::info_box_kerning::KernBox>,
+    /// The selected placed image, in place of the selection part (`panels::info_box_image`).
+    pub image: Option<super::image_box::ImageBox>,
 }
 
 /// The Transformations section: its settings and what its buttons act on.
@@ -272,7 +274,7 @@ fn stroke_model(scene: &fontcraft_tools::Scene<'_>, paths: &[usize], targets: Op
 #[derive(Default)]
 pub struct PaletteModels {
     /// What the models were last projected from.
-    seen: Option<(Stamp, Selection, Option<Vec<usize>>)>,
+    seen: Option<(Stamp, Selection, Option<Vec<usize>>, bool)>,
     pub info_box: Tracked<InfoBoxModel>,
     pub transform: Tracked<TransformModel>,
     pub fit_curve: Tracked<FitCurveModel>,
@@ -283,7 +285,7 @@ pub struct PaletteModels {
 
 /// Projects the Info box and Palette models when the stamp, the selection or the focus moved.
 pub fn project(models: &mut PaletteModels, cx: &mut ProjectCx<'_>, tools: &Tools, stamp: Stamp) {
-    let key = (stamp, tools.selection.clone(), tools.focus.clone());
+    let key = (stamp, tools.selection.clone(), tools.focus.clone(), tools.image);
     if models.seen.as_ref() == Some(&key) {
         return;
     }
@@ -293,6 +295,15 @@ pub fn project(models: &mut PaletteModels, cx: &mut ProjectCx<'_>, tools: &Tools
     info.ps_hint = super::hint_canvas::ps_hint_box(cx, &tools.selection);
     info.tt = super::hint_canvas::tt_box(cx);
     info.kerning = info.glyph.as_ref().and_then(|_| super::info_box_kerning::kern_box(cx));
+    info.image = edit.as_ref().filter(|_| tools.image).and_then(|e| {
+        let mut targets = serde_json::Map::new();
+        targets.insert("glyph".into(), Value::from(e.glyph.clone()));
+        targets.insert("layer".into(), Value::from(e.layer.clone()));
+        if cx.view.edit_background {
+            targets.insert("side".into(), Value::from("background"));
+        }
+        super::image_box::image_box(cx.session, &targets)
+    });
     super::set(&mut models.info_box, info);
     super::set(&mut models.transform, transform(cx, edit.as_ref()));
     super::set(&mut models.fit_curve, fit_curve(cx, edit.as_ref()));
