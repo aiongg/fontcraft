@@ -2,10 +2,25 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-21: UI.51 merged, built and pushed (X.integ119 to X.integ120): PDF pages in placed images, `palette.toggleSection`, `tool.select {tool}` and `tool.list` in the window; the gate is green with 4,811 tests. UI.49 and UI.50 merged, built and pushed (X.integ113 to X.integ117): the egui window is gone and `crates/ui` with `apps/fontcraft` is the only window. Earlier notes follow._
+_Updated: 2026-11-21: M7.22 written on `w-M7.22` (M7.22a to M7.22c), not built: the TTFZones and TTFStems rows open their editors, dictionary and localized values show refusals, window tests of the bits and PANOSE dialogs. UI.51 merged, built and pushed (X.integ119 to X.integ120): PDF pages in placed images, `palette.toggleSection`, `tool.select {tool}` and `tool.list` in the window; the gate is green with 4,811 tests. UI.49 and UI.50 merged, built and pushed (X.integ113 to X.integ117): the egui window is gone and `crates/ui` with `apps/fontcraft` is the only window. Earlier notes follow._
 
 ## State of the tree
 
+- **Where M7.22 stands.** Written on the branch `w-M7.22`; the writer ran no build and no test, so it waits for an
+  integrator. Most of the package was already in the window from UI.10: the editors by kind in
+  `crates/ui/src/panels/font_info/param_value.rs` (a menu for a fixed list, check boxes for a list of fixed values,
+  a menu of masters for Variable Font Origin, Get Hints From Master and Link Metrics With Master), the OS/2 bits and
+  PANOSE dialogs (`dialogs/os2_bits.rs`, `dialogs/panose.rs`) and the frame tests for Post Table Type, Variable Font
+  Origin and a refused text. M7.22 adds:
+  - The TTFZones and TTFStems rows of a master post `window.ttfZones` and `window.ttfStems` with the master's index
+    (they posted `dialog.open` with an id no dialog spec has); those commands take a master id, name or index.
+  - Dictionary and localized parameter values go through the command's check as a whole while a field is edited,
+    so a refused entry shows its message under its field instead of being dropped without a word.
+  - `panels/font_info/dialogs_tests.rs`: the bits dialog in the window's dialog host (search, a box, OK posts one
+    `font.customParameters.set`, Cancel none), the PANOSE dialog (a Weight pick posts the ten digits), both compared
+    with the font the command gives; the TT rows open their editors. `tt/mod.rs` has a test for the master index.
+  - Spec: `fontInfo.rows.valueEditors` (new) holds the guesses about master menus, refused messages and numeric
+    choices, and the observe steps for them.
 - **Where UI.51 stands.** Merged on `master` and pushed; it built with no fixes and the gate (`cargo xtask ci`) is
   green with 4,811 tests. Checked headless under Xvfb over the control channel: `tool.select {"tool":"draw"}` replies
   `{tool: "draw", previous: "select"}`, `tool.list` reports `draw` active, and an unknown tool id is refused with the
