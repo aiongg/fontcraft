@@ -450,6 +450,7 @@ impl FontCraftApp {
             ViewMsg::LayerMenu(row) => self.view.layers.menu_row = row,
             ViewMsg::TextPreviewArea(area) => self.view.text_preview.area = area,
             ViewMsg::SidebarMenu(path) => self.view.sidebar.menu_row = path,
+            ViewMsg::FeatureCompletion(ask) => self.view.font_info.features.completion = ask,
         }
         Ok(())
     }

@@ -17,10 +17,10 @@ use super::{Props, show};
 use crate::app::models::font_exports::{ExportEntry, ExportFields, ExportsModel, Flag};
 use crate::app::models::font_features::{DiagnosticModel, EntryPane, EntryRow, FeaturesModel, GroupModel};
 use crate::app::models::font_info::FontInfoModel;
-use crate::app::{APP, FontCraftApp, Msg};
+use crate::app::{APP, FontCraftApp, Msg, ViewMsg};
 use crate::dialogs::feature_picker::FeaturePicker;
 use crate::shell::font_info::FontInfoTab;
-use crate::shell::font_info_tabs::{EntryKey, EntryKind};
+use crate::shell::font_info_tabs::{CompletionAsk, EntryKey, EntryKind};
 
 const ROOM: egui::Vec2 = egui::vec2(1280.0, 900.0);
 
@@ -125,6 +125,16 @@ fn feature_code_is_coloured_and_its_errors_underlined() {
     let mut colors: Vec<egui::Color32> = sections.iter().map(|s| s.format.color).collect();
     colors.dedup();
     assert!(colors.len() > 1, "the keyword and the glyph names differ in colour: {colors:?}");
+}
+
+/// Typing a name in the code asks for the names that fit at the caret.
+#[test]
+fn typing_a_name_asks_for_completions() {
+    let (mut fixture, posted) = panel(features_model());
+    let code = fixture.by_label("Feature Code").expect("the code field");
+    fixture.click(&code).key(Key::A, Modifiers::COMMAND).type_text("sub a").settle();
+    let ask = CompletionAsk { key: key(EntryKind::Feature, "ss01", 1), code: "sub a".into(), position: 5 };
+    assert!(posted.borrow().contains(&Msg::View(ViewMsg::FeatureCompletion(Some(ask)))), "{:?}", posted.borrow());
 }
 
 /// A snippet goes in place of the code field's selection, which the field keeps after the Snippets button takes the

@@ -1057,10 +1057,11 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
    Donate (UI.37). The ports left:
    - Smaller follow-ups: open-path thumbnails in Shape Order; svg filters and PDF images in colour layers.
    - Framework gaps, built in `crates/craft-ext` in craft-libs' layout so they can move there later (decision
-     0009). Built (UI.34, UI.36, UI.37a): a strikethrough list row, edit commands reaching a focused list, a mixed
-     mark on menu entries, a danger tone on menu entries, modifiers on context-menu requests, and open URL and
-     reveal in the file manager. Left: a text-field hook for syntax colour and error underlines, caret and selection access, an async
-     completer and Up/Down stepping; a press-and-hold flyout; union, intersect and slant icons; alternate menu rows with their own label and shortcut; an app-level paste event. The craft pin stays at `4bd0107` for these.
+     0009). Built (UI.34, UI.36, UI.37a, UI.38): a strikethrough list row, edit commands reaching a focused list, a mixed
+      mark on menu entries, a danger tone on menu entries, modifiers on context-menu requests, open URL and
+      reveal in the file manager, a text-field highlight hook (feature code colours and error underlines), caret and
+      selection access, Up/Down stepping on text fields that hold a number, and an async completer (feature code
+      completion). Left: a press-and-hold flyout; union, intersect and slant icons; alternate menu rows with their own label and shortcut; an app-level paste event. The craft pin stays at `4bd0107` for these.
 3. **The engine split, step 4 on.** ES.4 moves the kerning-index and metrics-sync readers outside the spacing crate
    behind its extension and moves the slots with `Session`; the later steps move command areas out of the engine
    crate along command ownership.

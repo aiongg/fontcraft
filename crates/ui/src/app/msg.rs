@@ -53,6 +53,8 @@ pub enum ViewMsg {
     TextPreviewArea(crate::shell::text_preview::Area),
     /// The sidebar entry whose context menu is open; `None` when it closed.
     SidebarMenu(Option<Vec<String>>),
+    /// The feature code editor asks completions for its code and caret; `None` drops the question.
+    FeatureCompletion(Option<crate::shell::font_info_tabs::CompletionAsk>),
 }
 
 impl Msg {

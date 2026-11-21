@@ -2884,7 +2884,7 @@ milestone = "M8"
 summary = "Typing where a glyph, class or lookup name is expected opens a suggestion menu. Up and Down move through it, further typing narrows it and Return inserts the highlighted suggestion."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed. The suggestions come from `font.features.complete`."
+notes = "Documented, not yet observed. The suggestions come from `font.features.complete`. Typing a name character, `@`, `$` or `{` asks for them; Tab, Return or a click inserts the highlighted one, Escape closes the list until the code changes."
 
 [[behavior]]
 id = "fontInfo.features.inlineErrors"

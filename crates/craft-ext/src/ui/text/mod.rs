@@ -4,10 +4,12 @@
 //! The text part keeps its widget, layout and selection to itself, so these stand-ins reach the field's egui text
 //! widget by the id craft derives for it ([`text_widget`]) and work on what that widget stores and paints.
 
+mod complete;
 mod highlight;
 mod selection;
 mod step;
 
+pub use complete::{AsyncCompleter, CompletionAnswer, CompletionQuery, MAX_COMPLETIONS};
 pub use highlight::{Highlight, HighlightText, MAX_HIGHLIGHT_BYTES, MAX_HIGHLIGHTS, recoloured};
 pub use selection::{FieldSelection, TextSelection};
 pub use step::{ArrowSteps, StepKeys, stepped};

@@ -8,6 +8,10 @@
 //!
 //! The field's last selection goes back to the Features tab, whose snippets menu puts a snippet in its place.
 //!
+//! Typing a name character, `@`, `$` or `{` asks for the names that fit at the caret (`ViewMsg::FeatureCompletion`,
+//! answered by the projection with `font.features.complete`); the list under the field shows them once the answer
+//! matches the code as typed, and Tab, Return or a click puts the picked name in (`fontInfo.features.autocomplete`).
+//!
 //! The diagnostics show only while the font is unchanged since the compile (`font.features.listErrors`).
 //!
 //! The code is coloured by the classes the feature parser's highlighter gives (`fontInfo.features.syntaxColouring`),
@@ -20,17 +24,21 @@ use craft::ui::buttons::Button;
 use craft::ui::contract::{Bind, Props as _, Show as _, ShowContainer as _};
 use craft::ui::display::{Shade, Text};
 use craft::ui::layout_components::Row;
+use craft::ui::primitives::Completion;
 use craft::ui::runtime::env::Env;
 use craft::ui::style::UiTokens;
 use craft::ui::text::TextField;
-use craft_ext::ui::text::{FieldSelection as _, Highlight, HighlightText as _, TextSelection};
+use craft_ext::ui::text::{
+    AsyncCompleter, CompletionAnswer, CompletionQuery, FieldSelection as _, Highlight, HighlightText as _, TextSelection, text_focused,
+};
 use egui::Color32;
 use egui::Ui;
 use fontcraft_engine::features::edit::{HighlightKind, highlight};
 use serde_json::json;
 
-use crate::app::Msg;
 use crate::app::models::font_features::{DiagnosticModel, EntryPane};
+use crate::app::{Msg, ViewMsg};
+use crate::shell::font_info_tabs::CompletionAsk;
 
 craft::ui::words! {
     /// The words of the feature code editor.
@@ -66,8 +74,22 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
         .limit(None)
         .enabled(!entry.automatic)
         .id_salt(("fontcraftFeatureCode", key.kind.name(), key.index, key.name.as_str()));
-    let field = if entry.automatic { field.tooltip(words.automatic_hint.clone()) } else { field };
+    let completer = AsyncCompleter::kept(ui.ctx(), egui::Id::new(("fontcraftFeatureCode.complete", key.kind.name(), key.index, key.name.as_str())));
+    if let Some(c) = &entry.completion {
+        let items = c.items.iter().map(|i| Completion::new(i.label.clone(), i.label.clone())).collect();
+        let range = c.items.first().map_or(c.position..c.position, |i| i.start..i.end);
+        completer.answer(CompletionQuery { text: c.code.clone(), caret: c.position }, CompletionAnswer { range, items });
+    }
+    let field = if entry.automatic { field.tooltip(words.automatic_hint.clone()) } else { field.complete(completer.clone()).complete_on_enter() };
     let out = field.show(ui);
+    if let Some(q) = completer.take_query() {
+        let ask = wants_completion(&q.text, q.caret).then(|| CompletionAsk { key: key.clone(), code: q.text, position: q.caret });
+        if ask.is_some() || entry.completion.is_some() {
+            sent.push(Msg::View(ViewMsg::FeatureCompletion(ask)));
+        }
+    } else if entry.completion.is_some() && !text_focused(ui.ctx(), out.response.id) {
+        sent.push(Msg::View(ViewMsg::FeatureCompletion(None)));
+    }
     let env = Env::of(ui);
     out.highlight_text(ui, |text| runs(text, &entry.code, &entry.diagnostics, &env.tokens));
     let selection = out.last_selection(ui.ctx()).and_then(|s| s.within(entry.code.chars().count()));
@@ -90,6 +112,12 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
         });
     }
     CodeOut { sent, selection }
+}
+
+/// Whether the character before byte `at` of `text` may start or continue a name worth completing: a name character,
+/// `@`, `$` or `{`.
+fn wants_completion(text: &str, at: usize) -> bool {
+    text.get(..at).and_then(|s| s.chars().next_back()).is_some_and(|c| c.is_alphanumeric() || matches!(c, '_' | '.' | '-' | '@' | '$' | '{'))
 }
 
 /// Most diagnostics underlined at once.

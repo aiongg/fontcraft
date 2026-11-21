@@ -71,6 +71,25 @@ pub struct EntryPane {
     /// The feature's section of the OpenType specification.
     pub spec_url: Option<String>,
     pub diagnostics: Vec<DiagnosticModel>,
+    /// The answer to the code editor's completion question about this entry.
+    pub completion: Option<CompletionModel>,
+}
+
+/// The names that fit at a place in the code (`font.features.complete`), for the code as typed and the caret's byte
+/// offset they answer.
+#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+pub struct CompletionModel {
+    pub code: String,
+    pub position: usize,
+    pub items: Vec<CompletionItem>,
+}
+
+/// One name that fits, and the bytes of the code it replaces.
+#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+pub struct CompletionItem {
+    pub label: String,
+    pub start: usize,
+    pub end: usize,
 }
 
 /// One error or warning of the last compile in the shown entry.
@@ -136,7 +155,8 @@ pub fn project(cx: &mut ProjectCx<'_>) -> FeaturesModel {
             .and_then(|r| r.get("url").and_then(Value::as_str).map(str::to_string)),
         _ => None,
     };
-    let entry = entry.map(|e| EntryPane { spec_url, ..e });
+    let completion = entry.as_ref().and_then(|e| completion(cx, e));
+    let entry = entry.map(|e| EntryPane { spec_url, completion, ..e });
     FeaturesModel { groups, selected, entry, master, snippets }
 }
 
@@ -170,6 +190,7 @@ fn pane(font: &Font, key: &EntryKey, diagnostics: &[(Option<EntryKey>, Diagnosti
             Vec::new()
         },
         spec_url: None,
+        completion: None,
         diagnostics: diagnostics.iter().filter(|(k, _)| k.as_ref() == Some(key)).map(|(_, d)| d.clone()).take(MAX_SHOWN_ERRORS).collect(),
     })
 }
@@ -196,6 +217,23 @@ fn diagnostics(result: Option<&Value>) -> Vec<(Option<EntryKey>, DiagnosticModel
             Some((d.get("entry").and_then(EntryKey::from_json), model))
         })
         .collect()
+}
+
+/// The answer to the code editor's completion question, when it asks about the shown entry.
+fn completion(cx: &mut ProjectCx<'_>, e: &EntryPane) -> Option<CompletionModel> {
+    let ask = cx.view.font_info.features.completion.as_ref().filter(|a| a.key == e.key)?;
+    let params = ask.key.with(&[("code", json!(ask.code)), ("position", json!(ask.position))]);
+    let result = cx.session.query("font.features.complete", &params).ok()?;
+    let list = result.get("completions").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
+    let items = list
+        .iter()
+        .take(craft_ext::ui::text::MAX_COMPLETIONS)
+        .filter_map(|c| {
+            let (start, end) = byte_range(c.get("replace"))?;
+            Some(CompletionItem { label: c.get("label")?.as_str()?.to_string(), start, end })
+        })
+        .collect();
+    Some(CompletionModel { code: ask.code.clone(), position: ask.position, items })
 }
 
 /// A diagnostic's `range`, `[start, end]` in bytes; `None` when it is missing or ends before it starts.

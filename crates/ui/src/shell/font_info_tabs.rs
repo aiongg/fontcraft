@@ -145,6 +145,16 @@ impl EntryKey {
 pub struct FeaturesView {
     /// Selected entries; the last is the one the editor shows.
     pub selected: Vec<EntryKey>,
+    /// The code editor's open completion question, which the projection answers with `font.features.complete`.
+    pub completion: Option<CompletionAsk>,
+}
+
+/// What the code editor asks completions for: the entry, the code as typed and the caret's byte offset in it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CompletionAsk {
+    pub key: EntryKey,
+    pub code: String,
+    pub position: usize,
 }
 
 /// The Exports tab's view state.
