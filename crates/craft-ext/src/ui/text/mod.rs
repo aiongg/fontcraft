@@ -6,9 +6,11 @@
 
 mod highlight;
 mod selection;
+mod step;
 
 pub use highlight::{Highlight, HighlightText, MAX_HIGHLIGHT_BYTES, MAX_HIGHLIGHTS, recoloured};
 pub use selection::{FieldSelection, TextSelection};
+pub use step::{ArrowSteps, StepKeys, stepped};
 
 use craft::behavior::PartKey;
 use craft::ui::runtime::memory;

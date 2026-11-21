@@ -13,6 +13,7 @@ use craft::ui::layout_components::Row;
 use craft::ui::pickers::ReferencePoint;
 use craft::ui::runtime::env::{Env, Label};
 use craft::ui::text::{NumberField, TextField};
+use craft_ext::ui::text::{ArrowSteps, StepKeys as _};
 use egui::Ui;
 use serde_json::{Value, json};
 
@@ -155,7 +156,8 @@ pub struct KeyedOutput {
 }
 
 /// A field named `label` that holds a number or a metrics key (`docs/spec/03b` › Info box). Its tooltip says what the
-/// key gives or why it is out of sync; an out-of-sync key gets an update button beside it. A read-only field (a linked
+/// key gives or why it is out of sync; an out-of-sync key gets an update button beside it. While it holds a number, Up
+/// and Down commit the number stepped. A read-only field (a linked
 /// master's metrics) shows the text and commits nothing.
 pub fn key_or_number(ui: &mut Ui, label: Label, metric: &KeyedNumber, read_only: bool) -> KeyedOutput {
     let words = Env::of(ui).words::<WidgetWords>();
@@ -174,6 +176,14 @@ pub fn key_or_number(ui: &mut Ui, label: Label, metric: &KeyedNumber, read_only:
             && *text != shown
         {
             out.commit = metric.commit_value(text);
+        }
+        // Up and Down step a metric that holds a number: 1, 10 with Shift, 100 with Cmd+Shift.
+        if !read_only
+            && metric.state == KeyState::Number
+            && let Some(delta) = edit.arrow_steps(ui, ArrowSteps::UNITS)
+            && let Some(value) = metric.value
+        {
+            out.commit = Some(json!(value + delta));
         }
         if metric.state == KeyState::OutOfSync && !read_only {
             let update_label = format!("{} {}", words.update_key.as_str(), label.as_str());
@@ -201,7 +211,7 @@ pub fn box_point(ui: &mut Ui, label: Label, point: Option<&str>) -> Option<&'sta
 mod tests {
     use serde_json::json;
 
-    use super::{KeyState, KeyedNumber, format_number};
+    use super::{KeyState, KeyedNumber, Label, format_number, key_or_number};
 
     #[test]
     fn numbers_show_at_most_two_decimals() {
@@ -222,5 +232,33 @@ mod tests {
         assert_eq!(derived.commit_value(""), Some(json!("=+0")));
         let plain = KeyedNumber { value: Some(10.0), ..Default::default() };
         assert_eq!(plain.commit_value(""), None);
+    }
+
+    /// Up and Down step a metric that holds a number and commit it; a keyed metric does not step.
+    #[test]
+    fn arrows_step_a_numeric_metric() {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        use craft::ui::testing::Fixture;
+        use egui::{Key, Modifiers};
+
+        let commits = Rc::new(RefCell::new(Vec::new()));
+        let seen = Rc::clone(&commits);
+        let mut fixture = Fixture::new(move |ui| {
+            let plain = KeyedNumber { value: Some(40.0), ..Default::default() };
+            let keyed = KeyedNumber { value: Some(50.0), key: Some("=H".into()), state: KeyState::InSync, message: None };
+            for (label, metric) in [("LSB", &plain), ("RSB", &keyed)] {
+                if let Some(commit) = key_or_number(ui, Label::from(label), metric, false).commit {
+                    seen.borrow_mut().push((label, commit));
+                }
+            }
+        });
+        fixture.settle();
+        let lsb = fixture.by_label("LSB").expect("the LSB field");
+        fixture.click(&lsb).key(Key::ArrowUp, Modifiers::SHIFT).settle();
+        let rsb = fixture.by_label("RSB").expect("the RSB field");
+        fixture.click(&rsb).key(Key::ArrowUp, Modifiers::NONE).settle();
+        assert_eq!(*commits.borrow(), vec![("LSB", json!(50.0))]);
     }
 }

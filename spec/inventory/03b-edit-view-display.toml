@@ -290,7 +290,7 @@ milestone = "M3"
 summary = "While an Info box field is focused, Up and Down raise or lower its value by 1, by 10 with Shift held, and by 100 with Cmd and Shift held."
 ref = "Edit View › Measuring › Measuring with the Info box"
 status = "handbook"
-notes = "Built in M3.15: each press commits at once, as one undo step. The handbook gives the step of 100 with Cmd+Shift for the glyph box's sidebearing fields; every Info box field takes it (widgets::arrow_delta)."
+notes = "Built in M3.15: each press commits at once, as one undo step. The handbook gives the step of 100 with Cmd+Shift for the glyph box's sidebearing fields; every Info box field of the egui window takes it (`widgets::arrow_delta`). In the craft window the metric fields that take a number or a key step by 1, 10 and 100 while they hold a number (`craft_ext::ui::text::StepKeys`); its plain number fields are the framework's, which step by 1 and by 10 with Shift and have no Cmd+Shift step yet."
 
 [[behavior]]
 id = "infoBox.followsSelection"
@@ -1393,6 +1393,7 @@ status = "handbook"
 notes = "Documented, not yet observed. A command takes the selection as `range` (character indexes); the context menu fills it from the field's selection. Runs of the other direction keep their own order: a Latin word in right-to-left text reads left to right, and only the order of the runs follows the base direction. Digits and neutral characters resolve by UAX #9 (row `textPreview.unicodeBidi`, `crates/textlayout/src/bidi.rs`), so \"12 34\" in right-to-left text reads \"34 12\". Edit View keeps one direction for its whole text."
 guesses = [
   "The default direction of the text comes from its first letter: right to left for Hebrew, Arabic and the other right-to-left scripts, else left to right. The reference follows the Unicode bidirectional algorithm; a mixed text in the reference app would settle how far we differ.",
+  "The direction of the selection sits in the text's context menu under its own heading, Selection Direction, below the direction of the whole text, and acts on the text field's last selection; the reference app's context menu would settle the layout.",
   "A selected range with the other direction is an embedding: its base direction changes, one level inside the text's, and its runs are ordered by it; it keeps its direction while text is typed around it; directions do nothing in vertical text. The reference app on a mixed text would settle it.",
   "Line breaking measures a trailing blank with the kern it has before its level is reset to the paragraph's, so a line can break up to one kern early; a right-to-left line that ends in a kerned blank, in the reference app, would settle how the reference measures it.",
 ]
