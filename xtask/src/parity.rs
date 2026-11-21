@@ -146,7 +146,7 @@ pub fn run(root: &Path, check: bool) -> Result<(), String> {
     let registered: Vec<(&str, &str, Vec<&str>, &str)> = fontcraft_engine::command_specs()
         .iter()
         .map(|c| (c.id, c.label, c.menu.to_vec(), c.shortcut.unwrap_or("")))
-        .chain(ui_commands().map(|c| (c.id, c.label, c.menu.to_vec(), c.shortcut.unwrap_or(""))))
+        .chain(ui_commands().map(|c| (c.id, c.label, c.menu.to_vec(), fontcraft_ui::shell::commands::shown_shortcut(c).unwrap_or(""))))
         .collect();
     let mut drift = Vec::new();
     for (id, label, menu, shortcut) in &registered {

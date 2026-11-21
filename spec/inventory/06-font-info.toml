@@ -75,6 +75,20 @@ guesses = [
 ]
 
 [[command]]
+id = "font.info.openDialog"
+label = "Open Font Info Dialog"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{dialog: 'fieldPicker'|'parameterPicker'|'os2Bits'|'panose'|'featurePicker', scope: 'font'|'master'|'instance', targets?: [index], name?: string, index?: number}"
+area = "font-info"
+milestone = "M7"
+summary = "Opens one of the Font Info window's pickers (fields, custom parameters, features) or the dialog that edits one parameter's value (OS/2 bit fields, PANOSE)."
+ref = "Font Info"
+status = "inferred"
+notes = "Our command behind the Font Info panel's plus buttons and parameter value fields in `crates/ui`, so the dialogs open through the command channel as clicks open them. The reference app opens the same pickers and editors from those buttons and fields; it has no command for them."
+
+[[command]]
 id = "font.info.features.select"
 label = "Select Feature Entries"
 menu = []

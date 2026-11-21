@@ -20,7 +20,7 @@
 [[command]]
 id = "fontView.show"
 label = "Show Font View"
-menu = []
+menu = ["View"]
 shortcut = "Cmd+Alt+1"
 kind = "ui"
 params = "{}"
@@ -29,6 +29,9 @@ milestone = "M4"
 summary = "Switches the font window to the Font View tab, which is always the leftmost tab. It is also the tab a newly created document opens on. Font View always occupies the first tab of a window."
 ref = "Font View › (introduction)"
 status = "handbook"
+guesses = [
+  "Show Font View is a View menu row with its Cmd+Alt+1 shortcut; the handbook names the shortcut but no menu item, and the reference app's View and Window menus settle it.",
+]
 
 [[command]]
 id = "fontView.setViewMode"

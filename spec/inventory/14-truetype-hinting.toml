@@ -310,6 +310,20 @@ observe = [
   "T3: click the globe of a zone on the main master; note which properties the rule pop-up offers.",
 ]
 
+[[command]]
+id = "window.ttfZones"
+label = "Edit TT Zones…"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{master?: id | name}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Opens the TTFZones editor (`dialog.ttfZones`) on a master's TT zones; without a master, on the main master."
+ref = "TrueType Hinting › TrueType Zones"
+status = "inferred"
+notes = "The reference app opens the editor from the value field of the master's TTFZones custom parameter in Font Info › Masters; in `crates/ui` that field opens it through `dialog.open`, and this command opens it on a master for scripts and agents. An unknown master is refused with a message in the status line."
+
 [[behavior]]
 id = "hinting.tt.zones.name"
 area = "hinting-tt"
@@ -480,6 +494,20 @@ status = "handbook"
 notes = "M10.28, crates/ui/src/dialogs/tt/zones.rs, in the frame of dialog.ttfZones (ttf_zones.rs): opens from the value field of a master's TTFStems parameter; the double arrow switches between X (↔) and Y (↕). Selection, deltas, filter and the actions menu work as in dialog.ttfZones. Documented, not yet observed."
 guesses = ["The plus button adds `stem N`, an X stem 80 units per 1000 units per em wide, to every master; the reference app would show what a new stem holds."]
 observe = ["T3: in the TTFStems editor click plus; note the new stem's orientation, name and size."]
+
+[[command]]
+id = "window.ttfStems"
+label = "Edit TT Stems…"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{master?: id | name}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Opens the TTFStems editor (`dialog.ttfStems`) on a master's TT stems; without a master, on the main master."
+ref = "TrueType Hinting › TrueType Stems"
+status = "inferred"
+notes = "The reference app opens the editor from the value field of the master's TTFStems custom parameter in Font Info › Masters; in `crates/ui` that field opens it through `dialog.open`, and this command opens it on a master for scripts and agents. An unknown master is refused with a message in the status line."
 
 [[behavior]]
 id = "hinting.tt.stems.orientation"

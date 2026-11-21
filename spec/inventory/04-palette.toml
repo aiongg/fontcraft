@@ -61,6 +61,21 @@ guesses = [
 ]
 
 [[command]]
+id = "window.resetLayout"
+label = "Reset Layout"
+menu = ["Window"]
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Puts every dock panel back where it starts and shows the Palette sections that were hidden."
+ref = "Palette"
+status = "inferred"
+own = true
+notes = "`crates/ui` only: the dock layout goes back to `dock::default_workspace` and the hidden Palette sections are shown again. The reference app's panels are fixed around the window, so it has nothing to reset."
+
+[[command]]
 id = "palette.toggleSection"
 label = "Collapse / Expand Section"
 menu = []

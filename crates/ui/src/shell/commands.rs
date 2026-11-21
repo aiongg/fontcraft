@@ -99,3 +99,48 @@ pub fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
     let (module, _) = find(&command.id).ok_or_else(|| format!("no shell command `{}`", command.id))?;
     (module.run)(app, command)
 }
+
+/// Keys the window takes for a shell command in one place only, or as the first of a numbered series
+/// ([`super::numbered_keys`]). A command's own `shortcut` is bound everywhere, so these stay out of it; the inventory
+/// check reads them through [`shown_shortcut`].
+///
+/// - Escape: text mode and edit mode in the edit view (`canvas::text::input`).
+/// - Comma, period and X: the TrueType Instructor's keys, run through the tool (`fontcraft_tools::tt_instructor`).
+/// - Up and Down: the Kerning window's list moves its lead row, and the panel selects that row and shows its pair,
+///   as the commands do.
+/// - Cmd+1 and Cmd+Alt+2: the first keys of the master and tab series.
+pub const SCOPED_KEYS: &[(&str, &str)] = &[
+    ("editView.toggleTextMode", "Escape"),
+    ("hint.tt.decreasePixelSize", ","),
+    ("hint.tt.increasePixelSize", "."),
+    ("hint.tt.toggleDirection", "X"),
+    ("kerning.selectNextPair", "Down"),
+    ("kerning.selectPreviousPair", "Up"),
+    ("view.selectMaster", "Cmd+1"),
+    ("view.showTab", "Cmd+Alt+2"),
+];
+
+/// The shortcut people know `command` by: its own, else its key from [`SCOPED_KEYS`].
+pub fn shown_shortcut(command: &UiCommand) -> Option<&'static str> {
+    command.shortcut.or_else(|| SCOPED_KEYS.iter().find(|(id, _)| *id == command.id).map(|(_, key)| *key))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SCOPED_KEYS, find};
+    use crate::shell::numbered_keys;
+
+    #[test]
+    fn scoped_keys_name_shell_commands_without_a_global_shortcut() {
+        for (id, _) in SCOPED_KEYS {
+            let found = find(id).map(|(_, command)| command.shortcut);
+            assert_eq!(found, Some(None), "{id}: a shell command with no shortcut of its own");
+        }
+        let numbered = numbered_keys::all();
+        for id in ["view.selectMaster", "view.showTab"] {
+            let first = numbered.iter().find(|key| key.command.id == id).map(|key| key.shortcut.as_str());
+            let scoped = SCOPED_KEYS.iter().find(|(scoped, _)| *scoped == id).map(|(_, key)| *key);
+            assert_eq!(scoped, first, "{id}: the first key of its numbered series");
+        }
+    }
+}

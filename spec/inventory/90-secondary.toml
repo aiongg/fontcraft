@@ -4553,7 +4553,7 @@ guesses = [
 [[command]]
 id = "view.setReferenceFont"
 label = "Set Reference Font"
-menu = ["View"]
+menu = []
 shortcut = ""
 kind = "ui"
 params = "{path?: path, remove?: path, show?: bool, character?: string, language?: string}"
@@ -4563,7 +4563,7 @@ summary = "Adds a compiled font file as a reference and toggles the background d
 ref = "Fontra reference › Editor › Panels › Reference font"
 status = "docs"
 origin = "fontra"
-notes = "Documented, not yet observed. The font is read through the same reading code and limits as File › Open, read-only and never part of the document. The glyph is found by the custom character when one is set, else by the edited glyph's first code point, else by the edited glyph's name; it is drawn as an outline at the edited glyph's origin, scaled from the reference font's units per em to the edited font's."
+notes = "Documented, not yet observed. The window runs it from the Reference Font panel (Fontra has it as a panel, not a menu item); it always takes parameters, so it has no menu row. The font is read through the same reading code and limits as File › Open, read-only and never part of the document. The glyph is found by the custom character when one is set, else by the edited glyph's first code point, else by the edited glyph's name; it is drawn as an outline at the edited glyph's origin, scaled from the reference font's units per em to the edited font's."
 guesses = [
   "The language code picks a glyph named like the found one plus .locl and the code in capitals (A.loclTRK for TRK); applying the reference font's own locl substitutions through the shaper would settle what the reference app does.",
   "Adding a path selects that font and turns the display on; the reference app's panel would settle whether adding also shows it.",

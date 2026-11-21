@@ -187,7 +187,7 @@ observe = [
 [[command]]
 id = "app.about"
 label = "About FontCraft"
-menu = ["FontCraft"]
+menu = ["Help"]
 shortcut = ""
 kind = "ui"
 params = "{} → {version, licences}"
@@ -196,7 +196,10 @@ milestone = "M14"
 summary = "Shows the version, the licences of FontCraft and of everything it ships, and the graphics adapter in use."
 ref = "platform convention"
 status = "inferred"
-notes = "The window (`crates/ui/src/dialogs/about.rs`) shows the name, the version and a licence line naming NOTICE and ASSETS.md in the framework's About dialog, from Help › About FontCraft. Not built yet: the graphics adapter line, and the item's place in the app menu on macOS."
+notes = "The window (`crates/ui/src/dialogs/about.rs`) shows the name, the version and a licence line naming NOTICE and ASSETS.md in the framework's About dialog, from Help › About FontCraft. Not built yet: the graphics adapter line."
+guesses = [
+  "About FontCraft sits in the Help menu on every platform: the window has no macOS application menu to put it in, where the reference app keeps it; a macOS build with the native menu bar would move it there.",
+]
 
 [[command]]
 id = "path.convertToCubic"
