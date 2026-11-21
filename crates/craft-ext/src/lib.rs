@@ -6,4 +6,5 @@
 //! in for. Nothing here depends on FontCraft; when a piece moves into craft, its call sites change their import path
 //! and nothing else.
 
+pub mod platform;
 pub mod ui;

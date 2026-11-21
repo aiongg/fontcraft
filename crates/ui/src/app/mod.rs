@@ -227,6 +227,9 @@ pub struct FontCraftApp {
     pub preview_host: Option<Box<dyn preview_host::PreviewHost>>,
     /// Where the user's settings are kept between runs; `None` keeps nothing (tests, the browser).
     pub user_store: Option<Box<dyn user_store::UserStore>>,
+    /// Opens web links in the browser and shows files in the file manager; the desktop app supplies the system's,
+    /// tests and the browser build have none.
+    pub opener: craft_ext::platform::open::Opener,
     /// The canvas overlays' switches, data and the text note being typed (`canvas::overlays`).
     pub overlays: crate::canvas::overlays::Overlays,
     /// The control channel: its listener, the window its input goes to, the replies waiting on frames.
@@ -281,6 +284,7 @@ impl FontCraftApp {
             frame_hook: None,
             preview_host: None,
             user_store: None,
+            opener: craft_ext::platform::open::Opener::NONE,
             control: crate::control::Control::default(),
             window: None,
             #[cfg(not(target_arch = "wasm32"))]

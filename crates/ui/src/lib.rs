@@ -22,6 +22,8 @@ pub mod shell;
 pub mod testing;
 
 pub use app::FontCraftApp;
+/// The browser and file-manager calls the desktop app hands over in [`Options`].
+pub use craft_ext::platform::open::Opener;
 
 /// Builds the app's frame hook once the window's context exists (it wakes the window).
 #[cfg(not(target_arch = "wasm32"))]
@@ -41,6 +43,8 @@ pub struct Options {
     pub preview_host: Option<Box<dyn app::preview_host::PreviewHost>>,
     /// Where the user's settings are kept between runs (the settings folder).
     pub user_store: Option<Box<dyn app::user_store::UserStore>>,
+    /// Opens web links and shows files in the file manager (`Opener::system()` on the desktop).
+    pub opener: Opener,
 }
 
 /// Opens the desktop window and runs it until it closes.
@@ -60,7 +64,7 @@ pub fn run(options: Options) -> Result<(), String> {
         app.preview_host = options.preview_host;
         app.user_store = options.user_store;
         app::user_store::load(&mut app);
-        app.view.start.reveal = Some(craft::platform::open::reveal);
+        app.opener = options.opener;
         if app.session.settings().get_bool(shell::start::SHOW_AT_LAUNCH).unwrap_or(true) {
             app.sent.push(app::Msg::Shell(craft::ui::runtime::commands::CommandRef::with_params("window.startWindow", serde_json::json!({}))));
         }

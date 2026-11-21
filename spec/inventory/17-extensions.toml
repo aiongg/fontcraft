@@ -220,7 +220,7 @@ summary = "The grey link under an entry's description opens the extension's webs
 ref = "Extensions › Plugin Manager"
 status = "inferred"
 guesses = ["The Website button shows on every index entry and the command fails with a message when the entry has no `homepage`; the reference app with an entry that lacks a website would settle whether the link is hidden instead."]
-notes = "FontCraft (M13.10): opens the entry's `homepage` (an https:// or http:// link; an index with another scheme is refused). Without a system browser, as in tests and the web build, the command fails with a message."
+notes = "FontCraft (M13.10): opens the entry's `homepage` (an https:// or http:// link; an index with another scheme is refused). Without a system browser, as in tests and the web build, the command fails with a message. Both windows open the link through the same checked call (`craft_ext::platform::open`), which takes only http(s) links with a host and no spaces or control characters; in `crates/ui` the Website button is under the selected row."
 
 [[command]]
 id = "pluginManager.openDonationPage"
@@ -235,7 +235,7 @@ summary = "Entries whose vendor accepts donations show PayPal or Ko-fi icons tha
 ref = "Extensions › Plugin Manager"
 status = "inferred"
 guesses = ["One Donate button stands for every donation service, opening the entry's single `funding` link; an index entry in the reference format that lists several services would settle whether one button is enough."]
-notes = "FontCraft (M13.10): `service` is accepted and ignored, since an entry has one `funding` link."
+notes = "FontCraft (M13.10): `service` is accepted and ignored, since an entry has one `funding` link. The link opens as Open Website's does; in `crates/ui` the Donate button is under the selected row."
 
 [[behavior]]
 id = "pluginManager.relaunchForPluginsAndModules"

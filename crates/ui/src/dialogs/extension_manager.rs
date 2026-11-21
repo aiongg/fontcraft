@@ -1,5 +1,6 @@
 //! The Extension Manager window: shows `shell::extension_manager`'s state while it is open. The filters post their
-//! shell commands; the buttons under the list act on the selected row through engine commands. Install from File…
+//! shell commands; the buttons under the list act on the selected row through engine commands, and Website and Donate
+//! through `pluginManager.openWebsite` and `pluginManager.openDonationPage`. Install from File…
 //! posts `plugin.installFromFile` without a path, so the file picker asks for it.
 
 use std::borrow::Cow;
@@ -48,6 +49,10 @@ craft::ui::words! {
         new_module: "fontcraftExtensionManager.newModule" = "New, off";
         update_to: "fontcraftExtensionManager.updateTo" = "Update offered, installed:";
         none: "fontcraftExtensionManager.none" = "No extension matches. Install a module or macro from a file, or add an extension index.";
+        website: "fontcraftExtensionManager.website" = "Website";
+        website_tip: "fontcraftExtensionManager.websiteTip" = "Open the extension's website in the browser";
+        donate: "fontcraftExtensionManager.donate" = "Donate";
+        donate_tip: "fontcraftExtensionManager.donateTip" = "Open the vendor's donation page in the browser";
         install: "fontcraftExtensionManager.install" = "Install";
         update: "fontcraftExtensionManager.update" = "Update";
         remove: "fontcraftExtensionManager.remove" = "Remove";
@@ -209,6 +214,16 @@ impl ManagerDialog {
         }
         let id = entry.id.clone();
         Row::new().show(ui, |ui, _| {
+            if entry.from_index {
+                let website = Button::new(words.website.clone()).tooltip(words.website_tip.clone()).id_salt("fontcraftExtensionManager.website");
+                if website.show(ui).clicked() {
+                    self.post_shell("pluginManager.openWebsite", json!({ "id": id }));
+                }
+                let donate = Button::new(words.donate.clone()).tooltip(words.donate_tip.clone()).id_salt("fontcraftExtensionManager.donate");
+                if donate.show(ui).clicked() {
+                    self.post_shell("pluginManager.openDonationPage", json!({ "id": id }));
+                }
+            }
             if entry.from_index
                 && !entry.installed
                 && Button::new(words.install.clone()).id_salt("fontcraftExtensionManager.install").show(ui).clicked()

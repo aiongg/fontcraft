@@ -10,6 +10,7 @@
 //! | On | `plugin.setEnabled` |
 //! | Install from File… | `plugin.installFromFile` without `path`: the file picker asks for a module or macro |
 //! | Reload | `pluginManager.reloadIndexes`, then the list is made again |
+//! | Website, Donate | `pluginManager.openWebsite`, `pluginManager.openDonationPage`: the entry's link in the browser, through `FontCraftApp::opener` |
 //!
 //! The list is made again when it is opened, when a filter changes, when the installed modules, their switches or
 //! their errors change, and after Reload. Each row carries the module's last error (`ExtensionState::module_errors`); module files that failed
@@ -20,6 +21,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 
 use craft::ui::runtime::commands::CommandRef;
 use fontcraft_engine::Session;
+use fontcraft_engine::extension_index::Entry;
 use serde_json::{Value, json};
 
 use super::commands::{Module, UiCommand};
@@ -64,6 +66,20 @@ const COMMANDS: &[UiCommand] = &[
         menu: &[],
         shortcut: None,
         params: "{query: string} show the extensions whose id, title, vendor or description holds the text, ignoring case; an empty query shows all",
+    },
+    UiCommand {
+        id: "pluginManager.openWebsite",
+        label: "Open Website",
+        menu: &[],
+        shortcut: None,
+        params: "{id: entry id} open the index entry's website in the system browser (an http:// or https:// link); refused when the entry names none or this build has no browser",
+    },
+    UiCommand {
+        id: "pluginManager.openDonationPage",
+        label: "Donate",
+        menu: &[],
+        shortcut: None,
+        params: "{id: entry id, service?: string (ignored: an entry has one funding link)} open the index entry's donation page in the system browser; refused when the entry names none or this build has no browser",
     },
 ];
 
@@ -200,10 +216,25 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
         "pluginManager.search" => {
             view.query = text("query").unwrap_or_default().chars().take(MAX_QUERY_CHARS).collect();
         }
+        "pluginManager.openWebsite" | "pluginManager.openDonationPage" => return open_link(app, command.id.as_str(), params),
         other => return Err(format!("no Extension Manager command `{other}`")),
     }
     refresh(app);
     Ok(())
+}
+
+/// The first entry with `id` in the session's indexes (the first index wins), with its index's location.
+pub fn find_entry(session: &Session, id: &str) -> Option<(Entry, String)> {
+    session.extensions().indexes.iter().find_map(|l| l.index.find(id, None).map(|e| (e.clone(), l.source.clone())))
+}
+
+/// Opens the entry's website or donation page with the app's opener, which takes only http(s) links.
+fn open_link(app: &mut FontCraftApp, command: &str, params: &Value) -> Result<(), String> {
+    let id = params.get("id").and_then(Value::as_str).ok_or("give the entry's `id`")?;
+    let (entry, _) = find_entry(&app.session, id).ok_or_else(|| format!("no extension index offers {id:?}"))?;
+    let (link, what) = if command == "pluginManager.openWebsite" { (entry.homepage, "website") } else { (entry.funding, "donation page") };
+    let link = link.ok_or_else(|| format!("{id:?} names no {what}"))?;
+    app.opener.open_url(&link)
 }
 
 /// What the list depends on in the extension state: the installed modules and macros, each module's switch, the
@@ -318,5 +349,34 @@ mod tests {
         assert_eq!(ids(&app), ["square"], "a removed module leaves the list");
         shell(&mut app, "pluginManager.filterByInstallState", json!({"state": "notInstalled"})).unwrap();
         assert!(ids(&app).is_empty());
+    }
+
+    fn opened_ok(_: &str) -> Result<(), String> {
+        Ok(())
+    }
+
+    /// Website and Donate open the index entry's links through the app's opener; without one, or without the link,
+    /// they say why.
+    #[test]
+    fn extension_manager_opens_website_and_donation_links() {
+        use fontcraft_engine::extension_index::Index;
+        use fontcraft_engine::extensions::LoadedIndex;
+
+        let mut app = FontCraftApp::new(Session::new(), Arc::new(Host::builder(crate::app::APP).build()));
+        let bytes = serde_json::to_vec(&json!({"format": "fontcraft.extensions", "version": 1, "entries": [{
+            "id": "tighten", "kind": "macro", "version": "1", "titles": {"en": "Tighten"}, "url": "tighten.fcmacro", "size": 10,
+            "sha256": "0".repeat(64), "homepage": "https://example.com/home", "funding": "https://example.com/give money",
+        }]}))
+        .unwrap();
+        let index = Index::parse(&bytes).unwrap();
+        app.session.extensions_mut().indexes.push(LoadedIndex { source: "https://example.test/index.json".into(), index });
+
+        let error = shell(&mut app, "pluginManager.openWebsite", json!({"id": "tighten"})).unwrap_err();
+        assert!(error.contains("browser"), "{error}");
+        app.opener = craft_ext::platform::open::Opener::new(Some(opened_ok), None);
+        shell(&mut app, "pluginManager.openWebsite", json!({"id": "tighten"})).unwrap();
+        let error = shell(&mut app, "pluginManager.openDonationPage", json!({"id": "tighten"})).unwrap_err();
+        assert!(error.contains("not a web link"), "only http(s) links open: {error}");
+        assert!(shell(&mut app, "pluginManager.openWebsite", json!({"id": "loosen"})).unwrap_err().contains("no extension index"));
     }
 }
