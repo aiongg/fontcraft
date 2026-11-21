@@ -1078,8 +1078,12 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
         one catalog definition per parameter set (`craft_ext::ui::runtime::commands`); Cmd+B; Window › Palette
         (Cmd+Alt+P) over the end-edge panels; Window › Panels with a check row per dock panel. Left: the master
         icons' tooltips do not name Cmd+1 to Cmd+9, and the Palette has no sidebar button.
-     3. Menu fidelity: check marks on the switch rows and rows greyed when the selection supplies no targets.
-     4. The Dimensions panel, and the Kerning and Kerning Review panel ids filled or removed.
+     3. Done (UI.42a, UI.42b): check marks on the switch rows (`app/menu_states.rs`, `SWITCHES`), and engine rows
+        greyed when firing them would be refused for their targets, with the reason as tooltip and as
+        `disabled_reason` in `ui.menu.list`. Left: Show Image and Keep Layer Selection in Sync join the switch list
+        when their commands exist (items 5 and 9).
+     4. Done (UI.42c): Palette › Dimensions; the Kerning and Kerning Review panel ids are removed (the Info box holds
+        the kerning fields, Pairs & Phrases the review lists), and no panel shows a stub.
      5. Placed images: drawn, selected, dragged, cropped and locked on the canvas, the image Info box, the canvas
         menu's image section, View › Show Image, Reveal Image File, drops, and Font View cell images.
      6. Snapping suggestions, the reference font glyph and power guides drawn on the canvas.

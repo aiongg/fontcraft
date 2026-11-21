@@ -568,8 +568,7 @@ linked file is checked against it, and a linked file outside the read root reads
      text field still waits for craft in the browser build. Then the parity audit gaps, in ROADMAP's order: what
      the Edit View tabs left (tabs per document, tabs from the document's display strings and written on save, a
      removed glyph leaving its tabs); what the Edit View controls and shortcuts left (the master icons' tooltips
-     naming Cmd+1 to Cmd+9, the Palette's sidebar button); menu check marks and greyed rows; the
-     Dimensions panel and the Kerning and Kerning Review panel ids; placed images on the canvas, in the Info box,
+     naming Cmd+1 to Cmd+9, the Palette's sidebar button); placed images on the canvas, in the Info box,
      menus and Font View; snapping suggestions, the reference font glyph and power guides; the Axis Mappings dialog
      and the Cross-Axis Mappings window; the Primitive Measurements and Add Pixel Glyph dialogs; the small commands
      listed there; and the `ui.inspect` keys and getter commands for control parity. The smaller follow-ups
