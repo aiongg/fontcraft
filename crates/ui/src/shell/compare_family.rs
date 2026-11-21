@@ -132,7 +132,8 @@ fn open_glyph(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
         return Err(format!("`{}` has no glyph `{}`", doc.title, quoted(glyph)));
     }
     let glyph = glyph.to_string();
-    app.session.execute("document.activate", &json!({ "index": index })).map_err(|e| e.to_string())?;
+    // Through the app, so the newly active document's tab set shows before the glyph goes into it.
+    app.apply_msg(FontCraftApp::route(CommandRef::with_params("document.activate", json!({ "index": index }))))?;
     super::tabs::show_glyph(app, glyph)
 }
 
