@@ -147,6 +147,20 @@ pub struct FeaturesView {
     pub selected: Vec<EntryKey>,
     /// The code editor's open completion question, which the projection answers with `font.features.complete`.
     pub completion: Option<CompletionAsk>,
+    /// Where the caret goes in the entry's code field, in characters: after a snippet went in
+    /// (`font.features.insertSnippet`'s `caret`). The code editor places it and drops it.
+    pub caret: Option<(EntryKey, usize)>,
+}
+
+/// After a run of `id` the person asked for: an inserted snippet leaves the caret after itself.
+pub fn after_run(app: &mut crate::app::FontCraftApp, id: &str, reply: &Value) {
+    if id != "font.features.insertSnippet" {
+        return;
+    }
+    let caret = reply.get("caret").and_then(Value::as_u64).and_then(|c| usize::try_from(c).ok());
+    if let (Some(key), Some(caret)) = (EntryKey::from_json(reply), caret) {
+        app.view.font_info.features.caret = Some((key, caret));
+    }
 }
 
 /// What the code editor asks completions for: the entry, the code as typed and the caret's byte offset in it.

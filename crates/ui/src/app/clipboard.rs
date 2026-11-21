@@ -8,8 +8,10 @@
 //!   taken name gets the first free `.001` suffix), in this document or another. Text that holds no copied glyphs is
 //!   not pasted in Font View.
 //! - Copy Glyph Names (the glyph menus) puts the `text` of `glyph.copyGlyphNames` on the clipboard.
-//! - Edit › Paste and Paste Special fired without text ask the window for the clipboard's text ([`Clipboard::request`]);
-//!   the shell takes the text when it arrives and calls [`paste`]. Paste Special opens `dialog.pasteSpecial` on
+//! - Edit › Paste and Paste Special fired without text wait for the clipboard's text ([`Clipboard::request`]). On the
+//!   desktop the shell reads it from the system clipboard at once ([`read_waiting`], through
+//!   `FontCraftApp::clipboard_reader`) and calls [`paste`]; without a reader (tests, the browser) it asks the window for
+//!   a paste event and takes the text when it arrives. Paste Special opens `dialog.pasteSpecial` on
 //!   copied glyphs, with the selected glyphs as its `targets` and Font View's master, or on the canvas the edited glyph
 //!   and the master of the layer it shows.
 //! - Font View's master is the current master (`view.selectMaster`). A drawing pastes into the layer the canvas shows
@@ -26,6 +28,13 @@
 //!   instance list holds the keyboard focus go to that list, which posts the same commands.
 //!
 //! The text goes out through [`Clipboard::out`], which the shell hands to the window's clipboard.
+//!
+//! Why paste reads the clipboard itself: craft hands the platform's paste event only to a focused component that lists
+//! Paste (a text field, a list taking edit commands, a canvas whose key use lists it). Anywhere else the event stands for
+//! the Cmd+V chord, which fires `edit.paste`, and its text is dropped, so a paste event the app asks for never reaches
+//! it. craft's own read path, `craft::platform::clipboard::Clipboard`, reads the text instead. The full version in craft
+//! would hand the dropped text to the app with the fired command (a `paste` on the fired command or on `FrameOutput`),
+//! which also covers the browser build, where the clipboard can only be read from a paste event.
 
 use craft::ui::runtime::commands::CommandRef;
 use craft_ext::ui::list::{EditCommand, deliver};
@@ -42,6 +51,17 @@ const SELECT_ALL: &str = "edit.selectAll";
 const GLYPHS_FORMAT: &str = "fontcraft-glyphs";
 /// Longest clipboard text a paste takes.
 pub const MAX_PASTE_BYTES: usize = 16 * 1024 * 1024;
+
+/// Reads the system clipboard's text: `Ok(None)` when it holds none.
+pub type ReadClipboardFn = fn() -> Result<Option<String>, String>;
+
+/// The system clipboard's text, through craft's clipboard (size limits included). Not in the browser build, whose
+/// clipboard is read from paste events only.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn system_text() -> Result<Option<String>, String> {
+    use craft::platform::clipboard::{Clipboard as SystemReader, SystemClipboard};
+    SystemReader::new(SystemClipboard::new()).read_text().map_err(|e| e.to_string())
+}
 
 /// Which paste waits for the clipboard's text.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -203,10 +223,66 @@ pub fn paste_msg(app: &mut FontCraftApp, text: &str, kind: PasteKind) -> Result<
     Ok(Msg::Run(command))
 }
 
+/// Takes the clipboard's text for the paste that waits for it from `FontCraftApp::clipboard_reader` and pastes it.
+/// `false` when no paste waits or the app has no reader: the shell then asks the window for a paste event.
+pub fn read_waiting(app: &mut FontCraftApp) -> bool {
+    let (Some(kind), Some(read)) = (app.clipboard.request, app.clipboard_reader) else { return false };
+    app.clipboard.request = None;
+    app.clipboard.asked = None;
+    match read() {
+        Ok(Some(text)) => paste(app, &text, kind),
+        Ok(None) => app.status = "Paste: the clipboard holds no text".into(),
+        Err(e) => app.status = format!("Paste: {e}"),
+    }
+    true
+}
+
 /// Pastes `text` as `kind` asks, after what views posted: the shell calls it when the clipboard's text arrives.
 pub fn paste(app: &mut FontCraftApp, text: &str, kind: PasteKind) {
     match paste_msg(app, text, kind) {
         Ok(msg) => app.sent.push(msg),
         Err(e) => app.status = e,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use craft::host::Host;
+    use fontcraft_engine::Session;
+    use serde_json::json;
+
+    use super::{PasteKind, read_waiting};
+    use crate::app::{APP, FontCraftApp, Msg};
+
+    fn copied() -> Result<Option<String>, String> {
+        Ok(Some("feature liga { sub f i by f_i; } liga;".to_string()))
+    }
+
+    fn empty() -> Result<Option<String>, String> {
+        Ok(None)
+    }
+
+    /// With a reader, a waiting paste takes the system clipboard's text at once, without a paste event; without one
+    /// it keeps waiting for the window's event; an empty clipboard says so in the status line.
+    #[test]
+    fn a_waiting_paste_reads_the_system_clipboard() {
+        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        app.clipboard.request = Some(PasteKind::FeatureEntries);
+        assert!(!read_waiting(&mut app), "no reader: the paste waits for the window's event");
+        assert_eq!(app.clipboard.request, Some(PasteKind::FeatureEntries));
+
+        app.clipboard_reader = Some(copied);
+        assert!(read_waiting(&mut app));
+        assert_eq!(app.clipboard.request, None);
+        assert_eq!(app.sent, vec![Msg::run("font.features.pasteEntries", json!({ "text": "feature liga { sub f i by f_i; } liga;" }))]);
+
+        app.sent.clear();
+        app.clipboard_reader = Some(empty);
+        app.clipboard.request = Some(PasteKind::Paste);
+        assert!(read_waiting(&mut app));
+        assert!(app.sent.is_empty());
+        assert_eq!(app.status, "Paste: the clipboard holds no text");
     }
 }

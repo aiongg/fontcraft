@@ -1,8 +1,9 @@
 //! The Option (Alt) alternates of menu rows: while Alt is held, choosing a row runs its alternate instead, and the
 //! alternate has no row of its own.
 //!
-//! The menu bar carries each pair as a `craft::menu::Alternate` on the base row. The framework swaps the command
-//! only: the row keeps the base's label and shortcut while Alt is held.
+//! The menu bar carries each pair as a `craft::menu::Alternate` on the base row. While Alt is held the row reads as
+//! the alternate: the shell hands the bar over through `craft_ext::menu::held_alternate_labels`, which gives the row
+//! the alternate's label ([`alternate_label`]), and the chord column shows the alternate command's own shortcut.
 
 use craft::keymap::Mods;
 use craft::menu::Alternate;
@@ -47,6 +48,12 @@ pub fn alternate_of(id: &str) -> Option<&'static str> {
     ALTERNATES.iter().find(|(_, alt)| *alt == id).map(|(base, _)| *base)
 }
 
+/// The label the row shows while Alt is held, when `id` is an alternate: the command's own label.
+pub fn alternate_label(id: &str) -> Option<&'static str> {
+    alternate_of(id)?;
+    fontcraft_engine::command_specs().iter().find(|spec| spec.id == id).map(|spec| spec.label)
+}
+
 /// The menu alternate of the row of `id`.
 pub fn menu_alternate(id: &str) -> Option<Alternate> {
     alternate(id).map(|alt| Alternate::new(Mods::ALT, alt))
@@ -89,6 +96,23 @@ mod tests {
             assert!(!items.iter().any(|i| i.command.id == *alt), "`{alt}` has no row of its own");
         }
         assert_eq!(alternate_of("path.forceExtremes"), Some("path.addExtremes"));
+    }
+
+    /// With Alt held, a row with an alternate reads as the alternate: Tidy Up Paths shows the label of
+    /// `path.tidyUpPathsForAllMasters`; without Alt the bar is unchanged.
+    #[test]
+    fn held_alt_shows_the_alternate_label() {
+        let catalog = Catalog::build();
+        let label = |command: &craft::menu::CommandRef| super::alternate_label(&command.id).map(str::to_string);
+        let held = craft_ext::menu::alternate_labels(&catalog.menu, craft::keymap::Mods::ALT, label);
+        let mut items = Vec::new();
+        for menu in &held.menus {
+            rows(&menu.children, &mut items);
+        }
+        let row = items.iter().find(|i| i.command.id == "path.tidyUpPaths").expect("the Tidy Up Paths row");
+        assert_eq!(Some(row.label.as_str()), super::alternate_label("path.tidyUpPathsForAllMasters"));
+        assert_ne!(Some(row.label.as_str()), fontcraft_engine::command_specs().iter().find(|s| s.id == "path.tidyUpPaths").map(|s| s.label));
+        assert!(matches!(craft_ext::menu::alternate_labels(&catalog.menu, craft::keymap::Mods::NONE, label), std::borrow::Cow::Borrowed(_)));
     }
 
     /// Audit Kerning Exceptions…, Match Kerning… and Overlay Fonts… show once each: the dialogs' rows, not the engine

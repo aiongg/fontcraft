@@ -163,6 +163,23 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   `OverlayData`, which layers read as `PaintCx::overlays`; their switches are `shell/overlays.rs`. Reporter module
   drawings are read the same way (`canvas/reporters.rs`) and paint as `reportersBack` and `reportersFront`. A text note is
   typed in a field over its box (`canvas/annotation_editor.rs`).
+- **Edit View tabs.** The document area (`PanelId::Document`, a canvas group the host draws in
+  `Panels::group_view`) shows craft's `DocumentTabs` strip over its body (`panels/tab_strip.rs`, model
+  `models.tabs`): Font View first and not closable, then one tab per Edit View tab, titled by its first glyphs. The
+  body is Font View while its tab shows, else the canvas. Font View is a tab of this strip and no dock panel, as in
+  the reference, where Cmd+Alt+1 shows it as the first tab; tabs in the dock would have needed a `PanelId` per tab
+  and would let a tab dock beside another, which the reference does not do. `ViewState::tabs`
+  (`shell/tabs.rs`, `EditTabs`) holds the tabs, the showing one (`None`: Font View) and the closed ones (at most
+  `MAX_CLOSED_TABS`; at most `MAX_TABS` open). The edit-view fields of `ViewState` (`glyph`, `canvas`, `text`'s text,
+  layout options and features, `layers`' master, picked layers and row selection, `edit_background`,
+  `preview.area_open`) and the selection in `FontCraftApp::tools` are the *live* tab's: the showing tab, or while
+  Font View shows, the tab shown last. The other tabs keep their copy in `EditTab::state`, and `tabs::show` swaps
+  the two, so projections, the canvas and the tools read the live fields and never look at tabs. Code that opens
+  glyphs for editing calls `tabs::edit_glyphs` (the tab holding exactly those glyphs, else a new one),
+  `tabs::open_glyphs` (always a new tab) or `tabs::show_glyph` (the live tab); `app.font_view_shows()` says whether
+  Font View is the showing tab. A window opens with one Edit View tab. The tabs belong to the window, not to the
+  active document. Cmd+Alt+2 to Cmd+Alt+9 are not bound yet: craft's catalog takes one definition per command id
+  and its bindings carry no parameters.
 - **Tools.** The slot holds `canvas::tools::bridge::ToolBridge`. It posts the canvas's press, drags,
   hover and keys as `Msg::Tool`; `drain` runs `fontcraft_tools::Toolbox` on them
   (`canvas/tools/apply.rs`) and applies its answer before the next message, so each event sees what
@@ -284,6 +301,8 @@ only; each module's doc names the craft file the piece is meant for.
 | `craft_ext::ui::text::{HighlightText, Highlight}` (`highlight_text`) | a `highlight` option on `TextOptions` that the text widget's layouter turns into sections | Font Info › Features: the code editor's syntax colours and the underlined ranges of the compile's diagnostics |
 | `craft_ext::ui::text::{FieldSelection, TextSelection}` (`selection`, `last_selection`, `select`) | a `selection` on `EditResponse` and a `TextField::selection` prop | Text Preview: the Selection Direction items of the text's context menu; Font Info › Features: a snippet replaces the code field's selection |
 | `craft_ext::ui::text::{AsyncCompleter, CompletionQuery, CompletionAnswer}` (`kept`, `take_query`, `answer`) | a `Completer` that may answer in a later pass | Font Info › Features: the code editor's name completion, asked through `ViewMsg::FeatureCompletion` and answered by the projection with `font.features.complete` |
+| `craft_ext::menu::{alternate_labels, held_alternate_labels}` | a `label` on `craft::menu::Alternate` that the bar's row shows while the alternate is selected | the menu bar: with Alt held, Tidy Up Paths reads Tidy Up Paths for All Masters (`app::menu_alternates::alternate_label`) |
+| `craft_ext::ui::primitives::ShapeIcon` (`spec`) | named icons `union`, `intersect`, `slant_left`, `slant_right`, `slant_down`, `slant_up` in craft's icon set | Palette › Transformations: the slant buttons and the Union and Intersect buttons (Subtract takes craft's `squares_subtract`) |
 | `craft_ext::ui::text::{StepKeys, ArrowSteps}` (`arrow_steps`, `stepped`) | a `steps` prop on `TextField` that keeps the arrows for a stepped value, as `NumberField` does | the metric fields that take a number or a key (`panels::widgets::key_or_number`), Font Info's minor version field |
 
 The stand-ins paint over what craft drew, so they cover the plain forms only (a row without icon, toggles or
@@ -291,6 +310,12 @@ indent; a menu row's mark column), and a screen reader hears a mixed menu row as
 tone on its icon only (the label keeps its ink). Dialog buttons take craft's own danger look:
 `DialogRole::Destructive` on a `FooterButton`, `Variant::DANGER` on a `Button`. An Edit command reaches
 the focused list one pass after it fired.
+
+Paste outside a text field takes no craft-ext piece: craft gives the platform's paste event only to a focused
+component that lists Paste and turns it into the Cmd+V chord elsewhere, dropping its text. `app::clipboard` therefore
+reads the system clipboard through craft's own `craft::platform::clipboard` (`FontCraftApp::clipboard_reader`, which
+`apps/fontcraft-next` sets to `clipboard::system_text`); tests and the browser build have no reader and ask the window
+for a paste event.
 
 ## Forbidden in UI code
 

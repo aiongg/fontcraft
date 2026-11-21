@@ -304,7 +304,7 @@ pub fn project_inspector(model: &mut Tracked<GlyphPropsModel>, cx: &mut ProjectC
 /// the glyph panels show.
 pub fn project_selection_info(model: &mut Tracked<GlyphPropsModel>, cx: &mut ProjectCx<'_>) {
     let shows = cx.view.workspace.layout.panel_state(&PanelId::SelectionInfo) != PanelState::Hidden;
-    let font_view = cx.view.workspace.layout.panel_state(&PanelId::FontView) != PanelState::Hidden;
+    let font_view = cx.view.tabs.font_view_shows();
     let glyphs = if font_view {
         cx.view.font_view.selected.clone()
     } else {

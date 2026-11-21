@@ -64,8 +64,11 @@ pub struct ViewState {
     pub tool: &'static str,
     /// The tool each rail slot showed last.
     pub tools_last_used: LastUsed<&'static str>,
-    /// The glyph the glyph panels show; `None` shows the font's first glyph.
+    /// The glyph the glyph panels show; `None` shows the font's first glyph. This field and `canvas`, `text`'s text,
+    /// `layers`' master and picked layers and `edit_background` belong to the live Edit View tab (`tabs`).
     pub glyph: Option<String>,
+    /// The Edit View tabs beside Font View, the showing one and the closed ones (`shell::tabs`).
+    pub tabs: crate::shell::tabs::EditTabs,
     /// The dock: which panels show where.
     pub workspace: Workspace<PanelId>,
     /// The document canvas's view.
@@ -143,6 +146,7 @@ impl Default for ViewState {
             tool: "select",
             tools_last_used: LastUsed::default(),
             glyph: None,
+            tabs: Default::default(),
             workspace: dock::default_workspace(),
             canvas: CanvasView::new(egui::Rect::NOTHING, Point::ZERO, 1.0),
             display: crate::canvas::Display::default(),
@@ -230,6 +234,9 @@ pub struct FontCraftApp {
     /// Opens web links in the browser and shows files in the file manager; the desktop app supplies the system's,
     /// tests and the browser build have none.
     pub opener: craft_ext::platform::open::Opener,
+    /// Reads the system clipboard's text for a paste outside a text field; the desktop app supplies
+    /// [`clipboard::system_text`], tests and the browser build have none and wait for the window's paste event.
+    pub clipboard_reader: Option<clipboard::ReadClipboardFn>,
     /// The canvas overlays' switches, data and the text note being typed (`canvas::overlays`).
     pub overlays: crate::canvas::overlays::Overlays,
     /// The control channel: its listener, the window its input goes to, the replies waiting on frames.
@@ -285,6 +292,7 @@ impl FontCraftApp {
             preview_host: None,
             user_store: None,
             opener: craft_ext::platform::open::Opener::NONE,
+            clipboard_reader: None,
             control: crate::control::Control::default(),
             window: None,
             #[cfg(not(target_arch = "wasm32"))]
@@ -386,6 +394,7 @@ impl FontCraftApp {
                     crate::dialogs::after::after_run(self, &command.id, &params, &reply);
                     // A request that names a copy gets the text in its reply; the system clipboard stays the person's.
                     clipboard::after_run(self, &command.id, &reply);
+                    crate::shell::font_info_tabs::after_run(self, &command.id, &reply);
                 }
                 crate::shell::project::after_run(self, &command.id, &reply);
                 crate::shell::extension_downloads::after_run(self, &command.id, &params, &reply);
@@ -451,6 +460,7 @@ impl FontCraftApp {
             ViewMsg::TextPreviewArea(area) => self.view.text_preview.area = area,
             ViewMsg::SidebarMenu(path) => self.view.sidebar.menu_row = path,
             ViewMsg::FeatureCompletion(ask) => self.view.font_info.features.completion = ask,
+            ViewMsg::FeatureCaretPlaced => self.view.font_info.features.caret = None,
         }
         Ok(())
     }
@@ -479,18 +489,14 @@ impl FontCraftApp {
     /// from [`Self::with_targets`], whose canvas part falls back to the font's first glyph: a dialog's command then acts
     /// on every glyph or the dialog asks for a glyph, and any other glyph command refuses ([`select_glyph_first`]).
     pub(crate) fn targets_chosen(&self) -> bool {
-        // `view.glyph` keeps the glyph opened last after its edit view went behind a tab.
-        let glyph_shown = self.view.glyph.is_some() && self.in_front(PanelId::Document);
+        // `view.glyph` keeps the glyph the live tab shows while Font View is in front.
+        let glyph_shown = self.view.glyph.is_some() && !self.view.tabs.font_view_shows();
         self.font_view_targets() || glyph_shown
     }
 
-    /// Whether fired commands take Font View's selection: glyphs are selected and Font View is in front.
+    /// Whether fired commands take Font View's selection: glyphs are selected and Font View is the showing tab.
     fn font_view_targets(&self) -> bool {
-        !self.view.font_view.selected.is_empty() && self.in_front(PanelId::FontView)
-    }
-
-    fn in_front(&self, panel: PanelId) -> bool {
-        self.view.workspace.layout.panel_state(&panel) == craft::behavior::dock::PanelState::Front
+        !self.view.font_view.selected.is_empty() && self.view.tabs.font_view_shows()
     }
 }
 

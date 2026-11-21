@@ -36,6 +36,7 @@ pub mod shape_order;
 pub mod sidebar;
 pub mod space_center;
 pub mod table_viewer;
+pub mod tabs;
 pub mod text;
 pub mod text_preview;
 
@@ -57,6 +58,8 @@ pub struct Models {
     pub canvas_tokens: crate::canvas::tokens::Tokens,
     /// Font View's glyphs, their order, the selection and the cell outlines (`panels::font_view`).
     pub font_view: Tracked<font_view::FontViewModel>,
+    /// The document area's tab strip (`panels::tab_strip`).
+    pub tabs: Tracked<tabs::TabsModel>,
     font_view_outlines: font_view::OutlineCache,
     /// The Font Info panel (`panels::font_info`).
     pub font_info: Tracked<font_info::FontInfoModel>,
@@ -176,6 +179,7 @@ impl Models {
         canvas::project(&mut self.canvas, &mut self.color_files, cx);
         self.canvas_tokens = crate::canvas::tokens::Tokens::from_settings(cx.session.settings(), false);
         font_view::project(&mut self.font_view, &mut self.font_view_outlines, &mut self.color_files, cx);
+        tabs::project(&mut self.tabs, cx);
         font_info::project(&mut self.font_info, cx);
         glyph_sections::project_related(&mut self.related_glyphs, cx);
         glyph_sections::project_selections(&mut self.selections, cx);

@@ -6,7 +6,7 @@ use craft::ui::runtime::commands::CommandRef;
 use serde_json::{Value, json};
 
 use super::commands::{Module, UiCommand};
-use crate::app::{FontCraftApp, Msg, ViewMsg};
+use crate::app::{FontCraftApp, Msg};
 
 pub const COMMANDS: &[UiCommand] = &[UiCommand {
     id: "url.show",
@@ -31,9 +31,18 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
             warnings.push(format!("{title}: {e}"));
             continue;
         }
-        let first = file.get("glyphs").and_then(Value::as_array).and_then(|g| g.first()).and_then(|e| e.get("glyph")).and_then(Value::as_str);
-        if let Some(glyph) = first {
-            app.apply_msg(Msg::View(ViewMsg::SelectGlyph(glyph.to_string())))?;
+        // The file's glyphs open in a tab of their own.
+        let glyphs: Vec<String> = file
+            .get("glyphs")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|e| e.get("glyph").and_then(Value::as_str))
+            .take(fontcraft_textlayout::MAX_ITEMS)
+            .map(str::to_string)
+            .collect();
+        if !glyphs.is_empty() {
+            super::tabs::open_glyphs(app, &glyphs)?;
         }
     }
     if let Some(last) = warnings.last() {

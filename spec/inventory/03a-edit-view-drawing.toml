@@ -233,6 +233,7 @@ milestone = "M3"
 summary = "Opens a new Edit View tab in the current window showing the glyphs that are selected at the time, so several glyphs can be opened together."
 ref = "Edit View"
 status = "handbook"
+notes = "Built in M3.2. In `crates/ui` (`shell/tabs.rs`) the new tab shows its glyphs as its text, edits the first, and draws in the master of the tab it was opened from; without parameters it takes the showing tab's edited glyph, or Font View's selection while Font View shows."
 
 [[command]]
 id = "view.editSelectedGlyphs"
@@ -246,7 +247,7 @@ milestone = "M4"
 summary = "In Font View, opens the selected glyphs for editing in Edit View; double-clicking a glyph or a selection does the same. The reference gives the key but no menu label for it."
 ref = "Edit View"
 status = "handbook"
-notes = "Built in M3.2."
+notes = "Built in M3.2. In `crates/ui` Return and a double-click in Font View, Cmd+Down and Font Audit's Show run it; `url.show` always opens a new tab."
 guesses = [
   "An open tab that holds exactly these glyphs is shown instead of a new tab.",
 ]
@@ -263,6 +264,7 @@ milestone = "M3"
 summary = "Switches to the tab at the given position. The reference binds Cmd+Alt+2 through Cmd+Alt+9 to tab positions 2 to 9 (position 1 is Font View); the shortcut field holds only the first of that range."
 ref = "Edit View"
 status = "handbook"
+notes = "Built in M3.2. In `crates/ui` a click on a tab title runs it. The craft command catalog takes one definition per command id and its key bindings carry no parameters, so Cmd+Alt+2 to Cmd+Alt+9 are not bound there yet (the same gap leaves Cmd+1 to Cmd+9 for view.selectMaster unbound)."
 
 [[command]]
 id = "view.showNextTab"
@@ -306,7 +308,7 @@ milestone = "M3"
 summary = "Closes the current Edit View tab. The close button that appears when the pointer is over a tab title does the same for that tab."
 ref = "Edit View"
 status = "handbook"
-notes = "Built in M3.2: `index` is a strip position (1 is Font View, which cannot be closed)."
+notes = "Built in M3.2: `index` is a strip position (1 is Font View, which cannot be closed). In `crates/ui` the tab strip's close button runs it for its tab."
 guesses = [
   "The tab to the left of a closed showing tab shows next.",
   "The last 32 closed tabs are kept for Reopen Last Closed Tab.",
@@ -324,7 +326,7 @@ milestone = "M3"
 summary = "Closes every tab except one. The reference offers this only as Option-click on a tab's close button, which keeps the current tab; it names no menu item."
 ref = "Edit View"
 status = "handbook"
-notes = "Built in M3.2: `keep` is a strip position; with Font View showing and no `keep`, every Edit View tab closes."
+notes = "Built in M3.2: `keep` is a strip position; with Font View showing and no `keep`, every Edit View tab closes. In `crates/ui` Alt held while clicking a tab's close button runs it with that tab as `keep`."
 
 [[command]]
 id = "view.reopenLastClosedTab"
@@ -347,6 +349,15 @@ milestone = "M3"
 summary = "One document window holds Font View as its fixed first tab followed by any number of Edit View tabs; clicking a tab title switches to it."
 ref = "Edit View"
 status = "handbook"
+notes = "Built in M3.2. In `crates/ui` (`shell/tabs.rs`, `panels/tab_strip.rs`) the strip is craft's document tab strip at the top of the document area: Font View first and not closable, then the Edit View tabs titled by their first four glyphs. Each tab keeps its glyph, camera, text and preview features, master and picked layers, selection and path focus, Edit Background and Preview Area; at most 1,000 tabs are open and the last 32 closed are kept. The tabs belong to the window, not to the active document; `docs/ui.md` has the design."
+guesses = [
+  "A window opens with one Edit View tab showing the font's first glyph beside Font View; the handbook does not say which tab a file without stored tabs opens on. Opening a new file in the reference app settles it.",
+  "Font View draws in the master of the Edit View tab shown last; the handbook gives Font View no master of its own. Switching masters in two tabs and then showing Font View in the reference app settles it.",
+]
+observe = [
+  "Open a new file and note which tab shows first.",
+  "Open two tabs, pick another master in the second, show Font View, and note which master its cells draw.",
+]
 
 [[behavior]]
 id = "menus.optionRevealsAlternateItems"
@@ -355,9 +366,10 @@ milestone = "M3"
 summary = "Holding Option while a menu or context menu is open swaps some items for an alternate form, typically the same action applied to all masters (Tidy up Paths, Correct Path Direction, Reverse Contours, Set/Reset Anchors, Expand Outline), plus Force Extremes, Add Global Guide and Reopen Last Closed Tab."
 ref = "Edit View › Editing Paths"
 status = "handbook"
-notes = "The new UI (`crates/ui`, `app/menu_alternates.rs`, `ALTERNATES`) puts each pair on the base row of the menu bar: choosing the row with Alt held runs the alternate, and the alternate has no row of its own. The framework swaps the command only, so the row keeps the base's label and shortcut while Alt is held. Not yet in the table: the tab pair and the Font View batch forms, whose commands the new UI does not have yet, and the delete and Expand Outline pairs, whose commands have no menu path in the engine."
+notes = "The new UI (`crates/ui`, `app/menu_alternates.rs`, `ALTERNATES`) puts each pair on the base row of the menu bar: choosing the row with Alt held runs the alternate, and the alternate has no row of its own. While Alt is held the row shows the alternate command's own label and shortcut (`craft_ext::menu::held_alternate_labels`); the label updates as Alt goes down and up while the menu is open. Not yet in the table: the tab pair, two shell commands that each keep a View menu row of their own (the table takes engine commands only), the Font View batch forms, whose commands the new UI does not have yet, and the delete and Expand Outline pairs, whose commands have no menu path in the engine."
 guesses = [
   "Clear Background is the Alt alternate of Assign Background; the handbook says only that it shows while Alt is held. Holding Option in the reference app's Path menu settles it.",
+  "An alternate row shows its own command's label and shortcut, as native macOS alternate items do; the handbook names the alternates but not their labels. The observe step below settles it.",
 ]
 observe = [
   "Open the Path menu, hold Option, and note which items change, their labels, and whether each keeps its shortcut with Option added.",
@@ -1936,9 +1948,9 @@ milestone = "M3"
 summary = "Palette section at the bottom right holding the live stroke attributes of the selected path. It is available only while Show Info is on and a path is selected."
 ref = "Edit View › Strokes"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 5:08: a Stroke section appears at the bottom of the Palette while a path is selected and is absent with nothing selected (partly visible). Its fields are not shown. Built in M3.11: a path counts as selected when it is selected whole or one of its nodes or handles is. Controls: width (emptying it removes the stroke); with a stroke, height (empty: the width), position with the presets −100, 0 and 100, Fill (closed paths), a Join row of icon buttons for miter, bevel, round and round full, and for open paths Start and End rows of icon buttons for the caps butt, square, round, round inset and axis-aligned; each icon names its choice on hover. Holding the axis-aligned cap for half a second opens a menu (automatic, X axis, Y axis); the forced axis is one per path, so it serves both ends. Each control runs `path.setStroke` with only its own key. The buttons carry text, not icons."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 5:08: a Stroke section appears at the bottom of the Palette while a path is selected and is absent with nothing selected (partly visible). Its fields are not shown. Built in M3.11: a path counts as selected when it is selected whole or one of its nodes or handles is. Controls: width (emptying it removes the stroke); with a stroke, height (empty: the width), position with the presets −100, 0 and 100, Fill (closed paths), a Join row of icon buttons for miter, bevel, round and round full, and for open paths Start and End rows of icon buttons for the caps butt, square, round, round inset and axis-aligned; each icon names its choice on hover. Holding the axis-aligned cap for half a second opens a menu (automatic, X axis, Y axis); the forced axis is one per path, so it serves both ends, and the release that ends the hold sets nothing. Each control runs `path.setStroke` with only its own key. The buttons carry text, not icons."
 guesses = [
-  "Cap axis is chosen with a select; the handbook's click-and-hold on the cap control needs a hold/flyout control the UI kit lacks.",
+  "A right click on the axis-aligned cap opens the axis menu too; the handbook names only click-and-hold. Watching the reference app would settle it.",
 ]
 
 [[command]]

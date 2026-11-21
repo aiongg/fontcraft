@@ -13,8 +13,10 @@ use craft::ui::contract::{Bind, Entry, Props as _, Show as _, ShowContainer as _
 use craft::ui::display::{Shade, Text};
 use craft::ui::layout_components::Row;
 use craft::ui::pickers::Select;
+use craft::ui::primitives::IconSpec;
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::{Env, Label};
+use craft_ext::ui::primitives::ShapeIcon;
 use egui::Ui;
 use serde_json::{Value, json};
 
@@ -77,6 +79,11 @@ pub fn show(ui: &mut Ui, mut props: Props<'_>) {
 /// An icon button named `label` that is enabled with `enabled`; whether it was pressed.
 fn icon(ui: &mut Ui, name: &'static str, label: &Label, enabled: bool) -> bool {
     IconButton::new(IconId::new(name)).label(label.clone()).tooltip(label.clone()).enabled(enabled).show(ui).clicked() && enabled
+}
+
+/// [`icon`] with a shape-operation icon.
+fn shape_icon(ui: &mut Ui, glyph: ShapeIcon, label: &Label, enabled: bool) -> bool {
+    IconButton::new(glyph.spec()).label(label.clone()).tooltip(label.clone()).enabled(enabled).show(ui).clicked() && enabled
 }
 
 fn view(props: &mut Props<'_>, ui: &mut Ui) {
@@ -169,16 +176,18 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
 
     let _ = Row::new().wrap(true).show(ui, |ui, _| {
         let angle = json!({"angle": m.slant, "origin": origin});
-        if Button::new(words.slant_left.clone()).enabled(enabled).show(ui).clicked() && enabled {
+        if shape_icon(ui, ShapeIcon::SlantLeft, &words.slant_left, enabled) {
             press(sent, "transform.slantLeft", angle.clone());
         }
         if let Some(v) = widgets::number(ui, words.slant.clone(), Some(m.slant)) {
             sent.push(shell("transform.setSettings", json!({ "slant": v })));
         }
-        for (id, label) in
-            [("transform.slantRight", &words.slant_right), ("transform.slantDown", &words.slant_down), ("transform.slantUp", &words.slant_up)]
-        {
-            if Button::new(label.clone()).enabled(enabled).show(ui).clicked() && enabled {
+        for (id, glyph, label) in [
+            ("transform.slantRight", ShapeIcon::SlantRight, &words.slant_right),
+            ("transform.slantDown", ShapeIcon::SlantDown, &words.slant_down),
+            ("transform.slantUp", ShapeIcon::SlantUp, &words.slant_up),
+        ] {
+            if shape_icon(ui, glyph, label, enabled) {
                 press(sent, id, angle.clone());
             }
         }
@@ -200,12 +209,13 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
     });
 
     let _ = Row::new().show(ui, |ui, _| {
-        for (id, label, tip) in [
-            ("transform.booleanUnion", &words.union, &words.union_tip),
-            ("transform.booleanSubtract", &words.subtract, &words.subtract_tip),
-            ("transform.booleanIntersect", &words.intersect, &words.intersect_tip),
+        for (id, glyph, label, tip) in [
+            ("transform.booleanUnion", ShapeIcon::Union.spec(), &words.union, &words.union_tip),
+            ("transform.booleanSubtract", IconSpec::from(IconId::new("squares_subtract")), &words.subtract, &words.subtract_tip),
+            ("transform.booleanIntersect", ShapeIcon::Intersect.spec(), &words.intersect, &words.intersect_tip),
         ] {
-            if Button::new(label.clone()).tooltip(tip.clone()).enabled(enabled).show(ui).clicked()
+            if IconButton::new(glyph).label(label.clone()).tooltip(tip.clone()).enabled(enabled).show(ui).clicked()
+                && enabled
                 && let Some(t) = &m.boolean
             {
                 sent.push(Msg::run(id, t.with(json!({}))));

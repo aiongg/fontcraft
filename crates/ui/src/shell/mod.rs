@@ -42,6 +42,7 @@ pub mod sidebar;
 pub mod space_center;
 pub mod start;
 pub mod table_viewer;
+pub mod tabs;
 pub mod text_preview;
 pub mod url;
 pub mod view;
@@ -94,12 +95,14 @@ fn title_bar(ui: &mut Ui, _: &mut BodyCx<'_>, app: &mut FontCraftApp) {
         Some(doc) => Title::new(doc.title.clone()),
         None => Title::new("FontCraft"),
     };
-    let menu = &app.catalog.menu;
+    let menu = craft_ext::menu::held_alternate_labels(ui, &app.catalog.menu, |command| {
+        crate::app::menu_alternates::alternate_label(&command.id).map(str::to_string)
+    });
     let _ = TitleBar::new().show_titled(
         ui,
         title,
         |ui, _| {
-            MenuBarUi::new(menu).show(ui);
+            MenuBarUi::new(&menu).show(ui);
         },
         |_, _| {},
     );

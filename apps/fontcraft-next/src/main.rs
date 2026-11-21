@@ -126,7 +126,8 @@ fn options(mut args: impl Iterator<Item = String>) -> Result<Option<fontcraft_ui
 }
 
 /// `options` with what only the desktop app supplies: External Preview's frame hook, the preview web server, the
-/// settings folder, the system browser and file manager, and the HTTPS downloads of the Extension Manager.
+/// settings folder, the system browser and file manager, the system clipboard, and the HTTPS downloads of the
+/// Extension Manager.
 #[cfg(not(target_arch = "wasm32"))]
 fn desktop(options: fontcraft_ui::Options) -> fontcraft_ui::Options {
     let frame_hook: fontcraft_ui::MakeFrameHook = Box::new(|ctx| {
@@ -139,6 +140,7 @@ fn desktop(options: fontcraft_ui::Options) -> fontcraft_ui::Options {
         preview_host: Some(Box::new(preview_server::Host::default())),
         user_store: Some(Box::new(user_files::UserFiles::in_settings_folder())),
         opener: fontcraft_ui::Opener::system(),
+        clipboard_reader: Some(fontcraft_ui::app::clipboard::system_text),
         fetch: Some(net::fetch),
         ..options
     }

@@ -6,7 +6,8 @@
 //! | the code | `font.features.setCode` when the field loses the keyboard and the text changed; read-only for an automatic entry |
 //! | a diagnostic's Fix button | `font.features.applyFix {error, fix}` |
 //!
-//! The field's last selection goes back to the Features tab, whose snippets menu puts a snippet in its place.
+//! The field's last selection goes back to the Features tab, whose snippets menu puts a snippet in its place; the
+//! caret then goes after the snippet and the field takes the keyboard (`EntryPane::caret`).
 //!
 //! Typing a name character, `@`, `$` or `{` asks for the names that fit at the caret (`ViewMsg::FeatureCompletion`,
 //! answered by the projection with `font.features.complete`); the list under the field shows them once the answer
@@ -26,6 +27,7 @@ use craft::ui::display::{Shade, Text};
 use craft::ui::layout_components::Row;
 use craft::ui::primitives::Completion;
 use craft::ui::runtime::env::Env;
+use craft::ui::runtime::focus::{self, FocusTarget};
 use craft::ui::style::UiTokens;
 use craft::ui::text::TextField;
 use craft_ext::ui::text::{
@@ -90,6 +92,11 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
         }
     } else if entry.completion.is_some() && !text_focused(ui.ctx(), out.response.id) {
         sent.push(Msg::View(ViewMsg::FeatureCompletion(None)));
+    }
+    if let Some(caret) = entry.caret.filter(|_| !entry.automatic) {
+        out.select(ui.ctx(), TextSelection::caret_at(caret.min(entry.code.chars().count())));
+        let _ = focus::request(ui.ctx(), FocusTarget::Id(out.response.id));
+        sent.push(Msg::View(ViewMsg::FeatureCaretPlaced));
     }
     let env = Env::of(ui);
     out.highlight_text(ui, |text| runs(text, &entry.code, &entry.diagnostics, &env.tokens));

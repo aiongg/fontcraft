@@ -336,13 +336,13 @@ fn side_glyph(font: &Font, direction: fontcraft_textlayout::Direction, position:
     }
 }
 
-fn glyph_item(font: &Font, name: &str) -> Item {
+pub(crate) fn glyph_item(font: &Font, name: &str) -> Item {
     let typed = font.glyph(name).and_then(|g| g.unicodes.first().copied()).and_then(char::from_u32);
     Item::Glyph { name: name.into(), typed }
 }
 
 /// The items `text`, `chars` or `glyphs` give (`None`: none of them).
-fn items(font: &Font, p: &Map<String, Value>) -> Result<Option<Vec<Item>>, String> {
+pub(crate) fn items(font: &Font, p: &Map<String, Value>) -> Result<Option<Vec<Item>>, String> {
     let given = ["text", "chars", "glyphs"].iter().filter(|k| p.contains_key(**k)).count();
     if given > 1 {
         return Err("give one of `text`, `chars` and `glyphs`".into());

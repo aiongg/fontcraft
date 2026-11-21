@@ -55,6 +55,8 @@ pub enum ViewMsg {
     SidebarMenu(Option<Vec<String>>),
     /// The feature code editor asks completions for its code and caret; `None` drops the question.
     FeatureCompletion(Option<crate::shell::font_info_tabs::CompletionAsk>),
+    /// The feature code editor placed the caret a snippet left.
+    FeatureCaretPlaced,
 }
 
 impl Msg {

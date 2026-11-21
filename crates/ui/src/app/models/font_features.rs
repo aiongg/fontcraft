@@ -73,6 +73,8 @@ pub struct EntryPane {
     pub diagnostics: Vec<DiagnosticModel>,
     /// The answer to the code editor's completion question about this entry.
     pub completion: Option<CompletionModel>,
+    /// Where the code editor puts the caret, in characters (after a snippet went in).
+    pub caret: Option<usize>,
 }
 
 /// The names that fit at a place in the code (`font.features.complete`), for the code as typed and the caret's byte
@@ -156,7 +158,8 @@ pub fn project(cx: &mut ProjectCx<'_>) -> FeaturesModel {
         _ => None,
     };
     let completion = entry.as_ref().and_then(|e| completion(cx, e));
-    let entry = entry.map(|e| EntryPane { spec_url, completion, ..e });
+    let caret = entry.as_ref().and_then(|e| cx.view.font_info.features.caret.as_ref().filter(|(k, _)| *k == e.key).map(|(_, c)| *c));
+    let entry = entry.map(|e| EntryPane { spec_url, completion, caret, ..e });
     FeaturesModel { groups, selected, entry, master, snippets }
 }
 
@@ -191,6 +194,7 @@ fn pane(font: &Font, key: &EntryKey, diagnostics: &[(Option<EntryKey>, Diagnosti
         },
         spec_url: None,
         completion: None,
+        caret: None,
         diagnostics: diagnostics.iter().filter(|(k, _)| k.as_ref() == Some(key)).map(|(_, d)| d.clone()).take(MAX_SHOWN_ERRORS).collect(),
     })
 }

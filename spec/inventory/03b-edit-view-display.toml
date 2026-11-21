@@ -2622,7 +2622,7 @@ milestone = "M5"
 summary = "Splits the Edit View tab into the editing canvas above and a Preview Area below, or closes the split. It is the eye button at the bottom left of the window; dragging the separator changes the area's height."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
-notes = "Built in M5.11a as a shell command; the area sits between the canvas and the bottom bar and its top edge is the separator. In `crates/ui` (UI.15b) the edit view has one text, so `tab` is not taken there and the area is one open state; its height is set through `height` only, without a separator to drag. Documented, not yet observed."
+notes = "Built in M5.11a as a shell command; the area sits between the canvas and the bottom bar and its top edge is the separator. In `crates/ui` (UI.15b) the command acts on the showing Edit View tab, which keeps its own open state (`tab` is not taken there); its height is set through `height` only, without a separator to drag. Documented, not yet observed."
 guesses = [
   "Each tab opens and closes its own Preview Area, while all tabs share one height; a second tab in the reference app settles it.",
   "The area is 140 points tall until its separator is dragged; the reference app's first height settles it.",
