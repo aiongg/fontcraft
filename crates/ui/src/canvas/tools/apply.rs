@@ -5,7 +5,7 @@
 //! 2. The toolbox runs with the edited glyph's scene, the selection and the canvas's view as it is now.
 //! 3. [`apply`] carries out the actions: a drag is `Preview::Begin`, `Preview::Update`s, then `Preview::Commit` (one
 //!    undo step) or `Preview::Cancel` (the font and the selection as they were). Commands go out as `Msg::Run`, or as
-//!    the shell or tool message their id names.
+//!    the shell or tool message their id names; the Primitives tool's `dialog.primitiveMeasurements` opens that dialog.
 
 use craft::behavior::kurbo::Point as KPoint;
 use craft::ui::runtime::commands::CommandRef;
@@ -208,6 +208,14 @@ pub fn apply(app: &mut FontCraftApp, out: Output) -> Vec<String> {
             _ => None,
         };
         let msg = match action {
+            // A Primitives click asks for the shape's size before anything runs.
+            Action::Run { invocation } if invocation.id == crate::dialogs::primitive_measurements::CLICK => {
+                if let Err(e) = crate::dialogs::primitive_measurements::open_for_click(app, &invocation.params) {
+                    app.status = e.clone();
+                    errors.push(e);
+                }
+                continue;
+            }
             Action::Begin { label } => Msg::Preview(Preview::Begin(label)),
             Action::Preview { invocation } => Msg::Preview(Preview::Update(CommandRef::with_params(invocation.id, invocation.params))),
             Action::Commit => Msg::Preview(Preview::Commit),

@@ -41,6 +41,7 @@ pub mod os2_bits;
 pub mod overlay_fonts;
 pub mod panose;
 pub mod path;
+pub mod primitive_measurements;
 pub mod review_hints;
 pub mod rule_tree;
 pub mod sample_strings;
@@ -107,6 +108,7 @@ pub const SPECS: &[&[DialogSpec]] = &[
     sidebar_filters::SPECS,
     component_name::SPECS,
     interp::SPECS,
+    primitive_measurements::SPECS,
 ];
 
 /// Runs every dialog module for this pass.
