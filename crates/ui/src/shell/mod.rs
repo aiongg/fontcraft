@@ -79,8 +79,9 @@ pub fn show(app: &mut FontCraftApp, ui: &mut Ui) {
         .title_bar(title_bar)
         .options_bar(true, |ui, _, app: &mut FontCraftApp| bars::options(ui, bars::OptionsProps { tool: app.view.tool }))
         .status(true, |ui, _, app: &mut FontCraftApp| {
+            let edit = bars::edit_state(app);
             let FontCraftApp { status, models, sent, .. } = app;
-            bars::status(ui, bars::StatusProps { status, features: &models.features, sent });
+            bars::status(ui, bars::StatusProps { status, features: &models.features, edit, sent });
         })
         .start(Slot::new("fontcraft.tools").size(SlotSize::RailWidth), |ui, _, app: &mut FontCraftApp| {
             let FontCraftApp { tool_slots, view, sent, .. } = app;
