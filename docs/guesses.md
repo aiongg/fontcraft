@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**3130 guesses on 1630 rows (671 of them live commands).**
+**3133 guesses on 1632 rows (673 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -52,6 +52,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `view.showNextTab` | M3 | handbook | yes | After the last tab comes Font View, and before Font View the last tab. |
 | `view.closeTab` | M3 | handbook | yes | The tab to the left of a closed showing tab shows next. |
 | `view.closeTab` | M3 | handbook | yes | The last 32 closed tabs are kept for Reopen Last Closed Tab. |
+| `tool.select` | M3 | inferred | yes | Without `tool`, the command makes the Select tool current, because it is that tool's own command; a `tool` that names no tool is refused with the list of tools and changes nothing. |
 | `edit.selectAll` | M3 | handbook | yes | In Font View it selects every glyph; the handbook describes edit mode only. |
 | `selection.selectNext` | M3 | handbook | yes | Tab steps through nodes in path order, then the next path, then anchors, then guides, then back to the start (03a question 8). |
 | `selection.set` | M3 | inferred | yes | The selection belongs to the showing tab and is cleared when another glyph is edited; the reference's rule is not documented. |
@@ -371,6 +372,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 |---|---|---|---|---|
 | `window.palette` | M3 | handbook | yes | With every Palette panel closed one at a time, Window › Palette opens the panels the default layout docks at the end edge; settle by closing the reference app's Palette sections one by one and choosing Window › Palette. |
 | `window.togglePanel` | M3 | inferred | yes | The panel rows sit in a Panels submenu of the Window menu rather than in the Window menu itself, which keeps the windows the reference lists there apart; settle against the reference app's Window menu. |
+| `palette.toggleSection` | M3 | handbook | yes | A section collapses with the panels tabbed in its dock group (Dimensions, Transformations and Fit Curve share one by default); the reference stacks its sections, each with its own chevron. |
+| `palette.toggleSection` | M3 | handbook | yes | Plug-in sections collapse together with the Modules panel, not one by one. |
 | `palette.setModuleValue` | M13 | inferred | yes | A module's field values last for the session and are not saved with the document or the settings; the handbook does not say whether plug-in Palette sections keep their values, and a plug-in section in the reference app, edited and reopened after a restart, settles it. |
 | `palette.applyModule` | M13 | inferred | yes | Apply acts on the same glyphs and nodes as the module's Filter menu item and makes one undo step; the handbook does not describe a filter section's Apply button, and running one in the reference app with nodes selected settles it. |
 | `dimensions.getValues` | M3 | inferred | yes | The field keys per script come from the corpus files (Latin: HH, HV, OH, OV, nV, nd, oH, oV, tH; Arabic: arAlef, arBar); the reference does not document them. |

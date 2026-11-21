@@ -32,12 +32,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1521 rows to check: 2630 guesses and 623 observe steps.**
+**1522 rows to check: 2632 guesses and 624 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **535** |
-| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 120 |
+| **Built milestones (M0 to M6)** | all | **536** |
+| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 121 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 33 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
 | Built milestones (M0 to M6) | Filters | 36 |
@@ -65,9 +65,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
-## Built milestones (M0 to M6) (535)
+## Built milestones (M0 to M6) (536)
 
-### Edit View: drawing, guides, layers and the Palette (120)
+### Edit View: drawing, guides, layers and the Palette (121)
 
 - [ ] `dialog.fieldKeys` (behavior, M3, inferred): In a dialog's number field, Return takes the typed value, Escape drops…
   - Guess: Dialog number fields follow the Info box's editing and arrow-key rules (infoBox.fieldEditing, infoBox.arrowKeyStepping); the handbook documents them for the Info box only.
@@ -314,6 +314,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Opposite buttons are exact for mirroring and quarter turns, through exact sines and cosines and grid rounding; other angles are undone only up to grid rounding (Palette question 5).
 - [ ] `window.palette` (M3, handbook, live): Palette
   - Guess: With every Palette panel closed one at a time, Window › Palette opens the panels the default layout docks at the end edge; settle by closing the reference app's Palette sections one by one and choosing Window › Palette.
+- [ ] `palette.toggleSection` (M3, handbook, live): Collapse / Expand Section
+  - Guess: A section collapses with the panels tabbed in its dock group (Dimensions, Transformations and Fit Curve share one by default); the reference stacks its sections, each with its own chevron.
+  - Guess: Plug-in sections collapse together with the Modules panel, not one by one.
+  - Observe: Collapse the Transformations section with its chevron: note whether the sections around it stay expanded and whether the state is kept after a restart.
 - [ ] `dimensions.getValues` (M3, inferred, live): Get Dimensions
   - Guess: The field keys per script come from the corpus files (Latin: HH, HV, OH, OV, nV, nd, oH, oV, tH; Arabic: arAlef, arBar); the reference does not document them.
 - [ ] `fitCurve.applyStep` (M3, handbook, live): Fit Curve
