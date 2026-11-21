@@ -80,6 +80,8 @@ pub struct DiagnosticModel {
     pub error: bool,
     pub message: String,
     pub line: u64,
+    /// The bytes of the entry's code the diagnostic is about, which the code editor underlines.
+    pub range: Option<(usize, usize)>,
     /// Labels of the suggested fixes.
     pub fixes: Vec<String>,
 }
@@ -188,11 +190,20 @@ fn diagnostics(result: Option<&Value>) -> Vec<(Option<EntryKey>, DiagnosticModel
                 error: d.get("severity").and_then(Value::as_str) == Some("error"),
                 message: d.get("message").and_then(Value::as_str).unwrap_or_default().to_string(),
                 line: d.get("line").and_then(Value::as_u64).unwrap_or(0),
+                range: byte_range(d.get("range")),
                 fixes: strings(d.get("fixes")).into_iter().take(MAX_FIXES).collect(),
             };
             Some((d.get("entry").and_then(EntryKey::from_json), model))
         })
         .collect()
+}
+
+/// A diagnostic's `range`, `[start, end]` in bytes; `None` when it is missing or ends before it starts.
+fn byte_range(v: Option<&Value>) -> Option<(usize, usize)> {
+    let r = v?.as_array()?;
+    let start = usize::try_from(r.first()?.as_u64()?).ok()?;
+    let end = usize::try_from(r.get(1)?.as_u64()?).ok()?;
+    (start <= end).then_some((start, end))
 }
 
 fn snippets(result: Result<Value, fontcraft_engine::EngineError>) -> SnippetsModel {

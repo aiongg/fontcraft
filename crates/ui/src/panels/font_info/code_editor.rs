@@ -7,19 +7,28 @@
 //! | a diagnostic's Fix button | `font.features.applyFix {error, fix}` |
 //!
 //! The diagnostics show only while the font is unchanged since the compile (`font.features.listErrors`).
+//!
+//! The code is coloured by the classes the feature parser's highlighter gives (`fontInfo.features.syntaxColouring`),
+//! and the ranges of the diagnostics are underlined in the error colour while the field shows the stored code
+//! (`fontInfo.features.inlineErrors`): typed text moves them.
 
 use craft::theme::variant::Tone;
+use craft::theme::{Rgba, Srgba};
 use craft::ui::buttons::Button;
 use craft::ui::contract::{Bind, Props as _, Show as _, ShowContainer as _};
 use craft::ui::display::{Shade, Text};
 use craft::ui::layout_components::Row;
 use craft::ui::runtime::env::Env;
+use craft::ui::style::UiTokens;
 use craft::ui::text::TextField;
+use craft_ext::ui::text::{Highlight, HighlightText as _};
+use egui::Color32;
 use egui::Ui;
+use fontcraft_engine::features::edit::{HighlightKind, highlight};
 use serde_json::json;
 
 use crate::app::Msg;
-use crate::app::models::font_features::EntryPane;
+use crate::app::models::font_features::{DiagnosticModel, EntryPane};
 
 craft::ui::words! {
     /// The words of the feature code editor.
@@ -48,7 +57,10 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> Vec<Msg> {
         .enabled(!entry.automatic)
         .id_salt(("fontcraftFeatureCode", key.kind.name(), key.index, key.name.as_str()));
     let field = if entry.automatic { field.tooltip(words.automatic_hint.clone()) } else { field };
-    if let Some(text) = field.show(ui).events.committed()
+    let out = field.show(ui);
+    let env = Env::of(ui);
+    out.highlight_text(ui, |text| runs(text, &entry.code, &entry.diagnostics, &env.tokens));
+    if let Some(text) = out.events.committed()
         && !entry.automatic
         && *text != entry.code
     {
@@ -67,4 +79,35 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> Vec<Msg> {
         });
     }
     sent
+}
+
+/// Most diagnostics underlined at once.
+const MAX_UNDERLINES: usize = 1_000;
+
+/// The colour of one class of code. The theme has no syntax colours of its own: keywords and tags take the accent,
+/// glyph names the text colour, comments and punctuation the muted text, the rest the data series.
+fn ink(kind: HighlightKind, tokens: &UiTokens) -> Rgba {
+    let series = |i: usize| tokens.color.data.series.get(i).copied().unwrap_or(tokens.color.text.normal);
+    match kind {
+        HighlightKind::Keyword | HighlightKind::Tag => tokens.color.accent.solid,
+        HighlightKind::GlyphName => tokens.color.text.normal,
+        HighlightKind::ClassName => series(5),
+        HighlightKind::LookupName => series(1),
+        HighlightKind::Number => series(7),
+        HighlightKind::String => series(2),
+        HighlightKind::Comment | HighlightKind::Punctuation => tokens.color.text.muted,
+        HighlightKind::Token => series(3),
+    }
+}
+
+/// The runs of the field's `text`: a colour per class, and the diagnostics' ranges underlined while `text` is the
+/// stored `code` they belong to.
+fn runs(text: &str, code: &str, diagnostics: &[DiagnosticModel], tokens: &UiTokens) -> Vec<Highlight> {
+    let color = |c: Rgba| Color32::from(Srgba::from(c));
+    let mut out: Vec<Highlight> = highlight(text).into_iter().map(|h| Highlight::ink(h.range, color(ink(h.kind, tokens)))).collect();
+    if text == code {
+        let bad = color(tokens.color.status.bad.fg);
+        out.extend(diagnostics.iter().filter_map(|d| d.range).take(MAX_UNDERLINES).map(|(start, end)| Highlight::underline(start..end, bad)));
+    }
+    out
 }

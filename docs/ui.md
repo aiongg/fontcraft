@@ -281,6 +281,7 @@ only; each module's doc names the craft file the piece is meant for.
 | `craft_ext::ui::menu::PickMarked` (`pick_marked`) | `Menu::pick` over entries with those states | the Features sidebar and Font View sidebar context menus |
 | `craft_ext::ui::contract::RequestMods` (`mods`, `held_mods`) | a `mods` field on `ContextMenuRequest` | Font View's glyph menu: Alt held at the click makes the swatches colour the layer |
 | `craft_ext::platform::open` (`Opener`, `open_url`, `reveal`) | checked, wasm-safe forms of `craft::platform::open::{open_external, reveal}` | `FontCraftApp::opener`: Show in Finder, the Extension Manager's Website and Donate and its folder buttons; `apps/fontcraft-next` hands over `Opener::system()`, tests a fake |
+| `craft_ext::ui::text::{HighlightText, Highlight}` (`highlight_text`) | a `highlight` option on `TextOptions` that the text widget's layouter turns into sections | Font Info › Features: the code editor's syntax colours and the underlined ranges of the compile's diagnostics |
 
 The stand-ins paint over what craft drew, so they cover the plain forms only (a row without icon, toggles or
 indent; a menu row's mark column), and a screen reader hears a mixed menu row as unchecked. A danger row shows the

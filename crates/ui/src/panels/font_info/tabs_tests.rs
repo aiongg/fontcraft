@@ -64,7 +64,14 @@ fn features_model() -> FontInfoModel {
             code: "sub a by b;".into(),
             stylistic_set: true,
             labels: vec![("dflt".into(), "Swash".into())],
-            diagnostics: vec![DiagnosticModel { id: 7, error: true, message: "unknown glyph".into(), line: 1, fixes: vec!["Remove".into()] }],
+            diagnostics: vec![DiagnosticModel {
+                id: 7,
+                error: true,
+                message: "unknown glyph".into(),
+                line: 1,
+                range: Some((4, 5)),
+                fixes: vec!["Remove".into()],
+            }],
             ..EntryPane::default()
         }),
         master: Some("m01".into()),
@@ -96,6 +103,28 @@ fn features_sidebar_and_buttons_post_their_commands() {
             shell("font.info.features.select", json!({ "entries": [{ "kind": "feature", "name": "liga", "index": 0 }] })),
         ]
     );
+}
+
+/// The feature code is coloured by class, and the range of the compile's diagnostic is underlined.
+#[test]
+fn feature_code_is_coloured_and_its_errors_underlined() {
+    let (mut fixture, _) = panel(features_model());
+    fixture.settle();
+    let shapes = fixture.frame_shapes();
+    let galley = shapes
+        .iter()
+        .find_map(|shape| match shape {
+            egui::Shape::Text(t) if t.galley.job.text == "sub a by b;" => Some(t.galley.clone()),
+            _ => None,
+        })
+        .expect("the code is painted");
+    let sections = &galley.job.sections;
+    let underlined: Vec<(usize, usize)> =
+        sections.iter().filter(|s| s.format.underline.width > 0.0).map(|s| (s.byte_range.start.0, s.byte_range.end.0)).collect();
+    assert_eq!(underlined, vec![(4, 5)]);
+    let mut colors: Vec<egui::Color32> = sections.iter().map(|s| s.format.color).collect();
+    colors.dedup();
+    assert!(colors.len() > 1, "the keyword and the glyph names differ in colour: {colors:?}");
 }
 
 /// Typed code is committed with `font.features.setCode` when the field loses the keyboard; the automatic box, a Fix
