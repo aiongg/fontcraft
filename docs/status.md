@@ -2,12 +2,14 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-21: UI.51 written on `w-UI.51`, not yet built: PDF pages in placed images, `palette.toggleSection`, `tool.select {tool}` and `tool.list` in the window. UI.49 and UI.50 merged, built and pushed (X.integ113 to X.integ117): the egui window is gone and `crates/ui` with `apps/fontcraft` is the only window. Earlier notes follow._
+_Updated: 2026-11-21: UI.51 merged, built and pushed (X.integ119 to X.integ120): PDF pages in placed images, `palette.toggleSection`, `tool.select {tool}` and `tool.list` in the window; the gate is green with 4,811 tests. UI.49 and UI.50 merged, built and pushed (X.integ113 to X.integ117): the egui window is gone and `crates/ui` with `apps/fontcraft` is the only window. Earlier notes follow._
 
 ## State of the tree
 
-- **Where UI.51 stands.** Written on `w-UI.51` (UI.51a to UI.51d); the writer ran no build or test, so the branch
-  needs one build and the gate before it merges. It has:
+- **Where UI.51 stands.** Merged on `master` and pushed; it built with no fixes and the gate (`cargo xtask ci`) is
+  green with 4,811 tests. Checked headless under Xvfb over the control channel: `tool.select {"tool":"draw"}` replies
+  `{tool: "draw", previous: "select"}`, `tool.list` reports `draw` active, and an unknown tool id is refused with the
+  list of tool ids. It has:
   - Placed PDF images drawn from their first page in Edit View and Font View cells (`canvas/images/files.rs`):
     `fontcraft-io-pdf` is a dependency of `crates/ui`; the page is drawn on the host's jobs once per file and read
     revision, at 4 pixels per point and at most 4,096 pixels on a side, and a file io-pdf refuses shows the
@@ -17,7 +19,7 @@ _Updated: 2026-11-21: UI.51 written on `w-UI.51`, not yet built: PDF pages in pl
     tool's command: the catalog keeps the tool's definition, `app::catalog::chosen_tool` picks the named tool, and a
     name that is no tool reaches the shell command, which refuses it. Every tool command run through
     `engine.execute` replies `{tool, previous}`.
-  - 1000 of 1056 commands live once parity is regenerated (`docs/parity.md` is generated; the integrator runs it).
+  - 1000 of 1056 commands live; M3 has 187 of 187.
   - The `[patch.crates-io]` egui entries cargo reports unused stay: they mirror `craft::egui_fork::PACKAGES`.
 - **Where UI.49 and UI.50 stand.** Merged on `master` and pushed; the gate (`cargo xtask ci`) is green with 4,808
   tests (the removed window's tests went with it). The desktop app is the package and binary `fontcraft` in
