@@ -61,13 +61,11 @@ pub const TABLE: &[(&str, Class)] = &[
     ("tools", Class::Layer(4)),
     ("engine-core", Class::Layer(5)),
     ("engine", Class::Layer(5)),
-    ("ui-egui", Class::Layer(6)),
     ("ui", Class::Layer(6)),
     ("craft-ext", Class::Layer(6)),
     ("mcp", Class::Layer(6)),
     ("testkit", Class::Testkit),
     // L7: apps and tooling
-    ("fontcraft", Class::Exempt),
     ("next", Class::Exempt),
     ("cli", Class::Exempt),
     ("web", Class::Exempt),
@@ -297,8 +295,8 @@ mod tests {
             krate("fontcraft-model", &[("fontcraft-geom", DepKind::Normal, true)]),
             krate("fontcraft-engine", &[("fontcraft-model", DepKind::Normal, true), ("fontcraft-testkit", DepKind::Dev, true)]),
             krate("fontcraft-testkit", &[("fontcraft-engine", DepKind::Normal, true)]),
-            krate("fontcraft-ui-egui", &[("fontcraft-engine", DepKind::Normal, true), ("egui", DepKind::Normal, false)]),
-            krate("fontcraft", &[("fontcraft-ui-egui", DepKind::Normal, true), ("eframe", DepKind::Normal, false)]),
+            krate("fontcraft-ui", &[("fontcraft-engine", DepKind::Normal, true), ("egui", DepKind::Normal, false)]),
+            krate("fontcraft-next", &[("fontcraft-ui", DepKind::Normal, true), ("eframe", DepKind::Normal, false)]),
         ];
         assert_eq!(check(&crates), vec![]);
     }
@@ -310,7 +308,7 @@ mod tests {
             krate("fontcraft-compile", &[("fontcraft-format", DepKind::Normal, true)]),
             krate("fontcraft-engine", &[("egui", DepKind::Normal, false), ("fontcraft-testkit", DepKind::Normal, true)]),
             krate("fontcraft-new", &[]),
-            krate("fontcraft-mcp", &[("fontcraft-ui-egui", DepKind::Normal, true)]),
+            krate("fontcraft-mcp", &[("fontcraft-ui", DepKind::Normal, true)]),
             krate("fontcraft-format", &[("fontcraft-cli", DepKind::Normal, true)]),
             krate(
                 "fontcraft-compile",
@@ -336,13 +334,7 @@ mod tests {
         assert!(v.contains(&Violation::UiBelowUiLayer { krate: "fontcraft-engine".into(), dep: "egui".into(), layer: 5 }));
         assert!(v.contains(&Violation::TestkitAsNormalDep { krate: "fontcraft-engine".into() }));
         assert!(v.contains(&Violation::Unregistered { krate: "fontcraft-new".into() }));
-        assert!(v.contains(&Violation::Upward {
-            krate: "fontcraft-mcp".into(),
-            dep: "fontcraft-ui-egui".into(),
-            from: 6,
-            to: 6,
-            kind: DepKind::Normal
-        }));
+        assert!(v.contains(&Violation::Upward { krate: "fontcraft-mcp".into(), dep: "fontcraft-ui".into(), from: 6, to: 6, kind: DepKind::Normal }));
         assert!(v.iter().any(|x| matches!(x, Violation::Upward { krate, to: 7, .. } if krate == "fontcraft-format")));
         for dep in ["egui-winit", "epaint", "accesskit_winit"] {
             assert!(v.contains(&Violation::UiBelowUiLayer { krate: "fontcraft-compile".into(), dep: dep.into(), layer: 3 }), "{dep}");

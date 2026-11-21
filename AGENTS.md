@@ -46,7 +46,8 @@ model, commands), [`docs/decisions/`](docs/decisions/) (why things are the way t
 - **Everything is a command.** User-visible behaviour is a command in `crates/engine/src/cmd/`
   (id, label, menu path, shortcut, params doc, `enabled`, `run`) with behaviour tests. Commands
   take explicit targets in their parameters; none depends on UI state. A command that fails
-  changes nothing. View and window state only: `UI_COMMANDS` in `crates/ui-egui/src/menus.rs`.
+  changes nothing. View and window state only: shell commands, each area's `Module` listed in
+  `MODULES` of `crates/ui/src/shell/commands.rs`.
 - **Spec first.** A command must have a row in `spec/inventory/*.toml` before or with its code
   (`cargo xtask parity` fails otherwise). When behaviour turns out different from a row, fix the
   row in the same change.

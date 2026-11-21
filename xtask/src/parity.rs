@@ -11,8 +11,13 @@ use std::path::Path;
 
 use crate::spec::{self, Inventory, KINDS};
 
+/// The window's shell commands: view and window state only (`fontcraft_ui::shell::commands`).
+fn ui_commands() -> impl Iterator<Item = &'static fontcraft_ui::shell::commands::UiCommand> {
+    fontcraft_ui::shell::commands::MODULES.iter().flat_map(|m| m.commands.iter())
+}
+
 pub fn live_ids() -> BTreeSet<&'static str> {
-    fontcraft_engine::command_specs().iter().map(|c| c.id).chain(fontcraft_ui_egui::UI_COMMANDS.iter().map(|c| c.0)).collect()
+    fontcraft_engine::command_specs().iter().map(|c| c.id).chain(ui_commands().map(|c| c.id)).collect()
 }
 
 fn pct(done: usize, total: usize) -> String {
@@ -126,7 +131,7 @@ pub fn run(root: &Path, check: bool) -> Result<(), String> {
         ));
     }
     // A UI command must be `kind = "ui"` in the inventory and an engine command `kind = "engine"`.
-    let ui: BTreeSet<&str> = fontcraft_ui_egui::UI_COMMANDS.iter().map(|c| c.0).collect();
+    let ui: BTreeSet<&str> = ui_commands().map(|c| c.id).collect();
     let wrong: Vec<String> = inv
         .rows
         .iter()
@@ -141,7 +146,7 @@ pub fn run(root: &Path, check: bool) -> Result<(), String> {
     let registered: Vec<(&str, &str, Vec<&str>, &str)> = fontcraft_engine::command_specs()
         .iter()
         .map(|c| (c.id, c.label, c.menu.to_vec(), c.shortcut.unwrap_or("")))
-        .chain(fontcraft_ui_egui::UI_COMMANDS.iter().map(|c| (c.0, c.1, c.2.to_vec(), c.3)))
+        .chain(ui_commands().map(|c| (c.id, c.label, c.menu.to_vec(), c.shortcut.unwrap_or(""))))
         .collect();
     let mut drift = Vec::new();
     for (id, label, menu, shortcut) in &registered {
