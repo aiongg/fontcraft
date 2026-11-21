@@ -485,7 +485,6 @@ guesses = [
   "The controls share the window's status bar with the status text instead of a bar of their own under each tab; settle by looking at where the reference app's bottom bar ends and whether Font View has one.",
   "The icons come from the framework's catalog: pilcrows for left to right and right to left, a vertical type mark for top to bottom, unlink, link and lock for the three kerning modes, an eye for the Preview Area; settle by comparing with the reference app's bottom bar.",
 ]
-notes = "Built in M3.15: zoom out, the zoom field and zoom in, at the right. The features menu, preview, writing direction and kerning mode buttons wait for their commands."
 
 [[behavior]]
 id = "zoom.gestures"
