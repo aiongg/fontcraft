@@ -40,6 +40,7 @@ pub mod smart_component;
 pub mod space_center;
 pub mod stroke;
 pub mod stub;
+pub mod tab_strip;
 pub mod table_viewer;
 pub mod text_preview;
 pub mod transformations;

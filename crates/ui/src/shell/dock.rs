@@ -20,9 +20,8 @@ use crate::{canvas, panels};
 /// [`Panels::body`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PanelId {
-    /// The edit view's canvas: the document area.
+    /// The document area: the tab strip over Font View or the showing Edit View tab's canvas (`shell::tabs`).
     Document,
-    FontView,
     Sidebar,
     /// The glyph part of the Info box: name, width and sidebearings.
     GlyphMetrics,
@@ -67,7 +66,6 @@ impl PanelId {
     /// Every panel, in the Window menu's order.
     pub const ALL: &[PanelId] = &[
         PanelId::Document,
-        PanelId::FontView,
         PanelId::Sidebar,
         PanelId::GlyphMetrics,
         PanelId::InfoBox,
@@ -111,7 +109,6 @@ impl PanelId {
     pub fn id(self) -> &'static str {
         match self {
             PanelId::Document => "document",
-            PanelId::FontView => "fontView",
             PanelId::Sidebar => "sidebar",
             PanelId::GlyphMetrics => "glyphMetrics",
             PanelId::InfoBox => "infoBox",
@@ -161,7 +158,6 @@ impl PanelId {
         let w = words;
         match self {
             PanelId::Document => w.document.clone(),
-            PanelId::FontView => w.font_view.clone(),
             PanelId::Sidebar => w.sidebar.clone(),
             PanelId::GlyphMetrics => w.glyph_metrics.clone(),
             PanelId::InfoBox => w.info_box.clone(),
@@ -306,7 +302,6 @@ impl DockPanels<PanelId> for Panels<'_> {
             PanelId::GlyphMetrics => {
                 panels::glyph_metrics::show(ui, panels::glyph_metrics::Props { model: &self.models.glyph_metrics, sent: self.sent });
             }
-            PanelId::FontView => panels::font_view::show(ui, panels::font_view::Props { model: &self.models.font_view, sent: self.sent }),
             PanelId::FontInfo => panels::font_info::show(ui, panels::font_info::Props { model: &self.models.font_info, sent: self.sent }),
             PanelId::RelatedGlyphs => {
                 panels::related_glyphs::show(ui, panels::related_glyphs::Props { model: &self.models.related_glyphs, sent: self.sent });
@@ -411,21 +406,32 @@ impl DockPanels<PanelId> for Panels<'_> {
         }
         match at {
             GroupAt::Show(rect) => {
-                match self.preview_area {
-                    // The Preview Area sits under the canvas, which takes the room it leaves.
-                    Some(height) => {
-                        let mut area_sent = Vec::new();
-                        let model = &self.models.preview_area;
-                        let (canvas, sent) = (&mut self.canvas, &mut *self.sent);
-                        let area = |ui: &mut Ui, _: &mut BodyCx<'_>| {
-                            let target = crate::shell::preview::Target::Area;
-                            panels::preview::show_area(ui, panels::preview::Props { model, target, sent: &mut area_sent }, height);
-                        };
-                        Stack::new().fill().footer(area).show(ui, |ui, _| canvas::show(ui, canvas, sent));
-                        self.sent.extend(area_sent);
-                    }
-                    None => canvas::show(ui, &mut self.canvas, self.sent),
+                let models = self.models;
+                let font_view = models.tabs.active.is_none();
+                let (mut strip_sent, mut area_sent) = (Vec::new(), Vec::new());
+                let strip = |ui: &mut Ui, _: &mut BodyCx<'_>| {
+                    panels::tab_strip::show(ui, panels::tab_strip::Props { model: &models.tabs, sent: &mut strip_sent });
+                };
+                let mut stack = Stack::new().fill().header(strip);
+                // The Preview Area sits under the canvas, which takes the room it leaves.
+                if let Some(height) = self.preview_area.filter(|_| !font_view) {
+                    let area_out = &mut area_sent;
+                    let area = move |ui: &mut Ui, _: &mut BodyCx<'_>| {
+                        let target = crate::shell::preview::Target::Area;
+                        panels::preview::show_area(ui, panels::preview::Props { model: &models.preview_area, target, sent: &mut *area_out }, height);
+                    };
+                    stack = stack.footer(area);
                 }
+                let (canvas, sent) = (&mut self.canvas, &mut *self.sent);
+                stack.show(ui, |ui, _| {
+                    if font_view {
+                        panels::font_view::show(ui, panels::font_view::Props { model: &models.font_view, sent: &mut *sent });
+                    } else {
+                        canvas::show(ui, &mut *canvas, &mut *sent);
+                    }
+                });
+                self.sent.extend(strip_sent);
+                self.sent.extend(area_sent);
                 Some(rect.height())
             }
             // The protected document group never sits in a flyout, which is what measures.

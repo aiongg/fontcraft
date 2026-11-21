@@ -133,8 +133,7 @@ fn open_glyph(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
     }
     let glyph = glyph.to_string();
     app.session.execute("document.activate", &json!({ "index": index })).map_err(|e| e.to_string())?;
-    app.view.glyph = Some(glyph);
-    Ok(())
+    super::tabs::show_glyph(app, glyph)
 }
 
 /// The panel as `ui.inspect` reports it, under `compareFamily`.

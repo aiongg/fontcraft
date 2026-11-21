@@ -7,7 +7,6 @@ use craft::ui::runtime::commands::CommandRef;
 use serde_json::Value;
 
 use super::commands::{Module, UiCommand};
-use super::dock::{self, PanelId};
 use crate::app::FontCraftApp;
 use crate::app::font_view::{Column, MAX_CELL_SIZE, MAX_SEARCH_BYTES, MIN_CELL_SIZE, SEARCH_FIELDS, Sort, ViewMode};
 
@@ -17,7 +16,13 @@ pub const MODULE: Module = Module { commands: COMMANDS, run };
 const MAX_SELECTION: usize = 100_000;
 
 const COMMANDS: &[UiCommand] = &[
-    UiCommand { id: "fontView.show", label: "Show Font View", menu: &["View"], shortcut: Some("Cmd+Alt+1"), params: "{} show the Font View panel" },
+    UiCommand {
+        id: "fontView.show",
+        label: "Show Font View",
+        menu: &["View"],
+        shortcut: Some("Cmd+Alt+1"),
+        params: "{} show Font View, the first tab",
+    },
     UiCommand {
         id: "fontView.setSelection",
         label: "Set Glyph Selection",
@@ -30,7 +35,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Edit Selected Glyphs",
         menu: &[],
         shortcut: Some("Cmd+Down"),
-        params: "{glyphs?: [names]} open the glyphs (default: the Font View selection) in Edit View",
+        params: "{glyphs?: [names]} open the glyphs (default: the Font View selection) in Edit View: the tab that holds exactly them, else a new tab",
     },
     UiCommand {
         id: "fontView.setViewMode",
@@ -73,24 +78,16 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
     let p = &command.params;
     match command.id.as_str() {
         "fontView.show" => {
-            if !app.font_view_shows() {
-                dock::toggle(&mut app.view.workspace, PanelId::FontView);
-            }
+            super::tabs::show(app, None);
             Ok(())
         }
         "fontView.setSelection" => set_selection(app, p),
         "view.editSelectedGlyphs" => {
-            let glyphs = match strings(p, "glyphs", MAX_SELECTION)? {
+            let glyphs = match strings(p, "glyphs", fontcraft_textlayout::MAX_ITEMS)? {
                 Some(list) => list,
-                None => app.view.font_view.selected.clone(),
+                None => app.view.font_view.selected.iter().take(fontcraft_textlayout::MAX_ITEMS).cloned().collect(),
             };
-            let first = glyphs.first().ok_or("no glyph is selected")?;
-            let font = app.session.font().map_err(|e| e.to_string())?;
-            if font.glyphs.get(first).is_none() {
-                return Err(format!("no glyph named `{first}`"));
-            }
-            app.view.glyph = Some(first.clone());
-            Ok(())
+            super::tabs::edit_glyphs(app, &glyphs)
         }
         "fontView.setViewMode" => {
             let id = p.get("mode").and_then(Value::as_str).ok_or("`mode` (\"grid\" or \"list\") is required")?;
