@@ -1,5 +1,10 @@
 //! The canvas selection and path focus: `edit.selectAll` and its relatives, `selection.*`, `edit.recallSelection`,
-//! `path.focusOnSelectedPath`, `path.clearFocusOnPaths`, and the Primitives tool's two modes (`tool.drawRectangle`, `tool.drawCircle`).
+//! `path.focusOnSelectedPath`, `path.clearFocusOnPaths`, the Primitives tool's two modes (`tool.drawRectangle`,
+//! `tool.drawCircle`), and `tool.select {tool}`, which makes a named pointer tool current.
+//!
+//! `tool.select` is also the Select tool's own command: fired without `tool`, from its toolbar button or key, it makes
+//! the Select tool current. `FontCraftApp::route` runs it as a tool command whenever `tool` names a tool; only a
+//! `tool` that names none reaches [`run`], which refuses it with the list of tools.
 //!
 //! The selection belongs to the edited glyph's layer (decision 0004: the engine never stores it), so these are shell
 //! commands. Each takes the edited glyph as given; `glyph` and `layer`, when given, must name it.
@@ -30,6 +35,13 @@ const fn command(
 const COMMANDS: &[UiCommand] = &[
     command("tool.drawRectangle", "Draw Rectangle", &[], None, "{} make the Primitives tool current in rectangle mode"),
     command("tool.drawCircle", "Draw Circle", &[], None, "{} make the Primitives tool current in ellipse mode"),
+    command(
+        "tool.select",
+        "Select Tool",
+        &[],
+        None,
+        "{tool?: id (tool.list names them)} → {tool, previous}: make the named pointer tool current, as its toolbar button or key does; without `tool`, the Select tool",
+    ),
     command(
         "edit.selectAll",
         "Select All",
@@ -101,6 +113,10 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
     match command.id.as_str() {
         "tool.drawRectangle" | "tool.drawCircle" => {
             let tool = if command.id == "tool.drawCircle" { "ellipse" } else { "rectangle" };
+            app.apply_msg(Msg::View(ViewMsg::SelectTool(tool)))
+        }
+        crate::app::catalog::SELECT_TOOL => {
+            let tool = crate::app::catalog::chosen_tool("select", command)?;
             app.apply_msg(Msg::View(ViewMsg::SelectTool(tool)))
         }
         "path.clearFocusOnPaths" => {

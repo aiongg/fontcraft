@@ -452,9 +452,12 @@ pub fn run_line(app: &mut FontCraftApp, line: &str) -> Result<Value, String> {
     let before = app.session.extensions().log.next_seq();
     let result = match catalog::kind(&id) {
         Kind::Engine => app.session.execute(&id, &params).map_err(|e| e.to_string()),
-        Kind::Tool(tool) => {
-            app.sent.push(Msg::View(ViewMsg::SelectTool(tool)));
-            Ok(Value::Null)
+        Kind::Tool(own) => {
+            let command = craft::ui::runtime::commands::CommandRef::with_params(id.clone(), params.clone());
+            catalog::chosen_tool(own, &command).map(|tool| {
+                app.sent.push(Msg::View(ViewMsg::SelectTool(tool)));
+                Value::Null
+            })
         }
         Kind::Shell if id == CONSOLE_COMMAND && params.get("line").is_some_and(|l| !l.is_null()) => {
             Err("a console line cannot run another console line".to_string())

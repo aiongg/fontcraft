@@ -12,6 +12,7 @@ use craft::menu::{ItemKind, MenuBar, Row};
 use craft::ui::runtime::commands::{AppCatalog, Binding, CommandDef, CommandInput, CommandKind, CommandRef, CommandState, Scope};
 use fontcraft_engine::Session;
 use fontcraft_engine::cmd::CommandSpec;
+use serde_json::Value;
 
 use crate::shell::commands::{self as shell_commands, UiCommand};
 
@@ -20,6 +21,11 @@ pub const MENU_ORDER: &[&str] = &["File", "Edit", "Font", "Glyph", "Path", "Filt
 
 /// The prefix of a tool's command id: `tool.select` makes the Select tool current.
 pub const TOOL_PREFIX: &str = "tool.";
+
+/// The Select tool's command, which also makes current the pointer tool its `tool` parameter names. It is a tool
+/// definition in the catalog and a shell command for the command lists; a `tool` that names no tool reaches the shell
+/// command, which refuses it.
+pub const SELECT_TOOL: &str = "tool.select";
 
 /// What a fired command is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -174,13 +180,30 @@ pub fn kind(id: &str) -> Kind {
     if shell_commands::find(id).is_some() { Kind::Shell } else { Kind::Engine }
 }
 
+/// The tool the tool command `command` makes current: its own tool `own`, or for [`SELECT_TOOL`] the pointer tool its
+/// `tool` parameter names. Err says why `tool` names none.
+pub fn chosen_tool(own: &'static str, command: &CommandRef) -> Result<&'static str, String> {
+    if command.id != SELECT_TOOL {
+        return Ok(own);
+    }
+    match command.params.get("tool") {
+        None | Some(Value::Null) => Ok(own),
+        Some(Value::String(id)) => fontcraft_tools::tool::TOOLS.iter().find(|t| t.id == id.as_str()).map(|t| t.id).ok_or_else(|| {
+            let known: Vec<&str> = fontcraft_tools::tool::TOOLS.iter().map(|t| t.id).collect();
+            format!("no tool `{id}`; the tools are {}", known.join(", "))
+        }),
+        Some(_) => Err("`tool` must be a tool id (tool.list names them)".into()),
+    }
+}
+
 fn definitions() -> Vec<CommandDef> {
     let mut defs = Vec::new();
     for spec in fontcraft_engine::cmd::command_specs() {
         defs.push(engine_def(spec));
     }
     for module in shell_commands::MODULES {
-        for command in module.commands {
+        // A shell command with a tool's id (`tool.select`) is that tool's definition, made below.
+        for command in module.commands.iter().filter(|c| !matches!(kind(c.id), Kind::Tool(_))) {
             defs.push(shell_def(command));
         }
     }

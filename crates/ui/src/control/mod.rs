@@ -115,7 +115,9 @@ enum Input {
 enum Answer {
     /// The reply, now.
     Reply(Result<Value, String>),
-    /// A screenshot of the window, written to the path (already checked against the roots) or returned inline.
+    /// A screenshot of the window, written to the path (already checked against the roots) or returned inline. The
+    /// web build takes no screenshots.
+    #[cfg(not(target_arch = "wasm32"))]
     Screenshot(Option<String>),
 }
 
@@ -129,6 +131,7 @@ pub fn handle(app: &mut FontCraftApp, request: &Value) -> Value {
     let params = request.get("params").cloned().unwrap_or(Value::Null);
     let answered = match answer(app, method, &params) {
         Answer::Reply(result) => reply(result),
+        #[cfg(not(target_arch = "wasm32"))]
         Answer::Screenshot(_) => reply(Err("ui.screenshot: this app has no window to capture (ui.render draws glyphs without one)".into())),
     };
     with_id(answered, &id)

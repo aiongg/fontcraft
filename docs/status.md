@@ -2,18 +2,30 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-21: UI.49 and UI.50 merged, built and pushed (X.integ113 to X.integ117): the egui window is gone and `crates/ui` with `apps/fontcraft` is the only window. Earlier notes follow._
+_Updated: 2026-11-21: UI.51 written on `w-UI.51`, not yet built: PDF pages in placed images, `palette.toggleSection`, `tool.select {tool}` and `tool.list` in the window. UI.49 and UI.50 merged, built and pushed (X.integ113 to X.integ117): the egui window is gone and `crates/ui` with `apps/fontcraft` is the only window. Earlier notes follow._
 
 ## State of the tree
 
+- **Where UI.51 stands.** Written on `w-UI.51` (UI.51a to UI.51d); the writer ran no build or test, so the branch
+  needs one build and the gate before it merges. It has:
+  - Placed PDF images drawn from their first page in Edit View and Font View cells (`canvas/images/files.rs`):
+    `fontcraft-io-pdf` is a dependency of `crates/ui`; the page is drawn on the host's jobs once per file and read
+    revision, at 4 pixels per point and at most 4,096 pixels on a side, and a file io-pdf refuses shows the
+    missing-image marker.
+  - `palette.toggleSection` (`shell/window.rs`): minimizes or expands the dock group of a Palette panel.
+  - `tool.select {tool}` (`shell/selection.rs`) and `tool.list` (`shell/getters.rs`). `tool.select` is also the Select
+    tool's command: the catalog keeps the tool's definition, `app::catalog::chosen_tool` picks the named tool, and a
+    name that is no tool reaches the shell command, which refuses it. Every tool command run through
+    `engine.execute` replies `{tool, previous}`.
+  - 1000 of 1056 commands live once parity is regenerated (`docs/parity.md` is generated; the integrator runs it).
+  - The `[patch.crates-io]` egui entries cargo reports unused stay: they mirror `craft::egui_fork::PACKAGES`.
 - **Where UI.49 and UI.50 stand.** Merged on `master` and pushed; the gate (`cargo xtask ci`) is green with 4,808
   tests (the removed window's tests went with it). The desktop app is the package and binary `fontcraft` in
   `apps/fontcraft`, on egui and eframe 0.37; it starts, answers `engine.execute` on the control channel, and keeps
   running when the file named on the command line does not exist (checked headless under Xvfb). Parity reads the
   window's shell commands; keys the window takes in one place only (Escape in the edit view, the Instructor's keys,
   the Kerning list's Up and Down, Cmd+1, Cmd+Alt+2) are listed in `shell::commands::SCOPED_KEYS`. 997 of 1056
-  commands are live; `tool.select`, `tool.list` and `palette.toggleSection`, which the egui window had, are not
-  ported yet.
+  commands were live at that merge.
 - **Where the seventeenth and eighteenth batches stand.** Every branch is merged on `master` and pushed; the gate (`cargo xtask ci`) is green
   on `f99ee43` with 5,382 tests. The writers ran no builds; one integrator built several branches at once (X.integ81
   to X.integ97). The new window (`crates/ui`) gained:
@@ -575,15 +587,10 @@ linked file is checked against it, and a linked file outside the read root reads
      text field still waits for craft in the browser build. The parity audit gaps are closed and merged (UI.46 to
      UI.48): tabs per document, a window and each new document open on Font View, tabs from the document's display
      strings and written on save, the Palette's sidebar button and cell-sized thumbnails in Font View among them.
-     The startup wiring and the clipboard's PDF of the old app are ported on `w-UI.50`, not yet built: the system
-     clock, the snippets and extension folders with their polling and safe mode (`crates/ui/src/app/startup.rs`), a
-     file or `fontcraft://show/` URL on the command line, the control surface entry, and a drawing app's PDF pasted
-     on the canvas (`crates/ui/src/app/clipboard.rs`, read by `apps/fontcraft/src/clipboard/`). Left: PDF pages
-     in placed images (needs a PDF renderer dependency), and `palette.toggleSection`, `tool.list` and
-     `tool.select {tool}`, which the egui window had as shell commands. The smaller follow-ups (Shape Order open-path thumbnails, svg filters
-     and PDF images in colour layers) are listed there too.
-   - Build and gate UI.49 (`w-UI.49`): the egui window removed, `cargo xtask parity` on the window's shell
-     commands, `docs/parity.md` regenerated.
+     The startup wiring and the clipboard's PDF of the old app are ported (UI.50). PDF pages in placed images,
+     `palette.toggleSection`, `tool.list` and `tool.select {tool}` are written on `w-UI.51`, not yet built: build it,
+     run the gate, bless the command ids and regenerate the parity, guesses and observe lists. What is left are the
+     smaller follow-ups (Shape Order open-path thumbnails, svg filters and PDF images in colour layers).
    - The engine split from ES.4.
    - The oracle measures already listed and the depth writers left in waves 2 to 11, with the builder queue from
      M8.25.
@@ -1633,3 +1640,12 @@ Append one terse entry per session: what landed, numbers, what is still open.
     a change in craft.
   Gate: green on `f99ee43`, 5,382 tests. Open: the ports left in "Where to start" item 2, then retiring the egui
   window, the engine split from ES.4 and the oracle measures.
+- **2026-11-21, UI.51.** Writer without builds on `w-UI.51`. Landed (not yet built): placed PDF images drawn from
+  their first page (UI.51a); `palette.toggleSection`, `tool.select {tool}` and `tool.list` (UI.51b); ROADMAP's M4 and
+  M5 counts, the web build's unused screenshot answer (UI.51c). Decisions:
+  - A PDF is drawn once per file at 4 pixels per point, capped at 4,096 pixels on a side; zooming in does not draw it
+    again at a higher resolution.
+  - `tool.select` without `tool` is the Select tool's command; a `tool` naming no tool is refused (a guess).
+  - A Palette section collapses with the panels tabbed in its dock group (a guess).
+  - The unused `[patch.crates-io]` egui entries stay, mirroring `craft::egui_fork::PACKAGES`.
+  Open: build and gate `w-UI.51`; the smaller follow-ups in "Where to start" item 2.

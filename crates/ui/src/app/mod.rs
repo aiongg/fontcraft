@@ -466,6 +466,11 @@ impl FontCraftApp {
             }
             Msg::Preview(step) => crate::canvas::tools::apply::preview(self, step).map(|()| Value::Null),
             Msg::Tool(input) => crate::canvas::tools::apply::input(self, input).pop().map_or(Ok(Value::Null), Err),
+            Msg::View(ViewMsg::SelectTool(tool)) => {
+                let previous = self.view.tool;
+                self.apply_view(ViewMsg::SelectTool(tool))?;
+                Ok(json!({ "tool": self.view.tool, "previous": previous }))
+            }
             Msg::View(view) => self.apply_view(view).map(|()| Value::Null),
         }
     }
@@ -524,14 +529,14 @@ impl FontCraftApp {
         Ok(())
     }
 
-    /// The message a fired command posts. `tool.select` with a `tool` parameter makes that tool current.
+    /// The message a fired command posts. `tool.select` with a `tool` parameter makes that tool current; one naming no
+    /// tool goes to the shell command, which refuses it.
     pub fn route(command: CommandRef) -> Msg {
         match catalog::kind(&command.id) {
-            Kind::Tool(tool) => {
-                let named = command.params.get("tool").and_then(serde_json::Value::as_str);
-                let tool = named.and_then(|id| fontcraft_tools::TOOLS.iter().find(|t| t.id == id)).map_or(tool, |t| t.id);
-                Msg::View(ViewMsg::SelectTool(tool))
-            }
+            Kind::Tool(own) => match catalog::chosen_tool(own, &command) {
+                Ok(tool) => Msg::View(ViewMsg::SelectTool(tool)),
+                Err(_) => Msg::Shell(command),
+            },
             Kind::Shell => Msg::Shell(command),
             Kind::Engine => Msg::Run(command),
         }

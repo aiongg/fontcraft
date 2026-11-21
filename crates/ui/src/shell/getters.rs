@@ -1,5 +1,5 @@
 //! Read-only getters for agents (`editView.getText`, `editView.getFeatures`, `fontView.getState`,
-//! `transform.getSettings`, `view.getDisplayOptions`) and the `ui.inspect` keys that report the same state (`display`,
+//! `transform.getSettings`, `view.getDisplayOptions`, `tool.list`) and the `ui.inspect` keys that report the same state (`display`,
 //! `switches`, `selectedGlyphs`, `editing`, `interaction`, `dialog`, `transform`, `fontView`).
 //!
 //! A getter is a shell command that changes nothing and returns its reply: `FontCraftApp::apply` answers it through
@@ -55,6 +55,13 @@ const COMMANDS: &[UiCommand] = &[
         shortcut: None,
         params: "{} every display toggle of the View menu, the showing tab, the zoom, the canvas centre, whether the Palette shows, the writing direction and the active preview features",
     },
+    UiCommand {
+        id: "tool.list",
+        label: "List Tools",
+        menu: &[],
+        shortcut: None,
+        params: "{} the pointer tools → {active: id, tools: [{id, label, shortcut, group}]}; tool.select makes one current",
+    },
 ];
 
 const GETTERS: &[(&str, Getter)] = &[
@@ -63,6 +70,7 @@ const GETTERS: &[(&str, Getter)] = &[
     ("fontView.getState", font_view_state),
     ("transform.getSettings", transform_settings),
     ("view.getDisplayOptions", display_options),
+    ("tool.list", tool_list),
 ];
 
 /// The getter of the shell command `id`, if it is one.
@@ -73,6 +81,10 @@ pub fn find(id: &str) -> Option<Getter> {
 /// A getter fired from a key or the command palette shows nothing: its reply is for agents.
 fn run(_: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
     find(&command.id).map(|_| ()).ok_or_else(|| format!("no getter `{}`", command.id))
+}
+
+fn tool_list(app: &FontCraftApp) -> Value {
+    app.tools.toolbox.list()
 }
 
 fn features(app: &FontCraftApp) -> Value {

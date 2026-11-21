@@ -43,8 +43,12 @@ fn commands(app: &mut FontCraftApp, _: &Value) -> Result<Value, String> {
             ),
         );
     }
-    list.extend(fontcraft_tools::tool::TOOLS.iter().map(|tool| {
-        json!({"id": format!("{TOOL_PREFIX}{}", tool.id), "label": tool.label, "menu": [], "shortcut": null, "params": "{} make the tool current", "ui": true, "enabled": true})
+    // A tool whose command is also a shell command (`tool.select`) is listed once, with the shell command's params.
+    list.extend(fontcraft_tools::tool::TOOLS.iter().filter_map(|tool| {
+        let id = format!("{TOOL_PREFIX}{}", tool.id);
+        crate::shell::commands::find(&id).is_none().then(|| {
+            json!({"id": id, "label": tool.label, "menu": [], "shortcut": null, "params": "{} make the tool current", "ui": true, "enabled": true})
+        })
     }));
     Ok(json!({ "commands": list }))
 }
