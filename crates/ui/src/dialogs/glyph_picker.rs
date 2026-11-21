@@ -513,7 +513,7 @@ mod tests {
     /// The picker searches as the query changes and a pick posts the purpose's command with the highlighted glyph.
     #[test]
     fn a_pick_adds_the_highlighted_component() {
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         for name in ["acutecomb", "Aacute"] {
             app.run_now(Msg::run("glyph.newGlyph", json!({ "name": name })), false).expect("a new glyph");
         }

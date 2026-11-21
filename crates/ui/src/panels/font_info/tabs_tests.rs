@@ -328,7 +328,7 @@ fn exports_tab_selects_and_edits_through_its_commands() {
 /// Exports tab the selected instances' fields.
 #[test]
 fn the_tabs_project_the_selected_entries() {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     app.sent.push(Msg::run("font.features.addFeature", json!({ "tag": "liga", "automatic": false })));
     app.sent.push(Msg::run("font.features.addFeature", json!({ "tag": "ss01", "automatic": false })));
     app.sent.push(shell("font.info", json!({ "tab": "features" })));
@@ -359,7 +359,7 @@ fn the_tabs_project_the_selected_entries() {
 /// on the Font tab, the weight class of the selected export on the Exports tab.
 #[test]
 fn font_info_warnings_project_by_field() {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     app.sent.push(Msg::run("font.info.set", json!({ "scope": "font", "values": { "familyName": "Sämple" } })));
     app.sent.push(Msg::run("font.instance.add", json!({})));
     app.sent.push(Msg::run("font.instance.setWeightClass", json!({ "instances": [0], "weightClass": 450 })));
@@ -402,7 +402,7 @@ fn the_sidebar_context_menu_disables_copies_and_pastes() {
 #[test]
 fn copied_feature_entries_paste_back() {
     use crate::app::clipboard::{self, PasteKind};
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     app.sent.push(Msg::run("font.features.addFeature", json!({ "tag": "liga", "automatic": false })));
     app.sent.push(Msg::run("font.features.setCode", json!({ "kind": "feature", "name": "liga", "code": "sub f i by f_i;" })));
     app.sent.push(Msg::run("font.features.copyEntries", json!({ "entries": [{ "kind": "feature", "name": "liga", "index": 0 }] })));
@@ -421,7 +421,7 @@ fn copied_feature_entries_paste_back() {
 /// `font.features.insertSnippet`'s result until the code editor reports it placed.
 #[test]
 fn an_inserted_snippet_leaves_the_caret_after_it() {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     app.sent.push(Msg::run("font.features.addFeature", json!({ "tag": "liga", "automatic": false })));
     app.sent.push(Msg::run("font.features.setCode", json!({ "kind": "feature", "name": "liga", "code": "sub a by b;" })));
     app.drain();

@@ -1147,7 +1147,7 @@ mod tests {
         let answers = [Picked::Paths(vec![first.clone()]), Picked::Paths(vec![second.clone()])];
         let chooser = Arc::new(ScriptedFiles::answering(answers));
         let host = Host::builder(APP).files(chooser.clone()).build();
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(host));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(host));
         for id in ["tableViewer.openFont", "tableViewer.compareWithFile"] {
             app.sent.push(Msg::Shell(CommandRef::new(id)));
             // The first pass asks; the next runs the command with the file picked.
@@ -1172,7 +1172,7 @@ mod tests {
     fn table_viewer_shows_what_tables_show_and_font_diff_read_and_refused_changes_change_nothing() {
         let (first, second) = two_fonts("compare");
         let (a, b) = (first.to_string_lossy().into_owned(), second.to_string_lossy().into_owned());
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         let out = viewer(&mut app, json!({"font": a})).unwrap();
         assert_eq!(out["open"], true, "the command shows the panel");
         let listed = app.session.query("tables.show", &json!({"font": a, "depth": 0})).unwrap();

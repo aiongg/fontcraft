@@ -18,7 +18,7 @@ use crate::app::models::canvas::{Placeholder, State};
 use crate::app::{APP, FontCraftApp, Msg, ViewMsg};
 
 fn app() -> FontCraftApp {
-    FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()))
+    FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()))
 }
 
 fn run(app: &mut FontCraftApp, id: &str, params: Value) {

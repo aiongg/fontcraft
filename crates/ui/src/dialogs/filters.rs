@@ -43,7 +43,7 @@ mod tests {
     fn glyph_as_image_asks_then_writes_the_pictures() {
         let dir = std::env::temp_dir().join(format!("fontcraft-ui-glyph-as-image-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         app.session.execute("glyph.newGlyph", &json!({"name": "A"})).ok();
         app.session.execute("path.addRectangle", &json!({"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200})).unwrap();
         app.sent.push(Msg::View(ViewMsg::SelectGlyph("A".into())));

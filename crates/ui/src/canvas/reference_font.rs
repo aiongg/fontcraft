@@ -170,7 +170,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("fontcraft-ui-reference-canvas-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = reference_file(&dir);
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         app.sent.push(Msg::View(ViewMsg::SelectGlyph("A".into())));
         app.drain();
         assert_eq!(width(&app), None, "no reference font yet");

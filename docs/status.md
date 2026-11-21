@@ -565,12 +565,13 @@ linked file is checked against it, and a linked file outside the read root reads
    work, and X.pdf3's pasteboard PDF; on Windows (not built yet), X.pdf3's clipboard PDF.
 2. **Then, in this order** (ROADMAP.md › What to build next, items 2 to 5):
    - The new window's ports left (item 2). The framework gaps in `crates/craft-ext` are built; paste outside a
-     text field still waits for craft in the browser build. Then the parity audit gaps, in ROADMAP's order: what
-     the Edit View tabs left (tabs per document, tabs from the document's display strings and written on save, a
-     removed glyph leaving its tabs); what the Edit View controls left (the Palette's sidebar button); what the
-     placed images left (PDF pages drawn, cell-sized thumbnails in Font View); what the Axis Mappings dialog left
-     (clicks and drags on the mapping graph, arrow keys on the selected point outside the fields); and Ctrl or Alt
-     with Up and Down in Pairs & Phrases stepping a group member. Packages 9 and 10 (the small commands, the
+     text field still waits for craft in the browser build. The parity audit gaps are closed on `w-UI.48`, not yet
+     built: a window and each new document open on Font View, tabs from the document's display strings and written
+     on save, renamed and removed glyphs followed into the tabs, the Palette's sidebar button and cell-sized
+     thumbnails in Font View. Left: PDF pages in placed images (needs a PDF renderer dependency); with that, the new
+     window has the old window's features and the next step is retiring the old window. Tabs per document, the Axis
+     Mappings graph and arrow keys, and Ctrl or Alt with Up and Down in Pairs & Phrases are written on `w-UI.47`, not
+     yet built. Packages 9 and 10 (the small commands, the
      `ui.inspect` keys and the getters) are written on `w-UI.46`, not yet built. The smaller follow-ups
      (Shape Order open-path thumbnails, svg filters and PDF images in colour layers) are listed there too.
    - Retire the egui window: remove `crates/ui-egui` and `apps/fontcraft`. `cargo xtask parity` must then read the

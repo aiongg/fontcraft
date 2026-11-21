@@ -26,7 +26,7 @@ fn open(app: &mut FontCraftApp, dialog: &str, params: Value) -> Value {
 
 /// Glyphs A, B and C, with a 200-unit square in A, A shown in the glyph panels.
 fn square_app() -> FontCraftApp {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     for name in ["A", "B", "C"] {
         app.session.execute("glyph.newGlyph", &json!({ "name": name })).ok();
     }

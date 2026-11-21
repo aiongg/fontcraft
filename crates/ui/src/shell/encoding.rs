@@ -111,7 +111,7 @@ mod tests {
     /// replaces that filter; a built-in code page works by name; a bad name changes nothing.
     #[test]
     fn an_encoding_file_becomes_a_selected_list_filter() {
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         shell(&mut app, "fontView.show", json!({}));
         let dir = std::env::temp_dir().join(format!("fontcraft-ui-encoding-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();

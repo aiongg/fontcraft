@@ -226,7 +226,7 @@ mod tests {
         other.glyph_mut("A").unwrap().layers[0].width = 640.0;
         session.add_document(other, None).unwrap();
         session.execute("document.activate", &json!({"index": 0})).unwrap();
-        let mut app = FontCraftApp::new(session, Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(session, Arc::new(Host::builder(APP).build()));
 
         app.run_now(shell("font.compareInTable", json!({"fonts": [0, 1]})), false).unwrap();
         assert!(crate::shell::compare_in_list::shows(&app));

@@ -158,7 +158,7 @@ mod tests {
         master.params.set(DISTANCE_PARAMETER, Plist::Dict(d));
         let mut session = Session::new();
         session.add_document(font, None).unwrap();
-        let mut app = FontCraftApp::new(session, Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(session, Arc::new(Host::builder(APP).build()));
         app.sent.push(Msg::View(ViewMsg::SelectGlyph("A".into())));
         app.drain();
         app.run_now(Msg::run("path.addRectangle", json!({"glyph": "A", "x": 0, "y": 0, "width": 100, "height": 100})), false).unwrap();

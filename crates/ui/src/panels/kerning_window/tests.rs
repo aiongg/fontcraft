@@ -49,7 +49,7 @@ fn kerned_session(value: f64) -> Session {
 }
 
 fn app_over(session: Session) -> FontCraftApp {
-    FontCraftApp::new(session, Arc::new(Host::builder(APP).build()))
+    FontCraftApp::with_edit_tab(session, Arc::new(Host::builder(APP).build()))
 }
 
 fn ran(app: &mut FontCraftApp, msg: Msg) {

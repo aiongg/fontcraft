@@ -26,7 +26,7 @@ fn fails(app: &mut FontCraftApp, method: &str, params: Value) -> String {
 
 /// Glyph A with a 200-unit square, shown in the glyph panels.
 fn square_app() -> FontCraftApp {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     app.session.execute("glyph.newGlyph", &json!({"name": "A"})).ok();
     app.session.execute("path.addRectangle", &json!({"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200})).unwrap();
     app.sent.push(Msg::View(ViewMsg::SelectGlyph("A".into())));
@@ -161,7 +161,7 @@ fn every_filter_with_parameters_has_a_dialog_and_bad_requests_are_errors() {
     }
     assert_eq!(super::find("dialog.filterRoundCorners").map(|d| d.command), Some("filter.roundCorners"));
 
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     for (method, params) in [
         ("ui.dialog.set", json!({"field": "radius", "value": 1})),
         ("ui.dialog.confirm", json!({})),

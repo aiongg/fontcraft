@@ -198,7 +198,7 @@ mod tests {
     use crate::app::{APP, FontCraftApp, Msg, ViewMsg};
 
     fn app() -> FontCraftApp {
-        FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()))
+        FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()))
     }
 
     fn find<'a>(nodes: &'a [Node], id: &str) -> Option<&'a Item> {

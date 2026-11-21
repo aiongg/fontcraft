@@ -27,7 +27,7 @@ const RECT: Rect = Rect { min: Pos2::ZERO, max: Pos2 { x: 1280.0, y: 800.0 } };
 
 /// Glyph A shown, the canvas at 0.25 points per unit.
 fn text_app() -> FontCraftApp {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     app.sent.push(Msg::View(ViewMsg::SelectGlyph("A".into())));
     app.drain();
     app.view.canvas = CanvasView::new(RECT, KPoint::new(300.0, 400.0), 0.25);

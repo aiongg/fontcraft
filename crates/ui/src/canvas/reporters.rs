@@ -340,7 +340,7 @@ mod tests {
     }
 
     fn editing_a() -> FontCraftApp {
-        let mut app = FontCraftApp::new(Session::new(), Arc::new(Host::builder(crate::app::APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::new(), Arc::new(Host::builder(crate::app::APP).build()));
         app.run_now(Msg::run("file.new", json!({})), false).unwrap();
         app.run_now(Msg::run("glyph.newGlyph", json!({"name": "A"})), false).ok();
         app.run_now(Msg::View(crate::app::ViewMsg::SelectGlyph("A".into())), false).unwrap();

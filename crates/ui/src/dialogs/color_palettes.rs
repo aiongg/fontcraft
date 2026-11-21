@@ -338,7 +338,7 @@ mod tests {
     /// apply is refused.
     #[test]
     fn the_editor_stages_edits_and_runs_them_on_ok() {
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         for c in ["#FF0000", "#00FF00"] {
             app.run_now(Msg::run("colorPalette.addColor", json!({"color": c})), false).unwrap();
         }

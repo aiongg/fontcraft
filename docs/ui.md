@@ -182,8 +182,15 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   the two, so projections, the canvas and the tools read the live fields and never look at tabs. Code that opens
   glyphs for editing calls `tabs::edit_glyphs` (the tab holding exactly those glyphs, else a new one),
   `tabs::open_glyphs` (always a new tab) or `tabs::show_glyph` (the live tab); `app.font_view_shows()` says whether
-  Font View is the showing tab. A window opens with one Edit View tab. The tabs belong to the window, not to the
-  active document. Cmd+Alt+2 to Cmd+Alt+9 show tabs 2 to 9 (numbered shortcuts, below).
+  Font View is the showing tab. Each open document has its own tab set (`tabs::follow_document`, run when a
+  command or the drain may have switched the active document): the live tab's state goes back into its tab, the set is
+  put away for its document, and the new document's set comes back with its live tab made live. A window, and each
+  document opened into it, opens on Font View with no Edit View tab; a closed document's tabs are dropped. Tests of
+  the edit view start from `FontCraftApp::with_edit_tab` (and `TestApp`, which uses it): the app with one Edit View tab
+  showing the font's first glyph. `shell/tabs/upkeep.rs` keeps the tabs in step with the document: File › Open (and a
+  URL that opens a file) adds a tab per display string behind Font View, Save and Save As write the open tabs into
+  the display strings first, and after each engine command renamed glyphs keep their places in the tabs and removed
+  glyphs leave them (a tab left without glyphs closes and is forgotten). Cmd+Alt+2 to Cmd+Alt+9 show tabs 2 to 9 (numbered shortcuts, below).
 - **Numbered shortcuts.** A shortcut that stands for a numbered series runs one command with the number as a
   parameter: Cmd+1 to Cmd+9 run `view.selectMaster {master}`, Cmd+Alt+2 to Cmd+Alt+9 run `view.showTab {index}`.
   `shell/numbered_keys.rs` lists them; `app::catalog` gives each its own catalog definition through
@@ -195,7 +202,8 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
 - **Window menu and Palette.** Window › Panels has a check row per dock panel (`shell/window.rs`, `refresh_menu`,
   rebuilt when a panel opens or closes), so a closed panel can come back; craft's `WindowMenuRows` draws into a menu
   body of its own, which the data-driven menu bar has no place for. Window › Palette (`window.palette`, Cmd+Alt+P)
-  hides or shows every panel docked at the end edge. A new panel needs no menu line: `PanelId::ALL` lists it.
+  hides or shows every panel docked at the end edge, as does the sidebar button at the options bar's end (the window's
+  top right, `shell/bars.rs`), lit while the Palette shows. A new panel needs no menu line: `PanelId::ALL` lists it.
 - **Menu row state.** `app/menu_states.rs` reads, after each drain, what the live state says about menu bar rows
   beyond the engine's `enabled`: every on/off switch in `SWITCHES` gets a check mark from its state (the display
   flags, the overlay switches, the panel it shows). `Catalog::set_checks` rebuilds the bar only when a mark changed.
@@ -334,6 +342,8 @@ only; each module's doc names the craft file the piece is meant for.
 | `craft_ext::ui::primitives::ShapeIcon` (`spec`) | named icons `union`, `intersect`, `slant_left`, `slant_right`, `slant_down`, `slant_up` in craft's icon set | Palette › Transformations: the slant buttons and the Union and Intersect buttons (Subtract takes craft's `squares_subtract`) |
 | `craft_ext::ui::runtime::commands::{param_def, fired_command}` | an `AppCatalog` indexed by the binding key (`CommandRef::key`: id and parameters), so one id takes a definition and a default binding per parameter set | the numbered shortcuts: Cmd+1 to Cmd+9 select a master, Cmd+Alt+2 to Cmd+Alt+9 show a tab |
 | `craft_ext::ui::text::{StepKeys, ArrowSteps}` (`arrow_steps`, `stepped`) | a `steps` prop on `TextField` that keeps the arrows for a stepped value, as `NumberField` does | the metric fields that take a number or a key (`panels::widgets::key_or_number`), Font Info's minor version field |
+| `craft_ext::ui::runtime::keys` (`region_claims`, `focused_claims`) | `claims` on a focus scope (held while focus is inside it and the focused stop neither keeps nor types the chord) and a per-instance `KeyUse::claims` | the Axis Mappings dialog: the arrows move the selected point while no field or list has focus; Pairs & Phrases: Ctrl or Alt with Up and Down step a group member while the list has focus |
+| `craft_ext::ui::display::{PointerOnPicture, PicturePointer}` (`pointer`) | a `pointer` prop on `Picture` that senses presses and reports them as picture events | the Axis Mappings graph: a click on a point selects it, a click on the line adds a point, a drag moves a point |
 
 The stand-ins paint over what craft drew, so they cover the plain forms only (a row without icon, toggles or
 indent; a menu row's mark column), and a screen reader hears a mixed menu row as unchecked. A danger row shows the

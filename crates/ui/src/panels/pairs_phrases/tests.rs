@@ -22,7 +22,7 @@ fn shell(id: &str, params: Value) -> Msg {
 
 /// T and V in the right group T, e and o in the left group o; @T @o −80, A V −100, L T −60; the panel open.
 fn kern_app() -> FontCraftApp {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     app.sent.push(Msg::run("kerning.setRightGroup", json!({"glyphs": ["T", "V"], "group": "T"})));
     app.sent.push(Msg::run("kerning.setLeftGroup", json!({"glyphs": ["e", "o"], "group": "o"})));
     for (left, right, value) in [("@T", "@o", -80), ("A", "V", -100), ("L", "T", -60)] {
@@ -89,7 +89,7 @@ fn kerning_load_pair_list_and_step_pair_list_walk_the_rows() {
 
 #[test]
 fn kerning_auto_kern_pair_list_proposes_for_review_then_applies() {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     // n has 60 units each side; i 20: n i holds 80 of white against n n's 120.
     for (glyph, nodes, width) in [
         ("n", json!([{"x": 60, "y": 0}, {"x": 440, "y": 0}, {"x": 440, "y": 500}, {"x": 60, "y": 500}]), 500),
@@ -157,4 +157,38 @@ fn pairs_panel_clicks_step_select_and_set_the_mode() {
         ]
     );
     assert_eq!(app.borrow().view.kerning_review.pairs.selected, [0, 1]);
+}
+
+/// With the list focused, Ctrl and Alt with the arrows step the pair's glyph through its group, left and right side.
+#[test]
+fn pairs_panel_ctrl_and_alt_arrows_step_a_group_member() {
+    let mut app = kern_app();
+    run(&mut app, "kerning.loadPairList", json!({"text": "A V\nL T\n", "list": "pairs"})).unwrap();
+    run(&mut app, "kerning.setPairListMode", json!({"mode": "pairs"})).unwrap();
+    let model = Tracked::new((*app.models.pairs_phrases).clone());
+    let posted = Rc::new(RefCell::new(Vec::new()));
+    let seen = Rc::clone(&posted);
+    let mut fixture = Fixture::new(move |ui| {
+        let mut sent = Vec::new();
+        show(ui, Props { model: &model, sent: &mut sent });
+        seen.borrow_mut().extend(sent);
+    });
+    fixture.settle();
+    let first = fixture.by_label("A V").expect("the first row");
+    fixture.click(&first).settle();
+    fixture.key(egui::Key::ArrowDown, Modifiers::ALT).settle();
+    fixture.key(egui::Key::ArrowUp, Modifiers::CTRL).settle();
+    let posted = posted.borrow();
+    let steps: Vec<&Msg> = posted.iter().filter(|m| matches!(m, Msg::Shell(c) if c.id == "kerning.stepGroupMember")).collect();
+    assert_eq!(
+        steps,
+        [
+            &shell("kerning.stepGroupMember", json!({"side": "right", "direction": "next"})),
+            &shell("kerning.stepGroupMember", json!({"side": "left", "direction": "previous"})),
+        ]
+    );
+    assert!(
+        !posted.iter().any(|m| *m == shell("kerning.stepPairList", json!({"index": 1, "list": "pairs"}))),
+        "the claimed arrows do not move the list"
+    );
 }

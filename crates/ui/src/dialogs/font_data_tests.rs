@@ -23,7 +23,7 @@ fn field(shown: &Value, id: &str) -> Value {
 }
 
 fn math_app() -> FontCraftApp {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     for name in ["integral", "integral.size1"] {
         app.session.execute("glyph.newGlyph", &json!({"name": name, "unicodes": [], "width": 500})).unwrap();
         app.session.execute("path.addRectangle", &json!({"glyph": name, "x": 50, "y": 0, "width": 300, "height": 900})).unwrap();

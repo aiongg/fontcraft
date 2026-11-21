@@ -493,7 +493,7 @@ mod tests {
     use crate::app::{APP, FontCraftApp, Msg};
 
     fn app_with_two_edited_fonts() -> FontCraftApp {
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         app.run_now(Msg::run("glyph.newGlyph", json!({"name": "a.one"})), false).unwrap();
         app.run_now(Msg::run("file.new", json!({})), false).unwrap();
         app.run_now(Msg::run("glyph.newGlyph", json!({"name": "a.two"})), false).unwrap();

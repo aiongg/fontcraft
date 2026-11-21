@@ -117,7 +117,7 @@ mod tests {
     /// Generate Dark Palette from its Font menu row adds a palette and says so in the status line.
     #[test]
     fn generate_dark_palette_reports_the_new_palette() {
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         app.session.execute("colorPalette.addColor", &json!({"color": "#FF0000"})).unwrap();
         app.sent.push(Msg::run("color.generateDarkPalette", json!({})));
         app.drain();

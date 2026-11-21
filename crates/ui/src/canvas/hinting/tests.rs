@@ -22,7 +22,7 @@ use crate::canvas::tools::ToolInput;
 use crate::canvas::tools::apply::camera;
 
 fn new_app() -> FontCraftApp {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     app.sent.push(Msg::View(ViewMsg::SelectGlyph("A".into())));
     app.drain();
     app

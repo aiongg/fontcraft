@@ -496,7 +496,7 @@ mod tests {
     /// and removal the engine commands make.
     #[test]
     fn extension_manager_lists_filters_and_follows_the_switch_and_removal() {
-        let mut app = FontCraftApp::new(Session::new(), Arc::new(Host::builder(crate::app::APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::new(), Arc::new(Host::builder(crate::app::APP).build()));
         for (id, kind) in [("box", "reporter"), ("square", "filter")] {
             let manifest = format!(r#"{{"id":"{id}","name":"{id} module","version":"2","kind":"{kind}","description":"draws a {id}"}}"#);
             let output = if kind == "filter" { json!({"shapes": []}) } else { json!({}) };
@@ -541,7 +541,7 @@ mod tests {
         use fontcraft_engine::extension_index::Index;
         use fontcraft_engine::extensions::LoadedIndex;
 
-        let mut app = FontCraftApp::new(Session::new(), Arc::new(Host::builder(crate::app::APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::new(), Arc::new(Host::builder(crate::app::APP).build()));
         let bytes = serde_json::to_vec(&json!({"format": "fontcraft.extensions", "version": 1, "entries": [{
             "id": "tighten", "kind": "macro", "version": "1", "titles": {"en": "Tighten"}, "descriptions": {}, "vendor": "Test Foundry", "url": "tighten.fcmacro", "size": 10,
             "sha256": "0".repeat(64), "homepage": "https://example.com/home", "funding": "https://example.com/give money",

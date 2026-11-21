@@ -295,7 +295,7 @@ mod live_audit_tests {
     /// View › Audit › Live Audit fires `audit.toggleLiveAudit`, which switches live audit on and off.
     #[test]
     fn the_view_menu_has_the_live_audit_switch() {
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         let view = app.catalog.menu.menus.iter().find(|m| m.title == "View").expect("the View menu");
         let audit = view
             .children

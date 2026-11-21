@@ -36,7 +36,7 @@ fn value(shown: &Value, key: &str) -> Value {
 
 /// `glyph` with the paths `paths` (each a list of corner points), shown in the glyph panels.
 fn drawn(glyph: &str, paths: &[&[(i32, i32)]]) -> FontCraftApp {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     app.session.execute("glyph.newGlyph", &json!({"name": glyph})).ok();
     for nodes in paths {
         let nodes: Vec<Value> = nodes.iter().map(|(x, y)| json!({"x": x, "y": y})).collect();
@@ -152,7 +152,7 @@ fn each_stem_filter_dialog_gives_its_commands_font() {
 }
 
 fn dotted() -> FontCraftApp {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     let square = |x: i32, y: i32| -> Vec<Value> {
         [(x, y), (x + 40, y), (x + 40, y + 40), (x, y + 40)].iter().map(|(x, y)| json!({"x": x, "y": y})).collect()
     };

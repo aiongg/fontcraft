@@ -23,7 +23,7 @@ fn audited_session() -> Session {
 }
 
 fn audited_app() -> FontCraftApp {
-    FontCraftApp::new(audited_session(), Arc::new(Host::builder(APP).build()))
+    FontCraftApp::with_edit_tab(audited_session(), Arc::new(Host::builder(APP).build()))
 }
 
 fn call(app: &mut FontCraftApp, id: &str, params: Value) {

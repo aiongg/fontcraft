@@ -42,7 +42,7 @@ fn two_masters() -> (FontCraftApp, [String; 2]) {
         }
     }
     s.execute("path.addRectangle", &json!({"glyph": "x.test", "x": 0, "y": 0, "width": 10, "height": 10})).unwrap();
-    let mut app = FontCraftApp::new(s, Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(s, Arc::new(Host::builder(APP).build()));
     app.sent.push(Msg::View(ViewMsg::SelectGlyph("o.test".into())));
     app.drain();
     (app, [light, bold])

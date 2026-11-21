@@ -42,15 +42,15 @@ impl Default for TestApp {
 }
 
 impl TestApp {
-    /// The app over a new font, after its first frame.
+    /// The app over a new font with one Edit View tab showing (`FontCraftApp::with_edit_tab`), after its first frame.
     pub fn new() -> TestApp {
         TestApp::with(Session::with_document())
     }
 
-    /// The app over `session`, after its first frame.
+    /// The app over `session` with one Edit View tab showing, after its first frame.
     pub fn with(session: Session) -> TestApp {
         let host = Arc::new(Host::builder(APP).build());
-        let app = FontCraftApp::new(session, Arc::clone(&host));
+        let app = FontCraftApp::with_edit_tab(session, Arc::clone(&host));
         let mut frames = Frames::new();
         frames.screen(egui::vec2(SCREEN[0], SCREEN[1]));
         frames.host(host);

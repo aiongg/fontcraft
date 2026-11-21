@@ -13,7 +13,7 @@ use crate::app::{APP, FontCraftApp, Msg};
 use crate::shell::dock::PanelId;
 
 fn app() -> FontCraftApp {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     shell(&mut app, "fontView.show", json!({}));
     app
 }

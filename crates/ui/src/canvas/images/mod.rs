@@ -123,6 +123,8 @@ pub struct Images {
     drag: Option<Dragging>,
     /// What the Font View cell images were last worked out from (`cells`).
     cells_seen: Option<cells::CellsKey>,
+    /// The Font View cells' thumbnails (`cells`).
+    thumbs: cells::Thumbs,
 }
 
 /// The image of `layer` on `side`.

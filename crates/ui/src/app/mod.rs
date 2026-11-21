@@ -311,6 +311,18 @@ impl FontCraftApp {
         if let Some(error) = app.catalog.error.clone() {
             app.status = error;
         }
+        // The window's first tab set is the document it opens with.
+        crate::shell::tabs::follow_document(&mut app);
+        app.project();
+        app
+    }
+
+    /// The app as [`Self::new`] gives it, with one Edit View tab showing the font's first glyph: the start the tests
+    /// of the edit view build on.
+    #[cfg(test)]
+    pub fn with_edit_tab(session: Session, host: Arc<Host>) -> FontCraftApp {
+        let mut app = FontCraftApp::new(session, host);
+        crate::shell::tabs::open_blank(&mut app);
         app.project();
         app
     }
@@ -335,10 +347,14 @@ impl FontCraftApp {
         if let Some(last) = failed.pop() {
             self.status = last;
         }
+        // A shell command may have switched or closed the active document: its tab set shows before anything reads
+        // the tabs, and again after a close the drain answered.
+        crate::shell::tabs::follow_document(self);
         crate::canvas::tools::apply::sync(self);
         crate::canvas::text::sync(self);
         self.tools.refresh();
         close::after_drain(self);
+        crate::shell::tabs::follow_document(self);
         self.project();
         crate::canvas::text::after_project(self);
     }
@@ -389,6 +405,10 @@ impl FontCraftApp {
                     return Ok(json!({ "picker": true }));
                 }
                 let params = if command.params.is_null() { json!({}) } else { command.params.clone() };
+                if matches!(command.id.as_str(), "file.save" | "file.saveAs") {
+                    crate::shell::tabs::upkeep::store_display_strings(self);
+                }
+                let before = self.session.active().map(|d| (d.id, Arc::clone(&d.font)));
                 let reply = match self.session.execute(&command.id, &params) {
                     Ok(reply) => reply,
                     Err(e) => {
@@ -397,6 +417,14 @@ impl FontCraftApp {
                         crate::dialogs::changed_on_disk::after_error(self, &command.id, &params, &error);
                         return Err(error);
                     }
+                };
+                let switched = crate::shell::tabs::follow_document(self);
+                crate::shell::tabs::upkeep::after_command(self, &command.id, &params, &reply, before, switched);
+                // A file opened anew brings back its tabs from its display strings.
+                let mut opened = if command.id == "file.open" && reply.get("alreadyOpen").is_none() {
+                    crate::shell::tabs::upkeep::open_display_strings(self)
+                } else {
+                    Vec::new()
                 };
                 crate::shell::start::after_run(self, &command.id);
                 crate::canvas::tools::apply::adopt(self, &reply);
@@ -408,7 +436,8 @@ impl FontCraftApp {
                 }
                 crate::shell::project::after_run(self, &command.id, &reply);
                 crate::shell::extension_downloads::after_run(self, &command.id, &params, &reply);
-                if let Some(notice) = self.after_command(&command, &reply).or_else(|| notices::notice(&command.id, &reply)) {
+                let notice = self.after_command(&command, &reply).or_else(|| notices::notice(&command.id, &reply));
+                if let Some(notice) = opened.pop().or(notice) {
                     self.status = notice;
                 }
                 self.prune_font_view_selection();

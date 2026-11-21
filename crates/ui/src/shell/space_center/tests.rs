@@ -48,7 +48,7 @@ fn session() -> Session {
 }
 
 fn app() -> FontCraftApp {
-    FontCraftApp::new(session(), Arc::new(Host::builder(APP).build()))
+    FontCraftApp::with_edit_tab(session(), Arc::new(Host::builder(APP).build()))
 }
 
 fn shell(app: &mut FontCraftApp, id: &str, params: Value) -> Result<Value, String> {

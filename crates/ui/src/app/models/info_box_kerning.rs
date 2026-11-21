@@ -223,7 +223,7 @@ mod tests {
     /// mode adds T's lock and group, and another tool takes them away.
     #[test]
     fn the_info_box_reads_the_pairs_around_the_edited_glyph() {
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         post(&mut app, Msg::run("kerning.setRightGroup", json!({"glyphs": ["T"], "group": "T"})));
         post(&mut app, Msg::run("kerning.setPair", json!({"left": "@T", "right": "o", "value": -40})));
         post(&mut app, Msg::View(ViewMsg::SelectGlyph("A".into())));

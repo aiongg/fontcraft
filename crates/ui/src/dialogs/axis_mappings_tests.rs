@@ -11,7 +11,7 @@ use fontcraft_engine::Session;
 use fontcraft_model::{Axis, Font, Instance, Master};
 use serde_json::{Value, json};
 
-use super::{AxisModel, EDIT, new_point_internal, view};
+use super::{AxisModel, EDIT, Graph, GraphDrag, new_point_internal, view};
 use crate::app::{APP, FontCraftApp, Msg};
 use crate::control;
 
@@ -55,7 +55,7 @@ fn mapped() -> FontCraftApp {
     ]);
     let mut session = Session::new();
     session.add_document(f, None).unwrap();
-    let mut app = FontCraftApp::new(session, Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(session, Arc::new(Host::builder(APP).build()));
     call(
         &mut app,
         "engine.execute",
@@ -154,9 +154,10 @@ fn the_dialog_view_posts_its_edits() {
     };
     let posted = Rc::new(RefCell::new(Vec::new()));
     let seen = Rc::clone(&posted);
+    let mut drag = GraphDrag::default();
     let mut fixture = Fixture::new(move |ui| {
         let mut sent = Vec::new();
-        view(ui, &model, &mut sent);
+        view(ui, &model, &mut drag, &mut sent);
         seen.borrow_mut().extend(sent);
     });
     fixture.settle();
@@ -181,4 +182,76 @@ fn the_dialog_view_posts_its_edits() {
     fixture.click(&minus).settle();
     assert_eq!(posted.borrow().last(), Some(&edit(json!({"command": "axisMappings.removePoint", "params": {}}))));
     assert!(fixture.by_label("Mapping graph: internal coordinates across, external coordinates up").is_some(), "the graph");
+}
+
+/// The arrows move the selected point while no field has focus: Shift for ten units, Up and Down the external value.
+/// A focused coordinate field keeps them to step its own value.
+#[test]
+fn arrow_keys_move_the_selected_point_while_no_field_has_focus() {
+    let model = AxisModel {
+        setting: None,
+        axes: vec![("wght".into(), "Weight".into())],
+        axis: "wght".into(),
+        points: vec![(30.0, 30.0), (120.0, 120.0)],
+        point: Some(0),
+    };
+    let posted = Rc::new(RefCell::new(Vec::new()));
+    let seen = Rc::clone(&posted);
+    let mut drag = GraphDrag::default();
+    let mut fixture = Fixture::new(move |ui| {
+        let mut sent = Vec::new();
+        view(ui, &model, &mut drag, &mut sent);
+        seen.borrow_mut().extend(sent);
+    });
+    fixture.settle();
+    let nudge = |d_internal: f64, d_external: f64| {
+        Msg::Shell(craft::ui::runtime::commands::CommandRef::with_params(
+            EDIT,
+            json!({"command": "axisMappings.nudgePoint", "params": {"dInternal": d_internal, "dExternal": d_external}}),
+        ))
+    };
+    fixture.key(Key::ArrowRight, Modifiers::SHIFT).settle();
+    fixture.key(Key::ArrowUp, Modifiers::NONE).settle();
+    assert_eq!(*posted.borrow(), vec![nudge(10.0, 0.0), nudge(0.0, 1.0)]);
+
+    let external = fixture.by_label("External Coordinate").expect("the External Coordinate field");
+    fixture.click(&external).settle();
+    posted.borrow_mut().clear();
+    fixture.key(Key::ArrowUp, Modifiers::NONE).settle();
+    assert!(!posted.borrow().iter().any(|m| *m == nudge(0.0, 1.0)), "a focused field keeps the arrows: {:?}", posted.borrow());
+}
+
+/// In the graph a click on a point selects it, a click on the line adds a point there, and a drag moves a point's
+/// external value, posted once at the release.
+#[test]
+fn the_graph_selects_adds_and_drags_points() {
+    let points = vec![(30.0, 30.0), (120.0, 120.0)];
+    let model =
+        AxisModel { setting: None, axes: vec![("wght".into(), "Weight".into())], axis: "wght".into(), points: points.clone(), point: Some(1) };
+    let posted = Rc::new(RefCell::new(Vec::new()));
+    let seen = Rc::clone(&posted);
+    let mut drag = GraphDrag::default();
+    let mut fixture = Fixture::new(move |ui| {
+        let mut sent = Vec::new();
+        view(ui, &model, &mut drag, &mut sent);
+        seen.borrow_mut().extend(sent);
+    });
+    fixture.room(egui::vec2(1200.0, 800.0)).settle();
+    let graph = fixture.by_label("Mapping graph: internal coordinates across, external coordinates up").expect("the graph");
+    let g = Graph::new(graph.rect, &points);
+    let edit = |params: Value| Msg::Shell(craft::ui::runtime::commands::CommandRef::with_params(EDIT, params));
+
+    fixture.click_at(g.at((30.0, 30.0))).settle();
+    assert_eq!(*posted.borrow(), vec![edit(json!({"point": 0}))], "a click on a point selects it");
+
+    posted.borrow_mut().clear();
+    fixture.click_at(g.at((75.0, 75.0))).settle();
+    assert_eq!(*posted.borrow(), vec![edit(json!({"command": "axisMappings.addPoint", "params": {"internal": 75.0}}))]);
+
+    posted.borrow_mut().clear();
+    let from = g.at((120.0, 120.0));
+    fixture.drag_at(from, egui::vec2(0.0, 30.0)).settle();
+    let external = g.external_at(from.y + 30.0).round();
+    assert!(external < 120.0);
+    assert_eq!(*posted.borrow(), vec![edit(json!({"command": "axisMappings.setPoint", "params": {"index": 1, "external": external}}))]);
 }

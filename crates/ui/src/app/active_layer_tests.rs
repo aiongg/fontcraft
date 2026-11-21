@@ -23,7 +23,7 @@ fn shell(app: &mut FontCraftApp, id: &str, params: Value) {
 /// Glyph A edited, with a square; a second master `m02` with a layer in every glyph, and a backup layer `bk` of the
 /// first master in A.
 fn two_master_app() -> FontCraftApp {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     for name in ["A", "B"] {
         app.session.execute("glyph.newGlyph", &json!({ "name": name })).ok();
     }

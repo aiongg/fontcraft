@@ -392,7 +392,7 @@ mod tests {
     /// serves again to this computer; close stops the server. Without a server it is refused.
     #[test]
     fn the_command_serves_the_page_and_closing_stops_it() {
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         assert!(shell(&mut app, json!({"text": "Hamburg"})).unwrap_err().contains("desktop app"));
 
         let served = Recorder::default();

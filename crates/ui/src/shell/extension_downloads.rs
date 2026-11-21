@@ -431,7 +431,7 @@ mod tests {
         let data = std::env::temp_dir().join(format!("fontcraft-ui-next-downloads-{tag}-{}-{nanos}", std::process::id()));
         std::fs::create_dir_all(&data).unwrap();
         let host = Host::builder(crate::app::APP).jobs(Arc::new(InlineJobs)).build();
-        let mut app = FontCraftApp::new(Session::new(), Arc::new(host));
+        let mut app = FontCraftApp::with_edit_tab(Session::new(), Arc::new(host));
         assert!(extensions::open_folders(app.session.extensions_mut(), Some(&data), false).is_empty());
         (app, data)
     }

@@ -1066,18 +1066,21 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
      reveal in the file manager, a text-field highlight hook (feature code colours and error underlines), caret and
      selection access, Up/Down stepping on text fields that hold a number, an async completer (feature code
      completion), union, intersect and slant icons, alternate menu rows with their own label and shortcut, and
-     (UI.41a) catalog definitions per parameter set, for shortcuts that run a command with a number. Taken
+     (UI.41a) catalog definitions per parameter set, for shortcuts that run a command with a number, (UI.47a) key
+     claims for a dialog, a panel or a focused component, and (UI.47b) clicks and drags on a painted picture. Taken
      from craft itself (UI.39): the Stroke palette's click-and-hold Cap Axis menu (a menu opened by `Trigger::Hold`)
      and paste outside a text field (`craft::platform::clipboard`, which reads the system clipboard on the desktop;
      the browser build still waits for a paste event that craft drops). The craft pin stays at `4bd0107`.
    - Parity audit gaps (old window against new, by how much a person would miss them):
-     1. Done (UI.40): the multi-tab Edit View. Left from it: tabs kept per document, tabs opened from the
-        document's display strings and written on save, and a removed glyph leaving its tabs.
+     1. Done (UI.40, UI.47c, UI.48a, UI.48b): the multi-tab Edit View, with a tab set per document (switching documents
+        shows each one's tabs, closing a document drops them); a window and each new document open on Font View; File ›
+        Open adds a tab per display string behind Font View and Save writes the open tabs back (M5.7); a renamed glyph
+        keeps its place in the tabs and a removed glyph leaves them (`shell/tabs/upkeep.rs`).
      2. Done (UI.41): the Edit View controls in the status bar (Preview Area, writing direction, kerning mode, zoom
         out, zoom field, zoom in) while an Edit View tab shows; Cmd+1 to Cmd+9 and Cmd+Alt+2 to Cmd+Alt+9 through
         one catalog definition per parameter set (`craft_ext::ui::runtime::commands`); Cmd+B; Window › Palette
         (Cmd+Alt+P) over the end-edge panels; Window › Panels with a check row per dock panel; the master icons'
-        tooltips name Cmd+1 to Cmd+9 (UI.46c). Left: the Palette has no sidebar button.
+        tooltips name Cmd+1 to Cmd+9 (UI.46c); the Palette's sidebar button at the options bar's end (UI.48c).
      3. Done (UI.42a, UI.42b): check marks on the switch rows (`app/menu_states.rs`, `SWITCHES`), and engine rows
         greyed when firing them would be refused for their targets, with the reason as tooltip and as
         `disabled_reason` in `ui.menu.list`; Show Image joined the switch list with item 5, Keep Layer Selection in
@@ -1087,9 +1090,9 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
      5. Done (UI.43a to UI.43c): placed images drawn behind the outline, selected, dragged, scaled, cropped and
         moved by keys on the canvas, locked ones ignored (`canvas/images/`, large files decoded on the host's jobs);
         the image Info box; the canvas menu's image section; View › Show Image with its check mark; Reveal Image
-        File through the opener; files dropped on the canvas and onto Font View tiles; Font View cell images. Left:
-        PDF images draw as the kept-format marker (the new window does not render PDF pages), and cells draw from
-        the decoded file shrunk to 4096 pixels rather than from cell-sized thumbnails.
+        File through the opener; files dropped on the canvas and onto Font View tiles; Font View cell images, drawn
+        from cell-sized thumbnails kept per file and side (UI.48d). Left: PDF images draw as the kept-format marker
+        (the new window does not render PDF pages; it needs a PDF renderer dependency).
      6. Done (UI.44a to UI.44c): the tools' scene gets the View › Suggest switches, the declared stems that apply to
         the edited glyph and the master's `suggestDistance`, and Suggest Distance's parallel outlines show near the
         pointer while a drag runs (`canvas/overlays/suggest.rs`); the Reference Font panel's glyph is drawn behind the
@@ -1100,24 +1103,24 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
      7. Done (UI.45a, UI.45b): the Axis Mappings dialog (`dialogs/axis_mappings.rs`: `axisMappings.showDialog`,
         `dialogEdit`, `closeDialog`, opened by the Font Info button; the edits preview as one batch, OK keeps one
         undo step) and the Cross-Axis Mappings window with its Font menu row (`dialogs/cross_axis.rs`); Alt-click on a
-        card's disclosure opens or closes every card (UI.46c). Left: the mapping graph shows the points but takes no
-        click on its line and no point drag (craft's `Picture` takes no pointer input; points are added with + and
-        moved with the selected point's coordinate fields); no arrow-key nudge of the selected point outside the
-        fields (a view may not read keys, and no craft piece lets a dialog claim the arrows yet).
+        card's disclosure opens or closes every card (UI.46c); in the mapping graph a click on a point selects it, a
+        click on the line adds a point and a drag moves a point (UI.47b), and the arrow keys move the selected point
+        while no field or list has focus (UI.47a).
      8. Done (UI.45c, UI.45d): a Primitives tool click opens Primitive Measurements (`dialogs/primitive_measurements.rs`,
         routed in `canvas/tools/apply.rs`), and a Pixel tool click in a font without the pixel glyph offers to add it
         (`dialogs/add_pixel_glyph.rs`, a follow-up of `pixel.setPixels`).
      9. Done (UI.46a): View › Filter by Encoding File with its file chooser (`shell/encoding.rs`), Edit › Keep Layer
         Selection in Sync with its check mark (the selection carried in `canvas/tools/apply.rs` `sync`), Font ›
         Kerning › Next / Previous Group Member, Show All Glyphs in the Kerning window, and `fontView.focusSearch`
-        (also Edit › Find while Font View shows). Left: Ctrl and Alt with Up and Down in the Pairs & Phrases list do
-        not step a group member (a view may not read keys; the list takes the arrows itself).
+        (also Edit › Find while Font View shows); Ctrl and Alt with Up and Down in the focused Pairs & Phrases list
+        step a group member (UI.47a).
      10. Done (UI.46b): `ui.inspect` keys `display`, `switches`, `selectedGlyphs`, `editing`, `interaction`,
          `dialog`, `transform` and `fontView` (`shell/getters.rs`), and the five read-only getters
          (`editView.getText`, `editView.getFeatures`, `fontView.getState`, `transform.getSettings`,
          `view.getDisplayOptions`), answered with their reply through `engine.execute`.
-     Left besides the items above: Edit View tabs kept per document (the window keeps one tab set, and switching
-     documents keeps it).
+   - With UI.48 written, the new window has the old window's features except PDF pages in placed images; the rest
+     of this list are smaller follow-ups the old window also lacks. The next step is retiring the old window.
+     UI.47 and UI.48 are written on their branches, not yet built.
 3. **The engine split, step 4 on.** ES.4 moves the kerning-index and metrics-sync readers outside the spacing crate
    behind its extension and moves the slots with `Session`; the later steps move command areas out of the engine
    crate along command ownership.

@@ -136,7 +136,7 @@ fn ui_render_draws_glyph_pixels_and_a_headless_app_has_no_screenshot() {
 /// app's setting as it was.
 #[test]
 fn control_requests_export_inside_the_destination_and_keep_the_setting() {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     assert!(app.session.export_outside());
     let _ = handle(&mut app, &json!({"id": 1, "method": "engine.execute", "params": {"command": "glyph.getInfo", "params": {}}}));
     assert!(app.session.export_outside());
@@ -224,7 +224,7 @@ fn window_input_reaches_the_frames() {
         t.error(method, bad.clone());
         assert_eq!(t.pointer(), Some(egui::pos2(640.0, 400.0)), "{method} {bad} moved the pointer");
     }
-    let mut windowless = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut windowless = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     let reply = handle(&mut windowless, &json!({"method": "ui.click", "params": {"x": 1, "y": 1}}));
     assert!(reply["error"].as_str().is_some_and(|e| e.contains("no window")), "{reply}");
 }

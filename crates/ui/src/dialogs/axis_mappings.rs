@@ -2,14 +2,15 @@
 //! `axisMappings.*` shell commands.
 //!
 //! Three panes: the axes; the points of the selected axis (internal coordinate and external coordinate) with fields
-//! for the selected point and the plus and minus buttons; a graph of the same points, internal across and external up.
+//! for the selected point and the plus and minus buttons; a graph of the same points, internal across and external up,
+//! where a click on a point selects it, a click on the line adds a point there and a drag moves a point up or down.
 //! The dialog edits the font's Axis Mappings, or a variable font setting's when it opens on one.
 //!
 //! The dialog is modal and previews like any dialog: opening it begins an interaction, every edit is one
 //! `axisMappings.*` command, and the edits made so far are previewed together as one `command.batch` on the font as it
 //! was when the dialog opened. OK keeps them as one undo step; Cancel gives back the very font the dialog opened on.
 //! An edit the command refuses (points out of order) changes nothing. Repeated moves of the same point merge into one
-//! step, so holding an arrow key in a field keeps the batch short.
+//! step, so dragging and holding an arrow key keep the batch short.
 //!
 //! | Control | Posts `axisMappings.dialogEdit` with |
 //! |---|---|
@@ -18,6 +19,10 @@
 //! | Internal Coordinate, External Coordinate fields | `{command: "axisMappings.setPoint", params: {index, internal | external}}` |
 //! | + | `{command: "axisMappings.addPoint", params: {internal}}`: halfway to the next point, on the line |
 //! | − | `{command: "axisMappings.removePoint"}` |
+//! | a click on a point in the graph | `{point}` |
+//! | a click on the graph's line | `{command: "axisMappings.addPoint", params: {internal}}`: where it was clicked, on the line |
+//! | a drag of a point in the graph | `{point}` at the press; `{command: "axisMappings.setPoint", params: {index, external}}` at the release, in whole units |
+//! | an arrow key while no field or list has focus | `{command: "axisMappings.nudgePoint", params: {dInternal, dExternal}}`: Up and Down the external value, Left and Right the internal one, by 1, 10 with Shift, 100 with Cmd |
 //!
 //! OK and Cancel post `axisMappings.closeDialog {confirm}`. `ui.inspect` reports the dialog under `axisMappings`.
 
@@ -25,6 +30,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use craft::behavior::{ColumnKey, ColumnWidth, Selection, keyed};
+use craft::keymap::{Chord, Key, Mods};
 use craft::ui::buttons::Button;
 use craft::ui::contract::{Bind, ColumnSpec, Props as _, SelectMode, Show as _, ShowCollection as _, ShowContainer as _};
 use craft::ui::dialog::{DialogHost, DialogId, DialogResult, DialogStack, StackDialog, dialog_id};
@@ -36,7 +42,9 @@ use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::{Env, Label};
 use craft::ui::table::Table;
 use craft::ui::text::NumberField;
-use egui::{Color32, Pos2, Rect, Shape, Stroke, Ui};
+use craft_ext::ui::display::{PicturePointer, PointerOnPicture as _};
+use craft_ext::ui::runtime::keys::region_claims;
+use egui::{Color32, Id, Pos2, Rect, Shape, Stroke, Ui};
 use fontcraft_engine::fontinfo::target;
 use fontcraft_model::Font;
 use fontcraft_model::axes::{AXIS_MAPPINGS, mapping};
@@ -81,10 +89,17 @@ const GRAPH_MARGIN: f64 = 0.06;
 /// A point's radius in the graph, as a share of the graph's width; the selected point is larger.
 const POINT_SHARE: f32 = 0.018;
 const SELECTED_SCALE: f32 = 1.7;
+/// How near a press must be to a point or the line to take it, as a share of the graph's width.
+const HIT_SHARE: f32 = 0.04;
 /// The frame's ink, as a share of the line's.
 const FRAME_SHARE: f32 = 0.3;
 /// Rows the point list shows before it scrolls.
 const LIST_ROWS: u16 = 8;
+/// How far one arrow press moves the selected point: plain, with Shift, with Cmd (with or without Shift).
+const ARROW_STEPS: [(Mods, f64); 4] =
+    [(Mods::NONE, 1.0), (Mods::SHIFT, 10.0), (Mods::CMD, 100.0), (Mods { cmd: true, ctrl: false, alt: false, shift: true }, 100.0)];
+/// The arrows and the way each moves the point: across (internal), up (external).
+const ARROWS: [(Key, f64, f64); 4] = [(Key::Up, 0.0, 1.0), (Key::Down, 0.0, -1.0), (Key::Right, 1.0, 0.0), (Key::Left, -1.0, 0.0)];
 
 const AXIS_COLUMN: ColumnKey = ColumnKey::new("axis");
 const POINT_COLUMN: ColumnKey = ColumnKey::new("point");
@@ -407,11 +422,26 @@ pub struct AxisMappingsDialog {
     open: bool,
     /// The form's value; the dialog's state lives in the app.
     held: bool,
+    /// A drag of a point in the graph.
+    drag: GraphDrag,
 }
+
+/// A drag of a point in the graph: the point, and the external value the pointer has got to. The font changes once,
+/// when the drag ends.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct GraphDrag(Option<(usize, f64)>);
 
 impl AxisMappingsDialog {
     pub fn new(model: AxisModel) -> Self {
-        AxisMappingsDialog { id: dialog_id("fontcraftAxisMappings"), model, outbox: Vec::new(), closing: false, open: true, held: false }
+        AxisMappingsDialog {
+            id: dialog_id("fontcraftAxisMappings"),
+            model,
+            outbox: Vec::new(),
+            closing: false,
+            open: true,
+            held: false,
+            drag: GraphDrag::default(),
+        }
     }
 }
 
@@ -433,9 +463,9 @@ impl StackDialog for AxisMappingsDialog {
             Some(name) => format!("{}: {name}", words.title.as_str()).into(),
             None => words.title.clone(),
         };
-        let AxisMappingsDialog { model, outbox, open, held, .. } = self;
+        let AxisMappingsDialog { model, outbox, open, held, drag, .. } = self;
         let shown = FormDialog::new(title, Bind::bound(held)).opened(Bind::bound(open)).show(ui, |ui, _, _| {
-            view(ui, model, outbox);
+            view(ui, model, drag, outbox);
             true
         });
         if shown.accepted.is_some() {
@@ -458,8 +488,8 @@ fn number(v: f64) -> String {
     if v.fract() == 0.0 && v.abs() < 1e15 { format!("{v:.0}") } else { format!("{v}") }
 }
 
-/// The dialog's body over `m`; what the person did goes to `sent`.
-pub fn view(ui: &mut Ui, m: &AxisModel, sent: &mut Vec<Msg>) {
+/// The dialog's body over `m`; what the person did goes to `sent`. `drag` is the graph's drag in progress.
+pub fn view(ui: &mut Ui, m: &AxisModel, drag: &mut GraphDrag, sent: &mut Vec<Msg>) {
     let words = Env::of(ui).words::<AxisMappingsWords>();
     if m.axes.is_empty() {
         Text::new(words.no_axes.clone()).shade(Shade::Muted).show(ui);
@@ -468,11 +498,36 @@ pub fn view(ui: &mut Ui, m: &AxisModel, sent: &mut Vec<Msg>) {
     Row::new().show(ui, |ui, _| {
         axis_list(ui, &words, m, sent);
         point_list(ui, &words, m, sent);
-        let (points, point) = (m.points.clone(), m.point);
-        Picture::painter(words.graph.clone(), ThumbAspect::SQUARE, move |cx, rect| paint(&cx.painter, cx.ink(), rect, &points, point))
-            .extent(PictureSize::Thumb(ThumbSize::Large))
-            .show(ui);
+        let (points, point, dragged) = (m.points.clone(), m.point, drag.0);
+        let shown =
+            Picture::painter(words.graph.clone(), ThumbAspect::SQUARE, move |cx, rect| paint(&cx.painter, cx.ink(), rect, &points, point, dragged))
+                .extent(PictureSize::Thumb(ThumbSize::Large))
+                .show(ui);
+        graph_pointer(&shown.pointer(ui), m, drag, sent);
     });
+    arrow_keys(ui, m, sent);
+}
+
+/// The arrow chords with the move each makes: `(chord, dInternal, dExternal)`.
+fn arrow_chords() -> Vec<(Chord, f64, f64)> {
+    ARROWS
+        .iter()
+        .flat_map(|&(key, across, up)| ARROW_STEPS.iter().map(move |&(mods, step)| (Chord::new(mods, key), across * step, up * step)))
+        .collect()
+}
+
+/// While a point is selected, the dialog claims the arrows that no field or list holds and moves the point with them.
+fn arrow_keys(ui: &Ui, m: &AxisModel, sent: &mut Vec<Msg>) {
+    if m.point.is_none_or(|at| at >= m.points.len()) {
+        return;
+    }
+    let moves = arrow_chords();
+    let chords: Vec<Chord> = moves.iter().map(|(chord, _, _)| *chord).collect();
+    for chord in region_claims(ui.ctx(), Id::new("fontcraftAxisMappings.arrows"), &chords) {
+        if let Some((_, across, up)) = moves.iter().find(|(c, _, _)| *c == chord) {
+            sent.push(post_edit("axisMappings.nudgePoint", json!({"dInternal": across, "dExternal": up})));
+        }
+    }
 }
 
 fn axis_list(ui: &mut Ui, words: &AxisMappingsWords, m: &AxisModel, sent: &mut Vec<Msg>) {
@@ -563,18 +618,108 @@ fn span(values: impl Iterator<Item = f64>) -> (f64, f64) {
     (lo - pad, hi + pad)
 }
 
-/// Paints the frame, the mapping line and its points into `rect`; the selected point is larger.
-fn paint(painter: &egui::Painter, ink: Color32, rect: Rect, points: &[(f64, f64)], selected: Option<usize>) {
-    let hairline = 1.0 / painter.pixels_per_point().max(0.01);
-    let internal = span(points.iter().map(|p| p.1));
-    let external = span(points.iter().map(|p| p.0));
-    let at = |(e, i): (f64, f64)| {
-        let fx = (i - internal.0) / (internal.1 - internal.0);
-        let fy = (e - external.0) / (external.1 - external.0);
-        Pos2::new(rect.left() + rect.width() * fx as f32, rect.bottom() - rect.height() * fy as f32)
+/// The graph's map between coordinates and the screen: internal across, external up, over the points' ranges.
+struct Graph {
+    rect: Rect,
+    internal: (f64, f64),
+    external: (f64, f64),
+}
+
+impl Graph {
+    fn new(rect: Rect, points: &[(f64, f64)]) -> Graph {
+        Graph { rect, internal: span(points.iter().map(|p| p.1)), external: span(points.iter().map(|p| p.0)) }
+    }
+
+    /// Where the point `(external, internal)` is drawn.
+    fn at(&self, (e, i): (f64, f64)) -> Pos2 {
+        let fx = (i - self.internal.0) / (self.internal.1 - self.internal.0);
+        let fy = (e - self.external.0) / (self.external.1 - self.external.0);
+        Pos2::new(self.rect.left() + self.rect.width() * fx as f32, self.rect.bottom() - self.rect.height() * fy as f32)
+    }
+
+    /// The internal coordinate at the screen's `x`.
+    fn internal_at(&self, x: f32) -> f64 {
+        self.internal.0 + f64::from((x - self.rect.left()) / self.rect.width().max(1.0)) * (self.internal.1 - self.internal.0)
+    }
+
+    /// The external coordinate at the screen's `y`.
+    fn external_at(&self, y: f32) -> f64 {
+        self.external.0 + f64::from((self.rect.bottom() - y) / self.rect.height().max(1.0)) * (self.external.1 - self.external.0)
+    }
+}
+
+/// The distance from `p` to the segment `a`–`b`.
+fn segment_distance(p: Pos2, a: Pos2, b: Pos2) -> f32 {
+    let ab = b - a;
+    let t = if ab.length_sq() > 0.0 { ((p - a).dot(ab) / ab.length_sq()).clamp(0.0, 1.0) } else { 0.0 };
+    (a + ab * t).distance(p)
+}
+
+/// What a click or a drag on the graph posts. A drag follows the pointer in `drag` and moves the font at its end.
+fn graph_pointer(p: &PicturePointer, m: &AxisModel, drag: &mut GraphDrag, sent: &mut Vec<Msg>) {
+    let g = Graph::new(p.rect, &m.points);
+    let screen: Vec<Pos2> = m.points.iter().map(|point| g.at(*point)).collect();
+    let reach = p.rect.width() * HIT_SHARE;
+    let nearest = |at: Pos2| {
+        screen.iter().enumerate().map(|(i, s)| (i, s.distance(at))).filter(|(_, d)| *d <= reach).min_by(|a, b| a.1.total_cmp(&b.1)).map(|(i, _)| i)
     };
+    if let Some(at) = p.drag_started
+        && let Some(i) = nearest(at)
+        && let Some((external, _)) = m.points.get(i)
+    {
+        drag.0 = Some((i, *external));
+        if m.point != Some(i) {
+            sent.push(post(json!({"point": i})));
+        }
+    }
+    if let (Some((i, _)), Some(at)) = (drag.0, p.dragging.or(p.drag_ended)) {
+        let external = g.external_at(at.y).round();
+        if external.is_finite() {
+            drag.0 = Some((i, external));
+        }
+    }
+    if p.drag_ended.is_some()
+        && let Some((i, external)) = drag.0.take()
+        && m.points.get(i).is_some_and(|point| point.0 != external)
+    {
+        sent.push(post_edit("axisMappings.setPoint", json!({"index": i, "external": external})));
+    }
+    // A drag whose press is no longer down and that ended unreported (the window lost the pointer) is dropped without
+    // an edit.
+    if !p.held && p.drag_started.is_none() && p.dragging.is_none() && p.drag_ended.is_none() {
+        drag.0 = None;
+    }
+    if let Some(at) = p.clicked {
+        match nearest(at) {
+            Some(i) if m.point != Some(i) => sent.push(post(json!({"point": i}))),
+            Some(_) => {}
+            None => {
+                let on_line = screen.windows(2).any(|pair| matches!(pair, [a, b] if segment_distance(at, *a, *b) <= reach));
+                let internal = g.internal_at(at.x).round();
+                if on_line && internal.is_finite() {
+                    sent.push(post_edit("axisMappings.addPoint", json!({"internal": internal})));
+                }
+            }
+        }
+    }
+}
+
+/// Paints the frame, the mapping line and its points into `rect`; the selected point is larger. `dragged` is a point
+/// being dragged and the external value it has got to; the graph keeps the ranges of `points` while it moves.
+fn paint(painter: &egui::Painter, ink: Color32, rect: Rect, points: &[(f64, f64)], selected: Option<usize>, dragged: Option<(usize, f64)>) {
+    let hairline = 1.0 / painter.pixels_per_point().max(0.01);
+    let g = Graph::new(rect, points);
     painter.rect_stroke(rect, 0.0, Stroke::new(hairline, ink.gamma_multiply(FRAME_SHARE)), egui::StrokeKind::Inside);
-    let shown: Vec<Pos2> = points.iter().copied().filter(|(e, i)| e.is_finite() && i.is_finite()).map(at).collect();
+    let shown: Vec<Pos2> = points
+        .iter()
+        .enumerate()
+        .map(|(i, &(e, int))| match dragged {
+            Some((at, external)) if at == i => (external, int),
+            _ => (e, int),
+        })
+        .filter(|(e, i)| e.is_finite() && i.is_finite())
+        .map(|point| g.at(point))
+        .collect();
     if shown.len() > 1 {
         painter.add(Shape::line(shown.clone(), Stroke::new(hairline * 2.0, ink)));
     }

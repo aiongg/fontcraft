@@ -273,7 +273,7 @@ mod tests {
         other.set_metric_pos("m01", "x-height", 520.0).unwrap();
         session.add_document(other, None).unwrap();
         session.execute("document.activate", &json!({"index": 0})).unwrap();
-        FontCraftApp::new(session, Arc::new(Host::builder(APP).build()))
+        FontCraftApp::with_edit_tab(session, Arc::new(Host::builder(APP).build()))
     }
 
     #[test]
@@ -319,7 +319,7 @@ mod tests {
         f.glyph_mut("A").unwrap().layers.push(Layer::new("m02", 700.0));
         let mut session = Session::new();
         session.add_document(f, None).unwrap();
-        let mut app = FontCraftApp::new(session, Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(session, Arc::new(Host::builder(APP).build()));
         app.run_now(shell("edit.compareFonts", json!({})), false).unwrap();
         let st = &app.view.compare_fonts;
         assert_eq!((st.left.as_ref().unwrap().master.as_str(), st.right.as_ref().unwrap().master.as_str()), ("m01", "m02"));

@@ -23,7 +23,7 @@ fn call(app: &mut FontCraftApp, method: &str, params: Value) -> Value {
 /// Glyph A with a closed 200-unit square (shape 0, node 2 at (300, 300)), shown at one point per unit, nothing
 /// selected.
 fn edit_app() -> FontCraftApp {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     app.sent.push(Msg::View(ViewMsg::SelectGlyph("A".into())));
     app.drain();
     app.session.execute("path.addRectangle", &json!({"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200})).unwrap();
@@ -100,7 +100,7 @@ fn font(app: &FontCraftApp) -> Arc<Font> {
 
 /// Glyphs A, B and C; B does not export.
 fn glyphs_app() -> FontCraftApp {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     for name in ["A", "B", "C"] {
         app.session.execute("glyph.newGlyph", &json!({ "name": name })).ok();
     }

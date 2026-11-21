@@ -1,7 +1,10 @@
 //! The options bar and the status bar.
 
+use craft::behavior::IconId;
 use craft::ui::bars::{Bar, BarKind};
-use craft::ui::contract::{Show as _, ShowContainer as _};
+use craft::ui::buttons::IconButton;
+use craft::ui::contract::tooltip::with_chord;
+use craft::ui::contract::{Props as _, Show as _, ShowContainer as _};
 use craft::ui::display::Text;
 use craft::ui::runtime::commands::{self, CommandRef};
 use craft::ui::runtime::env::Env;
@@ -11,21 +14,49 @@ use super::ChromeWords;
 use crate::app::catalog::TOOL_PREFIX;
 use crate::panels::edit_bar::{self, EditBar};
 
-/// What the options bar reads: the current tool, whose options it will show.
-pub struct OptionsProps {
+/// What the options bar reads: the current tool, whose options it will show, and whether the Palette shows, for the
+/// button at the bar's end that shows or hides it.
+pub struct OptionsProps<'a> {
     pub tool: &'static str,
+    pub palette: bool,
+    pub sent: &'a mut Vec<crate::app::Msg>,
 }
 
-pub fn options(ui: &mut Ui, mut props: OptionsProps) {
+pub fn options(ui: &mut Ui, mut props: OptionsProps<'_>) {
     options_view(&mut props, ui);
 }
 
-fn options_view(props: &mut OptionsProps, ui: &mut Ui) {
+fn options_view(props: &mut OptionsProps<'_>, ui: &mut Ui) {
     let words = Env::of(ui).words::<ChromeWords>();
     let tool = commands::resolve(ui.ctx(), CommandRef::new(format!("{TOOL_PREFIX}{}", props.tool))).label;
-    let _ = Bar::new(words.options.clone(), BarKind::Options).show(ui, |ui, _| {
+    let palette = props.palette;
+    // The end group runs in its own closure beside the body's, so it posts into its own list.
+    let mut end_sent = Vec::new();
+    let end = &mut end_sent;
+    let _ = Bar::new(words.options.clone(), BarKind::Options).trailing(move |ui, _| palette_button(ui, palette, &mut *end)).show(ui, |ui, _| {
         Text::new(tool.to_string()).show(ui);
     });
+    props.sent.extend(end_sent);
+}
+
+/// The sidebar button at the window's top right: shows or hides the Palette (`window.palette`), lit while it shows.
+fn palette_button(ui: &mut Ui, shows: bool, sent: &mut Vec<crate::app::Msg>) {
+    let words = Env::of(ui).words::<ChromeWords>();
+    let toggle = CommandRef::new("window.palette");
+    let os = craft::ui::runtime::windows::os_of(ui.ctx());
+    let tip = match commands::resolve(ui.ctx(), toggle.clone()).chord {
+        Some(chord) => with_chord(words.palette.as_str(), &chord, os),
+        None => words.palette.as_str().to_string(),
+    };
+    let out = IconButton::new(IconId::new("panel_right"))
+        .label(words.palette.clone())
+        .tooltip(tip)
+        .selected(shows)
+        .id_salt("fontcraftShell.palette")
+        .show(ui);
+    if out.clicked() {
+        sent.push(crate::app::Msg::Shell(toggle));
+    }
 }
 
 /// What the status bar reads.
@@ -84,16 +115,21 @@ fn status_view(props: &mut StatusProps<'_>, ui: &mut Ui) {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, clippy::panic)]
 mod tests {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
     use craft::ui::runtime::commands::CommandRef;
+    use craft::ui::testing::Fixture;
     use serde_json::json;
 
     use super::edit_state;
+    use crate::app::Msg;
     use crate::testing::TestApp;
 
     #[test]
     fn the_edit_controls_follow_the_showing_tab() {
         let mut t = TestApp::new();
-        let bar = edit_state(&t.app).expect("a window opens on an Edit View tab");
+        let bar = edit_state(&t.app).expect("the test starts on an Edit View tab");
         assert_eq!((bar.zoom, bar.preview_area), (t.app.view.canvas.zoom * 1000.0, false));
         t.app.fire(CommandRef::with_params("view.togglePreviewArea", json!({"on": true})));
         t.frame();
@@ -101,5 +137,21 @@ mod tests {
         t.app.fire(CommandRef::new("fontView.show"));
         t.frame();
         assert_eq!(edit_state(&t.app), None, "Font View shows no Edit View controls");
+    }
+
+    /// The sidebar button at the options bar's end shows or hides the Palette.
+    #[test]
+    fn the_palette_button_posts_window_palette() {
+        let posted = Rc::new(RefCell::new(Vec::new()));
+        let seen = Rc::clone(&posted);
+        let mut fixture = Fixture::new(move |ui| {
+            let mut sent = Vec::new();
+            super::palette_button(ui, true, &mut sent);
+            seen.borrow_mut().extend(sent);
+        });
+        fixture.settle();
+        let button = fixture.by_label("Palette").expect("the Palette button");
+        fixture.click(&button).settle();
+        assert_eq!(*posted.borrow(), vec![Msg::Shell(CommandRef::new("window.palette"))]);
     }
 }

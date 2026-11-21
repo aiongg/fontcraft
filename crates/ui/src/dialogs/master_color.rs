@@ -175,7 +175,7 @@ mod tests {
     /// A colour previews on the master's parameter; OK keeps it as `R,G,B,A`, Cancel puts the old value back.
     #[test]
     fn the_picker_previews_and_keeps_the_master_color() {
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         let id = app.session.font().unwrap().masters[0].id.clone();
         let add = json!({"scope": "master", "targets": id, "name": "Master Color", "value": "0,0,0,255"});
         app.run_now(Msg::run("font.customParameters.add", add), false).unwrap();
@@ -203,7 +203,7 @@ mod tests {
         use crate::panels::font_info::rows::dialog_message;
         use crate::shell::font_info::Target;
 
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         let add = json!({"scope": "master", "targets": [0], "name": "Master Color", "value": "255,0,0,128"});
         app.run_now(Msg::run("font.customParameters.add", add), false).unwrap();
         assert_eq!(row_dialog("Master Color", Scope::Master), Some(RowDialog::MasterColor));
