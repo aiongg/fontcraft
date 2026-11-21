@@ -5,10 +5,14 @@
 //! Window › Panels lists every dock panel but the document area as a check row that runs `window.togglePanel`,
 //! checked while the panel is open; the rows are rebuilt when a panel opens or closes ([`refresh_menu`]). craft's
 //! `WindowMenuRows` draws such rows into a menu body of its own, which the data-driven menu bar has no place for.
+//!
+//! A Palette section is a dock panel. `palette.toggleSection` collapses the group that holds it to its tab strip, or
+//! expands it again, as the group's own minimize button does; the panels tabbed with it collapse with it. A
+//! plug-in's section is a form in the Modules panel, so it collapses with that panel.
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 
-use craft::behavior::dock::{DockEdge, Layout, PanelState};
+use craft::behavior::dock::{Action, DockEdge, Layout, PanelState};
 use craft::menu::{ItemKind, Row};
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::WordSet as _;
@@ -42,6 +46,13 @@ const COMMANDS: &[UiCommand] = &[
         shortcut: Some("Cmd+Alt+P"),
         params: "{on?: bool} show or hide the Palette: the panels docked at the window's end edge (omitted: toggle)",
     },
+    UiCommand {
+        id: "palette.toggleSection",
+        label: "Collapse / Expand Section",
+        menu: &[],
+        shortcut: None,
+        params: "{section: panel id (`dimensions`, `fitCurve`, `layers`, `transformations`, `infoBox`, `modules` for the plug-ins' sections, …), expanded?: bool (omitted: toggle)} collapse an open Palette section to its title row, with the panels tabbed with it, or expand it again",
+    },
 ];
 
 /// The submenu that lists the dock panels.
@@ -74,8 +85,28 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
             }
             Ok(())
         }
+        "palette.toggleSection" => toggle_section(app, &command.params),
         other => Err(format!("no window command `{other}`")),
     }
+}
+
+/// `palette.toggleSection`: minimizes or expands the dock group of the panel `section`.
+fn toggle_section(app: &mut FontCraftApp, params: &Value) -> Result<(), String> {
+    let id = super::params::string(params, "section")?.ok_or("`section` (a panel id) is required")?;
+    let panel = PanelId::from_id(id).filter(|p| *p != PanelId::Document).ok_or_else(|| format!("no Palette section `{id}`"))?;
+    let layout = &app.view.workspace.layout;
+    let place = layout.place(&panel).filter(|_| layout.panel_state(&panel) != PanelState::Hidden);
+    let place = place.ok_or_else(|| format!("the {id} section is not open (Window › Panels shows it)"))?;
+    let minimized = layout.group(&place).map(|g| g.minimized).ok_or_else(|| format!("the {id} section is not in a panel group"))?;
+    let expanded = super::params::flag(params, "expanded")?.unwrap_or(minimized);
+    if expanded != minimized {
+        return Ok(());
+    }
+    app.view
+        .workspace
+        .apply(Action::set_minimized(panel, !expanded), false, |p| p.permissions())
+        .map_err(|e| format!("the {id} section cannot change: {e:?}"))?;
+    Ok(())
 }
 
 /// Whether the Palette shows: a panel is docked at the window's end edge.
@@ -211,5 +242,31 @@ mod tests {
         t.frame();
         assert_ne!(state(&t, PanelId::FontInfo), PanelState::Hidden);
         assert_eq!(checked(&t, "fontInfo"), Some(true));
+    }
+
+    /// Whether the dock group that holds `panel` shows only its tab strip.
+    fn minimized(t: &TestApp, panel: PanelId) -> bool {
+        let layout = &t.app.view.workspace.layout;
+        layout.place(&panel).and_then(|place| layout.group(&place)).unwrap().minimized
+    }
+
+    #[test]
+    fn a_palette_section_collapses_and_expands() {
+        let mut t = TestApp::new();
+        assert!(!minimized(&t, PanelId::Layers));
+        t.ok("engine.execute", json!({"command": "palette.toggleSection", "params": {"section": "layers"}}));
+        assert!(minimized(&t, PanelId::Layers), "omitted, `expanded` toggles");
+        assert!(!minimized(&t, PanelId::Dimensions), "other groups stay as they are");
+        t.ok("engine.execute", json!({"command": "palette.toggleSection", "params": {"section": "layers", "expanded": false}}));
+        assert!(minimized(&t, PanelId::Layers), "collapsing a collapsed section changes nothing");
+        t.ok("engine.execute", json!({"command": "palette.toggleSection", "params": {"section": "layers", "expanded": true}}));
+        assert!(!minimized(&t, PanelId::Layers));
+        t.frame();
+
+        let unknown = t.error("engine.execute", json!({"command": "palette.toggleSection", "params": {"section": "nope"}}));
+        assert!(unknown.contains("nope"), "{unknown}");
+        let closed = t.error("engine.execute", json!({"command": "palette.toggleSection", "params": {"section": "fontInfo"}}));
+        assert!(closed.contains("not open"), "{closed}");
+        assert!(!t.error("engine.execute", json!({"command": "palette.toggleSection", "params": {}})).is_empty());
     }
 }

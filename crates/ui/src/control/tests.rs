@@ -19,7 +19,10 @@ fn the_control_protocol_drives_the_app() {
     assert_eq!(t.ok("document.inspect", json!({}))["documents"][0]["undo"], json!(["New Glyph"]));
     let commands = t.ok("engine.commands", json!({}));
     let shell: usize = crate::shell::commands::MODULES.iter().map(|m| m.commands.len()).sum();
-    let expected = fontcraft_engine::command_specs().len() + shell + fontcraft_tools::tool::TOOLS.len();
+    // `tool.select` is a shell command and the Select tool's command: listed once.
+    let tools = fontcraft_tools::tool::TOOLS.iter().filter(|t| crate::shell::commands::find(&format!("tool.{}", t.id)).is_none()).count();
+    assert_eq!(tools + 1, fontcraft_tools::tool::TOOLS.len());
+    let expected = fontcraft_engine::command_specs().len() + shell + tools;
     assert_eq!(commands["commands"].as_array().map(Vec::len), Some(expected));
 
     let menus = t.ok("ui.menu.list", json!({}));
@@ -270,4 +273,29 @@ fn the_listener_answers_between_frames() {
     assert_eq!(t.pointer(), Some(egui::pos2(111.0, 222.0)), "the reply came after the move ran");
     assert_eq!(replies[2]["ok"], false);
     assert!(closed, "a line that is no request closes the connection");
+}
+
+/// `tool.select` makes the named tool current and is still the Select tool's own command; `tool.list` names the tools.
+#[test]
+fn tool_select_and_tool_list_choose_and_name_the_tools() {
+    let mut t = TestApp::new();
+    let chosen = t.ok("engine.execute", json!({"command": "tool.select", "params": {"tool": "zoom"}}));
+    assert_eq!(chosen, json!({"tool": "zoom", "previous": "select"}));
+    let listed = t.ok("engine.execute", json!({"command": "tool.list"}));
+    assert_eq!(listed["active"], "zoom");
+    assert!(listed["tools"].as_array().is_some_and(|tools| tools.iter().any(|tool| tool["id"] == "draw")), "{listed}");
+
+    // Without `tool`, as its toolbar button and key fire it, it is the Select tool's command.
+    assert_eq!(t.ok("engine.execute", json!({"command": "tool.select"})), json!({"tool": "select", "previous": "zoom"}));
+
+    // A `tool` naming no tool is refused and changes nothing.
+    t.ok("engine.execute", json!({"command": "tool.draw"}));
+    for bad in [json!({"tool": "nope"}), json!({"tool": 5})] {
+        let error = t.error("engine.execute", json!({"command": "tool.select", "params": bad}));
+        assert!(error.contains("tool"), "{error}");
+        assert_eq!(t.ok("ui.inspect", json!({}))["tool"], "draw");
+    }
+
+    // The catalog takes `tool.select` once: as the Select tool's definition.
+    assert!(t.app.catalog.error.is_none(), "{:?}", t.app.catalog.error);
 }

@@ -81,12 +81,18 @@ label = "Collapse / Expand Section"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{section: 'dimensions'|'fitCurve'|'layers'|'transformations'|pluginId, expanded?: bool}"
+params = "{section: 'dimensions'|'fitCurve'|'layers'|'transformations'|'infoBox'|'modules'|panel id, expanded?: bool}"
 area = "ui-chrome"
 milestone = "M3"
 summary = "Collapses a Palette section to its title row or expands it again, as clicking the chevron beside the section name does."
 ref = "Palette"
 status = "handbook"
+notes = "`crates/ui` (`shell/window.rs`): every Palette section is a dock panel, and the command minimizes or expands the dock group that holds it, as the group's own minimize button does. Omitted, `expanded` toggles. A section that is not open, or an id that is no panel, is refused. Plug-in sections are forms in the Modules panel (`palette.pluginSections`) and collapse with it (`section: modules`)."
+guesses = [
+  "A section collapses with the panels tabbed in its dock group (Dimensions, Transformations and Fit Curve share one by default); the reference stacks its sections, each with its own chevron.",
+  "Plug-in sections collapse together with the Modules panel, not one by one.",
+]
+observe = ["Collapse the Transformations section with its chevron: note whether the sections around it stay expanded and whether the state is kept after a restart."]
 
 [[behavior]]
 id = "palette.pluginSections"

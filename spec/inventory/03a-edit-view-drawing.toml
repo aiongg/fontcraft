@@ -555,13 +555,17 @@ label = "Select Tool"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{tool: id} → {tool: id, previous: id}"
+params = "{tool?: id} → {tool: id, previous: id}"
 area = "drawing"
 milestone = "M3"
 summary = "Makes the named pointer tool active in Edit View, as its toolbar button or key does. The control method ui.tool.select runs it. Our own command: the reference chooses tools only through the toolbar and keys."
 ref = "Edit View › Draw Tool; docs/control-protocol.md"
 status = "inferred"
 own = true
+notes = "`crates/ui`: the id is also the Select tool's own command (`tool.<id>` for every tool), so the catalog keeps one definition, the tool's, and the shell command table lists it for the command lists (`shell/selection.rs`, `app::catalog::chosen_tool`). Every tool command run through `engine.execute` replies `{tool, previous}`."
+guesses = [
+  "Without `tool`, the command makes the Select tool current, because it is that tool's own command; a `tool` that names no tool is refused with the list of tools and changes nothing.",
+]
 
 [[command]]
 id = "tool.list"
@@ -576,6 +580,7 @@ summary = "Query that lists the pointer tools with their keys and toolbar groups
 ref = "Edit View › Draw Tool; docs/control-protocol.md"
 status = "inferred"
 own = true
+notes = "`crates/ui`: a getter shell command (`shell/getters.rs`); fired from a key or the command palette it shows nothing."
 
 [[panel]]
 id = "dialog.primitiveMeasurements"
