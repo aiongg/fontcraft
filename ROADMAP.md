@@ -1118,9 +1118,17 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
          `dialog`, `transform` and `fontView` (`shell/getters.rs`), and the five read-only getters
          (`editView.getText`, `editView.getFeatures`, `fontView.getState`, `transform.getSettings`,
          `view.getDisplayOptions`), answered with their reply through `engine.execute`.
-   - With UI.48 written, the new window has the old window's features except PDF pages in placed images; the rest
-     of this list are smaller follow-ups the old window also lacks. The next step is retiring the old window.
-     UI.47 and UI.48 are written on their branches, not yet built.
+     11. Done (UI.50a to UI.50d, written on `w-UI.50`, not yet built): what the old app set up at startup, handed to
+         `fontcraft_ui::Options` by `apps/fontcraft-next`: the system clock for Last Changed stamps, the snippets
+         folder and the extension folders in the settings folder, read on the first frame, when the window gains
+         focus and every five seconds while it has it, safe mode from `--safe-mode` or Alt and Shift held as the
+         window opens (`app/startup.rs`); a file or `fontcraft://show/` URL on the command line in place of the
+         Start Window, which also shows when they open nothing; the `control` entry of the extension surfaces; and
+         a drawing app's PDF pasted on the canvas when the clipboard's text is neither our fragment nor SVG or there
+         is none, read off the window's thread (`app/clipboard.rs`, the platform readers in
+         `apps/fontcraft-next/src/clipboard/`).
+   - With UI.50, the new window has the old window's features except PDF pages in placed images; the rest of this
+     list are smaller follow-ups the old window also lacks. The next step is retiring the old window.
 3. **The engine split, step 4 on.** ES.4 moves the kerning-index and metrics-sync readers outside the spacing crate
    behind its extension and moves the slots with `Session`; the later steps move command areas out of the engine
    crate along command ownership.

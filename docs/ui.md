@@ -253,6 +253,10 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   Extension Manager's indexes, entry files and screenshots, run on the host's jobs by `shell/extension_downloads.rs`)
   and `Options::opener` (`FontCraftApp::opener`: links in the browser, files in the file manager). Tests set fakes; the
   browser build has neither, and what needs them says so.
+- **Startup.** `apps/fontcraft-next` hands over the desktop's facts in `Options`: `clock` (the system clock),
+  `settings_dir` (the snippets and the extension folders), `safe_mode` (`--safe-mode`) and `launch` (a file or
+  `fontcraft://show/` URL from the command line). `app/startup.rs` applies them once when the window opens and polls
+  the extension folders each frame through `FontCraftApp::folder_poll`, which tests and the browser build leave unset.
 - **Closing.** `app/close.rs` keeps the question asked before unsaved work closes (the close box,
   `app.quit`, File › Close): one document at a time, then the window or the document closes.
   `dialogs/unsaved.rs` shows it; `window.closePrompt` answers it from the control channel.
@@ -355,7 +359,9 @@ Paste outside a text field takes no craft-ext piece: craft gives the platform's 
 component that lists Paste and turns it into the Cmd+V chord elsewhere, dropping its text. `app::clipboard` therefore
 reads the system clipboard through craft's own `craft::platform::clipboard` (`FontCraftApp::clipboard_reader`, which
 `apps/fontcraft-next` sets to `clipboard::system_text`); tests and the browser build have no reader and ask the window
-for a paste event.
+for a paste event. craft's system clipboard reads no PDF, so the drawing apps' PDF comes through
+`FontCraftApp::clipboard_flavours` (`app::clipboard::ClipboardFlavours`), which `apps/fontcraft-next/src/clipboard/`
+implements per platform and runs off the window's thread.
 
 ## Forbidden in UI code
 

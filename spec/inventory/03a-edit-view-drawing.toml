@@ -83,9 +83,10 @@ milestone = "M4"
 summary = "The Start Window appears at launch when no document is open. Clearing its Show window on startup checkbox suppresses it on later launches (a persisted preference)."
 ref = "Create"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: the desktop app started without a file shows the Start Window and no document while start.showAtLaunch is on (apps/fontcraft/src/main.rs)."
+notes = "Documented, not yet observed. FontCraft: the desktop app started without a file shows the Start Window and no document while start.showAtLaunch is on; a file or fontcraft://show/ URL named on the command line opens in its place (`launch` in crates/ui/src/app/startup.rs)."
 guesses = [
   "With Show window on startup off, the app opens a new document at launch, as File › New does. Settled by observing a launch with the checkbox cleared.",
+  "A file or URL named on the command line that opens nothing leaves the reason in the status line and shows the Start Window, rather than quitting; launching the reference with a missing file would settle it.",
 ]
 
 [[setting]]

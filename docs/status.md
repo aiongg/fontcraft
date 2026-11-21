@@ -565,15 +565,16 @@ linked file is checked against it, and a linked file outside the read root reads
    work, and X.pdf3's pasteboard PDF; on Windows (not built yet), X.pdf3's clipboard PDF.
 2. **Then, in this order** (ROADMAP.md › What to build next, items 2 to 5):
    - The new window's ports left (item 2). The framework gaps in `crates/craft-ext` are built; paste outside a
-     text field still waits for craft in the browser build. The parity audit gaps are closed on `w-UI.48`, not yet
-     built: a window and each new document open on Font View, tabs from the document's display strings and written
-     on save, renamed and removed glyphs followed into the tabs, the Palette's sidebar button and cell-sized
-     thumbnails in Font View. Left: PDF pages in placed images (needs a PDF renderer dependency); with that, the new
-     window has the old window's features and the next step is retiring the old window. Tabs per document, the Axis
-     Mappings graph and arrow keys, and Ctrl or Alt with Up and Down in Pairs & Phrases are written on `w-UI.47`, not
-     yet built. Packages 9 and 10 (the small commands, the
-     `ui.inspect` keys and the getters) are written on `w-UI.46`, not yet built. The smaller follow-ups
-     (Shape Order open-path thumbnails, svg filters and PDF images in colour layers) are listed there too.
+     text field still waits for craft in the browser build. The parity audit gaps are closed and merged (UI.46 to
+     UI.48): tabs per document, a window and each new document open on Font View, tabs from the document's display
+     strings and written on save, the Palette's sidebar button and cell-sized thumbnails in Font View among them.
+     The startup wiring and the clipboard's PDF of the old app are ported on `w-UI.50`, not yet built: the system
+     clock, the snippets and extension folders with their polling and safe mode (`crates/ui/src/app/startup.rs`), a
+     file or `fontcraft://show/` URL on the command line, the control surface entry, and a drawing app's PDF pasted
+     on the canvas (`crates/ui/src/app/clipboard.rs`, read by `apps/fontcraft-next/src/clipboard/`). Left: PDF pages
+     in placed images (needs a PDF renderer dependency); with that, the new window has the old window's features and
+     the next step is retiring the old window. The smaller follow-ups (Shape Order open-path thumbnails, svg filters
+     and PDF images in colour layers) are listed there too.
    - Retire the egui window: remove `crates/ui-egui` and `apps/fontcraft`. `cargo xtask parity` must then read the
      commands of `crates/ui`.
    - The engine split from ES.4.
