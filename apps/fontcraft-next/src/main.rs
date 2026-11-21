@@ -1,5 +1,4 @@
-//! FontCraft on the craft framework: the desktop window of `fontcraft-ui`, while it is built up
-//! to replace `apps/fontcraft`.
+//! FontCraft, the desktop app: the window of `fontcraft-ui` on the craft framework.
 //!
 //! A FILE argument opens that font with a tab per display string it stores; a `fontcraft://show/?…` URL opens its
 //! files and shows its glyphs (`url.show`). Either takes the place of the Start Window, which also shows when they
@@ -34,7 +33,7 @@ use std::process::ExitCode;
 
 #[cfg(not(target_arch = "wasm32"))]
 const USAGE: &str = "\
-FontCraft, the font editor (craft framework build, in progress)
+FontCraft, the font editor
 
 USAGE:
   fontcraft-next [FILE | URL] [--safe-mode] [--control PORT [--automation-read-root DIR]

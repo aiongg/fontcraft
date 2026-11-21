@@ -197,7 +197,7 @@ per toolbar group of `tool.list`, in its order; an ungrouped tool has a button o
   `tool.select`. A click outside the menu or `Escape` closes it.
 - Hover text: name and key, as in `Knife (E)`.
 - The buttons never take the keyboard focus, so the tool keys keep working after a click.
-- The icons are our own drawings, made with egui shapes in `crates/ui-egui/src/icons.rs`.
+- The icons come from the framework's icon catalog (`crates/ui/src/icons.rs`).
 
 ### How FontCraft builds the drawing tools (M3.13)
 
@@ -568,7 +568,7 @@ Curve's Make Stroke uses (`crates/pathops/src/stroker.rs`). A centred stroke wit
 height and round caps covers the same area as Make Stroke with equal distances, position 50 and
 round caps.
 
-How FontCraft's Stroke section works (`crates/ui-egui/src/panels/stroke.rs`):
+How FontCraft's Stroke section works (`crates/ui/src/panels/stroke.rs`):
 
 - A path counts as selected when it is selected whole or one of its nodes or handles is. With
   several, a field shows a value only when every selected path has it.

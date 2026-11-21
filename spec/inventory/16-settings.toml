@@ -18,7 +18,7 @@ milestone = "M14"
 summary = "Opens the settings window, optionally on a given section. In the reference it sits in the application menu."
 ref = "Settings (chapter introduction)"
 status = "handbook"
-notes = "FontCraft (M14.1, crates/ui-egui/src/shell/settings_window): with no section the window opens on the section last shown, else on User Settings. A section that is not built yet is refused with its reason and changes nothing. open: false closes the window and first writes any text still being typed in a field. The result lists the sections in order with whether each is available."
+notes = "FontCraft (M14.1, crates/ui/src/dialogs/settings.rs): with no section the window opens on the section last shown, else on User Settings. A section that is not built yet is refused with its reason and changes nothing. open: false closes the window and first writes any text still being typed in a field. The result lists the sections in order with whether each is available."
 guesses = [
   "Settings… is the last item of the Edit menu on every platform, because FontCraft draws its own menu bar and has no application menu; the reference puts it in the application menu on macOS.",
   "The window reopens on the section last shown; the handbook does not say which section it opens on.",
@@ -53,7 +53,7 @@ milestone = "M4"
 summary = "Writes one preference by setting id, with the same validation and side effects as changing it in the settings window. Not in the reference; proposed for agents and the CLI."
 ref = "Settings (whole chapter)"
 status = "inferred"
-notes = "Moved from M14 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6), with settings.get. It accepts the [[setting]] ids FontCraft implements (crates/engine-core/src/settings.rs, SETTINGS), checks the value against the row's kind, and takes null for the default. The ids other commands write are refused. Limits: 1,024 ids, 1 MB per value, 64 levels of nesting, 8 MB per settings file; a settings file that cannot be read gives the defaults and a report. The desktop app reads the store from settings.json in its settings folder at start and writes it whenever it changes (apps/fontcraft/src/user_files.rs, M4.6); an unreadable file is kept as settings.json.bad. The folder's Info/GlyphData*.xml files are the user's custom glyph data."
+notes = "Moved from M14 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6), with settings.get. It accepts the [[setting]] ids FontCraft implements (crates/engine-core/src/settings.rs, SETTINGS), checks the value against the row's kind, and takes null for the default. The ids other commands write are refused. Limits: 1,024 ids, 1 MB per value, 64 levels of nesting, 8 MB per settings file; a settings file that cannot be read gives the defaults and a report. The desktop app reads the store from settings.json in its settings folder at start and writes it whenever it changes (apps/fontcraft-next/src/user_files.rs, M4.6); an unreadable file is kept as settings.json.bad. The folder's Info/GlyphData*.xml files are the user's custom glyph data."
 guesses = [
   "Our own command; the reference has no headless access to settings, so there is nothing to settle.",
 ]
@@ -842,7 +842,7 @@ milestone = "M13"
 summary = "Lets a companion viewer app on a device in the same local network connect and mirror the active Edit View. Default not stated."
 ref = "Settings › Sharing"
 status = "handbook"
-notes = "FontCraft: while on, the desktop app serves External Preview on a free port of every IPv4 interface, under a random path (apps/fontcraft/src/external_preview.rs); turning it off closes the port and forgets the address, the waiting and the refused devices. Turning it on is refused while automation roots are in force. Headless nothing is served."
+notes = "FontCraft: while on, the desktop app serves External Preview on a free port of every IPv4 interface, under a random path (apps/fontcraft-next/src/external_preview.rs); turning it off closes the port and forgets the address, the waiting and the refused devices. Turning it on is refused while automation roots are in force. Headless nothing is served."
 guesses = [
   "Off by default; the handbook does not say.",
   "The port and the random path are new each time the preview is turned on.",
@@ -957,7 +957,7 @@ milestone = "M13"
 summary = "FontCraft has no companion app; any browser on the network opens a read-only page of the active Edit View after the device is confirmed on the computer."
 ref = "Settings › Sharing"
 status = "inferred"
-notes = "apps/fontcraft/src/external_preview.rs, on the HTTP server of apps/fontcraft/src/preview_server.rs (one request per connection, capped headers, connections and request rate)."
+notes = "apps/fontcraft-next/src/external_preview.rs, on the HTTP server of apps/fontcraft-next/src/preview_server.rs (one request per connection, capped headers, connections and request rate)."
 
 # --- Addons ---
 

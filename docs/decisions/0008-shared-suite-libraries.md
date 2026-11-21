@@ -48,7 +48,7 @@ apart, and fixes made in one app do not reach the other.
 
 ## Rules
 
-- Only `ui-egui` may depend on craft-ui. egui stays above L6 (`cargo xtask layers`).
+- Only the UI crates (`ui`, `craft-ext`) may depend on craft-ui. egui stays above L6 (`cargo xtask layers`).
 - Every pinned crate must keep the wasm build (`cargo xtask wasm`) and the never-crash rules.
   Before adopting a crate, read its source for panic paths on our inputs, as for any dependency.
 - Bumping a pin is its own commit, with the full gate. Read what changed upstream first.

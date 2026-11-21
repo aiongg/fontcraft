@@ -1,7 +1,7 @@
 //! The engine half of the preview of instances (M9.20): `preview.render` draws the preview line
 //! to an image, and `preview.toggleInstanceVisibility` shows or hides an instance in the
 //! preview of all instances. The Preview Area and the Preview Panel themselves are the shell's
-//! (`fontcraft_ui_egui::shell::preview`); they share the strip's edges ([`preview_range`]) and
+//! (`fontcraft_ui::shell::preview`); they share the strip's edges ([`preview_range`]) and
 //! the blur ([`blur_pixels`]) with this module.
 //!
 //! Rows: `preview.render`, `preview.toggleInstanceVisibility`, `preview.respectsInstanceData`.

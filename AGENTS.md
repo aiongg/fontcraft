@@ -67,7 +67,7 @@ model, commands), [`docs/decisions/`](docs/decisions/) (why things are the way t
   commit, named by its id (`M1.3: …`).
 
 ## Running and looking at the app
-- `cargo run -p fontcraft -- --control 7985 [file.fontcraft]`: the desktop app with the control
+- `cargo run -p fontcraft-next -- --control 7985 [file.fontcraft]`: the desktop app with the control
   channel. The sibling apps default to port 7979; if the log says the port could not be bound,
   pick another, or your requests reach a different app.
 - Drive it with JSON lines on `127.0.0.1:7985`, e.g.
@@ -75,8 +75,8 @@ model, commands), [`docs/decisions/`](docs/decisions/) (why things are the way t
   Methods: `docs/control-protocol.md`.
 - Headless: `cargo run -p fontcraft-cli -- run --cmd path.addPath --params '{…}' --export out.ttf`,
   `fontcraft-cli commands`, `fontcraft-cli mcp --headless` (`docs/mcp.md`).
-- For UI work, look at the result: until `ui.screenshot` lands (M3), cover panels with a headless
-  frame test (`crates/ui-egui/src/tests.rs`).
+- For UI work, look at the result: `ui.screenshot` on the running app, and a headless test of
+  the panel (`crates/ui/src/testing.rs`, or the craft fixture the panel tests use).
 - Parallel agents: one `CARGO_TARGET_DIR` each, edit only the crates you own, put new commands in
   a new `cmd/<area>.rs` module, write manifests atomically, delete your target dir when done.
 

@@ -206,7 +206,7 @@ ref = "Extensions › Plugin Manager"
 status = "inferred"
 guesses = [
   "The enlarged screenshot opens in its own window and closes from that window or by running the command without an id; the reference app's full-size view would settle where it appears and how it closes.",
-  "In the new window the screenshot shows inside the Extension Manager at the largest thumbnail size rather than in a window of its own; the reference app's full-size view would settle it.",
+  "The screenshot shows inside the Extension Manager at the largest thumbnail size rather than in a window of its own; the reference app's full-size view would settle it.",
 ]
 notes = "FontCraft (M13.10): the screenshot is read beside a local index or downloaded by the desktop app (at most 8 MiB, PNG, JPEG or TIFF) and shown at full size in its own window; without `id` the preview closes. In `crates/ui` it shows under the list in the Extension Manager, fitted to the largest thumbnail size, with Close Preview; it is decoded on a background job and refused beyond 16 megapixels."
 
@@ -571,7 +571,7 @@ milestone = "M13"
 summary = "A plug-in outside the catalogue is installed by dropping its bundle on the app's Dock icon; the app moves it into the Plugins folder. FontCraft: dropping a `.wasm` or `.fcmacro` file on the window, opening it with File › Open, or calling this command with a path validates it (manifest, ABI version, no imports, limits) and copies it into its folder; on the web the file's bytes are stored in the browser."
 ref = "Extensions › Plug-ins › Installing Plug-ins"
 status = "inferred"
-notes = "X.ui3, crates/ui-egui/src/shell/extensions/dropped.rs: a `.wasm` or `.fcmacro` file dropped anywhere on the desktop window runs this command with its path, before the canvas or the Font View can take it as an image. The web build does not install from a drop, since a dropped file there has no path and its bytes arrive asynchronously."
+notes = "X.ui3, crates/ui/src/app/dropped.rs: a `.wasm` or `.fcmacro` file dropped anywhere on the desktop window runs this command with its path, before the canvas or the Font View can take it as an image. The web build does not install from a drop, since a dropped file there has no path and its bytes arrive asynchronously."
 guesses = [
   "A module keeps the file name it had (or `<id>.wasm`); installing the same module again only turns it on, and a different module with an installed id needs `replace`; the reference's handling of a second copy is not documented.",
 ]

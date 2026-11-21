@@ -1497,7 +1497,7 @@ summary = "Opens a search field over every registered command; typing part of a 
 ref = "FontLab 8 What's new › Explore & prepare › Commands & Shortcuts dialog"
 status = "docs"
 origin = "fontlab"
-notes = "The new UI (`crates/ui`, `shell/command_palette.rs`) builds it on the framework's command palette: each row shows the label, the menu path and the shortcut; the empty query lists the commands run last. A pick fires the command as its menu row does. Not built: the shortcut editor and the help text."
+notes = "The window (`crates/ui/src/shell/command_palette.rs`) builds it on the framework's command palette: each row shows the label, the menu path and the shortcut; the empty query lists the commands run last. A pick fires the command as its menu row does. Not built: the shortcut editor and the help text."
 guesses = [
   "The palette lists the commands that have a menu row; the others take parameters and are reached through the Command Console. The secondary reference's list would settle it.",
   "The shortcut Cmd+Shift+P comes from the secondary reference; the reference app has none.",
@@ -1596,7 +1596,7 @@ summary = "Shows a draggable horizontal line and reports sidebearings where it c
 ref = "FontLab 8 What's new › Metrics & kerning › Metrics (Metrics line); RoboFont reference › Space Center › Display options"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Edit View (M13.31) draws the line across the canvas and the sidebearings where it meets the outline, set with the `y` parameter. Dragging the line up or down beside the glyphs runs view.showMetricsBeam with the height under the pointer (X.ui3, crates/ui-egui/src/canvas/edit_aids.rs). Documented, not yet observed in the reference app."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Edit View (M13.31) draws the line across the canvas and the sidebearings where it meets the outline, set with the `y` parameter. Dragging the line up or down beside the glyphs runs view.showMetricsBeam with the height under the pointer (X.ui3, crates/ui/src/canvas/overlays/mod.rs). Documented, not yet observed in the reference app."
 guesses = [
   "The beam is dragged in whole units, only on the line itself (within half the node hit tolerance) and only outside the advance boxes of the edited glyph and the other glyphs on its line, so nodes and marquees near it stay with the tools; the reference apps' pages do not say where the line can be grabbed.",
   "The beam is one height per font, shared by Edit View and Space Center, and sidebearing commands take it as an optional `beam` parameter; FontLab's and RoboFont's pages do not say whether it is per font or per window.",
@@ -1701,7 +1701,7 @@ summary = "The dialog over kerning.auditExceptions: threshold, direction and mas
 ref = "FontLab 8 What's new › Metrics & kerning › Kerning (Audit Exceptions)"
 status = "docs"
 origin = "fontlab"
-notes = "Built in the new UI (UI.14) as the follow-up of M13.21b. The dialog runs the audit when it opens and again on Audit; Add Exceptions runs it with fix and lists the exception each pair got. Documented, not yet observed."
+notes = "Built in the window (UI.14) as the follow-up of M13.21b. The dialog runs the audit when it opens and again on Audit; Add Exceptions runs it with fix and lists the exception each pair got. Documented, not yet observed."
 guesses = [
   "The audit runs once with the default settings as the dialog opens; FontLab's page does not say whether its dialog lists pairs before a button is pressed.",
 ]
@@ -1719,7 +1719,7 @@ summary = "The dialog over kerning.matchAcrossMasters: asks for the main master,
 ref = "FontLab 8 What's new › Metrics & kerning › Kerning (Match Kerning)"
 status = "docs"
 origin = "fontlab"
-notes = "Built in the new UI (UI.14) as the follow-up of M13.21b. Documented, not yet observed."
+notes = "Built in the window (UI.14) as the follow-up of M13.21b. Documented, not yet observed."
 guesses = [
   "The summary gives the pairs filled, the exceptions added and each master's pair count before and after; FontLab's page names no summary.",
 ]
@@ -2220,7 +2220,7 @@ summary = "The dialog over font.overlayFonts: one row per source (open document,
 ref = "FontLab 8 What's new › Color › Overlay Fonts"
 status = "docs"
 origin = "fontlab"
-notes = "Built in the new UI (UI.30b) for M13.66. Documented, not yet observed."
+notes = "Built in the window (UI.30b) for M13.66. Documented, not yet observed."
 guesses = [
   "The dialog opens with one source per open document, bottom first, each in its own colour from a fixed list; settled by opening Overlay Fonts in the reference app with three fonts open.",
   "The preview shows the shown glyph, or the first three glyphs of the active font, side by side; settled by the reference app's dialog.",
@@ -3258,7 +3258,7 @@ summary = "Views and edits raw TrueType bytecode as assembly text, for glyph pro
 ref = "FontForge dialogs › Viewing and Editing truetype instructions; FontForge Hints menu › Edit Instructions, Edit fpgm, Edit prep"
 status = "docs"
 origin = "fontforge"
-notes = "Built in M13.51 (`hint.tt.editInstructions` opens it, `crates/ui-egui/src/dialogs/tt_instructions.rs`). The listing shows each instruction's byte offset and the disassembler's text, with a one-sentence explanation on hover; Edit and Parse work as described, Parse running hint.tt.setAssembly. Of the three shorthands in the summary only arguments on the instruction's line are supported: control values are not looked up or created by value, and deltas have no size-and-amount shorthand. Documented, not yet observed in the reference app."
+notes = "Built in M13.51 (`hint.tt.editInstructions` opens it, `crates/ui/src/dialogs/tt/instructions.rs`). The listing shows each instruction's byte offset and the disassembler's text, with a one-sentence explanation on hover; Edit and Parse work as described, Parse running hint.tt.setAssembly. Of the three shorthands in the summary only arguments on the instruction's line are supported: control values are not looked up or created by value, and deltas have no size-and-amount shorthand. Documented, not yet observed in the reference app."
 guesses = [
   "Parse stores the text at once (one undo step) instead of waiting for the dialog to close; watching the secondary reference's dialog would show whether its changes apply only on OK.",
   "The dialog has a Cancel button that drops the edited text and shows the listing again; the documentation names Edit and Parse only.",
@@ -3405,7 +3405,7 @@ summary = "Steps through the PostScript stem hints of a glyph one at a time for 
 ref = "FontForge Hints menu › Review Hints"
 status = "docs"
 origin = "fontforge"
-notes = "Built in M13.51 (`hint.ps.reviewHints` opens it, `crates/ui-egui/src/dialogs/review_hints.rs`), on the hint.ps commands: the fields run hint.ps.setHintValues, Create runs Add Horizontal or Vertical Hint without nodes, Remove runs hint.ps.deleteHints. The reviewed hint is the Edit View selection when the tab edits that layer, which the canvas marks while Show Hints is on. Documented, not yet observed in the reference app."
+notes = "Built in M13.51 (`hint.ps.reviewHints` opens it, `crates/ui/src/dialogs/review_hints.rs`), on the hint.ps commands: the fields run hint.ps.setHintValues, Create runs Add Horizontal or Vertical Hint without nodes, Remove runs hint.ps.deleteHints. The reviewed hint is the Edit View selection when the tab edits that layer, which the canvas marks while Show Hints is on. Documented, not yet observed in the reference app."
 guesses = [
   "The position field is the hint's origin edge and the width its signed distance to the other edge, as the hint badges show them; ghost hints show an empty width. The secondary reference's dialog would show whether it uses base and width the same way.",
   "Previous and Next stop at the first and last hint of the direction instead of wrapping round; the secondary reference's dialog would settle it.",
@@ -4495,7 +4495,7 @@ summary = "Edits mappings in which the position on one axis changes the effectiv
 ref = "Fontra reference › Font menu › Cross-axis mapping"
 status = "docs"
 origin = "fontra"
-notes = "Documented in the secondary reference's manual, not yet observed. Built (M13.48) as a window opened by `window.crossAxisMappings` (Font menu): the cards are a draft of the active font's mappings, written by Apply with `font.setCrossAxisMappings` as one undo step; Revert drops the draft. The new window (crates/ui/src/dialogs/cross_axis.rs) has no Alt-click on a disclosure yet: each card opens and closes on its own."
+notes = "Documented in the secondary reference's manual, not yet observed. Built (M13.48) as a window opened by `window.crossAxisMappings` (Font menu): the cards are a draft of the active font's mappings, written by Apply with `font.setCrossAxisMappings` as one undo step; Revert drops the draft. The window (crates/ui/src/dialogs/cross_axis.rs) has no Alt-click on a disclosure yet: each card opens and closes on its own."
 guesses = [
   "Edits collect in a draft that Apply writes, rather than each edit changing the font at once; watching the secondary reference's undo after editing a card would settle it.",
   "A new mapping starts with no axis ticked and each value at the default master's location; the secondary reference's new card would settle it.",

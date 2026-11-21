@@ -10,7 +10,7 @@ Source: Glyphs 4 Handbook, chapter "Settings". Inventory: `spec/inventory/16-set
 - Seven sections (`window.settings` and one `settings.*` panel each): Updates, Appearance, User
   Settings, Sample Strings, Sharing, Addons, Shortcuts. In FontCraft a section that is not built
   yet stays in the switcher, greyed with the reason, and `app.settings` refuses to open it. Each
-  section is an entry in `SECTIONS` (`crates/ui-egui/src/shell/settings_window`) whose body a
+  section is an entry in `SECTIONS` (`crates/ui/src/shell/settings.rs`) whose body a
   package fills; a body changes settings only through `settings.set` or its own commands.
 - Preferences persist across installing a newer or older version (`settings.surviveVersionChange`).
 - Headless access is our addition: `settings.get {id?}` and `settings.set {id, value}` address any
@@ -114,7 +114,7 @@ mirror the active Edit View.
 
 FontCraft has no companion app. While `sharing.enableExternalPreview` is on (off by default), the
 desktop app serves a page that any browser on the local network can open
-(`apps/fontcraft/src/external_preview.rs`).
+(`apps/fontcraft-next/src/external_preview.rs`).
 
 | Step | What happens |
 |---|---|
@@ -127,7 +127,7 @@ desktop app serves a page that any browser on the local network can open
 
 Limits: 64 trusted devices (the oldest go first), 8 waiting at once, 64 refused. The page is drawn
 at most 4 times a second, and only while a device is trusted. The HTTP server is the hinting
-preview's (`apps/fontcraft/src/preview_server.rs`): `GET` and `HEAD` only, one request per
+preview's (`apps/fontcraft-next/src/preview_server.rs`): `GET` and `HEAD` only, one request per
 connection, 4 connections, 64 KB of headers, 50 requests a second.
 
 While automation roots are in force, turning the preview on and trusting a device are refused, so a

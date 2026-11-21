@@ -1,6 +1,6 @@
 [package]
 name = "fontcraft-next"
-description = "FontCraft, the font editor, on the craft framework (desktop app, in progress)"
+description = "FontCraft, the font editor (desktop app)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

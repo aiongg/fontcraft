@@ -1,6 +1,6 @@
 //! Kerning pair lists: the plain-text work lists that the Pairs and Phrases section of the
 //! Palette steps through (`kerning.loadPairList`, `kerning.stepPairList`; the shell commands live
-//! in `fontcraft_ui_egui::shell::kerning_review`). This module reads the files and holds the
+//! in `fontcraft_ui::shell::kerning_review`). This module reads the files and holds the
 //! built-in lists; it registers no command.
 //!
 //! # Format

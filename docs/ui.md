@@ -1,8 +1,7 @@
 # Writing the UI (`crates/ui`)
 
-FontCraft's new UI is the crate `fontcraft-ui` (layer L6) on the craft framework. The binary
-`apps/fontcraft-next` runs it. `crates/ui-egui` and `apps/fontcraft` stay until the new UI reaches
-parity; then they are removed.
+FontCraft's UI is the crate `fontcraft-ui` (layer L6) on the craft framework. The desktop app
+`apps/fontcraft-next` runs it.
 
 This page is the contract for panel writers. The worked example is the Metrics panel:
 `crates/ui/src/panels/glyph_metrics.rs` and its view model in `crates/ui/src/app/models/glyph.rs`.
@@ -239,8 +238,8 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   yet is in `control::LATER`, which names it in the error; the package removes its line when it adds
   its module. `ui.inspect` keys come from `control::INSPECT`, `ui.set` switches from
   `control::SWITCHES`, one line per package each. `ui.click {id}` runs `ui.dialog.click`.
-  `apps/fontcraft-next --control PORT` listens on the loopback port (same protocol and flags as
-  `apps/fontcraft`); window input is replied to once the frames have carried it.
+  `apps/fontcraft-next --control PORT` listens on the loopback port (`docs/control-protocol.md`);
+  window input is replied to once the frames have carried it.
 - **Control-driven tests.** `crate::testing::TestApp` runs the whole app headless at 1280 × 800:
   `t.ok(method, params)` returns a request's result, `t.error(…)` its error, and window input
   (`ui.click`, `ui.drag`, `ui.move`, `ui.wheel`) has run when they return.
@@ -391,9 +390,5 @@ The view function stays as it is. That is why views read only their props.
 
 - `craft` is pinned by rev in the root `Cargo.toml`. The egui and winit `[patch.crates-io]`
   entries must equal `craft::egui_fork::REV` at that rev.
-- egui 0.37 (the fork) and egui 0.36 (crates.io, for `crates/ui-egui`) build side by side.
-  `fontcraft-ui` names egui 0.37 directly, not through the workspace.
-- The winit fork replaces winit for both. The 0.36 app builds its window events through
-  `vendor/egui-winit-0.36`, egui-winit 0.36.2 with the fork's extra event.
-- The `craft::egui_fork::check_lockfile` step in `cargo xtask ci` waits until `crates/ui-egui` is
-  removed: until then the lockfile holds egui 0.36 from crates.io on purpose.
+- egui and eframe are workspace dependencies at 0.37, which the patch resolves to the fork; the
+  lockfile holds no other egui.

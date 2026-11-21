@@ -14,7 +14,7 @@ milestones add. Decisions with alternatives are recorded in [`decisions/`](decis
         │ (desktop, │  127.0.0.1:port │ protocol    │   MCP (attached) │ cli        │
         │  web)     │                 └─────────────┘                  │ run, mcp…  │
         └─────┬─────┘                                                  └─────┬──────┘
-   L6   ui-egui: menus, panels, tools' overlays            mcp: tools ───────┤ (headless)
+   L6   ui: menus, panels, tools' overlays                 mcp: tools ───────┤ (headless)
               │  app.run(id, params)                                         │
    L5   engine: Session ── execute(id, params) ── command registry ── history, journal, guard
               │
@@ -73,11 +73,11 @@ Nothing below L6 may depend on a UI toolkit. Everything from L0 to L6 builds for
 | L4 | `tools` | today (M3.3: Select, Lasso Select, Hand, Zoom) | pointer tools: events in, commands and overlays out; hit testing, snapping, the selection and the Edit View keys |
 | L5 | `engine-core` | today | the session-free parts of the engine: `EngineError`, command parameters, user settings, the edit clock and the panic guard. Same-layer order: `engine` builds on it and re-exports each at its old path |
 | L5 | `engine` | today | sessions, history, the command registry |
-| L6 | `ui-egui` | today (shell) | the UI |
+| L6 | `ui` | today | the UI on the craft framework ([ui.md](ui.md)). Same-layer order: uses `craft-ext` |
 | L6 | `craft-ext` | today (UI.34) | framework pieces craft lacks, in craft-libs' layout and free of FontCraft code, used by `ui` ([decision 0009](decisions/0009-framework-gaps-staged-here.md)) |
 | L6 | `mcp` | today | the MCP server |
 | – | `testkit` | today | fixtures, junk parameters, invariants |
-| L7 | `fontcraft`, `fontcraft-cli`, `xtask` | today | apps and tooling. `fontcraft-web` (the same app in the browser) joins at M3 |
+| L7 | `fontcraft-next`, `fontcraft-cli`, `xtask` | today | apps and tooling. `fontcraft-web` (the same app in the browser) joins at M3 |
 
 A new crate is created in the lowest layer that works, starts with the no-panic lints (they are
 inherited from the workspace), and is registered in the layering table in the same change.
@@ -165,7 +165,7 @@ Rules for writing one ([decision 0004](decisions/0004-commands.md)):
   merged: [`spec/00-open-decisions.md`](spec/00-open-decisions.md), D2.)
 - **Dialogs are parameter editors.** A menu item with "…" opens a dialog that fills the command's
   parameters and previews by running it inside an interaction that is rolled back on Cancel.
-- **Shell commands** (`UI_COMMANDS` in `ui-egui`, gathered from one list per module in `shell/`)
+- **Shell commands** (`MODULES` in `crates/ui/src/shell/commands.rs`, one list per module)
   change only view and window state: zoom, panels, selection, which tab shows. They are reachable from the control channel and MCP like any other.
 - Nested commands share the outer command's transaction. `command.batch` runs a list of commands
   as one transaction and one undo step per document it changed; actions and scripts build on it.
@@ -278,7 +278,7 @@ command's result, so an agent can read them.
 | Surface | Transport | Where | Today |
 |---|---|---|---|
 | CLI | process, JSON on stdout | `apps/fontcraft-cli` | `commands`, `run`, `convert`, `info`, `mcp`. Planned set: `spec/inventory/20-cli.toml` (70 rows) |
-| Control channel | JSON lines, loopback TCP | `apps/fontcraft/src/control_server.rs`, `crates/ui-egui/src/control.rs` | `engine.execute`, `engine.commands`, `document.inspect`, `ui.inspect`, `ui.menu.list`, `ui.menu.invoke`, `ui.screenshot`, `ui.render`, `control.methods`. Planned: pointer and key injection, dialogs ([`control-protocol.md`](control-protocol.md)) |
+| Control channel | JSON lines, loopback TCP | `crates/ui/src/control/` | `engine.execute`, `engine.commands`, `document.inspect`, `ui.inspect`, `ui.menu.list`, `ui.menu.invoke`, `ui.screenshot`, `ui.render`, `control.methods`. Planned: pointer and key injection, dialogs ([`control-protocol.md`](control-protocol.md)) |
 | MCP | stdio JSON-RPC | `crates/mcp` | three tools (`list_commands`, `run_command`, `inspect_document`), headless or attached to the app. Planned: resources, prompts, completions, renders ([`mcp.md`](mcp.md)) |
 
 The request and reply shapes are the sibling apps'. The conventional control port is 7985 (theirs
@@ -287,21 +287,11 @@ started with `--control PORT`.
 
 ## The UI (L6)
 
-egui on wgpu through eframe; the web app is the same crate compiled to WebAssembly. `FontcraftApp`
-owns the `Session` and a serializable `UiState`, and draws into any egui context, which is how
-tests run frames without a window. The menu bar is generated from the registry: a command with a
-menu path appears by itself; the tree is rebuilt only when the document or the selection changes.
-Colours, radii and sizes come from `theme::Tokens`.
-
-The crate has two halves. `shell/` holds the chrome and the shell commands: menus, keymap (menu
-shortcuts with a modifier), tab strip, status bar, Font View, Palette. `canvas/` draws Edit View:
-the camera (`canvas/view.rs`, which hands the tools crate its `View` transform), metric lines and
-zones, filled glyphs (rasterised by `render` into a texture), the edited outline and the nodes
-with the display conventions of `docs/spec/03a` § 4.
-
-**Today:** menu bar, tab strip with Edit View tabs, Font View grid, Edit View (filled neighbours,
-outline, nodes, metric lines and zones, wheel and pinch zoom and scroll), a Palette stub, the
-status bar. **Planned:** the layout of [`ui-design.md`](ui-design.md).
+The crate `fontcraft-ui` (`crates/ui`) on the craft framework (egui on wgpu through eframe), run by
+the desktop app `apps/fontcraft-next`. `FontCraftApp` owns the `Session`, the view state and the
+view models; views read props and push messages, and only `drain()` runs commands. The menu bar is
+generated from the command catalog: a command with a menu path appears by itself. Tests run frames
+without a window. [`ui.md`](ui.md) is the contract for writing panels, dialogs and canvas layers.
 
 Planned: text in the UI stays English in code and is translated at draw time from per-language
 catalogues, as in the sibling apps. Command ids, the control channel, the CLI and MCP always use

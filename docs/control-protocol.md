@@ -23,9 +23,9 @@ are served at once. There is no authentication: enable the port only while you u
 Requests are answered on the UI thread between frames, exactly as a click would be. A bug inside a
 request becomes an error reply; the app keeps running.
 
-Transport: `apps/fontcraft/src/control_server.rs`. Dispatch: `crates/ui-egui/src/control.rs`.
-`ui.screenshot` needs the window, so the dispatch hands it back to the transport, which asks eframe
-for the next frame and replies when the frame arrives.
+Transport: `crates/ui/src/control/server.rs`, given its listener by the desktop app. Dispatch:
+`crates/ui/src/control/mod.rs`. `ui.screenshot` needs the window, so the reply waits until the
+next frame is captured.
 
 ## Confining file access
 
@@ -102,11 +102,7 @@ is checked for.
 | `ui.contextMenu.invoke` | `{command}` | runs an item of the open canvas context menu as a click on it does, and closes the menu; the item's result. The item is checked as the menu would show it now: a disabled or missing item is refused and the menu stays open; a menu whose tab or glyph changed, or that a dialog covers, closes and the request is refused. Refused while the question about unsaved changes is open |
 | `control.methods` | | this table |
 
-`ui.inspect` also names the active pointer tool (`tool`), the running interaction
-(`interaction`, the label of a drag or an open dialog, else `null`) and the open dialog's id
-(`dialog`, else `null`).
-
-The craft window (`apps/fontcraft-next`) answers `ui.inspect` with camelCase keys. Beside `tool`, `glyph`,
+`ui.inspect` answers with camelCase keys. Beside the active pointer tool (`tool`), `glyph`,
 `panels`, `canvas`, `status`, `tabs`, `activeTab`, `editText` and the panels' own keys, it reports:
 
 | Key | Holds |
@@ -428,7 +424,7 @@ The names and shapes follow the sibling apps so their agents' habits carry over.
 | `app.open` / `app.save` / `app.export` / `app.quit` | `{path}` … through the host (file dialogs, the browser's download) | M1 |
 
 Check drawing with `ui.screenshot` on the running app, or with a headless frame test
-(`crates/ui-egui/src/tests.rs`). Without a display the app runs on a virtual one
+(`crates/ui/src/testing.rs`). Without a display the app runs on a virtual one
 (`docs/development.md`).
 
 ## Errors agents will see

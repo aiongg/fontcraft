@@ -52,7 +52,7 @@ milestone = "M5"
 summary = "Variant of the glyph Info box that replaces the horizontal one when the text is laid out top to bottom. It exposes the vertical metrics (top and bottom sidebearing, vertical origin, vertical advance) and top and bottom kerning values and groups."
 ref = "Edit View › Info Box › Vertical Layout"
 status = "handbook"
-notes = "Documented, not yet observed. Built in M5.8a: T and B are fields running `spacing.setTopSidebearing` and `spacing.setBottomSidebearing`; In `crates/ui-egui` O and H are shown, not edited; in `crates/ui` (`panels/info_box.rs`) all four are key-or-number fields, O and H running `spacing.setVerticalOrigin` and `spacing.setVerticalWidth` (M5.20). The new UI has no vertical text layout yet, so its box shows this layout only once one sets it. K and G are the kern field and the group field with its lock at the box's first and second edge, for the glyph above and the glyph below."
+notes = "Documented, not yet observed. Built in M5.8a: T and B are fields running `spacing.setTopSidebearing` and `spacing.setBottomSidebearing`; In `crates/ui/src/panels/info_box.rs` all four are key-or-number fields, O and H running `spacing.setVerticalOrigin` and `spacing.setVerticalWidth` (M5.20). The window has no vertical text layout yet, so the box shows this layout only once one sets it. K and G are the kern field and the group field with its lock at the box's first and second edge, for the glyph above and the glyph below."
 
 [[panel]]
 id = "infoBox.selection"
@@ -90,7 +90,7 @@ milestone = "M6"
 summary = "Second Info box that appears to the right of the main one while a component is selected and describes the glyph the component references. Position edits are ignored while the component is automatically aligned."
 ref = "Edit View › Measuring › Measuring with the Info box"
 status = "handbook"
-notes = "Documented, not yet observed. M6.11: `ui-egui/src/panels/info_box_component.rs`. The box sits to the right of the selection box while Show Info is on and a component is selected. The name opens the glyph picker for component.setBaseGlyph; the fields run component.setTransform; the arrow runs component.editBaseGlyph. X and Y are greyed out on an aligned component (only X when it is aligned horizontally) and every field on a locked one."
+notes = "Documented, not yet observed. M6.11: `crates/ui/src/panels/info_box_component.rs`. The box sits to the right of the selection box while Show Info is on and a component is selected. The name opens the glyph picker for component.setBaseGlyph; the fields run component.setTransform; the arrow runs component.editBaseGlyph. X and Y are greyed out on an aligned component (only X when it is aligned horizontally) and every field on a locked one."
 guesses = [
   "With several components selected the box describes the first in shape order and shows how many more are selected beside its name; the reference app with two components selected settles it.",
   "A component whose transform is a matrix with slant that cannot be shown as scale and rotation shows only X and Y, the other fields empty and greyed out; a component with such a matrix in the reference app settles it.",
@@ -290,7 +290,7 @@ milestone = "M3"
 summary = "While an Info box field is focused, Up and Down raise or lower its value by 1, by 10 with Shift held, and by 100 with Cmd and Shift held."
 ref = "Edit View › Measuring › Measuring with the Info box"
 status = "handbook"
-notes = "Built in M3.15: each press commits at once, as one undo step. The handbook gives the step of 100 with Cmd+Shift for the glyph box's sidebearing fields; every Info box field of the egui window takes it (`widgets::arrow_delta`). In the craft window the metric fields that take a number or a key step by 1, 10 and 100 while they hold a number (`craft_ext::ui::text::StepKeys`); its plain number fields are the framework's, which step by 1 and by 10 with Shift and have no Cmd+Shift step yet."
+notes = "Built in M3.15: each press commits at once, as one undo step. The handbook gives the step of 100 with Cmd+Shift for the glyph box's sidebearing fields; In the window the metric fields that take a number or a key step by 1, 10 and 100 while they hold a number (`craft_ext::ui::text::StepKeys`); its plain number fields are the framework's, which step by 1 and by 10 with Shift and have no Cmd+Shift step yet."
 
 [[behavior]]
 id = "infoBox.followsSelection"
@@ -602,7 +602,7 @@ milestone = "M10"
 summary = "Toggles the display of PostScript hints on the glyph. TrueType hints are not covered by this switch; they are seen through the TrueType Instructor tool."
 ref = "Edit View › Glyph Display › View Options"
 status = "handbook"
-notes = "Off by default. While it is on, the Select tool hits and drags the hints and the context menu offers the hint commands (crates/ui-egui/src/canvas/hints_ps.rs); turning it off deselects the hints. Documented in the handbook, not yet observed."
+notes = "Off by default. While it is on, the Select tool hits and drags the hints and the context menu offers the hint commands (crates/ui/src/canvas/hinting/ps.rs); turning it off deselects the hints. Documented in the handbook, not yet observed."
 guesses = ["Show Hints starts off in a new window; the reference app would settle its default."]
 
 [[command]]
@@ -1496,7 +1496,7 @@ milestone = "M5"
 summary = "Chooser for stored sample strings. Unpinned it behaves as a transient picker; pinned it stays open so strings can be switched repeatedly."
 ref = "Edit View › Entering Text › Sample Strings"
 status = "handbook"
-notes = "Built in M5.13 (`dialogs/sample_strings.rs`): each group's name heads its strings; the string chosen last is highlighted. In the new UI each string's group shows in a column beside it, and a Choose button puts the selected string in and closes the window. Documented, not yet observed."
+notes = "Built in M5.13 (`dialogs/sample_strings.rs`): each group's name heads its strings; the string chosen last is highlighted. Each string's group shows in a column beside it, and a Choose button puts the selected string in and closes the window. Documented, not yet observed."
 guesses = [
   "Up and Down put the previous or next string into the text at once and keep the window open; a click closes it unless it is pinned; Return and Escape close it.",
 ]
@@ -2436,7 +2436,7 @@ milestone = "M8"
 summary = "Pop-up at the bottom left of Edit View that switches OpenType features on and off for the tab's text. Active features appear on the button as their four-letter tags, and the button takes the accent colour while any is on."
 ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
 status = "handbook"
-notes = "Documented, not yet observed. Type-ahead moves the highlight to the first entry whose name starts with the typed text, ignoring case, and Return picks it; typed characters more than a second apart start a new search. The new UI (`crates/ui/src/panels/features_menu.rs`) shows the button at the start of the status bar; its menu has the letter keys of every menu (a letter runs the entry it names), so name type-ahead waits for a menu component that has it."
+notes = "Documented, not yet observed. Type-ahead moves the highlight to the first entry whose name starts with the typed text, ignoring case, and Return picks it; typed characters more than a second apart start a new search. The window (`crates/ui/src/panels/features_menu.rs`) shows the button at the start of the status bar; its menu has the letter keys of every menu (a letter runs the entry it names), so name type-ahead waits for a menu component that has it."
 guesses = [
   "Type-ahead highlights the matching entry and Return picks it, rather than toggling the entry as soon as it matches; typing a tag with the menu open in the reference app would settle it.",
 ]

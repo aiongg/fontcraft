@@ -53,7 +53,7 @@ milestone = "M4"
 summary = "Window shown when the app starts with no document open. It lists recent documents and, after pressing plus, lets the user pick scripts and glyph sets and create a document with empty glyphs for them."
 ref = "Create"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/shell/start_window.rs. The chooser's scripts and sets are the built-in glyph sets (see file.newFromGlyphSets), so its lists differ from the reference's by design. The Create Document button runs file.newFromGlyphSets with the included scripts and their checked sets, so the window and the headless command give the same document."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/dialogs/start_window.rs. The chooser's scripts and sets are the built-in glyph sets (see file.newFromGlyphSets), so its lists differ from the reference's by design. The Create Document button runs file.newFromGlyphSets with the included scripts and their checked sets, so the window and the headless command give the same document."
 guesses = [
   "Each glyph set's checkbox shows its glyph count after its name. Settled by observing the chooser.",
   "Without earlier picks, Latin is included with its default sets. Settled by observing the chooser on a fresh install.",
@@ -173,7 +173,7 @@ milestone = "M4"
 summary = "Our query behind the Start Window's chooser: the built-in glyph sets by script, each script with its readable name and each set with its id, name, default flag and number of glyphs."
 ref = "Create"
 status = "inferred"
-notes = "Not a reference command: it backs the Start Window's script and glyph-set chooser (crates/ui-egui/src/shell/start_window.rs), so the chooser and an agent see the same lists, and it tells an agent which ids file.newFromGlyphSets takes. The sets are those of file.newFromGlyphSets's row; a script's readable name is the Unicode Script property value its id stands for (glyphData script ids such as `tibet` and `canadian` read `Tibetan` and `Canadian Aboriginal`)."
+notes = "Not a reference command: it backs the Start Window's script and glyph-set chooser (crates/ui/src/dialogs/start_window.rs), so the chooser and an agent see the same lists, and it tells an agent which ids file.newFromGlyphSets takes. The sets are those of file.newFromGlyphSets's row; a script's readable name is the Unicode Script property value its id stands for (glyphData script ids such as `tibet` and `canadian` read `Tibetan` and `Canadian Aboriginal`)."
 guesses = [
   "A script id that stands for several Unicode scripts (`kana`) or none (`math`) reads as the id with a capital (`Kana`, `Math`). Settled by observing the reference's script names in its chooser.",
 ]
@@ -368,7 +368,7 @@ milestone = "M3"
 summary = "Holding Option while a menu or context menu is open swaps some items for an alternate form, typically the same action applied to all masters (Tidy up Paths, Correct Path Direction, Reverse Contours, Set/Reset Anchors, Expand Outline), plus Force Extremes, Add Global Guide and Reopen Last Closed Tab."
 ref = "Edit View › Editing Paths"
 status = "handbook"
-notes = "The new UI (`crates/ui`, `app/menu_alternates.rs`, `ALTERNATES`) puts each pair on the base row of the menu bar: choosing the row with Alt held runs the alternate, and the alternate has no row of its own. While Alt is held the row shows the alternate command's own label and shortcut (`craft_ext::menu::held_alternate_labels`); the label updates as Alt goes down and up while the menu is open. Not yet in the table: the tab pair, two shell commands that each keep a View menu row of their own (the table takes engine commands only), the Font View batch forms, whose commands the new UI does not have yet, and the delete and Expand Outline pairs, whose commands have no menu path in the engine."
+notes = "The window (`crates/ui/src/app/menu_alternates.rs`, `ALTERNATES`) puts each pair on the base row of the menu bar: choosing the row with Alt held runs the alternate, and the alternate has no row of its own. While Alt is held the row shows the alternate command's own label and shortcut (`craft_ext::menu::held_alternate_labels`); the label updates as Alt goes down and up while the menu is open. Not yet in the table: the tab pair, two shell commands that each keep a View menu row of their own (the table takes engine commands only), the Font View batch forms, whose commands the window does not have yet, and the delete and Expand Outline pairs, whose commands have no menu path in the engine."
 guesses = [
   "Clear Background is the Alt alternate of Assign Background; the handbook says only that it shows while Alt is held. Holding Option in the reference app's Path menu settles it.",
   "An alternate row shows its own command's label and shortcut, as native macOS alternate items do; the handbook names the alternates but not their labels. The observe step below settles it.",
@@ -384,7 +384,7 @@ milestone = "M3"
 summary = "A menu item that switches something on and off shows a check mark while it is on: the View › Show items, the other display aids, and the menu switches of the Edit, Path and Window menus."
 ref = "Edit View › Glyph Display › View Options"
 status = "handbook"
-notes = "Documented for View › Show Info and View › Show Metrics, not yet observed for the other items. FontCraft: every command in `SWITCHES` (crates/ui-egui/src/shell/menus.rs) carries `checked` in the menu tree and in `ui.menu.list`; a menu item that only opens a window (Space Center, Kerning, Macro Panel) has none. The menu cache hashes the state of every switch, so the tree is rebuilt only on a frame where one changed. In `crates/ui` the list is `SWITCHES` in `app/menu_states.rs`; each row reads its state after every drain and the menu bar is rebuilt when a mark changed. Show Image and Keep Layer Selection in Sync join it when their commands exist there."
+notes = "Documented for View › Show Info and View › Show Metrics, not yet observed for the other items. FontCraft: every command in `SWITCHES` (crates/ui/src/app/menu_states.rs) carries `checked` in the menu tree and in `ui.menu.list`; a menu item that only opens a window (Space Center, Kerning, Macro Panel) has none. The menu cache hashes the state of every switch, so the tree is rebuilt only on a frame where one changed. In `crates/ui` the list is `SWITCHES` in `app/menu_states.rs`; each row reads its state after every drain and the menu bar is rebuilt when a mark changed. Show Image and Keep Layer Selection in Sync join it when their commands exist there."
 guesses = [
   "Every on/off switch shows a check mark, including Lock Outline, Power Nudge, Edit Background, Palette, Preview Panel and Font Audit; opening the reference app's View, Path and Window menus with each switch on and off settles which ones do.",
   "View › Show Indexes shows a check mark while any kind of index is shown. Settled by turning on a single kind in the reference app and opening the View menu.",
@@ -402,7 +402,7 @@ milestone = "M3"
 summary = "A menu item whose command needs something the selection does not give is greyed out: with no glyph edited or selected, every glyph command; in Font View, the commands that act on selected nodes, paths or anchors; in Edit View, a command on nodes until nodes are selected."
 ref = "macOS menu conventions; no handbook page says which items grey out"
 status = "inferred"
-notes = "Not documented, not yet observed. FontCraft (`crates/ui/src/app/menu_states.rs`, ported from `selection_supplies` of the old window): the reason is the row's tooltip and its `disabled_reason` in `ui.menu.list`. With nothing chosen the reason is the refusal firing the command gives (\"<label>: select a glyph first\", fontView.batch.appliesToSelection), so the row and the shortcut agree. Never greyed: commands that open a dialog when fired without parameters, the component pickers, Cut, Copy, Paste, Paste Special and Select All (a focused list or text mode takes them), and Delete in text mode."
+notes = "Not documented, not yet observed. FontCraft (`crates/ui/src/app/menu_states.rs`): the reason is the row's tooltip and its `disabled_reason` in `ui.menu.list`. With nothing chosen the reason is the refusal firing the command gives (\"<label>: select a glyph first\", fontView.batch.appliesToSelection), so the row and the shortcut agree. Never greyed: commands that open a dialog when fired without parameters, the component pickers, Cut, Copy, Paste, Paste Special and Select All (a focused list or text mode takes them), and Delete in text mode."
 guesses = [
   "With no glyph edited and nothing selected in Font View, every menu item whose command takes glyph targets is greyed out; opening the Path menu in the reference app's Font View with nothing selected settles it.",
   "In Font View with glyphs selected, a command that acts only on selected nodes or paths (Space Points, Make Parallel) is greyed out; the same menu with a glyph selected in Font View settles it.",
@@ -664,7 +664,7 @@ milestone = "M3"
 summary = "Row of tool buttons above the Edit View canvas. A click makes the tool active (`tool.select`); a shared button's menu lists the tools of its group."
 ref = "Edit View › Draw Tool; Edit View › Cutting Paths"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (https://www.youtube.com/watch?v=VGe96Qjlvvc; Glyphs 3), 11:54–11:57: the tooltip reads \"Knife (E)\" and the button carries a small menu triangle; 12:21: the Primitives button opens a menu listing Rectangle and Circle. FontCraft: the buttons come from `tool.list` in its order; the icons are our own drawings (`crates/ui-egui/src/icons.rs`)."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (https://www.youtube.com/watch?v=VGe96Qjlvvc; Glyphs 3), 11:54–11:57: the tooltip reads \"Knife (E)\" and the button carries a small menu triangle; 12:21: the Primitives button opens a menu listing Rectangle and Circle. FontCraft: the buttons come from `tool.list` in its order; the icons come from the framework's icon catalog (`crates/ui/src/icons.rs`)."
 guesses = [
   "A secondary click on a shared button also opens its menu; no source shows the reference doing so.",
 ]
@@ -2382,7 +2382,7 @@ milestone = "M6"
 summary = "The anchor marker is a diamond when the anchor sits precisely on a metric line (baseline or x-height, for instance), a square when it is inside an alignment zone, and a circle otherwise. Anchors whose name starts with an underscore are drawn with a hole in the same three shapes."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
-notes = "Documented, not yet observed. M6.10: drawn as documented (`crates/ui-egui/src/canvas/anchors.rs`), against the metric lines and zones the node highlights use."
+notes = "Documented, not yet observed. M6.10: drawn as documented (`crates/ui/src/canvas/paint/anchors.rs`), against the metric lines and zones the node highlights use."
 observe = [
   "Put an anchor on the x-height, one inside the baseline zone and one elsewhere, and note the three shapes; repeat with names that start with an underscore.",
 ]
@@ -2492,7 +2492,7 @@ milestone = "M8"
 summary = "Field at the bottom of the Palette for the context of a selected asterisk-prefixed anchor. It is shown only while Show Info is on."
 ref = "Edit View › Contextual Mark Attachment"
 status = "handbook"
-notes = "Documented, not yet observed. M8.21 (`crates/ui-egui/src/panels/palette_anchor_context.rs`): the last contextual section of the Palette, shown while Show Info is on and exactly one anchor whose name starts with `*` is selected; it runs `anchor.setContext`."
+notes = "Documented, not yet observed. M8.21 (`crates/ui/src/panels/anchor_context.rs`): the last contextual section of the Palette, shown while Show Info is on and exactly one anchor whose name starts with `*` is selected; it runs `anchor.setContext`."
 guesses = [
   "The field is multi-line, since a context may hold several lines, commits when it loses the focus, and Escape restores the stored text; the running app would show its size and when it commits.",
 ]
