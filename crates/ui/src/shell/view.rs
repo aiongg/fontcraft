@@ -80,6 +80,13 @@ const COMMANDS: &[UiCommand] = &[
     command("view.showAnchors", "Show Anchors", &["View"], None, TOGGLE),
     command("view.fillPreview", "Fill Preview", &["View"], None, TOGGLE),
     command(
+        "view.showImage",
+        "Show Image",
+        &["View"],
+        None,
+        "{on?: bool} draw the images placed on glyph layers; a layer side with no paths and no components shows its image regardless (omitted: toggle)",
+    ),
+    command(
         "path.editBackground",
         "Edit Background",
         &["Path"],
@@ -103,6 +110,7 @@ pub(crate) fn flag<'a>(display: &'a mut Display, id: &str) -> Option<&'a mut boo
         "view.showAnnotations" => &mut display.annotations,
         "view.showAnchors" => &mut display.anchors,
         "view.fillPreview" => &mut display.fill_preview,
+        "view.showImage" => &mut display.image,
         _ => return None,
     })
 }

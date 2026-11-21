@@ -54,6 +54,7 @@ pub struct PaintLayer {
 pub const LAYERS: &[PaintLayer] = &[
     PaintLayer { id: "background", paint: paint::background::tint },
     PaintLayer { id: "status", paint: paint::status::paint },
+    PaintLayer { id: "images", paint: super::images::paint },
     PaintLayer { id: "metrics", paint: paint::metrics::paint },
     PaintLayer { id: "reportersBack", paint: super::reporters::back },
     PaintLayer { id: "ttPixels", paint: hinting::pixels::backdrop },
@@ -81,6 +82,7 @@ pub const LAYERS: &[PaintLayer] = &[
     PaintLayer { id: "ttBadges", paint: hinting::badges::badge_layer },
     PaintLayer { id: "ttPointNumbers", paint: hinting::badges::numbers },
     PaintLayer { id: "psHintMarks", paint: hinting::ps::marks_layer },
+    PaintLayer { id: "imageSelection", paint: super::images::paint_selection },
     PaintLayer { id: "selection", paint: tools::overlays::selection },
     PaintLayer { id: "measurement", paint: overlays::guides::measurement },
     PaintLayer { id: "auditMarkers", paint: overlays::audit::markers },

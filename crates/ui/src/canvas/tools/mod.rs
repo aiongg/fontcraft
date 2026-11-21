@@ -50,6 +50,8 @@ pub struct ToolView {
     pub focus: Option<Vec<usize>>,
     /// What the active tool asks the canvas to draw, in font units.
     pub overlays: Vec<Overlay>,
+    /// The edited glyph's placed images and the selected one (`canvas::images::refresh` keeps it).
+    pub images: crate::canvas::images::ImagePaint,
 }
 
 /// The tools' side of the app: the toolbox, the selection and the running interaction.
@@ -66,6 +68,8 @@ pub struct Tools {
     checked: Option<(u64, u64)>,
     /// The modifiers the toolbox last saw.
     mods: Modifiers,
+    /// The edited side's placed image is selected (`canvas::images`); it belongs to the same target as the selection.
+    pub image: bool,
     /// What the tool layers paint; [`Tools::refresh`] copies it from the state above.
     pub view: ToolView,
 }
@@ -82,6 +86,7 @@ impl Default for Tools {
             before: None,
             checked: None,
             mods: Modifiers::NONE,
+            image: false,
             view: ToolView::default(),
         }
     }
@@ -118,6 +123,8 @@ impl Tools {
     pub fn park(&mut self) -> ParkedSelection {
         self.checked = None;
         self.before = None;
+        // A tab's image selection is not kept: the image is selected again with a click.
+        self.image = false;
         ParkedSelection { selection: std::mem::replace(&mut self.selection, Selection::new()), focus: self.focus.take(), target: self.target.take() }
     }
 
@@ -134,7 +141,12 @@ impl Tools {
 impl Tools {
     /// Copies the selection, the focus and the active tool's overlays into [`Tools::view`], when they changed.
     pub fn refresh(&mut self) {
-        let view = ToolView { selection: self.selection.clone(), focus: self.focus.clone(), overlays: self.toolbox.overlays() };
+        let view = ToolView {
+            selection: self.selection.clone(),
+            focus: self.focus.clone(),
+            overlays: self.toolbox.overlays(),
+            images: self.view.images.clone(),
+        };
         if view != self.view {
             self.view = view;
         }

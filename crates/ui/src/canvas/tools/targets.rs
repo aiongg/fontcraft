@@ -24,6 +24,7 @@ pub fn with_targets(app: &mut FontCraftApp, command: CommandRef) -> CommandRef {
         return command;
     }
     super::apply::sync(app);
+    let image = takes_param(spec, "image?: bool") && crate::canvas::images::is_selected(app);
     let marks = crate::canvas::hinting::ps_marks(&mut app.session, &app.view);
     let Ok(font) = app.session.font() else { return command };
     let Some(mut scene) = super::scene(font, &app.view, app.tools.focus.as_ref()) else { return command };
@@ -34,7 +35,11 @@ pub fn with_targets(app: &mut FontCraftApp, command: CommandRef) -> CommandRef {
     if spec.targets.is_empty() {
         return command;
     }
-    let targets = selection_targets(&scene, &app.tools.selection, spec);
+    let mut targets = selection_targets(&scene, &app.tools.selection, spec);
+    // The selected placed image is the target of the commands that take it (`canvas::images`).
+    if image {
+        targets.insert("image".into(), json!(true));
+    }
     CommandRef::with_params(command.id, Value::Object(targets))
 }
 

@@ -162,6 +162,9 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   `OverlayData`, which layers read as `PaintCx::overlays`; their switches are `shell/overlays.rs`. Reporter module
   drawings are read the same way (`canvas/reporters.rs`) and paint as `reportersBack` and `reportersFront`. A text note is
   typed in a field over its box (`canvas/annotation_editor.rs`).
+  Placed images are `canvas/images/`: `images::refresh` (after `drain`) decodes their files through `ImageFiles`
+  (large ones on the host's jobs) into `ToolView::images`, which the `images` and `imageSelection` layers paint; the
+  image's press, drags and keys come before the toolbox's, and whether it is selected is `Tools::image`.
 - **Edit View tabs.** The document area (`PanelId::Document`, a canvas group the host draws in
   `Panels::group_view`) shows craft's `DocumentTabs` strip over its body (`panels/tab_strip.rs`, model
   `models.tabs`): Font View first and not closable, then one tab per Edit View tab, titled by its first glyphs. The

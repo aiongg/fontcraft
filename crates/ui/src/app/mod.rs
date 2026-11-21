@@ -205,6 +205,8 @@ pub struct FontCraftApp {
     pub tools: crate::canvas::tools::Tools,
     /// The gradient knob drag in progress (`canvas::color::knobs`).
     pub knobs: crate::canvas::color::knobs::KnobDrag,
+    /// The decoded image files and the image drag in progress (`canvas::images`).
+    pub images: crate::canvas::images::Images,
     /// Moves with every applied [`ViewMsg`] and every view change a projection reads; part of the projection
     /// [`Stamp`].
     view_revision: u64,
@@ -277,6 +279,7 @@ impl FontCraftApp {
             space_preview: Default::default(),
             tools: crate::canvas::tools::Tools::default(),
             knobs: Default::default(),
+            images: Default::default(),
             view_revision: 0,
             enabled_at: None,
             models: Models::default(),
@@ -434,6 +437,7 @@ impl FontCraftApp {
         // Last: it takes the whole app, so `cx` must be done.
         crate::canvas::overlays::refresh(self);
         crate::canvas::reporters::refresh(self);
+        crate::canvas::images::refresh(self);
         let engine = Stamp::of(&self.session, 0);
         if self.enabled_at != Some(engine) {
             self.enabled_at = Some(engine);
@@ -610,6 +614,7 @@ impl ShellApp for FontCraftApp {
         models::text_preview::logic(&mut self.models.text_preview, ctx);
         dropped::take(self, ctx);
         crate::shell::external_changes::on_focus(self, ctx);
+        crate::canvas::images::logic(self, ctx);
         crate::control::logic(self, ctx);
         open::take_dropped(self, ctx);
         crate::shell::font_audit::logic(self, ctx);

@@ -80,6 +80,7 @@ pub fn sync(app: &mut FontCraftApp) {
         }
         app.tools.selection = Selection::new();
         app.tools.focus = None;
+        app.tools.image = false;
         app.tools.target = target;
     }
     if app.tools.before.is_some() && app.session.interaction().is_none() {
@@ -129,6 +130,9 @@ pub fn input(app: &mut FontCraftApp, input: ToolInput) -> Vec<String> {
         if let Some(errors) = crate::canvas::hinting::badges::key(app, &ev) {
             return errors;
         }
+        if let Some(errors) = crate::canvas::images::key(app, &ev) {
+            return errors;
+        }
         let out = match with_tool(app, |toolbox, cx| toolbox.key(cx, &ev)) {
             Ok(out) => out,
             Err(e) => return vec![e],
@@ -143,6 +147,9 @@ pub fn input(app: &mut FontCraftApp, input: ToolInput) -> Vec<String> {
     let out = match input {
         ToolInput::Pointer(ev) => {
             if let Some(errors) = crate::canvas::color::knobs::pointer(app, ev) {
+                return errors;
+            }
+            if let Some(errors) = crate::canvas::images::pointer(app, ev) {
                 return errors;
             }
             app.tools.mods = ev.mods;
@@ -178,6 +185,9 @@ pub fn key(app: &mut FontCraftApp, ev: fontcraft_tools::KeyEvent) -> Option<Vec<
         return crate::canvas::text::input::takes_key(&ev).then(|| crate::canvas::text::input::input(app, ToolInput::Key(ev)));
     }
     if let Some(errors) = crate::canvas::hinting::badges::key(app, &ev) {
+        return Some(errors);
+    }
+    if let Some(errors) = crate::canvas::images::key(app, &ev) {
         return Some(errors);
     }
     let out = with_tool(app, |toolbox, cx| toolbox.key(cx, &ev)).ok()?;
