@@ -523,7 +523,7 @@ fn arrow_keys(ui: &Ui, m: &AxisModel, sent: &mut Vec<Msg>) {
     }
     let moves = arrow_chords();
     let chords: Vec<Chord> = moves.iter().map(|(chord, _, _)| *chord).collect();
-    for chord in region_claims(ui.ctx(), Id::new("fontcraftAxisMappings.arrows"), &chords) {
+    for chord in region_claims(ui.ctx(), Id::unique("fontcraftAxisMappings.arrows"), &chords) {
         if let Some((_, across, up)) = moves.iter().find(|(c, _, _)| *c == chord) {
             sent.push(post_edit("axisMappings.nudgePoint", json!({"dInternal": across, "dExternal": up})));
         }

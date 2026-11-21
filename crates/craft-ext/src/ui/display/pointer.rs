@@ -11,7 +11,7 @@
 use egui::{Pos2, Rect, Response, Sense, Ui};
 
 /// What the pointer did on a picture in one pass. Positions are in screen points, inside or near [`rect`](Self::rect).
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PicturePointer {
     /// The picture's rect: the one its painter painted into.
     pub rect: Rect,
@@ -56,7 +56,7 @@ mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
 
-    use craft::ui::contract::{Props as _, Show as _};
+    use craft::ui::contract::Show as _;
     use craft::ui::display::{Picture, PictureSize};
     use craft::ui::list::{ThumbAspect, ThumbSize};
     use craft::ui::testing::Fixture;
@@ -72,7 +72,8 @@ mod tests {
         let mut fixture = Fixture::new(move |ui| {
             let shown = Picture::painter("Graph", ThumbAspect::SQUARE, |_, _| {}).extent(PictureSize::Thumb(ThumbSize::Large)).show(ui);
             let pointer = shown.pointer(ui);
-            if pointer != (PicturePointer { rect: pointer.rect, held: pointer.held, ..PicturePointer::default() }) {
+            let quiet = PicturePointer { drag_started: None, dragging: None, drag_ended: None, clicked: None, ..pointer };
+            if pointer != quiet {
                 out.borrow_mut().push(pointer);
             }
         });

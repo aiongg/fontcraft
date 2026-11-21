@@ -287,7 +287,7 @@ fn rename_in_text(text: &mut Text, old: &str, new: &str) {
 /// Drops the glyph items of `text` that `gone` names; a current glyph it names gives way to the glyph next to the
 /// cursor. Returns whether anything was dropped.
 fn remove_from_text(text: &mut Text, gone: &dyn Fn(&str) -> bool) -> bool {
-    let named = |item: &Item| matches!(item, Item::Glyph { name, .. } if gone(&**name));
+    let named = |item: &Item| matches!(item, Item::Glyph { name, .. } if gone(name));
     let current_gone = text.current_glyph().is_some_and(gone);
     if !text.items().iter().any(named) && !current_gone {
         return false;

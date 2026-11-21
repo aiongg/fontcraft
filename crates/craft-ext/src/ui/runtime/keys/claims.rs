@@ -94,7 +94,7 @@ mod tests {
         let mut fixture = Fixture::new(move |ui| {
             let _ = TextField::new("Name", Bind::given(String::new())).show(ui);
             let _ = Button::new("Apply").show(ui);
-            seen.borrow_mut().extend(region_claims(ui.ctx(), Id::new("region"), &[up]));
+            seen.borrow_mut().extend(region_claims(ui.ctx(), Id::unique("region"), &[up]));
         });
         fixture.settle();
         fixture.key(egui::Key::ArrowUp, Modifiers::NONE).settle();
