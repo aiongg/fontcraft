@@ -3222,6 +3222,7 @@ dependencies = [
  "fontcraft-engine",
  "fontcraft-ui",
  "serde_json",
+ "ureq",
 ]
 
 [[package]]
