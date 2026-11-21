@@ -32,12 +32,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1510 rows to check: 2604 guesses and 618 observe steps.**
+**1511 rows to check: 2607 guesses and 620 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **528** |
-| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 116 |
+| **Built milestones (M0 to M6)** | all | **529** |
+| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 117 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
 | Built milestones (M0 to M6) | Filters | 36 |
@@ -65,9 +65,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
-## Built milestones (M0 to M6) (528)
+## Built milestones (M0 to M6) (529)
 
-### Edit View: drawing, guides, layers and the Palette (116)
+### Edit View: drawing, guides, layers and the Palette (117)
 
 - [ ] `dialog.fieldKeys` (behavior, M3, inferred): In a dialog's number field, Return takes the typed value, Escape drops…
   - Guess: Dialog number fields follow the Info box's editing and arrow-key rules (infoBox.fieldEditing, infoBox.arrowKeyStepping); the handbook documents them for the Info box only.
@@ -81,8 +81,14 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: When several flavours are given, JSON is read first, then SVG, then PDF, and one that cannot be read gives way to the next; which flavour the reference prefers when a drawing app offers both SVG and PDF is not documented.
   - Guess: The desktop shell passes the clipboard's PDF only when its text cannot be pasted, so readable text wins over a PDF; copying a shape from a drawing app that offers both and pasting it into the reference would settle it.
   - Guess: A paste made while the clipboard's PDF is still being read for the previous one is dropped with a message in the status bar; pasting twice quickly from a drawing app into the reference would settle what it does.
+- [ ] `tabs.windowHoldsFontViewPlusEditTabs` (behavior, M3, handbook): One document window holds Font View as its fixed first tab followed…
+  - Guess: A window opens with one Edit View tab showing the font's first glyph beside Font View; the handbook does not say which tab a file without stored tabs opens on. Opening a new file in the reference app settles it.
+  - Guess: Font View draws in the master of the Edit View tab shown last; the handbook gives Font View no master of its own. Switching masters in two tabs and then showing Font View in the reference app settles it.
+  - Observe: Open a new file and note which tab shows first.
+  - Observe: Open two tabs, pick another master in the second, show Font View, and note which master its cells draw.
 - [ ] `menus.optionRevealsAlternateItems` (behavior, M3, handbook): Holding Option while a menu or context menu is open swaps some…
   - Guess: Clear Background is the Alt alternate of Assign Background; the handbook says only that it shows while Alt is held. Holding Option in the reference app's Path menu settles it.
+  - Guess: An alternate row shows its own command's label and shortcut, as native macOS alternate items do; the handbook names the alternates but not their labels. The observe step below settles it.
   - Observe: Open the Path menu, hold Option, and note which items change, their labels, and whether each keeps its shortcut with Option added.
 - [ ] `menus.switchCheckMarks` (behavior, M3, handbook): A menu item that switches something on and off shows a check…
   - Guess: Every on/off switch shows a check mark, including Lock Outline, Power Nudge, Edit Background, Palette, Preview Panel and Font Audit; opening the reference app's View, Path and Window menus with each switch on and off settles which ones do.
@@ -221,7 +227,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `editView.toolbar` (panel, M3, handbook): Edit View Toolbar
   - Guess: A secondary click on a shared button also opens its menu; no source shows the reference doing so.
 - [ ] `palette.stroke` (panel, M3, handbook): Stroke
-  - Guess: Cap axis is chosen with a select; the handbook's click-and-hold on the cap control needs a hold/flyout control the UI kit lacks.
+  - Guess: A right click on the axis-aligned cap opens the axis menu too; the handbook names only click-and-hold. Watching the reference app would settle it.
 - [ ] `dialog.shapeOrder` (panel, M3, handbook): Shape Order
   - Guess: The first row is the bottom shape (shape 0, drawn first).
   - Guess: Rows read `<index>: Path (<n> nodes)`, `<index>: Component <name>` or `<index>: Image`; what the reference's rows show and which end is the top are not observed (03a open question 24).

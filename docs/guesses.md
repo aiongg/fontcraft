@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**3103 guesses on 1614 rows (645 of them live commands).**
+**3106 guesses on 1615 rows (645 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -108,7 +108,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `guide.displayLines` | M3 | inferred | yes | The design grid parameter is read as a horizontal and a vertical step in units, drawn over the CJK box, or over the glyph's width and metric span when no CJK grid is set; the handbook does not explain it. |
 | `app.launchWithoutPlugins` (behavior) | M13 | handbook | – | The launch keys are read on the window's first frame, since the toolkit reports modifier keys only once the window exists; whether the reference also offers a way back without relaunching would settle Load Extensions. |
 | `start.shownAtLaunchWithoutDocuments` (behavior) | M4 | handbook | – | With Show window on startup off, the app opens a new document at launch, as File › New does. Settled by observing a launch with the checkbox cleared. |
+| `tabs.windowHoldsFontViewPlusEditTabs` (behavior) | M3 | handbook | – | A window opens with one Edit View tab showing the font's first glyph beside Font View; the handbook does not say which tab a file without stored tabs opens on. Opening a new file in the reference app settles it. |
+| `tabs.windowHoldsFontViewPlusEditTabs` (behavior) | M3 | handbook | – | Font View draws in the master of the Edit View tab shown last; the handbook gives Font View no master of its own. Switching masters in two tabs and then showing Font View in the reference app settles it. |
 | `menus.optionRevealsAlternateItems` (behavior) | M3 | handbook | – | Clear Background is the Alt alternate of Assign Background; the handbook says only that it shows while Alt is held. Holding Option in the reference app's Path menu settles it. |
+| `menus.optionRevealsAlternateItems` (behavior) | M3 | handbook | – | An alternate row shows its own command's label and shortcut, as native macOS alternate items do; the handbook names the alternates but not their labels. The observe step below settles it. |
 | `menus.switchCheckMarks` (behavior) | M3 | handbook | – | Every on/off switch shows a check mark, including Lock Outline, Power Nudge, Edit Background, Palette, Preview Panel and Font Audit; opening the reference app's View, Path and Window menus with each switch on and off settles which ones do. |
 | `menus.switchCheckMarks` (behavior) | M3 | handbook | – | View › Show Indexes shows a check mark while any kind of index is shown. Settled by turning on a single kind in the reference app and opening the View menu. |
 | `tools.sharedButtonCycling` (behavior) | M3 | handbook | – | Holding a shared toolbar button for 0.4 s opens its menu; the reference's hold time is not documented. |
@@ -159,7 +162,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `dialog.primitiveMeasurements` (panel) | M3 | handbook | – | The width and height fields run from 1 to 2,000,000 units and open at 100. |
 | `dialog.primitiveMeasurements` (panel) | M3 | handbook | – | The click is the shape's bottom-left corner (03a question 5). |
 | `editView.toolbar` (panel) | M3 | handbook | – | A secondary click on a shared button also opens its menu; no source shows the reference doing so. |
-| `palette.stroke` (panel) | M3 | handbook | – | Cap axis is chosen with a select; the handbook's click-and-hold on the cap control needs a hold/flyout control the UI kit lacks. |
+| `palette.stroke` (panel) | M3 | handbook | – | A right click on the axis-aligned cap opens the axis menu too; the handbook names only click-and-hold. Watching the reference app would settle it. |
 | `dialog.shapeOrder` (panel) | M3 | handbook | – | The first row is the bottom shape (shape 0, drawn first). |
 | `dialog.shapeOrder` (panel) | M3 | handbook | – | Rows read `<index>: Path (<n> nodes)`, `<index>: Component <name>` or `<index>: Image`; what the reference's rows show and which end is the top are not observed (03a open question 24). |
 | `palette.anchorContext` (panel) | M8 | handbook | – | The field is multi-line, since a context may hold several lines, commits when it loses the focus, and Escape restores the stored text; the running app would show its size and when it commits. |
