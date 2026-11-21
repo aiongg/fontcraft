@@ -390,6 +390,7 @@ impl FontCraftApp {
                     crate::dialogs::after::after_run(self, &command.id, &params, &reply);
                     // A request that names a copy gets the text in its reply; the system clipboard stays the person's.
                     clipboard::after_run(self, &command.id, &reply);
+                    crate::shell::font_info_tabs::after_run(self, &command.id, &reply);
                 }
                 crate::shell::project::after_run(self, &command.id, &reply);
                 crate::shell::extension_downloads::after_run(self, &command.id, &params, &reply);
@@ -455,6 +456,7 @@ impl FontCraftApp {
             ViewMsg::TextPreviewArea(area) => self.view.text_preview.area = area,
             ViewMsg::SidebarMenu(path) => self.view.sidebar.menu_row = path,
             ViewMsg::FeatureCompletion(ask) => self.view.font_info.features.completion = ask,
+            ViewMsg::FeatureCaretPlaced => self.view.font_info.features.caret = None,
         }
         Ok(())
     }

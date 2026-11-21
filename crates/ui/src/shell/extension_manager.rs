@@ -129,6 +129,8 @@ pub struct ManagerEntry {
     /// The file's size in bytes and its SHA-256, when the row gives them.
     pub size: Option<u64>,
     pub sha256: String,
+    /// The entry's file is downloading for Install or Update (`Downloads::install_running`).
+    pub downloading: bool,
 }
 
 impl ManagerEntry {
@@ -152,6 +154,7 @@ impl ManagerEntry {
             error,
             size: row.get("size").and_then(Value::as_u64),
             sha256: text("sha256"),
+            downloading: false,
             id,
         })
     }
@@ -408,6 +411,21 @@ fn fingerprint(session: &Session) -> u64 {
     h.finish()
 }
 
+/// Marks the rows whose file is downloading; the list changes only when a mark does.
+fn mark_downloads(app: &mut FontCraftApp) {
+    let downloads = app.view.extensions.downloads.clone();
+    let view = &mut app.view.extensions.manager;
+    let mut moved = false;
+    for e in &mut view.entries {
+        let running = downloads.install_running(&e.id);
+        moved |= e.downloading != running;
+        e.downloading = running;
+    }
+    if moved {
+        view.touch();
+    }
+}
+
 /// Makes the list again while the window is open and the extensions or the filters changed since it was made.
 pub fn refresh(app: &mut FontCraftApp) {
     if !app.view.extensions.manager.open {
@@ -419,6 +437,7 @@ pub fn refresh(app: &mut FontCraftApp) {
         view.indexes = indexes;
         view.touch();
     }
+    mark_downloads(app);
     let view = &app.view.extensions.manager;
     let key = (fingerprint(&app.session), view.state.clone(), view.kind.clone(), view.query.clone());
     if view.seen.as_ref() == Some(&key) {
@@ -448,6 +467,7 @@ pub fn refresh(app: &mut FontCraftApp) {
     view.safe_mode = safe_mode;
     view.note = note;
     view.seen = Some(key);
+    mark_downloads(app);
     view.revision = view.revision.wrapping_add(1);
     app.view_changed();
 }

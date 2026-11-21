@@ -61,6 +61,7 @@ craft::ui::words! {
         on: "fontcraftExtensionManager.on" = "On";
         off: "fontcraftExtensionManager.off" = "Off";
         new_module: "fontcraftExtensionManager.newModule" = "New, off";
+        downloading: "fontcraftExtensionManager.downloading" = "Downloading…";
         update_to: "fontcraftExtensionManager.updateTo" = "Update offered, installed:";
         none: "fontcraftExtensionManager.none" = "No extension matches. Install a module or macro from a file, or add an extension index.";
         website: "fontcraftExtensionManager.website" = "Website";
@@ -259,11 +260,16 @@ impl ManagerDialog {
             }
             if entry.from_index
                 && !entry.installed
-                && Button::new(words.install.clone()).id_salt("fontcraftExtensionManager.install").show(ui).clicked()
+                && Button::new(words.install.clone()).enabled(!entry.downloading).id_salt("fontcraftExtensionManager.install").show(ui).clicked()
+                && !entry.downloading
             {
                 self.posted.push(Msg::run("pluginManager.install", json!({ "id": id })));
             }
-            if entry.from_index && entry.update && Button::new(words.update.clone()).id_salt("fontcraftExtensionManager.update").show(ui).clicked() {
+            if entry.from_index
+                && entry.update
+                && Button::new(words.update.clone()).enabled(!entry.downloading).id_salt("fontcraftExtensionManager.update").show(ui).clicked()
+                && !entry.downloading
+            {
                 self.posted.push(Msg::run("pluginManager.install", json!({ "id": id, "version": entry.version })));
             }
             if entry.installed && Button::new(words.remove.clone()).id_salt("fontcraftExtensionManager.remove").show(ui).clicked() {
@@ -340,6 +346,9 @@ impl ManagerDialog {
 
 /// What the State column says about `e`.
 fn status(e: &ManagerEntry, words: &ManagerWords) -> Label {
+    if e.downloading {
+        return words.downloading.clone();
+    }
     if !e.installed {
         return words.not_installed.clone();
     }
@@ -517,5 +526,29 @@ mod tests {
                 Msg::Shell(CommandRef::with_params("pluginManager.filterByType", json!({"type": "reporter"}))),
             ]
         );
+    }
+
+    /// A row whose file is downloading says so in its State column, and its Install button does nothing until the
+    /// download ends.
+    #[test]
+    fn a_downloading_row_shows_it_and_holds_install() {
+        let mut view = ManagerView::default();
+        view.open = true;
+        view.entries = vec![ManagerEntry { downloading: true, ..entry("tighten", None, true, false) }];
+        let posted = Rc::new(RefCell::new(Vec::new()));
+        let seen = Rc::clone(&posted);
+        let mut dialog = ManagerDialog::new(&view);
+        let mut fixture = Fixture::new(move |ui| {
+            let words = Env::of(ui).words::<ManagerWords>();
+            dialog.body(ui, &words);
+            seen.borrow_mut().extend(std::mem::take(&mut dialog.posted));
+        });
+        fixture.room(egui::vec2(900.0, 700.0)).settle();
+        assert!(fixture.by_label("Downloading…").is_some(), "the State column says the file is downloading");
+        let row = fixture.by_label("tighten title").expect("the index entry's row");
+        fixture.click(&row).settle();
+        let install = fixture.by_label("Install").expect("Install for an index entry");
+        fixture.click(&install).settle();
+        assert!(posted.borrow().is_empty(), "Install waits for the download");
     }
 }

@@ -1055,13 +1055,17 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
    the user's settings and the Instructor section of the canvas menu (UI.35); the Extension Manager's Indexes tab,
    shared with Settings › Extensions, its HTTPS downloads of indexes, entry files and screenshots, Website and
    Donate (UI.37). The ports left:
-   - Smaller follow-ups: open-path thumbnails in Shape Order; svg filters and PDF images in colour layers.
+   - Smaller follow-ups: open-path thumbnails in Shape Order; svg filters and PDF images in colour layers; the image
+     Info box with Reveal Image File (`image.revealFile` through `FontCraftApp::opener`).
    - Framework gaps, built in `crates/craft-ext` in craft-libs' layout so they can move there later (decision
-     0009). Built (UI.34, UI.36, UI.37a, UI.38): a strikethrough list row, edit commands reaching a focused list, a mixed
-      mark on menu entries, a danger tone on menu entries, modifiers on context-menu requests, open URL and
-      reveal in the file manager, a text-field highlight hook (feature code colours and error underlines), caret and
-      selection access, Up/Down stepping on text fields that hold a number, and an async completer (feature code
-      completion). Left: union, intersect and slant icons; alternate menu rows with their own label and shortcut; an app-level paste event. The craft pin stays at `4bd0107` for these.
+     0009). Built (UI.34, UI.36, UI.37a, UI.38, UI.39): a strikethrough list row, edit commands reaching a focused list,
+     a mixed mark on menu entries, a danger tone on menu entries, modifiers on context-menu requests, open URL and
+     reveal in the file manager, a text-field highlight hook (feature code colours and error underlines), caret and
+     selection access, Up/Down stepping on text fields that hold a number, an async completer (feature code
+     completion), union, intersect and slant icons, and alternate menu rows with their own label and shortcut. Taken
+     from craft itself (UI.39): the Stroke palette's click-and-hold Cap Axis menu (a menu opened by `Trigger::Hold`)
+     and paste outside a text field (`craft::platform::clipboard`, which reads the system clipboard on the desktop;
+     the browser build still waits for a paste event that craft drops). The craft pin stays at `4bd0107`.
 3. **The engine split, step 4 on.** ES.4 moves the kerning-index and metrics-sync readers outside the spacing crate
    behind its extension and moves the slots with `Session`; the later steps move command areas out of the engine
    crate along command ownership.

@@ -416,3 +416,27 @@ fn copied_feature_entries_paste_back() {
     assert!(app.status.is_empty(), "{}", app.status);
     assert_eq!(app.session.font().map(|f| f.features.features.len()).unwrap_or(0), 2, "the pasted feature joins the font");
 }
+
+/// An inserted snippet leaves the caret after itself: the shown entry carries the `caret` of
+/// `font.features.insertSnippet`'s result until the code editor reports it placed.
+#[test]
+fn an_inserted_snippet_leaves_the_caret_after_it() {
+    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    app.sent.push(Msg::run("font.features.addFeature", json!({ "tag": "liga", "automatic": false })));
+    app.sent.push(Msg::run("font.features.setCode", json!({ "kind": "feature", "name": "liga", "code": "sub a by b;" })));
+    app.drain();
+    let list = app.session.query("font.features.listSnippets", &json!({})).expect("the snippets");
+    let first = list.get("builtIn").and_then(|b| b.get(0)).cloned().expect("a built-in snippet");
+    let title = first.get("title").and_then(Value::as_str).expect("its title").to_string();
+    let code = first.get("code").and_then(Value::as_str).expect("its code").to_string();
+    app.sent.push(Msg::run(
+        "font.features.insertSnippet",
+        json!({ "kind": "feature", "name": "liga", "index": 0, "snippet": title, "position": 0, "end": 0 }),
+    ));
+    app.drain();
+    let caret = app.view.font_info.features.caret.as_ref().map(|(key, at)| (key.name.clone(), *at));
+    assert_eq!(caret, Some(("liga".to_string(), code.chars().count())));
+    app.sent.push(Msg::View(ViewMsg::FeatureCaretPlaced));
+    app.drain();
+    assert_eq!(app.view.font_info.features.caret, None);
+}
