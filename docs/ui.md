@@ -157,9 +157,10 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   other glyphs and Font View cells, and `color::paint::draw` draws it on any painter. The active-tool slot is `FontCraftApp::active_tool`, a `canvas::ActiveTool`
   (a craft `CanvasTool` that also hands over the commands its gestures made): craft's `ToolHost`
   runs it on the canvas's pass, after the layers. View commands and display toggles are
-  `shell/view.rs`. Guides, grids, measurement labels, annotations, display aids, the auto-meter and audit markers
-  are `canvas/overlays/`: `overlays::refresh` (after `drain`) reads what they need from the engine into
-  `OverlayData`, which layers read as `PaintCx::overlays`; their switches are `shell/overlays.rs`. Reporter module
+  `shell/view.rs`. Guides, grids, measurement labels, annotations, display aids, the auto-meter, audit markers
+  and Suggest Distance's outlines are `canvas/overlays/`: `overlays::refresh` (after `drain`) reads what they need from the engine into
+  `OverlayData`, which layers read as `PaintCx::overlays`; their switches are `shell/overlays.rs`. `overlays::suggest::suggest` also fills the tools' scene with the
+  View › Suggest switches, the declared stems and the master's `suggestDistance`. Reporter module
   drawings are read the same way (`canvas/reporters.rs`) and paint as `reportersBack` and `reportersFront`. A text note is
   typed in a field over its box (`canvas/annotation_editor.rs`).
   Placed images are `canvas/images/`: `images::refresh` (after `drain`) decodes their files through `ImageFiles`

@@ -64,6 +64,7 @@ fn with_tool<R>(app: &mut FontCraftApp, f: impl FnOnce(&mut Toolbox, &Context<'_
     let font = app.session.font().map_err(|e| e.to_string())?;
     let mut scene = scene(font, &app.view, app.tools.focus.as_ref()).ok_or("no glyph is being edited")?;
     scene.ps_hints = marks;
+    scene.suggest = crate::canvas::overlays::suggest::suggest(&app.session, font, &app.view, app.overlays.switches.suggest);
     let settings = settings(&app.session, font, app);
     let cx = Context { scene: &scene, view, selection: &app.tools.selection, settings };
     Ok(f(&mut app.tools.toolbox, &cx))
