@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**3115 guesses on 1621 rows (647 of them live commands).**
+**3116 guesses on 1621 rows (647 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -3102,6 +3102,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `view.setReferenceFont` | M13 | docs | yes | The language code picks a glyph named like the found one plus .locl and the code in capitals (A.loclTRK for TRK); applying the reference font's own locl substitutions through the shaper would settle what the reference app does. |
 | `view.setReferenceFont` | M13 | docs | yes | Adding a path selects that font and turns the display on; the reference app's panel would settle whether adding also shows it. |
 | `view.setReferenceFont` | M13 | docs | yes | Any font the open path reads (sources too, not only compiled fonts) can be a reference, drawn from its first master. |
+| `view.setReferenceFont` | M13 | docs | yes | The reference glyph is drawn as a thin translucent green outline behind the edited glyph, with no fill; the reference app's colour is not documented, and its observe step would settle it. |
 | `font.setStatusDefinitions` | M13 | docs | yes | The definitions are stored in the font's user data as a list of code, name, colour and default flag; Fontra's storage is not documented. |
 | `font.setStatusDefinitions` | M13 | docs | yes | Two definitions with the same code or the same name, or more than one default, are refused; checking the reference's Status definitions panel would settle it. |
 | `font.setStatusDefinitions` | M13 | docs | yes | Redefining the list keeps every glyph's stored code, even one the new list lacks (such glyphs show no tint); renaming or deleting a status in the reference app would settle it. |

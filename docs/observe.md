@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1516 rows to check: 2615 guesses and 623 observe steps.**
+**1516 rows to check: 2616 guesses and 623 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -1884,6 +1884,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The language code picks a glyph named like the found one plus .locl and the code in capitals (A.loclTRK for TRK); applying the reference font's own locl substitutions through the shaper would settle what the reference app does.
   - Guess: Adding a path selects that font and turns the display on; the reference app's panel would settle whether adding also shows it.
   - Guess: Any font the open path reads (sources too, not only compiled fonts) can be a reference, drawn from its first master.
+  - Guess: The reference glyph is drawn as a thin translucent green outline behind the edited glyph, with no fill; the reference app's colour is not documented, and its observe step would settle it.
   - Observe: In Fontra, drop a compiled font on the Reference font panel, type a character in the custom character field and a language code such as 'tr', and note which glyph is drawn behind the edited one and in what colour.
 - [ ] `palette.selections` (panel, M13, docs): Selections
   - Guess: The section sits after Transformations in the Palette and shows only the edited glyph's entries; FontLab's panel placement would settle it.
