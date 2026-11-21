@@ -17,8 +17,7 @@ name = "craft_ext"
 # (docs/decisions/0009-framework-gaps-staged-here.md).
 [dependencies]
 craft = { workspace = true, features = ["ui", "keymap", "menu", "platform"] }
-# egui 0.37 is the craft fork (the workspace's `[patch.crates-io]`), named as `fontcraft-ui` names it.
-egui = { version = "0.37", default-features = false }
+egui.workspace = true
 
 [dev-dependencies]
 craft = { workspace = true, features = ["ui", "keymap", "menu", "platform", "screen-testing"] }

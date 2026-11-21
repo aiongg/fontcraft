@@ -15,7 +15,7 @@ fontcraft-ui.workspace = true
 fontcraft-engine.workspace = true
 serde_json.workspace = true
 ureq.workspace = true
-eframe = { version = "0.37", default-features = false, features = ["wayland"] }
+eframe = { workspace = true, features = ["wayland"] }
 
 # The pasteboard's PDF for a paste on the canvas, in the versions the clipboard crate of eframe already pulls in.
 [target.'cfg(target_os = "macos")'.dependencies]

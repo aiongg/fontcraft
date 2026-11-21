@@ -1,8 +1,8 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "apps/*", "xtask"]
-exclude = ["vendor", "xtask/glyphdata-oracle"]
-default-members = ["crates/*", "apps/fontcraft", "apps/fontcraft-cli", "apps/fontcraft-next", "xtask"]
+exclude = ["xtask/glyphdata-oracle"]
+default-members = ["crates/*", "apps/fontcraft-cli", "apps/fontcraft-next", "xtask"]
 
 [workspace.package]
 version = "0.0.1"
@@ -31,7 +31,6 @@ fontcraft-oracle = { path = "crates/oracle" }
 fontcraft-engine-core = { path = "crates/engine-core" }
 fontcraft-engine = { path = "crates/engine" }
 fontcraft-mcp = { path = "crates/mcp" }
-fontcraft-ui-egui = { path = "crates/ui-egui" }
 fontcraft-ui = { path = "crates/ui" }
 fontcraft-craft-ext = { path = "crates/craft-ext" }
 fontcraft-tools = { path = "crates/tools" }
@@ -64,9 +63,6 @@ craft-atomic = { git = "https://github.com/storytold/craft-libs", rev = "e9546e1
 # The system print spooler (CUPS on macOS and Linux, the XPS print API on Windows), for printing
 # PDF proofs (M12.36).
 craft-print = { git = "https://github.com/storytold/craft-libs", rev = "e9546e191dd62f2bc1d61eca45dbdc2f1b3c1d8e" }
-# The desktop shell's close and quit handling: on macOS the app quits through the platform's own
-# path, and the app menu's Quit asks about unsaved documents as the close box does.
-craft-quit = { git = "https://github.com/storytold/craft-libs", rev = "e9546e191dd62f2bc1d61eca45dbdc2f1b3c1d8e" }
 # The craft framework through its facade (`craft::ui::…`), for `fontcraft-ui`. The egui and winit
 # `[patch.crates-io]` below must equal `craft::egui_fork::REV` at this rev.
 craft = { git = "https://github.com/storytold/craft-libs", rev = "4bd0107b9215e2903069b98debd9316e2a9238ae", default-features = false }
@@ -136,22 +132,15 @@ wasmi = { version = "2.0.0", default-features = false, features = ["std", "valid
 # Tests only: WebAssembly text to binary for the module fixtures (Apache-2.0 WITH LLVM-exception).
 wat = "1.228"
 
-# ui
-egui = "0.36"
-eframe = { version = "0.36", default-features = false }
-# The system file and folder choosers of the desktop app (MIT). On Linux through the desktop
-# portal only, so the build needs no GTK.
-rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
+# ui: egui and eframe are the craft fork (`[patch.crates-io]` below).
+egui = { version = "0.37", default-features = false }
+eframe = { version = "0.37", default-features = false }
 # HTTPS for the desktop app's network extension indexes (MIT OR Apache-2.0). rustls with the ring
 # provider and the bundled Mozilla root certificates: no OpenSSL. Never in a crate that builds for wasm.
 ureq = { version = "3.4", default-features = false, features = ["rustls"] }
 
-# The egui fork that craft is built with (`craft::egui_fork`). It is egui 0.37, so it replaces only
-# 0.37 requirements: `fontcraft-ui-egui` stays on egui 0.36 from crates.io until it is removed.
-# The winit fork replaces winit for both, so the 0.36 desktop app builds its window events through
-# `vendor/egui-winit-0.36`: egui-winit 0.36.2 with the fork's one extra event (MIT OR Apache-2.0).
+# The egui and winit forks that craft is built with (`craft::egui_fork`).
 [patch.crates-io]
-egui-winit-036 = { path = "vendor/egui-winit-0.36", package = "egui-winit" }
 ecolor = { git = "https://github.com/storytold/egui.git", rev = "e9711ca9b69772f875ae0d1cef1977ff8c16234d" }
 emath = { git = "https://github.com/storytold/egui.git", rev = "e9711ca9b69772f875ae0d1cef1977ff8c16234d" }
 epaint = { git = "https://github.com/storytold/egui.git", rev = "e9711ca9b69772f875ae0d1cef1977ff8c16234d" }
