@@ -30,7 +30,9 @@ _Updated: 2026-11-20, after the seventeenth and eighteenth batches: the second w
 
   `crates/craft-ext` (decision 0009) stages the framework pieces craft lacks, in craft-libs' layout. It has: a struck
   list row, edit commands (copy, paste) reaching a focused list, a mixed mark on menu entries, a danger tone on menu
-  rows (icon only; the label ink needs a change in craft), and modifiers on context-menu requests. The new window's
+  rows (icon only; the label ink needs a change in craft), modifiers on context-menu requests, open URL and reveal
+  in the file manager, a text-field highlight hook, caret and selection access, Up/Down stepping, an async
+  completer, union, intersect and slant icons, and alternate menu rows (UI.37a, UI.38, UI.39). The new window's
   ports have headless tests only; none has been tried in the running window.
 - **Where the sixteenth batch stands.** Every branch is merged on `master` (over 250 commits on top of `9f8f3e5`,
   the last pushed commit, X.docs19). Nothing of this batch is pushed. The tests honour `TMPDIR`; point it at a disk
@@ -562,11 +564,17 @@ linked file is checked against it, and a linked file outside the read root reads
    Checks on the Mac, which builds and runs: wave 1's Cmd+Q, app-menu Quit, File › Open… chooser and drop with unsaved
    work, and X.pdf3's pasteboard PDF; on Windows (not built yet), X.pdf3's clipboard PDF.
 2. **Then, in this order** (ROADMAP.md › What to build next, items 2 to 5):
-   - The new window's ports left (item 2): the Extension Manager's Indexes tab and downloads; and the framework gaps
-     in `crates/craft-ext` (a text-field hook for syntax colour and error underlines, caret and selection access, an
-     async completer, Up/Down stepping, union, intersect and slant icons, open URL and
-     reveal in the file manager, alternate menu rows with their own label and shortcut, an app-level paste event);
-     then the small follow-ups listed there.
+   - The new window's ports left (item 2). The framework gaps in `crates/craft-ext` are built; paste outside a
+     text field still waits for craft in the browser build. Then the parity audit gaps, in ROADMAP's order: what
+     the Edit View tabs left (Cmd+Alt+2 to Cmd+Alt+9, tabs per document, tabs from the document's display strings
+     and written on save, a removed glyph leaving its tabs); the Edit View bottom bar with Cmd+B, Cmd+1 to Cmd+9,
+     Cmd+Alt+P and a Window › Palette row; menu check marks, greyed rows and a Window row per dock panel; the
+     Dimensions panel and the Kerning and Kerning Review panel ids; placed images on the canvas, in the Info box,
+     menus and Font View; snapping suggestions, the reference font glyph and power guides; the Axis Mappings dialog
+     and the Cross-Axis Mappings window; the Primitive Measurements and Add Pixel Glyph dialogs; the small commands
+     listed there; and the `ui.inspect` keys and getter commands for control parity. The smaller follow-ups
+     (Shape Order open-path thumbnails, svg filters and PDF images in colour layers, the image Info box with
+     Reveal Image File) are listed there too.
    - Retire the egui window: remove `crates/ui-egui` and `apps/fontcraft`. `cargo xtask parity` must then read the
      commands of `crates/ui`.
    - The engine split from ES.4.
