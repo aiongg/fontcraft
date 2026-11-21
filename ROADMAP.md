@@ -1066,13 +1066,15 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
      reveal in the file manager, a text-field highlight hook (feature code colours and error underlines), caret and
      selection access, Up/Down stepping on text fields that hold a number, an async completer (feature code
      completion), union, intersect and slant icons, alternate menu rows with their own label and shortcut, and
-     (UI.41a) catalog definitions per parameter set, for shortcuts that run a command with a number. Taken
+     (UI.41a) catalog definitions per parameter set, for shortcuts that run a command with a number, (UI.47a) key
+     claims for a dialog, a panel or a focused component, and (UI.47b) clicks and drags on a painted picture. Taken
      from craft itself (UI.39): the Stroke palette's click-and-hold Cap Axis menu (a menu opened by `Trigger::Hold`)
      and paste outside a text field (`craft::platform::clipboard`, which reads the system clipboard on the desktop;
      the browser build still waits for a paste event that craft drops). The craft pin stays at `4bd0107`.
    - Parity audit gaps (old window against new, by how much a person would miss them):
-     1. Done (UI.40): the multi-tab Edit View. Left from it: tabs kept per document, tabs opened from the
-        document's display strings and written on save, and a removed glyph leaving its tabs.
+     1. Done (UI.40, UI.47c): the multi-tab Edit View, with a tab set per document (switching documents shows each
+        one's tabs, closing a document drops them). Left from it: tabs opened from the document's display strings and
+        written on save, and a removed glyph leaving its tabs.
      2. Done (UI.41): the Edit View controls in the status bar (Preview Area, writing direction, kerning mode, zoom
         out, zoom field, zoom in) while an Edit View tab shows; Cmd+1 to Cmd+9 and Cmd+Alt+2 to Cmd+Alt+9 through
         one catalog definition per parameter set (`craft_ext::ui::runtime::commands`); Cmd+B; Window › Palette
@@ -1100,24 +1102,21 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
      7. Done (UI.45a, UI.45b): the Axis Mappings dialog (`dialogs/axis_mappings.rs`: `axisMappings.showDialog`,
         `dialogEdit`, `closeDialog`, opened by the Font Info button; the edits preview as one batch, OK keeps one
         undo step) and the Cross-Axis Mappings window with its Font menu row (`dialogs/cross_axis.rs`); Alt-click on a
-        card's disclosure opens or closes every card (UI.46c). Left: the mapping graph shows the points but takes no
-        click on its line and no point drag (craft's `Picture` takes no pointer input; points are added with + and
-        moved with the selected point's coordinate fields); no arrow-key nudge of the selected point outside the
-        fields (a view may not read keys, and no craft piece lets a dialog claim the arrows yet).
+        card's disclosure opens or closes every card (UI.46c); in the mapping graph a click on a point selects it, a
+        click on the line adds a point and a drag moves a point (UI.47b), and the arrow keys move the selected point
+        while no field or list has focus (UI.47a).
      8. Done (UI.45c, UI.45d): a Primitives tool click opens Primitive Measurements (`dialogs/primitive_measurements.rs`,
         routed in `canvas/tools/apply.rs`), and a Pixel tool click in a font without the pixel glyph offers to add it
         (`dialogs/add_pixel_glyph.rs`, a follow-up of `pixel.setPixels`).
      9. Done (UI.46a): View › Filter by Encoding File with its file chooser (`shell/encoding.rs`), Edit › Keep Layer
         Selection in Sync with its check mark (the selection carried in `canvas/tools/apply.rs` `sync`), Font ›
         Kerning › Next / Previous Group Member, Show All Glyphs in the Kerning window, and `fontView.focusSearch`
-        (also Edit › Find while Font View shows). Left: Ctrl and Alt with Up and Down in the Pairs & Phrases list do
-        not step a group member (a view may not read keys; the list takes the arrows itself).
+        (also Edit › Find while Font View shows); Ctrl and Alt with Up and Down in the focused Pairs & Phrases list
+        step a group member (UI.47a).
      10. Done (UI.46b): `ui.inspect` keys `display`, `switches`, `selectedGlyphs`, `editing`, `interaction`,
          `dialog`, `transform` and `fontView` (`shell/getters.rs`), and the five read-only getters
          (`editView.getText`, `editView.getFeatures`, `fontView.getState`, `transform.getSettings`,
          `view.getDisplayOptions`), answered with their reply through `engine.execute`.
-     Left besides the items above: Edit View tabs kept per document (the window keeps one tab set, and switching
-     documents keeps it).
 3. **The engine split, step 4 on.** ES.4 moves the kerning-index and metrics-sync readers outside the spacing crate
    behind its extension and moves the slots with `Session`; the later steps move command areas out of the engine
    crate along command ownership.
