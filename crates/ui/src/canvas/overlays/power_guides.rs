@@ -132,7 +132,7 @@ mod tests {
     use craft::behavior::kurbo::Point as KPoint;
     use craft::host::Host;
     use craft::ui::runtime::commands::CommandRef;
-    use egui::{LayerId, Painter, Pos2, Rect, Shape, vec2};
+    use egui::{LayerId, Painter, Pos2, Rect, Shape};
     use fontcraft_engine::Session;
     use fontcraft_geom::Point;
     use serde_json::{Value, json};

@@ -269,7 +269,7 @@ pub fn shrink(image: Rgba8, max_side: u32) -> Rgba8 {
     let (w, h) = (w as usize, h as usize);
     let (nw, nh) = (w.div_ceil(k), h.div_ceil(k));
     let mut pixels = vec![0u8; nw * nh * 4];
-    for (i, out) in pixels.chunks_exact_mut(4).enumerate() {
+    for (i, out) in pixels.as_chunks_mut::<4>().0.iter_mut().enumerate() {
         let (ox, oy) = (i % nw, i / nw);
         let mut sum = [0u32; 4];
         let mut n = 0u32;
