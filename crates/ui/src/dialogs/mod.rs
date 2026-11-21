@@ -15,6 +15,7 @@ pub mod axis_mappings;
 pub mod changed_on_disk;
 pub mod color_palettes;
 mod component_name;
+pub mod cross_axis;
 pub mod custom_parameter_picker;
 pub mod export;
 pub mod extension_indexes;
@@ -88,6 +89,7 @@ pub const MODULES: &[Module] = &[
     external_changes::run,
     extension_manager::run,
     axis_mappings::run_dialog,
+    cross_axis::run_dialog,
 ];
 
 /// Every package's dialog specs, one line each.

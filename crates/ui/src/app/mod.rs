@@ -141,6 +141,8 @@ pub struct ViewState {
     pub shape_order: crate::shell::shape_order::ShapeOrderView,
     /// The open Axis Mappings dialog (`dialogs::axis_mappings`).
     pub axis_mappings: crate::dialogs::axis_mappings::AxisMappingsState,
+    /// Whether the Cross-Axis Mappings window shows (`dialogs::cross_axis`).
+    pub cross_axis: crate::dialogs::cross_axis::CrossAxisState,
 }
 
 impl Default for ViewState {
@@ -186,6 +188,7 @@ impl Default for ViewState {
             overlay_fonts: Default::default(),
             shape_order: Default::default(),
             axis_mappings: Default::default(),
+            cross_axis: Default::default(),
         }
     }
 }

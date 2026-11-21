@@ -33,6 +33,7 @@ pub const INSPECT: &[Inspect] = &[
     crate::shell::shape_order::inspect,
     crate::shell::tabs::inspect,
     crate::dialogs::axis_mappings::inspect,
+    crate::dialogs::cross_axis::inspect,
 ];
 
 /// `{}` → `{tool, glyph, panels, canvas: {zoom, center, rect}, status, closing, unsaved, pendingInput}`, plus
