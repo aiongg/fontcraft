@@ -1,6 +1,7 @@
 //! FontCraft on the craft framework: the desktop window of `fontcraft-ui`, while it is built up
 //! to replace `apps/fontcraft`.
 //!
+//! `--safe-mode`, or Alt and Shift held as the window opens, lists the extension modules but runs none.
 //! `--control PORT` listens on `127.0.0.1:PORT` for the JSON control protocol
 //! (`docs/control-protocol.md`). `--automation-read-root` and `--automation-write-root` (or
 //! `FONTCRAFT_AUTOMATION_READ_ROOT` / `_WRITE_ROOT`) confine the files control requests read and write.
@@ -30,8 +31,11 @@ const USAGE: &str = "\
 FontCraft, the font editor (craft framework build, in progress)
 
 USAGE:
-  fontcraft-next [--control PORT [--automation-read-root DIR] [--automation-write-root DIR]]
+  fontcraft-next [--safe-mode] [--control PORT [--automation-read-root DIR]
+                 [--automation-write-root DIR]]
 
+  --safe-mode      start with every extension module off (also: hold Alt and Shift while the
+                   window opens); Help › Load Extensions turns them on for the session
   --control PORT   listen on 127.0.0.1:PORT for the JSON control protocol (no authentication:
                    enable it only while you use it)
   --automation-read-root DIR, --automation-write-root DIR
@@ -44,7 +48,8 @@ USAGE:
   -V, --version    the version
 
   Settings and custom glyph data are read from the settings folder (FONTCRAFT_SETTINGS_DIR
-  replaces it), and the settings are written back there when they change.
+  replaces it), and the settings are written back there when they change; extension modules
+  and macros come from its Modules and Macros folders.
 ";
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -74,6 +79,7 @@ fn options(mut args: impl Iterator<Item = String>) -> Result<Option<fontcraft_ui
     let mut write_root = root_env("FONTCRAFT_AUTOMATION_WRITE_ROOT");
     let (mut read_given, mut write_given) = (false, false);
     let mut port = None;
+    let mut safe_mode = false;
     while let Some(arg) = args.next() {
         // The roots also come as `--flag=DIR`.
         let (flag, inline) = match arg.split_once('=') {
@@ -99,6 +105,7 @@ fn options(mut args: impl Iterator<Item = String>) -> Result<Option<fontcraft_ui
                 println!("fontcraft-next {}", env!("CARGO_PKG_VERSION"));
                 return Ok(None);
             }
+            "--safe-mode" => safe_mode = true,
             "--control" => {
                 let value = args.next().ok_or("--control needs a port number")?;
                 port = Some(value.parse::<u16>().map_err(|_| format!("--control: `{value}` is not a port number"))?);
@@ -106,9 +113,22 @@ fn options(mut args: impl Iterator<Item = String>) -> Result<Option<fontcraft_ui
             other => return Err(format!("unknown argument `{other}`\n\n{USAGE}")),
         }
     }
-    let Some(port) = port else { return Ok(Some(desktop(fontcraft_ui::Options::default()))) };
+    let (control, roots) = match port {
+        Some(port) => control(port, read_root.as_deref(), write_root.as_deref())?,
+        None => (None, None),
+    };
+    Ok(Some(desktop(fontcraft_ui::Options { control, roots, safe_mode, ..Default::default() })))
+}
+
+/// The control channel's listener, `None` when the port could not be bound, and the folders its requests may use.
+#[cfg(not(target_arch = "wasm32"))]
+type Control = (Option<std::net::TcpListener>, Option<std::sync::Arc<fontcraft_engine::file_access::AutomationRoots>>);
+
+/// The control channel on `port` and the folders its requests may use.
+#[cfg(not(target_arch = "wasm32"))]
+fn control(port: u16, read_root: Option<&std::path::Path>, write_root: Option<&std::path::Path>) -> Result<Control, String> {
     // Checked before anything opens, so a mistyped root never leaves an unconfined channel.
-    let roots = fontcraft_engine::file_access::AutomationRoots::new(read_root.as_deref(), write_root.as_deref())?;
+    let roots = fontcraft_engine::file_access::AutomationRoots::new(read_root, write_root)?;
     if let Some(roots) = &roots {
         eprintln!("fontcraft-next: control requests: {}", roots.describe());
     }
@@ -123,7 +143,7 @@ fn options(mut args: impl Iterator<Item = String>) -> Result<Option<fontcraft_ui
             None
         }
     };
-    Ok(Some(desktop(fontcraft_ui::Options { control, roots, ..Default::default() })))
+    Ok((control, roots))
 }
 
 /// `options` with what only the desktop app supplies: the system clock, External Preview's frame hook, the preview web

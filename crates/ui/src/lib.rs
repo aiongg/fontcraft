@@ -76,6 +76,7 @@ pub fn run(options: Options) -> Result<(), String> {
         app.user_store = options.user_store;
         app::user_store::load(&mut app);
         app::startup::open_extensions(&mut app, options.settings_dir.as_deref(), options.safe_mode);
+        app.folder_poll = Some(app::startup::FolderPoll::default());
         app.opener = options.opener;
         app.clipboard_reader = options.clipboard_reader;
         app.view.extensions.downloads.fetch = options.fetch;

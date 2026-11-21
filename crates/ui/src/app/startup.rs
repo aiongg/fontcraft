@@ -2,10 +2,27 @@
 //!
 //! - [`open_extensions`]: the snippets folder and the extension folders (Modules and Macros) inside the settings
 //!   folder, the module switches, and when the session started.
+//! - [`poll_folders`], every frame: reads the extension folders again on the first frame, when the window gains focus
+//!   and every [`FOLDER_POLL_MS`] while it has it. Alt and Shift held on the first frame start safe mode, as
+//!   `--safe-mode` does.
 //!
 //! The desktop app hands these facts over in `fontcraft_ui::Options`; tests and the browser build have none of them.
 
+use fontcraft_engine::extensions::FOLDER_POLL_MS;
+
 use super::FontCraftApp;
+
+/// The status line after Alt and Shift held as the window opened turned safe mode on.
+pub const SAFE_MODE: &str = "Safe mode: extension modules are off. Help › Load Extensions turns them on.";
+
+/// When the extension folders were last read, and whether the window had focus at the last frame.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct FolderPoll {
+    /// The input time of the last poll, in seconds; `None` before the first frame.
+    pub last: Option<f64>,
+    /// The window had focus at the last frame.
+    pub focused: bool,
+}
 
 /// Where the snippets are kept inside the settings folder.
 pub const SNIPPETS_FOLDER: &str = "snippets";
@@ -31,5 +48,103 @@ fn report(app: &mut FontCraftApp, problems: &[String]) {
     }
     if let Some(first) = problems.first() {
         app.status = first.clone();
+    }
+}
+
+/// Reads the extension folders again on the first frame, when the window gains focus and every [`FOLDER_POLL_MS`]
+/// while it has it; nothing without [`FontCraftApp::folder_poll`]. Alt and Shift held on the first frame start safe
+/// mode. Every problem goes to the log, the first to the status line.
+pub fn poll_folders(app: &mut FontCraftApp, ctx: &egui::Context) {
+    let Some(poll) = app.folder_poll.as_mut() else { return };
+    let every = std::time::Duration::from_millis(FOLDER_POLL_MS);
+    let (now, focused, launch_keys) = ctx.input(|i| (i.time, i.focused, i.modifiers.alt && i.modifiers.shift));
+    let first = poll.last.is_none();
+    let gained = focused && !poll.focused;
+    poll.focused = focused;
+    let due = poll.last.is_none_or(|t| now - t >= every.as_secs_f64());
+    let read = first || gained || (focused && due);
+    if read {
+        poll.last = Some(now);
+    }
+    if first && launch_keys && !app.session.extensions().safe_mode {
+        app.session.extensions_mut().safe_mode = true;
+        app.status = SAFE_MODE.into();
+    }
+    if read {
+        let problems = fontcraft_engine::extensions::poll_folders(app.session.extensions_mut());
+        report(app, &problems);
+    }
+    if focused {
+        ctx.request_repaint_after(every);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use craft::host::Host;
+    use fontcraft_engine::Session;
+
+    use super::{FolderPoll, SAFE_MODE, poll_folders};
+    use crate::app::{APP, FontCraftApp};
+
+    fn polled_app() -> FontCraftApp {
+        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        app.folder_poll = Some(FolderPoll::default());
+        app
+    }
+
+    /// A frame at input time `time`, with the window focused or not and `modifiers` held.
+    fn frame(ctx: &egui::Context, app: &mut FontCraftApp, time: f64, focused: bool, modifiers: egui::Modifiers) {
+        let input =
+            egui::RawInput { time: Some(time), focused, modifiers, events: vec![egui::Event::ModifiersChanged(modifiers)], ..Default::default() };
+        let _ = ctx.run_ui(input, |ui| poll_folders(app, ui.ctx()));
+    }
+
+    fn last(app: &FontCraftApp) -> Option<f64> {
+        app.folder_poll.and_then(|p| p.last)
+    }
+
+    /// The folders are read on the first frame, when the window gains focus and once the poll interval has passed
+    /// while it has it; not while it is in the background.
+    #[test]
+    fn the_extension_folders_are_read_on_the_first_frame_on_focus_and_while_focused() {
+        let none = egui::Modifiers::NONE;
+        let ctx = egui::Context::default();
+        let mut app = polled_app();
+        frame(&ctx, &mut app, 0.0, false, none);
+        assert_eq!(last(&app), Some(0.0), "the first frame reads them");
+        frame(&ctx, &mut app, 30.0, false, none);
+        assert_eq!(last(&app), Some(0.0), "not in the background");
+        frame(&ctx, &mut app, 31.0, true, none);
+        assert_eq!(last(&app), Some(31.0), "the window gained focus");
+        frame(&ctx, &mut app, 32.0, true, none);
+        assert_eq!(last(&app), Some(31.0), "not due yet");
+        frame(&ctx, &mut app, 36.5, true, none);
+        assert_eq!(last(&app), Some(36.5), "due while focused");
+        assert!(!app.session.extensions().safe_mode);
+
+        // Without the desktop's poll nothing is read.
+        let mut app = polled_app();
+        app.folder_poll = None;
+        frame(&ctx, &mut app, 40.0, true, none);
+        assert_eq!(last(&app), None);
+    }
+
+    /// Alt and Shift held on the first frame start safe mode and say so; held later they do nothing.
+    #[test]
+    fn alt_and_shift_held_as_the_window_opens_start_safe_mode() {
+        let keys = egui::Modifiers { alt: true, shift: true, ..Default::default() };
+        let mut app = polled_app();
+        frame(&egui::Context::default(), &mut app, 0.0, true, keys);
+        assert!(app.session.extensions().safe_mode);
+        assert_eq!(app.status, SAFE_MODE);
+
+        let ctx = egui::Context::default();
+        let mut app = polled_app();
+        frame(&ctx, &mut app, 0.0, true, egui::Modifiers::NONE);
+        frame(&ctx, &mut app, 1.0, true, keys);
+        assert!(!app.session.extensions().safe_mode, "only the first frame counts");
     }
 }
