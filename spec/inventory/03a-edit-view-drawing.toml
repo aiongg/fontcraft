@@ -382,7 +382,7 @@ milestone = "M3"
 summary = "A menu item that switches something on and off shows a check mark while it is on: the View › Show items, the other display aids, and the menu switches of the Edit, Path and Window menus."
 ref = "Edit View › Glyph Display › View Options"
 status = "handbook"
-notes = "Documented for View › Show Info and View › Show Metrics, not yet observed for the other items. FontCraft: every command in `SWITCHES` (crates/ui-egui/src/shell/menus.rs) carries `checked` in the menu tree and in `ui.menu.list`; a menu item that only opens a window (Space Center, Kerning, Macro Panel) has none. The menu cache hashes the state of every switch, so the tree is rebuilt only on a frame where one changed."
+notes = "Documented for View › Show Info and View › Show Metrics, not yet observed for the other items. FontCraft: every command in `SWITCHES` (crates/ui-egui/src/shell/menus.rs) carries `checked` in the menu tree and in `ui.menu.list`; a menu item that only opens a window (Space Center, Kerning, Macro Panel) has none. The menu cache hashes the state of every switch, so the tree is rebuilt only on a frame where one changed. In `crates/ui` the list is `SWITCHES` in `app/menu_states.rs`; each row reads its state after every drain and the menu bar is rebuilt when a mark changed. Show Image and Keep Layer Selection in Sync join it when their commands exist there."
 guesses = [
   "Every on/off switch shows a check mark, including Lock Outline, Power Nudge, Edit Background, Palette, Preview Panel and Font Audit; opening the reference app's View, Path and Window menus with each switch on and off settles which ones do.",
   "View › Show Indexes shows a check mark while any kind of index is shown. Settled by turning on a single kind in the reference app and opening the View menu.",
@@ -391,6 +391,25 @@ observe = [
   "Open the View menu with Show Nodes, Show Metrics and Tunni Lines on: note which items carry a check mark.",
   "Turn Power Nudge and Edit Background on, open the Path menu: note whether either item carries a check mark.",
   "Hide the Palette, open the Window menu: note whether Palette carries a check mark while it is shown and none while hidden.",
+]
+
+[[behavior]]
+id = "menus.greyedBySelection"
+area = "ui-chrome"
+milestone = "M3"
+summary = "A menu item whose command needs something the selection does not give is greyed out: with no glyph edited or selected, every glyph command; in Font View, the commands that act on selected nodes, paths or anchors; in Edit View, a command on nodes until nodes are selected."
+ref = "macOS menu conventions; no handbook page says which items grey out"
+status = "inferred"
+notes = "Not documented, not yet observed. FontCraft (`crates/ui/src/app/menu_states.rs`, ported from `selection_supplies` of the old window): the reason is the row's tooltip and its `disabled_reason` in `ui.menu.list`. With nothing chosen the reason is the refusal firing the command gives (\"<label>: select a glyph first\", fontView.batch.appliesToSelection), so the row and the shortcut agree. Never greyed: commands that open a dialog when fired without parameters, the component pickers, Cut, Copy, Paste, Paste Special and Select All (a focused list or text mode takes them), and Delete in text mode."
+guesses = [
+  "With no glyph edited and nothing selected in Font View, every menu item whose command takes glyph targets is greyed out; opening the Path menu in the reference app's Font View with nothing selected settles it.",
+  "In Font View with glyphs selected, a command that acts only on selected nodes or paths (Space Points, Make Parallel) is greyed out; the same menu with a glyph selected in Font View settles it.",
+  "A command that opens a dialog stays enabled whatever the selection, since its dialog asks for what is missing; the Transform or Remove Overlap items with nothing selected settle it.",
+]
+observe = [
+  "Open Font View with nothing selected and open the Path menu: note which items are greyed out.",
+  "Select one glyph in Font View and open the Path menu: note whether Align Points › Space Points is greyed out.",
+  "Open a glyph in Edit View with no node selected and open the Path menu: note which node items are greyed out.",
 ]
 
 [[behavior]]

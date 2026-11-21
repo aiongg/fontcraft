@@ -196,6 +196,11 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   flags, the overlay switches, the panel it shows). `Catalog::set_checks` rebuilds the bar only when a mark changed.
   A new switch command needs one line in `SWITCHES` and, if its state is not a `flag` or `switch` field, one arm in
   `checked`.
+  The same module greys out an engine row whose command would be refused for its targets (`greyed`): with no glyph
+  chosen (`targets_chosen`) every targeted command, with the refusal firing it gives; in Font View the commands on
+  selected objects; in the edit view what `item_state::supplies` refuses. The reason is the row's tooltip and its
+  `disabled_reason` in `ui.menu.list`. It is worked out again only when the documents, view state, choice or canvas
+  selection moved (`Catalog::greyed_for`), never while a tool drags.
 - **Edit View controls.** While an Edit View tab shows, the status bar holds the Preview Area button after the
   Features menu and, at its end, the writing direction, kerning mode and zoom controls (`panels/edit_bar.rs`), read
   from the live tab each frame (`shell::bars::edit_state`).

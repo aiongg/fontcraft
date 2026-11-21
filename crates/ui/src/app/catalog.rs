@@ -53,6 +53,8 @@ pub struct Catalog {
     /// The engine rows the selection greys out, with why, and what they were worked out for.
     greyed: Vec<(&'static str, String)>,
     greyed_key: Option<u64>,
+    /// The commands that open a dialog when fired without parameters (`dialogs::for_command`), asked once.
+    dialogs: Vec<&'static str>,
 }
 
 impl Catalog {
@@ -78,6 +80,7 @@ impl Catalog {
             checks: Vec::new(),
             greyed: Vec::new(),
             greyed_key: None,
+            dialogs: crate::dialogs::commands_with_dialogs(),
         }
     }
 
@@ -127,6 +130,11 @@ impl Catalog {
         }
         self.checks = checks;
         self.rebuild_menu();
+    }
+
+    /// Whether the command `id` opens a dialog when fired without parameters.
+    pub fn has_dialog(&self, id: &str) -> bool {
+        self.dialogs.contains(&id)
     }
 
     /// Whether the rows the selection greys out were last worked out for `key`.

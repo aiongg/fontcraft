@@ -33,20 +33,27 @@ const OBJECT_TARGETS: &[(TargetKind, &str, &str)] = &[
     (TargetKind::Annotations, "annotations", "annotations"),
 ];
 
-/// Whether the selection gives `spec` what it acts on; the error says what to select. A command that takes no target
-/// lists, or that takes `glyphs` (it then acts on whole glyphs), needs no selection.
-pub fn supplies(scene: &Scene, selection: &Selection, spec: &CommandSpec) -> Result<(), String> {
+/// What to select for `spec` (`nodes`, `paths or components`), when it acts on selected objects; `None` for a command
+/// that takes no target lists, that takes `glyphs` (it then acts on whole glyphs), or that acts on the whole layer
+/// without targets.
+pub fn objects_wanted(spec: &CommandSpec) -> Option<String> {
     let wanted: Vec<&(TargetKind, &str, &str)> = OBJECT_TARGETS.iter().filter(|(k, _, _)| spec.targets.contains(k)).collect();
     if wanted.is_empty() || spec.targets.contains(&TargetKind::Glyphs) || WHOLE_LAYER_WITHOUT_TARGETS.contains(&spec.id) {
-        return Ok(());
+        return None;
     }
-    let what = match wanted.as_slice() {
+    Some(match wanted.as_slice() {
         [one] => one.2.to_string(),
         [a, b] => format!("{} or {}", a.2, b.2),
         _ => "something".to_string(),
-    };
+    })
+}
+
+/// Whether the selection gives `spec` what it acts on; the error says what to select. A command that needs no
+/// objects ([`objects_wanted`]) needs no selection.
+pub fn supplies(scene: &Scene, selection: &Selection, spec: &CommandSpec) -> Result<(), String> {
+    let Some(what) = objects_wanted(spec) else { return Ok(()) };
     let m = selection_targets(scene, selection, spec);
-    if !wanted.iter().any(|(_, key, _)| m.contains_key(*key)) {
+    if !OBJECT_TARGETS.iter().any(|(kind, key, _)| spec.targets.contains(kind) && m.contains_key(*key)) {
         return Err(format!("select {what} first"));
     }
     ready(scene, selection, spec.id)

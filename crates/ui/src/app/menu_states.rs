@@ -1,9 +1,25 @@
 //! What the live state says about menu bar rows beyond each engine command's `enabled` rule: the check mark of every
-//! on/off switch ([`SWITCHES`], [`checks`]).
+//! on/off switch ([`SWITCHES`], [`checks`]) and the rows the selection greys out ([`greyed`]).
+//!
+//! An engine row is greyed out when firing it would be refused for what the window gives it as targets:
+//!
+//! | Window state | Rows greyed out | Why (the row's tooltip, `disabled_reason` in `ui.menu.list`) |
+//! |---|---|---|
+//! | No glyph chosen ([`FontCraftApp::targets_chosen`]) | every command that takes targets | `<label>: select a glyph first`, the refusal firing it gives |
+//! | Font View in front with glyphs selected | commands that act on selected nodes, paths, anchors… and not on whole glyphs | `edit a glyph and select … first` |
+//! | A glyph in the edit view | commands whose objects the canvas selection does not supply ([`item_state::supplies`]) | `select … first` |
+//!
+//! Never greyed: commands that open a dialog when fired without parameters (the dialog asks for what is missing), the
+//! component pickers, the Edit menu's clipboard rows (a focused list or text mode takes them), and in text mode the
+//! Delete row.
+
+use std::hash::{DefaultHasher, Hash, Hasher};
 
 use craft::behavior::dock::PanelState;
+use fontcraft_engine::CommandSpec;
 
 use super::FontCraftApp;
+use super::context_menu::{item_state, scene_of};
 use crate::canvas::Display;
 use crate::canvas::overlays::Switches;
 use crate::shell::dock::PanelId;
@@ -52,10 +68,74 @@ pub const SWITCHES: &[&str] = &[
     "audit.showPanel",
 ];
 
-/// Brings the menu bar's check marks up to date; the bar is rebuilt only when one changed.
+/// Edit menu rows that a focused list or text mode takes before the selection is asked (`app::clipboard`).
+const EDIT_ROWS: &[&str] = &["edit.copy", "edit.cut", "edit.paste", "edit.pasteSpecial", "edit.selectAll"];
+
+/// Rows that open the component picker, which asks for what is missing (`dialogs::glyph_picker`).
+const PICKER_ROWS: &[&str] = &["glyph.addComponent", "glyph.addComponentAllMasters", "cornerComponent.add", "capComponent.add"];
+
+/// Brings the menu bar's check marks and greyed rows up to date; the bar is rebuilt only when one changed. The greyed
+/// rows are worked out again only when what they read moved, and not while a tool drags.
 pub fn refresh(app: &mut FontCraftApp) {
     let checks = checks(app);
     app.catalog.set_checks(checks);
+    if app.tools.toolbox.busy() {
+        return;
+    }
+    let key = greyed_key(app);
+    if !app.catalog.greyed_for(key) {
+        let greyed = greyed(app);
+        app.catalog.set_greyed(key, greyed);
+    }
+}
+
+/// What the greyed rows read: the documents, the view state, what is chosen and the canvas selection.
+fn greyed_key(app: &FontCraftApp) -> u64 {
+    let mut h = DefaultHasher::new();
+    app.session.documents().len().hash(&mut h);
+    app.session.active().map(|d| (d.id, d.revision)).hash(&mut h);
+    app.view_revision.hash(&mut h);
+    app.targets_chosen().hash(&mut h);
+    app.font_view_targets().hash(&mut h);
+    app.view.font_view.selected.hash(&mut h);
+    app.view.glyph.hash(&mut h);
+    crate::canvas::text::text_mode(&app.view).hash(&mut h);
+    app.tools.focus.hash(&mut h);
+    serde_json::to_string(&app.tools.selection).unwrap_or_default().hash(&mut h);
+    h.finish()
+}
+
+/// Every engine menu row the selection greys out, with why.
+pub fn greyed(app: &FontCraftApp) -> Vec<(&'static str, String)> {
+    if app.session.font().is_err() {
+        return Vec::new();
+    }
+    let chosen = app.targets_chosen();
+    let font_view = app.font_view_targets();
+    let canvas = if chosen && !font_view { scene_of(app) } else { None };
+    let text_mode = crate::canvas::text::text_mode(&app.view);
+    let mut out = Vec::new();
+    for spec in fontcraft_engine::cmd::command_specs() {
+        if spec.menu.is_empty() || spec.targets.is_empty() || exempt(app, spec, text_mode) {
+            continue;
+        }
+        let refused = if !chosen {
+            Err(super::select_glyph_first(spec.id))
+        } else if font_view {
+            item_state::objects_wanted(spec).map_or(Ok(()), |what| Err(format!("edit a glyph and select {what} first")))
+        } else {
+            canvas.as_ref().map_or(Ok(()), |(scene, selection)| item_state::supplies(scene, selection, spec))
+        };
+        if let Err(why) = refused {
+            out.push((spec.id, why));
+        }
+    }
+    out
+}
+
+/// Whether something other than the selection answers for the row of `spec` when it is fired.
+fn exempt(app: &FontCraftApp, spec: &CommandSpec, text_mode: bool) -> bool {
+    EDIT_ROWS.contains(&spec.id) || PICKER_ROWS.contains(&spec.id) || (text_mode && spec.id == "edit.delete") || app.catalog.has_dialog(spec.id)
 }
 
 /// Each switch of [`SWITCHES`] that the window has, and whether it is on.
@@ -105,7 +185,7 @@ mod tests {
     use serde_json::json;
 
     use super::SWITCHES;
-    use crate::app::{APP, FontCraftApp, Msg};
+    use crate::app::{APP, FontCraftApp, Msg, ViewMsg};
 
     fn app() -> FontCraftApp {
         FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()))
@@ -157,6 +237,56 @@ mod tests {
             }
         }
         assert_eq!(check(&app, "view.zoomIn"), None, "a plain command shows no mark");
+    }
+
+    fn shell(app: &mut FontCraftApp, id: &str, params: serde_json::Value) {
+        app.sent.push(Msg::Shell(CommandRef::with_params(id, params)));
+        app.drain();
+    }
+
+    /// Whether the row of `id` can be chosen, and the tooltip that says why not.
+    fn state(app: &FontCraftApp, id: &str) -> (bool, Option<String>) {
+        let row = row(app, id).unwrap_or_else(|| panic!("{id} has a menu row"));
+        (row.enabled, row.tooltip.clone())
+    }
+
+    /// A row is greyed out while firing it would be refused for its targets: with nothing chosen it says what firing
+    /// says; in Font View a command on nodes asks for a glyph to be edited; in the edit view it waits for the nodes.
+    #[test]
+    fn rows_grey_out_until_the_selection_supplies_their_targets() {
+        let mut app = app();
+        shell(&mut app, "fontView.show", json!({}));
+        assert!(!app.targets_chosen());
+        assert_eq!(state(&app, "path.removeOverlap"), (false, Some("Remove Overlap: select a glyph first".into())));
+        app.status.clear();
+        app.fire(CommandRef::new("path.removeOverlap"));
+        assert_eq!(app.status, "Remove Overlap: select a glyph first", "the row and the refusal agree");
+        assert!(row(&app, "edit.copy").is_none_or(|r| r.enabled), "a focused list can take Copy");
+        let listed = crate::control::dispatch(&mut app, "ui.menu.list", &json!({})).unwrap();
+        let entry = listed
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|menu| menu["items"].as_array().unwrap())
+            .find(|item| item["command"] == "path.removeOverlap")
+            .unwrap();
+        assert_eq!(entry["disabled_reason"], "Remove Overlap: select a glyph first", "{entry}");
+
+        shell(&mut app, "fontView.setSelection", json!({"glyphs": ["A"]}));
+        assert!(state(&app, "path.removeOverlap").0, "it acts on the selected glyphs");
+        assert_eq!(state(&app, "path.spacePoints"), (false, Some("edit a glyph and select nodes first".into())));
+
+        let mut app = self::app();
+        app.sent.push(Msg::View(ViewMsg::SelectGlyph("A".into())));
+        app.drain();
+        app.session.execute("path.addRectangle", &json!({"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200})).unwrap();
+        app.drain();
+        assert!(app.targets_chosen());
+        assert!(state(&app, "path.removeOverlap").0, "it acts on the edited glyph");
+        assert_eq!(state(&app, "path.spacePoints"), (false, Some("select nodes first".into())));
+        app.tools.selection = fontcraft_tools::Selection::from_items([fontcraft_tools::Item::Point(0, 0), fontcraft_tools::Item::Point(0, 2)]);
+        app.drain();
+        assert_eq!(state(&app, "path.spacePoints"), (true, None), "the selected nodes supply it");
     }
 
     /// The panel switches read whether their panel shows.

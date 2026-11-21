@@ -136,6 +136,13 @@ pub fn for_command(command: &str) -> Option<DialogSpec> {
     filters_with_params().into_iter().find(|(c, _)| *c == command).map(|(command, title)| generated(command, title))
 }
 
+/// Every command that has a dialog ([`for_command`]).
+pub fn commands_with_dialogs() -> Vec<&'static str> {
+    let mut out: Vec<&'static str> = SPECS.iter().flat_map(|specs| specs.iter()).filter(|d| !d.follow_up).map(|d| d.command).collect();
+    out.extend(filters_with_params().into_iter().map(|(command, _)| command));
+    out
+}
+
 fn generated(command: &'static str, title: &'static str) -> DialogSpec {
     DialogSpec::new("", title, command, Fields::Filter)
 }
