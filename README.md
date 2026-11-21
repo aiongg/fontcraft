@@ -29,7 +29,7 @@ cargo run -p fontcraft-cli -- run \
   --save demo.fontcraft --export demo.ttf
 
 cargo run -p fontcraft-cli -- commands            # every engine command, with its parameters
-cargo run -p fontcraft-next -- demo.fontcraft --control 7985    # the window, drivable over 127.0.0.1:7985
+cargo run -p fontcraft -- demo.fontcraft --control 7985    # the window, drivable over 127.0.0.1:7985
 cargo run -p fontcraft-cli -- mcp                 # MCP server: attaches to the window, or runs headless
 ```
 

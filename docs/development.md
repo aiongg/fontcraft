@@ -8,8 +8,8 @@ cargo test -p fontcraft-engine                   # one crate
 cargo test -p fontcraft-engine --test engine kerning_pairs::   # one module of the crate's integration tests
 cargo nextest run -p fontcraft-engine kerning_pairs::          # the same with nextest (name filter; -E 'test(/regex/)' for more)
 cargo test --profile measure -p fontcraft-oracle --features oracle --test kern -- --ignored   # speed measures and oracle runs
-cargo run -p fontcraft-next                      # the desktop app (docs/ui.md), with a new font
-cargo run -p fontcraft-next -- file.fontcraft --control 7985   # + the JSON control channel
+cargo run -p fontcraft                           # the desktop app (docs/ui.md), with a new font
+cargo run -p fontcraft -- file.fontcraft --control 7985   # + the JSON control channel
 cargo run -p fontcraft-cli -- commands           # the command catalogue as JSON
 cargo run -p fontcraft-cli -- run --cmd glyph.newGlyph --params '{"name":"A.alt"}' --export out.ttf
 cargo run -p fontcraft-cli -- mcp --headless     # the MCP server on stdio
@@ -73,7 +73,7 @@ AGENTS.md  CLAUDE.md      rules for agents (short; read first)
 README.md  ROADMAP.md     what it is; where it stands
 ASSETS.md  NOTICE         every asset's origin and licence; third-party notices
 crates/                   libraries, by layer (docs/architecture.md)
-apps/fontcraft-next       the desktop app: the window of crates/ui (docs/ui.md)
+apps/fontcraft            the desktop app: the window of crates/ui (docs/ui.md)
 apps/fontcraft-cli        the command-line tool and MCP entry point
 xtask/                    the gate, the parity report, the corpus fetcher
 spec/                     the feature inventory as data

@@ -114,7 +114,7 @@ mirror the active Edit View.
 
 FontCraft has no companion app. While `sharing.enableExternalPreview` is on (off by default), the
 desktop app serves a page that any browser on the local network can open
-(`apps/fontcraft-next/src/external_preview.rs`).
+(`apps/fontcraft/src/external_preview.rs`).
 
 | Step | What happens |
 |---|---|
@@ -127,7 +127,7 @@ desktop app serves a page that any browser on the local network can open
 
 Limits: 64 trusted devices (the oldest go first), 8 waiting at once, 64 refused. The page is drawn
 at most 4 times a second, and only while a device is trusted. The HTTP server is the hinting
-preview's (`apps/fontcraft-next/src/preview_server.rs`): `GET` and `HEAD` only, one request per
+preview's (`apps/fontcraft/src/preview_server.rs`): `GET` and `HEAD` only, one request per
 connection, 4 connections, 64 KB of headers, 50 requests a second.
 
 While automation roots are in force, turning the preview on and trusting a device are refused, so a

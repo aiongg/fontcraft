@@ -44,7 +44,7 @@ _Updated: 2026-11-21: UI.49 on `w-UI.49` (written, not yet built) removes the eg
   | Command ids blessed, generated lists (`cli-options`, guesses, observe, parity), fmt | done (X.integ78 to X.integ80) |
   | First full test run (cargo nextest) | 5,304 run, 5,271 passed, 33 failed |
   | The 24 failures outside the window crates (tables, compile, io-ufo, proof, engine, cli) | fixed by X.fix86; a filtered run of them passes |
-  | The 9 failures in `crates/ui`, `apps/fontcraft` and `apps/fontcraft-next` | fixed by X.fix87 (three were code bugs: the Instructor's Delete, dialogs targeting `.notdef`, a zero-height Preview Area strip) |
+  | The 9 failures in `crates/ui` and the two desktop apps | fixed by X.fix87 (three were code bugs: the Instructor's Delete, dialogs targeting `.notdef`, a zero-height Preview Area strip) |
   | Review pass | 7 findings, fixed by X.fix88 (CFF2 region cap, revisions never reused after a rollback, CLI `@` values, palette round trip) and X.fix89 (`ui.menu.invoke` plays as a click, dialogs target the view in front, Preview Area height) |
   | The gate, `cargo xtask ci` | green: 5,310 tests pass; wasm after X.fix90 (craft's OS clipboard is native-only in `crates/ui`). `pathops` `random_paths_through_every_operation_never_panic` can miss its one-second limit on a loaded machine |
 
@@ -52,7 +52,7 @@ _Updated: 2026-11-21: UI.49 on `w-UI.49` (written, not yet built) removes the eg
   tests, not in the app. Built and run on Linux x86-64 and on macOS 15 (Apple Silicon:
   the window builds with no changes and opens; a font opens). Windows was not compiled. Still to check on the Mac:
   the quit prompt with unsaved work, the Open chooser and drop, X.pdf3's pasteboard PDF.
-- **The window.** `apps/fontcraft-next` on `crates/ui`, built on the Craft suite's craft-next framework (pinned at
+- **The window.** `apps/fontcraft` on `crates/ui`, built on the Craft suite's craft-next framework (pinned at
   `4bd0107`; egui 0.37 from the suite's fork). Its parts have headless tests only, and none has been tried in the
   running window. Conventions for writing it are in `docs/ui.md`. UI.49 (on `w-UI.49`, not yet built) removes
   `crates/ui-egui`, its desktop app and the vendored egui-winit 0.36, and points `cargo xtask parity` at the
@@ -423,7 +423,7 @@ _Updated: 2026-11-21: UI.49 on `w-UI.49` (written, not yet built) removes the eg
   HTTPS downloads in the desktop app only. `craft-print` is a workspace dependency and is not in the
   lock file until M12.36 uses it (that needs network).
 - **Known failures:** none in the gate. `pathops` `random_paths_through_every_operation_never_panic` can miss its one-second limit per case when the machine is loaded; it passes on a quiet machine.
-- **New crates and dependencies of the sixteenth batch:** `crates/engine-core` (errors, guard, clock, parameters, settings) and `crates/ui` (the new window), with `apps/fontcraft-next`; the craft-next framework from the suite's craft-libs, pinned by git commit; icu 2.3.0 across the workspace, with the glyph-data comparison against glyphs-reader moved into an excluded crate under `xtask`; `tools` depends on `components` and `pathops`, `proof` on `decompile` (and lopdf), `engine` on `textlayout`, `ui` on `spacing` and `textlayout`; `apps/fontcraft` takes clipboard-win on Windows and objc2-app-kit and objc2-foundation on macOS (X.pdf3); the CLI takes `log`.
+- **New crates and dependencies of the sixteenth batch:** `crates/engine-core` (errors, guard, clock, parameters, settings) and `crates/ui` (the new window), with `apps/fontcraft`; the craft-next framework from the suite's craft-libs, pinned by git commit; icu 2.3.0 across the workspace, with the glyph-data comparison against glyphs-reader moved into an excluded crate under `xtask`; `tools` depends on `components` and `pathops`, `proof` on `decompile` (and lopdf), `engine` on `textlayout`, `ui` on `spacing` and `textlayout`; `apps/fontcraft` takes clipboard-win on Windows and objc2-app-kit and objc2-foundation on macOS (X.pdf3); the CLI takes `log`.
 - Test layout: the gate runs the tests with cargo nextest (all test binaries in parallel,
   doctests apart). The command sweep is 16 tests (4 states times 4 chunks, chunked by a stable
   hash of the command id), and one randomised pathops test reserves 8 threads
@@ -570,7 +570,7 @@ linked file is checked against it, and a linked file outside the read root reads
      The startup wiring and the clipboard's PDF of the old app are ported on `w-UI.50`, not yet built: the system
      clock, the snippets and extension folders with their polling and safe mode (`crates/ui/src/app/startup.rs`), a
      file or `fontcraft://show/` URL on the command line, the control surface entry, and a drawing app's PDF pasted
-     on the canvas (`crates/ui/src/app/clipboard.rs`, read by `apps/fontcraft-next/src/clipboard/`). Left: PDF pages
+     on the canvas (`crates/ui/src/app/clipboard.rs`, read by `apps/fontcraft/src/clipboard/`). Left: PDF pages
      in placed images (needs a PDF renderer dependency), and `palette.toggleSection`, `tool.list` and
      `tool.select {tool}`, which the egui window had as shell commands. The smaller follow-ups (Shape Order open-path thumbnails, svg filters
      and PDF images in colour layers) are listed there too.

@@ -1,5 +1,5 @@
 [package]
-name = "fontcraft-next"
+name = "fontcraft"
 description = "FontCraft, the font editor (desktop app)"
 version.workspace = true
 edition.workspace = true

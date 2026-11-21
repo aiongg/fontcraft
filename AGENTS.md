@@ -67,7 +67,7 @@ model, commands), [`docs/decisions/`](docs/decisions/) (why things are the way t
   commit, named by its id (`M1.3: …`).
 
 ## Running and looking at the app
-- `cargo run -p fontcraft-next -- --control 7985 [file.fontcraft]`: the desktop app with the control
+- `cargo run -p fontcraft -- --control 7985 [file.fontcraft]`: the desktop app with the control
   channel. The sibling apps default to port 7979; if the log says the port could not be bound,
   pick another, or your requests reach a different app.
 - Drive it with JSON lines on `127.0.0.1:7985`, e.g.

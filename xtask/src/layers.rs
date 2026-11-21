@@ -66,7 +66,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("mcp", Class::Layer(6)),
     ("testkit", Class::Testkit),
     // L7: apps and tooling
-    ("next", Class::Exempt),
+    ("fontcraft", Class::Exempt),
     ("cli", Class::Exempt),
     ("web", Class::Exempt),
     ("xtask", Class::Exempt),
@@ -296,7 +296,7 @@ mod tests {
             krate("fontcraft-engine", &[("fontcraft-model", DepKind::Normal, true), ("fontcraft-testkit", DepKind::Dev, true)]),
             krate("fontcraft-testkit", &[("fontcraft-engine", DepKind::Normal, true)]),
             krate("fontcraft-ui", &[("fontcraft-engine", DepKind::Normal, true), ("egui", DepKind::Normal, false)]),
-            krate("fontcraft-next", &[("fontcraft-ui", DepKind::Normal, true), ("eframe", DepKind::Normal, false)]),
+            krate("fontcraft", &[("fontcraft-ui", DepKind::Normal, true), ("eframe", DepKind::Normal, false)]),
         ];
         assert_eq!(check(&crates), vec![]);
     }

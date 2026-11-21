@@ -1,5 +1,5 @@
 //! What the desktop app plugs into the UI for the web previews: a hook that runs each frame beside the UI (External
-//! Preview's server, `apps/fontcraft-next`), and the web server the TrueType preview page needs.
+//! Preview's server, `apps/fontcraft`), and the web server the TrueType preview page needs.
 //!
 //! The UI crate opens no network ports and starts no threads; the app supplies these.
 

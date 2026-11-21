@@ -2,7 +2,7 @@
 resolver = "3"
 members = ["crates/*", "apps/*", "xtask"]
 exclude = ["xtask/glyphdata-oracle"]
-default-members = ["crates/*", "apps/fontcraft-cli", "apps/fontcraft-next", "xtask"]
+default-members = ["crates/*", "apps/fontcraft-cli", "apps/fontcraft", "xtask"]
 
 [workspace.package]
 version = "0.0.1"

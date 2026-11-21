@@ -1,7 +1,7 @@
 # Writing the UI (`crates/ui`)
 
 FontCraft's UI is the crate `fontcraft-ui` (layer L6) on the craft framework. The desktop app
-`apps/fontcraft-next` runs it.
+`apps/fontcraft` runs it.
 
 This page is the contract for panel writers. The worked example is the Metrics panel:
 `crates/ui/src/panels/glyph_metrics.rs` and its view model in `crates/ui/src/app/models/glyph.rs`.
@@ -238,21 +238,21 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   yet is in `control::LATER`, which names it in the error; the package removes its line when it adds
   its module. `ui.inspect` keys come from `control::INSPECT`, `ui.set` switches from
   `control::SWITCHES`, one line per package each. `ui.click {id}` runs `ui.dialog.click`.
-  `apps/fontcraft-next --control PORT` listens on the loopback port (`docs/control-protocol.md`);
+  `apps/fontcraft --control PORT` listens on the loopback port (`docs/control-protocol.md`);
   window input is replied to once the frames have carried it.
 - **Control-driven tests.** `crate::testing::TestApp` runs the whole app headless at 1280 × 800:
   `t.ok(method, params)` returns a request's result, `t.error(…)` its error, and window input
   (`ui.click`, `ui.drag`, `ui.move`, `ui.wheel`) has run when they return.
 - **File pickers.** A command listed in `app::files::PICKED` (engine or shell) that arrives without its path opens
   the host's picker; the answer posts the command again with the path.
-- **User settings.** The settings live in the session's settings store. `apps/fontcraft-next` supplies an
+- **User settings.** The settings live in the session's settings store. `apps/fontcraft` supplies an
   `app::user_store::UserStore` that reads them from the settings folder when the window opens and writes them back
   when they change (once per frame); `crates/ui` reads and writes no files itself.
-- **Network and the system.** `apps/fontcraft-next` hands over `Options::fetch` (a blocking HTTPS GET for the
+- **Network and the system.** `apps/fontcraft` hands over `Options::fetch` (a blocking HTTPS GET for the
   Extension Manager's indexes, entry files and screenshots, run on the host's jobs by `shell/extension_downloads.rs`)
   and `Options::opener` (`FontCraftApp::opener`: links in the browser, files in the file manager). Tests set fakes; the
   browser build has neither, and what needs them says so.
-- **Startup.** `apps/fontcraft-next` hands over the desktop's facts in `Options`: `clock` (the system clock),
+- **Startup.** `apps/fontcraft` hands over the desktop's facts in `Options`: `clock` (the system clock),
   `settings_dir` (the snippets and the extension folders), `safe_mode` (`--safe-mode`) and `launch` (a file or
   `fontcraft://show/` URL from the command line). `app/startup.rs` applies them once when the window opens and polls
   the extension folders each frame through `FontCraftApp::folder_poll`, which tests and the browser build leave unset.
@@ -260,7 +260,7 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   `app.quit`, File › Close): one document at a time, then the window or the document closes.
   `dialogs/unsaved.rs` shows it; `window.closePrompt` answers it from the control channel.
 - **Frame hook.** `FontCraftApp::frame_hook` (`app/preview_host.rs`) runs once per frame in
-  `logic`. `apps/fontcraft-next` puts External Preview's server there; `preview_host` holds the
+  `logic`. `apps/fontcraft` puts External Preview's server there; `preview_host` holds the
   web server for the TrueType preview page.
 
 ## Dialog specs
@@ -337,7 +337,7 @@ only; each module's doc names the craft file the piece is meant for.
 | `craft_ext::ui::menu::{MarkedEntry::danger, danger_icon}` | a danger flag on `Entry` and a danger tone on `MenuItem` | items that remove something: the canvas menu's Delete Guide and hint removals, Remove Filter, the Features sidebar's Delete |
 | `craft_ext::ui::menu::PickMarked` (`pick_marked`) | `Menu::pick` over entries with those states | the Features sidebar and Font View sidebar context menus |
 | `craft_ext::ui::contract::RequestMods` (`mods`, `held_mods`) | a `mods` field on `ContextMenuRequest` | Font View's glyph menu: Alt held at the click makes the swatches colour the layer |
-| `craft_ext::platform::open` (`Opener`, `open_url`, `reveal`) | checked, wasm-safe forms of `craft::platform::open::{open_external, reveal}` | `FontCraftApp::opener`: Show in Finder, the Extension Manager's Website and Donate and its folder buttons; `apps/fontcraft-next` hands over `Opener::system()`, tests a fake |
+| `craft_ext::platform::open` (`Opener`, `open_url`, `reveal`) | checked, wasm-safe forms of `craft::platform::open::{open_external, reveal}` | `FontCraftApp::opener`: Show in Finder, the Extension Manager's Website and Donate and its folder buttons; `apps/fontcraft` hands over `Opener::system()`, tests a fake |
 | `craft_ext::ui::text::{HighlightText, Highlight}` (`highlight_text`) | a `highlight` option on `TextOptions` that the text widget's layouter turns into sections | Font Info › Features: the code editor's syntax colours and the underlined ranges of the compile's diagnostics |
 | `craft_ext::ui::text::{FieldSelection, TextSelection}` (`selection`, `last_selection`, `select`) | a `selection` on `EditResponse` and a `TextField::selection` prop | Text Preview: the Selection Direction items of the text's context menu; Font Info › Features: a snippet replaces the code field's selection |
 | `craft_ext::ui::text::{AsyncCompleter, CompletionQuery, CompletionAnswer}` (`kept`, `take_query`, `answer`) | a `Completer` that may answer in a later pass | Font Info › Features: the code editor's name completion, asked through `ViewMsg::FeatureCompletion` and answered by the projection with `font.features.complete` |
@@ -357,9 +357,9 @@ the focused list one pass after it fired.
 Paste outside a text field takes no craft-ext piece: craft gives the platform's paste event only to a focused
 component that lists Paste and turns it into the Cmd+V chord elsewhere, dropping its text. `app::clipboard` therefore
 reads the system clipboard through craft's own `craft::platform::clipboard` (`FontCraftApp::clipboard_reader`, which
-`apps/fontcraft-next` sets to `clipboard::system_text`); tests and the browser build have no reader and ask the window
+`apps/fontcraft` sets to `clipboard::system_text`); tests and the browser build have no reader and ask the window
 for a paste event. craft's system clipboard reads no PDF, so the drawing apps' PDF comes through
-`FontCraftApp::clipboard_flavours` (`app::clipboard::ClipboardFlavours`), which `apps/fontcraft-next/src/clipboard/`
+`FontCraftApp::clipboard_flavours` (`app::clipboard::ClipboardFlavours`), which `apps/fontcraft/src/clipboard/`
 implements per platform and runs off the window's thread.
 
 ## Forbidden in UI code

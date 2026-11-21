@@ -36,8 +36,8 @@ const USAGE: &str = "\
 FontCraft, the font editor
 
 USAGE:
-  fontcraft-next [FILE | URL] [--safe-mode] [--control PORT [--automation-read-root DIR]
-                 [--automation-write-root DIR]]
+  fontcraft [FILE | URL] [--safe-mode] [--control PORT [--automation-read-root DIR]
+            [--automation-write-root DIR]]
 
   FILE             a font file to open (default: the Start Window, or a new font when the
                    Start Window is turned off)
@@ -67,14 +67,14 @@ fn main() -> ExitCode {
         Ok(Some(options)) => options,
         Ok(None) => return ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("fontcraft-next: {error}");
+            eprintln!("fontcraft: {error}");
             return ExitCode::from(2);
         }
     };
     match fontcraft_ui::run(options) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("fontcraft-next: {error}");
+            eprintln!("fontcraft: {error}");
             ExitCode::FAILURE
         }
     }
@@ -112,7 +112,7 @@ fn options(mut args: impl Iterator<Item = String>) -> Result<Option<fontcraft_ui
                 return Ok(None);
             }
             "-V" | "--version" => {
-                println!("fontcraft-next {}", env!("CARGO_PKG_VERSION"));
+                println!("fontcraft {}", env!("CARGO_PKG_VERSION"));
                 return Ok(None);
             }
             "--safe-mode" => safe_mode = true,
@@ -154,16 +154,16 @@ fn control(port: u16, read_root: Option<&std::path::Path>, write_root: Option<&s
     // Checked before anything opens, so a mistyped root never leaves an unconfined channel.
     let roots = fontcraft_engine::file_access::AutomationRoots::new(read_root, write_root)?;
     if let Some(roots) = &roots {
-        eprintln!("fontcraft-next: control requests: {}", roots.describe());
+        eprintln!("fontcraft: control requests: {}", roots.describe());
     }
     // A port another program holds is reported, and the window opens without the channel.
     let control = match std::net::TcpListener::bind(("127.0.0.1", port)) {
         Ok(listener) => {
-            eprintln!("fontcraft-next: control channel listening on 127.0.0.1:{port}");
+            eprintln!("fontcraft: control channel listening on 127.0.0.1:{port}");
             Some(listener)
         }
         Err(e) => {
-            eprintln!("fontcraft-next: control channel: cannot listen on 127.0.0.1:{port}: {e}");
+            eprintln!("fontcraft: control channel: cannot listen on 127.0.0.1:{port}: {e}");
             None
         }
     };

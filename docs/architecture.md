@@ -77,7 +77,7 @@ Nothing below L6 may depend on a UI toolkit. Everything from L0 to L6 builds for
 | L6 | `craft-ext` | today (UI.34) | framework pieces craft lacks, in craft-libs' layout and free of FontCraft code, used by `ui` ([decision 0009](decisions/0009-framework-gaps-staged-here.md)) |
 | L6 | `mcp` | today | the MCP server |
 | – | `testkit` | today | fixtures, junk parameters, invariants |
-| L7 | `fontcraft-next`, `fontcraft-cli`, `xtask` | today | apps and tooling. `fontcraft-web` (the same app in the browser) joins at M3 |
+| L7 | `fontcraft`, `fontcraft-cli`, `xtask` | today | apps and tooling. `fontcraft-web` (the same app in the browser) joins at M3 |
 
 A new crate is created in the lowest layer that works, starts with the no-panic lints (they are
 inherited from the workspace), and is registered in the layering table in the same change.
@@ -288,7 +288,7 @@ started with `--control PORT`.
 ## The UI (L6)
 
 The crate `fontcraft-ui` (`crates/ui`) on the craft framework (egui on wgpu through eframe), run by
-the desktop app `apps/fontcraft-next`. `FontCraftApp` owns the `Session`, the view state and the
+the desktop app `apps/fontcraft`. `FontCraftApp` owns the `Session`, the view state and the
 view models; views read props and push messages, and only `drain()` runs commands. The menu bar is
 generated from the command catalog: a command with a menu path appears by itself. Tests run frames
 without a window. [`ui.md`](ui.md) is the contract for writing panels, dialogs and canvas layers.

@@ -1,6 +1,6 @@
 //! External Preview, the engine half: the setting that turns it on, the trusted devices, and the
 //! devices waiting for an answer. The desktop app serves the page
-//! (`apps/fontcraft-next/src/external_preview.rs`): each frame it writes the page's address into
+//! (`apps/fontcraft/src/external_preview.rs`): each frame it writes the page's address into
 //! [`SharingState`], adds the devices that asked, and reads the answers back. Headless nothing is
 //! served, and these commands only change the lists.
 //!
