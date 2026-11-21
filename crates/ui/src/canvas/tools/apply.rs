@@ -79,7 +79,8 @@ pub fn sync(app: &mut FontCraftApp) {
         if app.tools.before.take().is_some() && app.session.interaction().is_some() {
             let _ = app.session.cancel();
         }
-        app.tools.selection = Selection::new();
+        let old = app.tools.target.take();
+        app.tools.selection = crate::shell::compatibility::carried(app, old.as_ref(), target.as_ref()).unwrap_or_default();
         app.tools.focus = None;
         app.tools.image = false;
         app.tools.target = target;

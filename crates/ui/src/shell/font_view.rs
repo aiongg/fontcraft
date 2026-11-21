@@ -72,7 +72,22 @@ const COMMANDS: &[UiCommand] = &[
         shortcut: None,
         params: "{query: string, fields?: [\"name\" | \"unicode\" | \"note\"], matchCase?: bool, regex?: bool} narrow Font View to the glyphs that match; an empty query shows them all",
     },
+    UiCommand {
+        id: "fontView.focusSearch",
+        label: "Find (Search Glyphs)",
+        menu: &[],
+        shortcut: None,
+        params: "{} give the keyboard to Font View's search field; in the edit view it does nothing. Edit › Find runs it while Font View shows",
+    },
 ];
+
+/// Gives the keyboard to Font View's search field on the next pass, while Font View shows.
+pub fn focus_search(app: &mut FontCraftApp) -> Result<(), String> {
+    if app.font_view_shows() {
+        app.view.font_view.focus_search = true;
+    }
+    Ok(())
+}
 
 fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
     let p = &command.params;
@@ -82,6 +97,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
             Ok(())
         }
         "fontView.setSelection" => set_selection(app, p),
+        "fontView.focusSearch" => focus_search(app),
         "view.editSelectedGlyphs" => {
             let glyphs = match strings(p, "glyphs", fontcraft_textlayout::MAX_ITEMS)? {
                 Some(list) => list,

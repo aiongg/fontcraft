@@ -87,6 +87,8 @@ pub struct FontViewState {
     pub selected: Vec<String>,
     /// The glyph Shift extends a range from: the one picked last.
     pub anchor: Option<String>,
+    /// The search field takes the keyboard on the next pass (`fontView.focusSearch`).
+    pub focus_search: bool,
 }
 
 impl Default for FontViewState {
@@ -101,6 +103,7 @@ impl Default for FontViewState {
             entries: None,
             selected: Vec::new(),
             anchor: None,
+            focus_search: false,
         }
     }
 }

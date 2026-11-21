@@ -1027,7 +1027,7 @@ milestone = "M9"
 summary = "Toggle. While on, switching to another master keeps the corresponding nodes and shapes selected, matched by index. It has an effect only when the glyph's layers are compatible."
 ref = "Interpolation › Editing Multiple Masters › Keep Layer Selection in Sync"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs (carry_selection), run before the tools see each frame."
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs (carry_selection), run before the tools see each frame; crates/ui/src/shell/compatibility.rs (carried), run when the tools' target layer changes."
 guesses = [
   "The selection is carried only from one master layer to another of the same glyph, when the glyph is compatible; nodes, shapes and anchors that resolve on the new layer are kept, guides and annotations are dropped. Settle by switching from a master to an intermediate layer with the option on.",
 ]

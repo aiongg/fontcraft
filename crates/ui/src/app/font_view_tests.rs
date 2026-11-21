@@ -198,3 +198,22 @@ fn a_glyph_command_fired_with_nothing_chosen_refuses() {
     let shown = fired_on(&mut app, "path.removeOverlap");
     assert!(shown.as_ref().is_ok_and(|p| p.contains("\"B\"") && !p.contains(".notdef")), "{shown:?}");
 }
+
+/// `fontView.focusSearch`, and Edit › Find without parameters while Font View shows, ask the search field to take the
+/// keyboard once; the field's answer clears the request. In the edit view nothing is asked.
+#[test]
+fn focus_search_asks_the_search_field_to_take_the_keyboard_once() {
+    let mut app = app();
+    shell(&mut app, "fontView.focusSearch", json!({}));
+    assert!(app.models.font_view.focus_search, "{}", app.status);
+    app.sent.push(Msg::View(crate::app::ViewMsg::FontViewSearchFocused));
+    app.drain();
+    assert!(!app.models.font_view.focus_search, "asked once");
+    shell(&mut app, "edit.find", json!({}));
+    assert!(app.models.font_view.focus_search && !app.view.text.find.open, "Find in Font View searches its glyphs");
+    app.sent.push(Msg::View(crate::app::ViewMsg::FontViewSearchFocused));
+    shell(&mut app, "view.showTab", json!({"index": 2}));
+    assert!(!app.font_view_shows());
+    shell(&mut app, "fontView.focusSearch", json!({}));
+    assert!(!app.view.font_view.focus_search, "the edit view has no search field to focus");
+}

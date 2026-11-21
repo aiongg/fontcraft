@@ -1,5 +1,6 @@
 //! Kerning review: the pair lists of the Pairs & Phrases panel (`kerning.loadPairList`, `kerning.stepPairList`,
-//! `kerning.setPairListMode`) and auto-kerning a pair list for review (`kerning.autoKernPairList`).
+//! `kerning.setPairListMode`), auto-kerning a pair list for review (`kerning.autoKernPairList`), and stepping a side of
+//! the edited pair through its kerning group (`kerning.stepGroupMember`).
 //!
 //! The panel keeps two work lists, pairs and phrases, each the built-in list until a list is loaded
 //! ([`fontcraft_engine::cmd::pair_list`] reads them). The mode picks the list shown; `auto` shows pairs while the edit
@@ -11,6 +12,7 @@ use craft::ui::contract::PlainData;
 use craft::ui::runtime::commands::CommandRef;
 use fontcraft_engine::cmd::pair_list::{MAX_PAIR_LIST_BYTES, PairListRow, builtin, parse_pair_list, read_pair_list_file};
 use fontcraft_engine::model::Font;
+use fontcraft_spacing::kerning::{Position, facing, members};
 use serde_json::{Map, Value, json};
 
 use super::commands::{Module, UiCommand};
@@ -44,6 +46,13 @@ const COMMANDS: &[UiCommand] = &[
         menu: &[],
         shortcut: None,
         params: "{mode: \"pairs\"|\"phrases\"|\"auto\"} choose the list the Pairs & Phrases panel shows; auto shows pairs while the edit view is in text mode, phrases otherwise",
+    },
+    UiCommand {
+        id: "kerning.stepGroupMember",
+        label: "Next / Previous Group Member",
+        menu: &["Font", "Kerning"],
+        shortcut: None,
+        params: "{side: \"left\"|\"right\", direction?: \"next\"|\"previous\" (default next)} in the pair at the edit view's current glyph (the current glyph and the one before it), replace the left or the right glyph with the next or previous member of its kerning group on the side facing the pair, in glyph order and wrapping round, so a class value can be judged on every member; the cursor stays between the two",
     },
     UiCommand {
         id: "kerning.autoKernPairList",
@@ -149,6 +158,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
             Ok(())
         }
         "kerning.autoKernPairList" => auto_kern(app, p),
+        "kerning.stepGroupMember" => step_member(app, p),
         other => Err(format!("no kerning review command `{other}`")),
     }
 }
@@ -320,6 +330,53 @@ fn show_row(font: &Font, row: &PairListRow, line: usize) -> Result<Vec<Msg>, Str
         return Err("the line shows no glyph".into());
     }
     Ok(vec![shell("editView.setText", json!({"glyphs": glyphs})), shell("editView.setCursor", json!({"index": 0}))])
+}
+
+/// Replaces one glyph of the pair at the edit view's current glyph with the next or previous member of its kerning
+/// group on the side facing the pair.
+fn step_member(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
+    let position = match string(p, "side")? {
+        Some("left") => Position::First,
+        Some("right") => Position::Second,
+        Some(other) => return Err(format!("`side` must be left or right, got `{}`", quoted(other))),
+        None => return Err("`side` (left or right) is required".into()),
+    };
+    let forward = match string(p, "direction")? {
+        None | Some("next") => true,
+        Some("previous") => false,
+        Some(other) => return Err(format!("`direction` must be next or previous, got `{}`", quoted(other))),
+    };
+    let text = &app.view.text;
+    let current = text.edited_index().filter(|i| *i > 0).ok_or("the edit view has no pair at the current glyph")?;
+    let (Some(left), Some(right)) = (text.item_glyph(current - 1), text.item_glyph(current)) else {
+        return Err("the edit view has no pair at the current glyph".into());
+    };
+    let (item, glyph) = match position {
+        Position::First => (current - 1, left.to_string()),
+        Position::Second => (current, right.to_string()),
+    };
+    let side = facing(text.direction.layout(), position);
+    let font = app.session.font().map_err(|e| e.to_string())?;
+    let group = font
+        .glyph(&glyph)
+        .and_then(|g| side.of(&g.kern_groups).map(str::to_string))
+        .ok_or_else(|| format!("`{}` has no {} kerning group", quoted(&glyph), side.name()))?;
+    let list = members(font, side, &group);
+    let n = list.len();
+    let at = list.iter().position(|m| *m == glyph).unwrap_or(0);
+    let next = match (n, forward) {
+        (0, _) => 0,
+        (_, true) => (at + 1) % n,
+        (_, false) => (at + n - 1) % n,
+    };
+    let member = list.get(next).map(|m| m.to_string()).ok_or_else(|| format!("the group `{}` has no members", quoted(&group)))?;
+    let replacement = crate::canvas::text::commands::glyph_item(font, &member);
+    let mut edited = app.view.text.clone();
+    edited.text.replace(item..item + 1, vec![replacement]).map_err(|e| e.to_string())?;
+    edited.text.set_cursor(current);
+    app.view.text = edited;
+    crate::canvas::text::follow(app);
+    Ok(())
 }
 
 /// The `kerning.autoKern` options a pair-list proposal passes on.

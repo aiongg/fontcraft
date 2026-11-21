@@ -16,6 +16,7 @@
 //! | `project.setExportDestination` | a folder to export into, into `folder` |
 //! | `tableViewer.openFont`, `tableViewer.compareWithFile` | a compiled font for the Table Viewer ([`COMPILED_EXTENSIONS`]) |
 //! | `plugin.installFromFile` | a `.wasm` module or `.fcmacro` macro, unless `dataBase64` or `name` names the file |
+//! | `view.filterByEncodingFile` | an encoding file, unless `name` names a built-in encoding |
 //!
 //! Engine and shell commands alike: a shell command of the table asks before it runs, as an engine command does.
 //!
@@ -40,6 +41,7 @@ pub const PICKED: &[(&str, &str)] = &[
     ("tableViewer.openFont", "path"),
     ("tableViewer.compareWithFile", "path"),
     ("plugin.installFromFile", "path"),
+    ("view.filterByEncodingFile", "path"),
 ];
 
 /// Most files one picker answer opens; the rest are left alone.
@@ -137,6 +139,12 @@ fn request(session: &Session, command: &CommandRef) -> Option<(PickRequest, &'st
                 return None;
             }
             (PickRequest::open("extension").title("Install from File").filter("Modules and macros", &EXTENSION_FILES), Fill::One)
+        }
+        "view.filterByEncodingFile" => {
+            if command.params.get("name").is_some_and(|v| !v.is_null()) {
+                return None;
+            }
+            (PickRequest::open("encoding").title("Filter by Encoding File"), Fill::One)
         }
         _ => return None,
     };

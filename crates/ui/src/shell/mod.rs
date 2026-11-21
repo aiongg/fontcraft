@@ -13,6 +13,7 @@ pub mod compatibility;
 pub mod components;
 pub mod context_menu;
 pub mod dock;
+pub mod encoding;
 pub mod extension_downloads;
 pub mod extension_manager;
 pub mod extensions;

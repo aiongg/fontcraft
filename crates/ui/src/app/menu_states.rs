@@ -43,6 +43,7 @@ pub const SWITCHES: &[&str] = &[
     "view.fillPreview",
     "view.showImage",
     "view.showMasterCompatibility",
+    "edit.keepLayerSelectionInSync",
     "view.showGroupMembers",
     "view.showHints",
     "view.showTunniLines",
@@ -159,6 +160,7 @@ fn checked(app: &FontCraftApp, display: &mut Display, switches: &mut Switches, i
     let shows = |panel: PanelId| app.view.workspace.layout.panel_state(&panel) != PanelState::Hidden;
     Some(match id {
         "view.showMasterCompatibility" => app.view.display.master_compatibility,
+        "edit.keepLayerSelectionInSync" => app.view.display.keep_layer_selection_in_sync,
         "view.showHints" => app.view.display.hints,
         "view.showGroupMembers" => app.view.text.group_members,
         "view.showMeasurementLine" => app.view.text.measurement,

@@ -477,6 +477,7 @@ impl FontCraftApp {
             ViewMsg::SidebarMenu(path) => self.view.sidebar.menu_row = path,
             ViewMsg::FeatureCompletion(ask) => self.view.font_info.features.completion = ask,
             ViewMsg::FeatureCaretPlaced => self.view.font_info.features.caret = None,
+            ViewMsg::FontViewSearchFocused => self.view.font_view.focus_search = false,
         }
         Ok(())
     }
