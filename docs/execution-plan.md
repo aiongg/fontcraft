@@ -84,7 +84,7 @@ The layering makes crates independent; the shared files are few. Rules, as in th
 - An agent owns named crates or modules for a package and edits nothing else.
 - New commands go in a **new module** (`cmd/<area>.rs` with `specs()`), not into a shared file.
   The shared files get one-line edits, re-read before editing: `cmd/mod.rs` (the `v.extend` list),
-  `xtask/src/layers.rs` (the table), `ui-egui/src/menus.rs`, root `Cargo.toml`.
+  `xtask/src/layers.rs` (the table), `crates/ui/src/shell/commands.rs` (`MODULES`), root `Cargo.toml`.
 - Each agent edits its own inventory files (one per chapter), never another's.
 - Create or rewrite a `Cargo.toml` atomically (write elsewhere, then move): one broken manifest
   breaks every build in the workspace.

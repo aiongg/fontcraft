@@ -1,5 +1,5 @@
-//! The canvas selection and path focus: `edit.selectAll` and its relatives, `selection.*`, `path.focusOnSelectedPath`,
-//! `path.clearFocusOnPaths`, and the Primitives tool's two modes (`tool.drawRectangle`, `tool.drawCircle`).
+//! The canvas selection and path focus: `edit.selectAll` and its relatives, `selection.*`, `edit.recallSelection`,
+//! `path.focusOnSelectedPath`, `path.clearFocusOnPaths`, and the Primitives tool's two modes (`tool.drawRectangle`, `tool.drawCircle`).
 //!
 //! The selection belongs to the edited glyph's layer (decision 0004: the engine never stores it), so these are shell
 //! commands. Each takes the edited glyph as given; `glyph` and `layer`, when given, must name it.
@@ -81,6 +81,13 @@ const COMMANDS: &[UiCommand] = &[
         "{glyph?: name (the edited glyph), layer?: id, shapes?: [index] (default: the paths with a selected point)} show and select only these paths' nodes, until the focus is cleared or another glyph is edited",
     ),
     command("path.clearFocusOnPaths", "Clear Focus on Paths", &[], None, "{} show and select the nodes of every path again"),
+    command(
+        "edit.recallSelection",
+        "Recall Selection",
+        &["Edit", "Selection"],
+        None,
+        "{name: string, glyph?: name, layer?: id (both must name the edited glyph and layer)} replace the selection with the stored selection `name` of the edited glyph, mapped onto the edited layer: the nodes with the same indexes, the components at the same indexes, the anchors with the same names. What does not resolve there is left out; when nothing resolves the command is refused",
+    ),
 ];
 
 /// What a command does to the tools' state.
@@ -100,6 +107,10 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
             app.tools.focus = None;
             Ok(())
         }
+        "edit.recallSelection" => {
+            app.tools.selection = recall(app, params)?;
+            Ok(())
+        }
         id => {
             apply::sync(app);
             let change = {
@@ -115,6 +126,32 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
             Ok(())
         }
     }
+}
+
+/// The stored selection `name` of the edited glyph, as the engine maps it onto the edited layer
+/// (`edit.getStoredSelections`).
+fn recall(app: &mut FontCraftApp, params: &Value) -> Result<Selection, String> {
+    let name = string(params, "name")?.ok_or("`name` is required")?;
+    apply::sync(app);
+    let query = {
+        let font = app.session.font().map_err(|e| e.to_string())?;
+        let scene = scene(font, &app.view, app.tools.focus.as_ref()).ok_or("no glyph is being edited (open a glyph first)")?;
+        check_target(params, &scene)?;
+        serde_json::json!({"glyph": scene.glyph, "layer": scene.layer_id, "side": scene.side.as_str(), "name": name})
+    };
+    let found = app.session.execute("edit.getStoredSelections", &query).map_err(|e| e.to_string())?;
+    let entry =
+        found.get("selections").and_then(Value::as_array).and_then(|list| list.first()).ok_or_else(|| format!("no stored selection `{name}`"))?;
+    let mut lists = serde_json::Map::new();
+    for key in ["points", "shapes", "anchors"] {
+        if let Some(v) = entry.get(key).filter(|v| v.as_array().is_some_and(|a| !a.is_empty())) {
+            lists.insert(key.into(), v.clone());
+        }
+    }
+    if lists.is_empty() {
+        return Err(format!("nothing of `{name}` resolves on the edited layer"));
+    }
+    Selection::from_value(&Value::Object(lists))
 }
 
 fn string<'a>(params: &'a Value, key: &str) -> Result<Option<&'a str>, String> {

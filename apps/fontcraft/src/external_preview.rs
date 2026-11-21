@@ -15,7 +15,8 @@
 //!   inside an HTML page that reloads itself every [`REFRESH_SECONDS`] with a meta refresh. The
 //!   page has no script; the browser's own zoom and scrolling move around in it.
 //!
-//! The app calls [`ExternalPreview::sync`] once per frame. The server threads never touch the
+//! The UI's frame hook ([`Hook`]) calls [`ExternalPreview::sync`] once per frame, with the glyph the window shows as
+//! the tab. The server threads never touch the
 //! session: they read the device lists and the last drawing the app hands them, and they collect
 //! the devices that asked, which the next frame passes to the session.
 
@@ -25,7 +26,7 @@ use std::time::{Duration, Instant};
 
 use fontcraft_engine::Session;
 use fontcraft_engine::cmd::sharing::{self, MAX_PENDING_DEVICES, SharingState};
-use fontcraft_ui_egui::dialogs::tt_preview_address::Scope;
+use fontcraft_ui::app::preview_host::Scope;
 use serde_json::{Value, json};
 
 use crate::preview_server::{Limits, Pages, Reply, Server};
@@ -270,6 +271,17 @@ impl ExternalPreview {
         viewer.lock().view = Arc::new(view);
         self.drawn = Some((now, Instant::now()));
         None
+    }
+}
+
+/// External Preview as the UI's frame hook: the page shows the active document's shown glyph in its first master.
+pub struct Hook(pub ExternalPreview);
+
+impl fontcraft_ui::app::preview_host::FrameHook for Hook {
+    fn frame(&mut self, app: &mut fontcraft_ui::FontCraftApp) -> Option<Duration> {
+        let glyph = app.models.glyph_metrics.glyph.clone();
+        let tab = app.session.active().map(|d| Tab::new(d.id, d.title.clone(), glyph.into_iter(), None));
+        self.0.sync(&mut app.session, || tab)
     }
 }
 

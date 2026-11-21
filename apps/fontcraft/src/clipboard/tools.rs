@@ -15,7 +15,7 @@ use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use fontcraft_ui_egui::shell::clipboard::PdfRead;
+use fontcraft_ui::app::clipboard::PdfRead;
 
 use super::too_large;
 

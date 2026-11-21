@@ -559,7 +559,7 @@ milestone = "M10"
 summary = "State of the Edit View Info box (View › Show Info, Cmd+Shift+I) while one or more PostScript hints are selected. It shows the numbers of the selected hint for editing; for a ghost hint it shows the orientation buttons instead of a size."
 ref = "PostScript Hinting › Stem Hints; Ghost Hints"
 status = "handbook"
-notes = "crates/ui-egui/src/panels/info_box_ps_hint.rs: Origin runs hint.ps.setHintValues with origin, Size with size, the up and down buttons hint.ps.setGhostDirection; the warnings hint.ps.listHints gives for the hint show under the fields. Documented in the handbook, not yet observed."
+notes = "crates/ui/src/panels/info_box_ps_hint.rs: Origin runs hint.ps.setHintValues with origin, Size with size, the up and down buttons hint.ps.setGhostDirection; the warnings hint.ps.listHints gives for the hint show under the fields. Documented in the handbook, not yet observed."
 guesses = ["With several hints selected the box shows the first of them in list order, with the count; the reference app would settle which one it shows."]
 observe = ["T1: in n, Shift-click two hint badges and note which hint's values the Info box shows."]
 
@@ -590,7 +590,7 @@ milestone = "M10"
 summary = "In Edit View a stem hint is drawn as a gray bar across the glyph with a number badge showing its origin and size; the reference's figures tint vertical hints green, horizontal hints yellow and ghost hints blue. A ghost hint's badge shows only the position plus an arrow: up for a top ghost hint, down for a bottom one."
 ref = "PostScript Hinting › Stem Hints; Ghost Hints"
 status = "handbook"
-notes = "crates/ui-egui/src/canvas/hints_ps.rs draws what hint.ps.listHints reports: translucent bars across the canvas tinted by kind, a ghost as a band on the inner side of its edge, gray number badges (origin / size; a ghost's position and an arrow) beside the glyph, orange when selected and ringed red when listHints warns, blue markers at the edges. The context menu offers Add Horizontal Hint and Add Vertical Hint (nodes, paths, empty canvas), Autohint and Remove PostScript Hints (the glyph), Make Ghost Hint and Delete Hints (a hint's badge or marker). Documented in the handbook, not yet observed."
+notes = "crates/ui/src/canvas/hinting/ps.rs draws what hint.ps.listHints reports: translucent bars across the canvas tinted by kind, a ghost as a band on the inner side of its edge, gray number badges (origin / size; a ghost's position and an arrow) beside the glyph, orange when selected and ringed red when listHints warns, blue markers at the edges. The context menu offers Add Horizontal Hint and Add Vertical Hint (nodes, paths, empty canvas), Autohint and Remove PostScript Hints (the glyph), Make Ghost Hint and Delete Hints (a hint's badge or marker). Documented in the handbook, not yet observed."
 guesses = [
   "PostScript hints are shown and edited with the Select tool while View › Show Hints is on; whether another tool is needed would be settled in the reference app.",
   "Badges and markers of horizontal hints stand in a column left of the glyph's origin, those of vertical hints in a row below the descender; a reference-app screenshot of n with hints would settle where they sit.",

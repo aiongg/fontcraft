@@ -16,9 +16,9 @@ features that own them).
 The buttons in the reference are icons without text, so most command labels in the inventory
 are ours.
 
-FontCraft's Transformations buttons are icons too, drawn with egui shapes
-(`crates/ui-egui/src/icons.rs`), so they show even where the interface font has no arrow
-symbols. Each keeps its command label as hover text.
+FontCraft's Transformations buttons are icons too, from the framework's icon catalog and our
+own shape icons (`crates/craft-ext/src/ui/primitives/shape_icons.rs`), so they show even where
+the interface font has no arrow symbols. Each keeps its command label as hover text.
 
 **How FontCraft builds it (M3.15).** The section settings are UI state, changed only by shell
 commands: `palette.toggleSection`, `fitCurve.setRange`, `transform.setOrigin`,

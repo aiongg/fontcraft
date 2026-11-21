@@ -342,7 +342,7 @@ milestone = "M9"
 summary = "In Edit View a glyph whose layers are incompatible shows a red bar above its ascender line."
 ref = "Interpolation › Outline Compatibility › Identifying Incompatible Outlines"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs (draw_bars), over every glyph of the tab whose layers cannot interpolate, hidden while Enforce Compatibility Check is present and off."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, over every glyph of the tab whose layers cannot interpolate, hidden while Enforce Compatibility Check is present and off."
 guesses = [
   "The bar spans the glyph's advance a few screen points above the ascender, a few points high. Settle by measuring it in a screenshot of the reference app.",
 ]
@@ -453,7 +453,7 @@ milestone = "M9"
 summary = "Shows every path and component of every layer of the current glyph and lets the shapes be rearranged until all layers use the same order. The exact layout and whether it colours shapes like Master Compatibility view are not described."
 ref = "Interpolation › Outline Compatibility › Reordering Shapes"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/dialogs/shape_order_window.rs, shown by window.shapeOrder. One column per master layer, each followed by its master's intermediate and alternate layers; numbered thumbnails in stacking order, each shape in a colour that follows its index over the dim layer. Dropping a thumbnail on another in the same column runs glyph.setShapeOrder for that layer. The window follows the glyph being edited unless it is opened on a named glyph. In crates/ui it is the dock panel `shapeOrder` (crates/ui/src/panels/shape_order.rs): one section per layer in the same order, each a list of rows with the thumbnail and the shape's index and kind; a row dropped between two others, or moved with the list's reorder keys, runs glyph.setShapeOrder; the tints are the Master Compatibility view's."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/panels/shape_order.rs, shown by window.shapeOrder. One column per master layer, each followed by its master's intermediate and alternate layers; numbered thumbnails in stacking order, each shape in a colour that follows its index over the dim layer. Dropping a thumbnail on another in the same column runs glyph.setShapeOrder for that layer. The window follows the glyph being edited unless it is opened on a named glyph. In crates/ui it is the dock panel `shapeOrder` (crates/ui/src/panels/shape_order.rs): one section per layer in the same order, each a list of rows with the thumbnail and the shape's index and kind; a row dropped between two others, or moved with the list's reorder keys, runs glyph.setShapeOrder; the tints are the Master Compatibility view's."
 guesses = [
   "The window opens from Window › Shape Order; Filter › Shape Order keeps the one-layer dialog. Choosing Filter › Shape Order in the reference app opens the all-layers window, so the two may have to merge.",
   "Columns run left to right, one per layer, thumbnails top to bottom with shape 0 on top; seeing the window would settle the layout.",
@@ -475,7 +475,7 @@ milestone = "M9"
 summary = "Toggles an Edit View mode that draws the current glyph's paths, components and anchors for all masters at once with correspondence lines and compatibility colours."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. The toggle is a shell command (crates/ui-egui/src/canvas/compatibility.rs)."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. The toggle is a shell command (crates/ui/src/canvas/compatibility.rs)."
 guesses = [
   "Shape tints cycle through the twelve colour-label colours by shape index, as the Shape Order window's do; settle by observing the view with thirteen shapes.",
 ]
@@ -503,7 +503,7 @@ milestone = "M9"
 summary = "The Edit View overlay switched on by Show Master Compatibility. It visualises shape order, start nodes, anchors and per-segment compatibility across masters and allows fixing mismatched correspondences by dragging line ends."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph."
 guesses = [
   "The edited layer stays in place and every other source layer is drawn beside it in source order (master layers, then intermediate layers), each starting a quarter em after the previous layer's advance and a twelfth of an em higher, so the connecting lines slant. Settle by opening the view on a glyph with three masters.",
   "Shape tints are drawn as wide translucent strokes along each shape's outline and components get a dashed tint in place of a checkered fill. Settle by comparing a screenshot of the reference app's view.",
@@ -519,7 +519,7 @@ milestone = "M9"
 summary = "Each path and component is tinted according to its position in the shape order, so the shape with index n has the same colour on every master; components additionally get a checkered pattern. The palette itself is not specified."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph."
 
 [[behavior]]
 id = "masterCompatibility.indexLabels"
@@ -528,7 +528,7 @@ milestone = "M9"
 summary = "On the current layer only, each path shows its shape order index next to its start node, and each component shows its index at its centre."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph."
 guesses = [
   "Indices count from 0, as the Shape Order window numbers shapes. Settle by reading the first shape's label in the reference app.",
 ]
@@ -540,7 +540,7 @@ milestone = "M9"
 summary = "Slanted lines join each start node, each shape centre and each anchor to its counterpart on the other masters; anchor lines are dashed. Selecting points draws the lines for those points too."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. Start nodes are each path's first on-curve node; a component's centre is the centre of its outline's bounds."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. Start nodes are each path's first on-curve node; a component's centre is the centre of its outline's bounds."
 guesses = [
   "Lines join the layers of one group in the order they are drawn, one segment between each neighbouring pair. Settle by watching the lines with three masters.",
 ]
@@ -552,7 +552,7 @@ milestone = "M9"
 summary = "Segments are green when compatible; yellow when compatible but their angle differs between masters by more than 20°, a hint that a node is missing; red when incompatible because the other master has no such segment or the types differ (curve against line). After a missing node all following segments of that path turn red."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. A segment is red when another layer of its group lacks the path or when the first node whose kind, count or closedness differs is the segment's end or one of its handles, so every later segment is red too; otherwise it is yellow when its chord turns by more than 20 degrees against another layer of the group."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. A segment is red when another layer of its group lacks the path or when the first node whose kind, count or closedness differs is the segment's end or one of its handles, so every later segment is red too; otherwise it is yellow when its chord turns by more than 20 degrees against another layer of the group."
 guesses = [
   "The angle compared is the chord from the segment's first on-curve node to its last, with the threshold fixed at 20 degrees, as `fontcraft_interp::compat` measures its warnings. Settle by bending one segment's handles on one master and watching when it turns yellow.",
 ]
@@ -564,7 +564,7 @@ milestone = "M9"
 summary = "For a path, component or anchor that one master lacks, the connecting line runs to that master's (0, 0)."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph."
 
 [[behavior]]
 id = "masterCompatibility.redMismatchLabels"
@@ -573,7 +573,7 @@ milestone = "M9"
 summary = "Components that reference different glyphs and anchors with different names across masters are labelled in red text."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. Component base glyphs are written in red on every layer when the layers of a group disagree on them; an anchor name is written in red on the layers that have it when another layer of the group lacks it."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. Component base glyphs are written in red on every layer when the layers of a group disagree on them; an anchor name is written in red on the layers that have it when another layer of the group lacks it."
 
 [[behavior]]
 id = "masterCompatibility.dragLineEnds"
@@ -582,7 +582,7 @@ milestone = "M9"
 summary = "The ends of connecting lines on layers other than the current one can be dragged onto the end of another line; the two correspondences swap, which reorders shapes (or start nodes) on that layer."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. Dropping an end within three end radii of another shape's line end on the same layer runs glyph.swapShapes on that layer with the two shapes' indices."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. Dropping an end within three end radii of another shape's line end on the same layer runs glyph.swapShapes on that layer with the two shapes' indices."
 guesses = [
   "Only the ends of shape lines (start nodes and component centres) can be dragged; anchor and selected-point lines cannot, and start nodes are not moved within a path. Settle by dragging an anchor line's end in the reference app.",
 ]
@@ -594,7 +594,7 @@ milestone = "M9"
 summary = "Selecting nodes on the current layer shows where the corresponding nodes fall on the other masters, the stated way to locate the cause of a segment mismatch. No command adds or removes the missing node automatically."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. Each selected point of the edited layer gets a line to the node with the same shape and node index on the other layers of its group."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. Each selected point of the edited layer gets a line to the node with the same shape and node index on the other layers of its group."
 
 [[behavior]]
 id = "masterCompatibility.shapeShifters"
@@ -603,7 +603,7 @@ milestone = "M9"
 summary = "Layers can be formally compatible yet interpolate badly when same-index shapes sit in different places on different masters; the view exposes this as crossing connecting lines. Fixes: Correct Path Direction, the Shape Order window, or dragging a line end to the right shape."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph."
 
 [[behavior]]
 id = "masterCompatibility.alternateLayersOffset"
@@ -612,7 +612,7 @@ milestone = "M9"
 summary = "Master Compatibility view also shows intermediate and alternate layers; alternate layers form their own group, separated from the master layers by a gap, because they need only match each other."
 ref = "Interpolation › Switching Shapes › Alternate Layers"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. Each alternate set is a group of its own, drawn after the main sources with three quarters of an em more gap; lines and colours compare a layer only with its own group."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. Each alternate set is a group of its own, drawn after the main sources with three quarters of an em more gap; lines and colours compare a layer only with its own group."
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Intermediate (brace) layers and virtual masters
@@ -773,7 +773,7 @@ milestone = "M9"
 summary = "Editor opened by clicking the value of a Virtual Master parameter; coordinates are entered as for a real master and confirmed with OK. Several virtual masters need several parameters."
 ref = "Interpolation › Intermediate Layers › Virtual Masters"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/dialogs/virtual_master.rs, a dialog of font.customParameters.set on an existing Virtual Master row of the font (dialog.open {dialog: \"dialog.virtualMaster\", params: {index}}; index picks the row when there are several). One number field per axis, keyed by the axis name; OK writes an entry for every axis, ordered by axis name. The parameter list does not open it from a click on the value yet."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/dialogs/interp/location.rs, a dialog of font.customParameters.set on an existing Virtual Master row of the font (dialog.open {dialog: \"dialog.virtualMaster\", params: {index}}; index picks the row when there are several). One number field per axis, keyed by the axis name; OK writes an entry for every axis, ordered by axis name. The parameter list does not open it from a click on the value yet."
 guesses = [
   "An axis the stored value leaves out starts at the first master's coordinate; adding a Virtual Master in the reference app would show its starting values.",
 ]
@@ -1027,7 +1027,7 @@ milestone = "M9"
 summary = "Toggle. While on, switching to another master keeps the corresponding nodes and shapes selected, matched by index. It has an effect only when the glyph's layers are compatible."
 ref = "Interpolation › Editing Multiple Masters › Keep Layer Selection in Sync"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs (carry_selection), run before the tools see each frame; crates/ui/src/shell/compatibility.rs (carried), run when the tools' target layer changes."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/tools/apply.rs, run before the tools see each frame; crates/ui/src/shell/compatibility.rs (carried), run when the tools' target layer changes."
 guesses = [
   "The selection is carried only from one master layer to another of the same glyph, when the glyph is compatible; nodes, shapes and anchors that resolve on the new layer are kept, guides and annotations are dropped. Settle by switching from a master to an intermediate layer with the option on.",
 ]
@@ -1400,7 +1400,7 @@ milestone = "M9"
 summary = "Editor opened by clicking the value of an Axis Location parameter on a master; assigns each axis the coordinate the master represents in variable fonts. Layout is not described beyond that."
 ref = "Interpolation › Variable Font Options › Axis Location"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/dialogs/axis_location.rs, a dialog of font.customParameters.set on an existing Axis Location row of a master or instance (dialog.open {dialog: \"dialog.axisLocation\", params: {scope, targets}}). It has one number field per axis, keyed by the axis name; OK writes an entry for every axis, ordered by axis name. The parameter list does not open it from a click on the value yet."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/dialogs/interp/location.rs, a dialog of font.customParameters.set on an existing Axis Location row of a master or instance (dialog.open {dialog: \"dialog.axisLocation\", params: {scope, targets}}). It has one number field per axis, keyed by the axis name; OK writes an entry for every axis, ordered by axis name. The parameter list does not open it from a click on the value yet."
 guesses = [
   "An axis the stored value leaves out starts at the master's or instance's internal coordinate; opening an empty Axis Location in the reference app would show its starting values.",
 ]
@@ -1478,7 +1478,7 @@ milestone = "M9"
 summary = "Three-pane editor opened by clicking the value of an Axis Mappings parameter: axes, the mapping table of the selected axis, and a graphical editor of the same points."
 ref = "Interpolation › Variable Font Options › Axis Mappings"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui/src/dialogs/axis_mappings.rs (and the earlier window's crates/ui-egui/src/dialogs/axis_mappings.rs), opened by axisMappings.showDialog (the font's mappings, or a variable font setting's). Every edit is one axisMappings.* command; the edits made while the dialog is open are previewed together as one command.batch, OK keeps them as one undo step and Cancel gives back the font it opened on. Repeated moves of one point merge into one step. The arrow keys move the selected point while no field or list has focus; a focused coordinate field steps its own value with them, and a focused list moves its selection. In the graph a click on a point selects it, a click on the line adds a point there, and a drag moves a point's external value, which the font takes once, when the drag ends."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/dialogs/axis_mappings.rs, opened by axisMappings.showDialog (the font's mappings, or a variable font setting's). Every edit is one axisMappings.* command; the edits made while the dialog is open are previewed together as one command.batch, OK keeps them as one undo step and Cancel gives back the font it opened on. Repeated moves of one point merge into one step. The arrow keys move the selected point while no field or list has focus; a focused coordinate field steps its own value with them, and a focused list moves its selection. In the graph a click on a point selects it, a click on the line adds a point there, and a drag moves a point's external value, which the font takes once, when the drag ends."
 guesses = [
   "The graph puts internal coordinates across and external ones up, so dragging a point up or down changes its external value; seeing the dialog would settle the orientation.",
   "A point dragged in the graph lands on a whole number; dragging a point in the reference app would show whether it keeps fractions.",
@@ -1878,7 +1878,7 @@ milestone = "M9"
 summary = "Shows or hides the Shape Order window on a glyph, by default the one being edited."
 ref = "Interpolation › Outline Compatibility › Reordering Shapes"
 status = "inferred"
-notes = "Our shell command for the window.shapeOrder window. In crates/ui-egui its reply lists each layer's shapes; in crates/ui shell commands reply with nothing and ui.inspect reports the same list under `shapeOrder`, so agents can read the order before running glyph.setShapeOrder."
+notes = "Our shell command for the window.shapeOrder window. Shell commands reply with nothing, so ui.inspect reports each layer's shapes under `shapeOrder`, so agents can read the order before running glyph.setShapeOrder."
 guesses = [
   "A shell command of ours that opens the window on a named glyph or the one being edited and replies with each layer's shapes; the reference app opens the window only from its menu.",
 ]

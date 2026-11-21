@@ -1,16 +1,14 @@
-//! The PDF a drawing app puts on the system clipboard, for Edit View's paste
-//! ([`ClipboardFlavours`]). egui carries only text, so the PDF is read per platform: through the
-//! system clipboard's own interface on Windows (module `windows`, clipboard-win) and macOS
-//! (module `macos`, the general pasteboard through objc2-app-kit), and through the desktop's
-//! clipboard tools on Linux and BSD (module `tools`). With no PDF on the clipboard there is
-//! nothing to paste.
+//! The PDF a drawing app puts on the system clipboard, for a paste on the canvas
+//! ([`ClipboardFlavours`]). The system clipboard's text reader carries only text, so the PDF is read per platform:
+//! through the system clipboard's own interface on Windows (module `windows`, clipboard-win) and macOS (module
+//! `macos`, the general pasteboard through objc2-app-kit), and through the desktop's clipboard tools on Linux and BSD
+//! (module `tools`). With no PDF on the clipboard there is nothing to paste.
 //!
-//! The read runs on a thread of its own, so a slow clipboard owner never holds up the window,
-//! which takes the result in a later frame. A PDF larger than the paste limit is refused.
+//! The read runs on a thread of its own, so a slow clipboard owner never holds up the window, which takes the result
+//! in a later frame. A PDF larger than the paste limit is refused.
 //!
-//! Each platform reader answers for a MIME type ([`read_flavour`]), the way a clipboard backend of
-//! the craft platform service is asked for one, so a reader can move behind that service when it
-//! carries custom types.
+//! Each platform reader answers for a MIME type ([`read_flavour`]), the way a clipboard backend of the craft platform
+//! service is asked for one, so a reader can move behind that service when it carries custom types.
 
 #[cfg(target_os = "macos")]
 mod macos;
@@ -28,8 +26,7 @@ use self::windows as platform;
 
 use std::sync::mpsc;
 
-use eframe::egui;
-use fontcraft_ui_egui::shell::clipboard::{ClipboardFlavours, PdfRead};
+use fontcraft_ui::app::clipboard::{ClipboardFlavours, PdfRead, Wake};
 
 /// The MIME type of a PDF.
 const PDF_MIME: &str = "application/pdf";
@@ -42,16 +39,15 @@ pub struct SystemClipboard {
 }
 
 impl ClipboardFlavours for SystemClipboard {
-    fn request_pdf(&mut self, max_bytes: usize, ctx: &egui::Context) {
+    fn request_pdf(&mut self, max_bytes: usize, wake: Wake) {
         if self.running.is_some() {
             return;
         }
         let (tx, rx) = mpsc::channel();
-        let ctx = ctx.clone();
         // A thread that cannot start drops `tx`, and `take_pdf` reports that.
         let _ = std::thread::Builder::new().name("clipboard-pdf".into()).spawn(move || {
             let _ = tx.send(read_flavour(PDF_MIME, max_bytes));
-            ctx.request_repaint();
+            wake.wake();
         });
         self.running = Some(rx);
     }

@@ -5,7 +5,7 @@
 //! The pasteboard hands over a type's data whole, so the size is known only once the data is in
 //! memory; the cap then keeps it from being copied and pasted.
 
-use fontcraft_ui_egui::shell::clipboard::PdfRead;
+use fontcraft_ui::app::clipboard::PdfRead;
 use objc2_app_kit::NSPasteboard;
 use objc2_foundation::NSString;
 

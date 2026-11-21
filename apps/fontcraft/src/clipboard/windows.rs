@@ -4,7 +4,7 @@
 use std::num::NonZeroUsize;
 
 use clipboard_win::{Clipboard, is_format_avail, raw, register_format};
-use fontcraft_ui_egui::shell::clipboard::PdfRead;
+use fontcraft_ui::app::clipboard::PdfRead;
 
 use super::read_named;
 

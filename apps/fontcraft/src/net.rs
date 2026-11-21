@@ -1,6 +1,6 @@
 //! Network access for the Extension Manager: HTTPS downloads of extension indexes, entry files
-//! and screenshots, and opening links in the system browser (`docs/plans/M13.md` § 7
-//! question 5: local files and HTTPS indexes, fetched by the desktop app only).
+//! and screenshots (`docs/plans/M13.md` § 7 question 5: local files and HTTPS indexes, fetched by
+//! the desktop app only). Links open through `fontcraft_ui::Opener`.
 //!
 //! Downloads use a Rust HTTPS client (rustls). Only `https://` is allowed, for the request and
 //! for every redirect. The user name and password of an index URL go in the `Authorization`
@@ -8,7 +8,6 @@
 //! redirect keeps them only to the same host. Each download has a size cap, a connection timeout
 //! and an overall timeout.
 
-use std::process::Command;
 use std::time::Duration;
 
 /// Seconds allowed to connect.
@@ -45,31 +44,6 @@ pub fn fetch(url: &str, max: usize, language: &str) -> Result<Vec<u8>, String> {
         ureq::Error::BodyExceedsLimit(_) => format!("{shown}: larger than {max} bytes"),
         e => failed(e),
     })
-}
-
-/// Opens an `https://` or `http://` link in the system browser.
-pub fn open_url(url: &str) -> Result<(), String> {
-    if !(url.starts_with("https://") || url.starts_with("http://")) || url.chars().any(|c| c.is_control() || c.is_whitespace()) {
-        return Err(format!("{url:?} is not a web link"));
-    }
-    let mut command = if cfg!(target_os = "macos") {
-        let mut c = Command::new("open");
-        c.arg(url);
-        c
-    } else if cfg!(target_os = "windows") {
-        // Not `cmd /c start`, which would read `&` in the URL as a command separator.
-        let mut c = Command::new("rundll32");
-        c.arg("url.dll,FileProtocolHandler").arg(url);
-        c
-    } else {
-        let mut c = Command::new("xdg-open");
-        c.arg(url);
-        c
-    };
-    let mut child = command.spawn().map_err(|e| format!("cannot start the browser: {e}"))?;
-    // Wait on another thread, so the finished process does not linger.
-    let _ = std::thread::spawn(move || child.wait());
-    Ok(())
 }
 
 /// `user:password@host/path` → (`user:password`, `host/path`); the `@` must be in the authority.
@@ -135,6 +109,5 @@ mod tests {
         assert_eq!(base64(b"ab"), "YWI=");
         assert_eq!(base64(b"a"), "YQ==");
         assert!(fetch("http://example.com/index.json", 10, "en").unwrap_err().contains("https"));
-        assert!(open_url("file:///etc/passwd").is_err());
     }
 }

@@ -123,7 +123,7 @@ milestone = "M6"
 summary = "The glyph picker shown by Add Component. It behaves exactly like the glyph picker the Text tool uses to insert glyphs in Edit View, so one picker implementation serves both."
 ref = "Reusing Shapes › Components › Building Composites"
 status = "handbook"
-notes = "Documented, not yet observed. M6.11: `ui-egui/src/dialogs/glyph_picker_component.rs`, driven by `editView.chooseGlyph`. Glyph › Add Component and Add Component (all masters), from the menu or their shortcuts, and Add Component in the canvas context menu open it while a glyph is edited; the search is glyph.search in All mode, the first result is highlighted, Up and Down move the highlight, Return runs glyph.addComponent with the highlighted glyph, Escape closes it. In Font View the menu items open the batch form instead."
+notes = "Documented, not yet observed. M6.11: `crates/ui/src/dialogs/glyph_picker.rs`, driven by `editView.chooseGlyph`. Glyph › Add Component and Add Component (all masters), from the menu or their shortcuts, and Add Component in the canvas context menu open it while a glyph is edited; the search is glyph.search in All mode, the first result is highlighted, Up and Down move the highlight, Return runs glyph.addComponent with the highlighted glyph, Escape closes it. In Font View the menu items open the batch form instead."
 guesses = [
   "The picker highlights one result and adds one component per Return, with no multiple selection; the reference app settles it.",
 ]
@@ -141,7 +141,7 @@ summary = "Drives the glyph picker that the component commands open: Add Compone
 ref = "Reusing Shapes › Components › Building Composites; Corner Components › Using Corner Components"
 status = "inferred"
 own = true
-notes = "M6.11: `ui-egui/src/dialogs/glyph_picker_component.rs`. A pick that the command refuses leaves the picker open with the message. In `crates/ui` (`dialogs/glyph_picker.rs`) the picker also serves the cap purposes (`addCap` lists `_cap.` glyphs for `capComponent.add`, `capGlyph` runs `capComponent.setGlyph`), and a pick posts its command and closes the picker, so a refusal reaches the status line instead."
+notes = "M6.11: `crates/ui/src/dialogs/glyph_picker.rs`. A pick that the command refuses leaves the picker open with the message. In `crates/ui` (`dialogs/glyph_picker.rs`) the picker also serves the cap purposes (`addCap` lists `_cap.` glyphs for `capComponent.add`, `capGlyph` runs `capComponent.setGlyph`), and a pick posts its command and closes the picker, so a refusal reaches the status line instead."
 
 [[panel]]
 id = "dialog.componentFromSelection"
@@ -157,7 +157,7 @@ milestone = "M6"
 summary = "Asks for the name of the glyph that will hold the selected shapes. The field starts with a name suggested from context and accepts any other name; an underscore-prefixed name makes the new glyph a non-exporting part."
 ref = "Reusing Shapes › Components › Turning Paths into Components"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 16:09–16:21: the dialog is titled Name of the Component Glyph, says that it applies to all master layers, and has a text field with Cancel and OK. Not shown: whether the field is pre-filled, an underscore name. M6.11: `ui-egui/src/dialogs/component_from_selection.rs`, opened by Glyph › Component from Selection and the canvas context menu; nothing runs until OK, which runs glyph.componentFromSelection once, then puts the new glyph into the tab's text after the edited glyph and edits it. Cancel changes nothing. The new glyph exports unless its name starts with an underscore."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 16:09–16:21: the dialog is titled Name of the Component Glyph, says that it applies to all master layers, and has a text field with Cancel and OK. Not shown: whether the field is pre-filled, an underscore name. M6.11: `crates/ui/src/dialogs/component_name.rs`, opened by Glyph › Component from Selection and the canvas context menu; nothing runs until OK, which runs glyph.componentFromSelection once, then puts the new glyph into the tab's text after the edited glyph and edits it. Cancel changes nothing. The new glyph exports unless its name starts with an underscore."
 guesses = [
   "The name field starts with the command's suggested name, `_part.` and the glyph name; the dialog of the reference app settles it.",
 ]
@@ -343,7 +343,7 @@ milestone = "M6"
 summary = "Canvas context-menu item that displays every glyph containing the current glyph as a component. The handbook does not say whether the result opens in a new tab or replaces the current text."
 ref = "Reusing Shapes › Components › Moving between Base Glyphs and Composites"
 status = "handbook"
-notes = "Documented, not yet observed. M6.11: a shell command in `ui-egui/src/shell/components.rs`, in the canvas section of the context menu. It lists the glyphs with glyph.listComposites (not recursive) and opens them in a new tab; a glyph no other glyph uses is refused with a message."
+notes = "Documented, not yet observed. M6.11: a shell command in `crates/ui/src/shell/components.rs`, in the canvas section of the context menu. It lists the glyphs with glyph.listComposites (not recursive) and opens them in a new tab; a glyph no other glyph uses is refused with a message."
 guesses = [
   "The glyphs open in a new Edit View tab, one per line slot in glyph order; the reference app settles it.",
 ]
@@ -844,7 +844,7 @@ milestone = "M6"
 summary = "Component fill colour signals alignment state in Edit View: green for auto-aligned, gray for manually placed, blue for the vertically shiftable single-number case."
 ref = "Reusing Shapes › Components › Automatic Alignment"
 status = "handbook"
-notes = "Documented, not yet observed. M6.10: Edit View draws each component's outline over the glyph in green, grey or blue by `fontcraft_components::align::component_alignment` (`crates/ui-egui/src/canvas/components.rs`); a selected component is drawn in the selection colour."
+notes = "Documented, not yet observed. M6.10: Edit View draws each component's outline over the glyph in green, grey or blue by `fontcraft_components::align::component_alignment` (`crates/ui/src/canvas/paint/components.rs`); a selected component is drawn in the selection colour."
 guesses = [
   "Components are shown by their outline drawn in the state colour, not filled; a composite in the reference app's Edit View settles it.",
   "Every component aligned horizontally only is blue, the single Number component and a component set to horizontal alignment alike; a component set to horizontal alignment in the reference app settles it.",
@@ -1465,7 +1465,7 @@ milestone = "M6"
 summary = "The arrow button of the corner Info box: adds the corner glyph to the Edit View text and activates it."
 ref = "Reusing Shapes › Corner Components › Using Corner Components"
 status = "handbook"
-notes = "Documented, not yet observed. M6.11: a shell command in `ui-egui/src/shell/components.rs`; the corner glyph goes in just before the edited glyph, as component.editBaseGlyph does, and becomes the edited glyph. A hint that is not a corner, or a corner glyph that does not exist, is refused."
+notes = "Documented, not yet observed. M6.11: a shell command in `crates/ui/src/shell/components.rs`; the corner glyph goes in just before the edited glyph, as component.editBaseGlyph does, and becomes the edited glyph. A hint that is not a corner, or a corner glyph that does not exist, is refused."
 guesses = [
   "The corner glyph joins the text left of the current glyph, as the base glyph of a component does; the reference app settles it.",
 ]
@@ -1486,7 +1486,7 @@ milestone = "M6"
 summary = "Shown for a selected corner component when View › Show Info is on."
 ref = "Reusing Shapes › Corner Components › Using Corner Components"
 status = "handbook"
-notes = "Documented, not yet observed. M6.11: `ui-egui/src/panels/info_box_corner.rs`, beside the selection box. The name opens the corner glyph picker for cornerComponent.setGlyph, the arrow runs cornerComponent.editGlyph, the fields cornerComponent.setScale and the four buttons cornerComponent.setAlignment."
+notes = "Documented, not yet observed. M6.11: `crates/ui/src/panels/info_box_component.rs`, beside the selection box. The name opens the corner glyph picker for cornerComponent.setGlyph, the arrow runs cornerComponent.editGlyph, the fields cornerComponent.setScale and the four buttons cornerComponent.setAlignment."
 guesses = [
   "Corner components cannot be selected yet, so the box describes the corner on the first selected node that holds one; selecting the corner itself, as the reference app does, settles it.",
 ]

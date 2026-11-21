@@ -374,7 +374,7 @@ milestone = "M7"
 summary = "First tab of Font Info: metadata shared by every exported font file, the design axes, and the font-level custom parameters."
 ref = "Font Info › Font"
 status = "handbook"
-notes = "Documented, not yet observed. The Axes rows act through font.axes.add, .set, .remove and .reorder; the name's disclosure menu lists font.axes.listPredefined (M9.27). M7 plan § 4: M7.16 (`crates/ui-egui/src/shell/font_info/font_tab.rs`)."
+notes = "Documented, not yet observed. The Axes rows act through font.axes.add, .set, .remove and .reorder; the name's disclosure menu lists font.axes.listPredefined (M9.27). M7 plan § 4: M7.16 (`crates/ui/src/panels/font_info/font_tab.rs`)."
 guesses = [
   "The double-arrow button opens a prompt under the field that asks for the new units per em, starting at the current value, with Scale and Cancel buttons; clicking the button in the reference app settles the prompt's form.",
   "The minor version shows three digits, and its stepper is a plus and a minus button after the field; the reference app's Version field settles the look.",
@@ -984,7 +984,7 @@ milestone = "M7"
 summary = "Second tab of Font Info: the list of masters on the left and the properties of the selected master or masters on the right."
 ref = "Font Info › Masters"
 status = "handbook"
-notes = "Documented, not yet observed. Axes Coordinates act through font.master.setAxisLocation on every selected master (M9.27); Number Values (font.numbers.*) are M8's and read-only until then. Add Other Font is shown disabled until its dialog exists (M9). M7 plan § 4: M7.17 (`ui-egui/src/shell/font_info/masters_tab.rs`)."
+notes = "Documented, not yet observed. Axes Coordinates act through font.master.setAxisLocation on every selected master (M9.27); Number Values (font.numbers.*) are M8's and read-only until then. Add Other Font is shown disabled until its dialog exists (M9). M7 plan § 4: M7.17 (`crates/ui/src/panels/font_info/masters_tab.rs`)."
 guesses = [
   "A master made with Add Master becomes the selection, and a dragged master stays selected at its new place; the list's selection in the reference app after each action settles it.",
   "The minus button is disabled while every master is selected, because a font keeps at least one master; whether the reference app disables it or refuses with a message settles it.",
@@ -1093,7 +1093,7 @@ milestone = "M9"
 summary = "Sheet shown by the Add Other Font entry of the masters plus menu, used to choose which masters of other open documents are copied into this font."
 ref = "Font Info › Masters › Managing Masters"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/dialogs/add_other_font.rs, opened from Font Info › Masters › + › Add Other Font… or dialog.open {dialog: \"fontInfo.addOtherFont\"}. The masters are checkboxes labelled with the document and master names; OK runs font.master.addFromOtherFont once with the ticked masters, as one undo step."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/dialogs/interp/masters.rs, opened from Font Info › Masters › + › Add Other Font… or dialog.open {dialog: \"fontInfo.addOtherFont\"}. The masters are checkboxes labelled with the document and master names; OK runs font.master.addFromOtherFont once with the ticked masters, as one undo step."
 guesses = [
   "The list includes the masters of the active font as well as the other open fonts, as the handbook's wording says; opening the sheet in the reference app would show whether the active font is left out.",
 ]
@@ -1180,7 +1180,7 @@ milestone = "M7"
 summary = "Popover opened by clicking the master icon. Clicking a drawing picks it; typing a glyph name in the field uses that glyph of the font as the icon."
 ref = "Font Info › Masters › General"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft draws its own 25 icons in code (`ui-egui/src/master_icons.rs`), a lowercase n at each weight and width, in a grid with weights down and widths across; no reference asset is used (ASSETS.md row). A glyph icon is drawn from the glyph's outline in that master. Corpus files store iconName values Bold, Light, SemiBold, Medium, Light_Condensed and Light_Extended."
+notes = "Documented, not yet observed. FontCraft draws its own 25 icons in code (`crates/ui/src/panels/master_icons.rs`), a lowercase n at each weight and width, in a grid with weights down and widths across; no reference asset is used (ASSETS.md row). A glyph icon is drawn from the glyph's outline in that master. Corpus files store iconName values Bold, Light, SemiBold, Medium, Light_Condensed and Light_Extended."
 guesses = [
   "A click on a built-in icon applies it to the selected masters and closes the picker; the glyph field applies on Use Glyph or Enter; how the reference app's popover closes settles it.",
   "The 25 built-in icons are five weights (Light, Regular, Medium, SemiBold, Bold) by five widths (Condensed, SemiCondensed, normal, SemiExtended, Extended), named `Weight` or `Weight_Width` as the corpus files spell them; the names the reference app writes for each icon of its picker settle the set.",
@@ -1520,7 +1520,7 @@ milestone = "M7"
 summary = "A metric with a glyph scope is drawn only in glyphs matching the scope; for example a metric scoped to Devanagari glyphs shows no alignment line elsewhere. Scopes use the smart-filter rule model."
 ref = "Font Info › Masters › Metrics & Alignment Zones"
 status = "handbook"
-notes = "Documented, not yet observed. The scope is the metric's `filter`, evaluated with the smart-filter rules of crates/glyphquery (M4), in ui-egui `canvas/metric_scope.rs`. A scope that does not read as a predicate leaves the line shown. M7 plan § 4: M7.6 (canvas hook)."
+notes = "Documented, not yet observed. The scope is the metric's `filter`, evaluated with the smart-filter rules of crates/glyphquery (M4). A scope that does not read as a predicate leaves the line shown. M7 plan § 4: M7.6 (canvas hook)."
 guesses = [
   "A hidden metric hides its alignment zone too, and in text mode the glyph being edited decides for the whole line of text; scoping x-height to Greek and typing A and alpha side by side in the reference app settles it.",
 ]
@@ -2971,7 +2971,7 @@ milestone = "M7"
 summary = "Fifth tab of Font Info: document-wide working settings for coordinate rounding, arrow-key steps, glyph naming, component alignment, glyph sorting, the saved file format and the interpolation model."
 ref = "Font Info › Other Settings"
 status = "handbook"
-notes = "Documented, not yet observed. The settings' own behaviour rows belong to M1, M3, M4, M6 and M9 (fontInfo.grid.*, fontInfo.useCustomNaming, fontInfo.disableAutomaticAlignment, fontInfo.fontType…); M7 builds the tab and font.settings.get/set. M7 plan § 4: M7.16 (`crates/ui-egui/src/shell/font_info/other_tab.rs`)."
+notes = "Documented, not yet observed. The settings' own behaviour rows belong to M1, M3, M4, M6 and M9 (fontInfo.grid.*, fontInfo.useCustomNaming, fontInfo.disableAutomaticAlignment, fontInfo.fontType…); M7 builds the tab and font.settings.get/set. M7 plan § 4: M7.16 (`crates/ui/src/panels/font_info/other_tab.rs`)."
 guesses = [
   "Each setting is written when its field loses the keyboard or its box or menu changes, as one undo step per change; changing a setting and choosing Undo in the reference app settles whether settings are undoable.",
 ]
@@ -3118,7 +3118,7 @@ milestone = "M7"
 summary = "Last tab of Font Info: one free-text note for the font, kept in the source and never exported."
 ref = "Font Info › Notes"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.16 (`crates/ui-egui/src/shell/font_info/notes_tab.rs`)."
+notes = "Documented, not yet observed. M7 plan § 4: M7.16 (`crates/ui/src/panels/font_info/notes_tab.rs`)."
 guesses = [
   "The note is written when the text box loses the keyboard, as one undo step for everything typed meanwhile; typing in the Notes tab and choosing Undo in the reference app settles the undo steps.",
 ]
@@ -3190,7 +3190,7 @@ milestone = "M7"
 summary = "The Exports tab shows a short preview of the selected instance drawn in its own outlines: the glyphs of Aang126 by default, or the glyphs an Instance Preview parameter lists."
 ref = "Appendix › Custom Parameters (Instance Preview)"
 status = "handbook"
-notes = "Documented in the description of the Instance Preview parameter, which calls the tab Instances; not yet observed. M7 plan § 4: M7.18. An instance between masters is drawn from the session's interpolated instance view (X.ui3, crates/ui-egui/src/shell/font_info/exports_tab.rs)."
+notes = "Documented in the description of the Instance Preview parameter, which calls the tab Instances; not yet observed. M7 plan § 4: M7.18. An instance between masters is drawn from the session's interpolated instance view (X.ui3, crates/ui/src/panels/font_info/exports_tab.rs)."
 guesses = [
   "The preview sits above the instance's fields, one line high, and draws the first selected instance; an instance between masters is drawn interpolated, and a variable font setting shows none; the Exports tab of the reference app settles placement.",
   "The default `Aang126` is read as characters and drawn with the glyphs mapped to them, skipping characters the font lacks; the reference app settles whether it names glyphs instead.",

@@ -1,8 +1,8 @@
 //! The web preview server (desktop only): serves pages to the local network on a free port, 4
 //! connections at a time, 64 KB of request headers. Two sites use it:
 //! - [`Hinting`]: the preview page and the hinted font while the preview-address dialog is open
-//!   (owner decision M10 § 7, question 5). Rows: `hint.tt.showPreviewAddress`. The dialog and the
-//!   page are `fontcraft_ui_egui::dialogs::tt_preview_address`; this module only serves them.
+//!   (owner decision M10 § 7, question 5). Rows: `hint.tt.showPreviewAddress`. The UI builds the
+//!   dialog and the page; this module only serves them ([`Host`], the UI's `PreviewHost`).
 //! - External Preview (`crate::external_preview`), which answers by the peer's address.
 //!
 //! A small HTTP/1.1 server on `std::net`. Everything a peer sends is untrusted:
@@ -27,7 +27,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime};
 
-use fontcraft_ui_egui::dialogs::tt_preview_address::{FONT_FILE, PreviewHost, Scope, Site};
+use fontcraft_ui::app::preview_host::{FONT_FILE, PreviewHost, Scope, Site};
 
 /// Most connections served at once; more are answered 503 and closed.
 pub const MAX_CONNECTIONS: usize = 4;

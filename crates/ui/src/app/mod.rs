@@ -22,6 +22,7 @@ mod notices;
 pub mod open;
 pub mod preview_host;
 pub mod sidebar;
+pub mod startup;
 pub mod user_store;
 
 use std::sync::Arc;
@@ -246,6 +247,12 @@ pub struct FontCraftApp {
     /// Reads the system clipboard's text for a paste outside a text field; the desktop app supplies
     /// [`clipboard::system_text`], tests and the browser build have none and wait for the window's paste event.
     pub clipboard_reader: Option<clipboard::ReadClipboardFn>,
+    /// Reads the clipboard's PDF off the window's thread for a paste on the canvas; the desktop app supplies the
+    /// system's, tests and the browser build have none and paste text only.
+    pub clipboard_flavours: Option<Box<dyn clipboard::ClipboardFlavours>>,
+    /// When the extension folders were last read ([`startup::poll_folders`]); the desktop app polls them, tests and the
+    /// browser build do not.
+    pub folder_poll: Option<startup::FolderPoll>,
     /// The canvas overlays' switches, data and the text note being typed (`canvas::overlays`).
     pub overlays: crate::canvas::overlays::Overlays,
     /// The control channel: its listener, the window its input goes to, the replies waiting on frames.
@@ -258,13 +265,14 @@ pub struct FontCraftApp {
 }
 
 impl FontCraftApp {
-    /// The app for the desktop window of `ctx`: a new font, the system file pickers.
+    /// The app for the desktop window of `ctx`: no document yet ([`startup::launch`] opens the first), the system file
+    /// pickers.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn open(ctx: &egui::Context) -> FontCraftApp {
         let ctx = ctx.clone();
         let (files, panels) = craft::dialogs::service::FileService::new(craft::host::Wake::new(move || ctx.request_repaint()));
         let host = Host::builder(APP).jobs(craft::host::default_jobs()).files(Arc::new(files)).build();
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(host));
+        let mut app = FontCraftApp::new(Session::new(), Arc::new(host));
         app.file_panels = Some(panels);
         app
     }
@@ -303,6 +311,8 @@ impl FontCraftApp {
             user_store: None,
             opener: craft_ext::platform::open::Opener::NONE,
             clipboard_reader: None,
+            clipboard_flavours: None,
+            folder_poll: None,
             control: crate::control::Control::default(),
             window: None,
             #[cfg(not(target_arch = "wasm32"))]
@@ -661,6 +671,10 @@ impl ShellApp for FontCraftApp {
         open::take_dropped(self, ctx);
         crate::canvas::images::drop::take(self, ctx);
         crate::shell::font_audit::logic(self, ctx);
+        startup::poll_folders(self, ctx);
+        if clipboard::finish_pdf(self) {
+            ctx.request_repaint_after(clipboard::READ_POLL);
+        }
         crate::control::drain(self);
         if let Some(mut hook) = self.frame_hook.take() {
             if let Some(after) = hook.frame(self) {

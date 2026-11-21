@@ -1,0 +1,227 @@
+//! What the desktop window sets up when it opens and keeps up while it runs, beside the UI.
+//!
+//! - [`open_extensions`]: the snippets folder and the extension folders (Modules and Macros) inside the settings
+//!   folder, the module switches, and when the session started.
+//! - [`launch`]: what the window opens with. A file named on the command line opens with its display-string tabs; a
+//!   `fontcraft://show/` URL runs `url.show`. With neither, the Start Window shows while `start.showAtLaunch` is on,
+//!   else a new font opens. When nothing opened, the Start Window shows.
+//! - [`poll_folders`], every frame: reads the extension folders again on the first frame, when the window gains focus
+//!   and every [`FOLDER_POLL_MS`] while it has it. Alt and Shift held on the first frame start safe mode, as
+//!   `--safe-mode` does.
+//!
+//! The desktop app hands these facts over in `fontcraft_ui::Options`; tests and the browser build have none of them.
+
+use craft::ui::runtime::commands::CommandRef;
+use fontcraft_engine::extensions::FOLDER_POLL_MS;
+use serde_json::{Value, json};
+
+use super::{FontCraftApp, Msg};
+
+/// What the window opens with in place of the Start Window or a new font.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Launch {
+    /// A font file to open (`fontcraft FILE`).
+    File(String),
+    /// A `fontcraft://show/?…` URL: open its files and show its glyphs in a new tab.
+    Url(String),
+}
+
+/// The status line after Alt and Shift held as the window opened turned safe mode on.
+pub const SAFE_MODE: &str = "Safe mode: extension modules are off. Help › Load Extensions turns them on.";
+
+/// When the extension folders were last read, and whether the window had focus at the last frame.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct FolderPoll {
+    /// The input time of the last poll, in seconds; `None` before the first frame.
+    pub last: Option<f64>,
+    /// The window had focus at the last frame.
+    pub focused: bool,
+}
+
+/// Where the snippets are kept inside the settings folder.
+pub const SNIPPETS_FOLDER: &str = "snippets";
+
+/// Sets the snippets folder and the extension folders inside the settings folder `dir`, notes when the session
+/// started, and reads the module switches; `safe_mode` lists the modules but runs none. The folders are read by the
+/// first poll. Every problem goes to the log, the first to the status line.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn open_extensions(app: &mut FontCraftApp, dir: Option<&std::path::Path>, safe_mode: bool) {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    app.session.set_snippets_dir(dir.map(|d| d.join(SNIPPETS_FOLDER)));
+    let started = SystemTime::now().duration_since(UNIX_EPOCH).ok().and_then(|d| i64::try_from(d.as_secs()).ok());
+    app.session.extensions_mut().started_at = started;
+    let problems = fontcraft_engine::extensions::open_folders(app.session.extensions_mut(), dir, safe_mode);
+    report(app, &problems);
+}
+
+/// Opens what the window starts with, after the settings were read: the file or URL of `launch`; without one, the
+/// Start Window while `start.showAtLaunch` is on, else a new font. When no document is open after that, the Start
+/// Window shows. A failure goes to the log and the status line.
+pub fn launch(app: &mut FontCraftApp, launch: Option<&Launch>) {
+    let result = match launch {
+        Some(Launch::File(path)) => app.run_now(Msg::run("file.open", json!({ "path": path })), false),
+        Some(Launch::Url(url)) => app.run_now(Msg::Shell(CommandRef::with_params("url.show", json!({ "url": url }))), false),
+        None if app.session.settings().get_bool(crate::shell::start::SHOW_AT_LAUNCH).unwrap_or(true) => Ok(Value::Null),
+        None => app.run_now(Msg::run("file.new", json!({})), false),
+    };
+    if let Err(e) = result {
+        log::error!("{e}");
+    }
+    if app.session.documents().is_empty() {
+        app.sent.push(Msg::Shell(CommandRef::with_params("window.startWindow", json!({}))));
+    }
+}
+
+/// Logs every problem and puts the first in the status line.
+fn report(app: &mut FontCraftApp, problems: &[String]) {
+    for problem in problems {
+        log::warn!("{problem}");
+    }
+    if let Some(first) = problems.first() {
+        app.status = first.clone();
+    }
+}
+
+/// Reads the extension folders again on the first frame, when the window gains focus and every [`FOLDER_POLL_MS`]
+/// while it has it; nothing without [`FontCraftApp::folder_poll`]. Alt and Shift held on the first frame start safe
+/// mode. Every problem goes to the log, the first to the status line.
+pub fn poll_folders(app: &mut FontCraftApp, ctx: &egui::Context) {
+    let Some(poll) = app.folder_poll.as_mut() else { return };
+    let every = std::time::Duration::from_millis(FOLDER_POLL_MS);
+    let (now, focused, launch_keys) = ctx.input(|i| (i.time, i.focused, i.modifiers.alt && i.modifiers.shift));
+    let first = poll.last.is_none();
+    let gained = focused && !poll.focused;
+    poll.focused = focused;
+    let due = poll.last.is_none_or(|t| now - t >= every.as_secs_f64());
+    let read = first || gained || (focused && due);
+    if read {
+        poll.last = Some(now);
+    }
+    if first && launch_keys && !app.session.extensions().safe_mode {
+        app.session.extensions_mut().safe_mode = true;
+        app.status = SAFE_MODE.into();
+    }
+    if read {
+        let problems = fontcraft_engine::extensions::poll_folders(app.session.extensions_mut());
+        report(app, &problems);
+    }
+    if focused {
+        ctx.request_repaint_after(every);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use craft::host::Host;
+    use fontcraft_engine::Session;
+
+    use craft::ui::runtime::commands::CommandRef;
+    use serde_json::json;
+
+    use super::{FolderPoll, Launch, SAFE_MODE, launch, poll_folders};
+    use crate::app::{APP, FontCraftApp, Msg};
+
+    fn polled_app() -> FontCraftApp {
+        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        app.folder_poll = Some(FolderPoll::default());
+        app
+    }
+
+    /// A frame at input time `time`, with the window focused or not and `modifiers` held.
+    fn frame(ctx: &egui::Context, app: &mut FontCraftApp, time: f64, focused: bool, modifiers: egui::Modifiers) {
+        let input =
+            egui::RawInput { time: Some(time), focused, modifiers, events: vec![egui::Event::ModifiersChanged(modifiers)], ..Default::default() };
+        let _ = ctx.run_ui(input, |ui| poll_folders(app, ui.ctx()));
+    }
+
+    fn last(app: &FontCraftApp) -> Option<f64> {
+        app.folder_poll.and_then(|p| p.last)
+    }
+
+    /// The folders are read on the first frame, when the window gains focus and once the poll interval has passed
+    /// while it has it; not while it is in the background.
+    #[test]
+    fn the_extension_folders_are_read_on_the_first_frame_on_focus_and_while_focused() {
+        let none = egui::Modifiers::NONE;
+        let ctx = egui::Context::default();
+        let mut app = polled_app();
+        frame(&ctx, &mut app, 0.0, false, none);
+        assert_eq!(last(&app), Some(0.0), "the first frame reads them");
+        frame(&ctx, &mut app, 30.0, false, none);
+        assert_eq!(last(&app), Some(0.0), "not in the background");
+        frame(&ctx, &mut app, 31.0, true, none);
+        assert_eq!(last(&app), Some(31.0), "the window gained focus");
+        frame(&ctx, &mut app, 32.0, true, none);
+        assert_eq!(last(&app), Some(31.0), "not due yet");
+        frame(&ctx, &mut app, 36.5, true, none);
+        assert_eq!(last(&app), Some(36.5), "due while focused");
+        assert!(!app.session.extensions().safe_mode);
+
+        // Without the desktop's poll nothing is read.
+        let mut app = polled_app();
+        app.folder_poll = None;
+        frame(&ctx, &mut app, 40.0, true, none);
+        assert_eq!(last(&app), None);
+    }
+
+    /// Alt and Shift held on the first frame start safe mode and say so; held later they do nothing.
+    #[test]
+    fn alt_and_shift_held_as_the_window_opens_start_safe_mode() {
+        let keys = egui::Modifiers { alt: true, shift: true, ..Default::default() };
+        let mut app = polled_app();
+        frame(&egui::Context::default(), &mut app, 0.0, true, keys);
+        assert!(app.session.extensions().safe_mode);
+        assert_eq!(app.status, SAFE_MODE);
+
+        let ctx = egui::Context::default();
+        let mut app = polled_app();
+        frame(&ctx, &mut app, 0.0, true, egui::Modifiers::NONE);
+        frame(&ctx, &mut app, 1.0, true, keys);
+        assert!(!app.session.extensions().safe_mode, "only the first frame counts");
+    }
+
+    fn start_window() -> Msg {
+        Msg::Shell(CommandRef::with_params("window.startWindow", json!({})))
+    }
+
+    fn empty_app() -> FontCraftApp {
+        FontCraftApp::new(Session::new(), Arc::new(Host::builder(APP).build()))
+    }
+
+    /// A file opens in place of the Start Window; one that cannot be opened says why and the Start Window shows.
+    /// Without a file the Start Window shows, or a new font opens while Show at Launch is off.
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn the_window_opens_the_file_given_else_the_start_window_or_a_new_font() {
+        let dir = std::env::temp_dir().join(format!("fontcraft-ui-launch-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("launch.glyphs").to_string_lossy().into_owned();
+        Session::with_document().execute("file.saveAs", &json!({ "path": path })).unwrap();
+
+        let mut app = empty_app();
+        launch(&mut app, Some(&Launch::File(path.clone())));
+        assert_eq!(app.session.documents().len(), 1);
+        assert!(app.sent.is_empty(), "no Start Window: {:?}", app.sent);
+
+        let mut app = empty_app();
+        launch(&mut app, Some(&Launch::File(dir.join("missing.glyphs").to_string_lossy().into_owned())));
+        assert!(app.session.documents().is_empty());
+        assert!(app.status.starts_with("file.open: "), "{}", app.status);
+        assert_eq!(app.sent, vec![start_window()]);
+
+        let mut app = empty_app();
+        launch(&mut app, None);
+        assert!(app.session.documents().is_empty());
+        assert_eq!(app.sent, vec![start_window()]);
+
+        let mut app = empty_app();
+        app.session.execute("settings.set", &json!({ "id": crate::shell::start::SHOW_AT_LAUNCH, "value": false })).unwrap();
+        launch(&mut app, None);
+        assert_eq!(app.session.documents().len(), 1, "a new font");
+        assert!(app.sent.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

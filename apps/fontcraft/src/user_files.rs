@@ -1,4 +1,5 @@
-//! The user's files in FontCraft's settings folder: the settings store and custom glyph data.
+//! The user's files in FontCraft's settings folder: the settings store and custom glyph data. [`UserFiles`] is the
+//! window's `UserStore`: it reads them when the window opens and writes the settings whenever they change.
 //!
 //! | Platform | Folder |
 //! |---|---|
@@ -51,12 +52,13 @@ pub struct UserFiles {
 }
 
 impl UserFiles {
-    /// Reads the settings and the user's glyph data into `session`. Returns what to save to and
-    /// the problems found, one line each.
-    pub fn load(session: &mut Session) -> (UserFiles, Vec<String>) {
-        Self::load_from(session, settings_dir())
+    /// The store of the settings folder; nothing is read until the window asks.
+    pub fn in_settings_folder() -> UserFiles {
+        UserFiles { dir: settings_dir(), saved_revision: 0 }
     }
 
+    /// Reads the settings and the user's glyph data into `session`. Returns what to save to and
+    /// the problems found, one line each.
     fn load_from(session: &mut Session, dir: Option<PathBuf>) -> (UserFiles, Vec<String>) {
         let mut problems = Vec::new();
         let Some(folder) = dir.clone() else {
@@ -168,6 +170,18 @@ fn read_capped(path: &Path, limit: u64) -> std::io::Result<Vec<u8>> {
         return Err(std::io::Error::other(format!("{size} bytes is over the limit of {limit}")));
     }
     std::fs::read(path)
+}
+
+impl fontcraft_ui::app::user_store::UserStore for UserFiles {
+    fn load(&mut self, session: &mut Session) -> Vec<String> {
+        let (files, problems) = Self::load_from(session, self.dir.clone());
+        *self = files;
+        problems
+    }
+
+    fn save_if_changed(&mut self, session: &Session) -> Option<String> {
+        UserFiles::save_if_changed(self, session.settings())
+    }
 }
 
 #[cfg(test)]

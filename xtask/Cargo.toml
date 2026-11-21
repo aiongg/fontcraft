@@ -23,4 +23,4 @@ fontcraft-pathops.workspace = true
 fontcraft-plist.workspace = true
 fontcraft-io-glyphs.workspace = true
 fontcraft-io-ufo.workspace = true
-fontcraft-ui-egui.workspace = true
+fontcraft-ui.workspace = true

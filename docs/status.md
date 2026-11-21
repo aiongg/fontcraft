@@ -2,7 +2,7 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-20, after the seventeenth and eighteenth batches: the second window's ports UI.30a to UI.36d (UI.30a, UI.30b, UI.24b, UI.27b, UI.31 to UI.34, UI.20b, UI.35a to UI.35d, UI.36a, UI.36b, UI.36d) and `crates/craft-ext` (decision 0009), merged on `master` as of `f99ee43`; the gate is green (5,382 tests). The sixteenth batch's entries below stay as written._
+_Updated: 2026-11-21: UI.49 on `w-UI.49` (written, not yet built) removes the egui window; before that, 2026-11-20, after the seventeenth and eighteenth batches: the second window's ports UI.30a to UI.36d (UI.30a, UI.30b, UI.24b, UI.27b, UI.31 to UI.34, UI.20b, UI.35a to UI.35d, UI.36a, UI.36b, UI.36d) and `crates/craft-ext` (decision 0009), merged on `master` as of `f99ee43`; the gate is green (5,382 tests). The sixteenth batch's entries below stay as written._
 
 ## State of the tree
 
@@ -44,31 +44,30 @@ _Updated: 2026-11-20, after the seventeenth and eighteenth batches: the second w
   | Command ids blessed, generated lists (`cli-options`, guesses, observe, parity), fmt | done (X.integ78 to X.integ80) |
   | First full test run (cargo nextest) | 5,304 run, 5,271 passed, 33 failed |
   | The 24 failures outside the window crates (tables, compile, io-ufo, proof, engine, cli) | fixed by X.fix86; a filtered run of them passes |
-  | The 9 failures in `crates/ui`, `apps/fontcraft` and `apps/fontcraft-next` | fixed by X.fix87 (three were code bugs: the Instructor's Delete, dialogs targeting `.notdef`, a zero-height Preview Area strip) |
+  | The 9 failures in `crates/ui` and the two desktop apps | fixed by X.fix87 (three were code bugs: the Instructor's Delete, dialogs targeting `.notdef`, a zero-height Preview Area strip) |
   | Review pass | 7 findings, fixed by X.fix88 (CFF2 region cap, revisions never reused after a rollback, CLI `@` values, palette round trip) and X.fix89 (`ui.menu.invoke` plays as a click, dialogs target the view in front, Preview Area height) |
   | The gate, `cargo xtask ci` | green: 5,310 tests pass; wasm after X.fix90 (craft's OS clipboard is native-only in `crates/ui`). `pathops` `random_paths_through_every_operation_never_panic` can miss its one-second limit on a loaded machine |
 
   The writers ran no builds and most branches were merged without one, so most of this code has been run only by its
   tests, not in the app. Built and run on Linux x86-64 and on macOS 15 (Apple Silicon:
-  both windows build with no changes and open; a font opens). Windows was not compiled. Still to check on the Mac:
+  the window builds with no changes and opens; a font opens). Windows was not compiled. Still to check on the Mac:
   the quit prompt with unsaved work, the Open chooser and drop, X.pdf3's pasteboard PDF.
-- **Two windows.** `apps/fontcraft` on `crates/ui-egui` is still the app. The new window, `apps/fontcraft-next` on
-  `crates/ui`, is built on the Craft suite's craft-next framework (pinned at `4bd0107`; egui 0.37 from the suite's
-  fork beside egui 0.36 for the old window; a vendored egui-winit 0.36 under `vendor/` keeps the old window building
-  against the shared winit fork). It sits beside the egui window until it reaches parity; then the egui window goes (the ports left are in "Where to start").
-  Its ports have headless tests only, and none has been tried in the running window. Conventions for writing it are
-  in `docs/ui.md`. Leave `crates/ui-egui` alone except for compile fixes.
+- **The window.** `apps/fontcraft` on `crates/ui`, built on the Craft suite's craft-next framework (pinned at
+  `4bd0107`; egui 0.37 from the suite's fork). Its parts have headless tests only, and none has been tried in the
+  running window. Conventions for writing it are in `docs/ui.md`. UI.49 (on `w-UI.49`, not yet built) removes
+  `crates/ui-egui`, its desktop app and the vendored egui-winit 0.36, and points `cargo xtask parity` at the
+  window's shell commands.
 - 960 of the 1,039 inventory commands exist (`docs/parity.md`). Per milestone: M1 (11), M2 (5), M3 (185), M5 (100),
   M6 (47), M10 (60) and M11 (42) are all live; M4 62 of 68, M7 66 of 69, M8 44 of 45, M9 64 of 66, M12 99 of 103,
   M13 167 of 197, M14 3 of 32. The inventory has 3,786 rows. Feature parity is about 38% (ROADMAP.md › Parity
-  estimate; 38.4, was 37.2), graded on the egui window and on engine and CLI behaviour; the new window counts once it
-  replaces the old one. 3,081 guesses on 1,606 rows are listed in `docs/guesses.md`; `docs/observe.md` lists 1,500 rows. CLI option coverage: 672 of
+  estimate; 38.4, was 37.2), graded on the egui window and on engine and CLI behaviour; the window's parts are not
+  regraded yet. 3,081 guesses on 1,606 rows are listed in `docs/guesses.md`; `docs/observe.md` lists 1,500 rows. CLI option coverage: 672 of
   770 reference options present (`docs/cli-options.md`).
 - Packages built (done of total, counted from commit subjects; the totals include the depth packages that carry a
   new number): M6 21 of 26, M7 21 of 24, M8 27 of 36, M9 30 of 40, M10 35 of 42, M11 20 of 22, M12 77 of 87, M13 63
   of 83; 294 of 360 in all. Depth packages (`docs/plans/depth.md`): 55 of 167 (wave 1 and 45 writers of waves 2 to
   11, listed in ROADMAP.md › Where we are); no builder of waves 2 to 13. M3.22, M3.23, M4.18, M4.19, M5.29, M7.22 and
-  M9.32 have editor parts in the new window only and are not counted. The lettered follow-ups (M10.37b, M10.37c,
+  M9.32 have editor parts that are not counted yet. The lettered follow-ups (M10.37b, M10.37c,
   M13.65b and those of earlier batches) are not counted.
 - **Baselines** (from the fifteenth batch; the sixteenth ran none of them, and a later change that moves one of these numbers needs a reason):
 
@@ -424,7 +423,7 @@ _Updated: 2026-11-20, after the seventeenth and eighteenth batches: the second w
   HTTPS downloads in the desktop app only. `craft-print` is a workspace dependency and is not in the
   lock file until M12.36 uses it (that needs network).
 - **Known failures:** none in the gate. `pathops` `random_paths_through_every_operation_never_panic` can miss its one-second limit per case when the machine is loaded; it passes on a quiet machine.
-- **New crates and dependencies of the sixteenth batch:** `crates/engine-core` (errors, guard, clock, parameters, settings) and `crates/ui` (the new window), with `apps/fontcraft-next`; the craft-next framework from the suite's craft-libs, pinned by git commit; icu 2.3.0 across the workspace, with the glyph-data comparison against glyphs-reader moved into an excluded crate under `xtask`; `tools` depends on `components` and `pathops`, `proof` on `decompile` (and lopdf), `engine` on `textlayout`, `ui` on `spacing` and `textlayout`; `apps/fontcraft` takes clipboard-win on Windows and objc2-app-kit and objc2-foundation on macOS (X.pdf3); the CLI takes `log`.
+- **New crates and dependencies of the sixteenth batch:** `crates/engine-core` (errors, guard, clock, parameters, settings) and `crates/ui` (the new window), with `apps/fontcraft`; the craft-next framework from the suite's craft-libs, pinned by git commit; icu 2.3.0 across the workspace, with the glyph-data comparison against glyphs-reader moved into an excluded crate under `xtask`; `tools` depends on `components` and `pathops`, `proof` on `decompile` (and lopdf), `engine` on `textlayout`, `ui` on `spacing` and `textlayout`; `apps/fontcraft` takes clipboard-win on Windows and objc2-app-kit and objc2-foundation on macOS (X.pdf3); the CLI takes `log`.
 - Test layout: the gate runs the tests with cargo nextest (all test binaries in parallel,
   doctests apart). The command sweep is 16 tests (4 states times 4 chunks, chunked by a stable
   hash of the command id), and one randomised pathops test reserves 8 threads
@@ -564,18 +563,19 @@ linked file is checked against it, and a linked file outside the read root reads
    Checks on the Mac, which builds and runs: wave 1's Cmd+Q, app-menu Quit, File › Open… chooser and drop with unsaved
    work, and X.pdf3's pasteboard PDF; on Windows (not built yet), X.pdf3's clipboard PDF.
 2. **Then, in this order** (ROADMAP.md › What to build next, items 2 to 5):
-   - The new window's ports left (item 2). The framework gaps in `crates/craft-ext` are built; paste outside a
-     text field still waits for craft in the browser build. The parity audit gaps are closed on `w-UI.48`, not yet
-     built: a window and each new document open on Font View, tabs from the document's display strings and written
-     on save, renamed and removed glyphs followed into the tabs, the Palette's sidebar button and cell-sized
-     thumbnails in Font View. Left: PDF pages in placed images (needs a PDF renderer dependency); with that, the new
-     window has the old window's features and the next step is retiring the old window. Tabs per document, the Axis
-     Mappings graph and arrow keys, and Ctrl or Alt with Up and Down in Pairs & Phrases are written on `w-UI.47`, not
-     yet built. Packages 9 and 10 (the small commands, the
-     `ui.inspect` keys and the getters) are written on `w-UI.46`, not yet built. The smaller follow-ups
-     (Shape Order open-path thumbnails, svg filters and PDF images in colour layers) are listed there too.
-   - Retire the egui window: remove `crates/ui-egui` and `apps/fontcraft`. `cargo xtask parity` must then read the
-     commands of `crates/ui`.
+   - The window's follow-ups (item 2). The framework gaps in `crates/craft-ext` are built; paste outside a
+     text field still waits for craft in the browser build. The parity audit gaps are closed and merged (UI.46 to
+     UI.48): tabs per document, a window and each new document open on Font View, tabs from the document's display
+     strings and written on save, the Palette's sidebar button and cell-sized thumbnails in Font View among them.
+     The startup wiring and the clipboard's PDF of the old app are ported on `w-UI.50`, not yet built: the system
+     clock, the snippets and extension folders with their polling and safe mode (`crates/ui/src/app/startup.rs`), a
+     file or `fontcraft://show/` URL on the command line, the control surface entry, and a drawing app's PDF pasted
+     on the canvas (`crates/ui/src/app/clipboard.rs`, read by `apps/fontcraft/src/clipboard/`). Left: PDF pages
+     in placed images (needs a PDF renderer dependency), and `palette.toggleSection`, `tool.list` and
+     `tool.select {tool}`, which the egui window had as shell commands. The smaller follow-ups (Shape Order open-path thumbnails, svg filters
+     and PDF images in colour layers) are listed there too.
+   - Build and gate UI.49 (`w-UI.49`): the egui window removed, `cargo xtask parity` on the window's shell
+     commands, `docs/parity.md` regenerated.
    - The engine split from ES.4.
    - The oracle measures already listed and the depth writers left in waves 2 to 11, with the builder queue from
      M8.25.
@@ -583,7 +583,7 @@ linked file is checked against it, and a linked file outside the read root reads
    Each depth package is written out in its milestone plan's section "Depth packages" (`docs/plans/M<n>.md`). Check
    the disk: build output is large (`cargo clean` or delete the target directory when the disk passes about 75%;
    incremental builds are off, `CARGO_INCREMENTAL=0`). Parallel agents that share one check directory across
-   worktrees see false errors: give each its own `CARGO_TARGET_DIR`. Run one agent at a time on the new window's
+   worktrees see false errors: give each its own `CARGO_TARGET_DIR`. Run one agent at a time on the window's
    crates. The measure-only builders (M12.71, M12.72, M12.83, M8.34, M2.11, M10.39) can run in a second lane with
    their own clone and target directory.
 3. **Open decisions** (`docs/plans/depth.md` › Open decisions): eight questions for the owner. The packages that
@@ -910,7 +910,7 @@ Windows for the clipboard's PDF.
 One question from the sixteenth batch:
 
 - **The suite's token-authenticated control protocol.** The craft-next control server requires a token; FontCraft's
-  control channel has none, and the new window keeps FontCraft's transport so MCP attach works unchanged. Adopting
+  control channel has none, and the window keeps FontCraft's transport so MCP attach works unchanged. Adopting
   the suite's protocol changes the protocol and the MCP backend. Adopt it, and when?
 
 MCP and the control channel are unrestricted unless `--automation-read-root` and

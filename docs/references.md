@@ -86,7 +86,7 @@ reports.
 | write-fonts | 0.54.0 | MIT OR Apache-2.0 | writing tables | yes |
 | read-fonts | 0.45.0 | MIT OR Apache-2.0 | reading tables | transitive (through write-fonts; also skrifa in tests) |
 | skrifa | 0.48.0 | MIT OR Apache-2.0 | outlines and metrics from compiled fonts; tests read our output back with it | dev |
-| egui, eframe | 0.36.2 | MIT OR Apache-2.0 | UI, as in the sibling apps | yes |
+| egui, eframe | 0.37.0 (the craft framework's fork) | MIT OR Apache-2.0 | UI, as in the sibling apps | yes |
 | norad | 0.19.0 | MIT OR Apache-2.0 | UFO 1–3 read, UFO 3 write, designspace 5 | planned, M1 (its gaps: [`spec/30-source-formats.md`](spec/30-source-formats.md) § 4.2) |
 | fea-rs | 1.0.0 | MIT/Apache-2.0 | feature-file compiler | planned, M8 (its gaps: [`spec/12-feature-code.md`](spec/12-feature-code.md)) |
 | fontc, fontir, fontbe, ufo2fontir, glyphs2fontir | 1.0.0 | MIT/Apache-2.0 | whole-font compiler, usable as a library on an in-memory source | oracle; dependency question in decision 0002 |
