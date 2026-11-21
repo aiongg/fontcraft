@@ -103,12 +103,24 @@ fn shell(id: &str, params: Value) -> Msg {
 }
 
 /// The shell's part, every pass: hands copied text to the system clipboard, and takes the clipboard's text for a
-/// paste that waits for it (asks the window once, takes the paste event that brings it, gives up when none comes).
+/// paste that waits for it (from the system clipboard where the app reads it; else asks the window once, takes the
+/// paste event that brings it, gives up when none comes).
 pub fn shell_pass(ui: &Ui, cx: &mut BodyCx<'_>, app: &mut FontCraftApp) {
     if let Some(text) = app.view.text.clipboard.out.take() {
         cx.clipboard().put(&[ClipItem::Text(text.into())]);
     }
     let Some(asked) = app.view.text.clipboard.paste else { return };
+    // Where the app reads the system clipboard itself, the paste takes its text at once (`clipboard::read_waiting`).
+    if let Some(read) = app.clipboard_reader {
+        app.view.text.clipboard.paste = None;
+        match read().map(|text| text.map(|text| paste(&text))) {
+            Ok(Some(Ok(msg))) => app.sent.extend(msg),
+            Ok(Some(Err(e))) => app.status = e,
+            Ok(None) => app.status = "Paste: the clipboard holds no text".into(),
+            Err(e) => app.status = format!("Paste: {e}"),
+        }
+        return;
+    }
     let pasted = ui.input(|i| {
         i.events.iter().find_map(|e| match e {
             egui::Event::Paste(text) => Some(text.clone()),

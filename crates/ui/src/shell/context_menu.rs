@@ -174,9 +174,13 @@ pub(crate) fn glyph_action(menu: &glyph_menu::GlyphMenu, pick: Pick) -> Option<G
     }
 }
 
-/// Takes the clipboard's text for a paste that waits for it: asks the window for it once, takes the paste event that
-/// brings it, and gives up when none comes.
+/// Takes the clipboard's text for a paste that waits for it: from the system clipboard where the app has a reader
+/// ([`clipboard::read_waiting`]); else asks the window for it once, takes the paste event that brings it, and gives up
+/// when none comes.
 fn take_paste(ui: &Ui, app: &mut FontCraftApp) {
+    if clipboard::read_waiting(app) {
+        return;
+    }
     let Some(kind) = app.clipboard.request else { return };
     let pasted = ui.input(|i| {
         i.events.iter().find_map(|e| match e {

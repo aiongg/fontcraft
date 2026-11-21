@@ -294,6 +294,12 @@ tone on its icon only (the label keeps its ink). Dialog buttons take craft's own
 `DialogRole::Destructive` on a `FooterButton`, `Variant::DANGER` on a `Button`. An Edit command reaches
 the focused list one pass after it fired.
 
+Paste outside a text field takes no craft-ext piece: craft gives the platform's paste event only to a focused
+component that lists Paste and turns it into the Cmd+V chord elsewhere, dropping its text. `app::clipboard` therefore
+reads the system clipboard through craft's own `craft::platform::clipboard` (`FontCraftApp::clipboard_reader`, which
+`apps/fontcraft-next` sets to `clipboard::system_text`); tests and the browser build have no reader and ask the window
+for a paste event.
+
 ## Forbidden in UI code
 
 | Do not use | Use instead |

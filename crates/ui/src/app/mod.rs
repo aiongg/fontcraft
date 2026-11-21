@@ -230,6 +230,9 @@ pub struct FontCraftApp {
     /// Opens web links in the browser and shows files in the file manager; the desktop app supplies the system's,
     /// tests and the browser build have none.
     pub opener: craft_ext::platform::open::Opener,
+    /// Reads the system clipboard's text for a paste outside a text field; the desktop app supplies
+    /// [`clipboard::system_text`], tests and the browser build have none and wait for the window's paste event.
+    pub clipboard_reader: Option<clipboard::ReadClipboardFn>,
     /// The canvas overlays' switches, data and the text note being typed (`canvas::overlays`).
     pub overlays: crate::canvas::overlays::Overlays,
     /// The control channel: its listener, the window its input goes to, the replies waiting on frames.
@@ -285,6 +288,7 @@ impl FontCraftApp {
             preview_host: None,
             user_store: None,
             opener: craft_ext::platform::open::Opener::NONE,
+            clipboard_reader: None,
             control: crate::control::Control::default(),
             window: None,
             #[cfg(not(target_arch = "wasm32"))]
