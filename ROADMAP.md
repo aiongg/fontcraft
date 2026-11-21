@@ -1076,12 +1076,12 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
      2. Done (UI.41): the Edit View controls in the status bar (Preview Area, writing direction, kerning mode, zoom
         out, zoom field, zoom in) while an Edit View tab shows; Cmd+1 to Cmd+9 and Cmd+Alt+2 to Cmd+Alt+9 through
         one catalog definition per parameter set (`craft_ext::ui::runtime::commands`); Cmd+B; Window › Palette
-        (Cmd+Alt+P) over the end-edge panels; Window › Panels with a check row per dock panel. Left: the master
-        icons' tooltips do not name Cmd+1 to Cmd+9, and the Palette has no sidebar button.
+        (Cmd+Alt+P) over the end-edge panels; Window › Panels with a check row per dock panel; the master icons'
+        tooltips name Cmd+1 to Cmd+9 (UI.46c). Left: the Palette has no sidebar button.
      3. Done (UI.42a, UI.42b): check marks on the switch rows (`app/menu_states.rs`, `SWITCHES`), and engine rows
         greyed when firing them would be refused for their targets, with the reason as tooltip and as
-        `disabled_reason` in `ui.menu.list`; Show Image joined the switch list with item 5. Left: Keep Layer
-        Selection in Sync joins it when its command exists (item 9).
+        `disabled_reason` in `ui.menu.list`; Show Image joined the switch list with item 5, Keep Layer Selection in
+        Sync with item 9, and a selected placed image supplies the rows of the commands that take it (UI.46c).
      4. Done (UI.42c): Palette › Dimensions; the Kerning and Kerning Review panel ids are removed (the Info box holds
         the kerning fields, Pairs & Phrases the review lists), and no panel shows a stub.
      5. Done (UI.43a to UI.43c): placed images drawn behind the outline, selected, dragged, scaled, cropped and
@@ -1099,17 +1099,25 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
         lines.
      7. Done (UI.45a, UI.45b): the Axis Mappings dialog (`dialogs/axis_mappings.rs`: `axisMappings.showDialog`,
         `dialogEdit`, `closeDialog`, opened by the Font Info button; the edits preview as one batch, OK keeps one
-        undo step) and the Cross-Axis Mappings window with its Font menu row (`dialogs/cross_axis.rs`). Left: the
-        mapping graph shows the points but takes no click on its line and no point drag (points are added with +
-        and moved with the selected point's coordinate fields); no arrow-key nudge of the selected point outside the fields;
-        no Alt-click on a card's disclosure to open or close every card.
+        undo step) and the Cross-Axis Mappings window with its Font menu row (`dialogs/cross_axis.rs`); Alt-click on a
+        card's disclosure opens or closes every card (UI.46c). Left: the mapping graph shows the points but takes no
+        click on its line and no point drag (craft's `Picture` takes no pointer input; points are added with + and
+        moved with the selected point's coordinate fields); no arrow-key nudge of the selected point outside the
+        fields (a view may not read keys, and no craft piece lets a dialog claim the arrows yet).
      8. Done (UI.45c, UI.45d): a Primitives tool click opens Primitive Measurements (`dialogs/primitive_measurements.rs`,
         routed in `canvas/tools/apply.rs`), and a Pixel tool click in a font without the pixel glyph offers to add it
         (`dialogs/add_pixel_glyph.rs`, a follow-up of `pixel.setPixels`).
-     9. Small commands: Filter by Encoding File, Keep Layer Selection in Sync, Next and Previous Group Member, Show
-        All Glyphs in the Kerning window, and focusing Font View's search.
-     10. Control parity: the `display`, `selectedGlyphs`, `editing`, `interaction` and `dialog` keys of `ui.inspect`,
-         and the five read-only getter commands.
+     9. Done (UI.46a): View › Filter by Encoding File with its file chooser (`shell/encoding.rs`), Edit › Keep Layer
+        Selection in Sync with its check mark (the selection carried in `canvas/tools/apply.rs` `sync`), Font ›
+        Kerning › Next / Previous Group Member, Show All Glyphs in the Kerning window, and `fontView.focusSearch`
+        (also Edit › Find while Font View shows). Left: Ctrl and Alt with Up and Down in the Pairs & Phrases list do
+        not step a group member (a view may not read keys; the list takes the arrows itself).
+     10. Done (UI.46b): `ui.inspect` keys `display`, `switches`, `selectedGlyphs`, `editing`, `interaction`,
+         `dialog`, `transform` and `fontView` (`shell/getters.rs`), and the five read-only getters
+         (`editView.getText`, `editView.getFeatures`, `fontView.getState`, `transform.getSettings`,
+         `view.getDisplayOptions`), answered with their reply through `engine.execute`.
+     Left besides the items above: Edit View tabs kept per document (the window keeps one tab set, and switching
+     documents keeps it).
 3. **The engine split, step 4 on.** ES.4 moves the kerning-index and metrics-sync readers outside the spacing crate
    behind its extension and moves the slots with `Session`; the later steps move command areas out of the engine
    crate along command ownership.
