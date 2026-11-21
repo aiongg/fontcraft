@@ -49,6 +49,12 @@ pub struct Options {
     pub clipboard_reader: Option<app::clipboard::ReadClipboardFn>,
     /// Downloads extension indexes, entry files and screenshots over HTTPS for the Extension Manager.
     pub fetch: Option<shell::extension_downloads::FetchFn>,
+    /// The settings folder, which holds the snippets folder and the extension folders (Modules and Macros).
+    pub settings_dir: Option<std::path::PathBuf>,
+    /// Lists the extension modules but runs none (`--safe-mode`).
+    pub safe_mode: bool,
+    /// The clock behind Last Changed stamps (the system clock on the desktop).
+    pub clock: Option<fontcraft_engine::Clock>,
 }
 
 /// Opens the desktop window and runs it until it closes.
@@ -63,11 +69,13 @@ pub fn run(options: Options) -> Result<(), String> {
     let spec = AppSpec::new("fontcraft", "FontCraft", Defaults::new(WINDOW, WINDOW_MIN));
     craft::ui::shell::app::run(spec, move |ctx| {
         let mut app = FontCraftApp::open(ctx);
+        app.session.set_clock(options.clock);
         app.control.roots = options.roots;
         app.frame_hook = options.frame_hook.map(|make| make(ctx));
         app.preview_host = options.preview_host;
         app.user_store = options.user_store;
         app::user_store::load(&mut app);
+        app::startup::open_extensions(&mut app, options.settings_dir.as_deref(), options.safe_mode);
         app.opener = options.opener;
         app.clipboard_reader = options.clipboard_reader;
         app.view.extensions.downloads.fetch = options.fetch;
@@ -76,7 +84,10 @@ pub fn run(options: Options) -> Result<(), String> {
         }
         if let Some(listener) = options.control {
             match app.control.listen(listener, ctx) {
-                Ok(addr) => log::info!("control channel listening on {addr}"),
+                Ok(addr) => {
+                    log::info!("control channel listening on {addr}");
+                    app.session.extensions_mut().surfaces.insert("control".into(), format!("listening on {addr}"));
+                }
                 Err(e) => {
                     log::error!("control channel: {e}");
                     app.status = format!("control channel: {e}");

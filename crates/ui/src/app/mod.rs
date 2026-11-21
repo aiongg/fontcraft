@@ -22,6 +22,7 @@ mod notices;
 pub mod open;
 pub mod preview_host;
 pub mod sidebar;
+pub mod startup;
 pub mod user_store;
 
 use std::sync::Arc;

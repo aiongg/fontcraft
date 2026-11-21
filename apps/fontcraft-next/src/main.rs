@@ -9,8 +9,9 @@
 //! ([`external_preview`], run each frame through the UI's frame hook). [`preview_server`] is the
 //! web server behind it and behind the TrueType preview page. The user's settings and custom glyph data are read
 //! from the settings folder when the window opens and the settings written back whenever they change
-//! ([`user_files`]; `FONTCRAFT_SETTINGS_DIR` replaces the folder). The Extension Manager's HTTPS downloads are
-//! [`net`].
+//! ([`user_files`]; `FONTCRAFT_SETTINGS_DIR` replaces the folder); the snippets and the extension folders (Modules
+//! and Macros) are in it too. The engine gets the system clock for Last Changed stamps. The Extension Manager's
+//! HTTPS downloads are [`net`].
 #![forbid(unsafe_code)]
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -125,9 +126,9 @@ fn options(mut args: impl Iterator<Item = String>) -> Result<Option<fontcraft_ui
     Ok(Some(desktop(fontcraft_ui::Options { control, roots, ..Default::default() })))
 }
 
-/// `options` with what only the desktop app supplies: External Preview's frame hook, the preview web server, the
-/// settings folder, the system browser and file manager, the system clipboard, and the HTTPS downloads of the
-/// Extension Manager.
+/// `options` with what only the desktop app supplies: the system clock, External Preview's frame hook, the preview web
+/// server, the settings folder (settings, snippets and extension folders), the system browser and file manager, the
+/// system clipboard, and the HTTPS downloads of the Extension Manager.
 #[cfg(not(target_arch = "wasm32"))]
 fn desktop(options: fontcraft_ui::Options) -> fontcraft_ui::Options {
     let frame_hook: fontcraft_ui::MakeFrameHook = Box::new(|ctx| {
@@ -142,6 +143,8 @@ fn desktop(options: fontcraft_ui::Options) -> fontcraft_ui::Options {
         opener: fontcraft_ui::Opener::system(),
         clipboard_reader: Some(fontcraft_ui::app::clipboard::system_text),
         fetch: Some(net::fetch),
+        settings_dir: user_files::settings_dir(),
+        clock: Some(fontcraft_engine::clock::system_clock()),
         ..options
     }
 }
