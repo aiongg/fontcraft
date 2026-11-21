@@ -311,6 +311,8 @@ impl FontCraftApp {
         if let Some(error) = app.catalog.error.clone() {
             app.status = error;
         }
+        // The window's first tab set is the document it opens with.
+        crate::shell::tabs::follow_document(&mut app);
         app.project();
         app
     }
@@ -335,10 +337,14 @@ impl FontCraftApp {
         if let Some(last) = failed.pop() {
             self.status = last;
         }
+        // A shell command may have switched or closed the active document: its tab set shows before anything reads
+        // the tabs, and again after a close the drain answered.
+        crate::shell::tabs::follow_document(self);
         crate::canvas::tools::apply::sync(self);
         crate::canvas::text::sync(self);
         self.tools.refresh();
         close::after_drain(self);
+        crate::shell::tabs::follow_document(self);
         self.project();
         crate::canvas::text::after_project(self);
     }
@@ -398,6 +404,7 @@ impl FontCraftApp {
                         return Err(error);
                     }
                 };
+                crate::shell::tabs::follow_document(self);
                 crate::shell::start::after_run(self, &command.id);
                 crate::canvas::tools::apply::adopt(self, &reply);
                 if origin == Origin::Person {

@@ -9,6 +9,11 @@
 //!
 //! Tab commands name tabs by their position in the strip, counting from 1 for Font View, as Cmd+Alt+1 to Cmd+Alt+9
 //! do.
+//!
+//! Each open document has its own tab set. [`follow_document`] keeps [`EditTabs`] on the active document's set: when
+//! another document becomes active, the live tab's state goes back into its tab, the whole set is put away for its
+//! document ([`EditTabs`]'s `others`), and the new document's set comes back with its live tab made live again. A
+//! document shown for the first time opens with one Edit View tab; a closed document's set is dropped with it.
 
 use std::collections::BTreeMap;
 
@@ -130,7 +135,17 @@ pub struct EditTab {
     pub state: TabState,
 }
 
-/// The window's Edit View tabs.
+/// The tab set of an open document that is not active. The live tab's state is in its tab; `master` is Font View's
+/// master when no tab was live.
+struct DocumentTabs {
+    tabs: Vec<EditTab>,
+    active: Option<u64>,
+    live: Option<u64>,
+    closed: Vec<(usize, EditTab)>,
+    master: Option<String>,
+}
+
+/// The Edit View tabs of the active document, and the tab sets of the other open documents.
 pub struct EditTabs {
     /// In strip order, after Font View.
     pub tabs: Vec<EditTab>,
@@ -140,13 +155,26 @@ pub struct EditTabs {
     live: Option<u64>,
     /// Closed tabs and the index each had, the last closed at the end.
     pub closed: Vec<(usize, EditTab)>,
+    /// Tab ids count across documents, so an id names one tab in the window.
     next_id: u64,
+    /// The document the tabs above belong to; `None` until a document shows.
+    document: Option<u64>,
+    /// The tab sets of the other open documents, by document id.
+    others: BTreeMap<u64, DocumentTabs>,
 }
 
 impl Default for EditTabs {
     /// A window opens with one Edit View tab, showing the font's first glyph.
     fn default() -> Self {
-        EditTabs { tabs: vec![EditTab { id: 1, state: TabState::default() }], active: Some(1), live: Some(1), closed: Vec::new(), next_id: 2 }
+        EditTabs {
+            tabs: vec![EditTab { id: 1, state: TabState::default() }],
+            active: Some(1),
+            live: Some(1),
+            closed: Vec::new(),
+            next_id: 2,
+            document: None,
+            others: BTreeMap::new(),
+        }
     }
 }
 
@@ -368,6 +396,69 @@ fn make_live(app: &mut FontCraftApp, id: u64) {
     }
     put_live(app, incoming);
     app.view.tabs.live = Some(id);
+}
+
+/// Keeps the tabs on the active document's set (module doc): the set shown until now goes back to its document while
+/// that document is open and is dropped with it otherwise. Returns whether another document's set shows now.
+pub(crate) fn follow_document(app: &mut FontCraftApp) -> bool {
+    let active = app.session.active().map(|d| d.id);
+    let open: Vec<u64> = app.session.documents().iter().map(|d| d.id).collect();
+    app.view.tabs.others.retain(|id, _| open.contains(id));
+    let shown = app.view.tabs.document;
+    match (shown, active) {
+        (Some(shown), Some(now)) if shown == now => return false,
+        // The window's first tab set becomes the first document's.
+        (None, _) => {
+            app.view.tabs.document = active;
+            return false;
+        }
+        _ => {}
+    }
+    // The live tab's state goes back into its tab, so the set is whole while it is put away.
+    let state = take_live(app);
+    let tabs = &mut app.view.tabs;
+    let live = tabs.live.and_then(|id| tabs.tabs.iter_mut().find(|t| t.id == id));
+    let master = match live {
+        Some(tab) => {
+            tab.state = state;
+            None
+        }
+        None => state.master,
+    };
+    let kept = DocumentTabs {
+        tabs: std::mem::take(&mut tabs.tabs),
+        active: tabs.active.take(),
+        live: tabs.live.take(),
+        closed: std::mem::take(&mut tabs.closed),
+        master,
+    };
+    if let Some(shown) = shown
+        && open.contains(&shown)
+    {
+        tabs.others.insert(shown, kept);
+    }
+    let back = active.and_then(|now| tabs.others.remove(&now)).unwrap_or_else(|| {
+        let id = tabs.next_id;
+        tabs.next_id = tabs.next_id.saturating_add(1);
+        DocumentTabs { tabs: vec![EditTab { id, state: TabState::default() }], active: Some(id), live: Some(id), closed: Vec::new(), master: None }
+    });
+    tabs.tabs = back.tabs;
+    tabs.active = back.active.filter(|id| tabs.tabs.iter().any(|t| t.id == *id));
+    tabs.closed = back.closed;
+    tabs.document = active;
+    let incoming = back.live.and_then(|id| tabs.tabs.iter_mut().find(|t| t.id == id)).map(|t| (t.id, std::mem::take(&mut t.state)));
+    match incoming {
+        Some((id, state)) => {
+            tabs.live = Some(id);
+            put_live(app, state);
+        }
+        None => {
+            put_live(app, TabState::default());
+            app.view.layers.master = back.master;
+        }
+    }
+    app.view_changed();
+    true
 }
 
 /// Takes the edit-view fields out of the view state, leaving fresh ones.

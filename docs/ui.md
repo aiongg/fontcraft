@@ -182,8 +182,10 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   the two, so projections, the canvas and the tools read the live fields and never look at tabs. Code that opens
   glyphs for editing calls `tabs::edit_glyphs` (the tab holding exactly those glyphs, else a new one),
   `tabs::open_glyphs` (always a new tab) or `tabs::show_glyph` (the live tab); `app.font_view_shows()` says whether
-  Font View is the showing tab. A window opens with one Edit View tab. The tabs belong to the window, not to the
-  active document. Cmd+Alt+2 to Cmd+Alt+9 show tabs 2 to 9 (numbered shortcuts, below).
+  Font View is the showing tab. Each open document has its own tab set (`tabs::follow_document`, run when a
+  command or the drain may have switched the active document): the live tab's state goes back into its tab, the set is
+  put away for its document, and the new document's set comes back with its live tab made live. A window, and each
+  document opened into it, starts with one Edit View tab; a closed document's tabs are dropped. Cmd+Alt+2 to Cmd+Alt+9 show tabs 2 to 9 (numbered shortcuts, below).
 - **Numbered shortcuts.** A shortcut that stands for a numbered series runs one command with the number as a
   parameter: Cmd+1 to Cmd+9 run `view.selectMaster {master}`, Cmd+Alt+2 to Cmd+Alt+9 run `view.showTab {index}`.
   `shell/numbered_keys.rs` lists them; `app::catalog` gives each its own catalog definition through

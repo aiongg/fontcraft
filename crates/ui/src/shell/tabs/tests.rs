@@ -122,3 +122,32 @@ fn tab_counts_are_capped() {
     shell(&mut app, "view.closeOtherTabs", json!({"keep": 2}));
     assert_eq!(app.view.tabs.closed.len(), super::MAX_CLOSED_TABS);
 }
+
+/// Each document keeps its own tabs: a new document opens with one Edit View tab, switching documents brings back
+/// each one's tabs with the tab that showed, and closing a document drops its tabs.
+#[test]
+fn each_document_keeps_its_own_tabs() {
+    let mut app = app();
+    assert_eq!(shell(&mut app, "view.newTab", json!({"text": "AB"})), "");
+    assert_eq!((opened(&app), app.view.tabs.position(), app.view.glyph.as_deref()), (vec!["A B".to_string()], 3, Some("A")));
+
+    app.run_now(Msg::run("file.new", json!({})), false).unwrap();
+    assert_eq!((app.view.tabs.tabs.len(), app.view.tabs.position()), (1, 2), "a new document opens with one Edit View tab");
+    assert_eq!(shell(&mut app, "view.newTab", json!({"text": "C"})), "");
+    assert_eq!(shell(&mut app, "fontView.show", json!({})), "");
+    assert_eq!(opened(&app), vec!["C".to_string()]);
+
+    app.run_now(Msg::run("document.activate", json!({"index": 0})), false).unwrap();
+    assert_eq!(
+        (opened(&app), app.view.tabs.position(), app.view.glyph.as_deref()),
+        (vec!["A B".to_string()], 3, Some("A")),
+        "the first document's tabs come back with the tab that showed"
+    );
+    app.run_now(Msg::run("document.activate", json!({"index": 1})), false).unwrap();
+    assert!(app.view.tabs.font_view_shows(), "the second document shows Font View again");
+    assert_eq!(opened(&app), vec!["C".to_string()]);
+
+    app.run_now(Msg::run("file.close", json!({})), false).unwrap();
+    assert_eq!(opened(&app), vec!["A B".to_string()], "closing the second document shows the first one's tabs");
+    assert!(app.view.tabs.others.is_empty(), "the closed document's tabs are dropped");
+}

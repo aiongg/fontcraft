@@ -349,9 +349,9 @@ milestone = "M3"
 summary = "One document window holds Font View as its fixed first tab followed by any number of Edit View tabs; clicking a tab title switches to it."
 ref = "Edit View"
 status = "handbook"
-notes = "Built in M3.2. In `crates/ui` (`shell/tabs.rs`, `panels/tab_strip.rs`) the strip is craft's document tab strip at the top of the document area: Font View first and not closable, then the Edit View tabs titled by their first four glyphs. Each tab keeps its glyph, camera, text and preview features, master and picked layers, selection and path focus, Edit Background and Preview Area; at most 1,000 tabs are open and the last 32 closed are kept. The tabs belong to the window, not to the active document; `docs/ui.md` has the design."
+notes = "Built in M3.2. In `crates/ui` (`shell/tabs.rs`, `panels/tab_strip.rs`) the strip is craft's document tab strip at the top of the document area: Font View first and not closable, then the Edit View tabs titled by their first four glyphs. Each tab keeps its glyph, camera, text and preview features, master and picked layers, selection and path focus, Edit Background and Preview Area; at most 1,000 tabs are open and the last 32 closed are kept. Each open document has its own tab set within those limits: switching the active document shows that document's tabs with the tab that showed last, and closing a document drops its tabs; `docs/ui.md` has the design."
 guesses = [
-  "A window opens with one Edit View tab showing the font's first glyph beside Font View; the handbook does not say which tab a file without stored tabs opens on. Opening a new file in the reference app settles it.",
+  "A window, and each document opened into it, starts with one Edit View tab showing the font's first glyph beside Font View; the handbook does not say which tab a file without stored tabs opens on. Opening a new file in the reference app settles it.",
   "Font View draws in the master of the Edit View tab shown last; the handbook gives Font View no master of its own. Switching masters in two tabs and then showing Font View in the reference app settles it.",
 ]
 observe = [
