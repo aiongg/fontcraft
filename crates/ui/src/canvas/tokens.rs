@@ -45,6 +45,8 @@ pub struct Tokens {
     pub background_outline: Color32,
     /// Another visible layer of the glyph (`appearance.color.otherLayersStroke`).
     pub visible_layer_outline: Color32,
+    /// The reference font's glyph behind the outline (`view.setReferenceFont`).
+    pub reference_outline: Color32,
     /// Laid over the canvas while the background is the side being edited.
     pub background_tint: Color32,
 
@@ -72,6 +74,7 @@ pub struct Tokens {
     pub label_gap: f32,
     pub background_outline_width: f32,
     pub visible_layer_outline_width: f32,
+    pub reference_outline_width: f32,
     /// Share of the canvas left free on each side when a glyph is fitted into it.
     pub fit_margin: f64,
     /// The Master Compatibility view (`canvas::compatibility`).
@@ -151,6 +154,7 @@ impl Tokens {
             attachment_band: Color32::from_rgba_unmultiplied(0x50, 0x96, 0xf0, 0x40),
             background_outline: Color32::from_rgba_unmultiplied(0xe0, 0x40, 0x40, 0x90),
             visible_layer_outline: Color32::from_rgba_unmultiplied(0x2d, 0x8c, 0xeb, 0xb0),
+            reference_outline: Color32::from_rgba_unmultiplied(0x30, 0xa0, 0x60, 0xa0),
             background_tint: Color32::from_rgba_unmultiplied(0x00, 0x00, 0x00, 0x18),
             outline_width: 1.5,
             source_outline_width: 1.0,
@@ -171,6 +175,7 @@ impl Tokens {
             label_gap: 4.0,
             background_outline_width: 1.0,
             visible_layer_outline_width: 0.75,
+            reference_outline_width: 1.0,
             fit_margin: 0.08,
             compat: CompatTokens::standard(),
         }

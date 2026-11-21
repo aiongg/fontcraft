@@ -183,6 +183,8 @@ pub struct OverlayData {
     pub reporters: Vec<super::reporters::ReporterDrawing>,
     /// Suggest Distance's parallel outlines near the pointer while a drag runs, as polylines ([`suggest::outlines`]).
     pub suggest_outlines: Vec<Vec<Point>>,
+    /// The reference font's glyph in the edited glyph's font units (`canvas::reference_font`).
+    pub reference: Option<std::sync::Arc<BezPath>>,
 }
 
 /// The overlays' side of the app.
@@ -196,6 +198,8 @@ pub struct Overlays {
     pub data: OverlayData,
     /// How many times live audit has run.
     pub audit_runs: u64,
+    /// The reference font's outline and what it was built from (`canvas::reference_font`).
+    pub reference: super::reference_font::ReferenceCache,
     base: Option<BaseKey>,
     ruler: Option<(BaseKey, Point, Point)>,
     quick: Option<(BaseKey, Point, bool)>,

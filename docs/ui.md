@@ -160,7 +160,9 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   `shell/view.rs`. Guides, grids, measurement labels, annotations, display aids, the auto-meter, audit markers
   and Suggest Distance's outlines are `canvas/overlays/`: `overlays::refresh` (after `drain`) reads what they need from the engine into
   `OverlayData`, which layers read as `PaintCx::overlays`; their switches are `shell/overlays.rs`. `overlays::suggest::suggest` also fills the tools' scene with the
-  View › Suggest switches, the declared stems and the master's `suggestDistance`. Reporter module
+  View › Suggest switches, the declared stems and the master's `suggestDistance`. The Reference Font panel's glyph is
+  `canvas/reference_font.rs`: its `refresh` (after `overlays::refresh`) builds the outline when the font, the glyph or
+  the fields changed, into `OverlayData::reference`, which the `referenceFont` layer paints. Reporter module
   drawings are read the same way (`canvas/reporters.rs`) and paint as `reportersBack` and `reportersFront`. A text note is
   typed in a field over its box (`canvas/annotation_editor.rs`).
   Placed images are `canvas/images/`: `images::refresh` (after `drain`) decodes their files through `ImageFiles`

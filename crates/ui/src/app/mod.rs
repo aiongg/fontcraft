@@ -439,6 +439,7 @@ impl FontCraftApp {
         // Last: it takes the whole app, so `cx` must be done.
         crate::canvas::overlays::refresh(self);
         crate::canvas::reporters::refresh(self);
+        crate::canvas::reference_font::refresh(self);
         crate::canvas::images::cells::refresh(self);
         let engine = Stamp::of(&self.session, 0);
         if self.enabled_at != Some(engine) {

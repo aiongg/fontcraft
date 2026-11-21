@@ -14,6 +14,7 @@ pub mod images;
 pub mod layers;
 pub mod overlays;
 pub mod paint;
+pub mod reference_font;
 pub mod reporters;
 pub mod text;
 pub mod tokens;
