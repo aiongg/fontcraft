@@ -1,8 +1,10 @@
 //! The master icons of the toolbar: one per master while the font has two or more, the current master's pressed. A
 //! click runs `view.selectMaster` for that master. Each icon is the master's icon from Font Info › Masters
-//! (`master_icons`): a built-in n, or a glyph of the font drawn in that master.
+//! (`master_icons`): a built-in n, or a glyph of the font drawn in that master. An icon's tooltip names the master and
+//! the chord that selects it (Cmd+1 to Cmd+9, `shell::numbered_keys`).
 
 use craft::ui::buttons::toggle_button::ToggleButton;
+use craft::ui::contract::tooltip::with_chord;
 use craft::ui::contract::{Bind, Props as _, Show as _, ShowContainer as _, Tracked};
 use craft::ui::layout_components::Row;
 use craft::ui::primitives::IconSpec;
@@ -30,14 +32,20 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
     }
     let current = props.model.current.as_deref();
     let sent = &mut *props.sent;
+    let os = craft::ui::runtime::windows::os_of(ui.ctx());
     Row::new().show(ui, |ui, _| {
         for (index, master) in masters.iter().enumerate() {
             let glyph = MasterGlyph(&master.icon);
             let on = current == Some(master.id.as_str());
+            let select = CommandRef::with_params("view.selectMaster", json!({ "master": index }));
+            let tip = match craft::ui::runtime::commands::resolve(ui.ctx(), select).chord {
+                Some(chord) => with_chord(&master.name, &chord, os),
+                None => master.name.clone(),
+            };
             let out = ToggleButton::new(master.name.clone(), Bind::given(on))
                 .icon(IconSpec::glyph(&glyph))
                 .icon_only()
-                .tooltip(master.name.clone())
+                .tooltip(tip)
                 .id_salt(("fontcraftMasterSwitcher", index))
                 .show(ui);
             if out.events.committed().is_some() {
