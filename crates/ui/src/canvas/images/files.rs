@@ -260,10 +260,15 @@ fn whole(image: &Rgba8) -> bool {
 
 /// `image` shrunk by a whole factor so that neither side exceeds `max_side`, averaging each block of pixels.
 pub fn shrink(image: Rgba8, max_side: u32) -> Rgba8 {
+    shrunk(&image, max_side).unwrap_or(image)
+}
+
+/// A copy of `image` shrunk as [`shrink`] does; `None` when it needs no shrinking (or its pixels do not fill it).
+pub fn shrunk(image: &Rgba8, max_side: u32) -> Option<Rgba8> {
     let (w, h) = (image.width, image.height);
     let longest = w.max(h);
-    if max_side == 0 || longest <= max_side || !whole(&image) {
-        return image;
+    if max_side == 0 || longest <= max_side || !whole(image) {
+        return None;
     }
     let k = longest.div_ceil(max_side) as usize;
     let (w, h) = (w as usize, h as usize);
@@ -290,5 +295,5 @@ pub fn shrink(image: Rgba8, max_side: u32) -> Rgba8 {
             }
         }
     }
-    Rgba8 { width: u32::try_from(nw).unwrap_or(u32::MAX), height: u32::try_from(nh).unwrap_or(u32::MAX), pixels }
+    Some(Rgba8 { width: u32::try_from(nw).unwrap_or(u32::MAX), height: u32::try_from(nh).unwrap_or(u32::MAX), pixels })
 }

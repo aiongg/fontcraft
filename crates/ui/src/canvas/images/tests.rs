@@ -275,3 +275,41 @@ fn font_view_cells_draw_placed_images() {
     assert!(!app.models.cell_images.by_glyph.contains_key("A"));
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A Font View cell draws a thumbnail no larger than the cell, kept per file and side, and the image keeps its size;
+/// a larger cell takes a larger thumbnail.
+#[test]
+fn font_view_cells_draw_cell_sized_thumbnails() {
+    let dir = temp_dir("thumbs");
+    let file = png(&dir, "big.png", 600, 300);
+    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    assert!(app.font_view_shows());
+    run(&mut app, "glyph.newGlyph", json!({"name": "img"}));
+    shell(&mut app, "fontView.setCellSize", json!({"size": 64}));
+    run(&mut app, "glyph.addImage", json!({"files": [file.to_string_lossy()], "glyphs": ["img"]}));
+    let thumb = |app: &FontCraftApp| {
+        let cell = app.models.cell_images.by_glyph.get("img").cloned().expect("the cell image");
+        let Look::Pixels { pixels, size } = &cell.look else { panic!("{:?}", cell.look) };
+        assert_eq!(*size, [600, 300], "the image keeps its place and size");
+        pixels.clone()
+    };
+    let small = thumb(&app);
+    assert_eq!((small.0.width, small.0.height), (60, 30), "shrunk by a whole factor to at most 64 pixels");
+    app.images.cells_seen = None;
+    app.project();
+    assert!(Arc::ptr_eq(&thumb(&app).0, &small.0), "the thumbnail is kept");
+    shell(&mut app, "fontView.setCellSize", json!({"size": 300}));
+    let large = thumb(&app);
+    assert_eq!((large.0.width, large.0.height), (300, 150), "a 300-point cell takes a 512-pixel thumbnail");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn thumbnail_sides_are_powers_of_two_within_limits() {
+    use super::cells::{MAX_THUMB_SIDE, MIN_THUMB_SIDE, thumb_side};
+    assert_eq!(thumb_side(64.0, 1.0), 64);
+    assert_eq!(thumb_side(100.0, 2.0), 256);
+    assert_eq!(thumb_side(4.0, 1.0), MIN_THUMB_SIDE);
+    assert_eq!(thumb_side(f64::INFINITY, 1.0), MAX_THUMB_SIDE);
+    assert_eq!(thumb_side(5_000.0, 1.0), MAX_THUMB_SIDE);
+}
