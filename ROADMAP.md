@@ -1101,7 +1101,7 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
         `dialogEdit`, `closeDialog`, opened by the Font Info button; the edits preview as one batch, OK keeps one
         undo step) and the Cross-Axis Mappings window with its Font menu row (`dialogs/cross_axis.rs`). Left: the
         mapping graph shows the points but takes no click on its line and no point drag (points are added with +
-        and moved with the selected point's fields); no arrow-key nudge of the selected point outside the fields;
+        and moved with the selected point's coordinate fields); no arrow-key nudge of the selected point outside the fields;
         no Alt-click on a card's disclosure to open or close every card.
      8. Done (UI.45c, UI.45d): a Primitives tool click opens Primitive Measurements (`dialogs/primitive_measurements.rs`,
         routed in `canvas/tools/apply.rs`), and a Pixel tool click in a font without the pixel glyph offers to add it

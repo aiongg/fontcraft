@@ -162,7 +162,7 @@ fn the_dialog_view_posts_its_edits() {
     fixture.settle();
     let edit = |params: Value| Msg::Shell(craft::ui::runtime::commands::CommandRef::with_params(EDIT, params));
 
-    let external = fixture.by_label("External").expect("the External field");
+    let external = fixture.by_label("External Coordinate").expect("the External Coordinate field");
     fixture.click(&external).key(Key::A, Modifiers::COMMAND).type_text("90").key(Key::Enter, Modifiers::NONE).settle();
     assert_eq!(
         posted.borrow().last(),

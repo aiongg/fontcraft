@@ -15,7 +15,7 @@
 //! |---|---|
 //! | a row of the axis list | `{axis}` |
 //! | a row of the point list | `{point}` |
-//! | Internal, External fields | `{command: "axisMappings.setPoint", params: {index, internal | external}}` |
+//! | Internal Coordinate, External Coordinate fields | `{command: "axisMappings.setPoint", params: {index, internal | external}}` |
 //! | + | `{command: "axisMappings.addPoint", params: {internal}}`: halfway to the next point, on the line |
 //! | − | `{command: "axisMappings.removePoint"}` |
 //!
@@ -55,6 +55,9 @@ craft::ui::words! {
         point: "fontcraftAxisMappings.point" = "Point";
         internal: "fontcraftAxisMappings.internal" = "Internal";
         external: "fontcraftAxisMappings.external" = "External";
+        /// The fields of the selected point, named apart from the list's column headers.
+        internal_field: "fontcraftAxisMappings.internalField" = "Internal Coordinate";
+        external_field: "fontcraftAxisMappings.externalField" = "External Coordinate";
         add: "fontcraftAxisMappings.add" = "+";
         add_tip: "fontcraftAxisMappings.addTip" = "Add a point on the line after the selected one";
         remove: "fontcraftAxisMappings.remove" = "−";
@@ -523,7 +526,7 @@ fn point_list(ui: &mut Ui, words: &AxisMappingsWords, m: &AxisModel, sent: &mut 
         // The selected point's coordinates; arrow keys in a field step the value.
         let selected = m.point.and_then(|at| m.points.get(at).map(|p| (at, *p)));
         Row::new().show(ui, |ui, _| {
-            for (key, label) in [("internal", &words.internal), ("external", &words.external)] {
+            for (key, label) in [("internal", &words.internal_field), ("external", &words.external_field)] {
                 let value = selected.map(|(_, (external, internal))| if key == "internal" { internal } else { external });
                 let out =
                     NumberField::new(label.clone(), Bind::given(value)).enabled(selected.is_some()).id_salt(("fontcraftAxisMappings", key)).show(ui);
