@@ -390,7 +390,7 @@ mod tests {
     /// closes the window.
     #[test]
     fn the_chooser_opens_from_the_menu_and_creates_a_document() {
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         assert!(super::fired(&mut app, &CommandRef::with_params(super::NEW_FROM_GLYPH_SETS, json!({}))));
         let st = &app.view.start;
         assert!(st.open && st.chooser);

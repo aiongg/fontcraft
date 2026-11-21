@@ -63,7 +63,7 @@ mod tests {
         std::fs::create_dir_all(&source).unwrap();
         let file = source.join("tighten.fcmacro");
         std::fs::write(&file, MACRO).unwrap();
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(crate::app::APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(crate::app::APP).build()));
         assert!(ext::open_folders(app.session.extensions_mut(), Some(&data), false).is_empty());
         // A text file dropped beside it is left for the views.
         post(&mut app, std::slice::from_ref(&file));

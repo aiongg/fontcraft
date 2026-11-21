@@ -44,7 +44,7 @@ fn masters(app: &FontCraftApp) -> Vec<String> {
 
 /// Two masters; A and B each hold two overlapping squares on both; A and B are selected in Font View.
 fn app_with_outlines() -> FontCraftApp {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     run(&mut app, "font.master.add", json!({"name": "Bold"}));
     for master in masters(&app) {
         for glyph in ["A", "B"] {

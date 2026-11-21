@@ -9,7 +9,7 @@ use serde_json::json;
 use super::{APP, FontCraftApp, Msg};
 
 fn app() -> FontCraftApp {
-    FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()))
+    FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()))
 }
 
 /// A posted width change runs once in `drain`, reaches the view model, and makes closing ask first.

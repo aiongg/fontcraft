@@ -268,7 +268,7 @@ mod tests {
     /// it keeps waiting for the window's event; an empty clipboard says so in the status line.
     #[test]
     fn a_waiting_paste_reads_the_system_clipboard() {
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         app.clipboard.request = Some(PasteKind::FeatureEntries);
         assert!(!read_waiting(&mut app), "no reader: the paste waits for the window's event");
         assert_eq!(app.clipboard.request, Some(PasteKind::FeatureEntries));

@@ -521,7 +521,7 @@ mod tests {
     /// Overlay Fonts previews the stacked outlines in their colours, and Overlay makes the new document.
     #[test]
     fn overlay_fonts_previews_then_makes_the_font() {
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         app.session.execute("glyph.newGlyph", &json!({"name": "A"})).ok();
         app.session.execute("path.addRectangle", &json!({"glyph": "A", "x": 100, "y": 0, "width": 300, "height": 500})).unwrap();
         let layers = json!([{"font": 0, "color": "#FF0000FF"}, {"font": 0, "color": "#0000FF80", "offset": [40, 0]}]);

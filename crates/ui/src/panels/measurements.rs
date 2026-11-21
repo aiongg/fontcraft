@@ -100,7 +100,7 @@ mod tests {
     /// The panel lists the shown master's metrics; typing a height posts `font.master.setMetric` for that master.
     #[test]
     fn a_typed_metric_height_posts_set_metric() {
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         app.sent.push(Msg::View(ViewMsg::TogglePanel(PanelId::Measurements)));
         app.drain();
         let model = Tracked::new((*app.models.measurements).clone());

@@ -195,7 +195,7 @@ fn the_bits_dialog_answers_ok_with_the_checked_bits() {
 /// `font.info` shows the panel on the tab asked for, and the view model follows it.
 #[test]
 fn font_info_shows_the_panel_on_a_tab() {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     app.sent.push(Msg::Shell(CommandRef::with_params("font.info", json!({ "tab": "other" }))));
     app.drain();
     assert!(app.status.is_empty(), "{}", app.status);

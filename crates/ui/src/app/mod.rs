@@ -317,6 +317,16 @@ impl FontCraftApp {
         app
     }
 
+    /// The app as [`Self::new`] gives it, with one Edit View tab showing the font's first glyph: the start the tests
+    /// of the edit view build on.
+    #[cfg(test)]
+    pub fn with_edit_tab(session: Session, host: Arc<Host>) -> FontCraftApp {
+        let mut app = FontCraftApp::new(session, host);
+        crate::shell::tabs::open_blank(&mut app);
+        app.project();
+        app
+    }
+
     /// Whether a document or project has changes not yet saved.
     pub fn has_unsaved_changes(&self) -> bool {
         close::has_unsaved(&self.session)

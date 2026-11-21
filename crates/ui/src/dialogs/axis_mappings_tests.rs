@@ -55,7 +55,7 @@ fn mapped() -> FontCraftApp {
     ]);
     let mut session = Session::new();
     session.add_document(f, None).unwrap();
-    let mut app = FontCraftApp::new(session, Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(session, Arc::new(Host::builder(APP).build()));
     call(
         &mut app,
         "engine.execute",

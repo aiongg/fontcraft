@@ -99,7 +99,7 @@ mod tests {
     /// Two masters of `n`; the second master's square has one node more, so its segments do not match from there.
     #[test]
     fn show_master_compatibility_places_every_master_and_colours_the_segments() {
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         let run = |app: &mut FontCraftApp, id: &str, params: serde_json::Value| app.session.execute(id, &params).unwrap();
         run(&mut app, "font.master.add", json!({}));
         run(&mut app, "glyph.newGlyph", json!({"name": "n.test"}));

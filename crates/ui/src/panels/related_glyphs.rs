@@ -106,7 +106,7 @@ mod tests {
     /// The starter font plus `circumflexcomb`, `Acircumflex` (A + circumflexcomb) and `Acircumflex.ss01` (a component
     /// of Acircumflex), with Acircumflex shown and the panel open.
     fn app() -> FontCraftApp {
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         for (name, unicode) in [("circumflexcomb", Some("0302")), ("Acircumflex", Some("00C2")), ("Acircumflex.ss01", None)] {
             app.sent.push(Msg::run("glyph.newGlyph", json!({ "name": name })));
             if let Some(u) = unicode {

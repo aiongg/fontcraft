@@ -232,7 +232,7 @@ mod tests {
     use crate::dialogs::custom_parameter_picker::project_adds;
 
     fn project_app(names: &[&str]) -> (FontCraftApp, u64) {
-        let mut app = FontCraftApp::new(Session::new(), Arc::new(Host::builder(crate::app::APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::new(), Arc::new(Host::builder(crate::app::APP).build()));
         app.run_now(Msg::run("file.new", json!({})), false).unwrap();
         app.run_now(Msg::run("file.newProject", json!({})), false).unwrap();
         for name in names {

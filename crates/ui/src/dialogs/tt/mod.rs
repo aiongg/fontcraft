@@ -198,7 +198,7 @@ mod tests {
     use crate::app::{APP, Msg};
 
     fn app() -> FontCraftApp {
-        FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()))
+        FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()))
     }
 
     /// The open commands queue their dialog; a bad target or master is refused and queues nothing.

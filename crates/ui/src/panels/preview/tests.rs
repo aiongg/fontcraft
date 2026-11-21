@@ -39,7 +39,7 @@ fn layer(master: &str, w: f64) -> Layer {
 /// Masters Thin (100) and Black (900); instances Light (300), Regular (500) and a variable font setting; `a` is 100
 /// to 300 wide, `b` 200 to 600. The edit view holds "ab" with `a` edited, and the Preview Area is open.
 fn instance_app() -> FontCraftApp {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     app.session
         .edit("setup", |font| {
             font.axes = Arc::new(vec![Axis { name: "Weight".into(), tag: "wght".into(), ..Axis::default() }]);

@@ -36,7 +36,7 @@ fn files(dir: &Path) -> BTreeMap<String, Vec<u8>> {
 fn drawn_with(answers: Vec<Picked>) -> (FontCraftApp, Arc<ScriptedFiles>) {
     let chooser = Arc::new(ScriptedFiles::answering(answers));
     let host = Host::builder(APP).files(chooser.clone()).build();
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(host));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(host));
     app.session.execute("glyph.newGlyph", &json!({"name": "A"})).ok();
     app.session.execute("path.addRectangle", &json!({"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200})).unwrap();
     app.sent.push(Msg::View(ViewMsg::SelectGlyph("A".into())));

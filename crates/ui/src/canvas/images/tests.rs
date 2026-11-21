@@ -52,7 +52,7 @@ fn shell(app: &mut FontCraftApp, id: &str, params: Value) {
 fn image_app(name: &str) -> (FontCraftApp, PathBuf) {
     let dir = temp_dir(name);
     let file = png(&dir, "A.png", 100, 50);
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     app.sent.push(Msg::View(ViewMsg::SelectGlyph("A".into())));
     app.drain();
     run(&mut app, "glyph.addImage", json!({"files": [file.to_string_lossy()], "glyphs": ["A"]}));

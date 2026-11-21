@@ -37,7 +37,7 @@ fn two_masters() -> (FontCraftApp, [String; 4]) {
             .to_string()
     };
     let ids = [add("m01", "one"), add("m01", "two"), add("m01", "three"), add("m02", "other")];
-    let mut app = FontCraftApp::new(session, Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(session, Arc::new(Host::builder(APP).build()));
     app.sent.push(Msg::View(ViewMsg::SelectGlyph("A".into())));
     app.drain();
     (app, ids)

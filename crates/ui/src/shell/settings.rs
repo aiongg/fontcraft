@@ -326,7 +326,7 @@ mod tests {
     /// The sample-string commands write the settings within their limits, and Default brings the built-in groups back.
     #[test]
     fn sample_string_commands_edit_and_reset_the_groups() {
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         assert_eq!(groups(&app.session), default_groups());
         let before = default_groups().len();
         shell(&mut app, "settings.addSampleStringGroup", json!({"name": "Mine", "strings": ["abc"]})).unwrap();
@@ -348,7 +348,7 @@ mod tests {
     /// `app.settings` opens on an available section and refuses one that is not built.
     #[test]
     fn settings_opens_on_available_sections_only() {
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         shell(&mut app, "app.settings", json!({"section": "sharing"})).unwrap();
         assert!(app.view.settings.open);
         assert_eq!(super::current(&app.view.settings), "sharing");

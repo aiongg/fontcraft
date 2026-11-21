@@ -7,8 +7,9 @@ use serde_json::{Value, json};
 
 use crate::app::{APP, FontCraftApp, Msg};
 
+/// The app with one Edit View tab showing.
 fn app() -> FontCraftApp {
-    FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()))
+    FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()))
 }
 
 /// Runs a shell command as `drain` does and returns the status line: empty when it worked.
@@ -19,7 +20,7 @@ fn shell(app: &mut FontCraftApp, id: &str, params: Value) -> String {
     app.status.clone()
 }
 
-/// The titles of the Edit View tabs after the one the window opened with.
+/// The titles of the Edit View tabs after the one the test started with.
 fn opened(app: &FontCraftApp) -> Vec<String> {
     app.models.tabs.tabs.iter().skip(1).map(|t| t.glyphs.join(" ")).collect()
 }
@@ -27,7 +28,7 @@ fn opened(app: &FontCraftApp) -> Vec<String> {
 #[test]
 fn tabs_open_switch_close_and_reopen() {
     let mut app = app();
-    assert_eq!((app.view.tabs.tabs.len(), app.view.tabs.position()), (1, 2), "a window opens on one Edit View tab");
+    assert_eq!((app.view.tabs.tabs.len(), app.view.tabs.position()), (1, 2), "the test starts on one Edit View tab");
     assert_eq!(shell(&mut app, "fontView.show", json!({})), "");
     assert!(app.view.tabs.font_view_shows());
     shell(&mut app, "fontView.setSelection", json!({"glyphs": ["A", "B"]}));
@@ -123,8 +124,25 @@ fn tab_counts_are_capped() {
     assert_eq!(app.view.tabs.closed.len(), super::MAX_CLOSED_TABS);
 }
 
-/// Each document keeps its own tabs: a new document opens with one Edit View tab, switching documents brings back
-/// each one's tabs with the tab that showed, and closing a document drops its tabs.
+/// A window opens on Font View with no Edit View tab, as the reference opens a font, and so does a new document.
+#[test]
+fn a_window_and_a_new_document_open_on_font_view() {
+    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    assert!(app.font_view_shows() && app.view.tabs.tabs.is_empty(), "a window opens on Font View");
+    assert_eq!(app.view.tabs.positions(), 1);
+    assert!(!app.targets_chosen(), "no glyph is chosen");
+    assert_eq!(shell(&mut app, "view.editSelectedGlyphs", json!({"glyphs": ["A"]})), "");
+    assert_eq!((app.view.tabs.tabs.len(), app.view.tabs.position(), app.view.glyph.as_deref()), (1, 2, Some("A")));
+    app.run_now(Msg::run("file.new", json!({})), false).unwrap();
+    assert!(app.font_view_shows() && app.view.tabs.tabs.is_empty(), "a new document opens on Font View");
+    // Cmd+Alt+2 with no Edit View tab names no tab.
+    assert!(shell(&mut app, "view.showTab", json!({"index": 2})).contains("no tab at position 2"));
+    assert!(shell(&mut app, "view.showNextTab", json!({})).is_empty());
+    assert!(app.font_view_shows(), "with Font View alone, the next tab is Font View");
+}
+
+/// Each document keeps its own tabs: a new document opens on Font View, switching documents brings back each one's
+/// tabs with the tab that showed, and closing a document drops its tabs.
 #[test]
 fn each_document_keeps_its_own_tabs() {
     let mut app = app();
@@ -132,10 +150,10 @@ fn each_document_keeps_its_own_tabs() {
     assert_eq!((opened(&app), app.view.tabs.position(), app.view.glyph.as_deref()), (vec!["A B".to_string()], 3, Some("A")));
 
     app.run_now(Msg::run("file.new", json!({})), false).unwrap();
-    assert_eq!((app.view.tabs.tabs.len(), app.view.tabs.position()), (1, 2), "a new document opens with one Edit View tab");
+    assert!(app.font_view_shows() && app.view.tabs.tabs.is_empty(), "a new document opens on Font View");
     assert_eq!(shell(&mut app, "view.newTab", json!({"text": "C"})), "");
     assert_eq!(shell(&mut app, "fontView.show", json!({})), "");
-    assert_eq!(opened(&app), vec!["C".to_string()]);
+    assert_eq!(app.models.tabs.tabs.iter().map(|t| t.glyphs.join(" ")).collect::<Vec<_>>(), vec!["C".to_string()]);
 
     app.run_now(Msg::run("document.activate", json!({"index": 0})), false).unwrap();
     assert_eq!(
@@ -145,7 +163,7 @@ fn each_document_keeps_its_own_tabs() {
     );
     app.run_now(Msg::run("document.activate", json!({"index": 1})), false).unwrap();
     assert!(app.view.tabs.font_view_shows(), "the second document shows Font View again");
-    assert_eq!(opened(&app), vec!["C".to_string()]);
+    assert_eq!(app.models.tabs.tabs.iter().map(|t| t.glyphs.join(" ")).collect::<Vec<_>>(), vec!["C".to_string()]);
 
     app.run_now(Msg::run("file.close", json!({})), false).unwrap();
     assert_eq!(opened(&app), vec!["A B".to_string()], "closing the second document shows the first one's tabs");

@@ -99,7 +99,7 @@ mod tests {
     /// The panel shows in the default layout and reads the notepad of the master the canvas shows.
     #[test]
     fn the_model_reads_the_shown_master_notepad() {
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         let master = app.session.font().unwrap().masters[0].id.clone();
         app.session.execute("dimensions.setValue", &json!({"master": master, "key": "nV", "value": 90})).unwrap();
         app.drain();

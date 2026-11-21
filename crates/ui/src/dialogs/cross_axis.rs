@@ -438,7 +438,7 @@ mod tests {
         Arc::make_mut(&mut font.masters)[0].location = vec![400.0, 100.0];
         let mut session = Session::new();
         session.add_document(font, None).unwrap();
-        FontCraftApp::new(session, Arc::new(Host::builder(APP).build()))
+        FontCraftApp::with_edit_tab(session, Arc::new(Host::builder(APP).build()))
     }
 
     fn model(app: &FontCraftApp) -> CrossModel {
@@ -488,10 +488,10 @@ mod tests {
 
     #[test]
     fn window_cross_axis_mappings_needs_a_document() {
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         call(&mut app, "engine.execute", json!({"command": ID, "params": {}}));
         assert_eq!(call(&mut app, "ui.inspect", json!({}))["crossAxisMappings"]["mappings"], json!([]));
-        let mut empty = FontCraftApp::new(Session::new(), Arc::new(Host::builder(APP).build()));
+        let mut empty = FontCraftApp::with_edit_tab(Session::new(), Arc::new(Host::builder(APP).build()));
         assert!(control::dispatch(&mut empty, "engine.execute", &json!({"command": ID, "params": {}})).is_err(), "no document, no window");
         assert!(!empty.view.cross_axis.open);
     }

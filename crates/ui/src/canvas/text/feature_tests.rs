@@ -37,7 +37,7 @@ fn items(app: &FontCraftApp) -> Value {
 
 /// Glyphs `zz`, `yy`, `zz.sc` and `zz_yy` with smcp and liga features, compiled, and the text `zz zz yy` typed by name.
 fn compiled_app() -> FontCraftApp {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     for name in ["zz", "yy", "zz.sc", "zz_yy"] {
         run(&mut app, "glyph.newGlyph", json!({"name": name, "width": 450}));
     }
@@ -80,7 +80,7 @@ fn features_shape_the_text_through_the_compiled_preview_font() {
 
 #[test]
 fn a_feature_on_before_any_compile_says_why_the_text_is_not_shaped() {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     post(&mut app, Msg::View(ViewMsg::SelectGlyph("A".into())));
     shell(&mut app, "editView.toggleFeature", json!({"tag": "ss01"}));
     assert_eq!(super::reply(&app)["features"]["active"], json!(["ss01"]));

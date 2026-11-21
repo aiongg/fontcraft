@@ -542,7 +542,7 @@ mod tests {
 
         use crate::app::APP;
 
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         let console = |params: Value| Msg::Shell(CommandRef::with_params(CONSOLE_COMMAND, params));
         let line = "glyph.newGlyph {\"name\": \"a.alt\"}";
         app.sent.push(console(json!({})));

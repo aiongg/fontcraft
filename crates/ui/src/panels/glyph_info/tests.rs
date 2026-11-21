@@ -26,7 +26,7 @@ fn glyph_names(session: &Session) -> Vec<String> {
 
 #[test]
 fn glyph_info_shows_the_search_selects_rows_and_adds_them_as_the_command_does() {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     app.sent.push(command(json!({"query": "zhe", "sortBy": "unicode"})));
     app.drain();
     assert!(app.status.is_empty(), "{}", app.status);

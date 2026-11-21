@@ -31,7 +31,7 @@ fn temp(name: &str) -> PathBuf {
 }
 
 fn plain() -> FontCraftApp {
-    FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()))
+    FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()))
 }
 
 /// Masters Regular and m02 Bold; A drawn on the first; A–V −40 on the first and −70 on m02.

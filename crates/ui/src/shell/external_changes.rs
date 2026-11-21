@@ -393,7 +393,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("Test.glyphspackage");
-        let mut app = FontCraftApp::new(Session::new(), Arc::new(Host::builder(crate::app::APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::new(), Arc::new(Host::builder(crate::app::APP).build()));
         app.run_now(Msg::run("file.new", json!({})), false).unwrap();
         app.run_now(Msg::run("file.saveAs", json!({ "path": path })), false).unwrap();
         assert_eq!(check(&mut app), 0, "nothing changed yet");

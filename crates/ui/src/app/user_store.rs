@@ -89,7 +89,7 @@ mod tests {
     /// while nothing changes.
     #[test]
     fn stored_settings_load_at_open_and_changes_are_written() {
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         let store = Memory::default();
         app.user_store = Some(Box::new(store.clone()));
         load(&mut app);

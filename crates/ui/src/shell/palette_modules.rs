@@ -207,7 +207,7 @@ mod tests {
     /// filter with the form on the edited glyph, as one undo step.
     #[test]
     fn a_module_section_keeps_its_form_and_applies_the_filter() {
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         post(&mut app, Msg::View(ViewMsg::SelectGlyph("A".into()))).unwrap();
         install_filter(&mut app, SQUARE, "Square", "{}");
         install_filter(&mut app, SHIFT, "Shift", r#"{"dx": {"type": "number", "min": -100, "max": 100, "default": 10}}"#);

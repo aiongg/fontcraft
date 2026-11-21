@@ -22,7 +22,7 @@ fn shell(id: &str, params: Value) -> Msg {
 
 /// T and V in the right group T, e and o in the left group o; @T @o −80, A V −100, L T −60; the panel open.
 fn kern_app() -> FontCraftApp {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     app.sent.push(Msg::run("kerning.setRightGroup", json!({"glyphs": ["T", "V"], "group": "T"})));
     app.sent.push(Msg::run("kerning.setLeftGroup", json!({"glyphs": ["e", "o"], "group": "o"})));
     for (left, right, value) in [("@T", "@o", -80), ("A", "V", -100), ("L", "T", -60)] {
@@ -89,7 +89,7 @@ fn kerning_load_pair_list_and_step_pair_list_walk_the_rows() {
 
 #[test]
 fn kerning_auto_kern_pair_list_proposes_for_review_then_applies() {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     // n has 60 units each side; i 20: n i holds 80 of white against n n's 120.
     for (glyph, nodes, width) in [
         ("n", json!([{"x": 60, "y": 0}, {"x": 440, "y": 0}, {"x": 440, "y": 500}, {"x": 60, "y": 500}]), 500),

@@ -116,7 +116,7 @@ mod tests {
             s.execute("path.addRectangle", &json!({"glyph": "n", "layer": id, "x": 50, "y": 0, "width": width, "height": 500})).unwrap();
         }
         s.execute("path.addRectangle", &json!({"glyph": "o", "layer": ids[0], "x": 50, "y": 0, "width": 100, "height": 500})).unwrap();
-        FontCraftApp::new(s, Arc::new(Host::builder(APP).build()))
+        FontCraftApp::with_edit_tab(s, Arc::new(Host::builder(APP).build()))
     }
 
     /// Edits `glyph` on the first master, selects node 2 of path 0, and shows the second master: the selection then.

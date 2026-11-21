@@ -47,7 +47,7 @@ mod tests {
 
     /// A font with a 50-unit grid; with `edit`, the empty glyph `o` is shown on the canvas with the Pixel tool.
     fn app(edit: bool) -> FontCraftApp {
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         app.session.execute("glyph.newGlyph", &json!({"name": "o"})).ok();
         app.session.execute("font.settings.set", &json!({"gridSpacing": 50})).unwrap();
         if edit {

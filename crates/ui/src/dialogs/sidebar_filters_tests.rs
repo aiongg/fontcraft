@@ -18,7 +18,7 @@ use crate::control;
 use crate::dialogs::form;
 
 fn app() -> FontCraftApp {
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     app.session.execute("glyph.newGlyph", &json!({"name": "A"})).ok();
     app
 }

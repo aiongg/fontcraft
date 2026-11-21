@@ -16,7 +16,7 @@ use crate::app::{APP, FontCraftApp, Msg};
 /// A new font whose preview fonts build at once, on the calling thread; the Text Preview open.
 fn app() -> FontCraftApp {
     let host = Host::builder(APP).jobs(Arc::new(InlineJobs)).build();
-    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(host));
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(host));
     for (glyph, x) in [("A", 50), ("V", 100)] {
         exec(&mut app, "path.addRectangle", json!({"glyph": glyph, "x": x, "y": 0, "width": 400, "height": 700}));
     }

@@ -13,7 +13,8 @@
 //! Each open document has its own tab set. [`follow_document`] keeps [`EditTabs`] on the active document's set: when
 //! another document becomes active, the live tab's state goes back into its tab, the whole set is put away for its
 //! document ([`EditTabs`]'s `others`), and the new document's set comes back with its live tab made live again. A
-//! document shown for the first time opens with one Edit View tab; a closed document's set is dropped with it.
+//! window, and each document shown for the first time, opens on Font View with no Edit View tab, as the reference
+//! opens a font; a closed document's set is dropped with it.
 
 use std::collections::BTreeMap;
 
@@ -164,17 +165,9 @@ pub struct EditTabs {
 }
 
 impl Default for EditTabs {
-    /// A window opens with one Edit View tab, showing the font's first glyph.
+    /// A window opens on Font View with no Edit View tab.
     fn default() -> Self {
-        EditTabs {
-            tabs: vec![EditTab { id: 1, state: TabState::default() }],
-            active: Some(1),
-            live: Some(1),
-            closed: Vec::new(),
-            next_id: 2,
-            document: None,
-            others: BTreeMap::new(),
-        }
+        EditTabs { tabs: Vec::new(), active: None, live: None, closed: Vec::new(), next_id: 1, document: None, others: BTreeMap::new() }
     }
 }
 
@@ -373,6 +366,17 @@ fn open(app: &mut FontCraftApp, text: TabText) -> Result<(), String> {
     Ok(())
 }
 
+/// Adds a tab that shows the font's first glyph, as a tab with no state of its own does, and shows it: the start
+/// the tests of the edit view build on.
+#[cfg(test)]
+pub(crate) fn open_blank(app: &mut FontCraftApp) {
+    let tabs = &mut app.view.tabs;
+    let id = tabs.next_id;
+    tabs.next_id = tabs.next_id.saturating_add(1);
+    tabs.tabs.push(EditTab { id, state: TabState::default() });
+    show(app, Some(id));
+}
+
 /// Shows the tab `to` (`None`: Font View).
 pub(crate) fn show(app: &mut FontCraftApp, to: Option<u64>) {
     let to = to.filter(|id| app.view.tabs.index(*id).is_some());
@@ -437,10 +441,13 @@ pub(crate) fn follow_document(app: &mut FontCraftApp) -> bool {
     {
         tabs.others.insert(shown, kept);
     }
-    let back = active.and_then(|now| tabs.others.remove(&now)).unwrap_or_else(|| {
-        let id = tabs.next_id;
-        tabs.next_id = tabs.next_id.saturating_add(1);
-        DocumentTabs { tabs: vec![EditTab { id, state: TabState::default() }], active: Some(id), live: Some(id), closed: Vec::new(), master: None }
+    // A document shown for the first time opens on Font View.
+    let back = active.and_then(|now| tabs.others.remove(&now)).unwrap_or(DocumentTabs {
+        tabs: Vec::new(),
+        active: None,
+        live: None,
+        closed: Vec::new(),
+        master: None,
     });
     tabs.tabs = back.tabs;
     tabs.active = back.active.filter(|id| tabs.tabs.iter().any(|t| t.id == *id));

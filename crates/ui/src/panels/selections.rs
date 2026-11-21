@@ -106,7 +106,7 @@ mod tests {
     /// A stored selection is listed with what it misses, and Remove posts its removal.
     #[test]
     fn stored_selections_are_listed_and_remove_posts() {
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         app.sent.push(Msg::run("path.addRectangle", json!({"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200})));
         app.sent.push(Msg::run("edit.storeSelection", json!({"glyph": "A", "name": "corners", "points": [[0, 0], [0, 2]]})));
         app.sent.push(Msg::View(ViewMsg::SelectGlyph("A".into())));

@@ -149,7 +149,7 @@ mod tests {
         src.execute("path.addRectangle", &json!({"glyph": "A.loclTRK", "x": 0, "y": 0, "width": 200, "height": 200})).unwrap();
         src.execute("file.exportStatic", &json!({"destination": ttf})).unwrap();
 
-        let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         let path = ttf.to_string_lossy().to_string();
         app.sent.push(shell(json!({ "path": path })));
         app.sent.push(shell(json!({ "language": "trk" })));
