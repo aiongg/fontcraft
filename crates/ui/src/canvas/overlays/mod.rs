@@ -5,6 +5,7 @@
 //! |---|---|---|
 //! | [`guides`] | the grid, metric lines that parameters set, CJK and design grids | `grid` |
 //! | [`guides`] | local and global guides, their knobs and names, measurement guides' crossings | `guides` |
+//! | [`power_guides`] | guide thickness edges, guide markers, power guide rhombi and link lines | `powerGuides` |
 //! | [`audit`] | the segments, paths and areas audit results report | `auditHighlights` |
 //! | [`annotations`] | the edited layer's annotations | `annotations` |
 //! | [`aids`] | ghost outline, Tunni lines, tension, curve lengths, indexes, the metrics beam, the Lock Outline badge | `editAids` |
@@ -22,6 +23,7 @@ pub mod annotations;
 pub mod audit;
 pub mod autometer;
 pub mod guides;
+pub mod power_guides;
 pub mod suggest;
 pub mod tokens;
 

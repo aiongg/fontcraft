@@ -327,7 +327,7 @@ pub fn grid_shapes(cx: &PaintCx<'_>) -> Drawn {
 }
 
 /// A guide colour written `r,g,b,a` with numbers from 0 to 1.
-fn parse_color(text: &str) -> Option<Color32> {
+pub(super) fn parse_color(text: &str) -> Option<Color32> {
     let parts: Vec<f64> = text.split(',').map(|p| p.trim().parse::<f64>().ok().filter(|v| (0.0..=1.0).contains(v))).collect::<Option<_>>()?;
     let byte = |v: f64| (v * 255.0).round() as u8;
     match parts.as_slice() {
@@ -337,7 +337,7 @@ fn parse_color(text: &str) -> Option<Color32> {
 }
 
 /// The part of the line through `at` along `dir` inside `rect`.
-fn clip(at: Pos2, dir: egui::Vec2, rect: Rect) -> Option<(Pos2, Pos2)> {
+pub(super) fn clip(at: Pos2, dir: egui::Vec2, rect: Rect) -> Option<(Pos2, Pos2)> {
     let (mut lo, mut hi) = (f32::NEG_INFINITY, f32::INFINITY);
     for (d, p, min, max) in [(dir.x, at.x, rect.left(), rect.right()), (dir.y, at.y, rect.top(), rect.bottom())] {
         if d.abs() < 1e-9 {

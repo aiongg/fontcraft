@@ -1090,7 +1090,13 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
         File through the opener; files dropped on the canvas and onto Font View tiles; Font View cell images. Left:
         PDF images draw as the kept-format marker (the new window does not render PDF pages), and cells draw from
         the decoded file shrunk to 4096 pixels rather than from cell-sized thumbnails.
-     6. Snapping suggestions, the reference font glyph and power guides drawn on the canvas.
+     6. Done (UI.44a to UI.44c): the tools' scene gets the View › Suggest switches, the declared stems that apply to
+        the edited glyph and the master's `suggestDistance`, and Suggest Distance's parallel outlines show near the
+        pointer while a drag runs (`canvas/overlays/suggest.rs`); the Reference Font panel's glyph is drawn behind the
+        outline (`canvas/reference_font.rs`); guide thickness edges, guide markers, power guide rhombi and link lines
+        are drawn over the guides (`canvas/overlays/power_guides.rs`). Left: nothing the old window had; built in
+        neither window are centreline snapping on thick guides, snap lines at markers and a switch that hides link
+        lines.
      7. The Axis Mappings dialog (the Font Info button that opens it does nothing yet) and the Cross-Axis Mappings
         window with its Font menu row.
      8. The Primitive Measurements and Add Pixel Glyph follow-up dialogs.
