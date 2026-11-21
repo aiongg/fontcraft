@@ -127,6 +127,29 @@ fn feature_code_is_coloured_and_its_errors_underlined() {
     assert!(colors.len() > 1, "the keyword and the glyph names differ in colour: {colors:?}");
 }
 
+/// A snippet goes in place of the code field's selection, which the field keeps after the Snippets button takes the
+/// keyboard.
+#[test]
+fn a_snippet_replaces_the_selected_code() {
+    let mut model = features_model();
+    model.features.snippets.built_in = vec!["Ligature".into()];
+    let (mut fixture, posted) = panel(model);
+    let code = fixture.by_label("Feature Code").expect("the code field");
+    fixture.click(&code).key(Key::A, Modifiers::COMMAND).settle();
+    let button = fixture.by_label("Snippets").expect("the Snippets button");
+    fixture.click(&button).settle();
+    let snippet = fixture.by_label("Ligature").expect("the snippet");
+    fixture.click(&snippet).settle();
+    let insert = posted.borrow().iter().find(|m| m.command_id() == Some("font.features.insertSnippet")).cloned();
+    assert_eq!(
+        insert,
+        Some(Msg::run(
+            "font.features.insertSnippet",
+            json!({ "kind": "feature", "name": "ss01", "index": 1, "snippet": "Ligature", "position": 0, "end": 11 })
+        ))
+    );
+}
+
 /// Typed code is committed with `font.features.setCode` when the field loses the keyboard; the automatic box, a Fix
 /// button and a stylistic set name post their commands.
 #[test]

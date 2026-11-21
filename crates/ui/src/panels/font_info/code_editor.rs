@@ -6,6 +6,8 @@
 //! | the code | `font.features.setCode` when the field loses the keyboard and the text changed; read-only for an automatic entry |
 //! | a diagnostic's Fix button | `font.features.applyFix {error, fix}` |
 //!
+//! The field's last selection goes back to the Features tab, whose snippets menu puts a snippet in its place.
+//!
 //! The diagnostics show only while the font is unchanged since the compile (`font.features.listErrors`).
 //!
 //! The code is coloured by the classes the feature parser's highlighter gives (`fontInfo.features.syntaxColouring`),
@@ -21,7 +23,7 @@ use craft::ui::layout_components::Row;
 use craft::ui::runtime::env::Env;
 use craft::ui::style::UiTokens;
 use craft::ui::text::TextField;
-use craft_ext::ui::text::{Highlight, HighlightText as _};
+use craft_ext::ui::text::{FieldSelection as _, Highlight, HighlightText as _, TextSelection};
 use egui::Color32;
 use egui::Ui;
 use fontcraft_engine::features::edit::{HighlightKind, highlight};
@@ -44,8 +46,16 @@ craft::ui::words! {
 /// Lines the code field shows.
 const CODE_LINES: usize = 18;
 
-/// Draws the code field and the diagnostics of `entry`; the messages to post.
-pub fn view(ui: &mut Ui, entry: &EntryPane) -> Vec<Msg> {
+/// What the code editor reports.
+pub struct CodeOut {
+    /// The messages to post.
+    pub sent: Vec<Msg>,
+    /// The code field's last selection, in characters of the stored code.
+    pub selection: Option<TextSelection>,
+}
+
+/// Draws the code field and the diagnostics of `entry`.
+pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
     let words = Env::of(ui).words::<CodeEditorWords>();
     let key = &entry.key;
     let mut sent = Vec::new();
@@ -60,6 +70,7 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> Vec<Msg> {
     let out = field.show(ui);
     let env = Env::of(ui);
     out.highlight_text(ui, |text| runs(text, &entry.code, &entry.diagnostics, &env.tokens));
+    let selection = out.last_selection(ui.ctx()).and_then(|s| s.within(entry.code.chars().count()));
     if let Some(text) = out.events.committed()
         && !entry.automatic
         && *text != entry.code
@@ -78,7 +89,7 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> Vec<Msg> {
             }
         });
     }
-    sent
+    CodeOut { sent, selection }
 }
 
 /// Most diagnostics underlined at once.

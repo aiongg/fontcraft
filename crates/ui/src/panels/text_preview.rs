@@ -8,7 +8,7 @@
 //! | Pin | `textPreview.togglePinned` |
 //! | Find | `textPreview.find {open}`: the find bar, with replace and its options |
 //! | text field | `textPreview.setText` on every change (texts up to [`FIELD_LIMIT`] characters) |
-//! | context menu of the text | `textPreview.setLayoutOrientation`, `textPreview.setWritingDirection {scope: "text"}` |
+//! | context menu of the text | `textPreview.setLayoutOrientation`, `textPreview.setWritingDirection {scope: "text"}`, and `{scope: "selection", range}` over the text field's last selection |
 //!
 //! The text area reports its line length and the lines in view (`ViewMsg::TextPreviewArea`) when they leave what the
 //! projection placed; the projection (`app::models::text_preview`) lays the text out, shapes it and places the
@@ -29,6 +29,7 @@ use craft::ui::primitives::TextureCache;
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::{Env, Label};
 use craft::ui::text::TextField;
+use craft_ext::ui::text::{FieldSelection as _, TextSelection};
 use egui::{Align2, Color32, ColorImage, FontId, Pos2, Rect, Sense, TextureOptions, Ui, pos2, vec2};
 use fontcraft_geom::{Affine, BezPath};
 use fontcraft_render::color::composite;
@@ -79,6 +80,7 @@ craft::ui::words! {
         default_direction: "fontcraftTextPreview.defaultDirection" = "Default";
         ltr: "fontcraftTextPreview.ltr" = "Left to Right";
         rtl: "fontcraftTextPreview.rtl" = "Right to Left";
+        selection_direction: "fontcraftTextPreview.selectionDirection" = "Selection Direction";
     }
 }
 
@@ -104,7 +106,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
         if model.find.open {
             find_bar(ui, model, &words, sent);
         }
-        text_field(ui, model, &words, sent);
+        let selection = text_field(ui, model, &words, sent);
         if !model.font {
             Text::new(words.no_font.clone()).shade(Shade::Muted).show(ui);
             return;
@@ -112,7 +114,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
         if let Some(message) = &model.message {
             Text::new(message.clone()).shade(Shade::Muted).show(ui);
         }
-        area(ui, model, &words, sent);
+        area(ui, model, &words, selection, sent);
     });
 }
 
@@ -200,11 +202,12 @@ fn find_bar(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, sen
     });
 }
 
-fn text_field(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, sent: &mut Vec<Msg>) {
+/// Shows the text field; returns its last selection when it selects characters of the text.
+fn text_field(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, sent: &mut Vec<Msg>) -> Option<TextSelection> {
     if model.length > FIELD_LIMIT {
         let note = words.too_long.fill(&[("length", grouped(model.length).as_str()), ("limit", grouped(FIELD_LIMIT).as_str())]);
         Text::new(note).shade(Shade::Muted).show(ui);
-        return;
+        return None;
     }
     let out = TextField::new(words.text.clone(), Bind::given(model.text.to_string())).lines(FIELD_LINES).limit(FIELD_LIMIT).show(ui);
     if let Some(text) = out.events.value()
@@ -212,6 +215,7 @@ fn text_field(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, s
     {
         sent.push(shell("textPreview.setText", json!({ "text": text })));
     }
+    out.last_selection(ui.ctx()).and_then(|s| s.within(model.length)).filter(|s| !s.is_empty())
 }
 
 /// Where the text sits on the screen: a layout point (x, y) is at (`ax` + x·`scale`, `ay` − y·`scale`).
@@ -237,7 +241,7 @@ fn color(c: Rgba) -> Color32 {
     Color32::from(Srgba::from(c))
 }
 
-fn area(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, sent: &mut Vec<Msg>) {
+fn area(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, selection: Option<TextSelection>, sent: &mut Vec<Msg>) {
     let env = Env::of(ui);
     let pad = env.tokens.space.pad.regular;
     let colors = &env.tokens.color;
@@ -298,7 +302,7 @@ fn area(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, sent: &
         for c in page.fallback.iter().filter(|c| lines.contains(&c.line)) {
             painter.text(place.screen(c.x, c.y), Align2::CENTER_CENTER, c.c, FontId::proportional(model.size as f32), fallback);
         }
-        context_menu(ui, model, words, &response, sent);
+        context_menu(ui, model, words, selection, &response, sent);
     });
     if let Some((first, last)) = seen {
         let wanted = Area { span, first, last, ppp, ink: ink_rgba };
@@ -363,7 +367,16 @@ fn fill(ui: &Ui, page: &Page, place: Placement, clip: Rect, lines: &std::ops::Ra
     painter.image(texture, clip, Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0)), Color32::WHITE);
 }
 
-fn context_menu(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, response: &egui::Response, sent: &mut Vec<Msg>) {
+/// The text's context menu: its orientation, the direction of the whole text, and the direction of the run the text
+/// field selects (`selection`, in characters), offered while the field selects characters.
+fn context_menu(
+    ui: &mut Ui,
+    model: &TextPreviewModel,
+    words: &TextPreviewWords,
+    selection: Option<TextSelection>,
+    response: &egui::Response,
+    sent: &mut Vec<Msg>,
+) {
     let orientations = [(Orientation::Horizontal, &words.horizontal), (Orientation::Vertical, &words.vertical)];
     let directions = [(BaseDirection::Default, &words.default_direction), (BaseDirection::Ltr, &words.ltr), (BaseDirection::Rtl, &words.rtl)];
     let mut entries = vec![Entry::heading(words.orientation.clone())];
@@ -371,12 +384,21 @@ fn context_menu(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords,
     entries.push(Entry::separator());
     entries.push(Entry::heading(words.writing_direction.clone()));
     entries.extend(directions.iter().map(|(d, label)| Entry::new(format!("d:{}", d.name()), (*label).clone()).checked(model.direction == *d)));
+    entries.push(Entry::separator());
+    entries.push(Entry::heading(words.selection_direction.clone()));
+    entries.extend(directions.iter().map(|(d, label)| Entry::new(format!("s:{}", d.name()), (*label).clone()).enabled(selection.is_some())));
     let menu = Menu::context(words.menu.clone(), response).pick(ui, &entries);
     let Some(picked) = menu.picked else { return };
     if let Some(orientation) = picked.strip_prefix("o:") {
         sent.push(shell("textPreview.setLayoutOrientation", json!({ "orientation": orientation })));
     } else if let Some(direction) = picked.strip_prefix("d:") {
         sent.push(shell("textPreview.setWritingDirection", json!({ "scope": "text", "direction": direction })));
+    } else if let (Some(direction), Some(s)) = (picked.strip_prefix("s:"), selection) {
+        let range = s.range();
+        sent.push(shell(
+            "textPreview.setWritingDirection",
+            json!({ "scope": "selection", "direction": direction, "range": [range.start, range.end] }),
+        ));
     }
 }
 
@@ -391,6 +413,29 @@ mod tests {
 
     use super::*;
     use crate::shell::text_preview::FindState;
+
+    /// The text field reports its selection to the context menu, and keeps it once a menu or another control takes the
+    /// keyboard.
+    #[test]
+    fn the_text_fields_selection_outlives_its_focus() {
+        let model = TextPreviewModel { font: true, text: "AVAV".into(), length: 4, ..TextPreviewModel::default() };
+        let seen = Rc::new(RefCell::new(None));
+        let record = Rc::clone(&seen);
+        let mut f = Fixture::new(move |ui| {
+            let words = Env::of(ui).words::<TextPreviewWords>();
+            let mut sent = Vec::new();
+            *record.borrow_mut() = text_field(ui, &model, &words, &mut sent);
+            let _ = TextField::new("Other", Bind::given(String::new())).show(ui);
+        });
+        f.room(egui::Vec2::new(800.0, 600.0)).settle();
+        assert_eq!(*seen.borrow(), None, "nothing is selected before the field is used");
+        let field = f.by_label("Preview text").expect("the text field");
+        f.click(&field).key(egui::Key::A, egui::Modifiers::COMMAND).settle();
+        assert_eq!(seen.borrow().map(TextSelection::range), Some(0..4));
+        let other = f.by_label("Other").expect("the other field");
+        f.click(&other).settle();
+        assert_eq!(seen.borrow().map(TextSelection::range), Some(0..4), "the selection is kept for the menu");
+    }
 
     /// The Find toggle opens the find bar, the size field posts the size, and the area reports its line length.
     #[test]

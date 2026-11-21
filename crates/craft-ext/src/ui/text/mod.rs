@@ -5,8 +5,10 @@
 //! widget by the id craft derives for it ([`text_widget`]) and work on what that widget stores and paints.
 
 mod highlight;
+mod selection;
 
 pub use highlight::{Highlight, HighlightText, MAX_HIGHLIGHT_BYTES, MAX_HIGHLIGHTS, recoloured};
+pub use selection::{FieldSelection, TextSelection};
 
 use craft::behavior::PartKey;
 use craft::ui::runtime::memory;
