@@ -139,6 +139,10 @@ pub struct ViewState {
     pub overlay_fonts: crate::dialogs::overlay_fonts::OverlayState,
     /// The glyph the Shape Order panel was opened on (`shell::shape_order`).
     pub shape_order: crate::shell::shape_order::ShapeOrderView,
+    /// The open Axis Mappings dialog (`dialogs::axis_mappings`).
+    pub axis_mappings: crate::dialogs::axis_mappings::AxisMappingsState,
+    /// Whether the Cross-Axis Mappings window shows (`dialogs::cross_axis`).
+    pub cross_axis: crate::dialogs::cross_axis::CrossAxisState,
 }
 
 impl Default for ViewState {
@@ -183,6 +187,8 @@ impl Default for ViewState {
             preview: Default::default(),
             overlay_fonts: Default::default(),
             shape_order: Default::default(),
+            axis_mappings: Default::default(),
+            cross_axis: Default::default(),
         }
     }
 }
@@ -409,6 +415,9 @@ impl FontCraftApp {
                 Ok(reply)
             }
             Msg::Shell(command) => {
+                if let Some(get) = crate::shell::getters::find(&command.id) {
+                    return Ok(get(self));
+                }
                 if ask_files && self.picks.ask(&self.host, &self.session, &command) {
                     return Ok(json!({ "picker": true }));
                 }
@@ -471,6 +480,7 @@ impl FontCraftApp {
             ViewMsg::SidebarMenu(path) => self.view.sidebar.menu_row = path,
             ViewMsg::FeatureCompletion(ask) => self.view.font_info.features.completion = ask,
             ViewMsg::FeatureCaretPlaced => self.view.font_info.features.caret = None,
+            ViewMsg::FontViewSearchFocused => self.view.font_view.focus_search = false,
         }
         Ok(())
     }

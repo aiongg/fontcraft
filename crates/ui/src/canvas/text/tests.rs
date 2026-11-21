@@ -269,6 +269,33 @@ fn show_pair_in_edit_view_replaces_the_pair_at_the_current_glyph() {
 }
 
 #[test]
+fn step_group_member_walks_one_side_of_the_edited_pair_through_its_group() {
+    let mut app = grouped_app();
+    shell(&mut app, "editView.setText", json!({"glyphs": ["T", "o"]}));
+    shell(&mut app, "editView.setCursor", json!({"index": 1}));
+    let font = app.session.font().unwrap().clone();
+    let lefts: Vec<String> = fontcraft_spacing::kerning::members(&font, GroupSide::Left, "o").into_iter().map(str::to_string).collect();
+    let rights: Vec<String> = fontcraft_spacing::kerning::members(&font, GroupSide::Right, "T").into_iter().map(str::to_string).collect();
+    let after = |list: &[String], glyph: &str| {
+        let at = list.iter().position(|g| g == glyph).unwrap();
+        list[(at + 1) % list.len()].clone()
+    };
+    let o_next = after(&lefts, "o");
+    shell(&mut app, "kerning.stepGroupMember", json!({"side": "right"}));
+    assert_eq!((items(&app), get(&app)["cursor"].clone()), (json!(["T", o_next]), json!(1)), "the right glyph steps through its left group");
+    shell(&mut app, "kerning.stepGroupMember", json!({"side": "right", "direction": "previous"}));
+    assert_eq!(items(&app), json!(["T", "o"]), "previous goes back");
+    let t_next = after(&rights, "T");
+    shell(&mut app, "kerning.stepGroupMember", json!({"side": "left"}));
+    assert_eq!(items(&app), json!([t_next, "o"]), "the left glyph steps through its right group");
+    assert!(try_shell(&mut app, "kerning.stepGroupMember", json!({})).is_err(), "the side is required");
+    shell(&mut app, "editView.setText", json!({"glyphs": ["A", "V"]}));
+    shell(&mut app, "editView.setCursor", json!({"index": 1}));
+    assert!(try_shell(&mut app, "kerning.stepGroupMember", json!({"side": "left"})).is_err(), "A has no right group");
+    assert_eq!(items(&app), json!(["A", "V"]), "a refused step changes nothing");
+}
+
+#[test]
 fn view_show_group_members_draws_the_facing_groups_of_the_edited_pair() {
     let mut app = grouped_app();
     shell(&mut app, "editView.setText", json!({"glyphs": ["T", "o"]}));

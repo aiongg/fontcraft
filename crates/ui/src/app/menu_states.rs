@@ -9,6 +9,9 @@
 //! | Font View in front with glyphs selected | commands that act on selected nodes, paths, anchors… and not on whole glyphs | `edit a glyph and select … first` |
 //! | A glyph in the edit view | commands whose objects the canvas selection does not supply ([`item_state::supplies`]) | `select … first` |
 //!
+//! A selected placed image supplies the commands that take `image` (Move, Delete, the transformations), with or without
+//! other objects selected.
+//!
 //! Never greyed: commands that open a dialog when fired without parameters (the dialog asks for what is missing), the
 //! component pickers, the Edit menu's clipboard rows (a focused list or text mode takes them), and in text mode the
 //! Delete row.
@@ -43,6 +46,7 @@ pub const SWITCHES: &[&str] = &[
     "view.fillPreview",
     "view.showImage",
     "view.showMasterCompatibility",
+    "edit.keepLayerSelectionInSync",
     "view.showGroupMembers",
     "view.showHints",
     "view.showTunniLines",
@@ -102,6 +106,7 @@ fn greyed_key(app: &FontCraftApp) -> u64 {
     app.view.glyph.hash(&mut h);
     crate::canvas::text::text_mode(&app.view).hash(&mut h);
     app.tools.focus.hash(&mut h);
+    app.tools.image.hash(&mut h);
     serde_json::to_string(&app.tools.selection).unwrap_or_default().hash(&mut h);
     h.finish()
 }
@@ -115,6 +120,7 @@ pub fn greyed(app: &FontCraftApp) -> Vec<(&'static str, String)> {
     let font_view = app.font_view_targets();
     let canvas = if chosen && !font_view { scene_of(app) } else { None };
     let text_mode = crate::canvas::text::text_mode(&app.view);
+    let image = canvas.is_some() && crate::canvas::images::is_selected(app);
     let mut out = Vec::new();
     for spec in fontcraft_engine::cmd::command_specs() {
         if spec.menu.is_empty() || spec.targets.is_empty() || exempt(app, spec, text_mode) {
@@ -124,6 +130,8 @@ pub fn greyed(app: &FontCraftApp) -> Vec<(&'static str, String)> {
             Err(super::select_glyph_first(spec.id))
         } else if font_view {
             item_state::objects_wanted(spec).map_or(Ok(()), |what| Err(format!("edit a glyph and select {what} first")))
+        } else if image && crate::canvas::tools::targets::takes_param(spec, "image?: bool") {
+            Ok(())
         } else {
             canvas.as_ref().map_or(Ok(()), |(scene, selection)| item_state::supplies(scene, selection, spec))
         };
@@ -159,6 +167,7 @@ fn checked(app: &FontCraftApp, display: &mut Display, switches: &mut Switches, i
     let shows = |panel: PanelId| app.view.workspace.layout.panel_state(&panel) != PanelState::Hidden;
     Some(match id {
         "view.showMasterCompatibility" => app.view.display.master_compatibility,
+        "edit.keepLayerSelectionInSync" => app.view.display.keep_layer_selection_in_sync,
         "view.showHints" => app.view.display.hints,
         "view.showGroupMembers" => app.view.text.group_members,
         "view.showMeasurementLine" => app.view.text.measurement,

@@ -57,6 +57,8 @@ pub enum ViewMsg {
     FeatureCompletion(Option<crate::shell::font_info_tabs::CompletionAsk>),
     /// The feature code editor placed the caret a snippet left.
     FeatureCaretPlaced,
+    /// Font View's search field took the keyboard (`fontView.focusSearch`).
+    FontViewSearchFocused,
 }
 
 impl Msg {

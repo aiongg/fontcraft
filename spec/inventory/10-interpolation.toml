@@ -1027,7 +1027,7 @@ milestone = "M9"
 summary = "Toggle. While on, switching to another master keeps the corresponding nodes and shapes selected, matched by index. It has an effect only when the glyph's layers are compatible."
 ref = "Interpolation › Editing Multiple Masters › Keep Layer Selection in Sync"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs (carry_selection), run before the tools see each frame."
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/canvas/compatibility.rs (carry_selection), run before the tools see each frame; crates/ui/src/shell/compatibility.rs (carried), run when the tools' target layer changes."
 guesses = [
   "The selection is carried only from one master layer to another of the same glyph, when the glyph is compatible; nodes, shapes and anchors that resolve on the new layer are kept, guides and annotations are dropped. Settle by switching from a master to an intermediate layer with the option on.",
 ]
@@ -1478,7 +1478,7 @@ milestone = "M9"
 summary = "Three-pane editor opened by clicking the value of an Axis Mappings parameter: axes, the mapping table of the selected axis, and a graphical editor of the same points."
 ref = "Interpolation › Variable Font Options › Axis Mappings"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/dialogs/axis_mappings.rs, opened by axisMappings.showDialog (the font's mappings, or a variable font setting's). Every edit is one axisMappings.* command; the edits made while the dialog is open are previewed together as one command.batch, OK keeps them as one undo step and Cancel gives back the font it opened on. Repeated moves of one point merge into one step."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/dialogs/axis_mappings.rs (and the earlier window's crates/ui-egui/src/dialogs/axis_mappings.rs), opened by axisMappings.showDialog (the font's mappings, or a variable font setting's). Every edit is one axisMappings.* command; the edits made while the dialog is open are previewed together as one command.batch, OK keeps them as one undo step and Cancel gives back the font it opened on. Repeated moves of one point merge into one step. In the new window the graph only shows the points: a click on its line and dragging a point are not built there yet, so points are added with plus and moved with the Internal Coordinate and External Coordinate fields of the selected point, whose arrow keys step the value."
 guesses = [
   "The graph puts internal coordinates across and external ones up, so dragging a point up or down changes its external value; seeing the dialog would settle the orientation.",
   "A point dragged in the graph lands on a whole number; dragging a point in the reference app would show whether it keeps fractions.",

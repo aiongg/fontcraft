@@ -54,6 +54,8 @@ pub struct FontViewModel {
     pub sort: Option<Sort>,
     /// The search field's text.
     pub search: String,
+    /// The search field takes the keyboard on this pass.
+    pub focus_search: bool,
     /// The master the cells draw and the Components cell edits.
     pub master: Option<String>,
     /// The vertical extent a cell shows, in font units: the master's ascender and descender.
@@ -188,6 +190,7 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, fil
         columns: state.shown_columns(),
         sort: state.sort,
         search: state.search.query.clone(),
+        focus_search: state.focus_search,
         master: Some(master),
         ascender,
         descender,

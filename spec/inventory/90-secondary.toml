@@ -4495,7 +4495,7 @@ summary = "Edits mappings in which the position on one axis changes the effectiv
 ref = "Fontra reference › Font menu › Cross-axis mapping"
 status = "docs"
 origin = "fontra"
-notes = "Documented in the secondary reference's manual, not yet observed. Built (M13.48) as a window opened by `window.crossAxisMappings` (Font menu): the cards are a draft of the active font's mappings, written by Apply with `font.setCrossAxisMappings` as one undo step; Revert drops the draft."
+notes = "Documented in the secondary reference's manual, not yet observed. Built (M13.48) as a window opened by `window.crossAxisMappings` (Font menu): the cards are a draft of the active font's mappings, written by Apply with `font.setCrossAxisMappings` as one undo step; Revert drops the draft. The new window (crates/ui/src/dialogs/cross_axis.rs) has no Alt-click on a disclosure yet: each card opens and closes on its own."
 guesses = [
   "Edits collect in a draft that Apply writes, rather than each edit changing the font at once; watching the secondary reference's undo after editing a card would settle it.",
   "A new mapping starts with no axis ticked and each value at the default master's location; the secondary reference's new card would settle it.",
@@ -4507,7 +4507,7 @@ label = "Cross-Axis Mappings"
 menu = ["Font"]
 shortcut = ""
 kind = "ui"
-params = "{open?: bool (default true)} → {open, description?, mappings: [{description?, input, output}]}"
+params = "{open?: bool (default true)}; ui.inspect reports {open, description?, mappings: [{description?, input, output}]} under crossAxisMappings"
 area = "interpolation"
 milestone = "M13"
 summary = "Shows or hides the Cross-Axis Mappings window of the active font."

@@ -11,6 +11,7 @@
 //! | double press on a left group, or F2 | renames it in place; confirming asks `dialog.renameKerningGroup` |
 //! | secondary press on a group cell | asks `dialog.renameKerningGroup` for that side's group |
 //! | Delete, − button | `kerning.deletePairs` on the selected rows |
+//! | Show All Glyphs | `kerning.showAllGlyphs` on the current row: every glyph pair it covers in the edit view |
 //! | Clean Up, Compress | `kerning.cleanUp`, `kerning.compress` on the master shown |
 
 use std::borrow::Cow;
@@ -63,6 +64,8 @@ craft::ui::words! {
         right: "fontcraftKerningWindow.right" = "Right";
         empty: "fontcraftKerningWindow.empty" = "No kerning pairs";
         delete: "fontcraftKerningWindow.delete" = "Delete the selected pairs";
+        show_all: "fontcraftKerningWindow.showAll" = "Show All Glyphs";
+        show_all_tip: "fontcraftKerningWindow.showAllTip" = "Put every glyph pair the current row covers into the edit view";
         clean_up: "fontcraftKerningWindow.cleanUp" = "Clean Up";
         compress: "fontcraftKerningWindow.compress" = "Compress";
         count: "fontcraftKerningWindow.count" = "pairs";
@@ -329,6 +332,11 @@ fn footer(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowModel, s
             Some(error) => Text::new(error.clone()).show(ui),
             None => Text::new(counts_text(words, model)).shade(Shade::Muted).show(ui),
         };
+        if Button::new(words.show_all.clone()).tooltip(words.show_all_tip.clone()).enabled(current.is_some()).show(ui).clicked()
+            && let Some(row) = current
+        {
+            sent.push(shell("kerning.showAllGlyphs", pair_json(row)));
+        }
         if Button::new(words.clean_up.clone()).enabled(model.has_doc).show(ui).clicked() {
             sent.push(Msg::run("kerning.cleanUp", Value::Object(scope(model))));
         }

@@ -11,7 +11,7 @@ use serde_json::{Map, Value, json};
 use crate::app::FontCraftApp;
 
 /// Whether `spec`'s params doc names `param` among its parameters (not in its result, after `→`).
-fn takes_param(spec: &CommandSpec, param: &str) -> bool {
+pub(crate) fn takes_param(spec: &CommandSpec, param: &str) -> bool {
     spec.params.split('→').next().is_some_and(|given| given.contains(param))
 }
 

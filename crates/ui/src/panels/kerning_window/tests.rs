@@ -144,6 +144,30 @@ fn window_kerning_lists_filters_sorts_and_steps() {
     assert!(refused.contains("match"), "{refused}");
 }
 
+/// Show All Glyphs puts every glyph pair of the current row into the edit view's text, in place of the shown pair.
+#[test]
+fn show_all_glyphs_puts_every_pair_of_the_current_row_into_the_text() {
+    let mut app = app_over(kerned_session(-60.0));
+    ran(&mut app, shell("window.kerning", json!({"select": [{"left": "T", "right": "@o"}]})));
+    ran(&mut app, shell("kerning.showAllGlyphs", json!({})));
+    let font = app.session.font().unwrap().clone();
+    let space = font.glyphs.iter().find(|g| g.unicodes.contains(&0x20)).map(|g| g.name.clone());
+    let mut expected: Vec<String> = Vec::new();
+    for (j, member) in fontcraft_spacing::kerning::members(&font, fontcraft_spacing::kerning::GroupSide::Left, "o").into_iter().enumerate() {
+        if j > 0 {
+            expected.extend(space.clone());
+        }
+        expected.extend(["T".to_string(), member.to_string()]);
+    }
+    let text = &app.view.text;
+    let shown: Vec<String> = (0..text.text.len()).filter_map(|i| text.item_glyph(i).map(str::to_string)).collect();
+    assert!(shown.starts_with(&expected), "{shown:?} starts with {expected:?}");
+
+    app.sent.push(shell("kerning.showAllGlyphs", json!({"left": "T"})));
+    app.drain();
+    assert!(app.status.contains("both"), "one side alone is refused: {}", app.status);
+}
+
 /// The rename question answers All Pairs with scope font and This Pair with scope pair, with the name typed.
 #[test]
 fn the_rename_question_answers_with_the_scope_and_the_new_name() {

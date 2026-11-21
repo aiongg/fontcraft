@@ -56,6 +56,8 @@ pub struct Display {
     pub master_compatibility: bool,
     /// View › Show Image: placed images show (a side with no paths and no components shows its image regardless).
     pub image: bool,
+    /// Edit › Keep Layer Selection in Sync: another master of a compatible glyph keeps the canvas selection.
+    pub keep_layer_selection_in_sync: bool,
 }
 
 impl Default for Display {
@@ -76,6 +78,7 @@ impl Default for Display {
             hints: false,
             master_compatibility: false,
             image: true,
+            keep_layer_selection_in_sync: false,
         }
     }
 }

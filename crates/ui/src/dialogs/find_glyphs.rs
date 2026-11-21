@@ -140,12 +140,16 @@ const COMMANDS: &[UiCommand] = &[UiCommand {
     label: "Find…",
     menu: &["Edit", "Find"],
     shortcut: Some("Cmd+F"),
-    params: "{query?: string, mode?: \"name\" | \"unicode\" | \"all\", select?: [names], insert?: bool, open?: bool (default true)} show the Find Glyphs pop-up and search the font as glyph.search does (query and mode left out keep their value; a pop-up that opens starts with an empty query; a new search selects its first result); select picks results; insert puts the selected results, in list order, into the edit view's text at the cursor and closes the pop-up",
+    params: "{query?: string, mode?: \"name\" | \"unicode\" | \"all\", select?: [names], insert?: bool, open?: bool (default true)} show the Find Glyphs pop-up and search the font as glyph.search does (query and mode left out keep their value; a pop-up that opens starts with an empty query; a new search selects its first result); select picks results; insert puts the selected results, in list order, into the edit view's text at the cursor and closes the pop-up. Without parameters while Font View shows, it gives the keyboard to Font View's search field instead (fontView.focusSearch)",
 }];
 
 fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
     let empty = Map::new();
     let p = command.params.as_object().unwrap_or(&empty);
+    if p.is_empty() && app.font_view_shows() {
+        // In Font View, Find searches the glyphs shown there.
+        return crate::shell::font_view::focus_search(app);
+    }
     let string = |key: &str| -> Result<Option<&str>, String> {
         match p.get(key) {
             None | Some(Value::Null) => Ok(None),

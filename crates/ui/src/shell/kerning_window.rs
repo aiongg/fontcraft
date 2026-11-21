@@ -8,6 +8,7 @@
 //! | `kerning.resetFilter` | returns the search options to their defaults; the term stays |
 //! | `kerning.sortPairs {column, descending?}` | sorts the list by a column |
 //! | `kerning.selectNextPair`, `kerning.selectPreviousPair` | steps the selection through the listed rows |
+//! | `kerning.showAllGlyphs {left?, right?}` | puts every glyph pair the current row covers into the edit view's text |
 //! | `dialog.renameKerningGroup {side, from, to?, pair, master?, direction?}` | asks whether a group rename covers the font or the pair |
 //! | `dialog.pasteKerningConflict {text \| pairs, master?, direction?}` | pastes; when a pasted pair clashes with a stored one, asks what to do |
 //! | `dialog.auditKerningExceptions {threshold?, masters?, direction?, fix?}` | runs `kerning.auditExceptions` and shows what it found |
@@ -20,7 +21,10 @@
 use craft::ui::contract::PlainData;
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::WordSet as _;
+use fontcraft_engine::model::Font;
 use fontcraft_model::MAX_NAME_LEN;
+use fontcraft_spacing::kerning::{Position, facing, members};
+use fontcraft_textlayout::{Direction, Item, MAX_ITEMS};
 use serde_json::{Map, Value, json};
 
 use super::commands::{Module, UiCommand};
@@ -82,6 +86,13 @@ const COMMANDS: &[UiCommand] = &[
         menu: &[],
         shortcut: None,
         params: "{} select the Kerning window's row before the current one (none: the last; at the first: it stays)",
+    },
+    UiCommand {
+        id: "kerning.showAllGlyphs",
+        label: "Show All Glyphs",
+        menu: &[],
+        shortcut: None,
+        params: "{left?: name|\"@group\", right?: name|\"@group\" (default: the Kerning window's current row)} put every glyph pair the row covers into the edit view's text in place of the pair at the current glyph: each group side expands to all its members in glyph order, one line per left glyph, its pairs separated by the space glyph when the font has one; at most as many items as the text holds",
     },
     UiCommand {
         id: "dialog.renameKerningGroup",
@@ -327,6 +338,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
         }
         "kerning.selectNextPair" => step(app, true),
         "kerning.selectPreviousPair" => step(app, false),
+        "kerning.showAllGlyphs" => show_all(app, p),
         "dialog.renameKerningGroup" => rename(app, p),
         "dialog.pasteKerningConflict" => paste(app, p),
         "dialog.auditKerningExceptions" => audit(app, p),
@@ -445,6 +457,84 @@ fn step(app: &mut FontCraftApp, forward: bool) -> Result<(), String> {
 fn show_pair(app: &mut FontCraftApp, left: &str, right: &str) -> Result<(), String> {
     let params = json!({"left": left, "right": right});
     crate::canvas::text::commands::show_pair(app, params.as_object().ok_or("a pair is an object")?)
+}
+
+/// The glyphs a pair side covers: the glyph itself, or every member of the group on the side facing the pair.
+fn side_glyphs(font: &Font, direction: Direction, position: Position, side: &str) -> Result<Vec<String>, String> {
+    match side.strip_prefix('@') {
+        None => font.glyph(side).map(|g| vec![g.name.clone()]).ok_or_else(|| format!("the font has no glyph `{}`", quoted(side))),
+        Some(group) => {
+            let group_side = facing(direction, position);
+            let found: Vec<String> = members(font, group_side, group).into_iter().map(str::to_string).collect();
+            if found.is_empty() {
+                return Err(format!("no glyph has the {} kerning group `{}`", group_side.name(), quoted(group)));
+            }
+            Ok(found)
+        }
+    }
+}
+
+fn show_all(app: &mut FontCraftApp, p: &Map<String, Value>) -> Result<(), String> {
+    let side = |key: &str| match p.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) if !s.is_empty() => Ok(Some(s.clone())),
+        Some(_) => Err(format!("`{key}` must be a glyph name or @group")),
+    };
+    let (left, right) = match (side("left")?, side("right")?) {
+        (Some(l), Some(r)) => (l, r),
+        (None, None) => {
+            let current = app.view.kerning.current.clone().ok_or("select a pair in the Kerning window, or give left and right")?;
+            let (l, r) = split_id(&current);
+            (l.to_string(), r.to_string())
+        }
+        _ => return Err("give both `left` and `right`, or neither".into()),
+    };
+    let font = app.session.font().map_err(|e| e.to_string())?;
+    if !crate::canvas::text::shows_text(font, &app.view) {
+        crate::canvas::text::hold_shown_glyph(app);
+    }
+    let font = app.session.font().map_err(|e| e.to_string())?;
+    let direction = app.view.text.direction.layout();
+    let lefts = side_glyphs(font, direction, Position::First, &left)?;
+    let rights = side_glyphs(font, direction, Position::Second, &right)?;
+    let space = font.glyphs.iter().find(|g| g.unicodes.contains(&0x20)).map(|g| g.name.clone());
+    // Two glyphs a pair, a space between pairs, a line break between lines.
+    let per_line = rights.len().saturating_mul(2).saturating_add(if space.is_some() { rights.len().saturating_sub(1) } else { 0 });
+    let count = lefts.len().saturating_mul(per_line).saturating_add(lefts.len().saturating_sub(1));
+    if count > MAX_ITEMS {
+        let pairs = lefts.len().saturating_mul(rights.len());
+        return Err(format!("the row covers {pairs} glyph pairs, {count} items; the text holds at most {MAX_ITEMS}"));
+    }
+    let item = |name: &str| crate::canvas::text::commands::glyph_item(font, name);
+    let mut items = Vec::with_capacity(count);
+    for (i, l) in lefts.iter().enumerate() {
+        if i > 0 {
+            items.push(Item::LineBreak);
+        }
+        for (j, r) in rights.iter().enumerate() {
+            if j > 0
+                && let Some(s) = &space
+            {
+                items.push(item(s));
+            }
+            items.push(item(l));
+            items.push(item(r));
+        }
+    }
+    let mut next = app.view.text.clone();
+    let range = match next.edited_index() {
+        Some(i) if i > 0 && next.item_glyph(i - 1).is_some() => i - 1..i + 1,
+        _ => {
+            let c = next.text.cursor();
+            c..c
+        }
+    };
+    let start = range.start;
+    next.text.replace(range, items).map_err(|e| e.to_string())?;
+    next.text.set_cursor(start + 1);
+    app.view.text = next;
+    crate::canvas::text::follow(app);
+    Ok(())
 }
 
 fn rename(app: &mut FontCraftApp, p: &Map<String, Value>) -> Result<(), String> {
