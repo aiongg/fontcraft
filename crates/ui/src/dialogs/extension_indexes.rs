@@ -100,7 +100,7 @@ pub fn show(ui: &mut Ui, model: &IndexesModel, new_index: &mut String, sent: &mu
             if let Some(on) = check.show(ui).events.committed() {
                 let mut list = model.sources.clone();
                 if let Some(source) = list.get_mut(at) {
-                    source.automatic_updates = on;
+                    source.automatic_updates = *on;
                 }
                 write_sources(&list, sent);
             }

@@ -142,10 +142,15 @@ fn field_text(ui: &Ui, response: &Response) -> Option<(usize, TextShape)> {
     let rect = response.rect;
     ui.ctx().graphics(|layers| {
         let list = layers.get(response.layer_id)?;
-        list.all_entries().enumerate().rev().find_map(|(at, clipped)| match &clipped.shape {
-            Shape::Text(text) if rect.contains(text.pos) && !text.galley.job.text.is_empty() => Some((at, text.clone())),
-            _ => None,
-        })
+        // The paint list iterates forward only; the last match is the field's text.
+        list.all_entries()
+            .enumerate()
+            .filter_map(|(at, clipped)| match &clipped.shape {
+                Shape::Text(text) if rect.contains(text.pos) && !text.galley.job.text.is_empty() => Some((at, text)),
+                _ => None,
+            })
+            .last()
+            .map(|(at, text)| (at, text.clone()))
     })
 }
 
