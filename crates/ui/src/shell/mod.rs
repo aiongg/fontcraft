@@ -23,6 +23,7 @@ pub mod font_info;
 pub mod font_info_masters;
 pub mod font_info_tabs;
 pub mod font_view;
+pub mod getters;
 pub mod glyph_info;
 pub mod images;
 pub mod kerning_review;

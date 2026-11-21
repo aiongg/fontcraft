@@ -106,6 +106,24 @@ is checked for.
 (`interaction`, the label of a drag or an open dialog, else `null`) and the open dialog's id
 (`dialog`, else `null`).
 
+The craft window (`apps/fontcraft-next`) answers `ui.inspect` with camelCase keys. Beside `tool`, `glyph`,
+`panels`, `canvas`, `status`, `tabs`, `activeTab`, `editText` and the panels' own keys, it reports:
+
+| Key | Holds |
+|---|---|
+| `display` | the View toggles, by the names above: `nodes`, `nodesInBackground`, `extraNodes`, `metrics`, `metricsNames`, `info`, `background`, `guides`, `boundingBox`, `annotations`, `fillPreview`, `anchors`, `groupMembers`, `hints`, `masterCompatibility`, `keepLayerSelectionInSync`, `showImage` |
+| `switches` | every menu row that turns something on or off, by command id, and whether it is on (the row's check mark) |
+| `selectedGlyphs` | Font View's selection, in the order it was made |
+| `editing` | the edited glyph while an Edit View tab shows, else `null` |
+| `interaction` | the label of the interaction in progress (a drag, a previewing dialog), else `null` |
+| `dialog` | the open form dialog's id, else `null`; `ui.dialog.inspect` has its fields |
+| `transform` | the Transformations panel's settings, as `transform.getSettings` returns them |
+| `fontView` | Font View's state, as `fontView.getState` returns it |
+
+Five read-only commands return the same state through `engine.execute`: `editView.getText` (the `editText` reply),
+`editView.getFeatures` (the Features menu), `fontView.getState`, `transform.getSettings` and `view.getDisplayOptions`
+(`display` with the showing tab, zoom, centre, `palette`, `direction` and `previewFeatures`). They change nothing.
+
 ### Pointer and keys
 
 `ui.pointer` runs its events in order through the same path as the mouse: the active tool turns

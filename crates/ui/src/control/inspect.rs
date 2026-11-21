@@ -34,6 +34,7 @@ pub const INSPECT: &[Inspect] = &[
     crate::shell::tabs::inspect,
     crate::dialogs::axis_mappings::inspect,
     crate::dialogs::cross_axis::inspect,
+    crate::shell::getters::inspect,
 ];
 
 /// `{}` → `{tool, glyph, panels, canvas: {zoom, center, rect}, status, closing, unsaved, pendingInput}`, plus

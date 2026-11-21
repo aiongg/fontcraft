@@ -415,6 +415,9 @@ impl FontCraftApp {
                 Ok(reply)
             }
             Msg::Shell(command) => {
+                if let Some(get) = crate::shell::getters::find(&command.id) {
+                    return Ok(get(self));
+                }
                 if ask_files && self.picks.ask(&self.host, &self.session, &command) {
                     return Ok(json!({ "picker": true }));
                 }
