@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**3106 guesses on 1615 rows (645 of them live commands).**
+**3115 guesses on 1621 rows (647 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -114,6 +114,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `menus.optionRevealsAlternateItems` (behavior) | M3 | handbook | – | An alternate row shows its own command's label and shortcut, as native macOS alternate items do; the handbook names the alternates but not their labels. The observe step below settles it. |
 | `menus.switchCheckMarks` (behavior) | M3 | handbook | – | Every on/off switch shows a check mark, including Lock Outline, Power Nudge, Edit Background, Palette, Preview Panel and Font Audit; opening the reference app's View, Path and Window menus with each switch on and off settles which ones do. |
 | `menus.switchCheckMarks` (behavior) | M3 | handbook | – | View › Show Indexes shows a check mark while any kind of index is shown. Settled by turning on a single kind in the reference app and opening the View menu. |
+| `menus.greyedBySelection` (behavior) | M3 | inferred | – | With no glyph edited and nothing selected in Font View, every menu item whose command takes glyph targets is greyed out; opening the Path menu in the reference app's Font View with nothing selected settles it. |
+| `menus.greyedBySelection` (behavior) | M3 | inferred | – | In Font View with glyphs selected, a command that acts only on selected nodes or paths (Space Points, Make Parallel) is greyed out; the same menu with a glyph selected in Font View settles it. |
+| `menus.greyedBySelection` (behavior) | M3 | inferred | – | A command that opens a dialog stays enabled whatever the selection, since its dialog asks for what is missing; the Transform or Remove Overlap items with nothing selected settle it. |
 | `tools.sharedButtonCycling` (behavior) | M3 | handbook | – | Holding a shared toolbar button for 0.4 s opens its menu; the reference's hold time is not documented. |
 | `nodes.smoothAndCornerTypes` (behavior) | M3 | handbook | – | Selected nodes, handles and segments are drawn in orange; no source names the reference's selection colour. |
 | `selection.marqueeSelectsNodesAndHandles` (behavior) | M3 | handbook | – | A marquee selects the handles inside it whatever their node (03a question 7). |
@@ -249,6 +252,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `image.setTransform` | M11 | handbook | yes | Width and height are the displayed size in font units; rotation turns the image about its position point (its bottom-left corner before rotation), as the stored `pos`, `scale` and `angle` suggest. Settled by rotating an image in the reference's Info box and reading the saved file. |
 | `image.setCrop` | M11 | handbook | yes | The crop rectangle is in image pixels, measured from the image's bottom-left corner, as origin and size. Settled by cropping an image in the reference and reading `crop` in the saved file. |
 | `image.setCropToLayerBounds` | M11 | handbook | yes | The layer bounds are the rectangle from 0 to the advance width and from the master's descender to its ascender. Settled by Set Crop to Layer Bounds on an image larger than the glyph in the reference. |
+| `view.selectMaster` | M3 | handbook | yes | A Cmd+digit past the font's last master changes nothing and says so in the status line; settle by pressing Cmd+3 in a two-master font in the reference app. |
 | `editView.toggleFeature` | M8 | handbook | yes | A tag the last feature compile does not have is accepted and kept, and applies once a compile has it, so automation can turn a feature on before compiling; the reference app only offers compiled features in its menu, so nothing there settles it. |
 | `editView.clearFeatures` | M8 | handbook | yes | The dash also turns Localized Forms off; choosing the dash with Localized Forms on in the reference app would settle it. |
 | `editView.setLocalizedForms` | M8 | handbook | yes | The menu offers the script and language pairs the compiled locl feature is registered for, without the default language, in the compiled font's order; turned on without a pair, Localized Forms takes the first; the menu's entries in the reference app would settle it. |
@@ -330,6 +334,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `infoBox.component` (panel) | M6 | handbook | – | With several components selected the box describes the first in shape order and shows how many more are selected beside its name; the reference app with two components selected settles it. |
 | `infoBox.component` (panel) | M6 | handbook | – | A component whose transform is a matrix with slant that cannot be shown as scale and rotation shows only X and Y, the other fields empty and greyed out; a component with such a matrix in the reference app settles it. |
 | `infoBox.image` (panel) | M11 | handbook | – | Width and height are edited independently, without a proportion lock. Settled by typing a new width for a selected image in the reference's Info box and reading its height. |
+| `editView.bottomBar` (panel) | M3 | handbook | – | The controls share the window's status bar with the status text instead of a bar of their own under each tab; settle by looking at where the reference app's bottom bar ends and whether Font View has one. |
+| `editView.bottomBar` (panel) | M3 | handbook | – | The icons come from the framework's catalog: pilcrows for left to right and right to left, a vertical type mark for top to bottom, unlink, link and lock for the three kerning modes, an eye for the Preview Area; settle by comparing with the reference app's bottom bar. |
 | `editView.contextMenu` (panel) | M4 | handbook | – | The swatches open the glyph section of the menu as a Glyph Color submenu (Layer Color when Alt was held at the click). Settled by observation. |
 | `editView.contextMenu` (panel) | M4 | handbook | – | The glyph section offers Exports, Locked and Show Glyph in Font View, and the menu ends with Copy Glyph Names, as the Glyphs 3 video lists them; the other entries of that list follow with their milestones. Settled by observation. |
 | `editView.contextMenu` (panel) | M4 | handbook | – | Items that remove something (Delete Guide, Delete Hints, Clear Hints, Delete Instructions) show a danger tone, a trash icon in the error colour; the video shows no such mark, so it is ours. Settled by observation. |
@@ -359,6 +365,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 
 | Row | Milestone | Status | Live | Guess |
 |---|---|---|---|---|
+| `window.palette` | M3 | handbook | yes | With every Palette panel closed one at a time, Window › Palette opens the panels the default layout docks at the end edge; settle by closing the reference app's Palette sections one by one and choosing Window › Palette. |
 | `dimensions.getValues` | M3 | inferred | yes | The field keys per script come from the corpus files (Latin: HH, HV, OH, OV, nV, nd, oH, oV, tH; Arabic: arAlef, arBar); the reference does not document them. |
 | `fitCurve.setHandleLength` | M3 | inferred | yes | A handle's percentage is its length over the distance from its node to the intersection of the two handles, or the chord when the handles are parallel (Palette question 2). |
 | `fitCurve.increase` | M3 | inferred | yes | Plus moves to the next of the eight steps above the segment's mean percentage; the handbook gives no increment. |
@@ -384,6 +391,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `dimensions.perMaster` (behavior) | M3 | handbook | – | Values are stored under `GSDimensionPlugin.Dimensions` in the font's user data, one dictionary per master id, the key the corpus files use (Palette question 1). |
 | `fitCurve.percentRange` (behavior) | M3 | handbook | – | Without the `Fit Curve Panel Settings` parameter the range is 48 to 74 %, the handbook's example, and values beyond the range are clamped to it (Palette question 2). |
 | `transform.oppositeButtonsExact` (behavior) | M3 | handbook | – | Opposite buttons are exact for mirroring and quarter turns, through exact sines and cosines and grid rounding; other angles are undone only up to grid rounding (Palette question 5). |
+| `window.togglePanel` | M3 | inferred | no | The panel rows sit in a Panels submenu of the Window menu rather than in the Window menu itself, which keeps the windows the reference lists there apart; settle against the reference app's Window menu. |
+| `palette.dimensions` (panel) | M3 | handbook | – | In Font View the panel shows the notepad of the current master rather than the first master's; switching masters in Font View in the reference app with the Dimensions section open settles it. |
 | `palette.layers` (panel) | M3 | handbook | – | While a row is dragged, an accent-coloured line between rows shows where it will land, and the master row is outlined when a backup dropped there would replace the master layer. |
 | `palette.layers` (panel) | M3 | handbook | – | Dropping on a row's upper half puts the dragged row above it, on its lower half below it. |
 | `palette.layers` (panel) | M3 | handbook | – | A row that is not a backup, dropped on its own master's row, moves to the top of that master's rows. |

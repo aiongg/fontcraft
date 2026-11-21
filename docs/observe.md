@@ -32,13 +32,13 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1511 rows to check: 2607 guesses and 620 observe steps.**
+**1516 rows to check: 2615 guesses and 623 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **529** |
-| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 117 |
-| Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
+| **Built milestones (M0 to M6)** | all | **534** |
+| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 120 |
+| Built milestones (M0 to M6) | Edit View: text mode and preview | 33 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
 | Built milestones (M0 to M6) | Filters | 36 |
 | Built milestones (M0 to M6) | Spacing and metrics keys | 23 |
@@ -46,7 +46,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Font View | 113 |
 | Built milestones (M0 to M6) | Font Info and features | 20 |
 | Built milestones (M0 to M6) | Files: open, import, export | 49 |
-| Built milestones (M0 to M6) | Settings and the window | 8 |
+| Built milestones (M0 to M6) | Settings and the window | 9 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
 | **Later milestones (after M6)** | all | **982** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 89 |
@@ -65,9 +65,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
-## Built milestones (M0 to M6) (529)
+## Built milestones (M0 to M6) (534)
 
-### Edit View: drawing, guides, layers and the Palette (117)
+### Edit View: drawing, guides, layers and the Palette (120)
 
 - [ ] `dialog.fieldKeys` (behavior, M3, inferred): In a dialog's number field, Return takes the typed value, Escape drops…
   - Guess: Dialog number fields follow the Info box's editing and arrow-key rules (infoBox.fieldEditing, infoBox.arrowKeyStepping); the handbook documents them for the Info box only.
@@ -282,6 +282,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: With placements, the outlines of all glyphs are merged together, so two glyphs that overlap measure as one shape; a ruler across two kerned glyphs that collide would settle it.
 - [ ] `annotation.add` (M3, inferred, live): Add Annotation
   - Guess: New annotations get a text box 200 units wide, an arrow at 45° and a circle 100 units across; the handbook gives no defaults (03b question 11).
+- [ ] `editView.bottomBar` (panel, M3, handbook): Edit View bottom bar
+  - Guess: The controls share the window's status bar with the status text instead of a bar of their own under each tab; settle by looking at where the reference app's bottom bar ends and whether Font View has one.
+  - Guess: The icons come from the framework's catalog: pilcrows for left to right and right to left, a vertical type mark for top to bottom, unlink, link and lock for the three kerning modes, an eye for the Preview Area; settle by comparing with the reference app's bottom bar.
 - [ ] `measurement` (tool, M3, handbook): Measurement
   - Guess: The ruler's ends snap unless Ctrl is held, and Shift keeps it horizontal or vertical, whichever is nearer.
   - Guess: The ruler stays until the next press, Escape or a tool change (03b question 9).
@@ -308,6 +311,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In a new font without the Fit Curve Panel Settings parameter, open the Palette's Fit Curve section and read the two percentage fields.
 - [ ] `transform.oppositeButtonsExact` (behavior, M3, handbook): The buttons on either side of a value field are exact inverses…
   - Guess: Opposite buttons are exact for mirroring and quarter turns, through exact sines and cosines and grid rounding; other angles are undone only up to grid rounding (Palette question 5).
+- [ ] `window.palette` (M3, handbook, live): Palette
+  - Guess: With every Palette panel closed one at a time, Window › Palette opens the panels the default layout docks at the end edge; settle by closing the reference app's Palette sections one by one and choosing Window › Palette.
 - [ ] `dimensions.getValues` (M3, inferred, live): Get Dimensions
   - Guess: The field keys per script come from the corpus files (Latin: HH, HV, OH, OV, nV, nd, oH, oV, tH; Arabic: arAlef, arBar); the reference does not document them.
 - [ ] `fitCurve.applyStep` (M3, handbook, live): Fit Curve
@@ -349,6 +354,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `transform.setSettings` (M3, inferred, live): Set Transformation Values
   - Guess: The defaults, scale 110 % with the lock closed, rotation 90° and slant 10°, are ours; the tutorial video named in palette.transformations shows the second scale field greyed, which suggests a closed lock.
   - Guess: The limits are ours: a scale is non-zero and within ±1000000 %, a rotation within ±3600°, a slant strictly between -90° and 90°.
+- [ ] `palette.dimensions` (panel, M3, handbook): Dimensions
+  - Guess: In Font View the panel shows the notepad of the current master rather than the first master's; switching masters in Font View in the reference app with the Dimensions section open settles it.
 - [ ] `palette.layers` (panel, M3, handbook): Layers
   - Guess: While a row is dragged, an accent-coloured line between rows shows where it will land, and the master row is outlined when a backup dropped there would replace the master layer.
   - Guess: Dropping on a row's upper half puts the dragged row above it, on its lower half below it.
@@ -402,8 +409,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `components.swapBaseKeepsPlacement` (behavior, M6, inferred): Changing the glyph a component points to (component.setBaseGlyph, defined in the Edit…
   - Guess: Swapping the base glyph keeps the component's slot in the shape order, its transform, its alignment setting and its stored attachment anchor; swapping a component in the reference app settles it.
 
-### Edit View: text mode and preview (32)
+### Edit View: text mode and preview (33)
 
+- [ ] `view.selectMaster` (M3, handbook, live): Select Master
+  - Guess: A Cmd+digit past the font's last master changes nothing and says so in the status line; settle by pressing Cmd+3 in a two-master font in the reference app.
 - [ ] `text.lineWidth` (behavior, M5, handbook): Text in Edit View wraps at a preset maximum line width, which…
   - Guess: Lines wrap at 10,000 units unless the setting says otherwise; no source gives the default.
   - Guess: A line that overflows breaks after its last space, else before the glyph that overflows, and a space may hang past the width; wrapped text in the reference app settles it.
@@ -1556,7 +1565,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `compile.gdefLigatureCarets` (behavior, M6, docs): Ligature caret positions in GDEF come from anchors named caret_N (horizontal text,…
   - Guess: Carets at the same position are all kept, as fontc keeps them, where ufo2ft keeps one; a ligature with two carets at one position in the reference app's export would settle it.
 
-### Settings and the window (8)
+### Settings and the window (9)
 
 - [ ] `edit.undo` (M0, memory, live): Undo
   - Guess: The menu label and Cmd+Z are recalled from the reference, not read in a source.
@@ -1567,6 +1576,13 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `dialog.livePreview` (behavior, M3, inferred): A dialog is a form over its command's parameters
   - Guess: Every filter dialog previews its result live and OK keeps it as one undo step; a tutorial video shows this for Transformations only.
   - Guess: Dialogs remember their last values for the session, and their first values are ours (11-filters open questions).
+- [ ] `menus.greyedBySelection` (behavior, M3, inferred): A menu item whose command needs something the selection does not give…
+  - Guess: With no glyph edited and nothing selected in Font View, every menu item whose command takes glyph targets is greyed out; opening the Path menu in the reference app's Font View with nothing selected settles it.
+  - Guess: In Font View with glyphs selected, a command that acts only on selected nodes or paths (Space Points, Make Parallel) is greyed out; the same menu with a glyph selected in Font View settles it.
+  - Guess: A command that opens a dialog stays enabled whatever the selection, since its dialog asks for what is missing; the Transform or Remove Overlap items with nothing selected settle it.
+  - Observe: Open Font View with nothing selected and open the Path menu: note which items are greyed out.
+  - Observe: Select one glyph in Font View and open the Path menu: note whether Align Points › Space Points is greyed out.
+  - Observe: Open a glyph in Edit View with no node selected and open the Path menu: note which node items are greyed out.
 - [ ] `settings.get` (M4, inferred, live): Get Setting
   - Guess: Our own command; the reference has no headless access to settings, so there is nothing to settle.
 - [ ] `settings.set` (M4, inferred, live): Set Setting
