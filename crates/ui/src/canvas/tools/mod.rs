@@ -115,6 +115,19 @@ impl ParkedSelection {
     pub fn selection(&self) -> &Selection {
         &self.selection
     }
+
+    /// Keeps the selection on glyph `old` after it was renamed `new`.
+    pub fn rename_glyph(&mut self, old: &str, new: &str) {
+        rename_target(&mut self.target, old, new);
+    }
+}
+
+fn rename_target(target: &mut Option<Target>, old: &str, new: &str) {
+    if let Some(t) = target
+        && t.glyph == old
+    {
+        t.glyph = new.to_string();
+    }
 }
 
 impl Tools {
@@ -126,6 +139,11 @@ impl Tools {
         // A tab's image selection is not kept: the image is selected again with a click.
         self.image = false;
         ParkedSelection { selection: std::mem::replace(&mut self.selection, Selection::new()), focus: self.focus.take(), target: self.target.take() }
+    }
+
+    /// Keeps the selection on glyph `old` after it was renamed `new`.
+    pub fn rename_glyph(&mut self, old: &str, new: &str) {
+        rename_target(&mut self.target, old, new);
     }
 
     /// Puts a tab's selection back: the tab shows again.

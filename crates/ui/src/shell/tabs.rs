@@ -14,7 +14,8 @@
 //! another document becomes active, the live tab's state goes back into its tab, the whole set is put away for its
 //! document ([`EditTabs`]'s `others`), and the new document's set comes back with its live tab made live again. A
 //! window, and each document shown for the first time, opens on Font View with no Edit View tab, as the reference
-//! opens a font; a closed document's set is dropped with it.
+//! opens a font; File › Open then adds a tab per display string the file stores ([`upkeep`]). A closed document's set
+//! is dropped with it.
 
 use std::collections::BTreeMap;
 
@@ -29,6 +30,8 @@ use super::commands::{Module, UiCommand};
 use crate::app::{FontCraftApp, ViewState};
 use crate::canvas::text::TabText;
 use crate::canvas::tools::ParkedSelection;
+
+pub mod upkeep;
 
 pub const MODULE: Module = Module { commands: COMMANDS, run };
 
@@ -351,12 +354,7 @@ fn open(app: &mut FontCraftApp, text: TabText) -> Result<(), String> {
     if app.view.tabs.tabs.len() >= MAX_TABS {
         return Err(format!("at most {MAX_TABS} tabs can be open"));
     }
-    let glyph = text.text.current_glyph().map(str::to_string).or_else(|| {
-        text.text.items().iter().find_map(|item| match item {
-            Item::Glyph { name, .. } => Some(name.to_string()),
-            _ => None,
-        })
-    });
+    let glyph = first_glyph(&text);
     let state = TabState { glyph, text, master: app.view.layers.master.clone(), ..TabState::default() };
     let tabs = &mut app.view.tabs;
     let id = tabs.next_id;
@@ -364,6 +362,16 @@ fn open(app: &mut FontCraftApp, text: TabText) -> Result<(), String> {
     tabs.tabs.push(EditTab { id, state });
     show(app, Some(id));
     Ok(())
+}
+
+/// The glyph a tab with `text` opens on: the text's current glyph, else its first glyph.
+fn first_glyph(text: &TabText) -> Option<String> {
+    text.text.current_glyph().map(str::to_string).or_else(|| {
+        text.text.items().iter().find_map(|item| match item {
+            Item::Glyph { name, .. } => Some(name.to_string()),
+            _ => None,
+        })
+    })
 }
 
 /// Adds a tab that shows the font's first glyph, as a tab with no state of its own does, and shows it: the start

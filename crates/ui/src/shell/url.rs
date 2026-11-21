@@ -1,6 +1,5 @@
 //! The URL scheme in the window (`url.show`): runs the engine's `url.open`, then shows each file's document and the
-//! first glyph the URL lists for it. The last file's document ends up in front. The reference adds an Edit View tab
-//! with the listed glyphs; that part comes with the Edit View tabs.
+//! glyphs the URL lists for it in a tab of their own. The last file's document ends up in front.
 
 use craft::ui::runtime::commands::CommandRef;
 use serde_json::{Value, json};
@@ -30,6 +29,10 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
         if let Err(e) = app.apply_msg(Msg::run("document.activate", json!({ "index": index }))) {
             warnings.push(format!("{title}: {e}"));
             continue;
+        }
+        // A file the URL opened brings back its tabs from its display strings, before the URL's own tab.
+        if file.get("opened").and_then(Value::as_bool) == Some(true) {
+            warnings.extend(super::tabs::upkeep::open_display_strings(app));
         }
         // The file's glyphs open in a tab of their own.
         let glyphs: Vec<String> = file

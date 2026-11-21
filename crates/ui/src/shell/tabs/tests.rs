@@ -169,3 +169,86 @@ fn each_document_keeps_its_own_tabs() {
     assert_eq!(opened(&app), vec!["A B".to_string()], "closing the second document shows the first one's tabs");
     assert!(app.view.tabs.others.is_empty(), "the closed document's tabs are dropped");
 }
+
+/// File › Open opens a tab per display string behind Font View, a string over the item limit cut to it with a warning
+/// in the status line; saving writes the open tabs back, without an undo step or the modified mark.
+#[test]
+fn display_strings_open_as_tabs_and_saving_writes_the_open_tabs() {
+    let dir = std::env::temp_dir().join(format!("fontcraft-ui-display-strings-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("strings.glyphs").to_string_lossy().into_owned();
+    let mut session = Session::with_document();
+    let long = "A".repeat(10_050);
+    session
+        .edit("strings", |font| {
+            font.display_strings = Arc::new(vec!["HO/a".into(), long.clone()]);
+            Ok(())
+        })
+        .unwrap();
+    session.execute("file.saveAs", &json!({"path": path})).unwrap();
+
+    let mut app = FontCraftApp::new(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    app.run_now(Msg::run("file.open", json!({"path": path})), false).unwrap();
+    assert!(app.font_view_shows(), "Font View stays showing");
+    assert_eq!(app.view.tabs.tabs.len(), 2);
+    assert!(app.status.contains("10000"), "{}", app.status);
+    assert_eq!(app.models.tabs.tabs[0].glyphs, ["H", "O", "a"]);
+    assert_eq!(app.view.tabs.tabs[1].state.text.text.len(), fontcraft_textlayout::MAX_ITEMS);
+
+    assert_eq!(shell(&mut app, "view.closeTab", json!({"index": 3})), "");
+    assert_eq!(shell(&mut app, "view.newTab", json!({"glyphs": ["V", "A"]})), "");
+    assert!(!app.session.doc().unwrap().modified());
+    app.run_now(Msg::run("file.save", json!({})), false).unwrap();
+    assert!(app.session.doc().unwrap().history.undo.is_empty(), "storing the tabs makes no undo step");
+    assert_eq!(&*app.session.font().unwrap().display_strings, &["HO/a".to_string(), "VA".into()]);
+
+    let mut reopened = FontCraftApp::new(Session::new(), Arc::new(Host::builder(APP).build()));
+    reopened.run_now(Msg::run("file.open", json!({"path": path})), false).unwrap();
+    assert_eq!(reopened.models.tabs.tabs.iter().map(|t| t.glyphs.join(" ")).collect::<Vec<_>>(), ["H O a", "V A"]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A renamed glyph keeps its place in every tab; a removed glyph leaves the tabs: a tab left without glyphs closes and
+/// is not kept for Reopen Last Closed Tab, and a closed tab left without glyphs is forgotten.
+#[test]
+fn renamed_and_removed_glyphs_follow_into_the_tabs() {
+    let mut app = app();
+    for name in ["x.one", "x.two", "x.three"] {
+        app.run_now(Msg::run("glyph.newGlyph", json!({"name": name})), false).unwrap();
+    }
+    shell(&mut app, "view.newTab", json!({"glyphs": ["x.one", "x.two"]}));
+    shell(&mut app, "view.newTab", json!({"glyphs": ["x.three"]}));
+    shell(&mut app, "view.newTab", json!({"glyphs": ["x.two"]}));
+    shell(&mut app, "view.closeTab", json!({}));
+    shell(&mut app, "view.showTab", json!({"index": 3}));
+    assert_eq!((opened(&app), app.view.tabs.closed.len()), (vec!["x.one x.two".to_string(), "x.three".into()], 1));
+
+    app.run_now(Msg::run("glyph.rename", json!({"glyph": "x.one", "newName": "x.first", "updateInfo": false})), false).unwrap();
+    assert_eq!(opened(&app), vec!["x.first x.two".to_string(), "x.three".into()]);
+    assert_eq!(app.view.glyph.as_deref(), Some("x.first"), "the edited glyph follows its new name");
+
+    app.run_now(Msg::run("glyph.removeGlyph", json!({"glyphs": ["x.two"]})), false).unwrap();
+    assert_eq!(opened(&app), vec!["x.first".to_string(), "x.three".into()]);
+    assert!(app.view.tabs.closed.is_empty(), "the closed tab that held only x.two is forgotten");
+
+    app.run_now(Msg::run("glyph.removeGlyph", json!({"glyphs": ["x.three"]})), false).unwrap();
+    assert_eq!((opened(&app), app.view.tabs.position()), (vec!["x.first".to_string()], 3), "the showing tab stays");
+    app.run_now(Msg::run("glyph.removeGlyph", json!({"glyphs": ["x.first"]})), false).unwrap();
+    assert!(app.font_view_shows(), "the showing tab left without glyphs closes and Font View shows");
+    assert!(opened(&app).is_empty() && app.view.tabs.closed.is_empty());
+}
+
+/// The display strings of a file are read into tab texts at most up to the room left, cut to the item limit; a
+/// string that cannot be read opens no tab.
+#[test]
+fn display_string_conversion_cuts_long_strings_and_skips_bad_ones() {
+    let session = Session::with_document();
+    let font = session.font().unwrap();
+    let bad = format!("/{}", "n".repeat(300));
+    let (texts, warnings) = super::upkeep::tabs_from_display_strings(font, &["AB".into(), "A".repeat(20_000), bad], 10);
+    assert_eq!(texts.iter().map(|t| t.text.len()).collect::<Vec<_>>(), [2, fontcraft_textlayout::MAX_ITEMS]);
+    assert_eq!(warnings.len(), 2, "{warnings:?}");
+    let (texts, warnings) = super::upkeep::tabs_from_display_strings(font, &vec!["A".to_string(); 5], 3);
+    assert_eq!(texts.len(), 3);
+    assert_eq!(warnings, ["the document has 5 display strings; only the first 3 open as tabs"]);
+}

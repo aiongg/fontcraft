@@ -187,7 +187,10 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   put away for its document, and the new document's set comes back with its live tab made live. A window, and each
   document opened into it, opens on Font View with no Edit View tab; a closed document's tabs are dropped. Tests of
   the edit view start from `FontCraftApp::with_edit_tab` (and `TestApp`, which uses it): the app with one Edit View tab
-  showing the font's first glyph. Cmd+Alt+2 to Cmd+Alt+9 show tabs 2 to 9 (numbered shortcuts, below).
+  showing the font's first glyph. `shell/tabs/upkeep.rs` keeps the tabs in step with the document: File › Open (and a
+  URL that opens a file) adds a tab per display string behind Font View, Save and Save As write the open tabs into
+  the display strings first, and after each engine command renamed glyphs keep their places in the tabs and removed
+  glyphs leave them (a tab left without glyphs closes and is forgotten). Cmd+Alt+2 to Cmd+Alt+9 show tabs 2 to 9 (numbered shortcuts, below).
 - **Numbered shortcuts.** A shortcut that stands for a numbered series runs one command with the number as a
   parameter: Cmd+1 to Cmd+9 run `view.selectMaster {master}`, Cmd+Alt+2 to Cmd+Alt+9 run `view.showTab {index}`.
   `shell/numbered_keys.rs` lists them; `app::catalog` gives each its own catalog definition through
