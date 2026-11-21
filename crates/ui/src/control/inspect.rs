@@ -31,6 +31,7 @@ pub const INSPECT: &[Inspect] = &[
     crate::shell::font_audit::inspect,
     crate::shell::kerning_tools::inspect,
     crate::shell::shape_order::inspect,
+    crate::shell::tabs::inspect,
 ];
 
 /// `{}` → `{tool, glyph, panels, canvas: {zoom, center, rect}, status, closing, unsaved, pendingInput}`, plus

@@ -163,6 +163,23 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   `OverlayData`, which layers read as `PaintCx::overlays`; their switches are `shell/overlays.rs`. Reporter module
   drawings are read the same way (`canvas/reporters.rs`) and paint as `reportersBack` and `reportersFront`. A text note is
   typed in a field over its box (`canvas/annotation_editor.rs`).
+- **Edit View tabs.** The document area (`PanelId::Document`, a canvas group the host draws in
+  `Panels::group_view`) shows craft's `DocumentTabs` strip over its body (`panels/tab_strip.rs`, model
+  `models.tabs`): Font View first and not closable, then one tab per Edit View tab, titled by its first glyphs. The
+  body is Font View while its tab shows, else the canvas. Font View is a tab of this strip and no dock panel, as in
+  the reference, where Cmd+Alt+1 shows it as the first tab; tabs in the dock would have needed a `PanelId` per tab
+  and would let a tab dock beside another, which the reference does not do. `ViewState::tabs`
+  (`shell/tabs.rs`, `EditTabs`) holds the tabs, the showing one (`None`: Font View) and the closed ones (at most
+  `MAX_CLOSED_TABS`; at most `MAX_TABS` open). The edit-view fields of `ViewState` (`glyph`, `canvas`, `text`'s text,
+  layout options and features, `layers`' master, picked layers and row selection, `edit_background`,
+  `preview.area_open`) and the selection in `FontCraftApp::tools` are the *live* tab's: the showing tab, or while
+  Font View shows, the tab shown last. The other tabs keep their copy in `EditTab::state`, and `tabs::show` swaps
+  the two, so projections, the canvas and the tools read the live fields and never look at tabs. Code that opens
+  glyphs for editing calls `tabs::edit_glyphs` (the tab holding exactly those glyphs, else a new one),
+  `tabs::open_glyphs` (always a new tab) or `tabs::show_glyph` (the live tab); `app.font_view_shows()` says whether
+  Font View is the showing tab. A window opens with one Edit View tab. The tabs belong to the window, not to the
+  active document. Cmd+Alt+2 to Cmd+Alt+9 are not bound yet: craft's catalog takes one definition per command id
+  and its bindings carry no parameters.
 - **Tools.** The slot holds `canvas::tools::bridge::ToolBridge`. It posts the canvas's press, drags,
   hover and keys as `Msg::Tool`; `drain` runs `fontcraft_tools::Toolbox` on them
   (`canvas/tools/apply.rs`) and applies its answer before the next message, so each event sees what
