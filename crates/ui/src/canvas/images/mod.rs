@@ -12,8 +12,9 @@
 //!   Text mode draws none.
 //! - An iColor or svg layer's image is the layer's colour drawing (`canvas::color`), not drawn here.
 //! - A file that is missing or cannot be read is drawn as the missing-image marker: a square with a cross at the
-//!   image's position. A format kept as a reference but not decoded (PSD, SVG, PDF) is the same square with the
-//!   format's name. A large file being decoded draws nothing until it lands ([`files`]).
+//!   image's position. A format kept as a reference but not decoded (PSD, SVG) is the same square with the format's
+//!   name. A PDF is drawn from its first page, one point per unit of its own space. A large file or a PDF being
+//!   decoded draws nothing until it lands ([`files`]).
 //!
 //! Selection and gestures (geometry in `fontcraft_tools::image`), seen before the toolbox ([`pointer`], [`key`]):
 //! - A press with the Select tool on the image, where no node, segment, anchor, component or guide lies, selects the

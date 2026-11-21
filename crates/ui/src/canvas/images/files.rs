@@ -4,11 +4,16 @@
 //!   `fontcraft_imagery` within its limits ([`imagery::MAX_FILE_BYTES`], [`imagery::MAX_SIDE`],
 //!   [`imagery::MAX_PIXELS`]).
 //! - A file's header is read first ([`HEADER_BYTES`]): it gives the format and the pixel size, so a file that is too
-//!   large, a format kept as a reference only (PSD, SVG, PDF) and a file that cannot be read are known without
-//!   decoding anything.
-//! - A file of at most [`SYNC_PIXELS`] pixels is decoded when it is first asked for. A larger one is decoded on the
-//!   host's jobs (a thread on the desktop, at once on the web and in tests with inline jobs), at most [`MAX_JOBS`] at
-//!   a time; until it lands it is [`Loaded::Pending`] and the window is woken when it does.
+//!   large, a format kept as a reference only (PSD, SVG) and a file that cannot be read are known without decoding
+//!   anything.
+//! - A PDF's first page is drawn by `fontcraft_io_pdf`, whose limits on file size, streams, decompression, operators
+//!   and drawing work run before and while it parses. The page is drawn once per file and read revision, at
+//!   [`PDF_PIXELS_PER_POINT`] and at most [`MAX_KEPT_SIDE`] pixels on a side, never per frame. Its size in the
+//!   image's own space is the page's size in whole points, as the engine measures it, so a PDF lands at one point
+//!   per font unit.
+//! - A file of at most [`SYNC_PIXELS`] pixels is decoded when it is first asked for. A larger one, and every PDF, is
+//!   decoded on the host's jobs (a thread on the desktop, at once on the web and in tests with inline jobs), at most
+//!   [`MAX_JOBS`] at a time; until it lands it is [`Loaded::Pending`] and the window is woken when it does.
 //! - Decoded pixels are kept shrunk to at most [`MAX_KEPT_SIDE`] on the longer side, by a whole factor. The cache
 //!   holds at most [`MAX_FILES`] files and [`MAX_FILE_BYTES`] bytes of pixels; past either it empties.
 //! - A file is read again when the window gets the focus back ([`ImageFiles::reread`]), so a changed or restored file
@@ -33,6 +38,8 @@ pub const MAX_KEPT_SIDE: u32 = 4096;
 pub const MAX_FILES: usize = 1024;
 /// Most bytes of decoded pixels kept; past it the cache empties.
 pub const MAX_FILE_BYTES: usize = 512 << 20;
+/// Pixels per point a PDF page is drawn at, lowered for a page that would pass [`MAX_KEPT_SIDE`].
+pub const PDF_PIXELS_PER_POINT: f64 = 4.0;
 
 /// Decoded pixels shared between the cache and what the canvas draws. Two are equal when they are the same buffer, so
 /// comparing view data never compares pixels.
@@ -54,7 +61,7 @@ impl std::fmt::Debug for Pixels {
 /// What the cache knows of a file.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Loaded {
-    /// Its pixels (possibly shrunk) and its size in pixels as stored.
+    /// Its pixels (possibly shrunk) and its size in its own space: pixels as stored, or a PDF page's whole points.
     Ready { pixels: Pixels, size: [u32; 2] },
     /// Being decoded on a job; the size comes from its header.
     Pending { size: [u32; 2] },
@@ -178,8 +185,10 @@ impl ImageFiles {
             }
         };
         let pixels = u64::from(header.width) * u64::from(header.height);
+        // A PDF's size is known once its page is parsed, on the job.
         let size = [header.width, header.height];
-        if pixels <= SYNC_PIXELS || host.is_none() {
+        let small = header.format != ImageFormat::Pdf && pixels <= SYNC_PIXELS;
+        if small || host.is_none() {
             let loaded = decode(assets.as_ref(), path);
             self.keep(path.to_string(), revision, loaded.clone());
             return loaded;
@@ -215,6 +224,9 @@ fn head(assets: &dyn AssetStore, path: &str) -> Result<imagery::ImageInfo, Loade
     let bytes = assets.read_head(path, HEADER_BYTES).map_err(|e| Loaded::Failed(e.to_string()))?;
     let info = imagery::sniff(&bytes).map_err(|e| Loaded::Failed(e.to_string()))?;
     let size = (info.width > 0 && info.height > 0).then_some([info.width, info.height]);
+    if info.format == ImageFormat::Pdf {
+        return Ok(info);
+    }
     if !info.format.decodable() {
         return Err(Loaded::Unsupported { format: info.format, size });
     }
@@ -231,6 +243,11 @@ pub fn decode(assets: &dyn AssetStore, path: &str) -> Loaded {
         Ok(b) => b,
         Err(e) => return Loaded::Failed(e.to_string()),
     };
+    // A PDF may be larger than the pixel formats' limit; its own limits are io-pdf's.
+    let start = bytes.get(..bytes.len().min(HEADER_BYTES)).unwrap_or_default();
+    if imagery::sniff(start).is_ok_and(|info| info.format == ImageFormat::Pdf) {
+        return pdf(&bytes);
+    }
     if bytes.len() > imagery::MAX_FILE_BYTES {
         return Loaded::Failed(format!("the file is larger than {} bytes", imagery::MAX_FILE_BYTES));
     }
@@ -249,6 +266,25 @@ pub fn decode(assets: &dyn AssetStore, path: &str) -> Loaded {
         }
         Ok(_) => Loaded::Failed("the decoded image has the wrong number of pixels".into()),
         Err(e) => Loaded::Failed(e.to_string()),
+    }
+}
+
+/// The first page of the PDF in `bytes`, drawn within `fontcraft_io_pdf`'s limits.
+fn pdf(bytes: &[u8]) -> Loaded {
+    let (w, h) = match fontcraft_io_pdf::page_size(bytes) {
+        Ok(size) => size,
+        Err(e) => return Loaded::Failed(format!("the PDF page cannot be read: {e}")),
+    };
+    let side = |v: f64| v.round().clamp(1.0, f64::from(u32::MAX)) as u32;
+    let size = [side(w), side(h)];
+    let longest = w.max(h);
+    let fit = f64::from(MAX_KEPT_SIDE) / longest;
+    let ppp = if fit.is_finite() && fit > 0.0 { PDF_PIXELS_PER_POINT.min(fit) } else { PDF_PIXELS_PER_POINT };
+    let max_pixels = u64::from(MAX_KEPT_SIDE) * u64::from(MAX_KEPT_SIDE);
+    match fontcraft_io_pdf::render_pdf(bytes, ppp, max_pixels) {
+        Ok(drawn) if whole(&drawn.image) => Loaded::Ready { pixels: Pixels(Arc::new(shrink(drawn.image, MAX_KEPT_SIDE))), size },
+        Ok(_) => Loaded::Failed("the PDF page has no pixels to draw".into()),
+        Err(e) => Loaded::Failed(format!("the PDF page cannot be drawn: {e}")),
     }
 }
 

@@ -191,6 +191,57 @@ fn files_past_the_limits_are_refused_without_decoding() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// A one-page PDF of `width × height` points whose left half is painted black.
+fn pdf_page(width: u32, height: u32) -> Vec<u8> {
+    let content = format!("0 0 0 rg 0 0 {} {height} re f", width / 2);
+    let objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+        format!("<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 {width} {height}] >>"),
+        "<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>".to_string(),
+        format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()),
+    ];
+    let mut pdf = b"%PDF-1.5\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, body) in objects.iter().enumerate() {
+        offsets.push(pdf.len());
+        pdf.extend_from_slice(format!("{} 0 obj\n{body}\nendobj\n", i + 1).as_bytes());
+    }
+    let xref = pdf.len();
+    pdf.extend_from_slice(b"xref\n0 5\n0000000000 65535 f \n");
+    for o in offsets {
+        pdf.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    pdf.extend_from_slice(format!("trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n").as_bytes());
+    pdf
+}
+
+/// A placed PDF is drawn from its first page, sized in points; the drawing is kept, and a broken PDF is the marker.
+#[test]
+fn placed_pdfs_draw_their_first_page() {
+    let dir = temp_dir("pdf");
+    let page = dir.join("page.pdf");
+    std::fs::write(&page, pdf_page(100, 50)).unwrap();
+    let broken = dir.join("broken.pdf");
+    std::fs::write(&broken, b"%PDF-1.5\n1 0 obj").unwrap();
+    let session = Session::with_document();
+    let assets = session.assets();
+    let mut cache = ImageFiles::default();
+    let path = page.to_string_lossy();
+    let Loaded::Ready { pixels, size } = cache.get(&assets, &path, None, None) else { panic!("the page is drawn") };
+    assert_eq!(size, [100, 50], "one point per unit of the image's own space");
+    let p = &pixels.0;
+    assert_eq!((p.width, p.height), (400, 200), "drawn at four pixels per point");
+    let alpha = |x: u32, y: u32| p.pixels[((y * p.width + x) * 4 + 3) as usize];
+    assert_eq!(alpha(100, 100), 255, "the left half is painted");
+    assert_eq!(alpha(300, 100), 0, "the right half is transparent");
+    // Asked again, the same drawing comes back: it is not drawn per frame.
+    let Loaded::Ready { pixels: again, .. } = cache.get(&assets, &path, None, None) else { panic!("still drawn") };
+    assert_eq!(again, pixels);
+    let got = cache.get(&assets, &broken.to_string_lossy(), None, None);
+    assert!(matches!(got, Loaded::Failed(_)), "{got:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 #[test]
 fn shrinking_averages_whole_blocks() {
     let image = Rgba8 { width: 4, height: 2, pixels: [[0u8, 0, 0, 255], [255, 255, 255, 255]].concat().repeat(4) };

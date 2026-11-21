@@ -1649,7 +1649,7 @@ milestone = "M11"
 summary = "A cell shows the image placed on the layer when View → Show Image is on. A glyph with no paths and no components shows its image even when that option is off."
 ref = "Font View › Images"
 status = "handbook"
-notes = "Documented, not yet observed. The cell draws the image of the glyph's layer of Font View's master under the outline, with its transform, crop and opacity as in Edit View, clipped to the cell. Thumbnails are decoded a few files per frame and kept within a byte limit. In `crates/ui` (`canvas/images/cells.rs`) a cell draws a thumbnail of the decoded file no larger than the cell (a power of two from 32 to 1,024 pixels), kept per file and side within 4,096 thumbnails and 128 MiB; PDF images draw the kept-format marker."
+notes = "Documented, not yet observed. The cell draws the image of the glyph's layer of Font View's master under the outline, with its transform, crop and opacity as in Edit View, clipped to the cell. Thumbnails are decoded a few files per frame and kept within a byte limit. In `crates/ui` (`canvas/images/cells.rs`) a cell draws a thumbnail of the decoded file no larger than the cell (a power of two from 32 to 1,024 pixels), kept per file and side within 4,096 thumbnails and 128 MiB; a PDF image's thumbnail is made from its first page as Edit View draws it."
 guesses = [
   "The image is drawn at its own opacity (50 % when the file states none), as Edit View draws it. Settled by a Font View cell of a glyph with an image in the reference.",
   "A missing or unreadable file draws the missing-image marker in the cell. Settled by moving an image file away and looking at Font View in the reference.",
