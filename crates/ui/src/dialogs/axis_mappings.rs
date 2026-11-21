@@ -18,6 +18,7 @@
 //! | Internal Coordinate, External Coordinate fields | `{command: "axisMappings.setPoint", params: {index, internal | external}}` |
 //! | + | `{command: "axisMappings.addPoint", params: {internal}}`: halfway to the next point, on the line |
 //! | − | `{command: "axisMappings.removePoint"}` |
+//! | an arrow key while no field or list has focus | `{command: "axisMappings.nudgePoint", params: {dInternal, dExternal}}`: Up and Down the external value, Left and Right the internal one, by 1, 10 with Shift, 100 with Cmd |
 //!
 //! OK and Cancel post `axisMappings.closeDialog {confirm}`. `ui.inspect` reports the dialog under `axisMappings`.
 
@@ -25,6 +26,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use craft::behavior::{ColumnKey, ColumnWidth, Selection, keyed};
+use craft::keymap::{Chord, Key, Mods};
 use craft::ui::buttons::Button;
 use craft::ui::contract::{Bind, ColumnSpec, Props as _, SelectMode, Show as _, ShowCollection as _, ShowContainer as _};
 use craft::ui::dialog::{DialogHost, DialogId, DialogResult, DialogStack, StackDialog, dialog_id};
@@ -36,7 +38,8 @@ use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::{Env, Label};
 use craft::ui::table::Table;
 use craft::ui::text::NumberField;
-use egui::{Color32, Pos2, Rect, Shape, Stroke, Ui};
+use craft_ext::ui::runtime::keys::region_claims;
+use egui::{Color32, Id, Pos2, Rect, Shape, Stroke, Ui};
 use fontcraft_engine::fontinfo::target;
 use fontcraft_model::Font;
 use fontcraft_model::axes::{AXIS_MAPPINGS, mapping};
@@ -85,6 +88,11 @@ const SELECTED_SCALE: f32 = 1.7;
 const FRAME_SHARE: f32 = 0.3;
 /// Rows the point list shows before it scrolls.
 const LIST_ROWS: u16 = 8;
+/// How far one arrow press moves the selected point: plain, with Shift, with Cmd (with or without Shift).
+const ARROW_STEPS: [(Mods, f64); 4] =
+    [(Mods::NONE, 1.0), (Mods::SHIFT, 10.0), (Mods::CMD, 100.0), (Mods { cmd: true, ctrl: false, alt: false, shift: true }, 100.0)];
+/// The arrows and the way each moves the point: across (internal), up (external).
+const ARROWS: [(Key, f64, f64); 4] = [(Key::Up, 0.0, 1.0), (Key::Down, 0.0, -1.0), (Key::Right, 1.0, 0.0), (Key::Left, -1.0, 0.0)];
 
 const AXIS_COLUMN: ColumnKey = ColumnKey::new("axis");
 const POINT_COLUMN: ColumnKey = ColumnKey::new("point");
@@ -473,6 +481,29 @@ pub fn view(ui: &mut Ui, m: &AxisModel, sent: &mut Vec<Msg>) {
             .extent(PictureSize::Thumb(ThumbSize::Large))
             .show(ui);
     });
+    arrow_keys(ui, m, sent);
+}
+
+/// The arrow chords with the move each makes: `(chord, dInternal, dExternal)`.
+fn arrow_chords() -> Vec<(Chord, f64, f64)> {
+    ARROWS
+        .iter()
+        .flat_map(|&(key, across, up)| ARROW_STEPS.iter().map(move |&(mods, step)| (Chord::new(mods, key), across * step, up * step)))
+        .collect()
+}
+
+/// While a point is selected, the dialog claims the arrows that no field or list holds and moves the point with them.
+fn arrow_keys(ui: &Ui, m: &AxisModel, sent: &mut Vec<Msg>) {
+    if m.point.is_none_or(|at| at >= m.points.len()) {
+        return;
+    }
+    let moves = arrow_chords();
+    let chords: Vec<Chord> = moves.iter().map(|(chord, _, _)| *chord).collect();
+    for chord in region_claims(ui.ctx(), Id::new("fontcraftAxisMappings.arrows"), &chords) {
+        if let Some((_, across, up)) = moves.iter().find(|(c, _, _)| *c == chord) {
+            sent.push(post_edit("axisMappings.nudgePoint", json!({"dInternal": across, "dExternal": up})));
+        }
+    }
 }
 
 fn axis_list(ui: &mut Ui, words: &AxisMappingsWords, m: &AxisModel, sent: &mut Vec<Msg>) {

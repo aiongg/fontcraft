@@ -1478,12 +1478,13 @@ milestone = "M9"
 summary = "Three-pane editor opened by clicking the value of an Axis Mappings parameter: axes, the mapping table of the selected axis, and a graphical editor of the same points."
 ref = "Interpolation › Variable Font Options › Axis Mappings"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui/src/dialogs/axis_mappings.rs (and the earlier window's crates/ui-egui/src/dialogs/axis_mappings.rs), opened by axisMappings.showDialog (the font's mappings, or a variable font setting's). Every edit is one axisMappings.* command; the edits made while the dialog is open are previewed together as one command.batch, OK keeps them as one undo step and Cancel gives back the font it opened on. Repeated moves of one point merge into one step. In the new window the graph only shows the points: a click on its line and dragging a point are not built there yet, so points are added with plus and moved with the Internal Coordinate and External Coordinate fields of the selected point, whose arrow keys step the value."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/dialogs/axis_mappings.rs (and the earlier window's crates/ui-egui/src/dialogs/axis_mappings.rs), opened by axisMappings.showDialog (the font's mappings, or a variable font setting's). Every edit is one axisMappings.* command; the edits made while the dialog is open are previewed together as one command.batch, OK keeps them as one undo step and Cancel gives back the font it opened on. Repeated moves of one point merge into one step. The arrow keys move the selected point while no field or list has focus; a focused coordinate field steps its own value with them, and a focused list moves its selection. In the new window the graph only shows the points: a click on its line and dragging a point are not built there yet."
 guesses = [
   "The graph puts internal coordinates across and external ones up, so dragging a point up or down changes its external value; seeing the dialog would settle the orientation.",
   "A point dragged in the graph lands on a whole number; dragging a point in the reference app would show whether it keeps fractions.",
   "Plus adds a point halfway between the selected point and the next one, on the current mapping line; pressing plus in the reference app would show where its new point goes.",
   "Return is OK and Escape is Cancel while no value is being typed, as in the other dialogs.",
+  "While the point list has focus, Up and Down move its selection rather than the point, as lists do elsewhere; pressing an arrow key after clicking a row in the reference app would show which it does.",
 ]
 
 [[command]]

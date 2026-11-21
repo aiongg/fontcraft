@@ -182,3 +182,39 @@ fn the_dialog_view_posts_its_edits() {
     assert_eq!(posted.borrow().last(), Some(&edit(json!({"command": "axisMappings.removePoint", "params": {}}))));
     assert!(fixture.by_label("Mapping graph: internal coordinates across, external coordinates up").is_some(), "the graph");
 }
+
+/// The arrows move the selected point while no field has focus: Shift for ten units, Up and Down the external value.
+/// A focused coordinate field keeps them to step its own value.
+#[test]
+fn arrow_keys_move_the_selected_point_while_no_field_has_focus() {
+    let model = AxisModel {
+        setting: None,
+        axes: vec![("wght".into(), "Weight".into())],
+        axis: "wght".into(),
+        points: vec![(30.0, 30.0), (120.0, 120.0)],
+        point: Some(0),
+    };
+    let posted = Rc::new(RefCell::new(Vec::new()));
+    let seen = Rc::clone(&posted);
+    let mut fixture = Fixture::new(move |ui| {
+        let mut sent = Vec::new();
+        view(ui, &model, &mut sent);
+        seen.borrow_mut().extend(sent);
+    });
+    fixture.settle();
+    let nudge = |d_internal: f64, d_external: f64| {
+        Msg::Shell(craft::ui::runtime::commands::CommandRef::with_params(
+            EDIT,
+            json!({"command": "axisMappings.nudgePoint", "params": {"dInternal": d_internal, "dExternal": d_external}}),
+        ))
+    };
+    fixture.key(Key::ArrowRight, Modifiers::SHIFT).settle();
+    fixture.key(Key::ArrowUp, Modifiers::NONE).settle();
+    assert_eq!(*posted.borrow(), vec![nudge(10.0, 0.0), nudge(0.0, 1.0)]);
+
+    let external = fixture.by_label("External Coordinate").expect("the External Coordinate field");
+    fixture.click(&external).settle();
+    posted.borrow_mut().clear();
+    fixture.key(Key::ArrowUp, Modifiers::NONE).settle();
+    assert!(!posted.borrow().iter().any(|m| *m == nudge(0.0, 1.0)), "a focused field keeps the arrows: {:?}", posted.borrow());
+}

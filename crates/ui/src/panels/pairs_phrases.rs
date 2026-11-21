@@ -6,6 +6,7 @@
 //! | path field (Enter); Reset | `kerning.loadPairList {path}`, `{reset}` |
 //! | a click on a row, Up, Down | `kerning.stepPairList {index}`: shows it in the edit view |
 //! | Cmd-click, Shift-click | add a row to the selection, or the rows up to it (`{select}`) |
+//! | Ctrl+Up, Ctrl+Down; Alt+Up, Alt+Down (list focused) | `kerning.stepGroupMember` on the left side; on the right side |
 //! | Auto Kern | `kerning.autoKernPairList` on the selected rows, for review; Apply, Discard |
 //!
 //! Pair rows show the value stored for the pair in the current master.
@@ -13,6 +14,7 @@
 use std::borrow::Cow;
 
 use craft::behavior::{DisplayOrder, ItemSource, Selection};
+use craft::keymap::{Chord, Key, Mods};
 use craft::ui::buttons::Button;
 use craft::ui::choice::Segmented;
 use craft::ui::contract::{Bind, CollectionEvent, Entry, Props as _, Show as _, ShowCollection as _, ShowContainer as _, Tracked};
@@ -22,6 +24,7 @@ use craft::ui::list::{List, ListRow};
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::Env;
 use craft::ui::text::TextField;
+use craft_ext::ui::runtime::keys::focused_claims;
 use egui::Ui;
 use serde_json::{Value, json};
 
@@ -63,6 +66,14 @@ pub struct Props<'a> {
 pub fn show(ui: &mut Ui, mut props: Props<'_>) {
     view(&mut props, ui);
 }
+
+/// The chords the focused list takes for `kerning.stepGroupMember`: the side, and the direction.
+const MEMBER_KEYS: [(Chord, &str, &str); 4] = [
+    (Chord::new(Mods::CTRL, Key::Up), "left", "previous"),
+    (Chord::new(Mods::CTRL, Key::Down), "left", "next"),
+    (Chord::new(Mods::ALT, Key::Up), "right", "previous"),
+    (Chord::new(Mods::ALT, Key::Down), "right", "next"),
+];
 
 fn shell(id: &str, params: Value) -> Msg {
     Msg::Shell(CommandRef::with_params(id, params))
@@ -148,6 +159,13 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
     }
     if let Some(at) = stepped {
         sent.push(shell("kerning.stepPairList", json!({ "index": at, "list": list })));
+    }
+    // With Ctrl or Alt the arrows step the pair's glyph through its kerning group instead of moving the list.
+    let chords = MEMBER_KEYS.map(|(chord, _, _)| chord);
+    for chord in focused_claims(ui.ctx(), out.response.id, &chords) {
+        if let Some((_, side, direction)) = MEMBER_KEYS.iter().find(|(c, _, _)| *c == chord) {
+            sent.push(shell("kerning.stepGroupMember", json!({ "side": side, "direction": direction })));
+        }
     }
     if Button::new(words.auto_kern.clone()).tooltip(words.auto_kern_tip.clone()).enabled(model.pairs).show(ui).clicked() && model.pairs {
         sent.push(shell("kerning.autoKernPairList", json!({ "list": list })));
