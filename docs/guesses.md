@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**3100 guesses on 1613 rows (645 of them live commands).**
+**3103 guesses on 1614 rows (645 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -225,6 +225,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `textPreview.togglePinned` | M5 | handbook | yes | The Text Preview is a window inside the app window; pinned, it stays in front of the other windows there, unpinned it goes behind the one clicked last. A separate pinned window in the reference app is the model. |
 | `textPreview.setLayoutOrientation` | M5 | handbook | yes | Vertical text runs in columns from right to left, with the vertical widths and origins Edit View uses; the reference app on our own vertical font would settle it. |
 | `textPreview.setWritingDirection` | M5 | handbook | yes | The default direction of the text comes from its first letter: right to left for Hebrew, Arabic and the other right-to-left scripts, else left to right. The reference follows the Unicode bidirectional algorithm; a mixed text in the reference app would settle how far we differ. |
+| `textPreview.setWritingDirection` | M5 | handbook | yes | The direction of the selection sits in the text's context menu under its own heading, Selection Direction, below the direction of the whole text, and acts on the text field's last selection; the reference app's context menu would settle the layout. |
 | `textPreview.setWritingDirection` | M5 | handbook | yes | A selected range with the other direction is an embedding: its base direction changes, one level inside the text's, and its runs are ordered by it; it keeps its direction while text is typed around it; directions do nothing in vertical text. The reference app on a mixed text would settle it. |
 | `textPreview.setWritingDirection` | M5 | handbook | yes | Line breaking measures a trailing blank with the kern it has before its level is reset to the paragraph's, so a line can break up to one kern early; a right-to-left line that ends in a kerned blank, in the reference app, would settle how the reference measures it. |
 | `textPreview.find` | M5 | handbook | yes | The search options are Ignore Case (on at first) and Contains, Starts With or Full Word, as the system find bar of the reference offers them; matches do not overlap. |
@@ -749,6 +750,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontInfo.features.contextMenu` (behavior) | M8 | inferred | – | Cmd+A in a focused sidebar group selects that group's entries; pressing Cmd+A in the reference app's sidebar would settle it. |
 | `fontInfo.features.contextMenu` (behavior) | M8 | inferred | – | Delete shows a danger tone, a trash icon in the error colour; the same right-click in the reference app would show whether it marks the item. |
 | `fontInfo.features.sidebarFilter` (behavior) | M8 | inferred | – | The filter matches code as well as names; typing a glyph name into the reference app's sidebar search, if it has one, would settle it. |
+| `fontInfo.features.syntaxColouring` (behavior) | M8 | handbook | – | The colours come from the theme, which has no syntax colours: keywords and tags take the accent, glyph names the text colour, comments and punctuation the muted text, the other classes colours of the data series; a screenshot of feature code in the reference app settles them. |
 | `fontInfo.features.inlineErrors` (behavior) | M8 | handbook | – | Error ranges are underlined in the code and each error is listed under the code with its line and an icon, not drawn between the code lines; a screenshot of an error in the reference app settles it. |
 | `fontInfo.features.notesDivider` (behavior) | M8 | handbook | – | The notes field starts four rows tall and the divider keeps it between two rows and half the tab's height; dragging the divider in the reference app settles the limits. |
 | `fontInfo.features.stylisticSetNames` (behavior) | M8 | handbook | – | A name in a language without a Windows language id is left out, as fontc does (glyphsLib stops with an error), and text tokens in names are not expanded yet; a name in such a language exported from the reference app settles it. |
@@ -1938,6 +1940,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `pluginManager.install` | M13 | inferred | yes | A macro installed from an index is saved in the Macros folder as `<id>.fcmacro`, so the listing and Remove find it by the entry's id; the reference's scripts keep their repository's file names. |
 | `pluginManager.remove` | M13 | inferred | yes | A removed module or macro file is moved into a `Removed` folder beside the Modules and Macros folders rather than deleted, so a removal can be undone by hand; the reference's Remove is not documented in that detail. |
 | `pluginManager.enlargePreview` | M13 | inferred | yes | The enlarged screenshot opens in its own window and closes from that window or by running the command without an id; the reference app's full-size view would settle where it appears and how it closes. |
+| `pluginManager.enlargePreview` | M13 | inferred | yes | In the new window the screenshot shows inside the Extension Manager at the largest thumbnail size rather than in a window of its own; the reference app's full-size view would settle it. |
 | `pluginManager.openWebsite` | M13 | inferred | yes | The Website button shows on every index entry and the command fails with a message when the entry has no `homepage`; the reference app with an entry that lacks a website would settle whether the link is hidden instead. |
 | `pluginManager.openDonationPage` | M13 | inferred | yes | One Donate button stands for every donation service, opening the entry's single `funding` link; an index entry in the reference format that lists several services would settle whether one button is enough. |
 | `script.run` | M13 | inferred | yes | A macro runs as one undo step that is undone as a whole, like command.batch; the reference undoes script edits per glyph and does not say how a script's changes group. |

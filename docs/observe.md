@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1509 rows to check: 2601 guesses and 618 observe steps.**
+**1510 rows to check: 2604 guesses and 618 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 49 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **981** |
+| **Later milestones (after M6)** | all | **982** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 89 |
 | Later milestones (after M6) | Edit View: text mode and preview | 28 |
 | Later milestones (after M6) | Components and anchors | 43 |
@@ -56,7 +56,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Spacing and metrics keys | 13 |
 | Later milestones (after M6) | Kerning and the Kerning window | 16 |
 | Later milestones (after M6) | Font View | 19 |
-| Later milestones (after M6) | Font Info and features | 305 |
+| Later milestones (after M6) | Font Info and features | 306 |
 | Later milestones (after M6) | Interpolation | 90 |
 | Later milestones (after M6) | Hinting | 113 |
 | Later milestones (after M6) | Colour fonts | 74 |
@@ -453,6 +453,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Vertical text runs in columns from right to left, with the vertical widths and origins Edit View uses; the reference app on our own vertical font would settle it.
 - [ ] `textPreview.setWritingDirection` (M5, handbook, live): Writing Direction
   - Guess: The default direction of the text comes from its first letter: right to left for Hebrew, Arabic and the other right-to-left scripts, else left to right. The reference follows the Unicode bidirectional algorithm; a mixed text in the reference app would settle how far we differ.
+  - Guess: The direction of the selection sits in the text's context menu under its own heading, Selection Direction, below the direction of the whole text, and acts on the text field's last selection; the reference app's context menu would settle the layout.
   - Guess: A selected range with the other direction is an embedding: its base direction changes, one level inside the text's, and its runs are ordered by it; it keeps its direction while text is typed around it; directions do nothing in vertical text. The reference app on a mixed text would settle it.
   - Guess: Line breaking measures a trailing blank with the kern it has before its level is reset to the paragraph's, so a line can break up to one kern early; a right-to-left line that ends in a kerned blank, in the reference app, would settle how the reference measures it.
 - [ ] `textPreview.find` (M5, handbook, live): Find…
@@ -1594,7 +1595,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (981)
+## Later milestones (after M6) (982)
 
 ### Edit View: drawing, guides, layers and the Palette (89)
 
@@ -2392,7 +2393,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.
   - Guess: Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.
 
-### Font Info and features (305)
+### Font Info and features (306)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
@@ -2728,6 +2729,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In F1 (Latin features), press Update in Font Info › Features: note which entries it adds and their order in the sidebar.
 - [ ] `fontInfo.features.optionalAutomatic` (behavior, M8, handbook): Some entries can be generated but are not added by Update, among…
   - Observe: In F1 (Latin features), add the class All by hand, then press Update: note All's content and whether Update keeps, refreshes or replaces it.
+- [ ] `fontInfo.features.syntaxColouring` (behavior, M8, handbook): The code editor colours keywords, glyph names, numbers, lookup names and comments…
+  - Guess: The colours come from the theme, which has no syntax colours: keywords and tags take the accent, glyph names the text colour, comments and punctuation the muted text, the other classes colours of the data series; a screenshot of feature code in the reference app settles them.
 - [ ] `fontInfo.features.inlineErrors` (behavior, M8, handbook): Code that fails to compile is flagged inline
   - Guess: Error ranges are underlined in the code and each error is listed under the code with its line and an icon, not drawn between the code lines; a screenshot of an error in the reference app settles it.
 - [ ] `fontInfo.features.notesDivider` (behavior, M8, handbook): The notes field under the editor is resized by dragging the gray…
@@ -4812,6 +4815,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A removed module or macro file is moved into a `Removed` folder beside the Modules and Macros folders rather than deleted, so a removal can be undone by hand; the reference's Remove is not documented in that detail.
 - [ ] `pluginManager.enlargePreview` (M13, inferred, live): Enlarge Preview
   - Guess: The enlarged screenshot opens in its own window and closes from that window or by running the command without an id; the reference app's full-size view would settle where it appears and how it closes.
+  - Guess: In the new window the screenshot shows inside the Extension Manager at the largest thumbnail size rather than in a window of its own; the reference app's full-size view would settle it.
 - [ ] `pluginManager.openWebsite` (M13, inferred, live): Open Website
   - Guess: The Website button shows on every index entry and the command fails with a message when the entry has no `homepage`; the reference app with an entry that lacks a website would settle whether the link is hidden instead.
 - [ ] `pluginManager.openDonationPage` (M13, inferred, live): Donate
