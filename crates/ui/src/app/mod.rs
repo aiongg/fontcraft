@@ -64,8 +64,11 @@ pub struct ViewState {
     pub tool: &'static str,
     /// The tool each rail slot showed last.
     pub tools_last_used: LastUsed<&'static str>,
-    /// The glyph the glyph panels show; `None` shows the font's first glyph.
+    /// The glyph the glyph panels show; `None` shows the font's first glyph. This field and `canvas`, `text`'s text,
+    /// `layers`' master and picked layers and `edit_background` belong to the live Edit View tab (`tabs`).
     pub glyph: Option<String>,
+    /// The Edit View tabs beside Font View, the showing one and the closed ones (`shell::tabs`).
+    pub tabs: crate::shell::tabs::EditTabs,
     /// The dock: which panels show where.
     pub workspace: Workspace<PanelId>,
     /// The document canvas's view.
@@ -143,6 +146,7 @@ impl Default for ViewState {
             tool: "select",
             tools_last_used: LastUsed::default(),
             glyph: None,
+            tabs: Default::default(),
             workspace: dock::default_workspace(),
             canvas: CanvasView::new(egui::Rect::NOTHING, Point::ZERO, 1.0),
             display: crate::canvas::Display::default(),
@@ -485,18 +489,14 @@ impl FontCraftApp {
     /// from [`Self::with_targets`], whose canvas part falls back to the font's first glyph: a dialog's command then acts
     /// on every glyph or the dialog asks for a glyph, and any other glyph command refuses ([`select_glyph_first`]).
     pub(crate) fn targets_chosen(&self) -> bool {
-        // `view.glyph` keeps the glyph opened last after its edit view went behind a tab.
-        let glyph_shown = self.view.glyph.is_some() && self.in_front(PanelId::Document);
+        // `view.glyph` keeps the glyph the live tab shows while Font View is in front.
+        let glyph_shown = self.view.glyph.is_some() && !self.view.tabs.font_view_shows();
         self.font_view_targets() || glyph_shown
     }
 
-    /// Whether fired commands take Font View's selection: glyphs are selected and Font View is in front.
+    /// Whether fired commands take Font View's selection: glyphs are selected and Font View is the showing tab.
     fn font_view_targets(&self) -> bool {
-        !self.view.font_view.selected.is_empty() && self.in_front(PanelId::FontView)
-    }
-
-    fn in_front(&self, panel: PanelId) -> bool {
-        self.view.workspace.layout.panel_state(&panel) == craft::behavior::dock::PanelState::Front
+        !self.view.font_view.selected.is_empty() && self.view.tabs.font_view_shows()
     }
 }
 

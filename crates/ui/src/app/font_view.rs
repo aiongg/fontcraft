@@ -11,7 +11,6 @@ use fontcraft_engine::params::TargetKind;
 use serde_json::{Map, Value, json};
 
 use super::FontCraftApp;
-use crate::shell::dock::PanelId;
 
 /// Smallest and largest grid cell, in points (`fontView.setCellSize`).
 pub const MIN_CELL_SIZE: f64 = 16.0;
@@ -265,9 +264,9 @@ pub fn incompatible_notice(id: &str, reply: &Value) -> Option<String> {
 const PER_GLYPH: [&str; 2] = ["glyph.addComponent", "glyph.addComponentAllMasters"];
 
 impl FontCraftApp {
-    /// Whether the Font View panel shows.
+    /// Whether Font View is the document area's showing tab.
     pub fn font_view_shows(&self) -> bool {
-        self.view.workspace.layout.panel_state(&PanelId::FontView) != craft::behavior::dock::PanelState::Hidden
+        self.view.tabs.font_view_shows()
     }
 
     /// Font View's master: the current master (`view.selectMaster`).

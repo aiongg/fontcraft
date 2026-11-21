@@ -155,6 +155,83 @@ impl EditText {
     }
 }
 
+/// The part of [`EditText`] each Edit View tab keeps for itself (`shell::tabs`): the text, its layout options and
+/// preview features, and where its edited glyph sat when the canvas last drew it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TabText {
+    pub text: Text,
+    pub direction: WritingDirection,
+    pub kerning: KerningMode,
+    pub features: features::Features,
+    origin: Option<(String, [f64; 2])>,
+}
+
+impl Default for TabText {
+    fn default() -> Self {
+        TabText { text: Text::new(), direction: WritingDirection::Ltr, kerning: KerningMode::Kerning, features: Default::default(), origin: None }
+    }
+}
+
+impl TabText {
+    /// A text of `items`, the cursor before the first.
+    pub fn of(items: Vec<Item>) -> Result<TabText, String> {
+        let mut text = Text::new();
+        text.replace(0..0, items).map_err(|e| e.to_string())?;
+        text.set_cursor(0);
+        Ok(TabText { text, ..TabText::default() })
+    }
+
+    /// The glyphs the tab shows: the text's when its current glyph is `shown`, else `shown` alone.
+    pub fn shown_glyphs(&self, shown: Option<&str>) -> Vec<String> {
+        shown_glyphs(&self.text, shown)
+    }
+}
+
+impl EditText {
+    /// Takes the tab's part out, leaving a fresh one: the tab goes behind another.
+    pub fn park(&mut self) -> TabText {
+        let parked = TabText {
+            text: std::mem::take(&mut self.text),
+            direction: self.direction,
+            kerning: self.kerning,
+            features: std::mem::take(&mut self.features),
+            origin: self.origin.take(),
+        };
+        self.direction = WritingDirection::Ltr;
+        self.kerning = KerningMode::Kerning;
+        self.drag = None;
+        self.touch();
+        parked
+    }
+
+    /// Puts a tab's part back: the tab shows again.
+    pub fn restore(&mut self, tab: TabText) {
+        self.text = tab.text;
+        self.direction = tab.direction;
+        self.kerning = tab.kerning;
+        self.features = tab.features;
+        self.origin = tab.origin;
+        self.drag = None;
+        self.touch();
+    }
+}
+
+/// The glyphs an edit view shows: the text's (placeholders as the current glyph) when the text's current glyph is
+/// `shown`, else `shown` alone.
+pub fn shown_glyphs(text: &Text, shown: Option<&str>) -> Vec<String> {
+    let current = text.current_glyph();
+    let glyph = |item: &Item| match item {
+        Item::Glyph { name, .. } => Some(name.to_string()),
+        Item::Placeholder => current.map(str::to_string),
+        Item::Missing(_) | Item::LineBreak => None,
+    };
+    let glyphs: Vec<String> = text.items().iter().filter_map(glyph).collect();
+    if shown.is_some() && current == shown && glyphs.iter().any(|g| Some(g.as_str()) == shown) {
+        return glyphs;
+    }
+    shown.map(str::to_string).into_iter().collect()
+}
+
 /// Whether the edit view is in text mode: the Text tool is the current tool.
 pub fn text_mode(view: &ViewState) -> bool {
     view.tool == TEXT_TOOL

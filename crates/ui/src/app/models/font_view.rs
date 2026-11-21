@@ -8,7 +8,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use craft::behavior::dock::PanelState;
 use craft::behavior::kurbo::{BezPath, PathEl, Point, Shape as _};
 use craft::ui::contract::{PlainData, Tracked};
 use fontcraft_engine::model::glyphdata::GlyphData;
@@ -18,7 +17,6 @@ use serde_json::Value;
 use super::ProjectCx;
 use crate::app::font_view::{Column, Sort, ViewMode};
 use crate::canvas::color;
-use crate::shell::dock::PanelId;
 
 /// Most points one cell outline keeps; the rest of a larger outline is left out of the cell.
 pub const MAX_CELL_POINTS: usize = 8_192;
@@ -114,7 +112,7 @@ pub struct OutlineCache {
 
 pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, files: &mut color::ColorFiles, cx: &mut ProjectCx<'_>) {
     let state = &cx.view.font_view;
-    let shows = cx.view.workspace.layout.panel_state(&PanelId::FontView) != PanelState::Hidden;
+    let shows = cx.view.tabs.font_view_shows();
     let Ok(font) = cx.session.font().cloned() else {
         super::set(model, FontViewModel::default());
         return;

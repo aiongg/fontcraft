@@ -92,6 +92,45 @@ fn keyboard() -> Keyboard {
     if cfg!(target_os = "macos") { Keyboard::Mac } else { Keyboard::Other }
 }
 
+/// The selection of an Edit View tab that is not showing (`shell::tabs`), with the path focus and what they belong to.
+#[derive(Clone, Debug)]
+pub struct ParkedSelection {
+    selection: Selection,
+    focus: Option<Vec<usize>>,
+    target: Option<Target>,
+}
+
+impl Default for ParkedSelection {
+    fn default() -> Self {
+        ParkedSelection { selection: Selection::new(), focus: None, target: None }
+    }
+}
+
+impl ParkedSelection {
+    pub fn selection(&self) -> &Selection {
+        &self.selection
+    }
+}
+
+impl Tools {
+    /// Takes the selection out, leaving none: its tab goes behind another. A running interaction is not cancelled
+    /// here; tabs switch between messages, when none runs.
+    pub fn park(&mut self) -> ParkedSelection {
+        self.checked = None;
+        self.before = None;
+        ParkedSelection { selection: std::mem::replace(&mut self.selection, Selection::new()), focus: self.focus.take(), target: self.target.take() }
+    }
+
+    /// Puts a tab's selection back: the tab shows again.
+    pub fn restore(&mut self, parked: ParkedSelection) {
+        self.checked = None;
+        self.before = None;
+        self.selection = parked.selection;
+        self.focus = parked.focus;
+        self.target = parked.target;
+    }
+}
+
 impl Tools {
     /// Copies the selection, the focus and the active tool's overlays into [`Tools::view`], when they changed.
     pub fn refresh(&mut self) {
