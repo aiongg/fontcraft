@@ -2,10 +2,18 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-21: UI.49 on `w-UI.49` (written, not yet built) removes the egui window; before that, 2026-11-20, after the seventeenth and eighteenth batches: the second window's ports UI.30a to UI.36d (UI.30a, UI.30b, UI.24b, UI.27b, UI.31 to UI.34, UI.20b, UI.35a to UI.35d, UI.36a, UI.36b, UI.36d) and `crates/craft-ext` (decision 0009), merged on `master` as of `f99ee43`; the gate is green (5,382 tests). The sixteenth batch's entries below stay as written._
+_Updated: 2026-11-21: UI.49 and UI.50 merged, built and pushed (X.integ113 to X.integ117): the egui window is gone and `crates/ui` with `apps/fontcraft` is the only window. Earlier notes follow._
 
 ## State of the tree
 
+- **Where UI.49 and UI.50 stand.** Merged on `master` and pushed; the gate (`cargo xtask ci`) is green with 4,808
+  tests (the removed window's tests went with it). The desktop app is the package and binary `fontcraft` in
+  `apps/fontcraft`, on egui and eframe 0.37; it starts, answers `engine.execute` on the control channel, and keeps
+  running when the file named on the command line does not exist (checked headless under Xvfb). Parity reads the
+  window's shell commands; keys the window takes in one place only (Escape in the edit view, the Instructor's keys,
+  the Kerning list's Up and Down, Cmd+1, Cmd+Alt+2) are listed in `shell::commands::SCOPED_KEYS`. 997 of 1056
+  commands are live; `tool.select`, `tool.list` and `palette.toggleSection`, which the egui window had, are not
+  ported yet.
 - **Where the seventeenth and eighteenth batches stand.** Every branch is merged on `master` and pushed; the gate (`cargo xtask ci`) is green
   on `f99ee43` with 5,382 tests. The writers ran no builds; one integrator built several branches at once (X.integ81
   to X.integ97). The new window (`crates/ui`) gained:
