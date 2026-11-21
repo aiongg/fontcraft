@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**3116 guesses on 1621 rows (647 of them live commands).**
+**3120 guesses on 1621 rows (647 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -110,6 +110,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `start.shownAtLaunchWithoutDocuments` (behavior) | M4 | handbook | – | With Show window on startup off, the app opens a new document at launch, as File › New does. Settled by observing a launch with the checkbox cleared. |
 | `tabs.windowHoldsFontViewPlusEditTabs` (behavior) | M3 | handbook | – | A window, and each document opened into it, opens on Font View with no Edit View tab, and a file's stored tabs open behind Font View; the handbook does not say which tab a file opens on. Opening a new file in the reference app settles it. |
 | `tabs.windowHoldsFontViewPlusEditTabs` (behavior) | M3 | handbook | – | Font View draws in the master of the Edit View tab shown last; the handbook gives Font View no master of its own. Switching masters in two tabs and then showing Font View in the reference app settles it. |
+| `tabs.windowHoldsFontViewPlusEditTabs` (behavior) | M3 | handbook | – | A tab left without glyphs by a removal closes, and Font View shows when it was showing; removing the only glyph of the showing tab in the reference app settles it. |
 | `menus.optionRevealsAlternateItems` (behavior) | M3 | handbook | – | Clear Background is the Alt alternate of Assign Background; the handbook says only that it shows while Alt is held. Holding Option in the reference app's Path menu settles it. |
 | `menus.optionRevealsAlternateItems` (behavior) | M3 | handbook | – | An alternate row shows its own command's label and shortcut, as native macOS alternate items do; the handbook names the alternates but not their labels. The observe step below settles it. |
 | `menus.switchCheckMarks` (behavior) | M3 | handbook | – | Every on/off switch shows a check mark, including Lock Outline, Power Nudge, Edit Background, Palette, Preview Panel and Font Audit; opening the reference app's View, Path and Window menus with each switch on and off settles which ones do. |
@@ -284,6 +285,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `text.displayStrings` (behavior) | M5 | docs | – | A `/name` the font lacks and a character no glyph encodes are kept in the text and take half the em with nothing drawn; opening such a string in the reference app settles it. |
 | `text.displayStrings` (behavior) | M5 | docs | – | A stored string over the 10,000-item tab limit opens cut to its first 10,000 items, with a warning in the log and the status bar, and a string that cannot be read (a `/name` longer than a glyph name may be) opens no tab; a file from the reference app with such a string settles it. |
 | `text.displayStrings` (behavior) | M5 | docs | – | Opening a document adds its tabs after the open ones and leaves Font View showing; opening a file with display strings in the reference app settles which tab shows. |
+| `text.displayStrings` (behavior) | M5 | docs | – | A tab is written as what it shows: its text while the canvas shows the text, else the one glyph it shows (picked in Font View after the text was typed); saving a file after picking another glyph into a tab of the reference app settles it. |
 | `text.findUnicodeMode` (behavior) | M5 | handbook | – | A Unicode term matches when a code point's hexadecimal form contains it, so `228` finds U+228E; whether the reference needs the whole code point would settle it. |
 | `textPreview.fallbackFont` (behavior) | M5 | handbook | – | Characters the font lacks are drawn in the interface font of the app. |
 | `textPreview.fallbackFont` (behavior) | M5 | handbook | – | Each character the font lacks takes half an em, the advance the Edit View layout gives a missing character, whatever its width in the interface font. |
@@ -1333,6 +1335,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `dialog.axisMappings` (panel) | M9 | handbook | – | A point dragged in the graph lands on a whole number; dragging a point in the reference app would show whether it keeps fractions. |
 | `dialog.axisMappings` (panel) | M9 | handbook | – | Plus adds a point halfway between the selected point and the next one, on the current mapping line; pressing plus in the reference app would show where its new point goes. |
 | `dialog.axisMappings` (panel) | M9 | handbook | – | Return is OK and Escape is Cancel while no value is being typed, as in the other dialogs. |
+| `dialog.axisMappings` (panel) | M9 | handbook | – | A press in the graph takes a point or the line within 4% of the graph's width of it; clicking near a point in the reference app would show how far its reach is. |
+| `dialog.axisMappings` (panel) | M9 | handbook | – | While the point list has focus, Up and Down move its selection rather than the point, as lists do elsewhere; pressing an arrow key after clicking a row in the reference app would show which it does. |
 | `window.compareFonts` (panel) | M9 | handbook | – | Each grey heading shows its category's row count, and a glyph row's name lists what differs (width, shapes, anchors, missing). Settle by looking at the headings and glyph rows of the reference app's window. |
 | `window.compareFonts` (panel) | M9 | handbook | – | A glyph row shows each side as a one-line summary (width, path and node counts, component names, anchors) rather than a drawing. Settle by comparing two masters whose glyph outlines differ. |
 | `window.compareFamily` (panel) | M9 | handbook | – | Values of a row that differ between documents are drawn in the accent colour. Settle by comparing two documents whose anchors differ on one glyph. |

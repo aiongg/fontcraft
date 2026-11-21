@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1516 rows to check: 2616 guesses and 623 observe steps.**
+**1516 rows to check: 2620 guesses and 623 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -82,8 +82,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The desktop shell passes the clipboard's PDF only when its text cannot be pasted, so readable text wins over a PDF; copying a shape from a drawing app that offers both and pasting it into the reference would settle it.
   - Guess: A paste made while the clipboard's PDF is still being read for the previous one is dropped with a message in the status bar; pasting twice quickly from a drawing app into the reference would settle what it does.
 - [ ] `tabs.windowHoldsFontViewPlusEditTabs` (behavior, M3, handbook): One document window holds Font View as its fixed first tab followed…
-  - Guess: A window opens with one Edit View tab showing the font's first glyph beside Font View; the handbook does not say which tab a file without stored tabs opens on. Opening a new file in the reference app settles it.
+  - Guess: A window, and each document opened into it, opens on Font View with no Edit View tab, and a file's stored tabs open behind Font View; the handbook does not say which tab a file opens on. Opening a new file in the reference app settles it.
   - Guess: Font View draws in the master of the Edit View tab shown last; the handbook gives Font View no master of its own. Switching masters in two tabs and then showing Font View in the reference app settles it.
+  - Guess: A tab left without glyphs by a removal closes, and Font View shows when it was showing; removing the only glyph of the showing tab in the reference app settles it.
   - Observe: Open a new file and note which tab shows first.
   - Observe: Open two tabs, pick another master in the second, show Font View, and note which master its cells draw.
 - [ ] `menus.optionRevealsAlternateItems` (behavior, M3, handbook): Holding Option while a menu or context menu is open swaps some…
@@ -427,6 +428,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A `/name` the font lacks and a character no glyph encodes are kept in the text and take half the em with nothing drawn; opening such a string in the reference app settles it.
   - Guess: A stored string over the 10,000-item tab limit opens cut to its first 10,000 items, with a warning in the log and the status bar, and a string that cannot be read (a `/name` longer than a glyph name may be) opens no tab; a file from the reference app with such a string settles it.
   - Guess: Opening a document adds its tabs after the open ones and leaves Font View showing; opening a file with display strings in the reference app settles which tab shows.
+  - Guess: A tab is written as what it shows: its text while the canvas shows the text, else the one glyph it shows (picked in Font View after the text was typed); saving a file after picking another glyph into a tab of the reference app settles it.
 - [ ] `text.findUnicodeMode` (behavior, M5, handbook): In Unicode mode the glyph search compares the query with the hexadecimal…
   - Guess: A Unicode term matches when a code point's hexadecimal form contains it, so `228` finds U+228E; whether the reference needs the whole code point would settle it.
 - [ ] `textPreview.fallbackFont` (behavior, M5, handbook): Characters the font does not cover are drawn in a system fallback…
@@ -3620,6 +3622,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A point dragged in the graph lands on a whole number; dragging a point in the reference app would show whether it keeps fractions.
   - Guess: Plus adds a point halfway between the selected point and the next one, on the current mapping line; pressing plus in the reference app would show where its new point goes.
   - Guess: Return is OK and Escape is Cancel while no value is being typed, as in the other dialogs.
+  - Guess: A press in the graph takes a point or the line within 4% of the graph's width of it; clicking near a point in the reference app would show how far its reach is.
+  - Guess: While the point list has focus, Up and Down move its selection rather than the point, as lists do elsewhere; pressing an arrow key after clicking a row in the reference app would show which it does.
 - [ ] `window.compareFonts` (panel, M9, handbook): Compare Fonts
   - Guess: Each grey heading shows its category's row count, and a glyph row's name lists what differs (width, shapes, anchors, missing). Settle by looking at the headings and glyph rows of the reference app's window.
   - Guess: A glyph row shows each side as a one-line summary (width, path and node counts, component names, anchors) rather than a drawing. Settle by comparing two masters whose glyph outlines differ.
