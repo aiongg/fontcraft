@@ -87,6 +87,9 @@ summary = "Opens one of the Font Info window's pickers (fields, custom parameter
 ref = "Font Info"
 status = "inferred"
 notes = "Our command behind the Font Info panel's plus buttons and parameter value fields in `crates/ui`, so the dialogs open through the command channel as clicks open them. The reference app opens the same pickers and editors from those buttons and fields; it has no command for them."
+guesses = [
+  "Our own command so scripts and agents open the pickers and parameter editors that clicks open; the reference app has only the buttons and value fields, so there is nothing to settle.",
+]
 
 [[command]]
 id = "font.info.features.select"
@@ -3226,6 +3229,9 @@ summary = "Selects masters in the list of the Masters tab; the sections at the r
 ref = "Font Info › Masters"
 status = "inferred"
 notes = "Our own command, so a script or agent can do what clicking, Cmd-clicking and Shift-clicking in the list do. An empty list selects the first master; indices the font lacks are dropped."
+guesses = [
+  "Our own command for scripts; an empty list selects the first master, since the Masters tab always edits at least one. Clicking in the reference app's list until nothing is selected settles whether it allows an empty selection.",
+]
 
 [[panel]]
 id = "fontInfo.addMetric"

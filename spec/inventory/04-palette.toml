@@ -117,6 +117,9 @@ summary = "Sets one field of a filter module's Palette section, held to the para
 ref = "Palette"
 status = "inferred"
 notes = "The command id and label are ours: the handbook describes plug-in Palette sections, not how their fields are stored. The form values are view state."
+guesses = [
+  "A module's field values last for the session and are not saved with the document or the settings; the handbook does not say whether plug-in Palette sections keep their values, and a plug-in section in the reference app, edited and reopened after a restart, settles it.",
+]
 
 [[command]]
 id = "palette.applyModule"
@@ -133,6 +136,9 @@ status = "inferred"
 notes = "The command id and label are ours. It runs plugin.runFilter, one undo step; with no glyph chosen it refuses as the Filter menu item does."
 
 # ───────────────────────────── Dimensions ─────────────────────────────
+guesses = [
+  "Apply acts on the same glyphs and nodes as the module's Filter menu item and makes one undo step; the handbook does not describe a filter section's Apply button, and running one in the reference app with nodes selected settles it.",
+]
 
 [[panel]]
 id = "palette.dimensions"

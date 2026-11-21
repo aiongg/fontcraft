@@ -748,6 +748,9 @@ milestone = "M14"
 summary = "Replaces the strings of one group; the UI equivalent is editing the text field. Proposed for headless use."
 ref = "Settings › Sample Strings"
 status = "inferred"
+guesses = [
+  "Our own command for scripts: it replaces a whole group, one string per line of the section's text field, as editing that field does; the reference has no headless access to settings, so there is nothing to settle.",
+]
 
 [[command]]
 id = "settings.resetSampleStrings"

@@ -32,23 +32,23 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1516 rows to check: 2620 guesses and 623 observe steps.**
+**1521 rows to check: 2630 guesses and 623 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **534** |
+| **Built milestones (M0 to M6)** | all | **535** |
 | Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 120 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 33 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
 | Built milestones (M0 to M6) | Filters | 36 |
 | Built milestones (M0 to M6) | Spacing and metrics keys | 23 |
 | Built milestones (M0 to M6) | Kerning and the Kerning window | 42 |
-| Built milestones (M0 to M6) | Font View | 113 |
+| Built milestones (M0 to M6) | Font View | 114 |
 | Built milestones (M0 to M6) | Font Info and features | 20 |
 | Built milestones (M0 to M6) | Files: open, import, export | 49 |
 | Built milestones (M0 to M6) | Settings and the window | 9 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **982** |
+| **Later milestones (after M6)** | all | **986** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 89 |
 | Later milestones (after M6) | Edit View: text mode and preview | 28 |
 | Later milestones (after M6) | Components and anchors | 43 |
@@ -56,16 +56,16 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Spacing and metrics keys | 13 |
 | Later milestones (after M6) | Kerning and the Kerning window | 16 |
 | Later milestones (after M6) | Font View | 19 |
-| Later milestones (after M6) | Font Info and features | 306 |
+| Later milestones (after M6) | Font Info and features | 307 |
 | Later milestones (after M6) | Interpolation | 90 |
-| Later milestones (after M6) | Hinting | 113 |
+| Later milestones (after M6) | Hinting | 115 |
 | Later milestones (after M6) | Colour fonts | 74 |
 | Later milestones (after M6) | Files: open, import, export | 71 |
-| Later milestones (after M6) | Settings and the window | 27 |
+| Later milestones (after M6) | Settings and the window | 28 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
-## Built milestones (M0 to M6) (534)
+## Built milestones (M0 to M6) (535)
 
 ### Edit View: drawing, guides, layers and the Palette (120)
 
@@ -1025,7 +1025,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Overwrite is the default button that Return presses; the warning in the reference app settles it.
   - Guess: The warning lists the conflicting pairs with the pasted and the current value; the handbook names no list, and a screenshot of the warning settles it.
 
-### Font View (113)
+### Font View (114)
 
 - [ ] `import.keepGlyphNames` (behavior, M1, handbook): When a compiled OTF or TTF is opened with the user setting…
   - Guess: The glyphOrder parameter is added whatever the setting says, following the Opening Font Files page rather than the Glyph Order page, which ties it to the setting; opening a TTF with the setting off would settle it.
@@ -1134,6 +1134,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The published data has no sort names, so the key is ours: category in the order Letter, Number, Punctuation, Symbol, Separator, Mark, then glyphs without one; within a category the base glyph's first code point, then the name; suffixed glyphs after the run of base glyphs, or right after their base with Keep Alternates Next to Base Glyph on. Settled by observation (05 question 2).
   - Guess: A sort name (from custom glyph data or the glyph itself) places the glyph after the others of its category, ordered by the sort name.
   - Guess: In a stored order that is not sorted by the key, a new glyph goes right after the last glyph whose key is not greater than its own (first when there is none), so it follows the glyphs it would follow in a sorted font. Settled by observing where the reference puts a new glyph in a hand-ordered font.
+- [ ] `fontView.show` (M4, handbook, live): Show Font View
+  - Guess: Show Font View is a View menu row with its Cmd+Alt+1 shortcut; the handbook names the shortcut but no menu item, and the reference app's View and Window menus settle it.
 - [ ] `fontView.setViewMode` (M4, handbook, live): Grid View / List View
   - Guess: The selection, the sidebar entries, the search and the sort carry over when the mode changes. Settled by observation.
 - [ ] `fontView.setCellSize` (M4, handbook, live): Cell Size
@@ -1241,7 +1243,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Without a selected entry in its section, a Shift-clicked entry is added as Cmd-click adds it. Settled by Shift-clicking an entry of an unused section in the reference.
   - Guess: Glyphs that a new sidebar selection hides are deselected. Settled by observing whether the reference keeps hidden glyphs selected after choosing a sidebar entry.
   - Guess: A selected entry that disappears (a removed or renamed filter, a category with no glyph left) is deselected. Settled by removing a selected filter in the reference.
-- [ ] `fontView.setSidebarEntryOpen` (M4, inferred): Open Sidebar Entry
+- [ ] `fontView.setSidebarEntryOpen` (M4, inferred, live): Open Sidebar Entry
   - Guess: The sections start open and every other entry with children starts closed. Settled by opening a new document in the reference.
 - [ ] `fontView.queryGlyphs` (M4, inferred, live): Query Glyphs
   - Guess: Our own query for agents; it must give the glyphs the sidebar and search would show for the same entries and text.
@@ -1492,6 +1494,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A path is kept once, as an absolute path; opening or saving it again moves it to the top. Settled by observing the Start Window.
 - [ ] `start.shownAtLaunchWithoutDocuments` (behavior, M4, handbook): The Start Window appears at launch when no document is open
   - Guess: With Show window on startup off, the app opens a new document at launch, as File › New does. Settled by observing a launch with the checkbox cleared.
+  - Guess: A file or URL named on the command line that opens nothing leaves the reason in the status line and shows the Start Window, rather than quitting; launching the reference with a missing file would settle it.
 - [ ] `file.newFromGlyphSets` (M4, handbook, live): New from Glyph Sets…
   - Guess: Phonetics and TransLatin sets are listed under latin, Coptic and the other Greek sets under greek. Settled by observing the reference's chooser.
   - Guess: A script picked without naming sets takes its Core set (Latin, Cyrillic, Greek and Arabic Core); a script without a default takes its first set. Settled by observing what the reference's chooser preselects when a script is switched on.
@@ -1619,7 +1622,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (982)
+## Later milestones (after M6) (986)
 
 ### Edit View: drawing, guides, layers and the Palette (89)
 
@@ -1689,10 +1692,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Module sections follow the built-in sections in the order of the modules' names; the handbook does not say where plug-in sections go.
   - Guess: Values typed into a module's form are kept for the session only, and a module replaced by another version starts again from its defaults.
   - Observe: Install a palette plug-in from the Plugin Manager, relaunch and note where its section appears among the built-in Palette sections and whether it collapses like them.
-- [ ] `palette.setModuleValue` (M13, inferred): Set Module Parameter
-  - Open (our design, not confirmed): Sets one field of a filter module's Palette section, held to the parameter's range. The value is kept for the session.
-- [ ] `palette.applyModule` (M13, inferred): Apply Module
-  - Open (our design, not confirmed): The Apply button of a filter module's Palette section: runs the module with the section's values on what its Filter menu item acts on (the edited glyph and its selected nodes, or the glyphs selected in Font View).
+- [ ] `palette.setModuleValue` (M13, inferred, live): Set Module Parameter
+  - Guess: A module's field values last for the session and are not saved with the document or the settings; the handbook does not say whether plug-in Palette sections keep their values, and a plug-in section in the reference app, edited and reopened after a restart, settles it.
+- [ ] `palette.applyModule` (M13, inferred, live): Apply Module
+  - Guess: Apply acts on the same glyphs and nodes as the module's Filter menu item and makes one undo step; the handbook does not describe a filter section's Apply button, and running one in the reference app with nodes selected settles it.
 - [ ] `image-pdf` (format, M13, handbook): PDF page placed as an image
   - Guess: The page is drawn on a transparent background, not white, so the glyph shows through around the artwork; placing a PDF in the reference app would show which it uses.
   - Guess: Text and images inside the PDF are not drawn; the reference draws them through the operating system, and a PDF with text placed in the reference app would show the difference.
@@ -2270,7 +2273,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: Turn on Upside Down: note whether the text is turned or mirrored, and press Right with a glyph selected: note which margin grows.
   - Observe: Turn on Beam: note its default height, whether it can be dragged, and whether Edit View's beam moves with it.
   - Observe: Turn on Guides with a horizontal font guide: note whether it runs across the line or within each glyph.
-- [ ] `spaceCenter.setValue` (M13, docs): Set Space Center Value
+- [ ] `spaceCenter.setValue` (M13, docs, live): Set Space Center Value
   - Guess: A matrix entry is its own command that evaluates the text and then runs the spacing setter as a second step; the reference's undo history after one entry would settle whether it is one step.
 - [ ] `palette.pairsAndPhrases` (panel, M13, docs): Pairs & Phrases
   - Guess: Automatic mode shows the pairs list while the showing tab is in text mode and the phrases list otherwise; the reference switches by its kerning tool, which FontCraft does not have.
@@ -2307,9 +2310,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Without `pairs` or glyph lists, every class pair stored in the master is expanded to its members; FontLab applies the command to the pairs selected in its window.
   - Guess: The default threshold is 0, so only outlines that overlap are reported; touching outlines (distance 0) are not.
   - Guess: `fix` adds a glyph–glyph exception set to the threshold minus the distance without kerning, rounded up to a whole unit; it never adds a glyph–group exception.
-- [ ] `dialog.auditKerningExceptions` (M13, docs): Audit Kerning Exceptions…
+- [ ] `dialog.auditKerningExceptions` (M13, docs, live): Audit Kerning Exceptions…
   - Guess: The audit runs once with the default settings as the dialog opens; FontLab's page does not say whether its dialog lists pairs before a button is pressed.
-- [ ] `dialog.matchKerning` (M13, docs): Match Kerning…
+- [ ] `dialog.matchKerning` (M13, docs, live): Match Kerning…
   - Guess: The summary gives the pairs filled, the exceptions added and each master's pair count before and after; FontLab's page names no summary.
 - [ ] `kerning.removePairsByRule` (M13, docs, live): Remove Pairs…
   - Guess: An exception is a stored pair with a glyph side whose glyph has a kerning group on the side facing the pair; its class value is the value that applies once it is removed (glyph–group, then group–glyph, then group–group; 0 when none applies). FontLab does not define either term on its page.
@@ -2418,7 +2421,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.
   - Guess: Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.
 
-### Font Info and features (306)
+### Font Info and features (307)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
@@ -2471,7 +2474,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In font B (m7-two), look at an instance's preview on the Exports tab: note where it is and what it shows.
 - [ ] `font.info.selectTab` (M7, inferred, live): Select Font Info Tab
   - Guess: Our own command for scripts; with the window closed it opens Font Info on that tab. Nothing to observe: the reference app switches tabs only by clicking them.
-- [ ] `font.info.exports.select` (M7, inferred): Select Exports
+- [ ] `font.info.openDialog` (M7, inferred, live): Open Font Info Dialog
+  - Guess: Our own command so scripts and agents open the pickers and parameter editors that clicks open; the reference app has only the buttons and value fields, so there is nothing to settle.
+- [ ] `font.info.exports.select` (M7, inferred, live): Select Exports
   - Guess: Our own command for scripts and the window's clicks; nothing to observe, the reference app selects exports only by clicking them.
 - [ ] `font.info.listFields` (M7, inferred, live): List Available Fields
   - Guess: The Font tab offers familyNames, designers, designerURL, manufacturers, manufacturerURL, copyrights, versionString, vendorID, uniqueID, licenses, licenseURL, trademarks, descriptions, sampleTexts, postscriptFontName, postscriptFullNames, compatibleFullNames, WWSFamilyName, WWSSubfamilyName and variationsPostScriptNamePrefix; the Exports tab the same plus styleNames, styleMapFamilyNames, styleMapStyleNames, preferredFamilyNames, preferredSubfamilyNames and variableStyleNames; the Masters tab offers none and keeps master properties as read. The pickers of the reference app settle the three lists.
@@ -2589,8 +2594,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The note is returned as plain text, as stored; the Notes tab in the running app would settle whether formatting is kept.
 - [ ] `font.note.set` (M7, inferred, live): Set Font Note
   - Guess: Setting the note replaces it whole in one undo step; editing the Notes tab in the running app would settle how undo groups typing.
-- [ ] `font.info.masters.select` (M7, inferred): Select Masters
-  - Open (our design, not confirmed): Selects masters in the list of the Masters tab; the sections at the right then edit every selected master at once.
+- [ ] `font.info.masters.select` (M7, inferred, live): Select Masters
+  - Guess: Our own command for scripts; an empty list selects the first master, since the Masters tab always edits at least one. Clicking in the reference app's list until nothing is selected settles whether it allows an empty selection.
 - [ ] `fontInfo` (panel, M7, handbook): Font Info
   - Guess: Font Info opens on the tab it last showed for that document, and on the Font tab the first time; opening it twice in the reference app settles it.
   - Guess: One Font Info window shows the active document, and switching documents shows the other document's information in it; opening Font Info in two documents of the reference app settles whether each keeps a window of its own.
@@ -2763,9 +2768,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `fontInfo.features.stylisticSetNames` (behavior, M8, handbook): Selecting one of ss01 to ss20 shows name rows above the editor,…
   - Guess: A name in a language without a Windows language id is left out, as fontc does (glyphsLib stops with an error), and text tokens in names are not expanded yet; a name in such a language exported from the reference app settles it.
   - Guess: Choosing another language for a name row removes the name and adds it in the new language, as two undo steps; changing a row's language in the reference app settles whether it is one step.
-- [ ] `font.info.features.select` (M8, inferred): Select Feature Entries
+- [ ] `font.info.features.select` (M8, inferred, live): Select Feature Entries
   - Guess: Our own command for scripts and the window's clicks; nothing to observe, the reference app selects sidebar entries only by clicking them.
-- [ ] `font.info.features.paste` (M8, inferred): Paste Feature Entries
+- [ ] `font.info.features.paste` (M8, inferred, live): Paste Feature Entries
   - Guess: Our own command that carries the sidebar's Paste to font.features.pasteEntries; nothing to observe beyond the context menu row fontInfo.features.contextMenu.
 - [ ] `font.numbers.list` (M8, inferred, live): List Number Values
   - Guess: Numbers are listed in the font's order, plus one master's values when asked; the Masters tab in the running app would settle the order.
@@ -3680,7 +3685,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Edits collect in a draft that Apply writes, rather than each edit changing the font at once; watching the secondary reference's undo after editing a card would settle it.
   - Guess: A new mapping starts with no axis ticked and each value at the default master's location; the secondary reference's new card would settle it.
 
-### Hinting (113)
+### Hinting (115)
 
 - [ ] `hinting.ps.standardStems.privateDictMapping` (behavior, M10, docs): At export the first horizontal stem becomes StdHW and the first vertical…
   - Guess: More than twelve stems in one direction: the export writes the first twelve in list order and warns, and hint.ps.validateFontHints reports it; an export from the reference app with thirteen stems would settle it.
@@ -3936,6 +3941,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `autohint.tt.run` (M10, inferred, live): Autohint TrueType
   - Guess: The built-in TrueType autohinter is FontCraft's own (decided in M10 § 7, question 2): Snap and Stem instructions from the PostScript autohinter's zone and stem analysis, compiled with the manual-instruction compiler; ttfautohint runs instead when the TTFAutohint binary path parameter names one; the reference app's built-in autohinter is ttfautohint.
   - Observe: T3: export a TTF with Autohint on from a font whose glyphs carry TrueType instructions; render a hinted glyph at 12 PPM and note whether the manual instructions or the autohinter's result shows.
+- [ ] `window.ttfZones` (M10, inferred, live): Edit TT Zones…
+  - Guess: Our own command so scripts and agents open the TT zones editor on a master, defaulting to the main master; the reference app opens it only from the parameter's value field, so there is nothing to settle.
 - [ ] `hint.tt.getPsZones` (M10, handbook, live): Get PS zones
   - Guess: Get PS zones replaces the TT zone list with the master's alignment zones, named after their metrics (xHeight for the x-height metric so that it gets the x-height rounding, else the metric's name, else zone 1, zone 2…); the reference app would settle replace or append and the names.
   - Guess: On the main master, Snap instructions keep their zone by name after Get PS zones, and those whose zone is gone turn to Auto; the reference app would settle it with a Snap on a custom zone.
@@ -3947,6 +3954,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: T3: remove a TT zone that a Snap instruction names; note what the instruction shows afterwards (Auto, another zone, or an error).
 - [ ] `hint.tt.setZone` (M10, inferred, live): Edit Zone
   - Guess: One command edits any property of a TT zone, as the sheet's row does, and refuses deltas and filters outside the main master; the reference app's sheet would settle whether other masters show those buttons at all.
+- [ ] `window.ttfStems` (M10, inferred, live): Edit TT Stems…
+  - Guess: Our own command so scripts and agents open the TT stems editor on a master, defaulting to the main master; the reference app opens it only from the parameter's value field, so there is nothing to settle.
 - [ ] `hint.tt.getPsStems` (M10, handbook, live): Get PS stems
   - Guess: Get PS stems replaces the TT stem list, keeping the stems' names; the reference app would settle replace or append.
   - Observe: T3: on a master that already has TT stems, choose Get PS stems; note whether the existing stems are replaced or kept, and which names the new stems get.
@@ -4325,7 +4334,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: In masters output each master is named after its source's family and master name, and colour and opacity are not stored, since a master has no colour.
   - Guess: The new font keeps the bottom source's family name and drops its axes and instances.
   - Guess: `color` defaults to opaque black and `output` has no default.
-- [ ] `dialog.overlayFonts` (M13, docs): Overlay Fonts…
+- [ ] `dialog.overlayFonts` (M13, docs, live): Overlay Fonts…
   - Guess: The dialog opens with one source per open document, bottom first, each in its own colour from a fixed list; settled by opening Overlay Fonts in the reference app with three fonts open.
   - Guess: The preview shows the shown glyph, or the first three glyphs of the active font, side by side; settled by the reference app's dialog.
 - [ ] `color.generateDarkPalette` (M13, docs, live): Generate Dark Palette
@@ -4403,12 +4412,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Closing a project with unsaved changes refuses unless `discard` is true, as closing a font does; closing a changed project window in the reference app would settle what it asks.
 - [ ] `project.list` (M7, inferred, live): List Projects
   - Guess: A query of ours listing each open project's font link, destination, instances and saved state; the reference app shows the same facts only in each project window.
-- [ ] `window.project.select` (M7, inferred): Select Project Instances
+- [ ] `window.project.select` (M7, inferred, live): Select Project Instances
   - Guess: One Project panel shows one open project at a time, with a choice between them when several are open, instead of one window per project; opening two projects in the reference app shows its window arrangement, and the dock has no free-floating windows.
   - Guess: The Duplicate item sits in the list's plus menu and in the entry's context menu; right-clicking a project instance in the reference app settles where it lives.
-- [ ] `window.project.copy` (M7, handbook): Copy Project Instances
+- [ ] `window.project.copy` (M7, handbook, live): Copy Project Instances
   - Guess: Copy and Paste of instances run from the instance list's context menu as well as the keys; right-clicking a project instance in the reference app settles whether it has such a menu.
-- [ ] `window.project.paste` (M7, handbook): Paste Project Instances
+- [ ] `window.project.paste` (M7, handbook, live): Paste Project Instances
   - Guess: Pasted copies go after the last selected instance rather than at the end of the list; pasting with one instance selected in the reference app settles it.
 - [ ] `window.project` (panel, M7, handbook): Project
   - Guess: A Save button beside Export saves the project, and a project never saved asks the save chooser for its file, offering a name after its title; the handbook only names File › Save. Saving a project in the reference app settles where saving lives.
@@ -4641,7 +4650,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Every item starts ticked, so Accept Selected with no change of the ticks takes everything; the reference's manual does not say which state the ticks start in, and opening the window there settles it.
   - Guess: The stored-text view on double-click shows the glyph in FontCraft's native JSON form rather than as a .glif file, since the comparison is between models; the reference shows the file text, and a file-per-glyph text view would follow it more closely.
 
-### Settings and the window (27)
+### Settings and the window (28)
 
 - [ ] `sharing.confirmConnectionOnHost` (behavior, M13, handbook): A first connection attempt from a device must be confirmed on the…
   - Guess: Devices are known by their IP address, so a device that gets a new address must be confirmed again; what the reference keys them by is not documented.
@@ -4689,6 +4698,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A document changed after the question about it was answered with Save is asked about again before the window closes; one answered Don't Save is not.
   - Observe: Change a font, click the window's close box: note the question's text, its buttons and their order.
   - Observe: In the question, choose Save for a font never saved and cancel the file chooser: note whether the window stays open and the question closes.
+- [ ] `app.about` (M14, inferred, live): About FontCraft
+  - Guess: About FontCraft sits in the Help menu on every platform: the window has no macOS application menu to put it in, where the reference app keeps it; a macOS build with the native menu bar would move it there.
 - [ ] `settings.menuItemNameOnOlderSystem` (behavior, M14, handbook): On macOS 12 the menu item that opens the window is labelled…
   - Guess: One label and place on every platform, Settings… in the Edit menu, as many Linux and Windows applications do; a native macOS menu bar would move it to the application menu.
 - [ ] `shortcuts.oneRegistry` (behavior, M14, inferred): FontCraft derives the action list from the command registry: every command with…
@@ -4696,8 +4707,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `app.settings` (M14, handbook, live): Settings…
   - Guess: Settings… is the last item of the Edit menu on every platform, because FontCraft draws its own menu bar and has no application menu; the reference puts it in the application menu on macOS.
   - Guess: The window reopens on the section last shown; the handbook does not say which section it opens on.
-- [ ] `settings.setSampleStrings` (M14, inferred): Set Sample Strings
-  - Open (our design, not confirmed): Replaces the strings of one group; the UI equivalent is editing the text field. Proposed for headless use.
+- [ ] `settings.setSampleStrings` (M14, inferred, live): Set Sample Strings
+  - Guess: Our own command for scripts: it replaces a whole group, one string per line of the section's text field, as editing that field does; the reference has no headless access to settings, so there is nothing to settle.
 - [ ] `settings.resetShortcut` (M14, inferred): Reset Shortcut
   - Open (our design, not confirmed): Drops the user's override for one action, or for all when no id is given, restoring built-in shortcuts. Not described in the source; proposed because Customized filtering implies a way back.
 - [ ] `settings.listShortcuts` (M14, inferred): List Shortcuts
@@ -4718,7 +4729,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Use Versions is stored and does nothing, because the system's version browser is a macOS service FontCraft does not use.
 - [ ] `user.sendCrashReports` (setting, M14, handbook): Send Crash Reports
   - Guess: Send Crash Reports and its two contact fields are stored and do nothing, because FontCraft has no crash-report service.
-- [ ] `app.commandPalette` (M14, docs): Commands…
+- [ ] `app.commandPalette` (M14, docs, live): Commands…
   - Guess: The palette lists the commands that have a menu row; the others take parameters and are reached through the Command Console. The secondary reference's list would settle it.
   - Guess: The shortcut Cmd+Shift+P comes from the secondary reference; the reference app has none.
 
@@ -4842,7 +4853,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A removed module or macro file is moved into a `Removed` folder beside the Modules and Macros folders rather than deleted, so a removal can be undone by hand; the reference's Remove is not documented in that detail.
 - [ ] `pluginManager.enlargePreview` (M13, inferred, live): Enlarge Preview
   - Guess: The enlarged screenshot opens in its own window and closes from that window or by running the command without an id; the reference app's full-size view would settle where it appears and how it closes.
-  - Guess: In the new window the screenshot shows inside the Extension Manager at the largest thumbnail size rather than in a window of its own; the reference app's full-size view would settle it.
+  - Guess: The screenshot shows inside the Extension Manager at the largest thumbnail size rather than in a window of its own; the reference app's full-size view would settle it.
 - [ ] `pluginManager.openWebsite` (M13, inferred, live): Open Website
   - Guess: The Website button shows on every index entry and the command fails with a message when the entry has no `homepage`; the reference app with an entry that lacks a website would settle whether the link is hidden instead.
 - [ ] `pluginManager.openDonationPage` (M13, inferred, live): Donate

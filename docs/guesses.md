@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**3120 guesses on 1621 rows (647 of them live commands).**
+**3130 guesses on 1630 rows (671 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -30,6 +30,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `window.closePrompt` | M14 | inferred | yes | Don't Save sits on the left, Cancel and Save on the right with Save rightmost, as macOS document apps place them. |
 | `window.closePrompt` | M14 | inferred | yes | A failed or cancelled save stops the whole quit rather than moving on to the next document. |
 | `window.closePrompt` | M14 | inferred | yes | A document changed after the question about it was answered with Save is asked about again before the window closes; one answered Don't Save is not. |
+| `app.about` | M14 | inferred | yes | About FontCraft sits in the Help menu on every platform: the window has no macOS application menu to put it in, where the reference app keeps it; a macOS build with the native menu bar would move it there. |
 | `path.convertToCubic` | M3 | handbook | yes | New handles are not rounded to the grid, so the outline stays exact; the handbook does not say whether the reference rounds them. |
 | `window.titleShowsDocument` (behavior) | M14 | inferred | – | The edited mark is the word Edited after the name, as macOS document windows show it; off macOS the app's name follows because the taskbar shows only the title. |
 | `dialog.livePreview` (behavior) | M3 | inferred | – | Every filter dialog previews its result live and OK keeps it as one undo step; a tutorial video shows this for Transformations only. |
@@ -108,6 +109,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `guide.displayLines` | M3 | inferred | yes | The design grid parameter is read as a horizontal and a vertical step in units, drawn over the CJK box, or over the glyph's width and metric span when no CJK grid is set; the handbook does not explain it. |
 | `app.launchWithoutPlugins` (behavior) | M13 | handbook | – | The launch keys are read on the window's first frame, since the toolkit reports modifier keys only once the window exists; whether the reference also offers a way back without relaunching would settle Load Extensions. |
 | `start.shownAtLaunchWithoutDocuments` (behavior) | M4 | handbook | – | With Show window on startup off, the app opens a new document at launch, as File › New does. Settled by observing a launch with the checkbox cleared. |
+| `start.shownAtLaunchWithoutDocuments` (behavior) | M4 | handbook | – | A file or URL named on the command line that opens nothing leaves the reason in the status line and shows the Start Window, rather than quitting; launching the reference with a missing file would settle it. |
 | `tabs.windowHoldsFontViewPlusEditTabs` (behavior) | M3 | handbook | – | A window, and each document opened into it, opens on Font View with no Edit View tab, and a file's stored tabs open behind Font View; the handbook does not say which tab a file opens on. Opening a new file in the reference app settles it. |
 | `tabs.windowHoldsFontViewPlusEditTabs` (behavior) | M3 | handbook | – | Font View draws in the master of the Edit View tab shown last; the handbook gives Font View no master of its own. Switching masters in two tabs and then showing Font View in the reference app settles it. |
 | `tabs.windowHoldsFontViewPlusEditTabs` (behavior) | M3 | handbook | – | A tab left without glyphs by a removal closes, and Font View shows when it was showing; removing the only glyph of the showing tab in the reference app settles it. |
@@ -368,6 +370,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | Row | Milestone | Status | Live | Guess |
 |---|---|---|---|---|
 | `window.palette` | M3 | handbook | yes | With every Palette panel closed one at a time, Window › Palette opens the panels the default layout docks at the end edge; settle by closing the reference app's Palette sections one by one and choosing Window › Palette. |
+| `window.togglePanel` | M3 | inferred | yes | The panel rows sit in a Panels submenu of the Window menu rather than in the Window menu itself, which keeps the windows the reference lists there apart; settle against the reference app's Window menu. |
+| `palette.setModuleValue` | M13 | inferred | yes | A module's field values last for the session and are not saved with the document or the settings; the handbook does not say whether plug-in Palette sections keep their values, and a plug-in section in the reference app, edited and reopened after a restart, settles it. |
+| `palette.applyModule` | M13 | inferred | yes | Apply acts on the same glyphs and nodes as the module's Filter menu item and makes one undo step; the handbook does not describe a filter section's Apply button, and running one in the reference app with nodes selected settles it. |
 | `dimensions.getValues` | M3 | inferred | yes | The field keys per script come from the corpus files (Latin: HH, HV, OH, OV, nV, nd, oH, oV, tH; Arabic: arAlef, arBar); the reference does not document them. |
 | `fitCurve.setHandleLength` | M3 | inferred | yes | A handle's percentage is its length over the distance from its node to the intersection of the two handles, or the chord when the handles are parallel (Palette question 2). |
 | `fitCurve.increase` | M3 | inferred | yes | Plus moves to the next of the eight steps above the segment's mean percentage; the handbook gives no increment. |
@@ -393,7 +398,6 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `dimensions.perMaster` (behavior) | M3 | handbook | – | Values are stored under `GSDimensionPlugin.Dimensions` in the font's user data, one dictionary per master id, the key the corpus files use (Palette question 1). |
 | `fitCurve.percentRange` (behavior) | M3 | handbook | – | Without the `Fit Curve Panel Settings` parameter the range is 48 to 74 %, the handbook's example, and values beyond the range are clamped to it (Palette question 2). |
 | `transform.oppositeButtonsExact` (behavior) | M3 | handbook | – | Opposite buttons are exact for mirroring and quarter turns, through exact sines and cosines and grid rounding; other angles are undone only up to grid rounding (Palette question 5). |
-| `window.togglePanel` | M3 | inferred | no | The panel rows sit in a Panels submenu of the Window menu rather than in the Window menu itself, which keeps the windows the reference lists there apart; settle against the reference app's Window menu. |
 | `palette.dimensions` (panel) | M3 | handbook | – | In Font View the panel shows the notepad of the current master rather than the first master's; switching masters in Font View in the reference app with the Dimensions section open settles it. |
 | `palette.layers` (panel) | M3 | handbook | – | While a row is dragged, an accent-coloured line between rows shows where it will land, and the master row is outlined when a backup dropped there would replace the master layer. |
 | `palette.layers` (panel) | M3 | handbook | – | Dropping on a row's upper half puts the dragged row above it, on its lower half below it. |
@@ -405,6 +409,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 
 | Row | Milestone | Status | Live | Guess |
 |---|---|---|---|---|
+| `fontView.show` | M4 | handbook | yes | Show Font View is a View menu row with its Cmd+Alt+1 shortcut; the handbook names the shortcut but no menu item, and the reference app's View and Window menus settle it. |
 | `fontView.setViewMode` | M4 | handbook | yes | The selection, the sidebar entries, the search and the sort carry over when the mode changes. Settled by observation. |
 | `fontView.setCellSize` | M4 | handbook | yes | Cells run from 16 to 512 points on a logarithmic slider, 64 by default. Settled by observation. |
 | `fontView.sortByColumn` | M4 | handbook | yes | Glyphs without a value in the sort column go last in both directions, and ties keep glyph order. Settled by observation. |
@@ -486,6 +491,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontView.selectSidebarEntries` | M4 | handbook | yes | Without a selected entry in its section, a Shift-clicked entry is added as Cmd-click adds it. Settled by Shift-clicking an entry of an unused section in the reference. |
 | `fontView.selectSidebarEntries` | M4 | handbook | yes | Glyphs that a new sidebar selection hides are deselected. Settled by observing whether the reference keeps hidden glyphs selected after choosing a sidebar entry. |
 | `fontView.selectSidebarEntries` | M4 | handbook | yes | A selected entry that disappears (a removed or renamed filter, a category with no glyph left) is deselected. Settled by removing a selected filter in the reference. |
+| `fontView.setSidebarEntryOpen` | M4 | inferred | yes | The sections start open and every other entry with children starts closed. Settled by opening a new document in the reference. |
 | `fontView.queryGlyphs` | M4 | inferred | yes | Our own query for agents; it must give the glyphs the sidebar and search would show for the same entries and text. |
 | `fontView.addSmartFilter` | M4 | handbook | yes | Headless, a filter added without rules gets one rule every glyph matches (Glyph Name contains an empty text), standing for the editor's single empty rule. Settled by observing what an untouched new smart filter shows. |
 | `path.roundCoordinates` | M3 | handbook | yes | A font whose grid is off (spacing 0) rounds to whole units. |
@@ -577,7 +583,6 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontView.image.dropOnCell` (behavior) | M11 | handbook | – | Several files dropped on Font View are matched to glyph names, whatever cell they land on, as Add Image does with several files. Settled by dropping two files on one cell in the reference. |
 | `fontView.image.batchByFileName` (behavior) | M11 | handbook | – | Files with no glyph of their name are skipped and listed in the result; no glyph is created. Settled by Add Image with an unmatched file in the reference. |
 | `fontView.image.caseSensitivity` (behavior) | M11 | handbook | – | File names are matched to glyph names exactly, case included, on every platform. Settled by Add Image with `a.png` in a font with `A` and `a` in the reference. |
-| `fontView.setSidebarEntryOpen` | M4 | inferred | no | The sections start open and every other entry with children starts closed. Settled by opening a new document in the reference. |
 | `glyphDataEditor.show` | M14 | inferred | no | The editor opens from the Window menu with no shortcut; the companion tool is a separate application, so nothing settles a menu place. |
 | `fontView.grid` (panel) | M4 | handbook | – | Shift+click adds every visible glyph from the last clicked glyph to the clicked one; Cmd+click adds or removes one glyph; a click on empty space clears the selection. Settled by observation. |
 | `fontView.grid` (panel) | M4 | handbook | – | Dragging across the grid draws a rectangle that selects the cells it touches, added to the selection while Shift or Cmd is held. Settled by observation. |
@@ -633,6 +638,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | Row | Milestone | Status | Live | Guess |
 |---|---|---|---|---|
 | `font.info.selectTab` | M7 | inferred | yes | Our own command for scripts; with the window closed it opens Font Info on that tab. Nothing to observe: the reference app switches tabs only by clicking them. |
+| `font.info.openDialog` | M7 | inferred | yes | Our own command so scripts and agents open the pickers and parameter editors that clicks open; the reference app has only the buttons and value fields, so there is nothing to settle. |
+| `font.info.features.select` | M8 | inferred | yes | Our own command for scripts and the window's clicks; nothing to observe, the reference app selects sidebar entries only by clicking them. |
+| `font.info.exports.select` | M7 | inferred | yes | Our own command for scripts and the window's clicks; nothing to observe, the reference app selects exports only by clicking them. |
+| `font.info.features.paste` | M8 | inferred | yes | Our own command that carries the sidebar's Paste to font.features.pasteEntries; nothing to observe beyond the context menu row fontInfo.features.contextMenu. |
 | `font.info.set` | M7 | inferred | yes | Setting a field the scope offers but the target lacks adds it, and a text sets a localizable field's default language; typing into an empty field row in the reference app settles it. |
 | `font.info.listFields` | M7 | inferred | yes | The Font tab offers familyNames, designers, designerURL, manufacturers, manufacturerURL, copyrights, versionString, vendorID, uniqueID, licenses, licenseURL, trademarks, descriptions, sampleTexts, postscriptFontName, postscriptFullNames, compatibleFullNames, WWSFamilyName, WWSSubfamilyName and variationsPostScriptNamePrefix; the Exports tab the same plus styleNames, styleMapFamilyNames, styleMapStyleNames, preferredFamilyNames, preferredSubfamilyNames and variableStyleNames; the Masters tab offers none and keeps master properties as read. The pickers of the reference app settle the three lists. |
 | `font.info.addField` | M7 | handbook | yes | Adding a field that is already present on a target is refused with a message pointing to Set Localized Value; the reference app settles it. |
@@ -736,6 +745,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `font.settings.set` | M7 | inferred | yes | Grid spacing is accepted from 0 to 10000, subdivision from 1 to 1000 and the keyboard increments above 0 up to 10000, and a value equal to the current one (stated or default) is not stored; typing the ends of each range in the reference app settles them. |
 | `font.note.get` | M7 | inferred | yes | The note is returned as plain text, as stored; the Notes tab in the running app would settle whether formatting is kept. |
 | `font.note.set` | M7 | inferred | yes | Setting the note replaces it whole in one undo step; editing the Notes tab in the running app would settle how undo groups typing. |
+| `font.info.masters.select` | M7 | inferred | yes | Our own command for scripts; an empty list selects the first master, since the Masters tab always edits at least one. Clicking in the reference app's list until nothing is selected settles whether it allows an empty selection. |
 | `fontInfo.rows.selection` (behavior) | M7 | handbook | – | Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it. |
 | `fontInfo.rows.selection` (behavior) | M7 | handbook | – | Copy puts the rows' JSON on the system clipboard, and a selected row of a parameter whose name repeats copies every row of that name; pasting copied rows into a text editor from the reference app settles the format. |
 | `fontInfo.rows.selection` (behavior) | M7 | handbook | – | Paste replaces the rows with the same key in the shown font, masters or exports and appends repeatable parameters; pasting a row the target has in the reference app settles it. |
@@ -775,9 +785,6 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontInfo.notes.markdownHighlighting` (behavior) | M7 | handbook | – | A note longer than 256 KiB is shown without highlighting so typing stays fast; a long note in the reference app settles whether it stops highlighting. |
 | `fontInfo.exports.instancePreview` (behavior) | M7 | handbook | – | The preview sits above the instance's fields, one line high, and draws the first selected instance; an instance between masters is drawn interpolated, and a variable font setting shows none; the Exports tab of the reference app settles placement. |
 | `fontInfo.exports.instancePreview` (behavior) | M7 | handbook | – | The default `Aang126` is read as characters and drawn with the glyphs mapped to them, skipping characters the font lacks; the reference app settles whether it names glyphs instead. |
-| `font.info.features.select` | M8 | inferred | no | Our own command for scripts and the window's clicks; nothing to observe, the reference app selects sidebar entries only by clicking them. |
-| `font.info.exports.select` | M7 | inferred | no | Our own command for scripts and the window's clicks; nothing to observe, the reference app selects exports only by clicking them. |
-| `font.info.features.paste` | M8 | inferred | no | Our own command that carries the sidebar's Paste to font.features.pasteEntries; nothing to observe beyond the context menu row fontInfo.features.contextMenu. |
 | `fontInfo` (panel) | M7 | handbook | – | Font Info opens on the tab it last showed for that document, and on the Font tab the first time; opening it twice in the reference app settles it. |
 | `fontInfo` (panel) | M7 | handbook | – | One Font Info window shows the active document, and switching documents shows the other document's information in it; opening Font Info in two documents of the reference app settles whether each keeps a window of its own. |
 | `fontInfo.font` (panel) | M7 | handbook | – | The double-arrow button opens a prompt under the field that asks for the new units per em, starting at the current value, with Scale and Cancel buttons; clicking the button in the reference app settles the prompt's form. |
@@ -871,6 +878,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `project.save` | M7 | handbook | yes | Saving writes only the project file, atomically, and refuses a path that is the linked font; File › Save in a project window runs this command. |
 | `project.close` | M7 | inferred | yes | Closing a project with unsaved changes refuses unless `discard` is true, as closing a font does; closing a changed project window in the reference app would settle what it asks. |
 | `project.list` | M7 | inferred | yes | A query of ours listing each open project's font link, destination, instances and saved state; the reference app shows the same facts only in each project window. |
+| `window.project.select` | M7 | inferred | yes | One Project panel shows one open project at a time, with a choice between them when several are open, instead of one window per project; opening two projects in the reference app shows its window arrangement, and the dock has no free-floating windows. |
+| `window.project.select` | M7 | inferred | yes | The Duplicate item sits in the list's plus menu and in the entry's context menu; right-clicking a project instance in the reference app settles where it lives. |
+| `window.project.copy` | M7 | handbook | yes | Copy and Paste of instances run from the instance list's context menu as well as the keys; right-clicking a project instance in the reference app settles whether it has such a menu. |
+| `window.project.paste` | M7 | handbook | yes | Pasted copies go after the last selected instance rather than at the end of the list; pasting with one instance selected in the reference app settles it. |
 | `export.fileNaming` (behavior) | M2 | memory | – | The PostScript-name stem is recalled from the reference, not read in a source; dropping characters a file name cannot hold and falling back to the source file's name are ours. |
 | `export.fileNaming` (behavior) | M2 | memory | – | The fileName parameter keeps its text tokens as written, as fontmake keeps them; an export of an instance whose fileName holds {{{name}}} in the reference app would settle it. |
 | `export.flavourSubfolders` (behavior) | M2 | inferred | – | An export of both flavours at once puts them into ttf and otf subfolders; how the reference lays out such an export is not documented. |
@@ -908,10 +919,6 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `import.metricsBreaksAutoAlignment` (behavior) | M6 | handbook | – | Imported values that round to the derived ones (less than half a unit away) leave alignment on; importing a metrics file whose values differ by fractions in the reference app settles it. |
 | `import.metricsBreaksAutoAlignment` (behavior) | M6 | handbook | – | Alignment is switched off only on the layer of the master being imported, for every component of that layer; the other masters' layers stay aligned; importing into one master of a two-master font in the reference app settles it. |
 | `paste.strokeAndFillMayDouble` (behavior) | M3 | inferred | – | A pasted shape with both fill and stroke may arrive as two contours; this is our reading of the handbook's advice, which gives no cause. |
-| `window.project.select` | M7 | inferred | no | One Project panel shows one open project at a time, with a choice between them when several are open, instead of one window per project; opening two projects in the reference app shows its window arrangement, and the dock has no free-floating windows. |
-| `window.project.select` | M7 | inferred | no | The Duplicate item sits in the list's plus menu and in the entry's context menu; right-clicking a project instance in the reference app settles where it lives. |
-| `window.project.copy` | M7 | handbook | no | Copy and Paste of instances run from the instance list's context menu as well as the keys; right-clicking a project instance in the reference app settles whether it has such a menu. |
-| `window.project.paste` | M7 | handbook | no | Pasted copies go after the last selected instance rather than at the end of the list; pasting with one instance selected in the reference app settles it. |
 | `dialog.exportMetrics` (panel) | M5 | handbook | – | The format, file name and folder sit on the tab, with the folder chooser for the folder, because the dialog framework has no save-file chooser; the handbook puts them in a save dialog after Next…. A save-file chooser in the shell would settle it. |
 | `dialog.exportMetrics` (panel) | M5 | handbook | – | The tab shows a Master pop-up that starts on the toolbar's master, so a master can be exported without changing the toolbar; the handbook names no such control. |
 | `dialog.importOutlinesMissingGlyph` (panel) | M3 | handbook | – | One question covers every unmatched file, with the buttons Add Glyphs and Skip; the handbook asks once per file, with Add Glyph and OK (skip). |
@@ -1647,11 +1654,13 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | Row | Milestone | Status | Live | Guess |
 |---|---|---|---|---|
 | `autohint.tt.run` | M10 | inferred | yes | The built-in TrueType autohinter is FontCraft's own (decided in M10 § 7, question 2): Snap and Stem instructions from the PostScript autohinter's zone and stem analysis, compiled with the manual-instruction compiler; ttfautohint runs instead when the TTFAutohint binary path parameter names one; the reference app's built-in autohinter is ttfautohint. |
+| `window.ttfZones` | M10 | inferred | yes | Our own command so scripts and agents open the TT zones editor on a master, defaulting to the main master; the reference app opens it only from the parameter's value field, so there is nothing to settle. |
 | `hint.tt.getPsZones` | M10 | handbook | yes | Get PS zones replaces the TT zone list with the master's alignment zones, named after their metrics (xHeight for the x-height metric so that it gets the x-height rounding, else the metric's name, else zone 1, zone 2…); the reference app would settle replace or append and the names. |
 | `hint.tt.getPsZones` | M10 | handbook | yes | On the main master, Snap instructions keep their zone by name after Get PS zones, and those whose zone is gone turn to Auto; the reference app would settle it with a Snap on a custom zone. |
 | `hint.tt.addZone` | M10 | handbook | yes | Adding, removing or renaming a TT zone or stem writes the TTFZones or TTFStems parameter of every master, so a master that used its alignment zones or standard stems gets an explicit list; the reference app would show whether such a master gets the parameter. |
 | `hint.tt.removeZone` | M10 | handbook | yes | Snap instructions that name a removed zone fall back to Auto, and zones aligned to it lose their alignment; a rename updates both; the reference app would settle it. |
 | `hint.tt.setZone` | M10 | inferred | yes | One command edits any property of a TT zone, as the sheet's row does, and refuses deltas and filters outside the main master; the reference app's sheet would settle whether other masters show those buttons at all. |
+| `window.ttfStems` | M10 | inferred | yes | Our own command so scripts and agents open the TT stems editor on a master, defaulting to the main master; the reference app opens it only from the parameter's value field, so there is nothing to settle. |
 | `hint.tt.getPsStems` | M10 | handbook | yes | Get PS stems replaces the TT stem list, keeping the stems' names; the reference app would settle replace or append. |
 | `hint.tt.removeStemDefinition` | M10 | handbook | yes | Stem instructions that name a removed stem fall back to Auto; a rename updates them; the reference app would settle it. |
 | `hint.tt.setStemDefinition` | M10 | inferred | yes | One command edits any property of a TT stem, as the sheet's row does, and refuses deltas and filters outside the main master; the reference app's sheet would settle whether other masters show those buttons at all. |
@@ -1918,6 +1927,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `app.settings` | M14 | handbook | yes | The window reopens on the section last shown; the handbook does not say which section it opens on. |
 | `settings.get` | M4 | inferred | yes | Our own command; the reference has no headless access to settings, so there is nothing to settle. |
 | `settings.set` | M4 | inferred | yes | Our own command; the reference has no headless access to settings, so there is nothing to settle. |
+| `settings.setSampleStrings` | M14 | inferred | yes | Our own command for scripts: it replaces a whole group, one string per line of the section's text field, as editing that field does; the reference has no headless access to settings, so there is nothing to settle. |
 | `sharing.answerDevice` | M13 | inferred | yes | A refused device is turned away until the preview is turned off; it is not remembered across launches. |
 | `settings.menuItemNameOnOlderSystem` (behavior) | M14 | handbook | – | One label and place on every platform, Settings… in the Edit menu, as many Linux and Windows applications do; a native macOS menu bar would move it to the application menu. |
 | `sharing.confirmConnectionOnHost` (behavior) | M13 | handbook | – | Devices are known by their IP address, so a device that gets a new address must be confirmed again; what the reference keys them by is not documented. |
@@ -1956,7 +1966,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `pluginManager.install` | M13 | inferred | yes | A macro installed from an index is saved in the Macros folder as `<id>.fcmacro`, so the listing and Remove find it by the entry's id; the reference's scripts keep their repository's file names. |
 | `pluginManager.remove` | M13 | inferred | yes | A removed module or macro file is moved into a `Removed` folder beside the Modules and Macros folders rather than deleted, so a removal can be undone by hand; the reference's Remove is not documented in that detail. |
 | `pluginManager.enlargePreview` | M13 | inferred | yes | The enlarged screenshot opens in its own window and closes from that window or by running the command without an id; the reference app's full-size view would settle where it appears and how it closes. |
-| `pluginManager.enlargePreview` | M13 | inferred | yes | In the new window the screenshot shows inside the Extension Manager at the largest thumbnail size rather than in a window of its own; the reference app's full-size view would settle it. |
+| `pluginManager.enlargePreview` | M13 | inferred | yes | The screenshot shows inside the Extension Manager at the largest thumbnail size rather than in a window of its own; the reference app's full-size view would settle it. |
 | `pluginManager.openWebsite` | M13 | inferred | yes | The Website button shows on every index entry and the command fails with a message when the entry has no `homepage`; the reference app with an entry that lacks a website would settle whether the link is hidden instead. |
 | `pluginManager.openDonationPage` | M13 | inferred | yes | One Donate button stands for every donation service, opening the entry's single `funding` link; an index entry in the reference format that lists several services would settle whether one button is enough. |
 | `script.run` | M13 | inferred | yes | A macro runs as one undo step that is undone as a whole, like command.batch; the reference undoes script edits per glyph and does not say how a script's changes group. |
@@ -2484,6 +2494,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `audit.toggleLiveAudit` | M3 | inferred | yes | The menu row sits in a View › Audit submenu, beside the other edit view display switches; the reference app has no audit, so no source places it. |
 | `audit.toggleMarkers` | M3 | inferred | yes | Markers are on when the app starts; the default is ours. |
 | `audit.filterResults` | M12 | inferred | yes | The severity filter is three choices (all, warnings and failures, failures) rather than a toggle per severity, because the command takes a minimum severity; a later design review would settle it. |
+| `audit.panel.fix` | M12 | inferred | yes | Fix runs the selected rows' fixes with safeOnly false, since the person chose them; watching how people use the panel would settle it. |
+| `audit.panel.ignore` | M12 | inferred | yes | Ignoring several rows at once is one undo step (a command.batch); nothing settles it. |
 | `audit.editProfile` | M12 | inferred | yes | The reference app has no audit profile editor, so the dialog is our design: it opens on the panel's profile, else the default one; people using it would settle whether that is the profile they expect. |
 | `audit.closeProfileDialog` | M12 | inferred | yes | Saving a draft with changed project values is one undo step (a command.batch of audit.config.set and audit.profile.save); the reference app has no such dialog, so people using it would settle it. |
 | `path.eraseOpenCorners` | M12 | inferred | yes | A corner counts only when the crossing lies in the later half of the first segment and the earlier half of the second, so the part dropped is the smaller one; watching the reference's Erase Open Corners on a corner with a long loop would settle it. |
@@ -2583,8 +2595,6 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `check.sources.unnecessaryInfoFields` (check) | M12 | docs | – | versionString and uniqueID are reported in .glyphs sources too, since they compile to the same name records as the UFO keys FontBakery names. |
 | `check.cid.definedTwiceOrMissing` (check) | M13 | docs | – | Two glyphs mapped to one CID count as the CID defined twice, as a glyph in two sub-fonts does; a glyph with a CID in no sub-font is reported with its own code, because the source formats can say that and the reference's sub-font model cannot. |
 | `check.cid.definedTwiceOrMissing` (check) | M13 | docs | – | Missing CIDs are reported as runs between CID 0 and the highest CID that has a glyph, one result per run; a CID mapped to a name the font has no glyph for counts as missing. |
-| `audit.panel.fix` | M12 | inferred | no | Fix runs the selected rows' fixes with safeOnly false, since the person chose them; watching how people use the panel would settle it. |
-| `audit.panel.ignore` | M12 | inferred | no | Ignoring several rows at once is one undo step (a command.batch); nothing settles it. |
 | `window.fontAudit` (panel) | M12 | inferred | – | Fix runs the selected rows' fixes with safeOnly false, since the person chose them, while Fix All Safe keeps safeOnly true; watching how people use the panel would settle it. |
 | `window.fontAudit` (panel) | M12 | inferred | – | Ignoring several rows at once is one undo step (a command.batch); nothing settles it. |
 | `window.fontAudit` (panel) | M12 | inferred | – | The panel sits at the top right of the window and lists sixteen rows before it scrolls; a layout review would settle it. |
@@ -2833,6 +2843,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `filter.adjustStems` | M13 | docs | yes | A round stem (the sides of o) is adjusted by moving the extreme nodes on both sides with their handles; one without a node at either measured point is left alone. |
 | `filter.adjustStems` | M13 | docs | yes | A rule that would make a stem narrower than 1 unit makes the whole command fail; the secondary reference with an offset larger than a stem would settle it. |
 | `filter.adjustStems` | M13 | docs | yes | One work budget covers the whole command across all glyphs and layers; past it the command fails, names the glyph where it stopped and changes nothing. Our own limit; the secondary reference on a very large selection would show whether it stops or runs on. |
+| `app.commandPalette` | M14 | docs | yes | The palette lists the commands that have a menu row; the others take parameters and are reached through the Command Console. The secondary reference's list would settle it. |
+| `app.commandPalette` | M14 | docs | yes | The shortcut Cmd+Shift+P comes from the secondary reference; the reference app has none. |
 | `spacing.autoSpace` | M13 | docs | yes | Method optical is FontCraft's own (open decision D11, docs/plans/M13.md § 3): for each side, the side profile sampled every `step` units (default 5) over a band from the baseline less its overshoot to the reference height plus its overshoot is clipped to `depth` inward from its extreme; the distance from the advance edge to the extreme plus a weight times the clipped profile's mean depth equals `area`. Neither FontLab nor FontForge documents its method; comparing the results on a font spaced in either app would show how far they differ. |
 | `spacing.autoSpace` | M13 | docs | yes | The clipping depth defaults to 10% of the x-height: on the corpus measure (docs/plans/M13.md § 5) shares from 5% to 10% did about equally well and 15% or more did worse. Spacing a test font in FontLab with its defaults would show whether its depth is similar. |
 | `spacing.autoSpace` | M13 | docs | yes | The mean depth is taken over the rows with ink rather than over the whole band, so a glyph with ink in part of the band (a period, a hyphen) is not pushed away by the empty rows; FontLab's and FontForge's pages say nothing about such glyphs. |
@@ -2862,6 +2874,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `kerning.auditExceptions` | M13 | docs | yes | Without `pairs` or glyph lists, every class pair stored in the master is expanded to its members; FontLab applies the command to the pairs selected in its window. |
 | `kerning.auditExceptions` | M13 | docs | yes | The default threshold is 0, so only outlines that overlap are reported; touching outlines (distance 0) are not. |
 | `kerning.auditExceptions` | M13 | docs | yes | `fix` adds a glyph–glyph exception set to the threshold minus the distance without kerning, rounded up to a whole unit; it never adds a glyph–group exception. |
+| `dialog.auditKerningExceptions` | M13 | docs | yes | The audit runs once with the default settings as the dialog opens; FontLab's page does not say whether its dialog lists pairs before a button is pressed. |
+| `dialog.matchKerning` | M13 | docs | yes | The summary gives the pairs filled, the exceptions added and each master's pair count before and after; FontLab's page names no summary. |
 | `kerning.removePairsByRule` | M13 | docs | yes | An exception is a stored pair with a glyph side whose glyph has a kerning group on the side facing the pair; its class value is the value that applies once it is removed (glyph–group, then group–glyph, then group–group; 0 when none applies). FontLab does not define either term on its page. |
 | `kerning.removePairsByRule` | M13 | docs | yes | Every pair is judged on the kerning as it stood before the call, so removing a small group pair does not change which exceptions are removed. |
 | `kerning.removePairsByRule` | M13 | docs | yes | `glyphs` keeps the pairs that name one of the glyphs, or a group one of them belongs to on the side facing the pair. |
@@ -2900,6 +2914,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `font.overlayFonts` | M13 | docs | yes | In masters output each master is named after its source's family and master name, and colour and opacity are not stored, since a master has no colour. |
 | `font.overlayFonts` | M13 | docs | yes | The new font keeps the bottom source's family name and drops its axes and instances. |
 | `font.overlayFonts` | M13 | docs | yes | `color` defaults to opaque black and `output` has no default. |
+| `dialog.overlayFonts` | M13 | docs | yes | The dialog opens with one source per open document, bottom first, each in its own colour from a fixed list; settled by opening Overlay Fonts in the reference app with three fonts open. |
+| `dialog.overlayFonts` | M13 | docs | yes | The preview shows the shown glyph, or the first three glyphs of the active font, side by side; settled by the reference app's dialog. |
 | `color.generateDarkPalette` | M13 | docs | yes | The dark colour of each entry inverts its OKLab lightness (L' = 1 - L) and keeps its hue and alpha, losing chroma, not hue, when the result falls outside sRGB; the reference's palettes for a set of known colours would settle it. |
 | `color.generateDarkPalette` | M13 | docs | yes | The new palette is named after its source with " Dark" added ("Dark" when the source has no name), and only the new palette is marked; the source palette gets no `light` style. Settled by the names and CPAL palette types of a font the reference exports with a dark palette. |
 | `color.generateDarkPalette` | M13 | docs | yes | A Color Palettes value in the list forms (versions 2 and 3) is converted to the version 4 dictionary, the only form that records background styles; settled by what the reference keeps when it saves such a font in an older format. |
@@ -3089,6 +3105,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `view.setSpaceCenterDisplay` | M13 | docs | yes | Guides are drawn within each glyph's advance box, the master's and the glyph's own; the reference app would settle whether a horizontal guide runs across the whole line. |
 | `view.setSpaceCenterDisplay` | M13 | docs | yes | Overlay layers are offered by master name in the menu, and the command also takes layer names or ids; the reference's layer list would settle it. |
 | `view.setSpaceCenterDisplay` | M13 | docs | yes | Line space multiplies the master's line height, from 0.5 to 4; the reference app's control would settle the range. |
+| `spaceCenter.setValue` | M13 | docs | yes | A matrix entry is its own command that evaluates the text and then runs the spacing setter as a second step; the reference's undo history after one entry would settle whether it is one step. |
 | `view.setPreferredSuffix` | M13 | docs | yes | The suffix replaces control glyphs as well as the text's glyphs; the reference app would settle it. |
 | `guide.setAppearance` | M13 | docs | yes | Magnetism is a distance in screen points from 0 to 100, 0 meaning not magnetic, as the manual's number field suggests. |
 | `view.showIndexes` | M13 | docs | yes | Nodes and segments are numbered within their path, paths and components by their shape index in the layer, anchors by their index in the layer, so the numbers match the `[shape, node]` addresses commands take. The reference apps' numbering on a glyph with components would settle it. |
@@ -3166,13 +3183,6 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `drag.ghostOutline` (behavior) | M13 | docs | – | The dotted cross-hair through the pointer is not offered. The reference app's appearance settings would settle whether it is worth a switch. |
 | `view.showCurvature` | M13 | inferred | no | The comb sits on the outside of each curve and its length scales with curvature times a user factor, not with the square root of curvature or with zoom. |
 | `view.showCurvature` | M13 | inferred | no | Combs show for cubic and quadratic segments alike, and on every master layer in the edit view text, not only the active glyph. |
-| `app.commandPalette` | M14 | docs | no | The palette lists the commands that have a menu row; the others take parameters and are reached through the Command Console. The secondary reference's list would settle it. |
-| `app.commandPalette` | M14 | docs | no | The shortcut Cmd+Shift+P comes from the secondary reference; the reference app has none. |
-| `dialog.auditKerningExceptions` | M13 | docs | no | The audit runs once with the default settings as the dialog opens; FontLab's page does not say whether its dialog lists pairs before a button is pressed. |
-| `dialog.matchKerning` | M13 | docs | no | The summary gives the pairs filled, the exceptions added and each master's pair count before and after; FontLab's page names no summary. |
-| `dialog.overlayFonts` | M13 | docs | no | The dialog opens with one source per open document, bottom first, each in its own colour from a fixed list; settled by opening Overlay Fonts in the reference app with three fonts open. |
-| `dialog.overlayFonts` | M13 | docs | no | The preview shows the shown glyph, or the first three glyphs of the active font, side by side; settled by the reference app's dialog. |
-| `spaceCenter.setValue` | M13 | docs | no | A matrix entry is its own command that evaluates the text and then runs the spacing setter as a second step; the reference's undo history after one entry would settle whether it is one step. |
 | `palette.selections` (panel) | M13 | docs | – | The section sits after Transformations in the Palette and shows only the edited glyph's entries; FontLab's panel placement would settle it. |
 | `palette.selections` (panel) | M13 | docs | – | Add with a name that already exists replaces that entry rather than refusing; observing the panel's Add on a duplicate name would settle it. |
 | `palette.measurements` (panel) | M13 | docs | – | The section shows the current master only, not a table of all masters, to fit the Palette's width. |
