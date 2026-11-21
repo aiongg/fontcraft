@@ -74,7 +74,8 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
         .limit(None)
         .enabled(!entry.automatic)
         .id_salt(("fontcraftFeatureCode", key.kind.name(), key.index, key.name.as_str()));
-    let completer = AsyncCompleter::kept(ui.ctx(), egui::Id::unique(("fontcraftFeatureCode.complete", key.kind.name(), key.index, key.name.as_str())));
+    let completer =
+        AsyncCompleter::kept(ui.ctx(), egui::Id::unique(("fontcraftFeatureCode.complete", key.kind.name(), key.index, key.name.as_str())));
     if let Some(c) = &entry.completion {
         let items = c.items.iter().map(|i| Completion::new(i.label.clone(), i.label.clone())).collect();
         let range = c.items.first().map_or(c.position..c.position, |i| i.start..i.end);
