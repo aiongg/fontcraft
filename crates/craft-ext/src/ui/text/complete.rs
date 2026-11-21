@@ -113,7 +113,7 @@ mod tests {
     #[test]
     fn an_answer_completes_only_its_own_query() {
         let ctx = Context::default();
-        let completer = AsyncCompleter::kept(&ctx, Id::new("names"));
+        let completer = AsyncCompleter::kept(&ctx, Id::unique("names"));
         let mut out = Vec::new();
         assert_eq!(completer.complete("sub A", 5, &mut out), None);
         assert_eq!(completer.complete("sub A", 5, &mut out), None);
@@ -121,7 +121,7 @@ mod tests {
         assert_eq!(query, CompletionQuery { text: "sub A".into(), caret: 5 });
         assert_eq!(completer.take_query(), None, "a query is handed out once");
         // Kept under its id: the next pass's completer sees the answer.
-        AsyncCompleter::kept(&ctx, Id::new("names"))
+        AsyncCompleter::kept(&ctx, Id::unique("names"))
             .answer(query, CompletionAnswer { range: 4..5, items: vec![Completion::new("A.alt", "A.alt"), Completion::new("Aacute", "Aacute")] });
         assert_eq!(completer.complete("sub A", 5, &mut out), Some(4..5));
         assert_eq!(out.len(), 2);
