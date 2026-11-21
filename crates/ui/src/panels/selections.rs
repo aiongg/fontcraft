@@ -95,6 +95,7 @@ mod tests {
 
     use craft::host::Host;
     use craft::ui::contract::Tracked;
+    use craft::ui::runtime::commands::CommandRef;
     use craft::ui::testing::Fixture;
     use fontcraft_engine::Session;
     use serde_json::json;
@@ -128,5 +129,18 @@ mod tests {
         let remove = fixture.by_label("Remove").expect("the Remove button");
         fixture.click(&remove).settle();
         assert_eq!(*posted.borrow(), vec![Msg::run("edit.removeStoredSelection", json!({"glyph": "A", "name": "corners"}))]);
+    }
+
+    /// Clicking a stored selection's name selects its nodes on the edited layer.
+    #[test]
+    fn recall_selects_the_stored_nodes() {
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        app.sent.push(Msg::run("path.addRectangle", json!({"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200})));
+        app.sent.push(Msg::run("edit.storeSelection", json!({"glyph": "A", "name": "corners", "points": [[0, 0], [0, 2]]})));
+        app.sent.push(Msg::View(ViewMsg::SelectGlyph("A".into())));
+        app.sent.push(Msg::Shell(CommandRef::with_params("edit.recallSelection", json!({"name": "corners", "glyph": "A"}))));
+        app.drain();
+        assert!(app.status.is_empty(), "{}", app.status);
+        assert_eq!(app.tools.selection.points.iter().copied().collect::<Vec<_>>(), [(0, 0), (0, 2)]);
     }
 }
