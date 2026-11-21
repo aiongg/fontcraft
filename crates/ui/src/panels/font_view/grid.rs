@@ -1,11 +1,14 @@
 //! Grid View (`fontView.grid`): a tile per shown glyph with its outline in the master Font View draws, and from
 //! the label size up its name under it (`fontView.cell.contentBySize`). A glyph that does not export shows veiled.
 //! The grid lays out only the tiles in view, so a font of tens of thousands of glyphs scrolls as a small one does.
+//! A tile draws its glyph's placed image behind the glyph (`canvas::images::cells`), and image files dropped onto a
+//! tile go on that glyph as Glyph › Add Image… places them (`canvas::images::drop::cell_params`).
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use craft::behavior::{DisplayOrder, ItemSource};
-use craft::ui::contract::{Bind, ShowCollection as _};
+use craft::ui::contract::{Bind, CollectionEvent, DropAt, DropKind, DropPlace, OsFiles, ShowCollection as _};
 use craft::ui::list::ThumbAspect;
 use craft::ui::runtime::env::Env;
 use craft::ui::tile_grid::{CaptionPlace, Tile, TileGrid};
@@ -15,6 +18,8 @@ use super::{FontViewWords, cells, keys};
 use crate::app::Msg;
 use crate::app::font_view::LABEL_MIN_CELL;
 use crate::app::models::font_view::FontViewModel;
+use crate::canvas::images::cells::CellImages;
+use crate::canvas::images::drop;
 
 /// The shown glyphs in display order, keyed by their row in the model.
 pub struct Shown<'a> {
@@ -55,7 +60,7 @@ impl DisplayOrder<usize> for Shown<'_> {
 
 impl ItemSource<usize> for Shown<'_> {}
 
-pub fn show(ui: &mut Ui, model: &FontViewModel, sent: &mut Vec<Msg>) {
+pub fn show(ui: &mut Ui, model: &FontViewModel, images: &CellImages, sent: &mut Vec<Msg>) {
     let env = Env::of(ui);
     let words = env.words::<FontViewWords>();
     let card = env.tokens.size.thumb.card;
@@ -71,16 +76,41 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, sent: &mut Vec<Msg>) {
         .type_ahead(true)
         .deletable(true)
         .selection(Bind::bound(&mut selection))
+        // A hovered file's name may not be known yet; the drop checks it again.
+        .takes_drop(DropKind::new(DropPlace::Onto, |files: &OsFiles, _: &DropAt<usize>| {
+            files.files.iter().any(|f| f.name.is_empty() || drop::is_image(&f.name))
+        }))
         .show_items(ui, &source, &mut |row, _| {
             let Some(glyph) = model.rows.get(*row) else { return Tile::new(String::new()) };
             let mut tile = Tile::new(glyph.name.clone());
             if !glyph.export {
                 tile = tile.hidden();
             }
-            if let Some(art) = glyph.art.as_ref().map(Arc::clone) {
-                tile = tile.thumb(ThumbAspect::SQUARE, move |cx, rect| cells::paint(cx, rect, &art, ascender, descender));
+            let art = glyph.art.as_ref().map(Arc::clone);
+            let image = images.by_glyph.get(&glyph.name).map(Arc::clone);
+            if art.is_some() || image.is_some() {
+                tile = tile.thumb(ThumbAspect::SQUARE, move |cx, rect| {
+                    let width = art.as_ref().map_or(0.0, |a| a.width);
+                    if let Some(image) = &image {
+                        cells::paint_image(cx, rect, image, width, ascender, descender);
+                    }
+                    if let Some(art) = &art {
+                        cells::paint(cx, rect, art, ascender, descender);
+                    }
+                });
             }
             tile
         });
+    for event in &out.response.events {
+        if let CollectionEvent::Dropped { at: DropAt::Onto(row), payload, .. } = event
+            && let Some(files) = payload.get::<OsFiles>()
+            && let (Some(glyph), Some(master)) = (model.name(*row), model.master.as_deref())
+        {
+            let paths: Vec<PathBuf> = files.files.iter().filter_map(|f| f.path.clone()).collect();
+            if let Some(params) = drop::cell_params(glyph, master, &paths) {
+                sent.push(Msg::run("glyph.addImage", params));
+            }
+        }
+    }
     keys::requests(ui.ctx(), model, &selection, &out.response.events, sent);
 }

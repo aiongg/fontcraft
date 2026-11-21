@@ -568,12 +568,11 @@ linked file is checked against it, and a linked file outside the read root reads
      text field still waits for craft in the browser build. Then the parity audit gaps, in ROADMAP's order: what
      the Edit View tabs left (tabs per document, tabs from the document's display strings and written on save, a
      removed glyph leaving its tabs); what the Edit View controls and shortcuts left (the master icons' tooltips
-     naming Cmd+1 to Cmd+9, the Palette's sidebar button); placed images on the canvas, in the Info box,
-     menus and Font View; snapping suggestions, the reference font glyph and power guides; the Axis Mappings dialog
+     naming Cmd+1 to Cmd+9, the Palette's sidebar button); what the placed images left (PDF pages drawn, cell-sized
+     thumbnails in Font View); snapping suggestions, the reference font glyph and power guides; the Axis Mappings dialog
      and the Cross-Axis Mappings window; the Primitive Measurements and Add Pixel Glyph dialogs; the small commands
      listed there; and the `ui.inspect` keys and getter commands for control parity. The smaller follow-ups
-     (Shape Order open-path thumbnails, svg filters and PDF images in colour layers, the image Info box with
-     Reveal Image File) are listed there too.
+     (Shape Order open-path thumbnails, svg filters and PDF images in colour layers) are listed there too.
    - Retire the egui window: remove `crates/ui-egui` and `apps/fontcraft`. `cargo xtask parity` must then read the
      commands of `crates/ui`.
    - The engine split from ES.4.

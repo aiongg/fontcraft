@@ -6,6 +6,8 @@ use craft::ui::primitives::ContentPainterCx;
 use egui::{Mesh, Pos2, Rect, Shape, pos2};
 
 use crate::app::models::font_view::CellArt;
+use crate::canvas::images::PlacedImage;
+use crate::canvas::images::tokens::ImageTokens;
 
 /// Most bands one cell is filled in; a taller cell takes bands of more than a point.
 const MAX_BANDS: usize = 256;
@@ -32,17 +34,33 @@ impl Edge {
 
 /// Where the outline lies in `rect`: the scale from font units to points and the screen position of the origin.
 fn placement(art: &CellArt, ascender: f32, descender: f32, rect: Rect) -> Option<(f32, Pos2)> {
+    place(art.width, ascender, descender, rect)
+}
+
+/// The scale and the glyph origin on screen of a glyph `width` wide in `rect`.
+fn place(width: f32, ascender: f32, descender: f32, rect: Rect) -> Option<(f32, Pos2)> {
     let height = ascender - descender;
     if !(height.is_finite() && height > 0.0) {
         return None;
     }
     let mut scale = rect.height() * FILL_SHARE / height;
-    if art.width > 0.0 && art.width * scale > rect.width() * FILL_SHARE {
-        scale = rect.width() * FILL_SHARE / art.width;
+    if width > 0.0 && width * scale > rect.width() * FILL_SHARE {
+        scale = rect.width() * FILL_SHARE / width;
     }
-    let left = rect.center().x - art.width.max(0.0) * scale / 2.0;
+    let left = rect.center().x - width.max(0.0) * scale / 2.0;
     let baseline = rect.center().y + (ascender + descender) / 2.0 * scale;
     (scale.is_finite() && scale > 0.0).then_some((scale, pos2(left, baseline)))
+}
+
+/// Draws the glyph's placed image in `rect`, behind the glyph, placed as the glyph `width` wide is, clipped to the
+/// cell.
+pub fn paint_image(cx: &ContentPainterCx<'_>, rect: Rect, image: &PlacedImage, width: f32, ascender: f32, descender: f32) {
+    let Some((scale, origin)) = place(width, ascender, descender, rect) else { return };
+    let (s, x, y) = (f64::from(scale), f64::from(origin.x), f64::from(origin.y));
+    let to_screen = fontcraft_geom::Affine::new([s, 0.0, 0.0, -s, x, y]);
+    let tokens = ImageTokens::standard();
+    let tokens = tokens.with_marker((rect.height() * tokens.cell_marker_share).min(tokens.marker_size));
+    crate::canvas::images::draw(&cx.painter.with_clip_rect(rect), image, to_screen, &tokens);
 }
 
 /// Fills `art` in `rect` with the painter's ink, or draws the glyph in colour when it has a colour drawing.

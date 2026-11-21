@@ -26,6 +26,7 @@
 //!   Shift, Cmd), and Delete or Backspace runs `edit.delete` with `image: true`. Commands run from menus, shortcuts and
 //!   the Palette that take the `image` flag get it while the image is selected (`tools::targets::with_targets`).
 
+pub mod cells;
 pub mod drop;
 pub mod files;
 pub mod tokens;
@@ -120,6 +121,8 @@ struct Dragging {
 pub struct Images {
     pub files: ImageFiles,
     drag: Option<Dragging>,
+    /// What the Font View cell images were last worked out from (`cells`).
+    cells_seen: Option<cells::CellsKey>,
 }
 
 /// The image of `layer` on `side`.

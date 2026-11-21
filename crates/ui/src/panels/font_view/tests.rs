@@ -43,11 +43,12 @@ fn model(mode: ViewMode, selected: Vec<usize>) -> FontViewModel {
 /// A fixture over `model` and the messages it posted.
 fn open(model: FontViewModel) -> (Fixture, Rc<RefCell<Vec<Msg>>>) {
     let model = Tracked::new(model);
+    let images = Tracked::new(crate::canvas::images::cells::CellImages::default());
     let posted = Rc::new(RefCell::new(Vec::new()));
     let seen = Rc::clone(&posted);
     let mut fixture = Fixture::new(move |ui| {
         let mut sent = Vec::new();
-        show(ui, Props { model: &model, sent: &mut sent });
+        show(ui, Props { model: &model, images: &images, sent: &mut sent });
         seen.borrow_mut().extend(sent);
     });
     fixture.settle();

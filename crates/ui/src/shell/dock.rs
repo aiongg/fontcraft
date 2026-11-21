@@ -415,7 +415,10 @@ impl DockPanels<PanelId> for Panels<'_> {
                 let (canvas, sent) = (&mut self.canvas, &mut *self.sent);
                 stack.show(ui, |ui, _| {
                     if font_view {
-                        panels::font_view::show(ui, panels::font_view::Props { model: &models.font_view, sent: &mut *sent });
+                        panels::font_view::show(
+                            ui,
+                            panels::font_view::Props { model: &models.font_view, images: &models.cell_images, sent: &mut *sent },
+                        );
                     } else {
                         canvas::show(ui, &mut *canvas, &mut *sent);
                     }

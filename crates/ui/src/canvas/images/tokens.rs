@@ -16,6 +16,8 @@ pub struct ImageTokens {
     pub outline_width: f32,
     /// Side of a knob, in screen points.
     pub knob_size: f32,
+    /// The marker's side in a Font View cell, as a share of the cell's height (at most `marker_size`).
+    pub cell_marker_share: f32,
 }
 
 impl ImageTokens {
@@ -27,6 +29,7 @@ impl ImageTokens {
             marker_text: 0.35,
             outline_width: 1.5,
             knob_size: 7.0,
+            cell_marker_share: 0.25,
         }
     }
 

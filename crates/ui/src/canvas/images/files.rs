@@ -87,6 +87,8 @@ pub struct ImageFiles {
     bytes: usize,
     running: HashSet<String>,
     landing: Landing,
+    /// Moves whenever an entry is made.
+    generation: u64,
 }
 
 impl ImageFiles {
@@ -102,6 +104,7 @@ impl ImageFiles {
     /// Marks every file to be read again when next asked for: the files on disk may have changed.
     pub fn reread(&mut self) {
         self.revision = self.revision.wrapping_add(1);
+        self.generation = self.generation.wrapping_add(1);
     }
 
     /// Takes in what the jobs decoded. Returns whether anything landed.
@@ -136,6 +139,21 @@ impl ImageFiles {
         }
         self.bytes = self.bytes.saturating_add(size);
         self.entries.insert(path, (revision, loaded));
+        self.generation = self.generation.wrapping_add(1);
+    }
+
+    /// Moves whenever the cache takes in a file, so what was drawn from it can be worked out again.
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    /// What the cache holds for `path` when it needs no reading: an entry of the current read revision, or one being
+    /// decoded.
+    pub fn fresh(&self, path: &str) -> Option<&Loaded> {
+        match self.entries.get(path) {
+            Some((r, loaded)) if *r == self.revision || self.running.contains(path) => Some(loaded),
+            _ => None,
+        }
     }
 
     /// What is known of the file at `path` without reading it.

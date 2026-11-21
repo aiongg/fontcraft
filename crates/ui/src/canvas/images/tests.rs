@@ -241,3 +241,19 @@ fn dropped_files_place_as_add_image_does() {
     assert_eq!(cell_params("C", &master, &[dir.join("notes.txt")]), None);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Font View cells draw the image of their glyph's master layer: always on an empty glyph, behind paths while Show
+/// Image is on.
+#[test]
+fn font_view_cells_draw_placed_images() {
+    let (mut app, dir) = image_app("cells");
+    shell(&mut app, "fontView.show", json!({}));
+    assert!(app.font_view_shows());
+    let cell = app.models.cell_images.by_glyph.get("A").cloned().expect("A's cell image");
+    assert!(matches!(cell.look, Look::Pixels { size: [100, 50], .. }), "{:?}", cell.look);
+    run(&mut app, "path.addRectangle", json!({"glyph": "A", "x": 300, "y": 300, "width": 100, "height": 100}));
+    assert!(app.models.cell_images.by_glyph.contains_key("A"));
+    shell(&mut app, "view.showImage", json!({"on": false}));
+    assert!(!app.models.cell_images.by_glyph.contains_key("A"));
+    let _ = std::fs::remove_dir_all(dir);
+}

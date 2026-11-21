@@ -1080,12 +1080,16 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
         icons' tooltips do not name Cmd+1 to Cmd+9, and the Palette has no sidebar button.
      3. Done (UI.42a, UI.42b): check marks on the switch rows (`app/menu_states.rs`, `SWITCHES`), and engine rows
         greyed when firing them would be refused for their targets, with the reason as tooltip and as
-        `disabled_reason` in `ui.menu.list`. Left: Show Image and Keep Layer Selection in Sync join the switch list
-        when their commands exist (items 5 and 9).
+        `disabled_reason` in `ui.menu.list`; Show Image joined the switch list with item 5. Left: Keep Layer
+        Selection in Sync joins it when its command exists (item 9).
      4. Done (UI.42c): Palette › Dimensions; the Kerning and Kerning Review panel ids are removed (the Info box holds
         the kerning fields, Pairs & Phrases the review lists), and no panel shows a stub.
-     5. Placed images: drawn, selected, dragged, cropped and locked on the canvas, the image Info box, the canvas
-        menu's image section, View › Show Image, Reveal Image File, drops, and Font View cell images.
+     5. Done (UI.43a to UI.43c): placed images drawn behind the outline, selected, dragged, scaled, cropped and
+        moved by keys on the canvas, locked ones ignored (`canvas/images/`, large files decoded on the host's jobs);
+        the image Info box; the canvas menu's image section; View › Show Image with its check mark; Reveal Image
+        File through the opener; files dropped on the canvas and onto Font View tiles; Font View cell images. Left:
+        PDF images draw as the kept-format marker (the new window does not render PDF pages), and cells draw from
+        the decoded file shrunk to 4096 pixels rather than from cell-sized thumbnails.
      6. Snapping suggestions, the reference font glyph and power guides drawn on the canvas.
      7. The Axis Mappings dialog (the Font Info button that opens it does nothing yet) and the Cross-Axis Mappings
         window with its Font menu row.
