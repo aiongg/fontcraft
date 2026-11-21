@@ -83,6 +83,7 @@ pub const MODULES: &[Module] = &[
     super::preview::MODULE,
     crate::dialogs::overlay_fonts::MODULE,
     super::shape_order::MODULE,
+    crate::dialogs::axis_mappings::MODULE,
 ];
 
 /// The module and description of the shell command `id`.

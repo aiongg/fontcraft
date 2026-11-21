@@ -139,6 +139,8 @@ pub struct ViewState {
     pub overlay_fonts: crate::dialogs::overlay_fonts::OverlayState,
     /// The glyph the Shape Order panel was opened on (`shell::shape_order`).
     pub shape_order: crate::shell::shape_order::ShapeOrderView,
+    /// The open Axis Mappings dialog (`dialogs::axis_mappings`).
+    pub axis_mappings: crate::dialogs::axis_mappings::AxisMappingsState,
 }
 
 impl Default for ViewState {
@@ -183,6 +185,7 @@ impl Default for ViewState {
             preview: Default::default(),
             overlay_fonts: Default::default(),
             shape_order: Default::default(),
+            axis_mappings: Default::default(),
         }
     }
 }

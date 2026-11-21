@@ -11,6 +11,7 @@ mod about;
 pub mod actions;
 pub mod after;
 pub mod audit_profile;
+pub mod axis_mappings;
 pub mod changed_on_disk;
 pub mod color_palettes;
 mod component_name;
@@ -86,6 +87,7 @@ pub const MODULES: &[Module] = &[
     find_glyphs::run_dialog,
     external_changes::run,
     extension_manager::run,
+    axis_mappings::run_dialog,
 ];
 
 /// Every package's dialog specs, one line each.
