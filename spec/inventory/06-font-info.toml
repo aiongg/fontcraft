@@ -362,6 +362,25 @@ guesses = [
 ]
 
 [[behavior]]
+id = "fontInfo.rows.valueEditors"
+area = "font-info"
+milestone = "M7"
+summary = "A custom parameter row edits its value with the control its kind calls for: a check box for yes or no, a number field, a text field, a field of several lines for a list, a menu for a value from a fixed list, check boxes for a list of such values, a menu of the font's masters for a parameter that names a master, and an Edit button for a value with a dialog of its own (OS/2 bits, PANOSE, TTFZones, TTFStems and the others). A value the parameter's check refuses is not stored, and the check's message shows under the row."
+ref = "Font Info › Font › Custom Parameters"
+status = "inferred"
+notes = "Not documented and not yet observed. M7 plan: M7.22, `crates/ui/src/panels/font_info/param_value.rs` and `rows.rs`; the editor of each row is chosen in `crates/ui/src/app/models/font_info.rs` from the catalogue's kind and value list. A typed value goes through the check of font.customParameters.set (`fontcraft_fontinfo::value::check`) before anything is sent, so the row and the command refuse the same values with the same words; a dictionary or localized value is checked as a whole when one of its fields changes. Every edit is one font.customParameters.set. A master's TTFZones and TTFStems rows open their editors with window.ttfZones and window.ttfStems on that master."
+guesses = [
+  "Variable Font Origin, Get Hints From Master and Link Metrics With Master are menus of the font's masters that store the master's id; the reference app's row and the file it writes settle it.",
+  "A refused value's message stays under its row until the next edit; the reference app with vendorID ABCDE settles it.",
+  "A value from a fixed list of whole numbers (Post Table Type) is stored as a number, any other as text; the file the reference app writes after picking one settles it.",
+]
+observe = [
+  "In font A (m7-one), add Variable Font Origin and Get Hints From Master on the Font tab and Link Metrics With Master on a master: note whether each is a menu of masters or a text field, and what the file stores after picking one.",
+  "In font A (m7-one), add Post Table Type and Webfont Formats on the Font tab: note whether the first is a menu and the second check boxes, and what the file stores.",
+  "In font A (m7-one), add TTFZones on a master and click its value: note whether the TTFZones editor opens.",
+]
+
+[[behavior]]
 id = "fontInfo.general.textTokens"
 area = "font-info"
 milestone = "M7"
@@ -828,7 +847,7 @@ milestone = "M7"
 summary = "Edits the fsType, codePageRanges and unicodeRanges parameters as check boxes, opened by the Edit button of their row. OK stores the checked bits with one font.customParameters.set; Cancel changes nothing."
 ref = "Font Info › Font › Custom Parameters"
 status = "inferred"
-notes = "Not documented and not yet observed. M7 plan: M7.22. fsType's usage levels 1, 2 and 3 exclude each other, as the M7.21 check refuses two of them."
+notes = "Not documented and not yet observed. M7 plan: M7.22, `crates/ui/src/dialogs/os2_bits.rs`. The search keeps the boxes whose name contains the typed text, case ignored; boxes it hides keep their state. fsType's usage levels 1, 2 and 3 exclude each other, as the M7.21 check refuses two of them: checking one clears the others."
 guesses = [
   "fsType, codePageRanges and unicodeRanges each open a dialog of check boxes with a search field; opening each row's editor in the reference app settles it.",
   "codePageRanges stores code page numbers, and a stored bit below 64 that a code page stands for shows as that page; the file the reference app writes after ticking a box settles it.",
@@ -850,11 +869,9 @@ milestone = "M7"
 summary = "Edits the panose parameter as ten menus, opened by the Edit button of its row. OK stores the ten digits with one font.customParameters.set; Cancel changes nothing."
 ref = "Font Info › Font › Custom Parameters"
 status = "inferred"
-notes = "Not documented and not yet observed. M7 plan: M7.22. The value names come from the PANOSE classification."
+notes = "Not documented and not yet observed. M7 plan: M7.22, `crates/ui/src/dialogs/panose.rs`. The value names come from the PANOSE classification. Missing digits of a stored value open as 0 (Any)."
 guesses = [
   "The menus name the values only for family kind 2 (Latin Text); other family kinds show plain numbers. The dialog of the reference app with family kind 3 settles it.",
-  "Variable Font Origin, Get Hints From Master and Link Metrics With Master are menus of the font's masters that store the master's id; the reference app's row and the file it writes settle it.",
-  "A refused value's message stays under its row until the next edit; the reference app with vendorID ABCDE settles it.",
 ]
 observe = [
   "In font A (m7-one), add panose on the Font tab and click its value: note whether a dialog opens, its menus and their names for family kind 2 and 3.",
