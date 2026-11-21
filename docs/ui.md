@@ -195,6 +195,10 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
 - **User settings.** The settings live in the session's settings store. `apps/fontcraft-next` supplies an
   `app::user_store::UserStore` that reads them from the settings folder when the window opens and writes them back
   when they change (once per frame); `crates/ui` reads and writes no files itself.
+- **Network and the system.** `apps/fontcraft-next` hands over `Options::fetch` (a blocking HTTPS GET for the
+  Extension Manager's indexes, entry files and screenshots, run on the host's jobs by `shell/extension_downloads.rs`)
+  and `Options::opener` (`FontCraftApp::opener`: links in the browser, files in the file manager). Tests set fakes; the
+  browser build has neither, and what needs them says so.
 - **Closing.** `app/close.rs` keeps the question asked before unsaved work closes (the close box,
   `app.quit`, File › Close): one document at a time, then the window or the document closes.
   `dialogs/unsaved.rs` shows it; `window.closePrompt` answers it from the control channel.

@@ -97,7 +97,7 @@ pub const SECTIONS: &[Section] = &[
     Section { id: USER_SETTINGS, label: "User Settings", available: true, unavailable: "" },
     Section { id: "sampleStrings", label: "Sample Strings", available: true, unavailable: "" },
     Section { id: "sharing", label: "Sharing", available: true, unavailable: "" },
-    Section { id: "addons", label: "Extensions", available: false, unavailable: "Not available yet: it comes with the Extension Manager." },
+    Section { id: "addons", label: "Extensions", available: true, unavailable: "" },
     Section { id: "shortcuts", label: "Shortcuts", available: false, unavailable: NOT_YET },
 ];
 

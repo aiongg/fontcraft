@@ -388,6 +388,7 @@ impl FontCraftApp {
                     clipboard::after_run(self, &command.id, &reply);
                 }
                 crate::shell::project::after_run(self, &command.id, &reply);
+                crate::shell::extension_downloads::after_run(self, &command.id, &params, &reply);
                 if let Some(notice) = self.after_command(&command, &reply).or_else(|| notices::notice(&command.id, &reply)) {
                     self.status = notice;
                 }

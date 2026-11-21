@@ -14,4 +14,5 @@ workspace = true
 fontcraft-ui.workspace = true
 fontcraft-engine.workspace = true
 serde_json.workspace = true
+ureq.workspace = true
 eframe = { version = "0.37", default-features = false, features = ["wayland"] }

@@ -11,20 +11,25 @@
 //! | Install from File… | `plugin.installFromFile` without `path`: the file picker asks for a module or macro |
 //! | Reload | `pluginManager.reloadIndexes`, then the list is made again |
 //! | Website, Donate | `pluginManager.openWebsite`, `pluginManager.openDonationPage`: the entry's link in the browser, through `FontCraftApp::opener` |
+//! | Preview | `pluginManager.enlargePreview`: the entry's screenshot, read or downloaded, under the list |
+//! | Indexes tab | the extension folders (Show: `file.showInFinder`), the log switch and the index list, each change a `settings.set` ([`IndexesModel`]; Settings › Extensions shows the same body) |
 //!
 //! The list is made again when it is opened, when a filter changes, when the installed modules, their switches or
 //! their errors change, and after Reload. Each row carries the module's last error (`ExtensionState::module_errors`); module files that failed
-//! to load are listed under the table. Entries on the network are installed only by the desktop app's downloader,
-//! which this window does not have yet: their Install reports the engine's refusal in the status line.
+//! to load are listed under the table. Opening the window reads the indexes again; downloads (HTTPS indexes, entry
+//! files, screenshots) are `super::extension_downloads`.
 
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::path::PathBuf;
+use std::sync::Arc;
 
 use craft::ui::runtime::commands::CommandRef;
 use fontcraft_engine::Session;
-use fontcraft_engine::extension_index::Entry;
+use fontcraft_engine::extension_index::{Entry, IndexSource, MAX_INDEXES, parse_sources, redact};
 use serde_json::{Value, json};
 
 use super::commands::{Module, UiCommand};
+use super::extension_downloads::{self, sources_setting};
 use crate::app::FontCraftApp;
 
 pub const MODULE: Module = Module { commands: COMMANDS, run };
@@ -37,6 +42,8 @@ pub const MAX_ENTRIES: usize = 4_096;
 pub const MAX_FAILURES: usize = 256;
 /// Longest error text kept per row, in characters.
 const MAX_ERROR_CHARS: usize = 500;
+/// The setting of the Indexes tab's log switch.
+pub const LOG_SETTING: &str = "addons.useSystemConsoleForScriptOutput";
 
 const COMMANDS: &[UiCommand] = &[
     UiCommand {
@@ -44,7 +51,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Extension Manager",
         menu: &["Window"],
         shortcut: None,
-        params: "{tab?: \"extensions\"} open the Extension Manager: the extensions the indexes offer, the installed modules and the macros, with Install, Update, Remove, an on/off switch, Install from File… and Reload",
+        params: "{tab?: \"extensions\" | \"indexes\"} open the Extension Manager on a tab (extensions) and read the extension indexes again (pluginManager.reloadIndexes); HTTPS indexes are downloaded in the background. Extensions: the extensions the indexes offer, the installed modules and the macros, with Install, Update, Remove, an on/off switch, Website, Donate, Preview, Install from File… and Reload. Indexes: the extension folders, the log switch and the list of indexes with an automatic-updates switch each",
     },
     UiCommand {
         id: "pluginManager.filterByInstallState",
@@ -66,6 +73,13 @@ const COMMANDS: &[UiCommand] = &[
         menu: &[],
         shortcut: None,
         params: "{query: string} show the extensions whose id, title, vendor or description holds the text, ignoring case; an empty query shows all",
+    },
+    UiCommand {
+        id: "pluginManager.enlargePreview",
+        label: "Enlarge Preview",
+        menu: &[],
+        shortcut: None,
+        params: "{id?: entry id} show the index entry's screenshot in the Extension Manager (read beside a local index, or downloaded in the background); without id, close the preview",
     },
     UiCommand {
         id: "pluginManager.openWebsite",
@@ -112,6 +126,9 @@ pub struct ManagerEntry {
     pub from_index: bool,
     /// The module's last error.
     pub error: Option<String>,
+    /// The file's size in bytes and its SHA-256, when the row gives them.
+    pub size: Option<u64>,
+    pub sha256: String,
 }
 
 impl ManagerEntry {
@@ -133,8 +150,106 @@ impl ManagerEntry {
             new: flag("new"),
             from_index: text("source") == "index",
             error,
+            size: row.get("size").and_then(Value::as_u64),
+            sha256: text("sha256"),
             id,
         })
+    }
+}
+
+/// The window's tabs.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Tab {
+    #[default]
+    Extensions,
+    Indexes,
+}
+
+/// An entry's screenshot while it is shown: decoded, still loading, or why it cannot be shown.
+#[derive(Clone, Default)]
+pub struct Shot {
+    pub id: String,
+    pub image: Option<Arc<egui::ColorImage>>,
+    pub error: Option<String>,
+    /// Moves when the image or the error arrives.
+    pub key: u64,
+}
+
+impl PartialEq for Shot {
+    fn eq(&self, other: &Shot) -> bool {
+        self.id == other.id && self.key == other.key && self.error == other.error && self.image.is_some() == other.image.is_some()
+    }
+}
+
+impl std::fmt::Debug for Shot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Shot({}, image: {}, error: {:?})", self.id, self.image.is_some(), self.error)
+    }
+}
+
+/// What a line of the index list shows next to its address.
+#[derive(Clone, Debug, PartialEq)]
+pub enum IndexState {
+    /// Not read since the list changed.
+    Unread,
+    Downloading,
+    Entries(u64),
+    Error(String),
+}
+
+/// One line of the index list: its address without credentials, its automatic-updates switch and its state.
+#[derive(Clone, Debug, PartialEq)]
+pub struct IndexRow {
+    pub shown: String,
+    pub automatic: bool,
+    pub state: IndexState,
+}
+
+/// The Indexes tab, which Settings › Extensions also shows.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct IndexesModel {
+    /// The Modules and Macros folders; `None` when the session has none.
+    pub modules_folder: Option<String>,
+    pub macros_folder: Option<String>,
+    /// The extension log also goes to standard error.
+    pub log_to_stderr: bool,
+    /// The index list as stored, with credentials: the edits write it back whole.
+    pub sources: Vec<IndexSource>,
+    /// What each line shows, in the order of `sources`.
+    pub rows: Vec<IndexRow>,
+    /// The last download or install problem.
+    pub problem: Option<String>,
+}
+
+/// The Indexes tab's model from the settings, the extension state and the downloads.
+pub fn indexes_model(app: &FontCraftApp) -> IndexesModel {
+    let ext = app.session.extensions();
+    let folder = |p: &Option<PathBuf>| p.as_ref().map(|p| p.display().to_string());
+    let sources: Vec<IndexSource> = parse_sources(&sources_setting(app)).into_iter().take(MAX_INDEXES).collect();
+    let view = &app.view.extensions.manager;
+    let rows = sources
+        .iter()
+        .map(|s| {
+            let shown = redact(&s.location);
+            let state = if app.view.extensions.downloads.index_running(&s.location) {
+                IndexState::Downloading
+            } else {
+                match view.reported.iter().find(|r| r.0 == shown) {
+                    Some((_, _, Some(error))) => IndexState::Error(error.clone()),
+                    Some((_, Some(n), None)) => IndexState::Entries(*n),
+                    _ => IndexState::Unread,
+                }
+            };
+            IndexRow { shown, automatic: s.automatic_updates, state }
+        })
+        .collect();
+    IndexesModel {
+        modules_folder: folder(&ext.modules_dir),
+        macros_folder: folder(&ext.macros_dir),
+        log_to_stderr: app.session.settings().get_bool(LOG_SETTING).unwrap_or(false),
+        sources,
+        rows,
+        problem: view.problem.clone(),
     }
 }
 
@@ -142,6 +257,7 @@ impl ManagerEntry {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ManagerView {
     pub open: bool,
+    pub tab: Tab,
     /// `all`, `installed` or `notInstalled`.
     pub state: String,
     /// `all` or an entry kind.
@@ -155,16 +271,27 @@ pub struct ManagerView {
     pub safe_mode: bool,
     /// Why the list could not be made.
     pub note: Option<String>,
-    /// Moves with every change of the list, so the dialog knows to take it again.
+    /// The Indexes tab.
+    pub indexes: IndexesModel,
+    /// The screenshot shown under the list.
+    pub preview: Option<Shot>,
+    /// The last download or install problem.
+    pub problem: Option<String>,
+    /// Moves with every change of what the window shows, so the dialog knows to take it again.
     pub revision: u64,
     /// The extensions' revision and filters the list was made for; `None`: make it again.
     seen: Option<(u64, String, String, String)>,
+    /// The last `pluginManager.reloadIndexes` report: each index's shown address, entry count or error.
+    pub(crate) reported: Vec<(String, Option<u64>, Option<String>)>,
+    /// The index list the indexes were last read for.
+    pub(crate) seen_sources: Option<String>,
 }
 
 impl Default for ManagerView {
     fn default() -> Self {
         ManagerView {
             open: false,
+            tab: Tab::Extensions,
             state: "all".into(),
             kind: "all".into(),
             query: String::new(),
@@ -172,8 +299,13 @@ impl Default for ManagerView {
             failures: Vec::new(),
             safe_mode: false,
             note: None,
+            indexes: IndexesModel::default(),
+            preview: None,
+            problem: None,
             revision: 0,
             seen: None,
+            reported: Vec::new(),
+            seen_sources: None,
         }
     }
 }
@@ -183,6 +315,11 @@ impl ManagerView {
     pub fn invalidate(&mut self) {
         self.seen = None;
     }
+
+    /// Records a change the dialog must show.
+    pub fn touch(&mut self) {
+        self.revision = self.revision.wrapping_add(1);
+    }
 }
 
 fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
@@ -191,14 +328,30 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
     let view = &mut app.view.extensions.manager;
     match command.id.as_str() {
         "window.pluginManager" => {
-            match text("tab") {
-                None | Some("extensions") => {}
-                Some("indexes") => return Err("the Indexes tab is not in this window yet".into()),
-                Some(other) => return Err(format!("`tab` is \"extensions\", not {other:?}")),
-            }
+            view.tab = match text("tab") {
+                None | Some("extensions") => Tab::Extensions,
+                Some("indexes") => Tab::Indexes,
+                Some(other) => return Err(format!("`tab` is \"extensions\" or \"indexes\", not {other:?}")),
+            };
             view.open = true;
             view.invalidate();
+            view.touch();
+            let params = extension_downloads::reload_params(app);
+            // A failed reading leaves the window open with the reason under the list.
+            if let Err(e) = app.run_command("pluginManager.reloadIndexes", params) {
+                app.view.extensions.manager.problem = Some(e);
+            }
         }
+        "pluginManager.enlargePreview" => match text("id") {
+            None => {
+                view.preview = None;
+                view.touch();
+            }
+            Some(id) => {
+                let id = id.to_string();
+                extension_downloads::show_screenshot(app, &id)?;
+            }
+        },
         "pluginManager.filterByInstallState" => {
             let value = text("state").ok_or("give `state`")?;
             if !STATES.contains(&value) {
@@ -257,10 +410,16 @@ fn fingerprint(session: &Session) -> u64 {
 
 /// Makes the list again while the window is open and the extensions or the filters changed since it was made.
 pub fn refresh(app: &mut FontCraftApp) {
-    let view = &app.view.extensions.manager;
-    if !view.open {
+    if !app.view.extensions.manager.open {
         return;
     }
+    let indexes = indexes_model(app);
+    let view = &mut app.view.extensions.manager;
+    if view.indexes != indexes {
+        view.indexes = indexes;
+        view.touch();
+    }
+    let view = &app.view.extensions.manager;
     let key = (fingerprint(&app.session), view.state.clone(), view.kind.clone(), view.query.clone());
     if view.seen.as_ref() == Some(&key) {
         return;
@@ -364,7 +523,7 @@ mod tests {
 
         let mut app = FontCraftApp::new(Session::new(), Arc::new(Host::builder(crate::app::APP).build()));
         let bytes = serde_json::to_vec(&json!({"format": "fontcraft.extensions", "version": 1, "entries": [{
-            "id": "tighten", "kind": "macro", "version": "1", "titles": {"en": "Tighten"}, "url": "tighten.fcmacro", "size": 10,
+            "id": "tighten", "kind": "macro", "version": "1", "titles": {"en": "Tighten"}, "descriptions": {}, "vendor": "Test Foundry", "url": "tighten.fcmacro", "size": 10,
             "sha256": "0".repeat(64), "homepage": "https://example.com/home", "funding": "https://example.com/give money",
         }]}))
         .unwrap();

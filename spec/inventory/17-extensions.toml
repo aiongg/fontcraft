@@ -32,7 +32,7 @@ milestone = "M13"
 summary = "Opens the Plugin Manager window, the catalogue of installable scripts, plug-ins and modules. FontCraft: opens an Extension Manager listing WebAssembly modules and command macros from the registry index; every action in it is also a command."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
-notes = "FontCraft (M13.10): Window › Extension Manager. Opening it reloads the extension indexes (`pluginManager.reloadIndexes`); the desktop app downloads HTTPS indexes in the background and reloads again when they arrive. The Indexes tab holds the list of indexes until the Settings window exists (M14). In `crates/ui` the window is one table (name, kind, version, state, last error) with the filters above it and Install, Update, Remove and an on/off switch for the selected row; Install from File… (the file picker, then plugin.installFromFile) and Reload (pluginManager.reloadIndexes) are its footer buttons. It has no Indexes tab, no HTTPS downloads, screenshots, Website or Donate yet."
+notes = "FontCraft (M13.10): Window › Extension Manager. Opening it reloads the extension indexes (`pluginManager.reloadIndexes`); the desktop app downloads HTTPS indexes in the background and reloads again when they arrive. The Indexes tab holds the list of indexes until the Settings window exists (M14). In `crates/ui` the Extensions tab is one table (name, kind, version, state, last error) with the filters above it and, for the selected row, its vendor, description, size and SHA-256, Website, Donate, Preview, Install, Update, Remove and an on/off switch; Install from File… (the file picker, then plugin.installFromFile) and Reload (pluginManager.reloadIndexes) are its footer buttons. The Indexes tab is the body Settings › Extensions shows. Downloads (`shell/extension_downloads.rs`) run on the host's jobs through the fetch the desktop app supplies, at most 8 at once; an entry file is capped at its listed size and 32 MiB, an index at 16 MiB, a screenshot at 8 MiB and 16 megapixels."
 guesses = [
   "The window and its menu item are called Extension Manager, since it lists modules and macros rather than plug-ins; the reference calls it Plugin Manager.",
 ]
@@ -55,7 +55,7 @@ milestone = "M13"
 summary = "Window that lists the extensions of the main repository and of any registered alternate repository, with two filter groups, a search field and per-entry install controls. FontCraft: the Extension Manager, the same layout over the entries of the extension indexes (modules and macros), with the type buttons Filters, Reporters, Checks and Macros, and each entry showing its kind, size and checksum before install."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
-notes = "FontCraft (M13.10): each entry shows its title, kind, version, vendor, description, size and SHA-256, a Website link and a Donate button when the index gives them, a Preview button when it has a screenshot, and Install, Update, Remove and an on/off switch for installed modules. A second tab, Indexes, lists the indexes with an automatic-updates switch each, the Modules and Macros folders, and a field to add an index."
+notes = "FontCraft (M13.10): each entry shows its title, kind, version, vendor, description, size and SHA-256, a Website link and a Donate button when the index gives them, a Preview button when it has a screenshot, and Install, Update, Remove and an on/off switch for installed modules. A second tab, Indexes, lists the indexes with an automatic-updates switch each, the Modules and Macros folders, and a field to add an index. In `crates/ui` the details and buttons belong to the row selected in the table, and Website, Donate and Preview show on every index entry; a folder's Show button opens it in the file manager."
 guesses = [
   "Screenshots are shown only when the entry's Preview button is pressed, not in the list, so opening the window downloads no images; the reference shows preview images in the list.",
   "Entries are listed in index order (first index first), then installed modules no index lists, then macros of the Macros folder; the reference's order is not documented.",
@@ -204,8 +204,11 @@ milestone = "M13"
 summary = "Clicking an entry's preview image shows it at full size. FontCraft: same, as a view-only action."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
-guesses = ["The enlarged screenshot opens in its own window and closes from that window or by running the command without an id; the reference app's full-size view would settle where it appears and how it closes."]
-notes = "FontCraft (M13.10): the screenshot is read beside a local index or downloaded by the desktop app (at most 8 MiB, PNG, JPEG or TIFF) and shown at full size in its own window; without `id` the preview closes."
+guesses = [
+  "The enlarged screenshot opens in its own window and closes from that window or by running the command without an id; the reference app's full-size view would settle where it appears and how it closes.",
+  "In the new window the screenshot shows inside the Extension Manager at the largest thumbnail size rather than in a window of its own; the reference app's full-size view would settle it.",
+]
+notes = "FontCraft (M13.10): the screenshot is read beside a local index or downloaded by the desktop app (at most 8 MiB, PNG, JPEG or TIFF) and shown at full size in its own window; without `id` the preview closes. In `crates/ui` it shows under the list in the Extension Manager, fitted to the largest thumbnail size, with Close Preview; it is decoded on a background job and refused beyond 16 megapixels."
 
 [[command]]
 id = "pluginManager.openWebsite"

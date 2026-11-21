@@ -45,6 +45,8 @@ pub struct Options {
     pub user_store: Option<Box<dyn app::user_store::UserStore>>,
     /// Opens web links and shows files in the file manager (`Opener::system()` on the desktop).
     pub opener: Opener,
+    /// Downloads extension indexes, entry files and screenshots over HTTPS for the Extension Manager.
+    pub fetch: Option<shell::extension_downloads::FetchFn>,
 }
 
 /// Opens the desktop window and runs it until it closes.
@@ -65,6 +67,7 @@ pub fn run(options: Options) -> Result<(), String> {
         app.user_store = options.user_store;
         app::user_store::load(&mut app);
         app.opener = options.opener;
+        app.view.extensions.downloads.fetch = options.fetch;
         if app.session.settings().get_bool(shell::start::SHOW_AT_LAUNCH).unwrap_or(true) {
             app.sent.push(app::Msg::Shell(craft::ui::runtime::commands::CommandRef::with_params("window.startWindow", serde_json::json!({}))));
         }
