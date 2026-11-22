@@ -2568,6 +2568,13 @@ status = "handbook"
 guesses = [
   "The snap distance is 4 screen points, with the priority nodes, handles, guides, metric lines (03a question 28).",
   "Ctrl suspends snapping as well as magnetic guides.",
+  "A component node shows as a marker while a dragged point is within four snap distances of it, the nearest 64 at most.",
+  "The markers are small faint dots that appear at once, without a timed fade.",
+  "Only the on-curve points of a component get markers; its off-curve points are snap targets without one.",
+]
+notes = "Documented, not yet observed. FontCraft (M3.43): while the Select tool drags points, `fontcraft_tools::component_markers` lists the nodes of the components that do not move near the dragged point, and the canvas draws each as a `ComponentNode` marker (`component_marker` token). Ctrl hides them with the snapping."
+observe = [
+  "Drag a node slowly towards a component's corner in Edit View: note how far away the component's node markers appear, whether they fade in over time or by distance, and whether handles get markers too.",
 ]
 
 [[command]]

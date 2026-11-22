@@ -200,6 +200,32 @@ pub fn snap(scene: &Scene, view: &View, p: Point, moving: &Moving, distance: f64
     out
 }
 
+/// How far, as a multiple of the snap distance, a component's node shows as a snap marker during a drag.
+pub const COMPONENT_MARKER_REACH: f64 = 4.0;
+/// Most component node markers one drag shows.
+pub const MAX_COMPONENT_MARKERS: usize = 64;
+
+/// The on-curve points of the components that do not move with the drag within
+/// [`COMPONENT_MARKER_REACH`] snap distances of `p`, nearest first: the markers a drag shows near a
+/// component (`snapping.toNodesAndHandles`), at most [`MAX_COMPONENT_MARKERS`].
+pub fn component_markers(scene: &Scene, view: &View, p: Point, moving: &Moving, distance: f64) -> Vec<Point> {
+    let reach = view.units(distance) * COMPONENT_MARKER_REACH;
+    if !finite(p) || !reach.is_finite() || reach <= 0.0 {
+        return Vec::new();
+    }
+    let mut near: Vec<(f64, Point)> = scene
+        .components()
+        .iter()
+        .filter(|c| !moving.shapes.contains(&c.shape))
+        .flat_map(|c| c.nodes.iter().copied())
+        .filter(|&q| finite(q))
+        .map(|q| (dist(p, q), q))
+        .filter(|(d, _)| *d <= reach)
+        .collect();
+    near.sort_by(|a, b| a.0.total_cmp(&b.0));
+    near.into_iter().take(MAX_COMPONENT_MARKERS).map(|(_, q)| q).collect()
+}
+
 fn nearest_value(v: f64, candidates: impl IntoIterator<Item = f64>, tol: f64) -> Option<f64> {
     let mut best: Option<(f64, f64)> = None;
     for c in candidates.into_iter().filter(|c| c.is_finite()) {

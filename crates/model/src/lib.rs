@@ -37,6 +37,7 @@ mod rare;
 mod rename;
 mod resolve;
 mod shape_info;
+pub mod shown_metrics;
 pub mod smart;
 pub mod strike;
 pub mod ufo_classes;

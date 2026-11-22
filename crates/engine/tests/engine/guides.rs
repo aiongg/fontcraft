@@ -235,6 +235,8 @@ fn display_lines_follow_font_info_and_parameters() {
     assert_eq!(a["grid"]["step"], 5.0);
     let asc = a["metrics"].as_array().unwrap().iter().find(|m| m["kind"] == metric::ASCENDER).unwrap();
     assert_eq!((asc["y"].as_f64(), asc["source"].as_str()), (Some(705.0), Some("parameter")));
+    let ascenders = a["metrics"].as_array().unwrap().iter().filter(|m| m["kind"] == metric::ASCENDER).count();
+    assert_eq!(ascenders, 1, "the Greek ascender replaces the master's line: {a}");
     assert_eq!(a["cjk"], json!({"box": [0.0, -200.0, 600.0, 705.0], "rows": 4.0, "columns": 4.0}));
     let b = run(&mut s, "guide.displayLines", json!({"glyph": "B"}));
     assert_eq!(b["cjk"]["guide"], json!([60.0, -100.0, 540.0, 700.0]));

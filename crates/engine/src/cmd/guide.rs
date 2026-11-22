@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use fontcraft_geom::round_to_grid;
 use fontcraft_model::plist::Value as PValue;
+use fontcraft_model::shown_metrics::{self, param_number, script_param};
 use fontcraft_model::{Family, Font, Guide, LayerParts, MAX_COORDINATE, MAX_LAYER_GUIDES, Master, metric};
 use serde_json::{Value, json};
 
@@ -633,31 +634,6 @@ fn list(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(json!({"glyph": r.glyph.name, "layer": r.layer.id, "master": r.master.id, "guides": guides}))
 }
 
-/// A parameter value with an optional script prefix (`greek: 705`, `han:6`): the script in
-/// lower case, and the rest as text.
-fn scripted(v: &PValue) -> Option<(Option<String>, String)> {
-    match v {
-        PValue::Number(n) => Some((None, n.value().as_f64().to_string())),
-        PValue::String(s) => Some(match s.as_str().split_once(':') {
-            Some((script, rest)) => (Some(script.trim().to_lowercase()), rest.trim().to_string()),
-            None => (None, s.as_str().trim().to_string()),
-        }),
-        _ => None,
-    }
-}
-
-/// The value of parameter `name` for a glyph's script, from the master's parameters and then the
-/// font's: an entry for that script first, else (when `plain` allows it) one without a script.
-fn param_for(font: &Font, master: &Master, name: &str, script: Option<&str>, plain: bool) -> Option<String> {
-    let all: Vec<(Option<String>, String)> = master.params.all(name).chain(font.info.params.all(name)).filter_map(scripted).collect();
-    let for_script = script.and_then(|sc| all.iter().find(|(s, _)| s.as_deref() == Some(sc)));
-    for_script.or_else(|| if plain { all.iter().find(|(s, _)| s.is_none()) } else { None }).map(|(_, v)| v.clone())
-}
-
-fn number(text: &str) -> Option<f64> {
-    text.trim().parse::<f64>().ok().filter(|n| n.is_finite() && n.abs() <= MAX_COORDINATE)
-}
-
 fn display_lines(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("guide.displayLines", p)?;
     let t = Targets::parse(&p)?;
@@ -667,49 +643,29 @@ fn display_lines(s: &mut Session, p: &Value) -> Result<Value> {
     let font = s.font()?;
     let r = t.resolve(font)?;
     let master = r.master;
-    let script = r.glyph.info.script.as_deref().map(str::to_lowercase);
+    let script = shown_metrics::glyph_script(r.glyph);
     let script = script.as_deref();
-    let small_caps = r.glyph.info.case.as_deref() == Some("smallCaps");
-    let param = |name: &str, plain: bool| param_for(font, master, name, script, plain).as_deref().and_then(number);
+    let param = |name: &str, plain: bool| script_param(font, master, name, script, plain).as_deref().and_then(param_number);
 
-    let (mut ascender, mut descender) = (font.metric_pos(master, metric::ASCENDER, 800.0), font.metric_pos(master, metric::DESCENDER, -200.0));
-    let mut metrics = Vec::new();
-    for (i, def) in font.metrics.iter().enumerate() {
-        if def.kind == metric::ITALIC_ANGLE {
-            continue;
-        }
-        let value = master.metric_values.get(i).copied().unwrap_or_default();
-        let plain = def.name.is_none() && def.filter.is_none();
-        let replaced = match def.kind.as_str() {
-            _ if !plain => None,
-            metric::ASCENDER => param("ascender", false),
-            metric::CAP_HEIGHT => param("capHeight", false),
-            metric::DESCENDER => param("descender", false),
-            metric::X_HEIGHT if small_caps => param("smallCapHeight", true),
-            _ => None,
-        };
-        let y = replaced.unwrap_or(value.pos);
-        if plain && def.kind == metric::ASCENDER {
-            ascender = y;
-        }
-        if plain && def.kind == metric::DESCENDER {
-            descender = y;
-        }
-        let source = if replaced.is_some() { "parameter" } else { "master" };
-        let mut line = json!({"kind": def.kind, "y": y, "overshoot": value.over, "source": source});
-        if let Some(o) = line.as_object_mut() {
-            if let Some(name) = &def.name {
-                o.insert("name".into(), json!(name));
+    let shown = shown_metrics::shown_metrics(font, master, r.glyph);
+    let ascender = shown_metrics::shown_pos(&shown, metric::ASCENDER, font.metric_pos(master, metric::ASCENDER, 800.0));
+    let descender = shown_metrics::shown_pos(&shown, metric::DESCENDER, font.metric_pos(master, metric::DESCENDER, -200.0));
+    let metrics: Vec<Value> = shown
+        .iter()
+        .map(|m| {
+            let source = if m.from_param { "parameter" } else { "master" };
+            let mut line = json!({"kind": m.kind, "y": m.y, "overshoot": m.over, "source": source});
+            if let Some(o) = line.as_object_mut() {
+                if let Some(name) = &m.name {
+                    o.insert("name".into(), json!(name));
+                }
+                if let Some(filter) = &m.filter {
+                    o.insert("filter".into(), json!(filter));
+                }
             }
-            if let Some(filter) = &def.filter {
-                o.insert("filter".into(), json!(filter));
-            }
-        }
-        metrics.push(line);
-    }
-    if let Some(y) = param("shoulderHeight", true) {
-        metrics.push(json!({"kind": "shoulder height", "y": y, "overshoot": 0.0, "source": "parameter"}));
-    }
+            line
+        })
+        .collect();
     let settings = &font.info.settings;
     let grid = json!({"spacing": settings.grid_length.unwrap_or(1.0), "subdivision": settings.grid_sub_division.unwrap_or(1.0), "step": grid(font)});
     let zones: Vec<Value> = master.zones.iter().map(|z| json!({"pos": z.pos, "size": z.size})).collect();
@@ -746,8 +702,8 @@ fn display_lines(s: &mut Session, p: &Value) -> Result<Value> {
             o.insert("cjk".into(), cjk);
         }
     }
-    let design = param_for(font, master, "Design Grid", script, true)
-        .map(|v| v.split(',').take(MAX_DESIGN_GRID_VALUES.saturating_add(1)).map(number).collect::<Option<Vec<f64>>>());
+    let design = script_param(font, master, "Design Grid", script, true)
+        .map(|v| v.split(',').take(MAX_DESIGN_GRID_VALUES.saturating_add(1)).map(param_number).collect::<Option<Vec<f64>>>());
     if let (Some(Some(values)), Some(o)) = (design, out.as_object_mut())
         && !values.is_empty()
         && values.len() <= MAX_DESIGN_GRID_VALUES

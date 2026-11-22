@@ -195,14 +195,11 @@ impl<'a> Scene<'a> {
         }
         if let Ok(master) = font.master(&layer.master) {
             scene.global_guides = &master.guides;
+            // The lines the canvas draws for this glyph, per-script parameters applied.
+            let shown = fontcraft_model::shown_metrics::shown_metrics(font, master, g);
+            let snapped = [metric::DESCENDER, metric::X_HEIGHT, metric::CAP_HEIGHT, metric::ASCENDER];
             let mut lines = vec![0.0];
-            for kind in [metric::DESCENDER, metric::X_HEIGHT, metric::CAP_HEIGHT, metric::ASCENDER] {
-                if let Some(v) = font.metric(master, kind)
-                    && v.pos.is_finite()
-                {
-                    lines.push(v.pos);
-                }
-            }
+            lines.extend(shown.iter().filter(|m| m.is_plain() && snapped.contains(&m.kind.as_str()) && m.y.is_finite()).map(|m| m.y));
             scene.metric_lines = lines;
         }
         let mut components = Vec::new();

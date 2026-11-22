@@ -102,6 +102,8 @@ pub enum OverlayKind {
     DrawPreview,
     /// A handle a drawing tool is pulling out, with its line to the node.
     DrawHandle,
+    /// A node of a component near a dragged point, shown as a snap target.
+    ComponentNode,
 }
 
 /// Something a tool asks the canvas to draw, in font units.

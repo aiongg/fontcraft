@@ -1569,6 +1569,7 @@ milestone = "M3"
 summary = "Edit View draws the master metrics as orange alignment lines while View > Show Metrics is on."
 ref = "Font Info › Masters › Metrics & Alignment Zones"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft (M3.43): the lines are the master's metrics as `fontcraft_model::shown_metrics` gives them for the edited glyph, with the per-script ascender, cap height and descender parameters and the small-cap height in place of the master's line; `guide.displayLines` returns the same lines."
 
 [[behavior]]
 id = "fontInfo.zones.highlightAndHinting"

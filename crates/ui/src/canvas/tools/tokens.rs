@@ -31,6 +31,9 @@ pub struct ToolTokens {
     pub measure_ruler_width: f32,
     /// Ring around the snap target and the hovered point.
     pub marker_radius: f32,
+    /// The faint dot a component's node shows as while a drag passes near it (`snapping.toNodesAndHandles`).
+    pub component_marker: Color32,
+    pub component_marker_radius: f32,
     /// How near the pointer must be to an object to hit it, in points.
     pub hit_tolerance: f32,
     /// How near a dragged point must come to a target to snap to it, in points.
@@ -63,6 +66,8 @@ impl ToolTokens {
             snap_line_width: 1.0,
             measure_ruler_width: 1.0,
             marker_radius: 7.0,
+            component_marker: Color32::from_rgba_unmultiplied(0xd0, 0x2c, 0x9c, 0x70),
+            component_marker_radius: 2.5,
             hit_tolerance: 6.0,
             snap_distance: 4.0,
             drag_threshold: 3.0,

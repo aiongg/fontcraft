@@ -7,6 +7,7 @@
 //! | marquee, Zoom tool rectangle | filled rectangle with an edge, `marquee_fill` and `marquee_stroke` |
 //! | lasso | closed line, `marquee_stroke` |
 //! | snapping line, snap target | line and ring, `snap_line` |
+//! | component node near a dragged point | small faint dot, `component_marker` |
 //! | point under the pointer | ring, `hover_point`; `locked_point` when it cannot be moved |
 //! | knife line, measurement ruler, drawing preview | line, `knife_line`, `measure_ruler`, `draw_preview` |
 //! | handle a drawing tool pulls out | handle line and dot, as the outline's handles |
@@ -138,6 +139,10 @@ pub fn overlay_shapes(cx: &PaintCx<'_>) -> Vec<Shape> {
                 }
                 if *kind == OverlayKind::DrawHandle {
                     out.push(Shape::circle_filled(at, cx.tokens.handle_radius, cx.tokens.node_handle));
+                    continue;
+                }
+                if *kind == OverlayKind::ComponentNode {
+                    out.push(Shape::circle_filled(at, t.component_marker_radius, t.component_marker));
                     continue;
                 }
                 let color = match kind {

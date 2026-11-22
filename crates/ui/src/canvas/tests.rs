@@ -230,6 +230,38 @@ fn a_scoped_metric_hides_its_line_in_glyphs_outside_the_scope() {
     assert!(lines(&app).iter().any(|(_, y)| *y == 420.0), "a metric scoped to A shows its line in A");
 }
 
+/// A per-script ascender replaces the master's line for glyphs of that script: the canvas draws one ascender line at
+/// it, its zone moves with it, and the tools snap to it.
+#[test]
+fn a_greek_ascender_replaces_the_masters_line_in_a_greek_glyph() {
+    let mut app = app();
+    app.session
+        .edit("setup", |font| {
+            let m = Arc::make_mut(&mut font.masters).first_mut().unwrap();
+            m.params.set("ascender", fontcraft_engine::model::plist::Value::String("greek: 705".into()));
+            font.glyph_mut("A")?.info.script = Some("greek".into());
+            Ok(())
+        })
+        .unwrap();
+    edit(&mut app, "A");
+    let glyph = app.models.canvas.glyph.clone().unwrap();
+    let ascenders: Vec<f64> = glyph.lines.iter().filter(|(name, _)| name == "ascender").map(|(_, y)| *y).collect();
+    assert_eq!(ascenders, vec![705.0], "one ascender line, at the Greek value: {:?}", glyph.lines);
+    assert!(glyph.zones.iter().any(|&(bottom, top)| bottom == 705.0 && top > 705.0), "the zone moves: {:?}", glyph.zones);
+    assert!(!glyph.zones.iter().any(|&(bottom, _)| bottom == 800.0), "no zone at the master's ascender: {:?}", glyph.zones);
+    let font = app.session.font().unwrap();
+    let scene = super::tools::scene(font, &app.view, None).unwrap();
+    assert!(scene.metric_lines.contains(&705.0) && !scene.metric_lines.contains(&800.0), "{:?}", scene.metric_lines);
+    let view = fontcraft_tools::View::default();
+    let s = fontcraft_tools::snap(&scene, &view, fontcraft_geom::Point::new(50.0, 703.0), &fontcraft_tools::Moving::default(), 4.0);
+    assert_eq!(s.point.y, 705.0, "a drag near 705 snaps to the Greek ascender");
+
+    // A Latin glyph keeps the master's line.
+    edit(&mut app, "B");
+    let lines = &app.models.canvas.glyph.as_ref().unwrap().lines;
+    assert!(lines.iter().any(|(name, y)| name == "ascender" && *y == 800.0), "{lines:?}");
+}
+
 /// The canvas is filled with its stored colour, and Fill Preview fills with the stored foreground stroke colour
 /// (`view.fillColorFromSettings`).
 #[test]

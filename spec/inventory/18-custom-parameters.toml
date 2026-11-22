@@ -101,6 +101,15 @@ effect = "ui"
 summary = "Replaces the ascender for one script: the value is the lowercase script name, a colon and the height (for example `greek: 705`). Edit View uses it for glyphs belonging to that script; add the parameter once per script."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft (M3.43): `fontcraft_model::shown_metrics` gives the metric lines of a glyph once, and `guide.displayLines`, the Edit View canvas, its alignment zones and the tools' snapping all read them there. An entry for the glyph's script replaces the master's ascender line for that glyph, keeping the master's overshoot, so the zone moves with the line; an entry without a script is ignored. The master's parameters are read before the font's."
+guesses = [
+  "The glyph's script is the one stored on the glyph; the script the glyph data gives a glyph without one is not used for these parameters.",
+  "The replaced line keeps the master's overshoot, so its alignment zone moves with it.",
+]
+observe = [
+  "In a font with the master parameter `ascender = greek: 705`, open a Greek glyph in Edit View: note whether one ascender line shows at 705 or a second line beside the master's, and where its zone sits.",
+  "Do the same for a Greek glyph whose script is not set on the glyph (only the glyph data gives it): note whether the line moves.",
+]
 
 [[parameter]]
 name = "Autohint"
@@ -185,6 +194,7 @@ effect = "ui"
 summary = "Replaces the cap height for one script: lowercase script name, colon, value (for example `armenian: 690`). Edit View uses it for glyphs of that script; add the parameter once per script."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft (M3.43): read as the `ascender` parameter is (`fontcraft_model::shown_metrics`): an entry for the glyph's script replaces the master's cap height line for that glyph in `guide.displayLines`, the canvas, its zones and snapping."
 
 [[parameter]]
 name = "CJK Grid"
@@ -462,6 +472,7 @@ effect = "ui"
 summary = "Replaces the descender for one script: lowercase script name, colon, value (for example `thai: -260`). Edit View uses it for glyphs of that script; add the parameter once per script."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft (M3.43): read as the `ascender` parameter is (`fontcraft_model::shown_metrics`): an entry for the glyph's script replaces the master's descender line for that glyph in `guide.displayLines`, the canvas, its zones and snapping."
 
 [[parameter]]
 name = "descriptions"
@@ -1948,6 +1959,10 @@ effect = "ui"
 summary = "Integer height shown as a metric line instead of the x-height in glyphs of those scripts. Automatic alignment-zone creation takes it into account."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft (M3.43): `fontcraft_model::shown_metrics` adds a `shoulder height` line, from the entry for the glyph's script else the entry without one; the canvas draws it with the other metric lines. It does not replace the x-height line and is not a snap target."
+guesses = [
+  "The shoulder height shows beside the x-height line, not in its place, and the tools do not snap to it.",
+]
 
 [[parameter]]
 name = "smallCapHeight"
@@ -1959,6 +1974,7 @@ effect = "ui"
 summary = "Integer height that takes the place of the x-height line for small-cap glyphs while metrics are visible. Automatic alignment-zone creation takes it into account."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft (M3.43): for a glyph whose case is small caps, `fontcraft_model::shown_metrics` puts it in place of the x-height line (the entry for the glyph's script, else the entry without one), in `guide.displayLines`, the canvas, its zones and snapping."
 
 [[parameter]]
 name = "strikeoutPosition"
