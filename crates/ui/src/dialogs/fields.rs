@@ -10,7 +10,9 @@ use std::collections::HashSet;
 
 use craft::behavior::{EditEvent, GesturePhase, Selection, keyed};
 use craft::ui::choice::Checkbox;
-use craft::ui::contract::{Bind, CollectionEvent, Props as _, ReorderMove, ReorderRule, Show as _, ShowCollection as _, ShowContainer as _};
+use craft::ui::contract::{
+    Bind, CollectionEvent, FieldLayout, Props as _, ReorderMove, ReorderRule, Show as _, ShowCollection as _, ShowContainer as _, SideLabel,
+};
 use craft::ui::display::Text;
 use craft::ui::layout_components::Stack;
 use craft::ui::list::{List, ListRow};
@@ -471,11 +473,14 @@ fn custom_row(ui: &mut Ui, fields: &mut DialogFields, cx: &mut CustomContext, fi
     };
     let ticked: Vec<String> = current.as_array().map(|l| l.iter().filter_map(|w| w.as_str().map(str::to_string)).collect()).unwrap_or_default();
     let mut next = ticked.clone();
-    let shown = Stack::new().show(ui, |ui, _| {
+    // The field's own label names the row, so each box shows its choice through the stack's label step: a box in a
+    // label scope draws only its mark.
+    let shown = Stack::new().show(ui, |ui, cx| {
         for (at, (word, label)) in words.iter().enumerate() {
             let was = ticked.contains(word);
             let mut on = was;
-            let _ = Checkbox::new(Bind::bound(&mut on)).label(Label::from(label.clone())).id_salt((field.key.as_str(), at)).show(ui);
+            let side = SideLabel::new().layout(FieldLayout::After);
+            let _ = cx.labelled(ui, (field.key.as_str(), at), Label::from(label.clone()), side, Checkbox::new(Bind::bound(&mut on)));
             if on != was {
                 next = words.iter().filter(|(w, _)| if w == word { on } else { next.contains(w) }).map(|(w, _)| w.clone()).collect();
             }
