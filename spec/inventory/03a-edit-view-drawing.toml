@@ -2815,7 +2815,7 @@ summary = "Query returning the lines Edit View draws for a layer besides guides:
 ref = "Font Info › Masters › Metrics & Alignment Zones; Appendix › Custom Parameters"
 status = "inferred"
 own = true
-notes = "Script-prefixed parameters match the glyph's own script property."
+notes = "Script-prefixed parameters match the glyph's effective script: the one it stores, else the glyph data's."
 guesses = [
   "A display-lines parameter without a script prefix applies to every glyph, since the glyph data that marks CJK glyphs is not built yet.",
   "The CJK grid divides the box from x 0 to the width and from the descender to the ascender.",

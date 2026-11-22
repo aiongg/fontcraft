@@ -398,7 +398,7 @@ fn press(app: &mut FontCraftApp, ev: PointerEvent) -> Option<Vec<String>> {
             // The layer's own objects lie above the image.
             let object = {
                 let font = app.session.font().ok()?;
-                let scene = tools::scene(font, &app.view, app.tools.focus.as_ref())?;
+                let scene = tools::scene(font, app.session.glyph_data().ok().as_deref(), &app.view, app.tools.focus.as_ref())?;
                 hit_test(&scene, &view, ev.pos, tolerance).is_some()
             };
             if object || !geom.contains(ev.pos) {

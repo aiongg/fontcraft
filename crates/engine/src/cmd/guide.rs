@@ -632,14 +632,15 @@ fn display_lines(s: &mut Session, p: &Value) -> Result<Value> {
     if t.has_lists() {
         return Err(p.bad("takes no target lists: it describes the whole layer"));
     }
+    let data = s.glyph_data()?;
     let font = s.font()?;
     let r = t.resolve(font)?;
     let master = r.master;
-    let script = shown_metrics::glyph_script(r.glyph);
+    let script = shown_metrics::glyph_script(r.glyph, Some(&*data));
     let script = script.as_deref();
     let param = |name: &str, plain: bool| script_param(font, master, name, script, plain).as_deref().and_then(param_number);
 
-    let shown = shown_metrics::shown_metrics(font, master, r.glyph);
+    let shown = shown_metrics::shown_metrics(font, master, r.glyph, Some(&*data));
     let ascender = shown_metrics::shown_pos(&shown, metric::ASCENDER, font.metric_pos(master, metric::ASCENDER, 800.0));
     let descender = shown_metrics::shown_pos(&shown, metric::DESCENDER, font.metric_pos(master, metric::DESCENDER, -200.0));
     let metrics: Vec<Value> = shown

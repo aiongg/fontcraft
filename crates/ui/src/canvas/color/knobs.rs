@@ -166,7 +166,7 @@ fn press(app: &mut FontCraftApp, ev: PointerEvent) -> Option<Vec<String>> {
     }
     apply::sync(app);
     let font = app.session.font().ok()?;
-    let scene = scene(font, &app.view, app.tools.focus.as_ref())?;
+    let scene = scene(font, app.session.glyph_data().ok().as_deref(), &app.view, app.tools.focus.as_ref())?;
     let list = knobs(&scene.layer, &selected_paths(&app.tools.selection), app.view.edit_background);
     if list.is_empty() {
         return None;

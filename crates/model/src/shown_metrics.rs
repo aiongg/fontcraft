@@ -4,8 +4,12 @@
 //! `shoulderHeight` line. A replaced line keeps the master's overshoot, so its zone moves with
 //! it.
 //!
-//! The engine's `guide.displayLines`, the canvas and the tools' snapping all read the lines here,
-//! so what is drawn is what is snapped to.
+//! A glyph's script is its effective one: the script it stores, else the one the glyph data gives
+//! for its name and code points, as Font View shows it. The engine's `guide.displayLines`, the
+//! canvas and the tools' snapping all read the lines here with the document's glyph data, so what
+//! is drawn is what is snapped to.
+
+use fontcraft_glyphdata::GlyphData;
 
 use crate::plist::Value;
 use crate::{Font, Glyph, MAX_COORDINATE, Master, metric};
@@ -35,9 +39,18 @@ impl ShownMetric {
     }
 }
 
-/// The script a glyph's per-script parameters are looked up by: its own, in lower case.
-pub fn glyph_script(glyph: &Glyph) -> Option<String> {
-    glyph.info.script.as_deref().map(str::to_lowercase)
+/// The script a glyph's per-script parameters are looked up by, in lower case: the one it stores,
+/// else the one `data` gives for its name and code points. Without `data`, the built-in database
+/// is read.
+pub fn glyph_script(glyph: &Glyph, data: Option<&GlyphData>) -> Option<String> {
+    if let Some(stored) = glyph.info.script.as_deref() {
+        return Some(stored.to_lowercase());
+    }
+    let from_data = |d: &GlyphData| d.lookup(&glyph.name, &glyph.unicodes).script.map(|s| s.value.to_lowercase());
+    match data {
+        Some(d) => from_data(d),
+        None => GlyphData::new().ok().as_ref().and_then(from_data),
+    }
 }
 
 /// A parameter value with an optional script prefix (`greek: 705`, `han:6`): the script in lower
@@ -67,9 +80,10 @@ pub fn param_number(text: &str) -> Option<f64> {
 }
 
 /// The metric lines `master` shows for `glyph`, in the font's metric order (the italic angle left
-/// out), then the shoulder height when a parameter gives one.
-pub fn shown_metrics(font: &Font, master: &Master, glyph: &Glyph) -> Vec<ShownMetric> {
-    let script = glyph_script(glyph);
+/// out), then the shoulder height when a parameter gives one. `data` gives the glyph's script
+/// when it stores none ([`glyph_script`]).
+pub fn shown_metrics(font: &Font, master: &Master, glyph: &Glyph, data: Option<&GlyphData>) -> Vec<ShownMetric> {
+    let script = glyph_script(glyph, data);
     let script = script.as_deref();
     let small_caps = glyph.info.case.as_deref() == Some("smallCaps");
     let param = |name: &str, plain: bool| script_param(font, master, name, script, plain).as_deref().and_then(param_number);
@@ -122,13 +136,34 @@ mod tests {
         master.params.set("ascender", Value::String("greek: 705".into()));
         let over = font.metric(&master, metric::ASCENDER).unwrap().over;
         let mut glyph: Glyph = (**font.glyph("A").unwrap()).clone();
-        let latin = shown_metrics(&font, &master, &glyph);
+        let latin = shown_metrics(&font, &master, &glyph, None);
         glyph.info.script = Some("Greek".into());
-        let greek = shown_metrics(&font, &master, &glyph);
+        let greek = shown_metrics(&font, &master, &glyph, None);
         let asc = |lines: &[ShownMetric]| lines.iter().filter(|m| m.kind == metric::ASCENDER).cloned().collect::<Vec<_>>();
         assert_eq!(asc(&greek).len(), 1, "one ascender line, in place of the master's");
         assert_eq!((asc(&greek)[0].y, asc(&greek)[0].over, asc(&greek)[0].from_param), (705.0, over, true));
         assert!(!asc(&latin)[0].from_param);
         assert_eq!(latin.len(), greek.len());
+    }
+
+    #[test]
+    fn a_glyph_without_a_stored_script_takes_the_glyph_datas() {
+        let font = Font::new("Test");
+        let master_id = font.masters.first().unwrap().id.clone();
+        let mut master = font.master(&master_id).unwrap().clone();
+        master.params.set("ascender", Value::String("greek: 705".into()));
+        let mut alpha: Glyph = (**font.glyph("A").unwrap()).clone();
+        alpha.name = "alpha".into();
+        alpha.unicodes = vec![0x03B1];
+        alpha.info.script = None;
+        let data = GlyphData::new().unwrap();
+        assert_eq!(glyph_script(&alpha, Some(&data)).as_deref(), Some("greek"));
+        let lines = shown_metrics(&font, &master, &alpha, Some(&data));
+        let asc = lines.iter().find(|m| m.kind == metric::ASCENDER).unwrap();
+        assert_eq!((asc.y, asc.from_param), (705.0, true), "the Greek ascender line");
+        assert_eq!(shown_metrics(&font, &master, &alpha, None), lines, "the built-in database without data");
+        // A stored script wins over the glyph data's.
+        alpha.info.script = Some("latin".into());
+        assert!(!shown_metrics(&font, &master, &alpha, Some(&data)).iter().any(|m| m.from_param));
     }
 }

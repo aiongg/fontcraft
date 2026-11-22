@@ -289,7 +289,7 @@ impl Space {
 /// model.
 pub(crate) fn scene_of(app: &FontCraftApp) -> Option<(Scene<'_>, &Selection)> {
     let font = app.session.font().ok()?;
-    let mut scene = tools::scene(font, &app.view, app.tools.focus.as_ref())?;
+    let mut scene = tools::scene(font, app.session.glyph_data().ok().as_deref(), &app.view, app.tools.focus.as_ref())?;
     scene.ps_hints = app.models.hint_canvas.ps.clone();
     Some((scene, &app.tools.selection))
 }

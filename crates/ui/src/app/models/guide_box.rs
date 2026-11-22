@@ -41,7 +41,7 @@ pub fn guide_box(cx: &ProjectCx<'_>, tools: &Tools) -> Option<GuideBox> {
     let mut guides = tools.selection.guides.iter();
     let (&r, None) = (guides.next()?, guides.next()) else { return None };
     let font = cx.session.font().ok()?;
-    let scene = scene(font, cx.view, tools.focus.as_ref())?;
+    let scene = scene(font, cx.session.glyph_data().ok().as_deref(), cx.view, tools.focus.as_ref())?;
     let g = guide_drag::guide(&scene, r)?;
     let values = guide_drag::properties(&scene, r, g);
     let mut target: Map<String, Value> = values.clone();

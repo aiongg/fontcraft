@@ -351,7 +351,7 @@ const TARGETED: &[&str] = &[
 impl Edit {
     fn read(cx: &ProjectCx<'_>, tools: &Tools) -> Option<Edit> {
         let font = cx.session.font().ok()?;
-        let scene = scene(font, cx.view, tools.focus.as_ref())?;
+        let scene = scene(font, cx.session.glyph_data().ok().as_deref(), cx.view, tools.focus.as_ref())?;
         let selection = tools.selection.clone();
         let targets: Vec<(&'static str, Map<String, Value>)> = TARGETED
             .iter()
@@ -410,7 +410,7 @@ fn info_box(cx: &mut ProjectCx<'_>, edit: Option<&Edit>) -> InfoBoxModel {
 /// The Smart Component controls for the selected smart components of the edited side.
 fn smart(cx: &ProjectCx<'_>, tools: &Tools) -> Option<SmartModel> {
     let font = cx.session.font().ok()?;
-    let scene = scene(font, cx.view, tools.focus.as_ref())?;
+    let scene = scene(font, cx.session.glyph_data().ok().as_deref(), cx.view, tools.focus.as_ref())?;
     let glyph = font.glyph(&scene.glyph)?;
     let layer = glyph.layers.iter().find(|l| l.id == scene.layer_id)?;
     let shapes: Vec<usize> = tools.selection.shapes.iter().copied().collect();

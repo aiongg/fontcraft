@@ -131,7 +131,7 @@ fn global_guide_scope(app: &FontCraftApp) -> Option<Map<String, Value>> {
         return None;
     }
     let font = app.session.font().ok()?;
-    let scene = crate::canvas::tools::scene(font, &app.view, app.tools.focus.as_ref())?;
+    let scene = crate::canvas::tools::scene(font, app.session.glyph_data().ok().as_deref(), &app.view, app.tools.focus.as_ref())?;
     let g = fontcraft_tools::guide_drag::guide(&scene, r)?;
     let mut given = scene.target();
     given.insert("guide".into(), json!({"scope": r.scope.as_str(), "index": r.index}));

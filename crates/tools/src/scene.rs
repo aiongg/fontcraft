@@ -4,6 +4,7 @@ use std::borrow::Cow;
 
 use fontcraft_components::align::{AlignMode, component_alignment};
 use fontcraft_geom::{BezPath, CubicBez, ParamCurve, PathEl, Point, QuadBez};
+use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Font, Guide, Layer, LayerSide, Node, Path, Shape, metric};
 
 use crate::MAX_COMPONENT_POINTS;
@@ -175,11 +176,13 @@ impl<'a> Scene<'a> {
     /// The scene of a glyph's layer in `font`: the layer by id, or the first master's layer when
     /// `layer_id` is `None`. `None` when the glyph or the layer does not exist.
     pub fn from_font(font: &'a Font, glyph: &str, layer_id: Option<&str>) -> Option<Self> {
-        Self::from_font_side(font, glyph, layer_id, LayerSide::Foreground)
+        Self::from_font_side(font, None, glyph, layer_id, LayerSide::Foreground)
     }
 
-    /// [`Scene::from_font`] for one side of the layer.
-    pub fn from_font_side(font: &'a Font, glyph: &str, layer_id: Option<&str>, side: LayerSide) -> Option<Self> {
+    /// [`Scene::from_font`] for one side of the layer. `data` is the document's glyph data, which
+    /// gives the glyph's script for the per-script metric lines when it stores none (the built-in
+    /// database when `None`).
+    pub fn from_font_side(font: &'a Font, data: Option<&GlyphData>, glyph: &str, layer_id: Option<&str>, side: LayerSide) -> Option<Self> {
         let g = font.glyph(glyph)?;
         let layer: &'a Layer = match layer_id {
             Some(id) => g.layers.iter().find(|l| l.id == id)?,
@@ -196,7 +199,7 @@ impl<'a> Scene<'a> {
         if let Ok(master) = font.master(&layer.master) {
             scene.global_guides = &master.guides;
             // The lines the canvas draws for this glyph, per-script parameters applied.
-            let shown = fontcraft_model::shown_metrics::shown_metrics(font, master, g);
+            let shown = fontcraft_model::shown_metrics::shown_metrics(font, master, g, data);
             let snapped = [metric::DESCENDER, metric::X_HEIGHT, metric::CAP_HEIGHT, metric::ASCENDER];
             let mut lines = vec![0.0];
             lines.extend(shown.iter().filter(|m| m.is_plain() && snapped.contains(&m.kind.as_str()) && m.y.is_finite()).map(|m| m.y));

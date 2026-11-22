@@ -250,7 +250,7 @@ fn a_greek_ascender_replaces_the_masters_line_in_a_greek_glyph() {
     assert!(glyph.zones.iter().any(|&(bottom, top)| bottom == 705.0 && top > 705.0), "the zone moves: {:?}", glyph.zones);
     assert!(!glyph.zones.iter().any(|&(bottom, _)| bottom == 800.0), "no zone at the master's ascender: {:?}", glyph.zones);
     let font = app.session.font().unwrap();
-    let scene = super::tools::scene(font, &app.view, None).unwrap();
+    let scene = super::tools::scene(font, app.session.glyph_data().ok().as_deref(), &app.view, None).unwrap();
     assert!(scene.metric_lines.contains(&705.0) && !scene.metric_lines.contains(&800.0), "{:?}", scene.metric_lines);
     let view = fontcraft_tools::View::default();
     let s = fontcraft_tools::snap(&scene, &view, fontcraft_geom::Point::new(50.0, 703.0), &fontcraft_tools::Moving::default(), 4.0);
