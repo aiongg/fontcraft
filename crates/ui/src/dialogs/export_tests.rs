@@ -277,7 +277,7 @@ fn export_all_asks_once_only_without_a_kept_folder() {
 #[test]
 fn the_profile_dialog_saves_the_compile_groups_and_reopens_with_them() {
     let mut app = drawn();
-    call(&mut app, "ui.dialog.open", json!({"dialog": "dialog.exportProfiles", "params": {"name": "Small"}}));
+    form::open_command(&mut app, &json!({"dialog": "dialog.exportProfiles", "params": {"name": "Small"}})).unwrap();
     call(&mut app, "ui.dialog.set", json!({"field": "postFormat", "value": "3"}));
     call(&mut app, "ui.dialog.set", json!({"field": "removeGlyphs", "value": "A  B"}));
     call(&mut app, "ui.dialog.set", json!({"field": "colr", "value": false}));
@@ -287,7 +287,7 @@ fn the_profile_dialog_saves_the_compile_groups_and_reopens_with_them() {
     assert_eq!(*group, json!({"postFormat": 3, "removeGlyphs": ["A", "B"], "colr": false, "conversionError": 0.002}), "{done}");
 
     // Reopened on the profile, the fields show its group; a field back at its default removes the key.
-    let reopened = call(&mut app, "ui.dialog.open", json!({"dialog": "dialog.exportProfiles", "params": {"name": "Small"}}));
+    let reopened = form::open_command(&mut app, &json!({"dialog": "dialog.exportProfiles", "params": {"name": "Small"}})).unwrap();
     assert_eq!(reopened["params"]["settings"]["compile"]["postFormat"], 3, "{reopened}");
     call(&mut app, "ui.dialog.set", json!({"field": "colr", "value": true}));
     let done = call(&mut app, "ui.dialog.confirm", json!({}));
@@ -305,7 +305,7 @@ fn the_profile_dialog_shows_the_compile_groups() {
 
     let app = Rc::new(RefCell::new(drawn()));
     let host = Rc::new(RefCell::new(DialogHost::new()));
-    call(&mut app.borrow_mut(), "ui.dialog.open", json!({"dialog": "dialog.exportProfiles", "params": {"name": "Groups"}}));
+    form::open_command(&mut app.borrow_mut(), &json!({"dialog": "dialog.exportProfiles", "params": {"name": "Groups"}})).unwrap();
     let (shown_app, shown_host) = (Rc::clone(&app), Rc::clone(&host));
     let mut fixture = Fixture::new(move |ui| {
         let (mut app, mut host) = (shown_app.borrow_mut(), shown_host.borrow_mut());
@@ -336,7 +336,7 @@ fn the_profile_dialog_shows_the_compile_groups() {
 #[test]
 fn export_fonts_as_offers_the_fonts_and_next_to_each_source() {
     let mut app = drawn();
-    let opened = call(&mut app, "ui.dialog.open", json!({"dialog": "dialog.exportFontsAs"}));
+    let opened = form::open_command(&mut app, &json!({"dialog": "dialog.exportFontsAs"})).unwrap();
     let title = app.session.doc().unwrap().title.clone();
     assert_eq!(opened["params"]["fonts"], json!([title]));
     assert!(opened["params"].get("bySource").is_none(), "unticked, the export folder is the destination");
