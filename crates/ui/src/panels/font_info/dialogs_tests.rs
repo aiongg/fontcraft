@@ -69,7 +69,7 @@ fn same_as_the_command(app: &Rc<RefCell<FontCraftApp>>, mut direct: FontCraftApp
     assert!(app.status.is_empty(), "{}", app.status);
     direct.session.execute(SET, &json!({"scope": "font", "name": name, "index": 0, "value": value})).expect("the command takes the value");
     let read = |app: &FontCraftApp| stored_value(app, &Target::font(), name, 0).map(|v| numbers(&v));
-    assert_eq!(read(&*app), read(&direct));
+    assert_eq!(read(&app), read(&direct));
 }
 
 /// The bits dialog: a search, a box and OK post one `set` with the checked bits; Cancel posts nothing.
