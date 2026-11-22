@@ -242,7 +242,10 @@ fn the_canvas_and_the_fill_take_the_appearance_colours() {
     let ink = Color32::from_rgb(0x12, 0x34, 0x56);
     assert_eq!(count(&painted(&app, paint::background::canvas_shapes), canvas), 1);
     assert!(app.view.display.fill_preview && app.tools.view.fills, "Fill Preview fills under the Hand tool");
-    assert!(count(&painted(&app, paint::outline::shapes), ink) >= 2, "the fill and the stroke both take the foreground colour");
+    let outline = painted(&app, paint::outline::shapes);
+    let filled = outline.iter().any(|s| matches!(s, Shape::Mesh(m) if m.vertices.first().is_some_and(|v| v.color == ink)));
+    assert!(filled, "the fill takes the foreground colour");
+    assert!(count(&outline, ink) >= 1, "so does the stroke");
 }
 
 /// The active master's Master Background Color is painted over the canvas colour, its Dark form on a dark canvas and
