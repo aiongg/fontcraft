@@ -260,28 +260,21 @@ fn level_at(bitmap: &StrikeGlyph, depth: u8, (x, y): (i32, i32)) -> u8 {
 pub fn inspect(app: &FontCraftApp, state: &mut Map<String, Value>) {
     let open = app.view.workspace.layout.panel_state(&PanelId::BitmapEditor) != PanelState::Hidden;
     let view = &app.view.bitmap_editor;
-    let mut out = json!({
+    let shown = app.session.font().ok().and_then(|font| shown(font, &app.view));
+    let bitmap = shown
+        .and_then(|(glyph, strike)| strike.glyph(&glyph.name))
+        .map(|b| json!({"width": b.width, "height": b.height, "left": b.left, "bottom": b.bottom, "advance": b.advance}));
+    let out = json!({
         "open": open,
-        "glyph": null,
-        "strike": null,
+        "glyph": shown.map(|(glyph, _)| glyph.name.clone()),
+        "strike": shown.map(|(_, strike)| strike.label()),
         "tool": view.tool.word(),
-        "level": null,
-        "maxLevel": null,
+        "level": shown.map(|(_, strike)| draw_level(&app.view, strike)),
+        "maxLevel": shown.map(|(_, strike)| max_level(strike.depth)),
         "outline": view.outline,
         "grid": view.grid,
-        "bitmap": null,
+        "bitmap": bitmap,
     });
-    if let Ok(font) = app.session.font()
-        && let Some((glyph, strike)) = shown(font, &app.view)
-    {
-        out["glyph"] = json!(glyph.name);
-        out["strike"] = json!(strike.label());
-        out["level"] = json!(draw_level(&app.view, strike));
-        out["maxLevel"] = json!(max_level(strike.depth));
-        if let Some(b) = strike.glyph(&glyph.name) {
-            out["bitmap"] = json!({"width": b.width, "height": b.height, "left": b.left, "bottom": b.bottom, "advance": b.advance});
-        }
-    }
     state.insert("bitmapEditor".into(), out);
 }
 

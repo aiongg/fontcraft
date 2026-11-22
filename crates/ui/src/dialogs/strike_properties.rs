@@ -97,8 +97,9 @@ fn values(strike: &BitmapStrike) -> Map<String, Value> {
     let mut out = Map::new();
     out.insert("name".into(), json!(strike.name));
     out.insert("pointSize".into(), json!(strike.point_size));
-    out.insert("resolutionX".into(), json!(strike.resolution[0]));
-    out.insert("resolutionY".into(), json!(strike.resolution[1]));
+    let [rx, ry] = strike.resolution;
+    out.insert("resolutionX".into(), json!(rx));
+    out.insert("resolutionY".into(), json!(ry));
     out.insert("ascent".into(), json!(strike.ascent));
     out.insert("descent".into(), json!(strike.descent));
     out.insert("properties".into(), json!(properties.join("\n")));
