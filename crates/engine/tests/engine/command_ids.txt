@@ -225,6 +225,7 @@ audit.step
 audit.cancel
 settings.get
 settings.set
+settings.resetColors
 sharing.status
 sharing.answerDevice
 settings.resetTrustedDevices

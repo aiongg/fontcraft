@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**3159 guesses on 1642 rows (676 of them live commands).**
+**3179 guesses on 1653 rows (676 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -137,9 +137,11 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `tidyUp.mayBreakCompatibility` (behavior) | M3 | handbook | – | A glyph counts as made incompatible when Tidy up Paths changes its node counts or segment types so that the compatibility check fails where it passed before; smooth flags do not count. |
 | `tidyUp.mayBreakCompatibility` (behavior) | M3 | handbook | – | The window reports such glyphs in a status message; the reference app may show nothing beyond its usual compatibility indicators. |
 | `nodes.metricLineHighlight` (behavior) | M3 | handbook | – | "Vertical metric lines" are read as the master's height lines: ascender, cap height, x-height, baseline, descender and any other metric but the italic angle. |
+| `boundingBox.scaleKnobs` (behavior) | M3 | handbook | – | A knob's badge shows both percentages and both new sizes even when the knob scales one axis; the video shows one percentage and the new height for a side knob. |
 | `infoBox.selectionGeometryFields` (behavior) | M3 | handbook | – | The width and height lock starts open; the handbook gives no default. |
 | `align.anchorToPoints` (behavior) | M6 | handbook | – | With two points the anchor keeps its height and moves horizontally onto the line at the italic angle through the points' midpoint, and a locked anchor refuses it; aligning an anchor between two nodes of different heights on an italic master in the reference app settles it. |
 | `align.componentOriginPoint` (behavior) | M6 | handbook | – | On a slanted master the left sidebearing line leaves the baseline at x = 0 and leans at the master's italic angle, so without an origin anchor the origin point is (x-height / 2 · tan(italic angle), 0) of the base glyph; aligning a component on an italic master in the reference app settles it. |
+| `duplicate.optionDrag` (behavior) | M3 | handbook | – | The move badge shows the offset in whole units as `x:… y:…`; the reference app's wording is not visible in the video. |
 | `duplicate.optionDrag` (behavior) | M3 | handbook | – | Alt held at mouse-down on a selection drags a copy, and Alt pressed after the drag started switches to nudge (03a question 1). |
 | `duplicate.optionDrag` (behavior) | M3 | handbook | – | Alt held at mouse-down on lone nodes, with no whole segment, path or other object to copy, moves only the selected points (selection.move mode pointsOnly), as for nodes moved with Option; observing an Option-drag of one node would settle it. |
 | `stroke.joinsAndCaps` (behavior) | M3 | handbook | – | Every join and cap shape is our construction on offset curves (docs/spec/03a § 17): miter up to 4 half widths, then bevel. |
@@ -183,7 +185,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `draw` (tool) | M3 | handbook | – | Escape or another tool ends the path. |
 | `pencil` (tool) | M3 | handbook | – | The stroke is fitted with cubic curves within one screen point, so it stays node-heavy. |
 | `pencil` (tool) | M3 | handbook | – | A stroke that ends on its start, within the hit tolerance, gives a closed path. |
+| `rectangle` (tool) | M3 | handbook | – | Badge numbers are whole units, and percentages have one decimal (75.8%); the reference app at a fractional zoom settles the rounding. |
 | `select` (tool) | M3 | handbook | – | The canvas context menu's sections, item targets and what a right-click selects first are our design (docs/spec/03a § 6). |
+| `rotate` (tool) | M3 | handbook | – | The rotation badge shows the counter-clockwise angle in whole degrees. |
+| `scale` (tool) | M3 | handbook | – | The Scale tool's badge shows the horizontal and vertical percentages, without the new size. |
 
 ## `03b-edit-view-display.toml`
 
@@ -1184,9 +1189,13 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `corner.glyphNaming` (behavior) | M6 | handbook | – | A layer with a corner that cannot be fitted (its path deleted, a zero-length segment next to it) is drawn in the editor without any of its corners, as the export leaves it; a hint whose path was deleted in the reference app shows what it draws. |
 | `corner.glyphNaming` (behavior) | M6 | handbook | – | Corners are fitted on the layer's stored shapes, whose indices the hints name, before its smart components are drawn; fontc draws smart components first and then reads the indices against the shapes that result, which differs only in a layer that has both. A layer with a smart component before a path with a corner, built in the reference app, settles it. |
 | `corner.highlightAndSelection` (behavior) | M6 | handbook | – | The highlight is a wide, faint blue band along the corner's fitted outline, as the sources show for caps, segments and brushes; its width and colour are ours, and a corner at 400 % zoom in the reference app settles them. |
+| `corner.highlightAndSelection` (behavior) | M6 | handbook | – | A click hits a corner along the segments between its inserted nodes; the host node itself stays a node hit, and where a path segment is as near as the corner, the corner wins. |
+| `corner.highlightAndSelection` (behavior) | M6 | handbook | – | A selected corner's band is drawn in a stronger tint of the same blue. |
+| `corner.highlightAndSelection` (behavior) | M6 | handbook | – | A drag that starts on a corner moves nothing: a corner moves with its node. |
 | `corner.copyPasteOntoNodes` (behavior) | M6 | handbook | – | Pasting a corner, cap, segment or brush onto a selection of the wrong kind (a corner with a segment selected, a cap on nodes that are not neighbours) is refused with a message and nothing changes; the reference app settles it. |
 | `corner.copyPasteOntoNodes` (behavior) | M6 | handbook | – | One copied corner goes onto every selected node; several copied corners go onto as many selected nodes, in order, and any other count is refused. Copying two corners and pasting them onto three nodes in the reference app settles it. |
 | `corner.mirrorViaPalette` (behavior) | M6 | handbook | – | Mirroring negates the scale only and keeps the corner's alignment mode; mirroring a corner aligned left in the reference app and reading its Info box settles it. |
+| `corner.mirrorViaPalette` (behavior) | M6 | handbook | – | With corners and other objects selected, the mirror buttons flip the corners only and leave the rest. |
 | `corner.entryAnchor` (behavior) | M6 | handbook | – | The entry anchor slides the fitted corner along its own baseline until the anchor lies on the incoming stroke, and the corner is then fitted as without it; the reference app's output for `av_left_anchoroffpath` agrees, and a left anchor on a curved stem in the reference app settles the rest. |
 | `corner.entryAnchor` (behavior) | M6 | handbook | – | A corner path faces right when its second node lies right of its start node; it then takes `right` as its entry anchor and `left` as its exit anchor. A right-facing corner glyph with both anchors in the reference app settles it. |
 | `corner.entryAnchor` (behavior) | M6 | handbook | – | A mirrored corner (one negative scale) ignores its entry and exit anchors; a mirrored corner with a left anchor in the reference app settles it. |
@@ -1954,6 +1963,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `sharing.viewerShowsActiveEditView` (behavior) | M13 | handbook | – | The viewer follows tab switches. |
 | `addons.repo.httpBasicAuth` (behavior) | M13 | handbook | – | Credentials are taken from the URL itself and stored with the setting, not in the operating system's keychain; the reference's storage is not described. |
 | `window.settings` (panel) | M14 | handbook | – | Sections that are not built yet stay in the switcher, greyed with the reason, so the order matches the reference; the reference has no such state. |
+| `settings.appearance` (panel) | M14 | handbook | – | The wells sit in a table with the light set left and the dark set right, one row per item, in the handbook's order. |
+| `settings.appearance` (panel) | M14 | handbook | – | The handle size is a three-way choice, Small, Regular and Large; the handbook names the control only. |
 | `settings.userSettings` (panel) | M14 | handbook | – | Every checkbox is off by default; the handbook gives no defaults. |
 | `settings.sampleStrings` (panel) | M5 | handbook | – | The plus, minus and Default buttons sit in one row above the group list. |
 | `settings.sampleStrings` (panel) | M5 | handbook | – | The groups show as a row of choices above the field, not as a list beside it. |
@@ -1964,8 +1975,14 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `settings.addons` (panel) | M13 | handbook | – | The section is called Extensions, because FontCraft has no add-on kinds that need Python; the reference calls it Addons. |
 | `appearance.displayUnicodeValue` (setting) | M4 | handbook | – | On shows the code point, off the small marker, as the handbook's wording implies. Settled by observation. |
 | `appearance.displayUnicodeValue` (setting) | M4 | handbook | – | Off by default (the small marker), as the handbook gives no default. Settled by observing a fresh install. |
+| `appearance.alwaysLightModeFontView` (setting) | M14 | handbook | – | Always use Light Mode changes the view's content, not the window chrome. |
+| `appearance.alwaysLightModeFontView` (setting) | M14 | handbook | – | Off by default; the handbook gives no default. |
+| `appearance.alwaysLightModeEditView` (setting) | M14 | handbook | – | Always use Light Mode changes the view's content, not the window chrome. |
+| `appearance.alwaysLightModeEditView` (setting) | M14 | handbook | – | Off by default; the handbook gives no default. |
 | `appearance.handleSize` (setting) | M14 | handbook | – | Three steps, small, regular and large, at 0.75, 1 and 1.5 times the regular sizes; the handbook lists no steps. Settled by opening the reference's Appearance settings and measuring a node at each step. |
 | `appearance.handleSize` (setting) | M14 | handbook | – | The appearance colour settings default to the canvas colours FontCraft drew before they existed, the same value for light and dark; the handbook states no defaults. Settled by reading the reference's colour wells after Standard. |
+| `appearance.color.foregroundStroke.dark` (setting) | M14 | handbook | – | The dark default is `#e6e6e6`, so the dark canvas is dark with a light outline; the handbook gives no default. Settled by reading the reference's dark well after Standard. |
+| `appearance.color.canvas.dark` (setting) | M14 | handbook | – | The dark default is `#1e1e1e`, so the dark canvas is dark with a light outline; the handbook gives no default. Settled by reading the reference's dark well after Standard. |
 | `appearance.color.kerningNegative.light` (setting) | M5 | handbook | – | The default is the tint FontCraft drew before the setting existed, the same for light and dark: light blue `#8cc8f590` for negative and yellow `#f5dc46a0` for positive kerning; the handbook names only the hues. Settled by reading the reference's colour wells after Standard. |
 | `appearance.color.kerningNegative.dark` (setting) | M5 | handbook | – | The default is the tint FontCraft drew before the setting existed, the same for light and dark: light blue `#8cc8f590` for negative and yellow `#f5dc46a0` for positive kerning; the handbook names only the hues. Settled by reading the reference's colour wells after Standard. |
 | `appearance.color.kerningPositive.light` (setting) | M5 | handbook | – | The default is the tint FontCraft drew before the setting existed, the same for light and dark: light blue `#8cc8f590` for negative and yellow `#f5dc46a0` for positive kerning; the handbook names only the hues. Settled by reading the reference's colour wells after Standard. |
@@ -2091,6 +2108,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `MakeOTF Compatibility Mode` (parameter) | M12 | handbook | – | The parameter changes only how substitutions are grouped into lookups, the one layout rule the project compile has of its own; exporting feature code with mixed single and ligature substitutions in the reference app with it on and off would settle what else it changes. |
 | `MakeOTF Compatibility Mode` (parameter) | M12 | handbook | – | Pair kerning classes keep the ordinary numbering (the largest first class in class 0), where makeotf numbers classes in the order the code names them and puts the first one in class 0; comparing the reference app's class kerning with the parameter on and off would settle whether it follows makeotf there. |
 | `Master Background Color` (parameter) | M14 | handbook | – | The background and stroke colours take Master Color's forms (`R,G,B[,A]` or `#RRGGBB[AA]`); the handbook gives no syntax for them, and a value saved by the reference app settles it. |
+| `Master Background Color` (parameter) | M14 | handbook | – | A translucent value is painted over the Appearance canvas colour, so the canvas colour shows through it. |
+| `Master Background Color Dark` (parameter) | M14 | handbook | – | A dark canvas without this parameter keeps the Appearance canvas colour and does not fall back to Master Background Color, whose light value would hide the light outline. |
+| `Master Icon Glyph Name` (parameter) | M14 | handbook | – | An icon set on the master itself (font.master.setIcon) wins over the parameter. |
 | `Optical Size` (parameter) | M8 | handbook | – | The values are whole decipoints from 0 to 65535 and the code is a `size` feature added at the end of the list, replacing the code of a `size` feature the font already has; exporting with the parameter in the reference app and reading GPOS settles it. |
 | `Optical Size` (parameter) | M8 | handbook | – | The menu name is written for Windows (English) and, when it is plain ASCII, for the Mac (Roman, English); a subfamily of 0 writes no range and no name, as the feature file specification asks; the exported name table of the reference app settles it. |
 | `Optimize Variable Deltas` (parameter) | M9 | handbook | – | The handbook drops the deltas of a contour whose nodes all move half a unit or less; FontCraft drops the deltas IUP can infer within half a unit, as both oracles do. A variable font exported by the reference app with the parameter on and off would settle it. |

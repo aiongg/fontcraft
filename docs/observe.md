@@ -32,12 +32,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1532 rows to check: 2658 guesses and 642 observe steps.**
+**1543 rows to check: 2678 guesses and 653 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **545** |
-| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 121 |
+| **Built milestones (M0 to M6)** | all | **549** |
+| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 125 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 33 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
 | Built milestones (M0 to M6) | Filters | 36 |
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 49 |
 | Built milestones (M0 to M6) | Settings and the window | 18 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **987** |
+| **Later milestones (after M6)** | all | **994** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 90 |
 | Later milestones (after M6) | Edit View: text mode and preview | 28 |
 | Later milestones (after M6) | Components and anchors | 43 |
@@ -56,18 +56,18 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Spacing and metrics keys | 13 |
 | Later milestones (after M6) | Kerning and the Kerning window | 16 |
 | Later milestones (after M6) | Font View | 19 |
-| Later milestones (after M6) | Font Info and features | 308 |
+| Later milestones (after M6) | Font Info and features | 310 |
 | Later milestones (after M6) | Interpolation | 90 |
 | Later milestones (after M6) | Hinting | 115 |
 | Later milestones (after M6) | Colour fonts | 74 |
 | Later milestones (after M6) | Files: open, import, export | 71 |
-| Later milestones (after M6) | Settings and the window | 27 |
+| Later milestones (after M6) | Settings and the window | 32 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
-## Built milestones (M0 to M6) (545)
+## Built milestones (M0 to M6) (549)
 
-### Edit View: drawing, guides, layers and the Palette (121)
+### Edit View: drawing, guides, layers and the Palette (125)
 
 - [ ] `dialog.fieldKeys` (behavior, M3, inferred): In a dialog's number field, Return takes the typed value, Escape drops…
   - Guess: Dialog number fields follow the Info box's editing and arrow-key rules (infoBox.fieldEditing, infoBox.arrowKeyStepping); the handbook documents them for the Info box only.
@@ -130,9 +130,13 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In a two-master font with an instance between the masters, put a node in the middle of a straight edge on both masters, run Tidy up Paths on one master only, and note any message beyond the compatibility indicators.
 - [ ] `nodes.metricLineHighlight` (behavior, M3, handbook): A beige diamond is drawn behind any node that sits precisely on…
   - Guess: "Vertical metric lines" are read as the master's height lines: ascender, cap height, x-height, baseline, descender and any other metric but the italic angle.
+- [ ] `boundingBox.scaleKnobs` (behavior, M3, handbook): When more than one node is selected a bounding box with eight…
+  - Guess: A knob's badge shows both percentages and both new sizes even when the knob scales one axis; the video shows one percentage and the new height for a side knob.
+  - Observe: Drag a side knob and a corner knob of a selection's box and note what each badge shows.
 - [ ] `infoBox.selectionGeometryFields` (behavior, M3, handbook): With several nodes selected the Info box shows X, Y, width and…
   - Guess: The width and height lock starts open; the handbook gives no default.
 - [ ] `duplicate.optionDrag` (behavior, M3, handbook): Dragging a selection with Option held leaves the original in place and…
+  - Guess: The move badge shows the offset in whole units as `x:… y:…`; the reference app's wording is not visible in the video.
   - Guess: Alt held at mouse-down on a selection drags a copy, and Alt pressed after the drag started switches to nudge (03a question 1).
   - Guess: Alt held at mouse-down on lone nodes, with no whole segment, path or other object to copy, moves only the selected points (selection.move mode pointsOnly), as for nodes moved with Option; observing an Option-drag of one node would settle it.
   - Observe: Option-drag one selected node of a path: note whether a copy appears, or the node moves without its handles.
@@ -244,8 +248,15 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `pencil` (tool, M3, handbook): Pencil
   - Guess: The stroke is fitted with cubic curves within one screen point, so it stays node-heavy.
   - Guess: A stroke that ends on its start, within the hit tolerance, gives a closed path.
+- [ ] `rectangle` (tool, M3, handbook): Primitives (Rectangle)
+  - Guess: Badge numbers are whole units, and percentages have one decimal (75.8%); the reference app at a fractional zoom settles the rounding.
 - [ ] `select` (tool, M3, handbook): Select
   - Guess: The canvas context menu's sections, item targets and what a right-click selects first are our design (docs/spec/03a § 6).
+- [ ] `rotate` (tool, M3, handbook): Rotate
+  - Guess: The rotation badge shows the counter-clockwise angle in whole degrees.
+  - Observe: Rotate a shape with the Rotate tool and note the badge's text and whether it shows decimals.
+- [ ] `scale` (tool, M3, handbook): Scale
+  - Guess: The Scale tool's badge shows the horizontal and vertical percentages, without the new size.
 - [ ] `background.snapping` (behavior, M3, handbook): While the background is displayed, its nodes and outlines are snapping targets…
   - Guess: The background's nodes, then its handles, are snap targets after the edited layer's nodes and handles and before guides; its outlines between nodes are not targets.
 - [ ] `measurement.allVisibleGlyphs` (behavior, M3, handbook): Coordinates and rulers of the Measurement tool cover every glyph shown in…
@@ -642,13 +653,18 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Corners are fitted on the layer's stored shapes, whose indices the hints name, before its smart components are drawn; fontc draws smart components first and then reads the indices against the shapes that result, which differs only in a layer that has both. A layer with a smart component before a path with a corner, built in the reference app, settles it.
 - [ ] `corner.highlightAndSelection` (behavior, M6, handbook): In Edit View a corner component is tinted with a faint blue…
   - Guess: The highlight is a wide, faint blue band along the corner's fitted outline, as the sources show for caps, segments and brushes; its width and colour are ours, and a corner at 400 % zoom in the reference app settles them.
+  - Guess: A click hits a corner along the segments between its inserted nodes; the host node itself stays a node hit, and where a path segment is as near as the corner, the corner wins.
+  - Guess: A selected corner's band is drawn in a stronger tint of the same blue.
+  - Guess: A drag that starts on a corner moves nothing: a corner moves with its node.
   - Observe: Attach a corner component at 400 % zoom and note the width and colour of its blue band, and how a selected corner differs from an unselected one.
+  - Observe: Click a corner's blue line, then drag from it: note whether the corner, its node or nothing moves.
 - [ ] `corner.copyPasteOntoNodes` (behavior, M6, handbook): A selected corner component can be copied with Edit › Copy and,…
   - Guess: Pasting a corner, cap, segment or brush onto a selection of the wrong kind (a corner with a segment selected, a cap on nodes that are not neighbours) is refused with a message and nothing changes; the reference app settles it.
   - Guess: One copied corner goes onto every selected node; several copied corners go onto as many selected nodes, in order, and any other count is refused. Copying two corners and pasting them onto three nodes in the reference app settles it.
   - Observe: Copy two corners, select three nodes and paste: note which nodes get which corner, or whether the paste is refused.
 - [ ] `corner.mirrorViaPalette` (behavior, M6, handbook): The Palette's mirror buttons flip selected corner components, equivalent to negating the…
   - Guess: Mirroring negates the scale only and keeps the corner's alignment mode; mirroring a corner aligned left in the reference app and reading its Info box settles it.
+  - Guess: With corners and other objects selected, the mirror buttons flip the corners only and leave the rest.
   - Observe: Select a corner aligned left on a diagonal stem, press the horizontal mirror button and read the Info box: note the scale fields and the alignment button.
 - [ ] `corner.entryAnchor` (behavior, M6, handbook): The entry point, where the stem runs into the corner, defaults to…
   - Guess: The entry anchor slides the fitted corner along its own baseline until the anchor lies on the incoming stroke, and the corner is then fitted as without it; the reference app's output for `av_left_anchoroffpath` agrees, and a left anchor on a curved stem in the reference app settles the rest.
@@ -1672,7 +1688,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (987)
+## Later milestones (after M6) (994)
 
 ### Edit View: drawing, guides, layers and the Palette (90)
 
@@ -2476,7 +2492,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.
   - Guess: Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.
 
-### Font Info and features (308)
+### Font Info and features (310)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
@@ -3458,6 +3474,14 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The dialog edits the first master and one glyph at a time, with the data as text fields rather than a table per glyph; the reference's math dialog would settle the layout.
 - [ ] `Master Background Color` (parameter, M14, handbook): Colour of the Edit View canvas whenever the master carrying the parameter…
   - Guess: The background and stroke colours take Master Color's forms (`R,G,B[,A]` or `#RRGGBB[AA]`); the handbook gives no syntax for them, and a value saved by the reference app settles it.
+  - Guess: A translucent value is painted over the Appearance canvas colour, so the canvas colour shows through it.
+  - Observe: Give the second master a Master Background Color, switch masters in Edit View and note whether the canvas colour changes at once.
+- [ ] `Master Background Color Dark` (parameter, M14, handbook): Dark-mode counterpart of Master Background Color
+  - Guess: A dark canvas without this parameter keeps the Appearance canvas colour and does not fall back to Master Background Color, whose light value would hide the light outline.
+  - Observe: With the system in dark mode, give a master only Master Background Color and note whether the dark canvas takes it.
+- [ ] `Master Icon Glyph Name` (parameter, M14, handbook): Name of the glyph shown on the master's button at the top…
+  - Guess: An icon set on the master itself (font.master.setIcon) wins over the parameter.
+  - Observe: Give a master both an icon and a Master Icon Glyph Name and note which the master button shows.
 - [ ] `proof-pdf` (format, M14, inferred): PDF proof sheet
   - Open (our design, not confirmed): Vector PDF of an Edit View text, a glyph overview or a waterfall, drawn straight from the source outlines of the current master or instance so no font has to be installed. Scale follows the font's units-per-point setting; nodes, guides and annotations are included only when asked for.
 
@@ -4710,7 +4734,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Every item starts ticked, so Accept Selected with no change of the ticks takes everything; the reference's manual does not say which state the ticks start in, and opening the window there settles it.
   - Guess: The stored-text view on double-click shows the glyph in FontCraft's native JSON form rather than as a .glif file, since the comparison is between models; the reference shows the file text, and a file-per-glyph text view would follow it more closely.
 
-### Settings and the window (27)
+### Settings and the window (32)
 
 - [ ] `sharing.confirmConnectionOnHost` (behavior, M13, handbook): A first connection attempt from a device must be confirmed on the…
   - Guess: Devices are known by their IP address, so a device that gets a new address must be confirmed again; what the reference keys them by is not documented.
@@ -4774,13 +4798,31 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `window.settings` (panel, M14, handbook): Settings
   - Guess: Sections that are not built yet stay in the switcher, greyed with the reason, so the order matches the reference; the reference has no such state.
   - Observe: Open Settings and note the order of the sections in the switcher and which section shows first.
+- [ ] `settings.appearance` (panel, M14, handbook): Appearance
+  - Guess: The wells sit in a table with the light set left and the dark set right, one row per item, in the handbook's order.
+  - Guess: The handle size is a three-way choice, Small, Regular and Large; the handbook names the control only.
+  - Observe: Open Settings › Appearance and note the order of the controls and how the light and dark wells are laid out.
 - [ ] `settings.userSettings` (panel, M14, handbook): User Settings
   - Guess: Every checkbox is off by default; the handbook gives no defaults.
   - Observe: On a fresh install, open Settings › User Settings and note which checkboxes are on.
   - Observe: Note the labels of the two crash-report contact fields.
+- [ ] `appearance.alwaysLightModeFontView` (setting, M14, handbook): Always use Light Mode: Font View
+  - Guess: Always use Light Mode changes the view's content, not the window chrome.
+  - Guess: Off by default; the handbook gives no default.
+  - Observe: With the system in dark mode, turn on Always use Light Mode for Font View and note what turns light beyond the view's content.
+- [ ] `appearance.alwaysLightModeEditView` (setting, M14, handbook): Always use Light Mode: Edit View
+  - Guess: Always use Light Mode changes the view's content, not the window chrome.
+  - Guess: Off by default; the handbook gives no default.
+  - Observe: With the system in dark mode, turn on Always use Light Mode for Edit View and note what turns light beyond the view's content.
 - [ ] `appearance.handleSize` (setting, M14, handbook): Handle size
   - Guess: Three steps, small, regular and large, at 0.75, 1 and 1.5 times the regular sizes; the handbook lists no steps. Settled by opening the reference's Appearance settings and measuring a node at each step.
   - Guess: The appearance colour settings default to the canvas colours FontCraft drew before they existed, the same value for light and dark; the handbook states no defaults. Settled by reading the reference's colour wells after Standard.
+- [ ] `appearance.color.foregroundStroke.dark` (setting, M14, handbook): Foreground Layer Stroke (Dark)
+  - Guess: The dark default is `#e6e6e6`, so the dark canvas is dark with a light outline; the handbook gives no default. Settled by reading the reference's dark well after Standard.
+  - Observe: With the system in dark mode, click Standard in Settings › Appearance and read the dark well's colour.
+- [ ] `appearance.color.canvas.dark` (setting, M14, handbook): Canvas (Dark)
+  - Guess: The dark default is `#1e1e1e`, so the dark canvas is dark with a light outline; the handbook gives no default. Settled by reading the reference's dark well after Standard.
+  - Observe: With the system in dark mode, click Standard in Settings › Appearance and read the dark well's colour.
 - [ ] `user.disableLocalization` (setting, M14, handbook): Disable Localization
   - Guess: Disable Localization is stored and does nothing, because FontCraft has no translations yet.
 - [ ] `user.useVersions` (setting, M14, handbook): Use Versions
