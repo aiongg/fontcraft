@@ -128,7 +128,8 @@ enum Answer {
     /// web build takes no screenshots.
     #[cfg(not(target_arch = "wasm32"))]
     Screenshot(Option<String>),
-    /// A `ui.wait`: the reply goes out once the frames have passed or the window is idle.
+    /// A `ui.wait`: the reply goes out once the frames have passed or the window is idle. Only the listener reads it.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     Wait(wait::Wait),
 }
 

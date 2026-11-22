@@ -1,6 +1,8 @@
 //! `ui.wait {frames?, idle?, timeoutMs?}`: the reply waits until `frames` frames have been drawn, or until the window
 //! is idle, or both; at the timeout it goes out anyway with `timedOut: true`. The UI thread never blocks: the
 //! listener parks the reply and looks at it at the end of every pass (`server::after_ui`).
+// The web build has no listener: it parses and refuses waits, and the rest goes unused there.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code))]
 
 use std::time::Duration;
 
