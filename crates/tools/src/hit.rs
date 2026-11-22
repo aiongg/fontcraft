@@ -1,9 +1,10 @@
 //! What lies under the pointer.
 //!
 //! Points (nodes, handles, anchors) win over segments, segments over components, components over
-//! guides. A corner component's fitted outline counts with the segments: the nearer of the two
-//! wins, the corner at equal distance. Among points the nearest wins; at equal distance a node beats an anchor and an anchor
-//! beats a handle. The tolerance is in screen points, so it feels the same at every zoom.
+//! guides. Among points the nearest wins; at equal distance a node beats an anchor and an anchor
+//! beats a handle. [`hit_test_with_corners`], for the Select tool and the context menu, also
+//! counts a corner component's fitted outline with the segments: the nearer of the two wins, the
+//! corner at equal distance. Other tools act on the outline under a corner. The tolerance is in screen points, so it feels the same at every zoom.
 
 use fontcraft_geom::Point;
 use serde::Serialize;
@@ -86,6 +87,15 @@ impl HitResult {
 
 /// The object under `pos` (font units) within `tolerance` screen points, or `None`.
 pub fn hit_test(scene: &Scene, view: &View, pos: Point, tolerance: f64) -> Option<HitResult> {
+    hit(scene, view, pos, tolerance, false)
+}
+
+/// [`hit_test`] that also finds corner components ([`Hit::Attachment`]).
+pub fn hit_test_with_corners(scene: &Scene, view: &View, pos: Point, tolerance: f64) -> Option<HitResult> {
+    hit(scene, view, pos, tolerance, true)
+}
+
+fn hit(scene: &Scene, view: &View, pos: Point, tolerance: f64, corners: bool) -> Option<HitResult> {
     if !finite(pos) {
         return None;
     }
@@ -143,7 +153,8 @@ pub fn hit_test(scene: &Scene, view: &View, pos: Point, tolerance: f64) -> Optio
             }
         }
     }
-    if let Some((hint, d, at)) = crate::attachment::nearest(scene, pos, tol)
+    if corners
+        && let Some((hint, d, at)) = crate::attachment::nearest(scene, pos, tol)
         && nearest.as_ref().is_none_or(|(sd, _)| d <= *sd)
     {
         return Some(HitResult { hit: Hit::Attachment { hint }, at, locked: scene.locked });

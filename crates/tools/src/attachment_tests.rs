@@ -22,10 +22,13 @@ fn corner_font() -> Font {
     font.add_glyph("_corner.one", Vec::new(), 0.0).unwrap();
     let corner = Path::new(false, vec![on(0.0, 50.0), on(-50.0, 50.0), on(-50.0, 0.0), on(25.0, 0.0)]);
     font.glyph_mut("_corner.one").unwrap().layer_mut("m01").unwrap().shapes.push(Shape::Path(corner));
-    let layer = font.glyph_mut("A").unwrap().layer_mut("m01").unwrap();
-    layer.shapes.push(Shape::Path(Path::new(true, vec![on(100.0, 0.0), on(400.0, 0.0), on(400.0, 500.0), on(100.0, 500.0)])));
-    layer.info.hints.push(CornerHint::new("_corner.one", 0, 3).to_hint());
-    layer.info.hints.push(CornerHint::new("_corner.one", 0, 0).to_hint());
+    {
+        let mut glyph = font.glyph_mut("A").unwrap();
+        let layer = glyph.layer_mut("m01").unwrap();
+        layer.shapes.push(Shape::Path(Path::new(true, vec![on(100.0, 0.0), on(400.0, 0.0), on(400.0, 500.0), on(100.0, 500.0)])));
+        layer.info.hints.push(CornerHint::new("_corner.one", 0, 3).to_hint());
+        layer.info.hints.push(CornerHint::new("_corner.one", 0, 0).to_hint());
+    }
     font
 }
 
@@ -59,11 +62,11 @@ fn corners_are_selected_by_a_click_on_their_fitted_outline() {
     assert_eq!(hints, vec![(0, AttachmentKind::Corner), (1, AttachmentKind::Corner)]);
     let view = View::default();
     // The bottom-left corner sticks out to x = 50, half a stem away from the path.
-    assert_eq!(hit_test(&scene, &view, Point::new(50.0, 25.0), 6.0).map(|h| h.hit), Some(Hit::Attachment { hint: 0 }));
-    assert_eq!(hit_test(&scene, &view, Point::new(100.0, 0.0), 6.0).map(|h| h.hit), Some(Hit::Node { shape: 0, node: 0 }));
-    assert!(matches!(hit_test(&scene, &view, Point::new(100.0, 250.0), 6.0).map(|h| h.hit), Some(Hit::Segment { .. })));
+    assert_eq!(hit_test_with_corners(&scene, &view, Point::new(50.0, 25.0), 6.0).map(|h| h.hit), Some(Hit::Attachment { hint: 0 }));
+    assert_eq!(hit_test_with_corners(&scene, &view, Point::new(100.0, 0.0), 6.0).map(|h| h.hit), Some(Hit::Node { shape: 0, node: 0 }));
+    assert!(matches!(hit_test_with_corners(&scene, &view, Point::new(100.0, 250.0), 6.0).map(|h| h.hit), Some(Hit::Segment { .. })));
     let second = scene.attachments[1].outline.segments().next().unwrap().eval(0.5);
-    assert_eq!(hit_test(&scene, &view, second, 6.0).map(|h| h.hit), Some(Hit::Attachment { hint: 1 }));
+    assert_eq!(hit_test_with_corners(&scene, &view, second, 6.0).map(|h| h.hit), Some(Hit::Attachment { hint: 1 }));
 
     let mut tool = SelectTool::default();
     let mut selection = Selection::new();
@@ -84,6 +87,23 @@ fn corners_are_selected_by_a_click_on_their_fitted_outline() {
     gesture(&mut tool, &scene, &mut marquee, &[(Down, a), (Drag, b), (Up, b)], Modifiers::NONE);
     assert_eq!(marquee.points.len(), 4);
     assert!(marquee.hints.is_empty(), "the marquee leaves corners out");
+}
+
+/// Only the Select tool sees corners: where a corner's fitted outline lies on the bottom stem,
+/// the plain hit (Pen, Lasso and the other tools) is still the segment.
+#[test]
+fn other_tools_hit_the_segment_under_a_corner() {
+    let font = corner_font();
+    let scene = Scene::from_font(&font, "A", None).unwrap();
+    let view = View::default();
+    let on_stem: Vec<Point> = (101..160).map(|x| Point::new(f64::from(x), 0.0)).collect();
+    assert!(
+        on_stem.iter().any(|&p| hit_test_with_corners(&scene, &view, p, 6.0).map(|h| h.hit) == Some(Hit::Attachment { hint: 0 })),
+        "the corner overlaps the stem somewhere"
+    );
+    for p in on_stem {
+        assert!(matches!(hit_test(&scene, &view, p, 6.0).map(|h| h.hit), Some(Hit::Segment { .. })), "{p:?}");
+    }
 }
 
 /// Selected corners survive an edit while the layer has them; a removed one drops out.

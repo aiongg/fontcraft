@@ -72,7 +72,7 @@ pub mod view;
 pub mod zoom;
 
 pub use event::{Key, KeyEvent, Modifiers, PointerEvent, PointerKind};
-pub use hit::{Hit, HitResult, hit_test};
+pub use hit::{Hit, HitResult, hit_test, hit_test_with_corners};
 pub use output::{Action, Invocation, Output, Overlay, OverlayKind, ViewChange};
 pub use scene::{Scene, SmartAxis, SmartHandle, SmartSize, side_view};
 pub use selection::{GuideRef, GuideScope, Item, SelectMode, Selection};

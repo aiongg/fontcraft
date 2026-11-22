@@ -44,7 +44,7 @@ use craft::ui::runtime::commands::CommandRef;
 use fontcraft_engine::params::TargetKind;
 use fontcraft_engine::{CommandSpec, command_specs, find_command};
 use fontcraft_geom::Point;
-use fontcraft_tools::{Hit, HitResult, Item, Scene, Selection, guide_drag, hint_drag, hit_test};
+use fontcraft_tools::{Hit, HitResult, Item, Scene, Selection, guide_drag, hint_drag, hit_test_with_corners};
 use serde_json::{Map, Value, json};
 
 use self::glyph_menu::GlyphMenu;
@@ -327,7 +327,7 @@ pub fn open_canvas(app: &mut FontCraftApp, at: Point, space: Space) -> Result<()
     let (hint, hit) = {
         let (scene, _) = scene_of(app).ok_or("no glyph is being edited")?;
         let hint = scene.ps_hints.hit(&view, pos, tolerance).map(|h| h.index);
-        let hit = if hint.is_some() { None } else { hit_test(&scene, &view, pos, tolerance) };
+        let hit = if hint.is_some() { None } else { hit_test_with_corners(&scene, &view, pos, tolerance) };
         (hint, hit)
     };
     // The image lies under every other object.

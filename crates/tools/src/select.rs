@@ -36,7 +36,7 @@ use crate::event::{Key, KeyEvent, Modifiers, PointerEvent, PointerKind};
 use crate::geometry::{dist, finite, rect_corners};
 use crate::guide_drag::GuideDrag;
 use crate::hint_drag::HintDrag;
-use crate::hit::{Hit, HitResult, hit_test};
+use crate::hit::{Hit, HitResult, hit_test_with_corners};
 use crate::output::{Action, Invocation, Output, Overlay, OverlayKind, offset_badge};
 use crate::scene::Scene;
 use crate::selection::{Selection, in_region, path_points};
@@ -297,7 +297,7 @@ impl SelectTool {
             }
             return out;
         }
-        let Some(hit) = hit_test(scene, &cx.view, ev.pos, cx.settings.hit_tolerance) else {
+        let Some(hit) = hit_test_with_corners(scene, &cx.view, ev.pos, cx.settings.hit_tolerance) else {
             let base = if ev.mods.shift { cx.selection.clone() } else { Selection::new() };
             if !ev.mods.shift && !cx.selection.is_empty() {
                 out.push(Action::Select { selection: Selection::new() });
@@ -524,7 +524,7 @@ impl SelectTool {
     fn double_click(&mut self, cx: &Context<'_>, ev: &PointerEvent) -> Output {
         let mut out = self.cancel();
         out.handled = true;
-        let Some(hit) = hit_test(cx.scene, &cx.view, ev.pos, cx.settings.hit_tolerance) else { return out };
+        let Some(hit) = hit_test_with_corners(cx.scene, &cx.view, ev.pos, cx.settings.hit_tolerance) else { return out };
         match hit.hit {
             Hit::Node { shape, node } if !hit.locked && !ev.mods.shift => {
                 let id = if ev.mods.alt { "path.toggleNodeTypeKeepingOutline" } else { "path.toggleNodeType" };
@@ -614,7 +614,7 @@ impl Tool for SelectTool {
         match ev.kind {
             PointerKind::Move => {
                 if matches!(self.state, State::Idle) {
-                    self.hover = hit_test(cx.scene, &cx.view, ev.pos, cx.settings.hit_tolerance);
+                    self.hover = hit_test_with_corners(cx.scene, &cx.view, ev.pos, cx.settings.hit_tolerance);
                 }
                 Output::default()
             }
