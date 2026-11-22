@@ -2,12 +2,15 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-22: M13.64 written on `w-M13.64` (based on `w-M10.34`), not yet built (see "Where M13.64 stands"); M13.23c not started. Before that: M10.34 and M10.41 written on `w-M10.34`, not yet built (see "Where M10.34 and M10.41 stand"). Before that: M5.30, M13.69, M13.70 and X.fix95 merged into `master`, built, tested and smoke-tested in the window (X.integ153 to X.integ156; see "Where M5.30, M13.69 and M13.70 stand"). Before that: M9.32, M3.41, M3.43 and M3.42 merged (X.integ148 to X.integ151); the Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
+_Updated: 2026-11-22: M10.34, M10.41 and M13.64 merged into `master`, built, tested and smoke-tested in the window (X.integ158 to X.integ161; see "Where M13.64 stands"); M13.23c not started. Found in the smoke: form dialogs draw beneath floating windows (see "Known weak spots"). Before that: M5.30, M13.69, M13.70 and X.fix95 merged into `master`, built, tested and smoke-tested in the window (X.integ153 to X.integ156; see "Where M5.30, M13.69 and M13.70 stand"). Before that: M9.32, M3.41, M3.43 and M3.42 merged (X.integ148 to X.integ151); the Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
 
 ## State of the tree
 
-- **Where M13.64 stands.** Written on `w-M13.64`, not yet built or tested: the writer ran only `cargo fmt`. One
-  commit, M13.64a, the Bitmap Glyph Editor:
+- **Where M13.64 stands.** Merged into `master` with M10.34 and M10.41 and built; the gate is green (X.integ158
+  to X.integ161). Seen in the window, light and dark: the editor opens as a floating window on a 12 ppem strike, the
+  pixels set with `bitmap.setPixels` and those rendered from the outline drawn over the grid with the scaled outline
+  as a guide; Strike Properties opens on the strike's ascent and descent. The every-window-floats startup test covers
+  `window.bitmapEditor`. Commit M13.64a, the Bitmap Glyph Editor:
   - `crates/tools/src/bitmap.rs`: `BitmapTool` (Pencil, Line, Shift), `pixel_at`, `line` (one pixel per step along
     the longer axis, the same from either end) and `BitmapStroke` (the press decides set or clear: a pixel at the
     drawing level clears, any other takes it; `params` gives the `bitmap.setPixels` parameters). Positions are
@@ -34,8 +37,10 @@ _Updated: 2026-11-22: M13.64 written on `w-M13.64` (based on `w-M10.34`), not ye
     menu, a strike chooser and property table in Strike Properties, reset to computed defaults; references are not
     drawn into the edited bitmap. M13.23c (Space Center images and colour glyphs) is not started.
 
-- **Where M10.34 and M10.41 stand.** Written on `w-M10.34`, not yet built or tested: the writer ran only
-  `cargo fmt`. One commit each:
+- **Where M10.34 and M10.41 stand.** Merged and built with M13.64. Seen in the window: with the Instructor and two
+  points selected, the canvas menu starts with Snap Point, Stem and Delta, Shift Points and Interpolate greyed out;
+  the glyph section has Autohint and Remove Hints. `ui.key Escape` does not close the canvas menu over the control
+  channel (a real Escape reaches egui's popup and does). One commit each:
   - M10.34a: the Instructor's context menus (`app/context_menu/mod.rs`). Snap Point, Stem, Shift Points,
     Interpolate and Delta have `context = ["canvas.node", "canvas.path"]` (engine `POINT_MENUS` in
     `cmd/hint_tt.rs`, and their rows); `candidates` drops a command whose `when` names a tool other than the active
@@ -1196,6 +1201,11 @@ primary's format with our own `.glyphs` reader and writer; commands with explici
 atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the repository.
 
 ## Known weak spots
+
+- **Form dialogs draw beneath floating windows.** A dialog opened while a floating window (Font Info, the Bitmap
+  Glyph Editor, …) covers the window's centre is hidden behind that window until it closes; seen under Xvfb with
+  `import -window root`. `ui.screenshot` shows the dialog and leaves the floating windows out, so the app's own
+  screenshots miss it. The layer order comes from craft's overlay host (dialogs and floating windows); not yet traced.
 
 - **The inventory is unreviewed line by line.** It passed mechanical checks and one sample audit
   (209 handbook rows re-read by a second reader: 1 wrong, 14 imprecise, all corrected; patterns in
