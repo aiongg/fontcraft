@@ -1,5 +1,5 @@
-//! Font View's shell commands: its mode, cell size, sort, columns, search and glyph selection, and opening the
-//! selection in Edit View. View state only; font changes go through engine commands.
+//! Font View's shell commands: its mode, cell size, sort, columns, search, glyph selection and the bitmap strike its
+//! cells draw, and opening the selection in Edit View. View state only; font changes go through engine commands.
 
 use std::collections::HashSet;
 
@@ -8,7 +8,12 @@ use serde_json::Value;
 
 use super::commands::{Module, UiCommand};
 use crate::app::FontCraftApp;
-use crate::app::font_view::{Column, MAX_CELL_SIZE, MAX_SEARCH_BYTES, MIN_CELL_SIZE, SEARCH_FIELDS, Sort, ViewMode};
+use crate::app::font_view::{
+    Column, MAX_CELL_SIZE, MAX_SEARCH_BYTES, MAX_STRIKE_MAGNIFICATION, MIN_CELL_SIZE, SEARCH_FIELDS, Sort, StrikeView, ViewMode,
+};
+
+/// The command that picks the strike the cells draw; the View menu's Font View Strike rows run it.
+pub const SET_STRIKE: &str = "view.setFontViewStrike";
 
 pub const MODULE: Module = Module { commands: COMMANDS, run };
 
@@ -79,6 +84,13 @@ const COMMANDS: &[UiCommand] = &[
         shortcut: None,
         params: "{} give the keyboard to Font View's search field; in the edit view it does nothing. Edit › Find runs it while Font View shows",
     },
+    UiCommand {
+        id: SET_STRIKE,
+        label: "Show Strike in Font View",
+        menu: &[],
+        shortcut: None,
+        params: "{strike?: {ppem: number, depth?: 1 | 2 | 4 | 8}, magnification?: whole number 1 to 16 (default 1)} make the grid cells draw the bitmaps of one of the font's strikes (without `depth`, the strike of that size with the fewest bits per pixel), each pixel at most `magnification` points (less when the bitmap would not fit its cell); a glyph without a bitmap in the strike shows an empty cell with its name. Without `strike` the cells draw the outlines. The View menu's Font View Strike submenu lists the font's strikes",
+    },
 ];
 
 /// Gives the keyboard to Font View's search field on the next pass, while Font View shows.
@@ -131,6 +143,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
             Ok(())
         }
         "fontView.setColumns" => set_columns(app, p),
+        SET_STRIKE => set_strike(app, p),
         "fontView.setSearch" => {
             let query = p.get("query").and_then(Value::as_str).ok_or("`query` (text) is required")?;
             if query.len() > MAX_SEARCH_BYTES {
@@ -149,6 +162,45 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
         }
         other => Err(format!("no Font View command `{other}`")),
     }
+}
+
+/// `view.setFontViewStrike`: checks the strike against the active font, then keeps it in Font View's state.
+fn set_strike(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
+    let magnification = match p.get("magnification") {
+        None | Some(Value::Null) => 1,
+        Some(v) => v
+            .as_u64()
+            .and_then(|m| u8::try_from(m).ok())
+            .filter(|m| (1..=MAX_STRIKE_MAGNIFICATION).contains(m))
+            .ok_or_else(|| format!("`magnification` must be a whole number from 1 to {MAX_STRIKE_MAGNIFICATION}"))?,
+    };
+    let wanted = match p.get("strike") {
+        None | Some(Value::Null) => {
+            app.view.font_view.strike = None;
+            return Ok(());
+        }
+        Some(Value::Object(s)) => s,
+        Some(_) => return Err("`strike` must be {ppem, depth?}, or null for the outlines".into()),
+    };
+    let ppem =
+        wanted.get("ppem").and_then(Value::as_u64).and_then(|n| u16::try_from(n).ok()).ok_or("`strike.ppem` must be a whole number of pixels")?;
+    let depth = match wanted.get("depth") {
+        None | Some(Value::Null) => None,
+        Some(v) => Some(v.as_u64().and_then(|d| u8::try_from(d).ok()).ok_or("`strike.depth` must be 1, 2, 4 or 8")?),
+    };
+    let font = app.session.font().map_err(|e| e.to_string())?;
+    let found =
+        font.bitmap_strikes.iter().filter(|s| s.ppem == ppem && depth.is_none_or(|d| s.depth == d)).min_by_key(|s| s.depth).ok_or_else(|| {
+            let shown: Vec<String> = font.bitmap_strikes.iter().map(|s| s.label()).collect();
+            let label = depth.map_or_else(|| ppem.to_string(), |d| fontcraft_engine::model::strike::label(ppem, d));
+            if shown.is_empty() {
+                "the font has no bitmap strikes".to_string()
+            } else {
+                format!("the font has no strike {label}; its strikes: {}", shown.join(", "))
+            }
+        })?;
+    app.view.font_view.strike = Some(StrikeView { ppem: found.ppem, depth: found.depth, magnification });
+    Ok(())
 }
 
 fn column(v: Option<&Value>) -> Option<Column> {

@@ -3,7 +3,9 @@
 //! The grid lays out only the tiles in view, so a font of tens of thousands of glyphs scrolls as a small one does.
 //! A tile draws its glyph's placed image behind the glyph (`canvas::images::cells`), and image files dropped onto a
 //! tile go on that glyph as Glyph › Add Image… places them (`canvas::images::drop::cell_params`). A glyph in a status
-//! (`glyph.setStatus`, or the font's default status) has a thin bar of the status colour along the tile's foot.
+//! (`glyph.setStatus`, or the font's default status) has a thin bar of the status colour along the tile's foot. With a
+//! strike shown (`view.setFontViewStrike`) a tile draws its glyph's bitmap in that strike instead of the outline and
+//! image, and always shows the name, so a glyph without a bitmap is an empty tile with its name.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -66,7 +68,8 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, images: &CellImages, sent: &mut 
     let words = env.words::<FontViewWords>();
     let card = env.tokens.size.thumb.card;
     let zoom = if card > 0.0 { (model.cell_size as f32 / card).max(f32::EPSILON) } else { 1.0 };
-    let caption = if model.cell_size >= LABEL_MIN_CELL { CaptionPlace::Below } else { CaptionPlace::None };
+    let caption = if model.cell_size >= LABEL_MIN_CELL || model.strike.is_some() { CaptionPlace::Below } else { CaptionPlace::None };
+    let strike = model.strike;
     let (ascender, descender) = (model.ascender, model.descender);
     let mut selection = keys::selection(model);
     let source = Shown::new(model);
@@ -88,9 +91,10 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, images: &CellImages, sent: &mut 
                 tile = tile.hidden();
             }
             let art = glyph.art.as_ref().map(Arc::clone);
-            let image = images.by_glyph.get(&glyph.name).map(Arc::clone);
+            let image = if strike.is_some() { None } else { images.by_glyph.get(&glyph.name).map(Arc::clone) };
+            let bitmap = strike.zip(glyph.bitmap.as_ref().map(Arc::clone));
             let status = glyph.status_color;
-            if art.is_some() || image.is_some() || status.is_some() {
+            if art.is_some() || image.is_some() || bitmap.is_some() || status.is_some() {
                 tile = tile.thumb(ThumbAspect::SQUARE, move |cx, rect| {
                     let width = art.as_ref().map_or(0.0, |a| a.width);
                     if let Some(image) = &image {
@@ -98,6 +102,9 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, images: &CellImages, sent: &mut 
                     }
                     if let Some(art) = &art {
                         cells::paint(cx, rect, art, ascender, descender);
+                    }
+                    if let Some((shown, cell)) = &bitmap {
+                        cells::paint_strike(cx, rect, cell, shown);
                     }
                     if let Some(color) = status {
                         cells::paint_status(cx, rect, color);

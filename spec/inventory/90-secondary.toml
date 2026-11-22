@@ -3637,7 +3637,7 @@ guesses = [
 [[command]]
 id = "view.setFontViewStrike"
 label = "Show Strike in Font View"
-menu = ["View"]
+menu = []
 shortcut = ""
 kind = "ui"
 params = "{strike?: {ppem: number, depth?: number}, magnification?: number}"
@@ -3646,7 +3646,16 @@ milestone = "M13"
 summary = "Makes the glyph grid show the bitmaps of one strike instead of rendered outlines, optionally magnified; omitting the strike returns to outlines. The View menu lists every strike, grey ones as size@depth."
 ref = "FontForge View menu › bitmap pixel size list, Bitmap Magnification"
 status = "docs"
-notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). Built for M4.24 (shell/font_view.rs, app/models/font_view.rs, panels/font_view/cells.rs): the View menu's Font View Strike submenu lists Outlines and each strike of the active font (dynamic rows, `app/menus_dynamic.rs`), the one shown checked. A cell draws its glyph's bitmap with references drawn in, one texture per bitmap tinted with the ink; a glyph without a bitmap shows an empty cell with its name. A strike the font no longer has shows the outlines again. Documented, not yet observed."
+guesses = [
+  "Without `depth` the strike of that size with the fewest bits per pixel is shown.",
+  "A pixel is `magnification` points (1 by default), shrunk to fit when the strike's line band or the bitmap's advance would not fit 80% of the cell; the strike's ascent and descent (else four fifths of the em above the baseline) set the band, centred in the cell. FontForge's font view at a strike's size would settle the placement.",
+  "While a strike shows, cells skip placed images and always show the glyph name.",
+  "The View menu lists the strikes in a Font View Strike submenu with Outlines first, keeping the magnification already set; the reference lists the sizes in the View menu itself with a separate Bitmap Magnification item.",
+]
+observe = [
+  "In FontForge, open a font with a 12 and a 16 pixel strike, pick 12 in the View menu, and note how the cells place a bitmap and what an empty glyph shows.",
+]
 origin = "fontforge"
 
 [[command]]

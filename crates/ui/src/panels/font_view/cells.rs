@@ -1,11 +1,14 @@
 //! The outline of a grid cell. A glyph's contours overlap and hold counters, which a polygon fill cannot show, so
 //! the outline is filled by the nonzero rule in horizontal bands: each band's spans become quads of one mesh, in the
-//! surface's ink. A glyph with a colour drawing (`canvas::color::cell_color`) is drawn in colour instead.
+//! surface's ink. A glyph with a colour drawing (`canvas::color::cell_color`) is drawn in colour instead. A strike
+//! bitmap ([`paint_strike`]) is one texture per bitmap, its pixels sharp, tinted with the ink.
 
 use craft::ui::primitives::ContentPainterCx;
 use egui::{Mesh, Pos2, Rect, Shape, pos2};
 
-use crate::app::models::font_view::CellArt;
+use craft::ui::primitives::TextureCache;
+
+use crate::app::models::font_view::{CellArt, StrikeCell, StrikeShown};
 use crate::canvas::images::PlacedImage;
 use crate::canvas::images::tokens::ImageTokens;
 
@@ -18,6 +21,8 @@ const FILL_SHARE: f32 = 0.8;
 /// The status bar's height: this share of the cell, at least [`STATUS_MIN`] points.
 const STATUS_SHARE: f32 = 0.06;
 const STATUS_MIN: f32 = 2.0;
+/// Widest and tallest strike bitmap a cell draws, in pixels; a larger one leaves the cell empty.
+pub const MAX_STRIKE_CELL_SIDE: u16 = 512;
 
 /// An edge in screen points, top end first, with its winding: +1 when the contour runs down it.
 #[derive(Clone, Copy)]
@@ -89,6 +94,54 @@ pub fn paint(cx: &ContentPainterCx<'_>, rect: Rect, art: &CellArt, ascender: f32
     }
     let Some(mesh) = fill(&edges, rect, cx.ink()) else { return };
     cx.painter.add(Shape::mesh(mesh));
+}
+
+/// Where a strike bitmap lies in `rect`: the strike's line band centred in the cell and the advance centred across
+/// it, each pixel `shown.magnification` points, or less when the band or the bitmap would not fit.
+pub fn strike_rect(rect: Rect, cell: &StrikeCell, shown: &StrikeShown) -> Option<Rect> {
+    if cell.width == 0 || cell.height == 0 || cell.width > MAX_STRIKE_CELL_SIDE || cell.height > MAX_STRIKE_CELL_SIDE {
+        return None;
+    }
+    let band = (shown.ascent + shown.descent).max(1) as f32;
+    let across = cell.advance.max(i32::from(cell.width)).max(1) as f32;
+    let fit = (rect.height() * FILL_SHARE / band).min(rect.width() * FILL_SHARE / across);
+    let pixel = f32::from(shown.magnification.max(1)).min(fit);
+    if !(pixel.is_finite() && pixel > 0.0) {
+        return None;
+    }
+    let baseline = rect.center().y - band * pixel / 2.0 + shown.ascent as f32 * pixel;
+    let origin = rect.center().x - cell.advance.max(0) as f32 * pixel / 2.0;
+    let left = origin + cell.left as f32 * pixel;
+    let top = baseline - (cell.bottom + i32::from(cell.height)) as f32 * pixel;
+    let placed = Rect::from_min_size(pos2(left, top), egui::vec2(f32::from(cell.width) * pixel, f32::from(cell.height) * pixel));
+    (placed.min.is_finite() && placed.max.is_finite()).then_some(placed)
+}
+
+/// Draws a strike bitmap in `rect` in the painter's ink: a level of 0 is clear, the depth's top level opaque.
+pub fn paint_strike(cx: &ContentPainterCx<'_>, rect: Rect, cell: &StrikeCell, shown: &StrikeShown) {
+    let Some(placed) = strike_rect(rect, cell, shown) else { return };
+    let (w, h) = (cell.width, cell.height);
+    let texture = TextureCache::texture_with(cx.painter.ctx(), ("fontcraftStrikeCell", cell.id, w, h), egui::TextureOptions::NEAREST, || {
+        let top = u16::from(fontcraft_engine::model::strike::max_level(cell.depth)).max(1);
+        let mut rgba = Vec::with_capacity(usize::from(w) * usize::from(h) * 4);
+        let probe = fontcraft_engine::model::strike::StrikeGlyph {
+            width: w,
+            height: h,
+            data: cell.data.clone(),
+            ..fontcraft_engine::model::strike::StrikeGlyph::empty("", 0)
+        };
+        for y in 0..h {
+            for x in 0..w {
+                let level = u16::from(probe.pixel(cell.depth, x, y));
+                let alpha = (level.min(top) * 255 / top) as u8;
+                rgba.extend_from_slice(&[255, 255, 255, alpha]);
+            }
+        }
+        egui::ColorImage::from_rgba_unmultiplied([usize::from(w), usize::from(h)], &rgba)
+    });
+    let mut mesh = Mesh::with_texture(texture);
+    mesh.add_rect_with_uv(placed, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), cx.ink());
+    cx.painter.with_clip_rect(rect).add(Shape::mesh(mesh));
 }
 
 /// Where the status bar of a cell drawn in `rect` lies: along its foot, the cell's width.

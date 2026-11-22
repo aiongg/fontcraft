@@ -253,3 +253,38 @@ fn the_status_column_edit_equals_set_status() {
     assert_eq!(super::list::status_request("A", "1"), Msg::run("glyph.setStatus", json!({"glyphs": ["A"], "status": 1})));
     assert_eq!(super::list::status_request("A", ""), Msg::run("glyph.setStatus", json!({"glyphs": ["A"], "status": null})));
 }
+
+/// With a strike shown, a cell with a bitmap draws it as a texture, and a glyph without one still shows its name even
+/// below the label size.
+#[test]
+fn a_strike_cell_draws_its_bitmap_and_an_empty_cell_its_name() {
+    use std::sync::Arc;
+
+    use crate::app::models::font_view::{StrikeCell, StrikeShown};
+
+    let strike_model = |bitmap: bool| {
+        let mut grid = model(ViewMode::Grid, Vec::new());
+        grid.cell_size = 32.0;
+        grid.strike = Some(StrikeShown { ppem: 12, depth: 1, ascent: 10, descent: 2, magnification: 1 });
+        if bitmap && let Some(row) = grid.rows.get_mut(0) {
+            // A 2 × 2 black square, one byte per row at one bit per pixel.
+            row.bitmap = Some(Arc::new(StrikeCell { id: 1, width: 2, height: 2, left: 0, bottom: 0, advance: 3, depth: 1, data: vec![0xc0, 0xc0] }));
+        }
+        grid
+    };
+    let textured =
+        |shapes: &[egui::Shape]| shapes.iter().filter(|s| matches!(s, egui::Shape::Mesh(m) if m.texture_id != egui::TextureId::default())).count();
+    let (mut fixture, _) = open(strike_model(false));
+    let without = textured(&fixture.frame_shapes());
+    let (mut fixture, _) = open(strike_model(true));
+    let shapes = fixture.frame_shapes();
+    assert_eq!(textured(&shapes), without + 1, "A's bitmap is one textured mesh");
+    let texts: Vec<String> = shapes
+        .iter()
+        .filter_map(|s| match s {
+            egui::Shape::Text(t) => Some(t.galley.job.text.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(texts.iter().any(|t| t == "B"), "B has no bitmap and shows its name: {texts:?}");
+}

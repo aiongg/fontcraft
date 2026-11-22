@@ -21,6 +21,17 @@ pub const LABEL_MIN_CELL: f64 = 64.0;
 pub const MAX_SEARCH_BYTES: usize = 1024;
 /// The fields a search can be limited to.
 pub const SEARCH_FIELDS: [&str; 3] = ["name", "unicode", "note"];
+/// Largest bitmap magnification of `view.setFontViewStrike`: points per strike pixel.
+pub const MAX_STRIKE_MAGNIFICATION: u8 = 16;
+
+/// The bitmap strike the grid cells draw in place of the outlines (`view.setFontViewStrike`): its size and depth,
+/// and how many points one of its pixels takes at most.
+#[derive(PlainData, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StrikeView {
+    pub ppem: u16,
+    pub depth: u8,
+    pub magnification: u8,
+}
 /// Most glyphs one batch over the selection names.
 pub const MAX_BATCH_GLYPHS: usize = 100_000;
 
@@ -89,6 +100,8 @@ pub struct FontViewState {
     pub anchor: Option<String>,
     /// The search field takes the keyboard on the next pass (`fontView.focusSearch`).
     pub focus_search: bool,
+    /// The strike the grid draws; `None` draws the outlines.
+    pub strike: Option<StrikeView>,
 }
 
 impl Default for FontViewState {
@@ -104,6 +117,7 @@ impl Default for FontViewState {
             selected: Vec::new(),
             anchor: None,
             focus_search: false,
+            strike: None,
         }
     }
 }

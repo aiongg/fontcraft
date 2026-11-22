@@ -6,8 +6,10 @@
 //! | Script | one per macro of the Macros folder in the listing's order (folders first, then titles in natural order); subfolders as submenus; the description as tooltip; unreadable files greyed out | `script.run {"macro": path}` |
 //! | Filter | one per filter module, by name, below a separator | `plugin.runFilter {"id"}` with the module's defaults |
 //! | View | one Show row per reporter module, by name, checked while shown | `view.showReporter {"id", "on"}` |
+//! | View › Font View Strike | Outlines, then one row per bitmap strike of the active font (`12`, or `12@4` for a grey one), the shown one checked; only when the font has strikes | `view.setFontViewStrike {"strike"}` |
 //!
-//! The rows are rebuilt when the extensions or the shown reporters change ([`refresh`]). The selection becomes the
+//! The rows are rebuilt when the extensions, the shown reporters, the font's strikes or the strike shown change
+//! ([`refresh`]). The selection becomes the
 //! targets when a row fires ([`fill_targets`]): Font View's selected glyphs, or the edited glyph and layer with the
 //! selected nodes. Rows: `script.menu.mirrorsFolder`, `script.menu.subfolders`, `script.menu.tooltip`,
 //! `view.reporterPluginsInViewMenu`, `filter.menu.pluginFiltersListed`, `fontView.batch.pluginsAndScripts`.
@@ -23,6 +25,8 @@ use fontcraft_engine::plugins::{Installed, Kind};
 use serde_json::{Map, Value, json};
 
 use super::FontCraftApp;
+use super::font_view::StrikeView;
+use crate::shell::font_view::SET_STRIKE;
 
 /// The command a filter module's row runs.
 pub const RUN_FILTER: &str = "plugin.runFilter";
@@ -44,15 +48,46 @@ pub fn refresh(app: &mut FontCraftApp) {
     session.extensions().revision().hash(&mut h);
     session.extensions().safe_mode.hash(&mut h);
     reporters.hash(&mut h);
-    catalog.set_dynamic(h.finish(), || rows(session, reporters));
+    let strike = view.font_view.strike;
+    strike.map(|s| (s.ppem, s.depth)).hash(&mut h);
+    if let Ok(font) = session.font() {
+        for s in font.bitmap_strikes.iter() {
+            (s.ppem, s.depth).hash(&mut h);
+        }
+    }
+    catalog.set_dynamic(h.finish(), || rows(session, reporters, strike));
 }
 
 /// Every dynamic row, the Script, Filter and View sections in turn.
-pub fn rows(session: &Session, reporters: &[String]) -> Vec<Row> {
+pub fn rows(session: &Session, reporters: &[String], strike: Option<StrikeView>) -> Vec<Row> {
     let mut out = Vec::new();
     section(&mut out, "Script", script_rows(session));
     section(&mut out, "Filter", filter_rows(session));
     section(&mut out, "View", reporter_rows(session, reporters));
+    out.extend(strike_rows(session, strike));
+    out
+}
+
+/// The submenu the strike rows sit in.
+pub const STRIKE_MENU: [&str; 2] = ["View", "Font View Strike"];
+
+/// View › Font View Strike: Outlines, then each strike of the active font, the one shown checked. None when the font
+/// has no strikes.
+fn strike_rows(session: &Session, shown: Option<StrikeView>) -> Vec<Row> {
+    let Ok(font) = session.font() else { return Vec::new() };
+    if font.bitmap_strikes.is_empty() {
+        return Vec::new();
+    }
+    let magnification = shown.map_or(1, |s| s.magnification);
+    let mut outlines = Row::new(&STRIKE_MENU, CommandRef::with_params(SET_STRIKE, json!({"strike": null})), "Outlines");
+    outlines.kind = ItemKind::Check(shown.is_none());
+    let mut out = vec![outlines];
+    for s in font.bitmap_strikes.iter().take(MAX_ROWS) {
+        let params = json!({"strike": {"ppem": s.ppem, "depth": s.depth}, "magnification": magnification});
+        let mut row = Row::new(&STRIKE_MENU, CommandRef::with_params(SET_STRIKE, params), s.label());
+        row.kind = ItemKind::Check(shown.is_some_and(|v| v.ppem == s.ppem && v.depth == s.depth));
+        out.push(row);
+    }
     out
 }
 
