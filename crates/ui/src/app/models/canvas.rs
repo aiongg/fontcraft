@@ -10,6 +10,7 @@ use craft::ui::contract::{PlainData, Tracked};
 use fontcraft_engine::cmd::stroke::{format_version, layer_outline, mask_mode, shapes_outline, stroke_style};
 use fontcraft_engine::components::align::{AlignMode, component_alignment};
 use fontcraft_engine::model::glyphdata::GlyphData;
+use fontcraft_engine::model::shown_metrics::{ShownMetric, shown_metrics};
 use fontcraft_engine::model::{Font, Glyph, Layer, LayerSide, Master, MetricDef, Shape, metric};
 use fontcraft_geom::{BezPath, Point};
 
@@ -118,7 +119,7 @@ pub fn edited_glyph(font: &Font, data: Option<&GlyphData>, glyph: &Glyph, full: 
     let layer = fontcraft_tools::side_view(full, side).into_owned();
     let (descender, ascender) = vertical_span(font, master);
     let hidden = data.map(|d| out_of_scope(font, d, glyph, &master.id)).unwrap_or_default();
-    let (lines, zones) = metric_lines(font, master, &hidden);
+    let (lines, zones) = metric_lines(font, master, glyph, &hidden);
     let plain = shapes_outline(font, &layer.shapes, &layer.master).map(concat).unwrap_or_else(|_| resolved(font, &layer.shapes, &layer.master));
     let (outline, source) = if side == LayerSide::Background {
         (plain, None)
@@ -208,17 +209,16 @@ pub fn vertical_span(font: &Font, master: &Master) -> (f64, f64) {
 /// Named metric lines and (bottom, top) zones.
 type MetricLines = (Vec<(String, f64)>, Vec<(f64, f64)>);
 
-/// The master's horizontal metric lines and alignment zones, without the metrics at `hidden`. The zones are read as
-/// `Font::alignment_zones` reads them: each metric's overshoot, then the master's own.
-fn metric_lines(font: &Font, master: &Master, hidden: &[usize]) -> MetricLines {
-    let defs = || font.metrics.iter().zip(master.metric_values.iter()).enumerate().filter(|(i, _)| !hidden.contains(i)).map(|(_, dv)| dv);
-    let lines = defs()
-        .filter(|(d, v)| d.kind != metric::ITALIC_ANGLE && v.pos.is_finite())
-        .map(|(d, v)| (d.name.clone().unwrap_or_else(|| d.kind.clone()), v.pos))
-        .collect();
-    let zones = defs()
-        .filter(|(d, v)| d.kind != metric::ITALIC_ANGLE && v.over != 0.0)
-        .map(|(_, v)| (v.pos, v.over))
+/// The horizontal metric lines and alignment zones `master` shows for `glyph`
+/// (`fontcraft_model::shown_metrics`: per-script parameters applied), without the metrics at `hidden`. The zones
+/// are read as `Font::alignment_zones` reads them: each shown metric's overshoot, then the master's own.
+fn metric_lines(font: &Font, master: &Master, glyph: &Glyph, hidden: &[usize]) -> MetricLines {
+    let shown: Vec<ShownMetric> = shown_metrics(font, master, glyph).into_iter().filter(|m| m.index.is_none_or(|i| !hidden.contains(&i))).collect();
+    let lines = shown.iter().filter(|m| m.y.is_finite()).map(|m| (m.name.clone().unwrap_or_else(|| m.kind.clone()), m.y)).collect();
+    let zones = shown
+        .iter()
+        .filter(|m| m.over != 0.0)
+        .map(|m| (m.y, m.over))
         .chain(master.zones.iter().map(|z| (z.pos, z.size)))
         .filter(|(pos, size)| pos.is_finite() && size.is_finite())
         .map(|(pos, size)| if size >= 0.0 { (pos, pos + size) } else { (pos + size, pos) })

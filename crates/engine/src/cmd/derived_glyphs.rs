@@ -458,7 +458,9 @@ fn derive_layer(
             return Err("the stem change rebuilt the paths".into());
         }
         write_back(&mut layer, &slots, &out.contours)?;
+        let before = layer.width;
         layer.width = snap(layer.width + out.width_change, step);
+        fontcraft_model::guide_follow::follow_width(&mut layer, before);
         done = cv;
     }
     let rest = ch - done;

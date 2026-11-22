@@ -207,7 +207,11 @@ fn apply(layer: &mut Layer, change: &Change) -> std::result::Result<(), String> 
             super::shared::shift_layer(layer, dx)?;
             layer.width += dx;
         }
-        Change::Width(w) => layer.width = w,
+        Change::Width(w) => {
+            let before = layer.width;
+            layer.width = w;
+            fontcraft_model::guide_follow::follow_width(layer, before);
+        }
         Change::Vertical { origin, width } => {
             if layer.info.vert_origin != origin {
                 layer.info.vert_origin = origin;

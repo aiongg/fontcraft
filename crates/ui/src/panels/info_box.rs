@@ -12,7 +12,9 @@
 //! | anything else | X, Y of the box at the reference point, width, height, lock | `selection.setPosition`; `transform.scale` about the reference point |
 //!
 //! A selected component, corner component or cap component adds its part below (`info_box_component`). A selected
-//! placed image shows its own part in place of the selection part (`info_box_image`).
+//! placed image shows its own part in place of the selection part (`info_box_image`). One selected node in a font with
+//! an axis and two masters adds its interpolation curve and timing graph (`info_box_hoi`); one selected guide adds its
+//! properties (`info_box_guide`).
 //!
 //! The nine-point grid chooses the reference point (`infoBox.setReferencePoint`); the lock makes a width or height
 //! edit scale both (`infoBox.setSizeLock`). A master that takes its metrics from another shows that master's values,
@@ -120,8 +122,11 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
     if let Some(b) = &model.cap {
         super::info_box_component::cap_part(ui, b, sent);
     }
-    if let Some(timing) = &model.timing {
-        super::hoi_timing::view(ui, timing);
+    if let Some(guide) = &model.guide {
+        super::info_box_guide::view(ui, guide, sent);
+    }
+    if let Some(hoi) = &model.hoi {
+        super::info_box_hoi::view(ui, hoi, sent);
     }
 }
 

@@ -32,6 +32,7 @@ pub mod form;
 pub mod glyph_picker;
 mod glyph_set;
 mod guide_properties;
+pub mod guide_scope;
 mod host;
 pub mod import;
 pub mod interp;
@@ -107,6 +108,7 @@ pub const SPECS: &[&[DialogSpec]] = &[
     shape_order::SPECS,
     path::SPECS,
     guide_properties::SPECS,
+    guide_scope::SPECS,
     color_palettes::SPECS,
     master_color::SPECS,
     sidebar_filters::SPECS,

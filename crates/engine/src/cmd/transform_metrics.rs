@@ -115,10 +115,13 @@ fn transform_metrics(s: &mut Session, v: &Value) -> Result<Value> {
     let out = s.edit("Transform Metrics", |font| {
         each_layer(font, &scope, "glyph.transformMetrics", |glyph, layer| match plans.get(&(glyph.to_string(), layer.id.clone())) {
             Some(Ok(change)) => {
+                // The shift moves the guides with the contents; they then follow the rest of the change.
+                let before = layer.width + change.dx;
                 if let Err(reason) = shift_layer(layer, change.dx) {
                     return Ok(Some(reason));
                 }
                 layer.width = change.width;
+                fontcraft_model::guide_follow::follow_width(layer, before);
                 Ok(None)
             }
             Some(Err(reason)) => Ok(Some(reason.clone())),

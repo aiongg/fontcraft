@@ -111,7 +111,7 @@ fn given(s: &Session, p: &Map<String, Value>) -> Result<Map<String, Value>, Stri
 }
 
 /// A count rule's value typed as text that reads as a number becomes the number.
-fn tidy(node: &mut Value) {
+pub(super) fn tidy(node: &mut Value) {
     let Some(m) = node.as_object_mut() else { return };
     if m.contains_key("property") {
         let counts = matches!(m.get("property").and_then(Value::as_str), Some("countOfPaths" | "countOfComponents"));

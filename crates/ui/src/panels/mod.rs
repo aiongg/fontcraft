@@ -20,6 +20,8 @@ pub mod hinting_waterfall;
 pub mod hoi_timing;
 pub mod info_box;
 pub mod info_box_component;
+pub mod info_box_guide;
+pub mod info_box_hoi;
 pub mod info_box_image;
 pub mod info_box_kerning;
 pub mod info_box_ps_hint;

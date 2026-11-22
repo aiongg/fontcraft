@@ -135,8 +135,10 @@ pub struct InfoBoxModel {
     pub component: Option<ComponentBox>,
     pub corner: Option<CornerBox>,
     pub cap: Option<CapBox>,
-    /// The timing graph of the one selected node's interpolation curve.
-    pub timing: Option<super::hoi::TimingGraph>,
+    /// The one selected node's interpolation curve and its timing graph (`panels::info_box_hoi`).
+    pub hoi: Option<super::hoi::HoiBox>,
+    /// The one selected guide (`panels::info_box_guide`).
+    pub guide: Option<super::guide_box::GuideBox>,
     /// The edited glyph's kerning towards its neighbours in the edit view's text (`panels::info_box_kerning`).
     pub kerning: Option<super::info_box_kerning::KernBox>,
     /// The selected placed image, in place of the selection part (`panels::info_box_image`).
@@ -301,6 +303,7 @@ pub fn project(models: &mut PaletteModels, cx: &mut ProjectCx<'_>, tools: &Tools
     info.ps_hint = super::hint_canvas::ps_hint_box(cx, &tools.selection);
     info.tt = super::hint_canvas::tt_box(cx);
     info.kerning = info.glyph.as_ref().and_then(|_| super::info_box_kerning::kern_box(cx));
+    info.guide = super::guide_box::guide_box(cx, tools);
     info.image = edit.as_ref().filter(|_| tools.image).and_then(|e| {
         let mut targets = serde_json::Map::new();
         targets.insert("glyph".into(), Value::from(e.glyph.clone()));
@@ -398,7 +401,9 @@ fn info_box(cx: &mut ProjectCx<'_>, edit: Option<&Edit>) -> InfoBoxModel {
         b.corner = components::corner_box(font, &edit.glyph, layer, &edit.selection);
         b.cap = components::cap_box(font, &edit.glyph, layer, &edit.selection);
     }
-    b.timing = cx.session.font().ok().and_then(|font| super::hoi::timing_of(font, &edit.glyph, &edit.layer, &edit.selection.points));
+    if !cx.view.edit_background {
+        b.hoi = cx.session.font().ok().and_then(|font| super::hoi::hoi_of(font, &edit.glyph, &edit.layer, &edit.selection.points));
+    }
     b
 }
 

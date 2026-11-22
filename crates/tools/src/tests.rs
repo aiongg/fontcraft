@@ -554,6 +554,38 @@ fn components_are_hit_inside_their_outline_and_move_as_shapes() {
     assert_eq!(last.params, json!({"glyph": "A", "layer": "m01", "shapes": [0], "dx": 10.0, "dy": 20.0}));
 }
 
+/// While a path node is dragged near a component, the component's nearby nodes show as small markers; far from it,
+/// or with snapping suspended, none do.
+#[test]
+fn a_drag_near_a_component_shows_its_nodes_as_markers() {
+    let mut font = Font::new("Test");
+    font.glyph_mut("B").unwrap().layer_mut("m01").unwrap().shapes.push(Shape::Path(Path::rect(0.0, 0.0, 100.0, 100.0)));
+    let mut c = Component::new("B", 200.0, 0.0);
+    c.info.alignment = Alignment::Disabled;
+    let layer = font.glyph_mut("A").unwrap().layer_mut("m01").unwrap();
+    layer.shapes.push(Shape::Component(c));
+    layer.shapes.push(Shape::Path(Path::rect(-300.0, 0.0, -200.0, 100.0)));
+    let scene = Scene::from_font(&font, "A", None).unwrap();
+    let selection = points(&[(1, 2)]);
+    let cx = Context { scene: &scene, view: View::default(), selection: &selection, settings: ToolSettings::default() };
+    let markers = |t: &SelectTool| t.overlays().into_iter().filter(|o| matches!(o, Overlay::Marker { kind: OverlayKind::ComponentNode, .. })).count();
+    let corner = match scene.node(1, 2) {
+        Some(n) => n.point(),
+        None => Point::new(-200.0, 100.0),
+    };
+    let mut t = SelectTool::default();
+    let _ = t.pointer(&cx, &ev(Down, corner.x, corner.y, NONE));
+    // From (-200, 100) to 10 units off the component's corner at (200, 100).
+    let _ = t.pointer(&cx, &ev(Drag, 190.0, 100.0, NONE));
+    assert!(markers(&t) >= 1, "the corner near the dragged node shows: {:?}", t.overlays());
+    let _ = t.pointer(&cx, &ev(Drag, 190.0, 100.0, Modifiers::CTRL));
+    assert_eq!(markers(&t), 0, "Ctrl suspends snapping and the markers");
+    let _ = t.pointer(&cx, &ev(Drag, -100.0, 400.0, NONE));
+    assert_eq!(markers(&t), 0, "far from the component, none show");
+    let _ = t.pointer(&cx, &ev(Up, -100.0, 400.0, NONE));
+    assert!(component_markers(&scene, &View::default(), Point::new(1.0e9, f64::NAN), &Moving::default(), 4.0).is_empty());
+}
+
 /// Drags a component of glyph `A` from inside its outline and returns the actions.
 fn drag_component(scene: &Scene) -> Vec<Action> {
     let selection = Selection::from_items([Item::Shape(0)]);

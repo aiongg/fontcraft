@@ -1229,6 +1229,7 @@ controls = [
   "interpolation type: Linear | Intermediate Point | Handles | Rotation",
   "center-bounds button (rotation only)",
   "rotation direction: Automatic (smallest angle) | Clockwise | Counterclockwise",
+  "knob coordinates: the intermediate point, the two handles or the rotation centre, X and Y each",
   "timing graph beside the box (read-only) with a white linear-time dot and a green dot following the graph",
 ]
 area = "interpolation"
@@ -1236,7 +1237,16 @@ milestone = "M13"
 summary = "Info box shown for a selected HOI knob. Sets the interpolation type and rotation options and displays the resulting timing curve, which cannot be edited directly."
 ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves; Interpolation Timing"
 status = "handbook"
-notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
+notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf). Written in M9.32 (crates/ui/src/panels/info_box_hoi.rs, model `app::models::hoi::hoi_of`): an Interpolation Curve part of the Info box for the one selected node of a font with an axis and two masters, over the span from the node's layer up along the first of its curves' axes with a layer above, else the first font axis with one. Interpolation Type runs `hoi.setInterpolationType`; Point X/Y, Lower and Upper Handle X/Y and Center X/Y run `hoi.setControlPoints` (both handles sent together); Center Rotation in Bounds runs `hoi.centerRotation`; Rotation Direction runs `hoi.setRotationDirection`. The canvas has no HOI tool yet, so the part shows for a node rather than for a selected knob. The animated dots are not drawn."
+guesses = [
+  "The part shows for one selected node in the Info box, since there is no HOI tool on the canvas to select a knob with.",
+  "One span is shown: the first of the node's curves with a layer above it, else the first axis with one; there is no axis pop-up.",
+  "The knobs are edited as X and Y fields in glyph coordinates, labelled Point, Lower Handle, Upper Handle and Center.",
+  "The rotation controls show only for a rotation; the knob fields only for a curve with knobs.",
+]
+observe = [
+  "Select an HOI knob with the reference app's tool and note which fields the Info box shows for each interpolation type, and their order.",
+]
 
 [[behavior]]
 id = "hoi.defaultLinear"
@@ -1315,9 +1325,12 @@ milestone = "M13"
 summary = "The timing graph plots progress against axis position for the selected curve: a straight diagonal from bottom-left to top-right for linear motion, shallow stretches where the node moves slowly and steep ones where it moves fast. It is derived from the curve and read-only; a white dot animates at constant speed beside a green dot that follows the graph."
 ref = "Interpolation › Higher-Order Interpolation › Interpolation Timing"
 status = "handbook"
-notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf). The graph's function is built in M9.29: `fontcraft_interp::hoi::timing` and `timing_graph` give the fraction of the curve's length travelled at each axis fraction, measured on a 64-segment polyline; the diagonal for a straight line at constant speed. The Info box shows the graph for the one selected node whose curve has a layer above it on the curve's axis (crates/ui/src/panels/hoi_timing.rs, M9.32): the diagonal faint behind the curve. The animated dots are not drawn yet."
+notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf). The graph's function is built in M9.29: `fontcraft_interp::hoi::timing` and `timing_graph` give the fraction of the curve's length travelled at each axis fraction, measured on a 64-segment polyline; the diagonal for a straight line at constant speed. The Info box shows the graph for the one selected node whose curve has a layer above it on the curve's axis (crates/ui/src/panels/hoi_timing.rs, M9.32): the diagonal faint behind the curve. A linear node's graph is the diagonal (`hoi_of` samples it at 64 points). The animated dots are not drawn yet."
 guesses = [
   "Progress is the fraction of the curve's length travelled; settle by comparing the graph of a Handles curve with zero amplitudes and of a Point curve in the reference app.",
+]
+observe = [
+  "Draw an intermediate point curve, note its timing graph, convert it to handles and compare the two graphs, to see how the graph is computed.",
 ]
 
 [[behavior]]

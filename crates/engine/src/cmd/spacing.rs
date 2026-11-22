@@ -4,6 +4,7 @@
 //! [`set_metric`]. Behaviour notes: `docs/spec/08-spacing-kerning.md`
 //! § 1 and § 2.
 
+use fontcraft_model::guide_follow::follow_width;
 use fontcraft_model::{Font, Glyph, Layer, MAX_COORDINATE, MetricsKeys};
 use fontcraft_spacing::{self as spacing, Entry, Field, Scope, WIDTH_RANGE};
 use serde_json::{Map, Value, json};
@@ -326,7 +327,12 @@ fn apply(layer: &mut Layer, field: Field, delta: f64, vertical: Option<f64>) -> 
             shift_layer(layer, delta)?;
             set_layer_width(layer, layer.width + delta)
         }
-        Field::Right | Field::Width => set_layer_width(layer, layer.width + delta),
+        Field::Right | Field::Width => {
+            let before = layer.width;
+            set_layer_width(layer, layer.width + delta)?;
+            follow_width(layer, before);
+            Ok(())
+        }
         Field::VertOrigin => set_vert_origin(layer, layer.info.vert_origin.unwrap_or(0.0) + delta),
         Field::Top | Field::Bottom | Field::VertWidth => {
             let vw = vertical.ok_or("the layer is empty, so it has no vertical sidebearings")? + delta;
@@ -477,7 +483,10 @@ fn nudge(s: &mut Session, v: &Value, id: &'static str, label: &str, edge: Nudge,
             let l = g.layers.iter_mut().find(|l| l.id == layer).ok_or_else(|| p.bad(format!("glyph `{name}` has no layer `{layer}`")))?;
             let moved = match edge {
                 Nudge::Left => shift_layer(l, d).and_then(|()| set_layer_width(l, l.width + d)),
-                Nudge::Right => set_layer_width(l, l.width + d),
+                Nudge::Right => {
+                    let before = l.width;
+                    set_layer_width(l, l.width + d).map(|()| follow_width(l, before))
+                }
                 Nudge::Shift => shift_layer(l, d),
             };
             moved.map_err(|e| p.bad(format!("glyph `{name}`: {e}")))?;

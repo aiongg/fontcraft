@@ -108,6 +108,8 @@ struct Drag {
     last_pos: Point,
     last_sent: Option<(f64, f64, MoveMode)>,
     snap: Option<Snap>,
+    /// The component nodes near the dragged point, shown as snap markers.
+    component_markers: Vec<Point>,
     /// The open end being dragged, when the drag may close or join paths.
     end: Option<(usize, usize)>,
     lever: crate::drag_aids::Lever,
@@ -408,6 +410,7 @@ impl SelectTool {
                     last_pos: ev.pos,
                     last_sent: None,
                     snap: None,
+                    component_markers: Vec::new(),
                     end,
                     lever: crate::drag_aids::Lever::new(press.down),
                     followers,
@@ -556,6 +559,8 @@ impl Drag {
         self.last_pos = pos;
         let pos = self.lever.apply(cx, pos, mods);
         let target = Point::new(self.grab.x + pos.x - self.down.x, self.grab.y + pos.y - self.down.y);
+        self.component_markers =
+            if mods.ctrl { Vec::new() } else { crate::snap::component_markers(cx.scene, &cx.view, target, &self.moving, cx.settings.snap_distance) };
         self.snap = if mods.ctrl {
             None
         } else {
@@ -698,7 +703,9 @@ impl Tool for SelectTool {
         match &self.state {
             State::Marquee(m) => vec![Overlay::Polygon { kind: OverlayKind::Marquee, points: m.polygon().to_vec() }],
             State::Dragging(drag) => {
-                let mut out = snap_overlays(drag.snap.as_ref());
+                let mut out: Vec<Overlay> =
+                    drag.component_markers.iter().map(|&at| Overlay::Marker { kind: OverlayKind::ComponentNode, at }).collect();
+                out.extend(snap_overlays(drag.snap.as_ref()));
                 // How far the selection has moved (the copy, for an Alt-drag).
                 if let Some((dx, dy, _)) = drag.last_sent {
                     out.push(offset_badge(drag.last_pos, dx, dy));

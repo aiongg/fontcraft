@@ -235,6 +235,8 @@ fn display_lines_follow_font_info_and_parameters() {
     assert_eq!(a["grid"]["step"], 5.0);
     let asc = a["metrics"].as_array().unwrap().iter().find(|m| m["kind"] == metric::ASCENDER).unwrap();
     assert_eq!((asc["y"].as_f64(), asc["source"].as_str()), (Some(705.0), Some("parameter")));
+    let ascenders = a["metrics"].as_array().unwrap().iter().filter(|m| m["kind"] == metric::ASCENDER).count();
+    assert_eq!(ascenders, 1, "the Greek ascender replaces the master's line: {a}");
     assert_eq!(a["cjk"], json!({"box": [0.0, -200.0, 600.0, 705.0], "rows": 4.0, "columns": 4.0}));
     let b = run(&mut s, "guide.displayLines", json!({"glyph": "B"}));
     assert_eq!(b["cjk"]["guide"], json!([60.0, -100.0, 540.0, 700.0]));
@@ -243,6 +245,31 @@ fn display_lines_follow_font_info_and_parameters() {
     run(&mut s, "guide.add", json!({"glyph": "A", "x": 12, "y": 13}));
     let g = guides(&mut s, "A")[0].clone();
     assert_eq!((g["x"].as_f64(), g["y"].as_f64()), (Some(10.0), Some(15.0)));
+}
+
+/// Local guides follow a width change by their sidebearing reference (`guides.sidebearingReference`), in the same
+/// undo step as the change.
+#[test]
+fn guides_follow_the_width_by_their_sidebearing_reference() {
+    let mut s = session();
+    for (x, to) in [(50.0, "left"), (550.0, "right"), (300.0, "both")] {
+        let out = run(&mut s, "guide.add", json!({"glyph": "A", "x": x, "y": 0, "angle": 90}));
+        run(&mut s, "guide.setProperties", json!({"glyph": "A", "guide": out["guide"], "relativeTo": to}));
+    }
+    let xs = |s: &mut Session| guides(s, "A").iter().filter(|g| g["scope"] == "local").map(|g| g["x"].as_f64().unwrap()).collect::<Vec<f64>>();
+    assert_eq!(xs(&mut s), vec![50.0, 550.0, 300.0]);
+    // The rectangle ends at 100 in a width of 600: a right sidebearing of 600 makes the width 700.
+    run(&mut s, "spacing.setRightSidebearing", json!({"glyphs": ["A"], "value": 600}));
+    assert_eq!(xs(&mut s), vec![50.0, 650.0, 350.0], "the right guide moves by the change, the both guide keeps its half");
+    run(&mut s, "spacing.setWidth", json!({"glyphs": ["A"], "value": 900}));
+    assert_eq!(xs(&mut s), vec![50.0, 850.0, 450.0]);
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(xs(&mut s), vec![50.0, 650.0, 350.0], "undo puts the guides back with the width");
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(xs(&mut s), vec![50.0, 550.0, 300.0]);
+    // A left sidebearing change moves every guide with the outline.
+    run(&mut s, "spacing.setLeftSidebearing", json!({"glyphs": ["A"], "value": 100}));
+    assert_eq!(xs(&mut s), vec![150.0, 650.0, 400.0]);
 }
 
 #[test]
