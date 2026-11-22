@@ -375,8 +375,7 @@ fn show_panel(app: &mut FontCraftApp, p: &Map<String, Value>) -> Result<(), Stri
 }
 
 fn set_visible(app: &mut FontCraftApp, visible: bool) {
-    // A refused move (the layout has no room) leaves the panel where it was.
-    let _ = app.view.workspace.set_visible(PanelId::FontAudit, visible, None, false, |panel| panel.permissions());
+    crate::shell::dock::show_window(&mut app.view.workspace, PanelId::FontAudit, visible, app.view.canvas.rect);
 }
 
 /// Reads the profiles the pop-up lists: the built-in ones, the document's and the user's, and the effective

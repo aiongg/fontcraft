@@ -419,8 +419,7 @@ fn show_command(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
     st.data = Some(Held(Arc::new(data)));
     st.generation = st.generation.wrapping_add(1);
     app.view.table_viewer = st;
-    // A refused move (the layout has no room) leaves the panel where it was.
-    let _ = app.view.workspace.set_visible(PanelId::TableViewer, true, None, false, |panel| panel.permissions());
+    crate::shell::dock::show_window(&mut app.view.workspace, PanelId::TableViewer, true, app.view.canvas.rect);
     Ok(())
 }
 

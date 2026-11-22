@@ -102,8 +102,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
     match command.id.as_str() {
         "edit.compareFamily" => {
             st.reads = st.reads.wrapping_add(1);
-            // A refused move (the layout has no room) leaves the panel where it was.
-            let _ = app.view.workspace.set_visible(PanelId::CompareFamily, true, None, false, |panel| panel.permissions());
+            crate::shell::dock::show_window(&mut app.view.workspace, PanelId::CompareFamily, true, app.view.canvas.rect);
         }
         "compareFamily.update" => st.reads = st.reads.wrapping_add(1),
         "compareFamily.setAttribute" => {

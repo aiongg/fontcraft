@@ -52,8 +52,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
         }
         app.view.shape_order.glyph = named;
     }
-    // A refused move (the layout has no room) leaves the panel where it was.
-    let _ = app.view.workspace.set_visible(PanelId::ShapeOrder, open, None, false, |panel| panel.permissions());
+    crate::shell::dock::show_window(&mut app.view.workspace, PanelId::ShapeOrder, open, app.view.canvas.rect);
     Ok(())
 }
 

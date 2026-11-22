@@ -169,8 +169,7 @@ fn open(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
     }
     st.left = Some(left);
     st.right = Some(right);
-    // A refused move (the layout has no room) leaves the panel where it was.
-    let _ = app.view.workspace.set_visible(PanelId::CompareFonts, true, None, false, |panel| panel.permissions());
+    crate::shell::dock::show_window(&mut app.view.workspace, PanelId::CompareFonts, true, app.view.canvas.rect);
     Ok(())
 }
 

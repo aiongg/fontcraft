@@ -498,8 +498,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
     match command.id.as_str() {
         "window.textPreview" => {
             let open = flag(p, "open")?.unwrap_or(true);
-            // A refused move (the layout has no room) leaves the panel where it was.
-            let _ = app.view.workspace.set_visible(PanelId::TextPreview, open, None, false, |panel| panel.permissions());
+            crate::shell::dock::show_window(&mut app.view.workspace, PanelId::TextPreview, open, app.view.canvas.rect);
         }
         "textPreview.setText" => {
             let text = string(p, "text")?.ok_or("`text` is required")?;

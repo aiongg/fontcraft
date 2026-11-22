@@ -228,6 +228,7 @@ mod tests {
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::indexing_slicing)]
 mod window_tests {
+    use craft::behavior::kurbo::Point as KPoint;
     use craft::ui::runtime::commands::CommandRef;
     use craft::ui::testing::input::{key_press, text};
     use egui::{Key, Modifiers};
@@ -262,21 +263,51 @@ mod window_tests {
         assert!(unaligned.is_empty(), "regions between pixels at {unaligned:?}");
     }
 
-    /// Font Info and the Kerning window open as windows of their own over the document area, as tall as the
-    /// window allows, not as a tab of the palette's first group.
+    /// Font Info, the Kerning window and the other panels the reference shows as windows or dialogs open as windows
+    /// of their own over the document area, as tall as the window allows, not as a tab of the palette's first group.
     #[test]
     fn font_info_and_the_kerning_window_open_as_windows() {
         let mut t = TestApp::window(crate::Options::default());
         t.ok("engine.execute", json!({"command": "file.new", "params": {}}));
         t.frames(2);
-        for (command, panel) in [("font.info", PanelId::FontInfo), ("window.kerning", PanelId::KerningWindow)] {
-            t.ok("engine.execute", json!({"command": command, "params": {}}));
+        let windows = [
+            ("font.info", json!({}), PanelId::FontInfo),
+            ("window.kerning", json!({}), PanelId::KerningWindow),
+            ("window.spaceCenter", json!({}), PanelId::SpaceCenter),
+            ("window.textPreview", json!({}), PanelId::TextPreview),
+            ("edit.compareFonts", json!({}), PanelId::CompareFonts),
+            ("edit.compareFamily", json!({}), PanelId::CompareFamily),
+            ("window.kerningPairsPreview", json!({}), PanelId::KerningPairsPreview),
+            ("dialog.kerningGroupsEditor", json!({}), PanelId::KerningGroupsEditor),
+            ("window.shapeOrder", json!({"glyph": "A"}), PanelId::ShapeOrder),
+            ("audit.showPanel", json!({"visible": true}), PanelId::FontAudit),
+        ];
+        for (command, params, panel) in windows {
+            t.ok("engine.execute", json!({"command": command, "params": params}));
             t.frames(2);
             let layout = &t.app.view.workspace.layout;
             let window = layout.floating.iter().find(|w| w.contains(&panel)).expect("the panel floats");
             assert!(window.rect.height() >= 400.0, "{command}: {:?}", window.rect);
             assert!(!window.panels().any(|p| *p == PanelId::GlyphMetrics), "{command} floats alone");
         }
+    }
+
+    /// A tab opened on several glyphs fits their whole line in the canvas the first time it draws.
+    #[test]
+    fn a_tab_on_several_glyphs_fits_the_line() {
+        let mut t = TestApp::window(crate::Options::default());
+        t.ok("engine.execute", json!({"command": "file.new", "params": {}}));
+        t.frames(2);
+        t.ok("engine.execute", json!({"command": "view.editSelectedGlyphs", "params": {"glyphs": ["H", "O", "H", "O", "H", "O"]}}));
+        t.frames(2);
+        let layout = t.app.models.text.layout.clone().expect("the text's layout");
+        let ends = layout.placed.iter().map(|p| (p.x, p.x + p.advance));
+        let (x0, x1) = ends.fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), (l, r)| (a.min(l), b.max(r)));
+        let view = t.app.view.canvas;
+        let o = t.app.models.text.origin[0];
+        let (left, right) = (view.to_screen(KPoint::new(x0 - o, 0.0)).x, view.to_screen(KPoint::new(x1 - o, 0.0)).x);
+        assert!(layout.placed.len() == 6 && x1 - x0 > 1000.0, "{:?}", layout.placed);
+        assert!(view.rect.left() <= left && right <= view.rect.right(), "the line {left}..{right} inside {:?}", view.rect);
     }
 
     /// A row of checkboxes in a dialog names each box beside it: the Export dialog's File Format row shows its three

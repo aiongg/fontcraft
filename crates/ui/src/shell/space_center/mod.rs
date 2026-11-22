@@ -373,8 +373,7 @@ fn window(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
     if next.selected.is_some_and(|s| s >= columns) {
         next.selected = None;
     }
-    // A refused move (the layout has no room) leaves the panel where it was.
-    let _ = app.view.workspace.set_visible(PanelId::SpaceCenter, open, None, false, |panel| panel.permissions());
+    crate::shell::dock::show_window(&mut app.view.workspace, PanelId::SpaceCenter, open, app.view.canvas.rect);
     app.view.space_center = next;
     Ok(())
 }

@@ -269,9 +269,9 @@ pub fn default_workspace() -> Workspace<PanelId> {
 /// The largest size a panel opened as a window starts at, in points.
 const WINDOW_SIZE: egui::Vec2 = egui::vec2(820.0, 600.0);
 
-/// Shows `panel` as a window of its own over `area` (the document area), or hides it. The reference app gives Font
-/// Info and the Kerning window windows of their own; docked into the palette's first group they get a few hundred
-/// points of height. A panel that shows already, or that was shown before and has a place recorded, goes there.
+/// Shows `panel` as a window of its own over `area` (the document area), or hides it: the panels the reference app
+/// shows as windows or dialogs (spec rows with `location = "window"` or `"dialog"`). Docked into the palette's first
+/// group they would get a few hundred points of height. A panel that shows already, or that was shown before and has a place recorded, goes there.
 pub fn show_window(workspace: &mut Workspace<PanelId>, panel: PanelId, open: bool, area: egui::Rect) {
     let permissions = |p: &PanelId| p.permissions();
     let known = workspace.layout.contains(&panel) || workspace.hidden.iter().any(|(p, _)| *p == panel);

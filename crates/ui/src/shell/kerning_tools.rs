@@ -273,8 +273,7 @@ fn preview(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
         }
         None => None,
     };
-    // A refused move (the layout has no room) leaves the panel where it was.
-    let _ = app.view.workspace.set_visible(PanelId::KerningPairsPreview, open, None, false, |panel| panel.permissions());
+    crate::shell::dock::show_window(&mut app.view.workspace, PanelId::KerningPairsPreview, open, app.view.canvas.rect);
     let pv = &mut app.view.kerning_tools.preview;
     if !open {
         pv.opened_with = None;
@@ -367,7 +366,7 @@ fn groups_editor(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
         let reply = app.session.execute("kerning.buildGroups", &Value::Object(params.clone())).map_err(|e| e.to_string())?;
         app.view.kerning_tools.groups.proposal = Some(Proposal { params: params.clone(), document, reply });
     }
-    let _ = app.view.workspace.set_visible(PanelId::KerningGroupsEditor, open, None, false, |panel| panel.permissions());
+    crate::shell::dock::show_window(&mut app.view.workspace, PanelId::KerningGroupsEditor, open, app.view.canvas.rect);
     let st = &mut app.view.kerning_tools.groups;
     if propose == Some(None) {
         st.proposal = None;
