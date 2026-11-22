@@ -62,6 +62,7 @@ fn a_tab_click_selects_the_tab() {
     let notes = fixture.by_label("Notes").expect("the Notes tab");
     fixture.click(&notes).settle();
     assert_eq!(*posted.borrow(), vec![Msg::Shell(CommandRef::with_params("font.info.selectTab", json!({ "tab": "notes" })))]);
+    assert!(fixture.by_label("Close Notes").is_none(), "a tab of Font Info has no close button");
 }
 
 /// The family name field sets the field, the stepper steps the version, and the warnings `font.info.get` gives show

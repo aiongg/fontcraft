@@ -39,7 +39,7 @@ use craft::ui::display::{Shade, Text};
 use craft::ui::layout_components::Stack;
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::{Env, Label};
-use craft::ui::tabs::{Tab, TabStrip};
+use craft::ui::tabs::{Tab, TabKind, TabStrip};
 use egui::Ui;
 use serde_json::json;
 
@@ -131,7 +131,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
 fn tab_strip(ui: &mut Ui, shown: FontInfoTab, words: &FontInfoWords) -> Option<FontInfoTab> {
     let labels: Vec<(FontInfoTab, Label)> = FontInfoTab::ALL.iter().map(|t| (*t, t.label(words))).collect();
     let source = keyed(&labels, |(tab, _)| *tab).with_text(|(_, label)| Cow::Borrowed(label.as_str()));
-    let out = TabStrip::new(words.tabs.clone()).shown(shown).show_items(ui, &source, &mut |tab, _| Tab::new(tab.label(words)));
+    let out = TabStrip::new(words.tabs.clone()).kind(TabKind::Text).shown(shown).show_items(ui, &source, &mut |tab, _| Tab::new(tab.label(words)));
     let picked = out.response.events.iter().rev().find_map(|event| match event {
         CollectionEvent::Selection(SelectionChange::Set(keys)) => keys.last().copied(),
         _ => None,
