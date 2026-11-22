@@ -2265,8 +2265,14 @@ summary = "Named, reusable bundles of export settings. Built-in profiles cover t
 ref = "FontLab 7 manual › Export Profiles; FontLab 8 What's new › Formats"
 status = "docs"
 origin = "fontlab"
-notes = "Documented, not yet observed. FontCraft's dialog edits one profile at a time (file.saveExportProfile): it lists the existing profiles, opens on a profile named in its parameters or on the one it is based on, and saves under a name; built-in profiles are read-only. Removing is file.removeExportProfile. The settings are those of the static export (subfolder, outline format, containers, overlap removal, autohint) and, in the colour group, CBDT (`color.export.cbdtNotInReference`, off by default); the size, hinting, glyph and layout groups, and the colour group's SVG, COLR and sbix choices, wait for export to support them."
+notes = "Documented, not yet observed. FontCraft's dialog edits one profile at a time (file.saveExportProfile): it lists the existing profiles, opens on a profile named in its parameters or on the one it is based on, and saves under a name; built-in profiles are read-only. Removing is file.removeExportProfile. The settings are those of the static export (subfolder, outline format, containers, overlap removal, autohint) and, in the colour group, CBDT (`color.export.cbdtNotInReference`, off by default). M13.62 adds the profile's `compile` group, font.compile settings under the groups they belong to: Output (Variable Fonts), Outlines (Curve Error), Size (Subroutines, post Table), Glyphs (Production Names, Keep Glyphs, Remove Glyphs), Layout (Skip Features) and Colour (COLR, SVG, sbix). A field at its default sends null, which removes the key from the profile. Not offered: the outline group's contour direction, extremes, clean-up and rounding; the size group's composites and compressed UFO; the hinting group beyond Autohint; the glyph group's required glyphs and sort order; the layout group's kern and mark choices and legacy kern table; EOT."
+observe = [
+  "Open the Export Profiles dialog, duplicate a built-in profile and note the controls of each group (outline, size, hinting, glyph, layout, colour), with their defaults.",
+]
 guesses = [
+  "Variable Fonts in a profile builds the variable fonts beside the static ones, not in their place.",
+  "COLR off also leaves out CPAL, since nothing else in an exported font reads the palettes.",
+  "Keep and Remove Glyphs are names separated by spaces; Keep Glyphs keeps the glyphs' components too, as font.compile's glyphs does.",
   "The built-in profiles are OpenType PS (CFF, plain), OpenType TT (TrueType, plain) and Web (TrueType, WOFF2 and WOFF), each writing into a subfolder named after it; the reference's full built-in list would settle it.",
   "There is no tick for which profiles the export dialog shows: Export Fonts As lists every profile; the reference's dialog would settle whether hidden profiles are needed.",
 ]
@@ -2275,14 +2281,17 @@ guesses = [
 id = "dialog.exportFontsAs"
 label = "Export Fonts As"
 location = "dialog"
-controls = ["profiles to export through, ticked", "export folder with Choose…"]
+controls = ["fonts to export, the active one ticked", "profiles to export through, ticked", "Next to Each Source checkbox", "export folder with Choose…"]
 area = "compile"
 milestone = "M13"
 summary = "Exports the active font through the ticked export profiles into a folder, each profile into its own subfolder (file.exportWithProfiles)."
 ref = "FontLab 8 What's new › Formats › File › Export Font As"
 status = "docs"
 origin = "fontlab"
-notes = "Documented, not yet observed. The choice of fonts and exporting next to each source file are parameters of file.exportWithProfiles that the dialog does not offer yet."
+notes = "Documented, not yet observed. M13.62: the dialog offers the open fonts (fonts, the active one at first) and Next to Each Source (bySource); ticked, the folder field reads that the folders go next to each source file and is no parameter, so OK asks for no folder. A font without a file is refused by the command, naming it."
+guesses = [
+  "The font list holds the open fonts by title; two open fonts of the same title cannot both be chosen.",
+]
 
 [[panel]]
 id = "dialog.exportArtwork"
@@ -2310,7 +2319,7 @@ summary = "Exports every listed open font through every listed export profile in
 ref = "FontLab 8 What's new › Formats › File › Export Font As"
 status = "docs"
 origin = "fontlab"
-notes = "A designspace without axes is refused when it states a location, or when it has two or more sources and instances to build, as fontmake refuses it (docs/spec/40-compile.md). Documented, not yet observed. Each profile builds the exportable instances as file.exportAll does, with the profile's overlap removal and autohint setting passed to the compiler as file.exportStatic passes its own, and the CBDT and CBLC tables when its cbdt setting is on. installTemporarily is refused as not supported yet: installing fonts for the session needs the desktop app's platform code (M14). All files are staged and moved into place only when every font was built."
+notes = "A designspace without axes is refused when it states a location, or when it has two or more sources and instances to build, as fontmake refuses it (docs/spec/40-compile.md). Documented, not yet observed. Each profile builds the exportable instances as file.exportAll does, with the profile's overlap removal and autohint setting passed to the compiler as file.exportStatic passes its own, and the CBDT and CBLC tables when its cbdt setting is on. installTemporarily is refused as not supported yet: installing fonts for the session needs the desktop app's platform code (M14). All files are staged and moved into place only when every font was built. M13.62: a profile with a `compile` group is built by font.compile's own code (`compile_into`, into the profile's staged folder) with the parameters the profile maps to, so it writes the files and bytes that font.compile call writes, with font.compile's file names and folders; the result's fonts for such a profile are font.compile's."
 guesses = [
   "Without `fonts` the active document is exported, not every open one; the reference's Export Fonts As dialog would settle the default.",
   "A profile's subfolder may not climb out of the destination with `..`, for any caller; the reference's profile settings would settle whether it can.",
@@ -2323,14 +2332,14 @@ label = "Save Export Profile"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{name: string, basedOn?: name, settings: {folder?: path, outlines?: 'truetype' | 'cff', containers?: ['plain' | 'woff' | 'woff2'], removeOverlap?: bool, autohint?: bool, cbdt?: bool}}"
+params = "{name: string, basedOn?: name, settings: {folder?: path, outlines?: 'truetype' | 'cff', containers?: ['plain' | 'woff' | 'woff2'], removeOverlap?: bool, autohint?: bool, cbdt?: bool, compile?: {variable?: bool, skipFeatures?: bool, productionNames?: bool, postFormat?: 2|3, conversionError?: number, subroutinize?: bool, keepGlyphs?: [name], removeGlyphs?: [name], colr?: bool, svg?: bool, sbix?: bool}}}"
 area = "compile"
 milestone = "M13"
 summary = "Creates or updates a custom export profile from a settings object, optionally starting from an existing profile."
 ref = "FontLab 7 manual › Export Profiles (Creating custom profiles)"
 status = "docs"
 origin = "fontlab"
-notes = "Documented, not yet observed. Profiles live in the application settings under com.fontcraft.exportProfiles as [{name, params}], at most 256 with the built-in ones; stored profiles that cannot be read are reported by file.listExportProfiles and left out."
+notes = "Documented, not yet observed. Profiles live in the application settings under com.fontcraft.exportProfiles as [{name, params}], at most 256 with the built-in ones; stored profiles that cannot be read are reported by file.listExportProfiles and left out. M13.62: the `compile` group maps to font.compile parameters: variable adds the variable format, conversionError is outlines.conversionError (above 0, at most 1 em), skipFeatures, productionNames, postFormat (2 or 3) and subroutinize pass as they are, keepGlyphs and removeGlyphs (at most 4096 names of at most 512 bytes) become glyphs (the exported glyphs kept, less the removed), colr, svg and sbix false become excludeTables (COLR with CPAL, SVG, sbix). The group merges key by key over the base's; null removes a key; an empty group is left out of the params. font.compile refuses postFormat 3 and excludeTables with variable output, and so does the profile's export."
 guesses = [
   "A copy made with basedOn writes into a subfolder named after the copy unless `settings` names a folder; the reference's Duplicate would settle it.",
 ]

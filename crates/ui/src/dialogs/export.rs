@@ -30,9 +30,14 @@ use crate::app::FontCraftApp;
 pub const SPECS: &[DialogSpec] = &[
     DialogSpec::new("dialog.export", "Export", "file.export", Fields::Tabs(&TABS)),
     PROFILES,
-    DialogSpec::new("dialog.exportFontsAs", "Export Fonts As", "file.exportWithProfiles", Fields::Fixed(export_fields))
-        .run_on_ok()
-        .buttons("Export", ""),
+    DialogSpec::new(
+        "dialog.exportFontsAs",
+        "Export Fonts As",
+        "file.exportWithProfiles",
+        Fields::Shaped(Shaped { fields: export_fields, given: export_given, params: export_params, link: export_link }),
+    )
+    .run_on_ok()
+    .buttons("Export", ""),
     DialogSpec::new("dialog.exportArtwork", "Export Artwork", "glyph.exportArtwork", Fields::Fixed(artwork_fields)).run_on_ok().buttons("Export", ""),
     WINDOW_CONTENTS,
     EXPORT_ALL_FOLDER,
@@ -195,6 +200,7 @@ pub fn master_field(session: &Session, key: &str, label: &str, doc: &str) -> Fie
         kind: Kind::Choice { choices: masters.iter().map(|(id, _)| id.clone()).collect(), labels: masters.into_iter().map(|(_, n)| n).collect() },
         doc: doc.into(),
         group: None,
+        same_as: None,
     }
 }
 
@@ -250,6 +256,7 @@ fn ufo_fields(session: &Session) -> Vec<Field> {
             default: json!(ids),
             doc: "The masters to write, each as its own UFO".into(),
             group: None,
+            same_as: None,
         },
         Field::bool(
             "productionNames",
@@ -309,6 +316,7 @@ fn profile_fields(session: &Session) -> Vec<Field> {
             default: json!(""),
             doc: "The profile whose settings a new profile starts from".into(),
             group: None,
+            same_as: None,
         },
         Field::text(
             "folder",
@@ -337,7 +345,99 @@ fn profile_fields(session: &Session) -> Vec<Field> {
         Field::bool("autohint", "Autohint", false, "Add automatic hints to the exported fonts").in_group("Hinting"),
         Field::bool("cbdt", "CBDT", false, "Also write CBDT and CBLC bitmap tables from the iColor layers, for renderers that do not draw sbix")
             .in_group("Colour"),
+        Field::bool("colr", "COLR", true, "Write the COLR and CPAL tables of palette layers").in_group("Colour"),
+        Field::bool("svg", "SVG", true, "Write the SVG table of SVG layers").in_group("Colour"),
+        Field::bool("sbix", "sbix", true, "Write the sbix table of iColor layers").in_group("Colour"),
+        Field::bool("variable", "Variable Fonts", false, "Also build the variable fonts, as the Variable Fonts tab of Export does")
+            .in_group("Output"),
+        Field::text(
+            "conversionError",
+            "Curve Error",
+            16,
+            "Largest distance of the quadratic outlines from the cubic ones, in em (above 0, at most 1); empty: the default",
+        )
+        .in_group("Outlines"),
+        Field::choice(
+            "subroutinize",
+            "Subroutines",
+            &[("", "Font's Setting"), ("true", "On"), ("false", "Off")],
+            "",
+            "Move repeated parts of CFF outlines into subroutines; the font's setting follows its Disable Subroutines parameter",
+        )
+        .in_group("Size"),
+        Field::choice(
+            "postFormat",
+            "post Table",
+            &[("", "Default"), ("2", "Format 2: glyph names"), ("3", "Format 3: no glyph names")],
+            "",
+            "Format 3 leaves the glyph names out of the font, which makes it smaller",
+        )
+        .in_group("Size"),
+        Field::choice(
+            "productionNames",
+            "Production Names",
+            &[("", "Font's Setting"), ("true", "On"), ("false", "Off")],
+            "",
+            "Rename the glyphs to their production names in the exported fonts",
+        )
+        .in_group("Glyphs"),
+        Field::text(
+            "keepGlyphs",
+            "Keep Glyphs",
+            65_536,
+            "Only these glyphs (and their components) are exported; names separated by spaces; empty: all",
+        )
+        .in_group("Glyphs"),
+        Field::text("removeGlyphs", "Remove Glyphs", 65_536, "These glyphs are left out of the exported fonts; names separated by spaces")
+            .in_group("Glyphs"),
+        Field::bool("skipFeatures", "Skip Features", false, "Build no OpenType layout features").in_group("Layout"),
     ]
+}
+
+/// The compile-group fields, keyed as in a profile's `compile` group.
+const COMPILE: [&str; 11] = [
+    "variable",
+    "skipFeatures",
+    "productionNames",
+    "postFormat",
+    "conversionError",
+    "subroutinize",
+    "keepGlyphs",
+    "removeGlyphs",
+    "colr",
+    "svg",
+    "sbix",
+];
+
+/// A compile-group value as its field shows it.
+fn compile_field_value(key: &str, v: &Value) -> Value {
+    match (key, v) {
+        ("keepGlyphs" | "removeGlyphs", Value::Array(names)) => json!(names.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(" ")),
+        ("productionNames" | "subroutinize", Value::Bool(b)) => json!(b.to_string()),
+        ("postFormat" | "conversionError", Value::Number(n)) => json!(n.to_string()),
+        _ => v.clone(),
+    }
+}
+
+/// A compile-group field's value as the profile keeps it; null for the default, which removes the key.
+fn compile_param(key: &str, v: Option<&Value>) -> Value {
+    let text = v.and_then(Value::as_str).map(str::trim).unwrap_or_default();
+    match key {
+        "keepGlyphs" | "removeGlyphs" if !text.is_empty() => json!(text.split_whitespace().collect::<Vec<_>>()),
+        "productionNames" | "subroutinize" if !text.is_empty() => json!(text == "true"),
+        "postFormat" => text.parse::<i64>().map_or(Value::Null, |n| json!(n)),
+        // A number that does not parse goes on as text, so the command names what is wrong with it.
+        "conversionError" if !text.is_empty() => text.parse::<f64>().map_or_else(|_| json!(text), |e| json!(e)),
+        "variable" | "skipFeatures" => match v {
+            Some(Value::Bool(true)) => json!(true),
+            _ => Value::Null,
+        },
+        "colr" | "svg" | "sbix" => match v {
+            Some(Value::Bool(false)) => json!(false),
+            _ => Value::Null,
+        },
+        _ => Value::Null,
+    }
 }
 
 /// Field values from parameters in the command's shape: the named profile's settings (or the base's), with `settings`
@@ -360,11 +460,21 @@ fn profile_given(session: &Session, p: &Map<String, Value>) -> Result<Map<String
                 out.insert((*key).into(), v.clone());
             }
         }
+        if let Some(Value::Object(group)) = start.params.get("compile") {
+            for (key, v) in group.iter().filter(|(k, _)| COMPILE.contains(&k.as_str())) {
+                out.insert(key.clone(), compile_field_value(key, v));
+            }
+        }
     }
     if let Some(Value::Object(settings)) = p.get("settings") {
         for key in SETTINGS {
             if let Some(v) = settings.get(key) {
                 out.insert(key.into(), v.clone());
+            }
+        }
+        if let Some(Value::Object(group)) = settings.get("compile") {
+            for (key, v) in group.iter().filter(|(k, _)| COMPILE.contains(&k.as_str())) {
+                out.insert(key.clone(), compile_field_value(key, v));
             }
         }
     }
@@ -387,6 +497,8 @@ fn profile_params(values: &Map<String, Value>) -> Map<String, Value> {
             None => {}
         }
     }
+    let compile: Map<String, Value> = COMPILE.iter().map(|key| ((*key).to_string(), compile_param(key, values.get(*key)))).collect();
+    settings.insert("compile".into(), Value::Object(compile));
     let mut out = Map::new();
     out.insert("name".into(), values.get("name").cloned().unwrap_or(json!("")));
     if let Some(based) = values.get("basedOn").and_then(Value::as_str).filter(|s| !s.is_empty()) {
@@ -399,7 +511,24 @@ fn profile_params(values: &Map<String, Value>) -> Map<String, Value> {
 fn export_fields(session: &Session) -> Vec<Field> {
     let names = profile_names(session);
     let first: Vec<&String> = names.iter().take(1).collect();
+    let fonts: Vec<String> = session.documents().iter().take(MAX_CHOICES).map(|d| d.title.clone()).collect();
+    let active: Vec<String> = session.active().map(|d| d.title.clone()).into_iter().collect();
     vec![
+        Field {
+            key: "fonts".into(),
+            label: "Fonts".into(),
+            kind: Kind::Multi { choices: fonts, labels: Vec::new() },
+            default: json!(active),
+            doc: "The open fonts to export; the active one at first".into(),
+            group: None,
+            same_as: None,
+        },
+        Field::bool(
+            "bySource",
+            "Next to Each Source",
+            false,
+            "Write each font's profile folders next to its source file instead of into the export folder",
+        ),
         Field {
             key: "profiles".into(),
             label: "Profiles".into(),
@@ -407,10 +536,44 @@ fn export_fields(session: &Session) -> Vec<Field> {
             default: json!(first),
             doc: "The profiles to export through; each writes into its own subfolder".into(),
             group: None,
+            same_as: None,
         },
         Field::folder("destination", "Export Folder", "The folder the profiles' subfolders are made in; files of the same name are replaced"),
     ]
 }
+
+fn export_given(_: &Session, p: &Map<String, Value>) -> Result<Map<String, Value>, String> {
+    Ok(p.clone())
+}
+
+/// With Next to Each Source the export folder is no parameter.
+fn export_params(values: &Map<String, Value>) -> Map<String, Value> {
+    let mut out = values.clone();
+    if values.get("bySource") == Some(&Value::Bool(true)) {
+        out.remove("destination");
+    } else {
+        out.remove("bySource");
+    }
+    out
+}
+
+/// With Next to Each Source ticked the folder field says so, which is no folder to ask for; unticked, it is
+/// emptied again.
+fn export_link(values: &mut Map<String, Value>, key: &str) {
+    if !key.is_empty() && key != "bySource" {
+        return;
+    }
+    let by_source = values.get("bySource") == Some(&Value::Bool(true));
+    let shows_note = values.get("destination").and_then(Value::as_str) == Some(BY_SOURCE_NOTE);
+    if by_source {
+        values.insert("destination".into(), json!(BY_SOURCE_NOTE));
+    } else if shows_note {
+        values.insert("destination".into(), json!(""));
+    }
+}
+
+/// What the folder field shows while Next to Each Source is ticked.
+const BY_SOURCE_NOTE: &str = "(next to each source file)";
 
 fn artwork_fields(session: &Session) -> Vec<Field> {
     vec![

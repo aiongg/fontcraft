@@ -273,3 +273,79 @@ fn export_all_asks_once_only_without_a_kept_folder() {
     let _ = std::fs::remove_dir_all(&picked);
     let _ = std::fs::remove_dir_all(&kept);
 }
+
+#[test]
+fn the_profile_dialog_saves_the_compile_groups_and_reopens_with_them() {
+    let mut app = drawn();
+    call(&mut app, "ui.dialog.open", json!({"dialog": "dialog.exportProfiles", "params": {"name": "Small"}}));
+    call(&mut app, "ui.dialog.set", json!({"field": "postFormat", "value": "3"}));
+    call(&mut app, "ui.dialog.set", json!({"field": "removeGlyphs", "value": "A  B"}));
+    call(&mut app, "ui.dialog.set", json!({"field": "colr", "value": false}));
+    call(&mut app, "ui.dialog.set", json!({"field": "conversionError", "value": "0.002"}));
+    let done = call(&mut app, "ui.dialog.confirm", json!({}));
+    let group = &done["result"]["profile"]["params"]["compile"];
+    assert_eq!(*group, json!({"postFormat": 3, "removeGlyphs": ["A", "B"], "colr": false, "conversionError": 0.002}), "{done}");
+
+    // Reopened on the profile, the fields show its group; a field back at its default removes the key.
+    let reopened = call(&mut app, "ui.dialog.open", json!({"dialog": "dialog.exportProfiles", "params": {"name": "Small"}}));
+    assert_eq!(reopened["params"]["settings"]["compile"]["postFormat"], 3, "{reopened}");
+    call(&mut app, "ui.dialog.set", json!({"field": "colr", "value": true}));
+    let done = call(&mut app, "ui.dialog.confirm", json!({}));
+    assert!(done["result"]["profile"]["params"]["compile"].get("colr").is_none(), "{done}");
+}
+
+/// The window's Export Profiles dialog shows the compile groups under their headings.
+#[test]
+fn the_profile_dialog_shows_the_compile_groups() {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use craft::ui::dialog::DialogHost;
+    use craft::ui::testing::Fixture;
+
+    let app = Rc::new(RefCell::new(drawn()));
+    let host = Rc::new(RefCell::new(DialogHost::new()));
+    call(&mut app.borrow_mut(), "ui.dialog.open", json!({"dialog": "dialog.exportProfiles", "params": {"name": "Groups"}}));
+    let (shown_app, shown_host) = (Rc::clone(&app), Rc::clone(&host));
+    let mut fixture = Fixture::new(move |ui| {
+        let (mut app, mut host) = (shown_app.borrow_mut(), shown_host.borrow_mut());
+        crate::dialogs::run(&mut host, &mut app);
+        host.run(ui);
+    });
+    fixture.settle();
+    for label in ["Size", "Glyphs", "Layout", "Colour", "Outlines", "Output", "Hinting"] {
+        assert!(fixture.by_label(label).is_some(), "the {label} heading");
+    }
+    for label in [
+        "Variable Fonts",
+        "Skip Features",
+        "Production Names",
+        "post Table",
+        "Curve Error",
+        "Subroutines",
+        "Keep Glyphs",
+        "Remove Glyphs",
+        "COLR",
+        "SVG",
+        "sbix",
+    ] {
+        assert!(fixture.by_label(label).is_some(), "the {label} row");
+    }
+}
+
+#[test]
+fn export_fonts_as_offers_the_fonts_and_next_to_each_source() {
+    let mut app = drawn();
+    let opened = call(&mut app, "ui.dialog.open", json!({"dialog": "dialog.exportFontsAs"}));
+    let title = app.session.doc().unwrap().title.clone();
+    assert_eq!(opened["params"]["fonts"], json!([title]));
+    assert!(opened["params"].get("bySource").is_none(), "unticked, the export folder is the destination");
+    call(&mut app, "ui.dialog.set", json!({"field": "bySource", "value": true}));
+    let ticked = call(&mut app, "ui.dialog.inspect", json!({}));
+    assert_eq!(ticked["params"]["bySource"], true);
+    assert!(ticked["params"].get("destination").is_none(), "{ticked}");
+    // The document has no file yet, so the command refuses and the dialog stays open with the reason.
+    let e = fails(&mut app, "ui.dialog.confirm", json!({}));
+    assert!(e.contains("save it first"), "{e}");
+    call(&mut app, "ui.dialog.cancel", json!({}));
+}

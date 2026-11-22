@@ -426,3 +426,61 @@ fn artwork_tiles_a_pattern_image_over_the_fill_and_reports_one_it_cannot_read() 
     assert_eq!(px(&img, x0 + 60, mid), RED, "the path is drawn without its pattern");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn a_profile_with_variable_output_and_no_features_writes_what_font_compile_writes() {
+    let dir = temp("compile-group");
+    let path = dir.join("TestSans.glyphs");
+    std::fs::write(&path, crate::export::TWO_MASTERS).unwrap();
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({"path": path}));
+    let group = json!({"variable": true, "skipFeatures": true, "conversionError": 0.002, "subroutinize": false});
+    let saved = run(&mut s, "file.saveExportProfile", json!({"name": "VF", "settings": {"folder": "", "outlines": "truetype", "compile": group}}));
+    assert_eq!(saved["profile"]["params"]["compile"], group);
+
+    let by_profile = dir.join("profile");
+    run(&mut s, "file.exportWithProfiles", json!({"profiles": ["VF"], "destination": by_profile, "timestamp": 0}));
+    let direct = dir.join("direct");
+    run(
+        &mut s,
+        "font.compile",
+        json!({
+            "formats": ["ttf", "variable"], "containers": ["plain"], "outlines": {"removeOverlaps": true, "conversionError": 0.002},
+            "autohint": false, "cbdt": false, "skipFeatures": true, "subroutinize": false, "timestamp": 0, "destination": direct,
+        }),
+    );
+    let files = names(&direct);
+    assert!(files.len() > 3, "the static instances and the variable font: {files:?}");
+    assert_eq!(names(&by_profile), files);
+    for file in &files {
+        assert_eq!(std::fs::read(by_profile.join(file)).unwrap(), std::fs::read(direct.join(file)).unwrap(), "{file}");
+    }
+
+    // The group is merged key by key; null removes a key, and an empty group is none.
+    let saved = run(&mut s, "file.saveExportProfile", json!({"name": "VF", "settings": {"compile": {"variable": null, "skipFeatures": null}}}));
+    assert_eq!(saved["profile"]["params"]["compile"], json!({"conversionError": 0.002, "subroutinize": false}));
+    let saved =
+        run(&mut s, "file.saveExportProfile", json!({"name": "VF", "settings": {"compile": {"conversionError": null, "subroutinize": null}}}));
+    assert!(saved["profile"]["params"].get("compile").is_none(), "{saved}");
+
+    // Values from files and agents are checked.
+    for (bad, named) in [
+        (json!({"postFormat": 4}), "postFormat"),
+        (json!({"conversionError": 0}), "conversionError"),
+        (json!({"conversionError": 2.0}), "conversionError"),
+        (json!({"removeGlyphs": "A"}), "removeGlyphs"),
+        (json!({"script": true}), "compile.script"),
+        (json!({"colr": "no"}), "colr"),
+    ] {
+        let e = fails(&mut s, "file.saveExportProfile", json!({"name": "Bad", "settings": {"compile": bad}}));
+        assert!(e.contains(named), "{e}");
+    }
+    let many: Vec<String> = (0..5000).map(|i| format!("g{i}")).collect();
+    let e = fails(&mut s, "file.saveExportProfile", json!({"name": "Bad", "settings": {"compile": {"keepGlyphs": many}}}));
+    assert!(e.contains("4096"), "{e}");
+    let hostile = json!([{"name": "Stored", "params": {"compile": {"postFormat": "three"}}}]);
+    s.settings_mut().set_reserved(Reserved::ExportProfiles, &hostile).unwrap();
+    let listed = run(&mut s, "file.listExportProfiles", json!({}));
+    assert!(profile(&listed, "Stored").is_none());
+    assert_eq!(listed["problems"].as_array().unwrap().len(), 1, "{listed}");
+}
