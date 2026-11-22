@@ -221,3 +221,75 @@ fn autometer_and_audit_switches_reach_the_layers() {
     shell(&mut app, "audit.toggleLiveAudit", json!({"on": true}));
     assert!(app.overlays.audit_runs >= 1);
 }
+
+/// Escape on an existing note's field leaves its text as it was, and a commit with the text unchanged runs nothing.
+#[test]
+fn escape_leaves_an_existing_note_unchanged() {
+    let mut app = edit_app();
+    shell(&mut app, "annotation.setTool", json!({"tool": "text"}));
+    pointer(&mut app, PointerKind::Down, 500.0, 500.0);
+    pointer(&mut app, PointerKind::Up, 500.0, 500.0);
+    let note = app.overlays.note.as_mut().unwrap();
+    note.text = "Kern".into();
+    note.done = Some(true);
+    app.drain();
+    let revision = app.session.active().map(|d| d.revision);
+
+    pointer(&mut app, PointerKind::DoubleClick, 505.0, 495.0);
+    let note = app.overlays.note.as_mut().expect("a double-click opens the note's field");
+    note.text = "Kern this".into();
+    note.done = Some(false);
+    app.drain();
+    assert_eq!(annotations(&app)[0].text.as_deref(), Some("Kern"));
+    assert_eq!(app.session.active().map(|d| d.revision), revision, "Escape changes nothing");
+
+    pointer(&mut app, PointerKind::DoubleClick, 505.0, 495.0);
+    app.overlays.note.as_mut().unwrap().done = Some(true);
+    app.drain();
+    assert_eq!(app.session.active().map(|d| d.revision), revision, "an unchanged commit changes nothing");
+}
+
+/// Finishing a note: a new note undoes its bare add only while the document is still at the add's revision; after
+/// another edit it is deleted or updated by its index instead.
+#[test]
+fn finishing_a_note_plans_its_commands() {
+    use crate::canvas::annotation_editor::{NoteEdit, plan};
+    use fontcraft_engine::model::LayerSide;
+    let note = NoteEdit {
+        glyph: "A".into(),
+        layer: "m01".into(),
+        side: LayerSide::Background,
+        index: 2,
+        text: "Note".into(),
+        original: String::new(),
+        new: true,
+        added_at: Some((1, 7)),
+        position: [10.0, 20.0],
+        width: 200.0,
+        open: false,
+        done: Some(true),
+    };
+    let at_add = Some((1, 7));
+    let address = json!({"glyph": "A", "layer": "m01", "side": "background"});
+    let with = |extra: Value| {
+        let mut p = address.clone();
+        p.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        p
+    };
+    assert_eq!(
+        plan(&note, true, at_add),
+        vec![
+            Msg::run("edit.undo", json!({})),
+            Msg::run("annotation.add", with(json!({"type": "text", "position": [10.0, 20.0], "width": 200.0, "text": "Note"}))),
+        ]
+    );
+    assert_eq!(plan(&note, false, at_add), vec![Msg::run("edit.undo", json!({}))]);
+    let moved = Some((1, 8));
+    assert_eq!(plan(&note, true, moved), vec![Msg::run("annotation.update", with(json!({"annotation": 2, "text": "Note"})))]);
+    assert_eq!(plan(&note, false, moved), vec![Msg::run("annotation.delete", with(json!({"annotations": [2]})))]);
+    let empty = NoteEdit { text: " \n".into(), ..note.clone() };
+    assert_eq!(plan(&empty, true, at_add), vec![Msg::run("edit.undo", json!({}))]);
+    let existing = NoteEdit { new: false, added_at: None, original: "Old".into(), ..note };
+    assert!(plan(&existing, false, at_add).is_empty());
+    assert_eq!(plan(&existing, true, at_add), vec![Msg::run("annotation.update", with(json!({"annotation": 2, "text": "Note"})))]);
+}

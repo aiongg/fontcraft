@@ -124,3 +124,33 @@ fn the_glyph_menu_opened_with_alt_captions_its_swatches_layer_color() {
     assert!(fixture.by_label("Layer Color").is_some());
     assert!(fixture.by_label("Glyph Color").is_none());
 }
+
+/// The Exports item shows a dash when some of the glyphs export and none when all do; a click reports it.
+#[test]
+fn exports_shows_the_mixed_mark() {
+    let dashes = |exports: Mark| {
+        let menu = GlyphMenu { glyphs: vec!["a".into(), "b".into()], screen: [40.0, 40.0], exports, ..GlyphMenu::default() };
+        let answers = Rc::new(RefCell::new(Vec::<Answer>::new()));
+        let seen = Rc::clone(&answers);
+        let mut fixture = Fixture::new(move |ui| {
+            let opener = ui.response();
+            seen.borrow_mut().push(glyph_menu(ui, &opener, &menu));
+        });
+        fixture.settle();
+        let row = fixture.by_label("Exports").expect("the Exports item").rect;
+        let count = fixture
+            .frame_shapes()
+            .iter()
+            .filter(|shape| {
+                matches!(shape, egui::Shape::LineSegment { points: [a, b], .. }
+                    if row.contains(*a) && row.contains(*b) && (a.y - b.y).abs() < f32::EPSILON && (a.y - row.center().y).abs() < 1.0)
+            })
+            .count();
+        let exports = fixture.by_label("Exports").expect("the Exports item");
+        fixture.click(&exports).settle();
+        assert!(answers.borrow().iter().any(|a| a.picked == Some(Pick::Export)), "{:?}", answers.borrow().last());
+        count
+    };
+    assert_eq!(dashes(Mark::Some), 1);
+    assert_eq!(dashes(Mark::All), 0);
+}

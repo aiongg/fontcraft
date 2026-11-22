@@ -2,7 +2,7 @@
 //! glyph that is not selected becomes the selection first; on a selected glyph the menu acts on the whole selection.
 //!
 //! It holds the colour swatches (with Alt held at the click: the colour of the layer shown), the Exports check item
-//! (`glyph.setExport`, no mark when the glyphs differ), the Tags submenu (`fontView.contextMenu.tags`), which ends with
+//! (`glyph.setExport`, a dash when some of the glyphs export), the Tags submenu (`fontView.contextMenu.tags`), which ends with
 //! More Tags… when the font has more tags than [`MAX_MENU_TAGS`], and the Copy Glyph Names submenu, whose text goes to
 //! the system clipboard (`app::clipboard`).
 

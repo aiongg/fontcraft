@@ -149,7 +149,11 @@ events, then `release`. The reply is the `ui.pointer` reply plus `handled` (whet
 took the key), and `command` and `result` (or `error`) when a menu shortcut ran. A shortcut
 whose command has a dialog opens it, as the keyboard does: `result` is then the
 `ui.dialog.inspect` reply. Other shortcuts act on the selection (Font View's selected glyphs, or
-Edit View's edited glyph and selection).
+Edit View's edited glyph and selection). While Font View shows, the tools take no key: the arrows, `Home` and `End`
+(alone or with `Shift`) and `Return`, `Delete` and `Backspace` go to the window as the keyboard
+sends them, so the grid or list that has the keyboard (after a `ui.click` on a cell) moves the
+selection, opens it or asks to remove it; the reply is `{queued, handled: true, fontView: true}`.
+Every other key goes on to the menu shortcuts.
 
 In text mode (the Text tool), `ui.key` and `ui.text` type into the tab's text at the cursor, as
 the keyboard does: characters, `Space`, `Return`, `Backspace`, `Delete` and the arrows (with

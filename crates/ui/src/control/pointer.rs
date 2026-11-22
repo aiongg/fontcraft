@@ -1,9 +1,12 @@
 //! Driving the canvas tools from the control channel: `ui.pointer`, `ui.key`, `ui.tool.select` and `ui.tool.list`.
 //!
 //! The events take the path the canvas's own input takes (`canvas::tools::apply::input`), so a script and the mouse
-//! do the same thing. Each method answers with the tools' state after it.
+//! do the same thing. Each method answers with the tools' state after it. While Font View shows, `ui.key` gives Font
+//! View's keys to the window, where the grid or the list that has the keyboard takes them, and none to the tools.
 
+use craft::keymap::{Key as WindowKey, Mods};
 use craft::ui::runtime::commands::{Binding, CommandRef};
+use egui::ViewportId;
 use fontcraft_geom::Point;
 use fontcraft_tools::{Key, KeyEvent, Modifiers, PointerEvent, PointerKind, TOOLS};
 use serde_json::{Value, json};
@@ -139,6 +142,13 @@ fn key(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
         Some(_) => return Err(format!("{M}: `action` must be tap, press or release")),
     };
     let tool_key = Key::parse(name);
+    // While Font View shows, its own keys go to the window as the keyboard sends them, and no key reaches the edit
+    // view's tools.
+    let font_view = app.font_view_shows();
+    if font_view && let Some(taken) = tool_key.and_then(|k| crate::panels::font_view::keys::takes(k, mods)) {
+        return font_view_key(app, taken, mods, press, release);
+    }
+    let tool_key = tool_key.filter(|_| !font_view);
     let mut errors = Vec::new();
     let mut handled = false;
     let mut command = None;
@@ -180,6 +190,22 @@ fn key(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
         }
     }
     Ok(reply)
+}
+
+/// A key Font View takes (`keys::takes`), queued on the window for the grid or the list that has the keyboard →
+/// `{queued, handled: true, fontView: true}`.
+fn font_view_key(app: &mut FontCraftApp, key: WindowKey, mods: Modifiers, press: bool, release: bool) -> Result<Value, String> {
+    let host = app.control.window.clone().ok_or("ui.key: Font View's keys need the window: the desktop app or a test frame")?;
+    let mut held = Mods::NONE;
+    held.shift = mods.shift;
+    if press {
+        host.inject_key(ViewportId::ROOT, key, held, !release);
+    } else if release {
+        host.inject_let_go(ViewportId::ROOT, key);
+    }
+    let steps = usize::from(press) + usize::from(release);
+    app.control.queued += steps;
+    Ok(json!({"queued": steps, "handled": true, "fontView": true}))
 }
 
 /// `{tool}`: make a pointer tool current → `{tool, previous}`.

@@ -51,14 +51,14 @@ craft::ui::words! {
     }
 }
 
-/// Most groups read from the settings.
+/// Most groups read from or written to the settings.
 pub const MAX_GROUPS: usize = 256;
-/// Most strings read from the settings, over all groups.
+/// Most strings read or written, over all groups.
 pub const MAX_STRINGS: usize = 10_000;
-/// Longest sample string read from the settings, in bytes; longer ones are left out.
+/// Longest sample string, in bytes; longer ones are left out on reading and refused on writing.
 pub const MAX_STRING_BYTES: usize = 4096;
-/// Longest group name kept, in characters.
-const MAX_NAME_CHARS: usize = 128;
+/// Longest group name, in characters.
+pub const MAX_NAME_CHARS: usize = 128;
 /// Rows the list shows before it scrolls: the dialog body scrolls too, so the list must be capped.
 const LIST_ROWS: u16 = 16;
 
@@ -75,7 +75,7 @@ pub struct SampleStrings {
 }
 
 /// One group of sample strings.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Group {
     pub name: String,
     pub strings: Vec<String>,

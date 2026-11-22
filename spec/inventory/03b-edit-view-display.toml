@@ -1638,7 +1638,7 @@ guesses = [
 [[behavior]]
 id = "sampleStrings.storedInSettings"
 area = "edit-text"
-milestone = "M14"
+milestone = "M5"
 summary = "Sample strings are an application-level list edited in Settings > Sample Strings, not part of the font file."
 ref = "Edit View › Entering Text › Sample Strings"
 status = "handbook"
@@ -1928,6 +1928,11 @@ notes = "Built in M3.16 (our geometry): the position is the box's top-left corne
 guesses = [
   "Cmd+Return and a click outside commit the typed text and Escape cancels; watching the reference app type a note would settle the keys.",
   "A new note left empty, or cancelled with Escape, is removed; checking whether the reference app keeps an empty note would settle it.",
+  "A new note is undone and added again with its text when it is committed, so the add and the typing are one undo step; how the reference app records them is not documented.",
+]
+observe = [
+  "Text Annotation tool: click, type two lines with Return between them, press Cmd+Return, then Undo once; note whether the note goes away or only its text.",
+  "Click with the Text Annotation tool and click outside without typing; note whether an empty note stays.",
 ]
 
 [[tool]]

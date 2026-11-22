@@ -2,9 +2,50 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-22: M7.22 and M3.23 merged, built and pushed (X.integ121 to X.integ123): the kerning colours and `appearance.guideOpacity` as live settings the canvas reads, Extra Nodes from `fontcraft-tools` with a count and work cap, the TTFZones and TTFStems rows open their editors on the row's master, dictionary and localized values show refusals, window tests of the bits and PANOSE dialogs; the gate is green with 4,819 tests. UI.51 merged, built and pushed (X.integ119 to X.integ120): PDF pages in placed images, `palette.toggleSection`, `tool.select {tool}` and `tool.list` in the window; the gate is green with 4,811 tests. UI.49 and UI.50 merged, built and pushed (X.integ113 to X.integ117): the egui window is gone and `crates/ui` with `apps/fontcraft` is the only window. Earlier notes follow._
+_Updated: 2026-11-22: M3.22 and M4.19 written on `w-M3.22` (M3.22a, M4.19a, M4.19b), on top of `w-M5.29` and not yet built: text notes typed on the canvas gain an Escape test and a test of the commands a finished note runs; the glyph menu's Exports shows a dash when some glyphs export, with frame tests of it and of the remaining Selection Info fields. M5.29 and M4.18 written on `w-M5.29` (M5.29a, M4.18a, M4.18b), not yet built: the Sample Strings section and Select Sample Text read the groups through one function, with limit and frame tests; Delete and minus in Font View open Remove Glyph's dialog, and `ui.key` gives Font View's keys to the window and none to the edit view's tools while Font View shows. M7.22 and M3.23 merged, built and pushed (X.integ121 to X.integ123): the kerning colours and `appearance.guideOpacity` as live settings the canvas reads, Extra Nodes from `fontcraft-tools` with a count and work cap, the TTFZones and TTFStems rows open their editors on the row's master, dictionary and localized values show refusals, window tests of the bits and PANOSE dialogs; the gate is green with 4,819 tests. UI.51 merged, built and pushed (X.integ119 to X.integ120): PDF pages in placed images, `palette.toggleSection`, `tool.select {tool}` and `tool.list` in the window; the gate is green with 4,811 tests. UI.49 and UI.50 merged, built and pushed (X.integ113 to X.integ117): the egui window is gone and `crates/ui` with `apps/fontcraft` is the only window. Earlier notes follow._
 
 ## State of the tree
+
+- **Where M3.22 and M4.19 stand.** Written on `w-M3.22` (based on `w-M5.29`), not built or tested: the writer ran
+  no cargo command but `cargo fmt`. Both were almost all in the window from the port (UI.5, UI.36b):
+  - M3.22: `canvas/annotation_editor.rs` opens craft's multi-line `TextField` in a popover at a new or
+    double-clicked text note; Return adds a line, Cmd+Return or a click outside commits, Escape cancels. A new note
+    is committed by undoing the bare add and adding it again with its text (one undo step); empty or cancelled, the
+    undo removes it. Once another edit moved the revision, it falls back to `annotation.update` or
+    `annotation.delete`. The branch adds a frame test that Escape and an unchanged commit on an existing note
+    change nothing, a test of `annotation_editor::plan` for every case, the undo guess and two observe steps on
+    `annotationText`.
+  - M4.19: `panels/selection_info.rs` already listed every Glyph Properties field, each edit one setter over the
+    selection, mixed fields as the inspector shows them; the glyph menu already had Exports and More Tags… past
+    `MAX_MENU_TAGS`, and Glyph Info had its frame test. The branch makes Exports show the mixed dash
+    (`panels/context_menu.rs`), with a frame test, a Selection Info frame test of Right Metrics Key, Left Group
+    (mixed), Direction, Production Name and Subcategory, and observe steps and an updated guess on
+    `window.selectionInfo` and `fontView.glyphContextMenu`.
+  - Unconfirmed until built: `craft_ext::ui::menu::entry_rows` taking a one-item `[MarkedEntry<()>]` for Exports;
+    the frame tests' label lookups ("Exports", "Right Metrics Key", "Left Group").
+
+- **Where M5.29 and M4.18 stand.** Written on `w-M5.29`, not built or tested: the writer ran no cargo command but
+  `cargo fmt`. Most of both packages was already in the window from the port: the four `settings.*SampleString*`
+  shell commands with their limits (`shell/settings.rs`), the Sample Strings section body (`dialogs/settings.rs`),
+  Font View's arrows, Shift, Home, End and Return from the craft grid and table (`panels/font_view/keys.rs`), and
+  the plus and minus buttons (`panels/font_view/status.rs`). The branch adds:
+  - The section and the Select Sample Text window read the groups through one function
+    (`dialogs/sample_strings.rs::groups`); the settings module's own copy of the reader and the built-in groups
+    is gone. Tests: the group, name and string limits (`shell/settings.rs`); a frame test that typed lines reach
+    the Select Sample Text list, the buttons post their commands and Remove Group is greyed with no group
+    (`dialogs/settings.rs`). The eleven Sample Strings rows and `sampleStrings.storedInSettings` move from M14 to
+    M5, with guesses and observe steps.
+  - Delete and the minus button open Remove Glyph's dialog on the selection (`keys::remove`) in place of removing
+    at once.
+  - `keys::takes` names the keys Font View keeps (arrows, Home and End with or without Shift; Return, Delete and
+    Backspace). While Font View shows, `ui.key` injects those into the window for the grid or list that has the
+    keyboard and gives no key to the edit view's tools; without a window it refuses them. Tool letters no longer
+    switch tools over the control channel while Font View shows.
+  - Tests: each key in Grid and List View, a row's end, the first and last glyph, Shift extending, Delete, Return,
+    End scrolling the last of 400 glyphs into view (`panels/font_view/tests.rs`); keys change no outline while
+    Font View shows, headless and through the window (`canvas/tools/tests.rs`). Unconfirmed until built: whether
+    a click on Add Group commits the multi-line field first, whether a click on a selected list row's Unicode cell
+    leaves rename alone, and whether the grid keeps the scroll after the fixture's fixed model resets the selection.
 
 - **Where M3.23 stands.** Merged with M7.22, built, gate green with 4,819 tests. Checked headless under Xvfb over
   the control channel: `settings.set` takes `appearance.guideOpacity` 50, refuses 150 and refuses a kerning colour
@@ -122,9 +163,9 @@ _Updated: 2026-11-22: M7.22 and M3.23 merged, built and pushed (X.integ121 to X.
   770 reference options present (`docs/cli-options.md`).
 - Packages built (done of total, counted from commit subjects; the totals include the depth packages that carry a
   new number): M6 21 of 26, M7 21 of 24, M8 27 of 36, M9 30 of 40, M10 35 of 42, M11 20 of 22, M12 77 of 87, M13 63
-  of 83; 294 of 360 in all. Depth packages (`docs/plans/depth.md`): 55 of 167 (wave 1 and 45 writers of waves 2 to
-  11, listed in ROADMAP.md › Where we are); no builder of waves 2 to 13. M3.22, M3.23, M4.18, M4.19, M5.29, M7.22 and
-  M9.32 have editor parts that are not counted yet. The lettered follow-ups (M10.37b, M10.37c,
+  of 83; 294 of 360 in all. Depth packages (`docs/plans/depth.md`): 61 of 167 (wave 1 and 51 writers of waves 2 to
+  11, listed in ROADMAP.md › Where we are); no builder of waves 2 to 13. M9.32 has editor parts that are not
+  counted yet. The lettered follow-ups (M10.37b, M10.37c,
   M13.65b and those of earlier batches) are not counted.
 - **Baselines** (from the fifteenth batch; the sixteenth ran none of them, and a later change that moves one of these numbers needs a reason):
 

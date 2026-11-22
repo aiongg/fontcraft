@@ -380,6 +380,72 @@ mod tests {
     use super::{SettingsModel, SharingModel, body};
     use crate::app::Msg;
 
+    /// Lines typed into the Sample Strings field replace the shown group's strings, and the Select Sample Text window
+    /// then lists them; the buttons post their commands, and Remove Group is greyed with no group.
+    #[test]
+    fn a_sample_strings_edit_reaches_the_select_sample_text_list() {
+        use std::sync::Arc;
+
+        use craft::host::Host;
+        use craft::ui::dialog::DialogHost;
+        use craft::ui::runtime::commands::CommandRef;
+        use egui::{Key, Modifiers};
+        use fontcraft_engine::Session;
+
+        use crate::app::{APP, FontCraftApp};
+        use crate::dialogs::sample_strings::{SampleStringsDialog, run_dialog};
+
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        app.run_now(Msg::Shell(CommandRef::with_params("app.settings", json!({"section": "sampleStrings", "group": 1}))), false).unwrap();
+        let model = SettingsModel::of(&app);
+        assert_eq!(model.group, 1);
+        let posted = Rc::new(RefCell::new(Vec::<Msg>::new()));
+        let seen = Rc::clone(&posted);
+        let mut fixture = Fixture::new(move |ui| {
+            let mut sent = Vec::new();
+            body(ui, &model, &mut String::new(), &mut sent);
+            seen.borrow_mut().extend(sent);
+        });
+        fixture.settle();
+        let field = fixture.by_label("Sample strings, one per line").expect("the strings field");
+        fixture.click(&field).key(Key::A, Modifiers::COMMAND).type_text("H0H");
+        fixture.key(Key::Enter, Modifiers::NONE).key(Key::Enter, Modifiers::NONE).type_text("/zero /one ");
+        // Clicking Add Group takes the focus from the field, which commits the typed lines first.
+        let add = fixture.by_label("Add Group").expect("Add Group");
+        fixture.click(&add).settle();
+        let reset = fixture.by_label("Default").expect("Default");
+        fixture.click(&reset).settle();
+        let shell = |id: &str, params: serde_json::Value| Msg::Shell(CommandRef::with_params(id, params));
+        let edit = shell("settings.setSampleStrings", json!({"group": 1, "strings": ["H0H", "/zero /one "]}));
+        assert_eq!(
+            *posted.borrow(),
+            vec![edit.clone(), shell("settings.addSampleStringGroup", json!({})), shell("settings.resetSampleStrings", json!({}))],
+            "one string per line, the empty line left out"
+        );
+
+        app.run_now(edit, false).unwrap();
+        app.run_now(shell("edit.selectSampleText", json!({})), false).unwrap();
+        let mut host = DialogHost::new();
+        run_dialog(&mut host, &mut app);
+        let listed = host.get::<SampleStringsDialog>().expect("the Select Sample Text window").strings.clone();
+        let figures: Vec<&str> = listed.iter().filter(|(g, _)| g == "Figures").map(|(_, s)| s.as_str()).collect();
+        assert_eq!(figures, vec!["H0H", "/zero /one "]);
+
+        let empty = SettingsModel { section: "sampleStrings".into(), ..Default::default() };
+        let clicked = Rc::new(RefCell::new(Vec::<Msg>::new()));
+        let seen = Rc::clone(&clicked);
+        let mut fixture = Fixture::new(move |ui| {
+            let mut sent = Vec::new();
+            body(ui, &empty, &mut String::new(), &mut sent);
+            seen.borrow_mut().extend(sent);
+        });
+        fixture.settle();
+        let remove = fixture.by_label("Remove Group").expect("Remove Group");
+        fixture.click(&remove).settle();
+        assert!(clicked.borrow().is_empty(), "Remove Group does nothing with no group");
+        assert!(fixture.texts().iter().any(|t| t.text.starts_with("No groups.")), "the empty note shows");
+    }
+
     /// In the Sharing section, Accept answers the waiting device and the switch writes the setting.
     #[test]
     fn sharing_accepts_a_waiting_device_and_switches_the_preview() {

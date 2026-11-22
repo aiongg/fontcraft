@@ -38,3 +38,33 @@ fn each_field_runs_its_command_on_every_glyph() {
         ]
     );
 }
+
+/// The other fields M4.19 lists run their setter once on all three glyphs, a mixed field (Left Group) included.
+#[test]
+fn the_remaining_fields_run_their_setter_on_every_glyph() {
+    let model = Tracked::new(three(false));
+    let posted = Rc::new(RefCell::new(Vec::new()));
+    let seen = Rc::clone(&posted);
+    let mut fixture = Fixture::new(move |ui| {
+        let mut sent = Vec::new();
+        show(ui, Props { model: &model, sent: &mut sent });
+        seen.borrow_mut().extend(sent);
+    });
+    fixture.settle();
+    commit(&mut fixture, "Right Metrics Key", "=o");
+    commit(&mut fixture, "Left Group", "H");
+    commit(&mut fixture, "Direction", "rtl");
+    commit(&mut fixture, "Production Name", "uni0041");
+    commit(&mut fixture, "Subcategory", "Uppercase");
+    let glyphs = json!(["A", "B", "C"]);
+    assert_eq!(
+        *posted.borrow(),
+        vec![
+            Msg::run("spacing.setRightSidebearing", json!({ "glyphs": glyphs, "layer": "m01", "value": "=o" })),
+            Msg::run("kerning.setLeftGroup", json!({ "glyphs": glyphs, "group": "H" })),
+            Msg::run("glyph.setDirection", json!({ "glyphs": glyphs, "direction": "rtl" })),
+            Msg::run("glyph.setProductionName", json!({ "glyphs": glyphs, "productionName": "uni0041" })),
+            Msg::run("glyph.setCategory", json!({ "glyphs": glyphs, "subCategory": "Uppercase" })),
+        ]
+    );
+}
