@@ -22,9 +22,10 @@ milestone = "M3"
 summary = "Runs the most recently used filter again on the current target. The source gives only the shortcut: the label is ours, a menu position is not confirmed, and whether the previous values are reused silently or the dialog reopens, are not stated."
 ref = "Filters › Applying Filters › Filter Menu"
 status = "handbook"
-notes = "Disabled until a filter has run."
+notes = "Disabled until a filter has run. It runs on the current selection: the shell fills the targets as for any filter, so points and segments narrow a filter that takes a node selection (M3.33; test repeat_last_filter_takes_the_current_node_selection)."
 guesses = [
   "The last filter is the last filter.* or filter.apply run in the session journal, and it runs again silently with the same settings on the targets given.",
+  "A node selection is dropped when the repeated filter changes whole layers, so the repeat still runs on the glyph instead of being refused.",
 ]
 
 [[command]]
@@ -95,6 +96,13 @@ milestone = "M3"
 summary = "Run from Edit View while the Text tool is active, a filter processes the glyphs covered by the text selection."
 ref = "Filters › Applying Filters › Filter Menu"
 status = "handbook"
+notes = "M3.33: with the Text tool active and a text selection, a filter fired from a menu or a key, or its dialog, gets the selected glyphs as `glyphs`, each once, on the layer the canvas edits (crates/ui/src/app/mod.rs, with_targets; canvas/text/mod.rs, filter_glyphs). Test a_filter_in_text_mode_changes_the_selected_glyphs."
+guesses = [
+  "A glyph shown twice in the selection is filtered once; the layer is the one the canvas edits, for every selected glyph.",
+]
+observe = [
+  "In text mode select three glyphs of a word and run Round Corners: note which glyphs change and on which master.",
+]
 
 [[behavior]]
 id = "filter.target.editViewCurrentGlyph"
@@ -161,9 +169,10 @@ milestone = "M3"
 summary = "Options dialog of the Extrude filter. Default values of Offset and Angle are not stated in the source; Don't Subtract is off by default."
 ref = "Filters › Built-in Filters › Extrude"
 status = "handbook"
-notes = "The first values are the `default` of each parameter in filter.list."
+notes = "The first values are the `default` of each parameter in filter.list. M3.33: the dialog opens with the values of its last OK in the session, the defaults the first time (crates/ui/src/dialogs/form.rs, DialogState::remember); test filter_dialogs_remember_their_last_ok_and_the_lock_ties_vertical_to_horizontal."
 guesses = [
   "First values: offset 50, angle -45 (down and to the right), Don't Subtract off.",
+  "The values of the last OK are kept for the session and not saved; Cancel keeps the earlier ones.",
 ]
 
 [[behavior]]
@@ -225,9 +234,10 @@ milestone = "M3"
 summary = "Options dialog of the Hatch Outline filter. No default values are stated in the source."
 ref = "Filters › Built-in Filters › Hatch Outline"
 status = "handbook"
-notes = "The first values are the `default` of each parameter in filter.list."
+notes = "The first values are the `default` of each parameter in filter.list. M3.33: the dialog opens with the values of its last OK in the session, the defaults the first time (crates/ui/src/dialogs/form.rs, DialogState::remember); test filter_dialogs_remember_their_last_ok_and_the_lock_ties_vertical_to_horizontal."
 guesses = [
   "First values: origin (0, 0), step width 20, angle 45, Offset Path on with thickness 5.",
+  "The values of the last OK are kept for the session and not saved; Cancel keeps the earlier ones.",
 ]
 
 [[behavior]]
@@ -317,9 +327,14 @@ milestone = "M3"
 summary = "Options dialog of the Offset Curve filter. Default values are not stated in the source."
 ref = "Filters › Built-in Filters › Offset Curve"
 status = "handbook"
-notes = "The first values are the `default` of each parameter in filter.list. The lock button keeps vertical equal to horizontal while it is engaged."
+notes = "The first values are the `default` of each parameter in filter.list. The lock button keeps vertical equal to horizontal while it is engaged. M3.33: the dialog opens with the values of its last OK in the session, the defaults the first time (crates/ui/src/dialogs/form.rs, DialogState::remember); test filter_dialogs_remember_their_last_ok_and_the_lock_ties_vertical_to_horizontal. The lock is a field of its own (`vertical.lock`, Same as Horizontal), closed when the dialog first opens: while closed, Vertical is greyed and holds the Horizontal value, which the run takes; the lock is no parameter of the command."
 guesses = [
   "First values: horizontal 10, vertical empty (the horizontal value), Make Stroke off, Auto Stroke off, position 50 %, Keep Compatible off, cap style flat.",
+  "The values of the last OK are kept for the session and not saved; Cancel keeps the earlier ones.",
+  "The lock sits on a row of its own above Vertical, labelled Same as Horizontal, and starts closed.",
+]
+observe = [
+  "Open Offset Curve, note whether the lock starts closed and Vertical greyed, then open the lock and note what Vertical shows.",
 ]
 
 [[behavior]]
@@ -341,7 +356,7 @@ milestone = "M3"
 summary = "With the lock button engaged the Horizontal value is applied to both axes and the Vertical field is ignored."
 ref = "Filters › Built-in Filters › Offset Curve"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: the lock is the dialog's; in the command and the export string a vertical distance left out is the horizontal one, and the string written by FontCraft always holds both values."
+notes = "Documented, not yet observed. FontCraft: the lock is the dialog's; in the command and the export string a vertical distance left out is the horizontal one, and the string written by FontCraft always holds both values. M3.33: the dialog's lock copies the Horizontal value into Vertical and greys it while closed; tested in filter_dialogs_remember_their_last_ok_and_the_lock_ties_vertical_to_horizontal."
 
 [[behavior]]
 id = "filter.offsetCurve.makeStroke"
@@ -442,10 +457,11 @@ milestone = "M3"
 summary = "Options dialog of the Roughen filter. No default values are stated in the source."
 ref = "Filters › Built-in Filters › Roughen"
 status = "handbook"
-notes = "The first values are the `default` of each parameter in filter.list. The seed is a command parameter only and has no field."
+notes = "The first values are the `default` of each parameter in filter.list. The seed is a command parameter only and has no field. M3.33: the dialog opens with the values of its last OK in the session, the defaults the first time (crates/ui/src/dialogs/form.rs, DialogState::remember); test filter_dialogs_remember_their_last_ok_and_the_lock_ties_vertical_to_horizontal."
 guesses = [
   "First values: segment length 50, horizontal 10, vertical 10, angle 0.",
   "The Angle field is ours: the handbook's export string has an angle value, but its dialog has no such field.",
+  "The values of the last OK are kept for the session and not saved; Cancel keeps the earlier ones.",
 ]
 
 [[behavior]]
@@ -501,9 +517,13 @@ milestone = "M3"
 summary = "Options dialog of the Round Corners filter. Defaults are not stated in the source."
 ref = "Filters › Built-in Filters › Round Corners"
 status = "handbook"
-notes = "The first values are the `default` of each parameter in filter.list."
+notes = "The first values are the `default` of each parameter in filter.list. M3.33: the dialog opens with the values of its last OK in the session, the defaults the first time (crates/ui/src/dialogs/form.rs, DialogState::remember); test filter_dialogs_remember_their_last_ok_and_the_lock_ties_vertical_to_horizontal."
 guesses = [
   "First values: radius 20, visual corrections off.",
+  "The values of the last OK are kept for the session and not saved; Cancel keeps the earlier ones.",
+]
+observe = [
+  "Run Round Corners with a radius of 33, open it again and read the radius field; then quit, relaunch and open it once more.",
 ]
 
 [[behavior]]

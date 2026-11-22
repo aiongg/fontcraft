@@ -105,14 +105,14 @@ fn other(side: LayerSide) -> LayerSide {
 // ── Selection to Background ─────────────────────────────────────────────────────────────────────
 
 /// What a selection copies: shape indices and anchor names. `None` copies everything.
-struct Pick {
+pub(crate) struct Pick {
     shapes: HashSet<usize>,
     anchors: HashSet<String>,
 }
 
 /// Copies the picked shapes and anchors of `from` to the other side, replacing what is there
 /// unless `add`. Returns how many shapes and anchors were copied.
-fn copy_side(layer: &mut Layer, from: LayerSide, pick: Option<&Pick>, add: bool) -> (usize, usize) {
+pub(crate) fn copy_side(layer: &mut Layer, from: LayerSide, pick: Option<&Pick>, add: bool) -> (usize, usize) {
     let had = layer.info.background.is_some();
     let src = layer.parts(from);
     let shapes: Vec<Shape> =

@@ -973,6 +973,15 @@ milestone = "M3"
 summary = "Some filters, Hatch Outline being the named example, keep the untouched original in the background so they can be re-run non-destructively."
 ref = "Edit View › Background"
 status = "handbook"
+notes = "M3.33: Hatch Outline copies each layer it changes to the background first, as Selection to Background with nothing selected does, in the same undo step (crates/engine/src/cmd/filter.rs, BACK_UP_FIRST). Test hatch_outline_keeps_the_original_in_the_background."
+guesses = [
+  "Only Hatch Outline backs up; the handbook names no other filter.",
+  "The copy replaces what the background held, shapes and anchors, as Selection to Background does.",
+  "A re-run hatches the foreground as it is; it does not read the background back.",
+]
+observe = [
+  "Run each filter of the Filter menu on a glyph with an empty background and note which ones leave a copy of the outline in the background.",
+]
 
 # ───────────────────────────── Entering text ─────────────────────────────
 

@@ -198,3 +198,154 @@ fn window_contents_opens_on_the_edited_glyph_and_asks_where_to_save() {
     call(&mut app, "ui.dialog.cancel", json!({}));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn the_otf_tab_reopens_with_the_settings_of_the_last_export() {
+    let dir = temp("kept");
+    let mut app = drawn();
+    export(&mut app, json!({"params": {"destination": dir, "timestamp": 0}}));
+    call(&mut app, "ui.dialog.set", json!({"field": "outlines", "value": "truetype"}));
+    call(&mut app, "ui.dialog.set", json!({"field": "containers", "value": ["woff2"]}));
+    call(&mut app, "ui.dialog.set", json!({"field": "removeOverlap", "value": false}));
+    call(&mut app, "ui.dialog.confirm", json!({}));
+
+    let reopened = export(&mut app, json!({}));
+    assert_eq!(reopened["params"]["outlines"], "truetype");
+    assert_eq!(reopened["params"]["containers"], json!(["woff2"]));
+    assert_eq!(reopened["params"]["removeOverlap"], false);
+    assert_eq!(reopened["params"]["useDestination"], true);
+    assert!(reopened["params"]["destination"].as_str().unwrap().ends_with(dir.file_name().unwrap().to_str().unwrap()), "{reopened}");
+    call(&mut app, "ui.dialog.cancel", json!({}));
+
+    // A cancelled dialog and a failed export keep what the last successful export kept.
+    export(&mut app, json!({}));
+    call(&mut app, "ui.dialog.set", json!({"field": "containers", "value": []}));
+    fails(&mut app, "ui.dialog.confirm", json!({}));
+    call(&mut app, "ui.dialog.cancel", json!({}));
+    assert_eq!(export(&mut app, json!({}))["params"]["containers"], json!(["woff2"]));
+    call(&mut app, "ui.dialog.cancel", json!({}));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn an_unticked_export_destination_asks_for_a_folder() {
+    let (dir, picked) = (temp("ticked"), temp("picked"));
+    let (mut app, chooser) = drawn_with(vec![Picked::Paths(vec![picked.clone()])]);
+    let opened = export(&mut app, json!({"params": {"destination": dir, "timestamp": 0}}));
+    assert_eq!(opened["params"]["useDestination"], true);
+    let unticked = {
+        call(&mut app, "ui.dialog.set", json!({"field": "useDestination", "value": false}));
+        call(&mut app, "ui.dialog.inspect", json!({}))
+    };
+    assert!(unticked["params"].get("destination").is_none(), "{unticked}");
+
+    form::confirm_by_person(&mut app).unwrap();
+    form::poll_chooser(&mut app);
+    assert_eq!(chooser.requests().first().map(|r| r.kind), Some(PickKind::Folder));
+    assert_eq!(call(&mut app, "ui.dialog.inspect", json!({}))["open"], false);
+    assert!(files(&dir).is_empty());
+    assert_eq!(files(&picked).keys().collect::<Vec<_>>(), ["Untitled-Regular.otf"]);
+
+    // The box stays unticked the next time, so the folder is asked again.
+    let reopened = export(&mut app, json!({}));
+    assert_eq!(reopened["params"]["useDestination"], false);
+    assert!(reopened["params"].get("destination").is_none(), "{reopened}");
+    call(&mut app, "ui.dialog.cancel", json!({}));
+    let _ = std::fs::remove_dir_all(&picked);
+}
+
+#[test]
+fn export_all_asks_once_only_without_a_kept_folder() {
+    let (picked, kept) = (temp("all-picked"), temp("all-kept"));
+    let (mut app, chooser) = drawn_with(vec![Picked::Paths(vec![picked.clone()])]);
+
+    // No document has a folder: the menu item asks once, and the export follows the folder chosen.
+    assert!(crate::dialogs::after::fired(&mut app, "file.exportAll", &Value::Null, &serde_json::Map::new()));
+    form::poll_chooser(&mut app);
+    assert_eq!(chooser.requests().len(), 1);
+    assert_eq!(call(&mut app, "ui.dialog.inspect", json!({}))["open"], false);
+    assert_eq!(files(&picked).keys().collect::<Vec<_>>(), ["Untitled-Regular.ttf"]);
+
+    // Once the document has a kept folder, Export All runs without a dialog or a chooser.
+    app.session.execute("file.exportStatic", &json!({"outlines": "cff", "destination": kept, "timestamp": 0})).unwrap();
+    assert!(!crate::dialogs::after::fired(&mut app, "file.exportAll", &Value::Null, &serde_json::Map::new()));
+    assert_eq!(chooser.requests().len(), 1);
+    let _ = std::fs::remove_dir_all(&picked);
+    let _ = std::fs::remove_dir_all(&kept);
+}
+
+#[test]
+fn the_profile_dialog_saves_the_compile_groups_and_reopens_with_them() {
+    let mut app = drawn();
+    form::open_command(&mut app, &json!({"dialog": "dialog.exportProfiles", "params": {"name": "Small"}})).unwrap();
+    call(&mut app, "ui.dialog.set", json!({"field": "postFormat", "value": "3"}));
+    call(&mut app, "ui.dialog.set", json!({"field": "removeGlyphs", "value": "A  B"}));
+    call(&mut app, "ui.dialog.set", json!({"field": "colr", "value": false}));
+    call(&mut app, "ui.dialog.set", json!({"field": "conversionError", "value": "0.002"}));
+    let done = call(&mut app, "ui.dialog.confirm", json!({}));
+    let group = &done["result"]["profile"]["params"]["compile"];
+    assert_eq!(*group, json!({"postFormat": 3, "removeGlyphs": ["A", "B"], "colr": false, "conversionError": 0.002}), "{done}");
+
+    // Reopened on the profile, the fields show its group; a field back at its default removes the key.
+    let reopened = form::open_command(&mut app, &json!({"dialog": "dialog.exportProfiles", "params": {"name": "Small"}})).unwrap();
+    assert_eq!(reopened["params"]["settings"]["compile"]["postFormat"], 3, "{reopened}");
+    call(&mut app, "ui.dialog.set", json!({"field": "colr", "value": true}));
+    let done = call(&mut app, "ui.dialog.confirm", json!({}));
+    assert!(done["result"]["profile"]["params"]["compile"].get("colr").is_none(), "{done}");
+}
+
+/// The window's Export Profiles dialog shows the compile groups under their headings.
+#[test]
+fn the_profile_dialog_shows_the_compile_groups() {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use craft::ui::dialog::DialogHost;
+    use craft::ui::testing::Fixture;
+
+    let app = Rc::new(RefCell::new(drawn()));
+    let host = Rc::new(RefCell::new(DialogHost::new()));
+    form::open_command(&mut app.borrow_mut(), &json!({"dialog": "dialog.exportProfiles", "params": {"name": "Groups"}})).unwrap();
+    let (shown_app, shown_host) = (Rc::clone(&app), Rc::clone(&host));
+    let mut fixture = Fixture::new(move |ui| {
+        let (mut app, mut host) = (shown_app.borrow_mut(), shown_host.borrow_mut());
+        crate::dialogs::run(&mut host, &mut app);
+        host.run(ui);
+    });
+    fixture.settle();
+    for label in ["Size", "Glyphs", "Layout", "Colour", "Outlines", "Output", "Hinting"] {
+        assert!(fixture.by_label(label).is_some(), "the {label} heading");
+    }
+    for label in [
+        "Variable Fonts",
+        "Skip Features",
+        "Production Names",
+        "post Table",
+        "Curve Error",
+        "Subroutines",
+        "Keep Glyphs",
+        "Remove Glyphs",
+        "COLR",
+        "SVG",
+        "sbix",
+    ] {
+        assert!(fixture.by_label(label).is_some(), "the {label} row");
+    }
+}
+
+#[test]
+fn export_fonts_as_offers_the_fonts_and_next_to_each_source() {
+    let mut app = drawn();
+    let opened = form::open_command(&mut app, &json!({"dialog": "dialog.exportFontsAs"})).unwrap();
+    let title = app.session.doc().unwrap().title.clone();
+    assert_eq!(opened["params"]["fonts"], json!([title]));
+    assert!(opened["params"].get("bySource").is_none(), "unticked, the export folder is the destination");
+    call(&mut app, "ui.dialog.set", json!({"field": "bySource", "value": true}));
+    let ticked = call(&mut app, "ui.dialog.inspect", json!({}));
+    assert_eq!(ticked["params"]["bySource"], true);
+    assert!(ticked["params"].get("destination").is_none(), "{ticked}");
+    // The document has no file yet, so the command refuses and the dialog stays open with the reason.
+    let e = fails(&mut app, "ui.dialog.confirm", json!({}));
+    assert!(e.contains("save it first"), "{e}");
+    call(&mut app, "ui.dialog.cancel", json!({}));
+}

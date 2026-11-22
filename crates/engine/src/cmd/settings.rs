@@ -12,7 +12,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Get Setting",
             [],
             None,
-            "{id?: string} one setting's value by id (its default while it is not set), or every setting without an id. Besides the preferences, the ids fontView.filters, fontView.visibleScripts, file.recentDocuments, start.chooserPicks, sampleStrings.groups, audit.userProfiles and sharing.trustedDevices hold data their own commands write (null while empty) → {id, value} | {settings: {id: value}}",
+            "{id?: string} one setting's value by id (its default while it is not set), or every setting without an id. Besides the preferences, the ids fontView.filters, fontView.visibleScripts, file.recentDocuments, start.chooserPicks, sampleStrings.groups, audit.userProfiles, sharing.trustedDevices and export.keptSettings hold data their own commands write (null while empty) → {id, value} | {settings: {id: value}}",
             always,
             get
         ),

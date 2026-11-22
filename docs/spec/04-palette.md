@@ -201,9 +201,19 @@ separate command that does respect the origin setting (see the path editing note
 - A component or image keeps its decomposed placement when the map has no rotation or slant;
   otherwise its placement becomes a matrix.
 - Points and anchors are rounded to the grid after the map; guides and annotations are not.
+- Exact inverses: the engine remembers the last Palette mirror, scale, rotation or slant (its
+  targets, origin, linear map, the layers before it and the document revision after it). When
+  the next one has the same targets and origin, its map undoes the remembered one (the product of
+  the two is the identity up to 1e-9), and the revision has not moved, it puts the remembered
+  layers back instead of mapping the rounded coordinates again. Any other edit, undo included,
+  breaks the link; a drag with the Rotate or Scale tool keeps no memory.
+- CJK glyphs: for a glyph whose script is han, hangul, kana or bopomofo (as stored, else from the
+  glyph data), a metrics origin is the layer centre, and the section shows a Layer Center button
+  in place of the metric heights.
 - Align: the objects are each shape, each addressed on-curve node with its handles, each lone
-  handle and each anchor; without target lists, every shape of the layer. Fewer than two
-  objects change nothing and the result carries a message (question 7).
+  handle, each anchor, each guide (by the point it passes through; its angle stays) and each
+  annotation; without target lists, every shape of the layer. A global guide moves on the
+  master. Fewer than two objects change nothing and the result carries a message (question 7).
 
 **Booleans.**
 
@@ -250,8 +260,9 @@ the command takes every path; in Font View they pass the selected glyphs.
    rotate, scale and slant (only mirroring is described); how exactness of opposite buttons is
    implemented (kept sub-grid coordinates or a remembered pre-state).
    **Answered for M3 (our decision, 2026-10-09):** slant is a shear by the tangent of the angle
-   about the origin. Opposite buttons are exact for mirroring and 90° rotation; other pairs are
-   exact up to grid rounding. The rest of this question stays open.
+   about the origin. The rest of this question stays open.
+   **Built in M3.24 (our decision, 2026-11-22), unconfirmed:** opposite buttons are exact for
+   every pair, through a remembered pre-state (see "How FontCraft applies them").
    **Further choices made when building it (2026-10-10), unconfirmed:** Slant Up moves what lies
    right of the origin up, Slant Down moves it down. The metrics-point origin sits at half the
    advance width for every operation, not only mirroring. Opposite buttons are exact because

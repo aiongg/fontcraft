@@ -3,7 +3,8 @@
 //! `filter.glyphAsImage`, `color.fullColor.imageOnlyEffects`.
 //!
 //! A profile is a named, saved set of the static export's settings: an output subfolder, the
-//! outline format, the containers, overlap removal, autohinting and the `CBDT` bitmap tables. Built-in profiles are fixed
+//! outline format, the containers, overlap removal, autohinting and the `CBDT` bitmap tables, and a `compile`
+//! group of `font.compile` settings ([`COMPILE_KEYS`]). Built-in profiles are fixed
 //! and read-only; the user's own live in the application settings under
 //! [`fontcraft_model::fc_keys::EXPORT_PROFILES`] as `[{name, params}]`. The settings file is
 //! untrusted: every stored profile is checked when it is read, and one that fails is reported and
@@ -13,7 +14,9 @@
 //! code as `file.exportAll`, staging all files first and moving them into place only when every
 //! font was built. All profiles' files move into place as one step that is undone whole when a
 //! move fails, so a failure leaves the folders as they were. A profile's subfolder is a relative path that
-//! never climbs out of the destination, whoever calls.
+//! never climbs out of the destination, whoever calls. A profile with a `compile` group is built by
+//! `font.compile`'s code with the parameters the profile maps to ([`compile_params`]), into the same staged folders,
+//! so it writes what that `font.compile` call writes.
 //!
 //! `glyph.exportArtwork` (and its Filter-menu name `filter.glyphAsImage`) writes one picture per
 //! glyph: SVG, PDF or PNG. Every picture spans the glyph's advance width (or what it draws, where
@@ -68,7 +71,25 @@ const MAX_PDF_IMAGE_BYTES: usize = 256 << 20;
 /// Most entries of a profile's `containers`.
 const MAX_CONTAINERS: usize = 3;
 /// The keys of a profile's `params`.
-const SETTING_KEYS: [&str; 6] = ["folder", "outlines", "containers", "removeOverlap", "autohint", "cbdt"];
+const SETTING_KEYS: [&str; 7] = ["folder", "outlines", "containers", "removeOverlap", "autohint", "cbdt", "compile"];
+/// The keys of a profile's `compile` group: the `font.compile` settings a profile carries besides the dialog's.
+pub const COMPILE_KEYS: [&str; 11] = [
+    "variable",
+    "skipFeatures",
+    "productionNames",
+    "postFormat",
+    "conversionError",
+    "subroutinize",
+    "keepGlyphs",
+    "removeGlyphs",
+    "colr",
+    "svg",
+    "sbix",
+];
+/// Most names in `keepGlyphs` or `removeGlyphs`.
+pub const MAX_GLYPH_REFS: usize = 4096;
+/// Longest glyph name in `keepGlyphs` or `removeGlyphs`, in bytes.
+const MAX_GLYPH_NAME_BYTES: usize = 512;
 
 /// The built-in profiles: name, outline format, containers. Each writes into a subfolder named
 /// after it.
@@ -82,7 +103,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Export Fonts As…",
             ["File"],
             None,
-            "{fonts?: [title or path] (default: the active document), profiles: [name], destination?: folder, bySource?: bool, installTemporarily?: bool, timestamp?: number|\"now\"} export every listed open font through every listed export profile in one run: each profile's fonts go into its output subfolder of the destination, or with bySource: true of the folder that holds each font's source file (give one or the other). Each profile builds the font's exportable instances as file.exportAll does, in the profile's outline format and containers, with its overlap removal, when its cbdt setting is on the CBDT and CBLC bitmap tables from the iColor layers, and when its autohint is on autohinting as file.exportStatic's autohint does; instances between masters are skipped and listed. A designspace without axes is refused when it states a location, or when it has two or more sources and instances to build. Two profiles that would write the same file are refused. A failing export writes nothing. installTemporarily (installing the fonts until the app quits) is not supported yet → {profiles: [{profile, documents: [{title, destination, fonts, skipped}]}], written, warnings}",
+            "{fonts?: [title or path] (default: the active document), profiles: [name], destination?: folder, bySource?: bool, installTemporarily?: bool, timestamp?: number|\"now\"} export every listed open font through every listed export profile in one run: each profile's fonts go into its output subfolder of the destination, or with bySource: true of the folder that holds each font's source file (give one or the other). Each profile builds the font's exportable instances as file.exportAll does, in the profile's outline format and containers, with its overlap removal, when its cbdt setting is on the CBDT and CBLC bitmap tables from the iColor layers, and when its autohint is on autohinting as file.exportStatic's autohint does; instances between masters are skipped and listed. A profile with compile settings is built by font.compile's own code with the parameters they map to, so it writes what that font.compile call writes (its file names and folders included). A designspace without axes is refused when it states a location, or when it has two or more sources and instances to build. Two profiles that would write the same file are refused. A failing export writes nothing. installTemporarily (installing the fonts until the app quits) is not supported yet → {profiles: [{profile, documents: [{title, destination, fonts, skipped}]}], written, warnings}",
             has_doc,
             export_with_profiles
         ).files(const { &[FileParam::write("destination")] }).writes_files(),
@@ -91,7 +112,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Save Export Profile",
             [],
             None,
-            "{name: string, basedOn?: profile name, settings: {folder?: relative folder, outlines?: \"truetype\"|\"cff\", containers?: [\"plain\"|\"woff\"|\"woff2\"], removeOverlap?: bool, autohint?: bool, cbdt?: bool}} create or update one of the user's export profiles, kept in the application settings. The settings start from basedOn's, else from the profile's own when it exists, else from the defaults (truetype, plain, removeOverlap true, autohint false, cbdt false), and `settings` replaces what it names. cbdt: also write CBDT and CBLC bitmap tables from the iColor layers. folder: the output subfolder, `/`-separated, relative and never climbing out with `..`; folder names ending in a space or a dot, and reserved device names (CON, PRN, AUX, NUL, COM1 to COM9, LPT1 to LPT9, with or without an extension), are refused on every system; empty writes into the destination itself; a new profile's folder defaults to its name. Built-in profiles are read-only: their names are refused; at most 256 profiles → {profile: {name, builtIn, params}, created: bool}",
+            "{name: string, basedOn?: profile name, settings: {folder?: relative folder, outlines?: \"truetype\"|\"cff\", containers?: [\"plain\"|\"woff\"|\"woff2\"], removeOverlap?: bool, autohint?: bool, cbdt?: bool, compile?: {variable?: bool, skipFeatures?: bool, productionNames?: bool, postFormat?: 2|3, conversionError?: number, subroutinize?: bool, keepGlyphs?: [name], removeGlyphs?: [name], colr?: bool, svg?: bool, sbix?: bool}}} create or update one of the user's export profiles, kept in the application settings. compile: the font.compile settings the profile carries, merged key by key over the base's (null removes one): variable also builds the variable fonts (font.compile's variable format); skipFeatures, productionNames, postFormat (2 or 3), subroutinize as in font.compile; conversionError is outlines.conversionError (above 0, at most 1 em); keepGlyphs and removeGlyphs (at most 4096 names each) become font.compile's glyphs: the exported glyphs kept, less the removed ones; colr, svg or sbix false leave out the COLR (with CPAL), SVG or sbix table. The settings start from basedOn's, else from the profile's own when it exists, else from the defaults (truetype, plain, removeOverlap true, autohint false, cbdt false), and `settings` replaces what it names. cbdt: also write CBDT and CBLC bitmap tables from the iColor layers. folder: the output subfolder, `/`-separated, relative and never climbing out with `..`; folder names ending in a space or a dot, and reserved device names (CON, PRN, AUX, NUL, COM1 to COM9, LPT1 to LPT9, with or without an extension), are refused on every system; empty writes into the destination itself; a new profile's folder defaults to its name. Built-in profiles are read-only: their names are refused; at most 256 profiles → {profile: {name, builtIn, params}, created: bool}",
             always,
             save_profile
         ),
@@ -109,7 +130,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "List Export Profiles",
             [],
             None,
-            "{} the export profiles: the built-in ones first, then the user's in the order they were made. problems lists stored profiles that cannot be read, which are left out → {profiles: [{name, builtIn, params: {folder, outlines, containers, removeOverlap, autohint, cbdt}}], problems: [text]}",
+            "{} the export profiles: the built-in ones first, then the user's in the order they were made. problems lists stored profiles that cannot be read, which are left out → {profiles: [{name, builtIn, params: {folder, outlines, containers, removeOverlap, autohint, cbdt, compile?}}], problems: [text]}",
             always,
             list_profiles
         ),
@@ -223,6 +244,55 @@ fn check_folder(text: &str) -> std::result::Result<String, String> {
     Ok(segments.join("/"))
 }
 
+/// A profile's `compile` group: `settings` over `base` key by key (null removes a key), every value checked.
+fn merge_compile(base: Option<&Value>, settings: Option<&Value>) -> std::result::Result<Map<String, Value>, String> {
+    let mut out = match base {
+        Some(Value::Object(m)) => m.clone(),
+        _ => Map::new(),
+    };
+    match settings {
+        None => {}
+        Some(Value::Object(m)) => {
+            for (key, value) in m {
+                if value.is_null() {
+                    out.remove(key);
+                } else {
+                    out.insert(key.clone(), value.clone());
+                }
+            }
+        }
+        Some(_) => return Err("`compile` must be an object".into()),
+    }
+    if let Some(key) = out.keys().find(|k| !COMPILE_KEYS.contains(&k.as_str())) {
+        return Err(format!(
+            "`compile.{}` is not a profile setting; the compile settings are {}",
+            key.chars().take(64).collect::<String>(),
+            COMPILE_KEYS.join(", ")
+        ));
+    }
+    for (key, value) in &out {
+        let ok = match key.as_str() {
+            "postFormat" => value.as_i64().is_some_and(|n| n == 2 || n == 3),
+            "conversionError" => value.as_f64().is_some_and(|e| e.is_finite() && e > 0.0 && e <= 1.0),
+            "keepGlyphs" | "removeGlyphs" => value.as_array().is_some_and(|names| {
+                names.len() <= MAX_GLYPH_REFS && names.iter().all(|n| n.as_str().is_some_and(|n| !n.is_empty() && n.len() <= MAX_GLYPH_NAME_BYTES))
+            }),
+            _ => value.is_boolean(),
+        };
+        if !ok {
+            return Err(match key.as_str() {
+                "postFormat" => "`compile.postFormat` is 2 or 3".into(),
+                "conversionError" => "`compile.conversionError` is a number above 0 and at most 1 (em)".into(),
+                "keepGlyphs" | "removeGlyphs" => {
+                    format!("`compile.{key}` is a list of at most {MAX_GLYPH_REFS} glyph names of at most {MAX_GLYPH_NAME_BYTES} bytes")
+                }
+                _ => format!("`compile.{key}` must be true or false"),
+            });
+        }
+    }
+    Ok(out)
+}
+
 /// `settings` over `base`, every key checked; `folder` falls back to `default_folder`.
 fn merge_settings(base: &Map<String, Value>, settings: &Map<String, Value>, default_folder: &str) -> std::result::Result<Map<String, Value>, String> {
     if let Some(key) = settings.keys().find(|k| !SETTING_KEYS.contains(&k.as_str())) {
@@ -265,12 +335,20 @@ fn merge_settings(base: &Map<String, Value>, settings: &Map<String, Value>, defa
         Some(Value::Bool(b)) => Ok(*b),
         Some(_) => Err(format!("`{key}` must be true or false")),
     };
-    let params = json!({
+    let mut params = json!({
         "folder": folder, "outlines": outlines, "containers": containers,
         "removeOverlap": flag("removeOverlap", true)?, "autohint": flag("autohint", false)?,
         "cbdt": flag("cbdt", false)?,
-    });
-    Ok(params.as_object().cloned().unwrap_or_default())
+    })
+    .as_object()
+    .cloned()
+    .unwrap_or_default();
+    // A profile without compile settings has no `compile` group, as the built-in ones.
+    let compile = merge_compile(base.get("compile"), settings.get("compile"))?;
+    if !compile.is_empty() {
+        params.insert("compile".into(), Value::Object(compile));
+    }
+    Ok(params)
 }
 
 /// The user's stored profiles that can be read, and a line for each that cannot.
@@ -395,6 +473,8 @@ struct Plan {
     remove_overlap: bool,
     cbdt: bool,
     autohint: bool,
+    /// The `compile` group; a profile with one is built by `font.compile`'s own code ([`compile_params`]).
+    compile: Option<Map<String, Value>>,
 }
 
 fn plan(p: &Params, profile: &Profile) -> Result<Plan> {
@@ -412,7 +492,79 @@ fn plan(p: &Params, profile: &Profile) -> Result<Plan> {
         remove_overlap: pp.bool_or("removeOverlap", true)?,
         cbdt: pp.bool_or("cbdt", false)?,
         autohint: pp.bool_or("autohint", false)?,
+        compile: profile.params.get("compile").and_then(Value::as_object).filter(|m| !m.is_empty()).cloned(),
     })
+}
+
+/// The `font.compile` parameters that build `font` as the profile `plan` asks, into `dest`: the profile's outline
+/// format, containers, overlap removal, autohinting and `CBDT`, and its `compile` group. Keep and Remove Glyphs
+/// become `glyphs` (the exported glyphs kept, less the removed ones); `colr`, `svg` and `sbix` false leave those
+/// tables out (`COLR` with its `CPAL`).
+fn compile_params(plan: &Plan, group: &Map<String, Value>, font: &Font, timestamp: i64, dest: &Path) -> Value {
+    let flag = |key: &str| group.get(key).and_then(Value::as_bool);
+    let mut formats = vec![json!(if plan.flavour == Flavour::Cff { "otf" } else { "ttf" })];
+    if flag("variable") == Some(true) {
+        formats.push(json!("variable"));
+    }
+    let mut outlines = Map::new();
+    outlines.insert("removeOverlaps".into(), json!(plan.remove_overlap));
+    if let Some(e) = group.get("conversionError") {
+        outlines.insert("conversionError".into(), e.clone());
+    }
+    let containers: Vec<&str> = plan.containers.iter().map(|c| c.name()).collect();
+    let mut out = json!({
+        "formats": formats, "containers": containers, "outlines": outlines, "autohint": plan.autohint, "cbdt": plan.cbdt,
+        "timestamp": timestamp, "destination": dest.to_string_lossy(),
+    });
+    let Value::Object(m) = &mut out else { return out };
+    for key in ["skipFeatures", "productionNames", "postFormat", "subroutinize"] {
+        if let Some(v) = group.get(key) {
+            m.insert(key.into(), v.clone());
+        }
+    }
+    let names =
+        |key: &str| -> Option<HashSet<&str>> { group.get(key).and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).collect()) };
+    let (keep, remove) = (names("keepGlyphs"), names("removeGlyphs"));
+    if keep.is_some() || remove.is_some() {
+        let glyphs: Vec<&str> = font
+            .glyphs
+            .iter()
+            .filter(|g| g.export)
+            .map(|g| g.name.as_str())
+            .filter(|n| keep.as_ref().is_none_or(|k| k.contains(n)) && !remove.as_ref().is_some_and(|r| r.contains(n)))
+            .collect();
+        m.insert("glyphs".into(), json!(glyphs));
+    }
+    let mut exclude: Vec<&str> = Vec::new();
+    if flag("colr") == Some(false) {
+        exclude.extend(["COLR", "CPAL"]);
+    }
+    if flag("svg") == Some(false) {
+        exclude.push("SVG ");
+    }
+    if flag("sbix") == Some(false) {
+        exclude.push("sbix");
+    }
+    if !exclude.is_empty() {
+        m.insert("excludeTables".into(), json!(exclude));
+    }
+    out
+}
+
+/// The items of a list, none for anything else.
+fn items(v: &Value) -> impl Iterator<Item = &Value> {
+    v.as_array().into_iter().flatten()
+}
+
+/// Runs `f` with document `i` active, then makes the document active before it active again.
+fn with_active<T>(s: &mut Session, i: usize, f: impl FnOnce(&mut Session) -> Result<T>) -> Result<T> {
+    let before = s.active().and_then(|a| s.documents().iter().position(|d| std::ptr::eq(d, a)));
+    s.set_active(i)?;
+    let out = f(s);
+    if let Some(before) = before {
+        s.set_active(before)?;
+    }
+    out
 }
 
 /// The documents `fonts` names (titles or paths), else the active one, as indices.
@@ -512,10 +664,12 @@ fn export_with_profiles(s: &mut Session, v: &Value) -> Result<Value> {
     let mut sinks: Vec<Sink> = Vec::new();
     let mut written: Vec<(PathBuf, String)> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
-    let mut results: Vec<Value> = Vec::with_capacity(plans.len());
+    let mut per_plan: Vec<Vec<Value>> = vec![Vec::new(); plans.len()];
     let mut skipped_all: Vec<Value> = Vec::new();
     let mut file_count = 0usize;
-    for plan in &plans {
+    // Profiles with a `compile` group, built after the others by `font.compile`'s code: (plan, folder, documents).
+    let mut through_compile: Vec<(usize, PathBuf, Vec<usize>)> = Vec::new();
+    for (pi, plan) in plans.iter().enumerate() {
         let folder = plan.profile.params.get("folder").and_then(Value::as_str).unwrap_or_default();
         let hinting = fontcraft_compile::HintingOptions { autohint: plan.autohint, strip: false };
         let options = Options { timestamp, remove_overlap: plan.remove_overlap, cbdt: plan.cbdt, hinting, ..Default::default() };
@@ -529,6 +683,10 @@ fn export_with_profiles(s: &mut Session, v: &Value) -> Result<Value> {
                 .filter_map(|(k, i)| docs.get(i).and_then(|d| d.path.as_deref()).map(|path| (below(&source_folder(path), folder), vec![(k, i)])))
                 .collect(),
         };
+        if plan.compile.is_some() {
+            through_compile.extend(groups.into_iter().map(|(dest, members)| (pi, dest, members.into_iter().map(|(_, i)| i).collect())));
+            continue;
+        }
         let mut documents = Vec::new();
         for (dest_path, members) in groups {
             let req = Request {
@@ -568,8 +726,44 @@ fn export_with_profiles(s: &mut Session, v: &Value) -> Result<Value> {
             }
             sinks.push(sink);
         }
-        results.push(json!({ "profile": plan.profile.name, "documents": documents }));
+        if let Some(list) = per_plan.get_mut(pi) {
+            *list = documents;
+        }
     }
+    for (pi, dest_path, members) in through_compile {
+        let (Some(plan), Some(group)) = (plans.get(pi), plans.get(pi).and_then(|plan| plan.compile.as_ref())) else { continue };
+        let mut sink = Sink::new(&Dest::Folder(dest_path.clone()), false, s.export_outside())?;
+        for i in members {
+            let doc = s.documents().get(i).ok_or(EngineError::NoDocument)?;
+            let (title, font) = (doc.title.clone(), doc.font.clone());
+            let params = compile_params(plan, group, &font, timestamp, &dest_path);
+            let result = with_active(s, i, |s| compile::compile_into(s, &params, Some(&mut sink)))
+                .map_err(|e| p.bad(format!("profile `{}`, `{title}`: {e}", plan.profile.name)))?;
+            let fonts = result.get("fonts").cloned().unwrap_or(Value::Null);
+            let skipped = result.get("skipped").cloned().unwrap_or(Value::Null);
+            for path in
+                items(&fonts).flat_map(|f| items(f.get("files").unwrap_or(&Value::Null))).filter_map(|f| f.get("path").and_then(Value::as_str))
+            {
+                let key = path.to_lowercase();
+                if let Some((_, other)) = written.iter().find(|(w, _)| w.to_string_lossy().to_lowercase() == key) {
+                    return Err(p.bad(format!("profiles `{other}` and `{}` both write {path}: give them different folders", plan.profile.name)));
+                }
+                written.push((PathBuf::from(path), plan.profile.name.clone()));
+                file_count += 1;
+            }
+            warnings.extend(items(result.get("warnings").unwrap_or(&Value::Null)).filter_map(Value::as_str).map(str::to_string));
+            skipped_all.extend(items(&skipped).cloned());
+            if let Some(list) = per_plan.get_mut(pi) {
+                list.push(json!({
+                    "title": title, "destination": dest_path.to_string_lossy(),
+                    "fonts": fonts, "skipped": skipped,
+                }));
+            }
+        }
+        sinks.push(sink);
+    }
+    let results: Vec<Value> =
+        plans.iter().zip(per_plan).map(|(plan, documents)| json!({ "profile": plan.profile.name, "documents": documents })).collect();
     if file_count == 0 {
         return Err(compile::nothing_built(&Report { skipped: skipped_all, ..Default::default() }));
     }

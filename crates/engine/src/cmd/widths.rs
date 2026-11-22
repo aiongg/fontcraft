@@ -33,13 +33,24 @@ const CORNER_PREFIX: &str = "_corner.";
 /// else the one `data` gives its name and code points; a glyph not in the font yet is looked up
 /// by name alone.
 pub(crate) fn new_layer_width(font: &Font, data: Option<&GlyphData>, glyph: &str, master: &str) -> f64 {
+    width_for(font, script_of(font, data, glyph).as_deref(), glyph, master)
+}
+
+/// The script of `glyph` in lower case: the one it stores, else the one `data` gives its name
+/// and code points; a glyph not in the font yet is looked up by name alone.
+fn script_of(font: &Font, data: Option<&GlyphData>, glyph: &str) -> Option<String> {
     let script = match (font.glyph(glyph), data) {
         (Some(g), _) if g.info.script.is_some() => g.info.script.clone(),
         (Some(g), Some(data)) => glyph_props(g, data, false).script.value,
         (None, Some(data)) => data_props(glyph, &[], data, false).script.value,
         (_, None) => None,
     };
-    width_for(font, script.map(|s| s.to_lowercase()).as_deref(), glyph, master)
+    script.map(|s| s.to_lowercase())
+}
+
+/// Whether `glyph` belongs to one of the [`CJK_SCRIPTS`], by [`script_of`].
+pub(crate) fn is_cjk(font: &Font, data: Option<&GlyphData>, glyph: &str) -> bool {
+    script_of(font, data, glyph).is_some_and(|s| CJK_SCRIPTS.contains(&s.as_str()))
 }
 
 /// An empty layer for every master of `font`, for a new glyph `name` with `unicodes`, each as

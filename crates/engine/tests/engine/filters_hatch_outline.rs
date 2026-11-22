@@ -74,6 +74,25 @@ fn hatch_outline_gives_open_lines_or_closed_strokes_cut_to_the_outline() {
     assert_eq!(shapes(&mut s, "B").len(), 1);
 }
 
+/// `background.usedByFilters`: Hatch Outline copies the outline to the background first, in the
+/// same undo step; Round Corners leaves the background alone (M3.33).
+#[test]
+fn hatch_outline_keeps_the_original_in_the_background() {
+    let mut s = fixture();
+    let original = shapes(&mut s, "O");
+    let before = font(&s);
+    run(&mut s, "filter.hatchOutline", json!({"glyph": "O", "stepWidth": 40}));
+    assert_ne!(shapes(&mut s, "O"), original);
+    let background = run(&mut s, "layer.inspect", json!({"glyph": "O", "side": "background"}))["shapes"].clone();
+    assert_eq!(background, json!(original), "the background holds the outline from before");
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(font(&s), before, "one undo step takes back the hatch and the copy");
+
+    run(&mut s, "filter.roundCorners", json!({"glyph": "B", "radius": 10}));
+    let background = run(&mut s, "layer.inspect", json!({"glyph": "B", "side": "background"}))["shapes"].clone();
+    assert!(background.as_array().is_none_or(Vec::is_empty), "{background}");
+}
+
 #[test]
 fn the_export_string_and_the_parameters_give_the_same_font() {
     let closed = [

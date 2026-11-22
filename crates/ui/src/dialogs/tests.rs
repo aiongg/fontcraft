@@ -195,6 +195,42 @@ fn a_fired_filter_opens_its_dialog() {
     assert!(!super::after::fired(&mut app, "spacing.setWidth", &Value::Null, &serde_json::Map::new()), "a command without a dialog runs");
 }
 
+/// A filter dialog opens with the values of its last OK in the session (M3.33). Offset Curve's lock, closed at first,
+/// greys Vertical and gives it the Horizontal value, which is what the run takes.
+#[test]
+fn filter_dialogs_remember_their_last_ok_and_the_lock_ties_vertical_to_horizontal() {
+    let mut app = square_app();
+    let open = |app: &mut FontCraftApp| super::form::open_command(app, &json!({"dialog": "dialog.filterOffsetCurve"})).unwrap();
+    let field =
+        |v: &Value, id: &str| v["fields"].as_array().unwrap().iter().find(|f| f["id"] == id).cloned().unwrap_or_else(|| panic!("no {id}: {v}"));
+
+    let opened = open(&mut app);
+    assert_eq!(field(&opened, "vertical.lock")["value"], true, "the lock starts closed");
+    assert_eq!(field(&opened, "vertical")["enabled"], false, "a closed lock greys Vertical");
+    assert_eq!(field(&opened, "vertical")["value"], field(&opened, "horizontal")["value"]);
+    call(&mut app, "ui.dialog.set", json!({"field": "horizontal", "value": 15}));
+    let shown = call(&mut app, "ui.dialog.inspect", json!({}));
+    assert_eq!(shown["params"]["vertical"], 15.0, "the run takes the horizontal value");
+    assert!(shown["params"].get("vertical.lock").is_none(), "the lock is no parameter: {}", shown["params"]);
+    call(&mut app, "ui.dialog.confirm", json!({}));
+
+    let reopened = open(&mut app);
+    assert_eq!(field(&reopened, "horizontal")["value"], 15.0, "the dialog opens with its last OK's values");
+    call(&mut app, "ui.dialog.click", json!({"id": "vertical.lock"}));
+    call(&mut app, "ui.dialog.set", json!({"field": "vertical", "value": 4}));
+    let shown = call(&mut app, "ui.dialog.inspect", json!({}));
+    assert_eq!(field(&shown, "vertical")["enabled"], true, "an open lock lets Vertical take its own value");
+    assert_eq!((shown["params"]["horizontal"].clone(), shown["params"]["vertical"].clone()), (json!(15.0), json!(4.0)));
+    super::form::cancel(&mut app).unwrap();
+
+    let again = open(&mut app);
+    assert_eq!(field(&again, "vertical.lock")["value"], true, "Cancel keeps the values of the last OK");
+    assert_eq!(field(&again, "horizontal")["value"], 15.0);
+    super::form::cancel(&mut app).unwrap();
+    let round = open_round_corners(&mut app);
+    assert_eq!(round["fields"][0]["value"], 20.0, "another filter's dialog keeps its own defaults");
+}
+
 /// The person's dialog: the window shows the app's dialog, a value typed into a row previews, and OK keeps it as one
 /// undo step and closes the window's dialog.
 #[test]

@@ -557,8 +557,20 @@ impl FontCraftApp {
 
     /// `command` with its targets filled: from Font View's selection while Font View is in front with glyphs
     /// selected, else from the canvas selection.
+    /// In text mode a filter takes the glyphs of the text selection, on the layer the canvas edits.
     pub(crate) fn with_targets(&mut self, command: CommandRef) -> CommandRef {
-        if self.font_view_targets() { self.with_font_view_targets(command) } else { crate::canvas::tools::targets::with_targets(self, command) }
+        if self.font_view_targets() {
+            return self.with_font_view_targets(command);
+        }
+        let text_glyphs = crate::canvas::text::filter_glyphs(&self.view, &command);
+        let targeted = crate::canvas::tools::targets::with_targets(self, command);
+        let Some(glyphs) = text_glyphs else { return targeted };
+        let mut m = Map::new();
+        if let Some(layer) = targeted.params.get("layer") {
+            m.insert("layer".into(), layer.clone());
+        }
+        m.insert("glyphs".into(), json!(glyphs));
+        CommandRef::with_params(targeted.id, Value::Object(m))
     }
 
     /// Whether the person chose what a fired command acts on: glyphs selected in Font View while it is in front, or a

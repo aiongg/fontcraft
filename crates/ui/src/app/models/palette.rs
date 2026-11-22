@@ -167,6 +167,9 @@ pub struct TransformModel {
     /// The selected corner components as `corners`, when there are any: the mirror buttons flip them in place
     /// (`corner.mirrorViaPalette`) and take no origin.
     pub corners: Option<Targets>,
+    /// The edited glyph is of a CJK script: the layer-centre control stands in for the metric heights, and the engine
+    /// puts a metrics origin at the layer's centre (`transform.originCjkLayerCenter`).
+    pub cjk: bool,
 }
 
 /// The Fit Curve section.
@@ -616,6 +619,7 @@ fn transform(cx: &ProjectCx<'_>, edit: Option<&Edit>) -> TransformModel {
         targets: targets.map(Targets::of),
         boolean,
         corners: edit.and_then(|e| e.targets("transform.mirrorHorizontal")).filter(|t| t.contains_key("corners")).map(Targets::of),
+        cjk: edit.is_some_and(|e| fontcraft_engine::cmd::transform::layer_center_origin(&*cx.session, &e.glyph)),
     }
 }
 
