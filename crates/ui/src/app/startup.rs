@@ -281,9 +281,13 @@ mod window_tests {
             ("dialog.kerningGroupsEditor", json!({}), PanelId::KerningGroupsEditor),
             ("window.shapeOrder", json!({"glyph": "A"}), PanelId::ShapeOrder),
             ("audit.showPanel", json!({"visible": true}), PanelId::FontAudit),
+            ("bitmap.setStrikes", json!({"add": [{"ppem": 12}]}), PanelId::BitmapEditor),
         ];
         for (command, params, panel) in windows {
             t.ok("engine.execute", json!({"command": command, "params": params}));
+            if panel == PanelId::BitmapEditor {
+                t.ok("engine.execute", json!({"command": "window.bitmapEditor", "params": {"glyph": "A"}}));
+            }
             t.frames(2);
             let layout = &t.app.view.workspace.layout;
             let window = layout.floating.iter().find(|w| w.contains(&panel)).expect("the panel floats");

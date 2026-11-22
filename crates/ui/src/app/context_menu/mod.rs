@@ -724,7 +724,7 @@ fn point_ready(app: &FontCraftApp, at: Option<&(Scene<'_>, &Selection)>, id: &st
             if points.len() < 2 {
                 return Err("select two points first".into());
             }
-            if points.len() % 2 != 0 {
+            if !points.len().is_multiple_of(2) {
                 return Err(format!("{} points are selected: Stem pairs them, so select an even number first", points.len()));
             }
             for pair in points.chunks(2) {

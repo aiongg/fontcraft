@@ -26,7 +26,7 @@ use crate::app::{Msg, ViewMsg};
 use crate::canvas::tokens::Tokens;
 use crate::panels::attributes::srgba;
 use crate::panels::font_view::cells::strike_texture;
-use crate::shell::bitmap_editor::{BitmapCanvas, PixelFrame, SET, WINDOW};
+use crate::shell::bitmap_editor::{BitmapCanvas, PixelFrame, SET};
 
 /// Pixels of room around the glyph's box and line band.
 const PAD: i32 = 2;
