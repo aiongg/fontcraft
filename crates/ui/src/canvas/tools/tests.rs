@@ -364,7 +364,8 @@ fn corner_names(app: &FontCraftApp) -> Vec<String> {
 fn corners_are_selected_by_click_and_deleted_like_the_command() {
     let mut app = corner_app();
     assert_eq!(corner_names(&app).len(), 2);
-    click(&mut app, corner_point(&app, 0), json!([]));
+    let first = corner_point(&app, 0);
+    click(&mut app, first, json!([]));
     assert_eq!(selection(&app), json!({"hints": [0]}));
     let second = corner_point(&app, 1);
     click(&mut app, second, json!(["shift"]));
@@ -390,7 +391,8 @@ fn corners_are_selected_by_click_and_deleted_like_the_command() {
 #[test]
 fn a_copied_corner_pastes_onto_selected_nodes_and_mirrors_in_place() {
     let mut app = corner_app();
-    click(&mut app, corner_point(&app, 0), json!([]));
+    let first = corner_point(&app, 0);
+    click(&mut app, first, json!([]));
     assert_eq!(selection(&app), json!({"hints": [0]}));
     let r = call(&mut app, "ui.key", json!({"key": "c", "cmd": true}));
     assert_eq!(r["command"], "edit.copy", "{r}");

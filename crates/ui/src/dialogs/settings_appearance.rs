@@ -16,7 +16,7 @@ use craft::ui::contract::{Bind, Entry, Props as _, Show as _, ShowContainer as _
 use craft::ui::display::{Shade, Text};
 use craft::ui::form::Field;
 use craft::ui::layout_components::Row;
-use craft::ui::runtime::env::{Env, Label, WordSet as _};
+use craft::ui::runtime::env::{Env, Label};
 use craft::ui::style::TypeRole;
 use egui::Ui;
 use fontcraft_engine::settings::COLOR_PREFIX;
@@ -117,7 +117,7 @@ impl AppearanceModel {
             handle_size: settings.get(HANDLE_SIZE).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_else(|| "regular".into()),
             colors: ITEMS
                 .iter()
-                .map(|(item, _)| ColorRow { item: *item, light: color(color_id(item, false)), dark: color(color_id(item, true)) })
+                .map(|(item, _)| ColorRow { item, light: color(color_id(item, false)), dark: color(color_id(item, true)) })
                 .collect(),
             canvas_dark: app.models.appearance.edit_view_dark(),
         }
