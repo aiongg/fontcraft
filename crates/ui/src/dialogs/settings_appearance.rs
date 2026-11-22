@@ -115,10 +115,7 @@ impl AppearanceModel {
             font_view_light: on(FONT_VIEW_LIGHT),
             edit_view_light: on(EDIT_VIEW_LIGHT),
             handle_size: settings.get(HANDLE_SIZE).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_else(|| "regular".into()),
-            colors: ITEMS
-                .iter()
-                .map(|(item, _)| ColorRow { item, light: color(color_id(item, false)), dark: color(color_id(item, true)) })
-                .collect(),
+            colors: ITEMS.iter().map(|(item, _)| ColorRow { item, light: color(color_id(item, false)), dark: color(color_id(item, true)) }).collect(),
             canvas_dark: app.models.appearance.edit_view_dark(),
         }
     }
