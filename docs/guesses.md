@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**3219 guesses on 1665 rows (678 of them live commands).**
+**3240 guesses on 1670 rows (678 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -159,11 +159,24 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `anchors.contextSyntax` (behavior) | M8 | handbook | – | A context naming an unknown glyph or class leaves that anchor's context out with a warning, where ufo2ft's feature compile fails; an export from the running app with such a context would settle it. |
 | `snapping.toNodesAndHandles` (behavior) | M3 | handbook | – | The snap distance is 4 screen points, with the priority nodes, handles, guides, metric lines (03a question 28). |
 | `snapping.toNodesAndHandles` (behavior) | M3 | handbook | – | Ctrl suspends snapping as well as magnetic guides. |
+| `snapping.toNodesAndHandles` (behavior) | M3 | handbook | – | A component node shows as a marker while a dragged point is within four snap distances of it, the nearest 64 at most. |
+| `snapping.toNodesAndHandles` (behavior) | M3 | handbook | – | The markers are small faint dots that appear at once, without a timed fade. |
+| `snapping.toNodesAndHandles` (behavior) | M3 | handbook | – | Only the on-curve points of a component get markers; its off-curve points are snap targets without one. |
 | `guides.knobAndSelection` (behavior) | M3 | handbook | – | A drag on the guide away from its knob turns it about the knob, the pressed side following the pointer (03a question 27). |
 | `guides.knobAndSelection` (behavior) | M3 | handbook | – | A double-click on the guide away from its knob opens dialog.guideProperties, our addition. |
+| `guides.infoBoxFields` (behavior) | M3 | handbook | – | The field order: position, angle with its lock, sidebearing reference, measurement, name. |
+| `guides.infoBoxFields` (behavior) | M3 | handbook | – | The three-way sidebearing reference is a pop-up with the three sidebearing choices. |
+| `guides.infoBoxFields` (behavior) | M3 | handbook | – | The position and name fields are labelled Guide X, Guide Y and Guide Name, apart from the selection's X and Y. |
 | `guides.angleLock` (behavior) | M3 | handbook | – | A drag on an angle-locked guide away from its knob moves the guide, as a knob drag does (03a question 27). |
 | `guides.sidebearingReference` (behavior) | M3 | handbook | – | Left keeps the guide's x, right moves it with the width, and both keeps its fraction of the width (03a question 27). |
+| `guides.sidebearingReference` (behavior) | M3 | handbook | – | The guide's x is stored as an absolute position, and the command that changes the width moves it in the same undo step. |
+| `guides.sidebearingReference` (behavior) | M3 | handbook | – | A left sidebearing change moves every local guide with the outline, whatever its reference; the reference applies to the rest of a width change. |
+| `guides.sidebearingReference` (behavior) | M3 | handbook | – | A both-referenced guide in a glyph of width zero moves by half the change. |
+| `guides.sidebearingReference` (behavior) | M3 | handbook | – | Locked guides follow the width too: the lock guards against editing the guide, not against its layer's metrics. |
+| `guides.sidebearingReference` (behavior) | M3 | handbook | – | Scaling the units per em keeps every reference without moving guides further, since positions and widths scale together. |
 | `guides.globalScopeFilter` (behavior) | M4 | handbook | – | A filter that does not read as a predicate leaves the guide shown in every glyph. Settled by opening a file whose guide filter the reference cannot read. |
+| `guides.globalScopeFilter` (behavior) | M4 | handbook | – | A stored filter opens as one Custom rule holding its text, since a predicate does not always read back as rules. |
+| `guides.globalScopeFilter` (behavior) | M4 | handbook | – | The starter rule (every glyph name) writes an empty filter, so the guide shows in every glyph. |
 | `window.start` (panel) | M4 | handbook | – | Each glyph set's checkbox shows its glyph count after its name. Settled by observing the chooser. |
 | `window.start` (panel) | M4 | handbook | – | Without earlier picks, Latin is included with its default sets. Settled by observing the chooser on a fresh install. |
 | `window.start` (panel) | M4 | handbook | – | A script switched on takes its default sets (its Core set) checked; the checkboxes of a script that is not included are greyed out. Settled by observing the chooser. |
@@ -177,6 +190,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `dialog.shapeOrder` (panel) | M3 | handbook | – | Rows read `<index>: Path (<n> nodes)`, `<index>: Component <name>` or `<index>: Image`; what the reference's rows show and which end is the top are not observed (03a open question 24). |
 | `palette.anchorContext` (panel) | M8 | handbook | – | The field is multi-line, since a context may hold several lines, commits when it loses the focus, and Escape restores the stored text; the running app would show its size and when it commits. |
 | `dialog.guideProperties` (panel) | M3 | inferred | – | The dialog is our own form over guide.setProperties; the reference edits a guide in the Info box. |
+| `dialog.guideScope` (panel) | M4 | inferred | – | The reference shows the rules in a window of their own; ours is a dialog with a Predicate line under the rules. |
 | `start.showAtLaunch` (setting) | M4 | handbook | – | On by default, since the Start Window is described as appearing at launch. Settled by observing a fresh install. |
 | `draw` (tool) | M3 | handbook | – | A click on a segment places the new node on the segment and leaves the clicked path alone (03a question 3). |
 | `draw` (tool) | M3 | handbook | – | Shift+click on a segment inserts at an extremum or inflection even while drawing. |
@@ -1377,6 +1391,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `dialog.virtualMaster` (panel) | M9 | handbook | – | An axis the stored value leaves out starts at the first master's coordinate; adding a Virtual Master in the reference app would show its starting values. |
 | `popover.alternateLayer` (panel) | M9 | handbook | – | The editor is a dialog in the middle of the window with a heading per axis over its min and max fields, not a popover attached to the row; settle by choosing Alternate on a layer in the reference app. |
 | `popover.alternateLayer` (panel) | M9 | handbook | – | Return in a field takes the typed value and a second Return confirms; settle by typing a bound and pressing Return once in the reference app. |
+| `infoBox.higherOrderInterpolation` (panel) | M13 | handbook | – | The part shows for one selected node in the Info box, since there is no HOI tool on the canvas to select a knob with. |
+| `infoBox.higherOrderInterpolation` (panel) | M13 | handbook | – | One span is shown: the first of the node's curves with a layer above it, else the first axis with one; there is no axis pop-up. |
+| `infoBox.higherOrderInterpolation` (panel) | M13 | handbook | – | The knobs are edited as X and Y fields in glyph coordinates, labelled Point, Lower Handle, Upper Handle and Center. |
+| `infoBox.higherOrderInterpolation` (panel) | M13 | handbook | – | The rotation controls show only for a rotation; the knob fields only for a curve with knobs. |
 | `dialog.axisLocation` (panel) | M9 | handbook | – | An axis the stored value leaves out starts at the master's or instance's internal coordinate; opening an empty Axis Location in the reference app would show its starting values. |
 | `dialog.axisMappings` (panel) | M9 | handbook | – | The graph puts internal coordinates across and external ones up, so dragging a point up or down changes its external value; seeing the dialog would settle the orientation. |
 | `dialog.axisMappings` (panel) | M9 | handbook | – | A point dragged in the graph lands on a whole number; dragging a point in the reference app would show whether it keeps fractions. |
@@ -2081,6 +2099,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `customParameters.unknownKept` (behavior) | M7 | inferred | – | Unknown parameters are shown and kept, not hidden or dropped; opening a file with an unknown parameter in the reference app settles it. |
 | `Add Class` (parameter) | M8 | handbook | – | A leading @ on the class name is dropped, and the white space after the semicolon is not part of the code (glyphsLib's split); exporting with the parameter in the reference app settles it. |
 | `Add Prefix` (parameter) | M8 | handbook | – | A prefix name may hold spaces, as prefix names in the Features tab are free text; adding `Language Systems; languagesystem DFLT dflt;` in the reference app settles it. |
+| `ascender` (parameter) | M3 | handbook | – | The glyph's script is the one stored on the glyph; the script the glyph data gives a glyph without one is not used for these parameters. |
+| `ascender` (parameter) | M3 | handbook | – | The replaced line keeps the master's overshoot, so its alignment zone moves with it. |
 | `blueShift` (parameter) | M10 | handbook | – | Negative and fractional values are refused, as the handbook gives an integer; typing -1 in the reference app settles it. |
 | `CJK Grid` (parameter) | M3 | handbook | – | A grid has 1 to 100 rows or columns; the handbook gives no range. |
 | `CJK Guide` (parameter) | M3 | handbook | – | An inset of 50 percent or more, which leaves no square, is refused; the handbook gives no range. |
@@ -2165,6 +2185,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `ROS` (parameter) | M12 | handbook | – | Any well-formed Registry-Ordering-Supplement is accepted, not only the six public ones the handbook lists; choosing a value in the reference app shows whether it offers a menu or a text field. |
 | `SBIX to SVG` (parameter) | M11 | handbook | – | The value is taken as a whole number from 0 to 65535; the handbook does not say what the number means. |
 | `Scale to UPM` (parameter) | M7 | handbook | – | The instance's value wins over the master's and the font's; a value that is not a whole number from 16 to 16384 is skipped with a warning, and a scaling that cannot be done refuses the export; a Scale to UPM on a master and another on its instance in the reference app settle the first part. |
+| `shoulderHeight` (parameter) | M3 | handbook | – | The shoulder height shows beside the x-height line, not in its place, and the tools do not snap to it. |
 | `styleMapStyleNames` (parameter) | M7 | handbook | – | The value must be regular, italic, bold or bold italic in any case, as the UFO key it comes from; another value is ignored with a warning; the reference app settles it. |
 | `TTFAutohint binary path` (parameter) | M10 | handbook | – | A failing external autohinter keeps the built-in autohinter's font with a warning instead of refusing the export; the reference app with a binary path that does not exist would show what it does. |
 | `TTFAutohint binary path` (parameter) | M10 | handbook | – | The parameter only selects the program the user trusted in the settings, and the options are limited to ttfautohint's option flags; this departs from the reference app, which runs whatever the parameter names, because a document from elsewhere could otherwise run any program with any arguments. |

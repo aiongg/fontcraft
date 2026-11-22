@@ -32,23 +32,23 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1555 rows to check: 2718 guesses and 670 observe steps.**
+**1560 rows to check: 2739 guesses and 679 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **556** |
-| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 129 |
+| **Built milestones (M0 to M6)** | all | **560** |
+| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 131 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 33 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
 | Built milestones (M0 to M6) | Filters | 37 |
 | Built milestones (M0 to M6) | Spacing and metrics keys | 23 |
 | Built milestones (M0 to M6) | Kerning and the Kerning window | 42 |
 | Built milestones (M0 to M6) | Font View | 114 |
-| Built milestones (M0 to M6) | Font Info and features | 20 |
+| Built milestones (M0 to M6) | Font Info and features | 22 |
 | Built milestones (M0 to M6) | Files: open, import, export | 51 |
 | Built milestones (M0 to M6) | Settings and the window | 18 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **999** |
+| **Later milestones (after M6)** | all | **1000** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 90 |
 | Later milestones (after M6) | Edit View: text mode and preview | 28 |
 | Later milestones (after M6) | Components and anchors | 43 |
@@ -57,7 +57,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Kerning and the Kerning window | 16 |
 | Later milestones (after M6) | Font View | 22 |
 | Later milestones (after M6) | Font Info and features | 310 |
-| Later milestones (after M6) | Interpolation | 90 |
+| Later milestones (after M6) | Interpolation | 91 |
 | Later milestones (after M6) | Hinting | 115 |
 | Later milestones (after M6) | Colour fonts | 74 |
 | Later milestones (after M6) | Files: open, import, export | 72 |
@@ -65,9 +65,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
-## Built milestones (M0 to M6) (556)
+## Built milestones (M0 to M6) (560)
 
-### Edit View: drawing, guides, layers and the Palette (129)
+### Edit View: drawing, guides, layers and the Palette (131)
 
 - [ ] `dialog.fieldKeys` (behavior, M3, inferred): In a dialog's number field, Return takes the typed value, Escape drops…
   - Guess: Dialog number fields follow the Info box's editing and arrow-key rules (infoBox.fieldEditing, infoBox.arrowKeyStepping); the handbook documents them for the Info box only.
@@ -151,13 +151,29 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `snapping.toNodesAndHandles` (behavior, M3, handbook): Any dragged node or other object snaps to the nodes and handles…
   - Guess: The snap distance is 4 screen points, with the priority nodes, handles, guides, metric lines (03a question 28).
   - Guess: Ctrl suspends snapping as well as magnetic guides.
+  - Guess: A component node shows as a marker while a dragged point is within four snap distances of it, the nearest 64 at most.
+  - Guess: The markers are small faint dots that appear at once, without a timed fade.
+  - Guess: Only the on-curve points of a component get markers; its off-curve points are snap targets without one.
+  - Observe: Drag a node slowly towards a component's corner in Edit View: note how far away the component's node markers appear, whether they fade in over time or by distance, and whether handles get markers too.
 - [ ] `guides.knobAndSelection` (behavior, M3, handbook): A guide is selected by clicking anywhere on it and shows a…
   - Guess: A drag on the guide away from its knob turns it about the knob, the pressed side following the pointer (03a question 27).
   - Guess: A double-click on the guide away from its knob opens dialog.guideProperties, our addition.
+- [ ] `guides.infoBoxFields` (behavior, M3, handbook): For a selected guide the Info box offers its position, its angle…
+  - Guess: The field order: position, angle with its lock, sidebearing reference, measurement, name.
+  - Guess: The three-way sidebearing reference is a pop-up with the three sidebearing choices.
+  - Guess: The position and name fields are labelled Guide X, Guide Y and Guide Name, apart from the selection's X and Y.
+  - Observe: Select a guide and note the order and the kind of control of each Info box field, the sidebearing reference in particular.
 - [ ] `guides.angleLock` (behavior, M3, handbook): Closing the lock next to a guide's angle in the Info box…
   - Guess: A drag on an angle-locked guide away from its knob moves the guide, as a knob drag does (03a question 27).
 - [ ] `guides.sidebearingReference` (behavior, M3, handbook): A guide's horizontal position is measured from the left sidebearing by default
   - Guess: Left keeps the guide's x, right moves it with the width, and both keeps its fraction of the width (03a question 27).
+  - Guess: The guide's x is stored as an absolute position, and the command that changes the width moves it in the same undo step.
+  - Guess: A left sidebearing change moves every local guide with the outline, whatever its reference; the reference applies to the rest of a width change.
+  - Guess: A both-referenced guide in a glyph of width zero moves by half the change.
+  - Guess: Locked guides follow the width too: the lock guards against editing the guide, not against its layer's metrics.
+  - Guess: Scaling the units per em keeps every reference without moving guides further, since positions and widths scale together.
+  - Observe: Change the width of a glyph with a right-referenced local guide and with a both-referenced one: note where each guide goes, and whether one undo puts the width and the guides back.
+  - Observe: Do the same with a right-referenced global guide: note whether it is drawn at a distance from the right edge of each glyph.
 - [ ] `view.showNextTab` (M3, handbook, live): Show Next Tab
   - Guess: After the last tab comes Font View, and before Font View the last tab.
 - [ ] `view.closeTab` (M3, handbook, live): Close Tab
@@ -412,8 +428,13 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: Drag a layer within its master: note how the drop position is shown.
 - [ ] `guides.globalScopeFilter` (behavior, M4, handbook): A global guide appears on all glyphs by default
   - Guess: A filter that does not read as a predicate leaves the guide shown in every glyph. Settled by opening a file whose guide filter the reference cannot read.
+  - Guess: A stored filter opens as one Custom rule holding its text, since a predicate does not always read back as rules.
+  - Guess: The starter rule (every glyph name) writes an empty filter, so the guide shows in every glyph.
+  - Observe: Give a global guide rules in the reference app, save, and read its filter in the file; then open the rules again and note whether they come back as rows or as one Custom rule.
 - [ ] `view.editSelectedGlyphs` (M4, handbook, live): Edit Selected Glyphs
   - Guess: An open tab that holds exactly these glyphs is shown instead of a new tab.
+- [ ] `dialog.guideScope` (panel, M4, inferred): Guide Scope
+  - Guess: The reference shows the rules in a window of their own; ours is a dialog with a Predicate line under the rules.
 - [ ] `infoBox.showsColorLabels` (behavior, M4, handbook): The Info box shows the glyph colour label on its left half…
   - Guess: The split square sits at the left of the Info box and is drawn only when the glyph or the active layer has a colour label; the Info box itself shows only while something is selected. Settled by observation.
 - [ ] `editView.contextMenu` (panel, M4, handbook): Edit View canvas context menu
@@ -1433,7 +1454,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The shortcut is Cmd+Alt+Shift+D, Decompose with Option added as for the other Option variants; the Glyph menu of the reference app with Option held settles it.
   - Guess: Only master layers are decomposed; intermediate and alternate layers keep their components. A composite with a brace layer in the reference app settles it.
 
-### Font Info and features (20)
+### Font Info and features (22)
 
 - [ ] `codePageRanges` (parameter, M2, handbook): List of code pages whose bits are set in OS/2.ulCodePageRange1 and ulCodePageRange2
   - Guess: Any other number is refused; the reference app's code page dialog shows which values it stores.
@@ -1456,10 +1477,17 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In font A (m7-one), set vendorID to `ABCDE` in Font Info: note whether the value is refused, kept, or kept with a warning, and where the message shows.
 - [ ] `Webfont Formats` (parameter, M2, handbook): List drawn from TTF, EOT, WOFF and WOFF2; the instance carrying it…
   - Guess: A format matches in any case and is stored as the handbook spells it (`woff2` becomes `WOFF2`); a lowercase entry in the reference app settles it.
+- [ ] `ascender` (parameter, M3, handbook): Replaces the ascender for one script: the value is the lowercase script…
+  - Guess: The glyph's script is the one stored on the glyph; the script the glyph data gives a glyph without one is not used for these parameters.
+  - Guess: The replaced line keeps the master's overshoot, so its alignment zone moves with it.
+  - Observe: In a font with the master parameter `ascender = greek: 705`, open a Greek glyph in Edit View: note whether one ascender line shows at 705 or a second line beside the master's, and where its zone sits.
+  - Observe: Do the same for a Greek glyph whose script is not set on the glyph (only the glyph data gives it): note whether the line moves.
 - [ ] `CJK Grid` (parameter, M3, handbook): Integer giving both the number of rows and of columns of a…
   - Guess: A grid has 1 to 100 rows or columns; the handbook gives no range.
 - [ ] `CJK Guide` (parameter, M3, handbook): For CJK glyphs, shows one more guide, a square marking the virtual…
   - Guess: An inset of 50 percent or more, which leaves no square, is refused; the handbook gives no range.
+- [ ] `shoulderHeight` (parameter, M3, handbook): Integer height shown as a metric line instead of the x-height in…
+  - Guess: The shoulder height shows beside the x-height line, not in its place, and the tools do not snap to it.
 - [ ] `glyph.updateGlyphInfo` (M4, handbook, live): Update Glyph Info
   - Guess: Stored overrides of category, subcategory, script, production name, case and direction are dropped, so those properties follow the database again; the sort name, tags, colour labels, note and export flag stay. Settled by observing a glyph with a custom category before and after the command (05 question 5).
   - Guess: With Use Custom Naming on, names are kept and only the other properties are updated. Settled by observation.
@@ -1733,7 +1761,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (999)
+## Later milestones (after M6) (1000)
 
 ### Edit View: drawing, guides, layers and the Palette (90)
 
@@ -3545,7 +3573,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `proof-pdf` (format, M14, inferred): PDF proof sheet
   - Open (our design, not confirmed): Vector PDF of an Edit View text, a glyph overview or a waterfall, drawn straight from the source outlines of the current master or instance so no font has to be installed. Scale follows the font's units-per-point setting; nodes, guides and annotations are included only when asked for.
 
-### Interpolation (90)
+### Interpolation (91)
 
 - [ ] `instance.manualInterpolation` (parameter, M9, docs): Whether the instance uses hand-entered master factors instead of factors computed from…
   - Guess: With manual interpolation on, the instance is the stored factors applied to the master layers; intermediate layers get no weight, alternate layers still switch by the instance's location, and the factors also weight metrics, kerning and parameters; settle with an instance using manual factors and a brace glyph in the reference app.
@@ -3817,6 +3845,13 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Every open font starts ticked; the secondary reference's dialog would settle its defaults.
 - [ ] `hoi.timingGraph` (behavior, M13, handbook): The timing graph plots progress against axis position for the selected curve:…
   - Guess: Progress is the fraction of the curve's length travelled; settle by comparing the graph of a Handles curve with zero amplitudes and of a Point curve in the reference app.
+  - Observe: Draw an intermediate point curve, note its timing graph, convert it to handles and compare the two graphs, to see how the graph is computed.
+- [ ] `infoBox.higherOrderInterpolation` (panel, M13, handbook): HOI Info box
+  - Guess: The part shows for one selected node in the Info box, since there is no HOI tool on the canvas to select a knob with.
+  - Guess: One span is shown: the first of the node's curves with a layer above it, else the first axis with one; there is no axis pop-up.
+  - Guess: The knobs are edited as X and Y fields in glyph coordinates, labelled Point, Lower Handle, Upper Handle and Center.
+  - Guess: The rotation controls show only for a rotation; the knob fields only for a curve with knobs.
+  - Observe: Select an HOI knob with the reference app's tool and note which fields the Info box shows for each interpolation type, and their order.
 - [ ] `font.interpolateFonts` (M13, docs, live): Interpolate Fonts…
   - Guess: Fonts that differ anywhere are refused with the first difference, rather than leaving out the glyphs that do not match; the secondary reference's handling of a partly compatible pair would settle it.
   - Guess: The new font keeps only the master layer of each glyph, and its family name, Font Info, features and other data are the first font's; the secondary reference's result on two fonts with different names and extra layers would settle it.

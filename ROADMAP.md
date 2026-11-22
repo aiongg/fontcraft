@@ -16,7 +16,7 @@ _Last updated: 2026-11-20 (this batch: 47 writer packages from depth waves 2 to 
 | Feature surface against the references (weighted, by behaviour, self-graded) | **~38%** |
 | Commands that exist (not: that behave like the reference) | **1003 of 1057** (`docs/parity.md`) |
 | Packages built, M6 to M13 | **295 of 360** (M6 21 of 26, M7 22 of 24, M8 27 of 36, M9 30 of 40, M10 35 of 42, M11 20 of 22, M12 77 of 87, M13 63 of 83; the totals include the depth packages of `docs/plans/depth.md` that carry a new number; counted from commit subjects, M8.7b with M8.7; M9.8b is a follow-up of M9.8 and not counted; nor are the follow-ups M8.20b, M8.20c, M8.23b, M10.19b, M10.21b, M11.5b, M11.5c, M11.7b, M11.13b, M11.14b, M11.17b to M11.17e, M12.7b to M12.7f, M12.10b, M12.13b, M12.18b, M12.18c, M12.19b to M12.19d, M12.20b, M12.21b, M12.22b to M12.22e, M12.23b, M12.23c, M12.24b, M12.24c, M12.25b to M12.25e, M12.30b to M12.30d, M12.40b to M12.40d, M12.41b, M12.64b, M13.15b, M13.15c, M13.23b, M13.55b to M13.55f, M10.37b, M10.37c and M13.65b) |
-| Depth packages (`docs/plans/depth.md`) | **73 of 167** built: wave 1 (M1.8, M3.19, M3.21, M3.40, M4.17, M7.21, M9.27, M13.78, M14.1, M14.3) and 59 writer packages of waves 2 to 11 (wave 2: M12.67, M13.80, M9.29, M12.36, M7.22, M3.23, M5.29, M4.18, M3.22; wave 3: M6.21, M12.66, M12.69, M4.19; wave 4: M2.8, M9.30, M5.20; wave 5: M2.12, M2.13, M8.28, M8.29, M7.23, M5.22, M12.68; wave 6: M3.29; wave 7: M9.34, M9.36, M10.36, M10.40, M12.70, M12.73; wave 8: all nine; wave 9: M13.66, M13.68, M12.77, M12.79, M13.21b; wave 10: M1.9, M3.36, M8.35, M12.80; wave 11: M1.11, M8.32, M12.75; M14.2, M14.6, M6.20, M3.20, M3.24, M3.33, M3.39, M13.62, M4.21, M4.24, M13.81, M14.5). Part of M14.4 is built and not counted. No builder of waves 2 to 13 is built. M9.32 and M3.41 are written on `w-M9.32`, and M3.43 and M3.42 on `w-M3.43`, not yet built and not counted; M6.25 (written down, no code) and X.pdf3 (built on no platform yet) are not counted either |
+| Depth packages (`docs/plans/depth.md`) | **77 of 167** built: wave 1 (M1.8, M3.19, M3.21, M3.40, M4.17, M7.21, M9.27, M13.78, M14.1, M14.3) and 63 writer packages of waves 2 to 11 (wave 2: M12.67, M13.80, M9.29, M12.36, M7.22, M3.23, M5.29, M4.18, M3.22; wave 3: M6.21, M12.66, M12.69, M4.19; wave 4: M2.8, M9.30, M5.20; wave 5: M2.12, M2.13, M8.28, M8.29, M7.23, M5.22, M12.68; wave 6: M3.29; wave 7: M9.34, M9.36, M10.36, M10.40, M12.70, M12.73; wave 8: all nine; wave 9: M13.66, M13.68, M12.77, M12.79, M13.21b; wave 10: M1.9, M3.36, M8.35, M12.80; wave 11: M1.11, M8.32, M12.75; M14.2, M14.6, M6.20, M3.20, M3.24, M3.33, M3.39, M13.62, M4.21, M4.24, M13.81, M14.5, M9.32, M3.41, M3.43, M3.42). Part of M14.4 is built and not counted. No builder of waves 2 to 13 is built. M6.25 (written down, no code) and X.pdf3 (built on no platform yet) are not counted either |
 | Observed against the running reference | **62 rows**: 57 compiled-output rows checked against fontc, fontmake and makeotf, and 5 editor rows confirmed by public tutorial videos of the previous major version. The reference app itself has not been run |
 
 ## Honest assessment (2026-10-12)
@@ -1141,9 +1141,8 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
    M8.26, M8.30;
    wave 4 M8.27; wave 5 M13.41; wave 6 M14.4 (the About text: graphics backend and the licences list),
    M5.30, M8.31, M13.42; wave 7 M10.34; wave 9 M13.64, M13.69, M13.74, M13.76; wave 10 M13.70, M13.23c,
-   M12.84; wave 11 M14.11, M10.41, M4.20, M3.26; waves 12 and 13. M4.21, M4.24, M13.81, M14.5 and the M14.4
-   alternates are built. M9.32 and M3.41 are written on `w-M9.32`, and M3.43 and M3.42 on `w-M3.43`, not yet
-   built. No builder of waves 2 to 13 is built:
+   M12.84; wave 11 M14.11, M10.41, M4.20, M3.26; waves 12 and 13. M4.21, M4.24, M13.81, M14.5, the M14.4
+   alternates, M9.32, M3.41, M3.43 and M3.42 are built. No builder of waves 2 to 13 is built:
    the builder queue starts again at M8.25. The close builders (M6.19, M7.20, M8.24, M9.26, M10.32, M11.20, M12.65,
    M13.61) come last.
 5. **The measures that missed** are depth packages: M10.21c (the TrueType autohinter's x-height rows, 92.9%
@@ -1843,7 +1842,7 @@ on, so the engine track, where oracles prove correctness, goes first.
   M14.4 leftovers in part: Reopen Last Closed Tab as Close Tab's Option alternate, Expand Outline for All Masters as
   Expand Outline's alternate in the context menu, `alternate` and `alternateOf` in `ui.menu.list`; Delete in All
   Masters stays a key, since Delete has no menu row; the About text is not done.
-- **Written, not yet built:** M9.32 the Info box's Interpolation Curve part (for one selected node of a font with an
+- **Built:** M9.32 the Info box's Interpolation Curve part (for one selected node of a font with an
   axis and two masters: the Interpolation Type pop-up, the knob coordinates, Center Rotation in Bounds and the
   Rotation Direction pop-up, each running its `hoi.*` command; a linear node's timing graph is the diagonal). M3.41
   the Info box's guide part (X, Y, angle with its lock, Measured From, Measurement and Name over
