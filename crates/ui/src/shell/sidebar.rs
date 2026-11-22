@@ -59,7 +59,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Info for Selection",
         menu: &["Edit"],
         shortcut: Some("Cmd+Alt+I"),
-        params: "{open?: bool (default true)} show the Selection Info panel on the selected glyphs (without Font View: the shown glyph); false hides it",
+        params: "{open?: bool (default true)} show the Selection Info panel on the selected glyphs (without Font View: the shown glyph); false hides it. In Edit View with one global guide selected alone, open the guide's scope rules instead",
     },
 ];
 
@@ -104,6 +104,10 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
         }
         "edit.infoForSelection" => {
             let open = flag("open")?.unwrap_or(true);
+            if open && let Some(given) = global_guide_scope(app) {
+                let spec = crate::dialogs::find(crate::dialogs::guide_scope::DIALOG).ok_or("the guide scope dialog is missing")?;
+                return crate::dialogs::form::open(app, &spec, &given).map(|_| ());
+            }
             let shown = app.view.workspace.layout.panel_state(&PanelId::SelectionInfo) != PanelState::Hidden;
             if open != shown {
                 dock::toggle(&mut app.view.workspace, PanelId::SelectionInfo);
@@ -112,6 +116,27 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
         }
         other => Err(format!("no sidebar command `{other}`")),
     }
+}
+
+/// With Edit View showing and one global guide selected alone on the canvas: the guide's address and its stored
+/// filter, which the guide scope dialog opens with (`guides.globalScopeFilter`).
+fn global_guide_scope(app: &FontCraftApp) -> Option<Map<String, Value>> {
+    if app.view.tabs.font_view_shows() {
+        return None;
+    }
+    let selection = &app.tools.selection;
+    let mut guides = selection.guides.iter();
+    let (&r, None) = (guides.next()?, guides.next()) else { return None };
+    if r.scope != fontcraft_tools::selection::GuideScope::Global || !selection.points.is_empty() || !selection.shapes.is_empty() {
+        return None;
+    }
+    let font = app.session.font().ok()?;
+    let scene = crate::canvas::tools::scene(font, &app.view, app.tools.focus.as_ref())?;
+    let g = fontcraft_tools::guide_drag::guide(&scene, r)?;
+    let mut given = scene.target();
+    given.insert("guide".into(), json!({"scope": r.scope.as_str(), "index": r.index}));
+    given.insert("filter".into(), json!(g.filter.clone().unwrap_or_default()));
+    Some(given)
 }
 
 fn select_entries(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {

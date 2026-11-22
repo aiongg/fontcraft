@@ -2749,6 +2749,21 @@ guesses = [
   "The dialog is our own form over guide.setProperties; the reference edits a guide in the Info box.",
 ]
 
+[[panel]]
+id = "dialog.guideScope"
+label = "Guide Scope"
+location = "dialog"
+controls = ["Rules: the smart filter rule tree", "Predicate line (read only)", "OK / Cancel"]
+area = "guides-metrics"
+milestone = "M4"
+summary = "The rules of a global guide, built like a smart filter's: the guide shows only in the glyphs that match them. Info for Selection opens it on a global guide selected alone in Edit View."
+ref = "Edit View › Local & Global Guides"
+status = "inferred"
+notes = "Written in M3.41, not yet built (crates/ui/src/dialogs/guide_scope.rs). It runs nothing until OK, which runs `guide.setProperties {filter}` once with the compiled predicate. `dialog.open {dialog: dialog.guideScope, params: {glyph, layer, guide, filter?}}` opens it from an agent."
+guesses = [
+  "The reference shows the rules in a window of their own; ours is a dialog with a Predicate line under the rules.",
+]
+
 [[command]]
 id = "guide.remove"
 label = "Remove"
@@ -2807,6 +2822,15 @@ milestone = "M3"
 summary = "For a selected guide the Info box offers its position, its angle with a lock toggle, a three-way sidebearing reference control, a measurement toggle and a Name field."
 ref = "Edit View › Local & Global Guides"
 status = "handbook"
+notes = "Written in M3.41 (crates/ui/src/panels/info_box_guide.rs, model `app::models::guide_box`): a Guide (or Global Guide) part of the Info box for one selected guide, with Guide X, Guide Y, Angle and the Lock Angle toggle, the Measured From pop-up (Left, Right or Both Sidebearings), the Measurement toggle and Guide Name. Each edit runs `guide.setProperties` with its one property as one undo step; a locked guide or a locked angle makes the command refuse with its message. Documented, not yet observed."
+guesses = [
+  "The field order: position, angle with its lock, sidebearing reference, measurement, name.",
+  "The three-way sidebearing reference is a pop-up with the three sidebearing choices.",
+  "The position and name fields are labelled Guide X, Guide Y and Guide Name, apart from the selection's X and Y.",
+]
+observe = [
+  "Select a guide and note the order and the kind of control of each Info box field, the sidebearing reference in particular.",
+]
 
 [[behavior]]
 id = "guides.angleLock"
@@ -2815,7 +2839,7 @@ milestone = "M3"
 summary = "Closing the lock next to a guide's angle in the Info box freezes the angle, so dragging the guide can no longer rotate it until the lock is opened again."
 ref = "Edit View › Local & Global Guides"
 status = "handbook"
-notes = "Built in M3.9: a double-click on its knob does not turn it. Documented but not yet observed."
+notes = "Built in M3.9: a double-click on its knob does not turn it. The Info box's Lock Angle toggle beside the angle runs `guide.setProperties {angleLocked}` (M3.41, written, not yet built). Documented but not yet observed."
 guesses = [
   "A drag on an angle-locked guide away from its knob moves the guide, as a knob drag does (03a question 27).",
 ]
@@ -2838,6 +2862,7 @@ milestone = "M3"
 summary = "The measurement toggle in the Info box turns a selected guide into a measurement guide; what a measurement guide displays is covered with the measuring features."
 ref = "Edit View › Local & Global Guides"
 status = "handbook"
+notes = "The Info box's Measurement toggle runs `guide.setProperties {measurement}` (M3.41, written, not yet built)."
 
 [[behavior]]
 id = "guides.names"
@@ -2855,9 +2880,14 @@ milestone = "M4"
 summary = "A global guide appears on all glyphs by default. Running Edit › Info for Selection (Cmd+Alt+I) on a selected global guide opens rules, built like Smart Filter rules, that limit the guide to the glyphs matching them."
 ref = "Edit View › Local & Global Guides"
 status = "handbook"
-notes = "The evaluation is fontcraft_glyphquery::guide_in_scope. Edit View draws a global guide only in the glyphs its `filter` (a glyph predicate, as files store it; guide.setProperties sets it) matches, read against the edited layer's master. A guide left out is not hit by clicks, snapped to or reached by Select Next either. Editing the rules through Info for Selection is not built yet."
+notes = "The evaluation is fontcraft_glyphquery::guide_in_scope. Edit View draws a global guide only in the glyphs its `filter` (a glyph predicate, as files store it; guide.setProperties sets it) matches, read against the edited layer's master. A guide left out is not hit by clicks, snapped to or reached by Select Next either. Written in M3.41, not yet built: Info for Selection on one global guide selected alone in Edit View opens dialog.guideScope (crates/ui/src/dialogs/guide_scope.rs), the smart filter rule tree over the guide; OK compiles the rules (`RuleTree::compile`), writes the predicate with `Expr`'s `Display` and runs `guide.setProperties {filter}`. Rules that do not compile set nothing, and the dialog's Predicate line says so."
 guesses = [
   "A filter that does not read as a predicate leaves the guide shown in every glyph. Settled by opening a file whose guide filter the reference cannot read.",
+  "A stored filter opens as one Custom rule holding its text, since a predicate does not always read back as rules.",
+  "The starter rule (every glyph name) writes an empty filter, so the guide shows in every glyph.",
+]
+observe = [
+  "Give a global guide rules in the reference app, save, and read its filter in the file; then open the rules again and note whether they come back as rows or as one Custom rule.",
 ]
 
 [[behavior]]

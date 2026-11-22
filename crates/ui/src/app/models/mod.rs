@@ -21,6 +21,7 @@ pub mod glyph;
 pub mod glyph_info;
 pub mod glyph_props;
 pub mod glyph_sections;
+pub mod guide_box;
 pub mod hint_canvas;
 pub mod hinting;
 pub mod hoi;

@@ -2,9 +2,31 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-22: M4.21, M4.24, M13.81, M14.5 and part of M14.4 merged into `master`, built, tested and smoke-tested in the window (X.integ142 to X.integ146). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
+_Updated: 2026-11-22: M9.32 and M3.41 written on `w-M9.32`, not yet built. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 merged into `master`, built, tested and smoke-tested in the window (X.integ142 to X.integ146). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
 
 ## State of the tree
+
+- **Where M9.32 and M3.41 stand.** Written on `w-M9.32` (M9.32a, M3.41a), not yet built: the writer ran no build or
+  test, only `cargo fmt`.
+  - M9.32 (`panels/info_box_hoi.rs`, model `app::models::hoi::hoi_of`, which replaces `timing_of`): `InfoBoxModel::hoi`
+    (in place of `timing`) for one selected foreground node in a font with an axis and two masters, over the span from
+    its layer up along the first of its curves' axes with a layer above, else the first font axis with one. The part:
+    Interpolation Type (`hoi.setInterpolationType`), Point X/Y, Lower and Upper Handle X/Y or Center X/Y
+    (`hoi.setControlPoints`, both handles sent together), Center Rotation in Bounds (`hoi.centerRotation`) and Rotation
+    Direction (`hoi.setRotationDirection`), then the timing graph (`hoi_timing`; a linear node's graph is the diagonal).
+    Tests: four Fixture tests in `info_box_hoi.rs`, one model test in `models/hoi.rs` (a linear node's diagonal, the
+    handles after the type command).
+  - M3.41 (`panels/info_box_guide.rs`, model `app::models::guide_box`; `dialogs/guide_scope.rs`): `InfoBoxModel::guide`
+    for one selected guide: Guide X, Guide Y, Angle, Lock Angle, Measured From, Measurement, Guide Name, each one
+    `guide.setProperties`. `edit.infoForSelection` (`shell/sidebar.rs`) opens `dialog.guideScope` when Edit View shows
+    and one global guide is selected alone: the rule tree, and a Predicate line filled by `annotate`; OK runs
+    `guide.setProperties {filter}` with `RuleTree::compile`'s predicate written by `Expr`'s `Display` (the starter rule
+    writes an empty filter). A stored filter opens as one Custom rule. Rules that do not compile set nothing.
+    `sidebar_filters::tidy` is `pub(super)`. Tests: a Fixture test of the guide fields, an app test that Info for
+    Selection opens the dialog and OK hides the guide in another glyph (`canvas::overlays::guides::out_of_scope`), a
+    unit test of the stored filter.
+  - For the integrator: the Select pop-ups are opened in tests by a click on their label and an entry clicked by its
+    label; no earlier fontcraft test opens a craft `Select` this way.
 
 - **Where M13.81, M14.5 and the M14.4 leftovers stand.** Merged and built; the gate is green. Seen in the window:
   `ui.wait`, `events.list` and `events.clear` over the control channel, and the Edit View scroll bars.
@@ -274,8 +296,8 @@ _Updated: 2026-11-22: M4.21, M4.24, M13.81, M14.5 and part of M14.4 merged into 
 - Packages built (done of total, counted from commit subjects; the totals include the depth packages that carry a
   new number): M6 21 of 26, M7 21 of 24, M8 27 of 36, M9 30 of 40, M10 35 of 42, M11 20 of 22, M12 77 of 87, M13 63
   of 83; 294 of 360 in all. Depth packages (`docs/plans/depth.md`): 61 of 167 (wave 1 and 51 writers of waves 2 to
-  11, listed in ROADMAP.md › Where we are); no builder of waves 2 to 13. M9.32 has editor parts that are not
-  counted yet. The lettered follow-ups (M10.37b, M10.37c,
+  11, listed in ROADMAP.md › Where we are); no builder of waves 2 to 13. M9.32 and M3.41 are written on `w-M9.32`,
+  not yet built and not counted. The lettered follow-ups (M10.37b, M10.37c,
   M13.65b and those of earlier batches) are not counted.
 - **Baselines** (from the fifteenth batch; the sixteenth ran none of them, and a later change that moves one of these numbers needs a reason):
 
