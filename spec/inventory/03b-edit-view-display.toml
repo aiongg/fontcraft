@@ -511,6 +511,15 @@ milestone = "M3"
 summary = "Two-finger dragging on a trackpad pans freely. A mouse wheel scrolls vertically and, with Shift held, horizontally. The canvas carries a vertical scroll bar along its right edge and a horizontal one along its bottom edge."
 ref = "Edit View › Glyph Display › Panning"
 status = "handbook"
+notes = "Scroll bars in M14.5 (`canvas/scroll_bars.rs`, over the framework's canvas scroll bars): they measure the edited glyph's box joined with the text around it, overscroll on as the canvas has it; dragging a thumb or pressing a track posts `view.scrollTo` with the new centre, and a press on a bar does not reach the tool. Trackpad and wheel panning come from the framework canvas."
+guesses = [
+    "The scroll bars measure the edited glyph's box joined with the laid-out text, not the whole font or the text's line height alone.",
+    "The bars are always shown, in the docked look of the framework, not only while scrolling.",
+]
+observe = [
+    "Open a glyph in Edit View with a long text line and look at the right and bottom edges of the canvas: note whether scroll bars show at rest or only while scrolling.",
+    "Drag the horizontal scroll bar's thumb to its end: note whether the view stops at the last glyph of the line or can go past it.",
+]
 
 [[behavior]]
 id = "pan.spaceInTextMode"

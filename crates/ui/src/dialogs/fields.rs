@@ -243,7 +243,7 @@ impl Field {
             Kind::Number { min, max } | Kind::Integer { min, max } => {
                 let n = match value {
                     Value::Number(n) => n.as_f64(),
-                    Value::String(s) if s.len() <= MAX_FIELD_TEXT => s.trim().parse::<f64>().ok(),
+                    Value::String(s) if s.len() <= MAX_FIELD_TEXT => crate::panels::widgets::parse_number(s),
                     _ => None,
                 }
                 .filter(|n| n.is_finite())

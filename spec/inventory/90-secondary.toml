@@ -1546,6 +1546,11 @@ summary = "Every numeric field accepts a simple arithmetic expression (such as 3
 ref = "FontLab 8 What's new › Explore & prepare › Other UI changes (Sliders; Calculations)"
 status = "docs"
 origin = "fontlab"
+notes = "Expressions in M14.5: panel number fields (the framework's number field) and dialog number fields (`panels/widgets.rs` `parse_number`, used by `dialogs/fields.rs`) read numbers joined by + - * / with parentheses and take the result on Return; a non-finite result (division by zero) is refused and the field keeps its value. The evaluator takes at most 256 bytes and nesting depth 32; a dialog number field's text is capped at 64 characters before that. The pull-down slider is not built."
+guesses = [
+    "The pull-down slider with a fine-control modifier is left out; only the arithmetic part is built.",
+    "In a dialog number field, text that starts with + or - is a signed number, not a change to the current value (panel fields follow the framework number field).",
+]
 
 # =====================================================================================================
 # FontLab — spacing and kerning

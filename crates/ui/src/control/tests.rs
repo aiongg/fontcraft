@@ -384,3 +384,19 @@ fn ui_wait_returns_once_the_window_is_idle() {
     assert!(replies[4]["error"].as_str().is_some_and(|e| e.contains("timeoutMs")), "{}", replies[4]);
     assert!(t.app.dialogs.open.is_some(), "the dialog is still open");
 }
+
+/// A dialog's number field takes arithmetic: the text `(10+20)/2` sets 15, and a division by zero is refused.
+#[test]
+fn a_dialog_number_field_takes_arithmetic() {
+    let mut t = TestApp::new();
+    t.ok("engine.execute", json!({"command": "path.addRectangle", "params": {"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200}}));
+    t.app.sent.push(Msg::View(crate::app::ViewMsg::SelectGlyph("A".into())));
+    t.frame();
+    t.ok("ui.menu.invoke", json!({"command": "filter.roundCorners"}));
+    let fields = t.ok("ui.dialog.inspect", json!({}))["fields"].as_array().cloned().unwrap_or_default();
+    let field = fields.iter().find(|f| f["kind"] == "number" || f["kind"] == "integer").and_then(|f| f["id"].as_str()).unwrap().to_owned();
+    let set = t.ok("ui.dialog.set", json!({"field": field, "value": "(10+20)/2"}));
+    let value = set["fields"].as_array().unwrap().iter().find(|f| f["id"] == field.as_str()).unwrap()["value"].as_f64();
+    assert_eq!(value, Some(15.0), "{set}");
+    assert!(t.error("ui.dialog.set", json!({"field": field, "value": "1/0"})).contains("number"));
+}
