@@ -176,6 +176,7 @@ mod tests {
         let mut app = FontCraftApp::with_edit_tab(fontcraft_engine::Session::with_document(), Arc::new(Host::builder(APP).build()));
         app.session.execute("bitmap.setStrikes", &json!({"add": [{"ppem": 12}, {"ppem": 16}]})).unwrap();
         app.session.execute("bitmap.setStrikeProperties", &json!({"strike": {"ppem": 16}, "ascent": 13})).unwrap();
+        let other = app.session.font().unwrap().bitmap_strikes.iter().find(|s| s.ppem == 12).unwrap().clone();
         let opened = json!({"dialog": "dialog.strikeProperties", "params": {"strike": {"ppem": 16}}});
         crate::dialogs::form::open_command(&mut app, &opened).unwrap();
         let inspected = crate::dialogs::form::inspect(&app);
@@ -186,6 +187,6 @@ mod tests {
         let font = app.session.font().unwrap();
         let strike = font.bitmap_strikes.iter().find(|s| s.ppem == 16).unwrap();
         assert_eq!((strike.ascent, strike.descent, strike.properties.len()), (13, 4, 1));
-        assert_eq!(font.bitmap_strikes.iter().find(|s| s.ppem == 12).unwrap().descent, 0, "the other strike is left alone");
+        assert_eq!(*font.bitmap_strikes.iter().find(|s| s.ppem == 12).unwrap(), other, "the other strike is left alone");
     }
 }

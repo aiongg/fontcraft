@@ -131,6 +131,7 @@ fn the_zones_editor_cancel_and_opening_leave_the_font_pointer_equal() {
     post(&mut t, added);
     let before = font(&t);
     let cancelled = fill(&t, Kind::Zones, &m, |f| {
+        f.room(egui::Vec2::new(800.0, 3000.0)).settle();
         press(f, zones::row_id(Kind::Zones, 0, "filter"));
         let field = f.node_of(zones::button_id(Kind::Zones, "predicate")).expect("predicate field");
         f.click(&field).type_text("category == \"Letter\"").settle();
