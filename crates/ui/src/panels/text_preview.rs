@@ -7,6 +7,8 @@
 //! | size field | `textPreview.setFontSize` |
 //! | Pin | `textPreview.togglePinned` |
 //! | Find | `textPreview.find {open}`: the find bar, with replace and its options |
+//! | source pop-up | `textPreview.showExportedFonts {source}`: the document or the last export (a folder comes from the command) |
+//! | file pop-up, for the last export or a folder | `textPreview.showExportedFonts {source, font}` |
 //! | Waterfall | `view.previewWaterfall {on}`: the Edit View text or Font View's selection once per size |
 //! | Insert Pattern menu of the find bar | `textPreview.insertPattern {pattern}` at the end of the search |
 //! | text field | `textPreview.setText` on every change (texts up to [`FIELD_LIMIT`] characters) |
@@ -94,6 +96,11 @@ craft::ui::words! {
         any_digit: "fontcraftTextPreview.anyDigit" = "Any Digit";
         any_letter: "fontcraftTextPreview.anyLetter" = "Any Letter";
         line_end: "fontcraftTextPreview.lineEnd" = "Line End";
+        source: "fontcraftTextPreview.source" = "Source";
+        document: "fontcraftTextPreview.document" = "Open Document";
+        last_export: "fontcraftTextPreview.lastExport" = "Last Export";
+        folder: "fontcraftTextPreview.folder" = "Folder";
+        file: "fontcraftTextPreview.file" = "Font File";
     }
 }
 
@@ -135,8 +142,35 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
     });
 }
 
+/// The source pop-up, and the file pop-up while the source is a set of font files.
+fn source_picker(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, sent: &mut Vec<Msg>) {
+    let mut entries =
+        vec![Entry::new("document".to_string(), words.document.clone()), Entry::new("lastExport".to_string(), words.last_export.clone())];
+    if model.source == "folder" {
+        entries.push(Entry::new("folder".to_string(), words.folder.clone()));
+    }
+    if let Some(picked) = Select::new(words.source.clone(), Bind::given(model.source.clone()), &entries).show(ui).events.committed()
+        && *picked != model.source
+        && picked != "folder"
+    {
+        sent.push(shell("textPreview.showExportedFonts", json!({ "source": picked })));
+    }
+    let files: Vec<Entry<String>> =
+        model.exported.iter().filter(|r| !r.file.is_empty()).map(|r| Entry::new(r.file.clone(), Label::from(r.file.clone()))).collect();
+    if model.source != "document" && files.len() > 1 {
+        let shown = model.exported.iter().find(|r| r.shown).map(|r| r.file.clone()).unwrap_or_default();
+        if let Some(picked) = Select::new(words.file.clone(), Bind::given(shown.clone()), &files).show(ui).events.committed()
+            && *picked != shown
+        {
+            // A folder source is sent again as it is, so only the file changes.
+            sent.push(shell("textPreview.showExportedFonts", json!({ "source": model.source, "folder": model.folder, "font": picked })));
+        }
+    }
+}
+
 fn top_row(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, sent: &mut Vec<Msg>) {
     Row::new().show(ui, |ui, _| {
+        source_picker(ui, model, words, sent);
         let mut entries = vec![Entry::new(String::new(), words.current_master.clone())];
         entries.extend(model.styles.iter().map(|s| Entry::new(s.clone(), Label::from(s.clone()))));
         let shown = model.style.clone().unwrap_or_default();
@@ -201,7 +235,7 @@ fn waterfall_area(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWord
 
 /// A size as the waterfall labels it: whole numbers without a fraction, others to one decimal.
 fn trimmed(v: f64) -> String {
-    if v.fract() == 0.0 { format!("{v:.0}") } else { format!("{v:.1}") }
+    if v.fract().abs() < 1e-9 { format!("{v:.0}") } else { format!("{v:.1}") }
 }
 
 fn find_bar(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, sent: &mut Vec<Msg>) {

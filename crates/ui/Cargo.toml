@@ -12,6 +12,7 @@ workspace = true
 
 [dependencies]
 fontcraft-engine.workspace = true
+fontcraft-decompile.workspace = true
 fontcraft-geom.workspace = true
 fontcraft-glyphquery.workspace = true
 fontcraft-tools.workspace = true

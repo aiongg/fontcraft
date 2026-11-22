@@ -2992,7 +2992,12 @@ summary = "Text Preview can show the compiled fonts of the last export, or every
 ref = "Our design, after the reference vendor's free font-preview companion tool"
 status = "inferred"
 own = true
-guesses = ["A watched file is read again when its modification time changes, at most once a second; a user report of missed or slow updates would settle it."]
+notes = "Built in M13.70 (`app/models/text_preview/exported.rs`): the files are read through the host's jobs under the engine's file size limit, opened as File › Open opens a compiled font, and shaped through a shaping font made from the file's own bytes; lines break on unshaped widths. The last export is the font files the latest export command of the session reported writing. A folder lists its .ttf, .otf, .woff, .woff2, .ttc and .otc files by name, at most 64. While a file shows, the document's kerning, colour drawings and styles do not apply."
+guesses = [
+  "A watched file is read again when its size or modification time changes, looked at once a second; a user report of missed or slow updates would settle it.",
+  "A collection file shows its first font only.",
+  "The last export is remembered for the session only, not saved with the document.",
+]
 
 [[command]]
 id = "textPreview.showExportedFonts"
@@ -3003,8 +3008,12 @@ kind = "ui"
 params = "{source: \"lastExport\"|\"folder\"|\"document\", folder?: path, font?: string}"
 area = "proofing"
 milestone = "M14"
-summary = "Switches Text Preview between the open document, the fonts of the last export and the fonts in a folder; font picks one of them by PostScript name."
+summary = "Switches Text Preview between the open document, the fonts of the last export and the fonts in a folder; font picks one of them by file name."
 ref = "Our design"
 status = "inferred"
 own = true
-guesses = ["The switch is a pop-up in the Text Preview window with no menu item; nothing in the reference app settles a place."]
+notes = "Built in M13.70 (`shell/text_preview.rs`): a Source pop-up in the Text Preview's top row offers the open document and the last export, and a Font File pop-up picks among several files; a folder is given through the command only. Without font the first file read is drawn."
+guesses = [
+  "The switch is a pop-up in the Text Preview window with no menu item; nothing in the reference app settles a place.",
+  "font names a file by its file name rather than its PostScript name, since two files of a folder can share a PostScript name.",
+]

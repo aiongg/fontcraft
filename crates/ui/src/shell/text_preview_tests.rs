@@ -219,3 +219,49 @@ fn insert_pattern_puts_a_token_into_the_search() {
     assert!(shell(&mut app, "textPreview.insertPattern", json!({"pattern": "word"})).is_err());
     assert!(shell(&mut app, "textPreview.insertPattern", json!({"pattern": "digit", "at": 99})).is_err());
 }
+
+/// The preview draws the fonts the last export wrote and the font files of a folder, from the files' own tables, and
+/// reads a file again once it changes on disk; the document source brings the open document back.
+#[test]
+fn the_preview_shows_the_last_export_and_a_folder_and_follows_changes() {
+    let dir = std::env::temp_dir().join(format!("fontcraft-ui-text-preview-exported-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut app = app();
+    shell(&mut app, "textPreview.setText", json!({"text": "AV"})).unwrap();
+    assert!(shell(&mut app, "textPreview.showExportedFonts", json!({"source": "folder"})).is_err(), "a folder source needs its folder");
+    assert!(shell(&mut app, "textPreview.showExportedFonts", json!({"source": "disk"})).is_err());
+
+    shell(&mut app, "textPreview.showExportedFonts", json!({"source": "lastExport"})).unwrap();
+    assert!(app.models.text_preview.view.page.is_none(), "nothing exported yet");
+    assert!(app.models.text_preview.view.message.is_some(), "the preview says why");
+
+    let out = dir.join("Exported.ttf");
+    exec(&mut app, "font.compile", json!({"formats": ["ttf"], "destination": out.to_string_lossy()}));
+    assert_eq!(app.view.text_preview.last_export, [out.clone()], "the export's file is kept as the last export");
+    set_now(&mut app.models.text_preview, 10.0);
+    app.drain();
+    let model = &app.models.text_preview.view;
+    assert_eq!(model.exported.iter().map(|r| (r.file.as_str(), r.shown)).collect::<Vec<_>>(), [("Exported.ttf", true)]);
+    let p = page(&app);
+    assert_eq!(names(&p), ["A", "V"], "laid out from the compiled file");
+    let before = xs(&p);
+
+    shell(&mut app, "textPreview.showExportedFonts", json!({"source": "folder", "folder": dir.to_string_lossy()})).unwrap();
+    set_now(&mut app.models.text_preview, 20.0);
+    app.drain();
+    assert_eq!(names(&page(&app)), ["A", "V"], "the folder's font file");
+
+    // A wider A, exported again over the same file, shows once the next look at the disk comes round.
+    exec(&mut app, "spacing.setWidth", json!({"glyphs": ["A"], "value": 900}));
+    exec(&mut app, "font.compile", json!({"formats": ["ttf"], "destination": out.to_string_lossy()}));
+    set_now(&mut app.models.text_preview, 22.0);
+    app.drain();
+    let after = xs(&page(&app));
+    assert!(after[1] - after[0] > before[1] - before[0], "the changed file is read again: {before:?} then {after:?}");
+
+    shell(&mut app, "textPreview.showExportedFonts", json!({"source": "document"})).unwrap();
+    assert!(app.models.text_preview.view.exported.is_empty());
+    assert_eq!(names(&page(&app)), ["A", "V"], "the open document again");
+    let _ = std::fs::remove_dir_all(&dir);
+}

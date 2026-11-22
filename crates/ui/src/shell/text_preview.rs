@@ -13,6 +13,7 @@
 //! | `textPreview.find {open?, query?, replace?, options?}` | the find bar: search, step through matches, replace |
 //! | `textPreview.insertPattern {pattern, at?}` | puts a pattern token (any space, digit or letter, a line end) into the search |
 //! | `view.previewWaterfall {on?, sizes?, useOpticalSize?}` | the waterfall: one line repeated at a list of sizes |
+//! | `textPreview.showExportedFonts {source, folder?, font?}` | the open document, the last export's fonts, or a folder's |
 //!
 //! The search holds plain characters and pattern tokens: `\s` any space (white space other than a line break), `\d`
 //! any digit, `\l` any letter, `\n` a line end, and `\\` a backslash. Each token matches one character.
@@ -23,6 +24,7 @@
 
 use std::collections::HashMap;
 use std::ops::RangeInclusive;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use craft::ui::contract::PlainData;
@@ -54,6 +56,10 @@ pub const MAX_RUNS: usize = bidi::MAX_EMBEDDINGS;
 pub const MAX_QUERY_CHARS: usize = 1_000;
 /// Match ranges `ui.inspect` lists.
 const MAX_LISTED: usize = 1_000;
+/// Most font files the preview lists from the last export or a folder.
+pub const MAX_FONT_FILES: usize = 64;
+/// Longest folder path `textPreview.showExportedFonts` takes, in bytes.
+const MAX_PATH_BYTES: usize = 4096;
 /// Most sizes a waterfall shows.
 pub const MAX_WATERFALL_SIZES: usize = 32;
 /// The sizes of a new waterfall, in points.
@@ -122,6 +128,13 @@ const COMMANDS: &[UiCommand] = &[
         menu: &[],
         shortcut: None,
         params: "{pattern: \"space\" | \"digit\" | \"letter\" | \"lineEnd\", at?: number (a character index into the query; default its end)} put a pattern token into the find bar's search and search again; the find bar opens",
+    },
+    UiCommand {
+        id: "textPreview.showExportedFonts",
+        label: "Preview Exported Fonts",
+        menu: &[],
+        shortcut: None,
+        params: "{source: \"document\" | \"lastExport\" | \"folder\", folder?: path (required for folder), font?: file name} what the preview draws: the open document, the font files the last export of this session wrote, or the font files (.ttf, .otf, .woff, .woff2, .ttc, .otc; at most 64) in a folder. Files are read in the background, again when they change on disk (looked at once a second), and laid out and shaped from their own tables; font picks one by file name, else the first is drawn. ui.inspect reports textPreview.source and textPreview.exported",
     },
     UiCommand {
         id: "view.previewWaterfall",
@@ -225,6 +238,47 @@ fn elements(query: &str) -> Vec<Element> {
 /// The characters one match of `query` spans: each pattern token matches one.
 pub fn match_len(query: &str) -> usize {
     elements(query).len()
+}
+
+/// Where the preview's font comes from.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub enum FontSource {
+    /// The open document.
+    #[default]
+    Document,
+    /// The font files the last export of this session wrote.
+    LastExport,
+    /// The font files in a folder.
+    Folder(PathBuf),
+}
+
+impl FontSource {
+    pub fn name(&self) -> &'static str {
+        match self {
+            FontSource::Document => "document",
+            FontSource::LastExport => "lastExport",
+            FontSource::Folder(_) => "folder",
+        }
+    }
+}
+
+/// Whether `path` names a compiled font file the preview reads, by its extension.
+pub fn is_font_file(path: &std::path::Path) -> bool {
+    let ext = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase);
+    matches!(ext.as_deref(), Some("ttf" | "otf" | "woff" | "woff2" | "ttc" | "otc"))
+}
+
+/// Keeps the font files an export command wrote (its reply's `fonts[].files[].path` and `collections[].path`) as
+/// the last export, when it wrote any.
+pub fn note_export(tp: &mut TextPreviewState, reply: &serde_json::Value) {
+    let paths = |v: &Value| v.get("path").and_then(Value::as_str).map(PathBuf::from);
+    let fonts = reply.get("fonts").and_then(Value::as_array).into_iter().flatten();
+    let files = fonts.flat_map(|f| f.get("files").and_then(Value::as_array).into_iter().flatten()).filter_map(paths);
+    let collections = reply.get("collections").and_then(Value::as_array).into_iter().flatten().filter_map(paths);
+    let written: Vec<PathBuf> = files.chain(collections).filter(|p| is_font_file(p)).take(MAX_FONT_FILES).collect();
+    if !written.is_empty() {
+        tp.last_export = written;
+    }
 }
 
 /// A waterfall: one line repeated at each size.
@@ -363,6 +417,11 @@ pub struct TextPreviewState {
     pub runs: Vec<Run>,
     pub find: FindState,
     pub waterfall: Waterfall,
+    pub source: FontSource,
+    /// The file the preview draws when the source lists several, by file name; `None`: the first.
+    pub exported_font: Option<String>,
+    /// The font files the last export of this session wrote.
+    pub last_export: Vec<PathBuf>,
     /// The text area as the view last reported it: the line length in points (0 until it does) and the lines in
     /// view.
     pub area: Area,
@@ -396,6 +455,9 @@ impl Default for TextPreviewState {
             runs: Vec::new(),
             find: FindState::default(),
             waterfall: Waterfall::default(),
+            source: FontSource::Document,
+            exported_font: None,
+            last_export: Vec::new(),
             area: Area::default(),
         }
     }
@@ -715,6 +777,27 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
         "textPreview.setWritingDirection" => writing_direction(&mut app.view.text_preview, p)?,
         "textPreview.find" => find(&mut app.view.text_preview, p)?,
         "textPreview.insertPattern" => insert_pattern(&mut app.view.text_preview, p)?,
+        "textPreview.showExportedFonts" => {
+            let source = match string(p, "source")?.ok_or("`source` is required")? {
+                "document" => FontSource::Document,
+                "lastExport" => FontSource::LastExport,
+                "folder" => {
+                    let folder = string(p, "folder")?.filter(|f| !f.is_empty()).ok_or("`folder` is required for the folder source")?;
+                    if folder.len() > MAX_PATH_BYTES {
+                        return Err(format!("`folder` holds at most {MAX_PATH_BYTES} bytes"));
+                    }
+                    FontSource::Folder(PathBuf::from(folder))
+                }
+                _ => return Err("`source` must be document, lastExport or folder".into()),
+            };
+            let font = string(p, "font")?.map(str::to_string);
+            if font.as_ref().is_some_and(|f| f.len() > MAX_PATH_BYTES) {
+                return Err(format!("`font` holds at most {MAX_PATH_BYTES} bytes"));
+            }
+            let tp = &mut app.view.text_preview;
+            tp.source = source;
+            tp.exported_font = font;
+        }
         "view.previewWaterfall" => {
             let tp = &mut app.view.text_preview;
             let waterfall = waterfall(&tp.waterfall, p)?;
@@ -895,6 +978,13 @@ pub fn inspect(app: &FontCraftApp, state: &mut Map<String, Value>) {
             "direction": tp.direction.name(),
             "rtl": base_is_rtl(&tp.text, tp.direction),
             "runs": tp.runs.iter().map(|r| json!({"start": r.start, "end": r.end, "direction": r.direction.name()})).collect::<Vec<_>>(),
+            "source": tp.source.name(),
+            "folder": match &tp.source {
+                FontSource::Folder(f) => Some(f.to_string_lossy().to_string()),
+                _ => None,
+            },
+            "exported": model.exported.iter().map(|e| json!({"file": e.file, "error": e.error, "shown": e.shown})).collect::<Vec<_>>(),
+            "lastExport": tp.last_export.iter().map(|p| p.to_string_lossy().to_string()).collect::<Vec<_>>(),
             "waterfall": {
                 "on": tp.waterfall.on,
                 "sizes": tp.waterfall.sizes,

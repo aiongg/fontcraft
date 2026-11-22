@@ -2,9 +2,34 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-22: X.fix95 written on `w-X.fix95`, not built or tested (see "Where X.fix95 stands"). Before that: M9.32, M3.41, M3.43 and M3.42 merged into `master`, built, tested and smoke-tested in the window (X.integ148 to X.integ151). The Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
+_Updated: 2026-11-22: M5.30, M13.69 and M13.70 written on `w-M5.30` (based on `w-X.fix95`), not built or tested (see "Where M5.30, M13.69 and M13.70 stand"). Before that: X.fix95 written on `w-X.fix95`, not built or tested (see "Where X.fix95 stands"). Before that: M9.32, M3.41, M3.43 and M3.42 merged into `master`, built, tested and smoke-tested in the window (X.integ148 to X.integ151). The Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
 
 ## State of the tree
+
+- **Where M5.30, M13.69 and M13.70 stand.** Written on `w-M5.30`, on top of `w-X.fix95`; the writer ran no cargo
+  command but `cargo fmt`, so the integrator builds and tests it. One commit each:
+  - M5.30a: `appearance.textViewWidth` (number, 1 to 100,000, default 10,000 thousandths of an em) in
+    `engine-core/src/settings.rs`; `app/models/text.rs::line_width(settings, upm)` gives the layout width and
+    `LayoutKey` carries the settings revision. Settings › Appearance has a Text View Width number field.
+    `canvas/text/input.rs`: Alt+arrow along the line moves by word (`word_boundary`), Cmd+Up/Down to the text's ends,
+    Shift extends. Tests: `alt_arrows_move_by_word_and_cmd_up_down_to_the_ends_of_the_text`,
+    `the_text_view_width_is_in_thousandths_of_an_em` (`canvas/text/tests.rs`), and the Appearance section test.
+  - M13.69a: `view.previewWaterfall {on?, sizes?, useOpticalSize?}` and `textPreview.insertPattern {pattern, at?}` in
+    `shell/text_preview.rs`. The model (`app/models/text_preview/mod.rs::waterfall`) lays the Edit View text, or
+    Font View's selection, out on one line per master and gives `waterfall` rows and `waterfall_pages`; the panel
+    draws each row at its size through `fill`. Find matches go through a shift-and matcher over characters and
+    pattern tokens (`\s`, `\d`, `\l`, `\n`, `\\`); `match_len` is the match length. Tests:
+    `pattern_tokens_match_one_character_of_their_kind`, `the_waterfall_repeats_the_edit_view_text_at_each_size`,
+    `insert_pattern_puts_a_token_into_the_search`.
+  - M13.70a: `textPreview.showExportedFonts {source, folder?, font?}`; `note_export` keeps the font paths of any
+    command reply with `fonts[].files[].path` (hooked in `app/mod.rs` after each engine command).
+    `app/models/text_preview/exported.rs` reads files on host jobs (`io::read_file`, `io::open`, `check`, a
+    `PreviewShaper` from the file's bytes), at most 64, once a second, again only when size or mtime changed;
+    `project_exported` draws the chosen file without the document's kerning or colour. `crates/ui` now depends on
+    `fontcraft-decompile` (for `to_sfnt`), so `Cargo.lock` changes on the first build. Test
+    `the_preview_shows_the_last_export_and_a_folder_and_follows_changes` (writes into the temp folder).
+  - Left: no folder chooser in the Text Preview (a folder comes only through the command); the waterfall picks the
+    nearest master by optical size, it does not interpolate.
 
 - **Where X.fix95 stands.** Written on `w-X.fix95`; the writer ran no cargo command but `cargo fmt`, so the
   integrator builds and tests it. Four fixes, one commit each:

@@ -178,7 +178,7 @@ pub fn section(ui: &mut Ui, model: &AppearanceModel, sent: &mut Vec<Msg>) {
             .copied()
             .flatten();
     });
-    if let Some(width) = width.filter(|w| w.is_finite() && *w != model.text_view_width) {
+    if let Some(width) = width.filter(|w| w.is_finite() && (*w - model.text_view_width).abs() > 1e-9) {
         sent.push(set(TEXT_VIEW_WIDTH, json!(width)));
     }
     note(ui, &words.text_view_width_note);
