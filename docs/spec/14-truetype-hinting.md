@@ -285,7 +285,9 @@ recorded in the row's `guesses`, to be checked in the reference app (§ 8 of the
    **Answer (guess):** "Stem"; Delete removes them; deleting or reversing a member dissolves the
    group; no reordering.
 4. What "drag to reposition" changes: the attached node(s) or only the badge position?
-   **Answer (guess):** only where the badge is drawn, as view state.
+   **Answer (guess):** the attached node. Dropping a badge of the current direction on a node or
+   handle runs `hint.tt.moveInstruction`, which puts the instruction's target on that point; no
+   badge position is stored (`hinting.tt.instructions.addFromSelection`).
 5. Colour of Delta badges; exact look of each rounding icon.
    **Answer (guess):** orange; the icons are FontCraft's own, from the theme.
 6. Delta table: PPM row range; whether the columns for Delta instructions are masters or instances;

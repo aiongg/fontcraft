@@ -11,7 +11,7 @@ use crate::app::context_menu::{self as menus, Space};
 pub const METHODS: &[(&str, Method)] = &[("ui.contextMenu.list", list), ("ui.contextMenu.invoke", invoke)];
 
 /// `{x?, y?, space?}` → the open canvas context menu: `{open, glyph, screen, at, hit, sections: [{context, items:
-/// [{command, label, enabled, disabled_reason?, checked?, alternate?}]}]}`; `{open: false}` when none is. With `x` and
+/// [{command, label, enabled, disabled_reason?, checked?, alternate?, choices?: [{value, label, checked}]}]}]}`; `{open: false}` when none is. With `x` and
 /// `y` it first opens the menu there, as a secondary click does (`space`: `font`, the default, or `screen`).
 fn list(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
     const M: &str = "ui.contextMenu.list";
@@ -35,9 +35,15 @@ fn list(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
     Ok(out)
 }
 
-/// `{command}` → the item's result: runs an item of the open canvas menu as a click on it does, and closes the menu.
+/// `{command, value?}` → the item's result: runs an item of the open canvas menu as a click on it does, and closes the
+/// menu. `value` picks one of a submenu item's `choices`.
 fn invoke(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
     const M: &str = "ui.contextMenu.invoke";
     let id = params.get("command").and_then(Value::as_str).ok_or(format!("{M}: `command` is required"))?.to_string();
-    menus::invoke(app, &id, |app, msg| app.run_now(msg, false)).map_err(|e| format!("{M}: {e}"))
+    let value = match params.get("value") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(v)) => Some(v.clone()),
+        Some(_) => return Err(format!("{M}: `value` must be a string")),
+    };
+    menus::invoke_choice(app, &id, value.as_deref(), |app, msg| app.run_now(msg, false)).map_err(|e| format!("{M}: {e}"))
 }

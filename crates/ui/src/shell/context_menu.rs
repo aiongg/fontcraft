@@ -3,7 +3,7 @@
 //! | Command | Does |
 //! |---|---|
 //! | `contextMenu.open {x, y, space?, alt?}` | opens the canvas menu at a point, as a secondary click does (`app::context_menu`) |
-//! | `contextMenu.invoke {command}` | runs an item of the open canvas menu, as a click on it does |
+//! | `contextMenu.invoke {command, value?}` | runs an item of the open canvas menu, as a click on it does; `value` picks a submenu item's choice |
 //! | `contextMenu.close` | closes the open menus |
 //! | `fontView.openGlyphMenu {glyphs, x?, y?, alt?}` | opens Font View's glyph menu on these glyphs; with `alt` its swatches colour the layer |
 //! | `fontView.showTags` | shows the sidebar, whose glyph inspector holds the Tags field (the glyph menu's More Tags…) |
@@ -46,7 +46,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Run Context Menu Item",
         menu: &[],
         shortcut: None,
-        params: "{command: id} run an item of the open canvas context menu as a click on it does, and close the menu. A disabled or missing item is refused and the menu stays open",
+        params: "{command: id, value?: string (a submenu item's choice, as `ui.contextMenu.list` lists it under `choices`)} run an item of the open canvas context menu as a click on it does, and close the menu. A disabled or missing item, a submenu item without one of its values, or a value for a plain item is refused and the menu stays open",
     },
     UiCommand { id: "contextMenu.close", label: "Close Context Menu", menu: &[], shortcut: None, params: "{} close the open context menus" },
     UiCommand {
@@ -92,7 +92,8 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
         }
         "contextMenu.invoke" => {
             let id = p.get("command").and_then(Value::as_str).ok_or("`command` is required")?;
-            menus::invoke(app, id, |app, msg| app.apply_msg(msg).map(|()| Value::Null)).map(drop)
+            let value = p.get("value").and_then(Value::as_str);
+            menus::invoke_choice(app, id, value, |app, msg| app.apply_msg(msg).map(|()| Value::Null)).map(drop)
         }
         "contextMenu.close" => {
             app.context_menus = menus::ContextMenus::default();
@@ -134,11 +135,14 @@ pub fn show(ui: &mut Ui, cx: &mut BodyCx<'_>, app: &mut FontCraftApp) {
         let still = menus::scene_glyph(app).is_some_and(|g| g == menu.glyph) && app.dialogs.open.is_none();
         let answer = if still { views::canvas_menu(ui, &opener, &menu, menu.alt) } else { views::Answer { picked: None, open: false } };
         // `contextMenu.invoke` closes the menu after it checked the item against it.
-        if !answer.open && !matches!(answer.picked, Some(Pick::Item(_))) {
+        if !answer.open && !matches!(answer.picked, Some(Pick::Item(_) | Pick::Choice(..))) {
             app.context_menus.canvas = None;
         }
         match answer.picked {
             Some(Pick::Item(id)) => app.sent.push(Msg::Shell(CommandRef::with_params("contextMenu.invoke", serde_json::json!({ "command": id })))),
+            Some(Pick::Choice(id, value)) => {
+                app.sent.push(Msg::Shell(CommandRef::with_params("contextMenu.invoke", serde_json::json!({ "command": id, "value": value }))));
+            }
             Some(Pick::Color(color)) => {
                 let steps = menus::color_steps(app, &menu, color, menu.alt);
                 app.sent.extend(steps);
@@ -171,7 +175,7 @@ pub(crate) fn glyph_action(menu: &glyph_menu::GlyphMenu, pick: Pick) -> Option<G
         Pick::MoreTags => Some(GlyphAction::MoreTags),
         Pick::CopyNames(format) => Some(GlyphAction::CopyNames(format)),
         Pick::Status(code) => Some(GlyphAction::Status(code)),
-        Pick::Item(_) => None,
+        Pick::Item(_) | Pick::Choice(..) => None,
     }
 }
 

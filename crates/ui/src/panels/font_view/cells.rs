@@ -120,8 +120,17 @@ pub fn strike_rect(rect: Rect, cell: &StrikeCell, shown: &StrikeShown) -> Option
 /// Draws a strike bitmap in `rect` in the painter's ink: a level of 0 is clear, the depth's top level opaque.
 pub fn paint_strike(cx: &ContentPainterCx<'_>, rect: Rect, cell: &StrikeCell, shown: &StrikeShown) {
     let Some(placed) = strike_rect(rect, cell, shown) else { return };
+    let texture = strike_texture(cx.painter.ctx(), "fontcraftStrikeCell", cell);
+    let mut mesh = Mesh::with_texture(texture);
+    mesh.add_rect_with_uv(placed, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), cx.ink());
+    cx.painter.with_clip_rect(rect).add(Shape::mesh(mesh));
+}
+
+/// The texture of a strike bitmap, one texel a pixel, white with the level as its alpha, to be tinted when drawn.
+/// `kind` keeps the textures of different users of the cache apart: `cell.id` is unique only among one user's.
+pub fn strike_texture(ctx: &egui::Context, kind: &'static str, cell: &StrikeCell) -> egui::TextureId {
     let (w, h) = (cell.width, cell.height);
-    let texture = TextureCache::texture_with(cx.painter.ctx(), ("fontcraftStrikeCell", cell.id, w, h), egui::TextureOptions::NEAREST, || {
+    TextureCache::texture_with(ctx, (kind, cell.id, w, h), egui::TextureOptions::NEAREST, || {
         let top = u16::from(fontcraft_engine::model::strike::max_level(cell.depth)).max(1);
         let mut rgba = Vec::with_capacity(usize::from(w) * usize::from(h) * 4);
         let probe = fontcraft_engine::model::strike::StrikeGlyph {
@@ -138,10 +147,7 @@ pub fn paint_strike(cx: &ContentPainterCx<'_>, rect: Rect, cell: &StrikeCell, sh
             }
         }
         egui::ColorImage::from_rgba_unmultiplied([usize::from(w), usize::from(h)], &rgba)
-    });
-    let mut mesh = Mesh::with_texture(texture);
-    mesh.add_rect_with_uv(placed, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), cx.ink());
-    cx.painter.with_clip_rect(rect).add(Shape::mesh(mesh));
+    })
 }
 
 /// Where the status bar of a cell drawn in `rect` lies: along its foot, the cell's width.

@@ -298,7 +298,7 @@ milestone = "M10"
 summary = "Editor that opens from the value field of a master's TTFZones custom parameter in Font Info › Masters. It lists the master's TT zones for editing; the delta and filter buttons are meaningful on the main master only."
 ref = "TrueType Hinting › TrueType Zones"
 status = "handbook"
-notes = "M10.28, crates/ui/src/dialogs/tt/zones.rs: opens from the value field of a master's TTFZones parameter in Font Info › Masters, on the master the tab shows; the font's TTFZones (family zones) keeps the plain value field. Each control runs its hint.tt.* command at once. The delta and globe buttons show on the main master only, drawn pressed when the zone has a delta or a filter; the Delta table's columns are the masters, plus any stored column that names no master. The globe opens the Smart Filter rule editor, and OK stores its rules as a glyph predicate. Documented, not yet observed."
+notes = "M10.28, crates/ui/src/dialogs/tt/zones.rs: opens from the value field of a master's TTFZones parameter in Font Info › Masters, on the master the tab shows; the font's TTFZones (family zones) keeps the plain value field. Each control runs its hint.tt.* command at once. The delta and globe buttons show on the main master only, drawn pressed when the zone has a delta or a filter; the Delta table's columns are the masters, plus any stored column that names no master. The globe opens the Smart Filter rule editor, and OK stores its rules as a glyph predicate. Documented, not yet observed. M10.41, crates/ui/src/dialogs/tt/wire_tests.rs: the filter sheet's Cancel posts nothing and leaves the font pointer-equal."
 guesses = [
   "Each edit takes effect at once as its own undo step, and Done closes the editor; the reference app's sheet would show whether its edits wait until it closes.",
   "The plus button adds `zone N` at position 0, 16 units per 1000 units per em high, to every master; the reference app would show what a new zone holds.",
@@ -384,7 +384,7 @@ guesses = [
   "One table serves every selected Delta instruction: a click sets that cell on all of them, and a cell where they differ shows a dash whose first click sets one pixel up; the reference app would show whether the table opens for several instructions.",
 ]
 observe = ["T3: open the Delta table of a zone and of a Delta instruction; note which PPM rows it offers and whether its columns are masters or instances."]
-notes = "M10.27, crates/ui/src/dialogs/tt/deltas.rs: rows 8 to 80 PPM; for Delta instructions the columns are the static instances (the masters when the font has none) plus any stored column that matches neither, captioned with its key so it can be cleared. A click cycles the cell none, up, down, none and runs hint.tt.setDeltas on the selected Delta instructions; the table shows the stored cells again on the next frame. Done, Escape or a click outside closes it. The zone and stem editors (M10.28) reuse the table with their own command. Documented, not yet observed."
+notes = "M10.27, crates/ui/src/dialogs/tt/deltas.rs: rows 8 to 80 PPM; for Delta instructions the columns are the static instances (the masters when the font has none) plus any stored column that matches neither, captioned with its key so it can be cleared. A click cycles the cell none, up, down, none and runs hint.tt.setDeltas on the selected Delta instructions; the table shows the stored cells again on the next frame. Done, Escape or a click outside closes it. The zone and stem editors (M10.28) reuse the table with their own command. Documented, not yet observed. M10.41, crates/ui/src/dialogs/tt/wire_tests.rs: a click on a zone's cell gives the font that hint.tt.setZone {deltas} gives over a TCP connection to the control channel. The table has no Cancel: each click runs its command at once, and Done closes it."
 
 [[behavior]]
 id = "hinting.tt.zones.filter"
@@ -494,7 +494,7 @@ milestone = "M10"
 summary = "Editor that opens from the value field of a master's TTFStems custom parameter in Font Info › Masters. It lists the master's TT stems for editing; the delta and filter buttons are meaningful on the main master only."
 ref = "TrueType Hinting › TrueType Stems"
 status = "handbook"
-notes = "M10.28, crates/ui/src/dialogs/tt/zones.rs, in the frame of dialog.ttfZones (ttf_zones.rs): opens from the value field of a master's TTFStems parameter; the double arrow switches between X (↔) and Y (↕). Selection, deltas, filter and the actions menu work as in dialog.ttfZones. Documented, not yet observed."
+notes = "M10.28, crates/ui/src/dialogs/tt/zones.rs, in the frame of dialog.ttfZones (ttf_zones.rs): opens from the value field of a master's TTFStems parameter; the double arrow switches between X (↔) and Y (↕). Selection, deltas, filter and the actions menu work as in dialog.ttfZones. Documented, not yet observed. M10.41, crates/ui/src/dialogs/tt/wire_tests.rs: plus and a typed size, filled in the editor body, give the font that hint.tt.addStemDefinition and hint.tt.setStemDefinition give over a TCP connection to the control channel; opening the TTFZones and TTFStems editors leaves the font pointer-equal. The editors' own controls cannot be pressed over the control channel (ui.dialog.* drives form dialogs only)."
 guesses = ["The plus button adds `stem N`, an X stem 80 units per 1000 units per em wide, to every master; the reference app would show what a new stem holds."]
 observe = ["T3: in the TTFStems editor click plus; note the new stem's orientation, name and size."]
 
@@ -879,7 +879,7 @@ milestone = "M10"
 summary = "State of the Edit View Info box (View › Show Info, Cmd+Shift+I) while the TrueType Instructor tool is active. Pixel size and direction are always present; the remaining controls depend on the kind of the selected instruction."
 ref = "TrueType Hinting › Pixel Size; Hint Direction; Instructions"
 status = "handbook"
-notes = "M10.27, crates/ui/src/panels/info_box_tt.rs: the PPM field with − and + (Up and Down step it; a typed value is kept to 4 to 400), the rendering intent pop-up and the direction button run hint.tt.setPixelSize, hint.tt.decreasePixelSize, hint.tt.increasePixelSize, hint.tt.setRenderingIntent and hint.tt.toggleDirection; the zone pop-up, stem pop-up, rounding buttons and Delta table run hint.tt.setSnapZone, hint.tt.setStemReference, hint.tt.setRounding and hint.tt.setDeltas on the selected instructions of the kinds each takes, in the edited glyph's active layer. Documented, not yet observed."
+notes = "M10.27, crates/ui/src/panels/info_box_tt.rs: the PPM field with − and + (Up and Down step it; a typed value is kept to 4 to 400), the rendering intent pop-up and the direction button run hint.tt.setPixelSize, hint.tt.decreasePixelSize, hint.tt.increasePixelSize, hint.tt.setRenderingIntent and hint.tt.toggleDirection; the zone pop-up, stem pop-up, rounding buttons and Delta table run hint.tt.setSnapZone, hint.tt.setStemReference, hint.tt.setRounding and hint.tt.setDeltas on the selected instructions of the kinds each takes, in the edited glyph's active layer. Documented, not yet observed. M10.41: the frame test (crates/ui/src/panels/info_box_tt.rs) covers the PPM buttons, the direction button and the rounding buttons; the zone and stem pop-ups and the Delta table have no frame test yet."
 guesses = [
   "The five rounding modes are text buttons (Round, Up, Down, None, GDI) that act on the selected Snap, Stem, Shift and Interpolate instructions and leave selected Delta instructions alone; the reference app would show its icons and what a mixed selection does.",
   "With several instructions selected, a pop-up or rounding button shows the value they share and nothing when they differ; the reference app would show how it marks a mixed selection.",
@@ -1146,9 +1146,9 @@ milestone = "M10"
 summary = "An instruction is added by selecting the nodes it should act on and choosing its type from the context menu or pressing its letter key. Instructions may sit on any node the tool shows, including off-curve points and extra nodes. A placed instruction can be dragged to reposition it."
 ref = "TrueType Hinting › Instructions; Points in Overlapping Intersections"
 status = "handbook"
-notes = "X.ui3: dragging a badge of the current direction and dropping it on a node or handle of the edited layer runs hint.tt.moveInstruction on the instruction's target (crates/ui/src/canvas/hinting/badges.rs); a drop elsewhere changes nothing. Documented, not yet observed."
-guesses = ["Dragging an instruction badge onto another node moves the instruction's target point there, and the drag is not saved as a badge position; the reference app would settle what the drag changes."]
-observe = ["T3: drag an instruction badge, save, reopen, and note what the drag changed and whether it was saved; then drag a badge onto another node and note whether the instruction moves to that node."]
+notes = "X.ui3: dragging a badge of the current direction and dropping it on a node or handle of the edited layer runs hint.tt.moveInstruction on the instruction's target (crates/ui/src/canvas/hinting/badges.rs); a drop elsewhere changes nothing. Documented, not yet observed. M10.34, crates/ui/src/app/context_menu: with the Instructor active, a right-click on a node, or on empty canvas with points selected, offers Snap Point, Stem, Shift Points, Interpolate and Delta first in the node or path section, each greyed out with the reason its command would refuse the selection with (an untouched point wanted, two touched and one untouched point for Interpolate, the vertical direction and the main master for Delta)."
+guesses = ["Dragging an instruction badge onto another node moves the instruction's target point there, and the drag is not saved as a badge position; the reference app would settle what the drag changes.", "The node menu shows the instructions the selection does not allow greyed out with the reason, rather than leaving them out; the reference app would settle it.", "The instruction items come first in the node menu, in the order of the key list (Snap, Stem, Shift, Interpolate, Delta), before the path items; the reference app would settle the order."]
+observe = ["T3: drag an instruction badge, save, reopen, and note what the drag changed and whether it was saved; then drag a badge onto another node and note whether the instruction moves to that node.", "T3: with the TrueType Instructor, right-click a selected node, a selected whole path and an instruction badge; note which items each menu holds and in what order, and whether items the selection does not allow are greyed out or missing."]
 
 [[behavior]]
 id = "hinting.tt.instructions.badgeColours"
@@ -1173,7 +1173,7 @@ milestone = "M10"
 summary = "Context-menu item of the TrueType Instructor that generates editable instructions for the glyph as a starting point: Snap and Stem instructions only, never Shift, Interpolate or Delta. The shortcut acts on all glyphs selected in Edit View and can be reassigned in the Commands section of the settings. For a glyph it cannot handle it reports 'There was a problem compiling TrueType instructions'."
 ref = "TrueType Hinting › Instructions"
 status = "handbook"
-notes = "M10.21, crates/engine/src/cmd/autohint_tt.rs: the built-in autohinter on the layer of the named master (default the main master), with the TT zones and stems that apply to the glyph; a glyph it cannot hint is listed under skipped, an unknown glyph or master refuses the run. Documented, not yet observed."
+notes = "M10.21, crates/engine/src/cmd/autohint_tt.rs: the built-in autohinter on the layer of the named master (default the main master), with the TT zones and stems that apply to the glyph; a glyph it cannot hint is listed under skipped, an unknown glyph or master refuses the run. Documented, not yet observed. M10.34, crates/ui/src/app/context_menu: while the Instructor is active, the glyph section of the canvas context menu offers it on the edited glyph, for the master of the edited layer."
 guesses = ["The Instructor's Autohint writes vertical Snap on every extreme in a TT zone and vertical Stem for each horizontal stem the PostScript stem analysis finds, and nothing horizontal, as ttfautohint hints heights only; a glyph hinted by the reference app would show which points and directions it picks."]
 
 [[command]]
@@ -1189,7 +1189,7 @@ summary = "Context-menu item of the TrueType Instructor that deletes every glyph
 ref = "TrueType Hinting › Instructions"
 status = "handbook"
 guesses = ["Remove Hints in the TrueType Instructor removes TrueType instructions only and leaves PostScript hints, since the handbook names it in the TrueType section; running it on a glyph with both in the reference app would settle it."]
-notes = "M10.7, crates/engine/src/cmd/hint_tt_more.rs: deletes every TrueType instruction of the layer (default the main master's) of each named glyph, in one undo step, and reports the glyphs that had some; PostScript hints and other stored hints stay. Documented, not yet observed."
+notes = "M10.7, crates/engine/src/cmd/hint_tt_more.rs: deletes every TrueType instruction of the layer (default the main master's) of each named glyph, in one undo step, and reports the glyphs that had some; PostScript hints and other stored hints stay. Documented, not yet observed. M10.34, crates/ui/src/app/context_menu: while the Instructor is active, the glyph section of the canvas context menu offers it on the edited glyph's edited layer, in the danger tone."
 
 [[command]]
 id = "hint.tt.deleteInstructions"
@@ -1271,6 +1271,7 @@ label = "Snap Point"
 menu = []
 shortcut = "A"
 when = "tool:trueTypeInstructor"
+context = ["canvas.node", "canvas.path"]
 kind = "engine"
 params = "{glyph: name, layer?: id, nodes: [point], direction?: 'vertical'|'horizontal', zone?: 'auto'|'none'|zoneName, rounding?: 'round'|'up'|'down'|'none'|'gdiOnly'}"
 area = "hinting-tt"
@@ -1278,7 +1279,7 @@ milestone = "M10"
 summary = "Adds one Snap instruction per selected point; each must be untouched so far. A Snap instruction rounds its point to a pixel edge in the current direction and makes it a touched point. Defaults: zone Auto, rounding Round."
 ref = "TrueType Hinting › Snap (A)"
 status = "handbook"
-notes = "M10.6, crates/engine/src/cmd/hint_tt.rs: one Snap per point at the end of the list, each checked against the touched state after the instructions before it (fontcraft_hinting::TouchedState); one refused point adds nothing. A named zone needs the vertical direction. Documented, not yet observed."
+notes = "M10.6, crates/engine/src/cmd/hint_tt.rs: one Snap per point at the end of the list, each checked against the touched state after the instructions before it (fontcraft_hinting::TouchedState); one refused point adds nothing. A named zone needs the vertical direction. Documented, not yet observed. M10.34, crates/ui/src/app/context_menu: while the Instructor is active, the node and path sections of the canvas context menu start with it, on the selected points and the Instructor's direction; it is greyed out with the reason the command would refuse with (point_ready)."
 
 [[command]]
 id = "hint.tt.setSnapZone"
@@ -1345,6 +1346,7 @@ label = "Stem"
 menu = []
 shortcut = "S"
 when = "tool:trueTypeInstructor"
+context = ["canvas.node", "canvas.path"]
 kind = "engine"
 params = "{glyph: name, layer?: id, nodes: [point] (even count, paired in order), direction?: 'vertical'|'horizontal', stem?: 'auto'|'none'|stemName, rounding?: 'round'|'up'|'down'|'none'|'gdiOnly'}"
 area = "hinting-tt"
@@ -1354,7 +1356,7 @@ ref = "TrueType Hinting › Stem (S)"
 status = "handbook"
 guesses = ["The context-menu label of the Stem instruction is Stem, as the key list names it; the reference app would settle it.", "With four or more points selected, the points pair in the order given (first with second, third with fourth); the reference app would settle how a larger selection pairs.", "In a pair of one touched and one untouched point the touched one becomes the origin, and of two untouched points the first one does; the reference app would settle which end gets the arrowhead."]
 observe = ["T3: with the TrueType Instructor, select two nodes and right-click; note the exact label of the item that adds a stem instruction.", "T3: Snap one node, select it and an untouched node in either click order, press S, and note which end gets the arrowhead; then select four untouched nodes and press S, and note how they pair."]
-notes = "M10.6, crates/engine/src/cmd/hint_tt.rs: one Stem per pair at the end of the list; an odd count or a pair of two touched points is refused and adds nothing. A named stem must suit the direction (horizontal stems for vertical instructions). Documented, not yet observed."
+notes = "M10.6, crates/engine/src/cmd/hint_tt.rs: one Stem per pair at the end of the list; an odd count or a pair of two touched points is refused and adds nothing. A named stem must suit the direction (horizontal stems for vertical instructions). Documented, not yet observed. M10.34, crates/ui/src/app/context_menu: while the Instructor is active, the node and path sections of the canvas context menu start with it, on the selected points and the Instructor's direction; it is greyed out with the reason the command would refuse with (point_ready)."
 
 [[command]]
 id = "hint.tt.reverse"
@@ -1382,8 +1384,8 @@ milestone = "M10"
 summary = "Sets the stem option of the selected Stem instructions; in the UI this is the pop-up at the top of the Info box."
 ref = "TrueType Hinting › Stem (S)"
 status = "handbook"
-notes = "M10.6, crates/engine/src/cmd/hint_tt.rs: Stem instructions only. Documented, not yet observed."
-guesses = ["A named stem whose orientation does not suit the instruction (a vertical stem on a vertical instruction) is refused; the reference app would show whether its pop-up lists stems of both orientations."]
+notes = "M10.6, crates/engine/src/cmd/hint_tt.rs: Stem instructions only. Documented, not yet observed. M10.34, crates/ui/src/app/context_menu: the instruction section a right-click on a badge opens while the Instructor is active offers it as a submenu: Auto, No Stem and the TT stems the selected Stem instructions' direction takes, the stem they share checked; it is greyed out unless only Stem instructions are selected. ui.contextMenu.invoke picks a choice with `value`."
+guesses = ["A named stem whose orientation does not suit the instruction (a vertical stem on a vertical instruction) is refused; the reference app would show whether its pop-up lists stems of both orientations.", "The badge menu offers Set Stem Reference as a submenu of the stem choices the Info box pop-up offers; the reference app would settle whether the menu has it and in what form."]
 observe = ["T3: select a vertical Stem instruction and open the stem pop-up of the Info box; note whether vertical stems are listed beside the horizontal ones."]
 
 [[command]]
@@ -1398,7 +1400,7 @@ milestone = "M10"
 summary = "Context-menu item available when three Stem instructions on three horizontal stems are selected (Shift+click each badge). It links them into a group that keeps at least one pixel of distance between the stems at every size; the linked instructions are drawn purple. How to dissolve a triple hint is not stated."
 ref = "TrueType Hinting › Stem (S)"
 status = "handbook"
-guesses = ["Deleting or reversing one member of a triple hint dissolves the group and the other two become plain Stem instructions; the reference app would settle it.", "Three instructions that would interleave with another triple hint in list order are refused, since the stored form keeps one flag per instruction and groups the flagged ones by threes; a reference file with two interleaved triple hints would settle how groups are stored.", "A triple hint keeps its pixel gaps by moving the middle and then the upper stem, never the lower one; the reference app would settle it on an E with crowded bars at 8 or 9 PPM."]
+guesses = ["Deleting or reversing one member of a triple hint dissolves the group and the other two become plain Stem instructions; the reference app would settle it.", "Three instructions that would interleave with another triple hint in list order are refused, since the stored form keeps one flag per instruction and groups the flagged ones by threes; a reference file with two interleaved triple hints would settle how groups are stored.", "A triple hint keeps its pixel gaps by moving the middle and then the upper stem, never the lower one; the reference app would settle it on an E with crowded bars at 8 or 9 PPM.", "Make Triple Hint shows on every badge menu and is greyed out unless three vertical Stem instructions outside a triple hint are selected, rather than appearing only then; the reference app would settle it."]
 observe = ["T3: make a triple hint, delete one of its members and note whether the group dissolves; make it again, reverse one member and note whether the group dissolves."]
 notes = "M10.6, crates/engine/src/cmd/hint_tt.rs: exactly three vertical Stem instructions (on horizontal stems), none in a triple hint already. Documented, not yet observed. M10.18, crates/hinting/src/tt_glyph.rs: once the third Stem of a group has run, the fpgm function FN_TRIPLE takes the three stems sorted by position and pushes the middle one, then the upper one, away from the stem below until at least a pixel separates them. The canvas context menu offers it in the instruction section a right-click on a badge opens while the Instructor is active, on the selected instructions; it is greyed out unless exactly three vertical Stem instructions outside any triple hint are selected (crates/ui/src/app/context_menu)."
 
@@ -1474,6 +1476,7 @@ label = "Shift Points"
 menu = []
 shortcut = "F"
 when = "tool:trueTypeInstructor"
+context = ["canvas.node", "canvas.path"]
 kind = "engine"
 params = "{glyph: name, layer?: id, nodes?: [point], origin?: point, targets?: [point], direction?: 'vertical'|'horizontal', rounding?: 'round'|'up'|'down'|'none'|'gdiOnly'}"
 area = "hinting-tt"
@@ -1481,7 +1484,7 @@ milestone = "M10"
 summary = "Adds a Shift instruction: an untouched target point is displaced by the same amount as its touched origin point, and the target counts as touched afterwards. The selection must contain exactly one touched point; every other selected point must be untouched and gets its own Shift instruction from that origin. Default rounding: No rounding (the recommended mode)."
 ref = "TrueType Hinting › Shift (F)"
 status = "handbook"
-notes = "M10.7, crates/engine/src/cmd/hint_tt_more.rs: `nodes` is the selection (exactly one touched point, the origin; every other point an untouched target), or `origin` and `targets` name the parts; one Shift per target at the end of the list, each checked against the touched state, so a refused target adds nothing. Default rounding No rounding. Documented, not yet observed."
+notes = "M10.7, crates/engine/src/cmd/hint_tt_more.rs: `nodes` is the selection (exactly one touched point, the origin; every other point an untouched target), or `origin` and `targets` name the parts; one Shift per target at the end of the list, each checked against the touched state, so a refused target adds nothing. Default rounding No rounding. Documented, not yet observed. M10.34, crates/ui/src/app/context_menu: while the Instructor is active, the node and path sections of the canvas context menu start with it, on the selected points and the Instructor's direction; it is greyed out with the reason the command would refuse with (point_ready)."
 
 [[behavior]]
 id = "hinting.tt.shift.rounding"
@@ -1510,6 +1513,7 @@ label = "Interpolate"
 menu = []
 shortcut = "G"
 when = "tool:trueTypeInstructor"
+context = ["canvas.node", "canvas.path"]
 kind = "engine"
 params = "{glyph: name, layer?: id, nodes?: [point, point, point], references?: [point, point], target?: point, direction?: 'vertical'|'horizontal', rounding?: 'round'|'up'|'down'|'none'|'gdiOnly'}"
 area = "hinting-tt"
@@ -1517,7 +1521,7 @@ milestone = "M10"
 summary = "Adds an Interpolate instruction: with two touched points and one untouched point selected, the untouched point is placed so that its position relative to the two touched points stays as it was in the unhinted outline, and it becomes touched. Default rounding: No rounding (the recommended mode)."
 ref = "TrueType Hinting › Interpolate (G)"
 status = "handbook"
-notes = "M10.7, crates/engine/src/cmd/hint_tt_more.rs: `nodes` is the selection of three points (the two touched ones are the references, in the order given; the untouched one the target), or `references` and `target` name them; checked against the touched state before it is added. Default rounding No rounding. Documented, not yet observed."
+notes = "M10.7, crates/engine/src/cmd/hint_tt_more.rs: `nodes` is the selection of three points (the two touched ones are the references, in the order given; the untouched one the target), or `references` and `target` name them; checked against the touched state before it is added. Default rounding No rounding. Documented, not yet observed. M10.34, crates/ui/src/app/context_menu: while the Instructor is active, the node and path sections of the canvas context menu start with it, on the selected points and the Instructor's direction; it is greyed out with the reason the command would refuse with (point_ready)."
 
 [[behavior]]
 id = "hinting.tt.interpolate.rounding"
@@ -1546,6 +1550,7 @@ label = "Delta"
 menu = []
 shortcut = "E"
 when = "tool:trueTypeInstructor"
+context = ["canvas.node", "canvas.path"]
 kind = "engine"
 params = "{glyph: name, layer?: id, nodes: [point], direction?: 'vertical', cells?: {column: {ppm: 'up'|'down'|'none'}}}"
 area = "hinting-tt"
@@ -1555,7 +1560,7 @@ ref = "TrueType Hinting › Delta (E)"
 status = "handbook"
 observe = ["T3: select a Delta instruction, open its Delta table from the Info box and note whether the columns are masters or instances."]
 guesses = ["Delta columns accept masters as well as static instances, both stored as the location key; the reference app's Delta table for an instruction would show which columns it offers."]
-notes = "M10.7, crates/engine/src/cmd/hint_tt_more.rs: one Delta per point, touched or not, at the end of the list. A column is an instance or master by name or id, stored as the key of its location (fontcraft_hinting::tt::delta_column_key), or a key in braces, read as axis values and stored in the same form (so {100} and {100, 0, 0, 0, 0, 0} are one column); a PPM key is a size from 1 to 255 or a range such as 12-14. A horizontal direction and a layer outside the main master are refused. Documented, not yet observed."
+notes = "M10.7, crates/engine/src/cmd/hint_tt_more.rs: one Delta per point, touched or not, at the end of the list. A column is an instance or master by name or id, stored as the key of its location (fontcraft_hinting::tt::delta_column_key), or a key in braces, read as axis values and stored in the same form (so {100} and {100, 0, 0, 0, 0, 0} are one column); a PPM key is a size from 1 to 255 or a range such as 12-14. A horizontal direction and a layer outside the main master are refused. Documented, not yet observed. M10.34, crates/ui/src/app/context_menu: while the Instructor is active, the node and path sections of the canvas context menu start with it, on the selected points and the Instructor's direction; it is greyed out with the reason the command would refuse with (point_ready)."
 
 [[command]]
 id = "hint.tt.setDeltas"

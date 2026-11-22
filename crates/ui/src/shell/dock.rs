@@ -59,6 +59,8 @@ pub enum PanelId {
     Project,
     FontInfo,
     ShapeOrder,
+    /// The Bitmap Glyph Editor: one glyph of one strike, drawn pixel by pixel (`window.bitmapEditor`).
+    BitmapEditor,
 }
 
 impl PanelId {
@@ -100,6 +102,7 @@ impl PanelId {
         PanelId::Project,
         PanelId::FontInfo,
         PanelId::ShapeOrder,
+        PanelId::BitmapEditor,
     ];
 
     /// The stable id commands and saved layouts use.
@@ -141,6 +144,7 @@ impl PanelId {
             PanelId::Project => "project",
             PanelId::FontInfo => "fontInfo",
             PanelId::ShapeOrder => "shapeOrder",
+            PanelId::BitmapEditor => "bitmapEditor",
         }
     }
 
@@ -188,6 +192,7 @@ impl PanelId {
             PanelId::Project => w.project.clone(),
             PanelId::FontInfo => w.font_info.clone(),
             PanelId::ShapeOrder => w.shape_order.clone(),
+            PanelId::BitmapEditor => w.bitmap_editor.clone(),
         }
     }
 
@@ -242,6 +247,7 @@ craft::ui::words! {
         project: "fontcraftPanel.project" = "Project";
         font_info: "fontcraftPanel.fontInfo" = "Font Info";
         shape_order: "fontcraftPanel.shapeOrder" = "Shape Order";
+        bitmap_editor: "fontcraftPanel.bitmapEditor" = "Bitmap Glyph Editor";
     }
 }
 
@@ -306,6 +312,8 @@ struct Panels<'a> {
     canvas: canvas::CanvasProps<'a>,
     /// The Space Center preview's view and drag tool.
     space_preview: &'a mut crate::shell::space_center::drag::SpacePreview,
+    /// The Bitmap Glyph Editor's pixel canvas: its view and pointer tool.
+    bitmap_canvas: &'a mut crate::shell::bitmap_editor::BitmapCanvas,
     sent: &'a mut Vec<Msg>,
     words: std::sync::Arc<PanelWords>,
     /// The Preview Area's height while it shows under the edit view.
@@ -419,6 +427,15 @@ impl DockPanels<PanelId> for Panels<'_> {
                 ui,
                 panels::shape_order::Props { model: &self.models.shape_order, tokens: &self.models.canvas_tokens, sent: self.sent },
             ),
+            PanelId::BitmapEditor => panels::bitmap_editor::show(
+                ui,
+                panels::bitmap_editor::Props {
+                    model: &self.models.bitmap_editor,
+                    tokens: &self.models.canvas_tokens,
+                    canvas: self.bitmap_canvas,
+                    sent: self.sent,
+                },
+            ),
             PanelId::Dimensions => panels::dimensions::show(ui, panels::dimensions::Props { model: &self.models.dimensions, sent: self.sent }),
             // Drawn by `group_view`.
             PanelId::Document => {}
@@ -493,7 +510,7 @@ fn preview_area_height(view: &crate::app::ViewState) -> Option<f32> {
 /// Shows the dock and applies what the user did to it.
 pub fn show(ui: &mut Ui, app: &mut FontCraftApp) {
     let words = Env::of(ui).words::<PanelWords>();
-    let FontCraftApp { view, models, sent, status, active_tool, space_preview, tools, overlays, .. } = app;
+    let FontCraftApp { view, models, sent, status, active_tool, space_preview, bitmap_canvas, tools, overlays, .. } = app;
     let hinting = canvas::hinting::HintPaint { model: &models.hint_canvas, view: &view.hinting, tokens: &models.hint_tokens };
     let given = view.workspace.clone();
     let label = words.dock.clone();
@@ -516,6 +533,7 @@ pub fn show(ui: &mut Ui, app: &mut FontCraftApp) {
             hinting,
         },
         space_preview,
+        bitmap_canvas,
         sent,
         words,
         preview_area,

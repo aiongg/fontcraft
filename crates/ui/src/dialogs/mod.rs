@@ -56,6 +56,7 @@ pub mod smart_settings;
 pub mod spec;
 pub mod start_window;
 pub mod status_definitions;
+pub mod strike_properties;
 pub mod tt;
 pub mod unsaved;
 
@@ -106,6 +107,7 @@ pub const SPECS: &[&[DialogSpec]] = &[
     import::SPECS,
     font_data::SPECS,
     shape_order::SPECS,
+    strike_properties::SPECS,
     path::SPECS,
     guide_properties::SPECS,
     guide_scope::SPECS,

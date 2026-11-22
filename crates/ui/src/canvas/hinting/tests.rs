@@ -287,10 +287,11 @@ fn an_instruction_badge_menu_reverses_links_and_deletes() {
     let menu = open_menu_at(&mut app, at);
     assert_eq!(menu.sections.iter().map(|s| s.context).collect::<Vec<_>>(), vec![TT_INSTRUCTION, CANVAS, TT_INSTRUCTOR]);
     let items: Vec<&str> = menu.sections[0].items.iter().map(|i| i.command).collect();
-    assert_eq!(items, vec!["hint.tt.reverse", "hint.tt.makeTripleHint", "hint.tt.deleteInstructions"]);
+    assert_eq!(items, vec!["hint.tt.reverse", "hint.tt.setStemReference", "hint.tt.makeTripleHint", "hint.tt.deleteInstructions"]);
     assert_eq!(selected(&app), vec![0], "the clicked instruction is selected first");
     let enabled = |menu: &crate::app::context_menu::CanvasMenu, id: &str| menu.item(id).unwrap().enabled;
     assert!(!enabled(&menu, "hint.tt.reverse") && !enabled(&menu, "hint.tt.makeTripleHint"));
+    assert!(!enabled(&menu, "hint.tt.setStemReference") && menu.item("hint.tt.setStemReference").unwrap().choices.is_empty());
     assert!(enabled(&menu, "hint.tt.deleteInstructions"));
     assert!(crate::app::context_menu::invoke(&mut app, "hint.tt.reverse", |app, msg| app.run_now(msg, false)).is_err(), "a greyed item refuses");
 
@@ -320,4 +321,95 @@ fn an_instruction_badge_menu_reverses_links_and_deletes() {
     run(&mut headless, "hint.tt.deleteInstructions", json!({"glyph": "A", "instructions": [0]}));
     assert_eq!(layer(&app), layer(&headless));
     assert!(selected(&app).is_empty());
+
+    // Set Stem Reference on a Stem badge is a submenu of the stem choices, the shared one checked; a pick runs the
+    // command with it, and the item refuses to run without a choice.
+    use crate::app::context_menu::{SET_STEM_REFERENCE, invoke_choice};
+    let at = badge_at(&app, 0);
+    let menu = open_menu_at(&mut app, at);
+    let item = menu.item(SET_STEM_REFERENCE).unwrap();
+    assert!(item.enabled, "{item:?}");
+    let values: Vec<&str> = item.choices.iter().map(|c| c.value.as_str()).collect();
+    assert_eq!(values[..2], ["auto", "none"], "{values:?}");
+    assert!(item.choices[0].checked && !item.choices[1].checked, "a new Stem's reference is Auto");
+    assert!(crate::app::context_menu::invoke(&mut app, SET_STEM_REFERENCE, |app, msg| app.run_now(msg, false)).is_err(), "a submenu wants a choice");
+    assert!(invoke_choice(&mut app, SET_STEM_REFERENCE, Some("nope"), |app, msg| app.run_now(msg, false)).is_err(), "a choice it does not hold");
+    invoke_choice(&mut app, SET_STEM_REFERENCE, Some("none"), |app, msg| app.run_now(msg, false)).unwrap();
+    run(&mut headless, "hint.tt.setStemReference", json!({"glyph": "A", "instructions": [0], "stem": "none"}));
+    assert_eq!(layer(&app), layer(&headless));
+}
+
+/// Opens the canvas menu at a point in font units.
+fn open_menu_in_font(app: &mut FontCraftApp, x: f64, y: f64) -> crate::app::context_menu::CanvasMenu {
+    use crate::app::context_menu::{Space, open_canvas};
+    open_canvas(app, fontcraft_geom::Point::new(x, y), Space::Font).unwrap();
+    app.context_menus.canvas.clone().expect("the canvas menu opened")
+}
+
+/// With the Instructor active, the node menu starts with the instructions added on the selected points, each greyed
+/// out with the refusal its command would give, and each runs as its command does. The glyph section offers Autohint
+/// and Remove Hints. Other tools' menus offer none of them.
+#[test]
+fn the_instructor_node_menu_adds_instructions_as_their_commands_do() {
+    use crate::app::context_menu::{CANVAS, NODE, POINT_ITEMS};
+    let mut app = new_app();
+    let mut headless = new_app();
+    for a in [&mut app, &mut headless] {
+        squares(a);
+    }
+    // Empty canvas far from the squares and their badges: the menu follows the selection.
+    let (x, y) = (900.0, 700.0);
+    shell(&mut app, "selection.set", json!({"points": [[0, 0]]}));
+    let menu = open_menu_in_font(&mut app, x, y);
+    assert!(POINT_ITEMS.iter().all(|id| menu.item(id).is_none()), "the Select tool's menu has no instructions");
+    assert!(menu.item("hint.tt.autohintGlyph").is_none() && menu.item("hint.tt.removeHints").is_none());
+
+    instructor(&mut app);
+    shell(&mut app, "selection.set", json!({"points": [[0, 0]]}));
+    let menu = open_menu_in_font(&mut app, x, y);
+    assert_eq!(menu.sections[0].context, NODE);
+    let first: Vec<&str> = menu.sections[0].items.iter().take(POINT_ITEMS.len()).map(|i| i.command).collect();
+    assert_eq!(first, POINT_ITEMS);
+    let item = |menu: &crate::app::context_menu::CanvasMenu, id: &str| menu.item(id).unwrap().clone();
+    assert!(item(&menu, "hint.tt.snapPoint").enabled && item(&menu, "hint.tt.addDelta").enabled);
+    for id in ["hint.tt.addStemHint", "hint.tt.shiftPoints", "hint.tt.interpolate"] {
+        let i = item(&menu, id);
+        assert!(!i.enabled && i.disabled_reason.as_deref().is_some_and(|r| r.starts_with("select")), "{i:?}");
+    }
+    let glyph: Vec<&str> = menu.sections.iter().find(|s| s.context == CANVAS).unwrap().items.iter().map(|i| i.command).collect();
+    assert!(glyph.contains(&"hint.tt.autohintGlyph") && glyph.contains(&"hint.tt.removeHints"), "{glyph:?}");
+
+    pick(&mut app, "hint.tt.snapPoint");
+    run(&mut headless, "hint.tt.snapPoint", json!({"glyph": "A", "nodes": [[0, 0]], "direction": "vertical"}));
+    assert_eq!(layer(&app), layer(&headless));
+
+    // On the snapped point Snap is greyed out with the command's reason, and refuses.
+    shell(&mut app, "selection.set", json!({"points": [[0, 0]]}));
+    let menu = open_menu_in_font(&mut app, x, y);
+    let snap = item(&menu, "hint.tt.snapPoint");
+    assert!(!snap.enabled && snap.disabled_reason.as_deref().is_some_and(|r| r.contains("touched already")), "{snap:?}");
+    assert!(crate::app::context_menu::invoke(&mut app, "hint.tt.snapPoint", |app, msg| app.run_now(msg, false)).is_err());
+
+    // The snapped point and an untouched one: Shift Points and Stem apply.
+    shell(&mut app, "selection.set", json!({"points": [[0, 0], [0, 1]]}));
+    let menu = open_menu_in_font(&mut app, x, y);
+    assert!(item(&menu, "hint.tt.shiftPoints").enabled && item(&menu, "hint.tt.addStemHint").enabled);
+    pick(&mut app, "hint.tt.shiftPoints");
+    run(&mut headless, "hint.tt.shiftPoints", json!({"glyph": "A", "nodes": [[0, 0], [0, 1]], "direction": "vertical"}));
+    assert_eq!(layer(&app), layer(&headless));
+
+    // Two touched references and an untouched target: Interpolate.
+    shell(&mut app, "selection.set", json!({"points": [[0, 0], [0, 1], [0, 2]]}));
+    let menu = open_menu_in_font(&mut app, x, y);
+    assert!(item(&menu, "hint.tt.interpolate").enabled, "{:?}", item(&menu, "hint.tt.interpolate"));
+    pick(&mut app, "hint.tt.interpolate");
+    run(&mut headless, "hint.tt.interpolate", json!({"glyph": "A", "nodes": [[0, 0], [0, 1], [0, 2]], "direction": "vertical"}));
+    assert_eq!(layer(&app), layer(&headless));
+
+    // Remove Hints from the glyph section clears the layer's instructions.
+    let menu = open_menu_in_font(&mut app, x, y);
+    assert!(menu.item("hint.tt.removeHints").unwrap().enabled);
+    pick(&mut app, "hint.tt.removeHints");
+    run(&mut headless, "hint.tt.removeHints", json!({"glyphs": ["A"]}));
+    assert_eq!(layer(&app), layer(&headless));
 }

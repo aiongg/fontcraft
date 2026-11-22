@@ -141,6 +141,8 @@ pub struct ViewState {
     pub overlay_fonts: crate::dialogs::overlay_fonts::OverlayState,
     /// The glyph the Shape Order panel was opened on (`shell::shape_order`).
     pub shape_order: crate::shell::shape_order::ShapeOrderView,
+    /// The Bitmap Glyph Editor's glyph, strike, tool, shade and the stroke in progress (`shell::bitmap_editor`).
+    pub bitmap_editor: crate::shell::bitmap_editor::BitmapEditorView,
     /// The open Axis Mappings dialog (`dialogs::axis_mappings`).
     pub axis_mappings: crate::dialogs::axis_mappings::AxisMappingsState,
     /// Whether the Cross-Axis Mappings window shows (`dialogs::cross_axis`).
@@ -192,6 +194,7 @@ impl Default for ViewState {
             preview: Default::default(),
             overlay_fonts: Default::default(),
             shape_order: Default::default(),
+            bitmap_editor: Default::default(),
             axis_mappings: Default::default(),
             cross_axis: Default::default(),
             system_dark: false,
@@ -213,6 +216,8 @@ pub struct FontCraftApp {
     pub active_tool: Box<dyn crate::canvas::ActiveTool>,
     /// The Space Center preview's view and its drag tool.
     pub space_preview: crate::shell::space_center::drag::SpacePreview,
+    /// The Bitmap Glyph Editor's pixel canvas: its view and its pointer tool.
+    pub bitmap_canvas: crate::shell::bitmap_editor::BitmapCanvas,
     /// The toolbox, the selection and the running interaction.
     pub tools: crate::canvas::tools::Tools,
     /// The gradient knob drag in progress (`canvas::color::knobs`).
@@ -296,6 +301,7 @@ impl FontCraftApp {
             view: ViewState::default(),
             active_tool: Box::new(crate::canvas::tools::bridge::ToolBridge::default()),
             space_preview: Default::default(),
+            bitmap_canvas: Default::default(),
             tools: crate::canvas::tools::Tools::default(),
             knobs: Default::default(),
             images: Default::default(),
@@ -564,6 +570,7 @@ impl FontCraftApp {
             ViewMsg::FeatureCompletion(ask) => self.view.font_info.features.completion = ask,
             ViewMsg::FeatureCaretPlaced => self.view.font_info.features.caret = None,
             ViewMsg::FontViewSearchFocused => self.view.font_view.focus_search = false,
+            ViewMsg::Bitmap(input) => return crate::shell::bitmap_editor::input(self, input),
         }
         Ok(())
     }

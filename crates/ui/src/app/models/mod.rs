@@ -3,6 +3,7 @@
 //! One file per area. Each file owns its model types and a `project` function; [`Models::project`] calls every
 //! one of them with a one-line arm, and only when the [`Stamp`] moved since the last call.
 
+pub mod bitmap_editor;
 pub mod canvas;
 pub mod color;
 pub mod compare;
@@ -144,6 +145,8 @@ pub struct Models {
     pub preview_panel: Tracked<preview::PreviewModel>,
     /// The Shape Order panel (`panels::shape_order`).
     pub shape_order: Tracked<shape_order::ShapeOrderModel>,
+    /// The Bitmap Glyph Editor (`panels::bitmap_editor`).
+    pub bitmap_editor: Tracked<bitmap_editor::BitmapEditorModel>,
 }
 
 /// What a projection reads: the session, for its data and its queries, and the view state.
@@ -227,6 +230,7 @@ impl Models {
         text::project_features(&mut self.features, &self.text, cx);
         preview::project_both(&mut self.preview_area, &mut self.preview_panel, cx);
         shape_order::project(&mut self.shape_order, cx);
+        bitmap_editor::project(&mut self.bitmap_editor, cx);
         true
     }
 }

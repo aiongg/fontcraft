@@ -59,6 +59,8 @@ pub enum ViewMsg {
     FeatureCaretPlaced,
     /// Font View's search field took the keyboard (`fontView.focusSearch`).
     FontViewSearchFocused,
+    /// A press, drag or release on the Bitmap Glyph Editor's pixel canvas (`shell::bitmap_editor::input`).
+    Bitmap(crate::shell::bitmap_editor::BitmapInput),
 }
 
 impl Msg {

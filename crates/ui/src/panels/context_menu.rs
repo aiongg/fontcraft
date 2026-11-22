@@ -18,7 +18,7 @@ use craft_ext::ui::menu::{EntryMark, MarkedEntry, entry_rows as marked_entry_row
 use egui::{Response, Ui};
 
 use crate::app::context_menu::glyph_menu::{COPY_FORMATS, GlyphMenu, Mark};
-use crate::app::context_menu::{CANVAS, CanvasMenu, DESTRUCTIVE};
+use crate::app::context_menu::{CANVAS, CanvasMenu, ContextItem, DESTRUCTIVE};
 use crate::app::models::font_view::COLOR_LABEL_NAMES;
 
 craft::ui::words! {
@@ -84,6 +84,8 @@ impl LabelTokens {
 pub enum Pick {
     /// An item of the canvas menu, by its command id.
     Item(&'static str),
+    /// A value of a submenu item of the canvas menu: its command id and the value.
+    Choice(&'static str, String),
     /// A swatch (`Some(index)`) or No Color (`None`).
     Color(Option<u8>),
     /// The glyph menu's Exports.
@@ -133,6 +135,15 @@ pub fn canvas_menu(ui: &mut Ui, opener: &Response, menu: &CanvasMenu, alt: bool)
                     Some(why) => entry.disabled_reason(Label::from(why.clone())),
                     None => entry.enabled(item.enabled),
                 };
+                if item.enabled && !item.choices.is_empty() {
+                    // The rows so far go first, so the submenu keeps its place among them.
+                    if let Some(i) = marked_entry_rows(ui, &entries) {
+                        picked = picked.or(entries.get(i).and_then(MarkedEntry::value).map(|id| Pick::Item(id)));
+                    }
+                    entries.clear();
+                    picked = picked.or(choices(ui, item));
+                    continue;
+                }
                 entries.push(MarkedEntry::new(entry).danger(DESTRUCTIVE.contains(&item.command)));
             }
             if let Some(i) = marked_entry_rows(ui, &entries) {
@@ -143,6 +154,19 @@ pub fn canvas_menu(ui: &mut Ui, opener: &Response, menu: &CanvasMenu, alt: bool)
     });
     let picked = shown.inner.flatten();
     Answer { open: open && picked.is_none() && shown.output.closed.is_none(), picked }
+}
+
+/// A submenu item of the canvas menu: its values, the one its targets share checked.
+fn choices(ui: &mut Ui, item: &ContextItem) -> Option<Pick> {
+    let mut picked = None;
+    let _ = Menu::submenu_row(ui, Label::from(item.label), |ui, _| {
+        let entries: Vec<MarkedEntry<usize>> =
+            item.choices.iter().enumerate().map(|(i, c)| MarkedEntry::new(Entry::new(i, Label::from(c.label.clone())).checked(c.checked))).collect();
+        if let Some(i) = marked_entry_rows(ui, &entries) {
+            picked = item.choices.get(i).map(|c| Pick::Choice(item.command, c.value.clone()));
+        }
+    });
+    picked
 }
 
 /// The glyph menu, hanging from `opener` at the point it opened at.

@@ -3,6 +3,7 @@
 //! The shell is the only UI code that holds `&mut FontCraftApp`. It hands each view its props and nothing else.
 
 pub mod bars;
+pub mod bitmap_editor;
 pub mod command_palette;
 pub mod command_surfaces;
 pub mod commands;

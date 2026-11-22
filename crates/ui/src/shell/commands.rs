@@ -83,6 +83,7 @@ pub const MODULES: &[Module] = &[
     super::preview::MODULE,
     crate::dialogs::overlay_fonts::MODULE,
     super::shape_order::MODULE,
+    super::bitmap_editor::MODULE,
     crate::dialogs::axis_mappings::MODULE,
     crate::dialogs::cross_axis::MODULE,
     super::encoding::MODULE,

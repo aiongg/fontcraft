@@ -2,9 +2,64 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-22: M5.30, M13.69, M13.70 and X.fix95 merged into `master`, built, tested and smoke-tested in the window (X.integ153 to X.integ156; see "Where M5.30, M13.69 and M13.70 stand"). Before that: M9.32, M3.41, M3.43 and M3.42 merged (X.integ148 to X.integ151); the Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
+_Updated: 2026-11-22: M13.64 written on `w-M13.64` (based on `w-M10.34`), not yet built (see "Where M13.64 stands"); M13.23c not started. Before that: M10.34 and M10.41 written on `w-M10.34`, not yet built (see "Where M10.34 and M10.41 stand"). Before that: M5.30, M13.69, M13.70 and X.fix95 merged into `master`, built, tested and smoke-tested in the window (X.integ153 to X.integ156; see "Where M5.30, M13.69 and M13.70 stand"). Before that: M9.32, M3.41, M3.43 and M3.42 merged (X.integ148 to X.integ151); the Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
 
 ## State of the tree
+
+- **Where M13.64 stands.** Written on `w-M13.64`, not yet built or tested: the writer ran only `cargo fmt`. One
+  commit, M13.64a, the Bitmap Glyph Editor:
+  - `crates/tools/src/bitmap.rs`: `BitmapTool` (Pencil, Line, Shift), `pixel_at`, `line` (one pixel per step along
+    the longer axis, the same from either end) and `BitmapStroke` (the press decides set or clear: a pixel at the
+    drawing level clears, any other takes it; `params` gives the `bitmap.setPixels` parameters). Positions are
+    clamped to 4,096 pixels, a run to 8,193 pixels, a stroke to 65,536 pixels. Tool tests in the module.
+  - `shell/bitmap_editor.rs`: `window.bitmapEditor {open?, glyph?, strike?}` and `view.setBitmapEditor {tool?,
+    level?, outline?, grid?}` (new rows), `BitmapEditorView` in `ViewState::bitmap_editor`, and `input`, which runs
+    a stroke as a session interaction (`begin`, `preview` per pointer move, `commit` on release, `cancel` for a
+    shift back to its start); Alt with a press in a grey strike picks the level. `ui.inspect` key `bitmapEditor`.
+    `shell/bitmap_editor/canvas.rs`: `BitmapCanvas` (in `FontCraftApp::bitmap_canvas`, through the dock as the
+    Space Center preview's) and its `CanvasTool` `PixelTool`, which reports `ViewMsg::Bitmap(BitmapInput)` in strike
+    pixels through `PixelFrame`.
+  - `app/models/bitmap_editor.rs` and `panels/bitmap_editor.rs` (`PanelId::BitmapEditor`, a window): the top row
+    (glyph and strike, tool, Outline, Grid, Recalculate, Strike Properties…), the Shades palette as a `SwatchTable`
+    on grey strikes, and the pixel canvas (ground, grid, metric lines, the bitmap texture through
+    `panels/font_view/cells.rs::strike_texture`, now shared with Font View, and the default master's outline scaled
+    to the strike).
+  - `dialogs/strike_properties.rs`: a run-on-OK `Shaped` dialog over `bitmap.setStrikeProperties`; the strike comes
+    from `params.strike` or the editor (`from_window`) and passes through as a target; properties are a text area of
+    `NAME value` lines (`parse_properties`).
+  - Tests: `panels/bitmap_editor/tests.rs` (a frame test per tool's gesture, the option posts, Shades only on grey
+    strikes), `shell/bitmap_editor/tests.rs` (each tool's stroke as one undo step, the grey shade and Alt pick, the
+    refusals, `inspect`), `dialogs/strike_properties.rs` (property lines, the dialog's OK on one strike).
+  - Left: the actual-size preview, the pointer position readout, the pointer, magnify and hand tools, the context
+    menu, a strike chooser and property table in Strike Properties, reset to computed defaults; references are not
+    drawn into the edited bitmap. M13.23c (Space Center images and colour glyphs) is not started.
+
+- **Where M10.34 and M10.41 stand.** Written on `w-M10.34`, not yet built or tested: the writer ran only
+  `cargo fmt`. One commit each:
+  - M10.34a: the Instructor's context menus (`app/context_menu/mod.rs`). Snap Point, Stem, Shift Points,
+    Interpolate and Delta have `context = ["canvas.node", "canvas.path"]` (engine `POINT_MENUS` in
+    `cmd/hint_tt.rs`, and their rows); `candidates` drops a command whose `when` names a tool other than the active
+    one, so they show only in the Instructor, first in their sections (`ORDER`). `point_ready` greys each out with
+    the refusal its command would give, replaying `TouchedState` over the edited layer as the commands do. The badge
+    menu adds Set Stem Reference as a submenu: `ContextItem::choices` (`ItemChoice {value, label, checked}`, from
+    `models::hint_canvas::stem_choices`, which shares `stem_names_for` with the Info box), drawn by
+    `panels/context_menu.rs::choices`, picked as `Pick::Choice`; `invoke_choice` and `contextMenu.invoke` /
+    `ui.contextMenu.invoke {command, value?}` run it. The glyph section adds `hint.tt.autohintGlyph` (the edited
+    layer's master) and `hint.tt.removeHints` (danger tone) while the Instructor is active. Menu and key targets of
+    the point commands now pass extra nodes as `[p1, n1, p2, n2]` (`canvas::hinting::targets`). TT open question 4 in
+    `docs/spec/14-truetype-hinting.md` is corrected. Tests: `the_instructor_node_menu_adds_instructions_as_their_commands_do`
+    and the Set Stem Reference part of `an_instruction_badge_menu_reverses_links_and_deletes`
+    (`canvas/hinting/tests.rs`); `instructor_menu_items_over_the_wire_equal_their_commands`
+    (`control/tt_tests.rs`, over TCP; its `wire` helper is shared).
+  - M10.41a: `dialogs/tt/wire_tests.rs`: the TTFStems editor (plus, a typed size), a zone's Delta table cell and the
+    Instructions dialog (Edit, text, Parse), each filled in a frame and posted as the dialog module posts it, equal
+    their commands sent over TCP to the control channel; the zones filter sheet's Cancel, the Instructions dialog's
+    Cancel and opening the editors leave the font pointer-equal. `InstructionsDialog::press` holds the press
+    handling the dialog and the tests share.
+  - Left: the TT dialogs are custom `StackDialog`s that `ui.dialog.*` cannot drive, so the channel side of the
+    check sends the command, not the dialog's clicks; driving them over the channel needs a control-channel
+    mechanism for them (an open question for the coordinator). No frame test of the Info box's zone and stem pop-ups
+    or its Delta table (`infoBox.ttInstructor`).
 
 - **Where M5.30, M13.69 and M13.70 stand.** Merged into `master` with X.fix95 and built; the gate is green
   (X.integ153 to X.integ156). Seen in the window, light and dark: the Text Preview waterfall draws the Edit View

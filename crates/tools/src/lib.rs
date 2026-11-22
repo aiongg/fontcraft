@@ -32,6 +32,7 @@
 pub mod annotate;
 pub mod attachment;
 pub mod bbox;
+pub mod bitmap;
 pub mod cycling;
 pub mod drag_aids;
 pub mod draw;
