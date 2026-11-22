@@ -6,6 +6,32 @@ _Updated: 2026-11-22: X.fix94: text mode fills the text's other glyphs while Fil
 
 ## State of the tree
 
+- **Where M14.2 and M14.6 stand.** Written on `w-M14.2` (based on master 8c4af06), not built or tested: the writer
+  ran no cargo command but `cargo fmt`.
+  - M14.2: the window's theme root follows the system (`app/appearance.rs::root`, `ModeChoice::System`); `logic`
+    records the resolved mode in `ViewState::system_dark` (`FontCraftApp::set_system_dark` moves the view revision).
+    `Models::appearance` holds it with the two new settings `appearance.alwaysLightMode{FontView,EditView}`; the
+    canvas tokens take the dark set while Edit View is drawn dark, and the dock shows Font View or the canvas in a
+    light `ThemeScope` while it is kept light under a dark window. The dark defaults of the canvas (`#1e1e1e`) and
+    the foreground stroke (`#e6e6e6`) differ from the light ones, and `Tokens::standard(dark)` has dark values for
+    the colours no setting covers. A new first paint layer, `canvas`, fills the canvas with its colour (the canvas
+    colour was read by nothing before). Settings › Appearance (`dialogs/settings_appearance.rs`) is available:
+    Display Unicode Value, the two switches, the handle size, nine rows of light and dark wells
+    (`panels::attributes::color_field`) and Standard, the engine command `settings.resetColors`
+    (`engine/src/cmd/settings.rs`, with `settings::color_ids`).
+  - M14.6: `canvas/tokens.rs::master_background` reads the active master's Master Background Color, or its Dark form
+    on a dark canvas, with no fallback between them, into `Tokens::master_canvas`, painted over the canvas colour.
+    `app/models/layers.rs::icon` shows the glyph named by Master Icon Glyph Name for a master without an icon of
+    its own. Master Stroke Color stays out (decision 1).
+  - Tests written: `app/appearance.rs` (light canvas under a dark system with the switch), `canvas/tokens.rs`
+    (each appearance's set), `dialogs/settings_appearance.rs` (a frame test of the switches, a typed well and
+    Standard), `engine/src/cmd/settings.rs` (Standard), `canvas/tests.rs` (canvas and fill colours; the master
+    background by appearance), `app/models/layers.rs` (the icon glyph).
+  - Unconfirmed until built: `RootEnv::resolved`, `ThemeScope::new().mode` and `Stack::theme` at the pinned craft;
+    the frame test finding the well's text field by "Corner Nodes (Dark)"; `Shape::rect_filled` with a `0.0`
+    radius; whether the theme's dark mode makes any existing frame or screenshot test differ (headless resolves
+    light). Not measured: the plan's light and dark screenshots.
+
 - **Where M3.22 and M4.19 stand.** Written on `w-M3.22` (based on `w-M5.29`), not built or tested: the writer ran
   no cargo command but `cargo fmt`. Both were almost all in the window from the port (UI.5, UI.36b):
   - M3.22: `canvas/annotation_editor.rs` opens craft's multi-line `TextField` in a popover at a new or
