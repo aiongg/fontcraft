@@ -375,8 +375,9 @@ fn corners_are_selected_by_click_and_deleted_like_the_command() {
     assert_eq!(selection(&app), json!({"hints": [0, 1]}));
 
     let steps = undo_steps(&app);
+    // The Select tool takes Delete and runs `edit.delete` itself, so the reply names no shortcut command.
     let r = call(&mut app, "ui.key", json!({"key": "Delete"}));
-    assert_eq!(r["command"], "edit.delete", "{r}");
+    assert_eq!(r["handled"], true, "{r}");
     assert!(app.status.is_empty(), "{}", app.status);
     assert_eq!(undo_steps(&app), steps + 1, "one undo step");
     assert!(corner_names(&app).is_empty());

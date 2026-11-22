@@ -235,7 +235,8 @@ fn a_scoped_metric_hides_its_line_in_glyphs_outside_the_scope() {
 #[test]
 fn the_canvas_and_the_fill_take_the_appearance_colours() {
     let mut app = app();
-    run(&mut app, "path.addRectangle", json!({"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200}));
+    // High enough to lie inside RECT at the unfitted view: the fill is clipped to the canvas, the stroke is not.
+    run(&mut app, "path.addRectangle", json!({"glyph": "A", "x": 100, "y": 500, "width": 200, "height": 200}));
     run(&mut app, "settings.set", json!({"id": "appearance.color.canvas.light", "value": "#ffeedd"}));
     run(&mut app, "settings.set", json!({"id": "appearance.color.foregroundStroke.light", "value": "#123456"}));
     edit(&mut app, "A");

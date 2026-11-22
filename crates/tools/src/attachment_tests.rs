@@ -90,13 +90,14 @@ fn corners_are_selected_by_a_click_on_their_fitted_outline() {
 }
 
 /// Only the Select tool sees corners: where a corner's fitted outline lies on the bottom stem,
-/// the plain hit (Pen, Lasso and the other tools) is still the segment.
+/// the plain hit (Pen, Lasso and the other tools) is still the segment. Within the hit tolerance
+/// of the bottom-left node (x < 107) the node wins either way.
 #[test]
 fn other_tools_hit_the_segment_under_a_corner() {
     let font = corner_font();
     let scene = Scene::from_font(&font, "A", None).unwrap();
     let view = View::default();
-    let on_stem: Vec<Point> = (101..160).map(|x| Point::new(f64::from(x), 0.0)).collect();
+    let on_stem: Vec<Point> = (108..200).map(|x| Point::new(f64::from(x), 0.0)).collect();
     assert!(
         on_stem.iter().any(|&p| hit_test_with_corners(&scene, &view, p, 6.0).map(|h| h.hit) == Some(Hit::Attachment { hint: 0 })),
         "the corner overlaps the stem somewhere"
