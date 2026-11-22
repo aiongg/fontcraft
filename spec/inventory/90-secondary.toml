@@ -3542,8 +3542,52 @@ milestone = "M13"
 summary = "Edits one glyph of one strike pixel by pixel, with the scaled outline shown behind as a guide. Only the bitmap is editable here; the outline and grid are overlays."
 ref = "FontForge main views › Bitmap View"
 status = "docs"
-notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Written in M13.64, not yet built: the dock panel `bitmapEditor` (`crates/ui/src/panels/bitmap_editor.rs`, view model `crates/ui/src/app/models/bitmap_editor.rs`), shown as a window by `window.bitmapEditor`. A top row with the glyph and strike, the Pencil, Line and Shift tools, Outline and Grid switches, Recalculate (`bitmap.regenerateGlyphs` on this glyph and strike) and Strike Properties (`dialog.strikeProperties`); in a grey strike the Shades palette; then a pixel canvas over the strike's line band and advance, the default master's outline scaled to the strike behind the pixels. The canvas sizes its pixels to fit the window. Each stroke is one `bitmap.setPixels` (`crates/ui/src/shell/bitmap_editor.rs`, rules in `crates/tools/src/bitmap.rs`). Not built: the actual-size preview, the pointer position and drag distance readout, the pointer, magnify and hand tools, and the context menu (rectangles, ellipses, flips, turns, set width). The glyph's own pixels are drawn; bitmaps it places by reference are not. Moved from M11 to M13 by the M11 planning pass (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
+guesses = [
+  "The tool palette and the Shades palette sit in the editor window's top rows rather than floating beside it; the secondary reference's Bitmap View would show where they live.",
+  "The pixel size follows the window, from 2 to 48 points a pixel, instead of a zoom the person sets; the reference's magnify tool would settle how it scales.",
+]
+observe = [
+  "In the secondary reference, open a glyph of a 4-bit strike in the Bitmap View: note where the tool and Shades palettes sit and the order of the shades.",
+  "With the pencil in a 4-bit strike, click a pixel of a lighter level than the current shade: note whether it clears or takes the shade.",
+]
+
+[[command]]
+id = "window.bitmapEditor"
+label = "Bitmap Glyph Editor"
+menu = ["Window"]
+shortcut = ""
+kind = "ui"
+params = "{open?: bool = true, glyph?: name, strike?: {ppem: number, depth?: number}}"
+area = "color"
+milestone = "M13"
+summary = "Shows or hides the Bitmap Glyph Editor on a glyph and strike, by default the glyph being edited and the font's first strike."
+ref = "FontForge main views › Bitmap View"
+status = "inferred"
+notes = "Written in M13.64, not yet built (`crates/ui/src/shell/bitmap_editor.rs`). Refused when the font has no strikes, or names a glyph or strike the font lacks; a strike without `depth` is the lowest depth of that size. Shell commands reply with nothing, so ui.inspect reports the window under `bitmapEditor`: {open, glyph, strike, tool, level, maxLevel, outline, grid, bitmap}."
+origin = "fontforge"
+guesses = [
+  "A shell command of ours that opens the editor on a named glyph and strike; the secondary reference opens it from a glyph in a bitmap font view.",
+]
+
+[[command]]
+id = "view.setBitmapEditor"
+label = "Bitmap Glyph Editor Options"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{tool?: \"pencil\" | \"line\" | \"shift\", level?: number, outline?: bool, grid?: bool}"
+area = "color"
+milestone = "M13"
+summary = "Picks the Bitmap Glyph Editor's tool and the grey level it draws with, and switches its outline guide and pixel grid."
+ref = "FontForge main views › Bitmap View"
+status = "inferred"
+notes = "Written in M13.64, not yet built (`crates/ui/src/shell/bitmap_editor.rs`). `level` is 0 to 255; a level above the strike's top level draws the top level. The tool buttons, the switches and the Shades palette post it."
+origin = "fontforge"
+guesses = [
+  "Our own command for the editor's tool palette and overlay switches; the secondary reference sets them only with its palettes and menus.",
+]
 
 [[tool]]
 id = "bitmapPencil"
@@ -3560,8 +3604,11 @@ milestone = "M13"
 summary = "Sets and clears single pixels in a bitmap glyph. In a grey strike it paints with the current grey level, chosen from the shades palette or picked from the canvas."
 ref = "FontForge main views › Bitmap View (Pencil; Anti-aliased glyphs)"
 status = "docs"
-notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Written in M13.64, not yet built: `fontcraft_tools::bitmap` (`crates/tools/src/bitmap.rs`) holds the stroke, the shell runs it (`crates/ui/src/shell/bitmap_editor.rs`). The press decides the state: a pixel holding the drawing level is cleared, any other takes the drawing level; every pixel passed over, with the run between pointer samples filled in, takes that state. The stroke previews while the button is down and ends as one `bitmap.setPixels` undo step. Alt with a press in a grey strike picks the level under the pointer and draws nothing. Moved from M11 to M13 by the M11 planning pass (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
+guesses = [
+  "In a grey strike a press on a pixel of another level paints the drawing level rather than clearing it; only a pixel already at the drawing level is cleared. Clicking a mid-grey pixel in the secondary reference would settle it.",
+]
 
 [[tool]]
 id = "bitmapLine"
@@ -3576,8 +3623,11 @@ milestone = "M13"
 summary = "Draws straight pixel lines in a bitmap glyph. The reference does not constrain the angle with Shift."
 ref = "FontForge main views › Bitmap View (Line)"
 status = "docs"
-notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Written in M13.64, not yet built (`crates/tools/src/bitmap.rs`): the run is one pixel per step along the longer axis, rounded the same from either end, previewed as the pointer moves and kept as one `bitmap.setPixels` undo step on release. Moved from M11 to M13 by the M11 planning pass (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
+guesses = [
+  "The run rounds each step to the nearest pixel, half away from zero, so a line reads the same drawn from either end; the secondary reference's pixels for a shallow line would settle its rounding.",
+]
 
 [[tool]]
 id = "bitmapShift"
@@ -3592,7 +3642,7 @@ milestone = "M13"
 summary = "Repositions the entire bitmap of the glyph relative to its origin. The ordinary pointer tool, by contrast, selects a rectangular region to move or copy and nudges it with the arrow keys."
 ref = "FontForge main views › Bitmap View (Four-arrow; Pointer)"
 status = "docs"
-notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Written in M13.64, not yet built (`crates/tools/src/bitmap.rs`): the drag sets the bitmap's `origin` by the whole pixels the pointer moved, previewed while it moves; a drag back to its start changes nothing and leaves no undo step. A glyph without a bitmap is not moved. Moved from M11 to M13 by the M11 planning pass (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
 
 [[panel]]
@@ -3605,8 +3655,11 @@ milestone = "M13"
 summary = "Chooses the grey level the bitmap tools paint with. Shown only while a grey strike is being edited."
 ref = "FontForge main views › Bitmap View (Shades palette)"
 status = "docs"
-notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Written in M13.64, not yet built: a row of the Bitmap Glyph Editor (`crates/ui/src/panels/bitmap_editor.rs`), shown only while the strike is grey: one swatch per level from clear to the top level (256 swatches at 8 bits, 16 to a row), the drawing level marked; a click posts `view.setBitmapEditor {level}`. The level under the pointer is not marked. Moved from M11 to M13 by the M11 planning pass (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
+guesses = [
+  "Lighter swatches are lower levels, level 0 white, as the pixels draw darker with each level; the secondary reference's Shades palette would show its order.",
+]
 
 [[command]]
 id = "bitmap.setPixels"
@@ -3732,8 +3785,11 @@ milestone = "M13"
 summary = "Edits the property list that a BDF file carries for a strike, such as its font descriptor string, resolution, ascent and descent."
 ref = "FontForge Element menu › BDF Info; FontForge dialogs › BDF Info Dialog"
 status = "docs"
-notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Written in M13.64, not yet built: a run-on-OK dialog over `bitmap.setStrikeProperties` (`crates/ui/src/dialogs/strike_properties.rs`), opened by the Bitmap Glyph Editor's Strike Properties button on its strike, or by `dialog.open` with `params.strike`. Fields: name, point size, horizontal and vertical resolution, ascent, descent, and the properties as text, one `NAME value` per line (a whole number or text). Not built: a strike chooser inside the dialog, a property table with add and remove buttons, and reset to computed defaults. Moved from M11 to M13 by the M11 planning pass (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
+guesses = [
+  "The properties are edited as lines of text rather than a table; the secondary reference's BDF Info dialog shows a table.",
+]
 
 [[command]]
 id = "bitmap.setStrikeProperties"

@@ -2,6 +2,7 @@
 
 pub mod anchor_context;
 pub mod attributes;
+pub mod bitmap_editor;
 pub mod command_console;
 pub mod compare_family;
 pub mod compare_fonts;

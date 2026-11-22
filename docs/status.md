@@ -2,9 +2,37 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-22: M10.34 and M10.41 written on `w-M10.34`, not yet built (see "Where M10.34 and M10.41 stand"). Before that: M5.30, M13.69, M13.70 and X.fix95 merged into `master`, built, tested and smoke-tested in the window (X.integ153 to X.integ156; see "Where M5.30, M13.69 and M13.70 stand"). Before that: M9.32, M3.41, M3.43 and M3.42 merged (X.integ148 to X.integ151); the Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
+_Updated: 2026-11-22: M13.64 written on `w-M13.64` (based on `w-M10.34`), not yet built (see "Where M13.64 stands"); M13.23c not started. Before that: M10.34 and M10.41 written on `w-M10.34`, not yet built (see "Where M10.34 and M10.41 stand"). Before that: M5.30, M13.69, M13.70 and X.fix95 merged into `master`, built, tested and smoke-tested in the window (X.integ153 to X.integ156; see "Where M5.30, M13.69 and M13.70 stand"). Before that: M9.32, M3.41, M3.43 and M3.42 merged (X.integ148 to X.integ151); the Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
 
 ## State of the tree
+
+- **Where M13.64 stands.** Written on `w-M13.64`, not yet built or tested: the writer ran only `cargo fmt`. One
+  commit, M13.64a, the Bitmap Glyph Editor:
+  - `crates/tools/src/bitmap.rs`: `BitmapTool` (Pencil, Line, Shift), `pixel_at`, `line` (one pixel per step along
+    the longer axis, the same from either end) and `BitmapStroke` (the press decides set or clear: a pixel at the
+    drawing level clears, any other takes it; `params` gives the `bitmap.setPixels` parameters). Positions are
+    clamped to 4,096 pixels, a run to 8,193 pixels, a stroke to 65,536 pixels. Tool tests in the module.
+  - `shell/bitmap_editor.rs`: `window.bitmapEditor {open?, glyph?, strike?}` and `view.setBitmapEditor {tool?,
+    level?, outline?, grid?}` (new rows), `BitmapEditorView` in `ViewState::bitmap_editor`, and `input`, which runs
+    a stroke as a session interaction (`begin`, `preview` per pointer move, `commit` on release, `cancel` for a
+    shift back to its start); Alt with a press in a grey strike picks the level. `ui.inspect` key `bitmapEditor`.
+    `shell/bitmap_editor/canvas.rs`: `BitmapCanvas` (in `FontCraftApp::bitmap_canvas`, through the dock as the
+    Space Center preview's) and its `CanvasTool` `PixelTool`, which reports `ViewMsg::Bitmap(BitmapInput)` in strike
+    pixels through `PixelFrame`.
+  - `app/models/bitmap_editor.rs` and `panels/bitmap_editor.rs` (`PanelId::BitmapEditor`, a window): the top row
+    (glyph and strike, tool, Outline, Grid, Recalculate, Strike Properties…), the Shades palette as a `SwatchTable`
+    on grey strikes, and the pixel canvas (ground, grid, metric lines, the bitmap texture through
+    `panels/font_view/cells.rs::strike_texture`, now shared with Font View, and the default master's outline scaled
+    to the strike).
+  - `dialogs/strike_properties.rs`: a run-on-OK `Shaped` dialog over `bitmap.setStrikeProperties`; the strike comes
+    from `params.strike` or the editor (`from_window`) and passes through as a target; properties are a text area of
+    `NAME value` lines (`parse_properties`).
+  - Tests: `panels/bitmap_editor/tests.rs` (a frame test per tool's gesture, the option posts, Shades only on grey
+    strikes), `shell/bitmap_editor/tests.rs` (each tool's stroke as one undo step, the grey shade and Alt pick, the
+    refusals, `inspect`), `dialogs/strike_properties.rs` (property lines, the dialog's OK on one strike).
+  - Left: the actual-size preview, the pointer position readout, the pointer, magnify and hand tools, the context
+    menu, a strike chooser and property table in Strike Properties, reset to computed defaults; references are not
+    drawn into the edited bitmap. M13.23c (Space Center images and colour glyphs) is not started.
 
 - **Where M10.34 and M10.41 stand.** Written on `w-M10.34`, not yet built or tested: the writer ran only
   `cargo fmt`. One commit each:

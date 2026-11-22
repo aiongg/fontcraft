@@ -154,7 +154,7 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
 
 - **Windows.** A panel whose spec row has `location = "window"` or `"dialog"` (Font Info, the Kerning window,
   Space Center, Text Preview, Compare Fonts and Family, Table Viewer, Kerning Pairs Preview, the Kerning Groups
-  Editor, Shape Order, Font Audit, Project) opens with
+  Editor, Shape Order, Font Audit, Project, the Bitmap Glyph Editor) opens with
   `shell::dock::show_window`: the first time as a floating group over the document area, which the desktop app
   shows as an OS window; after that wherever the person left it. `ui.screenshot` captures the main window only.
 - **Canvas.** `canvas::show` runs every pass; it is never memoized, so its props may hold the active
@@ -242,6 +242,11 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   `FontCraftApp::space_preview` and reach the panel through the dock, as the edit view's tool does. Painting hands
   the tool each glyph's box (`PreviewFrame`); the tool's edits become messages: a selection, one command or one
   `command.batch` per drag, a nudge per arrow.
+- **Bitmap Glyph Editor.** `panels/bitmap_editor.rs` is a craft `Canvas` whose document is the strike's pixel box in
+  points, as the Space Center preview's is. Its view and pointer tool (`shell::bitmap_editor::BitmapCanvas`) live in
+  `FontCraftApp::bitmap_canvas` and reach the panel through the dock. The tool reports presses, drags and releases in
+  strike pixels as `ViewMsg::Bitmap`; `shell::bitmap_editor::input` runs the stroke (`fontcraft_tools::bitmap`) as a
+  session interaction: `bitmap.setPixels` previewed while the pointer moves, one undo step on release.
 - **Dialogs.** `dialogs::run` gets the window's `DialogHost` every pass. A module opens its dialog
   when app state asks for it and takes the answer on a later pass (`dialogs/unsaved.rs` is the
   example: the close question). A form over one command's parameters is a spec instead
