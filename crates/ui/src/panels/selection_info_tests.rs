@@ -22,7 +22,8 @@ fn each_field_runs_its_command_on_every_glyph() {
         show(ui, Props { model: &model, sent: &mut sent });
         seen.borrow_mut().extend(sent);
     });
-    fixture.settle();
+    // The body scrolls: a room tall enough for every field keeps each one on screen to click.
+    fixture.room(egui::vec2(400.0, 1200.0)).settle();
     commit(&mut fixture, "Left Metrics Key", "=n");
     commit(&mut fixture, "Width Metrics Key", "=H");
     commit(&mut fixture, "Right Group", "O");
@@ -50,7 +51,8 @@ fn the_remaining_fields_run_their_setter_on_every_glyph() {
         show(ui, Props { model: &model, sent: &mut sent });
         seen.borrow_mut().extend(sent);
     });
-    fixture.settle();
+    // The body scrolls: a room tall enough for every field keeps each one on screen to click.
+    fixture.room(egui::vec2(400.0, 1200.0)).settle();
     commit(&mut fixture, "Right Metrics Key", "=o");
     commit(&mut fixture, "Left Group", "H");
     commit(&mut fixture, "Direction", "rtl");
