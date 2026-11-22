@@ -368,13 +368,15 @@ milestone = "M3"
 summary = "Holding Option while a menu or context menu is open swaps some items for an alternate form, typically the same action applied to all masters (Tidy up Paths, Correct Path Direction, Reverse Contours, Set/Reset Anchors, Expand Outline), plus Force Extremes, Add Global Guide and Reopen Last Closed Tab."
 ref = "Edit View › Editing Paths"
 status = "handbook"
-notes = "The window (`crates/ui/src/app/menu_alternates.rs`, `ALTERNATES`) puts each pair on the base row of the menu bar: choosing the row with Alt held runs the alternate, and the alternate has no row of its own. While Alt is held the row shows the alternate command's own label and shortcut (`craft_ext::menu::held_alternate_labels`); the label updates as Alt goes down and up while the menu is open. Not yet in the table: the tab pair, two shell commands that each keep a View menu row of their own (the table takes engine commands only), the Font View batch forms, whose commands the window does not have yet, and the delete and Expand Outline pairs, whose commands have no menu path in the engine."
+notes = "The window (`crates/ui/src/app/menu_alternates.rs`, `ALTERNATES`) puts each pair on the base row of the menu bar: choosing the row with Alt held runs the alternate, and the alternate has no row of its own. While Alt is held the row shows the alternate command's own label and shortcut (`craft_ext::menu::held_alternate_labels`); the label updates as Alt goes down and up while the menu is open. The table takes shell commands too: Reopen Last Closed Tab is Close Tab's alternate in the View menu (M14.4b). `ui.menu.list` names a row's alternate in `alternate` and lists the alternate after it with `alternateOf`; `ui.menu.invoke` runs an alternate by its id. Expand Outline for All Masters is Expand Outline's alternate in the canvas context menu (`context_menu::ALTERNATES`), since neither has a menu bar row. Delete has no menu row anywhere, so Delete in All Masters stays its Alt+Delete key. Not yet in the table: the Font View batch forms, whose commands the window does not have yet."
 guesses = [
   "Clear Background is the Alt alternate of Assign Background; the handbook says only that it shows while Alt is held. Holding Option in the reference app's Path menu settles it.",
   "An alternate row shows its own command's label and shortcut, as native macOS alternate items do; the handbook names the alternates but not their labels. The observe step below settles it.",
+  "Expand Outline for All Masters is offered as Expand Outline's Alt alternate in the canvas context menu; the handbook names the pair but not which menu shows it.",
 ]
 observe = [
   "Open the Path menu, hold Option, and note which items change, their labels, and whether each keeps its shortcut with Option added.",
+  "Right-click a path in Edit View with Option held and note whether Expand Outline reads Expand Outline for All Masters; then open the View menu with Option held and note whether Close Tab reads Reopen Last Closed Tab.",
 ]
 
 [[behavior]]
@@ -2070,6 +2072,7 @@ observe = [
 id = "path.expandOutlineForAllMasters"
 label = "Expand Outline for All Masters"
 menu = []
+context = ["canvas.path"]
 shortcut = ""
 kind = "engine"
 params = "{glyph: name | glyphs: [names], shapes?: [index] (with one glyph)}"

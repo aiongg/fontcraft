@@ -303,8 +303,10 @@ fn menu(enabled: impl Fn(usize) -> bool, states: &MenuStates<'_>, extra: &[Row])
         rows.push(row);
     }
     for module in shell_commands::MODULES {
-        for command in module.commands.iter().filter(|c| !c.menu.is_empty()) {
-            rows.push(states.checked(Row::new(command.menu, CommandRef::new(command.id), command.label), command.id));
+        for command in module.commands.iter().filter(|c| !c.menu.is_empty() && super::menu_alternates::alternate_of(c.id).is_none()) {
+            let mut row = states.checked(Row::new(command.menu, CommandRef::new(command.id), command.label), command.id);
+            row.alternate = super::menu_alternates::menu_alternate(command.id);
+            rows.push(row);
         }
     }
     rows.extend(extra.iter().cloned());

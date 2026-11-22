@@ -400,3 +400,30 @@ fn a_dialog_number_field_takes_arithmetic() {
     assert_eq!(value, Some(15.0), "{set}");
     assert!(t.error("ui.dialog.set", json!({"field": field, "value": "1/0"})).contains("number"));
 }
+
+/// `ui.menu.list` names each row's Option alternate and lists the alternate after it with `alternateOf`; the
+/// alternate is invoked by its own id, as a click with Alt held runs it.
+#[test]
+fn the_menu_list_reports_option_alternates() {
+    let mut t = TestApp::new();
+    let menus = t.ok("ui.menu.list", json!({}));
+    let items: Vec<Value> = menus.as_array().into_iter().flatten().flat_map(|m| m["items"].as_array().cloned().unwrap_or_default()).collect();
+    let at = |id: &str| items.iter().position(|i| i["command"] == id && i.get("alternateOf").is_none());
+    let close = at("view.closeTab").expect("a Close Tab row");
+    assert_eq!(items[close]["alternate"], "view.reopenLastClosedTab");
+    let held = &items[close + 1];
+    assert_eq!(
+        (&held["command"], &held["alternateOf"], &held["label"]),
+        (&json!("view.reopenLastClosedTab"), &json!("view.closeTab"), &json!("Reopen Last Closed Tab"))
+    );
+    assert_eq!(held["shortcut"], "Cmd+Alt+Shift+W", "the alternate keeps its own shortcut");
+    assert!(at("view.reopenLastClosedTab").is_none(), "the alternate has no row of its own");
+    let tidy = at("path.tidyUpPaths").expect("a Tidy Up Paths row");
+    assert_eq!(items[tidy + 1]["alternateOf"], "path.tidyUpPaths");
+
+    t.ok("engine.execute", json!({"command": "view.newTab", "params": {"glyphs": ["A"]}}));
+    let tabs = t.ok("ui.inspect", json!({}))["tabs"].as_array().map_or(0, Vec::len);
+    t.ok("ui.menu.invoke", json!({"command": "view.closeTab"}));
+    t.ok("ui.menu.invoke", json!({"command": "view.reopenLastClosedTab"}));
+    assert_eq!(t.ok("ui.inspect", json!({}))["tabs"].as_array().map_or(0, Vec::len), tabs, "the alternate reopened the closed tab");
+}

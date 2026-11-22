@@ -16,7 +16,8 @@
 //! - A click on the edited side's shown image, where no other object lies, opens the image section (`canvas.image`)
 //!   and the glyph section: Unlock Image on a locked image, Set Crop to Layer Bounds and Reset Crop on an unlocked one,
 //!   which the click selects (`canvas::images`).
-//! - Add Global Guide replaces Add Guide while Alt is held ([`ContextItem::alternate`]).
+//! - Add Global Guide replaces Add Guide, and Expand Outline for All Masters replaces Expand Outline, while Alt is held
+//!   ([`ContextItem::alternate`]).
 //! - While the layer's PostScript hints show, the hint items join the menu ([`HINT_ITEMS`]); a click on a hint's badge
 //!   or marker selects that hint first. Their parameters come from `fontcraft_tools::hint_drag::menu_params`.
 //! - While the TrueType Instructor is the active tool, a click on an instruction's badge of the current direction
@@ -131,7 +132,7 @@ const GLYPH_ITEMS: &[&str] = &["glyph.setExport"];
 pub const SHOW_IN_FONT_VIEW: &str = "contextMenu.showGlyphInFontView";
 
 /// Items drawn only while Alt is held, in place of the item before them.
-const ALTERNATES: &[&str] = &["guide.addGlobal"];
+const ALTERNATES: &[&str] = &["guide.addGlobal", "path.expandOutlineForAllMasters"];
 
 /// Items whose command removes something from the glyph: their rows show the danger tone.
 pub const DESTRUCTIVE: &[&str] = &["guide.remove", "hint.ps.deleteHints", "hint.ps.clearGlyphHints", "hint.tt.deleteInstructions"];
@@ -157,6 +158,7 @@ const ORDER: &[&str] = &[
     "glyph.toggleLocked",
     SHOW_IN_FONT_VIEW,
     "path.expandOutline",
+    "path.expandOutlineForAllMasters",
     "path.addPenPoint",
     "path.setMask",
     "guide.add",
