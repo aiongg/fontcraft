@@ -71,34 +71,38 @@ pub fn run(options: Options) -> Result<(), String> {
     const WINDOW: [f32; 2] = [1280.0, 800.0];
     const WINDOW_MIN: [f32; 2] = [640.0, 480.0];
     let spec = AppSpec::new("fontcraft", "FontCraft", Defaults::new(WINDOW, WINDOW_MIN));
-    craft::ui::shell::app::run(spec, move |ctx| {
-        let mut app = FontCraftApp::open(ctx);
-        app.session.set_clock(options.clock);
-        app.control.roots = options.roots;
-        app.frame_hook = options.frame_hook.map(|make| make(ctx));
-        app.preview_host = options.preview_host;
-        app.user_store = options.user_store;
-        app::user_store::load(&mut app);
-        app::startup::open_extensions(&mut app, options.settings_dir.as_deref(), options.safe_mode);
-        app.folder_poll = Some(app::startup::FolderPoll::default());
-        app.opener = options.opener;
-        app.clipboard_reader = options.clipboard_reader;
-        app.clipboard_flavours = options.clipboard_flavours;
-        app.view.extensions.downloads.fetch = options.fetch;
-        app::startup::launch(&mut app, options.launch.as_ref());
-        if let Some(listener) = options.control {
-            match app.control.listen(listener, ctx) {
-                Ok(addr) => {
-                    log::info!("control channel listening on {addr}");
-                    app.session.extensions_mut().surfaces.insert("control".into(), format!("listening on {addr}"));
-                }
-                Err(e) => {
-                    log::error!("control channel: {e}");
-                    app.status = format!("control channel: {e}");
-                }
+    craft::ui::shell::app::run(spec, move |ctx| open_window(ctx, options)).map_err(|e| e.to_string())
+}
+
+/// The app of the desktop window on `ctx`, set up from `options`: the settings read, the extension folders opened,
+/// the first document or the Start Window, and the control channel listening.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn open_window(ctx: &egui::Context, options: Options) -> FontCraftApp {
+    let mut app = FontCraftApp::open(ctx);
+    app.session.set_clock(options.clock);
+    app.control.roots = options.roots;
+    app.frame_hook = options.frame_hook.map(|make| make(ctx));
+    app.preview_host = options.preview_host;
+    app.user_store = options.user_store;
+    app::user_store::load(&mut app);
+    app::startup::open_extensions(&mut app, options.settings_dir.as_deref(), options.safe_mode);
+    app.folder_poll = Some(app::startup::FolderPoll::default());
+    app.opener = options.opener;
+    app.clipboard_reader = options.clipboard_reader;
+    app.clipboard_flavours = options.clipboard_flavours;
+    app.view.extensions.downloads.fetch = options.fetch;
+    app::startup::launch(&mut app, options.launch.as_ref());
+    if let Some(listener) = options.control {
+        match app.control.listen(listener, ctx) {
+            Ok(addr) => {
+                log::info!("control channel listening on {addr}");
+                app.session.extensions_mut().surfaces.insert("control".into(), format!("listening on {addr}"));
+            }
+            Err(e) => {
+                log::error!("control channel: {e}");
+                app.status = format!("control channel: {e}");
             }
         }
-        app
-    })
-    .map_err(|e| e.to_string())
+    }
+    app
 }

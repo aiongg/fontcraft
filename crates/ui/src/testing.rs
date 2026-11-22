@@ -50,10 +50,21 @@ impl TestApp {
     /// The app over `session` with one Edit View tab showing, after its first frame.
     pub fn with(session: Session) -> TestApp {
         let host = Arc::new(Host::builder(APP).build());
-        let app = FontCraftApp::with_edit_tab(session, Arc::clone(&host));
-        let mut frames = Frames::new();
+        let app = FontCraftApp::with_edit_tab(session, host);
+        TestApp::over(Frames::new(), app)
+    }
+
+    /// The app the desktop window sets up from `options` (`crate::open_window`), after its first frame.
+    pub fn window(options: crate::Options) -> TestApp {
+        let frames = Frames::new();
+        let app = crate::open_window(&frames.ctx.clone(), options);
+        TestApp::over(frames, app)
+    }
+
+    /// `app` on `frames`, after its first frame.
+    fn over(mut frames: Frames, app: FontCraftApp) -> TestApp {
         frames.screen(egui::vec2(SCREEN[0], SCREEN[1]));
-        frames.host(host);
+        frames.host(Arc::clone(&app.host));
         let mut test = TestApp { app, frames };
         test.frame();
         test

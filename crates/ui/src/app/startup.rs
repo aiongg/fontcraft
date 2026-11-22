@@ -224,3 +224,25 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod window_tests {
+    use serde_json::json;
+
+    use crate::testing::TestApp;
+
+    /// The desktop window starts with no document; once a font opens, the document area draws its tab strip at the
+    /// top of the group and Font View under it, with Font View's status line at the group's bottom.
+    #[test]
+    fn the_document_area_draws_font_view_once_a_font_opens() {
+        let mut t = TestApp::window(crate::Options::default());
+        assert!(t.app.session.documents().is_empty());
+        t.frames(2);
+        t.ok("engine.execute", json!({"command": "file.new", "params": {}}));
+        t.frames(2);
+        let tab = t.frames.texts().iter().find(|x| x.text == "Font View").map(|x| x.rect).expect("the Font View tab");
+        let status = t.frames.texts().iter().find(|x| x.text.contains("54 shown")).map(|x| x.rect).expect("Font View's status line");
+        assert!(status.min.y > tab.max.y + 400.0, "the status line under the tab strip, at the bottom: {tab:?} {status:?}");
+    }
+}

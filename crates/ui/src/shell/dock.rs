@@ -10,6 +10,7 @@ use craft::ui::docking::{DockConfig, DockPanels, GroupAt, PanelSpec};
 use craft::ui::layout_components::Stack;
 use craft::ui::patterns::dock::DockArea;
 use craft::ui::runtime::env::{Env, Label};
+use craft::ui::shell::CanvasPanel;
 use egui::Ui;
 
 use crate::app::models::Models;
@@ -402,18 +403,9 @@ impl DockPanels<PanelId> for Panels<'_> {
                 let strip = |ui: &mut Ui, _: &mut BodyCx<'_>| {
                     panels::tab_strip::show(ui, panels::tab_strip::Props { model: &models.tabs, sent: &mut strip_sent });
                 };
-                let mut stack = Stack::new().fill().header(strip);
-                // The Preview Area sits under the canvas, which takes the room it leaves.
-                if let Some(height) = self.preview_area.filter(|_| !font_view) {
-                    let area_out = &mut area_sent;
-                    let area = move |ui: &mut Ui, _: &mut BodyCx<'_>| {
-                        let target = crate::shell::preview::Target::Area;
-                        panels::preview::show_area(ui, panels::preview::Props { model: &models.preview_area, target, sent: &mut *area_out }, height);
-                    };
-                    stack = stack.footer(area);
-                }
+                let preview_area = self.preview_area.filter(|_| !font_view);
                 let (canvas, sent) = (&mut self.canvas, &mut *self.sent);
-                stack.show(ui, |ui, _| {
+                let mut body = |ui: &mut Ui, _: &mut BodyCx<'_>| {
                     if font_view {
                         panels::font_view::show(
                             ui,
@@ -422,6 +414,21 @@ impl DockPanels<PanelId> for Panels<'_> {
                     } else {
                         canvas::show(ui, &mut *canvas, &mut *sent);
                     }
+                };
+                // The framework's canvas panel gives the strip and the document area their rooms. The dock gives the
+                // group's view no height of its own, so a container that fills in its flow would take none.
+                CanvasPanel::new().tabs(strip).show(ui, |ui, cx| match preview_area {
+                    // The Preview Area sits under the canvas, which takes the room it leaves.
+                    Some(height) => {
+                        let area_out = &mut area_sent;
+                        let area = move |ui: &mut Ui, _: &mut BodyCx<'_>| {
+                            let target = crate::shell::preview::Target::Area;
+                            let props = panels::preview::Props { model: &models.preview_area, target, sent: &mut *area_out };
+                            panels::preview::show_area(ui, props, height);
+                        };
+                        Stack::new().fill().footer(area).show(ui, &mut body);
+                    }
+                    None => body(ui, cx),
                 });
                 self.sent.extend(strip_sent);
                 self.sent.extend(area_sent);

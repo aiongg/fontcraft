@@ -168,9 +168,11 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
   (large ones on the host's jobs) into `ToolView::images`, which the `images` and `imageSelection` layers paint; the
   image's press, drags and keys come before the toolbox's, and whether it is selected is `Tools::image`.
 - **Edit View tabs.** The document area (`PanelId::Document`, a canvas group the host draws in
-  `Panels::group_view`) shows craft's `DocumentTabs` strip over its body (`panels/tab_strip.rs`, model
-  `models.tabs`): Font View first and not closable, then one tab per Edit View tab, titled by its first glyphs. The
-  body is Font View while its tab shows, else the canvas. Font View is a tab of this strip and no dock panel, as in
+  `Panels::group_view`) is craft's `CanvasPanel`: its `DocumentTabs` strip (`panels/tab_strip.rs`, model
+  `models.tabs`) over the document area, which the panel sizes. The dock gives a group's view no height of its own,
+  so a container that fills in the view's flow would get none and draw nothing. The strip shows Font View first and
+  not closable, then one tab per Edit View tab, titled by its first glyphs. The document area is Font View while its
+  tab shows, else the canvas. Font View is a tab of this strip and no dock panel, as in
   the reference, where Cmd+Alt+1 shows it as the first tab; tabs in the dock would have needed a `PanelId` per tab
   and would let a tab dock beside another, which the reference does not do. `ViewState::tabs`
   (`shell/tabs.rs`, `EditTabs`) holds the tabs, the showing one (`None`: Font View) and the closed ones (at most
