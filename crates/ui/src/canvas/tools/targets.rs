@@ -92,7 +92,40 @@ pub fn selection_targets(scene: &Scene, selection: &Selection, spec: &CommandSpe
     if spec.targets.contains(&TargetKind::Glyphs) && !m.contains_key("glyph") {
         m.insert("glyphs".into(), json!([scene.glyph]));
     }
+    corner_targets(scene, selection, spec.id, &mut m);
     m
+}
+
+/// The selected corner components as the commands that act on them take them: `edit.delete` as `hints`, beside the
+/// other lists; Copy, Cut and the two mirrors as `corners`, alone. Copy takes corners without their nodes, Cut
+/// refuses them rather than cutting the whole layer, and the mirrors flip them in place.
+fn corner_targets(scene: &Scene, selection: &Selection, id: &str, m: &mut Map<String, Value>) {
+    let hints: Vec<usize> = fontcraft_tools::attachment::items(scene, selection)
+        .into_iter()
+        .filter_map(|item| match item {
+            fontcraft_tools::Item::Hint(i) => Some(i),
+            _ => None,
+        })
+        .collect();
+    if hints.is_empty() {
+        return;
+    }
+    match id {
+        "edit.delete" => {
+            m.insert("hints".into(), json!(hints));
+        }
+        "edit.copy" | "edit.cut" | "transform.mirrorHorizontal" | "transform.mirrorVertical" => {
+            let corners = fontcraft_tools::attachment::selected_corners(scene, selection);
+            if corners.is_empty() {
+                return;
+            }
+            for key in ["points", "segments", "shapes", "anchors", "guides", "annotations", "side"] {
+                m.remove(key);
+            }
+            m.insert("corners".into(), json!(corners));
+        }
+        _ => {}
+    }
 }
 
 /// The paths of `scene` whose on-curve nodes are all in `selection`.

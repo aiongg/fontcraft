@@ -291,3 +291,23 @@ fn corner_copy_paste_onto_nodes() {
     let e = run_err(&mut s, "edit.cut", json!({"glyph": "T", "corners": [0]}));
     assert!(e.contains("cannot be cut"), "{e}");
 }
+
+/// `edit.delete` with `hints` removes those corner components in one undo step and leaves the
+/// outline's nodes alone; a hint the layer lacks, or `hints` on the background, changes nothing.
+#[test]
+fn edit_delete_removes_selected_corners() {
+    let mut s = session();
+    run(&mut s, "cornerComponent.add", json!({"glyph": "I", "points": [[0, 0], [0, 1], [0, 2]], "corner": "_corner.one"}));
+    let shapes = s.font().unwrap().glyph("I").unwrap().layer("m01").unwrap().shapes.clone();
+    let steps = undo_steps(&s);
+    run(&mut s, "edit.delete", json!({"glyph": "I", "hints": [0, 2]}));
+    assert_eq!(undo_steps(&s), steps + 1, "one undo step");
+    assert_eq!(corners(&s, "I"), [CornerHint::new("_corner.one", 0, 0)]);
+    assert_eq!(s.font().unwrap().glyph("I").unwrap().layer("m01").unwrap().shapes, shapes, "the paths stay");
+    let e = run_err(&mut s, "edit.delete", json!({"glyph": "I", "hints": [4]}));
+    assert!(e.contains("does not resolve"), "{e}");
+    let e = run_err(&mut s, "edit.delete", json!({"glyph": "I", "side": "background", "hints": [0]}));
+    assert!(e.contains("foreground"), "{e}");
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(corners(&s, "I").len(), 3);
+}

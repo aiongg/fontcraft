@@ -325,3 +325,95 @@ fn keys_change_no_outline_while_font_view_shows() {
     assert_eq!(layer(&t.app), before, "the arrows and Delete went to Font View, not to the outline");
     assert!(t.app.dialogs.open.is_none(), "nothing in Font View had the keyboard, so nothing asked to remove a glyph");
 }
+
+/// Glyph A of [`edit_app`] with `_corner.one` on the square's bottom-left node (hint 0) and bottom-right node (hint 1).
+fn corner_app() -> FontCraftApp {
+    let mut app = edit_app();
+    run(&mut app, "glyph.newGlyph", json!({"name": "_corner.one"}));
+    let nodes = json!([{"x": 0, "y": 50}, {"x": -50, "y": 50}, {"x": -50, "y": 0}, {"x": 25, "y": 0}]);
+    run(&mut app, "path.addPath", json!({"glyph": "_corner.one", "closed": false, "nodes": nodes}));
+    run(&mut app, "cornerComponent.add", json!({"glyph": "A", "points": [[0, 0], [0, 1]], "corner": "_corner.one"}));
+    app.sent.push(Msg::View(ViewMsg::SelectGlyph("A".into())));
+    app.drain();
+    app.view.canvas = CanvasView::new(Rect::from_min_size(Pos2::ZERO, vec2(1000.0, 800.0)), KPoint::new(400.0, 400.0), 1.0);
+    app
+}
+
+/// The middle of the first segment of corner `hint`'s own fitted outline, in font units.
+fn corner_point(app: &FontCraftApp, hint: usize) -> (f64, f64) {
+    use fontcraft_geom::ParamCurve as _;
+    let font = app.session.font().unwrap();
+    let scene = super::scene(font, &app.view, None).unwrap();
+    let mark = scene.attachments.iter().find(|m| m.hint == hint).expect("the corner is fitted");
+    let p = mark.outline.segments().next().expect("the corner has an outline").eval(0.5);
+    (p.x, p.y)
+}
+
+fn click(app: &mut FontCraftApp, (x, y): (f64, f64), mods: Value) {
+    pointer(app, json!([{"kind": "down", "x": x, "y": y, "mods": mods}, {"kind": "up", "x": x, "y": y, "mods": mods}]));
+}
+
+fn corner_names(app: &FontCraftApp) -> Vec<String> {
+    use fontcraft_engine::model::corner::corner_hint;
+    layer(app).info.hints.iter().filter_map(|h| corner_hint(h).ok().flatten()).map(|c| c.name).collect()
+}
+
+/// A click on a corner's fitted outline selects it and Shift-click adds a second; Delete removes both in one undo
+/// step, as `edit.delete` with `hints` does (`corner.highlightAndSelection`).
+#[test]
+fn corners_are_selected_by_click_and_deleted_like_the_command() {
+    let mut app = corner_app();
+    assert_eq!(corner_names(&app).len(), 2);
+    click(&mut app, corner_point(&app, 0), json!([]));
+    assert_eq!(selection(&app), json!({"hints": [0]}));
+    let second = corner_point(&app, 1);
+    click(&mut app, second, json!(["shift"]));
+    assert_eq!(selection(&app), json!({"hints": [0, 1]}));
+    // The corners keep their selection through a frame of the tools.
+    super::apply::sync(&mut app);
+    assert_eq!(selection(&app), json!({"hints": [0, 1]}));
+
+    let steps = undo_steps(&app);
+    let r = call(&mut app, "ui.key", json!({"key": "Delete"}));
+    assert_eq!(r["command"], "edit.delete", "{r}");
+    assert!(app.status.is_empty(), "{}", app.status);
+    assert_eq!(undo_steps(&app), steps + 1, "one undo step");
+    assert!(corner_names(&app).is_empty());
+    let mut headless = corner_app();
+    run(&mut headless, "edit.delete", json!({"glyph": "A", "hints": [0, 1]}));
+    assert_eq!(layer(&app), layer(&headless), "the key gives the font the command gives");
+}
+
+/// Copy with a corner selected copies the corner; Paste with two other nodes selected puts it on both, as `edit.copy`
+/// with `corners` and `edit.paste` with `points` do (`corner.copyPasteOntoNodes`). Mirroring from the menu flips the
+/// selected corner (`corner.mirrorViaPalette`).
+#[test]
+fn a_copied_corner_pastes_onto_selected_nodes_and_mirrors_in_place() {
+    let mut app = corner_app();
+    click(&mut app, corner_point(&app, 0), json!([]));
+    assert_eq!(selection(&app), json!({"hints": [0]}));
+    let r = call(&mut app, "ui.key", json!({"key": "c", "cmd": true}));
+    assert_eq!(r["command"], "edit.copy", "{r}");
+    let text = app.clipboard.out.clone().expect("the copy reached the clipboard");
+    assert!(text.contains("fontcraft-corners"), "{text}");
+
+    shell(&mut app, "selection.set", json!({"points": [[0, 2], [0, 3]]}));
+    crate::app::clipboard::paste(&mut app, &text, crate::app::clipboard::PasteKind::Paste);
+    app.drain();
+    assert!(app.status.is_empty(), "{}", app.status);
+    assert_eq!(corner_names(&app).len(), 4, "the two top nodes hold the pasted corner");
+    let mut headless = corner_app();
+    let copied = headless.session.execute("edit.copy", &json!({"glyph": "A", "corners": [0]})).unwrap()["json"].as_str().unwrap().to_string();
+    run(&mut headless, "edit.paste", json!({"glyph": "A", "json": copied, "points": [[0, 2], [0, 3]]}));
+    assert_eq!(layer(&app).info.hints, layer(&headless).info.hints, "the paste gives the font the commands give");
+
+    shell(&mut app, "selection.set", json!({"hints": [0]}));
+    let filled = super::targets::with_targets(&mut app, CommandRef::new("transform.mirrorHorizontal"));
+    let master = app.session.font().unwrap().masters[0].id.clone();
+    assert_eq!(filled.params, json!({"glyph": "A", "layer": master, "corners": [0]}));
+    run(&mut app, "transform.mirrorHorizontal", filled.params);
+    let font = app.session.font().unwrap();
+    let hint = font.glyph("A").unwrap().layer(&master).unwrap().info.hints[0].clone();
+    let corner = fontcraft_engine::model::corner::corner_hint(&hint).unwrap().unwrap();
+    assert!(corner.scale.x < 0.0, "the corner is mirrored: {:?}", corner.scale);
+}

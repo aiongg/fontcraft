@@ -111,13 +111,18 @@ pub fn sync(app: &mut FontCraftApp) {
         let _ = apply(app, switch.output);
     }
     if !app.tools.selection.hints.is_empty() {
-        // Hidden hints cannot be acted on; hints an edit removed are no longer selected.
+        // Hidden hints cannot be acted on; hints an edit removed are no longer selected. Corner components are
+        // selected whatever Show Hints says.
         let marks = crate::canvas::hinting::ps_marks(&mut app.session, &app.view);
-        if marks.shown {
-            app.tools.selection.hints.retain(|&i| marks.get(i).is_some());
-        } else {
-            app.tools.selection.hints.clear();
-        }
+        let corners: Vec<usize> = match app.session.font() {
+            Ok(font) => scene(font, &app.view, None)
+                .map(|scene| {
+                    app.tools.selection.hints.iter().copied().filter(|&i| fontcraft_tools::attachment::is_selectable(&scene.layer, i)).collect()
+                })
+                .unwrap_or_default(),
+            Err(_) => Vec::new(),
+        };
+        app.tools.selection.hints.retain(|i| corners.contains(i) || (marks.shown && marks.get(*i).is_some()));
     }
     let base = app.tools.toolbox.base_id();
     app.active_tool.set_tool(base);

@@ -4,7 +4,7 @@
 //! | Model | Shows while |
 //! |---|---|
 //! | [`ComponentBox`] | a component of the edited layer is selected: the first in shape order |
-//! | [`CornerBox`] | a selected node holds a corner component: the first in the layer's hint order |
+//! | [`CornerBox`] | a corner component is selected, or a selected node holds one: the first selected corner, else the first on a selected node in the layer's hint order |
 //! | [`CapBox`] | a selected node is one of the two nodes of a cap component |
 //! | [`SmartModel`] | smart components are selected (`palette.smartComponent`, `dialog.smartComponentSettings`) |
 
@@ -12,26 +12,21 @@ use craft::ui::contract::PlainData;
 use fontcraft_engine::cmd::smart::is_toggle;
 use fontcraft_engine::components::align::{AlignMode, component_alignment};
 use fontcraft_engine::components::propagate::{base_layer, effective_anchors_with};
-use fontcraft_engine::model::attach::{Attachment, CapHint, attachment, fit_cap};
-use fontcraft_engine::model::corner::{CornerAlignment, CornerTarget, corner_hint, insert_corners, is_corner};
+use fontcraft_engine::model::attach::{Attachment, CapHint, attachment};
+use fontcraft_engine::model::corner::{CornerAlignment, CornerTarget, corner_hint, is_corner};
 use fontcraft_engine::model::glyphdata::GlyphData;
 use fontcraft_engine::model::smart::pole_layers;
 use fontcraft_engine::model::{Component, Font, Glyph, Layer, LayerSide, MAX_PART_PROPERTIES, PartProperty, Path, Shape, Transform};
-use fontcraft_geom::{BezPath, Point};
+use fontcraft_geom::BezPath;
 use fontcraft_tools::Selection;
+use fontcraft_tools::attachment;
 
 /// Most components before the selected one whose anchors the anchor menu reads.
 const MAX_ANCHOR_SOURCES: usize = 64;
 /// Below this a matrix entry counts as zero.
 const TINY: f64 = 1e-12;
-/// Most corner and cap components one layer gets highlight bands for: each fits its glyph once.
-pub const MAX_BANDS: usize = 64;
-/// Most nodes a fitted path may have for its band to be worked out.
-const MAX_BAND_NODES: usize = 4096;
 /// Most components the Smart Component controls edit at once.
 pub const MAX_SMART_COMPONENTS: usize = 1024;
-/// Two node positions closer than this, in font units, are the same node.
-const SAME_NODE: f64 = 0.5;
 
 /// The alignment modes of corner and cap components, as `cornerComponent.setAlignment` and
 /// `capComponent.setAlignment` name them, in button order.
@@ -294,9 +289,14 @@ fn selected_points(selection: &Selection) -> Vec<(usize, usize)> {
     selection.points.iter().copied().collect()
 }
 
-/// The corner part for the corner on the first selected node of `layer` that holds one.
+/// The corner part for the first selected corner of `layer`, else the corner on the first selected node that holds
+/// one.
 pub fn corner_box(font: &Font, glyph: &str, layer: &Layer, selection: &Selection) -> Option<CornerBox> {
-    let corner = *corners_on_nodes(layer, &selected_points(selection)).first()?;
+    let picked = selection.hints.iter().copied().find(|&i| layer.info.hints.get(i).is_some_and(is_corner));
+    let corner = match picked {
+        Some(i) => i,
+        None => *corners_on_nodes(layer, &selected_points(selection)).first()?,
+    };
     let hint = corner_hint(layer.info.hints.get(corner)?).ok().flatten()?;
     Some(CornerBox {
         glyph: glyph.to_string(),
@@ -382,68 +382,19 @@ pub fn smart_model(font: &Font, glyph: &str, layer: &Layer, side: LayerSide, com
     Some(SmartModel { glyph: glyph.to_string(), layer: layer.id.clone(), background: side == LayerSide::Background, components: picked, rows })
 }
 
-/// The highlight bands of `layer`'s corner and cap components: for each, the part of its host path that fitting it
-/// put in, in font units. An attachment that does not fit has no band.
-pub fn attachment_bands(font: &Font, layer: &Layer) -> Vec<BezPath> {
-    let mut out = Vec::new();
-    for (i, hint) in layer.info.hints.iter().enumerate() {
-        if out.len() >= MAX_BANDS {
-            break;
-        }
-        let fitted = if is_corner(hint) {
-            corner_hint(hint).ok().flatten().and_then(|corner| match corner.target {
-                CornerTarget::Node { shape, .. } => insert_corners(font, &with_one_hint(layer, i)).ok().flatten().map(|shapes| (shape, shapes)),
-                _ => None,
-            })
-        } else if let Ok(Some(Attachment::Cap(cap))) = attachment(hint) {
-            fit_cap(font, &layer.master, &layer.shapes, &cap).ok().map(|shapes| (cap.shape, shapes))
-        } else {
-            None
-        };
-        let Some((shape, shapes)) = fitted else { continue };
-        if let (Some(Shape::Path(before)), Some(Shape::Path(after))) = (layer.shapes.get(shape), shapes.get(shape))
-            && let Some(band) = inserted_run(before, after)
-        {
-            out.push(band);
-        }
-    }
-    out
+/// One corner or cap component's highlight band: the part of its host path that fitting it put in, in font units.
+#[derive(PlainData, Clone, Debug, PartialEq)]
+pub struct AttachmentBand {
+    /// The attachment's position in the layer's hint list: its selection address.
+    pub hint: usize,
+    #[plain_data(assume = "a kurbo path: owned points")]
+    pub band: BezPath,
 }
 
-/// `layer` with only the hint at `index`.
-fn with_one_hint(layer: &Layer, index: usize) -> Layer {
-    let mut one = layer.clone();
-    one.info.hints = layer.info.hints.get(index).cloned().into_iter().collect();
-    one
-}
-
-/// The segments of `after` that touch a node `before` does not have: what fitting an attachment into the path put in.
-fn inserted_run(before: &Path, after: &Path) -> Option<BezPath> {
-    if after.nodes.len() > MAX_BAND_NODES || before.nodes.len() > MAX_BAND_NODES {
-        return None;
-    }
-    let fresh: Vec<bool> =
-        after.nodes.iter().map(|n| !before.nodes.iter().any(|o| (o.x - n.x).abs() < SAME_NODE && (o.y - n.y).abs() < SAME_NODE)).collect();
-    let node = |i: usize| after.nodes.get(i).map(|n| Point::new(n.x, n.y));
-    let mut band = BezPath::new();
-    let mut last: Option<usize> = None;
-    for seg in after.segments() {
-        let touches = std::iter::once(seg.start).chain(seg.handles.iter().copied()).chain(std::iter::once(seg.end));
-        if !touches.into_iter().any(|i| fresh.get(i).copied().unwrap_or(false)) {
-            continue;
-        }
-        let (Some(start), Some(end)) = (node(seg.start), node(seg.end)) else { continue };
-        if last != Some(seg.start) {
-            band.move_to(start);
-        }
-        match seg.handles.as_slice() {
-            [h] => band.quad_to(node(*h)?, end),
-            [h1, h2] => band.curve_to(node(*h1)?, node(*h2)?, end),
-            _ => band.line_to(end),
-        }
-        last = Some(seg.end);
-    }
-    (!band.elements().is_empty()).then_some(band)
+/// The highlight bands of `layer`'s corner and cap components, at most [`attachment::MAX_ATTACHMENTS`]. An attachment that does
+/// not fit has no band.
+pub fn attachment_bands(font: &Font, layer: &Layer) -> Vec<AttachmentBand> {
+    attachment::marks(font, layer, |_| true).into_iter().map(|m| AttachmentBand { hint: m.hint, band: m.band }).collect()
 }
 
 #[cfg(test)]

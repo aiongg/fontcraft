@@ -164,6 +164,9 @@ pub struct TransformModel {
     /// The targets of the boolean buttons: the selected paths (a path counts when any of its nodes is selected), else
     /// every path.
     pub boolean: Option<Targets>,
+    /// The selected corner components as `corners`, when there are any: the mirror buttons flip them in place
+    /// (`corner.mirrorViaPalette`) and take no origin.
+    pub corners: Option<Targets>,
 }
 
 /// The Fit Curve section.
@@ -329,8 +332,15 @@ struct Edit {
 }
 
 /// The commands whose targets the models need.
-const TARGETED: &[&str] =
-    &["selection.getInfo", "selection.setPosition", "transform.scale", "fitCurve.applyStep", "anchor.setContext", "path.setStroke"];
+const TARGETED: &[&str] = &[
+    "selection.getInfo",
+    "selection.setPosition",
+    "transform.scale",
+    "transform.mirrorHorizontal",
+    "fitCurve.applyStep",
+    "anchor.setContext",
+    "path.setStroke",
+];
 
 impl Edit {
     fn read(cx: &ProjectCx<'_>, tools: &Tools) -> Option<Edit> {
@@ -605,6 +615,7 @@ fn transform(cx: &ProjectCx<'_>, edit: Option<&Edit>) -> TransformModel {
         origin: s.origin_param().to_string(),
         targets: targets.map(Targets::of),
         boolean,
+        corners: edit.and_then(|e| e.targets("transform.mirrorHorizontal")).filter(|t| t.contains_key("corners")).map(Targets::of),
     }
 }
 

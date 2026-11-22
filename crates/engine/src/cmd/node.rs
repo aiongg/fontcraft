@@ -96,7 +96,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Delete",
             [],
             Some("Delete"),
-            "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope, index}], annotations?: [index], image?: bool} removes what the targets name; `image: true` removes the layer's placed image on that side (a locked image, or none, refuses it). A deleted node leaves the path closed: the segments it joined become one, refitted to the old curve; a curve segment that loses a handle becomes a line; a path with every point named, or fewer than two nodes left, is removed → {selection}",
+            "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope, index}], annotations?: [index], hints?: [hint index], image?: bool} removes what the targets name; `image: true` removes the layer's placed image on that side (a locked image, or none, refuses it). `hints` are positions in the layer's hint list (corner components and other hints of the foreground); with `side: background` they are refused. A deleted node leaves the path closed: the segments it joined become one, refitted to the old curve; a curve segment that loses a handle becomes a line; a path with every point named, or fewer than two nodes left, is removed → {selection}",
             has_doc,
             delete
         )
@@ -738,8 +738,12 @@ fn delete(s: &mut Session, v: &Value) -> Result<Value> {
         return Err(p.bad("takes `points`, not `segments`: name a segment's handles to straighten it"));
     }
     let image = super::image::targeted(&p)?;
-    if !t.has_lists() && !image {
-        return Err(p.bad("give what to delete: `points`, `shapes`, `anchors`, `guides`, `annotations` or `image`"));
+    let hints = hint_list(&p)?;
+    if !hints.is_empty() && t.side != LayerSide::Foreground {
+        return Err(p.bad("`hints` belong to the foreground: give them without `side: background`"));
+    }
+    if !t.has_lists() && !image && hints.is_empty() {
+        return Err(p.bad("give what to delete: `points`, `shapes`, `anchors`, `guides`, `annotations`, `hints` or `image`"));
     }
     let step = grid(s.font()?);
     s.edit("Delete", |font| {
@@ -748,6 +752,12 @@ fn delete(s: &mut Session, v: &Value) -> Result<Value> {
             if image {
                 super::image::remove(&p, &t, layer)?;
             }
+            let count = layer.info.hints.len();
+            if let Some(&i) = hints.iter().find(|&&i| i >= count) {
+                return Err(p.bad(format!("`hints`: {i} does not resolve: the layer has {count} hints")));
+            }
+            // Hints first: their indices name the layer as it was given.
+            remove_at(&mut layer.info.hints, &hints);
             delete_in(&mut layer.parts_mut(t.side), &t, step).map_err(|m| p.bad(m))
         })?;
         let global: BTreeSet<usize> = t.guides.iter().filter(|g| g.scope == GuideScope::Global).map(|g| g.index).collect();
@@ -759,6 +769,18 @@ fn delete(s: &mut Session, v: &Value) -> Result<Value> {
         Ok(())
     })?;
     Ok(json!({ "selection": none_selected(&t).to_json() }))
+}
+
+/// `hints?`: positions in the layer's hint list, at most [`MAX_TARGETS`](crate::params::MAX_TARGETS).
+fn hint_list(p: &Params) -> Result<BTreeSet<usize>> {
+    let Some(v) = p.get("hints") else { return Ok(BTreeSet::new()) };
+    let list = v.as_array().ok_or_else(|| p.bad("`hints` must be a list of hint indices"))?;
+    if list.len() > crate::params::MAX_TARGETS {
+        return Err(p.bad(format!("`hints` holds {} entries; at most {} are allowed", list.len(), crate::params::MAX_TARGETS)));
+    }
+    list.iter()
+        .map(|v| v.as_u64().and_then(|i| usize::try_from(i).ok()).ok_or_else(|| p.bad(format!("`hints` must hold hint indices, found {v}"))))
+        .collect()
 }
 
 fn delete_in_all_masters(s: &mut Session, v: &Value) -> Result<Value> {

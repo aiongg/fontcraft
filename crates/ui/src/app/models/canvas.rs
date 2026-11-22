@@ -63,8 +63,7 @@ pub struct EditedGlyph {
     /// Where paths of the edited side cross: Extra Nodes.
     pub extra_nodes: Vec<[f64; 2]>,
     /// The highlight bands of the corner and cap components: the parts of their host paths that fitting them put in.
-    #[plain_data(assume = "kurbo paths: owned points")]
-    pub attachments: Vec<BezPath>,
+    pub attachments: Vec<super::components::AttachmentBand>,
     /// The colour (RGBA from 0 to 1) of the status the glyph is in: its stored status, else the font's default.
     pub status: Option<[f64; 4]>,
 }

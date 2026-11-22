@@ -1513,12 +1513,16 @@ milestone = "M6"
 summary = "In Edit View a corner component is tinted with a faint blue background. A click selects it, Shift-click extends the selection to several corners, and Delete removes the selected ones."
 ref = "Reusing Shapes › Corner Components › Using Corner Components"
 status = "handbook"
-notes = "Documented, not yet observed. M6.10: Edit View tints each corner component on a node with a faint disc (`corner_highlight`); a corner on an extra node is not tinted. Selecting corners by click and deleting them need a selection kind for hints and are not built yet. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the corner tutorial (W8) shows corner components as blue particles and selects them by a click or Shift-click on their blue line; the release-notes screenshot of caps (W5) and the tutorial screenshots of segment components and brushes (W6, W7) draw the highlight as a wide, faint blue band along the fitted outline of the attachment. The disc drawn by M6.10 differs from that and is a UI follow-up. W8 also says Select All, pressed repeatedly, cycles through all paths, all paths and anchors, all corner components and all anchors, so Delete can remove every corner at once."
+notes = "Documented, not yet observed. M6.10: Edit View tints each corner component on a node with a faint disc (`corner_highlight`); a corner on an extra node is not tinted. M6.20: a click on a corner's fitted outline (the segments between the nodes fitting put in) selects it as a hint item (`Item::Hint`, its position in the layer's hint list), Shift-click toggles it, and a marquee leaves corners out (`crates/tools/src/attachment.rs`, `hit.rs`); a selected corner's band is drawn in `attachment_band_selected`; Delete sends the selected corners to `edit.delete` as `hints`, one undo step; the corner Info box shows the selected corner. Select All does not cycle to corners yet. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the corner tutorial (W8) shows corner components as blue particles and selects them by a click or Shift-click on their blue line; the release-notes screenshot of caps (W5) and the tutorial screenshots of segment components and brushes (W6, W7) draw the highlight as a wide, faint blue band along the fitted outline of the attachment. The disc drawn by M6.10 differs from that and is a UI follow-up. W8 also says Select All, pressed repeatedly, cycles through all paths, all paths and anchors, all corner components and all anchors, so Delete can remove every corner at once."
 guesses = [
   "The highlight is a wide, faint blue band along the corner's fitted outline, as the sources show for caps, segments and brushes; its width and colour are ours, and a corner at 400 % zoom in the reference app settles them.",
+  "A click hits a corner along the segments between its inserted nodes; the host node itself stays a node hit, and where a path segment is as near as the corner, the corner wins.",
+  "A selected corner's band is drawn in a stronger tint of the same blue.",
+  "A drag that starts on a corner moves nothing: a corner moves with its node.",
 ]
 observe = [
   "Attach a corner component at 400 % zoom and note the width and colour of its blue band, and how a selected corner differs from an unselected one.",
+  "Click a corner's blue line, then drag from it: note whether the corner, its node or nothing moves.",
 ]
 
 [[behavior]]
@@ -1528,7 +1532,7 @@ milestone = "M6"
 summary = "A selected corner component can be copied with Edit › Copy and, with other nodes selected, pasted onto them with Edit › Paste, giving each node the same corner."
 ref = "Reusing Shapes › Corner Components › Using Corner Components"
 status = "handbook"
-notes = "Documented, not yet observed. M6.9: `edit.copy` with `corners: [hint indices]` puts the corners on the clipboard as our own JSON (`fontcraft-corners`: each corner's glyph, scale and alignment, without its node); `edit.paste` of that text with `points` attaches them to those nodes, as `cornerComponent.add` does (`cmd/corner.rs`, called from `cmd/clipboard.rs`)."
+notes = "Documented, not yet observed. M6.9: `edit.copy` with `corners: [hint indices]` puts the corners on the clipboard as our own JSON (`fontcraft-corners`: each corner's glyph, scale and alignment, without its node); `edit.paste` of that text with `points` attaches them to those nodes, as `cornerComponent.add` does (`cmd/corner.rs`, called from `cmd/clipboard.rs`). M6.20: with corners selected on the canvas, Copy and Cut send them as `corners` alone (Cut is refused rather than cutting the layer); Paste with nodes selected sends those nodes as `points`."
 guesses = [
   "Pasting a corner, cap, segment or brush onto a selection of the wrong kind (a corner with a segment selected, a cap on nodes that are not neighbours) is refused with a message and nothing changes; the reference app settles it.",
   "One copied corner goes onto every selected node; several copied corners go onto as many selected nodes, in order, and any other count is refused. Copying two corners and pasting them onto three nodes in the reference app settles it.",
@@ -1544,9 +1548,10 @@ milestone = "M6"
 summary = "The Palette's mirror buttons flip selected corner components, equivalent to negating the matching scale; a left corner becomes a right one and the reverse."
 ref = "Reusing Shapes › Corner Components › Using Corner Components; Palette › Transformations"
 status = "handbook"
-notes = "Documented, not yet observed. M6.9: `cornerComponent.setScale` with `flip: horizontal | vertical` negates the matching factor of each selected corner. The Palette's mirror buttons run `transform.mirrorHorizontal` and `transform.mirrorVertical`, which do not take corners; sending them to the flip when corners are selected is not built yet."
+notes = "Documented, not yet observed. M6.9: `cornerComponent.setScale` with `flip: horizontal | vertical` negates the matching factor of each selected corner. The Palette's mirror buttons and the menu's mirror commands run `transform.mirrorHorizontal` and `transform.mirrorVertical`; with corners selected on the canvas (M6.20) they send them as `corners`, without an origin, and the corners flip in place."
 guesses = [
   "Mirroring negates the scale only and keeps the corner's alignment mode; mirroring a corner aligned left in the reference app and reading its Info box settles it.",
+  "With corners and other objects selected, the mirror buttons flip the corners only and leave the rest.",
 ]
 observe = [
   "Select a corner aligned left on a diagonal stem, press the horizontal mirror button and read the Info box: note the scale fields and the alignment button.",

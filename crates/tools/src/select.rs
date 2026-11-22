@@ -6,6 +6,7 @@
 //! |---|---|
 //! | click an object | select it; a segment selects its two end nodes |
 //! | `Shift`+click | toggle it in the selection |
+//! | click a corner component's fitted outline, `Shift`+click | select it, toggle it; a drag from it moves nothing |
 //! | drag on empty canvas | marquee: nodes, handles and anchors inside; `Shift` toggles them, `Alt` takes on-curve nodes only and components too, `Ctrl` turns the marquee |
 //! | drag an object | `selection.move` in one interaction; snapping unless `Ctrl` is held |
 //! | `Alt` held at mouse-down | the drag moves a copy (`duplicate: true`) |
@@ -364,7 +365,8 @@ impl SelectTool {
                     self.state = State::Guide(Box::new(guide));
                     return out;
                 }
-                if press.hit.locked || cx.scene.locked {
+                // A corner component moves with its node, not by itself.
+                if press.hit.locked || cx.scene.locked || matches!(press.hit.hit, Hit::Attachment { .. }) {
                     return out;
                 }
                 let mods = press.mods;

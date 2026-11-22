@@ -53,7 +53,9 @@ pub fn objects_wanted(spec: &CommandSpec) -> Option<String> {
 pub fn supplies(scene: &Scene, selection: &Selection, spec: &CommandSpec) -> Result<(), String> {
     let Some(what) = objects_wanted(spec) else { return Ok(()) };
     let m = selection_targets(scene, selection, spec);
-    if !OBJECT_TARGETS.iter().any(|(kind, key, _)| spec.targets.contains(kind) && m.contains_key(*key)) {
+    // Selected corner components reach Delete as `hints`, Copy, Cut and the mirrors as `corners`.
+    let corners = m.contains_key("hints") || m.contains_key("corners");
+    if !corners && !OBJECT_TARGETS.iter().any(|(kind, key, _)| spec.targets.contains(kind) && m.contains_key(*key)) {
         return Err(format!("select {what} first"));
     }
     ready(scene, selection, spec.id)
@@ -129,9 +131,13 @@ pub fn checked(scene: &Scene, selection: &Selection, id: &str) -> Option<bool> {
     }
 }
 
-/// The corner components on the selected nodes, by hint index.
+/// The selected corner components and those on the selected nodes, by hint index.
 pub fn selected_corners(scene: &Scene, selection: &Selection) -> Vec<usize> {
-    corners_on_nodes(&scene.layer, &selection.points)
+    let mut out = fontcraft_tools::attachment::selected_corners(scene, selection);
+    out.extend(corners_on_nodes(&scene.layer, &selection.points));
+    out.sort_unstable();
+    out.dedup();
+    out
 }
 
 /// The corner component hints of `layer` that sit on one of `points`, by hint index.

@@ -52,6 +52,8 @@ pub struct Tokens {
     pub anchor: Color32,
     /// The faint band along a corner or cap component's fitted outline.
     pub attachment_band: Color32,
+    /// The band of a selected corner component.
+    pub attachment_band_selected: Color32,
     /// The other side of the layer under Show Background (`appearance.color.backgroundStroke`).
     pub background_outline: Color32,
     /// Another visible layer of the glyph (`appearance.color.otherLayersStroke`).
@@ -200,6 +202,7 @@ impl Tokens {
             component_placeholder: Color32::from_rgb(0xd0, 0x40, 0x40),
             anchor: Color32::from_rgb(0xe8, 0x8a, 0x1a),
             attachment_band: Color32::from_rgba_unmultiplied(0x50, 0x96, 0xf0, 0x40),
+            attachment_band_selected: Color32::from_rgba_unmultiplied(0x50, 0x96, 0xf0, 0xb0),
             background_outline: Color32::from_rgba_unmultiplied(0xe0, 0x40, 0x40, 0x90),
             visible_layer_outline: Color32::from_rgba_unmultiplied(0x2d, 0x8c, 0xeb, 0xb0),
             reference_outline: Color32::from_rgba_unmultiplied(0x30, 0xa0, 0x60, 0xa0),
