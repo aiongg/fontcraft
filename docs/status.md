@@ -2,12 +2,19 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-22: M5.30, M13.69 and M13.70 written on `w-M5.30` (based on `w-X.fix95`), not built or tested (see "Where M5.30, M13.69 and M13.70 stand"). Before that: X.fix95 written on `w-X.fix95`, not built or tested (see "Where X.fix95 stands"). Before that: M9.32, M3.41, M3.43 and M3.42 merged into `master`, built, tested and smoke-tested in the window (X.integ148 to X.integ151). The Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
+_Updated: 2026-11-22: M5.30, M13.69, M13.70 and X.fix95 merged into `master`, built, tested and smoke-tested in the window (X.integ153 to X.integ156; see "Where M5.30, M13.69 and M13.70 stand"). Before that: M9.32, M3.41, M3.43 and M3.42 merged (X.integ148 to X.integ151); the Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
 
 ## State of the tree
 
-- **Where M5.30, M13.69 and M13.70 stand.** Written on `w-M5.30`, on top of `w-X.fix95`; the writer ran no cargo
-  command but `cargo fmt`, so the integrator builds and tests it. One commit each:
+- **Where M5.30, M13.69 and M13.70 stand.** Merged into `master` with X.fix95 and built; the gate is green
+  (X.integ153 to X.integ156). Seen in the window, light and dark: the Text Preview waterfall draws the Edit View
+  text from 72 pt down; after `font.compile` to a folder, `textPreview.showExportedFonts {source: "lastExport"}`
+  draws the preview text from the written file; Settings › Appearance has Text View Width. The find bar's matcher
+  (`shell/text_preview.rs::occurrences`) is shift-and over 64-bit words, so a query past 64 characters spans
+  several words; queries are capped at 1,000 characters (`MAX_QUERY_CHARS`). UI commands get no junk-parameter
+  sweep (only engine commands do), so no test feeds `showExportedFonts {folder}` real paths. The top row of the
+  Text Preview wraps, so in a narrow window the size field and the toggles move to further lines (X.integ156).
+  One commit each:
   - M5.30a: `appearance.textViewWidth` (number, 1 to 100,000, default 10,000 thousandths of an em) in
     `engine-core/src/settings.rs`; `app/models/text.rs::line_width(settings, upm)` gives the layout width and
     `LayoutKey` carries the settings revision. Settings › Appearance has a Text View Width number field.
@@ -25,14 +32,14 @@ _Updated: 2026-11-22: M5.30, M13.69 and M13.70 written on `w-M5.30` (based on `w
     command reply with `fonts[].files[].path` (hooked in `app/mod.rs` after each engine command).
     `app/models/text_preview/exported.rs` reads files on host jobs (`io::read_file`, `io::open`, `check`, a
     `PreviewShaper` from the file's bytes), at most 64, once a second, again only when size or mtime changed;
-    `project_exported` draws the chosen file without the document's kerning or colour. `crates/ui` now depends on
-    `fontcraft-decompile` (for `to_sfnt`), so `Cargo.lock` changes on the first build. Test
+    `project_exported` draws the chosen file without the document's kerning or colour. `crates/ui` depends on
+    `fontcraft-decompile` (for `to_sfnt`). Test
     `the_preview_shows_the_last_export_and_a_folder_and_follows_changes` (writes into the temp folder).
   - Left: no folder chooser in the Text Preview (a folder comes only through the command); the waterfall picks the
     nearest master by optical size, it does not interpolate.
 
-- **Where X.fix95 stands.** Written on `w-X.fix95`; the writer ran no cargo command but `cargo fmt`, so the
-  integrator builds and tests it. Four fixes, one commit each:
+- **Where X.fix95 stands.** Merged and built with M5.30. Seen in the window: the glyph inspector and the Info box
+  describe the glyph of the Edit tab; a palette form (Transformations) scrolls under the wheel. Four fixes:
   - a: per-script metric lines read the glyph's effective script. `shown_metrics(font, master, glyph, data)` and
     `glyph_script(glyph, data)` take `Option<&GlyphData>`; `Scene::from_font_side(font, data, …)` and the UI's
     `canvas::tools::scene(font, data, view, focus)` pass it through (every caller hands
