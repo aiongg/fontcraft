@@ -7,10 +7,9 @@
 //! code. Nothing changes while the dialog is open (run on OK): OK runs the command once, one undo step, and a list the
 //! command refuses (a code or name used twice) keeps the dialog open with the message. Cancel changes nothing.
 
-use craft::behavior::Mixed;
 use craft::ui::buttons::Button;
 use craft::ui::choice::Checkbox;
-use craft::ui::contract::{Bind, Props as _, Show as _, ShowContainer as _};
+use craft::ui::contract::{Bind, FieldLayout, Show as _, ShowContainer as _, SideLabel};
 use craft::ui::form::Field as FormField;
 use craft::ui::layout_components::{Row, Stack};
 use craft::ui::patterns::form_dialogs::{CustomContext, DialogFields, FieldValue};
@@ -225,7 +224,7 @@ fn row(ui: &mut Ui, rows: &mut DialogFields, _: &mut CustomContext, field: &Fiel
         for (i, e) in list.iter().enumerate() {
             let caption = Label::from(words.status.as_str().replace("{n}", &(i + 1).to_string()));
             let _ = FormField::new(caption).show(ui, |ui, _| {
-                let _ = Row::new().wrap(true).show(ui, |ui, _| {
+                let _ = Row::new().wrap(true).show(ui, |ui, cx| {
                     let out = TextField::new(words.name.clone(), Bind::given(e.name.clone())).show(ui);
                     if let Some(text) = out.events.committed()
                         && text.trim() != e.name
@@ -242,8 +241,12 @@ fn row(ui: &mut Ui, rows: &mut DialogFields, _: &mut CustomContext, field: &Fiel
                     if let Some(c) = picked {
                         edit = Some(Edit::Color(i, c));
                     }
-                    let default = Checkbox::new(Bind::given(Mixed::Same(e.is_default))).label(words.default.clone());
-                    if default.show(ui).events.committed().is_some() {
+                    // A box in the row's label scope draws only its mark, so its word comes from the row's label step.
+                    let mut on = e.is_default;
+                    let side = SideLabel::new().layout(FieldLayout::After);
+                    let _ =
+                        cx.labelled(ui, ("fontcraftStatusDefinitions.default", i), words.default.clone(), side, Checkbox::new(Bind::bound(&mut on)));
+                    if on != e.is_default {
                         edit = Some(Edit::Default(i));
                     }
                     if Button::new(words.remove.clone()).show(ui).clicked() {
