@@ -91,6 +91,9 @@ fn column_of(key: &ColumnKey) -> Option<Column> {
     key.as_str().and_then(Column::parse)
 }
 
+/// The Status column's width, in control heights.
+const STATUS_WIDTH: f32 = 6.0;
+
 pub fn show(ui: &mut Ui, model: &FontViewModel, sent: &mut Vec<Msg>) {
     let env = Env::of(ui);
     let words = env.words::<FontViewWords>();
@@ -100,7 +103,9 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, sent: &mut Vec<Msg>) {
         .columns
         .iter()
         .map(|&c| {
-            let spec = ColumnSpec::new(key(c), header(&headers, c), ColumnWidth::Content).sortable().resizable().movable();
+            // A pop-up cell is not measured as text, so the Status column takes a width that fits a status name.
+            let width = if c == Column::Status { ColumnWidth::Controls(STATUS_WIDTH) } else { ColumnWidth::Content };
+            let spec = ColumnSpec::new(key(c), header(&headers, c), width).sortable().resizable().movable();
             let spec = if c == Column::Name { spec } else { spec.hideable() };
             // The first column's text is the row's own, which starts at the leading edge; its header does too.
             if c.is_numeric() && c != first { spec.numeric() } else { spec }
