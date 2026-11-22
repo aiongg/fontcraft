@@ -341,4 +341,22 @@ mod tests {
         fixture.click(&rsb).key(Key::ArrowUp, Modifiers::NONE).settle();
         assert_eq!(*commits.borrow(), vec![("LSB", json!(50.0))]);
     }
+
+    /// Craft's number fields read every draft through `NumberCodec`, whose expression reader recurses once per
+    /// parenthesis and sign with no depth limit, and the field sets no length limit on its draft, so a long enough
+    /// paste of `(` overflows the stack. Craft offers no hook before the read; this stays ignored until craft bounds
+    /// it, and aborts the test binary when run.
+    #[test]
+    #[ignore = "craft bug: aborts with a stack overflow until craft bounds its expression reader"]
+    fn craft_number_fields_survive_a_paste_of_deep_parentheses() {
+        use craft::behavior::Codec as _;
+        let text = "(".repeat(100_000);
+        let read = std::thread::Builder::new()
+            .stack_size(8 << 20)
+            .spawn(move || craft::behavior::NumberCodec::default().parse(&text, &None).is_ok())
+            .unwrap()
+            .join()
+            .unwrap();
+        assert!(!read);
+    }
 }

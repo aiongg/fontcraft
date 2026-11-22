@@ -41,3 +41,12 @@ craft-libs is not taking outside changes at this stage, and FontCraft cannot wai
   craft piece it extends or stands in for.
 - Pieces that need changes deep inside craft (for example, the shell delivering a paste event) may need
   a narrower stand-in here; the module doc records what the full version in craft would do.
+
+## Craft bugs FontCraft cannot work around
+
+Some defects sit inside craft components with no public hook before them, so a staged piece cannot
+fix them. They wait for craft-libs.
+
+| Bug | Where in craft | Effect in FontCraft | Test |
+|---|---|---|---|
+| The expression reader recurses once per `(` and per sign with no depth limit, and `NumberField` sets no length limit on its draft (a `TextField` holds 1,024 characters) | `behavior/src/quantity.rs` (`Parse::factor`), `ui-widgets/src/text/number.rs` | Pasting about 100,000 `(` into any panel number field overflows the stack and aborts the app. Dialog number fields read through `widgets::parse_number`, which caps length and depth first. | `panels::widgets::tests::craft_number_fields_survive_a_paste_of_deep_parentheses` (ignored) |

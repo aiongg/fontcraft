@@ -1087,7 +1087,8 @@ An adversarial review of the skeleton reported 31 findings. Most were fixed in t
 (coordinate and point-count bounds before the glyph writer, glyph-name sanitising for `post`,
 style linking, bounded reads on every channel, protocol id checks, the indexing lints, a
 virtualised Font View). The first two rows below were left on purpose; the reviews of the M9 to
-M12 first waves left the last two for the packages named. None can lose data.
+M12 first waves left the next two for the packages named. None of those can lose data. The last row is a
+craft bug with no hook on our side (`docs/decisions/0009`): it aborts the app.
 
 | Limit | Where | Fix it in |
 |---|---|---|
@@ -1095,6 +1096,7 @@ M12 first waves left the last two for the packages named. None can lose data.
 | The vendor-names scanner does not see through `concat!` or string escapes | `xtask/src/brands.rs` | when it matters |
 | No font-wide work budget for rasterising in the file checks, for drawing every glyph in the static-instancing check, or for the CFF glyph reading each hinting check repeats | `crates/audit` | a check package |
 | An embedded image or SVG file is not checked to be the format its table expects | `crates/engine` (assets) | M11.8, M11.10 |
+| A paste of about 100,000 `(` into a panel number field overflows the stack: craft's expression reader has no depth limit and its number field no draft limit | craft `NumberField` | craft-libs |
 
 ## Waiting on the owner
 
