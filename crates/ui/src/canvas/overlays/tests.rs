@@ -99,6 +99,11 @@ fn guides_draw_with_their_measurement_crossings() {
     let labels = texts(&d);
     assert!(labels.contains(&"mid".to_string()), "{labels:?}");
     assert!(labels.contains(&"200".to_string()), "the square is 200 wide at the guide: {labels:?}");
+    run(&mut app, "settings.set", json!({"id": "appearance.guideOpacity", "value": 50}));
+    let d = drawn(&app, super::guides::guide_shapes);
+    let faded =
+        d.shapes.iter().filter(|s| matches!(s, egui::Shape::LineSegment { stroke, .. } if stroke.color == t.guide_local.gamma_multiply(0.5))).count();
+    assert_eq!(faded, 1, "the guide opacity fades the line");
     shell(&mut app, "view.showGuides", json!({"on": false}));
     assert!(drawn(&app, super::guides::guide_shapes).shapes.is_empty(), "Show Guides off hides them");
 }

@@ -59,7 +59,7 @@ pub fn power_guide_shapes(cx: &PaintCx<'_>) -> Drawn {
     let t = OverlayTokens::standard();
     let layer = &glyph.layer;
     for g in &layer.info.guides {
-        let color = g.color.as_deref().and_then(parse_color).unwrap_or(t.guide_local);
+        let color = g.color.as_deref().and_then(parse_color).unwrap_or(t.guide_local).gamma_multiply(cx.tokens.guide_opacity);
         guide(cx, &t, layer, g, color, |l| l.glyph.is_none(), &mut out);
     }
     let data = cx.overlays.data;
@@ -68,7 +68,7 @@ pub fn power_guide_shapes(cx: &PaintCx<'_>) -> Drawn {
         if data.out_of_scope.contains(&i) {
             continue;
         }
-        let color = g.color.as_deref().and_then(parse_color).unwrap_or(t.guide_global);
+        let color = g.color.as_deref().and_then(parse_color).unwrap_or(t.guide_global).gamma_multiply(cx.tokens.guide_opacity);
         guide(cx, &t, layer, g, color, |l| own && l.glyph.as_deref() == Some(glyph.name.as_str()), &mut out);
     }
     out

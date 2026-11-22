@@ -111,6 +111,18 @@ impl HintTokens {
     }
 }
 
+impl HintTokens {
+    /// The tokens with the PostScript hint bands faded to `opacity`, from 0 to 1 (`appearance.guideOpacity`).
+    pub fn with_opacity(opacity: f32) -> HintTokens {
+        let mut t = HintTokens::standard();
+        let opacity = if opacity.is_finite() { opacity.clamp(0.0, 1.0) } else { 1.0 };
+        for c in [&mut t.ps_horizontal, &mut t.ps_vertical, &mut t.ps_ghost] {
+            *c = c.gamma_multiply(opacity);
+        }
+        t
+    }
+}
+
 impl Default for HintTokens {
     fn default() -> Self {
         HintTokens::standard()

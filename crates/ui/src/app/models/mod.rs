@@ -184,6 +184,7 @@ impl Models {
         glyph::project(&mut self.glyph_metrics, cx);
         canvas::project(&mut self.canvas, &mut self.color_files, cx);
         self.canvas_tokens = crate::canvas::tokens::Tokens::from_settings(cx.session.settings(), false);
+        self.hint_tokens = crate::canvas::hinting::tokens::HintTokens::with_opacity(self.canvas_tokens.guide_opacity);
         font_view::project(&mut self.font_view, &mut self.font_view_outlines, &mut self.color_files, cx);
         tabs::project(&mut self.tabs, cx);
         font_info::project(&mut self.font_info, cx);

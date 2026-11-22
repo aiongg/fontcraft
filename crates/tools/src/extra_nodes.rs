@@ -8,8 +8,11 @@
 //! components, for the hinting commands. Two segments that cross more than once name one extra
 //! node: the crossing nearest to where their chords cross, which is the place a static export
 //! with overlap removal moves an instruction on it to (`compile/src/points.rs`).
+//!
+//! [`crossing_points`] lists every crossing as a place, for drawing: two segments that cross
+//! twice give two places there.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use fontcraft_geom::{Piece, Point};
 use fontcraft_model::{Layer, Shape};
@@ -23,6 +26,11 @@ use crate::segment::{self, Segment};
 pub const NODE_DISTANCE: f64 = 1.0;
 /// Most extra nodes listed for one layer; past it, the rest are left out.
 pub const MAX_EXTRA_NODES: usize = 4_096;
+/// Most work one [`crossing_points`] call does, in the units of [`MAX_CROSSING_WORK`]. The canvas
+/// asks for them at every revision of the edited layer, so the budget is a tenth of a command's.
+pub const MAX_CROSSING_POINT_WORK: usize = MAX_CROSSING_WORK / 10;
+/// Two crossings closer than this on both axes, in font units, are drawn as one place.
+const SAME_PLACE: f64 = 0.01;
 
 /// One extra node.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -53,6 +61,45 @@ pub fn extra_nodes(layer: &Layer) -> Vec<ExtraNode> {
         }
     }
     crossings(&segments)
+}
+
+/// Every place where `layer`'s paths cross one another or themselves, at least [`NODE_DISTANCE`]
+/// from the end nodes of both segments, each place once, in the order found, at most
+/// [`MAX_EXTRA_NODES`]: what View › Show Nodes › Extra Nodes marks. Empty when the layer has more
+/// segments than can be compared or the comparison runs past [`MAX_CROSSING_POINT_WORK`].
+pub fn crossing_points(layer: &Layer) -> Vec<Point> {
+    let mut segments = Vec::new();
+    for (shape, s) in layer.shapes.iter().enumerate() {
+        let Shape::Path(path) = s else { continue };
+        segments.extend(segment::segments(shape, path));
+        if segments.len() > MAX_CROSSING_SEGMENTS {
+            return Vec::new();
+        }
+    }
+    let all: Vec<Vec<Piece>> = segments.iter().map(pieces).collect();
+    let mut work = MAX_CROSSING_POINT_WORK;
+    let Ok(found) = segment_crossing_pairs_within(&all, &mut work) else { return Vec::new() };
+    let mut seen: HashSet<(i64, i64)> = HashSet::new();
+    let mut out = Vec::new();
+    for c in found {
+        let (Some(pa), Some(pb)) = (all.get(c.a), all.get(c.b)) else { continue };
+        let (Some(at), Some(a0), Some(a1), Some(b0), Some(b1)) = (eval(pa, c.ta), eval(pa, 0.0), eval(pa, 1.0), eval(pb, 0.0), eval(pb, 1.0)) else {
+            continue;
+        };
+        if !(at.x.is_finite() && at.y.is_finite()) || [a0, a1, b0, b1].iter().any(|e| dist(*e, at) <= NODE_DISTANCE) {
+            continue;
+        }
+        // Saturating casts: a coordinate too large for the key still gives a key.
+        #[allow(clippy::cast_possible_truncation)]
+        let key = ((at.x / SAME_PLACE).round() as i64, (at.y / SAME_PLACE).round() as i64);
+        if seen.insert(key) {
+            out.push(at);
+            if out.len() >= MAX_EXTRA_NODES {
+                break;
+            }
+        }
+    }
+    out
 }
 
 /// The extra node where the segment ending at node `a.1` of shape `a.0` crosses the one ending
@@ -198,5 +245,36 @@ mod tests {
         // The chords (0,0)-(400,0) and (500,150)-(-100,150) are parallel: halfway between the
         // ends (400,0) and (-100,150) is (150,75), nearer the left crossing.
         assert!(top.first().is_some_and(|e| e.at.x < 200.0 && (e.at.y - 150.0).abs() < 0.01), "{top:?}");
+        let places = crossing_points(&layer).into_iter().filter(|p| (p.y - 150.0).abs() < 0.01).count();
+        assert_eq!(places, 2, "the places to draw keep both crossings");
+    }
+
+    #[test]
+    fn crossing_points_of_two_overlapping_squares_and_a_plus() {
+        let mut squares = Layer::new("m01", 600.0);
+        squares.shapes.push(Shape::Path(Path::rect(0.0, 0.0, 200.0, 200.0)));
+        squares.shapes.push(Shape::Path(Path::rect(100.0, 100.0, 300.0, 300.0)));
+        let mut found: Vec<(f64, f64)> = crossing_points(&squares).iter().map(|p| (p.x.round(), p.y.round())).collect();
+        found.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        assert_eq!(found, vec![(100.0, 200.0), (200.0, 100.0)]);
+        assert_eq!(crossing_points(&plus()).len(), 4, "the component is no path");
+    }
+
+    #[test]
+    fn crossing_points_stop_at_their_limits() {
+        // 70 long thin bars each way cross 70 × 70 × 4 times: more places than are listed.
+        let mut grid = Layer::new("m01", 600.0);
+        for i in 0..70 {
+            let at = f64::from(i) * 10.0;
+            grid.shapes.push(Shape::Path(Path::rect(-10.0, at, 1000.0, at + 2.0)));
+            grid.shapes.push(Shape::Path(Path::rect(at, -10.0, at + 2.0, 1000.0)));
+        }
+        assert_eq!(crossing_points(&grid).len(), MAX_EXTRA_NODES);
+        // A path with more segments than can be compared gives none, at once.
+        let n = Node::new;
+        let zigzag: Vec<Node> = (0..MAX_CROSSING_SEGMENTS + 1).map(|i| n(i as f64, if i % 2 == 0 { 0.0 } else { 100.0 }, NodeKind::Line)).collect();
+        let mut long = Layer::new("m01", 600.0);
+        long.shapes.push(Shape::Path(Path::new(true, zigzag)));
+        assert!(crossing_points(&long).is_empty());
     }
 }
