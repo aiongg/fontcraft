@@ -49,6 +49,7 @@ observe = [
 id = "file.exportSettings"
 label = "Export Settings"
 menu = []
+shortcut = ""
 kind = "engine"
 params = '{document?: title or path, tab?: "otf"|"variable"}'
 area = "compile"

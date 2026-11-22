@@ -341,15 +341,9 @@ fn profile_fields(session: &Session) -> Vec<Field> {
             "The containers each font is written in",
         )
         .in_group("Output"),
-        Field::bool("removeOverlap", "Remove Overlap", true, "Merge overlapping paths and components in every exported glyph").in_group("Outlines"),
-        Field::bool("autohint", "Autohint", false, "Add automatic hints to the exported fonts").in_group("Hinting"),
-        Field::bool("cbdt", "CBDT", false, "Also write CBDT and CBLC bitmap tables from the iColor layers, for renderers that do not draw sbix")
-            .in_group("Colour"),
-        Field::bool("colr", "COLR", true, "Write the COLR and CPAL tables of palette layers").in_group("Colour"),
-        Field::bool("svg", "SVG", true, "Write the SVG table of SVG layers").in_group("Colour"),
-        Field::bool("sbix", "sbix", true, "Write the sbix table of iColor layers").in_group("Colour"),
         Field::bool("variable", "Variable Fonts", false, "Also build the variable fonts, as the Variable Fonts tab of Export does")
             .in_group("Output"),
+        Field::bool("removeOverlap", "Remove Overlap", true, "Merge overlapping paths and components in every exported glyph").in_group("Outlines"),
         Field::text(
             "conversionError",
             "Curve Error",
@@ -357,6 +351,12 @@ fn profile_fields(session: &Session) -> Vec<Field> {
             "Largest distance of the quadratic outlines from the cubic ones, in em (above 0, at most 1); empty: the default",
         )
         .in_group("Outlines"),
+        Field::bool("autohint", "Autohint", false, "Add automatic hints to the exported fonts").in_group("Hinting"),
+        Field::bool("cbdt", "CBDT", false, "Also write CBDT and CBLC bitmap tables from the iColor layers, for renderers that do not draw sbix")
+            .in_group("Colour"),
+        Field::bool("colr", "COLR", true, "Write the COLR and CPAL tables of palette layers").in_group("Colour"),
+        Field::bool("svg", "SVG", true, "Write the SVG table of SVG layers").in_group("Colour"),
+        Field::bool("sbix", "sbix", true, "Write the sbix table of iColor layers").in_group("Colour"),
         Field::choice(
             "subroutinize",
             "Subroutines",
