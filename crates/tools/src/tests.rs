@@ -562,9 +562,12 @@ fn a_drag_near_a_component_shows_its_nodes_as_markers() {
     font.glyph_mut("B").unwrap().layer_mut("m01").unwrap().shapes.push(Shape::Path(Path::rect(0.0, 0.0, 100.0, 100.0)));
     let mut c = Component::new("B", 200.0, 0.0);
     c.info.alignment = Alignment::Disabled;
-    let layer = font.glyph_mut("A").unwrap().layer_mut("m01").unwrap();
-    layer.shapes.push(Shape::Component(c));
-    layer.shapes.push(Shape::Path(Path::rect(-300.0, 0.0, -200.0, 100.0)));
+    {
+        let mut glyph = font.glyph_mut("A").unwrap();
+        let layer = glyph.layer_mut("m01").unwrap();
+        layer.shapes.push(Shape::Component(c));
+        layer.shapes.push(Shape::Path(Path::rect(-300.0, 0.0, -200.0, 100.0)));
+    }
     let scene = Scene::from_font(&font, "A", None).unwrap();
     let selection = points(&[(1, 2)]);
     let cx = Context { scene: &scene, view: View::default(), selection: &selection, settings: ToolSettings::default() };
