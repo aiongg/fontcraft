@@ -6,6 +6,7 @@ file.exportUfo
 file.close
 file.exportStatic
 file.exportAll
+file.exportSettings
 edit.undo
 edit.redo
 edit.cut

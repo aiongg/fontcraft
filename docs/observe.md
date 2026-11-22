@@ -32,23 +32,23 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1543 rows to check: 2678 guesses and 653 observe steps.**
+**1550 rows to check: 2704 guesses and 664 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **549** |
-| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 125 |
+| **Built milestones (M0 to M6)** | all | **555** |
+| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 128 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 33 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
-| Built milestones (M0 to M6) | Filters | 36 |
+| Built milestones (M0 to M6) | Filters | 37 |
 | Built milestones (M0 to M6) | Spacing and metrics keys | 23 |
 | Built milestones (M0 to M6) | Kerning and the Kerning window | 42 |
 | Built milestones (M0 to M6) | Font View | 114 |
 | Built milestones (M0 to M6) | Font Info and features | 20 |
-| Built milestones (M0 to M6) | Files: open, import, export | 49 |
+| Built milestones (M0 to M6) | Files: open, import, export | 51 |
 | Built milestones (M0 to M6) | Settings and the window | 18 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **994** |
+| **Later milestones (after M6)** | all | **995** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 90 |
 | Later milestones (after M6) | Edit View: text mode and preview | 28 |
 | Later milestones (after M6) | Components and anchors | 43 |
@@ -60,14 +60,14 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Interpolation | 90 |
 | Later milestones (after M6) | Hinting | 115 |
 | Later milestones (after M6) | Colour fonts | 74 |
-| Later milestones (after M6) | Files: open, import, export | 71 |
+| Later milestones (after M6) | Files: open, import, export | 72 |
 | Later milestones (after M6) | Settings and the window | 32 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
-## Built milestones (M0 to M6) (549)
+## Built milestones (M0 to M6) (555)
 
-### Edit View: drawing, guides, layers and the Palette (125)
+### Edit View: drawing, guides, layers and the Palette (128)
 
 - [ ] `dialog.fieldKeys` (behavior, M3, inferred): In a dialog's number field, Return takes the typed value, Escape drops…
   - Guess: Dialog number fields follow the Info box's editing and arrow-key rules (infoBox.fieldEditing, infoBox.arrowKeyStepping); the handbook documents them for the Info box only.
@@ -259,6 +259,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The Scale tool's badge shows the horizontal and vertical percentages, without the new size.
 - [ ] `background.snapping` (behavior, M3, handbook): While the background is displayed, its nodes and outlines are snapping targets…
   - Guess: The background's nodes, then its handles, are snap targets after the edited layer's nodes and handles and before guides; its outlines between nodes are not targets.
+- [ ] `background.usedByFilters` (behavior, M3, handbook): Some filters, Hatch Outline being the named example, keep the untouched original…
+  - Guess: Only Hatch Outline backs up; the handbook names no other filter.
+  - Guess: The copy replaces what the background held, shapes and anchors, as Selection to Background does.
+  - Guess: A re-run hatches the foreground as it is; it does not read the background back.
+  - Observe: Run each filter of the Filter menu on a glyph with an empty background and note which ones leave a copy of the outline in the background.
 - [ ] `measurement.allVisibleGlyphs` (behavior, M3, handbook): Coordinates and rulers of the Measurement tool cover every glyph shown in…
   - Guess: When the text holds more than 200 glyphs, the 200 nearest the edited one in the text are measured.
   - Observe: Type "HO", edit H, choose the Measurement tool and drag a ruler across both glyphs: the gap between H and O is labelled.
@@ -328,8 +333,18 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `fitCurve.percentRange` (behavior, M3, handbook): Handle length is expressed as a percentage from 1 to 100
   - Guess: Without the `Fit Curve Panel Settings` parameter the range is 48 to 74 %, the handbook's example, and values beyond the range are clamped to it (Palette question 2).
   - Observe: In a new font without the Fit Curve Panel Settings parameter, open the Palette's Fit Curve section and read the two percentage fields.
+- [ ] `transform.supportedObjects` (behavior, M3, handbook): Palette transformations apply to points, paths, components, anchors, guides and placed images…
+  - Guess: An aligned guide counts as the point it passes through, and keeps its angle; an annotation counts as its position.
+  - Observe: Select a rectangle and a vertical guide to its right, press Align Left, and note whether the guide moves to the rectangle's left edge.
 - [ ] `transform.oppositeButtonsExact` (behavior, M3, handbook): The buttons on either side of a value field are exact inverses…
-  - Guess: Opposite buttons are exact for mirroring and quarter turns, through exact sines and cosines and grid rounding; other angles are undone only up to grid rounding (Palette question 5).
+  - Guess: Exactness comes from a remembered pre-state: the next Palette mirror, scale, rotation or slant whose map undoes the last one (product within 1e-9 of the identity), on the same targets and origin with no edit in between, puts back the layers from before it (Palette question 5).
+  - Guess: Any edit in between, an undo included, breaks the link; a drag with the Rotate or Scale tool keeps no memory.
+  - Observe: Draw a 7-unit square, scale it 90 % with the origin at its bottom left, press the reverse scale button, save, and read the coordinates in the saved file.
+- [ ] `transform.originCjkLayerCenter` (behavior, M3, handbook): For CJK glyphs the metrics-point control is replaced by a layer-dimensions control…
+  - Guess: A glyph counts as CJK when its script, as stored or from the glyph data, is han, hangul, kana or bopomofo, the scripts that also get the 1000-unit default width.
+  - Guess: Path › Transformations treats a metrics origin of a CJK glyph the same way.
+  - Guess: The control is one button named Layer Center; it reads as pressed while the metrics or layer origin is chosen.
+  - Observe: Open a han glyph and note what the Transformations section shows in place of the metric heights, and whether Path › Transformations changes too.
 - [ ] `window.palette` (M3, handbook, live): Palette
   - Guess: With every Palette panel closed one at a time, Window › Palette opens the panels the default layout docks at the end edge; settle by closing the reference app's Palette sections one by one and choosing Window › Palette.
 - [ ] `palette.toggleSection` (M3, handbook, live): Collapse / Expand Section
@@ -767,8 +782,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A drag paints every cell the straight line between successive pointer positions crosses, stepping into one neighbour where it passes exactly through a grid corner; the reference app settles whether a fast drag fills such gaps.
   - Guess: The Pixel tool paints on the foreground only and refuses on the background with a message; the reference app settles it.
 
-### Filters (36)
+### Filters (37)
 
+- [ ] `filter.target.editViewTextSelection` (behavior, M3, handbook): Run from Edit View while the Text tool is active, a filter…
+  - Guess: A glyph shown twice in the selection is filtered once; the layer is the one the canvas edits, for every selected glyph.
+  - Observe: In text mode select three glyphs of a word and run Round Corners: note which glyphs change and on which master.
 - [ ] `filter.target.visibleLayerOnly` (behavior, M3, handbook): A filter normally changes only the layer currently shown for each target…
   - Guess: A filter changes the visible layer of each targeted glyph unless `layers` is given; the handbook says only "normally".
 - [ ] `filter.target.headlessExplicitTargets` (behavior, M3, inferred): Every filter command accepts explicit glyph names and layer ids so that…
@@ -808,6 +826,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The half circle covers the same area as the square end it replaces, so its tip stands w·(1 − π/4)/2 (about 0.107 w) past the old end; the amount is ours.
 - [ ] `filter.repeatLastFilter` (M3, handbook, live): Repeat Last Filter
   - Guess: The last filter is the last filter.* or filter.apply run in the session journal, and it runs again silently with the same settings on the targets given.
+  - Guess: A node selection is dropped when the repeated filter changes whole layers, so the repeat still runs on the glyph instead of being refused.
 - [ ] `filter.extrude` (M3, handbook, live): Extrude
   - Guess: The construction is ours: the swept shape is the original area plus the band each piece of a closed path sweeps.
   - Guess: The offset runs from 0 to 1000000 units and the angle from -360 to 360 degrees.
@@ -832,15 +851,23 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Every path operation runs each glyph layer under a 5 s time limit, single-glyph commands included; a layer that runs out of time is skipped with `glyphs` and an error with one `glyph` (docs/plans/M3.md › M3.6, rule 8).
 - [ ] `dialog.filterExtrude` (panel, M3, handbook): Extrude
   - Guess: First values: offset 50, angle -45 (down and to the right), Don't Subtract off.
+  - Guess: The values of the last OK are kept for the session and not saved; Cancel keeps the earlier ones.
 - [ ] `dialog.filterHatchOutline` (panel, M3, handbook): Hatch Outline
   - Guess: First values: origin (0, 0), step width 20, angle 45, Offset Path on with thickness 5.
+  - Guess: The values of the last OK are kept for the session and not saved; Cancel keeps the earlier ones.
 - [ ] `dialog.filterOffsetCurve` (panel, M3, handbook): Offset Curve
   - Guess: First values: horizontal 10, vertical empty (the horizontal value), Make Stroke off, Auto Stroke off, position 50 %, Keep Compatible off, cap style flat.
+  - Guess: The values of the last OK are kept for the session and not saved; Cancel keeps the earlier ones.
+  - Guess: The lock sits on a row of its own above Vertical, labelled Same as Horizontal, and starts closed.
+  - Observe: Open Offset Curve, note whether the lock starts closed and Vertical greyed, then open the lock and note what Vertical shows.
 - [ ] `dialog.filterRoughen` (panel, M3, handbook): Roughen
   - Guess: First values: segment length 50, horizontal 10, vertical 10, angle 0.
   - Guess: The Angle field is ours: the handbook's export string has an angle value, but its dialog has no such field.
+  - Guess: The values of the last OK are kept for the session and not saved; Cancel keeps the earlier ones.
 - [ ] `dialog.filterRoundCorners` (panel, M3, handbook): Round Corners
   - Guess: First values: radius 20, visual corrections off.
+  - Guess: The values of the last OK are kept for the session and not saved; Cancel keeps the earlier ones.
+  - Observe: Run Round Corners with a radius of 33, open it again and read the radius field; then quit, relaunch and open it once more.
 - [ ] `dialog.interpolateWithBackground` (panel, M3, handbook): Interpolate with Background
   - Guess: It opens at 50 %; the handbook gives no default.
 - [ ] `glyph.transformMetrics.onBothSides` (behavior, M5, handbook): on both sides distributes the width change equally between the left and…
@@ -1451,7 +1478,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `Decompose Glyphs` (parameter, M6, handbook): List of glyph names whose components are turned into outlines at export
   - Guess: A text value is read as glyph names separated by commas or spaces, besides the documented list; the reference app with a text value would settle it.
 
-### Files: open, import, export (49)
+### Files: open, import, export (51)
 
 - [ ] `file.save` (M1, handbook, live): Save
   - Guess: The save chooser offers one filter with every source extension, and the chosen extension picks the format (no extension: the native format); the reference's format pop-up in its save sheet is documented but its layout is not observed.
@@ -1505,8 +1532,15 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: Give an instance the fileName parameter `{{{familyName}}}-{{{name}}}` and export it: note whether the file name holds the tokens or their values.
 - [ ] `export.flavourSubfolders` (behavior, M2, inferred): An export that writes both outline flavours at once (file.exportAll, font.compile) puts…
   - Guess: An export of both flavours at once puts them into ttf and otf subfolders; how the reference lays out such an export is not documented.
+- [ ] `export.destinationFolder` (behavior, M2, handbook): The folder destination is a checkbox next to a path
+  - Guess: Each tab keeps its own folder; the tabs do not share one.
+  - Guess: Unticking the box empties the folder field, so the folder chosen while it was unticked is not shown next time.
+  - Observe: Export from the OTF tab into folder A, then switch to the Variable Fonts tab: note whether it shows folder A.
 - [ ] `file.exportAll` (M2, handbook, live): Export All
-  - Guess: The reference's settings for Export All are not documented; using each document's last-used export settings is our assumption, and until FontCraft remembers settings the command takes them as parameters.
+  - Guess: The reference's settings for Export All are not documented; using each document's last-used settings of the OTF tab is our assumption.
+  - Guess: A document never exported uses the command's defaults (TrueType, plain), not the OTF tab's opening flavour (PostScript/CFF), so calls that name only a destination write what they wrote before.
+  - Guess: One folder asked once serves every document without a ticked folder of its own; documents with one keep it.
+  - Observe: Export one font from the OTF tab to folder A with WOFF2 ticked, then open a second font, hold Option and choose Export All: note which folder and formats each font is written with, and whether a folder is asked for the second font.
 - [ ] `font.compile` (M2, docs, live): Compile Fonts
   - Guess: Several masters with an axis and no formats build a variable TTF, as fontc does; fontmake builds static masters there. A static-only parameter, a project compile or a .otf destination file keeps the static default.
   - Guess: With familyName the instances of other families are listed as skipped; fontmake leaves them out silently.
@@ -1518,6 +1552,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A single file imported in Edit View is appended to the active layer; the handbook does not say whether existing shapes are kept or which layer receives them.
 - [ ] `paste.strokeAndFillMayDouble` (behavior, M3, inferred): The handbook advises Sketch users to copy shapes with a 1 pt…
   - Guess: A pasted shape with both fill and stroke may arrive as two contours; this is our reading of the handbook's advice, which gives no cause.
+- [ ] `file.exportSettings` (M3, inferred, live): Export Settings
+  - Guess: Settings are kept per document path, not app-wide: the handbook says Export All uses each document's last settings.
+  - Guess: An unsaved document's settings last for the session only; after Save As they are kept by path from its next export.
+  - Observe: Export font 1 from the OTF tab as TrueType with WOFF ticked, then open the Export dialog on font 2: note whether it shows TrueType and WOFF (app-wide) or the defaults (per document).
 - [ ] `file.importOutlines` (M3, handbook, live): Outlines…
   - Guess: An SVG reads as one font unit per SVG unit with SVG y = 0 at the ascender; the handbook does not say how a drawing is scaled.
 - [ ] `dialog.importOutlinesMissingGlyph` (panel, M3, handbook): Import Outlines: no matching glyph
@@ -1688,7 +1726,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (994)
+## Later milestones (after M6) (995)
 
 ### Edit View: drawing, guides, layers and the Palette (90)
 
@@ -4454,7 +4492,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A property name given twice is refused, since a BDF file names each property once.
   - Guess: Changing the strike's ascent or descent does not edit a `FONT_ASCENT` or `FONT_DESCENT` entry in `properties`; the two are set separately. The secondary reference's BDF Info dialog after a change of line metrics would settle whether it keeps them in step.
 
-### Files: open, import, export (71)
+### Files: open, import, export (72)
 
 - [ ] `export.instanceExportFolder` (behavior, M7, handbook): An instance carrying the Export Folder custom parameter is written to that…
   - Guess: The sub-path is used as written, `..` segments included, as the handbook says; an absolute path, an empty segment, a folder name with a character such as `:` or `\`, or a path of more than 32 segments makes export skip that instance with the reason, one trailing `/` is ignored, and the warnings name every file written outside the export destination; an Export Folder of `../x` and one of `/tmp/x` in the reference app settle it.
@@ -4728,8 +4766,14 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Font-level data is grouped into nine parts (info, axes, masters, instances, kerning, features, groups, glyph order, other), each accepted whole; the manual mentions font-level data without saying how finely it is split.
   - Guess: Glyph data apart from the layers (code points, export, kerning groups, metadata) is one item per glyph, beside one item per changed layer; changing a glyph's code point in a UFO while it is open in the reference settles how it is listed.
 - [ ] `dialog.exportProfiles` (panel, M13, docs): Export Profiles
+  - Guess: Variable Fonts in a profile builds the variable fonts beside the static ones, not in their place.
+  - Guess: COLR off also leaves out CPAL, since nothing else in an exported font reads the palettes.
+  - Guess: Keep and Remove Glyphs are names separated by spaces; Keep Glyphs keeps the glyphs' components too, as font.compile's glyphs does.
   - Guess: The built-in profiles are OpenType PS (CFF, plain), OpenType TT (TrueType, plain) and Web (TrueType, WOFF2 and WOFF), each writing into a subfolder named after it; the reference's full built-in list would settle it.
   - Guess: There is no tick for which profiles the export dialog shows: Export Fonts As lists every profile; the reference's dialog would settle whether hidden profiles are needed.
+  - Observe: Open the Export Profiles dialog, duplicate a built-in profile and note the controls of each group (outline, size, hinting, glyph, layout, colour), with their defaults.
+- [ ] `dialog.exportFontsAs` (panel, M13, docs): Export Fonts As
+  - Guess: The font list holds the open fonts by title; two open fonts of the same title cannot both be chosen.
 - [ ] `dialog.externalChanges` (panel, M13, docs): External Changes
   - Guess: Every item starts ticked, so Accept Selected with no change of the ticks takes everything; the reference's manual does not say which state the ticks start in, and opening the window there settles it.
   - Guess: The stored-text view on double-click shows the glyph in FontCraft's native JSON form rather than as a .glif file, since the comparison is between models; the reference shows the file text, and a file-per-glyph text view would follow it more closely.

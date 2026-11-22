@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**3179 guesses on 1653 rows (676 of them live commands).**
+**3205 guesses on 1660 rows (677 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -285,6 +285,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `preview.render` | M9 | inferred | yes | `features` is accepted and not applied, with a warning, since the Preview Area lays its line out without feature code. |
 | `infoBox.showsColorLabels` (behavior) | M4 | handbook | – | The split square sits at the left of the Info box and is drawn only when the glyph or the active layer has a colour label; the Info box itself shows only while something is selected. Settled by observation. |
 | `background.snapping` (behavior) | M3 | handbook | – | The background's nodes, then its handles, are snap targets after the edited layer's nodes and handles and before guides; its outlines between nodes are not targets. |
+| `background.usedByFilters` (behavior) | M3 | handbook | – | Only Hatch Outline backs up; the handbook names no other filter. |
+| `background.usedByFilters` (behavior) | M3 | handbook | – | The copy replaces what the background held, shapes and anchors, as Selection to Background does. |
+| `background.usedByFilters` (behavior) | M3 | handbook | – | A re-run hatches the foreground as it is; it does not read the background back. |
 | `text.lineWidth` (behavior) | M5 | handbook | – | Lines wrap at 10,000 units unless the setting says otherwise; no source gives the default. |
 | `text.lineWidth` (behavior) | M5 | handbook | – | A line that overflows breaks after its last space, else before the glyph that overflows, and a space may hang past the width; wrapped text in the reference app settles it. |
 | `text.lineWidth` (behavior) | M5 | handbook | – | In top-to-bottom text the lines are columns, placed from right to left one line height apart; a vertical tab in the reference app settles it. |
@@ -412,7 +415,12 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `palette.pluginSections` (behavior) | M13 | handbook | – | Values typed into a module's form are kept for the session only, and a module replaced by another version starts again from its defaults. |
 | `dimensions.perMaster` (behavior) | M3 | handbook | – | Values are stored under `GSDimensionPlugin.Dimensions` in the font's user data, one dictionary per master id, the key the corpus files use (Palette question 1). |
 | `fitCurve.percentRange` (behavior) | M3 | handbook | – | Without the `Fit Curve Panel Settings` parameter the range is 48 to 74 %, the handbook's example, and values beyond the range are clamped to it (Palette question 2). |
-| `transform.oppositeButtonsExact` (behavior) | M3 | handbook | – | Opposite buttons are exact for mirroring and quarter turns, through exact sines and cosines and grid rounding; other angles are undone only up to grid rounding (Palette question 5). |
+| `transform.supportedObjects` (behavior) | M3 | handbook | – | An aligned guide counts as the point it passes through, and keeps its angle; an annotation counts as its position. |
+| `transform.oppositeButtonsExact` (behavior) | M3 | handbook | – | Exactness comes from a remembered pre-state: the next Palette mirror, scale, rotation or slant whose map undoes the last one (product within 1e-9 of the identity), on the same targets and origin with no edit in between, puts back the layers from before it (Palette question 5). |
+| `transform.oppositeButtonsExact` (behavior) | M3 | handbook | – | Any edit in between, an undo included, breaks the link; a drag with the Rotate or Scale tool keeps no memory. |
+| `transform.originCjkLayerCenter` (behavior) | M3 | handbook | – | A glyph counts as CJK when its script, as stored or from the glyph data, is han, hangul, kana or bopomofo, the scripts that also get the 1000-unit default width. |
+| `transform.originCjkLayerCenter` (behavior) | M3 | handbook | – | Path › Transformations treats a metrics origin of a CJK glyph the same way. |
+| `transform.originCjkLayerCenter` (behavior) | M3 | handbook | – | The control is one button named Layer Center; it reads as pressed while the metrics or layer origin is chosen. |
 | `palette.dimensions` (panel) | M3 | handbook | – | In Font View the panel shows the notepad of the current master rather than the first master's; switching masters in Font View in the reference app with the Dimensions section open settles it. |
 | `palette.layers` (panel) | M3 | handbook | – | While a row is dragged, an accent-coloured line between rows shows where it will land, and the master row is outlined when a backup dropped there would replace the master layer. |
 | `palette.layers` (panel) | M3 | handbook | – | Dropping on a row's upper half puts the dragged row above it, on its lower half below it. |
@@ -849,7 +857,11 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 
 | Row | Milestone | Status | Live | Guess |
 |---|---|---|---|---|
-| `file.exportAll` | M2 | handbook | yes | The reference's settings for Export All are not documented; using each document's last-used export settings is our assumption, and until FontCraft remembers settings the command takes them as parameters. |
+| `file.exportAll` | M2 | handbook | yes | The reference's settings for Export All are not documented; using each document's last-used settings of the OTF tab is our assumption. |
+| `file.exportAll` | M2 | handbook | yes | A document never exported uses the command's defaults (TrueType, plain), not the OTF tab's opening flavour (PostScript/CFF), so calls that name only a destination write what they wrote before. |
+| `file.exportAll` | M2 | handbook | yes | One folder asked once serves every document without a ticked folder of its own; documents with one keep it. |
+| `file.exportSettings` | M3 | inferred | yes | Settings are kept per document path, not app-wide: the handbook says Export All uses each document's last settings. |
+| `file.exportSettings` | M3 | inferred | yes | An unsaved document's settings last for the session only; after Save As they are kept by path from its next export. |
 | `file.exportVariable` | M9 | handbook | yes | A glyph that has no layer for the origin master does not vary and keeps the origin's empty outline, with a warning; exporting such a font from the reference app would settle it. |
 | `file.exportVariable` | M9 | handbook | yes | An intermediate layer that lies outside the axes of a variable font setting (one that disables masters) is left out of that font, with a note; exporting such a setting from the reference app would settle it. |
 | `file.exportMetrics` | M5 | handbook | yes | The `metrics` format is our kerning-text format (`kerning-text` in 30-formats.toml), because the reference does not document its own metrics file; files in the reference format are neither read nor written. |
@@ -905,6 +917,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `export.fileNaming` (behavior) | M2 | memory | – | The fileName parameter keeps its text tokens as written, as fontmake keeps them; an export of an instance whose fileName holds {{{name}}} in the reference app would settle it. |
 | `export.flavourSubfolders` (behavior) | M2 | inferred | – | An export of both flavours at once puts them into ttf and otf subfolders; how the reference lays out such an export is not documented. |
 | `export.autohintCff` (behavior) | M10 | handbook | – | Zones or stems the autohinter cannot use (overlapping zones, fewer than two BlueValues zones, a direction without stems) make the export autohint without them, with a warning, where otfautohint refuses the font; a reference export of a font with overlapping zones would show what it does. |
+| `export.destinationFolder` (behavior) | M2 | handbook | – | Each tab keeps its own folder; the tabs do not share one. |
+| `export.destinationFolder` (behavior) | M2 | handbook | – | Unticking the box empties the folder field, so the folder chosen while it was unticked is not shown next time. |
 | `export.instanceExportFolder` (behavior) | M7 | handbook | – | The sub-path is used as written, `..` segments included, as the handbook says; an absolute path, an empty segment, a folder name with a character such as `:` or `\`, or a path of more than 32 segments makes export skip that instance with the reason, one trailing `/` is ignored, and the warnings name every file written outside the export destination; an Export Folder of `../x` and one of `/tmp/x` in the reference app settle it. |
 | `export.instanceExportFolder` (behavior) | M7 | handbook | – | Exports from the command line, MCP and the control channel skip an instance whose Export Folder resolves outside the destination folder; the reference app has no such callers, so nothing there settles it. |
 | `export.ufoProductionNames` (behavior) | M1 | handbook | – | A glyph whose name feature code uses is written under its own name, because the feature code is written unchanged; exporting a UFO with features from the reference app with the option on would settle it. |
@@ -1377,6 +1391,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | Row | Milestone | Status | Live | Guess |
 |---|---|---|---|---|
 | `filter.repeatLastFilter` | M3 | handbook | yes | The last filter is the last filter.* or filter.apply run in the session journal, and it runs again silently with the same settings on the targets given. |
+| `filter.repeatLastFilter` | M3 | handbook | yes | A node selection is dropped when the repeated filter changes whole layers, so the repeat still runs on the glyph instead of being refused. |
 | `filter.apply` | M3 | inferred | yes | `args` as a list holds export-string items and as an object the filter command's parameters; the reference has only the export string. |
 | `filter.apply` | M3 | inferred | yes | Without glyph or glyphs it runs on every glyph of the font, as export does. |
 | `filter.extrude` | M3 | handbook | yes | The construction is ours: the swept shape is the original area plus the band each piece of a closed path sweeps. |
@@ -1398,6 +1413,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `path.transformations.copyPreFilterParameter` | M3 | observed | yes | It copies the same string as a PreFilter custom parameter, read from its label (11-filters open questions). |
 | `path.interpolateWithBackground` | M3 | handbook | yes | An incompatible glyph is left unchanged and listed in `skipped` (11-filters open questions). |
 | `path.removeOverlap` | M3 | handbook | yes | Every path operation runs each glyph layer under a 5 s time limit, single-glyph commands included; a layer that runs out of time is skipped with `glyphs` and an error with one `glyph` (docs/plans/M3.md › M3.6, rule 8). |
+| `filter.target.editViewTextSelection` (behavior) | M3 | handbook | – | A glyph shown twice in the selection is filtered once; the layer is the one the canvas edits, for every selected glyph. |
 | `filter.target.visibleLayerOnly` (behavior) | M3 | handbook | – | A filter changes the visible layer of each targeted glyph unless `layers` is given; the handbook says only "normally". |
 | `filter.target.headlessExplicitTargets` (behavior) | M3 | inferred | – | Filters change paths only, not components, and a run over many glyphs is one undo step (11-filters open questions). |
 | `filter.hatchOutline.origin` (behavior) | M3 | handbook | – | One hatch line passes through the origin (originX, originY). |
@@ -1426,11 +1442,17 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `filter.customParameter.autohinting` (behavior) | M10 | handbook | – | Arguments after `Autohinting` are ignored with a warning, since the handbook lists none. |
 | `filter.customParameter.autohinting` (behavior) | M10 | handbook | – | A master's export (a font without instances, or masters exported as fonts) has no Autohint parameter to turn on, so the string is reported as not used there; a reference export of a font without instances that carries the string would settle it. |
 | `dialog.filterExtrude` (panel) | M3 | handbook | – | First values: offset 50, angle -45 (down and to the right), Don't Subtract off. |
+| `dialog.filterExtrude` (panel) | M3 | handbook | – | The values of the last OK are kept for the session and not saved; Cancel keeps the earlier ones. |
 | `dialog.filterHatchOutline` (panel) | M3 | handbook | – | First values: origin (0, 0), step width 20, angle 45, Offset Path on with thickness 5. |
+| `dialog.filterHatchOutline` (panel) | M3 | handbook | – | The values of the last OK are kept for the session and not saved; Cancel keeps the earlier ones. |
 | `dialog.filterOffsetCurve` (panel) | M3 | handbook | – | First values: horizontal 10, vertical empty (the horizontal value), Make Stroke off, Auto Stroke off, position 50 %, Keep Compatible off, cap style flat. |
+| `dialog.filterOffsetCurve` (panel) | M3 | handbook | – | The values of the last OK are kept for the session and not saved; Cancel keeps the earlier ones. |
+| `dialog.filterOffsetCurve` (panel) | M3 | handbook | – | The lock sits on a row of its own above Vertical, labelled Same as Horizontal, and starts closed. |
 | `dialog.filterRoughen` (panel) | M3 | handbook | – | First values: segment length 50, horizontal 10, vertical 10, angle 0. |
 | `dialog.filterRoughen` (panel) | M3 | handbook | – | The Angle field is ours: the handbook's export string has an angle value, but its dialog has no such field. |
+| `dialog.filterRoughen` (panel) | M3 | handbook | – | The values of the last OK are kept for the session and not saved; Cancel keeps the earlier ones. |
 | `dialog.filterRoundCorners` (panel) | M3 | handbook | – | First values: radius 20, visual corrections off. |
+| `dialog.filterRoundCorners` (panel) | M3 | handbook | – | The values of the last OK are kept for the session and not saved; Cancel keeps the earlier ones. |
 | `dialog.transformMetrics` (panel) | M5 | handbook | – | The dialog opens in sidebearing mode with LSB, RSB and Relative checked and both values 0, so opening it changes nothing; the reference app's first opening would settle it. |
 | `dialog.transformMetrics` (panel) | M5 | handbook | – | The width field starts at half the units per em; the reference app's first opening would settle it. |
 | `dialog.transformMetrics` (panel) | M5 | handbook | – | Each checkbox and its value field are two rows of the form ("LSB", "LSB value") instead of one row; observing the reference dialog would settle the layout. |
@@ -3240,8 +3262,12 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `palette.pairsAndPhrases` (panel) | M13 | docs | – | Automatic mode shows the pairs list while the showing tab is in text mode and the phrases list otherwise; the reference switches by its kerning tool, which FontCraft does not have. |
 | `palette.pairsAndPhrases` (panel) | M13 | docs | – | A loaded list lasts for the session and is not stored with the window state. |
 | `palette.pairsAndPhrases` (panel) | M13 | docs | – | Pair rows show the value stored for exactly that pair in the showing tab's master, not the value that applies through groups. |
+| `dialog.exportProfiles` (panel) | M13 | docs | – | Variable Fonts in a profile builds the variable fonts beside the static ones, not in their place. |
+| `dialog.exportProfiles` (panel) | M13 | docs | – | COLR off also leaves out CPAL, since nothing else in an exported font reads the palettes. |
+| `dialog.exportProfiles` (panel) | M13 | docs | – | Keep and Remove Glyphs are names separated by spaces; Keep Glyphs keeps the glyphs' components too, as font.compile's glyphs does. |
 | `dialog.exportProfiles` (panel) | M13 | docs | – | The built-in profiles are OpenType PS (CFF, plain), OpenType TT (TrueType, plain) and Web (TrueType, WOFF2 and WOFF), each writing into a subfolder named after it; the reference's full built-in list would settle it. |
 | `dialog.exportProfiles` (panel) | M13 | docs | – | There is no tick for which profiles the export dialog shows: Export Fonts As lists every profile; the reference's dialog would settle whether hidden profiles are needed. |
+| `dialog.exportFontsAs` (panel) | M13 | docs | – | The font list holds the open fonts by title; two open fonts of the same title cannot both be chosen. |
 | `dialog.exportWindowContents` (panel) | M13 | docs | – | A small dialog with the file and the scale comes before the save chooser, and the format follows the file's extension (.pdf or .svg); exporting in the reference would show whether it asks anything besides the file. |
 | `dialog.findOutline` (panel) | M13 | docs | – | The pattern and the replacement are drawn in glyphs of their own and named in the dialog, in place of the reference's two small outline editors; drawing panes inside the dialog would settle it. |
 | `dialog.findOutline` (panel) | M13 | docs | – | Restricting to selected glyphs is the selection itself: the selected glyphs, or every glyph when none is selected; an explicit checkbox would settle it. |
