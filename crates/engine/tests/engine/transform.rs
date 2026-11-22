@@ -152,6 +152,63 @@ fn scale_and_reverse_scale_undo_each_other() {
     assert_eq!(font(&s), before);
 }
 
+/// `transform.oppositeButtonsExact`: 7 × 0.9 = 6.3 rounds to 6 and 5 × 0.9 = 4.5 to 5; mapped
+/// back, 5 / 0.9 rounds to 6, so only the remembered coordinates give the shape back.
+#[test]
+fn opposite_buttons_give_back_the_coordinates_exactly() {
+    let mut s = Session::with_document();
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": rect(0.0, 0.0, 5.0, 7.0)}));
+    let start = nodes(&mut s, "A");
+    let p = json!({"glyph": "A", "points": all_points(4), "x": 90, "origin": [0, 0]});
+    run(&mut s, "transform.scale", p.clone());
+    let scaled = nodes(&mut s, "A");
+    assert_ne!(scaled, start);
+    run(&mut s, "transform.reverseScale", p.clone());
+    assert_eq!(nodes(&mut s, "A"), start, "reverse scale right after scale gives the start back");
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(nodes(&mut s, "A"), scaled, "the exact inverse is an undo step of its own");
+    run(&mut s, "edit.redo", json!({}));
+
+    // A rotation by an angle that is not a quarter turn, and back.
+    let r = json!({"glyph": "A", "points": all_points(4), "angle": 30, "origin": [0, 0]});
+    run(&mut s, "transform.rotateCounterclockwise", r.clone());
+    run(&mut s, "transform.rotateClockwise", r);
+    assert_eq!(nodes(&mut s, "A"), start);
+
+    // An edit in between breaks the link: the reverse maps the rounded coordinates.
+    run(&mut s, "transform.scale", p.clone());
+    run(&mut s, "anchor.add", json!({"glyph": "A", "name": "top", "x": 3, "y": 9}));
+    run(&mut s, "transform.reverseScale", p.clone());
+    assert_ne!(nodes(&mut s, "A"), start, "the rounded coordinates drift");
+
+    // Other targets or another origin break it too.
+    let mut s = Session::with_document();
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": rect(0.0, 0.0, 5.0, 7.0)}));
+    run(&mut s, "transform.scale", p.clone());
+    let mut other = p.clone();
+    other["origin"] = json!([0, 1]);
+    run(&mut s, "transform.reverseScale", other);
+    assert_ne!(nodes(&mut s, "A"), start);
+}
+
+/// `transform.originCjkLayerCenter`: a metrics origin of a han glyph is the layer's centre.
+#[test]
+fn a_cjk_glyph_takes_the_layer_centre_for_a_metrics_origin() {
+    let mut s = Session::with_document();
+    run(&mut s, "glyph.newGlyph", json!({"name": "uni4E00", "unicodes": [0x4E00]}));
+    run(&mut s, "path.addPath", json!({"glyph": "uni4E00", "nodes": rect(100.0, 0.0, 300.0, 700.0)}));
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": rect(100.0, 0.0, 300.0, 700.0)}));
+
+    let centre = run(&mut s, "transform.mirrorVertical", json!({"glyph": "uni4E00", "origin": {"mode": "layer"}}))["origin"].clone();
+    run(&mut s, "edit.undo", json!({}));
+    let metric = run(&mut s, "transform.mirrorVertical", json!({"glyph": "uni4E00", "origin": "xHeight"}))["origin"].clone();
+    assert_eq!(metric, centre, "the metric height gives way to the layer centre");
+    assert_ne!(centre[1], json!(0.0));
+
+    let latin = run(&mut s, "transform.mirrorVertical", json!({"glyph": "A", "origin": "baseline"}))["origin"].clone();
+    assert_eq!(latin[1], json!(0.0), "a Latin glyph keeps the metric height");
+}
+
 #[test]
 fn slants_shear_by_the_tangent_about_the_origin() {
     let mut s = Session::with_document();
@@ -264,6 +321,38 @@ fn align_buttons_line_objects_up_on_the_selection_box() {
     assert_eq!(v["moved"], json!(0));
     assert!(v["message"].is_string());
     assert_eq!(font(&s), before);
+}
+
+/// `transform.supportedObjects`: a guide aligns by the point it passes through and keeps its
+/// angle; an annotation aligns by its position; a global guide moves on the master.
+#[test]
+fn align_buttons_move_guides_and_annotations() {
+    let mut s = two_rects();
+    s.edit("guides", |font| {
+        let master = font.default_master()?.id.clone();
+        if let Some(m) = Arc::make_mut(&mut font.masters).first_mut() {
+            m.guides.push(Guide { x: 600.0, y: 500.0, ..Guide::default() });
+        }
+        let mut g = font.glyph_mut("A")?;
+        g.layer_mut(&master).unwrap().info.guides.push(Guide { x: 400.0, y: 10.0, angle: 90.0, ..Guide::default() });
+        Ok(())
+    })
+    .unwrap();
+    run(&mut s, "annotation.add", json!({"glyph": "A", "type": "text", "position": [500.5, 20]}));
+    let p = json!({
+        "glyph": "A",
+        "shapes": [0, 1],
+        "guides": [{"scope": "local", "index": 0}, {"scope": "global", "index": 0}],
+        "annotations": [0],
+    });
+    let v = run(&mut s, "transform.alignLeft", p);
+    assert_eq!(v["moved"], json!(4), "shape 1, both guides and the note move; shape 0 is already at x = 0");
+    let font = s.font().unwrap();
+    let layer = font.glyph("A").unwrap().layer("m01").unwrap();
+    let guide = &layer.info.guides[0];
+    assert_eq!((guide.x, guide.y, guide.angle), (0.0, 10.0, 90.0));
+    assert_eq!((layer.info.annotations[0].x, layer.info.annotations[0].y), (0.0, 20.0));
+    assert_eq!(font.masters[0].guides[0].x, 0.0);
 }
 
 #[test]

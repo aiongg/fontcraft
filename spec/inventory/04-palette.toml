@@ -1017,6 +1017,13 @@ milestone = "M3"
 summary = "Palette transformations apply to points, paths, components, anchors, guides and placed images alike."
 ref = "Palette › Transformations"
 status = "handbook"
+notes = "M3.24: the align buttons move guides and annotations too (crates/engine/src/cmd/transform.rs, align_units); test align_buttons_move_guides_and_annotations."
+guesses = [
+  "An aligned guide counts as the point it passes through, and keeps its angle; an annotation counts as its position.",
+]
+observe = [
+  "Select a rectangle and a vertical guide to its right, press Align Left, and note whether the guide moves to the rectangle's left edge.",
+]
 
 [[behavior]]
 id = "transform.oppositeButtonsExact"
@@ -1025,8 +1032,13 @@ milestone = "M3"
 summary = "The buttons on either side of a value field are exact inverses of each other, and applying one after the other returns the original coordinates without the rounding drift the unit grid could otherwise cause. How the reference achieves this (stored unrounded positions or an undo-like shortcut) is not explained."
 ref = "Palette › Transformations"
 status = "handbook"
+notes = "M3.24: crates/engine/src/cmd/transform.rs (LastPalette, undone_layers); test opposite_buttons_give_back_the_coordinates_exactly."
 guesses = [
-  "Opposite buttons are exact for mirroring and quarter turns, through exact sines and cosines and grid rounding; other angles are undone only up to grid rounding (Palette question 5).",
+  "Exactness comes from a remembered pre-state: the next Palette mirror, scale, rotation or slant whose map undoes the last one (product within 1e-9 of the identity), on the same targets and origin with no edit in between, puts back the layers from before it (Palette question 5).",
+  "Any edit in between, an undo included, breaks the link; a drag with the Rotate or Scale tool keeps no memory.",
+]
+observe = [
+  "Draw a 7-unit square, scale it 90 % with the origin at its bottom left, press the reverse scale button, save, and read the coordinates in the saved file.",
 ]
 
 [[behavior]]
@@ -1052,6 +1064,15 @@ milestone = "M3"
 summary = "For CJK glyphs the metrics-point control is replaced by a layer-dimensions control whose origin is the centre of the layer: half the advance width horizontally and midway between ascender and descender vertically."
 ref = "Palette › Transformations › Transformation Origin"
 status = "handbook"
+notes = "M3.24: the engine turns a metrics origin into the layer origin for such glyphs (transform.rs, origin_for); the section shows Layer Center in place of the metric heights (crates/ui/src/panels/transformations.rs). Tests a_cjk_glyph_takes_the_layer_centre_for_a_metrics_origin and cjk_glyphs_offer_the_layer_centre."
+guesses = [
+  "A glyph counts as CJK when its script, as stored or from the glyph data, is han, hangul, kana or bopomofo, the scripts that also get the 1000-unit default width.",
+  "Path › Transformations treats a metrics origin of a CJK glyph the same way.",
+  "The control is one button named Layer Center; it reads as pressed while the metrics or layer origin is chosen.",
+]
+observe = [
+  "Open a han glyph and note what the Transformations section shows in place of the metric heights, and whether Path › Transformations changes too.",
+]
 
 [[behavior]]
 id = "transform.alignIgnoresOrigin"

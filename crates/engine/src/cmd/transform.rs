@@ -15,6 +15,7 @@ use std::fmt::Write as _;
 use std::sync::Arc;
 
 use fontcraft_geom::{Affine, Point, Rect, Shape as _, Vec2, round_point};
+use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Font, Guide, Layer, LayerParts, LayerSide, MAX_COORDINATE, MAX_GLYPHS, Master, Metrics, Node, Shape, Transform, metric};
 use serde_json::{Map, Value, json};
 
@@ -39,7 +40,15 @@ const MAX_FILTER_STRING: usize = 1 << 20;
 
 const TRANSFORM_TARGETS: &[TargetKind] =
     &[TargetKind::Glyphs, TargetKind::Layer, TargetKind::Points, TargetKind::Segments, TargetKind::Shapes, TargetKind::Anchors, TargetKind::Guides];
-const ALIGN_TARGETS: &[TargetKind] = &[TargetKind::Layer, TargetKind::Points, TargetKind::Segments, TargetKind::Shapes, TargetKind::Anchors];
+const ALIGN_TARGETS: &[TargetKind] = &[
+    TargetKind::Layer,
+    TargetKind::Points,
+    TargetKind::Segments,
+    TargetKind::Shapes,
+    TargetKind::Anchors,
+    TargetKind::Guides,
+    TargetKind::Annotations,
+];
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -48,7 +57,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Mirror Horizontally",
             [],
             None,
-            "{glyph?: name, glyphs?: [names], layer?: id, side?: \"foreground\" | \"background\", points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: \"local\" | \"global\", index}], annotations?: [index], image?: bool, origin?: origin} flips left to right across the vertical line through the origin. Target lists go with `glyph`; without them, or with `glyphs`, the whole layer (shapes and anchors) is changed. `image: true` (with `glyph`) changes the layer's placed image on that side too, and alone without target lists; a locked image, or none, refuses it. An on-curve node carries its handles. origin: {mode: \"box\" (default) | \"reference\" | \"metrics\" | \"layer\", boxPoint?: \"topLeft\" | \"top\" | \"topRight\" | \"left\" | \"center\" (default) | \"right\" | \"bottomLeft\" | \"bottom\" | \"bottomRight\", metric?: \"baseline\" | \"halfXHeight\" | \"xHeight\" | \"halfCapHeight\" | \"capHeight\", point?: [x, y]}, a metric name, or [x, y]. A metrics origin sits at half the advance width; the layer origin at half the width, midway between ascender and descender. Points and anchors are rounded to the grid. With `corners: [hint indices]` (and `glyph`, `layer?`; no other target or origin) it flips those corner components in place instead, as cornerComponent.setScale with `flip` does, and returns what that returns → {glyphs: [names], layers: count, origin?: [x, y] (with one layer)}",
+            "{glyph?: name, glyphs?: [names], layer?: id, side?: \"foreground\" | \"background\", points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: \"local\" | \"global\", index}], annotations?: [index], image?: bool, origin?: origin} flips left to right across the vertical line through the origin. Target lists go with `glyph`; without them, or with `glyphs`, the whole layer (shapes and anchors) is changed. `image: true` (with `glyph`) changes the layer's placed image on that side too, and alone without target lists; a locked image, or none, refuses it. An on-curve node carries its handles. origin: {mode: \"box\" (default) | \"reference\" | \"metrics\" | \"layer\", boxPoint?: \"topLeft\" | \"top\" | \"topRight\" | \"left\" | \"center\" (default) | \"right\" | \"bottomLeft\" | \"bottom\" | \"bottomRight\", metric?: \"baseline\" | \"halfXHeight\" | \"xHeight\" | \"halfCapHeight\" | \"capHeight\", point?: [x, y]}, a metric name, or [x, y]. A metrics origin sits at half the advance width; the layer origin at half the width, midway between ascender and descender. For a glyph of the han, hangul, kana or bopomofo script a metrics origin is the layer origin. Points and anchors are rounded to the grid; a mirror, scale, rotation or slant that undoes the last of these on the same targets and origin, with nothing changed in between, gives back the coordinates from before it exactly. With `corners: [hint indices]` (and `glyph`, `layer?`; no other target or origin) it flips those corner components in place instead, as cornerComponent.setScale with `flip` does, and returns what that returns → {glyphs: [names], layers: count, origin?: [x, y] (with one layer)}",
             has_doc,
             mirror_horizontal
         )
@@ -148,7 +157,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Align Left",
             [],
             None,
-            "{glyph: name, layer?: id, side?, points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name]} moves each selected object so its left edge meets the left edge of the selection's box. Objects: each shape, each on-curve node with its handles, each lone handle, each anchor; without target lists, every shape of the layer. Ignores the transformation origin. Fewer than two objects change nothing → {glyph, moved: count, message?}",
+            "{glyph: name, layer?: id, side?, points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: \"local\" | \"global\", index}], annotations?: [index]} moves each selected object so its left edge meets the left edge of the selection's box. Objects: each shape, each on-curve node with its handles, each lone handle, each anchor, each guide (by the point it passes through; its angle stays) and each annotation; without target lists, every shape of the layer. Ignores the transformation origin. Fewer than two objects change nothing → {glyph, moved: count, message?}",
             has_doc,
             align_left
         )
@@ -158,7 +167,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Align Horizontal Centers",
             [],
             None,
-            "{glyph: name, layer?: id, side?, points?, segments?, shapes?, anchors?} moves each selected object so its horizontal centre is the centre of the selection's box: they share one vertical axis. Objects as for transform.alignLeft → {glyph, moved: count, message?}",
+            "{glyph: name, layer?: id, side?, points?, segments?, shapes?, anchors?, guides?, annotations?} moves each selected object so its horizontal centre is the centre of the selection's box: they share one vertical axis. Objects as for transform.alignLeft → {glyph, moved: count, message?}",
             has_doc,
             align_center_horizontal
         )
@@ -168,7 +177,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Align Right",
             [],
             None,
-            "{glyph: name, layer?: id, side?, points?, segments?, shapes?, anchors?} moves each selected object so its right edge meets the right edge of the selection's box. Objects as for transform.alignLeft → {glyph, moved: count, message?}",
+            "{glyph: name, layer?: id, side?, points?, segments?, shapes?, anchors?, guides?, annotations?} moves each selected object so its right edge meets the right edge of the selection's box. Objects as for transform.alignLeft → {glyph, moved: count, message?}",
             has_doc,
             align_right
         )
@@ -178,7 +187,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Align Top",
             [],
             None,
-            "{glyph: name, layer?: id, side?, points?, segments?, shapes?, anchors?} moves each selected object so its top edge meets the top edge of the selection's box. Objects as for transform.alignLeft → {glyph, moved: count, message?}",
+            "{glyph: name, layer?: id, side?, points?, segments?, shapes?, anchors?, guides?, annotations?} moves each selected object so its top edge meets the top edge of the selection's box. Objects as for transform.alignLeft → {glyph, moved: count, message?}",
             has_doc,
             align_top
         )
@@ -188,7 +197,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Align Vertical Centers",
             [],
             None,
-            "{glyph: name, layer?: id, side?, points?, segments?, shapes?, anchors?} moves each selected object so its vertical centre is the centre of the selection's box: they share one horizontal axis. Objects as for transform.alignLeft → {glyph, moved: count, message?}",
+            "{glyph: name, layer?: id, side?, points?, segments?, shapes?, anchors?, guides?, annotations?} moves each selected object so its vertical centre is the centre of the selection's box: they share one horizontal axis. Objects as for transform.alignLeft → {glyph, moved: count, message?}",
             has_doc,
             align_center_vertical
         )
@@ -198,7 +207,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Align Bottom",
             [],
             None,
-            "{glyph: name, layer?: id, side?, points?, segments?, shapes?, anchors?} moves each selected object so its bottom edge meets the bottom edge of the selection's box. Objects as for transform.alignLeft → {glyph, moved: count, message?}",
+            "{glyph: name, layer?: id, side?, points?, segments?, shapes?, anchors?, guides?, annotations?} moves each selected object so its bottom edge meets the bottom edge of the selection's box. Objects as for transform.alignLeft → {glyph, moved: count, message?}",
             has_doc,
             align_bottom
         )
@@ -414,6 +423,23 @@ fn point(p: &Params, key: &str, v: &Value) -> Result<Point> {
         return Ok(Point::new(x, y));
     }
     Err(p.bad(format!("`{key}` must be [x, y], two numbers within ±{MAX_COORDINATE}")))
+}
+
+/// Whether the metrics origin of `glyph` in the active document is the centre of the layer: the
+/// glyph's script is han, hangul, kana or bopomofo, as stored or as the glyph data gives it. The
+/// Transformations section shows the layer-centre control in place of the metric heights then.
+pub fn layer_center_origin(s: &Session, glyph: &str) -> bool {
+    let Ok(font) = s.font() else { return false };
+    let data = s.glyph_data().ok();
+    super::widths::is_cjk(font, data.as_deref(), glyph)
+}
+
+/// `origin` for a layer of `glyph`: a metrics origin is the layer centre for a CJK glyph.
+fn origin_for(origin: Origin, font: &Font, data: Option<&GlyphData>, glyph: &str) -> Origin {
+    match origin {
+        Origin::Metric(_) if super::widths::is_cjk(font, data, glyph) => Origin::Layer,
+        other => other,
+    }
 }
 
 /// Where `origin` is for one layer. `bounds` is the box of what is transformed (used by a box
@@ -744,9 +770,20 @@ fn run_jobs(
     image: Option<Rect>,
 ) -> Result<Vec<Point>> {
     let step = grid(s.font()?);
+    let data = if matches!(origin, Origin::Metric(_)) { s.glyph_data().ok() } else { None };
     s.edit(label, |font| {
         let mut origins = Vec::with_capacity(jobs.len());
+        // Jobs come glyph by glyph: the script is looked up once per glyph.
+        let mut glyph_origin: Option<(&str, Origin)> = None;
         for t in jobs {
+            let origin = match glyph_origin {
+                Some((name, o)) if name == t.glyph => o,
+                _ => {
+                    let o = origin_for(origin, font, data.as_deref(), &t.glyph);
+                    glyph_origin = Some((t.glyph.as_str(), o));
+                    o
+                }
+            };
             let (sel, o, master) = {
                 let r = t.resolve(font)?;
                 crate::check_unlocked(r.glyph)?;
@@ -805,14 +842,127 @@ fn image_bounds(s: &Session, p: &Params, jobs: &[Targets]) -> Result<Option<Rect
 }
 
 /// One Palette transformation.
+///
+/// A transformation that undoes the last one exactly (`transform.oppositeButtonsExact`) gives back
+/// the layers from before that one instead of mapping the rounded coordinates again: see
+/// [`LastPalette`].
 fn palette(s: &mut Session, v: &Value, id: &'static str, label: &str, lin: impl FnOnce(&Params) -> Result<Affine>) -> Result<Value> {
     let p = Params::new(id, v)?;
     let lin = lin(&p)?;
     let origin = parse_origin(&p, Origin::Box(BoxPoint::Center))?;
     let jobs = jobs(&p, s.font()?, false, false)?;
     let image = image_bounds(s, &p, &jobs)?;
-    let origins = run_jobs(s, &p, label, &jobs, origin, lin, Vec2::ZERO, image)?;
-    Ok(result(&jobs, &origins))
+    // A drag with the Rotate or Scale tool previews from the interaction's start: no memory.
+    if s.interaction().is_some() {
+        s.slot_mut::<LastPalette>().0 = None;
+        return run_jobs(s, &p, label, &jobs, origin, lin, Vec2::ZERO, image).map(|origins| result(&jobs, &origins));
+    }
+    let (doc, before) = {
+        let d = s.doc()?;
+        (d.id, d.font.clone())
+    };
+    let step = PaletteStep { doc, revision: 0, before, jobs, image: image.is_some(), origin, lin, origins: Vec::new() };
+    let origins = match undone_layers(s, &step)? {
+        Some((layers, origins)) => {
+            restore(s, &p, label, &step.jobs, layers)?;
+            origins
+        }
+        None => run_jobs(s, &p, label, &step.jobs, origin, lin, Vec2::ZERO, image)?,
+    };
+    let out = result(&step.jobs, &origins);
+    let revision = s.doc()?.revision;
+    s.slot_mut::<LastPalette>().0 = Some(PaletteStep { revision, origins, ..step });
+    Ok(out)
+}
+
+/// The last Palette transformation, kept for the one after it (`transform.oppositeButtonsExact`).
+///
+/// A session slot is not rolled back with a failing command, so it is written only after the
+/// transformation succeeded, and it names the document's revision right after it: any other
+/// change, an undo included, gives the document a revision never used before.
+#[derive(Default)]
+struct LastPalette(Option<PaletteStep>);
+
+struct PaletteStep {
+    doc: u64,
+    revision: u64,
+    /// The font before the transformation.
+    before: Arc<Font>,
+    jobs: Vec<Targets>,
+    image: bool,
+    origin: Origin,
+    lin: Affine,
+    /// The origin used in each layer.
+    origins: Vec<Point>,
+}
+
+/// When `next` undoes the remembered transformation: the layers it changed as they were before
+/// it, by job, and the origins it used. `None` when anything differs: the document, its
+/// revision, the targets, the image flag, the origin, or a linear map that is not the inverse.
+fn undone_layers(s: &Session, next: &PaletteStep) -> Result<Option<(Vec<Layer>, Vec<Point>)>> {
+    let Some(last) = s.slot::<LastPalette>().and_then(|l| l.0.as_ref()) else { return Ok(None) };
+    let same = last.doc == next.doc
+        && last.revision == s.doc()?.revision
+        && last.image == next.image
+        && last.origin == next.origin
+        && last.jobs.len() == next.jobs.len()
+        && last.jobs.iter().zip(&next.jobs).all(|(a, b)| same_targets(a, b))
+        && undoes(last.lin, next.lin);
+    if !same {
+        return Ok(None);
+    }
+    let mut layers = Vec::with_capacity(last.jobs.len());
+    for t in &last.jobs {
+        // A layer the transformation added has nothing to go back to: map it as usual.
+        let Ok(r) = t.resolve(&last.before) else { return Ok(None) };
+        layers.push(r.layer.clone());
+    }
+    Ok(Some((layers, last.origins.clone())))
+}
+
+/// Whether two target objects name the same things (the command that parsed them aside).
+fn same_targets(a: &Targets, b: &Targets) -> bool {
+    a.glyph == b.glyph
+        && a.layer == b.layer
+        && a.side == b.side
+        && a.points == b.points
+        && a.segments == b.segments
+        && a.shapes == b.shapes
+        && a.anchors == b.anchors
+        && a.guides == b.guides
+        && a.annotations == b.annotations
+}
+
+/// Whether `next` after `last` is the identity, up to floating-point error: mirror twice,
+/// scale by s and by 1/s, rotate or slant by +a and −a.
+fn undoes(last: Affine, next: Affine) -> bool {
+    const TOLERANCE: f64 = 1e-9;
+    let [a, b, c, d, e, f] = (next * last).as_coeffs();
+    [a - 1.0, b, c, d - 1.0, e, f].iter().all(|v| v.abs() <= TOLERANCE)
+}
+
+/// Puts back each job's layer from before the transformation being undone, and the master's
+/// global guides where a job moved some, as one undo step.
+fn restore(s: &mut Session, p: &Params, label: &str, jobs: &[Targets], layers: Vec<Layer>) -> Result<()> {
+    let before = s.slot::<LastPalette>().and_then(|l| l.0.as_ref()).map(|l| l.before.clone()).ok_or_else(|| p.bad("nothing to undo exactly"))?;
+    s.edit(label, |font| {
+        for (t, old) in jobs.iter().zip(layers) {
+            t.edit_layer(font, |l| {
+                *l = old;
+                Ok(())
+            })?;
+            if t.guides.iter().any(|g| g.scope == GuideScope::Global) {
+                let (id, guides) = {
+                    let r = t.resolve(&before)?;
+                    (r.master.id.clone(), r.master.guides.clone())
+                };
+                let masters = Arc::make_mut(&mut font.masters);
+                let m = masters.iter_mut().find(|x| x.id == id).ok_or_else(|| p.bad(format!("there is no master `{id}`")))?;
+                m.guides = guides;
+            }
+        }
+        Ok(())
+    })
 }
 
 /// `x` and `y` in percent (`y` defaults to `x`).
@@ -935,7 +1085,8 @@ struct Unit {
 }
 
 /// The objects of a selection: each shape, each on-curve node with its handles, each lone handle,
-/// each anchor. Without target lists, every shape of the layer.
+/// each anchor, each guide by the point it passes through, each annotation. Without target
+/// lists, every shape of the layer.
 fn align_units(font: &Font, master: &Master, parts: LayerParts, t: &Targets) -> Vec<Unit> {
     let sel = selection(t, parts);
     let mut units = Vec::new();
@@ -963,20 +1114,29 @@ fn align_units(font: &Font, master: &Master, parts: LayerParts, t: &Targets) -> 
         let Some(a) = parts.anchors.get(i) else { continue };
         units.push(Unit { bounds: dot(Point::new(a.x, a.y)), sel: Selection { anchors: BTreeSet::from([i]), ..Selection::default() } });
     }
+    for &i in &sel.local_guides {
+        let Some(g) = parts.guides.get(i) else { continue };
+        units.push(Unit { bounds: dot(Point::new(g.x, g.y)), sel: Selection { local_guides: BTreeSet::from([i]), ..Selection::default() } });
+    }
+    for &i in &sel.global_guides {
+        let Some(g) = master.guides.get(i) else { continue };
+        units.push(Unit { bounds: dot(Point::new(g.x, g.y)), sel: Selection { global_guides: BTreeSet::from([i]), ..Selection::default() } });
+    }
+    for &i in &sel.annotations {
+        let Some(a) = parts.annotations.get(i) else { continue };
+        units.push(Unit { bounds: dot(Point::new(a.x, a.y)), sel: Selection { annotations: BTreeSet::from([i]), ..Selection::default() } });
+    }
     units
 }
 
 fn align(s: &mut Session, v: &Value, id: &'static str, label: &str, edge: Edge) -> Result<Value> {
     let p = Params::new(id, v)?;
     let t = Targets::parse(&p)?;
-    if !t.guides.is_empty() || !t.annotations.is_empty() {
-        return Err(p.bad("aligns points, segments, shapes and anchors; guides and annotations are not aligned"));
-    }
     let step = grid(s.font()?);
-    let units = {
+    let (units, master) = {
         let font = s.font()?;
         let r = t.resolve(font)?;
-        align_units(font, r.master, r.parts, &t)
+        (align_units(font, r.master, r.parts, &t), r.master.id.clone())
     };
     let Some(all) = units.iter().map(|u| u.bounds).reduce(|a, b| a.union(b)) else {
         return Ok(json!({"glyph": t.glyph, "moved": 0, "message": "Nothing is selected to align."}));
@@ -985,26 +1145,39 @@ fn align(s: &mut Session, v: &Value, id: &'static str, label: &str, edge: Edge) 
         return Ok(json!({"glyph": t.glyph, "moved": 0, "message": "Select at least two objects to align them with each other."}));
     }
     let centre = |lo: f64, hi: f64| (lo + hi) / 2.0;
+    let shift = |b: Rect| match edge {
+        Edge::Left => Vec2::new(all.x0 - b.x0, 0.0),
+        Edge::CenterHorizontal => Vec2::new(centre(all.x0, all.x1) - centre(b.x0, b.x1), 0.0),
+        Edge::Right => Vec2::new(all.x1 - b.x1, 0.0),
+        Edge::Top => Vec2::new(0.0, all.y1 - b.y1),
+        Edge::CenterVertical => Vec2::new(0.0, centre(all.y0, all.y1) - centre(b.y0, b.y1)),
+        Edge::Bottom => Vec2::new(0.0, all.y0 - b.y0),
+    };
     let moved = s.edit(label, |font| {
-        t.edit_layer(font, |l| {
+        let mut moved = t.edit_layer(font, |l| {
             let mut moved = 0usize;
-            for u in &units {
-                let b = u.bounds;
-                let d = match edge {
-                    Edge::Left => Vec2::new(all.x0 - b.x0, 0.0),
-                    Edge::CenterHorizontal => Vec2::new(centre(all.x0, all.x1) - centre(b.x0, b.x1), 0.0),
-                    Edge::Right => Vec2::new(all.x1 - b.x1, 0.0),
-                    Edge::Top => Vec2::new(0.0, all.y1 - b.y1),
-                    Edge::CenterVertical => Vec2::new(0.0, centre(all.y0, all.y1) - centre(b.y0, b.y1)),
-                    Edge::Bottom => Vec2::new(0.0, all.y0 - b.y0),
-                };
+            for u in units.iter().filter(|u| u.sel.global_guides.is_empty()) {
+                let d = shift(u.bounds);
                 if d != Vec2::ZERO {
                     apply(&p, l, t.side, &u.sel, Affine::translate(d), step)?;
                     moved += 1;
                 }
             }
             Ok(moved)
-        })
+        })?;
+        // Global guides belong to the master, not the layer.
+        let global: Vec<(usize, Vec2)> =
+            units.iter().flat_map(|u| u.sel.global_guides.iter().map(move |&i| (i, shift(u.bounds)))).filter(|(_, d)| *d != Vec2::ZERO).collect();
+        if !global.is_empty() {
+            let masters = Arc::make_mut(&mut font.masters);
+            let m = masters.iter_mut().find(|x| x.id == master).ok_or_else(|| p.bad(format!("there is no master `{master}`")))?;
+            for (i, d) in global {
+                let g = m.guides.get_mut(i).ok_or_else(|| p.bad(format!("global guide {i} does not resolve")))?;
+                map_guide(&p, g, Affine::translate(d))?;
+                moved += 1;
+            }
+        }
+        Ok(moved)
     })?;
     Ok(json!({"glyph": t.glyph, "moved": moved}))
 }

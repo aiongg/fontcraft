@@ -37,6 +37,8 @@ craft::ui::words! {
         x_height: "fontcraftTransform.xHeight" = "x-height";
         half_cap_height: "fontcraftTransform.halfCapHeight" = "Half cap height";
         cap_height: "fontcraftTransform.capHeight" = "Cap height";
+        layer_center: "fontcraftTransform.layerCenter" = "Layer Center";
+        layer_center_tip: "fontcraftTransform.layerCenterTip" = "The centre of the layer: half the width, midway between ascender and descender";
         mirror_horizontal: "fontcraftTransform.mirrorHorizontal" = "Mirror Horizontally";
         mirror_vertical: "fontcraftTransform.mirrorVertical" = "Mirror Vertically";
         scale_x: "fontcraftTransform.scaleX" = "Horizontal Scale";
@@ -114,6 +116,15 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
             && let Some(p) = m.point
         {
             sent.push(shell("transform.setOrigin", json!({"mode": "reference", "point": p})));
+        }
+        // A CJK glyph has no metric heights to pick from: the layer's centre stands in for them.
+        if m.cjk {
+            let on = m.mode == "layer" || m.mode == "metrics";
+            let layer = ToggleButton::new(words.layer_center.clone(), Bind::given(on)).tooltip(words.layer_center_tip.clone()).show(ui);
+            if layer.events.committed().is_some() {
+                sent.push(shell("transform.setOrigin", json!({"mode": "layer"})));
+            }
+            return;
         }
         let labels = [&words.baseline, &words.x_height, &words.half_x_height, &words.cap_height, &words.half_cap_height];
         let names = ["baseline", "xHeight", "halfXHeight", "capHeight", "halfCapHeight"];
@@ -322,6 +333,35 @@ mod tests {
                 Msg::run("transform.mirrorHorizontal", json!({"glyph": "A", "layer": "m01", "corners": [0, 2]})),
                 Msg::run("transform.mirrorVertical", json!({"glyph": "A", "layer": "m01", "corners": [0, 2]})),
             ]
+        );
+    }
+
+    /// A CJK glyph shows the layer-centre control in place of the metric heights; pressing it picks the layer origin.
+    #[test]
+    fn cjk_glyphs_offer_the_layer_centre() {
+        let model = Tracked::new(TransformModel {
+            mode: "metrics".into(),
+            box_point: "center".into(),
+            metric: "baseline".into(),
+            origin: json!({"mode": "metrics", "metric": "baseline"}).to_string(),
+            targets: Some(Targets { json: json!({"glyph": "uni4E00", "layer": "m01"}).to_string() }),
+            cjk: true,
+            ..Default::default()
+        });
+        let posted = Rc::new(RefCell::new(Vec::new()));
+        let seen = Rc::clone(&posted);
+        let mut fixture = Fixture::new(move |ui| {
+            let mut sent = Vec::new();
+            show(ui, Props { model: &model, sent: &mut sent });
+            seen.borrow_mut().extend(sent);
+        });
+        fixture.settle();
+        assert!(fixture.by_label("Metric").is_none(), "no metric heights for a CJK glyph");
+        let button = fixture.by_label("Layer Center").expect("the Layer Center button");
+        fixture.click(&button).settle();
+        assert_eq!(
+            *posted.borrow(),
+            vec![Msg::Shell(craft::ui::runtime::commands::CommandRef::with_params("transform.setOrigin", json!({"mode": "layer"})))]
         );
     }
 }
