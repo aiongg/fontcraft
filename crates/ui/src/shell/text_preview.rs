@@ -11,11 +11,17 @@
 //! | `textPreview.setLayoutOrientation {orientation}` | lines, or columns from right to left |
 //! | `textPreview.setWritingDirection {scope, direction, range?}` | the direction of the whole text or of a range |
 //! | `textPreview.find {open?, query?, replace?, options?}` | the find bar: search, step through matches, replace |
+//! | `textPreview.insertPattern {pattern, at?}` | puts a pattern token (any space, digit or letter, a line end) into the search |
+//! | `view.previewWaterfall {on?, sizes?, useOpticalSize?}` | the waterfall: one line repeated at a list of sizes |
+//!
+//! The search holds plain characters and pattern tokens: `\s` any space (white space other than a line break), `\d`
+//! any digit, `\l` any letter, `\n` a line end, and `\\` a backslash. Each token matches one character.
 //!
 //! Text positions are character indexes; a line break is one character. Shell commands reply with nothing:
 //! `ui.inspect` reports the preview's state under `textPreview`. The layout, shaping and drawing are the projection's
 //! (`app::models::text_preview`).
 
+use std::collections::HashMap;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 
@@ -48,6 +54,10 @@ pub const MAX_RUNS: usize = bidi::MAX_EMBEDDINGS;
 pub const MAX_QUERY_CHARS: usize = 1_000;
 /// Match ranges `ui.inspect` lists.
 const MAX_LISTED: usize = 1_000;
+/// Most sizes a waterfall shows.
+pub const MAX_WATERFALL_SIZES: usize = 32;
+/// The sizes of a new waterfall, in points.
+pub const DEFAULT_WATERFALL: [f64; 15] = [72.0, 64.0, 48.0, 36.0, 30.0, 24.0, 18.0, 14.0, 12.0, 10.0, 9.0, 8.0, 6.0, 5.0, 4.0];
 
 const COMMANDS: &[UiCommand] = &[
     UiCommand {
@@ -104,9 +114,134 @@ const COMMANDS: &[UiCommand] = &[
         label: "Find…",
         menu: &[],
         shortcut: None,
-        params: "{open?: bool (default true), query?: string, replace?: string, options?: {ignoreCase?: bool (default true), match?: \"contains\" | \"startsWith\" | \"fullWord\", index?: number}} show the find bar and search the preview text; index picks the current match. With replace, replace every match, or only match index when it is given. ui.inspect reports find.matches, find.ranges (the first 1,000) and find.replaced",
+        params: "{open?: bool (default true), query?: string, replace?: string, options?: {ignoreCase?: bool (default true), match?: \"contains\" | \"startsWith\" | \"fullWord\", index?: number}} show the find bar and search the preview text; index picks the current match. With replace, replace every match, or only match index when it is given. The query may hold the pattern tokens \\s (any space), \\d (any digit), \\l (any letter), \\n (a line end) and \\\\ (a backslash). ui.inspect reports find.matches, find.ranges (the first 1,000) and find.replaced",
+    },
+    UiCommand {
+        id: "textPreview.insertPattern",
+        label: "Insert Pattern",
+        menu: &[],
+        shortcut: None,
+        params: "{pattern: \"space\" | \"digit\" | \"letter\" | \"lineEnd\", at?: number (a character index into the query; default its end)} put a pattern token into the find bar's search and search again; the find bar opens",
+    },
+    UiCommand {
+        id: "view.previewWaterfall",
+        label: "Preview Waterfall",
+        menu: &["View"],
+        shortcut: None,
+        params: "{on?: bool (default: toggle), sizes?: [points, 4 to 1000] (at most 32), useOpticalSize?: bool} show the Text Preview as a waterfall: the Edit View tab's text, or Font View's selection while Font View shows, once per size. With useOpticalSize, each line draws in the master whose optical-size axis value lies nearest the line's size",
     },
 ];
+
+/// A pattern token of the find bar: it matches one character of a kind.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Pattern {
+    /// White space other than a line break.
+    Space,
+    Digit,
+    Letter,
+    LineEnd,
+}
+
+impl Pattern {
+    pub const ALL: [Pattern; 4] = [Pattern::Space, Pattern::Digit, Pattern::Letter, Pattern::LineEnd];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Pattern::Space => "space",
+            Pattern::Digit => "digit",
+            Pattern::Letter => "letter",
+            Pattern::LineEnd => "lineEnd",
+        }
+    }
+
+    fn from_name(name: &str) -> Option<Pattern> {
+        Pattern::ALL.into_iter().find(|p| p.name() == name)
+    }
+
+    /// The token the search holds.
+    pub fn token(self) -> &'static str {
+        match self {
+            Pattern::Space => "\\s",
+            Pattern::Digit => "\\d",
+            Pattern::Letter => "\\l",
+            Pattern::LineEnd => "\\n",
+        }
+    }
+
+    fn from_letter(c: char) -> Option<Pattern> {
+        match c {
+            's' => Some(Pattern::Space),
+            'd' => Some(Pattern::Digit),
+            'l' => Some(Pattern::Letter),
+            'n' => Some(Pattern::LineEnd),
+            _ => None,
+        }
+    }
+
+    fn matches(self, c: char) -> bool {
+        match self {
+            Pattern::Space => c.is_whitespace() && c != '\n',
+            Pattern::Digit => c.is_numeric(),
+            Pattern::Letter => c.is_alphabetic(),
+            Pattern::LineEnd => c == '\n',
+        }
+    }
+}
+
+/// One element of a search: a character, or a pattern token.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum Element {
+    Char(char),
+    Pattern(Pattern),
+}
+
+/// The elements of `query`: `\\` is a backslash, `\` before `s`, `d`, `l` or `n` a pattern token, and any other
+/// backslash itself.
+fn elements(query: &str) -> Vec<Element> {
+    let mut out = Vec::new();
+    let mut chars = query.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(Element::Char(c));
+            continue;
+        }
+        let next = chars.peek().copied();
+        let element = match next {
+            Some('\\') => Some(Element::Char('\\')),
+            Some(letter) => Pattern::from_letter(letter).map(Element::Pattern),
+            None => None,
+        };
+        match element {
+            Some(e) => {
+                chars.next();
+                out.push(e);
+            }
+            None => out.push(Element::Char('\\')),
+        }
+    }
+    out
+}
+
+/// The characters one match of `query` spans: each pattern token matches one.
+pub fn match_len(query: &str) -> usize {
+    elements(query).len()
+}
+
+/// A waterfall: one line repeated at each size.
+#[derive(PlainData, Clone, Debug, PartialEq)]
+pub struct Waterfall {
+    pub on: bool,
+    /// Points, largest first as given; each within [`SIZE_RANGE`], at most [`MAX_WATERFALL_SIZES`].
+    pub sizes: Vec<f64>,
+    /// Each line draws in the master whose optical-size value lies nearest its size, when the font has the axis.
+    pub optical: bool,
+}
+
+impl Default for Waterfall {
+    fn default() -> Self {
+        Self { on: false, sizes: DEFAULT_WATERFALL.to_vec(), optical: true }
+    }
+}
 
 /// How the preview arranges its text.
 #[derive(PlainData, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -227,6 +362,7 @@ pub struct TextPreviewState {
     /// Ranges with their own direction, sorted, not overlapping.
     pub runs: Vec<Run>,
     pub find: FindState,
+    pub waterfall: Waterfall,
     /// The text area as the view last reported it: the line length in points (0 until it does) and the lines in
     /// view.
     pub area: Area,
@@ -259,6 +395,7 @@ impl Default for TextPreviewState {
             direction: BaseDirection::Default,
             runs: Vec::new(),
             find: FindState::default(),
+            waterfall: Waterfall::default(),
             area: Area::default(),
         }
     }
@@ -397,53 +534,92 @@ pub fn base_is_rtl(text: &str, direction: BaseDirection) -> bool {
     }
 }
 
-/// The start of every match of `query` in `text`, without overlaps, as character indexes.
+/// The start of every match of `query` in `text`, without overlaps, as character indexes. The query's pattern tokens
+/// match one character of their kind.
 pub fn find_matches(text: &str, query: &str, ignore_case: bool, matching: Matching) -> Vec<usize> {
     let fold = |c: char| if ignore_case { c.to_lowercase().next().unwrap_or(c) } else { c };
-    let needle: Vec<char> = query.chars().map(fold).collect();
+    let needle: Vec<Element> = elements(query)
+        .into_iter()
+        .map(|e| match e {
+            Element::Char(c) => Element::Char(fold(c)),
+            other => other,
+        })
+        .collect();
     if needle.is_empty() {
         return Vec::new();
     }
     let hay: Vec<char> = text.chars().map(fold).collect();
-    // Knuth–Morris–Pratt, so a hostile query costs no more than the text.
-    let mut fail = vec![0usize; needle.len()];
-    let mut k = 0;
-    for i in 1..needle.len() {
-        while k > 0 && needle.get(i) != needle.get(k) {
-            k = fail.get(k - 1).copied().unwrap_or(0);
-        }
-        if needle.get(i) == needle.get(k) {
-            k += 1;
-        }
-        if let Some(f) = fail.get_mut(i) {
-            *f = k;
-        }
-    }
     let word = |i: Option<usize>| i.and_then(|i| hay.get(i)).is_some_and(|c| c.is_alphanumeric() || *c == '_');
     let mut out = Vec::new();
-    let mut k = 0;
-    for (i, c) in hay.iter().enumerate() {
-        while k > 0 && needle.get(k) != Some(c) {
-            k = fail.get(k - 1).copied().unwrap_or(0);
+    // The end of the last match kept: matches do not overlap, and the leftmost one wins.
+    let mut free = 0;
+    for start in occurrences(&hay, &needle) {
+        if start < free {
+            continue;
         }
-        if needle.get(k) == Some(c) {
-            k += 1;
+        let end = start + needle.len();
+        let starts = !word(start.checked_sub(1));
+        let ends = !word(Some(end));
+        let ok = match matching {
+            Matching::Contains => true,
+            Matching::StartsWith => starts,
+            Matching::FullWord => starts && ends,
+        };
+        if ok {
+            out.push(start);
+            free = end;
         }
-        if k == needle.len() {
-            let start = i + 1 - k;
-            let starts = !word(start.checked_sub(1));
-            let ends = !word(Some(i + 1));
-            let ok = match matching {
-                Matching::Contains => true,
-                Matching::StartsWith => starts,
-                Matching::FullWord => starts && ends,
-            };
-            if ok {
-                out.push(start);
-                k = 0;
-            } else {
-                k = fail.get(k - 1).copied().unwrap_or(0);
+    }
+    out
+}
+
+/// The start of every occurrence of `needle` in `hay`, overlapping ones included, in order. Bit-parallel
+/// (shift-and), so a hostile query costs the text's length times the query's length over 64, at most.
+fn occurrences(hay: &[char], needle: &[Element]) -> Vec<usize> {
+    let Some(last) = needle.len().checked_sub(1) else { return Vec::new() };
+    let words = needle.len().div_ceil(64);
+    // For each character and each pattern: the bits of the needle's elements it matches.
+    let mut literal: HashMap<char, Vec<u64>> = HashMap::new();
+    let mut patterns: Vec<(Pattern, Vec<u64>)> = Vec::new();
+    for (i, e) in needle.iter().enumerate() {
+        let mask = match e {
+            Element::Char(c) => Some(literal.entry(*c).or_insert_with(|| vec![0; words])),
+            Element::Pattern(p) => {
+                let at = match patterns.iter().position(|(q, _)| q == p) {
+                    Some(at) => at,
+                    None => {
+                        patterns.push((*p, vec![0; words]));
+                        patterns.len() - 1
+                    }
+                };
+                patterns.get_mut(at).map(|(_, m)| m)
             }
+        };
+        if let Some(word) = mask.and_then(|m| m.get_mut(i / 64)) {
+            *word |= 1 << (i % 64);
+        }
+    }
+    let (last_word, last_bit) = (last / 64, 1u64 << (last % 64));
+    let mut state = vec![0u64; words];
+    let mut mask = vec![0u64; words];
+    let mut out = Vec::new();
+    for (i, c) in hay.iter().enumerate() {
+        mask.iter_mut().for_each(|m| *m = 0);
+        let sources = literal.get(c).into_iter().chain(patterns.iter().filter(|(p, _)| p.matches(*c)).map(|(_, m)| m));
+        for source in sources {
+            for (m, s) in mask.iter_mut().zip(source) {
+                *m |= s;
+            }
+        }
+        // Every partial match moves on one element, and a new one starts here.
+        let mut carry = 1u64;
+        for (s, m) in state.iter_mut().zip(&mask) {
+            let next = *s >> 63;
+            *s = ((*s << 1) | carry) & m;
+            carry = next;
+        }
+        if state.get(last_word).is_some_and(|s| s & last_bit != 0) {
+            out.push((i + 1).saturating_sub(needle.len()));
         }
     }
     out
@@ -538,6 +714,16 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
         }
         "textPreview.setWritingDirection" => writing_direction(&mut app.view.text_preview, p)?,
         "textPreview.find" => find(&mut app.view.text_preview, p)?,
+        "textPreview.insertPattern" => insert_pattern(&mut app.view.text_preview, p)?,
+        "view.previewWaterfall" => {
+            let tp = &mut app.view.text_preview;
+            let waterfall = waterfall(&tp.waterfall, p)?;
+            let open = waterfall.on;
+            tp.waterfall = waterfall;
+            if open {
+                crate::shell::dock::show_window(&mut app.view.workspace, PanelId::TextPreview, true, app.view.canvas.rect);
+            }
+        }
         other => return Err(format!("no Text Preview command `{other}`")),
     }
     Ok(())
@@ -569,6 +755,53 @@ fn writing_direction(tp: &mut TextPreviewState, p: &Map<String, Value>) -> Resul
     Ok(())
 }
 
+/// `textPreview.insertPattern`: the token goes into the search at `at` (a character index; default its end), and the
+/// search runs again with the find bar open.
+fn insert_pattern(tp: &mut TextPreviewState, p: &Map<String, Value>) -> Result<(), String> {
+    let name = string(p, "pattern")?.ok_or("`pattern` is required")?;
+    let pattern = Pattern::from_name(name).ok_or("`pattern` must be space, digit, letter or lineEnd")?;
+    let query = &tp.find.query;
+    let len = query.chars().count();
+    let at = match p.get("at").filter(|v| !v.is_null()) {
+        None => len,
+        Some(v) => v
+            .as_u64()
+            .and_then(|i| usize::try_from(i).ok())
+            .filter(|i| *i <= len)
+            .ok_or_else(|| format!("`at` must be a character index from 0 to {len}"))?,
+    };
+    let token = pattern.token();
+    if len.saturating_add(token.chars().count()) > MAX_QUERY_CHARS {
+        return Err(format!("the search holds at most {MAX_QUERY_CHARS} characters"));
+    }
+    let mut next: String = query.chars().take(at).collect();
+    next.push_str(token);
+    next.extend(query.chars().skip(at));
+    let mut params = Map::new();
+    params.insert("query".into(), Value::String(next));
+    find(tp, &params)
+}
+
+/// The waterfall `view.previewWaterfall` asks for: `on` toggles when not given; sizes are checked and kept in order.
+fn waterfall(old: &Waterfall, p: &Map<String, Value>) -> Result<Waterfall, String> {
+    let on = flag(p, "on")?.unwrap_or(!old.on);
+    let optical = flag(p, "useOpticalSize")?.unwrap_or(old.optical);
+    let sizes = match p.get("sizes").filter(|v| !v.is_null()) {
+        None => old.sizes.clone(),
+        Some(v) => {
+            let list = v.as_array().ok_or("`sizes` must be a list of numbers")?;
+            if list.is_empty() || list.len() > MAX_WATERFALL_SIZES {
+                return Err(format!("`sizes` holds from 1 to {MAX_WATERFALL_SIZES} sizes"));
+            }
+            list.iter()
+                .map(|v| v.as_f64().filter(|s| SIZE_RANGE.contains(s)))
+                .collect::<Option<Vec<f64>>>()
+                .ok_or_else(|| format!("each size lies between {} and {} points", SIZE_RANGE.start(), SIZE_RANGE.end()))?
+        }
+    };
+    Ok(Waterfall { on, sizes, optical })
+}
+
 fn find(tp: &mut TextPreviewState, p: &Map<String, Value>) -> Result<(), String> {
     let open = flag(p, "open")?.unwrap_or(true);
     let short = |key: &str| -> Result<Option<String>, String> {
@@ -598,7 +831,7 @@ fn find(tp: &mut TextPreviewState, p: &Map<String, Value>) -> Result<(), String>
         Some(v) => Some(v.as_u64().and_then(|i| usize::try_from(i).ok()).ok_or("`options.index` must be a whole number")?),
     };
     let query = query.unwrap_or_else(|| tp.find.query.clone());
-    let qlen = query.chars().count();
+    let qlen = match_len(&query);
     let starts = find_matches(&tp.text, &query, ignore_case, matching);
     if let Some(i) = index
         && i >= starts.len()
@@ -645,7 +878,7 @@ pub fn inspect(app: &FontCraftApp, state: &mut Map<String, Value>) {
     let font = app.session.font().ok();
     let styles: Vec<String> = font.map(styles).unwrap_or_default().into_iter().map(|s| s.name).collect();
     let starts = find_matches(&tp.text, &tp.find.query, tp.find.ignore_case, tp.find.matching);
-    let qlen = tp.find.query.chars().count();
+    let qlen = match_len(&tp.find.query);
     let model = &app.models.text_preview.view;
     let page = model.page.as_deref();
     state.insert(
@@ -662,6 +895,12 @@ pub fn inspect(app: &FontCraftApp, state: &mut Map<String, Value>) {
             "direction": tp.direction.name(),
             "rtl": base_is_rtl(&tp.text, tp.direction),
             "runs": tp.runs.iter().map(|r| json!({"start": r.start, "end": r.end, "direction": r.direction.name()})).collect::<Vec<_>>(),
+            "waterfall": {
+                "on": tp.waterfall.on,
+                "sizes": tp.waterfall.sizes,
+                "useOpticalSize": tp.waterfall.optical,
+                "lines": model.waterfall.iter().map(|r| json!({"size": r.size, "opticalSize": r.optical_size, "master": r.master})).collect::<Vec<_>>(),
+            },
             "find": {
                 "open": tp.find.open,
                 "query": tp.find.query,
@@ -706,6 +945,24 @@ mod tests {
         assert_eq!(find_matches("aaaa", "aa", true, Matching::Contains), [0, 2]);
         assert_eq!(replaced("Hat hat that", &[0, 4], 3, "cap", 12).as_deref(), Some("cap cap that"));
         assert_eq!(replaced("Hat hat that", &[0, 4], 3, "caps", 13), None);
+    }
+
+    /// Pattern tokens match one character of their kind, a doubled backslash is a backslash, and a query longer than a
+    /// machine word still matches.
+    #[test]
+    fn pattern_tokens_match_one_character_of_their_kind() {
+        let text = "a1 b22\nc3\\d";
+        assert_eq!(find_matches(text, "\\l\\d", true, Matching::Contains), [0, 3, 7]);
+        assert_eq!(find_matches(text, "\\d\\s", true, Matching::Contains), [1]);
+        assert_eq!(find_matches(text, "\\d\\n", true, Matching::Contains), [5]);
+        assert_eq!(find_matches(text, "\\\\d", true, Matching::Contains), [9], "a literal backslash before d");
+        assert_eq!(find_matches(text, "\\l\\d", true, Matching::FullWord), [0, 7]);
+        assert_eq!(match_len("\\l\\d\\\\"), 3);
+        assert_eq!(match_len("a\\"), 2, "a backslash at the end is itself");
+        let long = "x".repeat(70) + "7";
+        let text = format!("{long} {long}");
+        let query = "x".repeat(70) + "\\d";
+        assert_eq!(find_matches(&text, &query, false, Matching::Contains), [0, 72]);
     }
 
     #[test]

@@ -1456,14 +1456,24 @@ guesses = [
 id = "textPreview.insertPattern"
 label = "Insert Pattern"
 menu = []
-shortcut = "Cmd+Ctrl+Alt+P"
+shortcut = ""
 kind = "ui"
-params = "{pattern?: string}"
+params = "{pattern: \"space\" | \"digit\" | \"letter\" | \"lineEnd\", at?: number}"
 area = "proofing"
 milestone = "M14"
 summary = "Inserts a wildcard token (for example any whitespace or any digit) into the Text Preview search field. It is a feature of the system find bar; the list of patterns is not given."
 ref = "Edit View › Entering Text › Text Preview"
 status = "handbook"
+notes = "Documented, not yet observed. Built in M13.69 (`shell/text_preview.rs`): the find bar's Insert Pattern menu puts a token into the search at its end, `at` puts it at a character index; the find bar opens and the search runs again. The search writes the tokens as `\\s` (any space), `\\d` (any digit), `\\l` (any letter) and `\\n` (a line end), with `\\\\` for a backslash; each matches one character. The handbook's Cmd+Ctrl+Alt+P opens the system menu of patterns, which a command with a required pattern cannot do, so the command has no shortcut."
+guesses = [
+  "Four patterns: any space (white space other than a line break), any digit, any letter and a line end; the handbook lists none.",
+  "Tokens are written in the search as backslash escapes, so a literal backslash is searched as two; the system find bar shows tokens as tokens, which a plain text field cannot.",
+  "A line end matches the line break character only, not the end of the text.",
+  "No shortcut: the reference's key opens a menu of patterns, and this command takes the pattern as a parameter.",
+]
+observe = [
+  "In the Text Preview find bar, open Insert Pattern and note every pattern listed and what each matches.",
+]
 
 [[command]]
 id = "edit.selectSampleText"

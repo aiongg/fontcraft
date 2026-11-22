@@ -172,3 +172,50 @@ fn text_preview_draws_colour_glyphs_from_the_compiled_font() {
     assert_eq!(p.glyphs.len(), 2);
     assert_eq!(app.models.text_preview.view.message.as_deref(), Some(reason), "the reason shows under the text");
 }
+
+/// The waterfall repeats the Edit View text once per size, in one page for the master it draws; sizes outside the
+/// allowed range and too many sizes are refused, and turning it off brings the running text back.
+#[test]
+fn the_waterfall_repeats_the_edit_view_text_at_each_size() {
+    let mut app = app();
+    shell(&mut app, "editView.setText", json!({"text": "AV"})).unwrap();
+    shell(&mut app, "view.previewWaterfall", json!({"on": true, "sizes": [72, 12]})).unwrap();
+    let model = &app.models.text_preview.view;
+    assert_eq!(model.waterfall.iter().map(|r| r.size).collect::<Vec<_>>(), [72.0, 12.0]);
+    assert!(model.waterfall.iter().all(|r| r.optical_size.is_none() && r.page == 0), "no optical-size axis: one master");
+    assert_eq!(model.waterfall_pages.len(), 1);
+    assert_eq!(names(&model.waterfall_pages[0]), ["A", "V"]);
+    let x = xs(&model.waterfall_pages[0]);
+    assert!((x[1] - x[0] - (width(&app, "A") - 100.0)).abs() < 0.01, "the line is kerned: {x:?}");
+
+    assert!(shell(&mut app, "view.previewWaterfall", json!({"sizes": [2]})).is_err(), "below 4 points");
+    assert!(shell(&mut app, "view.previewWaterfall", json!({"sizes": vec![12; 33]})).is_err(), "more than 32 sizes");
+    assert_eq!(app.view.text_preview.waterfall.sizes, [72.0, 12.0], "a refused change keeps the sizes");
+    let mut state = serde_json::Map::new();
+    super::inspect(&app, &mut state);
+    assert_eq!(state["textPreview"]["waterfall"]["lines"].as_array().map(Vec::len), Some(2));
+
+    shell(&mut app, "view.previewWaterfall", json!({})).unwrap();
+    assert!(app.models.text_preview.view.waterfall.is_empty(), "without on, the waterfall toggles off");
+    shell(&mut app, "textPreview.setText", json!({"text": "AVA"})).unwrap();
+    assert_eq!(names(&page(&app)), ["A", "V", "A"]);
+}
+
+/// Insert Pattern puts a token into the search, at the end or at a given place, and the search runs again.
+#[test]
+fn insert_pattern_puts_a_token_into_the_search() {
+    let mut app = app();
+    shell(&mut app, "textPreview.setText", json!({"text": "A1 V2 AV"})).unwrap();
+    shell(&mut app, "textPreview.insertPattern", json!({"pattern": "letter"})).unwrap();
+    shell(&mut app, "textPreview.insertPattern", json!({"pattern": "digit"})).unwrap();
+    let model = &app.models.text_preview.view;
+    assert_eq!((model.find.query.as_str(), model.find.open, model.matches), ("\\l\\d", true, 2));
+    shell(&mut app, "textPreview.insertPattern", json!({"pattern": "space", "at": 0})).unwrap();
+    let model = &app.models.text_preview.view;
+    assert_eq!((model.find.query.as_str(), model.matches), ("\\s\\l\\d", 1));
+    let mut state = serde_json::Map::new();
+    super::inspect(&app, &mut state);
+    assert_eq!(state["textPreview"]["find"]["ranges"], json!([[2, 5]]), "a match spans one character per token");
+    assert!(shell(&mut app, "textPreview.insertPattern", json!({"pattern": "word"})).is_err());
+    assert!(shell(&mut app, "textPreview.insertPattern", json!({"pattern": "digit", "at": 99})).is_err());
+}

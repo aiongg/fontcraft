@@ -2512,6 +2512,16 @@ summary = "Switches the text preview to a waterfall: the same line repeated at a
 ref = "FontLab 8 What's new › Test & adjust › Previewing and printing (Echo text in waterfall; Optical size toggle)"
 status = "docs"
 origin = "fontlab"
+notes = "Built in M13.69 (`shell/text_preview.rs`, `app/models/text_preview/mod.rs`): the Text Preview shows one line per size with its size above it, from the Edit View tab's text, or Font View's selection while Font View shows, else the first line of the preview text, at most 500 items. Lines are laid out kerned on one line and shaped through the preview font in the shown master. With useOpticalSize and an `opsz` axis, a line draws in the master nearest its size among the masters at the shown master's other coordinates; the masters are not interpolated. Without `on` the command toggles; turning it on opens the Text Preview window."
+guesses = [
+  "Sizes 72, 64, 48, 36, 30, 24, 18, 14, 12, 10, 9, 8, 6, 5 and 4 points by default, at most 32, each from 4 to 1,000.",
+  "Optical size is on by default; the optical-size value of a line is its size in points, kept within the masters' range, and the masters' design coordinates are compared with it as they are.",
+  "The waterfall lays out left to right in lines, whatever the preview's orientation and writing direction.",
+  "A Waterfall button in the Text Preview's top row; the View menu item runs the same command.",
+]
+observe = [
+  "In the reference app, turn on the waterfall with the Edit View text and then a Font View selection, and note the default sizes and whether each line is labelled.",
+]
 
 # =====================================================================================================
 # FontForge — finding and validating problems
