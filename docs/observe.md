@@ -32,12 +32,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1550 rows to check: 2704 guesses and 664 observe steps.**
+**1555 rows to check: 2718 guesses and 670 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **555** |
-| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 128 |
+| **Built milestones (M0 to M6)** | all | **556** |
+| Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 129 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 33 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
 | Built milestones (M0 to M6) | Filters | 37 |
@@ -48,26 +48,26 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 51 |
 | Built milestones (M0 to M6) | Settings and the window | 18 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **995** |
+| **Later milestones (after M6)** | all | **999** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 90 |
 | Later milestones (after M6) | Edit View: text mode and preview | 28 |
 | Later milestones (after M6) | Components and anchors | 43 |
 | Later milestones (after M6) | Filters | 5 |
 | Later milestones (after M6) | Spacing and metrics keys | 13 |
 | Later milestones (after M6) | Kerning and the Kerning window | 16 |
-| Later milestones (after M6) | Font View | 19 |
+| Later milestones (after M6) | Font View | 22 |
 | Later milestones (after M6) | Font Info and features | 310 |
 | Later milestones (after M6) | Interpolation | 90 |
 | Later milestones (after M6) | Hinting | 115 |
 | Later milestones (after M6) | Colour fonts | 74 |
 | Later milestones (after M6) | Files: open, import, export | 72 |
-| Later milestones (after M6) | Settings and the window | 32 |
+| Later milestones (after M6) | Settings and the window | 33 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
-## Built milestones (M0 to M6) (555)
+## Built milestones (M0 to M6) (556)
 
-### Edit View: drawing, guides, layers and the Palette (128)
+### Edit View: drawing, guides, layers and the Palette (129)
 
 - [ ] `dialog.fieldKeys` (behavior, M3, inferred): In a dialog's number field, Return takes the typed value, Escape drops…
   - Guess: Dialog number fields follow the Info box's editing and arrow-key rules (infoBox.fieldEditing, infoBox.arrowKeyStepping); the handbook documents them for the Info box only.
@@ -90,7 +90,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `menus.optionRevealsAlternateItems` (behavior, M3, handbook): Holding Option while a menu or context menu is open swaps some…
   - Guess: Clear Background is the Alt alternate of Assign Background; the handbook says only that it shows while Alt is held. Holding Option in the reference app's Path menu settles it.
   - Guess: An alternate row shows its own command's label and shortcut, as native macOS alternate items do; the handbook names the alternates but not their labels. The observe step below settles it.
+  - Guess: Expand Outline for All Masters is offered as Expand Outline's Alt alternate in the canvas context menu; the handbook names the pair but not which menu shows it.
   - Observe: Open the Path menu, hold Option, and note which items change, their labels, and whether each keeps its shortcut with Option added.
+  - Observe: Right-click a path in Edit View with Option held and note whether Expand Outline reads Expand Outline for All Masters; then open the View menu with Option held and note whether Close Tab reads Reopen Last Closed Tab.
 - [ ] `menus.switchCheckMarks` (behavior, M3, handbook): A menu item that switches something on and off shows a check…
   - Guess: Every on/off switch shows a check mark, including Lock Outline, Power Nudge, Edit Background, Palette, Preview Panel and Font Audit; opening the reference app's View, Path and Window menus with each switch on and off settles which ones do.
   - Guess: View › Show Indexes shows a check mark while any kind of index is shown. Settled by turning on a single kind in the reference app and opening the View menu.
@@ -257,6 +259,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: Rotate a shape with the Rotate tool and note the badge's text and whether it shows decimals.
 - [ ] `scale` (tool, M3, handbook): Scale
   - Guess: The Scale tool's badge shows the horizontal and vertical percentages, without the new size.
+- [ ] `pan.scrolling` (behavior, M3, handbook): Two-finger dragging on a trackpad pans freely
+  - Guess: The scroll bars measure the edited glyph's box joined with the laid-out text, not the whole font or the text's line height alone.
+  - Guess: The bars are always shown, in the docked look of the framework, not only while scrolling.
+  - Observe: Open a glyph in Edit View with a long text line and look at the right and bottom edges of the canvas: note whether scroll bars show at rest or only while scrolling.
+  - Observe: Drag the horizontal scroll bar's thumb to its end: note whether the view stops at the last glyph of the line or can go past it.
 - [ ] `background.snapping` (behavior, M3, handbook): While the background is displayed, its nodes and outlines are snapping targets…
   - Guess: The background's nodes, then its handles, are snap targets after the edited layer's nodes and handles and before guides; its outlines between nodes are not targets.
 - [ ] `background.usedByFilters` (behavior, M3, handbook): Some filters, Hatch Outline being the named example, keep the untouched original…
@@ -1726,7 +1733,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (995)
+## Later milestones (after M6) (999)
 
 ### Edit View: drawing, guides, layers and the Palette (90)
 
@@ -2465,7 +2472,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The editor and the Kerning Pairs Preview are panels of the window's dock rather than floating windows; a dock panel can be floated.
   - Guess: The stacked view shows the member cells under the stacked drawing, so glyphs can still be dropped onto the group.
 
-### Font View (19)
+### Font View (22)
 
 - [ ] `smartFilter.rule.custom` (behavior, M8, handbook): Rule Custom holds a free-form glyph predicate written in the same expression…
   - Guess: The language adds matches (a regular expression over the whole value), which fea-rs refuses, because the Glyph Name rule offers matches and compiles to this language; && and || stand for AND and OR, and a yes-or-no attribute alone means == true. A comparison on tags holds when it holds for one tag. Settled by trying these forms in the reference's Custom rule.
@@ -2511,6 +2518,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Only whole copied glyphs paste after; a drawing fragment copied from a layer has no advance width and is refused. Pasting a selection from an outline window in the secondary reference would settle it.
   - Guess: Paths and components are pasted; anchors are not, so a word glyph does not get several anchors of one name. The secondary reference's result with anchored glyphs would settle it.
   - Guess: Each copied glyph gives its layer of the target's master (by id, else by name, else the master shown when copying), as edit.paste matches masters.
+- [ ] `view.setFontViewStrike` (M13, docs, live): Show Strike in Font View
+  - Guess: Without `depth` the strike of that size with the fewest bits per pixel is shown.
+  - Guess: A pixel is `magnification` points (1 by default), shrunk to fit when the strike's line band or the bitmap's advance would not fit 80% of the cell; the strike's ascent and descent (else four fifths of the em above the baseline) set the band, centred in the cell. FontForge's font view at a strike's size would settle the placement.
+  - Guess: While a strike shows, cells skip placed images and always show the glyph name.
+  - Guess: The View menu lists the strikes in a Font View Strike submenu with Outlines first, keeping the magnification already set; the reference lists the sizes in the View menu itself with a separate Bitmap Magnification item.
+  - Observe: In FontForge, open a font with a 12 and a 16 pixel strike, pick 12 in the View menu, and note how the cells place a bitmap and what an empty glyph shows.
 - [ ] `font.renameGlyphsByNamelist` (M13, docs, live): Rename Glyphs by Name List…
   - Guess: An unencoded glyph named after a renamed glyph plus a suffix is renamed with it (uni0041.sc to A.sc); the reference's documentation does not say, and renaming such a font in it would settle it.
   - Guess: Renamed glyphs keep their code points and their places in the glyph order, and when a code point is named twice in a list the first name counts.
@@ -2524,11 +2537,20 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: FontCraft stores the status per glyph, in the glyph's user data, so `.glyphs` and UFO keep it; per-source statuses would move it to layer user data. The reference documentation does not say.
   - Guess: A glyph without a stored status is shown in the default status; setting a status on a new glyph in the reference app would settle it.
   - Guess: The tint fills the advance box from the descender to the ascender at a quarter of the status colour's opacity, and shows whenever the glyph is in a defined status (no display toggle yet); the reference's Development status color option would settle the look and the default.
+  - Guess: List View's Status column comes after every other column and shows by default; its pop-up sets the row's glyph only, not the selection. The reference has no list view of its own to compare with.
+  - Guess: A grid cell shows its glyph's status as a bar along its foot, 6% of the cell high and at least 2 points; the reference's font overview cells would settle the look.
+  - Observe: In the reference app, define two statuses, give a glyph the second, and note how its cell in the font overview shows the status (bar, tint or nothing).
 - [ ] `palette.relatedGlyphs` (panel, M13, docs): Related Glyphs & Characters
   - Guess: A glyph's base name is the part of its name before the first dot, and alternates are the other glyphs with the same base name; the reference's documentation does not define the suffix rule.
   - Guess: The used-as-component section lists direct users only; Show Dependencies lists the nested ones.
   - Guess: The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.
   - Guess: Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.
+- [ ] `dialog.renameGlyphsByNamelist` (panel, M13, docs): Rename Glyphs by Name List
+  - Guess: The dialog renames the glyphs selected in Font View, and every glyph when none is selected; the reference renames the whole font, which renaming with a selection in it would confirm.
+  - Guess: Pasted text is offered beside a file, and the Renames list shows at most 2,000 rows; the reference reads a file only and shows no list.
+- [ ] `dialog.statusDefinitions` (panel, M13, docs): Status Definitions
+  - Guess: A new status takes the next code after the highest one, the name Status n and a grey colour, and ticking Default on one status unticks the others; the reference's panel would settle both.
+  - Observe: In the reference app, open Font › Status definitions, add a status, and note its starting code, name and colour.
 
 ### Font Info and features (310)
 
@@ -4778,7 +4800,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Every item starts ticked, so Accept Selected with no change of the ticks takes everything; the reference's manual does not say which state the ticks start in, and opening the window there settles it.
   - Guess: The stored-text view on double-click shows the glyph in FontCraft's native JSON form rather than as a .glif file, since the comparison is between models; the reference shows the file text, and a file-per-glyph text view would follow it more closely.
 
-### Settings and the window (32)
+### Settings and the window (33)
 
 - [ ] `sharing.confirmConnectionOnHost` (behavior, M13, handbook): A first connection attempt from a device must be confirmed on the…
   - Guess: Devices are known by their IP address, so a device that gets a new address must be confirmed again; what the reference keys them by is not documented.
@@ -4873,6 +4895,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Use Versions is stored and does nothing, because the system's version browser is a macOS service FontCraft does not use.
 - [ ] `user.sendCrashReports` (setting, M14, handbook): Send Crash Reports
   - Guess: Send Crash Reports and its two contact fields are stored and do nothing, because FontCraft has no crash-report service.
+- [ ] `ui.numericFieldExpressions` (behavior, M14, docs): Every numeric field accepts a simple arithmetic expression (such as 300+50 or…
+  - Guess: The pull-down slider with a fine-control modifier is left out; only the arithmetic part is built.
+  - Guess: In a dialog number field, text that starts with + or - is a signed number, not a change to the current value (panel fields follow the framework number field).
 - [ ] `app.commandPalette` (M14, docs, live): Commands…
   - Guess: The palette lists the commands that have a menu row; the others take parameters and are reached through the Command Console. The secondary reference's list would settle it.
   - Guess: The shortcut Cmd+Shift+P comes from the secondary reference; the reference app has none.

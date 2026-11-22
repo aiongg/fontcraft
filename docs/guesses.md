@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**3205 guesses on 1660 rows (677 of them live commands).**
+**3219 guesses on 1665 rows (678 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -116,6 +116,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `tabs.windowHoldsFontViewPlusEditTabs` (behavior) | M3 | handbook | – | A tab left without glyphs by a removal closes, and Font View shows when it was showing; removing the only glyph of the showing tab in the reference app settles it. |
 | `menus.optionRevealsAlternateItems` (behavior) | M3 | handbook | – | Clear Background is the Alt alternate of Assign Background; the handbook says only that it shows while Alt is held. Holding Option in the reference app's Path menu settles it. |
 | `menus.optionRevealsAlternateItems` (behavior) | M3 | handbook | – | An alternate row shows its own command's label and shortcut, as native macOS alternate items do; the handbook names the alternates but not their labels. The observe step below settles it. |
+| `menus.optionRevealsAlternateItems` (behavior) | M3 | handbook | – | Expand Outline for All Masters is offered as Expand Outline's Alt alternate in the canvas context menu; the handbook names the pair but not which menu shows it. |
 | `menus.switchCheckMarks` (behavior) | M3 | handbook | – | Every on/off switch shows a check mark, including Lock Outline, Power Nudge, Edit Background, Palette, Preview Panel and Font Audit; opening the reference app's View, Path and Window menus with each switch on and off settles which ones do. |
 | `menus.switchCheckMarks` (behavior) | M3 | handbook | – | View › Show Indexes shows a check mark while any kind of index is shown. Settled by turning on a single kind in the reference app and opening the View menu. |
 | `menus.greyedBySelection` (behavior) | M3 | inferred | – | With no glyph edited and nothing selected in Font View, every menu item whose command takes glyph targets is greyed out; opening the Path menu in the reference app's Font View with nothing selected settles it. |
@@ -284,6 +285,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `preview.render` | M9 | inferred | yes | `size` is the image height in pixels, the strip from Preview Descender to Preview Ascender filling it, as the Preview Area scales to its height. |
 | `preview.render` | M9 | inferred | yes | `features` is accepted and not applied, with a warning, since the Preview Area lays its line out without feature code. |
 | `infoBox.showsColorLabels` (behavior) | M4 | handbook | – | The split square sits at the left of the Info box and is drawn only when the glyph or the active layer has a colour label; the Info box itself shows only while something is selected. Settled by observation. |
+| `pan.scrolling` (behavior) | M3 | handbook | – | The scroll bars measure the edited glyph's box joined with the laid-out text, not the whole font or the text's line height alone. |
+| `pan.scrolling` (behavior) | M3 | handbook | – | The bars are always shown, in the docked look of the framework, not only while scrolling. |
 | `background.snapping` (behavior) | M3 | handbook | – | The background's nodes, then its handles, are snap targets after the edited layer's nodes and handles and before guides; its outlines between nodes are not targets. |
 | `background.usedByFilters` (behavior) | M3 | handbook | – | Only Hatch Outline backs up; the handbook names no other filter. |
 | `background.usedByFilters` (behavior) | M3 | handbook | – | The copy replaces what the background held, shapes and anchors, as Selection to Background does. |
@@ -3111,6 +3114,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `bitmap.transform` | M13 | docs | yes | Flips mirror the bitmap in its own box, which stays where it was, rather than about the advance's centre. Flipping an off-centre bitmap in the secondary reference would settle it. |
 | `bitmap.transform` | M13 | docs | yes | A quarter turn keeps the centre of the bitmap's box, rounding the new corner down; the secondary reference may turn about the glyph origin instead. |
 | `bitmap.transform` | M13 | docs | yes | A glyph built from references has them drawn into its pixels before it is transformed, so it loses its references; transforming only its own pixels would move them apart from the drawn parts. |
+| `view.setFontViewStrike` | M13 | docs | yes | Without `depth` the strike of that size with the fewest bits per pixel is shown. |
+| `view.setFontViewStrike` | M13 | docs | yes | A pixel is `magnification` points (1 by default), shrunk to fit when the strike's line band or the bitmap's advance would not fit 80% of the cell; the strike's ascent and descent (else four fifths of the em above the baseline) set the band, centred in the cell. FontForge's font view at a strike's size would settle the placement. |
+| `view.setFontViewStrike` | M13 | docs | yes | While a strike shows, cells skip placed images and always show the glyph name. |
+| `view.setFontViewStrike` | M13 | docs | yes | The View menu lists the strikes in a Font View Strike submenu with Outlines first, keeping the magnification already set; the reference lists the sizes in the View menu itself with a separate Bitmap Magnification item. |
 | `bitmap.importStrikes` | M13 | docs | yes | A bitmap goes to the glyph whose code point is its code when the file's codes are Unicode, else to the glyph of its name; the summary names both keys but not their order. Importing a BDF whose names and codes disagree into the secondary reference would settle it. |
 | `bitmap.importStrikes` | M13 | docs | yes | Bitmaps that match no glyph are left out and listed; no glyph is created for them. Importing a BDF with an extra glyph into a font without it, in the secondary reference, would settle it. |
 | `bitmap.importStrikes` | M13 | docs | yes | A file none of whose strikes has a bitmap that matches a glyph is refused, changing nothing; a strike that matches nothing in a file whose other strikes match (such as a symbol font in a FON file) is left out with a warning. |
@@ -3198,6 +3205,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `glyph.setStatus` | M13 | docs | yes | FontCraft stores the status per glyph, in the glyph's user data, so `.glyphs` and UFO keep it; per-source statuses would move it to layer user data. The reference documentation does not say. |
 | `glyph.setStatus` | M13 | docs | yes | A glyph without a stored status is shown in the default status; setting a status on a new glyph in the reference app would settle it. |
 | `glyph.setStatus` | M13 | docs | yes | The tint fills the advance box from the descender to the ascender at a quarter of the status colour's opacity, and shows whenever the glyph is in a defined status (no display toggle yet); the reference's Development status color option would settle the look and the default. |
+| `glyph.setStatus` | M13 | docs | yes | List View's Status column comes after every other column and shows by default; its pop-up sets the row's glyph only, not the selection. The reference has no list view of its own to compare with. |
+| `glyph.setStatus` | M13 | docs | yes | A grid cell shows its glyph's status as a bar along its foot, 6% of the cell high and at least 2 points; the reference's font overview cells would settle the look. |
 | `tunni.dragLineSymmetric` (behavior) | M13 | docs | – | Both handles gain the same share of their own distance to the Tunni point, the share being how far the pointer moves across the chord over the Tunni point's height above it, so the Tunni line follows the pointer; FontLab does not say how the two lengths relate, and dragging an unbalanced segment's Tunni line in FontLab would settle it. |
 | `tunni.dragLineSymmetric` (behavior) | M13 | docs | – | A Tunni line counts as selected when both its handles are selected, so clicking a Tunni line selects its two handles and Shift-click toggles them; FontLab keeps a separate Tunni line selection, and selecting a line there and then a node would show whether the two interact. |
 | `tunni.dragLineSymmetric` (behavior) | M13 | docs | – | The control dot is drawn and hit at the Tunni point itself (where the handle lines meet); the FontLab manual does not say where on the line the dot sits, and a screenshot of FontLab with Tunni lines on would settle it. |
@@ -3217,6 +3226,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `anchor.positionExpressions` (behavior) | M13 | docs | – | An anchor with expressions that is moved by hand goes back to its expressions' values at once; removing the expressions frees it. |
 | `anchor.positionExpressions` (behavior) | M13 | docs | – | Anchors are worked out once per change, in layer order, so `anchor:NAME` sees the new position of an anchor before it and the old position of one after it. |
 | `anchor.positionExpressions` (behavior) | M13 | docs | – | `guide:NAME` is the y of a horizontal guide and the x of a vertical one (`.x` and `.y` pick either), looked up on the layer and then on the master; `zone:NAME` is a master metric by name, then by kind; `param:NAME` is a master number value, then a numeric font custom parameter. |
+| `ui.numericFieldExpressions` (behavior) | M14 | docs | – | The pull-down slider with a fine-control modifier is left out; only the arithmetic part is built. |
+| `ui.numericFieldExpressions` (behavior) | M14 | docs | – | In a dialog number field, text that starts with + or - is a signed number, not a change to the current value (panel fields follow the framework number field). |
 | `kerning.representativeGlyph` (behavior) | M13 | docs | – | Members are stepped in glyph order and wrap round from the last to the first. |
 | `kerning.representativeGlyph` (behavior) | M13 | docs | – | The keys work only while the Pairs and Phrases list has the keyboard, so they never clash with the Edit View's own keys; elsewhere the command runs from Font › Kerning or the control channel. |
 | `features.opticalBoundsFromGuides` (behavior) | M13 | docs | – | A glyph without outlines or components (a space) takes no global offset, only its own guides; settled by exporting a font with a non-zero offset and a space glyph from the reference app. |
@@ -3307,6 +3318,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `dialog.setMasterLocations` (panel) | M9 | docs | – | The table is typed as text pairs rather than edited as rows; the secondary reference's dialog would show its layout. |
 | `dialog.addVariation` (panel) | M9 | docs | – | The tag starts at the first registered axis the font lacks; the secondary reference's dialog would settle its default. |
 | `dialog.mergeFontsToMasters` (panel) | M9 | docs | – | Every open font starts ticked; the secondary reference's dialog would settle its defaults. |
+| `dialog.renameGlyphsByNamelist` (panel) | M13 | docs | – | The dialog renames the glyphs selected in Font View, and every glyph when none is selected; the reference renames the whole font, which renaming with a selection in it would confirm. |
+| `dialog.renameGlyphsByNamelist` (panel) | M13 | docs | – | Pasted text is offered beside a file, and the Renames list shows at most 2,000 rows; the reference reads a file only and shows no list. |
+| `dialog.statusDefinitions` (panel) | M13 | docs | – | A new status takes the next code after the highest one, the name Status n and a grey colour, and ticking Default on one status unticks the others; the reference's panel would settle both. |
 | `curveTension` (parameter) | M13 | docs | – | A master without the parameter, or with a value outside 1 to 100, uses 55 percent, close to a circle's tension; FontLab's default value is not documented and a new FontLab font would show it. |
 | `suggestDistance` (parameter) | M13 | docs | – | Read as a dictionary {x, y} where a missing key is 0, an array of two numbers, or one number for both; a source file from the reference app that sets it would settle the stored form. |
 | `appearance.guideOpacity` (setting) | M14 | docs | – | One value covers every item type until the Appearance section offers one per type; the source lists the types but not how the values are stored. Settled by opening the reference's opacity settings. |
