@@ -1,5 +1,5 @@
-//! The glyph inspector (`fontView.inspector`): the properties of the glyphs selected in Font View, at the foot of
-//! the sidebar. Its title row shows and hides the fields (`fontView.toggleInspector`).
+//! The glyph inspector (`fontView.inspector`): the properties of the glyphs selected in Font View, or of the glyph
+//! an Edit tab edits while one shows, at the foot of the sidebar. Its title row shows and hides the fields (`fontView.toggleInspector`).
 //!
 //! | Row | Shows |
 //! |---|---|

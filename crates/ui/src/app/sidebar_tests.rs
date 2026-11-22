@@ -95,3 +95,19 @@ fn a_vertical_origin_edit_reaches_the_engine() {
     let origin = crate::panels::font_view::metrics::shown(&app.models.inspector, crate::app::models::glyph_props::MetricField::VertOrigin);
     assert_eq!(origin.text, "40");
 }
+
+/// While an Edit tab shows, the inspector describes the glyph it edits, not the Font View selection behind it.
+#[test]
+fn the_inspector_shows_the_edited_glyph_while_edit_view_shows() {
+    let mut app = app();
+    shell(&mut app, "fontView.setSelection", json!({ "glyphs": ["A"] }));
+    assert_eq!(app.models.inspector.glyphs, vec!["A".to_string()]);
+    shell(&mut app, "view.editSelectedGlyphs", json!({ "glyphs": ["B"] }));
+    assert_eq!(app.status, "");
+    assert!(!app.view.tabs.font_view_shows());
+    assert_eq!(app.view.font_view.selected, vec!["A".to_string()], "Font View keeps its selection");
+    assert_eq!(app.models.inspector.glyphs, vec!["B".to_string()], "the edited glyph");
+    assert_eq!(app.models.inspector.field(PropField::Name).text, "B");
+    shell(&mut app, "fontView.show", json!({}));
+    assert_eq!(app.models.inspector.glyphs, vec!["A".to_string()], "Font View's selection again");
+}

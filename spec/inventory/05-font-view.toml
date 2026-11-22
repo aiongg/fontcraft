@@ -1087,8 +1087,9 @@ milestone = "M4"
 summary = "Shows and edits the properties of the selected glyphs at the bottom left of Font View. With several glyphs selected, differing values display as a mixed state and an edit applies to all of them."
 ref = "Font View › Glyph Properties"
 status = "handbook"
-notes = "Documented, not yet observed. Built in M4.8: a column at Font View's left holds the inspector at its bottom; with a sidebar, the inspector sits at the bottom of the sidebar."
+notes = "Documented, not yet observed. Built in M4.8: a column at Font View's left holds the inspector at its bottom; with a sidebar, the inspector sits at the bottom of the sidebar. While an Edit tab shows, the inspector describes the glyph that tab edits instead of the Font View selection behind it (X.fix95)."
 guesses = [
+  "In Edit View the inspector describes the edited glyph alone, not every glyph of the tab's text or the glyphs selected in text mode.",
   "With several glyphs selected the Name field is read-only and shows Multiple Values, since glyph names are unique. Settled by observation.",
   "The metric and kerning group fields are shown read-only until their commands exist (M5). Settled by M5.",
   "A Unicode value typed with several glyphs selected goes to all of them, as for any other field. Settled by observation.",

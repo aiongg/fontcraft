@@ -293,10 +293,12 @@ struct GlyphCx<'a> {
     master: &'a str,
 }
 
-/// The inspector's model: the Font View selection, while the sidebar shows.
+/// The inspector's model, while the sidebar shows: the Font View selection while Font View shows, else the glyph
+/// Edit View edits.
 pub fn project_inspector(model: &mut Tracked<GlyphPropsModel>, cx: &mut ProjectCx<'_>) {
     let shows = cx.view.workspace.layout.panel_state(&PanelId::Sidebar) != PanelState::Hidden;
-    let glyphs = cx.view.font_view.selected.clone();
+    let glyphs =
+        if cx.view.tabs.font_view_shows() { cx.view.font_view.selected.clone() } else { super::glyph::shown_glyph(cx).into_iter().collect() };
     project(model, cx, shows, &glyphs);
 }
 
