@@ -2,12 +2,13 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-22: M3.23 written on `w-M3.23` (M3.23a to M3.23c, on top of `w-M7.22`), not built: the kerning colours and `appearance.guideOpacity` as live settings the canvas reads, Extra Nodes from `fontcraft-tools` with a count and work cap. M7.22 written on `w-M7.22` (M7.22a to M7.22c), not built: the TTFZones and TTFStems rows open their editors, dictionary and localized values show refusals, window tests of the bits and PANOSE dialogs. UI.51 merged, built and pushed (X.integ119 to X.integ120): PDF pages in placed images, `palette.toggleSection`, `tool.select {tool}` and `tool.list` in the window; the gate is green with 4,811 tests. UI.49 and UI.50 merged, built and pushed (X.integ113 to X.integ117): the egui window is gone and `crates/ui` with `apps/fontcraft` is the only window. Earlier notes follow._
+_Updated: 2026-11-22: M7.22 and M3.23 merged, built and pushed (X.integ121 to X.integ123): the kerning colours and `appearance.guideOpacity` as live settings the canvas reads, Extra Nodes from `fontcraft-tools` with a count and work cap, the TTFZones and TTFStems rows open their editors on the row's master, dictionary and localized values show refusals, window tests of the bits and PANOSE dialogs; the gate is green with 4,819 tests. UI.51 merged, built and pushed (X.integ119 to X.integ120): PDF pages in placed images, `palette.toggleSection`, `tool.select {tool}` and `tool.list` in the window; the gate is green with 4,811 tests. UI.49 and UI.50 merged, built and pushed (X.integ113 to X.integ117): the egui window is gone and `crates/ui` with `apps/fontcraft` is the only window. Earlier notes follow._
 
 ## State of the tree
 
-- **Where M3.23 stands.** Written on the branch `w-M3.23`, which starts from `w-M7.22`; the writer ran no build and
-  no test, so both wait for an integrator. Most of the package was already in the window from the port: `Kind::Color`
+- **Where M3.23 stands.** Merged with M7.22, built, gate green with 4,819 tests. Checked headless under Xvfb over
+  the control channel: `settings.set` takes `appearance.guideOpacity` 50, refuses 150 and refuses a kerning colour
+  that is not `#rrggbb` or `#rrggbbaa`. Most of the package was already in the window from the port: `Kind::Color`
   in `crates/engine-core/src/settings.rs` with the 14 node, stroke, zone and canvas colours and
   `appearance.handleSize`, the canvas tokens reading them (`crates/ui/src/canvas/tokens.rs`) with node, handle,
   anchor and Extra Node sizes scaled by the step, and the Extra Nodes rings with a frame test over two squares and a
@@ -23,8 +24,10 @@ _Updated: 2026-11-22: M3.23 written on `w-M3.23` (M3.23a to M3.23c, on top of `w
     gone). Tests: two squares give 2, the plus 4, a 70 by 70 grid of bars stops at the cap, a path with more than
     20,000 segments gives none.
   - The window still draws content in the light appearance only (`from_settings(…, false)`); the switching is M14.2.
-- **Where M7.22 stands.** Written on the branch `w-M7.22`; the writer ran no build and no test, so it waits for an
-  integrator. Most of the package was already in the window from UI.10: the editors by kind in
+- **Where M7.22 stands.** Merged, built, gate green. Checked headless over the control channel on a new font:
+  `font.customParameters.add` and `.set` of Use Typo Metrics read back through `.list`, a text value is refused with
+  "takes a boolean", and `window.ttfZones {"master": 0}` opens "TTFZones: Regular" with the five default zones;
+  master 5 is refused. Most of the package was already in the window from UI.10: the editors by kind in
   `crates/ui/src/panels/font_info/param_value.rs` (a menu for a fixed list, check boxes for a list of fixed values,
   a menu of masters for Variable Font Origin, Get Hints From Master and Link Metrics With Master), the OS/2 bits and
   PANOSE dialogs (`dialogs/os2_bits.rs`, `dialogs/panose.rs`) and the frame tests for Post Table Type, Variable Font
