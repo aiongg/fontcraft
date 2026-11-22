@@ -499,7 +499,10 @@ milestone = "M3"
 summary = "Rectangle mode of the Primitives tool, which adds a closed rectangular path either by dragging or from typed measurements."
 ref = "Edit View › Primitives"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 5:06–5:08 and 6:22–6:28: a drag creates a closed four-node rectangle, selected afterwards; during the drag a grey badge near the pointer shows the live width × height. At 12:21 the toolbar button opens a menu listing Rectangle and Circle. Not shown: the click dialog, Shift, Alt, Shift+F (documented, not yet observed). FontCraft draws no size badge yet. A click asks for `dialog.primitiveMeasurements` with the click as its x and y."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 5:06–5:08 and 6:22–6:28: a drag creates a closed four-node rectangle, selected afterwards; during the drag a grey badge near the pointer shows the live width × height. At 12:21 the toolbar button opens a menu listing Rectangle and Circle. Not shown: the click dialog, Shift, Alt, Shift+F (documented, not yet observed). M3.20: the drag shows the width and height beside the pointer (`120×45`, `Overlay::Badge`, drawn by `canvas/badges.rs`). A click asks for `dialog.primitiveMeasurements` with the click as its x and y."
+guesses = [
+  "Badge numbers are whole units, and percentages have one decimal (75.8%); the reference app at a fractional zoom settles the rounding.",
+]
 
 [[tool]]
 id = "ellipse"
@@ -519,7 +522,7 @@ milestone = "M3"
 summary = "Ellipse mode of the Primitives tool, which adds a closed elliptical path either by dragging or from typed measurements."
 ref = "Edit View › Primitives"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 9:06–9:11: a drag creates a closed ellipse with four smooth nodes at its extremes (top, bottom, left, right), with a size badge during the drag. At 12:21 the toolbar button opens a menu listing Rectangle and Circle. Not shown: the click dialog, Shift, Alt, Shift+F (documented, not yet observed). FontCraft draws no size badge yet. A click asks for `dialog.primitiveMeasurements` with the click as its x and y."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 9:06–9:11: a drag creates a closed ellipse with four smooth nodes at its extremes (top, bottom, left, right), with a size badge during the drag. At 12:21 the toolbar button opens a menu listing Rectangle and Circle. Not shown: the click dialog, Shift, Alt, Shift+F (documented, not yet observed). M3.20: the drag shows the width and height beside the pointer (`120×45`, `Overlay::Badge`, drawn by `canvas/badges.rs`). A click asks for `dialog.primitiveMeasurements` with the click as its x and y."
 
 [[command]]
 id = "tool.drawRectangle"
@@ -1261,7 +1264,13 @@ milestone = "M3"
 summary = "Rotates the current selection freehand about an origin the user places with a click."
 ref = "Edit View › Scaling & Rotating"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 12:25–12:30: with the Rotate tool, a drag rotates the selected rectangle about a pivot at the selection's centre, with a line drawn from the pivot to the pointer. Not shown: setting the origin with a click, Shift. Built in M3.5: a click sends transform.setOrigin {point}, which places the reference point and keeps the Palette's origin mode; a drag runs transform.rotateCounterclockwise in one interaction about the reference point, or about the centre of the selection's box while none is placed (as the video shows). With nothing selected the drag turns the whole layer, as the Palette does. Setting the origin with a click and Shift follow the handbook and are not yet observed."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 12:25–12:30: with the Rotate tool, a drag rotates the selected rectangle about a pivot at the selection's centre, with a line drawn from the pivot to the pointer. Not shown: setting the origin with a click, Shift. Built in M3.5: a click sends transform.setOrigin {point}, which places the reference point and keeps the Palette's origin mode; a drag runs transform.rotateCounterclockwise in one interaction about the reference point, or about the centre of the selection's box while none is placed (as the video shows). With nothing selected the drag turns the whole layer, as the Palette does. Setting the origin with a click and Shift follow the handbook and are not yet observed. M3.20: the drag shows the angle beside the pointer (`15°`)."
+guesses = [
+  "The rotation badge shows the counter-clockwise angle in whole degrees.",
+]
+observe = [
+  "Rotate a shape with the Rotate tool and note the badge's text and whether it shows decimals.",
+]
 
 [[tool]]
 id = "scale"
@@ -1278,7 +1287,10 @@ milestone = "M3"
 summary = "Scales the current selection freehand about an origin the user places with a click."
 ref = "Edit View › Scaling & Rotating"
 status = "handbook"
-notes = "Built in M3.5: a click places the reference point as for the Rotate tool; a drag runs transform.scale about it (or about the centre of the selection's box while none is placed). Each axis scales by the pointer's distance from the origin over the press's; an axis on which the press lies within the drag threshold of the origin keeps its size. Shift gives both axes the factor that differs more from 1. With nothing selected, the whole layer. Documented in the handbook, not yet observed."
+notes = "Built in M3.5: a click places the reference point as for the Rotate tool; a drag runs transform.scale about it (or about the centre of the selection's box while none is placed). Each axis scales by the pointer's distance from the origin over the press's; an axis on which the press lies within the drag threshold of the origin keeps its size. Shift gives both axes the factor that differs more from 1. With nothing selected, the whole layer. Documented in the handbook, not yet observed. M3.20: the drag shows both percentages beside the pointer (`120.0%/80.0%`)."
+guesses = [
+  "The Scale tool's badge shows the horizontal and vertical percentages, without the new size.",
+]
 
 [[command]]
 id = "view.showBoundingBox"
@@ -1301,7 +1313,13 @@ milestone = "M3"
 summary = "When more than one node is selected a bounding box with eight knobs (four sides, four corners) is drawn. Dragging a knob scales the selected points with the opposite knob as fixed point; Shift keeps proportions and Option uses the box centre as fixed point."
 ref = "Edit View › Scaling & Rotating"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 23:51: with several nodes selected, dragging the top or bottom knob scales them vertically, with a badge showing the percentage and new height. 9:24–9:31: a corner-knob drag shrinks an ellipse about its centre with its proportions kept, which fits Shift+Option, but the keys are not visible. Built in M3.5: the box shows when more than one item or a whole shape is selected; the knobs sit 6 screen points outside the selection so they do not cover its nodes. A drag runs transform.scale in one interaction with the fixed point as origin; Shift gives both axes the factor that differs more from 1. Shift and Option follow the handbook and are not yet observed."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 23:51: with several nodes selected, dragging the top or bottom knob scales them vertically, with a badge showing the percentage and new height. 9:24–9:31: a corner-knob drag shrinks an ellipse about its centre with its proportions kept, which fits Shift+Option, but the keys are not visible. Built in M3.5: the box shows when more than one item or a whole shape is selected; the knobs sit 6 screen points outside the selection so they do not cover its nodes. A drag runs transform.scale in one interaction with the fixed point as origin; Shift gives both axes the factor that differs more from 1. Shift and Option follow the handbook and are not yet observed. M3.20: a knob drag shows the two percentages and the new width and height beside the pointer (`150.0%/100.0% 150×100`); a drag outside the box shows the angle."
+guesses = [
+  "A knob's badge shows both percentages and both new sizes even when the knob scales one axis; the video shows one percentage and the new height for a side knob.",
+]
+observe = [
+  "Drag a side knob and a corner knob of a selection's box and note what each badge shows.",
+]
 
 [[behavior]]
 id = "boundingBox.rotateOutside"
@@ -1439,8 +1457,9 @@ milestone = "M3"
 summary = "Dragging a selection with Option held leaves the original in place and drags a copy to the new position. If only part of a path is selected, the selected segments are copied as a new open path (useful for repeating serifs and similar parts). Copy (Cmd+C) and paste (Cmd+V) is the alternative."
 ref = "Edit View › Duplicating Paths"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 6:42–6:44 and 18:36–18:38: dragging a selected shape leaves the original and moves a copy, drawn darker during the drag, with a badge showing the offset. The modifier key is not visible."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 6:42–6:44 and 18:36–18:38: dragging a selected shape leaves the original and moves a copy, drawn darker during the drag, with a badge showing the offset. The modifier key is not visible. M3.20: a move or an Alt-drag copy shows its offset beside the pointer (`x:30 y:-20`)."
 guesses = [
+  "The move badge shows the offset in whole units as `x:… y:…`; the reference app's wording is not visible in the video.",
   "Alt held at mouse-down on a selection drags a copy, and Alt pressed after the drag started switches to nudge (03a question 1).",
   "Alt held at mouse-down on lone nodes, with no whole segment, path or other object to copy, moves only the selected points (selection.move mode pointsOnly), as for nodes moved with Option; observing an Option-drag of one node would settle it.",
 ]

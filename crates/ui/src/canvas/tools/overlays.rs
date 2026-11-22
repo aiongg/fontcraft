@@ -147,6 +147,8 @@ pub fn overlay_shapes(cx: &PaintCx<'_>) -> Vec<Shape> {
                 };
                 out.push(Shape::circle_stroke(at, t.marker_radius, Stroke::new(t.selection_width, color)));
             }
+            // Text needs the fonts: `canvas::badges` paints these.
+            Overlay::Badge { .. } => {}
         }
     }
     out

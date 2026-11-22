@@ -17,7 +17,7 @@ use serde_json::{Map, Value, json};
 use crate::draw::params;
 use crate::event::{Key, KeyEvent, Modifiers, PointerEvent, PointerKind};
 use crate::geometry::{dist, finite};
-use crate::output::{Action, Invocation, Output};
+use crate::output::{Action, Invocation, Output, Overlay, badge_number};
 use crate::selection::Selection;
 use crate::snap::{Moving, snap};
 use crate::tool::{Context, Tool};
@@ -192,5 +192,14 @@ impl Tool for PrimitiveTool {
 
     fn busy(&self) -> bool {
         self.press.is_some()
+    }
+
+    /// While a box is dragged out: its width and height beside the pointer (`w×h`).
+    fn overlays(&self) -> Vec<Overlay> {
+        let Some(press) = self.press.as_ref().filter(|p| p.dragging) else { return Vec::new() };
+        let Some(sent) = &press.sent else { return Vec::new() };
+        let size = |key: &str| sent.get(key).and_then(Value::as_f64).map(f64::abs);
+        let (Some(w), Some(h)) = (size("width"), size("height")) else { return Vec::new() };
+        vec![Overlay::Badge { at: press.last, text: format!("{}×{}", badge_number(w), badge_number(h)) }]
     }
 }

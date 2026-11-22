@@ -43,7 +43,10 @@ const RECT: Rect = Rect { min: Pos2::ZERO, max: Pos2 { x: 1280.0, y: 800.0 } };
 
 /// The shapes `layer` paints for `app`'s canvas, the view at the app's canvas view placed in [`RECT`].
 fn painted(app: &FontCraftApp, layer: fn(&PaintCx<'_>) -> Vec<Shape>) -> Vec<Shape> {
-    let painter = Painter::new(egui::Context::default(), LayerId::background(), RECT);
+    // Labels need the fonts, which a context has after its first pass.
+    let ctx = egui::Context::default();
+    ctx.run_ui(egui::RawInput::default(), |_| {}).textures_delta.clear();
+    let painter = Painter::new(ctx, LayerId::background(), RECT);
     let mut view = app.view.canvas;
     view.rect = RECT;
     let top = app.models.canvas.glyph.as_ref().map_or(0.0, |g| g.ascender);
@@ -274,4 +277,29 @@ fn the_active_master_colours_the_canvas_for_the_appearance_in_use() {
     assert_eq!(app.models.canvas_tokens.master_canvas, Some(dark));
     run(&mut app, "settings.set", json!({"id": "appearance.alwaysLightModeEditView", "value": true}));
     assert_eq!(app.models.canvas_tokens.master_canvas, Some(light), "a canvas kept light takes the light value");
+}
+
+/// A drag's badge is painted beside the pointer: a filled box and its text (drag badges).
+#[test]
+fn a_drag_badge_is_painted_beside_the_pointer() {
+    let mut app = app();
+    edit(&mut app, "A");
+    app.tools.view.overlays = vec![fontcraft_tools::Overlay::Badge { at: fontcraft_geom::Point::new(0.0, 0.0), text: "x:30 y:-20".into() }];
+    let shapes = painted(&app, super::badges::shapes);
+    let t = super::tools::tokens::ToolTokens::standard();
+    let boxes: Vec<Rect> =
+        shapes.iter().filter_map(|s| if let Shape::Rect(r) = s { (r.fill == t.badge_fill).then_some(r.rect) } else { None }).collect();
+    let texts: Vec<(String, Pos2)> =
+        shapes.iter().filter_map(|s| if let Shape::Text(text) = s { Some((text.galley.text().to_string(), text.pos)) } else { None }).collect();
+    assert_eq!(boxes.len(), 1, "{shapes:?}");
+    assert_eq!(texts.len(), 1, "{shapes:?}");
+    assert_eq!(texts[0].0, "x:30 y:-20");
+    assert!(boxes[0].contains(texts[0].1), "the text sits on its box");
+    assert!(boxes[0].width() > 0.0 && boxes[0].height() > 0.0);
+    // Off the pointer: the box starts right of and below the pointer's screen position.
+    let mut view = app.view.canvas;
+    view.rect = RECT;
+    let top = app.models.canvas.glyph.as_ref().map_or(0.0, |g| g.ascender);
+    let pointer = Camera::new(view, top).to_screen(fontcraft_geom::Point::new(0.0, 0.0));
+    assert!(boxes[0].min.x > pointer.x && boxes[0].min.y > pointer.y, "{:?} {pointer:?}", boxes[0]);
 }

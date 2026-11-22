@@ -92,6 +92,8 @@ pub const MAX_COMPONENT_POINTS: usize = 200_000;
 #[cfg(test)]
 mod attachment_tests;
 #[cfg(test)]
+mod badge_tests;
+#[cfg(test)]
 mod draw_tests;
 #[cfg(test)]
 mod measure_annotate_tests;
