@@ -1286,6 +1286,8 @@ id = "fontView.statusBar"
 label = "Font View Status Area"
 location = "statusbar"
 controls = [
+  "plus button: New Glyph (bottom left)",
+  "minus button: Remove Glyph on the selection, greyed without one (bottom left)",
   "selected / visible / total glyph counts (centre)",
   "cell size slider (right)",
 ]
@@ -1502,15 +1504,20 @@ milestone = "M4"
 summary = "While Font View has the keyboard and no text field is active, the arrows move the glyph selection by one cell (Up and Down by a row in Grid View), Shift with an arrow extends it from the anchor, Home and End go to the first and last shown glyph, and Return opens the selection in Edit View; the view scrolls to keep the glyph in sight. Delete asks to remove the selected glyphs. The plus and minus buttons at the bottom left run New Glyph (the new glyph becomes the selection) and Remove Glyph on the selection; minus is greyed out with no selection."
 ref = "Font View › Grid View"
 status = "inferred"
-notes = "The keys come from the craft grid and table (crates/ui/src/panels/font_view/keys.rs turns what they report into commands). Minus and Delete post glyph.removeGlyph with the selection; the Remove Glyph dialog takes them over when it lands."
+notes = "The keys come from the craft grid and table (crates/ui/src/panels/font_view/keys.rs turns what they report into commands). Minus and Delete open Remove Glyph's dialog on the selection (`dialog.open {command: glyph.removeGlyph}`), which confirms and asks about components and metrics keys. While Font View shows, `keys::takes` names the keys it keeps (the arrows, Home and End, alone or with Shift, and Return, Delete and Backspace); the control channel's `ui.key` hands those to the window and gives no key to the edit view's tools (M4.18). Frame tests in crates/ui/src/panels/font_view/tests.rs cover each key in Grid and List View."
 guesses = [
   "Each key above behaves as in a file browser's icon view. Settled by pressing them in the reference's Font View.",
   "Plus comes before minus at the bottom left. Settled by looking at the reference's Font View.",
   "Minus is greyed out with no selection. Settled by looking at the reference with nothing selected.",
+  "Right at the end of a grid row goes on to the first glyph of the next row, and the selection stays put at the first and last glyph.",
+  "Delete and minus both ask before removing, in the same dialog as Glyph > Remove Glyph.",
+  "Letters and other keys go to type-ahead or the menu shortcuts while Font View shows; the edit view's tool letters do not switch tools there.",
 ]
 observe = [
   "In Font View press the arrows, Shift with an arrow, Home, End and Return, and note how the selection moves and what opens.",
   "Click the plus and minus buttons at the bottom left of Font View, with and without a selection.",
+  "In Grid View select the last glyph of a row and press Right; note whether the next row's first glyph is selected.",
+  "Select a glyph in Font View and press Delete; note whether a confirmation appears before it is removed.",
 ]
 
 # ── Grid cells ──

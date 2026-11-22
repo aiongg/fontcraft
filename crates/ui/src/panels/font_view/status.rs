@@ -1,5 +1,6 @@
-//! The row under the glyphs (`fontView.statusBar`): the New Glyph and Remove Glyph buttons at the start, the
-//! selected, shown and total counts, and the cell size slider (`fontView.setCellSize`) in Grid View.
+//! The row under the glyphs (`fontView.statusBar`): the New Glyph and Remove Glyph buttons at the start (Remove Glyph
+//! opens its dialog on the selection and is greyed without one), the selected, shown and total counts, and the cell
+//! size slider (`fontView.setCellSize`) in Grid View.
 
 use craft::behavior::IconId;
 use craft::ui::buttons::IconButton;
@@ -12,7 +13,7 @@ use craft::ui::value_drag::Slider;
 use egui::Ui;
 use serde_json::json;
 
-use super::FontViewWords;
+use super::{FontViewWords, keys};
 use crate::app::Msg;
 use crate::app::font_view::{MAX_CELL_SIZE, MIN_CELL_SIZE, ViewMode};
 use crate::app::models::font_view::FontViewModel;
@@ -32,7 +33,7 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, sent: &mut Vec<Msg>) {
         }
         let remove = IconButton::new(IconId::new("minus")).label(words.remove_glyph.clone()).enabled(!selected.is_empty()).show(ui);
         if remove.clicked() && !selected.is_empty() {
-            sent.push(Msg::run("glyph.removeGlyph", json!({ "glyphs": selected })));
+            sent.push(keys::remove(selected.iter().map(|g| (*g).to_string()).collect()));
         }
         Text::new(counts_text(&words, model.selected.len(), model.visible.len(), model.rows.len())).show(ui);
         if let Some(error) = &model.error {

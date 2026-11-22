@@ -292,3 +292,36 @@ fn the_tools_edit_a_colour_layer_picked_in_the_layers_panel() {
     shell(&mut app, "layers.select", json!({"layer": "c1"}));
     drag_lands_on(&mut app, "c1");
 }
+
+/// While Font View shows, no key reaches the edit view's tools: the arrows, Delete and Return leave the edited
+/// glyph's outline and selection as they were, with or without a window to hand them to.
+#[test]
+fn keys_change_no_outline_while_font_view_shows() {
+    let mut app = edit_app();
+    shell(&mut app, "selection.set", json!({"points": [[0, 2]]}));
+    let before = layer(&app);
+    shell(&mut app, "fontView.show", json!({}));
+    for key in ["ArrowRight", "ArrowUp", "Delete", "Backspace", "Return", "Home"] {
+        let reply = crate::control::dispatch(&mut app, "ui.key", &json!({ "key": key }));
+        assert!(reply.is_err(), "{key}: Font View's keys need the window, the tools never take them: {reply:?}");
+    }
+    let shifted = crate::control::dispatch(&mut app, "ui.key", &json!({"key": "ArrowLeft", "shift": true}));
+    assert!(shifted.is_err(), "{shifted:?}");
+    assert_eq!(layer(&app), before, "no key moved or removed a node");
+    assert_eq!(selection(&app), json!({"points": [[0, 2]]}));
+
+    let mut t = crate::testing::TestApp::with(Session::with_document());
+    t.app.sent.push(Msg::View(ViewMsg::SelectGlyph("A".into())));
+    t.app.drain();
+    run(&mut t.app, "path.addRectangle", json!({"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200}));
+    shell(&mut t.app, "selection.set", json!({"points": [[0, 2]]}));
+    let before = layer(&t.app);
+    t.app.fire(CommandRef::new("fontView.show"));
+    t.frame();
+    assert!(t.app.font_view_shows());
+    let reply = t.ok("ui.key", json!({"key": "ArrowRight"}));
+    assert_eq!((reply["handled"].as_bool(), reply["fontView"].as_bool()), (Some(true), Some(true)), "{reply}");
+    t.ok("ui.key", json!({"key": "Delete"}));
+    assert_eq!(layer(&t.app), before, "the arrows and Delete went to Font View, not to the outline");
+    assert!(t.app.dialogs.open.is_none(), "nothing in Font View had the keyboard, so nothing asked to remove a glyph");
+}
