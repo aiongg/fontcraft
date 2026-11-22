@@ -169,7 +169,8 @@ fn source_picker(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords
 }
 
 fn top_row(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, sent: &mut Vec<Msg>) {
-    Row::new().show(ui, |ui, _| {
+    // Wraps, so a narrow window moves the toggles to a second line instead of cutting their names.
+    Row::new().wrap(true).show(ui, |ui, _| {
         source_picker(ui, model, words, sent);
         let mut entries = vec![Entry::new(String::new(), words.current_master.clone())];
         entries.extend(model.styles.iter().map(|s| Entry::new(s.clone(), Label::from(s.clone()))));
