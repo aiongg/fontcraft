@@ -2,12 +2,13 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-22: M3.43 and M3.42 written on `w-M3.43` (on top of `w-M9.32`), not yet built. M9.32 and M3.41 written on `w-M9.32`, not yet built. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 merged into `master`, built, tested and smoke-tested in the window (X.integ142 to X.integ146). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
+_Updated: 2026-11-22: M9.32, M3.41, M3.43 and M3.42 merged into `master`, built, tested and smoke-tested in the window (X.integ148 to X.integ151). The Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
 
 ## State of the tree
 
-- **Where M3.43 and M3.42 stand.** Written on `w-M3.43` (M3.43a, M3.42a), not yet built: the writer ran no build
-  or test, only `cargo fmt`.
+- **Where M3.43 and M3.42 stand.** Merged and built; the gate is green. Seen in the window: a Greek glyph with a
+  master `ascender` parameter `greek: 705` draws its ascender at 705 and no zone at 800; local guides referenced to
+  the right and to both follow `spacing.setWidth`.
   - M3.43: `fontcraft_model::shown_metrics` (`shown_metrics`, `script_param`, `param_number`, `shown_pos`) gives a
     glyph's metric lines once: the master's metrics with a per-script `ascender`, `capHeight` or `descender` in place
     of the master's line (keeping its overshoot, so the zone moves), `smallCapHeight` for a small cap, and a
@@ -32,8 +33,9 @@ _Updated: 2026-11-22: M3.43 and M3.42 written on `w-M3.43` (on top of `w-M9.32`)
     (drawing, snapping, hit testing and dragging would all need the per-glyph x). Test:
     `guides_follow_the_width_by_their_sidebearing_reference` in `crates/engine/tests/engine/guides.rs`.
 
-- **Where M9.32 and M3.41 stand.** Written on `w-M9.32` (M9.32a, M3.41a), not yet built: the writer ran no build or
-  test, only `cargo fmt`.
+- **Where M9.32 and M3.41 stand.** Merged and built; the gate is green. Seen in the window: the Interpolation Curve
+  part for a node with `handles`, the Global Guide part, and Guide Scope from Info for Selection. The Info box body
+  scrolls (`panels/info_box.rs`), since these parts sit below the selection part in a 300-point group.
   - M9.32 (`panels/info_box_hoi.rs`, model `app::models::hoi::hoi_of`, which replaces `timing_of`): `InfoBoxModel::hoi`
     (in place of `timing`) for one selected foreground node in a font with an axis and two masters, over the span from
     its layer up along the first of its curves' axes with a layer above, else the first font axis with one. The part:
@@ -51,8 +53,7 @@ _Updated: 2026-11-22: M3.43 and M3.42 written on `w-M3.43` (on top of `w-M9.32`)
     `sidebar_filters::tidy` is `pub(super)`. Tests: a Fixture test of the guide fields, an app test that Info for
     Selection opens the dialog and OK hides the guide in another glyph (`canvas::overlays::guides::out_of_scope`), a
     unit test of the stored filter.
-  - For the integrator: the Select pop-ups are opened in tests by a click on their label and an entry clicked by its
-    label; no earlier fontcraft test opens a craft `Select` this way.
+  - The tests open a craft `Select` by a click on its label and pick an entry by its label; that works.
 
 - **Where M13.81, M14.5 and the M14.4 leftovers stand.** Merged and built; the gate is green. Seen in the window:
   `ui.wait`, `events.list` and `events.clear` over the control channel, and the Edit View scroll bars.
@@ -321,9 +322,8 @@ _Updated: 2026-11-22: M3.43 and M3.42 written on `w-M3.43` (on top of `w-M9.32`)
   770 reference options present (`docs/cli-options.md`).
 - Packages built (done of total, counted from commit subjects; the totals include the depth packages that carry a
   new number): M6 21 of 26, M7 21 of 24, M8 27 of 36, M9 30 of 40, M10 35 of 42, M11 20 of 22, M12 77 of 87, M13 63
-  of 83; 294 of 360 in all. Depth packages (`docs/plans/depth.md`): 61 of 167 (wave 1 and 51 writers of waves 2 to
-  11, listed in ROADMAP.md › Where we are); no builder of waves 2 to 13. M9.32 and M3.41 are written on `w-M9.32`,
-  not yet built and not counted. The lettered follow-ups (M10.37b, M10.37c,
+  of 83; 294 of 360 in all. Depth packages (`docs/plans/depth.md`): 77 of 167 (wave 1 and 63 writers of waves 2 to
+  11, listed in ROADMAP.md › Where we are); no builder of waves 2 to 13. The lettered follow-ups (M10.37b, M10.37c,
   M13.65b and those of earlier batches) are not counted.
 - **Baselines** (from the fifteenth batch; the sixteenth ran none of them, and a later change that moves one of these numbers needs a reason):
 
