@@ -10,7 +10,7 @@
 use craft::behavior::Mixed;
 use craft::ui::buttons::Button;
 use craft::ui::choice::Checkbox;
-use craft::ui::contract::{Bind, Show as _, ShowContainer as _};
+use craft::ui::contract::{Bind, Props as _, Show as _, ShowContainer as _};
 use craft::ui::form::Field as FormField;
 use craft::ui::layout_components::{Row, Stack};
 use craft::ui::patterns::form_dialogs::{CustomContext, DialogFields, FieldValue};

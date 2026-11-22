@@ -273,7 +273,7 @@ pub fn box_point(ui: &mut Ui, label: Label, point: Option<&str>) -> Option<&'sta
 mod tests {
     use serde_json::json;
 
-    use super::{KeyState, KeyedNumber, Label, MAX_EXPRESSION_BYTES, MAX_EXPRESSION_DEPTH, format_number, key_or_number, parse_number};
+    use super::{KeyState, KeyedNumber, Label, MAX_EXPRESSION_DEPTH, format_number, key_or_number, parse_number};
 
     #[test]
     fn number_fields_take_arithmetic_within_their_limits() {

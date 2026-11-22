@@ -18,7 +18,7 @@
 use std::borrow::Cow;
 
 use craft::behavior::{ColumnKey, ColumnWidth, keyed};
-use craft::ui::contract::{ColumnSpec, Show as _, ShowCollection as _};
+use craft::ui::contract::{ColumnSpec, Show as _, ShowCollection as _, ShowContainer as _};
 use craft::ui::display::{Shade, Text};
 use craft::ui::layout_components::Stack;
 use craft::ui::list::ListRow;
@@ -211,8 +211,8 @@ fn row(ui: &mut Ui, rows: &mut DialogFields, _: &mut CustomContext, field: &Fiel
     let count = value.get("count").and_then(Value::as_u64).unwrap_or(0);
     let error = value.get("error").and_then(Value::as_str).map(str::to_string);
     let shown = Stack::new().show(ui, |ui, _| {
-        if let Some(e) = error {
-            let _ = Text::new(Label::from(e)).shade(Shade::Muted).show(ui);
+        if let Some(e) = &error {
+            let _ = Text::new(Label::from(e.clone())).shade(Shade::Muted).show(ui);
             return;
         }
         if renames.is_empty() {
