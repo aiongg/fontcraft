@@ -12,10 +12,11 @@
 
 use craft::behavior::IconId;
 use craft::ui::buttons::IconButton;
-use craft::ui::contract::{Props as _, Show as _};
+use craft::ui::contract::{Bind, Props as _, Show as _};
 use craft::ui::display::Divider;
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::{Env, Label};
+use craft::ui::text::NumberField;
 use egui::Ui;
 use fontcraft_textlayout::KerningMode;
 use serde_json::json;
@@ -39,6 +40,8 @@ craft::ui::words! {
         zoom_in: "fontcraftEditBar.zoomIn" = "Zoom In";
         /// The zoom field's name.
         zoom: "fontcraftEditBar.zoom" = "Zoom";
+        /// The unit after the zoom value: display points per 1000 units.
+        zoom_unit: "fontcraftEditBar.zoomUnit" = "pt";
         preview: "fontcraftEditBar.preview" = "Preview Area";
         preview_tip: "fontcraftEditBar.previewTip" = "Show or hide the Preview Area";
     }
@@ -112,7 +115,9 @@ pub fn end_controls(ui: &mut Ui, props: Props<'_>) {
     if IconButton::new(IconId::new("zoom_out")).label(words.zoom_out.clone()).tooltip(words.zoom_out.clone()).show(ui).clicked() {
         sent.push(shell("view.zoomOut", json!({})));
     }
-    if let Some(size) = widgets::bare_number(ui, words.zoom.clone(), Some(bar.zoom.round()))
+    let zoom = Some(bar.zoom.round());
+    if let Some(widgets::NumberEdit::Set(size)) =
+        widgets::clearable(ui, NumberField::new(words.zoom.clone(), Bind::given(zoom)).unit(words.zoom_unit.clone()), zoom)
         && size > 0.0
     {
         sent.push(shell("view.setZoom", json!({ "size": size })));
@@ -148,6 +153,7 @@ mod tests {
             seen.borrow_mut().extend(sent);
         });
         fixture.settle();
+        assert!(fixture.texts().iter().any(|t| t.text == "pt"), "the zoom field shows its unit");
         for label in ["Preview Area", "Right to Left", "Kerning Mode", "Zoom In"] {
             let target = fixture.by_label(label).unwrap_or_else(|| panic!("the {label} button"));
             fixture.click(&target).settle();

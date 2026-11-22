@@ -136,10 +136,8 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
 
     let [scale_x, scale_y] = m.scale;
     let (sx, sy) = if m.scale_locked { (scale_x, scale_x) } else { (scale_x, scale_y) };
-    let _ = Row::new().show(ui, |ui, _| {
-        if Button::new(words.reverse_scale.clone()).enabled(enabled).show(ui).clicked() && enabled {
-            press(sent, "transform.reverseScale", json!({"x": sx, "y": sy, "origin": origin}));
-        }
+    // The labelled fields take most of the palette's width: what does not fit goes to the next line.
+    let _ = Row::new().wrap(true).show(ui, |ui, _| {
         if let Some(v) = widgets::number(ui, words.scale_x.clone(), Some(scale_x)) {
             sent.push(shell("transform.setSettings", json!({ "scaleX": v })));
         }
@@ -158,6 +156,9 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
         }
         if icon(ui, "scaling", &words.scale, enabled) {
             press(sent, "transform.scale", json!({"x": sx, "y": sy, "origin": origin}));
+        }
+        if Button::new(words.reverse_scale.clone()).enabled(enabled).show(ui).clicked() && enabled {
+            press(sent, "transform.reverseScale", json!({"x": sx, "y": sy, "origin": origin}));
         }
     });
 
