@@ -574,15 +574,15 @@ fn a_drag_near_a_component_shows_its_nodes_as_markers() {
         None => Point::new(-200.0, 100.0),
     };
     let mut t = SelectTool::default();
-    t.pointer(&cx, &ev(Down, corner.x, corner.y, NONE));
+    let _ = t.pointer(&cx, &ev(Down, corner.x, corner.y, NONE));
     // From (-200, 100) to 10 units off the component's corner at (200, 100).
-    t.pointer(&cx, &ev(Drag, 190.0, 100.0, NONE));
+    let _ = t.pointer(&cx, &ev(Drag, 190.0, 100.0, NONE));
     assert!(markers(&t) >= 1, "the corner near the dragged node shows: {:?}", t.overlays());
-    t.pointer(&cx, &ev(Drag, 190.0, 100.0, Modifiers::CTRL));
+    let _ = t.pointer(&cx, &ev(Drag, 190.0, 100.0, Modifiers::CTRL));
     assert_eq!(markers(&t), 0, "Ctrl suspends snapping and the markers");
-    t.pointer(&cx, &ev(Drag, -100.0, 400.0, NONE));
+    let _ = t.pointer(&cx, &ev(Drag, -100.0, 400.0, NONE));
     assert_eq!(markers(&t), 0, "far from the component, none show");
-    t.pointer(&cx, &ev(Up, -100.0, 400.0, NONE));
+    let _ = t.pointer(&cx, &ev(Up, -100.0, 400.0, NONE));
     assert!(component_markers(&scene, &View::default(), Point::new(1.0e9, f64::NAN), &Moving::default(), 4.0).is_empty());
 }
 
