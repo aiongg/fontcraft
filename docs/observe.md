@@ -32,11 +32,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1528 rows to check: 2642 guesses and 629 observe steps.**
+**1532 rows to check: 2654 guesses and 642 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **540** |
+| **Built milestones (M0 to M6)** | all | **545** |
 | Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 121 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 33 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
@@ -46,9 +46,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Font View | 114 |
 | Built milestones (M0 to M6) | Font Info and features | 20 |
 | Built milestones (M0 to M6) | Files: open, import, export | 49 |
-| Built milestones (M0 to M6) | Settings and the window | 13 |
+| Built milestones (M0 to M6) | Settings and the window | 18 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **988** |
+| **Later milestones (after M6)** | all | **987** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 90 |
 | Later milestones (after M6) | Edit View: text mode and preview | 28 |
 | Later milestones (after M6) | Components and anchors | 43 |
@@ -61,11 +61,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Hinting | 115 |
 | Later milestones (after M6) | Colour fonts | 74 |
 | Later milestones (after M6) | Files: open, import, export | 71 |
-| Later milestones (after M6) | Settings and the window | 28 |
+| Later milestones (after M6) | Settings and the window | 27 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
-## Built milestones (M0 to M6) (540)
+## Built milestones (M0 to M6) (545)
 
 ### Edit View: drawing, guides, layers and the Palette (121)
 
@@ -308,6 +308,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `annotationText` (tool, M3, handbook): Text Annotation
   - Guess: Cmd+Return and a click outside commit the typed text and Escape cancels; watching the reference app type a note would settle the keys.
   - Guess: A new note left empty, or cancelled with Escape, is removed; checking whether the reference app keeps an empty note would settle it.
+  - Guess: A new note is undone and added again with its text when it is committed, so the add and the typing are one undo step; how the reference app records them is not documented.
+  - Observe: Text Annotation tool: click, type two lines with Return between them, press Cmd+Return, then Undo once; note whether the note goes away or only its text.
+  - Observe: Click with the Text Annotation tool and click outside without typing; note whether an empty note stays.
 - [ ] `dimensions.perMaster` (behavior, M3, handbook): Dimensions values are kept separately for every master, so switching master switches…
   - Guess: Values are stored under `GSDimensionPlugin.Dimensions` in the font's user data, one dictionary per master id, the key the corpus files use (Palette question 1).
 - [ ] `fitCurve.percentRange` (behavior, M3, handbook): Handle length is expressed as a percentage from 1 to 100
@@ -1055,8 +1058,13 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Each key above behaves as in a file browser's icon view. Settled by pressing them in the reference's Font View.
   - Guess: Plus comes before minus at the bottom left. Settled by looking at the reference's Font View.
   - Guess: Minus is greyed out with no selection. Settled by looking at the reference with nothing selected.
+  - Guess: Right at the end of a grid row goes on to the first glyph of the next row, and the selection stays put at the first and last glyph.
+  - Guess: Delete and minus both ask before removing, in the same dialog as Glyph > Remove Glyph.
+  - Guess: Letters and other keys go to type-ahead or the menu shortcuts while Font View shows; the edit view's tool letters do not switch tools there.
   - Observe: In Font View press the arrows, Shift with an arrow, Home, End and Return, and note how the selection moves and what opens.
   - Observe: Click the plus and minus buttons at the bottom left of Font View, with and without a selection.
+  - Observe: In Grid View select the last glyph of a row and press Right; note whether the next row's first glyph is selected.
+  - Observe: Select a glyph in Font View and press Delete; note whether a confirmation appears before it is removed.
 - [ ] `fontView.cell.followsMaster` (behavior, M4, handbook): Every grid cell draws the glyph's layer for the master currently selected…
   - Guess: Font View's master is its own: choosing a master in a tab does not change it, and a tab opened from Font View starts in it. Settled by observation.
   - Guess: Each document window keeps its own selected master, as each font has its own window in the reference app; switching between two open fonts there would settle it.
@@ -1273,15 +1281,19 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The window is not modal and follows the selection while it is open. Settled by observation.
   - Guess: The fields are in the order name, exports, glyph colour, layer colour, tags, Unicode, production name, script, category, subcategory, case, direction, sort name, note, the three metrics keys and the two kerning groups. Settled by opening Info for Selection in the reference.
   - Guess: The layer colour field edits the layer of Font View's master. Settled by observation.
+  - Observe: Select three glyphs in Font View, open Edit › Info for Selection and write down every field in order.
+  - Observe: With two glyphs in different kerning groups selected, note what the Left Group field shows, then type a group and undo once.
 - [ ] `fontView.glyphContextMenu` (panel, M4, handbook): Glyph Context Menu
   - Guess: A right-click on a glyph that is not selected selects it alone first; on a selected glyph the menu acts on the whole selection. Settled by observation.
   - Guess: The items come in this order: the colour swatches under a caption (Glyph Color, or Layer Color with Alt), then Tags, then Copy Glyph Names. Settled by observation.
   - Guess: With Alt held the swatches set the layer colour of Font View's master. Settled by observation.
   - Guess: Alt counts when it is held at the click that opens the menu; pressing or releasing it while the menu is open changes nothing, where native macOS menus swap their alternate items live. Settled by observation.
   - Guess: The swatches sit in a Glyph Color submenu, Exports follows them, then Tags and Copy Glyph Names. Settled by observation.
-  - Guess: Exports shows no mark when only some of the glyphs export, and choosing it then makes them all export; with all exporting it turns export off. Settled by observation.
+  - Guess: Exports shows a dash when only some of the glyphs export, as a tag does, and choosing it then makes them all export; with all exporting it turns export off. Settled by observation.
   - Guess: Exports is in this menu as the Glyphs 3 video shows it in the canvas menu. Settled by observation.
   - Guess: More Tags… shows the sidebar with the glyph inspector, whose Tags field lists every tag. Settled by observation.
+  - Observe: Right-click a selection of three glyphs in Font View and write down every item in order, submenus included.
+  - Observe: Turn off export on one of three glyphs, right-click all three and note the mark beside Exports.
 - [ ] `fontView.sidebar` (panel, M4, handbook): Font View Sidebar
   - Guess: The sections start open; categories, scripts, folders and groups start closed. Settled by opening a new document in the reference.
   - Guess: The actions menu sits at the foot of the sidebar, below the entries. Settled by a screenshot of the reference's Font View.
@@ -1577,7 +1589,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `compile.gdefLigatureCarets` (behavior, M6, docs): Ligature caret positions in GDEF come from anchors named caret_N (horizontal text,…
   - Guess: Carets at the same position are all kept, as fontc keeps them, where ufo2ft keeps one; a ligature with two carets at one position in the reference app's export would settle it.
 
-### Settings and the window (13)
+### Settings and the window (18)
 
 - [ ] `edit.undo` (M0, memory, live): Undo
   - Guess: The menu label and Cmd+Z are recalled from the reference, not read in a source.
@@ -1602,6 +1614,25 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `appearance.displayUnicodeValue` (setting, M4, handbook): Display Unicode Value
   - Guess: On shows the code point, off the small marker, as the handbook's wording implies. Settled by observation.
   - Guess: Off by default (the small marker), as the handbook gives no default. Settled by observing a fresh install.
+- [ ] `settings.addSampleStringGroup` (M5, handbook, live): Add Group
+  - Guess: A group added without a name is called New Group.
+  - Guess: The new group is the one the section shows next.
+  - Observe: Click the plus button in Settings > Sample Strings and note the new group's name and whether it is selected.
+- [ ] `settings.removeSampleStringGroup` (M5, handbook, live): Remove Group
+  - Guess: The minus button removes the group without asking.
+  - Observe: Click the minus button with a group that holds strings and note whether a confirmation appears.
+- [ ] `settings.setSampleStrings` (M5, inferred, live): Set Sample Strings
+  - Guess: Our own command for scripts: it replaces a whole group, one string per line of the section's text field, as editing that field does; the reference has no headless access to settings, so there is nothing to settle.
+- [ ] `settings.resetSampleStrings` (M5, handbook, live): Default
+  - Guess: Default restores the groups without asking first.
+  - Observe: Click Default in Settings > Sample Strings after adding a group and note whether a confirmation appears.
+- [ ] `settings.sampleStrings` (panel, M5, handbook): Sample Strings
+  - Guess: The plus, minus and Default buttons sit in one row above the group list.
+  - Guess: The groups show as a row of choices above the field, not as a list beside it.
+  - Guess: The field commits its lines when it loses the focus, not at each keystroke.
+  - Guess: Empty lines in the field are dropped, not stored as empty sample strings.
+  - Observe: Open Settings > Sample Strings and note where the plus, minus and Default buttons and the group list sit.
+  - Observe: Type two strings with an empty line between them, switch groups and back, and note whether the empty line was kept.
 - [ ] `appearance.color.kerningNegative.light` (setting, M5, handbook): Negative Kerning (Light)
   - Guess: The default is the tint FontCraft drew before the setting existed, the same for light and dark: light blue `#8cc8f590` for negative and yellow `#f5dc46a0` for positive kerning; the handbook names only the hues. Settled by reading the reference's colour wells after Standard.
 - [ ] `appearance.color.kerningNegative.dark` (setting, M5, handbook): Negative Kerning (Dark)
@@ -1637,7 +1668,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (988)
+## Later milestones (after M6) (987)
 
 ### Edit View: drawing, guides, layers and the Palette (90)
 
@@ -4675,7 +4706,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Every item starts ticked, so Accept Selected with no change of the ticks takes everything; the reference's manual does not say which state the ticks start in, and opening the window there settles it.
   - Guess: The stored-text view on double-click shows the glyph in FontCraft's native JSON form rather than as a .glif file, since the comparison is between models; the reference shows the file text, and a file-per-glyph text view would follow it more closely.
 
-### Settings and the window (28)
+### Settings and the window (27)
 
 - [ ] `sharing.confirmConnectionOnHost` (behavior, M13, handbook): A first connection attempt from a device must be confirmed on the…
   - Guess: Devices are known by their IP address, so a device that gets a new address must be confirmed again; what the reference keys them by is not documented.
@@ -4732,8 +4763,6 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `app.settings` (M14, handbook, live): Settings…
   - Guess: Settings… is the last item of the Edit menu on every platform, because FontCraft draws its own menu bar and has no application menu; the reference puts it in the application menu on macOS.
   - Guess: The window reopens on the section last shown; the handbook does not say which section it opens on.
-- [ ] `settings.setSampleStrings` (M14, inferred, live): Set Sample Strings
-  - Guess: Our own command for scripts: it replaces a whole group, one string per line of the section's text field, as editing that field does; the reference has no headless access to settings, so there is nothing to settle.
 - [ ] `settings.resetShortcut` (M14, inferred): Reset Shortcut
   - Open (our design, not confirmed): Drops the user's override for one action, or for all when no id is given, restoring built-in shortcuts. Not described in the source; proposed because Customized filtering implies a way back.
 - [ ] `settings.listShortcuts` (M14, inferred): List Shortcuts

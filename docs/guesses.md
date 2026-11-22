@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**3143 guesses on 1638 rows (673 of them live commands).**
+**3155 guesses on 1642 rows (676 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -367,6 +367,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `annotation` (tool) | M3 | handbook | – | Handles show and work on selected annotations only. |
 | `annotationText` (tool) | M3 | handbook | – | Cmd+Return and a click outside commit the typed text and Escape cancels; watching the reference app type a note would settle the keys. |
 | `annotationText` (tool) | M3 | handbook | – | A new note left empty, or cancelled with Escape, is removed; checking whether the reference app keeps an empty note would settle it. |
+| `annotationText` (tool) | M3 | handbook | – | A new note is undone and added again with its text when it is committed, so the add and the typing are one undo step; how the reference app records them is not documented. |
 
 ## `04-palette.toml`
 
@@ -511,6 +512,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontView.keyboard` (behavior) | M4 | inferred | – | Each key above behaves as in a file browser's icon view. Settled by pressing them in the reference's Font View. |
 | `fontView.keyboard` (behavior) | M4 | inferred | – | Plus comes before minus at the bottom left. Settled by looking at the reference's Font View. |
 | `fontView.keyboard` (behavior) | M4 | inferred | – | Minus is greyed out with no selection. Settled by looking at the reference with nothing selected. |
+| `fontView.keyboard` (behavior) | M4 | inferred | – | Right at the end of a grid row goes on to the first glyph of the next row, and the selection stays put at the first and last glyph. |
+| `fontView.keyboard` (behavior) | M4 | inferred | – | Delete and minus both ask before removing, in the same dialog as Glyph > Remove Glyph. |
+| `fontView.keyboard` (behavior) | M4 | inferred | – | Letters and other keys go to type-ahead or the menu shortcuts while Font View shows; the edit view's tool letters do not switch tools there. |
 | `fontView.cell.followsMaster` (behavior) | M4 | handbook | – | Font View's master is its own: choosing a master in a tab does not change it, and a tab opened from Font View starts in it. Settled by observation. |
 | `fontView.cell.followsMaster` (behavior) | M4 | handbook | – | Each document window keeps its own selected master, as each font has its own window in the reference app; switching between two open fonts there would settle it. |
 | `fontView.cell.contentBySize` (behavior) | M4 | handbook | – | Names and Unicode markers show from a cell size of 64 points up. Settled by observation. |
@@ -607,7 +611,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontView.glyphContextMenu` (panel) | M4 | handbook | – | With Alt held the swatches set the layer colour of Font View's master. Settled by observation. |
 | `fontView.glyphContextMenu` (panel) | M4 | handbook | – | Alt counts when it is held at the click that opens the menu; pressing or releasing it while the menu is open changes nothing, where native macOS menus swap their alternate items live. Settled by observation. |
 | `fontView.glyphContextMenu` (panel) | M4 | handbook | – | The swatches sit in a Glyph Color submenu, Exports follows them, then Tags and Copy Glyph Names. Settled by observation. |
-| `fontView.glyphContextMenu` (panel) | M4 | handbook | – | Exports shows no mark when only some of the glyphs export, and choosing it then makes them all export; with all exporting it turns export off. Settled by observation. |
+| `fontView.glyphContextMenu` (panel) | M4 | handbook | – | Exports shows a dash when only some of the glyphs export, as a tag does, and choosing it then makes them all export; with all exporting it turns export off. Settled by observation. |
 | `fontView.glyphContextMenu` (panel) | M4 | handbook | – | Exports is in this menu as the Glyphs 3 video shows it in the canvas menu. Settled by observation. |
 | `fontView.glyphContextMenu` (panel) | M4 | handbook | – | More Tags… shows the sidebar with the glyph inspector, whose Tags field lists every tag. Settled by observation. |
 | `fontView.sidebar` (panel) | M4 | handbook | – | The sections start open; categories, scripts, folders and groups start closed. Settled by opening a new document in the reference. |
@@ -1933,7 +1937,11 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `app.settings` | M14 | handbook | yes | The window reopens on the section last shown; the handbook does not say which section it opens on. |
 | `settings.get` | M4 | inferred | yes | Our own command; the reference has no headless access to settings, so there is nothing to settle. |
 | `settings.set` | M4 | inferred | yes | Our own command; the reference has no headless access to settings, so there is nothing to settle. |
-| `settings.setSampleStrings` | M14 | inferred | yes | Our own command for scripts: it replaces a whole group, one string per line of the section's text field, as editing that field does; the reference has no headless access to settings, so there is nothing to settle. |
+| `settings.addSampleStringGroup` | M5 | handbook | yes | A group added without a name is called New Group. |
+| `settings.addSampleStringGroup` | M5 | handbook | yes | The new group is the one the section shows next. |
+| `settings.removeSampleStringGroup` | M5 | handbook | yes | The minus button removes the group without asking. |
+| `settings.setSampleStrings` | M5 | inferred | yes | Our own command for scripts: it replaces a whole group, one string per line of the section's text field, as editing that field does; the reference has no headless access to settings, so there is nothing to settle. |
+| `settings.resetSampleStrings` | M5 | handbook | yes | Default restores the groups without asking first. |
 | `sharing.answerDevice` | M13 | inferred | yes | A refused device is turned away until the preview is turned off; it is not remembered across launches. |
 | `settings.menuItemNameOnOlderSystem` (behavior) | M14 | handbook | – | One label and place on every platform, Settings… in the Edit menu, as many Linux and Windows applications do; a native macOS menu bar would move it to the application menu. |
 | `sharing.confirmConnectionOnHost` (behavior) | M13 | handbook | – | Devices are known by their IP address, so a device that gets a new address must be confirmed again; what the reference keys them by is not documented. |
@@ -1943,6 +1951,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `addons.repo.httpBasicAuth` (behavior) | M13 | handbook | – | Credentials are taken from the URL itself and stored with the setting, not in the operating system's keychain; the reference's storage is not described. |
 | `window.settings` (panel) | M14 | handbook | – | Sections that are not built yet stay in the switcher, greyed with the reason, so the order matches the reference; the reference has no such state. |
 | `settings.userSettings` (panel) | M14 | handbook | – | Every checkbox is off by default; the handbook gives no defaults. |
+| `settings.sampleStrings` (panel) | M5 | handbook | – | The plus, minus and Default buttons sit in one row above the group list. |
+| `settings.sampleStrings` (panel) | M5 | handbook | – | The groups show as a row of choices above the field, not as a list beside it. |
+| `settings.sampleStrings` (panel) | M5 | handbook | – | The field commits its lines when it loses the focus, not at each keystroke. |
+| `settings.sampleStrings` (panel) | M5 | handbook | – | Empty lines in the field are dropped, not stored as empty sample strings. |
 | `settings.sharing` (panel) | M13 | handbook | – | The section shows the page's address, because there is no companion app that finds the computer by itself. |
 | `settings.sharing` (panel) | M13 | handbook | – | Reset shows while at least one device is trusted. |
 | `settings.addons` (panel) | M13 | handbook | – | The section is called Extensions, because FontCraft has no add-on kinds that need Python; the reference calls it Addons. |

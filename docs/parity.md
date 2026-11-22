@@ -44,7 +44,7 @@ Weighted command coverage (Σ weight × live share ÷ Σ weight, over areas that
 | M2: Compile core: static TTF and OTF, oracle harness | 5 | 5 (100.0%) | 0 | 0 | 99 | 47 | 0 | 2 | 4 | 13 |
 | M3: Edit View drawing: tools, nodes, selection, transforms, path operations, guides | 187 | 187 (100.0%) | 19 | 25 | 188 | 11 | 34 | 0 | 2 | 0 |
 | M4: Font View and glyph management | 68 | 68 (100.0%) | 0 | 24 | 164 | 3 | 0 | 0 | 0 | 0 |
-| M5: Spacing, kerning and text mode | 102 | 102 (100.0%) | 1 | 19 | 98 | 6 | 0 | 0 | 2 | 0 |
+| M5: Spacing, kerning and text mode | 106 | 106 (100.0%) | 1 | 20 | 105 | 6 | 0 | 0 | 2 | 0 |
 | M6: Components and anchors | 47 | 47 (100.0%) | 1 | 10 | 131 | 5 | 0 | 0 | 0 | 0 |
 | M7: Font Info and custom parameters | 73 | 73 (100.0%) | 0 | 15 | 70 | 66 | 0 | 0 | 0 | 0 |
 | M8: OpenType features | 46 | 46 (100.0%) | 0 | 10 | 326 | 16 | 0 | 0 | 2 | 4 |
@@ -53,7 +53,7 @@ Weighted command coverage (Σ weight × live share ÷ Σ weight, over areas that
 | M11: Colour fonts and images | 42 | 42 (100.0%) | 0 | 9 | 93 | 11 | 0 | 0 | 3 | 5 |
 | M12: Command-line tool suite and quality checks | 105 | 105 (100.0%) | 0 | 3 | 38 | 2 | 241 | 65 | 6 | 15 |
 | M13: Plug-ins, scripting and automation depth | 201 | 173 (86.1%) | 9 | 44 | 105 | 4 | 26 | 1 | 14 | 0 |
-| M14: 1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web | 32 | 9 (28.1%) | 0 | 7 | 40 | 9 | 0 | 0 | 1 | 0 |
+| M14: 1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web | 28 | 5 (17.9%) | 0 | 6 | 33 | 9 | 0 | 0 | 1 | 0 |
 | fidelity: Interaction-fidelity pass: side by side with the reference, every modifier, cursor and default | 4 | 0 (0.0%) | 2 | 0 | 7 | 0 | 0 | 0 | 0 | 0 |
 
 ## By source
@@ -773,10 +773,10 @@ How each row is known. `handbook` and `docs` come from public documentation, `in
 | `app.settings` | Settings… | M14 | `spec/inventory/16-settings.toml` |
 | `settings.get` | Get Setting | M4 | `spec/inventory/16-settings.toml` |
 | `settings.set` | Set Setting | M4 | `spec/inventory/16-settings.toml` |
-| `settings.addSampleStringGroup` | Add Group | M14 | `spec/inventory/16-settings.toml` |
-| `settings.removeSampleStringGroup` | Remove Group | M14 | `spec/inventory/16-settings.toml` |
-| `settings.setSampleStrings` | Set Sample Strings | M14 | `spec/inventory/16-settings.toml` |
-| `settings.resetSampleStrings` | Default | M14 | `spec/inventory/16-settings.toml` |
+| `settings.addSampleStringGroup` | Add Group | M5 | `spec/inventory/16-settings.toml` |
+| `settings.removeSampleStringGroup` | Remove Group | M5 | `spec/inventory/16-settings.toml` |
+| `settings.setSampleStrings` | Set Sample Strings | M5 | `spec/inventory/16-settings.toml` |
+| `settings.resetSampleStrings` | Default | M5 | `spec/inventory/16-settings.toml` |
 | `settings.resetTrustedDevices` | Reset | M13 | `spec/inventory/16-settings.toml` |
 | `sharing.status` | External Preview Status | M13 | `spec/inventory/16-settings.toml` |
 | `sharing.answerDevice` | Answer Device | M13 | `spec/inventory/16-settings.toml` |
