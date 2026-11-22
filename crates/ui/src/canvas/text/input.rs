@@ -1,12 +1,12 @@
 //! The Text tool's input, run in `drain`: a click places the cursor, a drag selects, Shift with a click extends the
-//! selection, a double-click on a glyph edits it; letters type, the deletes delete, the arrows move the cursor, and
-//! the spacing and kerning shortcuts (`when = textMode`) act on the glyphs at the cursor.
+//! selection, a double-click on a glyph edits it; letters type, the deletes delete, the arrows move the cursor (with
+//! Alt by word, Cmd+Up and Cmd+Down to the text's start and end), and the spacing and kerning shortcuts (`when = textMode`) act on the glyphs at the cursor.
 
 use std::sync::Arc;
 
 use craft::ui::runtime::commands::CommandRef;
 use fontcraft_engine::command_specs;
-use fontcraft_textlayout::{KerningMode, Layout};
+use fontcraft_textlayout::{Item, KerningMode, Layout};
 use fontcraft_tools::{Key, KeyEvent, Modifiers, PointerEvent, PointerKind};
 use serde_json::{Value, json};
 
@@ -160,6 +160,8 @@ fn key(app: &mut FontCraftApp, ev: KeyEvent) -> Result<(), String> {
         Key::Left | Key::Right | Key::Up | Key::Down => match text_mode_command(ev.key, m) {
             Some(id) => shortcut(app, id),
             None if plain => move_cursor(app, ev.key, m.shift),
+            None if m.alt && !m.cmd && !m.ctrl => move_by_word(app, ev.key, m.shift),
+            None if m.cmd && !m.alt && !m.ctrl && matches!(ev.key, Key::Up | Key::Down) => to_text_end(app, ev.key == Key::Down, m.shift),
             None => Ok(()),
         },
         Key::Return | Key::Backspace | Key::Delete | Key::Home | Key::End | Key::Tab | Key::Escape => Ok(()),
@@ -217,6 +219,72 @@ fn select_all(app: &mut FontCraftApp) -> Result<(), String> {
     shell(app, "editView.setCursor", json!({"index": len, "anchor": 0}))
 }
 
+/// Whether an arrow key moves forward in the text along the line in `direction` (right to left: Left steps forward;
+/// top to bottom: Down does), backward, or neither (it moves across lines).
+fn along_line(direction: WritingDirection, key: Key) -> Option<bool> {
+    match (direction, key) {
+        (WritingDirection::Ltr, Key::Left) | (WritingDirection::Rtl, Key::Right) | (WritingDirection::Ttb, Key::Up) => Some(false),
+        (WritingDirection::Ltr, Key::Right) | (WritingDirection::Rtl, Key::Left) | (WritingDirection::Ttb, Key::Down) => Some(true),
+        _ => None,
+    }
+}
+
+/// Whether `item` ends a word: a line break, or a glyph typed as white space (or the glyph `space` entered by name).
+fn ends_word(item: &Item) -> bool {
+    match item {
+        Item::LineBreak => true,
+        Item::Glyph { typed: Some(c), .. } | Item::Missing(c) => c.is_whitespace(),
+        Item::Glyph { typed: None, name } => &**name == "space",
+        Item::Placeholder => false,
+    }
+}
+
+/// The cursor place one word on from `from`: forward, past any spaces and line breaks and then to the end of the
+/// next word; backward, to the start of the word before.
+pub fn word_boundary(items: &[Item], from: usize, forward: bool) -> usize {
+    let from = from.min(items.len());
+    if forward {
+        let rest = items.get(from..).unwrap_or_default();
+        let gap = rest.iter().take_while(|i| ends_word(i)).count();
+        let word = rest.iter().skip(gap).take_while(|i| !ends_word(i)).count();
+        from.saturating_add(gap).saturating_add(word)
+    } else {
+        let before = items.get(..from).unwrap_or_default();
+        let gap = before.iter().rev().take_while(|i| ends_word(i)).count();
+        let word = before.iter().rev().skip(gap).take_while(|i| !ends_word(i)).count();
+        from.saturating_sub(gap).saturating_sub(word)
+    }
+}
+
+/// Alt with an arrow along the line: the cursor moves to the end of the word after it or the start of the word
+/// before it. Without Shift it starts from the selection's edge on the arrow's side and collapses the selection; with
+/// Shift the selection follows the cursor. Alt with an arrow across lines does nothing.
+fn move_by_word(app: &mut FontCraftApp, key: Key, extend: bool) -> Result<(), String> {
+    let state = &app.view.text;
+    let Some(forward) = along_line(state.direction, key) else { return Ok(()) };
+    let (cursor, selection) = (state.text.cursor(), state.text.selection());
+    let anchor = if cursor == selection.start { selection.end } else { selection.start };
+    let from = match (extend, forward) {
+        (true, _) => cursor,
+        (false, true) => selection.end,
+        (false, false) => selection.start,
+    };
+    let target = word_boundary(state.text.items(), from, forward);
+    let anchor = if extend { anchor } else { target };
+    shell(app, "editView.setCursor", json!({"index": target, "anchor": anchor}))
+}
+
+/// Cmd+Up and Cmd+Down: the cursor to the start (`end` false) or the end of the text, in every writing direction.
+/// With Shift the selection runs from where it was anchored to there.
+fn to_text_end(app: &mut FontCraftApp, end: bool, extend: bool) -> Result<(), String> {
+    let text = &app.view.text.text;
+    let (cursor, selection) = (text.cursor(), text.selection());
+    let anchor = if cursor == selection.start { selection.end } else { selection.start };
+    let target = if end { text.len() } else { 0 };
+    let anchor = if extend { anchor } else { target };
+    shell(app, "editView.setCursor", json!({"index": target, "anchor": anchor}))
+}
+
 /// An arrow key: along the line in the writing direction (right to left: Left steps forward in the text), or to the
 /// nearest place on the line before or after. Without Shift a selection collapses to its end on the arrow's side;
 /// with Shift the selection follows the cursor.
@@ -224,11 +292,7 @@ fn move_cursor(app: &mut FontCraftApp, key: Key, extend: bool) -> Result<(), Str
     let state = &app.view.text;
     let (cursor, len, selection) = (state.text.cursor(), state.text.len(), state.text.selection());
     let anchor = if cursor == selection.start { selection.end } else { selection.start };
-    let forward = match (state.direction, key) {
-        (WritingDirection::Ltr, Key::Left) | (WritingDirection::Rtl, Key::Right) | (WritingDirection::Ttb, Key::Up) => Some(false),
-        (WritingDirection::Ltr, Key::Right) | (WritingDirection::Rtl, Key::Left) | (WritingDirection::Ttb, Key::Down) => Some(true),
-        _ => None,
-    };
+    let forward = along_line(state.direction, key);
     let target = match forward {
         Some(forward) if !extend && !selection.is_empty() => {
             if forward {

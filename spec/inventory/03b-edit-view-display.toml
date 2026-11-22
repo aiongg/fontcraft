@@ -1003,6 +1003,8 @@ gestures = [
   "select the tool: enter text mode with a text cursor in the tab's string",
   "type: insert the glyphs for the typed characters at the cursor",
   "Left / Right / Up / Down: move the text cursor",
+  "Alt+Left / Alt+Right: move the text cursor by word; Shift extends the selection",
+  "Cmd+Up / Cmd+Down: move the text cursor to the start / end of the text; Shift extends the selection",
   "Escape: toggle between text mode and editing the current glyph",
   "Home / End: replace the current glyph with the previous / next glyph of the font",
   "Shift+Home / Shift+End: same, stepping through the glyphs currently listed in Font View",
@@ -1020,6 +1022,8 @@ guesses = [
   "Return types a line break; the handbook allows several lines but does not name the key.",
   "Up and Down move to the nearest place on the line above or below, and to the start or the end of the text from the first or the last line; in right-to-left text Left steps forward in the text; in top-to-bottom text Up and Down step along the column and Left and Right move between columns. Moving the cursor in such texts in the reference app settles it.",
   "Backspace and Delete with Alt or Cmd do nothing (no word or line deletion); no source names them.",
+  "The word and document keys follow the system's text conventions (Alt+Left/Right by word, Cmd+Up/Down to the ends of the text); the handbook only says that standard text editing applies.",
+  "A word ends at a space, any other typed white space or a line break; Alt+Right goes past them to the end of the next word and Alt+Left to the start of the word before. Without Shift the move starts from the selection's edge on the arrow's side. In right-to-left text Alt+Left steps forward, in top-to-bottom text Alt+Up/Down move by word and Alt+Left/Right do nothing.",
   "Typing or moving the cursor past the canvas's edge scrolls the canvas sideways, the zoom kept, so the cursor stays in view; typing past the window's edge in the reference app settles it.",
   "A tab whose text holds several glyphs fits the whole text in the canvas the first time it draws, and so does a text that replaces the whole text (editView.setText, a sample string); typing keeps the zoom. Opening several glyphs in a new tab of the reference app settles it.",
   "The canvas scrolls freely past the edited glyph's advance box, so the text around it can be scrolled into view; the framework's default keeps the document on screen.",
@@ -1550,9 +1554,9 @@ milestone = "M5"
 summary = "Text in Edit View wraps at a preset maximum line width, which is an application setting."
 ref = "Edit View › Entering Text"
 status = "handbook"
-notes = "Built in M5.6 (`textlayout::layout`). Documented, not yet observed."
+notes = "Built in M5.6 (`textlayout::layout`); M5.30 takes the width from `appearance.textViewWidth`, in thousandths of an em, times the font's units per em / 1000. Documented, not yet observed."
 guesses = [
-  "Lines wrap at 10,000 units unless the setting says otherwise; no source gives the default.",
+  "Lines wrap at ten em (10,000 thousandths of an em) unless the setting says otherwise; no source gives the default.",
   "A line that overflows breaks after its last space, else before the glyph that overflows, and a space may hang past the width; wrapped text in the reference app settles it.",
   "In top-to-bottom text the lines are columns, placed from right to left one line height apart; a vertical tab in the reference app settles it.",
 ]
