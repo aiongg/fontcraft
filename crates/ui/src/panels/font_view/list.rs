@@ -86,19 +86,20 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, sent: &mut Vec<Msg>) {
     let env = Env::of(ui);
     let words = env.words::<FontViewWords>();
     let headers = env.words::<ColumnWords>();
+    let first = model.columns.first().copied().unwrap_or(Column::Name);
     let specs: Vec<ColumnSpec> = model
         .columns
         .iter()
         .map(|&c| {
             let spec = ColumnSpec::new(key(c), header(&headers, c), ColumnWidth::Content).sortable().resizable().movable();
             let spec = if c == Column::Name { spec } else { spec.hideable() };
-            if c.is_numeric() { spec.numeric() } else { spec }
+            // The first column's text is the row's own, which starts at the leading edge; its header does too.
+            if c.is_numeric() && c != first { spec.numeric() } else { spec }
         })
         .collect();
     let sort = model.sort.map(|s| ColumnSort::new(key(s.column), !s.ascending));
     let mut selection = keys::selection(model);
     let source = Shown::new(model);
-    let first = model.columns.first().copied().unwrap_or(Column::Name);
     let out = Table::<usize>::new(words.glyphs.clone(), specs)
         .empty(words.no_glyphs.clone())
         .sort(sort)
