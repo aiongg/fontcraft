@@ -32,11 +32,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1522 rows to check: 2632 guesses and 624 observe steps.**
+**1528 rows to check: 2642 guesses and 629 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **536** |
+| **Built milestones (M0 to M6)** | all | **540** |
 | Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 121 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 33 |
 | Built milestones (M0 to M6) | Components and anchors | 83 |
@@ -46,17 +46,17 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Font View | 114 |
 | Built milestones (M0 to M6) | Font Info and features | 20 |
 | Built milestones (M0 to M6) | Files: open, import, export | 49 |
-| Built milestones (M0 to M6) | Settings and the window | 9 |
+| Built milestones (M0 to M6) | Settings and the window | 13 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **986** |
-| Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 89 |
+| **Later milestones (after M6)** | all | **988** |
+| Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 90 |
 | Later milestones (after M6) | Edit View: text mode and preview | 28 |
 | Later milestones (after M6) | Components and anchors | 43 |
 | Later milestones (after M6) | Filters | 5 |
 | Later milestones (after M6) | Spacing and metrics keys | 13 |
 | Later milestones (after M6) | Kerning and the Kerning window | 16 |
 | Later milestones (after M6) | Font View | 19 |
-| Later milestones (after M6) | Font Info and features | 307 |
+| Later milestones (after M6) | Font Info and features | 308 |
 | Later milestones (after M6) | Interpolation | 90 |
 | Later milestones (after M6) | Hinting | 115 |
 | Later milestones (after M6) | Colour fonts | 74 |
@@ -65,7 +65,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
-## Built milestones (M0 to M6) (536)
+## Built milestones (M0 to M6) (540)
 
 ### Edit View: drawing, guides, layers and the Palette (121)
 
@@ -264,6 +264,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The rectangle fills the window less 8% on each side, the margin of Zoom to Active Layer.
 - [ ] `view.showExtraNodes` (M3, handbook, live): Extra Nodes
   - Guess: Extra Nodes are drawn as small hollow rings in their own colour; the handbook shows them but names no style. Settled by turning the toggle on in the reference over two crossing rectangles.
+  - Guess: A crossing within one unit of a node of either segment is that node, not an Extra Node, the tolerance the corner and hinting commands use.
+  - Guess: Two segments that cross twice show two Extra Nodes, though the hinting commands name only one of them.
+  - Observe: Turn Extra Nodes on over two overlapping squares and over an arch crossing a bar twice, and count the marks.
 - [ ] `path.editBackground` (M3, handbook, live): Edit Background
   - Guess: The edited side belongs to the tab and stays when another glyph, layer or master is edited.
   - Guess: Audit markers are not drawn on the background.
@@ -1574,7 +1577,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `compile.gdefLigatureCarets` (behavior, M6, docs): Ligature caret positions in GDEF come from anchors named caret_N (horizontal text,…
   - Guess: Carets at the same position are all kept, as fontc keeps them, where ufo2ft keeps one; a ligature with two carets at one position in the reference app's export would settle it.
 
-### Settings and the window (9)
+### Settings and the window (13)
 
 - [ ] `edit.undo` (M0, memory, live): Undo
   - Guess: The menu label and Cmd+Z are recalled from the reference, not read in a source.
@@ -1599,6 +1602,14 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `appearance.displayUnicodeValue` (setting, M4, handbook): Display Unicode Value
   - Guess: On shows the code point, off the small marker, as the handbook's wording implies. Settled by observation.
   - Guess: Off by default (the small marker), as the handbook gives no default. Settled by observing a fresh install.
+- [ ] `appearance.color.kerningNegative.light` (setting, M5, handbook): Negative Kerning (Light)
+  - Guess: The default is the tint FontCraft drew before the setting existed, the same for light and dark: light blue `#8cc8f590` for negative and yellow `#f5dc46a0` for positive kerning; the handbook names only the hues. Settled by reading the reference's colour wells after Standard.
+- [ ] `appearance.color.kerningNegative.dark` (setting, M5, handbook): Negative Kerning (Dark)
+  - Guess: The default is the tint FontCraft drew before the setting existed, the same for light and dark: light blue `#8cc8f590` for negative and yellow `#f5dc46a0` for positive kerning; the handbook names only the hues. Settled by reading the reference's colour wells after Standard.
+- [ ] `appearance.color.kerningPositive.light` (setting, M5, handbook): Positive Kerning (Light)
+  - Guess: The default is the tint FontCraft drew before the setting existed, the same for light and dark: light blue `#8cc8f590` for negative and yellow `#f5dc46a0` for positive kerning; the handbook names only the hues. Settled by reading the reference's colour wells after Standard.
+- [ ] `appearance.color.kerningPositive.dark` (setting, M5, handbook): Positive Kerning (Dark)
+  - Guess: The default is the tint FontCraft drew before the setting existed, the same for light and dark: light blue `#8cc8f590` for negative and yellow `#f5dc46a0` for positive kerning; the handbook names only the hues. Settled by reading the reference's colour wells after Standard.
 - [ ] `sampleStrings.groups` (setting, M5, handbook): Sample Strings
   - Guess: The built-in default holds groups of our own choosing: spacing strings built around n, o, H and O with placeholders, figures, and traditional pangrams for Latin, Greek and Cyrillic; no source lists the reference defaults we may copy.
 
@@ -1626,9 +1637,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (986)
+## Later milestones (after M6) (988)
 
-### Edit View: drawing, guides, layers and the Palette (89)
+### Edit View: drawing, guides, layers and the Palette (90)
 
 - [ ] `anchors.ccmpAlongsideMark` (behavior, M8, handbook): When the mark feature is generated and glyphs such as idotless and…
   - Guess: ccmp follows from the glyph names alone, whether or not the marks carry anchors for the mark feature; Update in the reference app on a font with idotless and an anchorless acutecomb would settle it.
@@ -1935,6 +1946,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Spiro points are not kept with the path: once added, the contour is ordinary cubic segments, so there is no spiro mode to toggle back. A contour key in the stored data would be needed to keep them.
   - Observe: Draw four G2 points around a circle and convert to cubics: how many cubic segments result, and do they follow a circle?
   - Observe: Draw a left point then a right point: which side of each is the straight line on?
+- [ ] `appearance.guideOpacity` (setting, M14, docs): Guide and Metric Line Opacity
+  - Guess: One value covers every item type until the Appearance section offers one per type; the source lists the types but not how the values are stored. Settled by opening the reference's opacity settings.
+  - Guess: The default is 100, fully opaque; the source states none. Settled by reading the setting on a fresh install of the reference.
+  - Guess: The value multiplies each item's own colour, so a colour that is already translucent gets fainter still.
+  - Observe: Set the guide opacity to 40 in the reference, look at a glyph with metric lines, zones, a guide and a hint, and note which items fade and whether each has its own slider.
 - [ ] `path.setPenPoint` (fidelity, inferred): Set Pen Point
   - Open (our design, not confirmed): Writes or clears the pen-point data of a node or of a free pen point, the action behind the pen-point fields of the Info box. Clearing the data is how a pen point on a node is removed. The reference exposes this only as Info box fields.
 
@@ -2425,7 +2441,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.
   - Guess: Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.
 
-### Font Info and features (307)
+### Font Info and features (308)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
@@ -2434,6 +2450,13 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Cmd+Delete removes the selected fields in one undo step and each selected parameter in one of its own, and leaves built-in fields; undoing after Cmd+Delete in the reference app settles the steps.
 - [ ] `fontInfo.rows.localizable` (behavior, M7, handbook): A localizable field shows a language menu and a plus button; each…
   - Guess: The plus button adds the first language the field lacks, in the name table's tag order after the default language, with empty text; picking another language in a row's menu moves its text there; clicking the plus in the reference app settles both.
+- [ ] `fontInfo.rows.valueEditors` (behavior, M7, inferred): A custom parameter row edits its value with the control its kind…
+  - Guess: Variable Font Origin, Get Hints From Master and Link Metrics With Master are menus of the font's masters that store the master's id; the reference app's row and the file it writes settle it.
+  - Guess: A refused value's message stays under its row until the next edit; the reference app with vendorID ABCDE settles it.
+  - Guess: A value from a fixed list of whole numbers (Post Table Type) is stored as a number, any other as text; the file the reference app writes after picking one settles it.
+  - Observe: In font A (m7-one), add Variable Font Origin and Get Hints From Master on the Font tab and Link Metrics With Master on a master: note whether each is a menu of masters or a text field, and what the file stores after picking one.
+  - Observe: In font A (m7-one), add Post Table Type and Webfont Formats on the Font tab: note whether the first is a menu and the second check boxes, and what the file stores.
+  - Observe: In font A (m7-one), add TTFZones on a master and click its value: note whether the TTFZones editor opens.
 - [ ] `fontInfo.familyName.allowedCharacters` (behavior, M7, handbook): The Family Name should contain only A-Z, a-z, 0-9 and spaces; other…
   - Guess: Other characters are accepted with a warning, not refused; typing an ampersand or an accented letter in the reference app settles whether it warns, refuses or neither.
   - Observe: In font A (m7-one), type the family name `Café & Co`: note any warning, refusal or nothing.
@@ -2629,8 +2652,6 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In font A (m7-one), add fsType, codePageRanges and unicodeRanges on the Font tab and click each value: note whether a dialog opens, what it lists and how a search narrows it.
 - [ ] `dialog.panose` (panel, M7, inferred): PANOSE
   - Guess: The menus name the values only for family kind 2 (Latin Text); other family kinds show plain numbers. The dialog of the reference app with family kind 3 settles it.
-  - Guess: Variable Font Origin, Get Hints From Master and Link Metrics With Master are menus of the font's masters that store the master's id; the reference app's row and the file it writes settle it.
-  - Guess: A refused value's message stays under its row until the next edit; the reference app with vendorID ABCDE settles it.
   - Observe: In font A (m7-one), add panose on the Font tab and click its value: note whether a dialog opens, its menus and their names for family kind 2 and 3.
 - [ ] `fontInfo.masters` (panel, M7, handbook): Masters
   - Guess: A master made with Add Master becomes the selection, and a dragged master stays selected at its new place; the list's selection in the reference app after each action settles it.

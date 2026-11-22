@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**3133 guesses on 1632 rows (673 of them live commands).**
+**3143 guesses on 1638 rows (673 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -196,6 +196,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `view.zoomToActiveLayer` | M3 | handbook | yes | The descender-to-ascender span, or the advance width when that is the tighter limit, fills the window less 8% on each side. |
 | `view.zoomToRect` | M3 | inferred | yes | The rectangle fills the window less 8% on each side, the margin of Zoom to Active Layer. |
 | `view.showExtraNodes` | M3 | handbook | yes | Extra Nodes are drawn as small hollow rings in their own colour; the handbook shows them but names no style. Settled by turning the toggle on in the reference over two crossing rectangles. |
+| `view.showExtraNodes` | M3 | handbook | yes | A crossing within one unit of a node of either segment is that node, not an Extra Node, the tolerance the corner and hinting commands use. |
+| `view.showExtraNodes` | M3 | handbook | yes | Two segments that cross twice show two Extra Nodes, though the hinting commands name only one of them. |
 | `view.showHints` | M10 | handbook | yes | Show Hints starts off in a new window; the reference app would settle its default. |
 | `view.showAnchors` | M6 | handbook | yes | Show Anchors is on by default; the View menu of a fresh install of the reference app settles it. |
 | `view.showImage` | M11 | handbook | yes | Show Image is on in a new window. Settled by opening a file with a placed image in a fresh reference installation and reading the View menu. |
@@ -754,6 +756,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontInfo.rows.selection` (behavior) | M7 | handbook | – | Paste replaces the rows with the same key in the shown font, masters or exports and appends repeatable parameters; pasting a row the target has in the reference app settles it. |
 | `fontInfo.rows.selection` (behavior) | M7 | handbook | – | Cmd+Delete removes the selected fields in one undo step and each selected parameter in one of its own, and leaves built-in fields; undoing after Cmd+Delete in the reference app settles the steps. |
 | `fontInfo.rows.localizable` (behavior) | M7 | handbook | – | The plus button adds the first language the field lacks, in the name table's tag order after the default language, with empty text; picking another language in a row's menu moves its text there; clicking the plus in the reference app settles both. |
+| `fontInfo.rows.valueEditors` (behavior) | M7 | inferred | – | Variable Font Origin, Get Hints From Master and Link Metrics With Master are menus of the font's masters that store the master's id; the reference app's row and the file it writes settle it. |
+| `fontInfo.rows.valueEditors` (behavior) | M7 | inferred | – | A refused value's message stays under its row until the next edit; the reference app with vendorID ABCDE settles it. |
+| `fontInfo.rows.valueEditors` (behavior) | M7 | inferred | – | A value from a fixed list of whole numbers (Post Table Type) is stored as a number, any other as text; the file the reference app writes after picking one settles it. |
 | `fontInfo.familyName.allowedCharacters` (behavior) | M7 | handbook | – | Other characters are accepted with a warning, not refused; typing an ampersand or an accented letter in the reference app settles whether it warns, refuses or neither. |
 | `fontInfo.unitsPerEm.limits` (behavior) | M7 | handbook | – | font.info.set refuses values outside 16–16384 and returns a warning above 3000, above 4096 (glyph widths of CFF-flavoured fonts, given whatever the outline flavour) and above 5000; the reference app settles whether it warns at all. |
 | `fontInfo.unitsPerEm.limits` (behavior) | M7 | handbook | – | The Font tab shows each units-per-em warning under the Units per Em field while the value stands, not only right after an edit; typing 6000 in the reference app and reopening Font Info settles it. |
@@ -804,8 +809,6 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `dialog.os2Bits` (panel) | M7 | inferred | – | fsType, codePageRanges and unicodeRanges each open a dialog of check boxes with a search field; opening each row's editor in the reference app settles it. |
 | `dialog.os2Bits` (panel) | M7 | inferred | – | codePageRanges stores code page numbers, and a stored bit below 64 that a code page stands for shows as that page; the file the reference app writes after ticking a box settles it. |
 | `dialog.panose` (panel) | M7 | inferred | – | The menus name the values only for family kind 2 (Latin Text); other family kinds show plain numbers. The dialog of the reference app with family kind 3 settles it. |
-| `dialog.panose` (panel) | M7 | inferred | – | Variable Font Origin, Get Hints From Master and Link Metrics With Master are menus of the font's masters that store the master's id; the reference app's row and the file it writes settle it. |
-| `dialog.panose` (panel) | M7 | inferred | – | A refused value's message stays under its row until the next edit; the reference app with vendorID ABCDE settles it. |
 | `fontInfo.masters` (panel) | M7 | handbook | – | A master made with Add Master becomes the selection, and a dragged master stays selected at its new place; the list's selection in the reference app after each action settles it. |
 | `fontInfo.masters` (panel) | M7 | handbook | – | The minus button is disabled while every master is selected, because a font keeps at least one master; whether the reference app disables it or refuses with a message settles it. |
 | `fontInfo.masters` (panel) | M7 | handbook | – | The General section has the name and icon only, without a plus button, because masters take no added General fields; the masters tab of the reference app settles it. |
@@ -1947,6 +1950,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `appearance.displayUnicodeValue` (setting) | M4 | handbook | – | Off by default (the small marker), as the handbook gives no default. Settled by observing a fresh install. |
 | `appearance.handleSize` (setting) | M14 | handbook | – | Three steps, small, regular and large, at 0.75, 1 and 1.5 times the regular sizes; the handbook lists no steps. Settled by opening the reference's Appearance settings and measuring a node at each step. |
 | `appearance.handleSize` (setting) | M14 | handbook | – | The appearance colour settings default to the canvas colours FontCraft drew before they existed, the same value for light and dark; the handbook states no defaults. Settled by reading the reference's colour wells after Standard. |
+| `appearance.color.kerningNegative.light` (setting) | M5 | handbook | – | The default is the tint FontCraft drew before the setting existed, the same for light and dark: light blue `#8cc8f590` for negative and yellow `#f5dc46a0` for positive kerning; the handbook names only the hues. Settled by reading the reference's colour wells after Standard. |
+| `appearance.color.kerningNegative.dark` (setting) | M5 | handbook | – | The default is the tint FontCraft drew before the setting existed, the same for light and dark: light blue `#8cc8f590` for negative and yellow `#f5dc46a0` for positive kerning; the handbook names only the hues. Settled by reading the reference's colour wells after Standard. |
+| `appearance.color.kerningPositive.light` (setting) | M5 | handbook | – | The default is the tint FontCraft drew before the setting existed, the same for light and dark: light blue `#8cc8f590` for negative and yellow `#f5dc46a0` for positive kerning; the handbook names only the hues. Settled by reading the reference's colour wells after Standard. |
+| `appearance.color.kerningPositive.dark` (setting) | M5 | handbook | – | The default is the tint FontCraft drew before the setting existed, the same for light and dark: light blue `#8cc8f590` for negative and yellow `#f5dc46a0` for positive kerning; the handbook names only the hues. Settled by reading the reference's colour wells after Standard. |
 | `user.disableLocalization` (setting) | M14 | handbook | – | Disable Localization is stored and does nothing, because FontCraft has no translations yet. |
 | `user.useVersions` (setting) | M14 | handbook | – | Use Versions is stored and does nothing, because the system's version browser is a macOS service FontCraft does not use. |
 | `user.sendCrashReports` (setting) | M14 | handbook | – | Send Crash Reports and its two contact fields are stored and do nothing, because FontCraft has no crash-report service. |
@@ -3240,6 +3247,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `dialog.mergeFontsToMasters` (panel) | M9 | docs | – | Every open font starts ticked; the secondary reference's dialog would settle its defaults. |
 | `curveTension` (parameter) | M13 | docs | – | A master without the parameter, or with a value outside 1 to 100, uses 55 percent, close to a circle's tension; FontLab's default value is not documented and a new FontLab font would show it. |
 | `suggestDistance` (parameter) | M13 | docs | – | Read as a dictionary {x, y} where a missing key is 0, an array of two numbers, or one number for both; a source file from the reference app that sets it would settle the stored form. |
+| `appearance.guideOpacity` (setting) | M14 | docs | – | One value covers every item type until the Appearance section offers one per type; the source lists the types but not how the values are stored. Settled by opening the reference's opacity settings. |
+| `appearance.guideOpacity` (setting) | M14 | docs | – | The default is 100, fully opaque; the source states none. Settled by reading the setting on a fresh install of the reference. |
+| `appearance.guideOpacity` (setting) | M14 | docs | – | The value multiplies each item's own colour, so a colour that is already translucent gets fainter still. |
 | `rapid` (tool) | M13 | docs | – | With no sub-mode latched, a plain click adds a smooth curve node, Alt+click a corner and Cmd+Alt+click a tangent node; the reference's documentation of the tool's modifier keys would settle it. |
 | `rapid` (tool) | M13 | docs | – | A segment's tension point sits halfway between its two handles and is dragged towards or away from the Tunni point; a click on it without dragging returns the segment to the master's tension. Watching the reference's tension points would settle it. |
 | `rapid` (tool) | M13 | docs | – | A segment whose handle lines do not meet ahead of both nodes (an S-curve) gets handles of the tension times the chord length over √2, a quarter circle's proportion; the reference's handles on an S-shaped run of clicks would settle it. |
