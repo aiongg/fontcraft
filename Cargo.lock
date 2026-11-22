@@ -3168,6 +3168,7 @@ dependencies = [
  "eframe",
  "egui",
  "fontcraft-craft-ext",
+ "fontcraft-decompile",
  "fontcraft-engine",
  "fontcraft-geom",
  "fontcraft-glyphquery",

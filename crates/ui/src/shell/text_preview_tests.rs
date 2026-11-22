@@ -238,7 +238,7 @@ fn the_preview_shows_the_last_export_and_a_folder_and_follows_changes() {
 
     let out = dir.join("Exported.ttf");
     exec(&mut app, "font.compile", json!({"formats": ["ttf"], "destination": out.to_string_lossy()}));
-    assert_eq!(app.view.text_preview.last_export, [out.clone()], "the export's file is kept as the last export");
+    assert_eq!(app.view.text_preview.last_export, std::slice::from_ref(&out), "the export's file is kept as the last export");
     set_now(&mut app.models.text_preview, 10.0);
     app.drain();
     let model = &app.models.text_preview.view;
