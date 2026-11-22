@@ -36,6 +36,8 @@ pub struct DialogSpec {
     pub actions: &'static [Action],
     /// Parameters the window supplies when `dialog.open` or the menu item leaves them out (what a tab shows).
     pub window: Option<FromWindow>,
+    /// Values the dialog shows but does not send, read after every change ([`Annotate`]).
+    pub annotate: Option<Annotate>,
 }
 
 impl DialogSpec {
@@ -54,6 +56,7 @@ impl DialogSpec {
             message: "",
             actions: &[],
             window: None,
+            annotate: None,
         }
     }
 
@@ -85,6 +88,11 @@ impl DialogSpec {
     /// Parameters the window supplies for those the dialog is opened without.
     pub const fn from_window(self, window: FromWindow) -> Self {
         DialogSpec { window: Some(window), ..self }
+    }
+
+    /// Values read from the session after every change and shown in the dialog's own fields ([`Annotate`]).
+    pub const fn annotate(self, annotate: Annotate) -> Self {
+        DialogSpec { annotate: Some(annotate), ..self }
     }
 
     /// A question asked after `after.command` when its result calls for it; never opened from its own command.
@@ -148,6 +156,11 @@ pub struct Tab {
 /// Parameters read from the window's view state (the edited glyph, the current master); see
 /// [`DialogSpec::from_window`].
 pub type FromWindow = fn(&crate::app::FontCraftApp) -> Map<String, Value>;
+
+/// Values for fields that are no parameter (a preview of what OK will do), from the session and the command's
+/// parameters; run when the dialog opens and after every change. Only a [`Fields::Shaped`] dialog has such fields: its
+/// `params` leaves them out. A previewing dialog reads the font with its last preview applied.
+pub type Annotate = fn(&Session, &Value) -> Map<String, Value>;
 
 /// Builds the fields of [`Fields::Targeted`] from the session and the dialog's targets.
 pub type TargetedFields = fn(&mut Session, &Map<String, Value>) -> Result<Vec<Field>, String>;

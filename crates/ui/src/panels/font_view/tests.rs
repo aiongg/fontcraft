@@ -195,3 +195,61 @@ fn a_header_press_sorts_the_list() {
     fixture.click(&header).settle();
     assert_eq!(*posted.borrow(), vec![shell("fontView.sortByColumn", json!({"column": "unicode", "ascending": true}))]);
 }
+
+/// The font's statuses as the model holds them: Draft (code 0, red) and Final (code 1, green).
+fn with_statuses(mut model: FontViewModel) -> FontViewModel {
+    use crate::app::models::font_view::StatusChoice;
+    model.statuses = vec![
+        StatusChoice { code: 0, name: "Draft".into(), color: [0xd0, 0x20, 0x20, 0xff] },
+        StatusChoice { code: 1, name: "Final".into(), color: [0x20, 0xa0, 0x40, 0xff] },
+    ];
+    if let Some(row) = model.rows.get_mut(0) {
+        row.status = Some(0);
+        row.status_color = Some([0xd0, 0x20, 0x20, 0xff]);
+    }
+    model
+}
+
+/// The filled rectangles of one frame, by colour.
+fn filled(fixture: &mut Fixture) -> Vec<egui::Color32> {
+    fixture
+        .frame_shapes()
+        .iter()
+        .filter_map(|shape| match shape {
+            egui::Shape::Rect(r) => Some(r.fill),
+            _ => None,
+        })
+        .collect()
+}
+
+/// A cell whose glyph is in a status draws a bar in the status colour; a cell in none draws no such bar.
+#[test]
+fn a_cell_with_a_status_draws_its_bar() {
+    let red = egui::Color32::from_rgba_unmultiplied(0xd0, 0x20, 0x20, 0xff);
+    let (mut fixture, _) = open(with_statuses(model(ViewMode::Grid, Vec::new())));
+    assert_eq!(filled(&mut fixture).iter().filter(|c| **c == red).count(), 1, "A's cell has the Draft bar");
+    let (mut fixture, _) = open(model(ViewMode::Grid, Vec::new()));
+    assert!(!filled(&mut fixture).contains(&red), "no glyph is in a status");
+    assert!(super::cells::status_bar(egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(64.0, 64.0))).height() >= 2.0);
+}
+
+/// List View's Status cell shows the glyph's status as a pop-up, and its pick runs `glyph.setStatus` on the row's
+/// glyph: the same change as the command; No Status clears it.
+#[test]
+fn the_status_column_edit_equals_set_status() {
+    let mut list = with_statuses(model(ViewMode::List, Vec::new()));
+    list.columns = vec![Column::Name, Column::Status];
+    let (mut fixture, _) = open(list);
+    let texts: Vec<String> = fixture
+        .frame_shapes()
+        .iter()
+        .filter_map(|shape| match shape {
+            egui::Shape::Text(t) => Some(t.galley.job.text.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(texts.iter().any(|t| t == "Draft"), "A's cell shows its status: {texts:?}");
+
+    assert_eq!(super::list::status_request("A", "1"), Msg::run("glyph.setStatus", json!({"glyphs": ["A"], "status": 1})));
+    assert_eq!(super::list::status_request("A", ""), Msg::run("glyph.setStatus", json!({"glyphs": ["A"], "status": null})));
+}

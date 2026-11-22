@@ -2,7 +2,8 @@
 //! the label size up its name under it (`fontView.cell.contentBySize`). A glyph that does not export shows veiled.
 //! The grid lays out only the tiles in view, so a font of tens of thousands of glyphs scrolls as a small one does.
 //! A tile draws its glyph's placed image behind the glyph (`canvas::images::cells`), and image files dropped onto a
-//! tile go on that glyph as Glyph › Add Image… places them (`canvas::images::drop::cell_params`).
+//! tile go on that glyph as Glyph › Add Image… places them (`canvas::images::drop::cell_params`). A glyph in a status
+//! (`glyph.setStatus`, or the font's default status) has a thin bar of the status colour along the tile's foot.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -88,7 +89,8 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, images: &CellImages, sent: &mut 
             }
             let art = glyph.art.as_ref().map(Arc::clone);
             let image = images.by_glyph.get(&glyph.name).map(Arc::clone);
-            if art.is_some() || image.is_some() {
+            let status = glyph.status_color;
+            if art.is_some() || image.is_some() || status.is_some() {
                 tile = tile.thumb(ThumbAspect::SQUARE, move |cx, rect| {
                     let width = art.as_ref().map_or(0.0, |a| a.width);
                     if let Some(image) = &image {
@@ -96,6 +98,9 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, images: &CellImages, sent: &mut 
                     }
                     if let Some(art) = &art {
                         cells::paint(cx, rect, art, ascender, descender);
+                    }
+                    if let Some(color) = status {
+                        cells::paint_status(cx, rect, color);
                     }
                 });
             }

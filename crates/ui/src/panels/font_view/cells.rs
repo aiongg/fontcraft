@@ -15,6 +15,9 @@ const MAX_BANDS: usize = 256;
 const MIN_BAND: f32 = 0.01;
 /// The share of the cell the font's ascender-to-descender height takes.
 const FILL_SHARE: f32 = 0.8;
+/// The status bar's height: this share of the cell, at least [`STATUS_MIN`] points.
+const STATUS_SHARE: f32 = 0.06;
+const STATUS_MIN: f32 = 2.0;
 
 /// An edge in screen points, top end first, with its winding: +1 when the contour runs down it.
 #[derive(Clone, Copy)]
@@ -86,6 +89,17 @@ pub fn paint(cx: &ContentPainterCx<'_>, rect: Rect, art: &CellArt, ascender: f32
     }
     let Some(mesh) = fill(&edges, rect, cx.ink()) else { return };
     cx.painter.add(Shape::mesh(mesh));
+}
+
+/// Where the status bar of a cell drawn in `rect` lies: along its foot, the cell's width.
+pub fn status_bar(rect: Rect) -> Rect {
+    let height = (rect.height() * STATUS_SHARE).max(STATUS_MIN).min(rect.height().max(0.0));
+    Rect::from_min_max(pos2(rect.left(), rect.bottom() - height), rect.max)
+}
+
+/// Draws the status bar in the status colour `[r, g, b, a]`.
+pub fn paint_status(cx: &ContentPainterCx<'_>, rect: Rect, [r, g, b, a]: [u8; 4]) {
+    cx.painter.rect_filled(status_bar(rect), 0.0, egui::Color32::from_rgba_unmultiplied(r, g, b, a));
 }
 
 /// The nonzero fill of `edges` inside `rect` as one mesh; `None` when nothing is filled.

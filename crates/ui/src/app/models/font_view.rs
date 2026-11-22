@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use craft::behavior::kurbo::{BezPath, PathEl, Point, Shape as _};
 use craft::ui::contract::{PlainData, Tracked};
+use fontcraft_engine::cmd::status;
 use fontcraft_engine::model::glyphdata::GlyphData;
 use fontcraft_engine::model::{ColorLabel, Font, Glyph, GlyphProps, Prop, Shape, glyph_order, glyph_props, keeps_alternates, metric};
 use serde_json::Value;
@@ -63,6 +64,16 @@ pub struct FontViewModel {
     pub descender: f32,
     /// Why the query failed; every glyph is listed then.
     pub error: Option<String>,
+    /// The font's status definitions, in their order: the Status cell's pop-up.
+    pub statuses: Vec<StatusChoice>,
+}
+
+/// One status definition as Font View offers it.
+#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+pub struct StatusChoice {
+    pub code: i64,
+    pub name: String,
+    pub color: [u8; 4],
 }
 
 /// One glyph as Font View lists it.
@@ -77,6 +88,10 @@ pub struct GlyphRow {
     pub cells: Vec<String>,
     /// Grid View: the outline. `None` in List View.
     pub art: Option<Arc<CellArt>>,
+    /// The code of the status the glyph is in (its stored one, else the default; `None` for a stored code the font
+    /// does not define), and that status's colour: the cell's status bar.
+    pub status: Option<i64>,
+    pub status_color: Option<[u8; 4]>,
 }
 
 /// A cell outline: the closed contours, flattened, in font units.
@@ -137,20 +152,26 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, fil
     let assets = cx.session.assets();
     let mode = color::cell_mode(&font, &master, false);
     let mut src = color::Sources { assets: assets.as_ref(), files, text: color::TEXT };
+    let defs = status::definitions(&font);
+    let statuses: Vec<StatusChoice> = defs.iter().map(|d| StatusChoice { code: d.code, name: d.name.clone(), color: status_rgba(d.color) }).collect();
     let mut glyphs: Vec<&Arc<Glyph>> = Vec::with_capacity(order.len());
     let mut rows = Vec::with_capacity(order.len());
     for (id, &i) in order.iter().enumerate() {
         let Some(glyph) = arcs.get(i) else { continue };
+        let in_status = glyph_status(&font, glyph, &statuses, &defs);
         let mut row = GlyphRow {
             name: glyph.name.clone(),
             export: glyph.export,
             unicode: glyph.unicodes.first().map(|u| format!("{u:04X}")),
+            status: in_status.map(|s| s.code),
+            status_color: in_status.map(|s| s.color),
             ..GlyphRow::default()
         };
         match state.mode {
             ViewMode::Grid => row.art = Some(art(&font, glyph, &master, &by_name, cache, &mode, &mut src)),
             ViewMode::List => {
-                let cell = Cell { font: &font, glyph, id, master: &master, props: props.get(glyph) };
+                let status = in_status.map(|s| s.name.as_str());
+                let cell = Cell { font: &font, glyph, id, master: &master, props: props.get(glyph), status };
                 row.cells = Column::ALL.iter().map(|c| cell.text(*c)).collect();
             }
         }
@@ -173,7 +194,8 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, fil
         let props = &props;
         let key = |i: usize| {
             let glyph = glyphs.get(i).copied()?;
-            Some(Cell { font: &font, glyph, id: i, master: &master, props: props.get(glyph) }.sort_value(sort.column))
+            let status = glyph_status(&font, glyph, &statuses, &defs).map(|s| s.name.as_str());
+            Some(Cell { font: &font, glyph, id: i, master: &master, props: props.get(glyph), status }.sort_value(sort.column))
         };
         sort_rows(&mut visible, sort, key);
     }
@@ -196,8 +218,24 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, fil
         descender,
         error,
         rows,
+        statuses,
     };
     super::set(model, value);
+}
+
+/// A status colour (components from 0 to 1) as bytes.
+fn status_rgba(c: [f64; 4]) -> [u8; 4] {
+    c.map(|v| if v.is_finite() { (v.clamp(0.0, 1.0) * 255.0).round() as u8 } else { 0 })
+}
+
+/// The status `glyph` is in: its stored code's definition, else the default one. A stored code the font does not
+/// define is in none.
+fn glyph_status<'s>(font: &Font, glyph: &Glyph, statuses: &'s [StatusChoice], defs: &[status::StatusDef]) -> Option<&'s StatusChoice> {
+    let code = match status::stored_status(font, &glyph.name) {
+        Some(code) => code,
+        None => defs.iter().find(|d| d.is_default)?.code,
+    };
+    statuses.iter().find(|s| s.code == code)
 }
 
 /// The rows `fontView.queryGlyphs` gives for `query`, in its order.
@@ -270,6 +308,8 @@ struct Cell<'a> {
     id: usize,
     master: &'a str,
     props: Option<Arc<GlyphProps>>,
+    /// The name of the status the glyph is in.
+    status: Option<&'a str>,
 }
 
 impl Cell<'_> {
@@ -306,6 +346,7 @@ impl Cell<'_> {
             Column::Lsb | Column::Rsb | Column::Width => self.number(column).map(|n| format!("{}", n.round())).unwrap_or_default(),
             Column::LeftGroup => glyph.kern_groups.left.clone().unwrap_or_default(),
             Column::RightGroup => glyph.kern_groups.right.clone().unwrap_or_default(),
+            Column::Status => self.status.unwrap_or_default().to_string(),
             _ => String::new(),
         }
     }

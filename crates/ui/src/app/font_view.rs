@@ -154,12 +154,14 @@ pub enum Column {
     Width,
     LeftGroup,
     RightGroup,
+    /// The status the glyph is in (`glyph.setStatus`).
+    Status,
 }
 
 impl Column {
     /// Every column, in the default order: the documented columns first, then the properties in the order the
-    /// Glyph Properties section lists them.
-    pub const ALL: [Column; 22] = [
+    /// Glyph Properties section lists them, then Status.
+    pub const ALL: [Column; 23] = [
         Column::Id,
         Column::Char,
         Column::Name,
@@ -182,6 +184,7 @@ impl Column {
         Column::Width,
         Column::LeftGroup,
         Column::RightGroup,
+        Column::Status,
     ];
 
     pub fn id(self) -> &'static str {
@@ -208,6 +211,7 @@ impl Column {
             Column::Width => "width",
             Column::LeftGroup => "leftGroup",
             Column::RightGroup => "rightGroup",
+            Column::Status => "status",
         }
     }
 

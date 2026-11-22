@@ -153,6 +153,43 @@ fn the_glyph_menu_marks_exports_and_tags_and_its_items_run_their_commands() {
     assert_ne!(many.view.workspace.layout.panel_state(&crate::shell::dock::PanelId::Sidebar), craft::behavior::dock::PanelState::Hidden);
 }
 
+/// The Status submenu marks the status the glyphs are in (the default one for a glyph without its own), and its items
+/// make the same change as `glyph.setStatus`; No Status clears the stored status.
+#[test]
+fn the_glyph_menu_status_items_equal_set_status() {
+    let statuses = json!({"statuses": [
+        {"code": 0, "name": "Draft", "color": [1, 0, 0], "isDefault": true},
+        {"code": 1, "name": "Final", "color": [0, 1, 0]},
+    ]});
+    let setup = || {
+        let mut app = glyphs_app();
+        app.session.execute("font.setStatusDefinitions", &statuses).unwrap();
+        app.session.execute("glyph.setStatus", &json!({"glyphs": ["A"], "status": 1})).unwrap();
+        app
+    };
+    let mut app = setup();
+    let names: Vec<String> = ["A", "B"].iter().map(|s| s.to_string()).collect();
+    let menu = glyph_menu::open(&app, &names, [0.0, 0.0]);
+    let marks: Vec<(String, Mark)> = menu.statuses.iter().map(|s| (s.name.clone(), s.mark)).collect();
+    assert_eq!(marks, vec![("Draft".to_string(), Mark::Some), ("Final".to_string(), Mark::Some)], "B is in the default status");
+    assert_eq!(menu.statuses[1].color, [0, 255, 0, 255]);
+
+    for msg in glyph_menu::steps(&menu, &GlyphAction::Status(Some(1))) {
+        app.run_now(msg, false).unwrap();
+    }
+    let mut direct = setup();
+    direct.session.execute("glyph.setStatus", &json!({"glyphs": ["A", "B"], "status": 1})).unwrap();
+    assert!(font(&app).same_as(&font(&direct)));
+    assert_eq!(glyph_menu::open(&app, &names, [0.0, 0.0]).statuses[1].mark, Mark::All);
+
+    for msg in glyph_menu::steps(&menu, &GlyphAction::Status(None)) {
+        app.run_now(msg, false).unwrap();
+    }
+    direct.session.execute("glyph.setStatus", &json!({"glyphs": ["A", "B"], "status": null})).unwrap();
+    assert!(font(&app).same_as(&font(&direct)));
+    assert!(glyph_menu::open(&glyphs_app(), &names, [0.0, 0.0]).statuses.is_empty(), "no definitions, no submenu");
+}
+
 /// A glyph menu opened with Alt held colours the layer each glyph shows in the current master; without Alt the glyph.
 #[test]
 fn the_glyph_menu_opened_with_alt_colours_the_layer() {

@@ -1,10 +1,15 @@
 //! List View (`fontView.list`): a row per shown glyph and a column per glyph property. A header press sorts
 //! (`fontView.sortByColumn`); the header menu shows and hides columns and a header drag moves one
-//! (`fontView.setColumns`); the Name cell renames the glyph. The table lays out only the rows in view.
+//! (`fontView.setColumns`); the Name cell renames the glyph, and the Status cell is a pop-up of the font's statuses
+//! that runs `glyph.setStatus` on the row's glyph (No Status clears the stored one). The table lays out only the rows
+//! in view.
+
+use std::cell::RefCell;
 
 use craft::behavior::{ColumnKey, ColumnWidth};
-use craft::ui::contract::{Bind, CollectionEvent, ColumnEvent, ColumnSort, ColumnSpec, ShowCollection as _};
+use craft::ui::contract::{Bind, CollectionEvent, ColumnEvent, ColumnSort, ColumnSpec, Entry, Props as _, ShowCollection as _};
 use craft::ui::list::ListRow;
+use craft::ui::pickers::Select;
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::{Env, Label};
 use craft::ui::table::Table;
@@ -42,6 +47,9 @@ craft::ui::words! {
         width: "fontcraftFontViewColumn.width" = "Width";
         left_group: "fontcraftFontViewColumn.leftGroup" = "Left Group";
         right_group: "fontcraftFontViewColumn.rightGroup" = "Right Group";
+        status: "fontcraftFontViewColumn.status" = "Status";
+        /// The Status pop-up's entry that clears the stored status.
+        no_status: "fontcraftFontViewColumn.noStatus" = "No Status";
     }
 }
 
@@ -71,6 +79,7 @@ pub fn header(words: &ColumnWords, column: Column) -> Label {
         Column::Width => w.width.clone(),
         Column::LeftGroup => w.left_group.clone(),
         Column::RightGroup => w.right_group.clone(),
+        Column::Status => w.status.clone(),
     }
 }
 
@@ -100,6 +109,9 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, sent: &mut Vec<Msg>) {
     let sort = model.sort.map(|s| ColumnSort::new(key(s.column), !s.ascending));
     let mut selection = keys::selection(model);
     let source = Shown::new(model);
+    let statuses = status_entries(model, &headers);
+    // The Status pop-up a row picked from: the glyph and the entry's value.
+    let picked: RefCell<Option<(String, String)>> = RefCell::new(None);
     let out = Table::<usize>::new(words.glyphs.clone(), specs)
         .empty(words.no_glyphs.clone())
         .sort(sort)
@@ -113,16 +125,53 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, sent: &mut Vec<Msg>) {
             let text = |c: Column| cells.get(c.index()).cloned().unwrap_or_default();
             let mut list_row = ListRow::new(text(first)).cells(icx.cells()).striped(icx.row.striped);
             for &c in model.columns.iter().skip(1) {
+                if c == Column::Status
+                    && !statuses.is_empty()
+                    && let Some(glyph) = model.rows.get(*row)
+                {
+                    let current = glyph.status.map(|code| code.to_string()).unwrap_or_default();
+                    let name = glyph.name.clone();
+                    let picked = &picked;
+                    let field = Select::new(headers.status.clone(), Bind::given(current.clone()), &statuses)
+                        .id_salt(("fontcraftFontView.status", glyph.name.as_str()));
+                    list_row = list_row.cell_field(key(c), field, move |out| {
+                        if let Some(value) = out.events.committed()
+                            && *value != current
+                        {
+                            *picked.borrow_mut() = Some((name, value.clone()));
+                        }
+                    });
+                    continue;
+                }
                 list_row = list_row.cell(key(c), text(c));
             }
             list_row
         });
+    if let Some((glyph, value)) = picked.into_inner() {
+        sent.push(status_request(&glyph, &value));
+    }
     keys::requests(ui.ctx(), model, &selection, &out.events, sent);
     for event in &out.events {
         if let CollectionEvent::Column(change) = event {
             column_request(model, change, sent);
         }
     }
+}
+
+/// The Status pop-up's entries: No Status, then each status by its code; none when the font defines no status.
+fn status_entries(model: &FontViewModel, words: &ColumnWords) -> Vec<Entry<String>> {
+    if model.statuses.is_empty() {
+        return Vec::new();
+    }
+    let mut out = vec![Entry::new(String::new(), words.no_status.clone())];
+    out.extend(model.statuses.iter().map(|s| Entry::new(s.code.to_string(), Label::from(s.name.clone()))));
+    out
+}
+
+/// `glyph.setStatus` for a Status pop-up's pick: a code, or empty for No Status.
+pub fn status_request(glyph: &str, value: &str) -> Msg {
+    let status = value.parse::<i64>().map_or(serde_json::Value::Null, |code| json!(code));
+    Msg::run("glyph.setStatus", json!({"glyphs": [glyph], "status": status}))
 }
 
 /// The shell command for a change the header made.
