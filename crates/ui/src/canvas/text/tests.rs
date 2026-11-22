@@ -233,14 +233,16 @@ fn the_text_layers_draw_the_other_glyphs_the_kerned_gaps_and_the_cursor() {
     shell(&mut app, "editView.setCursor", json!({"index": 0}));
     let t = TextTokens::standard();
     assert_eq!(count(&painted(&app, glyph_shapes), t.glyph), 1, "V, the one other glyph with an outline");
-    assert_eq!(count(&painted(&app, behind_shapes), t.kerning_negative), 1, "the A V gap");
+    assert_eq!(count(&painted(&app, behind_shapes), app.models.canvas_tokens.kerning_negative), 1, "the A V gap");
+    run(&mut app, "settings.set", json!({"id": "appearance.color.kerningNegative.light", "value": "#ff00ff"}));
+    assert_eq!(count(&painted(&app, behind_shapes), Color32::from_rgb(0xff, 0, 0xff)), 1, "the gap takes the set colour");
     assert!(painted(&app, cursor_shapes).is_empty(), "no cursor outside text mode");
 
     shell(&mut app, "editView.toggleTextMode", json!({"mode": "text"}));
     assert_eq!(count(&painted(&app, cursor_shapes), t.cursor), 1);
     assert!(!super::display(&app.view).nodes, "text mode hides the nodes");
     shell(&mut app, "kerning.setMode", json!({"mode": "none"}));
-    assert_eq!(count(&painted(&app, behind_shapes), t.kerning_negative), 0, "no kerning shown without kerning");
+    assert_eq!(count(&painted(&app, behind_shapes), app.models.canvas_tokens.kerning_negative), 0, "no kerning shown without kerning");
     shell(&mut app, "editView.setCursor", json!({"index": 0, "selectionLength": 2}));
     assert_eq!((count(&painted(&app, behind_shapes), t.selection), painted(&app, cursor_shapes).len()), (2, 0));
 }

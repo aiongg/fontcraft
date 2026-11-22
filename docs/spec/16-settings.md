@@ -58,6 +58,15 @@ Colours: nine colours, each stored for the light and for the dark appearance
 
 `settings.resetColors` (the Standard button) restores all of them.
 
+In FontCraft all 18 are live settings (`crates/engine-core/src/settings.rs`) that take `#rrggbb` or
+`#rrggbbaa` and refuse anything else with a message. Their defaults are the colours the canvas drew
+before the settings existed, the same for light and dark. The canvas tokens
+(`crates/ui/src/canvas/tokens.rs`) read the set for the appearance content is drawn in, and scale
+node, handle, anchor and Extra Node sizes by the `appearance.handleSize` step (0.75, 1 and 1.5).
+The window draws content in the light appearance only until the Appearance section adds the
+switching. `appearance.guideOpacity` (a number from 0 to 100) fades metric lines, zones, guides
+and hint bands.
+
 ## User Settings
 
 | Setting | Id | Effect |

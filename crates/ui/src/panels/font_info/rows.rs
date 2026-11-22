@@ -155,8 +155,8 @@ pub fn dialog_message(target: &Target, row: &RowModel, dialog: RowDialog) -> Opt
             shell("font.info.openDialog", open_params(&InfoDialog::Bits { target: target.clone(), name: row.key.clone(), index: row.occurrence }))
         }
         RowDialog::Panose => shell("font.info.openDialog", open_params(&InfoDialog::Panose { target: target.clone(), index: row.occurrence })),
-        RowDialog::TtfStems => open("dialog.ttfStems", json!({"master": target.first()})),
-        RowDialog::TtfZones => open("dialog.ttfZones", json!({"master": target.first()})),
+        RowDialog::TtfStems => shell("window.ttfStems", json!({"master": target.first()})),
+        RowDialog::TtfZones => shell("window.ttfZones", json!({"master": target.first()})),
         RowDialog::AxisLocation => open("dialog.axisLocation", json!({"scope": target.scope.name(), "targets": target.first()})),
         RowDialog::VirtualMaster => open("dialog.virtualMaster", json!({"index": row.occurrence})),
         RowDialog::AxisMappings if target.scope == Scope::Instance => {

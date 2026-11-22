@@ -11,8 +11,7 @@ use fontcraft_engine::cmd::stroke::{format_version, layer_outline, mask_mode, sh
 use fontcraft_engine::components::align::{AlignMode, component_alignment};
 use fontcraft_engine::model::glyphdata::GlyphData;
 use fontcraft_engine::model::{Font, Glyph, Layer, LayerSide, Master, MetricDef, Shape, metric};
-use fontcraft_engine::pathops::geometry_helpers::segment_crossings;
-use fontcraft_geom::{BezPath, PathSeg, Piece, Point};
+use fontcraft_geom::{BezPath, Point};
 
 use super::ProjectCx;
 use crate::shell::masters;
@@ -23,10 +22,6 @@ const MAX_REFERENCE_VISITS: usize = 4096;
 const MAX_COMPONENTS: usize = 2000;
 /// Most outline elements kept for one background or other layer.
 const MAX_ELEMENTS: usize = 200_000;
-/// Most segments compared for Extra Nodes; a layer with more shows none.
-const MAX_CROSSING_SEGMENTS: usize = 4000;
-/// Two crossings closer than this, in font units, are one Extra Node.
-const SAME_CROSSING: f64 = 1e-6;
 
 /// What the canvas draws; `glyph` is `None` without an open font or glyph.
 #[derive(PlainData, Clone, Debug, Default, PartialEq)]
@@ -323,32 +318,5 @@ fn component_mark(font: &Font, glyph: &str, layer: &Layer, shape: usize) -> Opti
 
 /// Where the paths of `layer` cross one another or themselves, away from their nodes: Extra Nodes.
 pub fn extra_nodes(layer: &Layer) -> Vec<[f64; 2]> {
-    let mut segments: Vec<Vec<Piece>> = Vec::new();
-    for shape in &layer.shapes {
-        let Shape::Path(path) = shape else { continue };
-        let Ok(bez) = path.to_bez() else { continue };
-        for seg in bez.segments() {
-            if segments.len() >= MAX_CROSSING_SEGMENTS {
-                return Vec::new();
-            }
-            segments.push(vec![match seg {
-                PathSeg::Line(l) => Piece::Line(l),
-                PathSeg::Quad(q) => Piece::Quad(q),
-                PathSeg::Cubic(c) => Piece::Cubic(c),
-            }]);
-        }
-    }
-    let Ok(crossings) = segment_crossings(&segments) else { return Vec::new() };
-    let mut out: Vec<[f64; 2]> = Vec::new();
-    for (pieces, ts) in segments.iter().zip(&crossings) {
-        let Some(piece) = pieces.first() else { continue };
-        // A crossing at a segment's end is one of its nodes.
-        for t in ts.iter().filter(|t| **t > SAME_CROSSING && **t < 1.0 - SAME_CROSSING) {
-            let p = piece.eval(*t);
-            if !out.iter().any(|q| (q[0] - p.x).abs() <= SAME_CROSSING * 1e3 && (q[1] - p.y).abs() <= SAME_CROSSING * 1e3) {
-                out.push([p.x, p.y]);
-            }
-        }
-    }
-    out
+    fontcraft_tools::extra_nodes::crossing_points(layer).into_iter().map(|p| [p.x, p.y]).collect()
 }

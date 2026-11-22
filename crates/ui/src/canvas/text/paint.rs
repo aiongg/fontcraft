@@ -30,7 +30,7 @@ pub fn behind_shapes(cx: &PaintCx<'_>) -> Vec<Shape> {
     let mut out = Vec::new();
     for (band, closes) in &model.kerned {
         if let Some(r) = screen_rect(cx, *band) {
-            out.push(Shape::rect_filled(r, 0.0, if *closes { t.kerning_negative } else { t.kerning_positive }));
+            out.push(Shape::rect_filled(r, 0.0, if *closes { cx.tokens.kerning_negative } else { cx.tokens.kerning_positive }));
         }
     }
     if model.text_mode {

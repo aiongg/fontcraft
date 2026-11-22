@@ -2,10 +2,42 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-21: UI.51 merged, built and pushed (X.integ119 to X.integ120): PDF pages in placed images, `palette.toggleSection`, `tool.select {tool}` and `tool.list` in the window; the gate is green with 4,811 tests. UI.49 and UI.50 merged, built and pushed (X.integ113 to X.integ117): the egui window is gone and `crates/ui` with `apps/fontcraft` is the only window. Earlier notes follow._
+_Updated: 2026-11-22: M3.23 written on `w-M3.23` (M3.23a to M3.23c, on top of `w-M7.22`), not built: the kerning colours and `appearance.guideOpacity` as live settings the canvas reads, Extra Nodes from `fontcraft-tools` with a count and work cap. M7.22 written on `w-M7.22` (M7.22a to M7.22c), not built: the TTFZones and TTFStems rows open their editors, dictionary and localized values show refusals, window tests of the bits and PANOSE dialogs. UI.51 merged, built and pushed (X.integ119 to X.integ120): PDF pages in placed images, `palette.toggleSection`, `tool.select {tool}` and `tool.list` in the window; the gate is green with 4,811 tests. UI.49 and UI.50 merged, built and pushed (X.integ113 to X.integ117): the egui window is gone and `crates/ui` with `apps/fontcraft` is the only window. Earlier notes follow._
 
 ## State of the tree
 
+- **Where M3.23 stands.** Written on the branch `w-M3.23`, which starts from `w-M7.22`; the writer ran no build and
+  no test, so both wait for an integrator. Most of the package was already in the window from the port: `Kind::Color`
+  in `crates/engine-core/src/settings.rs` with the 14 node, stroke, zone and canvas colours and
+  `appearance.handleSize`, the canvas tokens reading them (`crates/ui/src/canvas/tokens.rs`) with node, handle,
+  anchor and Extra Node sizes scaled by the step, and the Extra Nodes rings with a frame test over two squares and a
+  plus. M3.23 adds:
+  - The four `appearance.color.kerning{Negative,Positive}.{light,dark}` settings; text mode tints kerned gaps from
+    the canvas tokens (`kerning_negative`, `kerning_positive` moved there from `TextTokens`).
+  - `appearance.guideOpacity`, a number from 0 to 100, default 100: it fades metric lines and their names, zones,
+    local and global guides (`overlays/guides.rs`, `overlays/power_guides.rs`) and the PostScript hint bands
+    (`HintTokens::with_opacity`, set in `Models::project`). Not built: a value per item type, and hiding labels
+    below half opacity.
+  - `crossing_points` in `crates/tools/src/extra_nodes.rs`: the places Extra Nodes marks, at most 4,096, with a
+    tenth of a command's crossing budget and a hashed de-duplication (the canvas model's own quadratic search is
+    gone). Tests: two squares give 2, the plus 4, a 70 by 70 grid of bars stops at the cap, a path with more than
+    20,000 segments gives none.
+  - The window still draws content in the light appearance only (`from_settings(…, false)`); the switching is M14.2.
+- **Where M7.22 stands.** Written on the branch `w-M7.22`; the writer ran no build and no test, so it waits for an
+  integrator. Most of the package was already in the window from UI.10: the editors by kind in
+  `crates/ui/src/panels/font_info/param_value.rs` (a menu for a fixed list, check boxes for a list of fixed values,
+  a menu of masters for Variable Font Origin, Get Hints From Master and Link Metrics With Master), the OS/2 bits and
+  PANOSE dialogs (`dialogs/os2_bits.rs`, `dialogs/panose.rs`) and the frame tests for Post Table Type, Variable Font
+  Origin and a refused text. M7.22 adds:
+  - The TTFZones and TTFStems rows of a master post `window.ttfZones` and `window.ttfStems` with the master's index
+    (they posted `dialog.open` with an id no dialog spec has); those commands take a master id, name or index.
+  - Dictionary and localized parameter values go through the command's check as a whole while a field is edited,
+    so a refused entry shows its message under its field instead of being dropped without a word.
+  - `panels/font_info/dialogs_tests.rs`: the bits dialog in the window's dialog host (search, a box, OK posts one
+    `font.customParameters.set`, Cancel none), the PANOSE dialog (a Weight pick posts the ten digits), both compared
+    with the font the command gives; the TT rows open their editors. `tt/mod.rs` has a test for the master index.
+  - Spec: `fontInfo.rows.valueEditors` (new) holds the guesses about master menus, refused messages and numeric
+    choices, and the observe steps for them.
 - **Where UI.51 stands.** Merged on `master` and pushed; it built with no fixes and the gate (`cargo xtask ci`) is
   green with 4,811 tests. Checked headless under Xvfb over the control channel: `tool.select {"tool":"draw"}` replies
   `{tool: "draw", previous: "select"}`, `tool.list` reports `draw` active, and an unknown tool id is refused with the

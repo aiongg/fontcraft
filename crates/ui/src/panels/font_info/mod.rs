@@ -16,6 +16,8 @@
 //! A tab click posts `font.info.selectTab`; every edit posts an engine command.
 
 pub mod code_editor;
+#[cfg(test)]
+mod dialogs_tests;
 pub mod exports_tab;
 pub mod features_tab;
 pub mod font_tab;

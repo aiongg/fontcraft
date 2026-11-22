@@ -3,6 +3,7 @@
 //! The colours and the handle size that Settings › Appearance lists come from the user's settings
 //! (`appearance.color.<item>.light`/`.dark`, `appearance.handleSize`); their defaults are the setting defaults in
 //! `fontcraft_engine::settings`. Node, handle and anchor sizes scale with the handle-size step.
+//! `appearance.guideOpacity` fades metric lines, their names, alignment zones and guides.
 
 use egui::Color32;
 use fontcraft_engine::settings::UserSettings;
@@ -49,6 +50,13 @@ pub struct Tokens {
     pub reference_outline: Color32,
     /// Laid over the canvas while the background is the side being edited.
     pub background_tint: Color32,
+    /// Text mode's tint of a gap the kerning closes (`appearance.color.kerningNegative`).
+    pub kerning_negative: Color32,
+    /// Text mode's tint of a gap the kerning opens (`appearance.color.kerningPositive`).
+    pub kerning_positive: Color32,
+    /// How opaque guides are drawn, from 0 to 1 (`appearance.guideOpacity`); the metric line and zone colours above
+    /// already carry it.
+    pub guide_opacity: f32,
 
     pub outline_width: f32,
     pub source_outline_width: f32,
@@ -108,6 +116,15 @@ impl Tokens {
         tokens.node_smooth = color("smoothNodes", tokens.node_smooth);
         tokens.background_outline = color("backgroundStroke", tokens.background_outline);
         tokens.visible_layer_outline = color("otherLayersStroke", tokens.visible_layer_outline);
+        tokens.kerning_negative = color("kerningNegative", tokens.kerning_negative);
+        tokens.kerning_positive = color("kerningPositive", tokens.kerning_positive);
+        let percent = settings.get("appearance.guideOpacity").ok().and_then(|v| v.as_f64()).filter(|p| p.is_finite()).unwrap_or(100.0);
+        #[allow(clippy::cast_possible_truncation)]
+        let opacity = (percent.clamp(0.0, 100.0) / 100.0) as f32;
+        tokens.guide_opacity = opacity;
+        tokens.metric_line = tokens.metric_line.gamma_multiply(opacity);
+        tokens.metric_name = tokens.metric_name.gamma_multiply(opacity);
+        tokens.zone_fill = tokens.zone_fill.gamma_multiply(opacity);
         tokens.scale_handles(scale);
         tokens
     }
@@ -156,6 +173,9 @@ impl Tokens {
             visible_layer_outline: Color32::from_rgba_unmultiplied(0x2d, 0x8c, 0xeb, 0xb0),
             reference_outline: Color32::from_rgba_unmultiplied(0x30, 0xa0, 0x60, 0xa0),
             background_tint: Color32::from_rgba_unmultiplied(0x00, 0x00, 0x00, 0x18),
+            kerning_negative: Color32::from_rgba_unmultiplied(0x8c, 0xc8, 0xf5, 0x90),
+            kerning_positive: Color32::from_rgba_unmultiplied(0xf5, 0xdc, 0x46, 0xa0),
+            guide_opacity: 1.0,
             outline_width: 1.5,
             source_outline_width: 1.0,
             metric_line_width: 1.0,
@@ -265,5 +285,24 @@ mod tests {
         assert_eq!(tokens.node_size, standard.node_size * 1.5);
         assert_eq!(tokens.node_smooth, standard.node_smooth, "an unset colour keeps its default");
         assert_eq!(Tokens::from_settings(&settings, true).node_corner, standard.node_corner, "the dark value is separate");
+    }
+
+    #[test]
+    fn kerning_colours_and_guide_opacity_reach_the_tokens() {
+        let standard = Tokens::default();
+        let mut settings = UserSettings::new();
+        settings.set("appearance.color.kerningPositive.dark", json!("#00ff00")).unwrap();
+        settings.set("appearance.guideOpacity", json!(50)).unwrap();
+        let light = Tokens::from_settings(&settings, false);
+        let dark = Tokens::from_settings(&settings, true);
+        assert_eq!(dark.kerning_positive, Color32::from_rgb(0, 0xff, 0));
+        assert_eq!(light.kerning_positive, standard.kerning_positive, "the light value is separate");
+        assert_eq!(light.kerning_negative, standard.kerning_negative);
+        assert_eq!(light.guide_opacity, 0.5);
+        assert!(light.metric_line.a() < standard.metric_line.a() && light.zone_fill.a() < standard.zone_fill.a());
+        let hints = crate::canvas::hinting::tokens::HintTokens::with_opacity(light.guide_opacity);
+        assert!(hints.ps_vertical.a() < crate::canvas::hinting::tokens::HintTokens::standard().ps_vertical.a(), "hint bands fade too");
+        assert_eq!(standard.guide_opacity, 1.0);
+        assert_eq!(standard.metric_line, Tokens::standard().metric_line, "full opacity leaves the colours alone");
     }
 }

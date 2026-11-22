@@ -316,13 +316,13 @@ label = "Edit TT Zones…"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{master?: id | name}"
+params = "{master?: id | name | index}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Opens the TTFZones editor (`dialog.ttfZones`) on a master's TT zones; without a master, on the main master."
 ref = "TrueType Hinting › TrueType Zones"
 status = "inferred"
-notes = "The reference app opens the editor from the value field of the master's TTFZones custom parameter in Font Info › Masters; in `crates/ui` that field opens it through `dialog.open`, and this command opens it on a master for scripts and agents. An unknown master is refused with a message in the status line."
+notes = "The reference app opens the editor from the value field of the master's TTFZones custom parameter in Font Info › Masters; in `crates/ui` that field's Edit button runs this command with the master's index, and scripts and agents run it with a master id. An unknown master or an index past the last master is refused with a message in the status line."
 guesses = [
   "Our own command so scripts and agents open the TT zones editor on a master, defaulting to the main master; the reference app opens it only from the parameter's value field, so there is nothing to settle.",
 ]
@@ -504,13 +504,13 @@ label = "Edit TT Stems…"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{master?: id | name}"
+params = "{master?: id | name | index}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Opens the TTFStems editor (`dialog.ttfStems`) on a master's TT stems; without a master, on the main master."
 ref = "TrueType Hinting › TrueType Stems"
 status = "inferred"
-notes = "The reference app opens the editor from the value field of the master's TTFStems custom parameter in Font Info › Masters; in `crates/ui` that field opens it through `dialog.open`, and this command opens it on a master for scripts and agents. An unknown master is refused with a message in the status line."
+notes = "The reference app opens the editor from the value field of the master's TTFStems custom parameter in Font Info › Masters; in `crates/ui` that field's Edit button runs this command with the master's index, and scripts and agents run it with a master id. An unknown master or an index past the last master is refused with a message in the status line."
 guesses = [
   "Our own command so scripts and agents open the TT stems editor on a master, defaulting to the main master; the reference app opens it only from the parameter's value field, so there is nothing to settle.",
 ]

@@ -788,7 +788,7 @@ milestone = "M5"
 summary = "With the Text tool active, a kerned gap between two glyphs is tinted: light blue when the kerning value is negative, yellow when it is positive. Both colours are user-configurable in the Appearance settings."
 ref = "Spacing & Kerning › Kerning"
 status = "handbook"
-notes = "Documented, not yet observed: negative kerning is highlighted light blue and positive kerning yellow. Edit View tints each kerned gap in text mode while the mode shows kerning (`canvas/text.rs`), in the theme tokens `kerning_negative` and `kerning_positive`. The four appearance.color.kerning… settings (negative and positive, light and dark) are to feed those tokens; the settings store does not hold them yet."
+notes = "Documented, not yet observed: negative kerning is highlighted light blue and positive kerning yellow. Edit View tints each kerned gap in text mode while the mode shows kerning (`canvas/text.rs`), in the canvas tokens `kerning_negative` and `kerning_positive`, which the four appearance.color.kerning… settings (negative and positive, light and dark) feed."
 guesses = [
   "The tint fills the gap between the two advances, from the descender to the ascender, behind the glyphs; a screenshot of the reference app in text mode settles it.",
 ]

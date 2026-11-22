@@ -561,8 +561,13 @@ milestone = "M3"
 summary = "Toggles the display of Extra Nodes, the third node category the Show Nodes submenu controls. This section does not define them; see the path-editing part of the chapter."
 ref = "Edit View › Glyph Display › View Options"
 status = "handbook"
-notes = "Documented, not yet observed: Extra Nodes are the points where overlapping paths cross. The canvas marks every crossing of the edited side's paths, with one another or with themselves, away from their nodes, as a small ring while the toggle is on (`crates/ui/src/canvas/paint/nodes.rs`)."
-guesses = ["Extra Nodes are drawn as small hollow rings in their own colour; the handbook shows them but names no style. Settled by turning the toggle on in the reference over two crossing rectangles."]
+notes = "Documented, not yet observed: Extra Nodes are the points where overlapping paths cross. The canvas marks every crossing of the edited side's paths, with one another or with themselves, away from their nodes, as a small ring while the toggle is on (`crates/ui/src/canvas/paint/nodes.rs`). The crossings come from `crossing_points` in `crates/tools/src/extra_nodes.rs`, once per revision of the edited layer, at most 4,096 of them, and none for a layer with more than 20,000 segments or one whose comparison runs out of its work budget; the ring's size scales with `appearance.handleSize`."
+guesses = [
+  "Extra Nodes are drawn as small hollow rings in their own colour; the handbook shows them but names no style. Settled by turning the toggle on in the reference over two crossing rectangles.",
+  "A crossing within one unit of a node of either segment is that node, not an Extra Node, the tolerance the corner and hinting commands use.",
+  "Two segments that cross twice show two Extra Nodes, though the hinting commands name only one of them.",
+]
+observe = ["Turn Extra Nodes on over two overlapping squares and over an arch crossing a bar twice, and count the marks."]
 
 [[command]]
 id = "view.showMetrics"

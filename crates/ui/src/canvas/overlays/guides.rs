@@ -5,6 +5,7 @@
 //! |---|---|
 //! | local guide | line across the canvas, `guide_local` (or the guide's own colour) |
 //! | global guide | the same, `guide_global`; only in the glyphs its filter takes in |
+//! | every guide | faded by `appearance.guideOpacity` |
 //! | guide knob | ring at the guide's position; filled when selected; a padlock when locked |
 //! | guide name | at the guide's left end |
 //! | measurement guide | dots where it crosses the outline, the distance between neighbouring dots |
@@ -399,10 +400,15 @@ pub fn guide_shapes(cx: &PaintCx<'_>) -> Drawn {
         .map(|(index, g)| (GuideRef { scope: GuideScope::Global, index }, g));
     let mut colors = BTreeMap::new();
     for (r, g) in local.chain(global) {
-        let color = g.color.as_deref().and_then(parse_color).unwrap_or(match r.scope {
-            GuideScope::Local => t.guide_local,
-            GuideScope::Global => t.guide_global,
-        });
+        let color = g
+            .color
+            .as_deref()
+            .and_then(parse_color)
+            .unwrap_or(match r.scope {
+                GuideScope::Local => t.guide_local,
+                GuideScope::Global => t.guide_global,
+            })
+            .gamma_multiply(cx.tokens.guide_opacity);
         colors.insert(r, color);
         let Some((left, right, knob)) = guide_line(cx, g) else { continue };
         out.shapes.push(Shape::line_segment([left, right], Stroke::new(t.guide_width, color)));

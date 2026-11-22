@@ -1,14 +1,10 @@
-//! The colours and sizes of the edit view's text: the kerned gaps (`kerning.highlightColors`), the selection, the
-//! cursor, the other glyphs of the text, the group members and the measurement line.
+//! The colours and sizes of the edit view's text: the selection, the cursor, the other glyphs of the text, the group
+//! members and the measurement line. The kerned gaps take their tints from the canvas tokens (`kerning.highlightColors`).
 
 use egui::Color32;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TextTokens {
-    /// A gap the kerning closes.
-    pub kerning_negative: Color32,
-    /// A gap the kerning opens.
-    pub kerning_positive: Color32,
     pub selection: Color32,
     pub cursor: Color32,
     pub cursor_width: f32,
@@ -40,8 +36,6 @@ pub struct TextTokens {
 impl TextTokens {
     pub fn standard() -> TextTokens {
         TextTokens {
-            kerning_negative: Color32::from_rgba_unmultiplied(0x8c, 0xc8, 0xf5, 0x90),
-            kerning_positive: Color32::from_rgba_unmultiplied(0xf5, 0xdc, 0x46, 0xa0),
             selection: Color32::from_rgba_unmultiplied(0x2d, 0x8c, 0xeb, 0x40),
             cursor: Color32::from_rgb(0x2d, 0x8c, 0xeb),
             cursor_width: 1.5,

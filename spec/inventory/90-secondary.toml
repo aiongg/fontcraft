@@ -1109,6 +1109,13 @@ summary = "Separate opacity for metric lines, alignment zones, font guides, glyp
 ref = "FontLab 8 What's new › Consistency & precision › Guides and hints in the Glyph window (Opacity settings)"
 status = "docs"
 origin = "fontlab"
+notes = "Built in M3.23 as one live number setting from 0 to 100, default 100: Edit View fades metric lines and their names, alignment zones, local and global guides and the PostScript hint bands by it (`crates/ui/src/canvas/tokens.rs`, `canvas/overlays/guides.rs`, `canvas/hinting/tokens.rs`). Not built: a value per item type, and hiding the hint and zone labels below half opacity."
+guesses = [
+  "One value covers every item type until the Appearance section offers one per type; the source lists the types but not how the values are stored. Settled by opening the reference's opacity settings.",
+  "The default is 100, fully opaque; the source states none. Settled by reading the setting on a fresh install of the reference.",
+  "The value multiplies each item's own colour, so a colour that is already translucent gets fainter still.",
+]
+observe = ["Set the guide opacity to 40 in the reference, look at a glyph with metric lines, zones, a guide and a hint, and note which items fade and whether each has its own slider."]
 
 # =====================================================================================================
 # FontLab — elements, references, live filters, composites
