@@ -10,12 +10,12 @@
 //!
 //! A line under the wells says which set the canvas is drawn in (`app::appearance`).
 
+use craft::behavior::ColumnWidth;
 use craft::ui::buttons::Button;
 use craft::ui::choice::{Checkbox, Segmented};
 use craft::ui::contract::{Bind, Entry, Props as _, Show as _, ShowContainer as _};
 use craft::ui::display::{Shade, Text};
 use craft::ui::form::Field;
-use craft::behavior::ColumnWidth;
 use craft::ui::layout::empty_cell;
 use craft::ui::layout_components::Grid;
 use craft::ui::runtime::env::{Env, Label};
