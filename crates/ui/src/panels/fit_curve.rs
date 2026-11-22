@@ -46,7 +46,7 @@ pub struct Props<'a> {
 }
 
 pub fn show(ui: &mut Ui, mut props: Props<'_>) {
-    view(&mut props, ui);
+    super::widgets::scrolling(ui, |ui| view(&mut props, ui));
 }
 
 /// The percentage step `step` (1 to 8) applies: the minimum, the maximum and six even steps between.

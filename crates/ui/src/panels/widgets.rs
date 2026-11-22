@@ -4,13 +4,13 @@
 //! with its text unchanged commits nothing, so tabbing through fields adds no undo steps.
 //!
 //! The Info box, the Palette sections, the Font View inspector and Font Info use these instead of building their own
-//! fields.
+//! fields. Every palette panel draws its body through [`scrolling`].
 
 use craft::behavior::{Anchor9, IconId};
 use craft::ui::buttons::IconButton;
-use craft::ui::contract::{Bind, PlainData, Props as _, Show as _, ShowContainer as _};
+use craft::ui::contract::{Bind, PlainData, Props as _, Scroll, Show as _, ShowContainer as _};
 use craft::ui::form::Field;
-use craft::ui::layout_components::Row;
+use craft::ui::layout_components::{Row, Stack};
 use craft::ui::pickers::ReferencePoint;
 use craft::ui::runtime::env::{Env, Label};
 use craft::ui::text::{NumberField, TextField};
@@ -28,6 +28,12 @@ craft::ui::words! {
 
 /// The decimals a number shows.
 const DECIMALS: i32 = 2;
+
+/// A panel body that scrolls vertically: the palette gives each of its panels a fixed height, which a long
+/// selection, a guide's fields or a tall form outgrows.
+pub fn scrolling(ui: &mut Ui, mut body: impl FnMut(&mut Ui)) {
+    Stack::new().scroll(Scroll::vertical()).fill().show(ui, |ui, _| body(ui));
+}
 /// Longest text a key-or-number field takes.
 pub const MAX_KEY_CHARS: usize = 256;
 

@@ -21,9 +21,9 @@
 //! read only.
 
 use craft::ui::buttons::toggle_button::ToggleButton;
-use craft::ui::contract::{Bind, Props as _, Scroll, Show as _, ShowContainer as _, Tracked};
+use craft::ui::contract::{Bind, Props as _, Show as _, ShowContainer as _, Tracked};
 use craft::ui::display::{Shade, Text};
-use craft::ui::layout_components::{Row, Stack};
+use craft::ui::layout_components::Row;
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::{Env, Label};
 use craft::ui::sections::Section;
@@ -87,8 +87,7 @@ pub struct Props<'a> {
 }
 
 pub fn show(ui: &mut Ui, mut props: Props<'_>) {
-    // The palette gives the panel a fixed height, which a guide or interpolation curve part outgrows.
-    Stack::new().scroll(Scroll::vertical()).fill().show(ui, |ui, _| view(&mut props, ui));
+    widgets::scrolling(ui, |ui| view(&mut props, ui));
 }
 
 fn view(props: &mut Props<'_>, ui: &mut Ui) {

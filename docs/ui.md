@@ -19,7 +19,7 @@ This page is the contract for panel writers. The worked example is the Metrics p
 | `shell/dock.rs` | `PanelId`, panel titles, the default layout, `DockPanels::body` |
 | `shell/commands.rs` | shell commands (view and window state): `MODULES` |
 | `panels/<panel>.rs` | one panel: props, view, words, its Fixture test |
-| `panels/widgets.rs` | the controls panels share: number fields, the key-or-number field, the nine-point grid |
+| `panels/widgets.rs` | the controls panels share: number fields, the key-or-number field, the nine-point grid, the scrolling panel body |
 | `canvas/` | the document area: `camera.rs`, `layers.rs` (`LAYERS`), the active-tool slot in `mod.rs` |
 | `dialogs/` | dialogs on the window's `DialogHost`: `MODULES` |
 | `control/` | the control channel's method table: `MODULES` |
@@ -90,6 +90,7 @@ queries through `Session::query`, which refuses edits.
 | Function | Shows | Returns |
 |---|---|---|
 | `labelled(ui, &label, body)` | `body` in a craft `Field`, `label` beside it | the body's result |
+| `scrolling(ui, body)` | a panel body in a vertical scroll area; every palette panel's `show` draws through it, since the palette gives each panel a fixed height | nothing |
 | `number(ui, label, value)` | a `NumberField`, its label beside it | the number committed; an emptied field commits nothing |
 | `bare_number(ui, label, value)` | `number` without the visible label, for a bar whose neighbours say what it holds | as `number` |
 | `clearable_number(ui, label, value)` | a `NumberField` that may be emptied, its label beside it | `NumberEdit::Set(n)`, or `Clear` when a field that held a value is emptied |
