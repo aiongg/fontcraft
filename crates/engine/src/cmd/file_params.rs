@@ -125,6 +125,7 @@ mod tests {
         ("project.*", &["project"], "an open project's id, path or title; no file is opened"),
         ("document.activate", &["path"], "an open document's path; no file is opened"),
         ("file.exportWithProfiles", &["fonts"], "open documents' titles or paths; no file is opened"),
+        ("file.exportSettings", &["document"], "an open document's title or path; no file is opened"),
         ("file.reviewExternalChanges", &["font"], "an open document, whose own file is read again"),
         ("file.saveExportProfile", &["folder", "settings"], "a subfolder of a later export's destination, never climbing out of it"),
         ("font.master.addFromOtherFont", &["sources", "font"], "an open document's position, title or path; no file is opened"),
