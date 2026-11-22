@@ -18,7 +18,7 @@
 use std::collections::{HashMap, HashSet};
 
 use fontcraft_geom::Point;
-use fontcraft_model::{Font, Layer, Node, NodeKind, Path, Shape};
+use fontcraft_model::{Font, Layer, LayerSide, Node, NodeKind, Path, Shape};
 use fontcraft_pathops::filters::{
     self, Args, Context, Filter, FilterString, Input, MAX_ITEMS, MAX_SCOPE_NAMES, MasterMetrics, Param, ParamKind, Slot, Value as Arg,
 };
@@ -101,7 +101,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Repeat Last Filter",
             [],
             Some("Cmd+R"),
-            "{glyph: name | glyphs: [names], layer?: id | layers?: [ids], points?, segments?} runs the last filter of the session again (the last filter.* command, or filter.apply), with the same settings, on these targets → that filter's result with {repeated: {command, params}}",
+            "{glyph: name | glyphs: [names], layer?: id | layers?: [ids], points?, segments?} runs the last filter of the session again (the last filter.* command, or filter.apply), with the same settings, on these targets: `points` and `segments` narrow a filter that takes a node selection (Round Corners rounds only those corners) and are dropped for one that changes whole layers → that filter's result with {repeated: {command, params}}",
             can_repeat,
             repeat
         )
@@ -208,6 +208,10 @@ fn master_data(font: &Font) -> HashMap<String, MasterData> {
         .collect()
 }
 
+/// The filters that copy a layer's foreground to its background before they change it, so the
+/// original stays at hand (`background.usedByFilters`).
+const BACK_UP_FIRST: [&str; 1] = ["filter.hatchOutline"];
+
 /// Runs `f` on the unlocked paths of `layer`. `selected`: the node selection of a single-layer
 /// run.
 fn filter_layer(p: &Params, layer: &mut Layer, f: &dyn Filter, args: &Args, cx: Context, selected: Option<&Targets>) -> Result<Option<String>> {
@@ -219,6 +223,10 @@ fn filter_layer(p: &Params, layer: &mut Layer, f: &dyn Filter, args: &Args, cx: 
     let cx = Context { selection: &picked, ..cx };
     let out = f.apply(&contours, args, &cx).map_err(|e| p.bad(e.to_string()))?;
     if out != contours {
+        if BACK_UP_FIRST.contains(&f.id()) {
+            // As Selection to Background with nothing selected: the background becomes a copy.
+            super::background::copy_side(layer, LayerSide::Foreground, None, false);
+        }
         write_back(p, layer, &slots, &sources, out)?;
     }
     Ok(None)
@@ -653,9 +661,15 @@ fn repeat(s: &mut Session, v: &Value) -> Result<Value> {
         Value::Object(m) => m,
         _ => Map::new(),
     };
+    // The current targets replace the last run's; a node selection only reaches a filter that
+    // takes one, and any other changes the whole layer.
+    let takes_selection = id == "filter.apply" || filters::registry().iter().find(|f| f.id() == id).is_some_and(|f| f.takes_selection());
     for key in TARGET_KEYS {
         params.remove(key);
-        if let Some(value) = p.get(key) {
+        let selection = matches!(key, "points" | "segments" | "segment");
+        if let Some(value) = p.get(key)
+            && (takes_selection || !selection)
+        {
             params.insert(key.into(), value.clone());
         }
     }

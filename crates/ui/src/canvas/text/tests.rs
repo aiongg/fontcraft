@@ -441,3 +441,31 @@ fn the_measurement_line_measures_each_glyph_in_text_mode_and_moves_with_cmd_ctrl
     shell(&mut app, "editView.setWritingDirection", json!({"direction": "ttb"}));
     assert!(app.models.text.measurement.is_none(), "horizontal text only");
 }
+
+/// A filter fired in text mode acts on the glyphs the text selection shows, and only those
+/// (`filter.target.editViewTextSelection`).
+#[test]
+fn a_filter_in_text_mode_changes_the_selected_glyphs() {
+    let mut app = text_app();
+    for g in ["A", "V", "O", "H"] {
+        app.session.execute("glyph.newGlyph", &json!({"name": g})).ok();
+        app.session.execute("path.addRectangle", &json!({"glyph": g, "x": 100, "y": 100, "width": 200, "height": 200})).unwrap();
+    }
+    try_post(&mut app, Msg::View(ViewMsg::SelectTool(super::TEXT_TOOL))).unwrap();
+    shell(&mut app, "editView.setText", json!({"glyphs": ["A", "V", "O", "H"]}));
+    shell(&mut app, "editView.setCursor", json!({"index": 0, "selectionLength": 3}));
+    let targeted = app.with_targets(CommandRef::new("filter.roundCorners"));
+    assert_eq!(targeted.params["glyphs"], json!(["A", "V", "O"]), "{}", targeted.params);
+    assert!(targeted.params.get("glyph").is_none());
+
+    let opened = crate::dialogs::form::open_command(&mut app, &json!({"dialog": "dialog.filterRoundCorners"})).unwrap();
+    assert_eq!(opened["params"]["glyphs"], json!(["A", "V", "O"]));
+    crate::dialogs::form::confirm(&mut app).unwrap();
+    let nodes = |app: &mut FontCraftApp, g: &str| {
+        app.session.query("layer.inspect", &json!({"glyph": g})).unwrap()["shapes"][0]["nodes"].as_array().map_or(0, Vec::len)
+    };
+    for g in ["A", "V", "O"] {
+        assert!(nodes(&mut app, g) > 4, "{g} is rounded");
+    }
+    assert_eq!(nodes(&mut app, "H"), 4, "H lies outside the selection");
+}

@@ -21,6 +21,9 @@ and lists installed filter plug-ins next to them. Every filter can be run in two
   cover all masters is to switch master and run the filter again.
 - Some filters narrow the target further when a point or path selection exists (Round Corners,
   Transformations, Remove Overlap; see each filter).
+- In text mode the window gives a filter fired from a menu, a key or its dialog the glyphs the
+  text selection shows, each once, as `glyphs`, on the layer the canvas edits. With only a cursor,
+  the current glyph.
 - Commands: every `filter.*` command takes `glyphs?` and `layers?`. Omitted, the table above
   applies (`filter.target.*` rows). Passing several layer ids is our headless answer to the
   "re-run per master" limitation (`filter.target.headlessExplicitTargets`, inferred).
@@ -33,6 +36,24 @@ source gives the shortcut only.
 How FontCraft runs it (our design, unconfirmed): the last filter is the last `filter.*` command of
 the registry, or `filter.apply`, in the session journal. It runs again with the same settings, on
 the targets the repeat names, without a dialog. The command is disabled until a filter has run.
+The window fills those targets from the current selection, as for any filter: selected nodes and
+segments narrow a filter that takes a node selection (Round Corners), and are dropped for one that
+changes whole layers.
+
+### Dialog values
+
+A filter dialog opens with the values of its last OK in the session, and with the filter's
+defaults the first time; Cancel keeps the earlier values. The values are not saved. A parameter
+whose default is another parameter's value (`sameAs` in `filter.list`, Offset Curve's Vertical)
+gets a lock field before it, closed at first: while it is closed the field is greyed and holds the
+other field's value, which the run takes. The lock is a value of the dialog, not a parameter of
+the command.
+
+### Background copies
+
+Hatch Outline copies each layer it changes to the background first, in the same undo step, as
+Selection to Background with nothing selected does: the copy replaces what the background held.
+No other filter writes the background.
 
 ### Filter menu content
 

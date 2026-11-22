@@ -217,3 +217,17 @@ fn repeat_last_filter_runs_the_last_filter_on_new_targets() {
     assert_eq!(v["repeated"]["params"]["string"], "RoundCorner;5;0;");
     assert_eq!(on_curve(&mut s, "D")[0], (0.0, 5.0));
 }
+
+/// Repeat Last Filter runs on the current selection: with two corners of B selected, Round Corners
+/// rounds only those (M3.33).
+#[test]
+fn repeat_last_filter_takes_the_current_node_selection() {
+    let mut s = fixture();
+    run(&mut s, "filter.roundCorners", json!({"glyph": "A", "radius": 10}));
+    let v = run(&mut s, "filter.repeatLastFilter", json!({"glyph": "B", "points": [[0, 0], [0, 2]]}));
+    assert_eq!(v["repeated"]["params"]["points"], json!([[0, 0], [0, 2]]));
+    let b = on_curve(&mut s, "B");
+    assert_eq!(b.len(), 6, "two corners, two nodes each, and two corners left: {b:?}");
+    assert!(b.contains(&(100.0, 0.0)) && b.contains(&(0.0, 100.0)), "{b:?}");
+    assert!(!b.contains(&(0.0, 0.0)) && !b.contains(&(100.0, 100.0)), "{b:?}");
+}

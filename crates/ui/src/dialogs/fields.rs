@@ -102,11 +102,20 @@ pub struct Field {
     pub doc: String,
     /// The heading the field sits under; a heading row opens each run of fields with one.
     pub group: Option<String>,
+    /// The field whose value this one takes while its lock ([`lock_key`]) is closed (a filter parameter's `sameAs`):
+    /// the row is greyed then.
+    pub same_as: Option<String>,
+}
+
+/// The key of the lock that ties field `key` to its `same_as` field. It is a value of the dialog but no parameter of
+/// the command.
+pub fn lock_key(key: &str) -> String {
+    format!("{key}.lock")
 }
 
 impl Field {
     fn of(key: &str, label: &str, kind: Kind, default: Value, doc: &str) -> Self {
-        Field { key: key.into(), label: label.into(), kind, default, doc: doc.into(), group: None }
+        Field { key: key.into(), label: label.into(), kind, default, doc: doc.into(), group: None, same_as: None }
     }
 
     /// A number field.
@@ -371,6 +380,9 @@ impl Field {
         if let Some(group) = &self.group {
             m.insert("group".into(), json!(group));
         }
+        if let Some(other) = &self.same_as {
+            m.insert("sameAs".into(), json!(other));
+        }
         m
     }
 
@@ -408,6 +420,8 @@ impl Field {
                     .opens_with(FieldValue::Json(self.default.clone()))
             }
         };
+        // Greyed while the lock ties it to its `same_as` field.
+        let param = if self.same_as.is_some() { param.enabled_when(lock_key(&self.key), FieldValue::Bool(false)) } else { param };
         if self.doc.is_empty() { param } else { param.tooltip(Label::from(self.doc.clone())) }
     }
 
@@ -567,13 +581,33 @@ pub fn reordered(order: &[usize], moved: &ReorderMove<usize>) -> Option<Vec<usiz
     (rest != order).then_some(rest)
 }
 
-/// The fields of a filter, from its entry in `filter.list`.
+/// The fields of a filter, from its entry in `filter.list`. A parameter that is `sameAs` another gets a lock before
+/// it, closed at first, that gives it the other's value.
 pub fn filter_fields(entry: &Value) -> Result<Vec<Field>, String> {
     let params = entry.get("params").and_then(Value::as_array).ok_or("the filter's entry has no `params` list")?;
     if params.len() > MAX_FIELDS {
         return Err(format!("a dialog has at most {MAX_FIELDS} fields"));
     }
-    params.iter().map(filter_field).collect()
+    let mut fields: Vec<Field> = Vec::with_capacity(params.len());
+    for p in params {
+        let mut field = filter_field(p)?;
+        if let Some(other) = p.get("sameAs").and_then(Value::as_str)
+            && let Some(source) = fields.iter().find(|f| f.key == other).cloned()
+        {
+            fields.push(Field::lock(
+                &lock_key(&field.key),
+                &format!("Same as {}", source.label),
+                true,
+                &format!("While closed, {} takes the value of {}", field.label, source.label),
+            ));
+            field.same_as = Some(source.key);
+        }
+        fields.push(field);
+    }
+    if fields.len() > MAX_FIELDS {
+        return Err(format!("a dialog has at most {MAX_FIELDS} fields"));
+    }
+    Ok(fields)
 }
 
 fn filter_field(p: &Value) -> Result<Field, String> {
@@ -597,7 +631,7 @@ fn filter_field(p: &Value) -> Result<Field, String> {
         other => return Err(format!("`{key}` has an unknown kind {other:?}")),
     };
     let label = Some(text("label")).filter(|l| !l.is_empty()).unwrap_or_else(|| key.clone());
-    Ok(Field { key, label, kind, default: p.get("default").cloned().unwrap_or(Value::Null), doc: text("doc"), group: None })
+    Ok(Field { key, label, kind, default: p.get("default").cloned().unwrap_or(Value::Null), doc: text("doc"), group: None, same_as: None })
 }
 
 /// The values a dialog opens with: each field's default, unless `given` sets it.

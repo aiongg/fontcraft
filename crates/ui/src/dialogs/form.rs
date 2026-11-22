@@ -14,7 +14,9 @@
 use craft::host::{PickId, PickRequest, Picked};
 use serde_json::{Map, Value, json};
 
-use super::fields::{self, Field, Kind, format_value};
+use std::collections::HashMap;
+
+use super::fields::{self, Field, Kind, format_value, lock_key};
 use super::spec::{Action, DialogSpec, Fields, Mode, Shaped, Tab, Third};
 use crate::app::FontCraftApp;
 use crate::shell::masters::current_master_id;
@@ -32,6 +34,21 @@ pub struct DialogState {
     choosing: Option<(PickId, u64, String, bool)>,
     /// Text an action put out for the system clipboard, until the window copies it.
     pub clipboard: Option<String>,
+    /// The values of each filter dialog's last OK, by dialog id: the dialog opens with them again for the rest of the
+    /// session.
+    remembered: HashMap<String, Map<String, Value>>,
+}
+
+/// Most dialogs whose values [`DialogState`] keeps.
+const MAX_REMEMBERED: usize = 256;
+
+impl DialogState {
+    /// Keeps `values` as the last OK of the dialog `id`.
+    fn remember(&mut self, id: String, values: Map<String, Value>) {
+        if self.remembered.len() < MAX_REMEMBERED || self.remembered.contains_key(&id) {
+            self.remembered.insert(id, values);
+        }
+    }
 }
 
 /// A dialog that is open, with what its fields hold.
@@ -63,6 +80,8 @@ pub struct OpenDialog {
     pub serial: u64,
     /// Moves with every change, so the window shows the values the app holds.
     pub revision: u64,
+    /// A filter dialog: its values at OK are kept for the next time it opens ([`DialogState::remember`]).
+    pub remember: bool,
 }
 
 /// The tabs of an open dialog.
@@ -116,6 +135,7 @@ impl OpenDialog {
             .values
             .iter()
             .filter(|(k, v)| !self.fields.iter().any(|f| f.key == **k && f.is_empty_path(v)))
+            .filter(|(k, _)| !self.fields.iter().any(|f| f.same_as.is_some() && lock_key(&f.key) == **k))
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
         let mut m = self.targets.clone();
@@ -132,7 +152,25 @@ impl OpenDialog {
         if let Some(s) = &self.shaped {
             (s.link)(&mut self.values, key);
         }
+        self.sync_locks();
         self.revision += 1;
+    }
+
+    /// Gives every field whose lock is closed the value of the field it is the same as.
+    fn sync_locks(&mut self) {
+        for f in &self.fields {
+            let Some(other) = &f.same_as else { continue };
+            if self.locked(&f.key)
+                && let Some(value) = self.values.get(other).cloned()
+            {
+                self.values.insert(f.key.clone(), value);
+            }
+        }
+    }
+
+    /// Whether field `key` is tied to its `same_as` field by its closed lock.
+    pub fn locked(&self, key: &str) -> bool {
+        self.fields.iter().any(|f| f.key == key && f.same_as.is_some()) && self.values.get(&lock_key(key)).and_then(Value::as_bool).unwrap_or(false)
     }
 
     /// The third button, while the dialog has the field it answers.
@@ -256,6 +294,19 @@ fn open_one(app: &mut FontCraftApp, spec: &DialogSpec, given: &Map<String, Value
     }
     let mut values = fields::initial_values(&fields, &given)?;
     let mut targets: Map<String, Value> = given.iter().filter(|(k, _)| !values.contains_key(*k)).map(|(k, v)| (k.clone(), v.clone())).collect();
+    let id = if spec.id.is_empty() { super::generated_id(spec.command) } else { spec.id.to_string() };
+    // A filter dialog opens with the values of its last OK, where they still fit.
+    let remember = matches!(spec.fields, Fields::Filter);
+    if remember && let Some(last) = app.dialogs.remembered.get(&id) {
+        for f in &fields {
+            if given.get(&f.key).is_some_and(|v| !v.is_null()) {
+                continue;
+            }
+            if let Some(v) = last.get(&f.key).and_then(|v| f.check(v).ok()) {
+                values.insert(f.key.clone(), v);
+            }
+        }
+    }
     if targets.is_empty() {
         targets = selection_targets(app, spec.command);
     }
@@ -297,7 +348,6 @@ fn open_one(app: &mut FontCraftApp, spec: &DialogSpec, given: &Map<String, Value
         app.dialogs.opened += 1;
         app.dialogs.opened
     });
-    let id = if spec.id.is_empty() { super::generated_id(spec.command) } else { spec.id.to_string() };
     let mut dialog = OpenDialog {
         id,
         title: spec.title.to_string(),
@@ -316,10 +366,12 @@ fn open_one(app: &mut FontCraftApp, spec: &DialogSpec, given: &Map<String, Value
         tabs,
         serial,
         revision: 0,
+        remember,
     };
     if let Some(s) = dialog.shaped {
         (s.link)(&mut dialog.values, "");
     }
+    dialog.sync_locks();
     app.dialogs.open = Some(dialog);
     preview(app);
     Ok(inspect(app))
@@ -471,7 +523,11 @@ fn confirm_by(app: &mut FontCraftApp, person: bool) -> Result<Value, String> {
         return Err(format!("{}: the preview failed, so OK has nothing to keep: {e}", d.title));
     }
     let (title, command, params) = (d.title.clone(), d.command.clone(), d.params());
+    let kept = d.remember.then(|| (d.id.clone(), d.values.clone()));
     let changed = app.session.commit().map_err(|e| e.to_string())?;
+    if let Some((id, values)) = kept {
+        app.dialogs.remember(id, values);
+    }
     app.dialogs.open = None;
     app.status = format!("{title}: done");
     Ok(json!({"confirmed": true, "changed": changed, "command": command, "params": params}))
@@ -498,8 +554,12 @@ fn run_on_ok(app: &mut FontCraftApp, person: bool) -> Result<Value, String> {
         return Err(format!("{title}: {message}"));
     }
     let (title, command, params) = (d.title.clone(), d.command.clone(), d.params());
+    let kept = d.remember.then(|| (d.id.clone(), d.values.clone()));
     match app.session.execute(&command, &params) {
         Ok(result) => {
+            if let Some((id, values)) = kept {
+                app.dialogs.remember(id, values);
+            }
             app.dialogs.open = None;
             app.status = format!("{title}: done");
             super::after::after_run(app, &command, &params, &result);
@@ -617,6 +677,7 @@ pub fn inspect(app: &FontCraftApp) -> Value {
             let mut m = f.describe();
             m.insert("value".into(), d.values.get(&f.key).cloned().unwrap_or(Value::Null));
             m.insert("focused".into(), json!(d.editing.as_ref().is_some_and(|e| e.field == f.key)));
+            m.insert("enabled".into(), json!(!d.locked(&f.key)));
             Value::Object(m)
         })
         .collect();
