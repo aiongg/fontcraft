@@ -12,6 +12,10 @@ pub mod instructions;
 pub mod preview_address;
 pub mod zones;
 
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, clippy::panic)]
+mod wire_tests;
+
 use craft::ui::dialog::DialogHost;
 use craft::ui::runtime::commands::CommandRef;
 use fontcraft_engine::hinting::settings::main_master;

@@ -133,6 +133,21 @@ impl InstructionsDialog {
         InstructionsDialog { request, program: Program::default(), draft: None, error: None, outbox: Vec::new(), closing: false, open: true }
     }
 
+    /// Does what a press of Edit, Parse or Cancel does.
+    pub fn press(&mut self, press: Press) {
+        match press {
+            Press::Edit => {
+                self.draft = Some(self.program.text.clone().unwrap_or_default());
+                self.error = None;
+            }
+            Press::Parse => self.parse(),
+            Press::Cancel => {
+                self.draft = None;
+                self.error = None;
+            }
+        }
+    }
+
     /// Parse: assembles the draft; assembled, posts `hint.tt.setAssembly` and shows the listing again.
     fn parse(&mut self) {
         let Some(draft) = self.draft.clone() else { return };
@@ -239,17 +254,8 @@ impl StackDialog for InstructionsDialog {
         let shown = Dialog::new(title).opened(Bind::bound(open)).modeless().resizable(true).show(ui, |ui, _| {
             press = view(ui, program, draft, error.as_deref());
         });
-        match press {
-            Some(Press::Edit) => {
-                self.draft = Some(self.program.text.clone().unwrap_or_default());
-                self.error = None;
-            }
-            Some(Press::Parse) => self.parse(),
-            Some(Press::Cancel) => {
-                self.draft = None;
-                self.error = None;
-            }
-            None => {}
+        if let Some(press) = press {
+            self.press(press);
         }
         shown.output.closed.map(|_| DialogResult::Ok(()))
     }

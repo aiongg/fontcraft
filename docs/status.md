@@ -2,9 +2,36 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-22: M5.30, M13.69, M13.70 and X.fix95 merged into `master`, built, tested and smoke-tested in the window (X.integ153 to X.integ156; see "Where M5.30, M13.69 and M13.70 stand"). Before that: M9.32, M3.41, M3.43 and M3.42 merged (X.integ148 to X.integ151); the Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
+_Updated: 2026-11-22: M10.34 and M10.41 written on `w-M10.34`, not yet built (see "Where M10.34 and M10.41 stand"). Before that: M5.30, M13.69, M13.70 and X.fix95 merged into `master`, built, tested and smoke-tested in the window (X.integ153 to X.integ156; see "Where M5.30, M13.69 and M13.70 stand"). Before that: M9.32, M3.41, M3.43 and M3.42 merged (X.integ148 to X.integ151); the Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
 
 ## State of the tree
+
+- **Where M10.34 and M10.41 stand.** Written on `w-M10.34`, not yet built or tested: the writer ran only
+  `cargo fmt`. One commit each:
+  - M10.34a: the Instructor's context menus (`app/context_menu/mod.rs`). Snap Point, Stem, Shift Points,
+    Interpolate and Delta have `context = ["canvas.node", "canvas.path"]` (engine `POINT_MENUS` in
+    `cmd/hint_tt.rs`, and their rows); `candidates` drops a command whose `when` names a tool other than the active
+    one, so they show only in the Instructor, first in their sections (`ORDER`). `point_ready` greys each out with
+    the refusal its command would give, replaying `TouchedState` over the edited layer as the commands do. The badge
+    menu adds Set Stem Reference as a submenu: `ContextItem::choices` (`ItemChoice {value, label, checked}`, from
+    `models::hint_canvas::stem_choices`, which shares `stem_names_for` with the Info box), drawn by
+    `panels/context_menu.rs::choices`, picked as `Pick::Choice`; `invoke_choice` and `contextMenu.invoke` /
+    `ui.contextMenu.invoke {command, value?}` run it. The glyph section adds `hint.tt.autohintGlyph` (the edited
+    layer's master) and `hint.tt.removeHints` (danger tone) while the Instructor is active. Menu and key targets of
+    the point commands now pass extra nodes as `[p1, n1, p2, n2]` (`canvas::hinting::targets`). TT open question 4 in
+    `docs/spec/14-truetype-hinting.md` is corrected. Tests: `the_instructor_node_menu_adds_instructions_as_their_commands_do`
+    and the Set Stem Reference part of `an_instruction_badge_menu_reverses_links_and_deletes`
+    (`canvas/hinting/tests.rs`); `instructor_menu_items_over_the_wire_equal_their_commands`
+    (`control/tt_tests.rs`, over TCP; its `wire` helper is shared).
+  - M10.41a: `dialogs/tt/wire_tests.rs`: the TTFStems editor (plus, a typed size), a zone's Delta table cell and the
+    Instructions dialog (Edit, text, Parse), each filled in a frame and posted as the dialog module posts it, equal
+    their commands sent over TCP to the control channel; the zones filter sheet's Cancel, the Instructions dialog's
+    Cancel and opening the editors leave the font pointer-equal. `InstructionsDialog::press` holds the press
+    handling the dialog and the tests share.
+  - Left: the TT dialogs are custom `StackDialog`s that `ui.dialog.*` cannot drive, so the channel side of the
+    check sends the command, not the dialog's clicks; driving them over the channel needs a control-channel
+    mechanism for them (an open question for the coordinator). No frame test of the Info box's zone and stem pop-ups
+    or its Delta table (`infoBox.ttInstructor`).
 
 - **Where M5.30, M13.69 and M13.70 stand.** Merged into `master` with X.fix95 and built; the gate is green
   (X.integ153 to X.integ156). Seen in the window, light and dark: the Text Preview waterfall draws the Edit View
