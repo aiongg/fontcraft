@@ -350,6 +350,7 @@ fn script_fields(s: &fontcraft_engine::Session) -> Vec<Field> {
         kind: Kind::Multi { labels: choices.iter().map(|c| label(c)).collect(), choices: choices.clone() },
         doc: "The scripts the Languages section lists".into(),
         group: None,
+        same_as: None,
     }]
 }
 

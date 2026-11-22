@@ -113,6 +113,7 @@ fn document_field(session: &Session) -> Field {
         default: json!(""),
         doc: "Another open document to import from, or a .glyphs or UFO file".into(),
         group: None,
+        same_as: None,
     }
 }
 

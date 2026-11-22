@@ -20,7 +20,7 @@
 
 use fontcraft_engine::Session;
 use fontcraft_engine::cmd::export_profiles::{Profile, profiles};
-use fontcraft_engine::cmd::export_settings::{Tab, export_all_needs_folder, kept_for_active};
+use fontcraft_engine::cmd::export_settings::{self, export_all_needs_folder, kept_for_active};
 use serde_json::{Map, Value, json};
 
 use super::fields::{Field, Kind, MAX_CHOICES};
@@ -144,18 +144,18 @@ fn use_destination() -> Field {
 }
 
 /// The tab's values from the settings the document's last successful export kept, under what `given` names.
-fn kept_given(session: &Session, tab: Tab, p: &Map<String, Value>) -> Map<String, Value> {
+fn kept_given(session: &Session, tab: export_settings::Tab, p: &Map<String, Value>) -> Map<String, Value> {
     let mut out = kept_for_active(session, tab);
     out.extend(p.iter().map(|(k, v)| (k.clone(), v.clone())));
     out
 }
 
 fn otf_given(session: &Session, p: &Map<String, Value>) -> Result<Map<String, Value>, String> {
-    Ok(kept_given(session, Tab::Otf, p))
+    Ok(kept_given(session, export_settings::Tab::Otf, p))
 }
 
 fn variable_given(session: &Session, p: &Map<String, Value>) -> Result<Map<String, Value>, String> {
-    Ok(kept_given(session, Tab::Variable, p))
+    Ok(kept_given(session, export_settings::Tab::Variable, p))
 }
 
 /// The field values are the command's parameters; the command keeps them, `useDestination` with them.

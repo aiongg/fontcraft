@@ -77,7 +77,7 @@ fn blend_fields(_: &Session) -> Vec<Field> {
 fn choice(key: &str, label: &str, list: Vec<(String, String)>, doc: &str) -> Field {
     let default = list.first().map_or(Value::Null, |(w, _)| json!(w));
     let (choices, labels) = list.into_iter().take(MAX_CHOICES).unzip();
-    Field { key: key.into(), label: label.into(), kind: Kind::Choice { choices, labels }, default, doc: doc.into(), group: None }
+    Field { key: key.into(), label: label.into(), kind: Kind::Choice { choices, labels }, default, doc: doc.into(), group: None, same_as: None }
 }
 
 /// The font's masters as `(id, name)`.
@@ -278,6 +278,7 @@ fn merge_fields(session: &Session) -> Vec<Field> {
             kind: Kind::Multi { choices, labels },
             doc: "The static fonts to merge, one master each; each needs one master and the same units per em".into(),
             group: None,
+            same_as: None,
         },
         Field::text("family", "Family Name", MAX_NAME_LEN, "The merged font's family name; empty keeps the first font's"),
     ]

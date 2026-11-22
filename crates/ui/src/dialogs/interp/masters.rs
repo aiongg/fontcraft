@@ -88,6 +88,7 @@ fn other_font_fields(session: &Session) -> Vec<Field> {
         default: json!([]),
         doc: "The masters to copy into this font, each added at the end of its master list".into(),
         group: None,
+        same_as: None,
     }]
 }
 
@@ -129,6 +130,7 @@ fn icon_fields(_: &Session) -> Vec<Field> {
             default: json!(MASTER_ICONS.get(1).copied().unwrap_or_default()),
             doc: "One of the built-in icons: a lowercase n at five weights and five widths".into(),
             group: None,
+            same_as: None,
         },
         Field::text("glyph", "Glyph", MAX_NAME_LEN, "A glyph of the font to use as the icon instead; empty uses the built-in icon"),
     ]
