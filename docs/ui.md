@@ -313,6 +313,11 @@ colours). `.in_group(heading)` puts a heading over a run of fields. A field's `k
 parameter's key and its id for `ui.dialog.set` and `ui.dialog.click`. Each field shows as a craft
 `Param` row of a `FormDialog`; checking stays in the app layer, so a refused value changes nothing.
 
+A `Fields::Filter` dialog opens with the values of its last OK in the session (`DialogState::remember`). A filter
+parameter whose `filter.list` entry has `sameAs` gets a lock field before it (`fields::lock_key`, `<key>.lock`): while
+the lock is closed the field is greyed (`Param::enabled_when`) and holds the other field's value; `OpenDialog::params`
+leaves the lock out.
+
 A field keyed `master` opens on the current master unless it was given. In a run-on-OK dialog, OK in the window with
 an empty folder or save-file field asks the chooser for it first; over the control channel that is an error.
 
