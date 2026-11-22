@@ -147,7 +147,7 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, sent: &mut Vec<Msg>) {
             }
             list_row
         });
-    if let Some((glyph, value)) = picked.into_inner() {
+    if let Some((glyph, value)) = picked.take() {
         sent.push(status_request(&glyph, &value));
     }
     keys::requests(ui.ctx(), model, &selection, &out.events, sent);
