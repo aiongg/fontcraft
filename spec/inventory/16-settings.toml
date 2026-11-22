@@ -197,6 +197,14 @@ milestone = "M14"
 summary = "Section that sets how Font View and Edit View are drawn."
 ref = "Settings › Appearance"
 status = "handbook"
+notes = "FontCraft (M14.2, dialogs/settings_appearance.rs): Display Unicode Value, the two Always use Light Mode checkboxes, the handle size as three segments, then a table with one row per colour and a Light and a Dark well in each row, then Standard (settings.resetColors). Every control writes its setting with settings.set; a well takes a colour from its picker or as #RRGGBB or #RRGGBBAA text, and text that is not a colour changes nothing. The column of the appearance the canvas is drawn in is marked In use. Text View Width and Display Mark Cloud are left out until their behaviour exists (M5.30, the mark cloud)."
+guesses = [
+  "The wells sit in a table with the light set left and the dark set right, one row per item, in the handbook's order.",
+  "The handle size is a three-way choice, Small, Regular and Large; the handbook names the control only.",
+]
+observe = [
+  "Open Settings › Appearance and note the order of the controls and how the light and dark wells are laid out.",
+]
 
 [[setting]]
 id = "appearance.displayUnicodeValue"
@@ -226,6 +234,14 @@ milestone = "M14"
 summary = "Draws Font View content with the light appearance even when the system runs in dark mode; window chrome still follows the system."
 ref = "Settings › Appearance"
 status = "handbook"
+notes = "FontCraft (M14.2): while it is on and the window is dark, Font View is drawn in a light scope of the theme; the window chrome, panels and sidebars stay dark."
+guesses = [
+  "Always use Light Mode changes the view's content, not the window chrome.",
+  "Off by default; the handbook gives no default.",
+]
+observe = [
+  "With the system in dark mode, turn on Always use Light Mode for Font View and note what turns light beyond the view's content.",
+]
 
 [[setting]]
 id = "appearance.alwaysLightModeEditView"
@@ -238,6 +254,14 @@ milestone = "M14"
 summary = "Draws Edit View content with the light appearance even when the system runs in dark mode; window chrome still follows the system."
 ref = "Settings › Appearance"
 status = "handbook"
+notes = "FontCraft (M14.2): while it is on and the window is dark, Edit View is drawn in a light scope of the theme, and the canvas uses the light colour set; the window chrome, panels and sidebars stay dark."
+guesses = [
+  "Always use Light Mode changes the view's content, not the window chrome.",
+  "Off by default; the handbook gives no default.",
+]
+observe = [
+  "With the system in dark mode, turn on Always use Light Mode for Edit View and note what turns light beyond the view's content.",
+]
 
 [[setting]]
 id = "appearance.textViewWidth"
@@ -375,6 +399,12 @@ milestone = "M14"
 summary = "The outline stroke colour of the layer being edited, used when content is drawn in the dark appearance. Reset by the Standard button. Default value not stated."
 ref = "Settings › Appearance"
 status = "handbook"
+guesses = [
+  "The dark default is `#e6e6e6`, so the dark canvas is dark with a light outline; the handbook gives no default. Settled by reading the reference's dark well after Standard.",
+]
+observe = [
+  "With the system in dark mode, click Standard in Settings › Appearance and read the dark well's colour.",
+]
 
 [[setting]]
 id = "appearance.color.backgroundStroke.light"
@@ -447,6 +477,12 @@ milestone = "M14"
 summary = "The background colour of the Edit View canvas, used when content is drawn in the dark appearance. Reset by the Standard button. Default value not stated."
 ref = "Settings › Appearance"
 status = "handbook"
+guesses = [
+  "The dark default is `#1e1e1e`, so the dark canvas is dark with a light outline; the handbook gives no default. Settled by reading the reference's dark well after Standard.",
+]
+observe = [
+  "With the system in dark mode, click Standard in Settings › Appearance and read the dark well's colour.",
+]
 
 [[setting]]
 id = "appearance.color.kerningNegative.light"
@@ -517,13 +553,14 @@ id = "settings.resetColors"
 label = "Standard"
 menu = []
 shortcut = ""
-kind = "ui"
+kind = "engine"
 params = "{}"
 area = "ui-chrome"
 milestone = "M14"
 summary = "Returns every colour of the Appearance section, in both the light and the dark set, to its built-in default."
 ref = "Settings › Appearance"
 status = "handbook"
+notes = "FontCraft (M14.2): an engine command, because the colours are user settings. It returns every appearance.color.* id, light and dark, to its default in one command and names the ids it reset; the handle size, opacity and the switches stay."
 
 [[behavior]]
 id = "appearance.colorsPerSystemAppearance"
@@ -532,6 +569,7 @@ milestone = "M14"
 summary = "Each customisable colour is stored twice, once for the light and once for the dark appearance; the set in use follows the appearance the view is actually drawn in (including the Always use Light Mode overrides)."
 ref = "Settings › Appearance"
 status = "handbook"
+notes = "FontCraft (M14.2, app/appearance.rs): the window follows the system's light or dark mode through the theme; the canvas takes the dark set while it is drawn dark and the light set otherwise, Always use Light Mode for Edit View included. The dark defaults of the canvas (#1e1e1e) and the foreground stroke (#e6e6e6) differ from the light ones; the other items share one default."
 
 [[behavior]]
 id = "appearance.markCloudOnAnchorSelection"

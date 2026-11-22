@@ -5,6 +5,7 @@
 //! view messages into [`ViewState`]. Then [`FontCraftApp::project`] refreshes the view models when the engine or the
 //! view state moved.
 
+pub mod appearance;
 pub mod catalog;
 pub mod clipboard;
 pub mod close;
@@ -144,6 +145,9 @@ pub struct ViewState {
     pub axis_mappings: crate::dialogs::axis_mappings::AxisMappingsState,
     /// Whether the Cross-Axis Mappings window shows (`dialogs::cross_axis`).
     pub cross_axis: crate::dialogs::cross_axis::CrossAxisState,
+    /// Whether the window resolves to the dark appearance: the system's mode, as the theme reads it
+    /// ([`FontCraftApp::set_system_dark`]).
+    pub system_dark: bool,
 }
 
 impl Default for ViewState {
@@ -190,6 +194,7 @@ impl Default for ViewState {
             shape_order: Default::default(),
             axis_mappings: Default::default(),
             cross_axis: Default::default(),
+            system_dark: false,
         }
     }
 }
@@ -285,7 +290,7 @@ impl FontCraftApp {
         let mut app = FontCraftApp {
             session,
             host,
-            root: RootEnv::new(),
+            root: appearance::root(),
             catalog: Catalog::build(),
             tool_slots: tool_slots(),
             view: ViewState::default(),
@@ -504,6 +509,14 @@ impl FontCraftApp {
         menu_states::refresh(self);
     }
 
+    /// Records whether the window is drawn dark; the canvas colours and the Always use Light Mode scopes follow it.
+    pub fn set_system_dark(&mut self, dark: bool) {
+        if self.view.system_dark != dark {
+            self.view.system_dark = dark;
+            self.view_revision += 1;
+        }
+    }
+
     /// Records a change to view state that a projection reads, made outside [`ViewMsg`] (a shell command).
     pub fn view_changed(&mut self) {
         self.view_revision += 1;
@@ -672,6 +685,7 @@ impl ShellApp for FontCraftApp {
         if self.window.is_none() {
             self.window = Some(ctx.clone());
         }
+        self.set_system_dark(appearance::system_dark(&self.root, ctx));
         models::text_preview::logic(&mut self.models.text_preview, ctx);
         dropped::take(self, ctx);
         crate::shell::external_changes::on_focus(self, ctx);

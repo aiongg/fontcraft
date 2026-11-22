@@ -751,6 +751,7 @@ milestone = "M14"
 summary = "The fill colour used by Fill Preview is the foreground colour from the Appearance settings and can be changed there."
 ref = "Edit View › Glyph Display › View Options"
 status = "handbook"
+notes = "FontCraft (M14.2): Fill Preview fills with the canvas's outline token, which is the Foreground Layer Stroke colour of the appearance in use (appearance.color.foregroundStroke.light or .dark)."
 
 [[behavior]]
 id = "view.showInfoAffectsPalette"

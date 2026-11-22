@@ -25,6 +25,15 @@ pub fn specs() -> Vec<CommandSpec> {
             always,
             set
         ),
+        cmd!(
+            "settings.resetColors",
+            "Standard",
+            [],
+            None,
+            "{} returns every colour of Settings › Appearance, in both the light and the dark set, to its default (the section's Standard button) → {reset: [id]}",
+            always,
+            reset_colors
+        ),
     ]
 }
 
@@ -52,4 +61,41 @@ fn set(s: &mut Session, v: &Value) -> Result<Value> {
     s.settings_mut().set(&id, value).map_err(|e| p.bad(e.to_string()))?;
     let value = s.settings().get(&id).map_err(|e| p.bad(e.to_string()))?;
     Ok(json!({ "id": id, "value": value }))
+}
+
+fn reset_colors(s: &mut Session, v: &Value) -> Result<Value> {
+    let p = Params::new("settings.resetColors", v)?;
+    let ids: Vec<&str> = crate::settings::color_ids().collect();
+    // Every id is a live colour setting, for which null (the default) is always accepted, so the reset cannot stop
+    // halfway.
+    for id in &ids {
+        s.settings_mut().set(id, Value::Null).map_err(|e| p.bad(e.to_string()))?;
+    }
+    Ok(json!({ "reset": ids }))
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
+
+    use serde_json::json;
+
+    use crate::Session;
+
+    /// Standard returns both colour sets to their defaults and leaves the other settings alone.
+    #[test]
+    fn standard_restores_both_colour_sets() {
+        let mut s = Session::new();
+        let standard = s.settings().get("appearance.color.cornerNodes.dark").unwrap();
+        s.execute("settings.set", &json!({"id": "appearance.color.cornerNodes.light", "value": "#ff0000"})).unwrap();
+        s.execute("settings.set", &json!({"id": "appearance.color.cornerNodes.dark", "value": "#00ff0080"})).unwrap();
+        s.execute("settings.set", &json!({"id": "appearance.color.canvas.dark", "value": "#000000"})).unwrap();
+        s.execute("settings.set", &json!({"id": "appearance.handleSize", "value": "large"})).unwrap();
+        let out = s.execute("settings.resetColors", &json!({})).unwrap();
+        assert_eq!(out["reset"].as_array().unwrap().len(), 18, "nine items, light and dark");
+        assert_eq!(s.settings().get("appearance.color.cornerNodes.dark").unwrap(), standard);
+        assert_eq!(s.settings().get("appearance.color.cornerNodes.light").unwrap(), json!("#2d6cdf"));
+        assert_eq!(s.settings().get("appearance.color.canvas.dark").unwrap(), json!("#1e1e1e"));
+        assert_eq!(s.settings().get("appearance.handleSize").unwrap(), json!("large"), "the handle size is no colour");
+    }
 }

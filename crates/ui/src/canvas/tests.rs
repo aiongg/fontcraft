@@ -226,3 +226,21 @@ fn a_scoped_metric_hides_its_line_in_glyphs_outside_the_scope() {
     run(&mut app, "font.metrics.set", json!({"metric": "Small x", "scope": "name == 'A'"}));
     assert!(lines(&app).iter().any(|(_, y)| *y == 420.0), "a metric scoped to A shows its line in A");
 }
+
+/// The canvas is filled with its stored colour, and Fill Preview fills with the stored foreground stroke colour
+/// (`view.fillColorFromSettings`).
+#[test]
+fn the_canvas_and_the_fill_take_the_appearance_colours() {
+    let mut app = app();
+    run(&mut app, "path.addRectangle", json!({"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200}));
+    run(&mut app, "settings.set", json!({"id": "appearance.color.canvas.light", "value": "#ffeedd"}));
+    run(&mut app, "settings.set", json!({"id": "appearance.color.foregroundStroke.light", "value": "#123456"}));
+    edit(&mut app, "A");
+    app.sent.push(Msg::View(ViewMsg::SelectTool("hand")));
+    app.drain();
+    let canvas = Color32::from_rgb(0xff, 0xee, 0xdd);
+    let ink = Color32::from_rgb(0x12, 0x34, 0x56);
+    assert_eq!(count(&painted(&app, paint::background::canvas_shapes), canvas), 1);
+    assert!(app.view.display.fill_preview && app.tools.view.fills, "Fill Preview fills under the Hand tool");
+    assert!(count(&painted(&app, paint::outline::shapes), ink) >= 2, "the fill and the stroke both take the foreground colour");
+}

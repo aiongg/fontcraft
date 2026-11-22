@@ -2,7 +2,8 @@
 //!
 //! The colours and the handle size that Settings › Appearance lists come from the user's settings
 //! (`appearance.color.<item>.light`/`.dark`, `appearance.handleSize`); their defaults are the setting defaults in
-//! `fontcraft_engine::settings`. Node, handle and anchor sizes scale with the handle-size step.
+//! `fontcraft_engine::settings`. The set used is the one of the appearance the canvas is drawn in
+//! (`app::appearance`); the colours no setting covers have a light and a dark value here. Node, handle and anchor sizes scale with the handle-size step.
 //! `appearance.guideOpacity` fades metric lines, their names, alignment zones and guides.
 
 use egui::Color32;
@@ -108,7 +109,7 @@ impl Tokens {
         };
         let step = settings.get("appearance.handleSize").ok().and_then(|v| v.as_str().map(str::to_owned));
         let scale = HANDLE_SIZES.iter().find(|(name, _)| step.as_deref() == Some(*name)).map_or(1.0, |(_, s)| *s);
-        let mut tokens = Tokens::standard();
+        let mut tokens = Tokens::standard(dark);
         tokens.canvas = color("canvas", tokens.canvas);
         tokens.outline = color("foregroundStroke", tokens.outline);
         tokens.zone_fill = color("alignmentZones", tokens.zone_fill);
@@ -145,8 +146,28 @@ impl Tokens {
         }
     }
 
-    /// The values the settings do not cover, and the fallbacks for those they do.
-    fn standard() -> Tokens {
+    /// The values the settings do not cover, and the fallbacks for those they do, in the dark appearance when `dark`.
+    fn standard(dark: bool) -> Tokens {
+        let light = Tokens::standard_light();
+        if !dark {
+            return light;
+        }
+        Tokens {
+            canvas: Color32::from_rgb(0x1e, 0x1e, 0x1e),
+            outline: Color32::from_rgb(0xe6, 0xe6, 0xe6),
+            source_outline: Color32::from_rgb(0x5a, 0x5a, 0x5a),
+            metric_line: Color32::from_rgb(0x4c, 0x56, 0x64),
+            metric_name: Color32::from_rgb(0x8c, 0x96, 0xa4),
+            node_handle: Color32::from_rgb(0xa0, 0xa0, 0xa0),
+            handle_line: Color32::from_rgb(0x70, 0x70, 0x70),
+            component_manual: Color32::from_rgb(0xa0, 0xa0, 0xa0),
+            // Editing the background lifts the dark canvas a little, where a darker tint would not show.
+            background_tint: Color32::from_rgba_unmultiplied(0xff, 0xff, 0xff, 0x10),
+            ..light
+        }
+    }
+
+    fn standard_light() -> Tokens {
         Tokens {
             canvas: Color32::from_rgb(0xf4, 0xf4, 0xf4),
             outline: Color32::from_rgb(0x20, 0x20, 0x20),
@@ -303,6 +324,26 @@ mod tests {
         let hints = crate::canvas::hinting::tokens::HintTokens::with_opacity(light.guide_opacity);
         assert!(hints.ps_vertical.a() < crate::canvas::hinting::tokens::HintTokens::standard().ps_vertical.a(), "hint bands fade too");
         assert_eq!(standard.guide_opacity, 1.0);
-        assert_eq!(standard.metric_line, Tokens::standard().metric_line, "full opacity leaves the colours alone");
+        assert_eq!(standard.metric_line, Tokens::standard(false).metric_line, "full opacity leaves the colours alone");
+    }
+
+    /// The two sets have their own canvas and outline defaults, and a stored corner-node colour reaches the tokens in
+    /// the set it was stored for.
+    #[test]
+    fn each_appearance_takes_its_own_colour_set() {
+        let standard = UserSettings::new();
+        let light = Tokens::from_settings(&standard, false);
+        let dark = Tokens::from_settings(&standard, true);
+        assert_eq!(light.canvas, Color32::from_rgb(0xf4, 0xf4, 0xf4));
+        assert_eq!(dark.canvas, Color32::from_rgb(0x1e, 0x1e, 0x1e));
+        assert_eq!(dark.outline, Color32::from_rgb(0xe6, 0xe6, 0xe6));
+        assert_eq!(dark.node_corner, light.node_corner, "the node colours share one default");
+        let mut settings = UserSettings::new();
+        settings.set("appearance.color.cornerNodes.dark", json!("#11223344")).unwrap();
+        settings.set("appearance.color.canvas.light", json!("#ffffff")).unwrap();
+        assert_eq!(Tokens::from_settings(&settings, true).node_corner, Color32::from_rgba_unmultiplied(0x11, 0x22, 0x33, 0x44));
+        assert_eq!(Tokens::from_settings(&settings, false).node_corner, light.node_corner);
+        assert_eq!(Tokens::from_settings(&settings, false).canvas, Color32::WHITE);
+        assert_eq!(Tokens::from_settings(&settings, true).canvas, dark.canvas);
     }
 }

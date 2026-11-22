@@ -439,14 +439,24 @@ impl DockPanels<PanelId> for Panels<'_> {
                 };
                 let preview_area = self.preview_area.filter(|_| !font_view);
                 let (canvas, sent) = (&mut self.canvas, &mut *self.sent);
+                // Always use Light Mode keeps a view's content light under a dark window (`app::appearance`).
+                let scope = if font_view { models.appearance.font_view_scope() } else { models.appearance.edit_view_scope() };
                 let mut body = |ui: &mut Ui, _: &mut BodyCx<'_>| {
-                    if font_view {
-                        panels::font_view::show(
-                            ui,
-                            panels::font_view::Props { model: &models.font_view, images: &models.cell_images, sent: &mut *sent },
-                        );
-                    } else {
-                        canvas::show(ui, &mut *canvas, &mut *sent);
+                    let mut content = |ui: &mut Ui| {
+                        if font_view {
+                            panels::font_view::show(
+                                ui,
+                                panels::font_view::Props { model: &models.font_view, images: &models.cell_images, sent: &mut *sent },
+                            );
+                        } else {
+                            canvas::show(ui, &mut *canvas, &mut *sent);
+                        }
+                    };
+                    match scope.clone() {
+                        Some(scope) => {
+                            let _ = Stack::new().fill().theme(scope).show(ui, |ui, _| content(ui));
+                        }
+                        None => content(ui),
                     }
                 };
                 // The framework's canvas panel gives the strip and the document area their rooms. The dock gives the

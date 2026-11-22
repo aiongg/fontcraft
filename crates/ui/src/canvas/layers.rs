@@ -52,6 +52,7 @@ pub struct PaintLayer {
 
 /// Every paint layer, bottom first.
 pub const LAYERS: &[PaintLayer] = &[
+    PaintLayer { id: "canvas", paint: paint::background::canvas },
     PaintLayer { id: "background", paint: paint::background::tint },
     PaintLayer { id: "status", paint: paint::status::paint },
     PaintLayer { id: "referenceFont", paint: super::reference_font::paint },

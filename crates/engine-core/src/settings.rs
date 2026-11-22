@@ -41,6 +41,14 @@ pub const MAX_RECENT_DOCUMENTS: usize = 10;
 /// Longest path kept in the recent documents, in bytes.
 pub const MAX_RECENT_PATH_BYTES: usize = 4096;
 
+/// The colour settings of Settings › Appearance start with this; each item has a `.light` and a `.dark` id.
+pub const COLOR_PREFIX: &str = "appearance.color.";
+
+/// The ids of the colour settings of Settings › Appearance, both sets.
+pub fn color_ids() -> impl Iterator<Item = &'static str> {
+    SETTINGS.iter().filter(|d| d.kind == Kind::Color && d.id.starts_with(COLOR_PREFIX)).map(|d| d.id)
+}
+
 /// What values a live setting takes.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Kind {
@@ -101,15 +109,17 @@ pub struct SettingDef {
 pub const SETTINGS: &[SettingDef] = &[
     SettingDef { id: "addons.alternatePluginRepos", kind: Kind::Text, default: DefaultValue::Text("") },
     SettingDef { id: "addons.useSystemConsoleForScriptOutput", kind: Kind::Bool, default: DefaultValue::Bool(false) },
+    SettingDef { id: "appearance.alwaysLightModeEditView", kind: Kind::Bool, default: DefaultValue::Bool(false) },
+    SettingDef { id: "appearance.alwaysLightModeFontView", kind: Kind::Bool, default: DefaultValue::Bool(false) },
     SettingDef { id: "appearance.color.alignmentZones.dark", kind: Kind::Color, default: DefaultValue::Text("#9ab8dc38") },
     SettingDef { id: "appearance.color.alignmentZones.light", kind: Kind::Color, default: DefaultValue::Text("#9ab8dc38") },
     SettingDef { id: "appearance.color.backgroundStroke.dark", kind: Kind::Color, default: DefaultValue::Text("#e0404090") },
     SettingDef { id: "appearance.color.backgroundStroke.light", kind: Kind::Color, default: DefaultValue::Text("#e0404090") },
-    SettingDef { id: "appearance.color.canvas.dark", kind: Kind::Color, default: DefaultValue::Text("#f4f4f4") },
+    SettingDef { id: "appearance.color.canvas.dark", kind: Kind::Color, default: DefaultValue::Text("#1e1e1e") },
     SettingDef { id: "appearance.color.canvas.light", kind: Kind::Color, default: DefaultValue::Text("#f4f4f4") },
     SettingDef { id: "appearance.color.cornerNodes.dark", kind: Kind::Color, default: DefaultValue::Text("#2d6cdf") },
     SettingDef { id: "appearance.color.cornerNodes.light", kind: Kind::Color, default: DefaultValue::Text("#2d6cdf") },
-    SettingDef { id: "appearance.color.foregroundStroke.dark", kind: Kind::Color, default: DefaultValue::Text("#202020") },
+    SettingDef { id: "appearance.color.foregroundStroke.dark", kind: Kind::Color, default: DefaultValue::Text("#e6e6e6") },
     SettingDef { id: "appearance.color.foregroundStroke.light", kind: Kind::Color, default: DefaultValue::Text("#202020") },
     SettingDef { id: "appearance.color.kerningNegative.dark", kind: Kind::Color, default: DefaultValue::Text("#8cc8f590") },
     SettingDef { id: "appearance.color.kerningNegative.light", kind: Kind::Color, default: DefaultValue::Text("#8cc8f590") },
