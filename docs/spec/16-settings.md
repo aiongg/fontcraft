@@ -60,12 +60,22 @@ Colours: nine colours, each stored for the light and for the dark appearance
 
 In FontCraft all 18 are live settings (`crates/engine-core/src/settings.rs`) that take `#rrggbb` or
 `#rrggbbaa` and refuse anything else with a message. Their defaults are the colours the canvas drew
-before the settings existed, the same for light and dark. The canvas tokens
-(`crates/ui/src/canvas/tokens.rs`) read the set for the appearance content is drawn in, and scale
-node, handle, anchor and Extra Node sizes by the `appearance.handleSize` step (0.75, 1 and 1.5).
-The window draws content in the light appearance only until the Appearance section adds the
-switching. `appearance.guideOpacity` (a number from 0 to 100) fades metric lines, zones, guides
-and hint bands.
+before the settings existed, the same for light and dark, except the dark canvas (`#1e1e1e`) and
+the dark foreground stroke (`#e6e6e6`). The canvas tokens (`crates/ui/src/canvas/tokens.rs`) read
+the set for the appearance content is drawn in, and scale node, handle, anchor and Extra Node
+sizes by the `appearance.handleSize` step (0.75, 1 and 1.5). `appearance.guideOpacity` (a number
+from 0 to 100) fades metric lines, zones, guides and hint bands.
+
+Which appearance is in use (`crates/ui/src/app/appearance.rs`):
+
+| Part | Light or dark |
+|---|---|
+| window chrome, panels, sidebars | the system's mode, through the theme |
+| Font View cells | the system's mode; light while `appearance.alwaysLightModeFontView` is on |
+| Edit View canvas | the system's mode, with that colour set; light, with the light set, while `appearance.alwaysLightModeEditView` is on |
+
+`settings.resetColors` is an engine command: it sets every `appearance.color.*` id back to its
+default and leaves the other Appearance settings as they are.
 
 ## User Settings
 

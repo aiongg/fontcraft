@@ -1,7 +1,8 @@
 //! What lies under the pointer.
 //!
 //! Points (nodes, handles, anchors) win over segments, segments over components, components over
-//! guides. Among points the nearest wins; at equal distance a node beats an anchor and an anchor
+//! guides. A corner component's fitted outline counts with the segments: the nearer of the two
+//! wins, the corner at equal distance. Among points the nearest wins; at equal distance a node beats an anchor and an anchor
 //! beats a handle. The tolerance is in screen points, so it feels the same at every zoom.
 
 use fontcraft_geom::Point;
@@ -47,6 +48,10 @@ pub enum Hit {
     Guide {
         guide: GuideRef,
     },
+    /// A corner component (an attachment hint), by its position in the layer's hint list.
+    Attachment {
+        hint: usize,
+    },
 }
 
 /// A hit, where it is, and whether it may be moved.
@@ -69,6 +74,7 @@ impl HitResult {
             Hit::Anchor { name } => vec![Item::Anchor(name.clone())],
             Hit::Component { shape } => vec![Item::Shape(*shape)],
             Hit::Guide { guide } => vec![Item::Guide(*guide)],
+            Hit::Attachment { hint } => vec![Item::Hint(*hint)],
         }
     }
 
@@ -136,6 +142,11 @@ pub fn hit_test(scene: &Scene, view: &View, pos: Point, tolerance: f64) -> Optio
                 nearest = Some((d, HitResult { hit, at, locked }));
             }
         }
+    }
+    if let Some((hint, d, at)) = crate::attachment::nearest(scene, pos, tol)
+        && nearest.as_ref().is_none_or(|(sd, _)| d <= *sd)
+    {
+        return Some(HitResult { hit: Hit::Attachment { hint }, at, locked: scene.locked });
     }
     if let Some((_, hit)) = nearest {
         return Some(hit);

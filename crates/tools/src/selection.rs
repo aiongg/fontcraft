@@ -3,8 +3,8 @@
 //!
 //! The selection lives in the shell's UI state; the engine never stores it. Its lists use the
 //! same addresses as command targets: points as `[shape, node]`, shapes by index, anchors by
-//! name, guides as `{scope, index}`, annotations by index, PostScript hints by their position in
-//! the layer's hint list. Extra nodes, which only the TrueType Instructor selects, are
+//! name, guides as `{scope, index}`, annotations by index, PostScript hints and corner components
+//! by their position in the layer's hint list. Extra nodes, which only the TrueType Instructor selects, are
 //! `[shape, node, shape, node]`: the two crossing segments by the nodes they end at
 //! ([`crate::extra_nodes`]).
 
@@ -53,7 +53,8 @@ pub enum Item {
     Anchor(String),
     Guide(GuideRef),
     Annotation(usize),
-    /// A PostScript hint, by its position in the layer's hint list.
+    /// A PostScript hint or a corner component ([`crate::attachment`]), by its position in the
+    /// layer's hint list.
     Hint(usize),
     /// An extra node, as `[shape, node, shape, node]` ([`crate::extra_nodes::ExtraNode::key`]).
     Intersection([usize; 4]),
@@ -262,11 +263,14 @@ impl Selection {
         let annotations = layer.info.annotations.len();
         self.annotations.retain(|&i| i < annotations);
         self.intersections.retain(|&[s1, n1, s2, n2]| scene.node(s1, n1).is_some() && scene.node(s2, n2).is_some());
-        // Hints are known only while they are shown; otherwise the shell keeps them in step.
-        if scene.ps_hints.shown {
-            let hints = scene.ps_hints.hints.len();
-            self.hints.retain(|&i| i < hints);
-        }
+        // Corner components stay while the layer has them. PostScript hints are known only while
+        // they are shown; otherwise the shell keeps them in step.
+        let (shown, ps) = (scene.ps_hints.shown, scene.ps_hints.hints.len());
+        self.hints.retain(|&i| match layer.info.hints.get(i) {
+            None => false,
+            Some(_) if crate::attachment::is_selectable(layer, i) => true,
+            Some(_) => !shown || i < ps,
+        });
     }
 
     /// The selected on-curve nodes.

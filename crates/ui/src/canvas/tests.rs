@@ -43,7 +43,10 @@ const RECT: Rect = Rect { min: Pos2::ZERO, max: Pos2 { x: 1280.0, y: 800.0 } };
 
 /// The shapes `layer` paints for `app`'s canvas, the view at the app's canvas view placed in [`RECT`].
 fn painted(app: &FontCraftApp, layer: fn(&PaintCx<'_>) -> Vec<Shape>) -> Vec<Shape> {
-    let painter = Painter::new(egui::Context::default(), LayerId::background(), RECT);
+    // Labels need the fonts, which a context has after its first pass.
+    let ctx = egui::Context::default();
+    ctx.run_ui(egui::RawInput::default(), |_| {}).textures_delta.clear();
+    let painter = Painter::new(ctx, LayerId::background(), RECT);
     let mut view = app.view.canvas;
     view.rect = RECT;
     let top = app.models.canvas.glyph.as_ref().map_or(0.0, |g| g.ascender);
@@ -225,4 +228,78 @@ fn a_scoped_metric_hides_its_line_in_glyphs_outside_the_scope() {
     assert_eq!(lines(&app).len(), plain, "a metric scoped to B shows no line in A");
     run(&mut app, "font.metrics.set", json!({"metric": "Small x", "scope": "name == 'A'"}));
     assert!(lines(&app).iter().any(|(_, y)| *y == 420.0), "a metric scoped to A shows its line in A");
+}
+
+/// The canvas is filled with its stored colour, and Fill Preview fills with the stored foreground stroke colour
+/// (`view.fillColorFromSettings`).
+#[test]
+fn the_canvas_and_the_fill_take_the_appearance_colours() {
+    let mut app = app();
+    run(&mut app, "path.addRectangle", json!({"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200}));
+    run(&mut app, "settings.set", json!({"id": "appearance.color.canvas.light", "value": "#ffeedd"}));
+    run(&mut app, "settings.set", json!({"id": "appearance.color.foregroundStroke.light", "value": "#123456"}));
+    edit(&mut app, "A");
+    app.sent.push(Msg::View(ViewMsg::SelectTool("hand")));
+    app.drain();
+    let canvas = Color32::from_rgb(0xff, 0xee, 0xdd);
+    let ink = Color32::from_rgb(0x12, 0x34, 0x56);
+    assert_eq!(count(&painted(&app, paint::background::canvas_shapes), canvas), 1);
+    assert!(app.view.display.fill_preview && app.tools.view.fills, "Fill Preview fills under the Hand tool");
+    let outline = painted(&app, paint::outline::shapes);
+    let filled = outline.iter().any(|s| matches!(s, Shape::Mesh(m) if m.vertices.first().is_some_and(|v| v.color == ink)));
+    assert!(filled, "the fill takes the foreground colour");
+    assert!(count(&outline, ink) >= 1, "so does the stroke");
+}
+
+/// The active master's Master Background Color is painted over the canvas colour, its Dark form on a dark canvas and
+/// the light form again while Always use Light Mode keeps Edit View light; a master without one sets nothing.
+#[test]
+fn the_active_master_colours_the_canvas_for_the_appearance_in_use() {
+    let mut app = app();
+    run(&mut app, "font.master.add", json!({"name": "Bold"}));
+    let bold = app.session.font().unwrap().masters[1].id.clone();
+    let add = |name: &str, value: &str| json!({"scope": "master", "targets": bold, "name": name, "value": value});
+    run(&mut app, "font.customParameters.add", add("Master Background Color", "#336699"));
+    run(&mut app, "font.customParameters.add", add("Master Background Color Dark", "20, 30, 40, 255"));
+    edit(&mut app, "A");
+    let light = Color32::from_rgb(0x33, 0x66, 0x99);
+    let dark = Color32::from_rgb(20, 30, 40);
+    assert_eq!(app.models.canvas_tokens.master_canvas, None, "the first master sets no background");
+
+    shell(&mut app, "view.selectMaster", json!({"master": 1}));
+    assert_eq!(app.models.canvas_tokens.master_canvas, Some(light));
+    let shapes = painted(&app, paint::background::canvas_shapes);
+    assert_eq!(shapes.len(), 2, "the canvas colour, then the master's");
+    assert_eq!(count(&shapes, light), 1);
+
+    app.set_system_dark(true);
+    app.drain();
+    assert_eq!(app.models.canvas_tokens.master_canvas, Some(dark));
+    run(&mut app, "settings.set", json!({"id": "appearance.alwaysLightModeEditView", "value": true}));
+    assert_eq!(app.models.canvas_tokens.master_canvas, Some(light), "a canvas kept light takes the light value");
+}
+
+/// A drag's badge is painted beside the pointer: a filled box and its text (drag badges).
+#[test]
+fn a_drag_badge_is_painted_beside_the_pointer() {
+    let mut app = app();
+    edit(&mut app, "A");
+    app.tools.view.overlays = vec![fontcraft_tools::Overlay::Badge { at: fontcraft_geom::Point::new(0.0, 0.0), text: "x:30 y:-20".into() }];
+    let shapes = painted(&app, super::badges::shapes);
+    let t = super::tools::tokens::ToolTokens::standard();
+    let boxes: Vec<Rect> =
+        shapes.iter().filter_map(|s| if let Shape::Rect(r) = s { (r.fill == t.badge_fill).then_some(r.rect) } else { None }).collect();
+    let texts: Vec<(String, Pos2)> =
+        shapes.iter().filter_map(|s| if let Shape::Text(text) = s { Some((text.galley.text().to_string(), text.pos)) } else { None }).collect();
+    assert_eq!(boxes.len(), 1, "{shapes:?}");
+    assert_eq!(texts.len(), 1, "{shapes:?}");
+    assert_eq!(texts[0].0, "x:30 y:-20");
+    assert!(boxes[0].contains(texts[0].1), "the text sits on its box");
+    assert!(boxes[0].width() > 0.0 && boxes[0].height() > 0.0);
+    // Off the pointer: the box starts right of and below the pointer's screen position.
+    let mut view = app.view.canvas;
+    view.rect = RECT;
+    let top = app.models.canvas.glyph.as_ref().map_or(0.0, |g| g.ascender);
+    let pointer = Camera::new(view, top).to_screen(fontcraft_geom::Point::new(0.0, 0.0));
+    assert!(boxes[0].min.x > pointer.x && boxes[0].min.y > pointer.y, "{:?} {pointer:?}", boxes[0]);
 }

@@ -56,8 +56,11 @@ pub struct Models {
     pub glyph_metrics: Tracked<glyph::GlyphMetrics>,
     /// The edited glyph as the canvas draws it (`canvas`).
     pub canvas: Tracked<canvas::CanvasModel>,
-    /// The canvas's colours and sizes, from the appearance settings.
+    /// The canvas's colours and sizes, from the appearance settings, in the colour set of the appearance the canvas
+    /// is drawn in.
     pub canvas_tokens: crate::canvas::tokens::Tokens,
+    /// The appearance of the window and of the two document views (`app::appearance`).
+    pub appearance: crate::app::appearance::Appearance,
     /// Font View's glyphs, their order, the selection and the cell outlines (`panels::font_view`).
     pub font_view: Tracked<font_view::FontViewModel>,
     /// The placed images Font View cells draw (`canvas::images::cells`).
@@ -183,7 +186,15 @@ impl Models {
         self.seen = Some(stamp);
         glyph::project(&mut self.glyph_metrics, cx);
         canvas::project(&mut self.canvas, &mut self.color_files, cx);
-        self.canvas_tokens = crate::canvas::tokens::Tokens::from_settings(cx.session.settings(), false);
+        self.appearance = crate::app::appearance::Appearance::of(cx.session.settings(), cx.view.system_dark);
+        let dark = self.appearance.edit_view_dark();
+        self.canvas_tokens = crate::canvas::tokens::Tokens::from_settings(cx.session.settings(), dark);
+        self.canvas_tokens.master_canvas = cx
+            .session
+            .font()
+            .ok()
+            .and_then(|font| crate::shell::masters::current_master(font, &cx.view.layers))
+            .and_then(|master| crate::canvas::tokens::master_background(master, dark));
         self.hint_tokens = crate::canvas::hinting::tokens::HintTokens::with_opacity(self.canvas_tokens.guide_opacity);
         font_view::project(&mut self.font_view, &mut self.font_view_outlines, &mut self.color_files, cx);
         tabs::project(&mut self.tabs, cx);

@@ -6,6 +6,7 @@
 //! the background press, hover and keys and paints its feedback over the layers.
 
 pub mod annotation_editor;
+pub mod badges;
 pub mod camera;
 pub mod color;
 pub mod compatibility;

@@ -1,7 +1,8 @@
 //! Palette › Transformations: the origin (`transform.setOrigin`), mirror, scale with its lock
 //! (`transform.setScaleLock`), rotate, slant, align, and the booleans union, subtract and intersect.
 //!
-//! The buttons act on the canvas selection, or on the whole layer when nothing is selected; the booleans take the
+//! The buttons act on the canvas selection, or on the whole layer when nothing is selected; with corner components
+//! selected the mirror buttons flip those (`corner.mirrorViaPalette`); the booleans take the
 //! selected paths, a path counting as selected when any of its nodes is. The two buttons beside a field apply its
 //! value in opposite directions. Field values go through `transform.setSettings`; each button passes them, and the
 //! origin, to its command.
@@ -126,11 +127,16 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
     });
 
     let _ = Row::new().show(ui, |ui, _| {
+        // Selected corner components flip in place: no origin.
+        let mirror = |sent: &mut Vec<Msg>, id: &str| match &m.corners {
+            Some(corners) => sent.push(Msg::run(id, corners.with(json!({})))),
+            None => press(sent, id, json!({ "origin": origin })),
+        };
         if icon(ui, "swap_horizontal", &words.mirror_horizontal, enabled) {
-            press(sent, "transform.mirrorHorizontal", json!({ "origin": origin }));
+            mirror(sent, "transform.mirrorHorizontal");
         }
         if icon(ui, "swap_vertical", &words.mirror_vertical, enabled) {
-            press(sent, "transform.mirrorVertical", json!({ "origin": origin }));
+            mirror(sent, "transform.mirrorVertical");
         }
     });
 
@@ -282,6 +288,39 @@ mod tests {
                     "transform.rotateClockwise",
                     json!({"glyph": "A", "layer": "m01", "angle": 90.0, "origin": {"mode": "box", "boxPoint": "center"}})
                 ),
+            ]
+        );
+    }
+
+    /// With corner components selected, the mirror buttons flip them: the mirror command with `corners` and no
+    /// origin (`corner.mirrorViaPalette`).
+    #[test]
+    fn mirror_buttons_flip_selected_corners() {
+        let model = Tracked::new(TransformModel {
+            mode: "box".into(),
+            box_point: "center".into(),
+            origin: json!({"mode": "box", "boxPoint": "center"}).to_string(),
+            targets: Some(Targets { json: json!({"glyph": "A", "layer": "m01"}).to_string() }),
+            corners: Some(Targets { json: json!({"glyph": "A", "layer": "m01", "corners": [0, 2]}).to_string() }),
+            ..Default::default()
+        });
+        let posted = Rc::new(RefCell::new(Vec::new()));
+        let seen = Rc::clone(&posted);
+        let mut fixture = Fixture::new(move |ui| {
+            let mut sent = Vec::new();
+            show(ui, Props { model: &model, sent: &mut sent });
+            seen.borrow_mut().extend(sent);
+        });
+        fixture.settle();
+        let button = fixture.by_label("Mirror Horizontally").expect("the Mirror Horizontally button");
+        fixture.click(&button).settle();
+        let button = fixture.by_label("Mirror Vertically").expect("the Mirror Vertically button");
+        fixture.click(&button).settle();
+        assert_eq!(
+            *posted.borrow(),
+            vec![
+                Msg::run("transform.mirrorHorizontal", json!({"glyph": "A", "layer": "m01", "corners": [0, 2]})),
+                Msg::run("transform.mirrorVertical", json!({"glyph": "A", "layer": "m01", "corners": [0, 2]})),
             ]
         );
     }

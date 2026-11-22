@@ -3,6 +3,7 @@
 //!
 //! | Section | Body |
 //! |---|---|
+//! | Appearance | the switches, the handle size, the light and dark colour wells and Standard (`super::settings_appearance`) |
 //! | User Settings | the `user.*` switches and the crash-report contact fields (`settings.set`) |
 //! | Sample Strings | the groups, plus and minus, the shown group's strings one per line, Default (`settings.*SampleString*`) |
 //! | Sharing | Enable External Preview (`settings.set`), the page's address, the devices waiting with Accept and Refuse (`sharing.answerDevice`), Reset while a device is trusted (`settings.resetTrustedDevices`) |
@@ -28,6 +29,7 @@ use fontcraft_engine::cmd::sharing::{self, ENABLE_SETTING};
 use serde_json::{Value, json};
 
 use super::extension_indexes;
+use super::settings_appearance::{self, AppearanceModel};
 use crate::app::{FontCraftApp, Msg};
 use crate::shell::extension_manager::{self, IndexesModel};
 use crate::shell::settings::{self as settings_state, Group, SECTIONS};
@@ -112,6 +114,7 @@ pub struct SettingsModel {
     pub sharing: SharingModel,
     /// The Extensions section: the Extension Manager's Indexes tab.
     pub indexes: IndexesModel,
+    pub appearance: AppearanceModel,
 }
 
 impl SettingsModel {
@@ -136,6 +139,7 @@ impl SettingsModel {
                 trusted: sharing::trusted_devices(settings),
             },
             indexes: extension_manager::indexes_model(app),
+            appearance: AppearanceModel::of(app),
         }
     }
 }
@@ -158,6 +162,7 @@ pub fn body(ui: &mut Ui, model: &SettingsModel, new_index: &mut String, sent: &m
         sent.push(shell("app.settings", json!({ "section": section })));
     }
     Stack::new().show(ui, |ui, _| match model.section.as_str() {
+        "appearance" => settings_appearance::section(ui, &model.appearance, sent),
         "sampleStrings" => sample_strings(ui, model, sent, &words),
         "sharing" => sharing_section(ui, &model.sharing, sent, &words),
         "addons" => {

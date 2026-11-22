@@ -32,7 +32,7 @@ use serde_json::{Value, json};
 use crate::event::{Modifiers, PointerEvent, PointerKind};
 use crate::geometry::{dist, finite, near_box, usable};
 use crate::hit::hit_test;
-use crate::output::{Action, Invocation, Output, Overlay, OverlayKind};
+use crate::output::{Action, Invocation, Output, Overlay, OverlayKind, badge_number, badge_percent};
 use crate::scene::Scene;
 use crate::selection::Selection;
 use crate::tool::Context;
@@ -441,6 +441,15 @@ impl BoxDrag {
     fn cancel(self) -> Output {
         if self.started { Output::with(Action::Cancel) } else { Output::default() }
     }
+
+    /// While dragging: beside the pointer, a knob's percentages and the new width and height, or
+    /// the angle of a turn from outside the box.
+    pub fn overlays(&self) -> Vec<Overlay> {
+        if !self.started {
+            return Vec::new();
+        }
+        self.last_sent.as_ref().and_then(|inv| transform_badge(inv, self.last_pos, Some(self.rect))).into_iter().collect()
+    }
 }
 
 /// The Select tool's hook: gives a pointer event to the box gesture in `slot`, or starts one. `None`
@@ -623,13 +632,39 @@ impl Freehand {
         self.drag.is_some()
     }
 
-    /// While dragging: a line from the fixed point to the pointer.
+    /// While dragging: a line from the fixed point to the pointer, and the angle or the
+    /// percentages beside the pointer.
     pub fn overlays(&self) -> Vec<Overlay> {
         match &self.drag {
-            Some(FreeDrag { started: true, origin: Some(origin), last_pos, .. }) => {
-                vec![Overlay::Line { kind: OverlayKind::Hover, from: *origin, to: *last_pos }]
+            Some(FreeDrag { started: true, origin: Some(origin), last_pos, last_sent, .. }) => {
+                let mut out = vec![Overlay::Line { kind: OverlayKind::Hover, from: *origin, to: *last_pos }];
+                out.extend(last_sent.as_ref().and_then(|inv| transform_badge(inv, *last_pos, None)));
+                out
             }
             _ => Vec::new(),
         }
     }
+}
+
+/// The badge of a rotate or scale preview with the pointer at `at`: the angle (`15°`), or the
+/// two percentages (`120.0%/80.0%`) followed by the new width and height of `rect` when it is
+/// given (`360×160`). `None` for any other command.
+pub fn transform_badge(inv: &Invocation, at: Point, rect: Option<Rect>) -> Option<Overlay> {
+    let number = |key: &str| inv.params.get(key).and_then(Value::as_f64);
+    let text = match inv.id.as_str() {
+        "transform.rotateCounterclockwise" => format!("{}°", badge_number(number("angle")?)),
+        "transform.scale" => {
+            let (px, py) = (number("x")?, number("y")?);
+            let percents = format!("{}/{}", badge_percent(px), badge_percent(py));
+            match rect {
+                Some(r) => {
+                    let (w, h) = ((r.width() * px / 100.0).abs(), (r.height() * py / 100.0).abs());
+                    format!("{percents} {}×{}", badge_number(w), badge_number(h))
+                }
+                None => percents,
+            }
+        }
+        _ => return None,
+    };
+    Some(Overlay::Badge { at, text })
 }

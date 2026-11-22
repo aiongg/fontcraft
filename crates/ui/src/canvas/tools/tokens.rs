@@ -37,6 +37,13 @@ pub struct ToolTokens {
     pub snap_distance: f32,
     /// How far the pointer moves before a press becomes a drag, in points.
     pub drag_threshold: f32,
+    /// The label a drag shows beside the pointer: its fill, its text, its text size, its padding, and how far right
+    /// of and below the pointer its top-left corner sits, in points.
+    pub badge_fill: Color32,
+    pub badge_text: Color32,
+    pub badge_text_size: f32,
+    pub badge_padding: f32,
+    pub badge_offset: f32,
 }
 
 impl ToolTokens {
@@ -59,6 +66,11 @@ impl ToolTokens {
             hit_tolerance: 6.0,
             snap_distance: 4.0,
             drag_threshold: 3.0,
+            badge_fill: Color32::from_rgba_unmultiplied(0x20, 0x20, 0x20, 0xd0),
+            badge_text: Color32::from_rgb(0xf4, 0xf4, 0xf4),
+            badge_text_size: 11.0,
+            badge_padding: 3.0,
+            badge_offset: 14.0,
         }
     }
 }

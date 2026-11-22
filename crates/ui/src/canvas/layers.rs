@@ -52,6 +52,7 @@ pub struct PaintLayer {
 
 /// Every paint layer, bottom first.
 pub const LAYERS: &[PaintLayer] = &[
+    PaintLayer { id: "canvas", paint: paint::background::canvas },
     PaintLayer { id: "background", paint: paint::background::tint },
     PaintLayer { id: "status", paint: paint::status::paint },
     PaintLayer { id: "referenceFont", paint: super::reference_font::paint },
@@ -91,6 +92,7 @@ pub const LAYERS: &[PaintLayer] = &[
     PaintLayer { id: "gradientKnobs", paint: color::knobs::paint },
     PaintLayer { id: "suggestOutlines", paint: overlays::suggest::paint },
     PaintLayer { id: "toolOverlays", paint: tools::overlays::paint },
+    PaintLayer { id: "dragBadges", paint: super::badges::paint },
     PaintLayer { id: "textCursor", paint: super::text::paint::cursor },
     PaintLayer { id: "measurementLine", paint: super::text::paint::measurement },
     PaintLayer { id: "textMetricsLabels", paint: super::text::paint::metrics_labels },

@@ -84,12 +84,7 @@ pub const USER_SETTINGS: &str = "userSettings";
 /// The sections, in the reference's order.
 pub const SECTIONS: &[Section] = &[
     Section { id: "updates", label: "Updates", available: false, unavailable: "FontCraft does not look for new versions by itself." },
-    Section {
-        id: "appearance",
-        label: "Appearance",
-        available: false,
-        unavailable: "Not available yet. Its settings can be changed with settings.set in the Command Console.",
-    },
+    Section { id: "appearance", label: "Appearance", available: true, unavailable: "" },
     Section { id: USER_SETTINGS, label: "User Settings", available: true, unavailable: "" },
     Section { id: "sampleStrings", label: "Sample Strings", available: true, unavailable: "" },
     Section { id: "sharing", label: "Sharing", available: true, unavailable: "" },

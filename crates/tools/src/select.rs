@@ -6,8 +6,9 @@
 //! |---|---|
 //! | click an object | select it; a segment selects its two end nodes |
 //! | `Shift`+click | toggle it in the selection |
+//! | click a corner component's fitted outline, `Shift`+click | select it, toggle it; a drag from it moves nothing |
 //! | drag on empty canvas | marquee: nodes, handles and anchors inside; `Shift` toggles them, `Alt` takes on-curve nodes only and components too, `Ctrl` turns the marquee |
-//! | drag an object | `selection.move` in one interaction; snapping unless `Ctrl` is held |
+//! | drag an object | `selection.move` in one interaction; snapping unless `Ctrl` is held; a badge beside the pointer gives the offset (`x:… y:…`) |
 //! | `Alt` held at mouse-down | the drag moves a copy (`duplicate: true`) |
 //! | `Alt` held at mouse-down, with nothing to copy (lone nodes, no whole segment) | only the selected points move (`mode: pointsOnly`) |
 //! | `Ctrl+Alt` at mouse-down, or `Alt` pressed during the drag | nudge (`mode: nudge`) |
@@ -36,7 +37,7 @@ use crate::geometry::{dist, finite, rect_corners};
 use crate::guide_drag::GuideDrag;
 use crate::hint_drag::HintDrag;
 use crate::hit::{Hit, HitResult, hit_test};
-use crate::output::{Action, Invocation, Output, Overlay, OverlayKind};
+use crate::output::{Action, Invocation, Output, Overlay, OverlayKind, offset_badge};
 use crate::scene::Scene;
 use crate::selection::{Selection, in_region, path_points};
 use crate::snap::{Moving, Snap, SnapKind, snap};
@@ -364,7 +365,8 @@ impl SelectTool {
                     self.state = State::Guide(Box::new(guide));
                     return out;
                 }
-                if press.hit.locked || cx.scene.locked {
+                // A corner component moves with its node, not by itself.
+                if press.hit.locked || cx.scene.locked || matches!(press.hit.hit, Hit::Attachment { .. }) {
                     return out;
                 }
                 let mods = press.mods;
@@ -690,9 +692,19 @@ impl Tool for SelectTool {
     }
 
     fn overlays(&self) -> Vec<Overlay> {
+        if let Some(knobs) = &self.knobs {
+            return knobs.overlays();
+        }
         match &self.state {
             State::Marquee(m) => vec![Overlay::Polygon { kind: OverlayKind::Marquee, points: m.polygon().to_vec() }],
-            State::Dragging(drag) => snap_overlays(drag.snap.as_ref()),
+            State::Dragging(drag) => {
+                let mut out = snap_overlays(drag.snap.as_ref());
+                // How far the selection has moved (the copy, for an Alt-drag).
+                if let Some((dx, dy, _)) = drag.last_sent {
+                    out.push(offset_badge(drag.last_pos, dx, dy));
+                }
+                out
+            }
             State::Guide(guide) => snap_overlays(guide.snap.as_ref()),
             State::Idle => match &self.hover {
                 Some(h) => vec![Overlay::Marker { kind: if h.locked { OverlayKind::HoverLocked } else { OverlayKind::Hover }, at: h.at }],

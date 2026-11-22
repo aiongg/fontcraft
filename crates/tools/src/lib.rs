@@ -30,6 +30,7 @@
 #![forbid(unsafe_code)]
 
 pub mod annotate;
+pub mod attachment;
 pub mod bbox;
 pub mod cycling;
 pub mod drag_aids;
@@ -88,6 +89,10 @@ pub const MAX_LASSO_POINTS: usize = 10_000;
 /// Most sampled points kept for the outlines of a scene's components.
 pub const MAX_COMPONENT_POINTS: usize = 200_000;
 
+#[cfg(test)]
+mod attachment_tests;
+#[cfg(test)]
+mod badge_tests;
 #[cfg(test)]
 mod draw_tests;
 #[cfg(test)]

@@ -47,6 +47,7 @@ pub mod review_hints;
 pub mod rule_tree;
 pub mod sample_strings;
 pub mod settings;
+pub mod settings_appearance;
 pub mod shape_order;
 pub mod sidebar_filters;
 pub mod smart_settings;

@@ -108,7 +108,46 @@ pub enum OverlayKind {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "shape", rename_all = "camelCase")]
 pub enum Overlay {
-    Polygon { kind: OverlayKind, points: Vec<Point> },
-    Line { kind: OverlayKind, from: Point, to: Point },
-    Marker { kind: OverlayKind, at: Point },
+    Polygon {
+        kind: OverlayKind,
+        points: Vec<Point>,
+    },
+    Line {
+        kind: OverlayKind,
+        from: Point,
+        to: Point,
+    },
+    Marker {
+        kind: OverlayKind,
+        at: Point,
+    },
+    /// A label beside the pointer during a drag: a size, a position, an angle or percentages.
+    /// `at` is the pointer; the canvas places the label just off it.
+    Badge {
+        at: Point,
+        text: String,
+    },
+}
+
+/// `v` rounded to a whole number for a drag badge, without a sign on zero.
+pub fn badge_number(v: f64) -> String {
+    let r = v.round();
+    if !r.is_finite() {
+        return "–".into();
+    }
+    if r == 0.0 { "0".into() } else { format!("{r:.0}") }
+}
+
+/// `v` as a percentage with one decimal for a drag badge (`75.8%`), without a sign on zero.
+pub fn badge_percent(v: f64) -> String {
+    let r = (v * 10.0).round() / 10.0;
+    if !r.is_finite() {
+        return "–".into();
+    }
+    if r == 0.0 { "0.0%".into() } else { format!("{r:.1}%") }
+}
+
+/// The badge of a move by `(dx, dy)` with the pointer at `at`: `x:120 y:-35`.
+pub fn offset_badge(at: Point, dx: f64, dy: f64) -> Overlay {
+    Overlay::Badge { at, text: format!("x:{} y:{}", badge_number(dx), badge_number(dy)) }
 }
