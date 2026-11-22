@@ -1119,12 +1119,16 @@ milestone = "M4"
 summary = "A separate window (Edit → Info for Selection) listing the properties of the selected glyphs, including the ones that can only be changed here such as the sort name. The exact field list beyond those named in the chapter is unconfirmed."
 ref = "Font View › Glyph Properties; Sort Name"
 status = "handbook"
-notes = "Documented, not yet observed. Built in M4.8 with name, Unicode values, production name, script, category, subcategory, case, direction and sort name; case and direction are ours (05 question 15)."
+notes = "Documented, not yet observed. Built in M4.8 with name, Unicode values, production name, script, category, subcategory, case, direction and sort name; case and direction are ours (05 question 15). M4.19 adds exports, the two colours, tags, note, the metrics keys and the kerning groups; each edit is one setter command over every described glyph, so one undo step, and a field whose glyphs differ shows Multiple Values as the inspector does."
 guesses = [
   "Turning on the sort name check box only enables the field; the field's value is stored when it is committed. Turning it off removes the stored sort name (glyph.setSortName with null). Settled by observation.",
   "The window is not modal and follows the selection while it is open. Settled by observation.",
   "The fields are in the order name, exports, glyph colour, layer colour, tags, Unicode, production name, script, category, subcategory, case, direction, sort name, note, the three metrics keys and the two kerning groups. Settled by opening Info for Selection in the reference.",
   "The layer colour field edits the layer of Font View's master. Settled by observation.",
+]
+observe = [
+  "Select three glyphs in Font View, open Edit › Info for Selection and write down every field in order.",
+  "With two glyphs in different kerning groups selected, note what the Left Group field shows, then type a group and undo once.",
 ]
 
 [[panel]]
@@ -1150,7 +1154,7 @@ controls = [
   "twelve colour label swatches and a cross button (Option: act on the layer colour)",
   "Tags submenu: every tag used in the font, with checkmark / dash state",
   "Copy Glyph Names submenu: Space Separated, One per Line, Comma Separated, Slashed, Python List, Unicodes",
-  "Exports check item (glyph.setExport): checked when every glyph exports",
+  "Exports check item (glyph.setExport): checked when every glyph exports, a dash when some do",
   "More Tags… at the end of the Tags submenu when the font has more than 512 tags: shows the inspector's Tags field",
 ]
 area = "font-view"
@@ -1165,9 +1169,13 @@ guesses = [
   "With Alt held the swatches set the layer colour of Font View's master. Settled by observation.",
   "Alt counts when it is held at the click that opens the menu; pressing or releasing it while the menu is open changes nothing, where native macOS menus swap their alternate items live. Settled by observation.",
   "The swatches sit in a Glyph Color submenu, Exports follows them, then Tags and Copy Glyph Names. Settled by observation.",
-  "Exports shows no mark when only some of the glyphs export, and choosing it then makes them all export; with all exporting it turns export off. Settled by observation.",
+  "Exports shows a dash when only some of the glyphs export, as a tag does, and choosing it then makes them all export; with all exporting it turns export off. Settled by observation.",
   "Exports is in this menu as the Glyphs 3 video shows it in the canvas menu. Settled by observation.",
   "More Tags… shows the sidebar with the glyph inspector, whose Tags field lists every tag. Settled by observation.",
+]
+observe = [
+  "Right-click a selection of three glyphs in Font View and write down every item in order, submenus included.",
+  "Turn off export on one of three glyphs, right-click all three and note the mark beside Exports.",
 ]
 
 [[panel]]

@@ -151,8 +151,8 @@ pub fn glyph_menu(ui: &mut Ui, opener: &Response, menu: &GlyphMenu) -> Answer {
         .show(ui, |ui, _| {
             let caption = if menu.alt { words.layer_color.clone() } else { words.glyph_color.clone() };
             let mut picked = swatches(ui, caption, &words);
-            let exports = [Entry::new((), words.exports.clone()).checked(menu.exports == Mark::All)];
-            if entry_rows(ui, &exports).is_some() {
+            let exports = [MarkedEntry::new(Entry::new((), words.exports.clone())).mark(entry_mark(menu.exports))];
+            if marked_entry_rows(ui, &exports).is_some() {
                 picked = picked.or(Some(Pick::Export));
             }
             if !menu.tags.is_empty() {
