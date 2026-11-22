@@ -89,12 +89,18 @@ queries through `Session::query`, which refuses edits.
 
 | Function | Shows | Returns |
 |---|---|---|
-| `number(ui, label, value)` | a `NumberField` | the number committed; an emptied field commits nothing |
-| `clearable_number(ui, label, value)` | a `NumberField` that may be emptied | `NumberEdit::Set(n)`, or `Clear` when a field that held a value is emptied |
+| `labelled(ui, &label, body)` | `body` in a craft `Field`, `label` beside it | the body's result |
+| `number(ui, label, value)` | a `NumberField`, its label beside it | the number committed; an emptied field commits nothing |
+| `bare_number(ui, label, value)` | `number` without the visible label, for a bar whose neighbours say what it holds | as `number` |
+| `clearable_number(ui, label, value)` | a `NumberField` that may be emptied, its label beside it | `NumberEdit::Set(n)`, or `Clear` when a field that held a value is emptied |
 | `clearable(ui, field, value)` | a `NumberField` the caller configured (range, unit) | as `clearable_number` |
 | `key_or_number(ui, label, &KeyedNumber, read_only)` | a field that holds a number or a metrics key, its state in the tooltip, and an update button while the key is out of sync | `KeyedOutput { commit, update }`: `commit` is the setter's `value` parameter |
 | `box_point(ui, label, point)` | craft's `ReferencePoint` over one of the nine `BOX_POINTS` names | the point picked |
 | `format_number(n)` | | at most two decimals, no trailing zeros, no negative zero |
+
+A control's label only names it to assistive technology: craft paints it only in a label step (`Field`,
+`BodyCx::labelled`). A check box inside a labelled row is in that row's label scope and draws only its mark, so a row
+of boxes labels each one with `cx.labelled(…, SideLabel::new().layout(FieldLayout::After), …)`.
 
 A field commits on Enter, Tab or leaving it, and a field left with its text unchanged commits nothing.
 `KeyedNumber` (value, key, `KeyState`, message) is plain data for a view model; `KeyedNumber::commit_value` holds the
@@ -145,6 +151,9 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
 
 ## The other seams
 
+- **Windows.** A panel the reference app shows as a window of its own (Font Info, the Kerning window) opens with
+  `shell::dock::show_window`: the first time as a floating group over the document area, which the desktop app
+  shows as an OS window; after that wherever the person left it. `ui.screenshot` captures the main window only.
 - **Canvas.** `canvas::show` runs every pass; it is never memoized, so its props may hold the active
   tool. Its document is the edited glyph's advance box from the ascender down to the descender, and
   `Camera` turns font units (y up) into screen points through the canvas view. It paints the

@@ -381,8 +381,7 @@ fn window(app: &mut FontCraftApp, p: &Map<String, Value>) -> Result<(), String> 
         let (left, right) = split_id(last);
         show_pair(app, left, right)?;
     }
-    // A refused move (the layout has no room) leaves the panel where it was.
-    let _ = app.view.workspace.set_visible(PanelId::KerningWindow, open, None, false, |panel| panel.permissions());
+    crate::shell::dock::show_window(&mut app.view.workspace, PanelId::KerningWindow, open, app.view.canvas.rect);
     if let Some(ids) = select {
         let kerning = &mut app.view.kerning;
         kerning.current = ids.last().cloned();

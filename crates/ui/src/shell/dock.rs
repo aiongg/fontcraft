@@ -4,7 +4,7 @@
 //! moves as actions, which [`show`] applies. All dock code stays in this module.
 
 use craft::behavior::Axis;
-use craft::behavior::dock::{Column, DockEdge, Group, Layout, Node, PanelState, Permissions, SplitSize, Workspace};
+use craft::behavior::dock::{Action, Column, DockEdge, Group, Layout, Node, PanelState, Permissions, SplitSize, Target, Workspace};
 use craft::ui::contract::{Bind, BodyCx, ShowContainer as _};
 use craft::ui::docking::{DockConfig, DockPanels, GroupAt, PanelSpec};
 use craft::ui::layout_components::Stack;
@@ -249,14 +249,48 @@ craft::ui::words! {
 /// the end. Every other panel starts hidden.
 pub fn default_workspace() -> Workspace<PanelId> {
     let start = Column::new(vec![Group::new(vec![PanelId::Sidebar], 0)]);
+    // Whole-point heights for all but the last group: groups that share the free height split it into fractions, and
+    // a group at a fractional y draws its edges between pixels.
+    let sized = |panels: Vec<PanelId>, height: f32| {
+        let mut group = Group::new(panels, 0);
+        group.height = Some(height);
+        group
+    };
     let end = Column::new(vec![
-        Group::new(vec![PanelId::GlyphMetrics, PanelId::InfoBox], 0),
-        Group::new(vec![PanelId::Layers], 0),
+        sized(vec![PanelId::GlyphMetrics, PanelId::InfoBox], 300.0),
+        sized(vec![PanelId::Layers], 200.0),
         Group::new(vec![PanelId::Dimensions, PanelId::Transformations, PanelId::FitCurve], 0),
     ]);
     let centre = Node::split(Axis::X, SplitSize::Ratio(0.8), Node::tabs(vec![PanelId::Document], 0), Node::dock(DockEdge::End, vec![end]));
     let root = Node::split(Axis::X, SplitSize::Ratio(0.15), Node::dock(DockEdge::Start, vec![start]), centre);
     Workspace::new(Layout::new(Some(root), Vec::new()))
+}
+
+/// The largest size a panel opened as a window starts at, in points.
+const WINDOW_SIZE: egui::Vec2 = egui::vec2(820.0, 600.0);
+
+/// Shows `panel` as a window of its own over `area` (the document area), or hides it. The reference app gives Font
+/// Info and the Kerning window windows of their own; docked into the palette's first group they get a few hundred
+/// points of height. A panel that shows already, or that was shown before and has a place recorded, goes there.
+pub fn show_window(workspace: &mut Workspace<PanelId>, panel: PanelId, open: bool, area: egui::Rect) {
+    let permissions = |p: &PanelId| p.permissions();
+    let known = workspace.layout.contains(&panel) || workspace.hidden.iter().any(|(p, _)| *p == panel);
+    if !open || known {
+        // A refused move (the layout has no room) leaves the panel where it was.
+        let _ = workspace.set_visible(panel, open, None, false, permissions);
+        return;
+    }
+    let area = if area.is_finite() && area.width() >= 200.0 && area.height() >= 200.0 {
+        area
+    } else {
+        egui::Rect::from_min_size(egui::pos2(160.0, 90.0), WINDOW_SIZE)
+    };
+    let size = egui::vec2(WINDOW_SIZE.x.min(area.width() - 40.0), WINDOW_SIZE.y.min(area.height() - 40.0)).round();
+    let rect = egui::Rect::from_center_size(area.center().round(), size);
+    let actions = [Action::open(panel, None), Action::move_panel(panel, Target::float(rect)), Action::activate(panel)];
+    if workspace.apply_all(actions, false, permissions).is_err() {
+        let _ = workspace.set_visible(panel, true, None, false, permissions);
+    }
 }
 
 /// Shows `panel` when it is hidden, hides it when it shows.

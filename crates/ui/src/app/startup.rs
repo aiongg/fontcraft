@@ -233,6 +233,7 @@ mod window_tests {
     use egui::{Key, Modifiers};
     use serde_json::json;
 
+    use crate::shell::dock::PanelId;
     use crate::testing::TestApp;
 
     /// The desktop window starts with no document; once a font opens, the document area draws its tab strip at the
@@ -247,6 +248,49 @@ mod window_tests {
         let tab = t.frames.texts().iter().find(|x| x.text == "Font View").map(|x| x.rect).expect("the Font View tab");
         let status = t.frames.texts().iter().find(|x| x.text.contains("54 shown")).map(|x| x.rect).expect("Font View's status line");
         assert!(status.min.y > tab.max.y + 400.0, "the status line under the tab strip, at the bottom: {tab:?} {status:?}");
+    }
+
+    /// With a font open, nothing in the window sits between pixels: debug builds paint "Unaligned" over such a
+    /// region, as they did over the Layers group when the palette's groups split the column's height evenly.
+    #[test]
+    fn the_window_draws_every_region_on_whole_points() {
+        let mut t = TestApp::window(crate::Options::default());
+        t.ok("engine.execute", json!({"command": "file.new", "params": {}}));
+        t.frames(2);
+        assert!(t.frames.texts().iter().any(|x| x.text == "Layers"), "the Layers group shows");
+        let unaligned: Vec<_> = t.frames.texts().iter().filter(|x| x.text == "Unaligned").map(|x| x.rect).collect();
+        assert!(unaligned.is_empty(), "regions between pixels at {unaligned:?}");
+    }
+
+    /// Font Info and the Kerning window open as windows of their own over the document area, as tall as the
+    /// window allows, not as a tab of the palette's first group.
+    #[test]
+    fn font_info_and_the_kerning_window_open_as_windows() {
+        let mut t = TestApp::window(crate::Options::default());
+        t.ok("engine.execute", json!({"command": "file.new", "params": {}}));
+        t.frames(2);
+        for (command, panel) in [("font.info", PanelId::FontInfo), ("window.kerning", PanelId::KerningWindow)] {
+            t.ok("engine.execute", json!({"command": command, "params": {}}));
+            t.frames(2);
+            let layout = &t.app.view.workspace.layout;
+            let window = layout.floating.iter().find(|w| w.contains(&panel)).expect("the panel floats");
+            assert!(window.rect.height() >= 400.0, "{command}: {:?}", window.rect);
+            assert!(!window.panels().any(|p| *p == PanelId::GlyphMetrics), "{command} floats alone");
+        }
+    }
+
+    /// A row of checkboxes in a dialog names each box beside it: the Export dialog's File Format row shows its three
+    /// containers.
+    #[test]
+    fn a_dialog_names_each_box_of_a_checkbox_row() {
+        let mut t = TestApp::window(crate::Options::default());
+        t.ok("engine.execute", json!({"command": "file.new", "params": {}}));
+        t.frames(2);
+        t.ok("ui.menu.invoke", json!({"command": "file.export"}));
+        t.frames(2);
+        for name in ["OTF/TTF", "WOFF", "WOFF2"] {
+            assert!(t.frames.texts().iter().any(|x| x.text == name), "{name} shows beside its box");
+        }
     }
 
     fn selected(t: &mut TestApp) -> serde_json::Value {

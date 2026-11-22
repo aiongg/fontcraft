@@ -203,8 +203,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
             if let Some(tab) = tab {
                 app.view.font_info.tab = tab;
             }
-            // A refused move (the layout has no room) leaves the panel where it was.
-            let _ = app.view.workspace.set_visible(PanelId::FontInfo, true, None, false, |p| p.permissions());
+            crate::shell::dock::show_window(&mut app.view.workspace, PanelId::FontInfo, true, app.view.canvas.rect);
             Ok(())
         }
         "font.info.openDialog" => {
