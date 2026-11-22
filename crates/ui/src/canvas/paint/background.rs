@@ -3,6 +3,7 @@
 //! | Item | Drawn as | Shown when |
 //! |---|---|---|
 //! | the canvas | its colour, `canvas` (`appearance.color.canvas`) | [`canvas`], always |
+//! | the active master's background | `master_canvas` (Master Background Color, or its Dark form on a dark canvas) | the master sets one |
 //! | another layer of the glyph whose eye is on | thin outline, `visible_layer_outline` (`layers.visibleLayerOutline`) | always |
 //! | the other side of the layer | thin outline, `background_outline` (`background.outlineDisplay`) | Show Background |
 //! | its nodes and handles | as the edited side's nodes | Show Background and Show Nodes › In Background |
@@ -13,13 +14,19 @@ use egui::{Shape, Stroke};
 use super::super::layers::PaintCx;
 use super::{nodes, outline_shapes};
 
-/// Fills the canvas with its colour (`appearance.color.canvas`) of the appearance it is drawn in.
+/// Fills the canvas with its colour (`appearance.color.canvas`) of the appearance it is drawn in, and the active
+/// master's background over it.
 pub fn canvas(cx: &PaintCx<'_>) {
     cx.painter.extend(canvas_shapes(cx));
 }
 
+/// The canvas colour, then the active master's background over it.
 pub fn canvas_shapes(cx: &PaintCx<'_>) -> Vec<Shape> {
-    vec![Shape::rect_filled(cx.rect, 0.0, cx.tokens.canvas)]
+    let mut out = vec![Shape::rect_filled(cx.rect, 0.0, cx.tokens.canvas)];
+    if let Some(master) = cx.tokens.master_canvas {
+        out.push(Shape::rect_filled(cx.rect, 0.0, master));
+    }
+    out
 }
 
 /// Darkens the canvas a little while the background is the side being edited (`background.darkenedCanvas`).

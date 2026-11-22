@@ -244,3 +244,31 @@ fn the_canvas_and_the_fill_take_the_appearance_colours() {
     assert!(app.view.display.fill_preview && app.tools.view.fills, "Fill Preview fills under the Hand tool");
     assert!(count(&painted(&app, paint::outline::shapes), ink) >= 2, "the fill and the stroke both take the foreground colour");
 }
+
+/// The active master's Master Background Color is painted over the canvas colour, its Dark form on a dark canvas and
+/// the light form again while Always use Light Mode keeps Edit View light; a master without one sets nothing.
+#[test]
+fn the_active_master_colours_the_canvas_for_the_appearance_in_use() {
+    let mut app = app();
+    run(&mut app, "font.master.add", json!({"name": "Bold"}));
+    let bold = app.session.font().unwrap().masters[1].id.clone();
+    let add = |name: &str, value: &str| json!({"scope": "master", "targets": bold, "name": name, "value": value});
+    run(&mut app, "font.customParameters.add", add("Master Background Color", "#336699"));
+    run(&mut app, "font.customParameters.add", add("Master Background Color Dark", "20, 30, 40, 255"));
+    edit(&mut app, "A");
+    let light = Color32::from_rgb(0x33, 0x66, 0x99);
+    let dark = Color32::from_rgb(20, 30, 40);
+    assert_eq!(app.models.canvas_tokens.master_canvas, None, "the first master sets no background");
+
+    shell(&mut app, "view.selectMaster", json!({"master": 1}));
+    assert_eq!(app.models.canvas_tokens.master_canvas, Some(light));
+    let shapes = painted(&app, paint::background::canvas_shapes);
+    assert_eq!(shapes.len(), 2, "the canvas colour, then the master's");
+    assert_eq!(count(&shapes, light), 1);
+
+    app.set_system_dark(true);
+    app.drain();
+    assert_eq!(app.models.canvas_tokens.master_canvas, Some(dark));
+    run(&mut app, "settings.set", json!({"id": "appearance.alwaysLightModeEditView", "value": true}));
+    assert_eq!(app.models.canvas_tokens.master_canvas, Some(light), "a canvas kept light takes the light value");
+}

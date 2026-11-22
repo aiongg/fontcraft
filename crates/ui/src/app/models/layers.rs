@@ -287,13 +287,21 @@ fn masters(font: &Font, view: &LayersView) -> MastersModel {
     }
 }
 
-/// The icon of `master`: its built-in icon, else the glyph it names drawn in it, else the Regular icon.
+/// The master custom parameter naming the glyph a master without an icon of its own shows.
+pub const ICON_GLYPH_PARAM: &str = "Master Icon Glyph Name";
+
+/// The icon of `master`: its own icon (a built-in one, else the glyph it names drawn in it), else the glyph its Master
+/// Icon Glyph Name names, else the Regular icon. A name that is no glyph of the font, or a glyph with no outline in the
+/// master, falls through to the next.
 pub fn icon(font: &Font, master: &Master) -> MasterIcon {
-    let name = master.icon.as_deref().unwrap_or(DEFAULT_ICON);
-    builtin(name)
-        .or_else(|| font.glyph(name).and_then(|_| glyph_outline(font, name, &master.id)))
-        .or_else(|| builtin(DEFAULT_ICON))
-        .unwrap_or(MasterIcon::Builtin { weight: 1, width: 2 })
+    let own = master.icon.as_deref().and_then(|name| builtin(name).or_else(|| glyph_icon(font, master, name)));
+    let named = || master.params.get(ICON_GLYPH_PARAM).and_then(|v| v.as_str()).and_then(|name| glyph_icon(font, master, name.trim()));
+    own.or_else(named).or_else(|| builtin(DEFAULT_ICON)).unwrap_or(MasterIcon::Builtin { weight: 1, width: 2 })
+}
+
+/// Glyph `name` of the font drawn in `master`, as an icon.
+fn glyph_icon(font: &Font, master: &Master, name: &str) -> Option<MasterIcon> {
+    font.glyph(name).and_then(|_| glyph_outline(font, name, &master.id))
 }
 
 /// The built-in icon `name` (`MASTER_ICONS`, row by row).
@@ -340,4 +348,44 @@ fn glyph_outline(font: &Font, glyph: &str, master: &str) -> Option<MasterIcon> {
         }
     });
     (!contours.is_empty()).then_some(MasterIcon::Outline(contours))
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
+mod tests {
+    use std::sync::Arc;
+
+    use craft::host::Host;
+    use fontcraft_engine::Session;
+    use serde_json::json;
+
+    use super::{MasterIcon, icon};
+    use crate::app::{APP, FontCraftApp, Msg};
+
+    /// A master without an icon of its own shows the glyph its Master Icon Glyph Name names, in the switcher's model
+    /// too; its own icon wins, and a name that is no glyph leaves the Regular icon.
+    #[test]
+    fn master_icon_glyph_name_draws_the_glyph_for_a_master_without_an_icon() {
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        let mut run = |id: &str, params: serde_json::Value| app.run_now(Msg::run(id, params), false).unwrap();
+        run("font.master.add", json!({"name": "Bold"}));
+        run("path.addRectangle", json!({"glyph": "A", "x": 0, "y": 0, "width": 300, "height": 600}));
+        let regular = icon(app.session.font().unwrap(), &app.session.font().unwrap().masters[0]);
+        let first = app.session.font().unwrap().masters[0].id.clone();
+        let add = json!({"scope": "master", "targets": first, "name": "Master Icon Glyph Name", "value": "A"});
+        app.run_now(Msg::run("font.customParameters.add", add), false).unwrap();
+        let font = app.session.font().unwrap();
+        assert!(matches!(icon(font, &font.masters[0]), MasterIcon::Outline(ref c) if !c.is_empty()), "the glyph A, drawn");
+        assert_eq!(icon(font, &font.masters[1]), regular, "the other master keeps the Regular icon");
+        assert!(matches!(app.models.masters.masters[0].icon, MasterIcon::Outline(_)), "the master switcher shows it");
+
+        app.run_now(Msg::run("font.master.setIcon", json!({"masters": [0], "icon": "Bold"})), false).unwrap();
+        let font = app.session.font().unwrap();
+        assert!(matches!(icon(font, &font.masters[0]), MasterIcon::Builtin { .. }), "the master's own icon wins");
+
+        let unknown = json!({"scope": "master", "targets": 1, "name": "Master Icon Glyph Name", "value": "nosuchglyph"});
+        app.run_now(Msg::run("font.customParameters.add", unknown), false).unwrap();
+        let font = app.session.font().unwrap();
+        assert_eq!(icon(font, &font.masters[1]), regular, "a name that is no glyph leaves the Regular icon");
+    }
 }

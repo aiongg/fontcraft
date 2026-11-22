@@ -7,13 +7,22 @@
 //! `appearance.guideOpacity` fades metric lines, their names, alignment zones and guides.
 
 use egui::Color32;
+use fontcraft_engine::color::export;
+use fontcraft_engine::model::Master;
 use fontcraft_engine::settings::UserSettings;
+
+/// The master custom parameters that colour the canvas while their master is the active one.
+pub const MASTER_BACKGROUND: &str = "Master Background Color";
+pub const MASTER_BACKGROUND_DARK: &str = "Master Background Color Dark";
 
 /// The canvas's colours and sizes for one appearance.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tokens {
     /// The canvas behind the glyphs (`appearance.color.canvas`).
     pub canvas: Color32,
+    /// The active master's background (Master Background Color, or its Dark form on a dark canvas), painted over
+    /// `canvas`; `None` when the master sets none it can be read from.
+    pub master_canvas: Option<Color32>,
     /// The edited layer's outline (`appearance.color.foregroundStroke`).
     pub outline: Color32,
     /// The paths as drawn under a composite that strokes or masks change.
@@ -170,6 +179,7 @@ impl Tokens {
     fn standard_light() -> Tokens {
         Tokens {
             canvas: Color32::from_rgb(0xf4, 0xf4, 0xf4),
+            master_canvas: None,
             outline: Color32::from_rgb(0x20, 0x20, 0x20),
             source_outline: Color32::from_rgb(0xb4, 0xb4, 0xb4),
             metric_line: Color32::from_rgb(0xb0, 0xb8, 0xc4),
@@ -275,6 +285,15 @@ impl CompatTokens {
         let base = self.tints.get(index % self.tints.len()).copied().unwrap_or(self.line);
         if solid { Color32::from_rgb(base.r(), base.g(), base.b()) } else { base }
     }
+}
+
+/// The canvas colour `master` sets for the dark appearance when `dark`, else for the light one: its Master Background
+/// Color Dark or Master Background Color, read as `R,G,B[,A]` from 0 to 255 or `#RRGGBB[AA]`. A value that cannot be
+/// read sets nothing, and the dark canvas does not fall back to the light value.
+pub fn master_background(master: &Master, dark: bool) -> Option<Color32> {
+    let name = if dark { MASTER_BACKGROUND_DARK } else { MASTER_BACKGROUND };
+    let c = master.params.get(name).and_then(export::master_color)?;
+    Some(Color32::from_rgba_unmultiplied(c.r, c.g, c.b, c.a))
 }
 
 /// A colour setting's value: `#rrggbb` or `#rrggbbaa`.

@@ -187,7 +187,14 @@ impl Models {
         glyph::project(&mut self.glyph_metrics, cx);
         canvas::project(&mut self.canvas, &mut self.color_files, cx);
         self.appearance = crate::app::appearance::Appearance::of(cx.session.settings(), cx.view.system_dark);
-        self.canvas_tokens = crate::canvas::tokens::Tokens::from_settings(cx.session.settings(), self.appearance.edit_view_dark());
+        let dark = self.appearance.edit_view_dark();
+        self.canvas_tokens = crate::canvas::tokens::Tokens::from_settings(cx.session.settings(), dark);
+        self.canvas_tokens.master_canvas = cx
+            .session
+            .font()
+            .ok()
+            .and_then(|font| crate::shell::masters::current_master(font, &cx.view.layers))
+            .and_then(|master| crate::canvas::tokens::master_background(master, dark));
         self.hint_tokens = crate::canvas::hinting::tokens::HintTokens::with_opacity(self.canvas_tokens.guide_opacity);
         font_view::project(&mut self.font_view, &mut self.font_view_outlines, &mut self.color_files, cx);
         tabs::project(&mut self.tabs, cx);

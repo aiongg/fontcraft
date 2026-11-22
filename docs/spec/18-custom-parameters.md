@@ -397,6 +397,12 @@ Nothing here reaches the exported font.
 | `Master Color Dark` | M | Fill colour for this master in dark mode. | - |
 | `Master Icon Glyph Name` | M | Glyph drawn on this master's button in the font window. | - |
 | `Master Stroke Color` | M | Outline colour for this master with the Select All Layers tool. | - |
+
+In FontCraft the canvas paints the active master's Master Background Color over the Appearance
+canvas colour while the canvas is drawn light, and its Dark form while it is drawn dark, with no
+fallback between the two (`crates/ui/src/canvas/tokens.rs`). A master without an icon of its own
+shows the glyph its Master Icon Glyph Name names (`crates/ui/src/app/models/layers.rs`). Master
+Stroke Color waits on the Select All Layers tool.
 | `Master Stroke Color Dark` | M | Outline colour for this master in dark mode. | - |
 
 ### Editing defaults

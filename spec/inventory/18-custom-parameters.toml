@@ -1358,9 +1358,13 @@ effect = "ui"
 summary = "Colour of the Edit View canvas whenever the master carrying the parameter is the active one."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Checked when added or set (M7.21): the forms Master Color takes."
+notes = "Checked when added or set (M7.21): the forms Master Color takes. Built in M14.6 (canvas/tokens.rs `master_background`, canvas/paint/background.rs): while its master is the active one and the canvas is drawn light, the canvas is painted in it over the Appearance canvas colour."
 guesses = [
   "The background and stroke colours take Master Color's forms (`R,G,B[,A]` or `#RRGGBB[AA]`); the handbook gives no syntax for them, and a value saved by the reference app settles it.",
+  "A translucent value is painted over the Appearance canvas colour, so the canvas colour shows through it.",
+]
+observe = [
+  "Give the second master a Master Background Color, switch masters in Edit View and note whether the canvas colour changes at once.",
 ]
 
 [[parameter]]
@@ -1373,7 +1377,13 @@ effect = "ui"
 summary = "Dark-mode counterpart of Master Background Color."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Checked when added or set (M7.21): the forms Master Color takes."
+notes = "Checked when added or set (M7.21): the forms Master Color takes. Built in M14.6: used in place of Master Background Color while the canvas is drawn dark (a dark window without Always use Light Mode for Edit View)."
+guesses = [
+  "A dark canvas without this parameter keeps the Appearance canvas colour and does not fall back to Master Background Color, whose light value would hide the light outline.",
+]
+observe = [
+  "With the system in dark mode, give a master only Master Background Color and note whether the dark canvas takes it.",
+]
 
 [[parameter]]
 name = "Master Color"
@@ -1409,6 +1419,13 @@ effect = "ui"
 summary = "Name of the glyph shown on the master's button at the top left of the font window, which appears when the font has two or more masters."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Built in M14.6 (app/models/layers.rs `icon`): a master without an icon of its own shows the named glyph, drawn in that master, on the master switcher, in Font Info's Masters tab and in the master lists. A name that is no glyph of the font, or a glyph with no outline in the master, leaves the Regular icon."
+guesses = [
+  "An icon set on the master itself (font.master.setIcon) wins over the parameter.",
+]
+observe = [
+  "Give a master both an icon and a Master Icon Glyph Name and note which the master button shows.",
+]
 
 [[parameter]]
 name = "Master Stroke Color"
