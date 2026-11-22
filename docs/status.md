@@ -2,10 +2,26 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-22: M9.32, M3.41, M3.43 and M3.42 merged into `master`, built, tested and smoke-tested in the window (X.integ148 to X.integ151). The Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
+_Updated: 2026-11-22: X.fix95 written on `w-X.fix95`, not built or tested (see "Where X.fix95 stands"). Before that: M9.32, M3.41, M3.43 and M3.42 merged into `master`, built, tested and smoke-tested in the window (X.integ148 to X.integ151). The Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
 
 ## State of the tree
 
+- **Where X.fix95 stands.** Written on `w-X.fix95`; the writer ran no cargo command but `cargo fmt`, so the
+  integrator builds and tests it. Four fixes, one commit each:
+  - a: per-script metric lines read the glyph's effective script. `shown_metrics(font, master, glyph, data)` and
+    `glyph_script(glyph, data)` take `Option<&GlyphData>`; `Scene::from_font_side(font, data, …)` and the UI's
+    `canvas::tools::scene(font, data, view, focus)` pass it through (every caller hands
+    `session.glyph_data().ok().as_deref()`), `guide.displayLines` passes the document's data. Model test
+    `a_glyph_without_a_stored_script_takes_the_glyph_datas` (`alpha` without a stored script gets the Greek line).
+  - b: the glyph inspector (`project_inspector`) describes the edited glyph (`models::glyph::shown_glyph`) while an
+    Edit tab shows, the Font View selection while Font View shows. Test
+    `the_inspector_shows_the_edited_glyph_while_edit_view_shows` in `app/sidebar_tests.rs`.
+  - c: `panels::widgets::scrolling` wraps a panel body in a vertical scroll area; the Info box and the form panels
+    (Glyph Metrics, Dimensions, Transformations, Fit Curve, Stroke, Smart Component, Attributes, Anchor Context,
+    Modules, Selection Info, Related Glyphs, Reference Font, Selections, Measurements) draw through it. Layers and the
+    sidebar keep their own scrolling lists. Test `a_tall_body_scrolls_with_the_wheel` (Transformations).
+  - d: the Info box's proportions lock is a lock icon (`lock` / `lock_open`) with its label as tooltip and
+    accessible name. Test `the_proportions_lock_is_an_icon_that_toggles`.
 - **Where M3.43 and M3.42 stand.** Merged and built; the gate is green. Seen in the window: a Greek glyph with a
   master `ascender` parameter `greek: 705` draws its ascender at 705 and no zone at 800; local guides referenced to
   the right and to both follow `spacing.setWidth`.
@@ -14,8 +30,8 @@ _Updated: 2026-11-22: M9.32, M3.41, M3.43 and M3.42 merged into `master`, built,
     of the master's line (keeping its overshoot, so the zone moves), `smallCapHeight` for a small cap, and a
     `shoulderHeight` line. `guide.displayLines`, the canvas model (`app::models::canvas::metric_lines`, lines and
     zones) and `Scene::from_font_side` (`metric_lines`: baseline plus the plain descender, x-height, cap height and
-    ascender) all read it. The script is the glyph's stored one only; the glyph data's script is not used (the tools'
-    scene has no glyph data). Component markers: `fontcraft_tools::component_markers` (on-curve points of the
+    ascender) all read it. The script is the glyph's effective one (`shown_metrics::glyph_script`: stored, else the
+    glyph data's); each caller passes the session's glyph data (`None` reads the built-in database). Component markers: `fontcraft_tools::component_markers` (on-curve points of the
     components that do not move, within `COMPONENT_MARKER_REACH` = 4 snap distances, at most 64), kept on the Select
     tool's drag and drawn as `OverlayKind::ComponentNode` dots (`ToolTokens::component_marker`). Tests: a model unit
     test, one more assertion in the engine's `display_lines_follow_font_info_and_parameters`, a canvas test

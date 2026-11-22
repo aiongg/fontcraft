@@ -1366,9 +1366,10 @@ milestone = "M3"
 summary = "The lock between the width and height fields of the Info box. Closed, editing either scales the selection in both directions by the same factor; open, only in the edited one."
 ref = "Edit View › Scaling & Rotating"
 status = "inferred"
-notes = "The handbook describes the lock; the command id and label are ours."
+notes = "The handbook describes the lock; the command id and label are ours. The Info box draws it as a closed or open lock icon between the fields, its label as tooltip and accessible name."
 guesses = [
   "The lock starts open; the handbook gives no default.",
+  "The lock is an icon without a caption, as the kerning locks of the Info box are.",
 ]
 [[behavior]]
 id = "numberFields.arrowKeyStepping"
