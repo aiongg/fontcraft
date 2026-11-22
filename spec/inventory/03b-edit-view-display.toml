@@ -484,6 +484,7 @@ notes = "In `crates/ui` (UI.41b, `panels/edit_bar.rs`) the controls sit in the w
 guesses = [
   "The controls share the window's status bar with the status text instead of a bar of their own under each tab; settle by looking at where the reference app's bottom bar ends and whether Font View has one.",
   "The icons come from the framework's catalog: pilcrows for left to right and right to left, a vertical type mark for top to bottom, unlink, link and lock for the three kerning modes, an eye for the Preview Area; settle by comparing with the reference app's bottom bar.",
+  "The zoom field shows its value with the unit pt, since the value is a size in display points; settle by reading the reference app's zoom field.",
 ]
 
 [[behavior]]
@@ -1000,6 +1001,9 @@ guesses = [
   "Return types a line break; the handbook allows several lines but does not name the key.",
   "Up and Down move to the nearest place on the line above or below, and to the start or the end of the text from the first or the last line; in right-to-left text Left steps forward in the text; in top-to-bottom text Up and Down step along the column and Left and Right move between columns. Moving the cursor in such texts in the reference app settles it.",
   "Backspace and Delete with Alt or Cmd do nothing (no word or line deletion); no source names them.",
+  "Typing or moving the cursor past the canvas's edge scrolls the canvas sideways, the zoom kept, so the cursor stays in view; typing past the window's edge in the reference app settles it.",
+  "A tab whose text holds several glyphs fits the whole text in the canvas the first time it draws, and so does a text that replaces the whole text (editView.setText, a sample string); typing keeps the zoom. Opening several glyphs in a new tab of the reference app settles it.",
+  "The canvas scrolls freely past the edited glyph's advance box, so the text around it can be scrolled into view; the framework's default keeps the document on screen.",
 ]
 
 [[command]]

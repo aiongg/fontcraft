@@ -22,7 +22,7 @@ pub mod tools;
 
 use craft::behavior::CanvasView;
 use craft::behavior::kurbo::Size;
-use craft::ui::canvas::{Canvas, CanvasTool, NoTool, ToolHost, canvas_space, tool_pass};
+use craft::ui::canvas::{Canvas, CanvasTool, NavigationOptions, NoTool, ToolHost, canvas_space, tool_pass};
 use craft::ui::contract::{Bind, ShowContainer as _, Tracked};
 use craft::ui::runtime::env::Env;
 use egui::Ui;
@@ -135,7 +135,13 @@ pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
     // The document is the edited glyph's advance box from the ascender to the descender.
     let document = glyph.map(|g| Size::new(g.width.max(1.0), (g.ascender - g.descender).max(1.0)));
     let top = glyph.map_or(0.0, |g| g.ascender);
-    let mut canvas = Canvas::new(words.document.clone()).view(Bind::bound(&mut *props.view));
+    // A tab's view has no rect until the canvas first draws it, and then fits the document; a text of several glyphs
+    // is fitted whole after that.
+    let fresh = !props.view.rect.is_positive();
+    // The view scrolls freely: the document is the edited glyph alone, and the text around it reaches past it.
+    let mut navigation = NavigationOptions::default();
+    navigation.overscroll = true;
+    let mut canvas = Canvas::new(words.document.clone()).view(Bind::bound(&mut *props.view)).navigation(navigation);
     if let Some(size) = document {
         canvas = canvas.document(size);
     }
@@ -184,6 +190,13 @@ pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
     }
     if let Some(view) = reply.and_then(|r| r.view) {
         *props.view = view;
+    }
+    if fresh
+        && props.view.rect.is_positive()
+        && let Some(g) = glyph
+        && let Some(rect) = text::text_rect(props.text, g.ascender, g.descender)
+    {
+        crate::shell::view::fit(props.view, rect, top, props.tokens.fit_margin);
     }
     sent.extend(props.tool.take_sent());
 }

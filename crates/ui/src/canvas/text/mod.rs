@@ -102,6 +102,10 @@ pub struct EditText {
     slot: bool,
     /// Where the edited glyph sat in the text when the canvas last drew it.
     origin: Option<(String, [f64; 2])>,
+    /// The revision the canvas last scrolled the cursor into view for.
+    followed: u64,
+    /// The whole text was replaced: the canvas fits it once it has drawn the new text.
+    pub(super) fit_pending: bool,
 }
 
 impl Default for EditText {
@@ -121,6 +125,8 @@ impl Default for EditText {
             clipboard: Default::default(),
             slot: false,
             origin: None,
+            followed: 0,
+            fit_pending: false,
         }
     }
 }
@@ -291,17 +297,83 @@ pub fn sync(app: &mut FontCraftApp) {
 }
 
 /// After the projection: when the edited glyph moved to another place in the text, the canvas view moves with it,
-/// so the text stays where it was on screen.
+/// so the text stays where it was on screen; then a replaced text is fitted and the cursor kept in view.
 pub fn after_project(app: &mut FontCraftApp) {
     let model = &app.models.text;
     let now = model.edited_glyph.clone().filter(|_| model.shown).map(|g| (g, model.origin));
     let before = std::mem::replace(&mut app.view.text.origin, now.clone());
-    let (Some((_, [x0, y0])), Some((_, [x1, y1]))) = (before, now) else { return };
-    let (dx, dy) = (x0 - x1, y1 - y0);
-    if (dx != 0.0 || dy != 0.0) && dx.is_finite() && dy.is_finite() {
-        app.view.canvas.center.x += dx;
-        app.view.canvas.center.y += dy;
+    if let (Some((_, [x0, y0])), Some((_, [x1, y1]))) = (before, now) {
+        let (dx, dy) = (x0 - x1, y1 - y0);
+        if (dx != 0.0 || dy != 0.0) && dx.is_finite() && dy.is_finite() {
+            app.view.canvas.center.x += dx;
+            app.view.canvas.center.y += dy;
+        }
     }
+    fit_text(app);
+    keep_cursor_in_view(app);
+}
+
+/// After `editView.setText`: fits the new text in the canvas, when it holds several glyphs and the canvas has drawn.
+fn fit_text(app: &mut FontCraftApp) {
+    if !app.view.text.fit_pending || !app.view.canvas.rect.is_positive() {
+        return;
+    }
+    app.view.text.fit_pending = false;
+    let Some(glyph) = app.models.canvas.glyph.as_ref() else { return };
+    if let Some(rect) = text_rect(&app.models.text, glyph.ascender, glyph.descender) {
+        crate::shell::view::fit(&mut app.view.canvas, rect, glyph.ascender, app.models.canvas_tokens.fit_margin);
+    }
+}
+
+/// In text mode, after the text or the cursor changed: scrolls the canvas sideways, when the cursor left it, so the
+/// cursor is back inside, the fit margin from the edge. The zoom stays.
+fn keep_cursor_in_view(app: &mut FontCraftApp) {
+    let revision = app.view.text.revision;
+    if app.view.text.followed == revision {
+        return;
+    }
+    let model = &app.models.text;
+    let view = &mut app.view.canvas;
+    let (left, right) = (f64::from(view.rect.left()), f64::from(view.rect.right()));
+    // A canvas not drawn yet has no rect: it fits its document the first time it draws.
+    if !(left.is_finite() && right.is_finite() && right > left && view.zoom > 0.0) {
+        return;
+    }
+    app.view.text.followed = revision;
+    let Some([[x, _], _]) = model.cursor.filter(|_| model.text_mode && model.shown) else { return };
+    let at = f64::from(view.to_screen(craft::behavior::kurbo::Point::new(x, 0.0)).x);
+    let margin = (right - left) * app.models.canvas_tokens.fit_margin.clamp(0.0, 0.45);
+    let shift = if at < left + margin {
+        at - (left + margin)
+    } else if at > right - margin {
+        at - (right - margin)
+    } else {
+        0.0
+    };
+    if shift != 0.0 && shift.is_finite() {
+        view.center.x += shift / view.zoom;
+    }
+}
+
+/// The text around the edited glyph as a rect `[x, y, width, height]` in the edited glyph's font units: every
+/// placed glyph's advance box from the descender to the ascender of its line. `None` while the text shows fewer
+/// than two glyphs.
+pub fn text_rect(model: &crate::app::models::text::TextModel, ascender: f64, descender: f64) -> Option<[f64; 4]> {
+    let layout = model.layout.as_ref().filter(|_| model.shown)?;
+    let placed: Vec<_> = layout.placed.iter().filter(|p| p.glyph.is_some()).collect();
+    if placed.len() < 2 {
+        return None;
+    }
+    let [ox, oy] = model.origin;
+    let (mut x0, mut x1, mut y0, mut y1) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    for p in placed {
+        x0 = x0.min(p.x.min(p.x + p.advance));
+        x1 = x1.max(p.x.max(p.x + p.advance));
+        y0 = y0.min(p.y + descender);
+        y1 = y1.max(p.y + ascender);
+    }
+    let rect = [x0 - ox, y0 - oy, x1 - x0, y1 - y0];
+    (rect.iter().all(|v| v.is_finite()) && rect[2] > 0.0 && rect[3] > 0.0).then_some(rect)
 }
 
 /// Makes the shown glyph follow the text's current glyph, after a text command.

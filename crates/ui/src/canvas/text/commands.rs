@@ -190,6 +190,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
         "editView.setText" => {
             let items = items(font, p)?.ok_or("give `text`, `chars` or `glyphs`")?;
             edit(&mut next, 0..len, items)?;
+            next.fit_pending = true;
         }
         "editView.setCursor" => {
             let at = index(p, "index")?.ok_or("`index` (a position between items, 0 to the text's length) is required")?;

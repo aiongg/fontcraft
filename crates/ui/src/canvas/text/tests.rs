@@ -156,6 +156,36 @@ fn the_text_tool_types_deletes_moves_the_cursor_and_escape_leaves_text_mode() {
     assert_eq!(app.view.tool, super::TEXT_TOOL);
 }
 
+/// Typing past the canvas's edge scrolls it sideways so the cursor stays in view; the zoom stays.
+#[test]
+fn typing_keeps_the_cursor_in_view() {
+    let mut app = text_app();
+    try_post(&mut app, Msg::View(ViewMsg::SelectTool(super::TEXT_TOOL))).unwrap();
+    let cursor_x = |app: &FontCraftApp| {
+        let [[x, _], _] = app.models.text.cursor.expect("a cursor");
+        app.view.canvas.to_screen(KPoint::new(x, 0.0)).x
+    };
+    for _ in 0..16 {
+        key(&mut app, Key::Char('h'), SHIFT);
+        let x = cursor_x(&app);
+        assert!((0.0..=RECT.max.x).contains(&x), "the cursor at {x} after {:?}", items(&app));
+    }
+    assert_eq!(app.view.canvas.zoom, 0.25);
+}
+
+/// Setting the whole text fits it in the canvas.
+#[test]
+fn set_text_fits_the_new_text() {
+    let mut app = text_app();
+    shell(&mut app, "editView.setText", json!({"glyphs": ["H", "O", "H", "O", "H", "O", "H", "O", "H", "O", "H", "O"]}));
+    let layout = app.models.text.layout.clone().expect("a layout");
+    let (x0, x1) = layout.placed.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), p| (a.min(p.x), b.max(p.x + p.advance)));
+    let o = app.models.text.origin[0];
+    let screen = |x: f64| app.view.canvas.to_screen(KPoint::new(x - o, 0.0)).x;
+    assert!(x1 - x0 > 1280.0 / 0.25, "the text is wider than the canvas at the old zoom");
+    assert!(0.0 <= screen(x0) && screen(x1) <= RECT.max.x, "{}..{}", screen(x0), screen(x1));
+}
+
 /// A tool event at the text point (x, y), as the canvas posts it: in the edited glyph's units.
 fn pointer(app: &mut FontCraftApp, kind: PointerKind, x: f64, y: f64, mods: Modifiers) {
     let [ox, oy] = app.models.text.origin;
@@ -228,11 +258,18 @@ fn count(shapes: &[Shape], color: Color32) -> usize {
 fn the_text_layers_draw_the_other_glyphs_the_kerned_gaps_and_the_cursor() {
     let mut app = text_app();
     run(&mut app, "path.addRectangle", json!({"glyph": "V", "x": 100, "y": 0, "width": 400, "height": 500}));
+    run(&mut app, "path.addRectangle", json!({"glyph": "A", "x": 100, "y": 0, "width": 300, "height": 600}));
     run(&mut app, "kerning.setPair", json!({"left": "A", "right": "V", "value": -100}));
     shell(&mut app, "editView.setText", json!({"glyphs": ["A", "V", "A"]}));
     shell(&mut app, "editView.setCursor", json!({"index": 0}));
     let t = TextTokens::standard();
-    assert_eq!(count(&painted(&app, glyph_shapes), t.glyph), 1, "V, the one other glyph with an outline");
+    let meshes = |shapes: &[Shape]| shapes.iter().filter(|s| matches!(s, Shape::Mesh(_))).count();
+    // Fill Preview is on by default: the other glyphs are filled, and the edited one only under the Text tool.
+    assert_eq!(meshes(&painted(&app, glyph_shapes)), 2, "V and the second A, filled");
+    assert_eq!(meshes(&painted(&app, crate::canvas::paint::outline::shapes)), 0, "the Select tool shows A unfilled");
+    shell(&mut app, "view.fillPreview", json!({"on": false}));
+    assert_eq!(count(&painted(&app, glyph_shapes), t.glyph), 2, "V and the second A as outlines");
+    shell(&mut app, "view.fillPreview", json!({"on": true}));
     assert_eq!(count(&painted(&app, behind_shapes), app.models.canvas_tokens.kerning_negative), 1, "the A V gap");
     run(&mut app, "settings.set", json!({"id": "appearance.color.kerningNegative.light", "value": "#ff00ff"}));
     assert_eq!(count(&painted(&app, behind_shapes), Color32::from_rgb(0xff, 0, 0xff)), 1, "the gap takes the set colour");
@@ -240,6 +277,7 @@ fn the_text_layers_draw_the_other_glyphs_the_kerned_gaps_and_the_cursor() {
 
     shell(&mut app, "editView.toggleTextMode", json!({"mode": "text"}));
     assert_eq!(count(&painted(&app, cursor_shapes), t.cursor), 1);
+    assert_eq!(meshes(&painted(&app, crate::canvas::paint::outline::shapes)), 1, "the Text tool fills the edited glyph");
     assert!(!super::display(&app.view).nodes, "text mode hides the nodes");
     shell(&mut app, "kerning.setMode", json!({"mode": "none"}));
     assert_eq!(count(&painted(&app, behind_shapes), app.models.canvas_tokens.kerning_negative), 0, "no kerning shown without kerning");

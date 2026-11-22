@@ -52,6 +52,8 @@ pub struct ToolView {
     pub overlays: Vec<Overlay>,
     /// The edited glyph's placed images and the selected one (`canvas::images::refresh` keeps it).
     pub images: crate::canvas::images::ImagePaint,
+    /// The active tool is one under which Fill Preview fills the edited glyph: Text, Hand or Zoom.
+    pub fills: bool,
 }
 
 /// The tools' side of the app: the toolbox, the selection and the running interaction.
@@ -164,6 +166,7 @@ impl Tools {
             focus: self.focus.clone(),
             overlays: self.toolbox.overlays(),
             images: self.view.images.clone(),
+            fills: matches!(self.toolbox.active_id(), "text" | "hand" | "zoom"),
         };
         if view != self.view {
             self.view = view;

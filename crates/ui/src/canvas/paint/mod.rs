@@ -9,17 +9,19 @@
 //! | [`components`] | components by alignment state, placeholders, corner components |
 //! | [`nodes`] | nodes and handles, start and open-end marks, duplicate nodes, metric highlights, Extra Nodes |
 //! | [`anchors`] | anchors by metric position |
+//! | [`fill`] | the nonzero fill Fill Preview draws (no layer of its own) |
 
 pub mod anchors;
 pub mod background;
 pub mod components;
+pub mod fill;
 pub mod metrics;
 pub mod nodes;
 pub mod outline;
 pub mod status;
 
 use craft::behavior::kurbo::Affine;
-use egui::{Pos2, Shape, Stroke};
+use egui::{Color32, Pos2, Shape, Stroke};
 use fontcraft_geom::{BezPath, PathEl, Point};
 
 use super::layers::PaintCx;
@@ -75,6 +77,13 @@ pub fn flatten(path: &BezPath, affine: Affine) -> Vec<Vec<Pos2>> {
 /// The polylines that stroke `path` (font units) with `stroke` through the camera.
 pub fn outline_shapes(cx: &PaintCx<'_>, path: &BezPath, stroke: Stroke) -> Vec<Shape> {
     flatten(path, cx.camera.affine()).into_iter().map(|contour| Shape::line(contour, stroke)).collect()
+}
+
+/// The closed contours of `path` (font units) filled in `colour` by the nonzero rule, through the camera and inside
+/// the canvas body.
+pub fn fill_shapes(cx: &PaintCx<'_>, path: &BezPath, colour: Color32) -> Option<Shape> {
+    let closed: Vec<Vec<Pos2>> = flatten(path, cx.camera.affine()).into_iter().filter(|c| c.first() == c.last()).collect();
+    fill::nonzero(&closed, cx.rect, colour).map(Shape::mesh)
 }
 
 /// The screen point of the font point `[x, y]`, when it is finite.

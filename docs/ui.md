@@ -151,11 +151,14 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
 
 ## The other seams
 
-- **Windows.** A panel the reference app shows as a window of its own (Font Info, the Kerning window) opens with
+- **Windows.** A panel whose spec row has `location = "window"` or `"dialog"` (Font Info, the Kerning window,
+  Space Center, Text Preview, Compare Fonts and Family, Table Viewer, Kerning Pairs Preview, the Kerning Groups
+  Editor, Shape Order, Font Audit, Project) opens with
   `shell::dock::show_window`: the first time as a floating group over the document area, which the desktop app
   shows as an OS window; after that wherever the person left it. `ui.screenshot` captures the main window only.
 - **Canvas.** `canvas::show` runs every pass; it is never memoized, so its props may hold the active
-  tool. Its document is the edited glyph's advance box from the ascender down to the descender, and
+  tool. Its document is the edited glyph's advance box from the ascender down to the descender; the view scrolls
+  freely past it (overscroll on), and a view drawn for the first time on a text of several glyphs fits the whole text.
   `Camera` turns font units (y up) into screen points through the canvas view. It paints the
   projected `models.canvas` (the edited glyph in font units, resolved once per engine revision) with
   `models.canvas_tokens` (colours and sizes; the appearance settings feed them). A paint layer is one

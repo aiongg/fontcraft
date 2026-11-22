@@ -224,7 +224,7 @@ fn scroll_limit(v: f64) -> f64 {
 
 /// Zooms and scrolls `view` so the font rectangle `[x, y, width, height]` fills its rect, `margin` (a share) free on
 /// every side. A view never shown has no rect yet: it keeps its zoom and only centres the rectangle.
-fn fit(view: &mut CanvasView, [x, y, w, h]: [f64; 4], top: f64, margin: f64) {
+pub(crate) fn fit(view: &mut CanvasView, [x, y, w, h]: [f64; 4], top: f64, margin: f64) {
     let room = 1.0 - 2.0 * margin.clamp(0.0, 0.45);
     let (rw, rh) = (f64::from(view.rect.width()), f64::from(view.rect.height()));
     if rw.is_finite() && rh.is_finite() && rw > 0.0 && rh > 0.0 {

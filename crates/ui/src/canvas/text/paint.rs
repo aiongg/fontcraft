@@ -5,7 +5,7 @@
 use egui::{Align2, FontId, Pos2, Rect, Shape, Stroke};
 
 use super::super::layers::PaintCx;
-use super::super::paint::outline_shapes;
+use super::super::paint::{fill_shapes, outline_shapes};
 use super::tokens::TextTokens;
 
 /// The screen rectangle of `[x0, y0, x1, y1]` in the edited glyph's font units.
@@ -47,7 +47,8 @@ pub fn glyphs(cx: &PaintCx<'_>) {
     cx.painter.extend(glyph_shapes(cx));
 }
 
-/// The text's other glyphs and the group members, as outlines.
+/// The text's other glyphs, filled while Fill Preview is on and as outlines while it is off, and the group members
+/// as outlines.
 pub fn glyph_shapes(cx: &PaintCx<'_>) -> Vec<Shape> {
     let model = cx.text;
     if !model.shown {
@@ -59,7 +60,11 @@ pub fn glyph_shapes(cx: &PaintCx<'_>) -> Vec<Shape> {
         out.extend(outline_shapes(cx, member, Stroke::new(t.group_members_width, t.group_members)));
     }
     for glyph in &model.glyphs {
-        out.extend(outline_shapes(cx, &glyph.outline, Stroke::new(t.glyph_width, t.glyph)));
+        if cx.display.fill_preview {
+            out.extend(fill_shapes(cx, &glyph.outline, cx.tokens.outline));
+        } else {
+            out.extend(outline_shapes(cx, &glyph.outline, Stroke::new(t.glyph_width, t.glyph)));
+        }
     }
     out
 }
