@@ -111,11 +111,16 @@ pub const SETTINGS: &[SettingDef] = &[
     SettingDef { id: "appearance.color.cornerNodes.light", kind: Kind::Color, default: DefaultValue::Text("#2d6cdf") },
     SettingDef { id: "appearance.color.foregroundStroke.dark", kind: Kind::Color, default: DefaultValue::Text("#202020") },
     SettingDef { id: "appearance.color.foregroundStroke.light", kind: Kind::Color, default: DefaultValue::Text("#202020") },
+    SettingDef { id: "appearance.color.kerningNegative.dark", kind: Kind::Color, default: DefaultValue::Text("#8cc8f590") },
+    SettingDef { id: "appearance.color.kerningNegative.light", kind: Kind::Color, default: DefaultValue::Text("#8cc8f590") },
+    SettingDef { id: "appearance.color.kerningPositive.dark", kind: Kind::Color, default: DefaultValue::Text("#f5dc46a0") },
+    SettingDef { id: "appearance.color.kerningPositive.light", kind: Kind::Color, default: DefaultValue::Text("#f5dc46a0") },
     SettingDef { id: "appearance.color.otherLayersStroke.dark", kind: Kind::Color, default: DefaultValue::Text("#2d8cebb0") },
     SettingDef { id: "appearance.color.otherLayersStroke.light", kind: Kind::Color, default: DefaultValue::Text("#2d8cebb0") },
     SettingDef { id: "appearance.color.smoothNodes.dark", kind: Kind::Color, default: DefaultValue::Text("#2fa84f") },
     SettingDef { id: "appearance.color.smoothNodes.light", kind: Kind::Color, default: DefaultValue::Text("#2fa84f") },
     SettingDef { id: "appearance.displayUnicodeValue", kind: Kind::Bool, default: DefaultValue::Bool(false) },
+    SettingDef { id: "appearance.guideOpacity", kind: Kind::Number { min: 0.0, max: 100.0 }, default: DefaultValue::Number(100.0) },
     SettingDef { id: "appearance.handleSize", kind: Kind::Choice(&["small", "regular", "large"]), default: DefaultValue::Text("regular") },
     SettingDef { id: "editing.leverRatio", kind: Kind::Number { min: 1.0, max: 100.0 }, default: DefaultValue::Number(6.0) },
     SettingDef { id: "editing.powerNudge", kind: Kind::Bool, default: DefaultValue::Bool(false) },
@@ -509,6 +514,28 @@ mod tests {
         assert_eq!(s.get("appearance.handleSize").unwrap(), json!("regular"));
         s.set("appearance.handleSize", json!("large")).unwrap();
         assert!(s.set("appearance.handleSize", json!("huge")).is_err());
+    }
+
+    #[test]
+    fn kerning_colours_and_guide_opacity_have_defaults_and_separate_light_and_dark_values() {
+        let mut s = UserSettings::new();
+        assert_eq!(s.get("appearance.color.kerningNegative.light").unwrap(), json!("#8cc8f590"));
+        assert_eq!(s.get("appearance.color.kerningPositive.dark").unwrap(), json!("#f5dc46a0"));
+        assert_eq!(s.get("appearance.guideOpacity").unwrap(), json!(100.0));
+        s.set("appearance.color.kerningNegative.dark", json!("#102030")).unwrap();
+        assert_eq!(s.get("appearance.color.kerningNegative.dark").unwrap(), json!("#102030"));
+        assert_eq!(s.get("appearance.color.kerningNegative.light").unwrap(), json!("#8cc8f590"), "the light value stays");
+        let before = s.clone();
+        for bad in [json!("#1020"), json!("#10203g"), json!(" #102030"), json!("#102030ff00")] {
+            let e = s.set("appearance.color.kerningPositive.light", bad).unwrap_err().to_string();
+            assert!(e.contains("appearance.color.kerningPositive.light") && e.contains("#rrggbb"), "{e}");
+        }
+        for bad in [json!(-1), json!(100.5), json!("50")] {
+            assert!(s.set("appearance.guideOpacity", bad).is_err());
+        }
+        assert_eq!(s, before, "refused values change nothing");
+        s.set("appearance.guideOpacity", json!(40)).unwrap();
+        assert_eq!(s.get("appearance.guideOpacity").unwrap(), json!(40));
     }
 
     #[test]

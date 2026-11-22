@@ -459,7 +459,10 @@ milestone = "M5"
 summary = "The tint of the indicator shown between a negatively kerned pair; default light blue, used when content is drawn in the light appearance. Reset by the Standard button."
 ref = "Settings › Appearance"
 status = "handbook"
-notes = "Moved from M14 to M5 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): Edit View draws kerned gaps from M5 (`kerning.highlightColors`), and the value lives in the user settings store of M4. The settings window stays M14."
+notes = "Moved from M14 to M5 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): Edit View draws kerned gaps from M5 (`kerning.highlightColors`), and the value lives in the user settings store of M4. The settings window stays M14. Built in M3.23: a live colour setting; text mode tints each kerned gap with the canvas token it feeds (`crates/ui/src/canvas/tokens.rs`)."
+guesses = [
+  "The default is the tint FontCraft drew before the setting existed, the same for light and dark: light blue `#8cc8f590` for negative and yellow `#f5dc46a0` for positive kerning; the handbook names only the hues. Settled by reading the reference's colour wells after Standard.",
+]
 
 [[setting]]
 id = "appearance.color.kerningNegative.dark"
@@ -472,7 +475,10 @@ milestone = "M5"
 summary = "The tint of the indicator shown between a negatively kerned pair; default light blue, used when content is drawn in the dark appearance. Reset by the Standard button."
 ref = "Settings › Appearance"
 status = "handbook"
-notes = "Moved from M14 to M5 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): Edit View draws kerned gaps from M5 (`kerning.highlightColors`), and the value lives in the user settings store of M4. The settings window stays M14."
+notes = "Moved from M14 to M5 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): Edit View draws kerned gaps from M5 (`kerning.highlightColors`), and the value lives in the user settings store of M4. The settings window stays M14. Built in M3.23: a live colour setting; text mode tints each kerned gap with the canvas token it feeds (`crates/ui/src/canvas/tokens.rs`)."
+guesses = [
+  "The default is the tint FontCraft drew before the setting existed, the same for light and dark: light blue `#8cc8f590` for negative and yellow `#f5dc46a0` for positive kerning; the handbook names only the hues. Settled by reading the reference's colour wells after Standard.",
+]
 
 [[setting]]
 id = "appearance.color.kerningPositive.light"
@@ -485,7 +491,10 @@ milestone = "M5"
 summary = "The tint of the indicator shown between a positively kerned pair; default yellow, used when content is drawn in the light appearance. Reset by the Standard button."
 ref = "Settings › Appearance"
 status = "handbook"
-notes = "Moved from M14 to M5 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): Edit View draws kerned gaps from M5 (`kerning.highlightColors`), and the value lives in the user settings store of M4. The settings window stays M14."
+notes = "Moved from M14 to M5 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): Edit View draws kerned gaps from M5 (`kerning.highlightColors`), and the value lives in the user settings store of M4. The settings window stays M14. Built in M3.23: a live colour setting; text mode tints each kerned gap with the canvas token it feeds (`crates/ui/src/canvas/tokens.rs`)."
+guesses = [
+  "The default is the tint FontCraft drew before the setting existed, the same for light and dark: light blue `#8cc8f590` for negative and yellow `#f5dc46a0` for positive kerning; the handbook names only the hues. Settled by reading the reference's colour wells after Standard.",
+]
 
 [[setting]]
 id = "appearance.color.kerningPositive.dark"
@@ -498,7 +507,10 @@ milestone = "M5"
 summary = "The tint of the indicator shown between a positively kerned pair; default yellow, used when content is drawn in the dark appearance. Reset by the Standard button."
 ref = "Settings › Appearance"
 status = "handbook"
-notes = "Moved from M14 to M5 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): Edit View draws kerned gaps from M5 (`kerning.highlightColors`), and the value lives in the user settings store of M4. The settings window stays M14."
+notes = "Moved from M14 to M5 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): Edit View draws kerned gaps from M5 (`kerning.highlightColors`), and the value lives in the user settings store of M4. The settings window stays M14. Built in M3.23: a live colour setting; text mode tints each kerned gap with the canvas token it feeds (`crates/ui/src/canvas/tokens.rs`)."
+guesses = [
+  "The default is the tint FontCraft drew before the setting existed, the same for light and dark: light blue `#8cc8f590` for negative and yellow `#f5dc46a0` for positive kerning; the handbook names only the hues. Settled by reading the reference's colour wells after Standard.",
+]
 
 [[command]]
 id = "settings.resetColors"
