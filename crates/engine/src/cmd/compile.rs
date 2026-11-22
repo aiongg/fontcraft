@@ -747,7 +747,6 @@ fn output_key(path: &std::path::Path) -> String {
 /// `path` from the root of the file system, with `.` dropped and `..` taking off the folder before
 /// it (by the text, as the Export Folder's `..` is read). Left as given when the working folder
 /// is unknown.
-#[cfg(not(target_arch = "wasm32"))]
 pub(super) fn absolute(path: &std::path::Path) -> std::path::PathBuf {
     use std::path::Component;
     let Ok(full) = std::path::absolute(path) else { return path.to_path_buf() };
