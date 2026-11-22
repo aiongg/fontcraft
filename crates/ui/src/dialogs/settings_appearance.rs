@@ -15,7 +15,9 @@ use craft::ui::choice::{Checkbox, Segmented};
 use craft::ui::contract::{Bind, Entry, Props as _, Show as _, ShowContainer as _};
 use craft::ui::display::{Shade, Text};
 use craft::ui::form::Field;
-use craft::ui::layout_components::Row;
+use craft::behavior::ColumnWidth;
+use craft::ui::layout::empty_cell;
+use craft::ui::layout_components::Grid;
 use craft::ui::runtime::env::{Env, Label};
 use craft::ui::style::TypeRole;
 use egui::Ui;
@@ -129,6 +131,9 @@ fn note(ui: &mut Ui, text: &Label) {
     Text::new(text.clone()).role(TypeRole::Caption).shade(Shade::Muted).show(ui);
 }
 
+/// The colour grid's columns: the item, its light colour, its dark colour.
+const COLOR_COLUMNS: [ColumnWidth; 3] = [ColumnWidth::Content, ColumnWidth::Content, ColumnWidth::Content];
+
 /// The section's body.
 pub fn section(ui: &mut Ui, model: &AppearanceModel, sent: &mut Vec<Msg>) {
     let words = Env::of(ui).words::<AppearanceWords>();
@@ -147,29 +152,30 @@ pub fn section(ui: &mut Ui, model: &AppearanceModel, sent: &mut Vec<Msg>) {
 
     let entries: Vec<Entry<String>> = HANDLE_SIZES.iter().map(|(id, label)| Entry::new((*id).to_string(), label(&words).clone())).collect();
     let mut size = model.handle_size.clone();
-    Segmented::new(words.handle_size.clone(), Bind::bound(&mut size), &entries).show(ui);
+    Field::new(words.handle_size.clone()).show(ui, |ui, _| {
+        Segmented::new(words.handle_size.clone(), Bind::bound(&mut size), &entries).show(ui);
+    });
     if size != model.handle_size {
         sent.push(set(HANDLE_SIZE, json!(size)));
     }
 
     Text::new(words.colors.clone()).role(TypeRole::Heading).show(ui);
-    let _ = Row::new().show(ui, |ui, _| {
+    // One grid, so the wells of every row line up under the Light and Dark headings.
+    let _ = Grid::new(&COLOR_COLUMNS).show(ui, |ui, _| {
+        empty_cell(ui);
         Text::new(words.light.clone()).shade(Shade::Muted).show(ui);
         Text::new(words.dark.clone()).shade(Shade::Muted).show(ui);
-    });
-    for (row, (_, label_of)) in model.colors.iter().zip(ITEMS.iter()) {
-        let label = label_of(&words);
-        Field::new(label.clone()).show(ui, |ui, _| {
-            let _ = Row::new().show(ui, |ui, _| {
-                for (dark, color, set_name) in [(false, row.light, &words.light), (true, row.dark, &words.dark)] {
-                    let well = Label::from(format!("{} ({})", label.as_str(), set_name.as_str()));
-                    if let Some(picked) = color_field(ui, &well, color, ("fontcraftAppearance.color", row.item, dark)) {
-                        sent.push(set(&color_id(row.item, dark), json!(hex(picked))));
-                    }
+        for (row, (_, label_of)) in model.colors.iter().zip(ITEMS.iter()) {
+            let label = label_of(&words);
+            Text::new(label.clone()).show(ui);
+            for (dark, color, set_name) in [(false, row.light, &words.light), (true, row.dark, &words.dark)] {
+                let well = Label::from(format!("{} ({})", label.as_str(), set_name.as_str()));
+                if let Some(picked) = color_field(ui, &well, color, ("fontcraftAppearance.color", row.item, dark)) {
+                    sent.push(set(&color_id(row.item, dark), json!(hex(picked))));
                 }
-            });
-        });
-    }
+            }
+        }
+    });
     note(ui, if model.canvas_dark { &words.dark_in_use } else { &words.light_in_use });
     if Button::new(words.standard.clone()).show(ui).clicked() {
         sent.push(Msg::run("settings.resetColors", json!({})));
