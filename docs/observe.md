@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1563 rows to check: 2753 guesses and 682 observe steps.**
+**1570 rows to check: 2765 guesses and 685 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 51 |
 | Built milestones (M0 to M6) | Settings and the window | 18 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **1003** |
+| **Later milestones (after M6)** | all | **1010** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 90 |
 | Later milestones (after M6) | Edit View: text mode and preview | 30 |
 | Later milestones (after M6) | Components and anchors | 43 |
@@ -59,7 +59,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Font Info and features | 310 |
 | Later milestones (after M6) | Interpolation | 91 |
 | Later milestones (after M6) | Hinting | 115 |
-| Later milestones (after M6) | Colour fonts | 74 |
+| Later milestones (after M6) | Colour fonts | 81 |
 | Later milestones (after M6) | Files: open, import, export | 72 |
 | Later milestones (after M6) | Settings and the window | 34 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
@@ -1765,7 +1765,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (1003)
+## Later milestones (after M6) (1010)
 
 ### Edit View: drawing, guides, layers and the Palette (90)
 
@@ -4091,7 +4091,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: T3: add a Delta instruction to an untouched node, then select that node alone and press A; note whether a Snap instruction is added.
 - [ ] `hinting.tt.instructions.addFromSelection` (behavior, M10, handbook): An instruction is added by selecting the nodes it should act on…
   - Guess: Dragging an instruction badge onto another node moves the instruction's target point there, and the drag is not saved as a badge position; the reference app would settle what the drag changes.
+  - Guess: The node menu shows the instructions the selection does not allow greyed out with the reason, rather than leaving them out; the reference app would settle it.
+  - Guess: The instruction items come first in the node menu, in the order of the key list (Snap, Stem, Shift, Interpolate, Delta), before the path items; the reference app would settle the order.
   - Observe: T3: drag an instruction badge, save, reopen, and note what the drag changed and whether it was saved; then drag a badge onto another node and note whether the instruction moves to that node.
+  - Observe: T3: with the TrueType Instructor, right-click a selected node, a selected whole path and an instruction badge; note which items each menu holds and in what order, and whether items the selection does not allow are greyed out or missing.
 - [ ] `hinting.tt.instructions.badgeColours` (behavior, M10, handbook): Each instruction is drawn with a clickable badge whose colour identifies its…
   - Guess: Delta badges are orange, a colour no other instruction uses; the reference app would settle it.
   - Guess: Badges are plain discs placed beside the point (left of it for vertical instructions, below it for horizontal ones) or on the arrow of Stem and Shift; the reference app would show their shape, placement and icons.
@@ -4209,11 +4212,13 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: T3: Snap one node, select it and an untouched node in either click order, press S, and note which end gets the arrowhead; then select four untouched nodes and press S, and note how they pair.
 - [ ] `hint.tt.setStemReference` (M10, handbook, live): Set Stem Reference
   - Guess: A named stem whose orientation does not suit the instruction (a vertical stem on a vertical instruction) is refused; the reference app would show whether its pop-up lists stems of both orientations.
+  - Guess: The badge menu offers Set Stem Reference as a submenu of the stem choices the Info box pop-up offers; the reference app would settle whether the menu has it and in what form.
   - Observe: T3: select a vertical Stem instruction and open the stem pop-up of the Info box; note whether vertical stems are listed beside the horizontal ones.
 - [ ] `hint.tt.makeTripleHint` (M10, handbook, live): Make Triple Hint
   - Guess: Deleting or reversing one member of a triple hint dissolves the group and the other two become plain Stem instructions; the reference app would settle it.
   - Guess: Three instructions that would interleave with another triple hint in list order are refused, since the stored form keeps one flag per instruction and groups the flagged ones by threes; a reference file with two interleaved triple hints would settle how groups are stored.
   - Guess: A triple hint keeps its pixel gaps by moving the middle and then the upper stem, never the lower one; the reference app would settle it on an E with crowded bars at 8 or 9 PPM.
+  - Guess: Make Triple Hint shows on every badge menu and is greyed out unless three vertical Stem instructions outside a triple hint are selected, rather than appearing only then; the reference app would settle it.
   - Observe: T3: make a triple hint, delete one of its members and note whether the group dissolves; make it again, reverse one member and note whether the group dissolves.
 - [ ] `hint.tt.addDelta` (M10, handbook, live): Delta
   - Guess: Delta columns accept masters as well as static instances, both stored as the location key; the reference app's Delta table for an instruction would show which columns it offers.
@@ -4290,7 +4295,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In the secondary reference, open Review Hints on a glyph with ghost hints and note what the width field shows for one.
   - Observe: Press Next on the last hint in the secondary reference's Review Hints and check whether it wraps to the first.
 
-### Colour fonts (74)
+### Colour fonts (81)
 
 - [ ] `color.fourKinds` (behavior, M11, handbook): Four colour workflows are supported: layered fonts (one font file per colour),…
   - Guess: A glyph may mix kinds: its palette and full-colour layers feed COLR, its iColor layers sbix and its svg layer the SVG table, each written by its own rule; an svg layer wins over a conversion by Color Layers to SVG for that glyph. Settled by exporting a glyph with a palette layer and an svg layer from the reference.
@@ -4552,6 +4557,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `bitmap.removeGlyphs` (M13, docs, live): Remove Bitmap Glyphs…
   - Guess: References to a removed bitmap from other glyphs of the same strike are removed with it, and those glyphs are listed in the result, rather than refusing the removal. Removing a referenced bitmap in the secondary reference would settle it.
   - Guess: A call that would remove nothing (none of the glyphs has a bitmap in the chosen strikes) is refused rather than reported as an empty change.
+- [ ] `window.bitmapEditor` (M13, inferred, live): Bitmap Glyph Editor
+  - Guess: A shell command of ours that opens the editor on a named glyph and strike; the secondary reference opens it from a glyph in a bitmap font view.
+- [ ] `view.setBitmapEditor` (M13, inferred, live): Bitmap Glyph Editor Options
+  - Guess: Our own command for the editor's tool palette and overlay switches; the secondary reference sets them only with its palettes and menus.
 - [ ] `bitmap.setPixels` (M13, inferred, live): Set Pixels
   - Guess: Clearing pixels never shrinks the bitmap's box; only `rows` set a smaller one. The secondary reference's saved BDF after clearing an edge row would settle whether it trims.
   - Guess: `origin` is the bitmap's bottom-left corner relative to the glyph origin, the BDF bounding box offset, not a point inside the bitmap.
@@ -4564,6 +4573,19 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `bitmap.setStrikeProperties` (M13, docs, live): Set Strike Properties
   - Guess: A property name given twice is refused, since a BDF file names each property once.
   - Guess: Changing the strike's ascent or descent does not edit a `FONT_ASCENT` or `FONT_DESCENT` entry in `properties`; the two are set separately. The secondary reference's BDF Info dialog after a change of line metrics would settle whether it keeps them in step.
+- [ ] `window.bitmapEditor` (panel, M13, docs): Bitmap Glyph Editor
+  - Guess: The tool palette and the Shades palette sit in the editor window's top rows rather than floating beside it; the secondary reference's Bitmap View would show where they live.
+  - Guess: The pixel size follows the window, from 2 to 48 points a pixel, instead of a zoom the person sets; the reference's magnify tool would settle how it scales.
+  - Observe: In the secondary reference, open a glyph of a 4-bit strike in the Bitmap View: note where the tool and Shades palettes sit and the order of the shades.
+  - Observe: With the pencil in a 4-bit strike, click a pixel of a lighter level than the current shade: note whether it clears or takes the shade.
+- [ ] `palette.shades` (panel, M13, docs): Shades
+  - Guess: Lighter swatches are lower levels, level 0 white, as the pixels draw darker with each level; the secondary reference's Shades palette would show its order.
+- [ ] `dialog.strikeProperties` (panel, M13, docs): Strike Properties
+  - Guess: The properties are edited as lines of text rather than a table; the secondary reference's BDF Info dialog shows a table.
+- [ ] `bitmapPencil` (tool, M13, docs): Bitmap Pencil
+  - Guess: In a grey strike a press on a pixel of another level paints the drawing level rather than clearing it; only a pixel already at the drawing level is cleared. Clicking a mid-grey pixel in the secondary reference would settle it.
+- [ ] `bitmapLine` (tool, M13, docs): Bitmap Line
+  - Guess: The run rounds each step to the nearest pixel, half away from zero, so a line reads the same drawn from either end; the secondary reference's pixels for a shallow line would settle its rounding.
 
 ### Files: open, import, export (72)
 

@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**3257 guesses on 1673 rows (681 of them live commands).**
+**3269 guesses on 1680 rows (683 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1768,9 +1768,11 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `hint.tt.addStemHint` | M10 | handbook | yes | With four or more points selected, the points pair in the order given (first with second, third with fourth); the reference app would settle how a larger selection pairs. |
 | `hint.tt.addStemHint` | M10 | handbook | yes | In a pair of one touched and one untouched point the touched one becomes the origin, and of two untouched points the first one does; the reference app would settle which end gets the arrowhead. |
 | `hint.tt.setStemReference` | M10 | handbook | yes | A named stem whose orientation does not suit the instruction (a vertical stem on a vertical instruction) is refused; the reference app would show whether its pop-up lists stems of both orientations. |
+| `hint.tt.setStemReference` | M10 | handbook | yes | The badge menu offers Set Stem Reference as a submenu of the stem choices the Info box pop-up offers; the reference app would settle whether the menu has it and in what form. |
 | `hint.tt.makeTripleHint` | M10 | handbook | yes | Deleting or reversing one member of a triple hint dissolves the group and the other two become plain Stem instructions; the reference app would settle it. |
 | `hint.tt.makeTripleHint` | M10 | handbook | yes | Three instructions that would interleave with another triple hint in list order are refused, since the stored form keeps one flag per instruction and groups the flagged ones by threes; a reference file with two interleaved triple hints would settle how groups are stored. |
 | `hint.tt.makeTripleHint` | M10 | handbook | yes | A triple hint keeps its pixel gaps by moving the middle and then the upper stem, never the lower one; the reference app would settle it on an E with crowded bars at 8 or 9 PPM. |
+| `hint.tt.makeTripleHint` | M10 | handbook | yes | Make Triple Hint shows on every badge menu and is greyed out unless three vertical Stem instructions outside a triple hint are selected, rather than appearing only then; the reference app would settle it. |
 | `hint.tt.addDelta` | M10 | handbook | yes | Delta columns accept masters as well as static instances, both stored as the location key; the reference app's Delta table for an instruction would show which columns it offers. |
 | `hint.tt.setDeltas` | M10 | handbook | yes | Set Delta Cells changes only the cells it names and keeps the rest, as clicking single cells of the table does; the reference app's table would settle it. |
 | `hinting.tt.cubicSourceQuadraticOutput` (behavior) | M10 | handbook | – | An instruction on a cubic handle moves the off-curve point of the converted segment nearest to the handle, and an on-curve node that the conversion could leave implied is written as a point; exporting a glyph instructed on a handle from the reference app and reading its glyf would settle both. |
@@ -1814,6 +1816,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `hinting.tt.hintOrder` (behavior) | M10 | handbook | – | Instructions cannot be reordered: the list order is creation order, and deleting and re-adding is the way to move one to the end; the reference app would show whether a reorder exists. |
 | `hinting.tt.touchedPoints` (behavior) | M10 | handbook | – | A Delta instruction leaves its point untouched in the model, since it moves the point only at the sizes it lists; the reference app would settle whether a point with only a Delta can still take a Snap. |
 | `hinting.tt.instructions.addFromSelection` (behavior) | M10 | handbook | – | Dragging an instruction badge onto another node moves the instruction's target point there, and the drag is not saved as a badge position; the reference app would settle what the drag changes. |
+| `hinting.tt.instructions.addFromSelection` (behavior) | M10 | handbook | – | The node menu shows the instructions the selection does not allow greyed out with the reason, rather than leaving them out; the reference app would settle it. |
+| `hinting.tt.instructions.addFromSelection` (behavior) | M10 | handbook | – | The instruction items come first in the node menu, in the order of the key list (Snap, Stem, Shift, Interpolate, Delta), before the path items; the reference app would settle the order. |
 | `hinting.tt.instructions.badgeColours` (behavior) | M10 | handbook | – | Delta badges are orange, a colour no other instruction uses; the reference app would settle it. |
 | `hinting.tt.instructions.badgeColours` (behavior) | M10 | handbook | – | Badges are plain discs placed beside the point (left of it for vertical instructions, below it for horizontal ones) or on the arrow of Stem and Shift; the reference app would show their shape, placement and icons. |
 | `hinting.tt.snap.zoneAuto` (behavior) | M10 | handbook | – | In horizontal mode Auto ignores zones and rounds to the nearest pixel edge, since zones are vertical; the reference app would settle it. |
@@ -3145,6 +3149,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `bitmap.regenerateGlyphs` | M13 | docs | yes | A regenerated bitmap keeps the code its file gave the old one, so a strike in a non-Unicode encoding still exports with its codes. |
 | `bitmap.removeGlyphs` | M13 | docs | yes | References to a removed bitmap from other glyphs of the same strike are removed with it, and those glyphs are listed in the result, rather than refusing the removal. Removing a referenced bitmap in the secondary reference would settle it. |
 | `bitmap.removeGlyphs` | M13 | docs | yes | A call that would remove nothing (none of the glyphs has a bitmap in the chosen strikes) is refused rather than reported as an empty change. |
+| `window.bitmapEditor` | M13 | inferred | yes | A shell command of ours that opens the editor on a named glyph and strike; the secondary reference opens it from a glyph in a bitmap font view. |
+| `view.setBitmapEditor` | M13 | inferred | yes | Our own command for the editor's tool palette and overlay switches; the secondary reference sets them only with its palettes and menus. |
 | `bitmap.setPixels` | M13 | inferred | yes | Clearing pixels never shrinks the bitmap's box; only `rows` set a smaller one. The secondary reference's saved BDF after clearing an edge row would settle whether it trims. |
 | `bitmap.setPixels` | M13 | inferred | yes | `origin` is the bitmap's bottom-left corner relative to the glyph origin, the BDF bounding box offset, not a point inside the bitmap. |
 | `bitmap.setPixels` | M13 | inferred | yes | A `strike` without `depth` names the strike of that size when the font has only one; with several depths of the size the call is refused. |
@@ -3327,6 +3333,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `dialog.reviewHints` (panel) | M13 | docs | – | The position field is the hint's origin edge and the width its signed distance to the other edge, as the hint badges show them; ghost hints show an empty width. The secondary reference's dialog would show whether it uses base and width the same way. |
 | `dialog.reviewHints` (panel) | M13 | docs | – | Previous and Next stop at the first and last hint of the direction instead of wrapping round; the secondary reference's dialog would settle it. |
 | `dialog.reviewHints` (panel) | M13 | docs | – | Opening the dialog turns on View › Show Hints so the reviewed hint is visible. |
+| `window.bitmapEditor` (panel) | M13 | docs | – | The tool palette and the Shades palette sit in the editor window's top rows rather than floating beside it; the secondary reference's Bitmap View would show where they live. |
+| `window.bitmapEditor` (panel) | M13 | docs | – | The pixel size follows the window, from 2 to 48 points a pixel, instead of a zoom the person sets; the reference's magnify tool would settle how it scales. |
+| `palette.shades` (panel) | M13 | docs | – | Lighter swatches are lower levels, level 0 white, as the pixels draw darker with each level; the secondary reference's Shades palette would show its order. |
+| `dialog.strikeProperties` (panel) | M13 | docs | – | The properties are edited as lines of text rather than a table; the secondary reference's BDF Info dialog shows a table. |
 | `window.kerningPairsPreview` (panel) | M13 | docs | – | Pairs are drawn as outlines, one pair per row, in left-to-right text only; vertical and right-to-left pairs are not listed. |
 | `window.kerningPairsPreview` (panel) | M13 | docs | – | Changed values are those that differ from the values the window found when it opened. |
 | `window.kerningPairsPreview` (panel) | M13 | docs | – | Double-clicking a pair shows it in Edit View, which stands in for the enlarged view. |
@@ -3379,4 +3389,6 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `spiro` (tool) | M13 | docs | – | At a G2 point the second derivative of curvature is zero on both sides, at a corner (and an open contour's end) the first two derivatives are zero on each side, and a curve meeting a straight line is tangent to it with a zero second derivative; the thesis's exact end conditions, compared on a shared test contour, would settle it. |
 | `spiro` (tool) | M13 | docs | – | A left point is followed by the straight line and a right point preceded by it; drawing a left point and a right point in the reference app would settle it. |
 | `spiro` (tool) | M13 | docs | – | Spiro points are not kept with the path: once added, the contour is ordinary cubic segments, so there is no spiro mode to toggle back. A contour key in the stored data would be needed to keep them. |
+| `bitmapPencil` (tool) | M13 | docs | – | In a grey strike a press on a pixel of another level paints the drawing level rather than clearing it; only a pixel already at the drawing level is cleared. Clicking a mid-grey pixel in the secondary reference would settle it. |
+| `bitmapLine` (tool) | M13 | docs | – | The run rounds each step to the nearest pixel, half away from zero, so a line reads the same drawn from either end; the secondary reference's pixels for a shallow line would settle its rounding. |
 
