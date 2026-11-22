@@ -8,8 +8,9 @@
 use craft::keymap::Mods;
 use craft::menu::Alternate;
 
-/// `(base, alternate)`: the command a row runs, and the one it runs while Alt is held. Both have menu paths in the
-/// engine; the delete and Expand Outline pairs have none and wait for the context menus.
+/// `(base, alternate)`: the command a row runs, and the one it runs while Alt is held. Both have menu paths, in the
+/// engine or among the shell commands. Delete has no menu row, so Delete in All Masters is its key (Alt+Delete) only;
+/// Expand Outline for All Masters rides on Expand Outline in the canvas context menu (`context_menu::ALTERNATES`).
 pub const ALTERNATES: &[(&str, &str)] = &[
     ("path.tidyUpPaths", "path.tidyUpPathsForAllMasters"),
     ("path.correctPathDirection", "path.correctPathDirectionForAllMasters"),
@@ -23,6 +24,7 @@ pub const ALTERNATES: &[(&str, &str)] = &[
     ("path.addExtremes", "path.forceExtremes"),
     ("path.selectionToBackground", "path.addSelectionToBackground"),
     ("path.assignBackground", "path.clearBackground"),
+    ("view.closeTab", "view.reopenLastClosedTab"),
 ];
 
 /// `(engine command, dialog)`: engine commands whose menu row the dialog's own row takes. The dialog runs the command
@@ -51,7 +53,7 @@ pub fn alternate_of(id: &str) -> Option<&'static str> {
 /// The label the row shows while Alt is held, when `id` is an alternate: the command's own label.
 pub fn alternate_label(id: &str) -> Option<&'static str> {
     alternate_of(id)?;
-    fontcraft_engine::command_specs().iter().find(|spec| spec.id == id).map(|spec| spec.label)
+    fontcraft_engine::find_command(id).map(|spec| spec.label).or_else(|| crate::shell::commands::find(id).map(|(_, c)| c.label))
 }
 
 /// The menu alternate of the row of `id`.
@@ -81,8 +83,10 @@ mod tests {
     #[test]
     fn alternates_ride_on_their_base_rows() {
         let specs = fontcraft_engine::command_specs();
-        let missing: Vec<&str> =
-            ALTERNATES.iter().flat_map(|(base, alt)| [*base, *alt]).filter(|id| !specs.iter().any(|s| s.id == *id && !s.menu.is_empty())).collect();
+        let in_menu = |id: &str| {
+            specs.iter().any(|s| s.id == id && !s.menu.is_empty()) || crate::shell::commands::find(id).is_some_and(|(_, c)| !c.menu.is_empty())
+        };
+        let missing: Vec<&str> = ALTERNATES.iter().flat_map(|(base, alt)| [*base, *alt]).filter(|id| !in_menu(id)).collect();
         assert!(missing.is_empty(), "commands without a menu row: {missing:?}");
         let catalog = Catalog::build();
         let mut items = Vec::new();
@@ -96,6 +100,7 @@ mod tests {
             assert!(!items.iter().any(|i| i.command.id == *alt), "`{alt}` has no row of its own");
         }
         assert_eq!(alternate_of("path.forceExtremes"), Some("path.addExtremes"));
+        assert_eq!(super::alternate_label("view.reopenLastClosedTab"), Some("Reopen Last Closed Tab"), "a shell command's label");
     }
 
     /// With Alt held, a row with an alternate reads as the alternate: Tidy Up Paths shows the label of

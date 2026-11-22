@@ -82,6 +82,8 @@ pub struct OpenDialog {
     pub revision: u64,
     /// A filter dialog: its values at OK are kept for the next time it opens ([`DialogState::remember`]).
     pub remember: bool,
+    /// Fills the fields that show what OK will do ([`super::spec::Annotate`]).
+    pub annotate: Option<super::spec::Annotate>,
 }
 
 /// The tabs of an open dialog.
@@ -367,6 +369,7 @@ fn open_one(app: &mut FontCraftApp, spec: &DialogSpec, given: &Map<String, Value
         serial,
         revision: 0,
         remember,
+        annotate: spec.annotate,
     };
     if let Some(s) = dialog.shaped {
         (s.link)(&mut dialog.values, "");
@@ -441,6 +444,10 @@ fn selection_targets(app: &mut FontCraftApp, command: &str) -> Map<String, Value
 fn preview(app: &mut FontCraftApp) {
     let Some(d) = app.dialogs.open.as_mut() else { return };
     d.revision += 1;
+    if let Some(annotate) = d.annotate {
+        let shown = annotate(&app.session, &d.params());
+        d.values.extend(shown);
+    }
     if d.mode == Mode::RunOnOk {
         d.error = None;
         return;

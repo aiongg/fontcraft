@@ -46,9 +46,55 @@ pub fn format_number(n: f64) -> String {
     text.trim_end_matches('0').trim_end_matches('.').to_string()
 }
 
-/// A number typed into a text field; `None` for anything that is not a finite number.
+/// Longest arithmetic expression a number field evaluates, in bytes.
+pub const MAX_EXPRESSION_BYTES: usize = 256;
+/// Deepest nesting of parentheses and signs in front of a number an expression may have.
+pub const MAX_EXPRESSION_DEPTH: usize = 32;
+
+/// A number typed into a text field: a number, or an arithmetic expression of numbers with `+ - * /` and parentheses
+/// (`300+50`, `(500-20)/2`), worth its result. `None` for anything else, for an expression longer than
+/// [`MAX_EXPRESSION_BYTES`] or nested deeper than [`MAX_EXPRESSION_DEPTH`], and for a result that is not finite
+/// (a division by zero).
 pub fn parse_number(text: &str) -> Option<f64> {
-    text.trim().parse::<f64>().ok().filter(|n| n.is_finite())
+    let text = text.trim();
+    if let Ok(n) = text.parse::<f64>() {
+        return n.is_finite().then_some(n);
+    }
+    if text.is_empty() || text.len() > MAX_EXPRESSION_BYTES || expression_depth(text) > MAX_EXPRESSION_DEPTH {
+        return None;
+    }
+    craft::behavior::Reader::new().read(text, None).ok().filter(|n| n.is_finite())
+}
+
+/// How deep `text` nests: open parentheses plus the run of signs in front of a number. The evaluator goes one level
+/// deeper for each, so this bounds its recursion.
+fn expression_depth(text: &str) -> usize {
+    let (mut open, mut signs, mut deepest) = (0usize, 0usize, 0usize);
+    let mut after_operand = false;
+    for c in text.chars().filter(|c| !c.is_whitespace()) {
+        match c {
+            '(' => {
+                open += 1;
+                signs = 0;
+                after_operand = false;
+            }
+            ')' => {
+                open = open.saturating_sub(1);
+                after_operand = true;
+            }
+            '+' | '-' if !after_operand => signs += 1,
+            '+' | '-' | '*' | '/' => {
+                signs = 0;
+                after_operand = false;
+            }
+            _ => {
+                signs = 0;
+                after_operand = true;
+            }
+        }
+        deepest = deepest.max(open + signs);
+    }
+    deepest
 }
 
 /// What the user did to a number field that may be emptied.
@@ -227,7 +273,25 @@ pub fn box_point(ui: &mut Ui, label: Label, point: Option<&str>) -> Option<&'sta
 mod tests {
     use serde_json::json;
 
-    use super::{KeyState, KeyedNumber, Label, format_number, key_or_number};
+    use super::{KeyState, KeyedNumber, Label, MAX_EXPRESSION_BYTES, MAX_EXPRESSION_DEPTH, format_number, key_or_number, parse_number};
+
+    #[test]
+    fn number_fields_take_arithmetic_within_their_limits() {
+        assert_eq!(parse_number("300+50"), Some(350.0));
+        assert_eq!(parse_number(" 300 * 1.2 "), Some(360.0));
+        assert_eq!(parse_number("(500-20)/2"), Some(240.0));
+        assert_eq!(parse_number("-(-4)"), Some(4.0));
+        assert_eq!(parse_number("1e3"), Some(1_000.0), "a plain number still reads as before");
+        for bad in ["", "1/0", "0/0", "2*", "(1", "H", "=H+10", "1e400"] {
+            assert_eq!(parse_number(bad), None, "{bad}");
+        }
+        let deep = format!("{}1{}", "(".repeat(MAX_EXPRESSION_DEPTH + 1), ")".repeat(MAX_EXPRESSION_DEPTH + 1));
+        assert_eq!(parse_number(&deep), None, "too deep");
+        let shallow = format!("{}1{}", "(".repeat(MAX_EXPRESSION_DEPTH), ")".repeat(MAX_EXPRESSION_DEPTH));
+        assert_eq!(parse_number(&shallow), Some(1.0));
+        assert_eq!(parse_number(&"-".repeat(10_000)), None, "a long run of signs is refused before it is read");
+        assert_eq!(parse_number(&format!("1{}", "+1".repeat(200))), None, "longer than the limit");
+    }
 
     #[test]
     fn numbers_show_at_most_two_decimals() {

@@ -21,6 +21,17 @@ pub const LABEL_MIN_CELL: f64 = 64.0;
 pub const MAX_SEARCH_BYTES: usize = 1024;
 /// The fields a search can be limited to.
 pub const SEARCH_FIELDS: [&str; 3] = ["name", "unicode", "note"];
+/// Largest bitmap magnification of `view.setFontViewStrike`: points per strike pixel.
+pub const MAX_STRIKE_MAGNIFICATION: u8 = 16;
+
+/// The bitmap strike the grid cells draw in place of the outlines (`view.setFontViewStrike`): its size and depth,
+/// and how many points one of its pixels takes at most.
+#[derive(PlainData, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StrikeView {
+    pub ppem: u16,
+    pub depth: u8,
+    pub magnification: u8,
+}
 /// Most glyphs one batch over the selection names.
 pub const MAX_BATCH_GLYPHS: usize = 100_000;
 
@@ -89,6 +100,8 @@ pub struct FontViewState {
     pub anchor: Option<String>,
     /// The search field takes the keyboard on the next pass (`fontView.focusSearch`).
     pub focus_search: bool,
+    /// The strike the grid draws; `None` draws the outlines.
+    pub strike: Option<StrikeView>,
 }
 
 impl Default for FontViewState {
@@ -104,6 +117,7 @@ impl Default for FontViewState {
             selected: Vec::new(),
             anchor: None,
             focus_search: false,
+            strike: None,
         }
     }
 }
@@ -154,12 +168,14 @@ pub enum Column {
     Width,
     LeftGroup,
     RightGroup,
+    /// The status the glyph is in (`glyph.setStatus`).
+    Status,
 }
 
 impl Column {
     /// Every column, in the default order: the documented columns first, then the properties in the order the
-    /// Glyph Properties section lists them.
-    pub const ALL: [Column; 22] = [
+    /// Glyph Properties section lists them, then Status.
+    pub const ALL: [Column; 23] = [
         Column::Id,
         Column::Char,
         Column::Name,
@@ -182,6 +198,7 @@ impl Column {
         Column::Width,
         Column::LeftGroup,
         Column::RightGroup,
+        Column::Status,
     ];
 
     pub fn id(self) -> &'static str {
@@ -208,6 +225,7 @@ impl Column {
             Column::Width => "width",
             Column::LeftGroup => "leftGroup",
             Column::RightGroup => "rightGroup",
+            Column::Status => "status",
         }
     }
 

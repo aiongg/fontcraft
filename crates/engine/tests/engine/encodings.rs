@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use fontcraft_engine::Session;
-use fontcraft_engine::cmd::encodings::{compare_documents, resolve_documents};
+use fontcraft_engine::cmd::encodings::{NameSource, PlannedRename, compare_documents, preview_renames, resolve_documents};
 use fontcraft_engine::model::{Alignment, Component, ComponentInfo, ComponentInfoBox, Font, Glyph, Layer, Shape};
 use fontcraft_testkit::rect;
 use serde_json::{Value, json};
@@ -90,6 +90,32 @@ fn renaming_by_name_list_refuses_a_taken_name_and_changes_nothing() {
     let e = s.execute("font.renameGlyphsByNamelist", &json!({"namelist": namelist("bad", "0x0041 A B\n")})).unwrap_err().to_string();
     assert!(e.contains("line 1"), "{e}");
     let _ = std::fs::remove_file(&file);
+}
+
+/// A pasted name list (`text`) renames as the same lines in a file do, and the preview lists the same renames,
+/// marking the one that clashes, without changing the font.
+#[test]
+fn a_pasted_name_list_renames_and_previews_as_a_file_does() {
+    let mut s = built();
+    let data = s.glyph_data().unwrap();
+    let before = s.doc().unwrap().font.clone();
+    let clash = preview_renames(s.font().unwrap(), &data, NameSource::Text("0x0041 B\n"), None).unwrap().unwrap();
+    assert_eq!(
+        clash,
+        vec![
+            PlannedRename { from: "A".into(), to: "B".into(), problem: Some("the name is taken".into()) },
+            PlannedRename { from: "A.sc".into(), to: "B.sc".into(), problem: None },
+        ]
+    );
+    assert!(Arc::ptr_eq(&s.doc().unwrap().font, &before), "a preview changes nothing");
+    let bad = preview_renames(s.font().unwrap(), &data, NameSource::Text("0x0041 A B\n"), None).unwrap();
+    assert!(bad.is_err_and(|e| e.contains("line 1")));
+
+    let r = run(&mut s, "font.renameGlyphsByNamelist", json!({"text": "0x0041 Alpha\n"}));
+    assert_eq!(r["renamed"], json!([{"from": "A", "to": "Alpha"}, {"from": "A.sc", "to": "Alpha.sc"}]), "{r}");
+    let both = s.execute("font.renameGlyphsByNamelist", &json!({"text": "0x0041 A\n", "namelist": "nice"}));
+    assert!(both.is_err(), "namelist and text together are refused");
+    assert!(s.execute("font.renameGlyphsByNamelist", &json!({})).is_err(), "one of them is required");
 }
 
 #[test]

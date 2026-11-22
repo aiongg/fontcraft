@@ -217,3 +217,37 @@ fn focus_search_asks_the_search_field_to_take_the_keyboard_once() {
     shell(&mut app, "fontView.focusSearch", json!({}));
     assert!(!app.view.font_view.focus_search, "the edit view has no search field to focus");
 }
+
+/// `view.setFontViewStrike` makes the grid cells hold the strike's bitmaps instead of the outlines; a strike the font
+/// lacks is refused and changes nothing; no strike returns to the outlines. The View menu lists the strikes.
+#[test]
+fn a_strike_replaces_the_outlines_in_the_cells() {
+    use super::StrikeView;
+
+    let mut app = app();
+    app.session.execute("path.addRectangle", &json!({"glyph": "A", "x": 100, "y": 0, "width": 400, "height": 700})).unwrap();
+    app.session.execute("bitmap.setStrikes", &json!({"add": [{"ppem": 12}]})).unwrap();
+    app.drain();
+
+    shell(&mut app, "view.setFontViewStrike", json!({"strike": {"ppem": 12}, "magnification": 2}));
+    assert!(app.status.is_empty(), "{}", app.status);
+    assert_eq!(app.view.font_view.strike, Some(StrikeView { ppem: 12, depth: 1, magnification: 2 }));
+    let m = &app.models.font_view;
+    assert_eq!(m.strike.map(|s| (s.ppem, s.depth, s.magnification)), Some((12, 1, 2)));
+    assert!(m.rows.iter().all(|r| r.art.is_none()), "no outline is flattened while a strike shows");
+    let a = m.rows.iter().find(|r| r.name == "A").and_then(|r| r.bitmap.clone()).expect("A has a bitmap in the strike");
+    assert!(a.width > 0 && a.height > 0);
+
+    shell(&mut app, "view.setFontViewStrike", json!({"strike": {"ppem": 13}}));
+    assert!(app.status.contains("12"), "the message lists the font's strikes: {}", app.status);
+    assert_eq!(app.view.font_view.strike.map(|s| s.ppem), Some(12), "a refused strike changes nothing");
+
+    let rows = crate::app::menus_dynamic::rows(&app.session, &[], app.view.font_view.strike);
+    let strike_rows: Vec<_> = rows.iter().filter(|r| r.path == crate::app::menus_dynamic::STRIKE_MENU).collect();
+    assert_eq!(strike_rows.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), vec!["Outlines", "12"]);
+
+    shell(&mut app, "view.setFontViewStrike", json!({}));
+    assert_eq!(app.view.font_view.strike, None);
+    assert!(app.models.font_view.strike.is_none());
+    assert!(app.models.font_view.rows.iter().all(|r| r.art.is_some() && r.bitmap.is_none()), "back to the outlines");
+}

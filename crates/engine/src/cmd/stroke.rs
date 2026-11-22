@@ -60,7 +60,8 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             expand_outline_all_masters
         )
-        .targets(&[TargetKind::Layer, TargetKind::Shapes]),
+        .targets(&[TargetKind::Layer, TargetKind::Shapes])
+        .context(&["canvas.path"]),
         cmd!(
             "path.setMask",
             "Mask",

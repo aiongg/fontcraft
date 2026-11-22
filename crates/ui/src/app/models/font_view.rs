@@ -4,13 +4,19 @@
 //! Only the shown mode's data is projected: cell outlines in Grid View, cell texts in List View. Nothing is projected
 //! while the panel is hidden. A cell outline is flattened once per glyph and master and kept until the glyph or a
 //! glyph it uses as a component changes, so an edit flattens only the glyphs it touched.
+//!
+//! With a strike chosen (`view.setFontViewStrike`) a cell holds its glyph's bitmap in that strike instead of the
+//! outline, its references drawn in. Bitmaps are kept per glyph until the font's strikes or the choice change, at most
+//! [`MAX_STRIKE_CACHE_BYTES`] of them; a glyph past that, or without a bitmap in the strike, shows an empty cell.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use craft::behavior::kurbo::{BezPath, PathEl, Point, Shape as _};
 use craft::ui::contract::{PlainData, Tracked};
+use fontcraft_engine::cmd::status;
 use fontcraft_engine::model::glyphdata::GlyphData;
+use fontcraft_engine::model::strike::BitmapStrike;
 use fontcraft_engine::model::{ColorLabel, Font, Glyph, GlyphProps, Prop, Shape, glyph_order, glyph_props, keeps_alternates, metric};
 use serde_json::Value;
 
@@ -28,6 +34,8 @@ const MAX_DEPTH: usize = 8;
 const MAX_DEPS: usize = 64;
 /// Most cached outlines; past this the cache starts again empty.
 const MAX_CACHED: usize = 65_536;
+/// Most bytes of strike bitmaps the cells keep.
+pub const MAX_STRIKE_CACHE_BYTES: usize = 64 << 20;
 
 /// The twelve colour label names, in index order (`glyph.colorLabelIndices`).
 pub const COLOR_LABEL_NAMES: [&str; 12] =
@@ -63,6 +71,44 @@ pub struct FontViewModel {
     pub descender: f32,
     /// Why the query failed; every glyph is listed then.
     pub error: Option<String>,
+    /// The font's status definitions, in their order: the Status cell's pop-up.
+    pub statuses: Vec<StatusChoice>,
+    /// The strike the cells draw instead of the outlines.
+    pub strike: Option<StrikeShown>,
+}
+
+/// The strike the grid draws: its size, depth, the pixel band its lines take and the magnification.
+#[derive(PlainData, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StrikeShown {
+    pub ppem: u16,
+    pub depth: u8,
+    /// Pixels above and below the baseline the cell shows.
+    pub ascent: i32,
+    pub descent: i32,
+    /// Most points one pixel takes.
+    pub magnification: u8,
+}
+
+/// A glyph's bitmap in the strike shown: rows top to bottom at the strike's depth, as `StrikeGlyph` keeps them.
+#[derive(PlainData, Clone, Debug, Default, PartialEq, Eq)]
+pub struct StrikeCell {
+    /// Unique among the bitmaps made in this run: the key of its texture.
+    pub id: u64,
+    pub width: u16,
+    pub height: u16,
+    pub left: i32,
+    pub bottom: i32,
+    pub advance: i32,
+    pub depth: u8,
+    pub data: Vec<u8>,
+}
+
+/// One status definition as Font View offers it.
+#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+pub struct StatusChoice {
+    pub code: i64,
+    pub name: String,
+    pub color: [u8; 4],
 }
 
 /// One glyph as Font View lists it.
@@ -77,6 +123,12 @@ pub struct GlyphRow {
     pub cells: Vec<String>,
     /// Grid View: the outline. `None` in List View.
     pub art: Option<Arc<CellArt>>,
+    /// The code of the status the glyph is in (its stored one, else the default; `None` for a stored code the font
+    /// does not define), and that status's colour: the cell's status bar.
+    pub status: Option<i64>,
+    pub status_color: Option<[u8; 4]>,
+    /// Grid View with a strike shown: the glyph's bitmap in it, if it has one.
+    pub bitmap: Option<Arc<StrikeCell>>,
 }
 
 /// A cell outline: the closed contours, flattened, in font units.
@@ -110,6 +162,62 @@ pub struct OutlineCache {
     /// What the colour drawings were made with (`canvas::color::stamp`).
     color: u64,
     entries: HashMap<String, (Vec<Arc<Glyph>>, Arc<CellArt>)>,
+    strikes: StrikeCache,
+}
+
+/// Strike bitmaps kept across projections, by glyph name, for one strike of one strike list.
+#[derive(Default)]
+struct StrikeCache {
+    /// The font's strike list they were made from (its address) and the strike's size and depth.
+    source: usize,
+    strike: (u16, u8),
+    entries: HashMap<String, Option<Arc<StrikeCell>>>,
+    bytes: usize,
+    /// The id the next bitmap takes.
+    next: u64,
+}
+
+impl StrikeCache {
+    /// The bitmap of `glyph` in `strike`; `None` when the strike has none, or the cache is full.
+    fn cell(&mut self, strikes: &Arc<Vec<BitmapStrike>>, strike: &BitmapStrike, glyph: &str) -> Option<Arc<StrikeCell>> {
+        let source = Arc::as_ptr(strikes) as usize;
+        if self.source != source || self.strike != (strike.ppem, strike.depth) || self.entries.len() > MAX_CACHED {
+            let next = self.next;
+            *self = StrikeCache { source, strike: (strike.ppem, strike.depth), next, ..StrikeCache::default() };
+        }
+        if let Some(kept) = self.entries.get(glyph) {
+            return kept.clone();
+        }
+        let made = match strike.composed(glyph) {
+            Ok(Some(g)) if self.bytes.saturating_add(g.data.len()) <= MAX_STRIKE_CACHE_BYTES => {
+                self.bytes = self.bytes.saturating_add(g.data.len());
+                self.next = self.next.wrapping_add(1);
+                Some(Arc::new(StrikeCell {
+                    id: self.next,
+                    width: g.width,
+                    height: g.height,
+                    left: g.left,
+                    bottom: g.bottom,
+                    advance: g.advance,
+                    depth: strike.depth,
+                    data: g.data,
+                }))
+            }
+            // Past the byte limit the glyph shows an empty cell until the strike list or the choice changes.
+            Ok(Some(_)) | Ok(None) | Err(_) => None,
+        };
+        self.entries.insert(glyph.to_string(), made.clone());
+        made
+    }
+}
+
+/// The pixel band a strike's lines take: its stated ascent and descent, else four fifths of the em above the
+/// baseline and the rest below.
+fn strike_band(strike: &BitmapStrike) -> (i32, i32) {
+    let ppem = i32::from(strike.ppem).max(1);
+    let ascent = if strike.ascent > 0 { strike.ascent } else { ppem * 4 / 5 };
+    let descent = if strike.descent > 0 { strike.descent } else { (ppem - ascent).max(0) };
+    (ascent, descent)
 }
 
 pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, files: &mut color::ColorFiles, cx: &mut ProjectCx<'_>) {
@@ -131,26 +239,42 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, fil
     let by_name: HashMap<&str, &Arc<Glyph>> = arcs.iter().map(|g| (g.name.as_str(), g)).collect();
     let stamp = color::stamp(&font, &master);
     if cache.master != master || cache.color != stamp || cache.entries.len() > MAX_CACHED {
-        *cache = OutlineCache { master: master.clone(), color: stamp, entries: HashMap::new() };
+        let strikes = std::mem::take(&mut cache.strikes);
+        *cache = OutlineCache { master: master.clone(), color: stamp, entries: HashMap::new(), strikes };
     }
+    // The strike the cells draw; one the font no longer has leaves the outlines.
+    let strike = state.strike.and_then(|v| font.bitmap_strikes.iter().find(|s| s.ppem == v.ppem && s.depth == v.depth).map(|s| (v.magnification, s)));
+    let shown_strike = strike.map(|(magnification, s)| {
+        let (ascent, descent) = strike_band(s);
+        StrikeShown { ppem: s.ppem, depth: s.depth, ascent, descent, magnification }
+    });
     files.follow(cx.session.active().map(|d| d.id));
     let assets = cx.session.assets();
     let mode = color::cell_mode(&font, &master, false);
     let mut src = color::Sources { assets: assets.as_ref(), files, text: color::TEXT };
+    let defs = status::definitions(&font);
+    let statuses: Vec<StatusChoice> = defs.iter().map(|d| StatusChoice { code: d.code, name: d.name.clone(), color: status_rgba(d.color) }).collect();
     let mut glyphs: Vec<&Arc<Glyph>> = Vec::with_capacity(order.len());
     let mut rows = Vec::with_capacity(order.len());
     for (id, &i) in order.iter().enumerate() {
         let Some(glyph) = arcs.get(i) else { continue };
+        let in_status = glyph_status(&font, glyph, &statuses, &defs);
         let mut row = GlyphRow {
             name: glyph.name.clone(),
             export: glyph.export,
             unicode: glyph.unicodes.first().map(|u| format!("{u:04X}")),
+            status: in_status.map(|s| s.code),
+            status_color: in_status.map(|s| s.color),
             ..GlyphRow::default()
         };
         match state.mode {
-            ViewMode::Grid => row.art = Some(art(&font, glyph, &master, &by_name, cache, &mode, &mut src)),
+            ViewMode::Grid => match strike {
+                Some((_, s)) => row.bitmap = cache.strikes.cell(&font.bitmap_strikes, s, &glyph.name),
+                None => row.art = Some(art(&font, glyph, &master, &by_name, cache, &mode, &mut src)),
+            },
             ViewMode::List => {
-                let cell = Cell { font: &font, glyph, id, master: &master, props: props.get(glyph) };
+                let status = in_status.map(|s| s.name.as_str());
+                let cell = Cell { font: &font, glyph, id, master: &master, props: props.get(glyph), status };
                 row.cells = Column::ALL.iter().map(|c| cell.text(*c)).collect();
             }
         }
@@ -173,7 +297,8 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, fil
         let props = &props;
         let key = |i: usize| {
             let glyph = glyphs.get(i).copied()?;
-            Some(Cell { font: &font, glyph, id: i, master: &master, props: props.get(glyph) }.sort_value(sort.column))
+            let status = glyph_status(&font, glyph, &statuses, &defs).map(|s| s.name.as_str());
+            Some(Cell { font: &font, glyph, id: i, master: &master, props: props.get(glyph), status }.sort_value(sort.column))
         };
         sort_rows(&mut visible, sort, key);
     }
@@ -196,8 +321,25 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, fil
         descender,
         error,
         rows,
+        statuses,
+        strike: if state.mode == ViewMode::Grid { shown_strike } else { None },
     };
     super::set(model, value);
+}
+
+/// A status colour (components from 0 to 1) as bytes.
+fn status_rgba(c: [f64; 4]) -> [u8; 4] {
+    c.map(|v| if v.is_finite() { (v.clamp(0.0, 1.0) * 255.0).round() as u8 } else { 0 })
+}
+
+/// The status `glyph` is in: its stored code's definition, else the default one. A stored code the font does not
+/// define is in none.
+fn glyph_status<'s>(font: &Font, glyph: &Glyph, statuses: &'s [StatusChoice], defs: &[status::StatusDef]) -> Option<&'s StatusChoice> {
+    let code = match status::stored_status(font, &glyph.name) {
+        Some(code) => code,
+        None => defs.iter().find(|d| d.is_default)?.code,
+    };
+    statuses.iter().find(|s| s.code == code)
 }
 
 /// The rows `fontView.queryGlyphs` gives for `query`, in its order.
@@ -270,6 +412,8 @@ struct Cell<'a> {
     id: usize,
     master: &'a str,
     props: Option<Arc<GlyphProps>>,
+    /// The name of the status the glyph is in.
+    status: Option<&'a str>,
 }
 
 impl Cell<'_> {
@@ -306,6 +450,7 @@ impl Cell<'_> {
             Column::Lsb | Column::Rsb | Column::Width => self.number(column).map(|n| format!("{}", n.round())).unwrap_or_default(),
             Column::LeftGroup => glyph.kern_groups.left.clone().unwrap_or_default(),
             Column::RightGroup => glyph.kern_groups.right.clone().unwrap_or_default(),
+            Column::Status => self.status.unwrap_or_default().to_string(),
             _ => String::new(),
         }
     }

@@ -43,6 +43,7 @@ pub mod overlay_fonts;
 pub mod panose;
 pub mod path;
 pub mod primitive_measurements;
+pub mod rename_by_namelist;
 pub mod review_hints;
 pub mod rule_tree;
 pub mod sample_strings;
@@ -53,6 +54,7 @@ pub mod sidebar_filters;
 pub mod smart_settings;
 pub mod spec;
 pub mod start_window;
+pub mod status_definitions;
 pub mod tt;
 pub mod unsaved;
 
@@ -112,6 +114,8 @@ pub const SPECS: &[&[DialogSpec]] = &[
     interp::SPECS,
     primitive_measurements::SPECS,
     add_pixel_glyph::SPECS,
+    rename_by_namelist::SPECS,
+    status_definitions::SPECS,
 ];
 
 /// Runs every dialog module for this pass.

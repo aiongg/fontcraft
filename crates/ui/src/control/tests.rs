@@ -299,3 +299,131 @@ fn tool_select_and_tool_list_choose_and_name_the_tools() {
     // The catalog takes `tool.select` once: as the Select tool's definition.
     assert!(t.app.catalog.error.is_none(), "{:?}", t.app.catalog.error);
 }
+
+/// The events ring records a command, the document it opened and a failure; `since` reads only what came after, and
+/// `events.clear` empties the ring.
+#[test]
+fn events_record_commands_and_documents() {
+    let dir = std::env::temp_dir().join(format!("fontcraft-ui-events-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("events.glyphs").to_string_lossy().into_owned();
+    let mut saved = Session::with_document();
+    saved.execute("file.saveAs", &json!({"path": path})).unwrap();
+
+    let mut t = TestApp::new();
+    let start = t.ok("events.list", json!({}))["last"].clone();
+    t.ok("engine.execute", json!({"command": "file.open", "params": {"path": path}}));
+    let after = t.ok("events.list", json!({"since": start}));
+    let events = after["events"].as_array().cloned().unwrap_or_default();
+    assert!(events.iter().any(|e| e["kind"] == "command" && e["command"] == "file.open" && e["ok"] == true), "{after}");
+    let opened = |e: &Value| e["kind"] == "document" && e["action"] == "opened" && e["path"].as_str().is_some_and(|p| p.ends_with("events.glyphs"));
+    assert!(events.iter().any(opened), "{after}");
+    assert_eq!(after["dropped"], false);
+
+    let missing = dir.join("missing.glyphs").to_string_lossy().into_owned();
+    t.error("engine.execute", json!({"command": "file.open", "params": {"path": missing}}));
+    let failed = t.ok("events.list", json!({"since": after["last"].clone()}));
+    let failed = failed["events"].as_array().cloned().unwrap_or_default();
+    assert!(failed.iter().any(|e| e["command"] == "file.open" && e["ok"] == false && e["error"].is_string()), "{failed:?}");
+    assert!(!failed.iter().any(opened), "only what came after `since`");
+
+    assert!(t.ok("events.clear", json!({}))["cleared"].as_u64().is_some_and(|n| n > 0));
+    assert_eq!(t.ok("events.list", json!({}))["events"], json!([]));
+    assert!(t.error("events.list", json!({"since": -1})).contains("since"));
+    assert!(t.error("ui.wait", json!({})).starts_with("ui.wait:"), "a host without frames refuses a wait");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// `ui.wait` over TCP: after the request that opened a dialog, the idle wait returns with the dialog showing and its
+/// event recorded; a frame count waits for the frames; a timeout above the limit is refused at once.
+#[test]
+fn ui_wait_returns_once_the_window_is_idle() {
+    let mut t = TestApp::new();
+    t.ok("engine.execute", json!({"command": "path.addRectangle", "params": {"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200}}));
+    t.app.sent.push(Msg::View(crate::app::ViewMsg::SelectGlyph("A".into())));
+    t.frame();
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let ctx = t.frames.ctx.clone();
+    let addr = t.app.control.listen(listener, &ctx).unwrap();
+    let client = std::thread::spawn(move || {
+        let stream = std::net::TcpStream::connect(addr).unwrap();
+        stream.set_read_timeout(Some(std::time::Duration::from_secs(20))).unwrap();
+        let mut writer = stream.try_clone().unwrap();
+        let mut reader = BufReader::new(stream);
+        let mut replies = Vec::new();
+        for line in [
+            r#"{"id": 1, "method": "ui.menu.invoke", "params": {"command": "filter.roundCorners"}}"#,
+            r#"{"id": 2, "method": "ui.wait", "params": {"timeoutMs": 10000}}"#,
+            r#"{"id": 3, "method": "events.list"}"#,
+            r#"{"id": 4, "method": "ui.wait", "params": {"frames": 3}}"#,
+            r#"{"id": 5, "method": "ui.wait", "params": {"timeoutMs": 30001}}"#,
+        ] {
+            writeln!(writer, "{line}").unwrap();
+            let mut reply = String::new();
+            reader.read_line(&mut reply).unwrap();
+            replies.push(serde_json::from_str::<Value>(&reply).unwrap());
+        }
+        replies
+    });
+    for _ in 0..2_000 {
+        if client.is_finished() {
+            break;
+        }
+        t.frame();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    let replies = client.join().unwrap();
+    assert_eq!(replies[0]["result"], json!({"dialog": "dialog.filterRoundCorners"}), "{}", replies[0]);
+    let waited = &replies[1]["result"];
+    assert_eq!((&waited["idle"], &waited["timedOut"]), (&json!(true), &json!(false)), "{}", replies[1]);
+    assert!(waited["frames"].as_u64().is_some_and(|n| n >= super::wait::IDLE_FRAMES), "{waited}");
+    let events = replies[2]["result"]["events"].as_array().cloned().unwrap_or_default();
+    assert!(events.iter().any(|e| e["kind"] == "dialog" && e["action"] == "opened" && e["dialog"] == "dialog.filterRoundCorners"), "{events:?}");
+    assert_eq!(replies[3]["result"]["frames"], 3, "{}", replies[3]);
+    assert_eq!(replies[4]["ok"], false);
+    assert!(replies[4]["error"].as_str().is_some_and(|e| e.contains("timeoutMs")), "{}", replies[4]);
+    assert!(t.app.dialogs.open.is_some(), "the dialog is still open");
+}
+
+/// A dialog's number field takes arithmetic: the text `(10+20)/2` sets 15, and a division by zero is refused.
+#[test]
+fn a_dialog_number_field_takes_arithmetic() {
+    let mut t = TestApp::new();
+    t.ok("engine.execute", json!({"command": "path.addRectangle", "params": {"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200}}));
+    t.app.sent.push(Msg::View(crate::app::ViewMsg::SelectGlyph("A".into())));
+    t.frame();
+    t.ok("ui.menu.invoke", json!({"command": "filter.roundCorners"}));
+    let fields = t.ok("ui.dialog.inspect", json!({}))["fields"].as_array().cloned().unwrap_or_default();
+    let field = fields.iter().find(|f| f["kind"] == "number" || f["kind"] == "integer").and_then(|f| f["id"].as_str()).unwrap().to_owned();
+    let set = t.ok("ui.dialog.set", json!({"field": field, "value": "(10+20)/2"}));
+    let value = set["fields"].as_array().unwrap().iter().find(|f| f["id"] == field.as_str()).unwrap()["value"].as_f64();
+    assert_eq!(value, Some(15.0), "{set}");
+    assert!(t.error("ui.dialog.set", json!({"field": field, "value": "1/0"})).contains("number"));
+}
+
+/// `ui.menu.list` names each row's Option alternate and lists the alternate after it with `alternateOf`; the
+/// alternate is invoked by its own id, as a click with Alt held runs it.
+#[test]
+fn the_menu_list_reports_option_alternates() {
+    let mut t = TestApp::new();
+    let menus = t.ok("ui.menu.list", json!({}));
+    let items: Vec<Value> = menus.as_array().into_iter().flatten().flat_map(|m| m["items"].as_array().cloned().unwrap_or_default()).collect();
+    let at = |id: &str| items.iter().position(|i| i["command"] == id && i.get("alternateOf").is_none());
+    let close = at("view.closeTab").expect("a Close Tab row");
+    assert_eq!(items[close]["alternate"], "view.reopenLastClosedTab");
+    let held = &items[close + 1];
+    assert_eq!(
+        (&held["command"], &held["alternateOf"], &held["label"]),
+        (&json!("view.reopenLastClosedTab"), &json!("view.closeTab"), &json!("Reopen Last Closed Tab"))
+    );
+    assert_eq!(held["shortcut"], "Cmd+Alt+Shift+W", "the alternate keeps its own shortcut");
+    assert!(at("view.reopenLastClosedTab").is_none(), "the alternate has no row of its own");
+    let tidy = at("path.tidyUpPaths").expect("a Tidy Up Paths row");
+    assert_eq!(items[tidy + 1]["alternateOf"], "path.tidyUpPaths");
+
+    t.ok("engine.execute", json!({"command": "view.newTab", "params": {"glyphs": ["A"]}}));
+    let tabs = t.ok("ui.inspect", json!({}))["tabs"].as_array().map_or(0, Vec::len);
+    t.ok("ui.menu.invoke", json!({"command": "view.closeTab"}));
+    t.ok("ui.menu.invoke", json!({"command": "view.reopenLastClosedTab"}));
+    assert_eq!(t.ok("ui.inspect", json!({}))["tabs"].as_array().map_or(0, Vec::len), tabs, "the alternate reopened the closed tab");
+}

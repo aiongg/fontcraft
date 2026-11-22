@@ -354,6 +354,9 @@ impl FontCraftApp {
         for command in self.picks.poll(&self.host, &mut failed) {
             self.sent.push(FontCraftApp::route(command));
         }
+        for error in &failed {
+            self.control.events.error(error);
+        }
         for msg in std::mem::take(&mut self.sent) {
             if let Err(error) = self.apply_msg(msg) {
                 failed.push(error);
@@ -372,6 +375,7 @@ impl FontCraftApp {
         crate::shell::tabs::follow_document(self);
         self.project();
         crate::canvas::text::after_project(self);
+        crate::control::events::observe(self);
     }
 
     /// Runs `msg` now, as `drain` would after the frame, and returns the command's result: what views posted
@@ -412,8 +416,29 @@ impl FontCraftApp {
     }
 
     /// Applies one message: the only code that runs `Session::execute`. Tool input runs the toolbox, whose answer
-    /// is applied here too, before the next message.
+    /// is applied here too, before the next message. Each command run, and each other failure, goes into the control
+    /// channel's events; queries and shell getters, which change nothing, do not.
     fn apply(&mut self, msg: Msg, ask_files: bool, origin: Origin) -> Result<Value, String> {
+        let command = msg.command_id().map(str::to_owned);
+        let result = self.apply_now(msg, ask_files, origin);
+        match command {
+            Some(id) => {
+                let query = fontcraft_engine::find_command(&id).is_some_and(|spec| !spec.journal) || crate::shell::getters::find(&id).is_some();
+                if !query {
+                    let revision = self.session.active().map(|d| d.revision);
+                    self.control.events.command(&id, result.as_ref().map(|_| ()).map_err(String::as_str), revision);
+                }
+            }
+            None => {
+                if let Err(error) = &result {
+                    self.control.events.error(error);
+                }
+            }
+        }
+        result
+    }
+
+    fn apply_now(&mut self, msg: Msg, ask_files: bool, origin: Origin) -> Result<Value, String> {
         match msg {
             Msg::Run(command) => {
                 if ask_files && self.picks.ask(&self.host, &self.session, &command) {

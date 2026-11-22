@@ -1546,6 +1546,11 @@ summary = "Every numeric field accepts a simple arithmetic expression (such as 3
 ref = "FontLab 8 What's new › Explore & prepare › Other UI changes (Sliders; Calculations)"
 status = "docs"
 origin = "fontlab"
+notes = "Expressions in M14.5: panel number fields (the framework's number field) and dialog number fields (`panels/widgets.rs` `parse_number`, used by `dialogs/fields.rs`) read numbers joined by + - * / with parentheses and take the result on Return; a non-finite result (division by zero) is refused and the field keeps its value. The evaluator takes at most 256 bytes and nesting depth 32; a dialog number field's text is capped at 64 characters before that. The pull-down slider is not built."
+guesses = [
+    "The pull-down slider with a fine-control modifier is left out; only the arithmetic part is built.",
+    "In a dialog number field, text that starts with + or - is a signed number, not a change to the current value (panel fields follow the framework number field).",
+]
 
 # =====================================================================================================
 # FontLab — spacing and kerning
@@ -3637,7 +3642,7 @@ guesses = [
 [[command]]
 id = "view.setFontViewStrike"
 label = "Show Strike in Font View"
-menu = ["View"]
+menu = []
 shortcut = ""
 kind = "ui"
 params = "{strike?: {ppem: number, depth?: number}, magnification?: number}"
@@ -3646,7 +3651,16 @@ milestone = "M13"
 summary = "Makes the glyph grid show the bitmaps of one strike instead of rendered outlines, optionally magnified; omitting the strike returns to outlines. The View menu lists every strike, grey ones as size@depth."
 ref = "FontForge View menu › bitmap pixel size list, Bitmap Magnification"
 status = "docs"
-notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). Built for M4.24 (shell/font_view.rs, app/models/font_view.rs, panels/font_view/cells.rs): the View menu's Font View Strike submenu lists Outlines and each strike of the active font (dynamic rows, `app/menus_dynamic.rs`), the one shown checked. A cell draws its glyph's bitmap with references drawn in, one texture per bitmap tinted with the ink; a glyph without a bitmap shows an empty cell with its name. A strike the font no longer has shows the outlines again. Documented, not yet observed."
+guesses = [
+  "Without `depth` the strike of that size with the fewest bits per pixel is shown.",
+  "A pixel is `magnification` points (1 by default), shrunk to fit when the strike's line band or the bitmap's advance would not fit 80% of the cell; the strike's ascent and descent (else four fifths of the em above the baseline) set the band, centred in the cell. FontForge's font view at a strike's size would settle the placement.",
+  "While a strike shows, cells skip placed images and always show the glyph name.",
+  "The View menu lists the strikes in a Font View Strike submenu with Outlines first, keeping the magnification already set; the reference lists the sizes in the View menu itself with a separate Bitmap Magnification item.",
+]
+observe = [
+  "In FontForge, open a font with a 12 and a 16 pixel strike, pick 12 in the View menu, and note how the cells place a bitmap and what an empty glyph shows.",
+]
 origin = "fontforge"
 
 [[command]]
@@ -3948,14 +3962,14 @@ label = "Rename Glyphs by Name List…"
 menu = ["Font"]
 shortcut = ""
 kind = "engine"
-params = "{namelist: path | name, glyphs?, updateReferences?: bool}"
+params = "{namelist?: path | name, text?: string, glyphs?, updateReferences?: bool}"
 area = "font-view"
 milestone = "M13"
 summary = "Renames glyphs to the names a name list gives for their code points; a name list is a text file mapping code points to names. The font's current mapping can be saved as a name list, and a list of bare names can create empty unencoded glyphs."
 ref = "FontForge Encoding menu › Load Namelist, Rename Glyphs, Save Namelist of Font, Create Named Glyphs"
 status = "docs"
 origin = "fontforge"
-notes = "Documented, not yet observed. Renaming is built: lines `0x0041 A`, `U+0041 A` or `A;0041`, `%`/`#` comments, `Lang:` lines skipped, `Based:` refused; the built-in lists `nice` and `production` are the glyph data's names. Saving the font's mapping as a name list and creating glyphs from bare names are not built yet. Reader limits: 8 MiB, 300,000 lines, 200,000 entries."
+notes = "Documented, not yet observed. Renaming is built: lines `0x0041 A`, `U+0041 A` or `A;0041`, `%`/`#` comments, `Lang:` lines skipped, `Based:` refused; the built-in lists `nice` and `production` are the glyph data's names; `text` takes a name list's lines in place of a file. The Font menu item opens the Rename Glyphs by Name List dialog (`dialog.renameGlyphsByNamelist`), whose Renames list is the command's own check (`cmd::encodings::preview_renames`). Saving the font's mapping as a name list and creating glyphs from bare names are not built yet. Reader limits: 8 MiB, 300,000 lines, 200,000 entries."
 guesses = [
   "An unencoded glyph named after a renamed glyph plus a suffix is renamed with it (uni0041.sc to A.sc); the reference's documentation does not say, and renaming such a font in it would settle it.",
   "Renamed glyphs keep their code points and their places in the glyph order, and when a code point is named twice in a list the first name counts.",
@@ -4622,7 +4636,7 @@ summary = "Defines the project's list of development statuses (for example draft
 ref = "Fontra reference › Font menu › Status definitions"
 status = "docs"
 origin = "fontra"
-notes = "Documented (Font menu › Status definitions) but not yet observed in the running reference app. The command takes the whole list; the dialog that edits it is not built yet."
+notes = "Documented (Font menu › Status definitions) but not yet observed in the running reference app. The command takes the whole list; the Font menu item opens the Status Definitions dialog (`dialog.statusDefinitions`) on the font's list, which OK sends whole."
 guesses = [
   "The definitions are stored in the font's user data as a list of code, name, colour and default flag; Fontra's storage is not documented.",
   "Two definitions with the same code or the same name, or more than one default, are refused; checking the reference's Status definitions panel would settle it.",
@@ -4642,11 +4656,16 @@ summary = "Assigns one of the font's defined statuses to glyphs; a display optio
 ref = "Fontra reference › Glyph editor appearance (Development status color); Font menu › Status definitions"
 status = "docs"
 origin = "fontra"
-notes = "Verified by the M13 planning pass against Fontra's documentation (Font menu › Status definitions; Glyph editor appearance), which does not say where a status is stored. Documented, not yet observed in the running reference app."
+notes = "Verified by the M13 planning pass against Fontra's documentation (Font menu › Status definitions; Glyph editor appearance), which does not say where a status is stored. Documented, not yet observed in the running reference app. In Font View: List View's Status column (a pop-up of the defined statuses on each row), the glyph menu's Status submenu (each status with its colour, a check or a dash for the status all or some of the glyphs are in, then No Status) and a bar of the status colour along the foot of each grid cell."
 guesses = [
   "FontCraft stores the status per glyph, in the glyph's user data, so `.glyphs` and UFO keep it; per-source statuses would move it to layer user data. The reference documentation does not say.",
   "A glyph without a stored status is shown in the default status; setting a status on a new glyph in the reference app would settle it.",
   "The tint fills the advance box from the descender to the ascender at a quarter of the status colour's opacity, and shows whenever the glyph is in a defined status (no display toggle yet); the reference's Development status color option would settle the look and the default.",
+  "List View's Status column comes after every other column and shows by default; its pop-up sets the row's glyph only, not the selection. The reference has no list view of its own to compare with.",
+  "A grid cell shows its glyph's status as a bar along its foot, 6% of the cell high and at least 2 points; the reference's font overview cells would settle the look.",
+]
+observe = [
+  "In the reference app, define two statuses, give a glyph the second, and note how its cell in the font overview shows the status (bar, tint or nothing).",
 ]
 
 [[behavior]]
@@ -4749,4 +4768,40 @@ origin = "fontlab"
 notes = "Documented in the secondary reference's release notes, not yet observed. FontCraft: crates/ui/src/dialogs/interp/variation.rs, a dialog of font.mergeFontsToMasters that runs on Merge. Every open font starts ticked, named by the path it was opened from, else its title; it needs two open fonts."
 guesses = [
   "Every open font starts ticked; the secondary reference's dialog would settle its defaults.",
+]
+
+[[panel]]
+id = "dialog.renameGlyphsByNamelist"
+label = "Rename Glyphs by Name List"
+location = "dialog"
+controls = ["Names From pop-up: a file, pasted text, nice names or production names", "name-list file field with the file chooser", "pasted name list", "Update References checkbox", "Renames list: old name, new name and the problem of a clash"]
+area = "font-view"
+milestone = "M13"
+summary = "The dialog of Font › Rename Glyphs by Name List…: picks where the names come from, lists the renames OK will make with clashes marked, and runs font.renameGlyphsByNamelist once."
+ref = "FontForge Encoding menu › Rename Glyphs"
+status = "docs"
+origin = "fontforge"
+notes = "Built for M4.21 (crates/ui/src/dialogs/rename_by_namelist.rs). Run on OK: the font is unchanged while the dialog is open; the Renames list is read after every change from the command's own check. A list with a problem is refused whole and the dialog stays open with the message. Documented, not yet observed."
+guesses = [
+  "The dialog renames the glyphs selected in Font View, and every glyph when none is selected; the reference renames the whole font, which renaming with a selection in it would confirm.",
+  "Pasted text is offered beside a file, and the Renames list shows at most 2,000 rows; the reference reads a file only and shows no list.",
+]
+
+[[panel]]
+id = "dialog.statusDefinitions"
+label = "Status Definitions"
+location = "dialog"
+controls = ["a row per status: name, code, colour, Default checkbox, Remove", "Add Status button"]
+area = "font-view"
+milestone = "M13"
+summary = "The dialog of Font › Status Definitions…: edits the font's list of development statuses and sends it whole to font.setStatusDefinitions on OK."
+ref = "Fontra reference › Font menu › Status definitions"
+status = "docs"
+origin = "fontra"
+notes = "Built for M4.21 (crates/ui/src/dialogs/status_definitions.rs). Run on OK; Cancel changes nothing; a list the command refuses (a code or a name used twice) keeps the dialog open with the message. Documented, not yet observed."
+guesses = [
+  "A new status takes the next code after the highest one, the name Status n and a grey colour, and ticking Default on one status unticks the others; the reference's panel would settle both.",
+]
+observe = [
+  "In the reference app, open Font › Status definitions, add a status, and note its starting code, name and colour.",
 ]

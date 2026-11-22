@@ -6,7 +6,8 @@
 //! section starts with the colour swatches (Glyph Color, or Layer Color when Alt was held at the click) and the menu
 //! ends with Copy Glyph Names. Items that remove something (Delete Guide, the hint removals) show the danger tone
 //! (`craft_ext::ui::menu::danger_icon`). The glyph menu holds the swatches (Layer Color when Alt was held at the click), Exports, Tags (ending with More Tags… past
-//! `MAX_MENU_TAGS`) and Copy Glyph Names. A tag carries a check when every glyph has it and a dash when some do.
+//! `MAX_MENU_TAGS`), Status (when the font defines statuses: each with its colour, then No Status) and Copy Glyph Names.
+//! A tag or a status carries a check when every glyph has it and a dash when some do.
 
 use craft::theme::Srgba;
 use craft::ui::contract::overlay::Anchor;
@@ -37,6 +38,9 @@ craft::ui::words! {
         /// The Tags submenu and its last item.
         tags: "fontcraftContextMenu.tags" = "Tags";
         more_tags: "fontcraftContextMenu.moreTags" = "More Tags…";
+        /// The Status submenu and its item that clears the stored status.
+        status: "fontcraftContextMenu.status" = "Status";
+        no_status: "fontcraftContextMenu.noStatus" = "No Status";
         /// The Copy Glyph Names submenu and its formats.
         copy_names: "fontcraftContextMenu.copyNames" = "Copy Glyph Names";
         space_separated: "fontcraftContextMenu.spaceSeparated" = "Space Separated";
@@ -87,6 +91,8 @@ pub enum Pick {
     /// A tag of the Tags submenu.
     Tag(String),
     MoreTags,
+    /// A status of the Status submenu by its code, or No Status (`None`).
+    Status(Option<i64>),
     /// A format of Copy Glyph Names, by its `glyph.copyGlyphNames` name.
     CopyNames(&'static str),
 }
@@ -176,10 +182,36 @@ pub fn glyph_menu(ui: &mut Ui, opener: &Response, menu: &GlyphMenu) -> Answer {
                     }
                 });
             }
+            if !menu.statuses.is_empty() {
+                picked = picked.or(statuses(ui, menu, &words));
+            }
             picked.or(copy_names(ui, &words))
         });
     let picked = shown.inner.flatten();
     Answer { open: open && picked.is_none() && shown.output.closed.is_none(), picked }
+}
+
+/// The Status submenu: each status with its colour and mark, then No Status.
+fn statuses(ui: &mut Ui, menu: &GlyphMenu, words: &ContextMenuWords) -> Option<Pick> {
+    let mut picked = None;
+    let _ = Menu::submenu_row(ui, words.status.clone(), |ui, _| {
+        let unit = |c: u8| f32::from(c) / 255.0;
+        let mut entries: Vec<MarkedEntry<Option<i64>>> = menu
+            .statuses
+            .iter()
+            .map(|s| {
+                let [r, g, b, a] = s.color;
+                let entry = Entry::new(Some(s.code), Label::from(s.name.clone())).swatch(Srgba::new(unit(r), unit(g), unit(b), unit(a)));
+                MarkedEntry::new(entry).mark(entry_mark(s.mark))
+            })
+            .collect();
+        entries.push(Entry::separator().into());
+        entries.push(Entry::new(None, words.no_status.clone()).into());
+        if let Some(i) = marked_entry_rows(ui, &entries) {
+            picked = entries.get(i).and_then(MarkedEntry::value).map(|code| Pick::Status(*code));
+        }
+    });
+    picked
 }
 
 /// The menu mark of a switch that is on for all, some or none of the menu's glyphs.

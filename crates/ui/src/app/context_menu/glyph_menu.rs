@@ -4,11 +4,14 @@
 //! It holds the colour swatches (with Alt held at the click: the colour of the layer shown), the Exports check item
 //! (`glyph.setExport`, a dash when some of the glyphs export), the Tags submenu (`fontView.contextMenu.tags`), which ends with
 //! More Tags… when the font has more tags than [`MAX_MENU_TAGS`], and the Copy Glyph Names submenu, whose text goes to
-//! the system clipboard (`app::clipboard`).
+//! the system clipboard (`app::clipboard`). When the font defines statuses, the Status submenu lists them with their
+//! colours, a check on the status every glyph is in and a dash on one some are in, and ends with No Status
+//! (`glyph.setStatus`).
 
 use std::collections::{BTreeSet, HashMap};
 
 use craft::ui::runtime::commands::CommandRef;
+use fontcraft_engine::cmd::status;
 use fontcraft_engine::model::Font;
 use serde_json::{Map, Value, json};
 
@@ -67,6 +70,18 @@ pub struct GlyphMenu {
     pub layer: Option<String>,
     /// Alt was held when the menu opened: the swatches colour `layer` instead of the glyphs.
     pub alt: bool,
+    /// The font's statuses, in order, with how many of `glyphs` are in each. Empty: no Status submenu.
+    pub statuses: Vec<StatusItem>,
+}
+
+/// A status of the Status submenu.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct StatusItem {
+    pub code: i64,
+    pub name: String,
+    /// Red, green, blue and alpha.
+    pub color: [u8; 4],
+    pub mark: Mark,
 }
 
 /// What an item of a glyph menu does.
@@ -84,6 +99,8 @@ pub enum GlyphAction {
     MoreTags,
     /// A format of Copy Glyph Names.
     CopyNames(&'static str),
+    /// A status of the Status submenu, by its code, or No Status (`None`).
+    Status(Option<i64>),
 }
 
 /// The glyph menu for `glyphs`, opening at `screen`. Names the font lacks are left out.
@@ -107,9 +124,32 @@ pub fn open(app: &FontCraftApp, glyphs: &[String], screen: [f32; 2]) -> GlyphMen
         tags,
         screen,
         layer: menu_layer(app, font, &glyphs),
+        statuses: status_items(font, &glyphs),
         glyphs,
         alt: false,
     }
+}
+
+/// The Status submenu's statuses: each definition with how many of `glyphs` are in it (their stored status, else the
+/// default one).
+fn status_items(font: &Font, glyphs: &[String]) -> Vec<StatusItem> {
+    let defs = status::definitions(font);
+    let default = defs.iter().find(|d| d.is_default).map(|d| d.code);
+    let mut counts: HashMap<i64, usize> = HashMap::new();
+    for name in glyphs {
+        if let Some(code) = status::stored_status(font, name).or(default) {
+            *counts.entry(code).or_insert(0) += 1;
+        }
+    }
+    let byte = |c: f64| if c.is_finite() { (c.clamp(0.0, 1.0) * 255.0).round() as u8 } else { 0 };
+    defs.iter()
+        .map(|d| StatusItem {
+            code: d.code,
+            name: d.name.clone(),
+            color: d.color.map(byte),
+            mark: Mark::of(counts.get(&d.code).copied().unwrap_or(0), glyphs.len()),
+        })
+        .collect()
 }
 
 /// The layer the Alt swatches colour: for one glyph the layer it shows (the Layers panel's pick, else its layer of the
@@ -143,5 +183,9 @@ pub fn steps(menu: &GlyphMenu, action: &GlyphAction) -> Vec<Msg> {
         GlyphAction::Tag(tag) => vec![Msg::run("glyph.addTag", json!({"glyphs": menu.glyphs, "tag": tag}))],
         GlyphAction::MoreTags => vec![Msg::Shell(CommandRef::new(crate::shell::context_menu::SHOW_TAGS))],
         GlyphAction::CopyNames(format) => vec![Msg::run("glyph.copyGlyphNames", json!({"glyphs": menu.glyphs, "format": format}))],
+        GlyphAction::Status(code) => {
+            let status = code.map_or(Value::Null, |c| json!(c));
+            vec![Msg::run("glyph.setStatus", json!({"glyphs": menu.glyphs, "status": status}))]
+        }
     }
 }

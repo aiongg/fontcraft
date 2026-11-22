@@ -73,6 +73,8 @@ craft::ui::words! {
         ready: "fontcraftShell.ready" = "Ready";
         /// The document area's name.
         document: "fontcraftShell.document" = "Glyphs";
+        /// The canvas's scroll bars, as assistive technology names them.
+        scroll_bars: "fontcraftShell.scrollBars" = "Scroll bars";
         /// The options bar's button that shows or hides the Palette.
         palette: "fontcraftShell.palette" = "Palette";
     }

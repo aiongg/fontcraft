@@ -17,6 +17,7 @@ pub mod overlays;
 pub mod paint;
 pub mod reference_font;
 pub mod reporters;
+pub mod scroll_bars;
 pub mod text;
 pub mod tokens;
 pub mod tools;
@@ -153,6 +154,8 @@ pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
     let compatibility = props.compatibility;
     let tool = &mut *props.tool;
     let mut reply = None;
+    let extent = scroll_bars::extent(document, text::text_rect(text, top, glyph.map_or(0.0, |g| g.descender)), top);
+    let mut scrolled = None;
     let _ = canvas.show(ui, |ui, body| {
         let Some(space) = canvas_space(&Env::of(ui).view()) else { return };
         let painter = ui.painter_at(space.view.rect);
@@ -180,7 +183,9 @@ pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
             }
         }
         tool.set_camera(camera);
-        if let Some(pass) = tool_pass(&body.env) {
+        let on_bars =
+            extent.is_some_and(|extent| scroll_bars::show(ui, words.scroll_bars.clone(), space.view, space.view.rect, extent, top, &mut scrolled));
+        if !on_bars && let Some(pass) = tool_pass(&body.env) {
             reply = Some(ToolHost::new().run(ui, &pass, &mut *tool));
         }
     });
@@ -200,6 +205,7 @@ pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
         crate::shell::view::fit(props.view, rect, top, props.tokens.fit_margin);
     }
     sent.extend(props.tool.take_sent());
+    sent.extend(scrolled);
 }
 
 #[cfg(test)]

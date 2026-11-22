@@ -71,7 +71,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Rename Glyphs by Name List…",
         ["Font"],
         None,
-        "{namelist: path | \"nice\" | \"production\", glyphs?: [names] (default every glyph), updateReferences?: bool (default true)} renames each glyph to the name the name list gives the glyph's first code point (a glyph whose first code point the list does not name keeps its name); an unencoded glyph whose name is a renamed glyph's name plus a suffix follows it (uni0041.sc becomes A.sc). A name list is a text file of lines `0x0041 A`, `U+0041 A` or `A;0041`; nice and production are the glyph data's names. updateReferences renames components, metrics keys, kerning, groups and the glyphOrder parameter too. Glyphs keep their code points and places. Refused whole when a new name breaks the naming rules or is taken → {renamed: [{from, to}], updated: [{name, place}], stillUsed: [{name, place}]}",
+        "{namelist?: path | \"nice\" | \"production\", text?: string (a name list's lines, in place of namelist; exactly one of the two), glyphs?: [names] (default every glyph), updateReferences?: bool (default true)} renames each glyph to the name the name list gives the glyph's first code point (a glyph whose first code point the list does not name keeps its name); an unencoded glyph whose name is a renamed glyph's name plus a suffix follows it (uni0041.sc becomes A.sc). A name list is a text file of lines `0x0041 A`, `U+0041 A` or `A;0041`; nice and production are the glyph data's names. updateReferences renames components, metrics keys, kerning, groups and the glyphOrder parameter too. Glyphs keep their code points and places. Refused whole when a new name breaks the naming rules or is taken → {renamed: [{from, to}], updated: [{name, place}], stillUsed: [{name, place}]}",
         has_doc,
         rename_by_namelist
     ).files(const { &[FileParam::read("namelist").keywords(&["nice", "production"])] })
@@ -400,6 +400,25 @@ pub fn parse_namelist(bytes: &[u8]) -> std::result::Result<NameList, String> {
 /// The built-in name lists.
 pub const BUILTIN_NAMELISTS: [&str; 2] = ["nice", "production"];
 
+/// Where a rename takes its names from: a built-in list ([`BUILTIN_NAMELISTS`]), a name-list
+/// file, or a name list's text.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NameSource<'a> {
+    /// `nice`, `production`, or a file's path.
+    List(&'a str),
+    /// The lines of a name list.
+    Text(&'a str),
+}
+
+/// One rename a name list asks for. `problem`, when set, is why it cannot be made; one such
+/// rename refuses the whole list.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct PlannedRename {
+    pub from: String,
+    pub to: String,
+    pub problem: Option<String>,
+}
+
 /// Where renamed glyphs take their names from.
 enum Names {
     File(NameList),
@@ -417,19 +436,25 @@ impl Names {
     }
 }
 
-fn read_namelist(p: &Params, source: &str) -> Result<Names> {
-    match source {
-        "nice" => Ok(Names::Nice),
-        "production" => Ok(Names::Production),
-        path => {
-            let bytes = read_text_file(path)?;
-            let list = parse_namelist(&bytes).map_err(|e| p.bad(format!("{path}: {e}")))?;
-            if list.names.is_empty() {
-                return Err(p.bad(format!("{path} names no code points")));
-            }
-            Ok(Names::File(list))
-        }
+/// A name list read from `bytes`; `what` names it in messages.
+fn names_from_bytes(bytes: &[u8], what: &str) -> std::result::Result<Names, String> {
+    if bytes.len() > MAX_FILE_BYTES {
+        return Err(format!("{what} is {} bytes long; at most {MAX_FILE_BYTES} are read", bytes.len()));
     }
+    let list = parse_namelist(bytes).map_err(|e| format!("{what}: {e}"))?;
+    if list.names.is_empty() {
+        return Err(format!("{what} names no code points"));
+    }
+    Ok(Names::File(list))
+}
+
+fn read_names(source: NameSource<'_>) -> Result<std::result::Result<Names, String>> {
+    Ok(match source {
+        NameSource::List("nice") => Ok(Names::Nice),
+        NameSource::List("production") => Ok(Names::Production),
+        NameSource::List(path) => names_from_bytes(&read_text_file(path)?, path),
+        NameSource::Text(text) => names_from_bytes(text.as_bytes(), "the name list"),
+    })
 }
 
 /// The renames a name list asks for among `targets`: encoded glyphs by their first code point
@@ -459,6 +484,52 @@ fn planned_renames(font: &Font, data: &GlyphData, names: &Names, targets: &[Stri
     pairs
 }
 
+/// `pairs` with each new name checked against the naming rules and the names already taken.
+fn checked_renames(font: &Font, pairs: Vec<(String, String)>) -> Vec<PlannedRename> {
+    let renamed: HashSet<String> = pairs.iter().map(|(old, _)| old.clone()).collect();
+    let mut taken: HashSet<String> = font.glyphs.iter().map(|g| g.name.clone()).filter(|n| !renamed.contains(n)).collect();
+    pairs
+        .into_iter()
+        .map(|(from, to)| {
+            let exports = font.glyph(&from).is_none_or(|g| g.export);
+            let problem = if to.len() > MAX_NAME_LEN {
+                Some(format!("the new name is longer than {MAX_NAME_LEN} bytes"))
+            } else if let Err(e) = validate(&to, exports) {
+                Some(e.to_string())
+            } else if !taken.insert(to.clone()) {
+                Some("the name is taken".to_string())
+            } else {
+                None
+            };
+            PlannedRename { from, to, problem }
+        })
+        .collect()
+}
+
+/// The renames `source` asks for in `font` among `targets` (every glyph when `None`), each with
+/// its problem, without renaming anything: what `font.renameGlyphsByNamelist` would do. The outer
+/// error is a file that cannot be read, the inner one a list that cannot be used.
+pub fn preview_renames(
+    font: &Font,
+    data: &GlyphData,
+    source: NameSource<'_>,
+    targets: Option<&[String]>,
+) -> Result<std::result::Result<Vec<PlannedRename>, String>> {
+    let names = match read_names(source)? {
+        Ok(names) => names,
+        Err(e) => return Ok(Err(e)),
+    };
+    let all: Vec<String>;
+    let targets = match targets {
+        Some(list) => list,
+        None => {
+            all = font.glyphs.iter().map(|g| g.name.clone()).collect();
+            &all
+        }
+    };
+    Ok(Ok(checked_renames(font, planned_renames(font, data, &names, targets))))
+}
+
 /// Renames glyphs and nothing else: references keep the old names.
 fn rename_names_only(font: &mut Font, pairs: &[(String, String)]) -> Result<RenameReport> {
     let map: HashMap<&str, &str> = pairs.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
@@ -478,41 +549,36 @@ fn rename_names_only(font: &mut Font, pairs: &[(String, String)]) -> Result<Rena
     Ok(RenameReport { renamed: pairs.iter().map(|(a, b)| Renamed { from: a.clone(), to: b.clone() }).collect(), ..RenameReport::default() })
 }
 
+/// The `namelist` or `text` parameter: exactly one of them.
+fn name_source<'a>(p: &Params<'a>) -> Result<NameSource<'a>> {
+    match (p.opt_str("namelist")?, p.opt_str("text")?) {
+        (Some(_), Some(_)) => Err(p.bad("give `namelist` or `text`, not both")),
+        (Some(list), None) => Ok(NameSource::List(list)),
+        (None, Some(text)) => Ok(NameSource::Text(text)),
+        (None, None) => Err(p.bad("give `namelist` (a file, nice or production) or `text` (a name list's lines)")),
+    }
+}
+
 fn rename_by_namelist(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("font.renameGlyphsByNamelist", v)?;
-    let source = p.str("namelist")?;
+    let source = name_source(&p)?;
     let update = p.bool_or("updateReferences", true)?;
-    let names = read_namelist(&p, source)?;
     let data = s.glyph_data()?;
     let font = s.font()?;
-    let targets = match p.opt_glyphs("glyphs", font)? {
-        Some(list) => list,
-        None => font.glyphs.iter().map(|g| g.name.clone()).collect(),
-    };
-    let pairs = planned_renames(font, &data, &names, &targets);
-    if pairs.is_empty() {
+    let targets = p.opt_glyphs("glyphs", font)?;
+    let planned = preview_renames(font, &data, source, targets.as_deref())?.map_err(|e| p.bad(e))?;
+    if planned.is_empty() {
         return Ok(json!({"renamed": [], "updated": [], "stillUsed": []}));
     }
     // Every new name is checked before anything is renamed: a list with a problem is refused whole.
-    let renamed: HashSet<&str> = pairs.iter().map(|(old, _)| old.as_str()).collect();
-    let mut taken: HashSet<&str> = font.glyphs.iter().map(|g| g.name.as_str()).filter(|n| !renamed.contains(n)).collect();
-    let mut problems = Vec::new();
-    for (old, new) in &pairs {
-        let exports = font.glyph(old).is_none_or(|g| g.export);
-        if new.len() > MAX_NAME_LEN {
-            problems.push(format!("`{old}` to a name longer than {MAX_NAME_LEN} bytes"));
-        } else if let Err(e) = validate(new, exports) {
-            problems.push(format!("`{old}` to `{new}`: {e}"));
-        } else if !taken.insert(new.as_str()) {
-            problems.push(format!("`{old}` to `{new}`: the name is taken"));
-        }
-    }
+    let problems: Vec<String> = planned.iter().filter_map(|r| r.problem.as_ref().map(|why| format!("`{}` to `{}`: {why}", r.from, r.to))).collect();
     if !problems.is_empty() {
         let count = problems.len();
         let listed: Vec<String> = problems.into_iter().take(MAX_LISTED_PROBLEMS).collect();
         let more = if count > listed.len() { format!(" and {} more", count - listed.len()) } else { String::new() };
         return Err(p.bad(format!("nothing was renamed: {}{more}", listed.join("; "))));
     }
+    let pairs: Vec<(String, String)> = planned.into_iter().map(|r| (r.from, r.to)).collect();
     let label = "Rename Glyphs by Name List";
     let report =
         if update { s.edit(label, |font| Ok(rename_glyphs(font, &pairs)?))? } else { s.edit(label, |font| rename_names_only(font, &pairs))? };
