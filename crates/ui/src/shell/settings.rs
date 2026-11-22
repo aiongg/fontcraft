@@ -6,8 +6,10 @@
 //! command), so the sections do not depend on where the settings are stored.
 //!
 //! The sample strings live in the user settings as `sampleStrings.groups`, a list of `{name, strings}`; while nothing
-//! is stored, the built-in groups stand in ([`default_groups`]). A string is written as the settings write it:
-//! `/name ` names a glyph, `/Placeholder` is a placeholder, and the two characters `\n` are a line break.
+//! is stored, the built-in groups stand in ([`default_groups`]). The groups are read in one place,
+//! `dialogs/sample_strings.rs`, so the section and the Select Sample Text window always list the same groups. A string
+//! is written as the settings write it: `/name ` names a glyph, `/Placeholder` is a placeholder, and the two
+//! characters `\n` are a line break.
 
 use craft::ui::runtime::commands::CommandRef;
 use fontcraft_engine::Session;
@@ -18,14 +20,8 @@ use super::commands::{Module, UiCommand};
 use super::params;
 use crate::app::FontCraftApp;
 
-/// Most groups read from or written to the settings.
-pub const MAX_GROUPS: usize = 256;
-/// Most strings read or written, over all groups.
-pub const MAX_STRINGS: usize = 10_000;
-/// Longest sample string, in bytes; longer ones are left out on reading and refused on writing.
-pub const MAX_STRING_BYTES: usize = 4096;
-/// Longest group name, in characters.
-pub const MAX_NAME_CHARS: usize = 128;
+pub use crate::dialogs::sample_strings::{Group, MAX_GROUPS, MAX_NAME_CHARS, MAX_STRING_BYTES, MAX_STRINGS, default_groups, groups};
+
 /// The name of a group added without one.
 const NEW_GROUP: &str = "New Group";
 
@@ -132,69 +128,6 @@ pub fn inspect(app: &FontCraftApp, out: &mut Map<String, Value>) {
         })
         .collect();
     out.insert("settings".into(), json!({"open": st.open, "section": current(st), "sections": sections, "group": st.group}));
-}
-
-/// A group of sample strings.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Group {
-    pub name: String,
-    pub strings: Vec<String>,
-}
-
-/// The built-in groups, used while the settings hold none.
-pub fn default_groups() -> Vec<Group> {
-    let group = |name: &str, strings: &[&str]| Group { name: name.into(), strings: strings.iter().map(|s| (*s).to_string()).collect() };
-    vec![
-        group(
-            "Spacing",
-            &[
-                "nnnnnnnn",
-                "oooooooo",
-                "nnonnoonno",
-                "nn/Placeholder nn oo/Placeholder oo",
-                "HHOHHOOHHO",
-                "HH/Placeholder HH OO/Placeholder OO",
-                "HnHoHnHo\\nnHnoHonHo",
-            ],
-        ),
-        group("Figures", &["0123456789", "H0H1H2H3H4H5H6H7H8H9H", "n0n1n2n3n4n5n6n7n8n9n"]),
-        group(
-            "Latin",
-            &[
-                "Hamburgefonstiv\\nHAMBURGEFONSTIV",
-                "Five quacking zephyrs jolt my wax bed.",
-                "Jackdaws love my big sphinx of quartz.",
-                "Pack my box with five dozen liquor jugs.",
-            ],
-        ),
-        group("Greek", &["Ξεσκεπάζω την ψυχοφθόρα βδελυγμία.", "ΞΕΣΚΕΠΑΖΩ ΤΗΝ ΨΥΧΟΦΘΟΡΑ ΒΔΕΛΥΓΜΙΑ"]),
-        group("Cyrillic", &["Съешь же ещё этих мягких французских булок, да выпей чаю.", "СЪЕШЬ ЖЕ ЕЩЁ ЭТИХ МЯГКИХ ФРАНЦУЗСКИХ БУЛОК"]),
-    ]
-}
-
-/// The groups the settings hold, within the limits; the built-in ones while the settings hold none or something
-/// unreadable.
-pub fn groups(session: &Session) -> Vec<Group> {
-    let Ok(Some(stored)) = session.settings().reserved::<Vec<Value>>(Reserved::SampleStrings) else { return default_groups() };
-    let mut left = MAX_STRINGS;
-    stored
-        .iter()
-        .take(MAX_GROUPS)
-        .map(|g| {
-            let strings: Vec<String> = g
-                .get("strings")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter_map(Value::as_str)
-                .filter(|s| s.len() <= MAX_STRING_BYTES)
-                .take(left)
-                .map(str::to_string)
-                .collect();
-            left = left.saturating_sub(strings.len());
-            Group { name: g.get("name").and_then(Value::as_str).unwrap_or_default().chars().take(MAX_NAME_CHARS).collect(), strings }
-        })
-        .collect()
 }
 
 fn store(session: &mut Session, groups: &[Group]) -> Result<(), String> {
@@ -316,7 +249,7 @@ mod tests {
     use fontcraft_engine::Session;
     use serde_json::json;
 
-    use super::{MAX_STRING_BYTES, default_groups, groups};
+    use super::{MAX_GROUPS, MAX_NAME_CHARS, MAX_STRING_BYTES, MAX_STRINGS, default_groups, groups};
     use crate::app::{APP, FontCraftApp, Msg};
 
     fn shell(app: &mut FontCraftApp, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
@@ -343,6 +276,33 @@ mod tests {
         assert_eq!(groups(&app.session).len(), before);
         shell(&mut app, "settings.resetSampleStrings", json!({})).unwrap();
         assert_eq!(groups(&app.session), default_groups());
+    }
+
+    /// The group and string limits hold for adding and setting, and a refused command leaves the groups as they were.
+    #[test]
+    fn sample_string_commands_keep_to_the_limits() {
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        assert!(shell(&mut app, "settings.addSampleStringGroup", json!({"name": "  "})).is_err(), "a blank name");
+        let long_name = "n".repeat(MAX_NAME_CHARS + 1);
+        assert!(shell(&mut app, "settings.addSampleStringGroup", json!({"name": long_name})).is_err(), "a long name");
+        shell(&mut app, "settings.addSampleStringGroup", json!({})).unwrap();
+        assert_eq!(groups(&app.session).last().map(|g| g.name.clone()), Some("New Group".to_string()));
+
+        let used: usize = groups(&app.session).iter().map(|g| g.strings.len()).sum();
+        let too_many: Vec<String> = (0..=MAX_STRINGS - used).map(|i| format!("s{i}")).collect();
+        let err = shell(&mut app, "settings.setSampleStrings", json!({"group": "New Group", "strings": too_many})).unwrap_err();
+        assert!(err.contains("more fit"), "{err}");
+        let fits: Vec<String> = (0..MAX_STRINGS - used).map(|i| format!("s{i}")).collect();
+        shell(&mut app, "settings.setSampleStrings", json!({"group": "New Group", "strings": fits})).unwrap();
+        assert!(shell(&mut app, "settings.addSampleStringGroup", json!({"strings": ["one more"]})).is_err(), "no string left");
+
+        shell(&mut app, "settings.resetSampleStrings", json!({})).unwrap();
+        while groups(&app.session).len() < MAX_GROUPS {
+            shell(&mut app, "settings.addSampleStringGroup", json!({})).unwrap();
+        }
+        assert!(shell(&mut app, "settings.addSampleStringGroup", json!({})).is_err(), "no group left");
+        assert_eq!(groups(&app.session).len(), MAX_GROUPS);
+        assert!(shell(&mut app, "settings.setSampleStrings", json!({"group": 0})).is_err(), "strings are required");
     }
 
     /// `app.settings` opens on an available section and refuses one that is not built.

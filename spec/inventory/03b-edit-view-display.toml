@@ -1638,7 +1638,7 @@ guesses = [
 [[behavior]]
 id = "sampleStrings.storedInSettings"
 area = "edit-text"
-milestone = "M14"
+milestone = "M5"
 summary = "Sample strings are an application-level list edited in Settings > Sample Strings, not part of the font file."
 ref = "Edit View › Entering Text › Sample Strings"
 status = "handbook"

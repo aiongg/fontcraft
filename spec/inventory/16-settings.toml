@@ -701,10 +701,21 @@ controls = [
   "Default button",
 ]
 area = "edit-text"
-milestone = "M14"
+milestone = "M5"
 summary = "Section that stores the groups of sample strings offered for insertion in Edit View."
 ref = "Settings › Sample Strings"
 status = "handbook"
+notes = "Built in M5.29 as the Sample Strings section of the Settings window (`dialogs/settings.rs`): Add Group, Remove Group and Default in a row, the groups as a segmented choice, and a multi-line field with the shown group's strings that commits when it loses the focus. The section and the Select Sample Text window read the groups through one function, so an edit shows in that window's list at once."
+guesses = [
+  "The plus, minus and Default buttons sit in one row above the group list.",
+  "The groups show as a row of choices above the field, not as a list beside it.",
+  "The field commits its lines when it loses the focus, not at each keystroke.",
+  "Empty lines in the field are dropped, not stored as empty sample strings.",
+]
+observe = [
+  "Open Settings > Sample Strings and note where the plus, minus and Default buttons and the group list sit.",
+  "Type two strings with an empty line between them, switch groups and back, and note whether the empty line was kept.",
+]
 
 [[setting]]
 id = "sampleStrings.groups"
@@ -717,7 +728,7 @@ milestone = "M5"
 summary = "Ordered list of named groups, each holding sample strings, one per line. Stored as structured data (list of {name, strings}); the schema's kind list has no list type, hence string."
 ref = "Settings › Sample Strings"
 status = "handbook"
-notes = "Moved from M14 to M5 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): Select Sample Text (M5) reads it from the user settings store of M4. The settings section and its group commands stay M14. Built in M5.13 as the reserved settings id `sampleStrings.groups` (`[{name, strings}]`, at most 256 groups and 10,000 strings of 4,096 bytes); nothing writes it before M14's commands, and while it holds nothing or something unreadable the built-in groups stand in."
+notes = "Moved from M14 to M5 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): Select Sample Text (M5) reads it from the user settings store of M4. The settings section and its group commands moved to M5 too (M5.29). Built in M5.13 as the reserved settings id `sampleStrings.groups` (`[{name, strings}]`, at most 256 groups and 10,000 strings of 4,096 bytes); the section's commands write it (M5.29), and while it holds nothing or something unreadable the built-in groups stand in. An entry without a name or a list of strings is left out on reading."
 guesses = [
   "The built-in default holds groups of our own choosing: spacing strings built around n, o, H and O with placeholders, figures, and traditional pangrams for Latin, Greek and Cyrillic; no source lists the reference defaults we may copy.",
 ]
@@ -730,10 +741,18 @@ shortcut = ""
 kind = "ui"
 params = "{name?: string, strings?: [string]}"
 area = "edit-text"
-milestone = "M14"
+milestone = "M5"
 summary = "Appends a new, empty sample-string group (plus button)."
 ref = "Settings › Sample Strings"
 status = "handbook"
+notes = "Built in M5.29; refuses a 257th group, a blank name or one longer than 128 characters, and strings past the 10,000 shared by all groups. The new group becomes the one the section shows."
+guesses = [
+  "A group added without a name is called New Group.",
+  "The new group is the one the section shows next.",
+]
+observe = [
+  "Click the plus button in Settings > Sample Strings and note the new group's name and whether it is selected.",
+]
 
 [[command]]
 id = "settings.removeSampleStringGroup"
@@ -743,10 +762,17 @@ shortcut = ""
 kind = "ui"
 params = "{group: name | index}"
 area = "edit-text"
-milestone = "M14"
+milestone = "M5"
 summary = "Deletes the selected sample-string group with all its strings (minus button)."
 ref = "Settings › Sample Strings"
 status = "handbook"
+notes = "Built in M5.29; the minus button is greyed while there is no group, and the section then shows the group that took the removed one's place, or the last group."
+guesses = [
+  "The minus button removes the group without asking.",
+]
+observe = [
+  "Click the minus button with a group that holds strings and note whether a confirmation appears.",
+]
 
 [[command]]
 id = "settings.setSampleStrings"
@@ -756,7 +782,7 @@ shortcut = ""
 kind = "ui"
 params = "{group: name | index, strings: [string]}"
 area = "edit-text"
-milestone = "M14"
+milestone = "M5"
 summary = "Replaces the strings of one group; the UI equivalent is editing the text field. Proposed for headless use."
 ref = "Settings › Sample Strings"
 status = "inferred"
@@ -772,15 +798,22 @@ shortcut = ""
 kind = "ui"
 params = "{}"
 area = "edit-text"
-milestone = "M14"
+milestone = "M5"
 summary = "Restores the built-in sample strings and removes all groups the user added."
 ref = "Settings › Sample Strings"
 status = "handbook"
+notes = "Built in M5.29: it clears the stored groups, so the built-in groups of `sampleStrings.groups` stand in again."
+guesses = [
+  "Default restores the groups without asking first.",
+]
+observe = [
+  "Click Default in Settings > Sample Strings after adding a group and note whether a confirmation appears.",
+]
 
 [[behavior]]
 id = "sampleStrings.oneStringPerLine"
 area = "edit-text"
-milestone = "M14"
+milestone = "M5"
 summary = "In the editor each line of the text field is one sample string of the selected group."
 ref = "Settings › Sample Strings"
 status = "handbook"
@@ -788,7 +821,7 @@ status = "handbook"
 [[behavior]]
 id = "sampleStrings.unicodeText"
 area = "edit-text"
-milestone = "M14"
+milestone = "M5"
 summary = "The field accepts any Unicode text, including combining marks and non-ASCII characters, and stores it unchanged."
 ref = "Settings › Sample Strings"
 status = "handbook"
@@ -796,7 +829,7 @@ status = "handbook"
 [[behavior]]
 id = "sampleStrings.lineBreakEscape"
 area = "edit-text"
-milestone = "M14"
+milestone = "M5"
 summary = "The two characters backslash and n inside a sample string stand for a line break in the inserted text."
 ref = "Settings › Sample Strings"
 status = "handbook"
@@ -804,7 +837,7 @@ status = "handbook"
 [[behavior]]
 id = "sampleStrings.glyphNameEscape"
 area = "edit-text"
-milestone = "M14"
+milestone = "M5"
 summary = "A glyph can be given by name as a slash, the glyph name and a terminating space; this reaches unencoded or hard-to-type glyphs. The terminating space is consumed, not shown."
 ref = "Settings › Sample Strings"
 status = "handbook"
@@ -812,7 +845,7 @@ status = "handbook"
 [[behavior]]
 id = "sampleStrings.consecutiveGlyphNames"
 area = "edit-text"
-milestone = "M14"
+milestone = "M5"
 summary = "When one slash-name is directly followed by another, the space between them may be left out because the next slash ends the name."
 ref = "Settings › Sample Strings"
 status = "handbook"
@@ -820,7 +853,7 @@ status = "handbook"
 [[behavior]]
 id = "sampleStrings.placeholder"
 area = "edit-text"
-milestone = "M14"
+milestone = "M5"
 summary = "/Placeholder inserts a placeholder that always shows whichever glyph is currently selected."
 ref = "Settings › Sample Strings"
 status = "handbook"
