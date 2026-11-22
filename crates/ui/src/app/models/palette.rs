@@ -135,8 +135,8 @@ pub struct InfoBoxModel {
     pub component: Option<ComponentBox>,
     pub corner: Option<CornerBox>,
     pub cap: Option<CapBox>,
-    /// The timing graph of the one selected node's interpolation curve.
-    pub timing: Option<super::hoi::TimingGraph>,
+    /// The one selected node's interpolation curve and its timing graph (`panels::info_box_hoi`).
+    pub hoi: Option<super::hoi::HoiBox>,
     /// The edited glyph's kerning towards its neighbours in the edit view's text (`panels::info_box_kerning`).
     pub kerning: Option<super::info_box_kerning::KernBox>,
     /// The selected placed image, in place of the selection part (`panels::info_box_image`).
@@ -398,7 +398,9 @@ fn info_box(cx: &mut ProjectCx<'_>, edit: Option<&Edit>) -> InfoBoxModel {
         b.corner = components::corner_box(font, &edit.glyph, layer, &edit.selection);
         b.cap = components::cap_box(font, &edit.glyph, layer, &edit.selection);
     }
-    b.timing = cx.session.font().ok().and_then(|font| super::hoi::timing_of(font, &edit.glyph, &edit.layer, &edit.selection.points));
+    if !cx.view.edit_background {
+        b.hoi = cx.session.font().ok().and_then(|font| super::hoi::hoi_of(font, &edit.glyph, &edit.layer, &edit.selection.points));
+    }
     b
 }
 

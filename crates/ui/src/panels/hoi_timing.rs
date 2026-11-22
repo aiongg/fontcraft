@@ -1,6 +1,7 @@
-//! The Info box's timing graph (M9.32, row `hoi.timingGraph`): position along the span across, share of the curve's
-//! length travelled up, for the one selected node's interpolation curve. The diagonal of constant speed is drawn
-//! faint behind it. Read-only; the curve is edited on the canvas and with the `hoi.*` commands.
+//! The Info box's timing graph (M9.32, row `hoi.timingGraph`), under the interpolation curve part (`info_box_hoi`):
+//! position along the span across, share of the curve's length travelled up, for the one selected node. The diagonal
+//! of constant speed is drawn faint behind it; a linear node's graph is that diagonal. Read-only: the curve is edited
+//! in the part above and with the `hoi.*` commands.
 
 use craft::ui::contract::{Props as _, Show as _, ShowContainer as _};
 use craft::ui::display::{Picture, PictureSize, Text};
