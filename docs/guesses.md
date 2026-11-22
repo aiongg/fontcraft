@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**3240 guesses on 1670 rows (678 of them live commands).**
+**3257 guesses on 1673 rows (681 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -64,6 +64,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `path.tidyUpPaths` | M3 | handbook | yes | A straight curve becomes a line when either of its end nodes is selected; running Tidy up Paths on one selected end in the reference app would settle it. |
 | `path.tidyUpPaths` | M3 | handbook | yes | A node on a line next to a curve is removed only when the curve's handles lie on the line between the node's on-curve neighbours, so the outline stays as it was; a node where a line runs into a curve along the curve's handle is kept. |
 | `infoBox.setSizeLock` | M3 | inferred | yes | The lock starts open; the handbook gives no default. |
+| `infoBox.setSizeLock` | M3 | inferred | yes | The lock is an icon without a caption, as the kerning locks of the Info box are. |
 | `path.alignSelection` | M3 | handbook | yes | When width equals height the selection aligns on one X, and the transformation origin's column or row picks min, centre or max (03a question 13). |
 | `edit.delete` | M3 | handbook | yes | The refitted segment keeps its end nodes and the directions it leaves and enters them in, and fits the two handle lengths by least squares over the removed segments (03a question 10). |
 | `edit.delete` | M3 | handbook | yes | With only handles selected the segment becomes a line; with every node of a path selected the path is removed. |
@@ -262,6 +263,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `textPreview.setWritingDirection` | M5 | handbook | yes | Line breaking measures a trailing blank with the kern it has before its level is reset to the paragraph's, so a line can break up to one kern early; a right-to-left line that ends in a kerned blank, in the reference app, would settle how the reference measures it. |
 | `textPreview.find` | M5 | handbook | yes | The search options are Ignore Case (on at first) and Contains, Starts With or Full Word, as the system find bar of the reference offers them; matches do not overlap. |
 | `textPreview.find` | M5 | handbook | yes | Replace changes the current match, All changes every match; a replacement that would take the text past 1,000,000 characters is refused. |
+| `textPreview.insertPattern` | M14 | handbook | yes | Four patterns: any space (white space other than a line break), any digit, any letter and a line end; the handbook lists none. |
+| `textPreview.insertPattern` | M14 | handbook | yes | Tokens are written in the search as backslash escapes, so a literal backslash is searched as two; the system find bar shows tokens as tokens, which a plain text field cannot. |
+| `textPreview.insertPattern` | M14 | handbook | yes | A line end matches the line break character only, not the end of the text. |
+| `textPreview.insertPattern` | M14 | handbook | yes | No shortcut: the reference's key opens a menu of patterns, and this command takes the pattern as a parameter. |
 | `edit.selectSampleText` | M5 | handbook | yes | Choosing a sample string replaces the whole text of the tab; the handbook says the string goes into the text without saying where. |
 | `edit.selectNextSampleString` | M5 | handbook | yes | Next and Previous wrap around at the ends of the list. |
 | `edit.selectNextSampleString` | M5 | handbook | yes | Next and Previous step through the strings of all groups as one list, from the string chosen last in any tab; with none chosen yet, Next takes the first string and Previous the last. |
@@ -298,6 +303,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `preview.setOffset` | M5 | inferred | yes | The offset is in screen points, added to where the centring puts the line, and stays when the edited glyph changes; dragging in the reference app settles it. |
 | `preview.render` | M9 | inferred | yes | `size` is the image height in pixels, the strip from Preview Descender to Preview Ascender filling it, as the Preview Area scales to its height. |
 | `preview.render` | M9 | inferred | yes | `features` is accepted and not applied, with a warning, since the Preview Area lays its line out without feature code. |
+| `textPreview.showExportedFonts` | M14 | inferred | yes | The switch is a pop-up in the Text Preview window with no menu item; nothing in the reference app settles a place. |
+| `textPreview.showExportedFonts` | M14 | inferred | yes | font names a file by its file name rather than its PostScript name, since two files of a folder can share a PostScript name. |
 | `infoBox.showsColorLabels` (behavior) | M4 | handbook | – | The split square sits at the left of the Info box and is drawn only when the glyph or the active layer has a colour label; the Info box itself shows only while something is selected. Settled by observation. |
 | `pan.scrolling` (behavior) | M3 | handbook | – | The scroll bars measure the edited glyph's box joined with the laid-out text, not the whole font or the text's line height alone. |
 | `pan.scrolling` (behavior) | M3 | handbook | – | The bars are always shown, in the docked look of the framework, not only while scrolling. |
@@ -305,7 +312,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `background.usedByFilters` (behavior) | M3 | handbook | – | Only Hatch Outline backs up; the handbook names no other filter. |
 | `background.usedByFilters` (behavior) | M3 | handbook | – | The copy replaces what the background held, shapes and anchors, as Selection to Background does. |
 | `background.usedByFilters` (behavior) | M3 | handbook | – | A re-run hatches the foreground as it is; it does not read the background back. |
-| `text.lineWidth` (behavior) | M5 | handbook | – | Lines wrap at 10,000 units unless the setting says otherwise; no source gives the default. |
+| `text.lineWidth` (behavior) | M5 | handbook | – | Lines wrap at ten em (10,000 thousandths of an em) unless the setting says otherwise; no source gives the default. |
 | `text.lineWidth` (behavior) | M5 | handbook | – | A line that overflows breaks after its last space, else before the glyph that overflows, and a space may hang past the width; wrapped text in the reference app settles it. |
 | `text.lineWidth` (behavior) | M5 | handbook | – | In top-to-bottom text the lines are columns, placed from right to left one line height apart; a vertical tab in the reference app settles it. |
 | `text.currentGlyphAfterCursor` (behavior) | M5 | handbook | – | At the end of the text or of a line the current glyph is the glyph before the cursor, and next to a placeholder or a missing character it stays what it was; moving the cursor there in the reference app settles it. |
@@ -358,8 +365,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `preview.singleLine` (behavior) | M5 | handbook | – | On the preview line a line break takes no room; a tab of several lines in the reference app's Preview Area settles it. |
 | `preview.singleLine` (behavior) | M5 | handbook | – | Vertical text previews on a horizontal line, and right-to-left text from the right; the reference app with a vertical tab settles it. |
 | `preview.respectsInstanceData` (behavior) | M9 | handbook | – | The preview of an instance applies the instance's interpolation parameters (Local Interpolation, InterpolationWeightY, manual interpolation) and no export filters (Rename Glyphs, Remove Glyphs) or filters; settle by previewing an instance with Rename Glyphs and with a filter parameter in the reference app. |
-| `textPreview.exportedFonts` (behavior) | M14 | inferred | – | A watched file is read again when its modification time changes, at most once a second; a user report of missed or slow updates would settle it. |
-| `textPreview.showExportedFonts` | M14 | inferred | no | The switch is a pop-up in the Text Preview window with no menu item; nothing in the reference app settles a place. |
+| `textPreview.exportedFonts` (behavior) | M14 | inferred | – | A watched file is read again when its size or modification time changes, looked at once a second; a user report of missed or slow updates would settle it. |
+| `textPreview.exportedFonts` (behavior) | M14 | inferred | – | A collection file shows its first font only. |
+| `textPreview.exportedFonts` (behavior) | M14 | inferred | – | The last export is remembered for the session only, not saved with the document. |
 | `infoBox.glyph` (panel) | M5 | handbook | – | With several glyphs selected in the text, the Info box describes the glyph after the cursor only, and the Unicode value is shown, not edited. |
 | `infoBox.glyph` (panel) | M5 | handbook | – | At each outer edge the kern field sits on the sidebearing row and the group field with its lock on the width row; a screenshot of the reference app's Info box in text mode would settle it. |
 | `infoBox.glyph` (panel) | M5 | handbook | – | The preceding glyph's box sits beside the glyph box, on the side where the preceding glyph is drawn; the reference app with the Text tool would settle it. |
@@ -381,6 +389,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `text` (tool) | M5 | handbook | – | Return types a line break; the handbook allows several lines but does not name the key. |
 | `text` (tool) | M5 | handbook | – | Up and Down move to the nearest place on the line above or below, and to the start or the end of the text from the first or the last line; in right-to-left text Left steps forward in the text; in top-to-bottom text Up and Down step along the column and Left and Right move between columns. Moving the cursor in such texts in the reference app settles it. |
 | `text` (tool) | M5 | handbook | – | Backspace and Delete with Alt or Cmd do nothing (no word or line deletion); no source names them. |
+| `text` (tool) | M5 | handbook | – | The word and document keys follow the system's text conventions (Alt+Left/Right by word, Cmd+Up/Down to the ends of the text); the handbook only says that standard text editing applies. |
+| `text` (tool) | M5 | handbook | – | A word ends at a space, any other typed white space or a line break; Alt+Right goes past them to the end of the next word and Alt+Left to the start of the word before. Without Shift the move starts from the selection's edge on the arrow's side. In right-to-left text Alt+Left steps forward, in top-to-bottom text Alt+Up/Down move by word and Alt+Left/Right do nothing. |
 | `text` (tool) | M5 | handbook | – | Typing or moving the cursor past the canvas's edge scrolls the canvas sideways, the zoom kept, so the cursor stays in view; typing past the window's edge in the reference app settles it. |
 | `text` (tool) | M5 | handbook | – | A tab whose text holds several glyphs fits the whole text in the canvas the first time it draws, and so does a text that replaces the whole text (editView.setText, a sample string); typing keeps the zoom. Opening several glyphs in a new tab of the reference app settles it. |
 | `text` (tool) | M5 | handbook | – | The canvas scrolls freely past the edited glyph's advance box, so the text around it can be scrolled into view; the framework's default keeps the document on screen. |
@@ -632,6 +642,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontView.grid` (panel) | M4 | handbook | – | Section headers of the glyphOrder parameter show only while the view lists every glyph in glyph order (no filter, search or sort). Settled by observation. |
 | `fontView.list` (panel) | M4 | handbook | – | A click on an editable cell of the only selected row, or a double-click on it, starts editing; a click on an Exports cell flips the flag; a double-click on a cell that cannot be edited opens the glyph. Settled by observation. |
 | `fontView.list` (panel) | M4 | handbook | – | Values that come from the glyph data rather than from the glyph are drawn dimmed. Settled by observation. |
+| `fontView.inspector` (panel) | M4 | handbook | – | In Edit View the inspector describes the edited glyph alone, not every glyph of the tab's text or the glyphs selected in text mode. |
 | `fontView.inspector` (panel) | M4 | handbook | – | With several glyphs selected the Name field is read-only and shows Multiple Values, since glyph names are unique. Settled by observation. |
 | `fontView.inspector` (panel) | M4 | handbook | – | The metric and kerning group fields are shown read-only until their commands exist (M5). Settled by M5. |
 | `fontView.inspector` (panel) | M4 | handbook | – | A Unicode value typed with several glyphs selected goes to all of them, as for any other field. Settled by observation. |
@@ -2022,6 +2033,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `appearance.alwaysLightModeFontView` (setting) | M14 | handbook | – | Off by default; the handbook gives no default. |
 | `appearance.alwaysLightModeEditView` (setting) | M14 | handbook | – | Always use Light Mode changes the view's content, not the window chrome. |
 | `appearance.alwaysLightModeEditView` (setting) | M14 | handbook | – | Off by default; the handbook gives no default. |
+| `appearance.textViewWidth` (setting) | M14 | handbook | – | 10,000 thousandths of an em (ten em) by default; the handbook gives no default. |
+| `appearance.textViewWidth` (setting) | M14 | handbook | – | The accepted range, 1 to 100,000 thousandths of an em, is ours; no source gives one. |
 | `appearance.handleSize` (setting) | M14 | handbook | – | Three steps, small, regular and large, at 0.75, 1 and 1.5 times the regular sizes; the handbook lists no steps. Settled by opening the reference's Appearance settings and measuring a node at each step. |
 | `appearance.handleSize` (setting) | M14 | handbook | – | The appearance colour settings default to the canvas colours FontCraft drew before they existed, the same value for light and dark; the handbook states no defaults. Settled by reading the reference's colour wells after Standard. |
 | `appearance.color.foregroundStroke.dark` (setting) | M14 | handbook | – | The dark default is `#e6e6e6`, so the dark canvas is dark with a light outline; the handbook gives no default. Settled by reading the reference's dark well after Standard. |
@@ -2099,7 +2112,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `customParameters.unknownKept` (behavior) | M7 | inferred | – | Unknown parameters are shown and kept, not hidden or dropped; opening a file with an unknown parameter in the reference app settles it. |
 | `Add Class` (parameter) | M8 | handbook | – | A leading @ on the class name is dropped, and the white space after the semicolon is not part of the code (glyphsLib's split); exporting with the parameter in the reference app settles it. |
 | `Add Prefix` (parameter) | M8 | handbook | – | A prefix name may hold spaces, as prefix names in the Features tab are free text; adding `Language Systems; languagesystem DFLT dflt;` in the reference app settles it. |
-| `ascender` (parameter) | M3 | handbook | – | The glyph's script is the one stored on the glyph; the script the glyph data gives a glyph without one is not used for these parameters. |
+| `ascender` (parameter) | M3 | handbook | – | The glyph's script is its effective one: the script stored on the glyph, else the one the glyph data gives for its name and code points, as Font View shows it. |
 | `ascender` (parameter) | M3 | handbook | – | The replaced line keeps the master's overshoot, so its alignment zone moves with it. |
 | `blueShift` (parameter) | M10 | handbook | – | Negative and fractional values are refused, as the handbook gives an integer; typing -1 in the reference app settles it. |
 | `CJK Grid` (parameter) | M3 | handbook | – | A grid has 1 to 100 rows or columns; the handbook gives no range. |
@@ -3032,6 +3045,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `view.filterByEncodingFile` | M13 | docs | yes | A code-point slot the font has no glyph for lists the glyph data's name for that code point, and running the command again with the same name replaces the list filter instead of adding a second one. |
 | `font.compareInTable` | M13 | docs | yes | Each font is read in its first master, and without `fonts` every open document is compared; FontLab's Font window comparison mode would settle which master and fonts it uses. |
 | `font.compareInTable` | M13 | docs | yes | Measured values are rounded to hundredths of a unit before rows are marked as differing; the reference's own comparison display would settle the precision. |
+| `view.previewWaterfall` | M14 | docs | yes | Sizes 72, 64, 48, 36, 30, 24, 18, 14, 12, 10, 9, 8, 6, 5 and 4 points by default, at most 32, each from 4 to 1,000. |
+| `view.previewWaterfall` | M14 | docs | yes | Optical size is on by default; the optical-size value of a line is its size in points, kept within the masters' range, and the masters' design coordinates are compared with it as they are. |
+| `view.previewWaterfall` | M14 | docs | yes | The waterfall lays out left to right in lines, whatever the preview's orientation and writing direction. |
+| `view.previewWaterfall` | M14 | docs | yes | A Waterfall button in the Text Preview's top row; the View menu item runs the same command. |
 | `path.findOutlinePattern` | M13 | docs | yes | Matching is point for point only, as FontForge documents; shapes that are equal with another point structure do not match (open question 12). |
 | `path.findOutlinePattern` | M13 | docs | yes | Matches are found up to translation, and with allowFlipped up to mirroring and half turns; allowRotated and allowScaled are refused until the matcher supports them, which a matcher with rotation and scale would settle. |
 | `path.findOutlinePattern` | M13 | docs | yes | A pattern glyph gives its paths per layer id, so each master is searched with its own pattern; the reference's single pattern pane would settle it. |

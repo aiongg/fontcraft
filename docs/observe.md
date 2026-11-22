@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1560 rows to check: 2739 guesses and 679 observe steps.**
+**1563 rows to check: 2753 guesses and 682 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,9 +48,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 51 |
 | Built milestones (M0 to M6) | Settings and the window | 18 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **1000** |
+| **Later milestones (after M6)** | all | **1003** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 90 |
-| Later milestones (after M6) | Edit View: text mode and preview | 28 |
+| Later milestones (after M6) | Edit View: text mode and preview | 30 |
 | Later milestones (after M6) | Components and anchors | 43 |
 | Later milestones (after M6) | Filters | 5 |
 | Later milestones (after M6) | Spacing and metrics keys | 13 |
@@ -61,7 +61,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Hinting | 115 |
 | Later milestones (after M6) | Colour fonts | 74 |
 | Later milestones (after M6) | Files: open, import, export | 72 |
-| Later milestones (after M6) | Settings and the window | 33 |
+| Later milestones (after M6) | Settings and the window | 34 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 62 |
 | Later milestones (after M6) | Elsewhere | 26 |
 
@@ -194,6 +194,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: Draw a line into a curve whose first handle continues the line (an n stem into its arch); select the node where they meet and run Tidy up Paths; note whether it stays.
 - [ ] `infoBox.setSizeLock` (M3, inferred, live): Lock Info Box Proportions
   - Guess: The lock starts open; the handbook gives no default.
+  - Guess: The lock is an icon without a caption, as the kerning locks of the Info box are.
 - [ ] `path.alignSelection` (M3, handbook, live): Align Selection
   - Guess: When width equals height the selection aligns on one X, and the transformation origin's column or row picks min, centre or max (03a question 13).
 - [ ] `edit.delete` (M3, handbook, live): Delete
@@ -480,7 +481,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `view.selectMaster` (M3, handbook, live): Select Master
   - Guess: A Cmd+digit past the font's last master changes nothing and says so in the status line; settle by pressing Cmd+3 in a two-master font in the reference app.
 - [ ] `text.lineWidth` (behavior, M5, handbook): Text in Edit View wraps at a preset maximum line width, which…
-  - Guess: Lines wrap at 10,000 units unless the setting says otherwise; no source gives the default.
+  - Guess: Lines wrap at ten em (10,000 thousandths of an em) unless the setting says otherwise; no source gives the default.
   - Guess: A line that overflows breaks after its last space, else before the glyph that overflows, and a space may hang past the width; wrapped text in the reference app settles it.
   - Guess: In top-to-bottom text the lines are columns, placed from right to left one line height apart; a vertical tab in the reference app settles it.
 - [ ] `text.currentGlyphAfterCursor` (behavior, M5, handbook): In text mode the glyph immediately after the text cursor is the…
@@ -568,6 +569,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Return types a line break; the handbook allows several lines but does not name the key.
   - Guess: Up and Down move to the nearest place on the line above or below, and to the start or the end of the text from the first or the last line; in right-to-left text Left steps forward in the text; in top-to-bottom text Up and Down step along the column and Left and Right move between columns. Moving the cursor in such texts in the reference app settles it.
   - Guess: Backspace and Delete with Alt or Cmd do nothing (no word or line deletion); no source names them.
+  - Guess: The word and document keys follow the system's text conventions (Alt+Left/Right by word, Cmd+Up/Down to the ends of the text); the handbook only says that standard text editing applies.
+  - Guess: A word ends at a space, any other typed white space or a line break; Alt+Right goes past them to the end of the next word and Alt+Left to the start of the word before. Without Shift the move starts from the selection's edge on the arrow's side. In right-to-left text Alt+Left steps forward, in top-to-bottom text Alt+Up/Down move by word and Alt+Left/Right do nothing.
   - Guess: Typing or moving the cursor past the canvas's edge scrolls the canvas sideways, the zoom kept, so the cursor stays in view; typing past the window's edge in the reference app settles it.
   - Guess: A tab whose text holds several glyphs fits the whole text in the canvas the first time it draws, and so does a text that replaces the whole text (editView.setText, a sample string); typing keeps the zoom. Opening several glyphs in a new tab of the reference app settles it.
   - Guess: The canvas scrolls freely past the edited glyph's advance box, so the text around it can be scrolled into view; the framework's default keeps the document on screen.
@@ -1347,6 +1350,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A click on an editable cell of the only selected row, or a double-click on it, starts editing; a click on an Exports cell flips the flag; a double-click on a cell that cannot be edited opens the glyph. Settled by observation.
   - Guess: Values that come from the glyph data rather than from the glyph are drawn dimmed. Settled by observation.
 - [ ] `fontView.inspector` (panel, M4, handbook): Glyph Inspector
+  - Guess: In Edit View the inspector describes the edited glyph alone, not every glyph of the tab's text or the glyphs selected in text mode.
   - Guess: With several glyphs selected the Name field is read-only and shows Multiple Values, since glyph names are unique. Settled by observation.
   - Guess: The metric and kerning group fields are shown read-only until their commands exist (M5). Settled by M5.
   - Guess: A Unicode value typed with several glyphs selected goes to all of them, as for any other field. Settled by observation.
@@ -1478,7 +1482,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `Webfont Formats` (parameter, M2, handbook): List drawn from TTF, EOT, WOFF and WOFF2; the instance carrying it…
   - Guess: A format matches in any case and is stored as the handbook spells it (`woff2` becomes `WOFF2`); a lowercase entry in the reference app settles it.
 - [ ] `ascender` (parameter, M3, handbook): Replaces the ascender for one script: the value is the lowercase script…
-  - Guess: The glyph's script is the one stored on the glyph; the script the glyph data gives a glyph without one is not used for these parameters.
+  - Guess: The glyph's script is its effective one: the script stored on the glyph, else the one the glyph data gives for its name and code points, as Font View shows it.
   - Guess: The replaced line keeps the master's overshoot, so its alignment zone moves with it.
   - Observe: In a font with the master parameter `ascender = greek: 705`, open a Greek glyph in Edit View: note whether one ascender line shows at 705 or a second line beside the master's, and where its zone sits.
   - Observe: Do the same for a Greek glyph whose script is not set on the glyph (only the glyph data gives it): note whether the line moves.
@@ -1761,7 +1765,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (1000)
+## Later milestones (after M6) (1003)
 
 ### Edit View: drawing, guides, layers and the Palette (90)
 
@@ -2078,7 +2082,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `path.setPenPoint` (fidelity, inferred): Set Pen Point
   - Open (our design, not confirmed): Writes or clears the pen-point data of a node or of a free pen point, the action behind the pen-point fields of the Info box. Clearing the data is how a pen point on a node is removed. The reference exposes this only as Info box fields.
 
-### Edit View: text mode and preview (28)
+### Edit View: text mode and preview (30)
 
 - [ ] `textToken.syntax` (behavior, M7, handbook): In text fields that support them, `{{{token}}}` is replaced by a computed…
   - Guess: A token FontCraft cannot resolve stays in the text as written, and the compile report names it, as glyphsLib leaves it; a misspelt token in the reference app settles it.
@@ -2173,6 +2177,18 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The suffix replaces control glyphs as well as the text's glyphs; the reference app would settle it.
 - [ ] `dialog.exportWindowContents` (panel, M13, docs): Export Window Contents
   - Guess: A small dialog with the file and the scale comes before the save chooser, and the format follows the file's extension (.pdf or .svg); exporting in the reference would show whether it asks anything besides the file.
+- [ ] `textPreview.insertPattern` (M14, handbook, live): Insert Pattern
+  - Guess: Four patterns: any space (white space other than a line break), any digit, any letter and a line end; the handbook lists none.
+  - Guess: Tokens are written in the search as backslash escapes, so a literal backslash is searched as two; the system find bar shows tokens as tokens, which a plain text field cannot.
+  - Guess: A line end matches the line break character only, not the end of the text.
+  - Guess: No shortcut: the reference's key opens a menu of patterns, and this command takes the pattern as a parameter.
+  - Observe: In the Text Preview find bar, open Insert Pattern and note every pattern listed and what each matches.
+- [ ] `view.previewWaterfall` (M14, docs, live): Preview Waterfall
+  - Guess: Sizes 72, 64, 48, 36, 30, 24, 18, 14, 12, 10, 9, 8, 6, 5 and 4 points by default, at most 32, each from 4 to 1,000.
+  - Guess: Optical size is on by default; the optical-size value of a line is its size in points, kept within the masters' range, and the masters' design coordinates are compared with it as they are.
+  - Guess: The waterfall lays out left to right in lines, whatever the preview's orientation and writing direction.
+  - Guess: A Waterfall button in the Text Preview's top row; the View menu item runs the same command.
+  - Observe: In the reference app, turn on the waterfall with the Edit View text and then a Font View selection, and note the default sizes and whether each line is labelled.
 
 ### Components and anchors (43)
 
@@ -4835,7 +4851,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Every item starts ticked, so Accept Selected with no change of the ticks takes everything; the reference's manual does not say which state the ticks start in, and opening the window there settles it.
   - Guess: The stored-text view on double-click shows the glyph in FontCraft's native JSON form rather than as a .glif file, since the comparison is between models; the reference shows the file text, and a file-per-glyph text view would follow it more closely.
 
-### Settings and the window (33)
+### Settings and the window (34)
 
 - [ ] `sharing.confirmConnectionOnHost` (behavior, M13, handbook): A first connection attempt from a device must be confirmed on the…
   - Guess: Devices are known by their IP address, so a device that gets a new address must be confirmed again; what the reference keys them by is not documented.
@@ -4915,6 +4931,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Always use Light Mode changes the view's content, not the window chrome.
   - Guess: Off by default; the handbook gives no default.
   - Observe: With the system in dark mode, turn on Always use Light Mode for Edit View and note what turns light beyond the view's content.
+- [ ] `appearance.textViewWidth` (setting, M14, handbook): Text View Width
+  - Guess: 10,000 thousandths of an em (ten em) by default; the handbook gives no default.
+  - Guess: The accepted range, 1 to 100,000 thousandths of an em, is ours; no source gives one.
+  - Observe: Open Settings › Appearance in a fresh install and note the Text View Width default; type a long line in a 1,000-unit and a 2,048-unit font and note where each wraps.
 - [ ] `appearance.handleSize` (setting, M14, handbook): Handle size
   - Guess: Three steps, small, regular and large, at 0.75, 1 and 1.5 times the regular sizes; the handbook lists no steps. Settled by opening the reference's Appearance settings and measuring a node at each step.
   - Guess: The appearance colour settings default to the canvas colours FontCraft drew before they existed, the same value for light and dark; the handbook states no defaults. Settled by reading the reference's colour wells after Standard.
