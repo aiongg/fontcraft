@@ -705,6 +705,7 @@ fn apply(target: &mut Glyph, o: &Overwrite, parts: &Parts, shown: &str) -> Vec<S
             let Some(to) = target.layers.iter_mut().find(|l| l.id == from.id) else { continue };
             let (lsb, rsb) = o.metrics.get(&from.id).copied().unwrap_or((None, None));
             let bounds = o.boxes.get(&from.id).copied().flatten();
+            let before = to.width;
             let mut dx = 0.0;
             if parts.lsb {
                 match (lsb, bounds) {
@@ -731,6 +732,7 @@ fn apply(target: &mut Glyph, o: &Overwrite, parts: &Parts, shown: &str) -> Vec<S
             if parts.width && !rsb_done {
                 to.width = from.width;
             }
+            fontcraft_model::guide_follow::follow_width(to, before + dx);
         }
     }
     notes

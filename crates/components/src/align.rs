@@ -138,7 +138,9 @@ pub fn align_layer_cached(font: &Font, glyph: &Glyph, layer: &Layer, cache: &mut
         }
     }
     if let Some(w) = plan.width {
+        let before = out.width;
         out.width = w;
+        fontcraft_model::guide_follow::follow_width(&mut out, before);
     }
     Ok(Some(out))
 }

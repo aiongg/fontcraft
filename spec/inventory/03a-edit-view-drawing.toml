@@ -2860,6 +2860,16 @@ ref = "Edit View › Local & Global Guides"
 status = "handbook"
 guesses = [
   "Left keeps the guide's x, right moves it with the width, and both keeps its fraction of the width (03a question 27).",
+  "The guide's x is stored as an absolute position, and the command that changes the width moves it in the same undo step.",
+  "A left sidebearing change moves every local guide with the outline, whatever its reference; the reference applies to the rest of a width change.",
+  "A both-referenced guide in a glyph of width zero moves by half the change.",
+  "Locked guides follow the width too: the lock guards against editing the guide, not against its layer's metrics.",
+  "Scaling the units per em keeps every reference without moving guides further, since positions and widths scale together.",
+]
+notes = "Documented, not yet observed. FontCraft (M3.42): `fontcraft_model::guide_follow::follow_width` moves a layer's local guides, foreground and background, and runs in the same edit as every command that writes a width with the contents left in place: the right sidebearing, width and nudge commands, metrics keys, Auto Space and its value setters, Transform Metrics, automatic alignment, the import of metrics, copying metrics from a glyph set, the stem filters and derived glyphs, and colour layers following the master width. Global guides do not follow yet: they are drawn and snapped at their stored x in every glyph."
+observe = [
+  "Change the width of a glyph with a right-referenced local guide and with a both-referenced one: note where each guide goes, and whether one undo puts the width and the guides back.",
+  "Do the same with a right-referenced global guide: note whether it is drawn at a distance from the right edge of each glyph.",
 ]
 
 [[behavior]]

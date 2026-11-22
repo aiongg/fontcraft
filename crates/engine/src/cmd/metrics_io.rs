@@ -770,6 +770,7 @@ fn import_glyph_metrics(font: &mut Font, master: &str, source: &Source, mode: Mo
         }
         let mut gm = font.glyph_mut(want.glyph)?;
         let Some(l) = gm.layers.iter_mut().find(|l| l.id == master) else { continue };
+        let before = l.width + dx;
         if let Err(e) = super::shared::shift_layer(l, dx) {
             drop(gm);
             if aligned {
@@ -779,6 +780,7 @@ fn import_glyph_metrics(font: &mut Font, master: &str, source: &Source, mode: Mo
             continue;
         }
         l.width = width;
+        fontcraft_model::guide_follow::follow_width(l, before);
         if aligned {
             // The imported values hold only with the layer's components placed by hand.
             for shape in &mut l.shapes {

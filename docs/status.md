@@ -2,9 +2,35 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-22: M9.32 and M3.41 written on `w-M9.32`, not yet built. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 merged into `master`, built, tested and smoke-tested in the window (X.integ142 to X.integ146). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
+_Updated: 2026-11-22: M3.43 and M3.42 written on `w-M3.43` (on top of `w-M9.32`), not yet built. M9.32 and M3.41 written on `w-M9.32`, not yet built. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 merged into `master`, built, tested and smoke-tested in the window (X.integ142 to X.integ146). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
 
 ## State of the tree
+
+- **Where M3.43 and M3.42 stand.** Written on `w-M3.43` (M3.43a, M3.42a), not yet built: the writer ran no build
+  or test, only `cargo fmt`.
+  - M3.43: `fontcraft_model::shown_metrics` (`shown_metrics`, `script_param`, `param_number`, `shown_pos`) gives a
+    glyph's metric lines once: the master's metrics with a per-script `ascender`, `capHeight` or `descender` in place
+    of the master's line (keeping its overshoot, so the zone moves), `smallCapHeight` for a small cap, and a
+    `shoulderHeight` line. `guide.displayLines`, the canvas model (`app::models::canvas::metric_lines`, lines and
+    zones) and `Scene::from_font_side` (`metric_lines`: baseline plus the plain descender, x-height, cap height and
+    ascender) all read it. The script is the glyph's stored one only; the glyph data's script is not used (the tools'
+    scene has no glyph data). Component markers: `fontcraft_tools::component_markers` (on-curve points of the
+    components that do not move, within `COMPONENT_MARKER_REACH` = 4 snap distances, at most 64), kept on the Select
+    tool's drag and drawn as `OverlayKind::ComponentNode` dots (`ToolTokens::component_marker`). Tests: a model unit
+    test, one more assertion in the engine's `display_lines_follow_font_info_and_parameters`, a canvas test
+    `a_greek_ascender_replaces_the_masters_line_in_a_greek_glyph` (lines, zones, scene, snap), a tools test
+    `a_drag_near_a_component_shows_its_nodes_as_markers`.
+  - M3.42: `fontcraft_model::guide_follow` (`reference`, `set_reference`, `moved_x`, `follow_width`) holds the
+    sidebearing reference (the `.glyphs` `alignment` key) that `guide.*` and `tools::guide_drag` read. `follow_width`
+    moves a layer's local guides, foreground and background, after a width change with the contents in place: right
+    by the change, both by the fraction (half the change from a width of 0). Called from the spacing right
+    sidebearing, width and nudge paths, metrics keys (`Change::Width`), Auto Space (plan and value setters), Transform
+    Metrics, automatic alignment (`fontcraft_components::align::align_layer_cached`), the metrics import, copying
+    metrics from a glyph set, the stem filters, derived glyphs and colour layers following the master width. A left
+    sidebearing change moves every guide with the outline, as before. `font.scaleUpm` scales guides and widths
+    together and does not call it. Left: global guides counted from the right edge or the centre of each glyph
+    (drawing, snapping, hit testing and dragging would all need the per-glyph x). Test:
+    `guides_follow_the_width_by_their_sidebearing_reference` in `crates/engine/tests/engine/guides.rs`.
 
 - **Where M9.32 and M3.41 stand.** Written on `w-M9.32` (M9.32a, M3.41a), not yet built: the writer ran no build or
   test, only `cargo fmt`.

@@ -8,9 +8,9 @@
 use std::sync::Arc;
 
 use fontcraft_geom::round_to_grid;
-use fontcraft_model::plist::Value as PValue;
+use fontcraft_model::guide_follow::{self, Reference};
 use fontcraft_model::shown_metrics::{self, param_number, script_param};
-use fontcraft_model::{Family, Font, Guide, LayerParts, MAX_COORDINATE, MAX_LAYER_GUIDES, Master, metric};
+use fontcraft_model::{Font, Guide, LayerParts, MAX_COORDINATE, MAX_LAYER_GUIDES, Master, metric};
 use serde_json::{Value, json};
 
 use super::common::grid;
@@ -20,9 +20,6 @@ use crate::params::{GuideRef, GuideScope, Params, TargetKind, Targets, kind};
 
 /// Longest name, filter or colour text a guide may be given.
 const MAX_GUIDE_TEXT: usize = 4096;
-/// The key, in a guide's `.glyphs` data, of what its x position follows when the width changes:
-/// absent (left sidebearing), `right`, or `center` (both sidebearings).
-const RELATIVE_KEY: &str = "alignment";
 /// Most rows or columns a CJK grid parameter may ask for.
 const MAX_CJK_DIVISIONS: f64 = 1000.0;
 /// Most numbers read from a `Design Grid` value.
@@ -296,21 +293,16 @@ fn append(p: &Params, guides: &mut Vec<Guide>, new: Vec<Guide>) -> Result<usize>
 }
 
 fn relative_to(g: &Guide) -> &'static str {
-    match g.extra.get(Family::Glyphs, RELATIVE_KEY).and_then(PValue::as_str) {
-        Some("right") => "right",
-        Some("center") => "both",
-        _ => "left",
-    }
+    guide_follow::reference(g).name()
 }
 
 fn set_relative_to(g: &mut Guide, to: &str) {
-    match to {
-        "right" => g.extra.insert(Family::Glyphs, RELATIVE_KEY, PValue::String("right".into())),
-        "both" => g.extra.insert(Family::Glyphs, RELATIVE_KEY, PValue::String("center".into())),
-        _ => {
-            g.extra.remove(Family::Glyphs, RELATIVE_KEY);
-        }
-    }
+    let to = match to {
+        "right" => Reference::Right,
+        "both" => Reference::Both,
+        _ => Reference::Left,
+    };
+    guide_follow::set_reference(g, to);
 }
 
 /// A colour as `r,g,b,a`, each from 0 to 1 (the form a UFO guideline uses).

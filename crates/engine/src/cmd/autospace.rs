@@ -30,6 +30,7 @@
 use std::collections::{BTreeMap, HashSet};
 
 use fontcraft_model::glyphdata::GlyphData;
+use fontcraft_model::guide_follow::follow_width;
 use fontcraft_model::{Font, Glyph, Layer, MAX_COORDINATE, Master, MetricValue, glyph_props, metric};
 use fontcraft_spacing::profile::{self, Band};
 use fontcraft_spacing::{self as spacing, Field, SIDEBEARING_RANGE, Scope, WIDTH_RANGE};
@@ -435,8 +436,10 @@ fn auto_space(s: &mut Session, v: &Value) -> Result<Value> {
             if plan.shift == 0.0 && plan.width == l.width {
                 continue;
             }
+            let before = l.width + plan.shift;
             shift_layer(l, plan.shift).map_err(|e| p.bad(format!("glyph `{}`: {e}", plan.glyph)))?;
             l.width = plan.width;
+            follow_width(l, before);
             if seen.insert(plan.glyph.as_str()) {
                 changed.push(plan.glyph.clone());
             }
@@ -691,14 +694,22 @@ fn copy_metrics(s: &mut Session, v: &Value) -> Result<Value> {
                     }
                     let Some(l) = g.layers.iter_mut().find(|l| l.id == *id) else { continue };
                     let moved = match w {
-                        What::Width => check_width(*value).map(|()| l.width = *value),
+                        What::Width => check_width(*value).map(|()| {
+                            let before = l.width;
+                            l.width = *value;
+                            follow_width(l, before);
+                        }),
                         What::Lsb => {
                             let d = value - current.unwrap_or(*value);
                             check_width(l.width + d).and_then(|()| shift_layer(l, d)).map(|()| l.width += d)
                         }
                         What::Rsb => {
                             let width = l.width + value - current.unwrap_or(*value);
-                            check_width(width).map(|()| l.width = width)
+                            check_width(width).map(|()| {
+                                let before = l.width;
+                                l.width = width;
+                                follow_width(l, before);
+                            })
                         }
                         What::VerticalAdvance => check_width(*value).map(|()| l.info.vert_width = Some(*value)),
                     };

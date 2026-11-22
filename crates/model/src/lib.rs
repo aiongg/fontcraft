@@ -25,6 +25,7 @@ mod glyph;
 mod glyph_info;
 mod glyph_props;
 pub mod guide_data;
+pub mod guide_follow;
 pub mod hoi;
 mod info;
 mod kerning;

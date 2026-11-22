@@ -197,7 +197,9 @@ fn write(p: &Params, layer: &mut Layer, slots: &[usize], sources: &[(usize, usiz
             return Err(p.bad(format!("the result has a point ({x}, {y}) outside the coordinate range")));
         }
     }
+    let before = layer.width;
     layer.width = width;
+    fontcraft_model::guide_follow::follow_width(layer, before);
     if !change.rebuilt {
         for (&slot, contour) in slots.iter().zip(&change.contours) {
             let Some(Shape::Path(path)) = layer.shapes.get_mut(slot) else {

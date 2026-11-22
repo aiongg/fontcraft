@@ -14,7 +14,7 @@
 //! guide belongs to the master, so a glyph lock leaves it free.
 
 use fontcraft_geom::Point;
-use fontcraft_model::{Family, Guide, Layer};
+use fontcraft_model::{Guide, Layer};
 use serde_json::{Map, Value, json};
 
 use crate::geometry::{dist, finite};
@@ -26,10 +26,6 @@ use crate::tool::Context;
 
 /// The dialog a double-click on a guide's line opens; the shell registers it.
 pub const PROPERTIES_DIALOG: &str = "dialog.guideProperties";
-
-/// The `.glyphs` key that holds a guide's sidebearing reference, as `guide.setProperties`
-/// writes it: absent for the left side, `right`, or `center` for both.
-const RELATIVE_KEY: &str = "alignment";
 
 /// Closer to the knob than this (screen points), the pointer gives no usable angle.
 const MIN_TURN_RADIUS: f64 = 1.0;
@@ -78,11 +74,7 @@ fn target(scene: &Scene, r: GuideRef) -> Map<String, Value> {
 
 /// The sidebearing reference as `guide.setProperties` takes it.
 fn relative_to(g: &Guide) -> &'static str {
-    match g.extra.get(Family::Glyphs, RELATIVE_KEY).and_then(fontcraft_model::plist::Value::as_str) {
-        Some("right") => "right",
-        Some("center") => "both",
-        _ => "left",
-    }
+    fontcraft_model::guide_follow::reference(g).name()
 }
 
 /// The parameters the properties dialog opens with: the guide's address and its present

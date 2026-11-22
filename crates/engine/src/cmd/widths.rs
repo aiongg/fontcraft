@@ -126,7 +126,9 @@ pub(crate) fn color_layers_follow_master(next: &mut Font, before: &Font) {
         let widths: Vec<(String, f64)> = g.layers.iter().filter(|l| l.is_master_layer()).map(|l| (l.id.clone(), l.width)).collect();
         for layer in g.layers.iter_mut().filter(|l| !l.is_master_layer() && fontcraft_color::layers::kind(l).is_some()) {
             if let Some((_, width)) = widths.iter().find(|(id, _)| *id == layer.master) {
+                let before = layer.width;
                 layer.width = *width;
+                fontcraft_model::guide_follow::follow_width(layer, before);
             }
         }
     }

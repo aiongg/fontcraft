@@ -247,6 +247,31 @@ fn display_lines_follow_font_info_and_parameters() {
     assert_eq!((g["x"].as_f64(), g["y"].as_f64()), (Some(10.0), Some(15.0)));
 }
 
+/// Local guides follow a width change by their sidebearing reference (`guides.sidebearingReference`), in the same
+/// undo step as the change.
+#[test]
+fn guides_follow_the_width_by_their_sidebearing_reference() {
+    let mut s = session();
+    for (x, to) in [(50.0, "left"), (550.0, "right"), (300.0, "both")] {
+        let out = run(&mut s, "guide.add", json!({"glyph": "A", "x": x, "y": 0, "angle": 90}));
+        run(&mut s, "guide.setProperties", json!({"glyph": "A", "guide": out["guide"], "relativeTo": to}));
+    }
+    let xs = |s: &mut Session| guides(s, "A").iter().filter(|g| g["scope"] == "local").map(|g| g["x"].as_f64().unwrap()).collect::<Vec<f64>>();
+    assert_eq!(xs(&mut s), vec![50.0, 550.0, 300.0]);
+    // The rectangle ends at 100 in a width of 600: a right sidebearing of 600 makes the width 700.
+    run(&mut s, "spacing.setRightSidebearing", json!({"glyphs": ["A"], "value": 600}));
+    assert_eq!(xs(&mut s), vec![50.0, 650.0, 350.0], "the right guide moves by the change, the both guide keeps its half");
+    run(&mut s, "spacing.setWidth", json!({"glyphs": ["A"], "value": 900}));
+    assert_eq!(xs(&mut s), vec![50.0, 850.0, 450.0]);
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(xs(&mut s), vec![50.0, 650.0, 350.0], "undo puts the guides back with the width");
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(xs(&mut s), vec![50.0, 550.0, 300.0]);
+    // A left sidebearing change moves every guide with the outline.
+    run(&mut s, "spacing.setLeftSidebearing", json!({"glyphs": ["A"], "value": 100}));
+    assert_eq!(xs(&mut s), vec![150.0, 650.0, 400.0]);
+}
+
 #[test]
 fn dimensions_are_noted_per_master() {
     let mut s = Session::with_document();
