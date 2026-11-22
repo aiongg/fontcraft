@@ -65,9 +65,11 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
 
 /// A number field over `value` that calls `commit` with the value typed.
 fn field(ui: &mut Ui, label: Label, value: Option<f64>, mut commit: impl FnMut(f64)) {
-    let out = NumberField::new(label, Bind::given(value)).show(ui);
-    if let Some(Some(value)) = out.edit.events.committed() {
-        commit(*value);
+    let committed = crate::panels::widgets::labelled(ui, &label.clone(), |ui| {
+        NumberField::new(label.clone(), Bind::given(value)).show(ui).edit.events.committed().copied().flatten()
+    });
+    if let Some(Some(value)) = committed {
+        commit(value);
     }
 }
 
@@ -103,6 +105,12 @@ mod tests {
             seen.borrow_mut().extend(sent);
         });
         fixture.settle();
+        // Each field shows its name to the left of it on the same line.
+        for name in ["Width", "LSB", "RSB"] {
+            let field = fixture.by_label(name).expect("the field").rect;
+            let shown = fixture.texts().iter().find(|t| t.text.starts_with(name)).map(|t| t.rect).expect("the field's label painted");
+            assert!(shown.max.x <= field.min.x && shown.center().y > field.min.y && shown.center().y < field.max.y, "{name}: {shown:?} {field:?}");
+        }
         let width = fixture.by_label("Width").expect("the Width field");
         fixture.click(&width).key(Key::A, Modifiers::COMMAND).type_text("640").key(Key::Enter, Modifiers::NONE).settle();
         assert_eq!(*posted.borrow(), vec![Msg::run("spacing.setWidth", json!({ "glyphs": ["A"], "layer": "m02", "value": 640.0 }))]);

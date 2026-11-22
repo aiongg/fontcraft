@@ -112,7 +112,7 @@ pub fn end_controls(ui: &mut Ui, props: Props<'_>) {
     if IconButton::new(IconId::new("zoom_out")).label(words.zoom_out.clone()).tooltip(words.zoom_out.clone()).show(ui).clicked() {
         sent.push(shell("view.zoomOut", json!({})));
     }
-    if let Some(size) = widgets::number(ui, words.zoom.clone(), Some(bar.zoom.round()))
+    if let Some(size) = widgets::bare_number(ui, words.zoom.clone(), Some(bar.zoom.round()))
         && size > 0.0
     {
         sent.push(shell("view.setZoom", json!({ "size": size })));

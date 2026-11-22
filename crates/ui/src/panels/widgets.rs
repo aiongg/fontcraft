@@ -9,6 +9,7 @@
 use craft::behavior::{Anchor9, IconId};
 use craft::ui::buttons::IconButton;
 use craft::ui::contract::{Bind, PlainData, Props as _, Show as _, ShowContainer as _};
+use craft::ui::form::Field;
 use craft::ui::layout_components::Row;
 use craft::ui::pickers::ReferencePoint;
 use craft::ui::runtime::env::{Env, Label};
@@ -58,17 +59,30 @@ pub enum NumberEdit {
     Clear,
 }
 
-/// A number field named `label` over `value`; the number committed. An emptied field commits nothing.
+/// `body` with `label` shown beside it. A control's own label only names it to assistive technology; a panel field
+/// shows its name on screen through this.
+pub fn labelled<R>(ui: &mut Ui, label: &Label, mut body: impl FnMut(&mut Ui) -> R) -> Option<R> {
+    Field::new(label.clone()).show(ui, |ui, _| body(ui)).inner
+}
+
+/// A number field named `label` over `value`, its label shown beside it; the number committed. An emptied field
+/// commits nothing.
 pub fn number(ui: &mut Ui, label: Label, value: Option<f64>) -> Option<f64> {
+    labelled(ui, &label.clone(), |ui| bare_number(ui, label.clone(), value)).flatten()
+}
+
+/// [`number`] without the visible label: for a bar whose neighbours already say what the field holds.
+pub fn bare_number(ui: &mut Ui, label: Label, value: Option<f64>) -> Option<f64> {
     match clearable(ui, NumberField::new(label, Bind::given(value)), value) {
         Some(NumberEdit::Set(n)) => Some(n),
         _ => None,
     }
 }
 
-/// A number field named `label` over `value` that reports an emptied field as [`NumberEdit::Clear`].
+/// A number field named `label` over `value`, its label shown beside it, that reports an emptied field as
+/// [`NumberEdit::Clear`].
 pub fn clearable_number(ui: &mut Ui, label: Label, value: Option<f64>) -> Option<NumberEdit> {
-    clearable(ui, NumberField::new(label, Bind::given(value)), value)
+    labelled(ui, &label.clone(), |ui| clearable(ui, NumberField::new(label.clone(), Bind::given(value)), value)).flatten()
 }
 
 /// Shows `field` (a number field over `value`, configured by the caller) and reads its commit.
@@ -163,32 +177,34 @@ pub fn key_or_number(ui: &mut Ui, label: Label, metric: &KeyedNumber, read_only:
     let words = Env::of(ui).words::<WidgetWords>();
     let shown = metric.shown();
     let mut out = KeyedOutput::default();
-    let _ = Row::new().show(ui, |ui, _| {
-        let mut field = TextField::new(label.clone(), Bind::given(shown.clone()))
-            .select_on_focus()
-            .limit(MAX_KEY_CHARS)
-            .read_only(read_only || !metric.editable());
-        if let Some(message) = &metric.message {
-            field = field.tooltip(message.clone());
-        }
-        let edit = field.show(ui);
-        if let Some(text) = edit.events.committed()
-            && *text != shown
-        {
-            out.commit = metric.commit_value(text);
-        }
-        // Up and Down step a metric that holds a number: 1, 10 with Shift, 100 with Cmd+Shift.
-        if !read_only
-            && metric.state == KeyState::Number
-            && let Some(delta) = edit.arrow_steps(ui, ArrowSteps::UNITS)
-            && let Some(value) = metric.value
-        {
-            out.commit = Some(json!(value + delta));
-        }
-        if metric.state == KeyState::OutOfSync && !read_only {
-            let update_label = format!("{} {}", words.update_key.as_str(), label.as_str());
-            out.update = IconButton::new(IconId::new("refresh")).label(update_label).tooltip(words.update_key.clone()).show(ui).clicked();
-        }
+    let _ = labelled(ui, &label, |ui| {
+        Row::new().show(ui, |ui, _| {
+            let mut field = TextField::new(label.clone(), Bind::given(shown.clone()))
+                .select_on_focus()
+                .limit(MAX_KEY_CHARS)
+                .read_only(read_only || !metric.editable());
+            if let Some(message) = &metric.message {
+                field = field.tooltip(message.clone());
+            }
+            let edit = field.show(ui);
+            if let Some(text) = edit.events.committed()
+                && *text != shown
+            {
+                out.commit = metric.commit_value(text);
+            }
+            // Up and Down step a metric that holds a number: 1, 10 with Shift, 100 with Cmd+Shift.
+            if !read_only
+                && metric.state == KeyState::Number
+                && let Some(delta) = edit.arrow_steps(ui, ArrowSteps::UNITS)
+                && let Some(value) = metric.value
+            {
+                out.commit = Some(json!(value + delta));
+            }
+            if metric.state == KeyState::OutOfSync && !read_only {
+                let update_label = format!("{} {}", words.update_key.as_str(), label.as_str());
+                out.update = IconButton::new(IconId::new("refresh")).label(update_label).tooltip(words.update_key.clone()).show(ui).clicked();
+            }
+        })
     });
     out
 }

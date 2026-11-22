@@ -312,7 +312,8 @@ fn buttons(ui: &mut Ui, model: &LayersModel, glyph: &str, words: &LayersWords, s
         [one] if one.is_backup() => Some(one.id.clone()),
         _ => None,
     };
-    Line::new().show(ui, |ui, _| {
+    // The palette is narrower than the four buttons: they wrap rather than cut their captions short.
+    Line::new().wrap(true).show(ui, |ui, _| {
         if Button::new(words.new_backup.clone()).show(ui).clicked()
             && let (Some(master), Some(from)) = (&model.active_master, &model.active_layer)
         {

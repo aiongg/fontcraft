@@ -10,6 +10,7 @@
 //!
 //! Every command names its pair, its master and its direction. A kern field without a neighbour is disabled.
 
+use craft::behavior::IconId;
 use craft::ui::buttons::toggle_button::ToggleButton;
 use craft::ui::contract::{Bind, Props as _, Show as _, ShowContainer as _};
 use craft::ui::display::{Shade, Text};
@@ -120,7 +121,13 @@ fn lock(ui: &mut Ui, words: &InfoBoxKerningWords, label: Label, k: &KernBox, pai
         KernLock::Ungrouped => words.ungrouped.clone(),
     };
     let enabled = state != KernLock::Ungrouped;
-    let out = ToggleButton::new(label, Bind::given(state != KernLock::Open)).tooltip(tip).enabled(enabled).show(ui);
+    let closed = state != KernLock::Open;
+    let out = ToggleButton::new(label, Bind::given(closed))
+        .icon(IconId::new(if closed { "lock" } else { "lock_open" }))
+        .icon_only()
+        .tooltip(tip)
+        .enabled(enabled)
+        .show(ui);
     if out.events.committed().is_some()
         && enabled
         && let Some(p) = pair

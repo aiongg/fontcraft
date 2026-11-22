@@ -170,14 +170,16 @@ fn glyph_part(ui: &mut Ui, words: &InfoBoxWords, g: &GlyphBox, sent: &mut Vec<Ms
     };
     let _ = Row::new().show(ui, |ui, _| {
         for (label, group, mixed, command) in groups {
-            let mut field = TextField::new(label.clone(), Bind::given(group.clone())).select_on_focus();
-            if mixed {
-                field = field.placeholder(words.multiple.clone());
-            }
-            let out = field.show(ui);
+            let committed = widgets::labelled(ui, label, |ui| {
+                let mut field = TextField::new(label.clone(), Bind::given(group.clone())).select_on_focus();
+                if mixed {
+                    field = field.placeholder(words.multiple.clone());
+                }
+                field.show(ui).events.committed().cloned()
+            });
             // A mixed field starts empty: committing it empty leaves the groups as they are.
-            if let Some(text) = out.events.committed()
-                && text != group
+            if let Some(Some(text)) = committed
+                && text != *group
                 && !(mixed && text.trim().is_empty())
             {
                 sent.push(Msg::run(command, json!({"glyphs": targets, "group": text.trim()})));
@@ -192,8 +194,11 @@ fn glyph_part(ui: &mut Ui, words: &InfoBoxWords, g: &GlyphBox, sent: &mut Vec<Ms
 /// A metric field whose glyphs differ: empty, with the *Multiple Values* placeholder; any value typed goes to every
 /// glyph, and an emptied field sets nothing.
 fn mixed_field(ui: &mut Ui, label: Label, placeholder: Label) -> widgets::KeyedOutput {
-    let edit = TextField::new(label, Bind::given(String::new())).select_on_focus().limit(widgets::MAX_KEY_CHARS).placeholder(placeholder).show(ui);
-    let commit = edit.events.committed().and_then(|text| KeyedNumber::default().commit_value(text));
+    let commit = widgets::labelled(ui, &label.clone(), |ui| {
+        let field = TextField::new(label.clone(), Bind::given(String::new())).select_on_focus().limit(widgets::MAX_KEY_CHARS);
+        field.placeholder(placeholder.clone()).show(ui).events.committed().and_then(|text| KeyedNumber::default().commit_value(text))
+    })
+    .flatten();
     widgets::KeyedOutput { commit, update: false }
 }
 
