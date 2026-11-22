@@ -58,6 +58,8 @@ const PASTE_SPECIAL: &str = "edit.pasteSpecial";
 const SELECT_ALL: &str = "edit.selectAll";
 /// The `format` the engine writes into copied glyphs (`edit.copy` with `glyphs`).
 const GLYPHS_FORMAT: &str = "fontcraft-glyphs";
+/// The `format` of copied corner components (`edit.copy` with `corners`).
+const CORNERS_FORMAT: &str = "fontcraft-corners";
 /// Longest clipboard text a paste takes.
 pub const MAX_PASTE_BYTES: usize = 16 * 1024 * 1024;
 
@@ -203,6 +205,11 @@ fn holds_glyphs(text: &str) -> bool {
     text.trim_start().starts_with('{') && text.contains(GLYPHS_FORMAT)
 }
 
+/// Whether clipboard text holds copied corner components, which `edit.paste` puts onto the nodes in `points`.
+fn holds_corners(text: &str) -> bool {
+    text.trim_start().starts_with('{') && text.contains(CORNERS_FORMAT)
+}
+
 /// The message that pastes `text` as `kind` asks: `edit.paste` into the edited glyph (on the canvas) or the copied
 /// glyphs into the font (in Font View), or Paste Special's dialog. Errors when there is nothing to paste, or no glyph
 /// to paste a drawing into ([`FontCraftApp::targets_chosen`]).
@@ -258,6 +265,10 @@ pub fn paste_msg(app: &mut FontCraftApp, text: &str, kind: PasteKind) -> Result<
         Value::Object(m) => m,
         _ => Map::new(),
     };
+    let points = &app.tools.selection.points;
+    if holds_corners(text) && !points.is_empty() {
+        params.insert("points".into(), json!(points.iter().map(|&(s, n)| [s, n]).collect::<Vec<_>>()));
+    }
     params.insert("text".into(), json!(text));
     command.params = Value::Object(params);
     Ok(Msg::Run(command))
