@@ -11,9 +11,10 @@ use fontcraft_engine::Session;
 use fontcraft_engine::compile::preview::PreviewFont;
 use fontcraft_engine::model::Font;
 use fontcraft_engine::prelude::*;
+use fontcraft_engine::settings::UserSettings;
 use fontcraft_geom::{Affine, BezPath};
 use fontcraft_spacing::kerning::{GroupSide, Position, facing, members};
-use fontcraft_textlayout::{DEFAULT_LINE_WIDTH, Direction, Layout, Options, PreviewShaper, Shaping};
+use fontcraft_textlayout::{Direction, LENGTH_RANGE, Layout, Options, PreviewShaper, Shaping};
 
 use super::ProjectCx;
 use crate::app::ViewState;
@@ -23,6 +24,17 @@ use crate::canvas::text::{self, EditText};
 pub const MAX_DRAWN_GLYPHS: usize = 2000;
 /// Most members drawn for one glyph by Show Group Members; a larger group shows its first ones in glyph order.
 pub const MAX_MEMBERS: usize = 200;
+/// The setting that sets where Edit View text wraps, in thousandths of an em.
+pub const TEXT_VIEW_WIDTH: &str = "appearance.textViewWidth";
+/// The setting's default, ten em.
+pub const DEFAULT_TEXT_VIEW_WIDTH: f64 = 10_000.0;
+
+/// The width at which Edit View text wraps, in font units: `appearance.textViewWidth` × `units_per_em` / 1000, kept
+/// within the layout's [`LENGTH_RANGE`].
+pub fn line_width(settings: &UserSettings, units_per_em: u16) -> f64 {
+    let thousandths = settings.get(TEXT_VIEW_WIDTH).ok().and_then(|v| v.as_f64()).filter(|w| w.is_finite()).unwrap_or(DEFAULT_TEXT_VIEW_WIDTH);
+    (thousandths * f64::from(units_per_em) / 1000.0).clamp(*LENGTH_RANGE.start(), *LENGTH_RANGE.end())
+}
 
 /// What the text layers draw, in the edited glyph's font units. `shown` is false while the canvas shows a glyph the
 /// text does not hold; the other fields are empty then.
@@ -192,6 +204,8 @@ pub struct LayoutKey {
     pub master: String,
     /// The last feature compile (`features::compile_stamp`).
     pub compile: Option<(u64, u64, bool)>,
+    /// The user settings' revision, for the line width.
+    pub settings: u64,
 }
 
 pub fn project(model: &mut Tracked<TextModel>, files: &mut crate::canvas::color::ColorFiles, cx: &mut ProjectCx<'_>) {
@@ -222,6 +236,7 @@ pub fn layout(session: &mut Session, view: &ViewState, shaper: &ShaperSlot) -> O
     let preview = text::features::preview(session, features);
     let font = session.font().ok()?;
     let master = crate::shell::masters::current_master(font, &view.layers)?.id.clone();
+    let line_width = line_width(session.settings(), font.units_per_em);
     let active = features.active_tags();
     let found = shaper.shaper(preview.as_ref());
     let shaping = match found {
@@ -231,7 +246,7 @@ pub fn layout(session: &mut Session, view: &ViewState, shaper: &ShaperSlot) -> O
     let options = Options {
         direction: view.text.direction.layout(),
         kerning: view.text.kerning,
-        line_width: DEFAULT_LINE_WIDTH,
+        line_width,
         index: index.as_deref(),
         layers: Some(&view.layers.layers),
         shaping,
@@ -256,7 +271,13 @@ pub fn key(session: &Session, view: &ViewState) -> Option<LayoutKey> {
     let font = session.font().ok()?;
     let doc = session.active().map(|d| (d.id, d.revision))?;
     let master = crate::shell::masters::current_master(font, &view.layers)?.id.clone();
-    Some(LayoutKey { doc, text: view.text.revision, master, compile: text::features::compile_stamp(session) })
+    Some(LayoutKey {
+        doc,
+        text: view.text.revision,
+        master,
+        compile: text::features::compile_stamp(session),
+        settings: session.settings().revision(),
+    })
 }
 
 fn build(session: &mut Session, view: &ViewState, shaper: &ShaperSlot) -> Option<TextModel> {

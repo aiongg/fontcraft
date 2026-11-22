@@ -476,6 +476,7 @@ impl FontCraftApp {
                 }
                 crate::shell::project::after_run(self, &command.id, &reply);
                 crate::shell::extension_downloads::after_run(self, &command.id, &params, &reply);
+                crate::shell::text_preview::note_export(&mut self.view.text_preview, &reply);
                 let notice = self.after_command(&command, &reply).or_else(|| notices::notice(&command.id, &reply));
                 if let Some(notice) = opened.pop().or(notice) {
                     self.status = notice;

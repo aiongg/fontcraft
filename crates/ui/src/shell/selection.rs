@@ -131,7 +131,8 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
             apply::sync(app);
             let change = {
                 let font = app.session.font().map_err(|e| e.to_string())?;
-                let scene = scene(font, &app.view, app.tools.focus.as_ref()).ok_or("no glyph is being edited (open a glyph first)")?;
+                let scene = scene(font, app.session.glyph_data().ok().as_deref(), &app.view, app.tools.focus.as_ref())
+                    .ok_or("no glyph is being edited (open a glyph first)")?;
                 check_target(params, &scene)?;
                 change(id, params, &scene, &app.tools.selection)?
             };
@@ -151,7 +152,8 @@ fn recall(app: &mut FontCraftApp, params: &Value) -> Result<Selection, String> {
     apply::sync(app);
     let query = {
         let font = app.session.font().map_err(|e| e.to_string())?;
-        let scene = scene(font, &app.view, app.tools.focus.as_ref()).ok_or("no glyph is being edited (open a glyph first)")?;
+        let scene = scene(font, app.session.glyph_data().ok().as_deref(), &app.view, app.tools.focus.as_ref())
+            .ok_or("no glyph is being edited (open a glyph first)")?;
         check_target(params, &scene)?;
         serde_json::json!({"glyph": scene.glyph, "layer": scene.layer_id, "side": scene.side.as_str(), "name": name})
     };

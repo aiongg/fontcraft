@@ -91,7 +91,9 @@ pub fn outlines(app: &FontCraftApp) -> Vec<Vec<Point>> {
     }
     let Some((near, _)) = app.overlays.hover else { return Vec::new() };
     let Ok(font) = app.session.font() else { return Vec::new() };
-    let Some(mut scene) = tools::scene(font, &app.view, app.tools.focus.as_ref()) else { return Vec::new() };
+    let Some(mut scene) = tools::scene(font, app.session.glyph_data().ok().as_deref(), &app.view, app.tools.focus.as_ref()) else {
+        return Vec::new();
+    };
     scene.suggest = suggest(&app.session, font, &app.view, on);
     let moving = Moving::from_selection(&scene, &app.tools.selection);
     let scale = tools::apply::camera(app).scale();

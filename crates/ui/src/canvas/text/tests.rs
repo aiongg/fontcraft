@@ -156,6 +156,71 @@ fn the_text_tool_types_deletes_moves_the_cursor_and_escape_leaves_text_mode() {
     assert_eq!(app.view.tool, super::TEXT_TOOL);
 }
 
+/// Alt with Left or Right moves by word and Cmd with Up or Down to the start or end of the text; Shift extends the
+/// selection with both. None of these keys is a text-mode shortcut.
+#[test]
+fn alt_arrows_move_by_word_and_cmd_up_down_to_the_ends_of_the_text() {
+    let alt = Modifiers { alt: true, ..Modifiers::NONE };
+    let alt_shift = Modifiers { alt: true, shift: true, ..Modifiers::NONE };
+    let cmd = Modifiers { cmd: true, ..Modifiers::NONE };
+    let cmd_shift = Modifiers { cmd: true, shift: true, ..Modifiers::NONE };
+    for (k, m) in [(Key::Left, alt), (Key::Right, alt_shift), (Key::Up, cmd), (Key::Down, cmd_shift)] {
+        assert_eq!(super::input::text_mode_command(k, m), None, "{k:?} {m:?} is no text-mode shortcut");
+    }
+    let mut app = text_app();
+    try_post(&mut app, Msg::View(ViewMsg::SelectTool(super::TEXT_TOOL))).unwrap();
+    shell(&mut app, "editView.setText", json!({"glyphs": ["H", "o", "space", "H", "o", "space", "H", "o"]}));
+    shell(&mut app, "editView.setCursor", json!({"index": 0}));
+    let at = |app: &FontCraftApp| (get(app)["cursor"].clone(), get(app)["selection"].clone());
+
+    key(&mut app, Key::Right, alt);
+    assert_eq!(at(&app), (json!(2), json!([2, 2])), "Alt+Right: to the end of the first word");
+    key(&mut app, Key::Right, alt);
+    assert_eq!(at(&app), (json!(5), json!([5, 5])), "past the space to the end of the next word");
+    key(&mut app, Key::Right, alt_shift);
+    assert_eq!(at(&app), (json!(8), json!([5, 8])), "Shift extends the selection by a word");
+    key(&mut app, Key::Left, alt);
+    assert_eq!(at(&app), (json!(3), json!([3, 3])), "Alt+Left from the selection's start, to the start of its word");
+    key(&mut app, Key::Left, alt_shift);
+    assert_eq!(at(&app), (json!(0), json!([0, 3])));
+
+    key(&mut app, Key::Down, cmd);
+    assert_eq!(at(&app), (json!(8), json!([8, 8])), "Cmd+Down: to the end of the text");
+    key(&mut app, Key::Up, cmd_shift);
+    assert_eq!(at(&app), (json!(0), json!([0, 8])), "Cmd+Shift+Up selects back to the start");
+    key(&mut app, Key::Down, cmd_shift);
+    assert_eq!(at(&app), (json!(8), json!([8, 8])), "the anchor stays at the end");
+    key(&mut app, Key::Up, cmd);
+    assert_eq!(at(&app), (json!(0), json!([0, 0])), "Cmd+Up: to the start of the text");
+    assert_eq!(items(&app).as_array().map(Vec::len), Some(8), "no key changed the text");
+}
+
+/// The text wraps at `appearance.textViewWidth` thousandths of an em: in a 2,048-unit font the default is 20,480
+/// units, and a narrower setting breaks a long line.
+#[test]
+fn the_text_view_width_is_in_thousandths_of_an_em() {
+    use crate::app::models::text::{TEXT_VIEW_WIDTH, line_width};
+
+    let mut font = fontcraft_engine::model::Font::new("Wide");
+    font.units_per_em = 2048;
+    let mut session = Session::new();
+    session.add_document(font, None).unwrap();
+    assert_eq!(line_width(session.settings(), 2048), 20_480.0);
+    assert_eq!(line_width(session.settings(), 1000), 10_000.0);
+    session.execute("settings.set", &json!({"id": TEXT_VIEW_WIDTH, "value": 500})).unwrap();
+    assert_eq!(line_width(session.settings(), 2048), 1024.0);
+    assert!(session.execute("settings.set", &json!({"id": TEXT_VIEW_WIDTH, "value": 0})).is_err(), "a width of nothing is refused");
+
+    let mut app = FontCraftApp::with_edit_tab(session, Arc::new(Host::builder(APP).build()));
+    app.sent.push(Msg::View(ViewMsg::SelectGlyph("A".into())));
+    app.drain();
+    shell(&mut app, "editView.setText", json!({"glyphs": ["A", "B", "A", "B", "A", "B", "A", "B"]}));
+    let lines = |app: &FontCraftApp| app.models.text.layout.as_ref().map_or(0, |l| l.lines.len());
+    assert!(lines(&app) > 1, "eight glyphs do not fit half an em");
+    run(&mut app, "settings.set", json!({"id": TEXT_VIEW_WIDTH, "value": 100_000}));
+    assert_eq!(lines(&app), 1, "a hundred em holds them on one line");
+}
+
 /// Typing past the canvas's edge scrolls it sideways so the cursor stays in view; the zoom stays.
 #[test]
 fn typing_keeps_the_cursor_in_view() {

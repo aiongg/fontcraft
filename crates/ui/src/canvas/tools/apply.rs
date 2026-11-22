@@ -62,7 +62,7 @@ fn with_tool<R>(app: &mut FontCraftApp, f: impl FnOnce(&mut Toolbox, &Context<'_
     let view = tools_view(&camera(app));
     let marks = crate::canvas::hinting::ps_marks(&mut app.session, &app.view);
     let font = app.session.font().map_err(|e| e.to_string())?;
-    let mut scene = scene(font, &app.view, app.tools.focus.as_ref()).ok_or("no glyph is being edited")?;
+    let mut scene = scene(font, app.session.glyph_data().ok().as_deref(), &app.view, app.tools.focus.as_ref()).ok_or("no glyph is being edited")?;
     scene.ps_hints = marks;
     scene.suggest = crate::canvas::overlays::suggest::suggest(&app.session, font, &app.view, app.overlays.switches.suggest);
     let settings = settings(&app.session, font, app);
@@ -97,7 +97,7 @@ pub fn sync(app: &mut FontCraftApp) {
         app.tools.checked = revision;
         // After an edit, undo or redo, drop the addresses that no longer resolve.
         if let Ok(font) = app.session.font()
-            && let Some(scene) = scene(font, &app.view, None)
+            && let Some(scene) = scene(font, app.session.glyph_data().ok().as_deref(), &app.view, None)
         {
             app.tools.selection.retain_valid(&scene);
             if let Some(focus) = app.tools.focus.as_mut() {
@@ -115,7 +115,7 @@ pub fn sync(app: &mut FontCraftApp) {
         // selected whatever Show Hints says.
         let marks = crate::canvas::hinting::ps_marks(&mut app.session, &app.view);
         let corners: Vec<usize> = match app.session.font() {
-            Ok(font) => scene(font, &app.view, None)
+            Ok(font) => scene(font, app.session.glyph_data().ok().as_deref(), &app.view, None)
                 .map(|scene| {
                     app.tools.selection.hints.iter().copied().filter(|&i| fontcraft_tools::attachment::is_selectable(&scene.layer, i)).collect()
                 })

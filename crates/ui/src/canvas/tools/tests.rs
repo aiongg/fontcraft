@@ -343,7 +343,7 @@ fn corner_app() -> FontCraftApp {
 fn corner_point(app: &FontCraftApp, hint: usize) -> (f64, f64) {
     use fontcraft_geom::ParamCurve as _;
     let font = app.session.font().unwrap();
-    let scene = super::scene(font, &app.view, None).unwrap();
+    let scene = super::scene(font, app.session.glyph_data().ok().as_deref(), &app.view, None).unwrap();
     let mark = scene.attachments.iter().find(|m| m.hint == hint).expect("the corner is fitted");
     let p = mark.outline.segments().next().expect("the corner has an outline").eval(0.5);
     (p.x, p.y)

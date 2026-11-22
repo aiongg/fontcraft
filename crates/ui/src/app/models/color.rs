@@ -125,7 +125,7 @@ fn attributes(cx: &ProjectCx<'_>, selection: &Selection) -> Option<AttributesMod
         return None;
     }
     let font = cx.session.font().ok()?;
-    let scene = scene(font, cx.view, None)?;
+    let scene = scene(font, cx.session.glyph_data().ok().as_deref(), cx.view, None)?;
     if !scene.layer.info.attrs.full_color {
         return None;
     }

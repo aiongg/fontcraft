@@ -7,6 +7,10 @@
 //! | size field | `textPreview.setFontSize` |
 //! | Pin | `textPreview.togglePinned` |
 //! | Find | `textPreview.find {open}`: the find bar, with replace and its options |
+//! | source pop-up | `textPreview.showExportedFonts {source}`: the document or the last export (a folder comes from the command) |
+//! | file pop-up, for the last export or a folder | `textPreview.showExportedFonts {source, font}` |
+//! | Waterfall | `view.previewWaterfall {on}`: the Edit View text or Font View's selection once per size |
+//! | Insert Pattern menu of the find bar | `textPreview.insertPattern {pattern}` at the end of the search |
 //! | text field | `textPreview.setText` on every change (texts up to [`FIELD_LIMIT`] characters) |
 //! | context menu of the text | `textPreview.setLayoutOrientation`, `textPreview.setWritingDirection {scope: "text"}`, and `{scope: "selection", range}` over the text field's last selection |
 //!
@@ -20,7 +24,7 @@
 use craft::theme::{Rgba, Srgba};
 use craft::ui::buttons::{Button, ToggleButton};
 use craft::ui::choice::Checkbox;
-use craft::ui::contract::{Bind, Entry, Props as _, Scroll, Show as _, ShowContainer as _, Tracked};
+use craft::ui::contract::{Bind, Entry, Props as _, Scroll, Show as _, ShowContainer as _, Tracked, Trigger};
 use craft::ui::display::{Shade, Text};
 use craft::ui::layout_components::{Row, Stack};
 use craft::ui::menu::Menu;
@@ -28,6 +32,7 @@ use craft::ui::pickers::Select;
 use craft::ui::primitives::TextureCache;
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::{Env, Label};
+use craft::ui::style::TypeRole;
 use craft::ui::text::TextField;
 use craft_ext::ui::text::{FieldSelection as _, TextSelection};
 use egui::{Align2, Color32, ColorImage, FontId, Pos2, Rect, Sense, TextureOptions, Ui, pos2, vec2};
@@ -39,7 +44,7 @@ use serde_json::{Value, json};
 use super::widgets;
 use crate::app::models::text_preview::{Page, PageDirection, PageGlyph, TextPreviewModel};
 use crate::app::{Msg, ViewMsg};
-use crate::shell::text_preview::{Area, BaseDirection, FIELD_LIMIT, MAX_QUERY_CHARS, Matching, Orientation, SIZE_RANGE, grouped};
+use crate::shell::text_preview::{Area, BaseDirection, FIELD_LIMIT, MAX_QUERY_CHARS, Matching, Orientation, Pattern, SIZE_RANGE, grouped};
 
 /// Rows of the text field.
 const FIELD_LINES: usize = 3;
@@ -81,6 +86,21 @@ craft::ui::words! {
         ltr: "fontcraftTextPreview.ltr" = "Left to Right";
         rtl: "fontcraftTextPreview.rtl" = "Right to Left";
         selection_direction: "fontcraftTextPreview.selectionDirection" = "Selection Direction";
+        waterfall: "fontcraftTextPreview.waterfall" = "Waterfall";
+        waterfall_tip: "fontcraftTextPreview.waterfallTip" = "Show the Edit View text, or the glyphs selected in Font View, at each size";
+        optical_size: "fontcraftTextPreview.opticalSize" = "Optical Size";
+        points: template "fontcraftTextPreview.points" = "{size} pt";
+        points_optical: template "fontcraftTextPreview.pointsOptical" = "{size} pt, optical size {value}";
+        insert_pattern: "fontcraftTextPreview.insertPattern" = "Insert Pattern";
+        any_space: "fontcraftTextPreview.anySpace" = "Any Space";
+        any_digit: "fontcraftTextPreview.anyDigit" = "Any Digit";
+        any_letter: "fontcraftTextPreview.anyLetter" = "Any Letter";
+        line_end: "fontcraftTextPreview.lineEnd" = "Line End";
+        source: "fontcraftTextPreview.source" = "Source";
+        document: "fontcraftTextPreview.document" = "Open Document";
+        last_export: "fontcraftTextPreview.lastExport" = "Last Export";
+        folder: "fontcraftTextPreview.folder" = "Folder";
+        file: "fontcraftTextPreview.file" = "Font File";
     }
 }
 
@@ -114,12 +134,43 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
         if let Some(message) = &model.message {
             Text::new(message.clone()).shade(Shade::Muted).show(ui);
         }
-        area(ui, model, &words, selection, sent);
+        if model.waterfall.is_empty() {
+            area(ui, model, &words, selection, sent);
+        } else {
+            waterfall_area(ui, model, &words);
+        }
     });
+}
+
+/// The source pop-up, and the file pop-up while the source is a set of font files.
+fn source_picker(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, sent: &mut Vec<Msg>) {
+    let mut entries =
+        vec![Entry::new("document".to_string(), words.document.clone()), Entry::new("lastExport".to_string(), words.last_export.clone())];
+    if model.source == "folder" {
+        entries.push(Entry::new("folder".to_string(), words.folder.clone()));
+    }
+    if let Some(picked) = Select::new(words.source.clone(), Bind::given(model.source.clone()), &entries).show(ui).events.committed()
+        && *picked != model.source
+        && picked != "folder"
+    {
+        sent.push(shell("textPreview.showExportedFonts", json!({ "source": picked })));
+    }
+    let files: Vec<Entry<String>> =
+        model.exported.iter().filter(|r| !r.file.is_empty()).map(|r| Entry::new(r.file.clone(), Label::from(r.file.clone()))).collect();
+    if model.source != "document" && files.len() > 1 {
+        let shown = model.exported.iter().find(|r| r.shown).map(|r| r.file.clone()).unwrap_or_default();
+        if let Some(picked) = Select::new(words.file.clone(), Bind::given(shown.clone()), &files).show(ui).events.committed()
+            && *picked != shown
+        {
+            // A folder source is sent again as it is, so only the file changes.
+            sent.push(shell("textPreview.showExportedFonts", json!({ "source": model.source, "folder": model.folder, "font": picked })));
+        }
+    }
 }
 
 fn top_row(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, sent: &mut Vec<Msg>) {
     Row::new().show(ui, |ui, _| {
+        source_picker(ui, model, words, sent);
         let mut entries = vec![Entry::new(String::new(), words.current_master.clone())];
         entries.extend(model.styles.iter().map(|s| Entry::new(s.clone(), Label::from(s.clone()))));
         let shown = model.style.clone().unwrap_or_default();
@@ -140,7 +191,51 @@ fn top_row(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, sent
         if let Some(open) = ToggleButton::new(words.find.clone(), Bind::given(model.find.open)).show(ui).events.committed() {
             sent.push(shell("textPreview.find", json!({ "open": open })));
         }
+        let on = !model.waterfall.is_empty();
+        if let Some(on) = ToggleButton::new(words.waterfall.clone(), Bind::given(on)).tooltip(words.waterfall_tip.clone()).show(ui).events.committed()
+        {
+            sent.push(shell("view.previewWaterfall", json!({ "on": on })));
+        }
     });
+}
+
+/// The waterfall: each line's size, then the line drawn at that size, in the master the model chose for it.
+fn waterfall_area(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords) {
+    let env = Env::of(ui);
+    let pad = env.tokens.space.pad.regular;
+    let ink = env.tokens.color.text.normal;
+    let canvas = color(env.tokens.color.surface.canvas);
+    Stack::new().scroll(Scroll::both()).fill().show(ui, |ui, _| {
+        for row in &model.waterfall {
+            let Some(page) = model.waterfall_pages.get(row.page) else { continue };
+            let size = trimmed(row.size);
+            let label: Label = match row.optical_size {
+                Some(value) => words.points_optical.fill(&[("size", size.as_str()), ("value", trimmed(value).as_str())]).into(),
+                None => words.points.fill(&[("size", size.as_str())]).into(),
+            };
+            Text::new(label).role(TypeRole::Caption).shade(Shade::Muted).show(ui);
+            let scale = (row.size / page.units_per_em.max(1.0)) as f32;
+            let lh = (page.line_height as f32 * scale).max(1.0);
+            let width = ui.available_width().max(pad * 8.0);
+            let (rect, _) = ui.allocate_exact_size(vec2(width, lh), Sense::hover());
+            let visible = rect.intersect(ui.clip_rect());
+            if !visible.is_positive() {
+                continue;
+            }
+            ui.painter_at(visible).rect_filled(visible, 0.0, canvas);
+            let ay = rect.min.y + page.ascender as f32 * scale;
+            let place = match page.direction {
+                PageDirection::Rtl => Placement { ax: rect.max.x - pad, ay, scale },
+                PageDirection::Ltr | PageDirection::Vertical => Placement { ax: rect.min.x + pad, ay, scale },
+            };
+            fill(ui, page, place, visible, &(0..1), ink);
+        }
+    });
+}
+
+/// A size as the waterfall labels it: whole numbers without a fraction, others to one decimal.
+fn trimmed(v: f64) -> String {
+    if v.fract().abs() < 1e-9 { format!("{v:.0}") } else { format!("{v:.1}") }
 }
 
 fn find_bar(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, sent: &mut Vec<Msg>) {
@@ -195,6 +290,17 @@ fn find_bar(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, sen
         }
         if Button::new(words.replace_all.clone()).enabled(count > 0).show(ui).clicked() && count > 0 {
             sent.push(shell("textPreview.find", json!({ "replace": with })));
+        }
+        let patterns = [
+            (Pattern::Space, &words.any_space),
+            (Pattern::Digit, &words.any_digit),
+            (Pattern::Letter, &words.any_letter),
+            (Pattern::LineEnd, &words.line_end),
+        ];
+        let button = Button::new(words.insert_pattern.clone()).show(ui);
+        let entries: Vec<Entry<&'static str>> = patterns.iter().map(|(p, label)| Entry::new(p.name(), (*label).clone())).collect();
+        if let Some(name) = Menu::new(words.insert_pattern.clone()).opened_by(&button.response, Trigger::Click).pick(ui, &entries).picked {
+            sent.push(shell("textPreview.insertPattern", json!({ "pattern": name })));
         }
         if Button::new(words.done.clone()).show(ui).clicked() {
             sent.push(shell("textPreview.find", json!({ "open": false })));

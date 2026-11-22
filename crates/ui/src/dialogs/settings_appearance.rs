@@ -5,6 +5,7 @@
 //! | Display Unicode Value | `settings.set appearance.displayUnicodeValue` |
 //! | Always use Light Mode: Font View, Edit View | `settings.set appearance.alwaysLightMode{FontView,EditView}` |
 //! | Handle size | `settings.set appearance.handleSize` (`small`, `regular`, `large`) |
+//! | Text View Width | `settings.set appearance.textViewWidth`, in thousandths of an em |
 //! | a colour well, light or dark | `settings.set appearance.color.<item>.{light,dark}` as `#RRGGBBAA` |
 //! | Standard | `settings.resetColors {}`: both colour sets back to their defaults |
 //!
@@ -20,12 +21,14 @@ use craft::ui::layout::empty_cell;
 use craft::ui::layout_components::Grid;
 use craft::ui::runtime::env::{Env, Label};
 use craft::ui::style::TypeRole;
+use craft::ui::text::NumberField;
 use egui::Ui;
 use fontcraft_engine::settings::COLOR_PREFIX;
 use serde_json::{Value, json};
 
 use crate::app::appearance::{EDIT_VIEW_LIGHT, FONT_VIEW_LIGHT};
 use crate::app::models::color::{Rgba8, hex, parse_hex};
+use crate::app::models::text::{DEFAULT_TEXT_VIEW_WIDTH, TEXT_VIEW_WIDTH};
 use crate::app::{FontCraftApp, Msg};
 use crate::panels::attributes::color_field;
 
@@ -41,6 +44,8 @@ craft::ui::words! {
         small: "fontcraftAppearance.small" = "Small";
         regular: "fontcraftAppearance.regular" = "Regular";
         large: "fontcraftAppearance.large" = "Large";
+        text_view_width: "fontcraftAppearance.textViewWidth" = "Text View Width";
+        text_view_width_note: "fontcraftAppearance.textViewWidthNote" = "Edit View text wraps at this length, in thousandths of an em, whatever the font's units per em.";
         colors: "fontcraftAppearance.colors" = "Colours";
         light: "fontcraftAppearance.light" = "Light";
         dark: "fontcraftAppearance.dark" = "Dark";
@@ -102,6 +107,8 @@ pub struct AppearanceModel {
     pub edit_view_light: bool,
     /// `small`, `regular` or `large`.
     pub handle_size: String,
+    /// Where Edit View text wraps, in thousandths of an em.
+    pub text_view_width: f64,
     pub colors: Vec<ColorRow>,
     /// The canvas is drawn with the dark set.
     pub canvas_dark: bool,
@@ -117,6 +124,7 @@ impl AppearanceModel {
             font_view_light: on(FONT_VIEW_LIGHT),
             edit_view_light: on(EDIT_VIEW_LIGHT),
             handle_size: settings.get(HANDLE_SIZE).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_else(|| "regular".into()),
+            text_view_width: settings.get(TEXT_VIEW_WIDTH).ok().and_then(|v| v.as_f64()).filter(|w| w.is_finite()).unwrap_or(DEFAULT_TEXT_VIEW_WIDTH),
             colors: ITEMS.iter().map(|(item, _)| ColorRow { item, light: color(color_id(item, false)), dark: color(color_id(item, true)) }).collect(),
             canvas_dark: app.models.appearance.edit_view_dark(),
         }
@@ -158,6 +166,22 @@ pub fn section(ui: &mut Ui, model: &AppearanceModel, sent: &mut Vec<Msg>) {
     if size != model.handle_size {
         sent.push(set(HANDLE_SIZE, json!(size)));
     }
+
+    let mut width = None;
+    Field::new(words.text_view_width.clone()).show(ui, |ui, _| {
+        width = NumberField::new(words.text_view_width.clone(), Bind::given(Some(model.text_view_width)))
+            .id_salt("fontcraftAppearance.textViewWidth")
+            .show(ui)
+            .edit
+            .events
+            .committed()
+            .copied()
+            .flatten();
+    });
+    if let Some(width) = width.filter(|w| w.is_finite() && (*w - model.text_view_width).abs() > 1e-9) {
+        sent.push(set(TEXT_VIEW_WIDTH, json!(width)));
+    }
+    note(ui, &words.text_view_width_note);
 
     Text::new(words.colors.clone()).role(TypeRole::Heading).show(ui);
     // One grid, so the wells of every row line up under the Light and Dark headings.
@@ -219,6 +243,7 @@ mod tests {
         let model = AppearanceModel::of(&app);
         assert_eq!(model.colors.len(), 9);
         assert_eq!(model.handle_size, "regular");
+        assert_eq!(model.text_view_width, 10_000.0);
         assert_eq!(model.colors.iter().find(|r| r.item == "canvas").and_then(|r| r.dark), Some([0x1e, 0x1e, 0x1e, 0xff]));
         assert!(!model.canvas_dark);
 
@@ -228,17 +253,20 @@ mod tests {
         fixture.click(&switch).settle();
         let well = fixture.by_label("Corner Nodes (Dark)").expect("the dark corner-node field");
         fixture.click(&well).key(Key::A, Modifiers::COMMAND).type_text("#ff000080").key(Key::Enter, Modifiers::NONE).settle();
+        let width = fixture.by_label("Text View Width").expect("the Text View Width field");
+        fixture.click(&width).key(Key::A, Modifiers::COMMAND).type_text("5000").key(Key::Enter, Modifiers::NONE).settle();
         let standard = fixture.by_label("Standard").expect("Standard");
         fixture.click(&standard).settle();
         let set = |id: &str, value: serde_json::Value| Msg::run("settings.set", json!({ "id": id, "value": value }));
         let expected = vec![
             set("appearance.alwaysLightModeEditView", json!(true)),
             set("appearance.color.cornerNodes.dark", json!("#FF000080")),
+            set("appearance.textViewWidth", json!(5000.0)),
             Msg::run("settings.resetColors", json!({})),
         ];
         assert_eq!(*posted.borrow(), expected);
 
-        for msg in expected.into_iter().take(2) {
+        for msg in expected.into_iter().take(3) {
             app.run_now(msg, false).unwrap();
         }
         app.set_system_dark(true);
@@ -246,6 +274,7 @@ mod tests {
         let model = AppearanceModel::of(&app);
         assert!(model.edit_view_light && !model.canvas_dark, "Edit View is kept light under the dark window");
         assert_eq!(model.colors.iter().find(|r| r.item == "cornerNodes").and_then(|r| r.dark), Some([0xff, 0, 0, 0x80]));
+        assert_eq!(model.text_view_width, 5000.0);
         app.run_now(Msg::run("settings.resetColors", json!({})), false).unwrap();
         let model = AppearanceModel::of(&app);
         assert_eq!(model.colors.iter().find(|r| r.item == "cornerNodes").and_then(|r| r.dark), Some([0x2d, 0x6c, 0xdf, 0xff]));

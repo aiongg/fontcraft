@@ -172,3 +172,96 @@ fn text_preview_draws_colour_glyphs_from_the_compiled_font() {
     assert_eq!(p.glyphs.len(), 2);
     assert_eq!(app.models.text_preview.view.message.as_deref(), Some(reason), "the reason shows under the text");
 }
+
+/// The waterfall repeats the Edit View text once per size, in one page for the master it draws; sizes outside the
+/// allowed range and too many sizes are refused, and turning it off brings the running text back.
+#[test]
+fn the_waterfall_repeats_the_edit_view_text_at_each_size() {
+    let mut app = app();
+    shell(&mut app, "editView.setText", json!({"text": "AV"})).unwrap();
+    shell(&mut app, "view.previewWaterfall", json!({"on": true, "sizes": [72, 12]})).unwrap();
+    let model = &app.models.text_preview.view;
+    assert_eq!(model.waterfall.iter().map(|r| r.size).collect::<Vec<_>>(), [72.0, 12.0]);
+    assert!(model.waterfall.iter().all(|r| r.optical_size.is_none() && r.page == 0), "no optical-size axis: one master");
+    assert_eq!(model.waterfall_pages.len(), 1);
+    assert_eq!(names(&model.waterfall_pages[0]), ["A", "V"]);
+    let x = xs(&model.waterfall_pages[0]);
+    assert!((x[1] - x[0] - (width(&app, "A") - 100.0)).abs() < 0.01, "the line is kerned: {x:?}");
+
+    assert!(shell(&mut app, "view.previewWaterfall", json!({"sizes": [2]})).is_err(), "below 4 points");
+    assert!(shell(&mut app, "view.previewWaterfall", json!({"sizes": vec![12; 33]})).is_err(), "more than 32 sizes");
+    assert_eq!(app.view.text_preview.waterfall.sizes, [72.0, 12.0], "a refused change keeps the sizes");
+    let mut state = serde_json::Map::new();
+    super::inspect(&app, &mut state);
+    assert_eq!(state["textPreview"]["waterfall"]["lines"].as_array().map(Vec::len), Some(2));
+
+    shell(&mut app, "view.previewWaterfall", json!({})).unwrap();
+    assert!(app.models.text_preview.view.waterfall.is_empty(), "without on, the waterfall toggles off");
+    shell(&mut app, "textPreview.setText", json!({"text": "AVA"})).unwrap();
+    assert_eq!(names(&page(&app)), ["A", "V", "A"]);
+}
+
+/// Insert Pattern puts a token into the search, at the end or at a given place, and the search runs again.
+#[test]
+fn insert_pattern_puts_a_token_into_the_search() {
+    let mut app = app();
+    shell(&mut app, "textPreview.setText", json!({"text": "A1 V2 AV"})).unwrap();
+    shell(&mut app, "textPreview.insertPattern", json!({"pattern": "letter"})).unwrap();
+    shell(&mut app, "textPreview.insertPattern", json!({"pattern": "digit"})).unwrap();
+    let model = &app.models.text_preview.view;
+    assert_eq!((model.find.query.as_str(), model.find.open, model.matches), ("\\l\\d", true, 2));
+    shell(&mut app, "textPreview.insertPattern", json!({"pattern": "space", "at": 0})).unwrap();
+    let model = &app.models.text_preview.view;
+    assert_eq!((model.find.query.as_str(), model.matches), ("\\s\\l\\d", 1));
+    let mut state = serde_json::Map::new();
+    super::inspect(&app, &mut state);
+    assert_eq!(state["textPreview"]["find"]["ranges"], json!([[2, 5]]), "a match spans one character per token");
+    assert!(shell(&mut app, "textPreview.insertPattern", json!({"pattern": "word"})).is_err());
+    assert!(shell(&mut app, "textPreview.insertPattern", json!({"pattern": "digit", "at": 99})).is_err());
+}
+
+/// The preview draws the fonts the last export wrote and the font files of a folder, from the files' own tables, and
+/// reads a file again once it changes on disk; the document source brings the open document back.
+#[test]
+fn the_preview_shows_the_last_export_and_a_folder_and_follows_changes() {
+    let dir = std::env::temp_dir().join(format!("fontcraft-ui-text-preview-exported-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut app = app();
+    shell(&mut app, "textPreview.setText", json!({"text": "AV"})).unwrap();
+    assert!(shell(&mut app, "textPreview.showExportedFonts", json!({"source": "folder"})).is_err(), "a folder source needs its folder");
+    assert!(shell(&mut app, "textPreview.showExportedFonts", json!({"source": "disk"})).is_err());
+
+    shell(&mut app, "textPreview.showExportedFonts", json!({"source": "lastExport"})).unwrap();
+    assert!(app.models.text_preview.view.page.is_none(), "nothing exported yet");
+    assert!(app.models.text_preview.view.message.is_some(), "the preview says why");
+
+    let out = dir.join("Exported.ttf");
+    exec(&mut app, "font.compile", json!({"formats": ["ttf"], "destination": out.to_string_lossy()}));
+    assert_eq!(app.view.text_preview.last_export, [out.clone()], "the export's file is kept as the last export");
+    set_now(&mut app.models.text_preview, 10.0);
+    app.drain();
+    let model = &app.models.text_preview.view;
+    assert_eq!(model.exported.iter().map(|r| (r.file.as_str(), r.shown)).collect::<Vec<_>>(), [("Exported.ttf", true)]);
+    let p = page(&app);
+    assert_eq!(names(&p), ["A", "V"], "laid out from the compiled file");
+    let before = xs(&p);
+
+    shell(&mut app, "textPreview.showExportedFonts", json!({"source": "folder", "folder": dir.to_string_lossy()})).unwrap();
+    set_now(&mut app.models.text_preview, 20.0);
+    app.drain();
+    assert_eq!(names(&page(&app)), ["A", "V"], "the folder's font file");
+
+    // A wider A, exported again over the same file, shows once the next look at the disk comes round.
+    exec(&mut app, "spacing.setWidth", json!({"glyphs": ["A"], "value": 900}));
+    exec(&mut app, "font.compile", json!({"formats": ["ttf"], "destination": out.to_string_lossy()}));
+    set_now(&mut app.models.text_preview, 22.0);
+    app.drain();
+    let after = xs(&page(&app));
+    assert!(after[1] - after[0] > before[1] - before[0], "the changed file is read again: {before:?} then {after:?}");
+
+    shell(&mut app, "textPreview.showExportedFonts", json!({"source": "document"})).unwrap();
+    assert!(app.models.text_preview.view.exported.is_empty());
+    assert_eq!(names(&page(&app)), ["A", "V"], "the open document again");
+    let _ = std::fs::remove_dir_all(&dir);
+}

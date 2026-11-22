@@ -16,6 +16,7 @@ pub mod targets;
 pub mod tokens;
 
 use fontcraft_engine::Session;
+use fontcraft_engine::model::glyphdata::GlyphData;
 use fontcraft_engine::model::{Font, Layer, LayerSide, Master};
 use fontcraft_tools::toolbox::Keyboard;
 use fontcraft_tools::{KeyEvent, Modifiers, Overlay, PointerEvent, Scene, Selection, Toolbox};
@@ -216,10 +217,11 @@ pub fn target(session: &Session, view: &ViewState) -> Option<Target> {
 }
 
 /// The scene the tools work on: the edited side of the edited glyph's active layer, as the canvas shows it.
-pub fn scene<'a>(font: &'a Font, view: &ViewState, focus: Option<&Vec<usize>>) -> Option<Scene<'a>> {
+/// `data` is the session's glyph data, so the snapped metric lines are the drawn ones.
+pub fn scene<'a>(font: &'a Font, data: Option<&GlyphData>, view: &ViewState, focus: Option<&Vec<usize>>) -> Option<Scene<'a>> {
     let glyph = edited_glyph(font, view)?;
     let layer = active_layer(font, view)?;
-    let mut scene = Scene::from_font_side(font, glyph, Some(&layer.id), side(view))?;
+    let mut scene = Scene::from_font_side(font, data, glyph, Some(&layer.id), side(view))?;
     scene.focus = focus.cloned();
     scene.background_shown = view.display.background;
     scene.guides_shown = view.display.guides;

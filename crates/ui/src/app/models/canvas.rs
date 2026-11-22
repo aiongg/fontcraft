@@ -119,7 +119,7 @@ pub fn edited_glyph(font: &Font, data: Option<&GlyphData>, glyph: &Glyph, full: 
     let layer = fontcraft_tools::side_view(full, side).into_owned();
     let (descender, ascender) = vertical_span(font, master);
     let hidden = data.map(|d| out_of_scope(font, d, glyph, &master.id)).unwrap_or_default();
-    let (lines, zones) = metric_lines(font, master, glyph, &hidden);
+    let (lines, zones) = metric_lines(font, data, master, glyph, &hidden);
     let plain = shapes_outline(font, &layer.shapes, &layer.master).map(concat).unwrap_or_else(|_| resolved(font, &layer.shapes, &layer.master));
     let (outline, source) = if side == LayerSide::Background {
         (plain, None)
@@ -210,10 +210,12 @@ pub fn vertical_span(font: &Font, master: &Master) -> (f64, f64) {
 type MetricLines = (Vec<(String, f64)>, Vec<(f64, f64)>);
 
 /// The horizontal metric lines and alignment zones `master` shows for `glyph`
-/// (`fontcraft_model::shown_metrics`: per-script parameters applied), without the metrics at `hidden`. The zones
+/// (`fontcraft_model::shown_metrics`: per-script parameters applied, the script from `data` when the glyph stores
+/// none), without the metrics at `hidden`. The zones
 /// are read as `Font::alignment_zones` reads them: each shown metric's overshoot, then the master's own.
-fn metric_lines(font: &Font, master: &Master, glyph: &Glyph, hidden: &[usize]) -> MetricLines {
-    let shown: Vec<ShownMetric> = shown_metrics(font, master, glyph).into_iter().filter(|m| m.index.is_none_or(|i| !hidden.contains(&i))).collect();
+fn metric_lines(font: &Font, data: Option<&GlyphData>, master: &Master, glyph: &Glyph, hidden: &[usize]) -> MetricLines {
+    let shown: Vec<ShownMetric> =
+        shown_metrics(font, master, glyph, data).into_iter().filter(|m| m.index.is_none_or(|i| !hidden.contains(&i))).collect();
     let lines = shown.iter().filter(|m| m.y.is_finite()).map(|m| (m.name.clone().unwrap_or_else(|| m.kind.clone()), m.y)).collect();
     let zones = shown
         .iter()

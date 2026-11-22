@@ -103,7 +103,7 @@ ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Documented, not yet observed. FontCraft (M3.43): `fontcraft_model::shown_metrics` gives the metric lines of a glyph once, and `guide.displayLines`, the Edit View canvas, its alignment zones and the tools' snapping all read them there. An entry for the glyph's script replaces the master's ascender line for that glyph, keeping the master's overshoot, so the zone moves with the line; an entry without a script is ignored. The master's parameters are read before the font's."
 guesses = [
-  "The glyph's script is the one stored on the glyph; the script the glyph data gives a glyph without one is not used for these parameters.",
+  "The glyph's script is its effective one: the script stored on the glyph, else the one the glyph data gives for its name and code points, as Font View shows it.",
   "The replaced line keeps the master's overshoot, so its alignment zone moves with it.",
 ]
 observe = [

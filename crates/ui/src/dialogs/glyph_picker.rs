@@ -229,7 +229,7 @@ fn search(app: &mut FontCraftApp, purpose: Purpose, query: &str) -> (Vec<Found>,
 /// The targets of `purpose` from `p`, else from the canvas selection.
 fn targets(app: &FontCraftApp, p: &Value, purpose: Purpose) -> Result<Map<String, Value>, String> {
     let font = app.session.font().map_err(|e| e.to_string())?;
-    let shown = scene(font, &app.view, app.tools.focus.as_ref());
+    let shown = scene(font, app.session.glyph_data().ok().as_deref(), &app.view, app.tools.focus.as_ref());
     let glyph = match string(p, "glyph")? {
         Some(g) => g.to_string(),
         None => shown.as_ref().map(|s| s.glyph.clone()).ok_or("no glyph is being edited: give `glyph`")?,

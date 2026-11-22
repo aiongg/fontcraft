@@ -126,7 +126,7 @@ fn index(p: &Value, key: &str) -> Result<Option<usize>, String> {
 /// The edited glyph and the layer the canvas shows.
 fn edited(app: &FontCraftApp) -> Result<(String, String, LayerSide), String> {
     let font = app.session.font().map_err(|e| e.to_string())?;
-    let scene = scene(font, &app.view, app.tools.focus.as_ref()).ok_or("no glyph is being edited")?;
+    let scene = scene(font, app.session.glyph_data().ok().as_deref(), &app.view, app.tools.focus.as_ref()).ok_or("no glyph is being edited")?;
     Ok((scene.glyph.clone(), scene.layer_id.clone(), scene.side))
 }
 

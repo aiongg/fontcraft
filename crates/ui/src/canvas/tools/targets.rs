@@ -27,7 +27,7 @@ pub fn with_targets(app: &mut FontCraftApp, command: CommandRef) -> CommandRef {
     let image = takes_param(spec, "image?: bool") && crate::canvas::images::is_selected(app);
     let marks = crate::canvas::hinting::ps_marks(&mut app.session, &app.view);
     let Ok(font) = app.session.font() else { return command };
-    let Some(mut scene) = super::scene(font, &app.view, app.tools.focus.as_ref()) else { return command };
+    let Some(mut scene) = super::scene(font, app.session.glyph_data().ok().as_deref(), &app.view, app.tools.focus.as_ref()) else { return command };
     scene.ps_hints = marks;
     if let Some(params) = crate::canvas::hinting::targets(&scene, &app.tools.selection, &app.view.hinting, &command.id) {
         return CommandRef::with_params(command.id, params);

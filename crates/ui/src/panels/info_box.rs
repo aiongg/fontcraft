@@ -20,10 +20,11 @@
 //! edit scale both (`infoBox.setSizeLock`). A master that takes its metrics from another shows that master's values,
 //! read only.
 
+use craft::behavior::IconId;
 use craft::ui::buttons::toggle_button::ToggleButton;
-use craft::ui::contract::{Bind, Props as _, Scroll, Show as _, ShowContainer as _, Tracked};
+use craft::ui::contract::{Bind, Props as _, Show as _, ShowContainer as _, Tracked};
 use craft::ui::display::{Shade, Text};
-use craft::ui::layout_components::{Row, Stack};
+use craft::ui::layout_components::Row;
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::{Env, Label};
 use craft::ui::sections::Section;
@@ -87,8 +88,7 @@ pub struct Props<'a> {
 }
 
 pub fn show(ui: &mut Ui, mut props: Props<'_>) {
-    // The palette gives the panel a fixed height, which a guide or interpolation curve part outgrows.
-    Stack::new().scroll(Scroll::vertical()).fill().show(ui, |ui, _| view(&mut props, ui));
+    widgets::scrolling(ui, |ui| view(&mut props, ui));
 }
 
 fn view(props: &mut Props<'_>, ui: &mut Ui) {
@@ -281,7 +281,12 @@ fn box_fields(ui: &mut Ui, words: &InfoBoxWords, s: &SelectionBox, sent: &mut Ve
             let k = v / old;
             scale(sent, [k, if s.locked { k } else { 1.0 }]);
         }
-        let lock = ToggleButton::new(words.lock.clone(), Bind::given(s.locked)).tooltip(words.lock.clone()).show(ui);
+        // A lock icon fits between the two fields; the full name is the tooltip and the accessible name.
+        let lock = ToggleButton::new(words.lock.clone(), Bind::given(s.locked))
+            .icon(IconId::new(if s.locked { "lock" } else { "lock_open" }))
+            .icon_only()
+            .tooltip(words.lock.clone())
+            .show(ui);
         if lock.events.committed().is_some() {
             sent.push(shell("infoBox.setSizeLock", json!({ "locked": !s.locked })));
         }
@@ -411,6 +416,30 @@ mod tests {
                 "selection.setPosition",
                 json!({"glyph": "A", "layer": "m01", "points": [[0, 0]], "x": 140.0, "referencePoint": "center"})
             )]
+        );
+    }
+
+    /// The proportions lock between the width and height fields is a lock icon named by its tooltip: no cut caption,
+    /// and a click asks for the other state.
+    #[test]
+    fn the_proportions_lock_is_an_icon_that_toggles() {
+        let selection =
+            SelectionBox { kind: SelectionKind::Box, reference: "center".into(), width: Some(200.0), height: Some(100.0), ..Default::default() };
+        let model = Tracked::new(InfoBoxModel { glyph: Some(glyph(false)), selection: Some(selection), ..Default::default() });
+        let posted = Rc::new(RefCell::new(Vec::new()));
+        let seen = Rc::clone(&posted);
+        let mut fixture = Fixture::new(move |ui| {
+            let mut sent = Vec::new();
+            show(ui, Props { model: &model, sent: &mut sent });
+            seen.borrow_mut().extend(sent);
+        });
+        fixture.in_room(craft::ui::testing::Room::Panel).settle();
+        assert!(!fixture.texts().iter().any(|t| t.text.starts_with("Lock")), "no caption beside the icon");
+        let lock = fixture.by_label("Lock Info Box Proportions").expect("the lock, by its name");
+        fixture.click(&lock).settle();
+        assert_eq!(
+            *posted.borrow(),
+            vec![Msg::Shell(craft::ui::runtime::commands::CommandRef::with_params("infoBox.setSizeLock", json!({"locked": true})))]
         );
     }
 }

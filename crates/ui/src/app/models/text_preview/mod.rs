@@ -19,6 +19,7 @@
 //! frames; its own keys keep an unchanged preview from being placed again.
 
 pub mod color_font;
+pub mod exported;
 pub mod shaping;
 
 use std::collections::HashMap;
@@ -57,6 +58,10 @@ const MAX_OUTLINES: usize = 65_536;
 const MAX_COLOR_GLYPHS: usize = 4_096;
 /// The text colour (`CPAL` palette index 65,535) before the view reports its own.
 const DEFAULT_INK: [u8; 4] = [0, 0, 0, 255];
+/// Most items a waterfall line holds; a longer source shows its first ones.
+pub const MAX_WATERFALL_ITEMS: usize = 500;
+/// The axis tag of optical size.
+const OPTICAL_SIZE: &str = "opsz";
 
 /// One glyph to draw, at its origin in layout coordinates (font units, y up).
 #[derive(PlainData, Clone, Debug, Default, PartialEq)]
@@ -157,6 +162,30 @@ pub enum PageDirection {
     Vertical,
 }
 
+/// One line of the waterfall.
+#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+pub struct WaterfallRow {
+    /// Points per em.
+    pub size: f64,
+    /// The optical-size value the line stands for, when the waterfall uses the font's optical-size axis.
+    pub optical_size: Option<f64>,
+    /// The master the line draws in.
+    pub master: String,
+    /// The line, laid out in that master: an index into [`TextPreviewModel::waterfall_pages`].
+    pub page: usize,
+}
+
+/// One font file of the last export or the folder the preview reads.
+#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+pub struct ExportedRow {
+    /// The file name; empty for a source that could not be listed.
+    pub file: String,
+    /// Why the file could not be read.
+    pub error: Option<String>,
+    /// The preview draws this file.
+    pub shown: bool,
+}
+
 /// What the Text Preview shows.
 #[derive(PlainData, Clone, Debug, Default, PartialEq)]
 pub struct TextPreviewModel {
@@ -181,6 +210,16 @@ pub struct TextPreviewModel {
     pub message: Option<String>,
     /// A preview font or a colour font is being built.
     pub building: bool,
+    /// The waterfall's lines, largest first as the sizes are given; empty while the waterfall is off.
+    pub waterfall: Vec<WaterfallRow>,
+    /// The waterfall's line in each master it draws, one line each, placed in font units.
+    pub waterfall_pages: Vec<Arc<Page>>,
+    /// Where the font comes from: `document`, `lastExport` or `folder`.
+    pub source: String,
+    /// The folder of the `folder` source.
+    pub folder: Option<String>,
+    /// The files of the last export or the folder, while the preview shows one of them.
+    pub exported: Vec<ExportedRow>,
 }
 
 /// The view model and what the projection keeps between frames.
@@ -218,6 +257,11 @@ struct Cache {
     warnings: Vec<(Arc<str>, String)>,
     page_key: Option<u64>,
     page: Option<Arc<Page>>,
+    waterfall_key: Option<u64>,
+    waterfall: (Vec<WaterfallRow>, Vec<Arc<Page>>),
+    exported: exported::ExportedSlot,
+    exported_key: Option<u64>,
+    exported_page: Option<(Arc<Page>, Arc<Vec<usize>>)>,
     model_key: Option<u64>,
 }
 
@@ -281,6 +325,10 @@ pub fn project(models: &mut TextPreviewModels, cx: &mut ProjectCx<'_>, host: &Ho
         return;
     }
     let state = &view.text_preview;
+    if state.source != tp::FontSource::Document {
+        project_exported(models, state, host);
+        return;
+    }
     let cache = &mut models.cache;
     let font_info = cx.session.font().ok().map(|font| (tp::styles(font), tp::shown_master(font, view), font.units_per_em));
     let doc = cx.session.active().map(|d| (d.id, d.revision));
@@ -314,6 +362,36 @@ pub fn project(models: &mut TextPreviewModels, cx: &mut ProjectCx<'_>, host: &Ho
             }
         }
     }
+
+    if state.waterfall.on {
+        let Ok(font) = cx.session.font() else { return };
+        let source = waterfall_items(font, view);
+        let key = hash_of((doc, &master, shaper_id, state.waterfall.optical, state.waterfall.sizes.iter().map(|s| s.to_bits()).collect::<Vec<_>>()))
+            ^ hash_of(source_key(font, &source));
+        if cache.waterfall_key != Some(key) {
+            cache.waterfall_key = Some(key);
+            let index = cx.session.kern_index().ok();
+            let font = cx.session.font().ok();
+            cache.waterfall = match font {
+                Some(font) => waterfall(font, &master, &source, &state.waterfall, index.as_deref(), shaper.as_deref(), key),
+                None => (Vec::new(), Vec::new()),
+            };
+        }
+        let building = cache.font.building();
+        let message = cache.font.error(&font_key).map(str::to_string);
+        let model_key = hash_of(("waterfall", key, &message, building, state.revision, &state.style, state.size.to_bits(), state.pinned))
+            ^ hash_of((state.orientation, state.direction, &state.find.query, state.find.open, state.find.current, state.area));
+        if cache.model_key == Some(model_key) {
+            return;
+        }
+        cache.model_key = Some(model_key);
+        let names = styles.into_iter().map(|s| s.name).collect();
+        let (rows, pages) = cache.waterfall.clone();
+        let model = TextPreviewModel { message, building, waterfall: rows, waterfall_pages: pages, ..base(state, names, 0) };
+        set(&mut models.view, model);
+        return;
+    }
+    cache.waterfall_key = None;
 
     let span = if state.area.span == 0 { DEFAULT_SPAN } else { state.area.span };
     let scale = state.size / upm;
@@ -402,7 +480,7 @@ pub fn project(models: &mut TextPreviewModels, cx: &mut ProjectCx<'_>, host: &Ho
                 shaped: &cache.shaped,
                 placed,
                 matches: if state.find.open { cache.matches.as_slice() } else { &[] },
-                query_len: state.find.query.chars().count(),
+                query_len: tp::match_len(&state.find.query),
                 current: state.find.current,
                 length: state.length,
             };
@@ -456,10 +534,229 @@ fn base(state: &TextPreviewState, styles: Vec<String>, matches: usize) -> TextPr
         page: None,
         message: None,
         building: false,
+        waterfall: Vec::new(),
+        waterfall_pages: Vec::new(),
+        source: state.source.name().to_string(),
+        folder: match &state.source {
+            tp::FontSource::Folder(f) => Some(f.to_string_lossy().to_string()),
+            _ => None,
+        },
+        exported: Vec::new(),
     }
 }
 
+/// Projects the preview of a compiled font file: laid out on the area's line length and shaped through the file's
+/// own tables, without the document's kerning or colour drawings.
+fn project_exported(models: &mut TextPreviewModels, state: &TextPreviewState, host: &Host) {
+    let cache = &mut models.cache;
+    cache.wake = cache.exported.step(&state.source, &state.last_export, cache.now, host);
+    let shown = cache.exported.shown(state.exported_font.as_deref()).cloned();
+    let rows: Vec<ExportedRow> = cache
+        .exported
+        .entries()
+        .iter()
+        .map(|e| match e {
+            Ok(x) => ExportedRow { file: x.file.clone(), error: None, shown: shown.as_ref().is_some_and(|s| Arc::ptr_eq(s, x)) },
+            Err(m) => ExportedRow { file: String::new(), error: Some(m.clone()), shown: false },
+        })
+        .collect();
+    let mut message = rows.iter().find_map(|r| r.error.clone());
+    match &shown {
+        None => {
+            cache.exported_key = None;
+            cache.exported_page = None;
+            if message.is_none() {
+                message = Some(match (&state.exported_font, cache.exported.building()) {
+                    (_, true) => "The font files are being read".to_string(),
+                    (Some(name), false) => format!("No font file is named {name}"),
+                    (None, false) => "No font file was read".to_string(),
+                });
+            }
+        }
+        Some(x) => {
+            let font = x.font.as_ref();
+            let upm = f64::from(font.units_per_em.max(1));
+            let span = if state.area.span == 0 { DEFAULT_SPAN } else { state.area.span };
+            let scale = state.size / upm;
+            let line_width = f64::from(span) / scale;
+            let key = hash_of((Arc::as_ptr(x) as usize, state.revision, state.orientation, state.direction, &state.runs, line_width.to_bits()))
+                ^ hash_of((&state.find.query, state.find.ignore_case, state.find.matching, state.find.open, state.find.current, state.area));
+            if cache.exported_key != Some(key) {
+                cache.exported_key = Some(key);
+                cache.exported_page = match lay_out(font, &x.master, state, line_width, None, None) {
+                    Ok((text, layout)) => {
+                        let placed = placed_lines(&state.area, &layout);
+                        let mut shaped = HashMap::new();
+                        if let Some(shaper) = x.shaper.as_deref() {
+                            for l in placed.clone() {
+                                if let Some(line) = fontcraft_textlayout::shape_line(font, &x.master, &text, &layout, l, shaper) {
+                                    shaped.insert(l, Arc::new(line));
+                                }
+                            }
+                        }
+                        let matches = Arc::new(find_matches(&state.text, &state.find.query, state.find.ignore_case, state.find.matching));
+                        let input = PageInput {
+                            font,
+                            master: &x.master,
+                            text: &text,
+                            layout: &layout,
+                            shaped: &shaped,
+                            placed,
+                            matches: if state.find.open { matches.as_slice() } else { &[] },
+                            query_len: tp::match_len(&state.find.query),
+                            current: state.find.current,
+                            length: state.length,
+                        };
+                        let mut outlines = Arc::new(Outlines { id: key, paths: HashMap::new() });
+                        let placed_page = page(&input, &mut outlines, key, scale, upm, shaped.len());
+                        Some((Arc::new(placed_page), matches))
+                    }
+                    Err(e) => {
+                        if message.is_none() {
+                            message = Some(e);
+                        }
+                        None
+                    }
+                };
+            }
+        }
+    }
+    let building = cache.exported.building();
+    let matches = cache.exported_page.as_ref().map_or(0, |(_, m)| m.len());
+    let model_key =
+        hash_of(("exported", cache.exported_key, &message, building, &rows.iter().map(|r| (&r.file, &r.error, r.shown)).collect::<Vec<_>>()))
+            ^ hash_of((state.revision, &state.style, state.size.to_bits(), state.pinned, state.area, &state.find.query, state.find.open));
+    if cache.model_key == Some(model_key) {
+        return;
+    }
+    cache.model_key = Some(model_key);
+    let model = TextPreviewModel {
+        page: cache.exported_page.as_ref().map(|(p, _)| p.clone()),
+        message,
+        building,
+        exported: rows,
+        ..base(state, Vec::new(), matches)
+    };
+    set(&mut models.view, model);
+}
+
 /// The lines to place: those the view shows and two screens on each side, at most [`MAX_PLACED`] items.
+/// What the waterfall repeats: Font View's selection while Font View shows, else the Edit View tab's text, on one
+/// line; when that is empty, the first line of the preview text. At most [`MAX_WATERFALL_ITEMS`] items.
+fn waterfall_items(font: &Font, view: &crate::app::ViewState) -> Vec<Item> {
+    let one_line = |i: &&Item| !matches!(i, Item::LineBreak | Item::Placeholder);
+    let items: Vec<Item> = if view.tabs.font_view_shows() {
+        view.font_view.selected.iter().take(MAX_WATERFALL_ITEMS).map(|n| Item::glyph(n)).collect()
+    } else {
+        view.text.text.items().iter().filter(one_line).take(MAX_WATERFALL_ITEMS).cloned().collect()
+    };
+    if !items.is_empty() {
+        return items;
+    }
+    let map = Charmap::new(font);
+    view.text_preview.text.lines().next().unwrap_or_default().chars().take(MAX_WATERFALL_ITEMS).map(|c| map.item(c)).collect()
+}
+
+/// What tells two waterfall sources apart: each item's glyph name or character.
+fn source_key(font: &Font, items: &[Item]) -> u64 {
+    let mut text = Text::new();
+    if text.insert(0, items.to_vec()).is_err() {
+        return 0;
+    }
+    hash_of(text.to_display_string(font))
+}
+
+/// The master a waterfall line of `size` points draws in, and the optical-size value it stands for: with `optical`
+/// and an optical-size axis, the master nearest that value among the masters at the shown master's other
+/// coordinates. The value is the size in points, kept within the masters' range of the axis.
+fn row_master(font: &Font, shown: &str, size: f64, optical: bool) -> (String, Option<f64>) {
+    let plain = (shown.to_string(), None);
+    let Some(axis) = font.axes.iter().position(|a| a.tag.starts_with(OPTICAL_SIZE)).filter(|_| optical) else { return plain };
+    let Some(home) = font.masters.iter().find(|m| m.id == shown) else { return plain };
+    let others = |m: &fontcraft_model::Master| m.location.iter().zip(&home.location).enumerate().all(|(i, (a, b))| i == axis || (a - b).abs() < 1e-9);
+    let family: Vec<(&str, f64)> = font
+        .masters
+        .iter()
+        .filter(|m| others(m))
+        .filter_map(|m| m.location.get(axis).filter(|v| v.is_finite()).map(|v| (m.id.as_str(), *v)))
+        .collect();
+    let lo = family.iter().map(|(_, v)| *v).fold(f64::INFINITY, f64::min);
+    let hi = family.iter().map(|(_, v)| *v).fold(f64::NEG_INFINITY, f64::max);
+    if !(lo.is_finite() && hi.is_finite()) {
+        return plain;
+    }
+    let value = size.max(lo).min(hi);
+    let nearest = family.iter().min_by(|a, b| (a.1 - value).abs().total_cmp(&(b.1 - value).abs())).map(|(id, _)| id.to_string());
+    (nearest.unwrap_or_else(|| shown.to_string()), Some(value))
+}
+
+/// The waterfall's lines and one page per master they draw in: `source` laid out on one line, kerned, and shaped
+/// through the preview font in the shown master, where it is built.
+fn waterfall(
+    font: &Font,
+    shown: &str,
+    source: &[Item],
+    settings: &tp::Waterfall,
+    index: Option<&KernIndex>,
+    shaper: Option<&fontcraft_textlayout::PreviewShaper>,
+    key: u64,
+) -> (Vec<WaterfallRow>, Vec<Arc<Page>>) {
+    let upm = f64::from(font.units_per_em.max(1));
+    let mut text = match Text::with_limit(MAX_WATERFALL_ITEMS) {
+        Ok(t) => t,
+        Err(_) => return (Vec::new(), Vec::new()),
+    };
+    if text.insert(0, source.iter().take(MAX_WATERFALL_ITEMS).cloned().collect()).is_err() {
+        return (Vec::new(), Vec::new());
+    }
+    let mut rows = Vec::new();
+    let mut pages: Vec<Arc<Page>> = Vec::new();
+    let mut masters: Vec<String> = Vec::new();
+    for size in settings.sizes.iter().take(tp::MAX_WATERFALL_SIZES) {
+        let (master, optical_size) = row_master(font, shown, *size, settings.optical);
+        let at = match masters.iter().position(|m| *m == master) {
+            Some(at) => at,
+            None => {
+                let options = Options {
+                    direction: Direction::Ltr,
+                    kerning: KerningMode::Kerning,
+                    line_width: *LENGTH_RANGE.end(),
+                    index,
+                    single_line: true,
+                    ..Options::default()
+                };
+                let Ok(layout) = fontcraft_textlayout::layout(font, &master, &text, &options) else { continue };
+                let mut shaped = HashMap::new();
+                if master == shown
+                    && let Some(shaper) = shaper
+                    && let Some(line) = fontcraft_textlayout::shape_line(font, &master, &text, &layout, 0, shaper)
+                {
+                    shaped.insert(0, Arc::new(line));
+                }
+                let input = PageInput {
+                    font,
+                    master: &master,
+                    text: &text,
+                    layout: &layout,
+                    shaped: &shaped,
+                    placed: 0..layout.lines.len().min(1),
+                    matches: &[],
+                    query_len: 0,
+                    current: None,
+                    length: text.len(),
+                };
+                let page_key = hash_of((key, &master));
+                let mut outlines = Arc::new(Outlines { id: page_key, paths: HashMap::new() });
+                pages.push(Arc::new(page(&input, &mut outlines, page_key, size / upm, upm, shaped.len())));
+                masters.push(master.clone());
+                pages.len() - 1
+            }
+        };
+        rows.push(WaterfallRow { size: *size, optical_size, master, page: at });
+    }
+    (rows, pages)
+}
+
 fn placed_lines(area: &Area, layout: &Layout) -> Range<usize> {
     let count = layout.lines.len();
     let (first, last) = if area.last == 0 { (0, DEFAULT_LINES) } else { (area.first, area.last) };

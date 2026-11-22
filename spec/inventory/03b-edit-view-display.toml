@@ -1003,6 +1003,8 @@ gestures = [
   "select the tool: enter text mode with a text cursor in the tab's string",
   "type: insert the glyphs for the typed characters at the cursor",
   "Left / Right / Up / Down: move the text cursor",
+  "Alt+Left / Alt+Right: move the text cursor by word; Shift extends the selection",
+  "Cmd+Up / Cmd+Down: move the text cursor to the start / end of the text; Shift extends the selection",
   "Escape: toggle between text mode and editing the current glyph",
   "Home / End: replace the current glyph with the previous / next glyph of the font",
   "Shift+Home / Shift+End: same, stepping through the glyphs currently listed in Font View",
@@ -1020,6 +1022,8 @@ guesses = [
   "Return types a line break; the handbook allows several lines but does not name the key.",
   "Up and Down move to the nearest place on the line above or below, and to the start or the end of the text from the first or the last line; in right-to-left text Left steps forward in the text; in top-to-bottom text Up and Down step along the column and Left and Right move between columns. Moving the cursor in such texts in the reference app settles it.",
   "Backspace and Delete with Alt or Cmd do nothing (no word or line deletion); no source names them.",
+  "The word and document keys follow the system's text conventions (Alt+Left/Right by word, Cmd+Up/Down to the ends of the text); the handbook only says that standard text editing applies.",
+  "A word ends at a space, any other typed white space or a line break; Alt+Right goes past them to the end of the next word and Alt+Left to the start of the word before. Without Shift the move starts from the selection's edge on the arrow's side. In right-to-left text Alt+Left steps forward, in top-to-bottom text Alt+Up/Down move by word and Alt+Left/Right do nothing.",
   "Typing or moving the cursor past the canvas's edge scrolls the canvas sideways, the zoom kept, so the cursor stays in view; typing past the window's edge in the reference app settles it.",
   "A tab whose text holds several glyphs fits the whole text in the canvas the first time it draws, and so does a text that replaces the whole text (editView.setText, a sample string); typing keeps the zoom. Opening several glyphs in a new tab of the reference app settles it.",
   "The canvas scrolls freely past the edited glyph's advance box, so the text around it can be scrolled into view; the framework's default keeps the document on screen.",
@@ -1452,14 +1456,24 @@ guesses = [
 id = "textPreview.insertPattern"
 label = "Insert Pattern"
 menu = []
-shortcut = "Cmd+Ctrl+Alt+P"
+shortcut = ""
 kind = "ui"
-params = "{pattern?: string}"
+params = "{pattern: \"space\" | \"digit\" | \"letter\" | \"lineEnd\", at?: number}"
 area = "proofing"
 milestone = "M14"
 summary = "Inserts a wildcard token (for example any whitespace or any digit) into the Text Preview search field. It is a feature of the system find bar; the list of patterns is not given."
 ref = "Edit View › Entering Text › Text Preview"
 status = "handbook"
+notes = "Documented, not yet observed. Built in M13.69 (`shell/text_preview.rs`): the find bar's Insert Pattern menu puts a token into the search at its end, `at` puts it at a character index; the find bar opens and the search runs again. The search writes the tokens as `\\s` (any space), `\\d` (any digit), `\\l` (any letter) and `\\n` (a line end), with `\\\\` for a backslash; each matches one character. The handbook's Cmd+Ctrl+Alt+P opens the system menu of patterns, which a command with a required pattern cannot do, so the command has no shortcut."
+guesses = [
+  "Four patterns: any space (white space other than a line break), any digit, any letter and a line end; the handbook lists none.",
+  "Tokens are written in the search as backslash escapes, so a literal backslash is searched as two; the system find bar shows tokens as tokens, which a plain text field cannot.",
+  "A line end matches the line break character only, not the end of the text.",
+  "No shortcut: the reference's key opens a menu of patterns, and this command takes the pattern as a parameter.",
+]
+observe = [
+  "In the Text Preview find bar, open Insert Pattern and note every pattern listed and what each matches.",
+]
 
 [[command]]
 id = "edit.selectSampleText"
@@ -1550,9 +1564,9 @@ milestone = "M5"
 summary = "Text in Edit View wraps at a preset maximum line width, which is an application setting."
 ref = "Edit View › Entering Text"
 status = "handbook"
-notes = "Built in M5.6 (`textlayout::layout`). Documented, not yet observed."
+notes = "Built in M5.6 (`textlayout::layout`); M5.30 takes the width from `appearance.textViewWidth`, in thousandths of an em, times the font's units per em / 1000. Documented, not yet observed."
 guesses = [
-  "Lines wrap at 10,000 units unless the setting says otherwise; no source gives the default.",
+  "Lines wrap at ten em (10,000 thousandths of an em) unless the setting says otherwise; no source gives the default.",
   "A line that overflows breaks after its last space, else before the glyph that overflows, and a space may hang past the width; wrapped text in the reference app settles it.",
   "In top-to-bottom text the lines are columns, placed from right to left one line height apart; a vertical tab in the reference app settles it.",
 ]
@@ -2978,7 +2992,12 @@ summary = "Text Preview can show the compiled fonts of the last export, or every
 ref = "Our design, after the reference vendor's free font-preview companion tool"
 status = "inferred"
 own = true
-guesses = ["A watched file is read again when its modification time changes, at most once a second; a user report of missed or slow updates would settle it."]
+notes = "Built in M13.70 (`app/models/text_preview/exported.rs`): the files are read through the host's jobs under the engine's file size limit, opened as File › Open opens a compiled font, and shaped through a shaping font made from the file's own bytes; lines break on unshaped widths. The last export is the font files the latest export command of the session reported writing. A folder lists its .ttf, .otf, .woff, .woff2, .ttc and .otc files by name, at most 64. While a file shows, the document's kerning, colour drawings and styles do not apply."
+guesses = [
+  "A watched file is read again when its size or modification time changes, looked at once a second; a user report of missed or slow updates would settle it.",
+  "A collection file shows its first font only.",
+  "The last export is remembered for the session only, not saved with the document.",
+]
 
 [[command]]
 id = "textPreview.showExportedFonts"
@@ -2989,8 +3008,12 @@ kind = "ui"
 params = "{source: \"lastExport\"|\"folder\"|\"document\", folder?: path, font?: string}"
 area = "proofing"
 milestone = "M14"
-summary = "Switches Text Preview between the open document, the fonts of the last export and the fonts in a folder; font picks one of them by PostScript name."
+summary = "Switches Text Preview between the open document, the fonts of the last export and the fonts in a folder; font picks one of them by file name."
 ref = "Our design"
 status = "inferred"
 own = true
-guesses = ["The switch is a pop-up in the Text Preview window with no menu item; nothing in the reference app settles a place."]
+notes = "Built in M13.70 (`shell/text_preview.rs`): a Source pop-up in the Text Preview's top row offers the open document and the last export, and a Font File pop-up picks among several files; a folder is given through the command only. Without font the first file read is drawn."
+guesses = [
+  "The switch is a pop-up in the Text Preview window with no menu item; nothing in the reference app settles a place.",
+  "font names a file by its file name rather than its PostScript name, since two files of a folder can share a PostScript name.",
+]

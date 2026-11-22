@@ -52,7 +52,7 @@ pub struct Props<'a> {
 }
 
 pub fn show(ui: &mut Ui, mut props: Props<'_>) {
-    view(&mut props, ui);
+    super::widgets::scrolling(ui, |ui| view(&mut props, ui));
 }
 
 fn view(props: &mut Props<'_>, ui: &mut Ui) {

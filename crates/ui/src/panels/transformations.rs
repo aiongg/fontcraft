@@ -76,7 +76,7 @@ pub struct Props<'a> {
 }
 
 pub fn show(ui: &mut Ui, mut props: Props<'_>) {
-    view(&mut props, ui);
+    super::widgets::scrolling(ui, |ui| view(&mut props, ui));
 }
 
 /// An icon button named `label` that is enabled with `enabled`; whether it was pressed.
@@ -363,5 +363,29 @@ mod tests {
             *posted.borrow(),
             vec![Msg::Shell(craft::ui::runtime::commands::CommandRef::with_params("transform.setOrigin", json!({"mode": "layer"})))]
         );
+    }
+
+    /// The palette gives the panel a fixed height: a body taller than it scrolls with the wheel.
+    #[test]
+    fn a_tall_body_scrolls_with_the_wheel() {
+        let model = Tracked::new(TransformModel {
+            mode: "box".into(),
+            box_point: "center".into(),
+            origin: json!({"mode": "box", "boxPoint": "center"}).to_string(),
+            targets: Some(Targets { json: json!({"glyph": "A", "layer": "m01"}).to_string() }),
+            ..Default::default()
+        });
+        let mut fixture = Fixture::new(move |ui| {
+            let mut sent = Vec::new();
+            show(ui, Props { model: &model, sent: &mut sent });
+        });
+        fixture.room(egui::vec2(320.0, 120.0)).settle();
+        let first = fixture.texts().first().cloned().expect("the panel paints text");
+        let inside = egui::pos2(160.0, 60.0);
+        fixture.frame(vec![craft::ui::testing::pointer::moved(inside)]);
+        fixture.frame(vec![craft::ui::testing::pointer::wheel(-80.0)]);
+        fixture.advance(1.0).settle();
+        let moved = fixture.texts().iter().find(|t| t.text == first.text).map(|t| t.rect).expect("the first text still paints");
+        assert!(moved.min.y < first.rect.min.y - 10.0, "the body scrolled up: {:?} then {moved:?}", first.rect);
     }
 }
