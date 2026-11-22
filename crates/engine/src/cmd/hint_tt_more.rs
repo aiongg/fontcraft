@@ -25,7 +25,7 @@ use fontcraft_model::{Font, Layer};
 use serde_json::{Map, Value, json};
 
 use super::hint_tt::{
-    Read, all_of, append, direction, indexes, point, points, points_in, read, rounding_named, settings, triple_of, type_name, write,
+    POINT_MENUS, Read, all_of, append, direction, indexes, point, points, points_in, read, rounding_named, settings, triple_of, type_name, write,
 };
 use super::*;
 use crate::params::{Params, TargetKind, Targets};
@@ -50,7 +50,8 @@ pub fn specs() -> Vec<CommandSpec> {
             shift_points
         )
         .targets(ONE_LAYER)
-        .when("tool:trueTypeInstructor"),
+        .when("tool:trueTypeInstructor")
+        .context(POINT_MENUS),
         cmd!(
             "hint.tt.interpolate",
             "Interpolate",
@@ -61,7 +62,8 @@ pub fn specs() -> Vec<CommandSpec> {
             interpolate
         )
         .targets(ONE_LAYER)
-        .when("tool:trueTypeInstructor"),
+        .when("tool:trueTypeInstructor")
+        .context(POINT_MENUS),
         cmd!(
             "hint.tt.addDelta",
             "Delta",
@@ -72,7 +74,8 @@ pub fn specs() -> Vec<CommandSpec> {
             add_delta
         )
         .targets(ONE_LAYER)
-        .when("tool:trueTypeInstructor"),
+        .when("tool:trueTypeInstructor")
+        .context(POINT_MENUS),
         cmd!(
             "hint.tt.setDeltas",
             "Set Delta Cells",

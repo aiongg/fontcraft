@@ -238,7 +238,7 @@ pub fn targets(scene: &Scene, selection: &Selection, view: &HintingView, id: &st
             }
             let mut m = base();
             if !points.is_empty() {
-                let nodes: Vec<Value> = points.iter().map(|p| json!([p.path, p.node])).collect();
+                let nodes: Vec<Value> = points.iter().map(tt_instructor::HintPoint::param).collect();
                 m.insert("nodes".into(), Value::Array(nodes));
             }
             m.insert("direction".into(), json!(direction.as_str()));

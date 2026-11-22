@@ -30,6 +30,9 @@ use super::*;
 use crate::params::{Params, TargetKind, Targets, kind};
 
 const ONE_LAYER: &[TargetKind] = &[TargetKind::Layer];
+/// The context menus that offer the instructions added on selected points: the node menu, and the path menu when the
+/// selection covers whole paths. They show only while the Instructor is active, as their `when` says.
+pub(super) const POINT_MENUS: &[&str] = &["canvas.node", "canvas.path"];
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -43,7 +46,8 @@ pub fn specs() -> Vec<CommandSpec> {
             snap_point
         )
         .targets(ONE_LAYER)
-        .when("tool:trueTypeInstructor"),
+        .when("tool:trueTypeInstructor")
+        .context(POINT_MENUS),
         cmd!(
             "hint.tt.setSnapZone",
             "Set Snap Zone",
@@ -64,7 +68,8 @@ pub fn specs() -> Vec<CommandSpec> {
             add_stem
         )
         .targets(ONE_LAYER)
-        .when("tool:trueTypeInstructor"),
+        .when("tool:trueTypeInstructor")
+        .context(POINT_MENUS),
         cmd!(
             "hint.tt.reverse",
             "Reverse",

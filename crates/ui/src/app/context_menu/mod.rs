@@ -20,10 +20,19 @@
 //!   ([`ContextItem::alternate`]).
 //! - While the layer's PostScript hints show, the hint items join the menu ([`HINT_ITEMS`]); a click on a hint's badge
 //!   or marker selects that hint first. Their parameters come from `fontcraft_tools::hint_drag::menu_params`.
+//! - While the TrueType Instructor is the active tool, the node and path sections start with the instructions added on
+//!   the selected points: Snap Point, Stem, Shift Points, Interpolate and Delta (their rows name those menus in
+//!   `context`, and their `when` the Instructor; a command whose `when` names another tool is left out). Each is greyed
+//!   out with the refusal its command would give for the selection, the Instructor's direction and the touched state
+//!   ([`point_ready`]).
 //! - While the TrueType Instructor is the active tool, a click on an instruction's badge of the current direction
 //!   selects that instruction first (unless it is selected) and opens the instruction section ([`TT_INSTRUCTION`]):
-//!   Reverse on Stem instructions, Make Triple Hint on three vertical Stem instructions, and Delete Instructions,
-//!   which then clears the instruction selection ([`TT_ITEMS`]). They act on the selected instructions.
+//!   Reverse and Set Stem Reference on Stem instructions, Make Triple Hint on three vertical Stem instructions, and
+//!   Delete Instructions, which then clears the instruction selection ([`TT_ITEMS`]). They act on the selected
+//!   instructions. Set Stem Reference is a submenu of its choices (Auto, No Stem, the TT stems of the direction), the
+//!   one the instructions share checked ([`ContextItem::choices`]); a pick runs the command with that `stem`.
+//! - While the TrueType Instructor is the active tool, the glyph section offers Autohint and Remove Hints on the
+//!   edited glyph's layer.
 //! - While the TrueType Instructor is the active tool, a last section ([`TT_INSTRUCTOR`]) offers its view items: Show
 //!   Pixel Preview, the Hinting Preview's three scales ([`PREVIEW_SCALES`]), Show Preview Address… and Show Point
 //!   Indexes, checked as their state is. Other tools' menus leave them out.
@@ -42,15 +51,19 @@ pub mod item_state;
 mod tests;
 
 use craft::ui::runtime::commands::CommandRef;
+use fontcraft_engine::hinting::settings::main_master;
+use fontcraft_engine::hinting::{Direction, NodeRef, StemRef, TouchedState, TtInstruction, TtKind, TtPoint, ZoneRef, tt_instructions};
+use fontcraft_engine::model::LayerSide;
 use fontcraft_engine::params::TargetKind;
 use fontcraft_engine::{CommandSpec, command_specs, find_command};
 use fontcraft_geom::Point;
+use fontcraft_tools::tt_instructor;
 use fontcraft_tools::{Hit, HitResult, Item, Scene, Selection, guide_drag, hint_drag, hit_test_with_corners};
 use serde_json::{Map, Value, json};
 
 use self::glyph_menu::GlyphMenu;
 use self::item_state::GUIDE_PROPERTIES;
-use crate::app::models::hint_canvas::{BadgeKind, TtMark};
+use crate::app::models::hint_canvas::{BadgeKind, Choice, TtMark};
 use crate::app::{FontCraftApp, Msg};
 use crate::canvas::hinting::SelectedInstructions;
 use crate::canvas::tools::{self, apply};
@@ -98,10 +111,26 @@ pub const HINT_ITEMS: &[(&str, &[&str])] = &[
     ("hint.ps.clearGlyphHints", &[CANVAS]),
 ];
 
-/// The TrueType instruction commands the instruction section shows while the Instructor is active (their rows name no
-/// `context`: the section exists only on an instruction's badge).
-pub const TT_ITEMS: &[(&str, &[&str])] =
-    &[("hint.tt.reverse", &[TT_INSTRUCTION]), ("hint.tt.makeTripleHint", &[TT_INSTRUCTION]), ("hint.tt.deleteInstructions", &[TT_INSTRUCTION])];
+/// The TrueType commands the menus show while the Instructor is active, with their sections (their rows name no
+/// `context`: the instruction section exists only on an instruction's badge, and the glyph section offers the two
+/// glyph items only in the Instructor).
+pub const TT_ITEMS: &[(&str, &[&str])] = &[
+    ("hint.tt.reverse", &[TT_INSTRUCTION]),
+    (SET_STEM_REFERENCE, &[TT_INSTRUCTION]),
+    ("hint.tt.makeTripleHint", &[TT_INSTRUCTION]),
+    ("hint.tt.deleteInstructions", &[TT_INSTRUCTION]),
+    ("hint.tt.autohintGlyph", &[CANVAS]),
+    ("hint.tt.removeHints", &[CANVAS]),
+];
+
+/// The instruction section's items, which act on the selected instructions.
+const INSTRUCTION_ITEMS: &[&str] = &["hint.tt.reverse", SET_STEM_REFERENCE, "hint.tt.makeTripleHint", "hint.tt.deleteInstructions"];
+
+/// The instruction section's submenu of stem choices.
+pub const SET_STEM_REFERENCE: &str = "hint.tt.setStemReference";
+
+/// The instructions the node and path sections add on the selected points while the Instructor is active.
+pub const POINT_ITEMS: &[&str] = &["hint.tt.snapPoint", "hint.tt.addStemHint", "hint.tt.shiftPoints", "hint.tt.interpolate", "hint.tt.addDelta"];
 
 /// The component section's Show Smart Glyph Settings: the settings of the clicked component's glyph.
 const SMART_GLYPH_SETTINGS: &str = "smartGlyph.showSettings";
@@ -135,11 +164,17 @@ pub const SHOW_IN_FONT_VIEW: &str = "contextMenu.showGlyphInFontView";
 const ALTERNATES: &[&str] = &["guide.addGlobal", "path.expandOutlineForAllMasters"];
 
 /// Items whose command removes something from the glyph: their rows show the danger tone.
-pub const DESTRUCTIVE: &[&str] = &["guide.remove", "hint.ps.deleteHints", "hint.ps.clearGlyphHints", "hint.tt.deleteInstructions"];
+pub const DESTRUCTIVE: &[&str] =
+    &["guide.remove", "hint.ps.deleteHints", "hint.ps.clearGlyphHints", "hint.tt.deleteInstructions", "hint.tt.removeHints"];
 
 /// The order of context menu items: the order of their inventory rows. A command missing here comes after these, in
 /// registry order.
 const ORDER: &[&str] = &[
+    "hint.tt.snapPoint",
+    "hint.tt.addStemHint",
+    "hint.tt.shiftPoints",
+    "hint.tt.interpolate",
+    "hint.tt.addDelta",
     "path.toggleNodeType",
     "path.convertSegmentToCurve",
     "path.connectNodes",
@@ -176,8 +211,11 @@ const ORDER: &[&str] = &[
     "hint.ps.autohintGlyph",
     "hint.ps.clearGlyphHints",
     "hint.tt.reverse",
+    SET_STEM_REFERENCE,
     "hint.tt.makeTripleHint",
     "hint.tt.deleteInstructions",
+    "hint.tt.autohintGlyph",
+    "hint.tt.removeHints",
 ];
 
 /// One entry of a context menu.
@@ -191,6 +229,19 @@ pub struct ContextItem {
     pub checked: Option<bool>,
     /// Drawn only while Alt is held, in place of the item before it.
     pub alternate: bool,
+    /// The values of a submenu item, in order: picking one runs the command with it ([`invoke_choice`]). Empty for a
+    /// plain item.
+    pub choices: Vec<ItemChoice>,
+}
+
+/// One value of a submenu item.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ItemChoice {
+    /// The value the command gets.
+    pub value: String,
+    pub label: String,
+    /// The value the targets share now.
+    pub checked: bool,
 }
 
 /// The items of one `context` value; sections are drawn with a separator between them.
@@ -239,6 +290,11 @@ impl CanvasMenu {
                         }
                         if i.alternate {
                             m.insert("alternate".into(), json!(true));
+                        }
+                        if !i.choices.is_empty() {
+                            let choices: Vec<Value> =
+                                i.choices.iter().map(|c| json!({"value": c.value, "label": c.label, "checked": c.checked})).collect();
+                            m.insert("choices".into(), Value::Array(choices));
                         }
                         Value::Object(m)
                     })
@@ -420,7 +476,7 @@ fn instructor_section(app: &FontCraftApp) -> Section {
             "hint.tt.showPointIndexes" => Some(state.point_indexes),
             _ => None,
         };
-        ContextItem { command: id, label, enabled: true, disabled_reason: None, checked, alternate: false }
+        ContextItem { command: id, label, enabled: true, disabled_reason: None, checked, alternate: false, choices: Vec::new() }
     };
     let scales = PREVIEW_SCALES.iter().map(|&(id, label, s)| ContextItem {
         command: id,
@@ -429,6 +485,7 @@ fn instructor_section(app: &FontCraftApp) -> Section {
         disabled_reason: None,
         checked: Some(s == scale),
         alternate: false,
+        choices: Vec::new(),
     });
     let items = TT_VIEW_BEFORE.iter().map(command).chain(scales).chain(TT_VIEW_AFTER.iter().map(command)).collect();
     Section { context: TT_INSTRUCTOR, items }
@@ -480,11 +537,12 @@ struct Candidate {
     spec: Option<&'static CommandSpec>,
 }
 
-/// Every command a menu may show, in menu order.
-fn candidates(hints_shown: bool, instructor: bool) -> Vec<Candidate> {
+/// Every command a menu may show, in menu order. A command whose `when` names a tool shows only while `tool` is it.
+fn candidates(hints_shown: bool, instructor: bool, tool: &str) -> Vec<Candidate> {
     let mut all: Vec<Candidate> = command_specs()
         .iter()
         .filter(|c| !c.context.is_empty())
+        .filter(|c| c.when.and_then(|w| w.strip_prefix("tool:")).is_none_or(|t| t == tool))
         .map(|c| Candidate { id: c.id, label: c.label, context: c.context, spec: Some(c) })
         .collect();
     for (id, context) in UI_CONTEXT {
@@ -526,7 +584,7 @@ fn candidates(hints_shown: bool, instructor: bool) -> Vec<Candidate> {
 pub fn sections(app: &FontCraftApp, kinds: &[&'static str]) -> Vec<Section> {
     let scene = scene_of(app);
     let hints_shown = scene.as_ref().is_some_and(|(s, _)| s.ps_hints.shown);
-    let all = candidates(hints_shown, crate::canvas::hinting::badges::instructor_shows(app));
+    let all = candidates(hints_shown, crate::canvas::hinting::badges::instructor_shows(app), app.view.tool);
     // On a guide the menu offers the guide's commands; adding a guide is for clicks off guides.
     let on_guide = kinds.contains(&GUIDE);
     let visible = |id: &str| match &scene {
@@ -564,9 +622,11 @@ fn item(app: &FontCraftApp, at: Option<&(Scene<'_>, &Selection)>, c: &Candidate)
         Some(spec) => (spec.enabled)(&app.session)
             .and_then(|()| at.map_or(Ok(()), |(scene, selection)| item_state::supplies(scene, selection, spec)))
             .and_then(|()| hint_ready(selection, c.id))
-            .and_then(|()| instruction_ready(app, c.id)),
+            .and_then(|()| instruction_ready(app, c.id))
+            .and_then(|()| point_ready(app, at, c.id)),
         None => ui_enabled(app, c.id),
     };
+    let choices = if c.id == SET_STEM_REFERENCE && check.is_ok() { stem_choices(app) } else { Vec::new() };
     ContextItem {
         command: c.id,
         label: c.label,
@@ -577,7 +637,25 @@ fn item(app: &FontCraftApp, at: Option<&(Scene<'_>, &Selection)>, c: &Candidate)
             _ => at.and_then(|(scene, selection)| item_state::checked(scene, selection, c.id)),
         },
         alternate: ALTERNATES.contains(&c.id),
+        choices,
     }
+}
+
+/// Set Stem Reference's choices for the selected instructions.
+fn stem_choices(app: &FontCraftApp) -> Vec<ItemChoice> {
+    let (Some(tt), Ok(font)) = (app.models.hint_canvas.tt.as_ref(), app.session.font()) else { return Vec::new() };
+    let chosen = app.view.hinting.instructor.selected_in(&tt.glyph, &tt.layer);
+    crate::app::models::hint_canvas::stem_choices(font, &tt.glyph, &tt.layer, &chosen)
+        .into_iter()
+        .map(|(choice, checked)| {
+            let label = match &choice {
+                Choice::Auto => "Auto".to_string(),
+                Choice::None => "No Stem".to_string(),
+                Choice::Named(name) => name.clone(),
+            };
+            ItemChoice { value: choice.param().to_string(), label, checked }
+        })
+        .collect()
 }
 
 /// The hint items that act on selected hints need one.
@@ -588,10 +666,10 @@ fn hint_ready(selection: Option<&Selection>, id: &str) -> Result<(), String> {
     }
 }
 
-/// The instruction items need selected instructions of the edited layer: Reverse Stem instructions only, Make Triple
-/// Hint three vertical Stem instructions outside any triple hint.
+/// The instruction items need selected instructions of the edited layer: Reverse and Set Stem Reference Stem
+/// instructions only, Make Triple Hint three vertical Stem instructions outside any triple hint.
 fn instruction_ready(app: &FontCraftApp, id: &str) -> Result<(), String> {
-    if !TT_ITEMS.iter().any(|(item, _)| *item == id) {
+    if !INSTRUCTION_ITEMS.contains(&id) {
         return Ok(());
     }
     let Some(tt) = app.models.hint_canvas.tt.as_ref() else { return Err("select an instruction first".into()) };
@@ -603,10 +681,111 @@ fn instruction_ready(app: &FontCraftApp, id: &str) -> Result<(), String> {
     let stem = |m: &&TtMark| matches!(m.kind, BadgeKind::Stem | BadgeKind::TripleStem);
     match id {
         "hint.tt.reverse" if !marks.iter().all(stem) => Err("Reverse swaps the points of Stem instructions; select only Stem instructions".into()),
+        SET_STEM_REFERENCE if !marks.iter().all(stem) => {
+            Err("Set Stem Reference sets the stem of Stem instructions; select only Stem instructions".into())
+        }
         "hint.tt.makeTripleHint" if marks.len() != 3 || !marks.iter().all(|m| m.kind == BadgeKind::Stem && !m.horizontal) => {
             Err("select three vertical Stem instructions that belong to no triple hint".into())
         }
         _ => Ok(()),
+    }
+}
+
+/// The point items need selected points that the command would take: Snap Point untouched ones, Stem pairs that
+/// are not both touched, Shift Points one touched origin and untouched targets, Interpolate two touched references
+/// and an untouched target, Delta a point of the main master's layer in the vertical direction. Touched means touched
+/// in the Instructor's direction by the layer's instructions, as the commands check it
+/// (`fontcraft_hinting::TouchedState`), and the reason is the commands' own where they give one.
+fn point_ready(app: &FontCraftApp, at: Option<&(Scene<'_>, &Selection)>, id: &str) -> Result<(), String> {
+    if !POINT_ITEMS.contains(&id) {
+        return Ok(());
+    }
+    let Some((scene, selection)) = at else { return Err("select a point first".into()) };
+    if scene.side != LayerSide::Foreground {
+        return Err("instructions belong to the foreground; leave the background first".into());
+    }
+    let tt_direction = app.view.hinting.instructor.direction;
+    let direction = crate::canvas::hinting::hinting_direction(tt_direction);
+    let mut chosen = tt_instructor::selected_points(scene, selection);
+    if id == "hint.tt.addStemHint" {
+        chosen = tt_instructor::stem_pairs(chosen, tt_direction);
+    }
+    let points: Vec<TtPoint> = chosen.iter().map(tt_point).collect();
+    let list: Vec<TtInstruction> = tt_instructions(&scene.layer).map_err(|e| e.to_string())?.into_iter().map(|(_, t)| t).collect();
+    let mut state = TouchedState::replay(&list, usize::MAX);
+    match id {
+        "hint.tt.snapPoint" => {
+            if points.is_empty() {
+                return Err("select a point first".into());
+            }
+            points.iter().try_for_each(|&p| add(&mut state, TtInstruction::new(TtKind::Snap { zone: ZoneRef::Auto }, direction, p)))
+        }
+        "hint.tt.addStemHint" => {
+            if points.len() < 2 {
+                return Err("select two points first".into());
+            }
+            if points.len() % 2 != 0 {
+                return Err(format!("{} points are selected: Stem pairs them, so select an even number first", points.len()));
+            }
+            for pair in points.chunks(2) {
+                let [a, b] = pair else { continue };
+                let (origin, target) = if state.is_touched(b, direction) && !state.is_touched(a, direction) { (*b, *a) } else { (*a, *b) };
+                let mut t = TtInstruction::new(TtKind::Stem { stem: StemRef::Auto, triple: None }, direction, target);
+                t.origin = Some(origin);
+                add(&mut state, t)?;
+            }
+            Ok(())
+        }
+        "hint.tt.shiftPoints" => {
+            let (touched, untouched): (Vec<TtPoint>, Vec<TtPoint>) = points.iter().copied().partition(|p| state.is_touched(p, direction));
+            let ([origin], false) = (touched.as_slice(), untouched.is_empty()) else {
+                return Err("select one touched point, the origin, and untouched points to shift first".into());
+            };
+            let origin = *origin;
+            untouched.into_iter().try_for_each(|target| {
+                let mut t = TtInstruction::new(TtKind::Shift, direction, target);
+                t.origin = Some(origin);
+                add(&mut state, t)
+            })
+        }
+        "hint.tt.interpolate" => {
+            let (touched, untouched): (Vec<TtPoint>, Vec<TtPoint>) = points.iter().copied().partition(|p| state.is_touched(p, direction));
+            let ([a, b], [target]) = (touched.as_slice(), untouched.as_slice()) else {
+                return Err("select two touched points, the references, and one untouched point first".into());
+            };
+            let mut t = TtInstruction::new(TtKind::Interpolate, direction, *target);
+            t.origin = Some(*a);
+            t.other = Some(*b);
+            add(&mut state, t)
+        }
+        _ => {
+            if points.is_empty() {
+                return Err("select a point first".into());
+            }
+            if direction != Direction::Vertical {
+                return Err("Delta instructions are vertical; switch the Instructor to the vertical direction first".into());
+            }
+            let main = app.session.font().map(main_master).unwrap_or_default();
+            if scene.layer.master != main {
+                return Err("Delta instructions belong to the main master; edit its layer first".into());
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Checks `t` against `state` as the commands do, then runs it, so the next instruction sees the points it touched.
+fn add(state: &mut TouchedState, t: TtInstruction) -> Result<(), String> {
+    state.check(&t)?;
+    state.run(&t);
+    Ok(())
+}
+
+/// A selected point as the instructions name it.
+fn tt_point(p: &tt_instructor::HintPoint) -> TtPoint {
+    match p.other {
+        None => TtPoint::Node(NodeRef::new(p.path, p.node)),
+        Some([path, node]) => TtPoint::Intersection { a: NodeRef::new(p.path, p.node), b: NodeRef::new(path, node) },
     }
 }
 
@@ -699,6 +878,18 @@ pub fn params_for(app: &mut FontCraftApp, menu: &CanvasMenu, id: &str) -> Value 
                 m.insert("corners".into(), corners);
             }
         }
+        "hint.tt.autohintGlyph" => {
+            m.insert("glyphs".into(), json!([menu.glyph]));
+            if let Some(master) = scene_says(&|scene, _| json!(scene.layer.master)) {
+                m.insert("layer".into(), master);
+            }
+        }
+        "hint.tt.removeHints" => {
+            m.insert("glyphs".into(), json!([menu.glyph]));
+            if let Some(layer) = scene_says(&|scene, _| json!(scene.layer_id)) {
+                m.insert("layer".into(), layer);
+            }
+        }
         "glyph.setExport" => {
             let exports = edited_exports(app, &menu.glyph).unwrap_or(true);
             m.insert("glyphs".into(), json!([menu.glyph]));
@@ -783,6 +974,18 @@ pub fn steps_for(app: &mut FontCraftApp, menu: &CanvasMenu, id: &str) -> Vec<Msg
 /// covers, closes; an item that is gone or disabled is refused and leaves the menu open. Returns the first step's
 /// result: the item's command, or the dialog that asks for it.
 pub fn invoke(app: &mut FontCraftApp, id: &str, run: fn(&mut FontCraftApp, Msg) -> Result<Value, String>) -> Result<Value, String> {
+    invoke_choice(app, id, None, run)
+}
+
+/// Runs item `id` of the open canvas menu as [`invoke`] does; a submenu item needs `choice`, one of its values, which
+/// its command gets (Set Stem Reference's `stem`). A choice for a plain item, or one the submenu does not hold, is
+/// refused and leaves the menu open.
+pub fn invoke_choice(
+    app: &mut FontCraftApp,
+    id: &str,
+    choice: Option<&str>,
+    run: fn(&mut FontCraftApp, Msg) -> Result<Value, String>,
+) -> Result<Value, String> {
     let menu = app.context_menus.canvas.clone().ok_or("no context menu is open")?;
     let same = scene_of(app).is_some_and(|(scene, _)| scene.glyph == menu.glyph);
     if !same || app.dialogs.open.is_some() {
@@ -798,13 +1001,35 @@ pub fn invoke(app: &mut FontCraftApp, id: &str, run: fn(&mut FontCraftApp, Msg) 
     if !item.enabled {
         return Err(item.disabled_reason.unwrap_or_else(|| format!("`{id}` is not available now")));
     }
+    let steps = match (item.choices.is_empty(), choice) {
+        (true, None) => None,
+        (true, Some(_)) => return Err(format!("`{id}` is not a submenu: give no `value`")),
+        (false, Some(value)) if item.choices.iter().any(|c| c.value == value) => Some(choice_steps(app, &menu, item.command, value)),
+        (false, _) => {
+            let values: Vec<&str> = item.choices.iter().map(|c| c.value.as_str()).collect();
+            return Err(format!("`{id}` is a submenu: give `value`, one of {}", values.join(", ")));
+        }
+    };
     app.context_menus.canvas = None;
+    let steps = match steps {
+        Some(steps) => steps,
+        None => steps_for(app, &menu, item.command),
+    };
     let mut result = None;
-    for msg in steps_for(app, &menu, item.command) {
+    for msg in steps {
         let value = run(app, msg)?;
         result.get_or_insert(value);
     }
     Ok(result.unwrap_or(Value::Null))
+}
+
+/// The messages a submenu item posts for `value`: its command with the value under the key the submenu chooses.
+fn choice_steps(app: &mut FontCraftApp, menu: &CanvasMenu, id: &str, value: &str) -> Vec<Msg> {
+    let mut params = params_for(app, menu, id);
+    if let Some(m) = params.as_object_mut() {
+        m.insert("stem".into(), json!(value));
+    }
+    vec![FontCraftApp::route(CommandRef::with_params(id, params))]
 }
 
 /// The canvas menu's colour swatches: the edited glyph's colour label, or with Alt the active layer's.

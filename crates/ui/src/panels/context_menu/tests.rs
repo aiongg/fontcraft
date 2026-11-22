@@ -17,6 +17,7 @@ fn item(command: &'static str, label: &'static str, enabled: bool) -> ContextIte
         disabled_reason: (!enabled).then(|| "select two open ends of paths".into()),
         checked: None,
         alternate: false,
+        choices: Vec::new(),
     }
 }
 

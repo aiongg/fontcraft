@@ -33,6 +33,9 @@ mod window_input;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
+mod tt_tests;
 
 use std::sync::Arc;
 

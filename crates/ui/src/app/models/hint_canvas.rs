@@ -366,6 +366,50 @@ pub struct TtBox {
     pub table: Option<DeltaTable>,
 }
 
+/// The names of the TT stems that apply to `glyph` and suit Stem instructions of `direction`: a vertical Stem
+/// instruction measures a horizontal stem, and the other way round.
+pub fn stem_names_for(font: &Font, settings: &HintSettings, glyph: &str, direction: Direction) -> Vec<String> {
+    settings
+        .tt_stems_for(font, glyph)
+        .into_iter()
+        .filter_map(|i| settings.tt_stems.get(i))
+        .filter(|st| st.horizontal == (direction == Direction::Vertical))
+        .map(|st| st.name.clone())
+        .collect()
+}
+
+/// The stem choices of the instruction menu's Set Stem Reference for instructions `chosen` of layer `layer` of
+/// `glyph`: Auto, No Stem, then the TT stems their direction takes (none when the Stem instructions differ in
+/// direction), each with whether every chosen Stem instruction has it. Empty when a chosen instruction is not a Stem.
+pub fn stem_choices(font: &Font, glyph: &str, layer: &str, chosen: &std::collections::BTreeSet<usize>) -> Vec<(Choice, bool)> {
+    let Some(l) = font.glyph(glyph).and_then(|g| g.layers.iter().find(|l| l.id == layer)) else { return Vec::new() };
+    let list: Vec<TtInstruction> = tt_instructions(l).map(|v| v.into_iter().map(|(_, t)| t).collect()).unwrap_or_default();
+    let selected: Vec<&TtInstruction> = chosen.iter().filter_map(|&i| list.get(i)).collect();
+    if selected.is_empty() || !selected.iter().all(|t| matches!(t.kind, TtKind::Stem { .. })) {
+        return Vec::new();
+    }
+    let settings = HintSettings::for_master(font, &main_master(font)).ok();
+    let stem_name = |i: usize| settings.as_ref().and_then(|s| s.tt_stems.get(i)).map(|z| z.name.clone());
+    let current = shared(selected.iter().filter_map(|t| match &t.kind {
+        TtKind::Stem { stem: StemRef::Auto, .. } => Some(Choice::Auto),
+        TtKind::Stem { stem: StemRef::NoStem, .. } => Some(Choice::None),
+        TtKind::Stem { stem: StemRef::Index(i), .. } => stem_name(*i).map(Choice::Named),
+        _ => None,
+    }));
+    let names = match (&settings, shared(selected.iter().map(|t| t.direction))) {
+        (Some(s), Some(d)) => stem_names_for(font, s, glyph, d),
+        _ => Vec::new(),
+    };
+    [Choice::Auto, Choice::None]
+        .into_iter()
+        .chain(names.into_iter().map(Choice::Named))
+        .map(|c| {
+            let on = current.as_ref() == Some(&c);
+            (c, on)
+        })
+        .collect()
+}
+
 /// The value the selected instructions share, if they share one.
 fn shared<T: PartialEq>(mut values: impl Iterator<Item = T>) -> Option<T> {
     let first = values.next()?;
@@ -418,15 +462,8 @@ pub fn tt_box(cx: &mut ProjectCx<'_>) -> Option<TtBox> {
         }
         _ => Vec::new(),
     };
-    // A vertical Stem instruction measures a horizontal stem, and the other way round.
     let stem_names = match (&settings, direction_of(|k| matches!(k, TtKind::Stem { .. }))) {
-        (Some(s), Some(d)) => s
-            .tt_stems_for(font, &target.glyph)
-            .into_iter()
-            .filter_map(|i| s.tt_stems.get(i))
-            .filter(|st| st.horizontal == (d == Direction::Vertical))
-            .map(|st| st.name.clone())
-            .collect(),
+        (Some(s), Some(d)) => stem_names_for(font, s, &target.glyph, d),
         _ => Vec::new(),
     };
     let table = (!deltas.is_empty()).then(|| delta_table(font, &selected));
