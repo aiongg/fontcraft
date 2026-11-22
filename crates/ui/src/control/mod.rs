@@ -11,12 +11,14 @@
 //! - [`handle`] answers one request at once: tests ([`crate::testing`]) and hosts without a window.
 //! - The desktop app listens with [`Control::listen`] (`server.rs`). Requests are answered on the UI thread between
 //!   frames ([`logic`]); window input (`ui.click`, `ui.drag`, `ui.move`, `ui.wheel`) is replied to once the frames
-//!   have carried it, and `ui.screenshot` once the window is captured ([`after_ui`]).
+//!   have carried it, `ui.screenshot` once the window is captured, and `ui.wait` once its frames have passed or the
+//!   window is idle ([`after_ui`]).
 
 mod app;
 mod context_menu;
 mod dialogs;
 mod engine;
+pub mod events;
 mod inspect;
 mod menu;
 mod pointer;
@@ -26,6 +28,7 @@ mod screenshot;
 #[cfg(not(target_arch = "wasm32"))]
 mod server;
 mod text;
+mod wait;
 mod window_input;
 
 #[cfg(test)]
@@ -52,6 +55,7 @@ pub const MODULES: &[&[(&str, Method)]] = &[
     context_menu::METHODS,
     dialogs::METHODS,
     engine::METHODS,
+    events::METHODS,
     inspect::METHODS,
     menu::METHODS,
     pointer::METHODS,
@@ -59,6 +63,9 @@ pub const MODULES: &[&[(&str, Method)]] = &[
     window_input::METHODS,
     text::METHODS,
 ];
+
+/// Methods answered once the window has drawn (`answer` takes them before [`dispatch`]); headless hosts refuse them.
+const WINDOW_METHODS: &[&str] = &["ui.screenshot", "ui.wait"];
 
 /// Methods of the protocol whose package is not built yet: `(method or prefix ending in `.`, package)`. A package
 /// that adds its methods to [`MODULES`] removes its line here.
@@ -75,6 +82,8 @@ pub struct Control {
     queued: usize,
     /// Where the window input requests queued stands; while it is not idle, `drain` runs confined.
     input: Input,
+    /// What happened, for `events.list`.
+    pub events: events::Events,
     #[cfg(not(target_arch = "wasm32"))]
     server: Option<server::Server>,
 }
@@ -119,6 +128,8 @@ enum Answer {
     /// web build takes no screenshots.
     #[cfg(not(target_arch = "wasm32"))]
     Screenshot(Option<String>),
+    /// A `ui.wait`: the reply goes out once the frames have passed or the window is idle.
+    Wait(wait::Wait),
 }
 
 /// Answers one request now. Never panics: a bug becomes an error reply and the app keeps running. A screenshot
@@ -133,6 +144,7 @@ pub fn handle(app: &mut FontCraftApp, request: &Value) -> Value {
         Answer::Reply(result) => reply(result),
         #[cfg(not(target_arch = "wasm32"))]
         Answer::Screenshot(_) => reply(Err("ui.screenshot: this app has no window to capture (ui.render draws glyphs without one)".into())),
+        Answer::Wait(_) => reply(Err("ui.wait: this app answers each request at once and draws no frames to wait for".into())),
     };
     with_id(answered, &id)
 }
@@ -168,6 +180,12 @@ fn answer(app: &mut FontCraftApp, method: &str, params: &Value) -> Answer {
                 Err(e) => Answer::Reply(Err(format!("ui.screenshot: {e}"))),
             };
         }
+        if method == "ui.wait" {
+            return match wait::Wait::parse(params) {
+                Ok(wait) => Answer::Wait(wait),
+                Err(e) => Answer::Reply(Err(e)),
+            };
+        }
         let outside = app.session.export_outside();
         app.session.set_export_outside(false);
         let result = guard::catch_panic(|| dispatch(app, method, params));
@@ -194,9 +212,9 @@ pub fn dispatch(app: &mut FontCraftApp, name: &str, params: &Value) -> Result<Va
     Err(format!("unknown method `{name}` (see control.methods)"))
 }
 
-/// Every method name [`dispatch`] runs, in table order.
+/// Every method name the channel answers: what [`dispatch`] runs, in table order, then the window methods.
 pub fn method_names() -> Vec<&'static str> {
-    MODULES.iter().flat_map(|methods| methods.iter().map(|(n, _)| *n)).collect()
+    MODULES.iter().flat_map(|methods| methods.iter().map(|(n, _)| *n)).chain(WINDOW_METHODS.iter().copied()).collect()
 }
 
 /// The control channel's work before the frame: notes the window for window input and, in the desktop app,

@@ -7,14 +7,15 @@
 //! (`docs/control-protocol.md`): the listener is on only when the app is started with `--control`.
 //!
 //! UI thread: [`ControlChannel`] hands over the requests between frames ([`logic`]); window input replies wait until
-//! the passes have carried the input, and screenshots go through the channel's capture queue ([`after_ui`]).
+//! the passes have carried the input, screenshots go through the channel's capture queue, and `ui.wait` replies are
+//! parked until their frames have passed or the window is idle ([`after_ui`]).
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{Sender, channel};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use craft::automation::control::{ControlChannel, ControlRequest, REPLY_DEADLINE, Reply};
 use craft::automation::screenshot::settle_ms;
@@ -23,7 +24,8 @@ use craft::ui::runtime::windows::WindowHost;
 use egui::ViewportId;
 use serde_json::{Value, json};
 
-use super::{Answer, answer, reply, screenshot};
+use super::wait::{self, Wait};
+use super::{Answer, Input, answer, reply, screenshot};
 use crate::app::FontCraftApp;
 
 /// Longest request line accepted.
@@ -44,8 +46,18 @@ pub struct Server {
     channel: ControlChannel,
     /// Replies waiting for their window input to run: where each goes and what it says.
     after_input: Vec<(Sender<Value>, Value)>,
+    /// `ui.wait` replies waiting for frames or for the window to go idle.
+    waits: Vec<Waiting>,
     next_token: u64,
     stop: Arc<AtomicBool>,
+}
+
+/// A parked `ui.wait`: where the reply goes, what it waits for, when it arrived and the frames drawn since.
+struct Waiting {
+    reply: Sender<Value>,
+    wait: Wait,
+    since: Instant,
+    frames: u64,
 }
 
 impl Drop for Server {
@@ -95,12 +107,17 @@ impl Server {
                 }
             }
         })?;
-        Ok(Server { addr, channel: ControlChannel::new(requests), after_input: Vec::new(), next_token: 0, stop })
+        Ok(Server { addr, channel: ControlChannel::new(requests), after_input: Vec::new(), waits: Vec::new(), next_token: 0, stop })
     }
 
     /// Whether replies wait on frames.
     pub fn waiting(&self) -> bool {
-        !self.after_input.is_empty() || self.channel.waiting() > 0
+        !self.after_input.is_empty() || self.channel.waiting() > 0 || !self.waits.is_empty()
+    }
+
+    /// Whether nothing but `ui.wait` replies waits on frames.
+    fn others_idle(&self) -> bool {
+        self.after_input.is_empty() && self.channel.waiting() == 0
     }
 }
 
@@ -174,6 +191,9 @@ pub fn logic(app: &mut FontCraftApp, ctx: &egui::Context) {
                 let settle = settle_ms(ctx.global_style().animation_time);
                 server.channel.settle(request, Reply::screenshot(server.next_token, path, ViewportId::ROOT), None, settle);
             }
+            Answer::Wait(wait) => {
+                server.waits.push(Waiting { reply: request.reply.clone(), wait, since: motion::now(), frames: 0 });
+            }
         }
     }
     if answered == FRAME_REQUESTS || server.waiting() {
@@ -184,6 +204,7 @@ pub fn logic(app: &mut FontCraftApp, ctx: &egui::Context) {
 
 /// The end of a UI pass: screenshots due are issued, and replies waiting on window input go out once it has run.
 pub fn after_ui(app: &mut FontCraftApp, ctx: &egui::Context) {
+    let input_idle = app.control.input == Input::Idle;
     let Some(server) = app.control.server.as_mut() else { return };
     let host = WindowHost::of(ctx);
     server.channel.captures.note_pass();
@@ -199,6 +220,20 @@ pub fn after_ui(app: &mut FontCraftApp, ctx: &egui::Context) {
                 let _ = to.send(value);
             }
         }
+    }
+    if !server.waits.is_empty() {
+        let idle = input_idle && host.injected_idle() && server.others_idle();
+        let now = motion::now();
+        server.waits.retain_mut(|waiting| {
+            waiting.frames = waiting.frames.saturating_add(1);
+            let elapsed = now.saturating_duration_since(waiting.since);
+            let settled = waiting.wait.settled(waiting.frames, idle);
+            if settled || elapsed >= waiting.wait.timeout {
+                let _ = waiting.reply.send(reply(Ok(wait::result(waiting.frames, idle, !settled, elapsed))));
+                return false;
+            }
+            true
+        });
     }
     if server.waiting() {
         ctx.request_repaint();

@@ -100,6 +100,9 @@ is checked for.
 | `ui.focus` | | brings the window to the front with the keyboard, at the next frame; `{focus: true}` |
 | `ui.contextMenu.list` | `{x?, y?, space?}` | the open canvas context menu: `{open, glyph, screen, at, hit, sections: [{context, items: [{command, label, enabled, disabled_reason?, checked?, alternate?}]}]}`; `{open: false}` when none is. With `x` and `y` it first opens the menu there, as a right-click does (`space` as in `ui.pointer`, default `font`); that is refused while a tool is dragging or a dialog is open |
 | `ui.contextMenu.invoke` | `{command}` | runs an item of the open canvas context menu as a click on it does, and closes the menu; the item's result. The item is checked as the menu would show it now: a disabled or missing item is refused and the menu stays open; a menu whose tab or glyph changed, or that a dialog covers, closes and the request is refused. Refused while the question about unsaved changes is open |
+| `ui.wait` | `{frames?, idle?, timeoutMs?}` | the reply waits until `frames` frames (at most 3,600) have been drawn, or until the window is idle, or both: `{frames, idle, timedOut, elapsedMs}`. Without `frames` it waits for idle; with `frames` alone only for the frames. Idle means no window input queued or running, no screenshot or input reply waiting, and at least two frames drawn since the request, so what the request before it fired has been applied and drawn. `timeoutMs` (default 5,000, at most 30,000) ends the wait with `timedOut: true`. Headless hosts answer with an error |
+| `events.list` | `{since?}` | what happened, oldest first: `{events: [{seq, kind, …}], last, dropped}`; see [Events](#events) |
+| `events.clear` | | empties the event ring: `{cleared}`. Sequence numbers keep counting |
 | `control.methods` | | this table |
 
 `ui.inspect` answers with camelCase keys. Beside the active pointer tool (`tool`), `glyph`,
@@ -423,6 +426,21 @@ printf '%s\n' '{"id": 1, "method": "engine.execute", "params": {"command": "glyp
 
 socat READLINE TCP:127.0.0.1:7985
 ```
+
+### Events
+
+The app keeps the last 1,000 events in a ring. Each has a sequence number `seq`, counted from 1 and never reused,
+and a `kind`:
+
+| `kind` | Fields | When |
+|---|---|---|
+| `command` | `command`, `ok`, `revision`, `error?` | a command ran, from any source: a request, a menu, a key, a panel. `revision` is the active document's after it. Read-only queries are left out |
+| `document` | `action` (`opened`, `saved`, `closed`), `document`, `title`, `path` | a document was opened, saved (also under a new path) or closed |
+| `dialog` | `action` (`opened`, `closed`), `dialog` | a form dialog opened or closed |
+| `error` | `message` | a failure that was not a command run: a tool's input, a view change, a file chooser's answer |
+
+Pass the reply's `last` as `since` next time to read only newer events. `dropped: true` says that events after
+`since` have already left the ring. Error texts are cut at 2,000 bytes.
 
 ## Planned, in the order the milestones need them
 
