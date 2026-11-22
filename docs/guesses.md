@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**3155 guesses on 1642 rows (676 of them live commands).**
+**3159 guesses on 1642 rows (676 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -343,6 +343,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `infoBox.image` (panel) | M11 | handbook | – | Width and height are edited independently, without a proportion lock. Settled by typing a new width for a selected image in the reference's Info box and reading its height. |
 | `editView.bottomBar` (panel) | M3 | handbook | – | The controls share the window's status bar with the status text instead of a bar of their own under each tab; settle by looking at where the reference app's bottom bar ends and whether Font View has one. |
 | `editView.bottomBar` (panel) | M3 | handbook | – | The icons come from the framework's catalog: pilcrows for left to right and right to left, a vertical type mark for top to bottom, unlink, link and lock for the three kerning modes, an eye for the Preview Area; settle by comparing with the reference app's bottom bar. |
+| `editView.bottomBar` (panel) | M3 | handbook | – | The zoom field shows its value with the unit pt, since the value is a size in display points; settle by reading the reference app's zoom field. |
 | `editView.contextMenu` (panel) | M4 | handbook | – | The swatches open the glyph section of the menu as a Glyph Color submenu (Layer Color when Alt was held at the click). Settled by observation. |
 | `editView.contextMenu` (panel) | M4 | handbook | – | The glyph section offers Exports, Locked and Show Glyph in Font View, and the menu ends with Copy Glyph Names, as the Glyphs 3 video lists them; the other entries of that list follow with their milestones. Settled by observation. |
 | `editView.contextMenu` (panel) | M4 | handbook | – | Items that remove something (Delete Guide, Delete Hints, Clear Hints, Delete Instructions) show a danger tone, a trash icon in the error colour; the video shows no such mark, so it is ours. Settled by observation. |
@@ -355,6 +356,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `text` (tool) | M5 | handbook | – | Return types a line break; the handbook allows several lines but does not name the key. |
 | `text` (tool) | M5 | handbook | – | Up and Down move to the nearest place on the line above or below, and to the start or the end of the text from the first or the last line; in right-to-left text Left steps forward in the text; in top-to-bottom text Up and Down step along the column and Left and Right move between columns. Moving the cursor in such texts in the reference app settles it. |
 | `text` (tool) | M5 | handbook | – | Backspace and Delete with Alt or Cmd do nothing (no word or line deletion); no source names them. |
+| `text` (tool) | M5 | handbook | – | Typing or moving the cursor past the canvas's edge scrolls the canvas sideways, the zoom kept, so the cursor stays in view; typing past the window's edge in the reference app settles it. |
+| `text` (tool) | M5 | handbook | – | A tab whose text holds several glyphs fits the whole text in the canvas the first time it draws, and so does a text that replaces the whole text (editView.setText, a sample string); typing keeps the zoom. Opening several glyphs in a new tab of the reference app settles it. |
+| `text` (tool) | M5 | handbook | – | The canvas scrolls freely past the edited glyph's advance box, so the text around it can be scrolled into view; the framework's default keeps the document on screen. |
 | `measurement` (tool) | M3 | handbook | – | The ruler's ends snap unless Ctrl is held, and Shift keeps it horizontal or vertical, whichever is nearer. |
 | `measurement` (tool) | M3 | handbook | – | The ruler stays until the next press, Escape or a tool change (03b question 9). |
 | `measurement` (tool) | M3 | handbook | – | G with any modifiers adds the measurement guide. |
