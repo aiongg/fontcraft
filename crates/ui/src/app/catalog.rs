@@ -27,6 +27,20 @@ pub const TOOL_PREFIX: &str = "tool.";
 /// command, which refuses it.
 pub const SELECT_TOOL: &str = "tool.select";
 
+/// Whether the shortcut of the command `id` works while Font View shows (`font_view`) with the tool `tool` current: its
+/// engine command's `when` (`CommandSpec::when`) names where. `fontView` works only in Font View; `editView`,
+/// `textMode` and `tool:<id>` (that tool current) only in the edit view. A command with no `when`, or one that names a
+/// panel or a dialog, works everywhere: the panel or dialog that has the keyboard keeps its own keys.
+pub fn shortcut_works(id: &str, font_view: bool, tool: &str) -> bool {
+    let when = fontcraft_engine::cmd::command_specs().iter().find(|spec| spec.id == id).and_then(|spec| spec.when);
+    match when {
+        Some("fontView") => font_view,
+        Some("editView" | "textMode") => !font_view,
+        Some(when) => when.strip_prefix("tool:").is_none_or(|own| !font_view && own == tool),
+        None => true,
+    }
+}
+
 /// What a fired command is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {

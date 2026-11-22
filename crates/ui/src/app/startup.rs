@@ -226,8 +226,11 @@ mod tests {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used)]
+#[allow(clippy::expect_used, clippy::indexing_slicing)]
 mod window_tests {
+    use craft::ui::runtime::commands::CommandRef;
+    use craft::ui::testing::input::{key_press, text};
+    use egui::{Key, Modifiers};
     use serde_json::json;
 
     use crate::testing::TestApp;
@@ -244,5 +247,38 @@ mod window_tests {
         let tab = t.frames.texts().iter().find(|x| x.text == "Font View").map(|x| x.rect).expect("the Font View tab");
         let status = t.frames.texts().iter().find(|x| x.text.contains("54 shown")).map(|x| x.rect).expect("Font View's status line");
         assert!(status.min.y > tab.max.y + 400.0, "the status line under the tab strip, at the bottom: {tab:?} {status:?}");
+    }
+
+    fn selected(t: &mut TestApp) -> serde_json::Value {
+        t.ok("ui.inspect", json!({}))["fontView"]["selected"].clone()
+    }
+
+    /// While Font View shows, a letter runs no shortcut of the edit view: G, the TrueType Instructor's Interpolate,
+    /// does nothing from the keyboard or the control channel. With a cell focused, a letter selects by name.
+    #[test]
+    fn a_letter_in_font_view_runs_no_edit_view_shortcut() {
+        let mut t = TestApp::new();
+        t.app.fire(CommandRef::new("fontView.show"));
+        t.frames(2);
+        assert!(t.app.font_view_shows());
+        t.frame_with(vec![key_press(Key::G, Modifiers::NONE), text("g")]).frame();
+        assert_eq!(t.app.status, "", "no shortcut ran");
+        let reply = t.ok("ui.key", json!({"key": "g"}));
+        assert_eq!(reply.get("command"), None, "{reply}");
+        assert_eq!(t.app.status, "");
+        // The Instructor's keys work in the edit view while it is the tool.
+        let works = crate::app::catalog::shortcut_works;
+        assert!(works("hint.tt.interpolate", false, "trueTypeInstructor"));
+        assert!(!works("hint.tt.interpolate", true, "trueTypeInstructor"));
+        assert!(!works("hint.tt.interpolate", false, "select"));
+
+        // The cell's name is the last `.notdef` drawn: the tab strip's Edit View tab shows it first.
+        let cell = t.frames.texts().iter().rfind(|x| x.text == ".notdef").map(|x| x.rect.center()).expect(".notdef's cell");
+        t.ok("ui.click", json!({"x": cell.x, "y": cell.y - 30.0}));
+        assert_eq!(selected(&mut t), json!([".notdef"]));
+        let reply = t.ok("ui.key", json!({"key": "k"}));
+        assert_eq!(reply["fontView"], true, "{reply}");
+        assert_eq!(selected(&mut t), json!(["K"]), "type-ahead selects the first name starting with k");
+        assert_eq!(t.app.status, "");
     }
 }

@@ -104,9 +104,13 @@ fn chord_text(name: &str, mods: Modifiers) -> String {
     text
 }
 
-/// The engine or shell command whose shortcut is `chord`, then the numbered shortcuts with their parameters.
-fn shortcut_command(chord: &Binding) -> Option<CommandRef> {
-    let engine = fontcraft_engine::cmd::command_specs().iter().filter_map(|spec| Some((spec.id, spec.shortcut?)));
+/// The engine or shell command whose shortcut is `chord` and works while Font View shows (`font_view`) with `tool`
+/// current (`catalog::shortcut_works`), then the numbered shortcuts with their parameters.
+fn shortcut_command(chord: &Binding, font_view: bool, tool: &str) -> Option<CommandRef> {
+    let engine = fontcraft_engine::cmd::command_specs()
+        .iter()
+        .filter(|spec| crate::app::catalog::shortcut_works(spec.id, font_view, tool))
+        .filter_map(|spec| Some((spec.id, spec.shortcut?)));
     let shell = crate::shell::commands::MODULES.iter().flat_map(|m| m.commands.iter()).filter_map(|c| Some((c.id, c.shortcut?)));
     let matches = |text: &str| Binding::parse(text).ok().as_ref() == Some(chord);
     if let Some((id, _)) = engine.chain(shell).find(|(_, text)| matches(text)) {
@@ -116,7 +120,8 @@ fn shortcut_command(chord: &Binding) -> Option<CommandRef> {
 }
 
 /// `{key, shift?, alt?, cmd?, ctrl?, mods?, action?: tap | press | release}`: a key as the keyboard gives it, the
-/// tools' keys first, then the menu shortcuts.
+/// tools' keys first, then the menu shortcuts that work where the window is. While Font View shows, its own keys and
+/// the characters no shortcut there takes go to the window, for the grid or list that has the keyboard.
 fn key(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
     const M: &str = "ui.key";
     let name =
@@ -158,7 +163,9 @@ fn key(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
         {
             handled = true;
             errors.extend(errs);
-        } else if let Some(fired) = Binding::parse(&chord_text(name, mods)).ok().as_ref().and_then(shortcut_command) {
+        } else if let Some(fired) =
+            Binding::parse(&chord_text(name, mods)).ok().as_ref().and_then(|chord| shortcut_command(chord, font_view, app.view.tool))
+        {
             handled = true;
             command = Some(fired.id.clone());
             let msgs = match crate::canvas::text::edit::fired(app, &fired) {
@@ -178,6 +185,12 @@ fn key(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
                 }
             }
         }
+    }
+    if font_view
+        && !handled
+        && let Some(typed) = typed_char(name, mods)
+    {
+        return font_view_typed(app, typed, mods, press, release);
     }
     if release && let Some(k) = tool_key {
         errors.extend(apply::key(app, KeyEvent::release(k, mods)).unwrap_or_default());
@@ -204,6 +217,37 @@ fn font_view_key(app: &mut FontCraftApp, key: WindowKey, mods: Modifiers, press:
         host.inject_let_go(ViewportId::ROOT, key);
     }
     let steps = usize::from(press) + usize::from(release);
+    app.control.queued += steps;
+    Ok(json!({"queued": steps, "handled": true, "fontView": true}))
+}
+
+/// The character the key `name` types with `mods` held: a one-character name with no Cmd, Ctrl or Alt held, as
+/// Shift gives it.
+fn typed_char(name: &str, mods: Modifiers) -> Option<String> {
+    let mut chars = name.chars();
+    let c = chars.next().filter(|c| !c.is_control() && chars.next().is_none() && !(mods.cmd || mods.ctrl || mods.alt))?;
+    Some(if mods.shift { c.to_uppercase().collect() } else { c.to_lowercase().collect() })
+}
+
+/// A character typed while Font View shows that no shortcut there takes, queued on the window as the keyboard types
+/// it: the grid or list that has the keyboard selects by name (type-ahead) → `{queued, handled: true, fontView: true}`.
+fn font_view_typed(app: &mut FontCraftApp, typed: String, mods: Modifiers, press: bool, release: bool) -> Result<Value, String> {
+    let host = app.control.window.clone().ok_or("ui.key: Font View's keys need the window: the desktop app or a test frame")?;
+    let key = WindowKey::parse(&typed);
+    let mut held = Mods::NONE;
+    held.shift = mods.shift;
+    let mut steps = 0;
+    if press {
+        if let Some(key) = key {
+            host.inject_key(ViewportId::ROOT, key, held, !release);
+            steps += 1;
+        }
+        host.inject_text(ViewportId::ROOT, &typed);
+        steps += 1;
+    } else if release && let Some(key) = key {
+        host.inject_let_go(ViewportId::ROOT, key);
+        steps += 1;
+    }
     app.control.queued += steps;
     Ok(json!({"queued": steps, "handled": true, "fontView": true}))
 }

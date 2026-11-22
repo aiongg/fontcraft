@@ -32,7 +32,7 @@ use craft::behavior::dock::Workspace;
 use craft::behavior::kurbo::Point;
 use craft::host::{AppInfo, Host};
 use craft::ui::rails::{LastUsed, RailTool, ToolSlot};
-use craft::ui::runtime::commands::{CommandRef, FirePhase};
+use craft::ui::runtime::commands::{CommandRef, FirePhase, FireSource};
 use craft::ui::runtime::env::RootEnv;
 use craft::ui::runtime::frame::{FrameInput, FrameOutput};
 use craft::ui::shell::app::ShellApp;
@@ -657,6 +657,10 @@ impl ShellApp for FontCraftApp {
         for fired in output.fired {
             // A numbered shortcut fires its catalog definition, whose id holds the parameters.
             let command = craft_ext::ui::runtime::commands::fired_command(fired.command);
+            // A key fires only the commands whose shortcut works where the window is (a tool's keys not in Font View).
+            if fired.source == FireSource::Key && !catalog::shortcut_works(&command.id, self.font_view_shows(), self.view.tool) {
+                continue;
+            }
             // A held tool key fires again on release; the tool stays.
             if fired.phase != FirePhase::Release && !clipboard::to_focused_list(self, &command) {
                 self.fire(command);
