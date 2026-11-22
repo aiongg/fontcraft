@@ -2,9 +2,32 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-22: M7.22 and M3.23 merged, built and pushed (X.integ121 to X.integ123): the kerning colours and `appearance.guideOpacity` as live settings the canvas reads, Extra Nodes from `fontcraft-tools` with a count and work cap, the TTFZones and TTFStems rows open their editors on the row's master, dictionary and localized values show refusals, window tests of the bits and PANOSE dialogs; the gate is green with 4,819 tests. UI.51 merged, built and pushed (X.integ119 to X.integ120): PDF pages in placed images, `palette.toggleSection`, `tool.select {tool}` and `tool.list` in the window; the gate is green with 4,811 tests. UI.49 and UI.50 merged, built and pushed (X.integ113 to X.integ117): the egui window is gone and `crates/ui` with `apps/fontcraft` is the only window. Earlier notes follow._
+_Updated: 2026-11-22: M5.29 and M4.18 written on `w-M5.29` (M5.29a, M4.18a, M4.18b), not yet built: the Sample Strings section and Select Sample Text read the groups through one function, with limit and frame tests; Delete and minus in Font View open Remove Glyph's dialog, and `ui.key` gives Font View's keys to the window and none to the edit view's tools while Font View shows. M7.22 and M3.23 merged, built and pushed (X.integ121 to X.integ123): the kerning colours and `appearance.guideOpacity` as live settings the canvas reads, Extra Nodes from `fontcraft-tools` with a count and work cap, the TTFZones and TTFStems rows open their editors on the row's master, dictionary and localized values show refusals, window tests of the bits and PANOSE dialogs; the gate is green with 4,819 tests. UI.51 merged, built and pushed (X.integ119 to X.integ120): PDF pages in placed images, `palette.toggleSection`, `tool.select {tool}` and `tool.list` in the window; the gate is green with 4,811 tests. UI.49 and UI.50 merged, built and pushed (X.integ113 to X.integ117): the egui window is gone and `crates/ui` with `apps/fontcraft` is the only window. Earlier notes follow._
 
 ## State of the tree
+
+- **Where M5.29 and M4.18 stand.** Written on `w-M5.29`, not built or tested: the writer ran no cargo command but
+  `cargo fmt`. Most of both packages was already in the window from the port: the four `settings.*SampleString*`
+  shell commands with their limits (`shell/settings.rs`), the Sample Strings section body (`dialogs/settings.rs`),
+  Font View's arrows, Shift, Home, End and Return from the craft grid and table (`panels/font_view/keys.rs`), and
+  the plus and minus buttons (`panels/font_view/status.rs`). The branch adds:
+  - The section and the Select Sample Text window read the groups through one function
+    (`dialogs/sample_strings.rs::groups`); the settings module's own copy of the reader and the built-in groups
+    is gone. Tests: the group, name and string limits (`shell/settings.rs`); a frame test that typed lines reach
+    the Select Sample Text list, the buttons post their commands and Remove Group is greyed with no group
+    (`dialogs/settings.rs`). The eleven Sample Strings rows and `sampleStrings.storedInSettings` move from M14 to
+    M5, with guesses and observe steps.
+  - Delete and the minus button open Remove Glyph's dialog on the selection (`keys::remove`) in place of removing
+    at once.
+  - `keys::takes` names the keys Font View keeps (arrows, Home and End with or without Shift; Return, Delete and
+    Backspace). While Font View shows, `ui.key` injects those into the window for the grid or list that has the
+    keyboard and gives no key to the edit view's tools; without a window it refuses them. Tool letters no longer
+    switch tools over the control channel while Font View shows.
+  - Tests: each key in Grid and List View, a row's end, the first and last glyph, Shift extending, Delete, Return,
+    End scrolling the last of 400 glyphs into view (`panels/font_view/tests.rs`); keys change no outline while
+    Font View shows, headless and through the window (`canvas/tools/tests.rs`). Unconfirmed until built: whether
+    a click on Add Group commits the multi-line field first, whether a click on a selected list row's Unicode cell
+    leaves rename alone, and whether the grid keeps the scroll after the fixture's fixed model resets the selection.
 
 - **Where M3.23 stands.** Merged with M7.22, built, gate green with 4,819 tests. Checked headless under Xvfb over
   the control channel: `settings.set` takes `appearance.guideOpacity` 50, refuses 150 and refuses a kerning colour
