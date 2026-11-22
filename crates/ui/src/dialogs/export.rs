@@ -20,6 +20,7 @@
 
 use fontcraft_engine::Session;
 use fontcraft_engine::cmd::export_profiles::{Profile, profiles};
+use fontcraft_engine::cmd::export_settings::{Tab, export_all_needs_folder, kept_for_active};
 use serde_json::{Map, Value, json};
 
 use super::fields::{Field, Kind, MAX_CHOICES};
@@ -34,6 +35,7 @@ pub const SPECS: &[DialogSpec] = &[
         .buttons("Export", ""),
     DialogSpec::new("dialog.exportArtwork", "Export Artwork", "glyph.exportArtwork", Fields::Fixed(artwork_fields)).run_on_ok().buttons("Export", ""),
     WINDOW_CONTENTS,
+    EXPORT_ALL_FOLDER,
 ];
 
 /// The tabs of Export, by the id `file.export {tab}` takes.
@@ -45,12 +47,33 @@ pub const TABS: [Tab; 4] = [
 ];
 
 /// Static OpenType fonts.
-const OTF: DialogSpec =
-    DialogSpec::new("dialog.exportOtf", "Export", "file.exportStatic", Fields::Fixed(otf_fields)).run_on_ok().buttons("Next…", "");
+const OTF: DialogSpec = DialogSpec::new(
+    "dialog.exportOtf",
+    "Export",
+    "file.exportStatic",
+    Fields::Shaped(Shaped { fields: otf_fields, given: otf_given, params: kept_params, link: destination_link }),
+)
+.run_on_ok()
+.buttons("Next…", "");
 
 /// One variable font per variable font setting, TrueType only.
-const VARIABLE: DialogSpec =
-    DialogSpec::new("dialog.exportVariable", "Export", "file.exportVariable", Fields::Fixed(variable_fields)).run_on_ok().buttons("Next…", "");
+const VARIABLE: DialogSpec = DialogSpec::new(
+    "dialog.exportVariable",
+    "Export",
+    "file.exportVariable",
+    Fields::Shaped(Shaped { fields: variable_fields, given: variable_given, params: kept_params, link: destination_link }),
+)
+.run_on_ok()
+.buttons("Next…", "");
+
+/// Export All when a document has no ticked export folder: one folder for those documents, asked with the chooser
+/// as the dialog opens ([`export_all_fired`]). Never the menu item's dialog: Export All skips the Export dialog.
+const EXPORT_ALL_FOLDER: DialogSpec = DialogSpec {
+    follow_up: true,
+    ..DialogSpec::new("export.promptWhenNoDestination", "Export All", "file.exportAll", Fields::Fixed(export_all_fields))
+        .run_on_ok()
+        .buttons("Export", "")
+};
 
 /// One UFO per master.
 const UFO: DialogSpec = DialogSpec::new("dialog.exportUfo", "Export", "file.exportUfo", Fields::Fixed(ufo_fields)).run_on_ok().buttons("Next…", "");
@@ -110,6 +133,56 @@ fn destination() -> Field {
     Field::folder("destination", "Export Folder", "The folder the files are written to; files of the same name are replaced")
 }
 
+/// The Export Destination checkbox of the OTF and Variable Fonts tabs.
+fn use_destination() -> Field {
+    Field::bool("useDestination", "Export Destination", true, "Write into the export folder; unticked, Next… asks for a folder every time")
+}
+
+/// The tab's values from the settings the document's last successful export kept, under what `given` names.
+fn kept_given(session: &Session, tab: Tab, p: &Map<String, Value>) -> Map<String, Value> {
+    let mut out = kept_for_active(session, tab);
+    out.extend(p.iter().map(|(k, v)| (k.clone(), v.clone())));
+    out
+}
+
+fn otf_given(session: &Session, p: &Map<String, Value>) -> Result<Map<String, Value>, String> {
+    Ok(kept_given(session, Tab::Otf, p))
+}
+
+fn variable_given(session: &Session, p: &Map<String, Value>) -> Result<Map<String, Value>, String> {
+    Ok(kept_given(session, Tab::Variable, p))
+}
+
+/// The field values are the command's parameters; the command keeps them, `useDestination` with them.
+fn kept_params(values: &Map<String, Value>) -> Map<String, Value> {
+    values.clone()
+}
+
+/// With Export Destination unticked the folder field is emptied, so Next… asks for a folder.
+fn destination_link(values: &mut Map<String, Value>, key: &str) {
+    if (key.is_empty() || key == "useDestination") && values.get("useDestination") == Some(&Value::Bool(false)) {
+        values.insert("destination".into(), json!(""));
+    }
+}
+
+fn export_all_fields(_: &Session) -> Vec<Field> {
+    vec![Field::folder("fallbackDestination", "Export Folder", "The folder for the documents that have no export folder of their own")]
+}
+
+/// Export All fired by the person: runs straight away when every document has a ticked export folder (returns
+/// false), else opens [`EXPORT_ALL_FOLDER`] with the folder chooser, and OK follows the folder chosen.
+pub fn export_all_fired(app: &mut FontCraftApp, id: &str, params: &Value) -> bool {
+    let empty = params.is_null() || params.as_object().is_some_and(Map::is_empty);
+    if id != "file.exportAll" || !empty || !export_all_needs_folder(&app.session) {
+        return false;
+    }
+    let opened = super::form::open(app, &EXPORT_ALL_FOLDER, &Map::new()).and_then(|_| super::form::choose(app, "fallbackDestination", true));
+    if let Err(e) = opened {
+        app.status = e;
+    }
+    true
+}
+
 /// A pop-up of the active document's masters by name; the value is the master id, the first master at first (the
 /// dialog opens on the current master).
 pub fn master_field(session: &Session, key: &str, label: &str, doc: &str) -> Field {
@@ -143,6 +216,7 @@ fn otf_fields(_: &Session) -> Vec<Field> {
             "PostScript/CFF: hint every glyph without manual PostScript hints; TrueType: hint the whole font, in place of any manual TrueType hints. An instance's Autohint parameter overrides this",
         ),
         Field::bool("cbdt", "CBDT", false, "Also write CBDT and CBLC bitmap tables from the iColor layers, for renderers that do not draw sbix"),
+        use_destination(),
         destination(),
     ]
 }
@@ -158,7 +232,7 @@ fn containers() -> Field {
 }
 
 fn variable_fields(_: &Session) -> Vec<Field> {
-    vec![containers(), destination()]
+    vec![containers(), use_destination(), destination()]
 }
 
 fn ufo_fields(session: &Session) -> Vec<Field> {

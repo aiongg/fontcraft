@@ -53,7 +53,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Export Variable Fonts",
             [],
             None,
-            "{settings?: [string], outlines?: \"truetype\"|\"cff2\", containers?: [\"plain\"|\"woff\"|\"woff2\"], destination?: string, optimizeDeltas?: bool, timestamp?: number|\"now\", versionStamp?: bool} compile the active document's variable fonts: one per variable font setting (or the settings named), or one for the whole designspace when the font has none. Each is written once per container (default plain). destination: a folder, created when missing, where each file is named by the setting's Variable Font File Name or fileName parameter, else the family name, the setting's name unless it is Regular, and VF; or one file path ending in .ttf (.otf for CFF2), .woff or .woff2 when one font results; without it the fonts are returned as dataBase64. The export stops while an exported glyph's layers are incompatible, naming the glyphs. outlines: truetype (default: glyf and gvar) or cff2 (cubic outlines with blends in a CFF2 table, hmtx with HVAR, glyph names in post; manual hints are left out, with a warning). optimizeDeltas: leave out the deltas of points that interpolation between their neighbours gives within half a unit (default: the Optimize Variable Deltas parameter, else true). timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now). versionStamp: append `;FontCraft <version>` to the version string unless the font states its own (default true). Existing files are replaced; a failing export writes nothing → {fonts: [{setting, fileName, glyphs, warnings, files: [{name, container, bytes, path? | dataBase64?}]}], warnings}",
+            "{settings?: [string], outlines?: \"truetype\"|\"cff2\", containers?: [\"plain\"|\"woff\"|\"woff2\"], destination?: string, optimizeDeltas?: bool, timestamp?: number|\"now\", versionStamp?: bool, useDestination?: bool} compile the active document's variable fonts: one per variable font setting (or the settings named), or one for the whole designspace when the font has none. Each is written once per container (default plain). destination: a folder, created when missing, where each file is named by the setting's Variable Font File Name or fileName parameter, else the family name, the setting's name unless it is Regular, and VF; or one file path ending in .ttf (.otf for CFF2), .woff or .woff2 when one font results; without it the fonts are returned as dataBase64. The export stops while an exported glyph's layers are incompatible, naming the glyphs. outlines: truetype (default: glyf and gvar) or cff2 (cubic outlines with blends in a CFF2 table, hmtx with HVAR, glyph names in post; manual hints are left out, with a warning). optimizeDeltas: leave out the deltas of points that interpolation between their neighbours gives within half a unit (default: the Optimize Variable Deltas parameter, else true). timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now). versionStamp: append `;FontCraft <version>` to the version string unless the font states its own (default true). Existing files are replaced; a failing export writes nothing. A successful export keeps its outlines, containers and destination folder for the document as the Export dialog's Variable Fonts settings (file.exportSettings); useDestination: whether the dialog's Export Destination box was ticked, kept with them (default true) → {fonts: [{setting, fileName, glyphs, warnings, files: [{name, container, bytes, path? | dataBase64?}]}], warnings}",
             has_doc,
             export_variable
         ).files(const { &[FileParam::write("destination")] }).writes_files(),
@@ -1556,6 +1556,8 @@ fn export_variable(s: &mut Session, p: &Value) -> Result<Value> {
     let mut warnings = Vec::new();
     let linked = crate::export_steps::linked(font, doc.path.as_deref(), &mut warnings)?;
     let var_options = VariableOptions { flavour, optimize_deltas };
+    let outlines = if flavour == VarFlavour::Cff2 { "cff2" } else { "truetype" };
+    let kept = super::export_settings::ran_with(&p, super::export_settings::Tab::Variable, outlines, &containers, &[], &dest)?;
     let mut sink = Sink::new(&dest, true, outside)?;
     let mut fonts = Vec::with_capacity(picked.len());
     for setting in picked {
@@ -1587,6 +1589,9 @@ fn export_variable(s: &mut Session, p: &Value) -> Result<Value> {
         }));
     }
     sink.commit()?;
+    if let Some(warning) = super::export_settings::remember(s, super::export_settings::Tab::Variable, kept) {
+        warnings.push(warning);
+    }
     Ok(json!({ "fonts": fonts, "warnings": warnings }))
 }
 

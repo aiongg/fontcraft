@@ -29,15 +29,40 @@ label = "Export All"
 menu = ["File"]
 shortcut = "Cmd+Alt+E"
 kind = "engine"
-params = '{documents?: [titles or paths], outlines?: ["truetype"|"cff"], containers?: ["plain"|"woff"|"woff2"], destination: path, removeOverlap?: bool, autohint?: bool, cbdt?: bool, timestamp?: number|"now"}'
+params = '{documents?: [titles or paths], outlines?: ["truetype"|"cff"], containers?: ["plain"|"woff"|"woff2"], destination?: path, fallbackDestination?: path, removeOverlap?: bool, autohint?: bool, cbdt?: bool, timestamp?: number|"now"}'
 area = "compile"
 milestone = "M2"
-summary = "Exports every open document in one go without showing the export dialog; the menu item replaces Export… while Option is held. Each document is exported with its last-used export settings. FontCraft has no remembered settings yet, so the command takes them as parameters: every exportable instance of each chosen document, in each outline flavour and container asked for, into one destination folder, reporting what it wrote and what it skipped."
+summary = "Exports every open document in one go without showing the export dialog; the menu item replaces Export… while Option is held. Each document is exported with its last-used export settings: every exportable instance of each chosen document, in each outline flavour and container, into its folder, reporting what it wrote and what it skipped."
 ref = "Import & Export › Exporting Font Files"
 status = "handbook"
-notes = "A designspace without axes is refused when it states a location, or when it has two or more sources and instances to build, as fontmake refuses it (docs/spec/40-compile.md)."
+notes = "A designspace without axes is refused when it states a location, or when it has two or more sources and instances to build, as fontmake refuses it (docs/spec/40-compile.md). M3.39: what the parameters leave out comes from each document's kept OTF-tab settings (file.exportSettings), else from the command's defaults (TrueType, plain, Remove Overlap on). The kept folder counts only while its Export Destination box was ticked. A document with no folder is refused headless, naming it; fired from the menu with no parameters while some document has none, the desktop asks for one folder once (export.promptWhenNoDestination) and passes it as fallbackDestination, which only those documents use. Documents that share a folder are staged together, and all folders move into place as one step."
 guesses = [
-  "The reference's settings for Export All are not documented; using each document's last-used export settings is our assumption, and until FontCraft remembers settings the command takes them as parameters.",
+  "The reference's settings for Export All are not documented; using each document's last-used settings of the OTF tab is our assumption.",
+  "A document never exported uses the command's defaults (TrueType, plain), not the OTF tab's opening flavour (PostScript/CFF), so calls that name only a destination write what they wrote before.",
+  "One folder asked once serves every document without a ticked folder of its own; documents with one keep it.",
+]
+observe = [
+  "Export one font from the OTF tab to folder A with WOFF2 ticked, then open a second font, hold Option and choose Export All: note which folder and formats each font is written with, and whether a folder is asked for the second font.",
+]
+
+[[command]]
+id = "file.exportSettings"
+label = "Export Settings"
+menu = []
+kind = "engine"
+params = '{document?: title or path, tab?: "otf"|"variable"}'
+area = "compile"
+milestone = "M3"
+summary = "FontCraft's query of the Export dialog's settings kept from a document's last successful export, per tab: outline format, containers, Remove Overlap, Autohint, CBDT, the export folder and whether its Export Destination box was ticked. The dialog opens with them and Export All reuses the OTF tab's."
+ref = "Import & Export › Exporting Font Files"
+status = "inferred"
+notes = "M3.39. file.exportStatic and file.exportVariable keep the settings they ran with after they succeed; a failing export keeps the settings before. A saved document's settings live in the user settings under export.keptSettings, keyed by its path (at most 64 documents, newest first); an unsaved document's are kept for the session. Entries read from the settings file are checked; one that fails is listed under problems and not used."
+guesses = [
+  "Settings are kept per document path, not app-wide: the handbook says Export All uses each document's last settings.",
+  "An unsaved document's settings last for the session only; after Save As they are kept by path from its next export.",
+]
+observe = [
+  "Export font 1 from the OTF tab as TrueType with WOFF ticked, then open the Export dialog on font 2: note whether it shows TrueType and WOFF (app-wide) or the defaults (per document).",
 ]
 
 [[command]]
@@ -142,7 +167,7 @@ milestone = "M3"
 summary = "Options for static OpenType export: outline flavour, the container formats to write, overlap removal, autohinting and the two destinations (a folder, or direct installation into the system)."
 ref = "Import & Export › Exporting Font Files › OpenType Export"
 status = "handbook"
-notes = "Runs file.exportStatic. Fields: outlines (cff or truetype; opens on cff, as the video named in file.export shows it; whether that is the default or a remembered setting is not observed), containers (File Format checkboxes OTF/TTF, WOFF, WOFF2; plain ticked), removeOverlap (on), autohint (off), cbdt (off: also write CBDT and CBLC from the iColor layers, an option the reference does not have), destination (Export Folder: a path with Choose…, see dialog.chooseExportFolder). Not built: the destination checkbox and Test Install (M14), so the folder is the only destination. The dialog does not preview, as exporting writes files: Next… runs the command once, journaled, and a failure keeps the dialog open with the message. Next… with no folder asks for one (export.promptWhenNoDestination). The flavour menu shows PostScript/CFF and TrueType for the words cff and truetype."
+notes = "Runs file.exportStatic. Fields: outlines (cff or truetype; opens on cff, as the video named in file.export shows it; whether that is the default or a remembered setting is not observed), containers (File Format checkboxes OTF/TTF, WOFF, WOFF2; plain ticked), removeOverlap (on), autohint (off), cbdt (off: also write CBDT and CBLC from the iColor layers, an option the reference does not have), destination (Export Folder: a path with Choose…, see dialog.chooseExportFolder). Export Destination (useDestination, ticked): unticked, the folder field is emptied and Next… asks for a folder every time (M3.39). Not built: Test Install (M14). The tab opens with the settings of the document's last successful export from it (file.exportSettings), else the defaults. The dialog does not preview, as exporting writes files: Next… runs the command once, journaled, and a failure keeps the dialog open with the message. Next… with no folder asks for one (export.promptWhenNoDestination). The flavour menu shows PostScript/CFF and TrueType for the words cff and truetype."
 
 [[panel]]
 id = "dialog.exportVariable"
@@ -159,7 +184,7 @@ milestone = "M9"
 summary = "Options for variable font export. The handbook only says file formats and destination are set as on the OTF tab; there is no flavour choice because the output is always TrueType. Whether Remove Overlap and Autohint appear here is not stated."
 ref = "Import & Export › Exporting Font Files › Exporting Variable Fonts"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: the Variable Fonts tab of the export dialog, crates/ui/src/dialogs/export.rs, running file.exportVariable on Next…. It offers the OTF tab's File Format checkboxes and export folder and no outline flavour. FontCraft has no Test Install; Remove Overlap and Autohint are not offered."
+notes = "Documented, not yet observed. FontCraft: the Variable Fonts tab of the export dialog, crates/ui/src/dialogs/export.rs, running file.exportVariable on Next…. It offers the OTF tab's File Format checkboxes, the Export Destination checkbox and export folder (as on the OTF tab, M3.39) and no outline flavour, and opens with the settings of the document's last variable export. FontCraft has no Test Install; Remove Overlap and Autohint are not offered."
 
 [[panel]]
 id = "dialog.exportUfo"
@@ -229,6 +254,7 @@ milestone = "M2"
 summary = "Holding Option turns File › Export… into Export All, which processes all open documents and never shows the export dialog."
 ref = "Import & Export › Exporting Font Files"
 status = "handbook"
+notes = "M3.39: File › Export All (Cmd+Alt+E) runs file.exportAll with each document's kept settings and opens no dialog; only when a document has no ticked folder does the folder chooser appear once (export.promptWhenNoDestination)."
 
 [[behavior]]
 id = "export.staticUsesInstancesOrDefault"
@@ -365,6 +391,14 @@ milestone = "M2"
 summary = "The folder destination is a checkbox next to a path. Ticking it writes font files into that folder; clicking the path opens a folder chooser to change it. Whether the OTF and Variable Fonts tabs share one remembered folder is not stated."
 ref = "Import & Export › Exporting Font Files › Export Destination"
 status = "handbook"
+notes = "M3.39: each of the OTF and Variable Fonts tabs has the checkbox (useDestination) and keeps its own folder per document (file.exportSettings)."
+guesses = [
+  "Each tab keeps its own folder; the tabs do not share one.",
+  "Unticking the box empties the folder field, so the folder chosen while it was unticked is not shown next time.",
+]
+observe = [
+  "Export from the OTF tab into folder A, then switch to the Variable Fonts tab: note whether it shows folder A.",
+]
 
 [[behavior]]
 id = "export.testInstall"
@@ -381,7 +415,7 @@ milestone = "M2"
 summary = "If neither the folder checkbox nor Test Install is ticked, pressing Next… asks for an export folder before compiling. The two destinations are separate checkboxes; whether ticking both writes files and installs in one run is not spelled out."
 ref = "Import & Export › Exporting Font Files › Export Destination"
 status = "handbook"
-notes = "Built (M3.14) in the export dialog, where the folder is the only destination until Test Install exists: Next… pressed by the person with an empty Export Folder opens dialog.chooseExportFolder; cancelling it exports nothing and leaves the dialog open. Over the control channel (ui.dialog.confirm) an empty folder is an error that names the field. Documented, not yet observed."
+notes = "Built (M3.14) in the export dialog, where the folder is the only destination until Test Install exists: Next… pressed by the person with an empty Export Folder opens dialog.chooseExportFolder; cancelling it exports nothing and leaves the dialog open. Over the control channel (ui.dialog.confirm) an empty folder is an error that names the field. M3.39: the Export Destination checkbox unticked empties the folder field, so Next… asks; Export All fired from the menu while a document has no ticked folder opens this prompt with the folder chooser at once. Documented, not yet observed."
 
 [[behavior]]
 id = "export.instanceExportFolder"

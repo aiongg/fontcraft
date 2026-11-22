@@ -159,6 +159,7 @@ mod detect;
 mod drag_aids;
 pub mod encodings;
 pub mod export_profiles;
+pub mod export_settings;
 mod expressions;
 pub mod external_changes;
 mod file_helpers;
@@ -345,6 +346,7 @@ pub(crate) use cmd;
 pub const COMMAND_TABLES: &[CommandTable] = &[
     file::specs,
     compile_export::specs,
+    export_settings::specs,
     edit::specs,
     clipboard::specs,
     corner::specs,

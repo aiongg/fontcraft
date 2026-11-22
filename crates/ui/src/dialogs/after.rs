@@ -42,6 +42,9 @@ pub fn fired(app: &mut FontCraftApp, id: &str, params: &Value, targets: &Map<Str
     if super::glyph_picker::fired(app, id, &picker_params) {
         return true;
     }
+    if super::export::export_all_fired(app, id, params) {
+        return true;
+    }
     let empty = params.is_null() || params.as_object().is_some_and(Map::is_empty);
     let Some(spec) = empty.then(|| super::for_command(id)).flatten() else { return false };
     if let Err(e) = super::form::open(app, &spec, targets) {

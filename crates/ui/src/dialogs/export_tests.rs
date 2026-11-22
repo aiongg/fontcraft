@@ -198,3 +198,78 @@ fn window_contents_opens_on_the_edited_glyph_and_asks_where_to_save() {
     call(&mut app, "ui.dialog.cancel", json!({}));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn the_otf_tab_reopens_with_the_settings_of_the_last_export() {
+    let dir = temp("kept");
+    let mut app = drawn();
+    export(&mut app, json!({"params": {"destination": dir, "timestamp": 0}}));
+    call(&mut app, "ui.dialog.set", json!({"field": "outlines", "value": "truetype"}));
+    call(&mut app, "ui.dialog.set", json!({"field": "containers", "value": ["woff2"]}));
+    call(&mut app, "ui.dialog.set", json!({"field": "removeOverlap", "value": false}));
+    call(&mut app, "ui.dialog.confirm", json!({}));
+
+    let reopened = export(&mut app, json!({}));
+    assert_eq!(reopened["params"]["outlines"], "truetype");
+    assert_eq!(reopened["params"]["containers"], json!(["woff2"]));
+    assert_eq!(reopened["params"]["removeOverlap"], false);
+    assert_eq!(reopened["params"]["useDestination"], true);
+    assert!(reopened["params"]["destination"].as_str().unwrap().ends_with(dir.file_name().unwrap().to_str().unwrap()), "{reopened}");
+    call(&mut app, "ui.dialog.cancel", json!({}));
+
+    // A cancelled dialog and a failed export keep what the last successful export kept.
+    export(&mut app, json!({}));
+    call(&mut app, "ui.dialog.set", json!({"field": "containers", "value": []}));
+    fails(&mut app, "ui.dialog.confirm", json!({}));
+    call(&mut app, "ui.dialog.cancel", json!({}));
+    assert_eq!(export(&mut app, json!({}))["params"]["containers"], json!(["woff2"]));
+    call(&mut app, "ui.dialog.cancel", json!({}));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn an_unticked_export_destination_asks_for_a_folder() {
+    let (dir, picked) = (temp("ticked"), temp("picked"));
+    let (mut app, chooser) = drawn_with(vec![Picked::Paths(vec![picked.clone()])]);
+    let opened = export(&mut app, json!({"params": {"destination": dir, "timestamp": 0}}));
+    assert_eq!(opened["params"]["useDestination"], true);
+    let unticked = {
+        call(&mut app, "ui.dialog.set", json!({"field": "useDestination", "value": false}));
+        call(&mut app, "ui.dialog.inspect", json!({}))
+    };
+    assert!(unticked["params"].get("destination").is_none(), "{unticked}");
+
+    form::confirm_by_person(&mut app).unwrap();
+    form::poll_chooser(&mut app);
+    assert_eq!(chooser.requests().first().map(|r| r.kind), Some(PickKind::Folder));
+    assert_eq!(call(&mut app, "ui.dialog.inspect", json!({}))["open"], false);
+    assert!(files(&dir).is_empty());
+    assert_eq!(files(&picked).keys().collect::<Vec<_>>(), ["Untitled-Regular.otf"]);
+
+    // The box stays unticked the next time, so the folder is asked again.
+    let reopened = export(&mut app, json!({}));
+    assert_eq!(reopened["params"]["useDestination"], false);
+    assert!(reopened["params"].get("destination").is_none(), "{reopened}");
+    call(&mut app, "ui.dialog.cancel", json!({}));
+    let _ = std::fs::remove_dir_all(&picked);
+}
+
+#[test]
+fn export_all_asks_once_only_without_a_kept_folder() {
+    let (picked, kept) = (temp("all-picked"), temp("all-kept"));
+    let (mut app, chooser) = drawn_with(vec![Picked::Paths(vec![picked.clone()])]);
+
+    // No document has a folder: the menu item asks once, and the export follows the folder chosen.
+    assert!(crate::dialogs::after::fired(&mut app, "file.exportAll", &Value::Null, &serde_json::Map::new()));
+    form::poll_chooser(&mut app);
+    assert_eq!(chooser.requests().len(), 1);
+    assert_eq!(call(&mut app, "ui.dialog.inspect", json!({}))["open"], false);
+    assert_eq!(files(&picked).keys().collect::<Vec<_>>(), ["Untitled-Regular.ttf"]);
+
+    // Once the document has a kept folder, Export All runs without a dialog or a chooser.
+    app.session.execute("file.exportStatic", &json!({"outlines": "cff", "destination": kept, "timestamp": 0})).unwrap();
+    assert!(!crate::dialogs::after::fired(&mut app, "file.exportAll", &Value::Null, &serde_json::Map::new()));
+    assert_eq!(chooser.requests().len(), 1);
+    let _ = std::fs::remove_dir_all(&picked);
+    let _ = std::fs::remove_dir_all(&kept);
+}
