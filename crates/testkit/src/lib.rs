@@ -165,9 +165,11 @@ pub fn param_keys(doc: &str) -> Vec<String> {
 
 /// Parameter objects to throw at a command: non-objects, every key set to every junk value (one at
 /// a time, the others absent), and every key set at once. Keys that name files (`path`,
-/// `destination`) also get a path inside `scratch`, so a command that writes does so there.
-pub fn junk_params(doc: &str, scratch: &std::path::Path) -> Vec<Value> {
+/// `destination`, and the command's declared file parameters `files`) also get a path inside `scratch`, so a command
+/// that writes does so there.
+pub fn junk_params(doc: &str, files: &[&str], scratch: &std::path::Path) -> Vec<Value> {
     let keys = param_keys(doc);
+    let is_file_key = |key: &str| is_file_key(key) || files.contains(&key);
     let junk = junk_values();
     let mut out: Vec<Value> = vec![Value::Null, json!({}), json!([]), json!("x"), json!(7), json!({"unknownKey": 1})];
     for key in &keys {

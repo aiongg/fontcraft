@@ -111,7 +111,8 @@ fn sweep(state: &str, chunk: u64) {
     let mut failures = Vec::new();
     let mut calls = 0usize;
     for spec in command_specs().iter().filter(|spec| chunk_of(spec.id) == chunk) {
-        for params in junk_params(spec.params, &scratch) {
+        let files: Vec<&str> = spec.files.iter().map(|f| f.name).collect();
+        for params in junk_params(spec.params, &files, &scratch) {
             let mut s = make();
             let before = snapshot(&s);
             calls += 1;
