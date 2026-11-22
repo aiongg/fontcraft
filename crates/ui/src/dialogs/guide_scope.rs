@@ -128,8 +128,6 @@ mod tests {
         let mut run = |id: &str, params: Value| {
             s.execute(id, &params).unwrap_or_else(|e| panic!("{id}: {e}"));
         };
-        run("glyph.newGlyph", json!({"name": "A"}));
-        run("glyph.newGlyph", json!({"name": "B"}));
         run("guide.addGlobal", json!({"y": 300}));
         let master = s.font().unwrap().masters[0].id.clone();
         let mut app = FontCraftApp::with_edit_tab(s, Arc::new(Host::builder(APP).build()));
