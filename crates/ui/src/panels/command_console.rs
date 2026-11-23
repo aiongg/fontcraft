@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 use craft::behavior::{DisplayOrder, ItemSource};
 use craft::ui::buttons::Button;
-use craft::ui::contract::{Bind, Show as _, ShowCollection as _, ShowContainer as _, Tracked};
+use craft::ui::contract::{Bind, Props as _, Show as _, ShowCollection as _, ShowContainer as _, Tracked};
 use craft::ui::display::{Shade, Text};
 use craft::ui::layout_components::Row;
 use craft::ui::list::{List, ListRow};

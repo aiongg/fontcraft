@@ -6,7 +6,7 @@
 //! adapter and backend when the app was told them ([`FontCraftApp::graphics`]); the framework does not hand them to the
 //! app yet, so without them it says they are not reported. The web build says it draws in the browser.
 
-use craft::ui::contract::{Bind, Props as _, Show as _, ShowContainer as _};
+use craft::ui::contract::{Bind, Show as _, ShowContainer as _};
 use craft::ui::dialog::{Dialog, DialogHost, DialogId, DialogResult, DialogStack, StackDialog, dialog_id};
 use craft::ui::display::{Shade, Text};
 use craft::ui::layout_components::Stack;
