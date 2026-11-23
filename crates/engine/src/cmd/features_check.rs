@@ -193,13 +193,11 @@ pub fn compile_instance(font: &Font, cx: &CheckContext, raw: &Value) -> Result<V
     let state = FeatureState { revision: 0, master: master.clone(), preview: None, features: Vec::new(), diagnostics, source_hash: 0, code_hash: 0 };
     let (errors, warnings) = counts(&state);
     let mut list = diagnostics_json(&features, &state, None, &BTreeMap::new());
-    if let Value::Array(items) = &mut list {
-        for d in items.iter_mut() {
-            let entry = d.get("entry").and_then(|e| Some((e.get("kind")?.as_str()?.to_string(), usize::try_from(e.get("index")?.as_u64()?).ok()?)));
-            let origin = entry.and_then(|(kind, at)| origins.iter().find(|((k, i), _)| *k == kind && *i == at).map(|(_, o)| o.clone()));
-            if let (Some((name, index)), Some(object)) = (origin, d.as_object_mut()) {
-                object.insert("param".into(), json!({ "name": name, "index": index }));
-            }
+    for d in &mut list {
+        let entry = d.get("entry").and_then(|e| Some((e.get("kind")?.as_str()?.to_string(), usize::try_from(e.get("index")?.as_u64()?).ok()?)));
+        let origin = entry.and_then(|(kind, at)| origins.iter().find(|((k, i), _)| *k == kind && *i == at).map(|(_, o)| o.clone()));
+        if let (Some((name, index)), Some(object)) = (origin, d.as_object_mut()) {
+            object.insert("param".into(), json!({ "name": name, "index": index }));
         }
     }
     let refused_count = refused.len();
