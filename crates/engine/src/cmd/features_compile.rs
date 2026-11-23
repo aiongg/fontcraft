@@ -25,6 +25,7 @@
 //! The editor's queries read the active document: `complete` (`fontInfo.features.autocomplete`),
 //! `evaluateToken` (Option-click on a token), `previewName` (Alt-click on a glyph or class name).
 
+use std::cell::Cell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::PathBuf;
@@ -33,7 +34,7 @@ use std::sync::Arc;
 use fontcraft_compile::CompileError;
 use fontcraft_compile::preview::{self, PreviewBuild, PreviewFont, PreviewKind};
 use fontcraft_fea::{CompileRequest, Diagnostic, GlyphOrder, LayoutTable, MAX_DIAGNOSTICS, MAX_GLYPHS, Severity};
-use fontcraft_features::edit::{self, CompletionKind, CompletionNames, Definitions, Fix, MAX_FIXES};
+use fontcraft_features::edit::{self, Bodies, CompletionKind, CompletionNames, Definitions, Fix, MAX_FIXES};
 use fontcraft_features::tokens::{self, TokenValue};
 use fontcraft_features::{
     EntryDiagnostic, EntryKind, EntryRef, FeatureError, MAX_ENTRY_BYTES, MasterValues, SourceMap, Target, TargetValues, assemble,
@@ -47,6 +48,8 @@ use crate::params::Params;
 use crate::prelude::*;
 use crate::{EngineError, Result, Session};
 
+/// Most glyph names the nearest-name fix looks at over all the diagnostics of one listing.
+const MAX_NEAREST_LOOKS: usize = 500_000;
 /// Most bytes of entry code read for the class and lookup names completion offers.
 const MAX_NAME_SCAN_BYTES: usize = 4 << 20;
 /// Most characters of a code line quoted in an error's details.
@@ -133,7 +136,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Preview Glyph or Class",
             [],
             None,
-            "{name: string (a glyph name, or a class name with or without @), master?: id|name (for tokens in class code; default: the first master)} what the popover of an Alt-clicked name shows → {kind: \"glyph\", name, unicodes: [hex], export: bool} or {kind: \"class\", name, glyphs: [name], unknown: [name] (members the font does not have)}",
+            "{name: string (a glyph name, a class name with or without @, or a lookup name), master?: id|name (for tokens in class code; default: the first master)} what the popover of an Alt-clicked name shows. Classes are class entries, `@Name = …;` definitions in prefix and feature code, and `markClass` classes → {kind: \"glyph\", name, unicodes: [hex], export: bool} or {kind: \"class\", name, glyphs: [name], unknown: [name] (members the font does not have), anchors?: [{glyphs: [name], anchor}] (a markClass class: each statement's glyphs and anchor)} or {kind: \"lookup\", name, rules: [string] (its first 50 rules), more: bool}",
             has_doc,
             preview_name
         ),
@@ -675,6 +678,9 @@ struct Names {
     glyphs: Vec<String>,
     definitions: Definitions,
     numbers: Vec<String>,
+    /// The glyph names the nearest-name fix may still look at, over every diagnostic these names
+    /// serve.
+    nearest: Cell<usize>,
 }
 
 impl Names {
@@ -700,11 +706,17 @@ impl Names {
             }
         }
         let numbers = font.numbers.iter().map(|n| n.name.clone()).collect();
-        Self { glyphs, definitions, numbers }
+        Self { glyphs, definitions, numbers, nearest: Cell::new(MAX_NEAREST_LOOKS) }
     }
 
     fn completion(&self) -> CompletionNames<'_> {
-        CompletionNames { glyphs: &self.glyphs, classes: self.definitions.classes(), lookups: self.definitions.lookups(), numbers: &self.numbers }
+        CompletionNames {
+            glyphs: &self.glyphs,
+            classes: self.definitions.classes(),
+            lookups: self.definitions.lookups(),
+            numbers: &self.numbers,
+            nearest_budget: Some(&self.nearest),
+        }
     }
 }
 
@@ -1044,15 +1056,58 @@ fn complete(s: &mut Session, raw: &Value) -> Result<Value> {
 }
 
 /// Adds the members of class entry `name` to `out`, following classes it names.
+/// Where a class the name previews resolve is defined.
+enum ClassSource<'a> {
+    /// A class entry.
+    Entry(&'a Snippet),
+    /// `@Name = body;` in the code of a prefix or feature entry.
+    Code(&'a str),
+    /// `markClass` statements: each one's glyphs and anchor.
+    Mark(&'a [(String, String)]),
+}
+
+/// The classes the name previews resolve, by name: the class entries (the first where names
+/// repeat), then the classes the code of prefix and feature entries defines, then its mark
+/// classes.
+fn class_sources<'a>(features: &'a Features, bodies: &'a Bodies) -> HashMap<&'a str, ClassSource<'a>> {
+    let mut out: HashMap<&str, ClassSource<'_>> = HashMap::new();
+    for c in &features.classes {
+        out.entry(c.name.as_str()).or_insert(ClassSource::Entry(c));
+    }
+    for (name, body) in &bodies.classes {
+        out.entry(name.as_str()).or_insert(ClassSource::Code(body.as_str()));
+    }
+    for (name, statements) in &bodies.mark_classes {
+        out.entry(name.as_str()).or_insert(ClassSource::Mark(statements.as_slice()));
+    }
+    out
+}
+
+/// The bodies of the classes, mark classes and lookups that the code of the enabled prefix and
+/// feature entries defines, reading at most [`MAX_NAME_SCAN_BYTES`] of code.
+fn code_bodies(features: &Features) -> Bodies {
+    let mut out = Bodies::default();
+    let mut budget = MAX_NAME_SCAN_BYTES;
+    for e in features.prefixes.iter().chain(&features.features).filter(|e| !e.disabled) {
+        if e.code.is_empty() || e.code.len() > budget {
+            continue;
+        }
+        budget -= e.code.len();
+        edit::bodies(&e.code, &mut out);
+    }
+    out
+}
+
 struct ClassWalk<'a> {
-    /// The class entries by name; the first entry wins where names repeat.
-    classes: &'a HashMap<&'a str, &'a Snippet>,
+    classes: &'a HashMap<&'a str, ClassSource<'a>>,
     values: &'a dyn TargetValues,
     glyphs: &'a HashSet<&'a str>,
     seen_classes: HashSet<String>,
     seen_glyphs: HashSet<String>,
     out: Vec<String>,
     unknown: Vec<String>,
+    /// The `markClass` statements walked: their glyphs and anchor.
+    anchors: Vec<Value>,
 }
 
 impl ClassWalk<'_> {
@@ -1060,14 +1115,35 @@ impl ClassWalk<'_> {
         if depth > MAX_CLASS_DEPTH || !self.seen_classes.insert(name.to_string()) {
             return;
         }
-        let Some(entry) = self.classes.get(name) else {
+        let classes = self.classes;
+        let Some(source) = classes.get(name) else {
             if self.unknown.len() < MAX_UNKNOWN {
                 self.unknown.push(format!("@{name}"));
             }
             return;
         };
-        let expanded = tokens::expand(&entry.code, self.values, EntryKind::Class).map(|(text, _)| text).unwrap_or_else(|_| entry.code.clone());
-        for word in expanded.split(|c: char| c.is_whitespace() || c == '[' || c == ']') {
+        let code = match source {
+            ClassSource::Entry(entry) => entry.code.as_str(),
+            ClassSource::Code(body) => *body,
+            ClassSource::Mark(statements) => {
+                for (glyphs, anchor) in statements.iter() {
+                    let before = self.out.len();
+                    self.words(glyphs, depth);
+                    if self.anchors.len() < MAX_UNKNOWN {
+                        let members = self.out.get(before..).map(<[String]>::to_vec).unwrap_or_default();
+                        self.anchors.push(json!({ "glyphs": members, "anchor": anchor }));
+                    }
+                }
+                return;
+            }
+        };
+        let expanded = tokens::expand(code, self.values, EntryKind::Class).map(|(text, _)| text).unwrap_or_else(|_| code.to_string());
+        self.words(&expanded, depth);
+    }
+
+    /// The glyphs and classes of `text`, a class's code with its tokens expanded.
+    fn words(&mut self, text: &str, depth: usize) {
+        for word in text.split(|c: char| c.is_whitespace() || c == '[' || c == ']') {
             if word.is_empty() || word.starts_with('#') {
                 continue;
             }
@@ -1092,23 +1168,25 @@ fn preview_name(s: &mut Session, raw: &Value) -> Result<Value> {
     let name = p.str("name")?.trim();
     let data = s.glyph_data()?;
     let font = s.font()?;
-    let mut classes: HashMap<&str, &Snippet> = HashMap::new();
-    for c in &font.features.classes {
-        classes.entry(c.name.as_str()).or_insert(c);
-    }
-    let is_class_entry = |n: &str| classes.contains_key(n);
+    let bodies = code_bodies(&font.features);
+    let classes = class_sources(&font.features, &bodies);
+    let is_class = |n: &str| classes.contains_key(n);
     let class = match name.strip_prefix('@') {
         Some(rest) => Some(rest),
-        None if font.glyphs.get(name).is_none() && is_class_entry(name) => Some(name),
+        None if font.glyphs.get(name).is_none() && is_class(name) => Some(name),
         None => None,
     };
     let Some(class) = class else {
         let glyph = name.strip_prefix('\\').unwrap_or(name);
-        let g = font.glyphs.get(glyph).ok_or_else(|| p.bad(format!("the font has no glyph or class `{name}`")))?;
-        let unicodes: Vec<String> = g.unicodes.iter().map(|u| format!("{u:04X}")).collect();
-        return Ok(json!({ "kind": "glyph", "name": g.name, "unicodes": unicodes, "export": g.export }));
+        if let Some(g) = font.glyphs.get(glyph) {
+            let unicodes: Vec<String> = g.unicodes.iter().map(|u| format!("{u:04X}")).collect();
+            return Ok(json!({ "kind": "glyph", "name": g.name, "unicodes": unicodes, "export": g.export }));
+        }
+        let (rules, more) =
+            bodies.lookups.get(name).ok_or_else(|| p.bad(format!("the font has no glyph or class `{name}`, and the code no such lookup")))?;
+        return Ok(json!({ "kind": "lookup", "name": name, "rules": rules, "more": more }));
     };
-    if !is_class_entry(class) {
+    if !is_class(class) {
         return Err(p.bad(format!("the font has no class `@{class}`")));
     }
     let master = master_id(&p, font, p.opt_str("master")?)?;
@@ -1122,9 +1200,16 @@ fn preview_name(s: &mut Session, raw: &Value) -> Result<Value> {
         seen_glyphs: HashSet::new(),
         out: Vec::new(),
         unknown: Vec::new(),
+        anchors: Vec::new(),
     };
     walk.walk(class, 0);
-    Ok(json!({ "kind": "class", "name": class, "glyphs": walk.out, "unknown": walk.unknown }))
+    let mut reply = json!({ "kind": "class", "name": class, "glyphs": walk.out, "unknown": walk.unknown });
+    if !walk.anchors.is_empty()
+        && let Some(object) = reply.as_object_mut()
+    {
+        object.insert("anchors".into(), Value::Array(walk.anchors));
+    }
+    Ok(reply)
 }
 
 #[cfg(test)]

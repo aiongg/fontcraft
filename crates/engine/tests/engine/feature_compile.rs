@@ -239,6 +239,27 @@ fn preview_name_lists_a_glyph_or_the_members_of_a_class() {
     refused(&mut s, "font.features.previewName", json!({"name": "nothing"}), "no glyph or class");
 }
 
+/// Classes that prefix code defines and `markClass` classes preview their members (a mark class
+/// with each statement's anchor), a class entry reaches into them, and a lookup name previews its
+/// first rules.
+#[test]
+fn preview_name_resolves_code_classes_mark_classes_and_lookups() {
+    let mut s = Session::with_document();
+    run(&mut s, "glyph.newGlyph", json!({"name": "acutecomb"}));
+    let prefix = "@Pre = [a b];\nmarkClass [acutecomb] <anchor 0 500> @TOP;\nlookup Smallcaps {\n    sub a by A;\n} Smallcaps;\n";
+    run(&mut s, "font.features.addPrefix", json!({"code": prefix}));
+    run(&mut s, "font.features.addClass", json!({"name": "Mixed", "code": "@Pre A"}));
+    let r = run(&mut s, "font.features.previewName", json!({"name": "@Pre"}));
+    assert_eq!(r, json!({"kind": "class", "name": "Pre", "glyphs": ["a", "b"], "unknown": []}));
+    let r = run(&mut s, "font.features.previewName", json!({"name": "@Mixed"}));
+    assert_eq!(r["glyphs"], json!(["a", "b", "A"]));
+    let r = run(&mut s, "font.features.previewName", json!({"name": "@TOP"}));
+    assert_eq!(r["glyphs"], json!(["acutecomb"]));
+    assert_eq!(r["anchors"], json!([{"glyphs": ["acutecomb"], "anchor": "<anchor 0 500>"}]));
+    let r = run(&mut s, "font.features.previewName", json!({"name": "Smallcaps"}));
+    assert_eq!(r, json!({"kind": "lookup", "name": "Smallcaps", "rules": ["sub a by A;"], "more": false}));
+}
+
 /// Many classes and many short feature entries: completion collects names in time linear in the
 /// font, and a class naming every other class is walked through one lookup per name.
 #[test]

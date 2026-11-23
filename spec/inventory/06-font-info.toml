@@ -2709,10 +2709,12 @@ ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
 notes = "Documented, not yet observed. In the window the Fix buttons are in the details that the gutter icon of the error's line opens (`fontInfo.featureErrorDetails`, M8.26)."
 guesses = [
-  "Four fixes of ours carry a wrench: a glyph name that matches an existing one apart from case, a class name that matches a defined one apart from case, a missing semicolon at the end of a statement (inserted before any comment), and a class used before its entry (moving the class entry up); the reference app's error list on a font with these mistakes would settle its own set.",
+  "Our fixes carry a wrench: a glyph name that matches an existing one apart from case, a class or lookup name that matches a defined one apart from case, a missing semicolon at the end of a statement (inserted before any comment), a class used before its entry (moving the class entry up), a block left open (`} tag;` inserted before the next top-level statement, else at the end of the entry) and a closing tag that differs from the opening one; the reference app's error list on a font with these mistakes would settle its own set.",
+  "An unknown glyph name with no match apart from case is offered the font's nearest names: at most two edits away (one for names of at most four characters), the nearest first, at most five.",
 ]
 observe = [
   "In F1 (Latin features), write a misspelt glyph name, drop a semicolon, and use a class before its entry: note which errors show a wrench and what Fix does for each.",
+  "In F1, write `sub Agrav by c;` (one letter short of a glyph name) and a lookup block without its closing `} name;`: note whether either error shows a wrench and what Fix offers.",
 ]
 
 [[command]]
@@ -2837,7 +2839,14 @@ milestone = "M8"
 summary = "Shows a popover with a drawing of the glyph, or with all member glyphs of the class, for the glyph or class name that was Alt-clicked in the code editor."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed. An engine query returning the glyph, or the member glyphs of a class entry with nested classes and tokens resolved; the Features tab draws the popover (M8.17)."
+notes = "Documented, not yet observed. An engine query returning the glyph, or the member glyphs of a class with nested classes and tokens resolved (M8.17). Classes are class entries, `@Name = …;` definitions in the code of prefix and feature entries, and `markClass` classes, whose reply adds each statement's glyphs and anchor; a lookup name returns its first 50 rules and whether it has more (M8.30). The code editor does not open the popover on Alt-click yet."
+guesses = [
+  "A class entry wins over a class of the same name defined in code, and the first definition in code wins over later ones.",
+  "Alt-clicking a lookup name shows its first 50 rules, whitespace collapsed and each cut at 300 characters.",
+]
+observe = [
+  "In F1 (Latin features), Alt-click a class defined in the prefix, a markClass class and a lookup name in the code editor: note what each popover shows.",
+]
 
 [[behavior]]
 id = "fontInfo.features.sidebarGroups"
