@@ -160,7 +160,16 @@ pub enum Editor {
     },
     /// A value no editor shows.
     Summary(String),
+    /// The `name; code` value of a parameter that writes feature code (Add or Replace Class, Prefix, Feature), and the
+    /// first problem the instance compile found in it as (line in the code, message).
+    Code {
+        text: String,
+        problem: Option<(u64, String)>,
+    },
 }
+
+/// The parameters whose value is a name, a semicolon and feature code.
+pub const FEATURE_CODE_PARAMS: [&str; 6] = ["Add Class", "Add Prefix", "Add Feature", "Replace Class", "Replace Prefix", "Replace Feature"];
 
 impl Default for Editor {
     fn default() -> Self {
@@ -382,6 +391,11 @@ pub fn row_dialog(name: &str, scope: Scope) -> Option<RowDialog> {
 fn param_editor(name: &str, value: &Value, scope: Scope, masters: &[(&str, &str)]) -> Editor {
     if let Some(dialog) = row_dialog(name, scope) {
         return Editor::Dialog { summary: summary(value), dialog };
+    }
+    if FEATURE_CODE_PARAMS.contains(&name)
+        && let Some(text) = plain_text(value)
+    {
+        return Editor::Code { text, problem: None };
     }
     if NAMES_A_MASTER.contains(&name) {
         let text = plain_text(value).unwrap_or_default();

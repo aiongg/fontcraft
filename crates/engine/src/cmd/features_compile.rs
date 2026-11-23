@@ -73,7 +73,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Compile",
             [],
             None,
-            "{master?: id|name (default: the first master; the Features tab passes the master of the active Edit View tab), force?: bool (compile even when the code, glyph order and master are those of the last compile, or a preview build of this revision is kept; default false)} compiles the feature code of one master so Edit View can preview it, and keeps the result as the document's feature state (no undo step, never saved). Feature code with errors is not a failure: the errors come back → {master, ok: bool (no errors), cached: bool (the last compile's result, reused), errors: n, warnings: n, features: [{tag, table: \"GSUB\"|\"GPOS\", languageSystems: [[script, language]], lookups: n}], diagnostics: [as font.features.listErrors], preview: bool (the preview font was built), previewMessage?: string}",
+            "{master?: id|name (default: the first master; the Features tab passes the master of the active Edit View tab), instance?: index|id|name (compile the code as that instance exports it: its Add, Replace and Remove feature parameters applied; nothing is kept, and a diagnostic in code a parameter wrote names it as param: {name, index}; the answer adds instance and refused: [{param, message}] for parameter values that cannot be applied), force?: bool (compile even when the code, glyph order and master are those of the last compile, or a preview build of this revision is kept; default false)} compiles the feature code of one master so Edit View can preview it, and keeps the result as the document's feature state (no undo step, never saved). Feature code with errors is not a failure: the errors come back → {master, ok: bool (no errors), cached: bool (the last compile's result, reused), errors: n, warnings: n, features: [{tag, table: \"GSUB\"|\"GPOS\", languageSystems: [[script, language]], lookups: n}], diagnostics: [as font.features.listErrors], preview: bool (the preview font was built), previewMessage?: string}",
             has_doc,
             compile
         ),
@@ -162,7 +162,7 @@ fn parse_kind(p: &Params, value: &str) -> Result<EntryKind> {
     }
 }
 
-fn group(f: &Features, kind: EntryKind) -> &Vec<Snippet> {
+pub(super) fn group(f: &Features, kind: EntryKind) -> &Vec<Snippet> {
     match kind {
         EntryKind::Prefix => &f.prefixes,
         EntryKind::Class => &f.classes,
@@ -486,6 +486,10 @@ pub(crate) fn input_hash(s: &Session, doc: &crate::DocState, master: &str) -> Op
 }
 
 fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
+    if raw.get("instance").is_some() {
+        let cx = super::features_check::check_context(s)?;
+        return super::features_check::compile_instance(s.font()?, &cx, raw);
+    }
     let p = Params::new("font.features.compile", raw)?;
     let force = p.bool_or("force", false)?;
     let doc = s.doc()?;

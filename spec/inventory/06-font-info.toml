@@ -2639,13 +2639,13 @@ label = "Compile"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{master?: id|name, force?: bool}"
+params = "{master?: id|name, instance?: index|id|name, force?: bool}"
 area = "features"
 milestone = "M8"
 summary = "Compiles the feature code so that Edit View can preview it and returns the errors found. Edit View previews hand-written substitution rules but not hand-written positioning rules."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed. The compile checks the whole code, positioning included, for one master and keeps the result as the document's feature state (session only, no undo step); the preview font Edit View shapes with holds substitutions only. One compile of the code gives the diagnostics, Edit View's font and Text Preview's font (generated kerning and marks included); a Text Preview build of the same document revision and master is taken without compiling. When that build fails outside the code's entries, the code is compiled on its own for its diagnostics. Compiling unchanged code again reuses the last result."
+notes = "Documented, not yet observed. The compile checks the whole code, positioning included, for one master and keeps the result as the document's feature state (session only, no undo step); the preview font Edit View shapes with holds substitutions only. One compile of the code gives the diagnostics, Edit View's font and Text Preview's font (generated kerning and marks included); a Text Preview build of the same document revision and master is taken without compiling. When that build fails outside the code's entries, the code is compiled on its own for its diagnostics. Compiling unchanged code again reuses the last result. With `instance` (M8.31) the code is compiled as that instance exports it, its Add, Replace and Remove parameters applied one by one, on its own and kept nowhere: the document's feature state stays the master's. A diagnostic in code an Add or Replace parameter wrote names it (`param: {name, index}`, the index among the instance's parameters of that name; the line counted in the parameter's code), and a parameter value that cannot be applied comes back under `refused`."
 observe = [
   "In any font, look for a shortcut or menu item for Compile in Font Info › Features: note both.",
 ]
@@ -3019,7 +3019,14 @@ milestone = "M8"
 summary = "Per-instance feature changes are made with the custom parameters Add, Remove and Replace for Prefix, Class and Feature. Automatic classes and features need no such parameters because they are regenerated for the glyph set of each instance."
 ref = "Font Info › Features › Export-Specific Features"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. FontCraft (M8.31): the six Add and Replace parameters are edited in a monospaced field of several lines, coloured as the feature code editor colours code (crates/ui/src/panels/font_info/param_value.rs); completion is not there yet. With one instance selected in the Exports tab, the instance compile (font.features.compile with `instance`) runs when the projection is made, and a parameter with an error shows an error icon and its first message, with the line in the parameter's code, under its field. Number values in the instance's code are those of the first master (or the master asked for), not interpolated at the instance's location."
+guesses = [
+  "The Exports tab shows an error icon and the first message under a feature parameter whose code does not compile; the reference app may show the error only at export.",
+  "An instance compile reads number values from the default master rather than at the instance's location.",
+]
+observe = [
+  "In F1 (Latin features), add a Replace Feature parameter with an unknown glyph to an instance in Font Info › Exports: note whether an error shows in the Exports tab, and what export reports.",
+]
 
 # ───────────────────────────── Other Settings tab ─────────────────────────────
 

@@ -15,6 +15,7 @@ use craft::ui::layout_components::{Row, Stack};
 use craft::ui::pickers::Select;
 use craft::ui::runtime::env::{Env, Label, Message};
 use craft::ui::text::{NumberField, TextField};
+use craft_ext::ui::text::HighlightText as _;
 use egui::Ui;
 use fontcraft_engine::fontinfo::{catalog, value as fv};
 use serde_json::{Map, Value as Json, json};
@@ -120,7 +121,38 @@ pub fn editor(ui: &mut Ui, row: &RowModel, masters: &[(String, String)], languag
             Text::new(text.clone()).shade(Shade::Muted).show(ui);
             None
         }
+        Editor::Code { text, problem } => {
+            let shown = if mixed { String::new() } else { text.clone() };
+            let check = param.then_some(name);
+            let bind = Bind::given(shown).check(move |t: &String| validity(check, &Json::String(t.clone())));
+            let out = TextField::new(label, bind).mono().lines(CODE_LINES).limit(None).id_salt((name, row.occurrence, "code")).show(ui);
+            let env = Env::of(ui);
+            out.highlight_text(ui, |t| super::code_editor::code_runs(t, &env.tokens));
+            if let Some((line, message)) = problem.as_ref().filter(|_| !mixed) {
+                code_problem(ui, *line, message, &words);
+            }
+            let typed = out.events.committed()?;
+            (check.is_none_or(|n| refusal(n, &Json::String(typed.clone())).is_none())).then(|| Edit::Value(Json::String(typed.clone())))
+        }
     }
+}
+
+/// Lines the feature code of an Add or Replace parameter shows.
+const CODE_LINES: usize = 6;
+
+/// The error icon and the message of the instance compile's first problem in a parameter's feature code.
+fn code_problem(ui: &mut Ui, line: u64, message: &str, words: &FontInfoWords) {
+    let env = Env::of(ui);
+    let bad = egui::Color32::from(craft::theme::Srgba::from(env.tokens.color.status.bad.fg));
+    Row::new().show(ui, |ui, _| {
+        let side = ui.text_style_height(&egui::TextStyle::Body);
+        let (rect, response) = ui.allocate_exact_size(egui::vec2(side, side), egui::Sense::hover());
+        ui.painter().circle_filled(rect.center(), 0.4 * side, bad);
+        let label = words.code_problem.as_str().to_string();
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, label.clone()));
+        let text = if line > 0 { format!("{} {line}: {message}", words.code_line.as_str()) } else { message.to_string() };
+        Text::new(text).tone(craft::theme::variant::Tone::Bad).show(ui);
+    });
 }
 
 /// A one-line text field; with a parameter `check`, the value goes through the command's check first.

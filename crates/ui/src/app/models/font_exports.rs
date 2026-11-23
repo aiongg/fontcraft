@@ -10,7 +10,7 @@ use fontcraft_engine::model::{Font, Instance, StyleClass};
 use serde_json::{Value, json};
 
 use super::ProjectCx;
-use super::font_info::{FieldWarning, MAX_SHOWN, MAX_WARNINGS, RowModel, field_warnings, rows};
+use super::font_info::{Editor, FieldWarning, MAX_SHOWN, MAX_WARNINGS, RowModel, field_warnings, rows};
 use crate::shell::font_info::Target;
 
 /// Most axes the Axes Coordinates rows list.
@@ -138,7 +138,51 @@ pub fn project(cx: &mut ProjectCx<'_>) -> ExportsModel {
     } else {
         (fields(font, &selected, &placement, &listed), rows(font, &target, RowKind::Field), rows(font, &target, RowKind::Param))
     };
+    let params = match selected.as_slice() {
+        [one] => code_problems(cx, *one, params),
+        _ => params,
+    };
     ExportsModel { entries, selected, plus, fields, rows: rows_, params }
+}
+
+/// Most diagnostics of an instance compile read for the parameters' problems.
+const MAX_CODE_DIAGNOSTICS: usize = 1_000;
+
+/// `params`, the rows of the one selected instance `instance`, with the first problem the instance compile
+/// (`font.features.compile` with `instance`) finds in each enabled feature-code parameter. The compile runs only when
+/// such a parameter is there.
+fn code_problems(cx: &mut ProjectCx<'_>, instance: usize, mut params: Vec<RowModel>) -> Vec<RowModel> {
+    if !params.iter().any(|r| r.enabled && matches!(r.editor, Editor::Code { .. })) {
+        return params;
+    }
+    let Ok(check) = fontcraft_engine::cmd::features_check::check_context(cx.session) else { return params };
+    let Ok(font) = cx.session.font() else { return params };
+    let raw = json!({ "instance": instance });
+    let Ok(Ok(r)) = fontcraft_engine::guard::catch_panic(|| fontcraft_engine::cmd::features_check::compile_instance(font, &check, &raw)) else {
+        return params;
+    };
+    let mut found: Vec<(String, usize, u64, String)> = Vec::new();
+    let mut read = |d: &Value, line: u64| {
+        let param = d.get("param")?;
+        let name = param.get("name")?.as_str()?.to_string();
+        let index = usize::try_from(param.get("index")?.as_u64()?).ok()?;
+        found.push((name, index, line, d.get("message").and_then(Value::as_str).unwrap_or_default().to_string()));
+        Some(())
+    };
+    for d in r.get("refused").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default().iter().take(MAX_CODE_DIAGNOSTICS) {
+        let _ = read(d, 0);
+    }
+    for d in r.get("diagnostics").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default().iter().take(MAX_CODE_DIAGNOSTICS) {
+        if d.get("severity").and_then(Value::as_str) == Some("error") {
+            let _ = read(d, d.get("line").and_then(Value::as_u64).unwrap_or(0));
+        }
+    }
+    for row in &mut params {
+        if let Editor::Code { problem, .. } = &mut row.editor {
+            *problem = found.iter().find(|f| f.0 == row.key && f.1 == row.occurrence).map(|f| (f.2, f.3.clone()));
+        }
+    }
+    params
 }
 
 /// The entries the tab acts on: the selected ones the font has, else the first.

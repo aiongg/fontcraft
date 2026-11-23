@@ -157,7 +157,7 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
     let runs_id = out.response.id.with("fontcraftFeatureCode.runs");
     let focused = text_focused(ui.ctx(), out.response.id);
     let caret = out.selection(ui.ctx()).filter(|s| focused && s.is_empty()).map(|s| s.caret);
-    let found: &[(usize, usize)] = entry.find.as_ref().map_or(&[], |f| f.here.as_slice());
+    let found: &[(usize, usize)] = entry.find.as_ref().map(|f| f.here.as_slice()).unwrap_or_default();
     let accent = Color32::from(Srgba::from(env.tokens.color.accent.solid));
     out.highlight_text(ui, |text| {
         if text != entry.code {
@@ -447,9 +447,8 @@ fn scan(text: &str, at: usize, c: char, forward: bool) -> Option<usize> {
 fn find_action(ui: &Ui, field: &Response, entry: &EntryPane, found: &FindModel, shown: &str, action: Option<FindAction>, sent: &mut Vec<Msg>) {
     let ctx = ui.ctx();
     let here = match_chars(shown, &found.here);
-    if let Some(first) = found.state.reveal
-        && let Some(m) = if first { here.first() } else { here.last() }
-    {
+    let end = |first: bool| if first { here.first() } else { here.last() };
+    if let Some(m) = found.state.reveal.and_then(end) {
         field.select(ctx, TextSelection::new(m.0, m.1));
         sent.push(Msg::View(ViewMsg::FeatureFind(Some(FindState { reveal: None, ..found.state.clone() }))));
     }
@@ -493,7 +492,7 @@ fn find_action(ui: &Ui, field: &Response, entry: &EntryPane, found: &FindModel, 
                     return;
                 }
             }
-            if let Some(m) = if forward { here.first() } else { here.last() } {
+            if let Some(m) = end(forward) {
                 field.select(ctx, TextSelection::new(m.0, m.1));
             }
         }
@@ -892,6 +891,11 @@ fn kept_runs(
     let fresh = runs(text, diagnostics, found, tokens);
     ctx.data_mut(|d| d.insert_temp(id, Arc::new((key, fresh.clone()))));
     fresh
+}
+
+/// The colours of feature code with no diagnostics or matches, for the code fields of the feature parameters.
+pub(super) fn code_runs(text: &str, tokens: &UiTokens) -> Vec<Highlight> {
+    runs(text, &[], &[], tokens)
 }
 
 /// Every colour [`runs`] uses, so a theme change makes new runs.

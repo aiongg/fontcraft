@@ -728,3 +728,24 @@ fn check_reports_the_drafts_line_and_range_and_changes_nothing() {
     let big = "#".repeat(fontcraft_engine::cmd::features_check::MAX_DRAFT_BYTES + 1);
     refused(&mut s, "font.features.check", json!({"kind": "feature", "name": "liga", "code": big}), "`code`");
 }
+
+/// An instance compile applies the instance's feature parameters as export does: a broken Replace Feature reports its
+/// line against that parameter, and the master compile is unaffected.
+#[test]
+fn an_instance_compile_reports_a_broken_replace_feature_at_its_parameter() {
+    let mut s = Session::with_document();
+    run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": "sub a by b;"}));
+    run(&mut s, "font.instance.add", json!({"styleName": "Bold"}));
+    let value = "liga; sub a by b;\nsub c by zzz;";
+    run(&mut s, "font.customParameters.add", json!({"scope": "instance", "targets": ["Bold"], "name": "Replace Feature", "value": value}));
+    let font = Arc::clone(&s.doc().unwrap().font);
+    let r = run(&mut s, "font.features.compile", json!({"instance": {"name": "Bold"}}));
+    assert_eq!(r["ok"], false, "{r}");
+    assert_eq!(r["instance"], "Bold");
+    let d = first_error(&r);
+    assert_eq!(d["param"], json!({"name": "Replace Feature", "index": 0}), "{d}");
+    assert_eq!(d["line"], 2, "{d}");
+    assert!(Arc::ptr_eq(&font, &s.doc().unwrap().font), "an instance compile changes nothing");
+    let master = run(&mut s, "font.features.compile", json!({}));
+    assert_eq!(master["ok"], true, "{master}");
+}

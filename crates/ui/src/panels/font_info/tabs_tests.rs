@@ -736,3 +736,36 @@ fn find_next_wraps_and_replace_takes_the_selected_match() {
     );
     assert!(posted.borrow().contains(&expected), "{:?}", posted.borrow());
 }
+
+/// A Replace Feature parameter is edited as coloured feature code, and the instance compile's problem shows under it
+/// with an error icon and its line.
+#[test]
+fn a_feature_parameter_is_coloured_and_shows_its_compile_problem() {
+    use crate::app::models::font_info::{Editor, RowModel, RowSort};
+    let text = "liga; sub a by zz;";
+    let mut model = exports_model();
+    model.exports.params = vec![RowModel {
+        sort: RowSort::Param,
+        key: "Replace Feature".into(),
+        label: "Replace Feature".into(),
+        enabled: true,
+        removable: true,
+        editor: Editor::Code { text: text.into(), problem: Some((1, "glyph not in font".into())) },
+        ..RowModel::default()
+    }];
+    let (mut fixture, _) = panel(model);
+    assert!(fixture.by_label("Problem in this parameter's feature code").is_some(), "the error icon");
+    let texts: Vec<String> = fixture
+        .frame_shapes()
+        .iter()
+        .filter_map(|shape| match shape {
+            egui::Shape::Text(t) => Some(t.galley.job.text.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(texts.iter().any(|t| t == "Line 1: glyph not in font"), "{texts:?}");
+    let (_, galley) = painted_code(&mut fixture, text);
+    let mut colors: Vec<egui::Color32> = galley.job.sections.iter().map(|s| s.format.color).collect();
+    colors.dedup();
+    assert!(colors.len() > 1, "the code is coloured: {colors:?}");
+}
