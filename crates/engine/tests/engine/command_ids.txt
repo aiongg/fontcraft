@@ -349,6 +349,8 @@ font.features.expandCode
 font.features.setDisabled
 font.features.copyEntries
 font.features.pasteEntries
+font.features.find
+font.features.replace
 font.numbers.list
 font.numbers.add
 font.numbers.rename

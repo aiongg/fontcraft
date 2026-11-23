@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1571 rows to check: 2777 guesses and 690 observe steps.**
+**1578 rows to check: 2797 guesses and 700 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 51 |
 | Built milestones (M0 to M6) | Settings and the window | 18 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **1011** |
+| **Later milestones (after M6)** | all | **1018** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 90 |
 | Later milestones (after M6) | Edit View: text mode and preview | 30 |
 | Later milestones (after M6) | Components and anchors | 43 |
@@ -56,7 +56,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Spacing and metrics keys | 13 |
 | Later milestones (after M6) | Kerning and the Kerning window | 16 |
 | Later milestones (after M6) | Font View | 22 |
-| Later milestones (after M6) | Font Info and features | 311 |
+| Later milestones (after M6) | Font Info and features | 318 |
 | Later milestones (after M6) | Interpolation | 91 |
 | Later milestones (after M6) | Hinting | 115 |
 | Later milestones (after M6) | Colour fonts | 81 |
@@ -1765,7 +1765,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (1011)
+## Later milestones (after M6) (1018)
 
 ### Edit View: drawing, guides, layers and the Palette (90)
 
@@ -2604,7 +2604,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A new status takes the next code after the highest one, the name Status n and a grey colour, and ticking Default on one status unticks the others; the reference's panel would settle both.
   - Observe: In the reference app, open Font › Status definitions, add a status, and note its starting code, name and colour.
 
-### Font Info and features (311)
+### Font Info and features (318)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
@@ -2950,12 +2950,28 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `fontInfo.features.syntaxColouring` (behavior, M8, handbook): The code editor colours keywords, glyph names, numbers, lookup names and comments…
   - Guess: The colours come from the theme, which has no syntax colours: keywords and tags take the accent, glyph names the text colour, comments and punctuation the muted text, the other classes colours of the data series; a screenshot of feature code in the reference app settles them.
 - [ ] `fontInfo.features.inlineErrors` (behavior, M8, handbook): Code that fails to compile is flagged inline
-  - Guess: Error ranges are underlined in the code and each error is listed under the code with its line and an icon, not drawn between the code lines; a screenshot of an error in the reference app settles it.
+  - Guess: The code editor has a gutter with line numbers; a wrapped row gets no number.
+  - Guess: One icon per line, whatever the number of diagnostics on it, with the error icon winning over the warning icon.
+  - Guess: The first message of a line is drawn dimmed after the line's text, clipped at the editor's edge, rather than on a row of its own under the line.
+  - Guess: Error ranges stay underlined besides the gutter icon.
 - [ ] `fontInfo.features.notesDivider` (behavior, M8, handbook): The notes field under the editor is resized by dragging the gray…
   - Guess: The notes field starts four rows tall and the divider keeps it between two rows and half the tab's height; dragging the divider in the reference app settles the limits.
 - [ ] `fontInfo.features.stylisticSetNames` (behavior, M8, handbook): Selecting one of ss01 to ss20 shows name rows above the editor,…
   - Guess: A name in a language without a Windows language id is left out, as fontc does (glyphsLib stops with an error), and text tokens in names are not expanded yet; a name in such a language exported from the reference app settles it.
   - Guess: Choosing another language for a name row removes the name and adds it in the new language, as two undo steps; changing a row's language in the reference app settles whether it is one step.
+- [ ] `fontInfo.features.exportSpecific` (behavior, M8, handbook): Per-instance feature changes are made with the custom parameters Add, Remove and…
+  - Guess: The Exports tab shows an error icon and the first message under a feature parameter whose code does not compile; the reference app may show the error only at export.
+  - Guess: An instance compile reads number values from the default master rather than at the instance's location.
+  - Observe: In F1 (Latin features), add a Replace Feature parameter with an unknown glyph to an instance in Font Info › Exports: note whether an error shows in the Exports tab, and what export reports.
+- [ ] `fontInfo.features.findBar` (behavior, M8, inferred): Cmd+F in the feature code editor opens a find bar above the…
+  - Guess: The find bar sits above the code field and keeps its query while the tab shows; the reference app's find in the feature editor may be the system find panel instead.
+  - Guess: Next and Previous wrap at the end of the scope.
+  - Observe: In F1 (Latin features), press Cmd+F in the feature code editor: note where the find interface appears, its controls, and what happens past the last match.
+- [ ] `fontInfo.features.editingKeys` (behavior, M8, inferred): Editing keys of the feature code editor: Cmd+/ comments or uncomments the…
+  - Guess: Cmd+/ toggles `#` comments line by line.
+  - Guess: Tab indents only a selection that spans lines; with a caret it moves the keyboard to the next control.
+  - Guess: Indentation is one tab, as the generated code is written.
+  - Observe: In F1 (Latin features), select three lines in the feature code editor and press Cmd+/, then Tab and Shift+Tab: note what changes. Put the caret after a `{` and note whether its `}` is marked.
 - [ ] `font.info.features.select` (M8, inferred, live): Select Feature Entries
   - Guess: Our own command for scripts and the window's clicks; nothing to observe, the reference app selects sidebar entries only by clicking them.
 - [ ] `font.info.features.paste` (M8, inferred, live): Paste Feature Entries
@@ -3013,11 +3029,15 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `font.features.check` (M8, inferred, live): Check Feature Code
   - Guess: The Features tab checks the code as it is typed, half a second after the last keystroke; watching the error markers while typing a misspelt glyph name in the reference app would settle whether it checks before Compile and after what pause.
   - Guess: Diagnostics stay valid while the compiler's input (assembled code, stored code, glyph order with code points, master) is unchanged, so a node move keeps them; moving a node after a compile with an error in the reference app would settle it.
+  - Observe: In F1 (Latin features), compile `sub a by zzz;` in a feature: screenshot the editor and note where the message is drawn (after the line's text, under the line, or only in the popover) and whether the editor shows line numbers.
+  - Observe: In F1, put two errors on one line and compile: note whether the line gets one icon or two.
   - Observe: In F1 (Latin features), type `sub a by zzz;` into a feature without pressing Compile and wait two seconds: note whether an error marker appears.
   - Observe: In F1, compile code with an error, then move a node of an unrelated glyph in Edit View and go back to Font Info › Features: note whether the error marker stays.
 - [ ] `font.features.applyFix` (M8, handbook, live): Fix
-  - Guess: Four fixes of ours carry a wrench: a glyph name that matches an existing one apart from case, a class name that matches a defined one apart from case, a missing semicolon at the end of a statement (inserted before any comment), and a class used before its entry (moving the class entry up); the reference app's error list on a font with these mistakes would settle its own set.
+  - Guess: Our fixes carry a wrench: a glyph name that matches an existing one apart from case, a class or lookup name that matches a defined one apart from case, a missing semicolon at the end of a statement (inserted before any comment), a class used before its entry (moving the class entry up), a block left open (`} tag;` inserted before the next top-level statement, else at the end of the entry) and a closing tag that differs from the opening one; the reference app's error list on a font with these mistakes would settle its own set.
+  - Guess: An unknown glyph name with no match apart from case is offered the font's nearest names: at most two edits away (one for names of at most four characters), the nearest first, at most five.
   - Observe: In F1 (Latin features), write a misspelt glyph name, drop a semicolon, and use a class before its entry: note which errors show a wrench and what Fix does for each.
+  - Observe: In F1, write `sub Agrav by c;` (one letter short of a glyph name) and a lookup block without its closing `} name;`: note whether either error shows a wrench and what Fix offers.
 - [ ] `font.features.listSnippets` (M8, inferred, live): List Code Snippets
   - Guess: The built-in snippets come before the user's groups, and the groups follow file-name order; opening the snippets menu with two snippet files in the folder would settle the order.
 - [ ] `font.features.insertSnippet` (M8, handbook, live): Insert Snippet
@@ -3026,6 +3046,18 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The language of a name is `dflt` or one of the OpenType language tags the name table can hold, and an empty name is refused; the language picker of the reference app would settle the list.
 - [ ] `font.features.complete` (M8, inferred, live): Complete Feature Code
   - Guess: Completion offers glyphs in rules, classes after @, lookups after `lookup`, number values after $ and inside ${…}, registered feature tags after `feature` and statement keywords (then glyphs) at the start of a statement, exact-case matches first; typing in each of these places in the reference app would settle its lists.
+- [ ] `font.features.previewName` (M8, handbook, live): Preview Glyph or Class
+  - Guess: A class entry wins over a class of the same name defined in code, and the first definition in code wins over later ones.
+  - Guess: Alt-clicking a lookup name shows its first 50 rules, whitespace collapsed and each cut at 300 characters.
+  - Observe: In F1 (Latin features), Alt-click a class defined in the prefix, a markClass class and a lookup name in the code editor: note what each popover shows.
+- [ ] `font.features.find` (M8, inferred, live): Find in Feature Code
+  - Guess: The find options are Match Case, Whole Word and Regular Expression, case-insensitive by default; using the find bar of the reference app's feature editor would settle which exist.
+  - Guess: Whole Word keeps a match that no letter, digit, `_` or `.` touches, so `a` does not find the `a` of `a.sc`.
+  - Guess: Find can search every entry, not only the one shown; searching for a class name used in several features in the reference app would settle it.
+  - Observe: In F1 (Latin features), press Cmd+F in Font Info › Features with a feature shown: note the find bar's options, and whether a search reaches matches in other entries.
+- [ ] `font.features.replace` (M8, inferred, live): Replace in Feature Code
+  - Guess: Replace All across entries skips automatic entries, since Update would write their code again.
+  - Observe: In F1 (Latin features), use Replace All in the feature editor's find bar with a name that also appears in an automatic feature: note whether the automatic feature's code changes.
 - [ ] `fontInfo.features` (panel, M8, handbook): Features
   - Guess: With no entry selected, the tab selects the first entry of the sidebar; the reference app's tab opened on a font with features settles it.
   - Guess: The plus button beside Classes adds a class named NewClass (NewClass1, NewClass2… when taken), renamed by double-clicking it; adding a class in the reference app settles the name and whether it asks for one.
@@ -3342,7 +3374,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `fontInfo.featureAutocomplete` (panel, M8, handbook): Autocomplete suggestions
   - Guess: The list opens after a name character, @, $ or { is typed, follows the keyboard only (Up, Down, Return or Tab to insert, Escape to close) and closes on a click; using it in the reference app settles mouse clicks and Tab.
 - [ ] `fontInfo.featureNamePreview` (panel, M8, handbook): Glyph and class preview
+  - Guess: Alt-clicking a lookup name opens the same popover with the lookup's rules.
   - Guess: The glyph is drawn as it is in the master of the active Edit View tab, else the master Font View shows; Option-clicking a glyph name with another master active in the reference app settles it.
+- [ ] `fontInfo.featureErrorDetails` (panel, M8, handbook): Feature error details
+  - Guess: The details are a popover hanging from the icon, listing every diagnostic of the line, not only the first.
+  - Guess: Our compiler has no long form of a message: the details repeat the message with its line.
+  - Observe: In F1 (Latin features), compile a misspelt glyph name, click the error icon: note what the details show (a longer text than the inline message?), where they open and how they close.
 - [ ] `Add Class` (parameter, M8, handbook): Adds an OpenType glyph class at export
   - Guess: A leading @ on the class name is dropped, and the white space after the semicolon is not part of the code (glyphsLib's split); exporting with the parameter in the reference app settles it.
 - [ ] `Add Prefix` (parameter, M8, handbook): Adds a feature-code prefix at export
