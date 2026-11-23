@@ -140,32 +140,31 @@ fn view(props: &mut Props<'_>, log_rows: u16, ui: &mut Ui) {
     editor(ui, &words, model, sent);
 }
 
-/// How the log stood at the end of its last pass: its row count, and whether its last row was in view.
+/// How the log stood at the end of its last pass: its row count, whether its last row was in view, and whether it is
+/// still scrolling to its last row (a reveal lands over more than one pass).
 #[derive(Clone, Copy)]
 struct LogTail {
     rows: usize,
     at_end: bool,
+    following: bool,
 }
 
 /// The log of lines run. While its last row is in view, a row added scrolls the log to it; scrolled up, the log stays
 /// where it is. Only a log longer than its `rows` scrolls itself: a shorter one asks nothing of the panel body's scroll.
 fn command_log(ui: &mut Ui, words: &ConsoleWords, model: &ConsoleModel, rows: u16) {
     let tail_id = ui.scope_id().with("fontcraftConsole.logTail");
-    let tail = ui.ctx().data(|data| data.get_temp::<LogTail>(tail_id)).unwrap_or(LogTail { rows: 0, at_end: true });
+    let tail = ui.ctx().data(|data| data.get_temp::<LogTail>(tail_id)).unwrap_or(LogTail { rows: 0, at_end: true, following: true });
     let count = model.lines.len();
     let mut list = List::new(words.log.clone()).empty(words.empty.clone()).max_rows(rows);
-    if count > tail.rows
-        && tail.at_end
-        && count > usize::from(rows)
-        && let Some(last) = count.checked_sub(1)
-    {
+    let follow = (tail.following || (count > tail.rows && tail.at_end)) && count > usize::from(rows);
+    if follow && let Some(last) = count.checked_sub(1) {
         list = list.reveal(last);
     }
     let source = Lines(&model.lines);
     let out = list.show_items(ui, &source, &mut |at, _| ListRow::new(model.lines.get(*at).cloned().unwrap_or_default()));
     let bottom = out.response.rect.bottom() + 0.5;
     let at_end = count == 0 || out.shown.iter().any(|row| row.key + 1 == count && row.rect.bottom() <= bottom);
-    ui.ctx().data_mut(|data| data.insert_temp(tail_id, LogTail { rows: count, at_end }));
+    ui.ctx().data_mut(|data| data.insert_temp(tail_id, LogTail { rows: count, at_end, following: follow && !at_end }));
 }
 
 /// The macro editor and its buttons.
@@ -384,7 +383,11 @@ mod tests {
             show(ui, Props { model: &shared.borrow(), sent: &mut sent });
         });
         fixture.room(egui::vec2(400.0, 900.0)).settle();
-        let painted = |f: &Fixture, text: &str| f.texts().iter().any(|t| t.text == text);
+        // A row in view lies inside the log: rows just past its edges are painted too, and clipped.
+        let painted = |f: &Fixture, text: &str| {
+            let log = f.by_label("Command Log").map(|l| l.rect);
+            f.texts().iter().any(|t| t.text == text && log.is_some_and(|r| r.contains(t.rect.center())))
+        };
         assert!(painted(&fixture, "row 29"), "the log opens on its newest row");
         assert!(!painted(&fixture, "row 0"), "the oldest rows are above the fold");
 
