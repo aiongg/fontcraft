@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 use craft::behavior::{DisplayOrder, ItemSource};
 use craft::ui::buttons::Button;
-use craft::ui::contract::{Bind, Props as _, Show as _, ShowCollection as _, ShowContainer as _, Tracked};
+use craft::ui::contract::{Bind, Props as _, Show as _, ShowCollection as _, ShowContainer as _, Sizing, Tracked};
 use craft::ui::display::{Shade, Text};
 use craft::ui::layout_components::Row;
 use craft::ui::list::{List, ListRow};
@@ -149,7 +149,7 @@ fn editor(ui: &mut Ui, words: &ConsoleWords, model: &ConsoleModel, sent: &mut Ve
     let out = TextField::new(words.editor.clone(), Bind::given(model.editor.clone()))
         .mono()
         .lines(EDITOR_LINES)
-        .tab_inserts(true)
+        .sizing(Sizing::FillWidth)
         .limit(MAX_EDITOR_BYTES)
         .id_salt("fontcraftConsole.editor")
         .show(ui);
@@ -347,6 +347,39 @@ mod tests {
         fixture.frame(vec![pointer::moved(over_input)]).frame(vec![pointer::wheel(-600.0)]).settle();
         let editor = fixture.by_label("Macro").expect("the macro editor");
         assert!(editor.rect.bottom() <= fixture.shown().bottom(), "the editor scrolled into view: {:?}", editor.rect);
+    }
+
+    /// Over the control channel, Shift+ArrowUp at the end of the docked macro editor selects into the line above, as
+    /// the keyboard's does: a text field that has the keyboard takes `ui.key` before the canvas tools, and the editor
+    /// keeps its arrows (a field that inserts Tab loses them, decision 0009). Run Selection then runs both lines.
+    #[test]
+    fn shift_arrow_over_the_control_channel_selects_in_the_macro_editor() {
+        use craft::ui::runtime::commands::CommandRef;
+
+        let mut t = crate::testing::TestApp::new();
+        t.app.fire(CommandRef::with_params("window.macroPanel", json!({})));
+        let text = "glyph.newGlyph {\"name\":\"one\"}\nglyph.newGlyph {\"name\":\"two\"}";
+        t.app.fire(CommandRef::with_params("macroPanel.setText", json!({ "text": text })));
+        t.frames(3);
+        let find = |t: &mut crate::testing::TestApp, name: &str| {
+            let tree = t.frames.tree();
+            let key = tree.keys().into_iter().find(|k| tree.name_of(*k) == Some(name));
+            key.and_then(|k| tree.bounds_of(k)).unwrap_or_else(|| panic!("no `{name}` in the window"))
+        };
+        let input = find(&mut t, "Command");
+        t.ok("ui.wheel", json!({"x": input.center().x, "y": input.center().y, "dy": -100}));
+        t.frames(2);
+        let editor = find(&mut t, "Macro");
+        t.ok("ui.click", json!({"x": editor.center().x, "y": editor.top() + 10.0}));
+        t.ok("ui.key", json!({"key": "End", "cmd": true}));
+        let reply = t.ok("ui.key", json!({"key": "ArrowUp", "shift": true}));
+        assert_eq!(reply["field"], true, "{reply}");
+        t.frames(2);
+        let run = find(&mut t, "Run Selection");
+        t.ok("ui.click", json!({"x": run.center().x, "y": run.center().y}));
+        t.frames(2);
+        let again = t.error("engine.execute", json!({"command": "glyph.newGlyph", "params": {"name": "one"}}));
+        assert!(again.contains("already exists"), "the selection ran line 1 too: {again}");
     }
 
     /// A tall room lets the log grow to its cap; a short one shrinks it to its floor.

@@ -165,6 +165,11 @@ name starts with what was typed (type-ahead); with nothing focused it does nothi
 key goes on to the menu shortcuts. While a context menu is open (the canvas menu or Font View's
 glyph menu), every key goes to the window as the keyboard sends it, and the menu takes it as it
 takes the keyboard's (`Escape` closes it). The reply is `{queued, handled: true, contextMenu: true}`.
+While a text field has the keyboard (a panel's field or the macro editor, after a `ui.click` on
+it), every key goes to that field's window the same way, before the tools and Font View: the
+arrows move the caret, `shift` with them selects, and a character with no `cmd`, `ctrl` or `alt`
+is typed. The reply is `{queued, handled, field: true}`; a shortcut a key fires there is not named
+in it. `ui.text` types into such a field too (`{field: true}`).
 
 In text mode (the Text tool), `ui.key` and `ui.text` type into the tab's text at the cursor, as
 the keyboard does: characters, `Space`, `Return`, `Backspace`, `Delete` and the arrows (with

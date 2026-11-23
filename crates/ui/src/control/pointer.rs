@@ -3,7 +3,8 @@
 //! The events take the path the canvas's own input takes (`canvas::tools::apply::input`), so a script and the mouse
 //! do the same thing. Each method answers with the tools' state after it. While Font View shows, `ui.key` gives Font
 //! View's keys to the window, where the grid or the list that has the keyboard takes them, and none to the tools.
-//! While a context menu is open, every key goes to the window, where the menu takes it as it takes the keyboard's.
+//! While a context menu is open, every key goes to the window, where the menu takes it as it takes the keyboard's, and
+//! so does every key while a text field has the keyboard (a panel's field, the macro editor).
 
 use craft::keymap::{Key as WindowKey, Mods};
 use craft::ui::runtime::commands::{Binding, CommandRef};
@@ -164,6 +165,10 @@ fn key(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
         app.control.queued += steps;
         return Ok(json!({"queued": steps, "handled": true, "contextMenu": true}));
     }
+    // A text field that has the keyboard takes the keys before the tools and Font View, as it takes the keyboard's.
+    if app.control.window.as_ref().is_some_and(craft::ui::runtime::windows::WindowHost::typing) {
+        return field_key(app, name, mods, press, release);
+    }
     let tool_key = Key::parse(name);
     // While Font View shows, its own keys go to the window as the keyboard sends them, and no key reaches the edit
     // view's tools.
@@ -221,6 +226,32 @@ fn key(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
         }
     }
     Ok(reply)
+}
+
+/// A key for the text field that has the keyboard, queued on its window as the keyboard sends it; a character with no
+/// Cmd, Ctrl or Alt is typed too → `{queued, handled, field: true}`, `handled` false for a key the window has no name for.
+fn field_key(app: &mut FontCraftApp, name: &str, mods: Modifiers, press: bool, release: bool) -> Result<Value, String> {
+    let host = app.control.window.clone().ok_or("ui.key: a text field's keys need the window")?;
+    let viewport = host.key_window();
+    let key = WindowKey::parse(name);
+    let typed = typed_char(name, mods);
+    let held = Mods { cmd: mods.cmd, ctrl: mods.ctrl, alt: mods.alt, shift: mods.shift };
+    let mut steps = 0;
+    if press {
+        if let Some(key) = key {
+            host.inject_key(viewport, key, held, !release);
+            steps += 1;
+        }
+        if let Some(text) = &typed {
+            host.inject_text(viewport, text);
+            steps += 1;
+        }
+    } else if release && let Some(key) = key {
+        host.inject_let_go(viewport, key);
+        steps += 1;
+    }
+    app.control.queued += steps;
+    Ok(json!({"queued": steps, "handled": steps > 0, "field": true}))
 }
 
 /// A key Font View takes (`keys::takes`), queued on the window for the grid or the list that has the keyboard →
