@@ -54,8 +54,9 @@ milestone = "M8"
 summary = "Popover opened by Option-clicking a glyph name or class name in the code editor: shows the glyph, or for a class all member glyphs."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. The data comes from `font.features.previewName`, which resolves class entries, classes defined in code and `markClass` classes with their anchors, and gives a lookup's first 50 rules (M8.30). FontCraft: crates/ui/src/panels/font_info/code_editor.rs (M8.30b). Alt-click on a name in the code editor opens the popover under the name: a glyph's name, Unicode values and whether it exports (the drawing of the glyph is not there yet), a class's member count and members (or each markClass statement's anchor and glyphs) and the names that are not in the font, or a lookup's rules; a name that is none of these shows why. The name is read from name characters on both sides of the click, with a leading `@` or backslash."
 guesses = [
+  "Alt-clicking a lookup name opens the same popover with the lookup's rules.",
   "The glyph is drawn as it is in the master of the active Edit View tab, else the master Font View shows; Option-clicking a glyph name with another master active in the reference app settles it.",
 ]
 
@@ -87,7 +88,14 @@ milestone = "M8"
 summary = "Opened by clicking an inline error icon in the code editor: gives the long form of the compile error and, for errors marked with a wrench, a Fix button that applies the suggested correction."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. A popover hanging from the gutter icon of a line (M8.26): each diagnostic of that line (at most 50) as `Line N: message`, then a `Fix: label` button per suggested fix, which runs `font.features.applyFix {error, fix}` and closes the popover. A second click on the icon, Escape or a press outside closes it."
+guesses = [
+  "The details are a popover hanging from the icon, listing every diagnostic of the line, not only the first.",
+  "Our compiler has no long form of a message: the details repeat the message with its line.",
+]
+observe = [
+  "In F1 (Latin features), compile a misspelt glyph name, click the error icon: note what the details show (a longer text than the inline message?), where they open and how they close.",
+]
 
 [[panel]]
 id = "fontInfo.featureSnippetsMenu"

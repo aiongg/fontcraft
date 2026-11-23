@@ -46,6 +46,7 @@ fontcraft-textlayout.workspace = true
 skrifa.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+regex.workspace = true
 thiserror.workspace = true
 log.workspace = true
 base64.workspace = true

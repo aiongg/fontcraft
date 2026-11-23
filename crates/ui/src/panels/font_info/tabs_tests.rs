@@ -20,7 +20,7 @@ use crate::app::models::font_info::FontInfoModel;
 use crate::app::{APP, FontCraftApp, Msg, ViewMsg};
 use crate::dialogs::feature_picker::FeaturePicker;
 use crate::shell::font_info::FontInfoTab;
-use crate::shell::font_info_tabs::{CompletionAsk, EntryKey, EntryKind, FeatureDraft};
+use crate::shell::font_info_tabs::{CompletionAsk, EntryKey, EntryKind, FeatureDraft, PreviewAsk};
 
 const ROOM: egui::Vec2 = egui::vec2(1280.0, 900.0);
 
@@ -233,14 +233,16 @@ fn a_snippet_replaces_the_selected_code() {
 #[test]
 fn features_entry_pane_posts_code_fixes_and_names() {
     let (mut fixture, posted) = panel(features_model());
+    let mark = fixture.by_label("Problems on line 1 (a fix is available)").expect("the line's icon");
+    fixture.click(&mark).settle();
+    let fix = fixture.by_label("Fix: Remove").expect("the Fix button");
+    fixture.click(&fix).settle();
     let code = fixture.by_label("Feature Code").expect("the code field");
     fixture.click(&code).key(Key::A, Modifiers::COMMAND).type_text("sub b by c;").settle();
     let notes = fixture.by_label("Notes").expect("the notes field");
     fixture.click(&notes).settle();
     let automatic = fixture.by_label("Generate Feature Automatically").expect("the box");
     fixture.click(&automatic).settle();
-    let fix = fixture.by_label("Fix: Remove").expect("the Fix button");
-    fixture.click(&fix).settle();
     let minus = fixture.by_label("Remove this name").expect("the name's minus");
     fixture.click(&minus).settle();
     let entry = json!({ "kind": "feature", "name": "ss01", "index": 1 });
@@ -507,4 +509,263 @@ fn an_inserted_snippet_leaves_the_caret_after_it() {
     app.sent.push(Msg::View(ViewMsg::FeatureCaretPlaced));
     app.drain();
     assert_eq!(app.view.font_info.features.caret, None);
+}
+
+/// The painted code of the Features tab whose text is `code`, with where it was painted.
+fn painted_code(fixture: &mut Fixture, code: &str) -> (egui::Pos2, Arc<egui::Galley>) {
+    fixture
+        .frame_shapes()
+        .iter()
+        .find_map(|shape| match shape {
+            egui::Shape::Text(t) if t.galley.job.text == code => Some((t.pos, t.galley.clone())),
+            _ => None,
+        })
+        .expect("the code is painted")
+}
+
+/// The features model showing `code` with the compile's `diagnostics`.
+fn showing(code: &str, diagnostics: Vec<DiagnosticModel>) -> FontInfoModel {
+    let mut model = features_model();
+    if let Some(e) = model.features.entry.as_mut() {
+        e.code = code.into();
+        e.diagnostics = diagnostics;
+    }
+    model
+}
+
+/// The gutter marks the diagnostic's line with an icon beside that line, and no other; the list under the code is
+/// gone, and the icon opens the details, whose Fix posts the same `font.features.applyFix` as the command takes.
+#[test]
+fn the_gutter_marks_the_diagnostics_line_and_its_icon_opens_the_fix() {
+    let code = "sub a by b;\nsub c by d;";
+    let found =
+        DiagnosticModel { id: 3, error: true, message: "unknown glyph".into(), line: 2, range: Some((16, 17)), fixes: vec!["Use c.sc".into()] };
+    let (mut fixture, posted) = panel(showing(code, vec![found]));
+    assert!(fixture.by_label("Fix: Use c.sc").is_none(), "no list under the code");
+    assert!(fixture.by_label("Problems on line 1").is_none());
+    let mark = fixture.by_label("Problems on line 2 (a fix is available)").expect("an icon at line 2");
+    let (pos, galley) = painted_code(&mut fixture, code);
+    let second = galley.rows.get(1).expect("two rows").rect().translate(pos.to_vec2());
+    assert!(second.y_range().contains(mark.rect.center().y), "the icon {:?} sits beside line 2 {second:?}", mark.rect);
+    fixture.click(&mark).settle();
+    let fix = fixture.by_label("Fix: Use c.sc").expect("the details show the Fix");
+    fixture.click(&fix).settle();
+    assert_eq!(*posted.borrow(), vec![Msg::run("font.features.applyFix", json!({ "error": 3, "fix": 0 }))]);
+}
+
+/// A line gets one mark: an error icon if any of its diagnostics is an error, a wrench only if one has a fix, and the
+/// first message; the icon's name says when a fix is available.
+#[test]
+fn the_wrench_shows_only_where_a_fix_exists() {
+    let d = |id: u64, error: bool, line: u64, fixes: &[&str]| DiagnosticModel {
+        id,
+        error,
+        message: format!("problem {id}"),
+        line,
+        range: None,
+        fixes: fixes.iter().map(|f| (*f).to_string()).collect(),
+    };
+    let found = vec![d(1, false, 3, &[]), d(2, true, 1, &[]), d(3, true, 3, &["Fix it"]), d(4, false, 0, &["Nowhere"])];
+    let got = super::code_editor::marks(&found);
+    let want = vec![
+        super::code_editor::LineMark { line: 1, error: true, fixable: false, message: "problem 2" },
+        super::code_editor::LineMark { line: 3, error: true, fixable: true, message: "problem 1" },
+    ];
+    assert_eq!(got, want);
+
+    let (fixture, _) = panel(showing("sub a by b;\nsub c by d;\nsub e by f;", found.clone()));
+    assert!(fixture.by_label("Problems on line 1").is_some(), "no fix, no wrench");
+    assert!(fixture.by_label("Problems on line 1 (a fix is available)").is_none());
+    assert!(fixture.by_label("Problems on line 3 (a fix is available)").is_some());
+}
+
+/// Each line of the code gets a number in the gutter; the rows a long line wraps onto get none.
+#[test]
+fn wrapped_lines_get_no_number() {
+    let long = "sub a by b; ".repeat(60);
+    let code = format!("{long}\nsub c by d;");
+    let (mut fixture, _) = panel(showing(&code, Vec::new()));
+    let shapes = fixture.frame_shapes();
+    let (pos, galley) = shapes
+        .iter()
+        .find_map(|shape| match shape {
+            egui::Shape::Text(t) if t.galley.job.text == code => Some((t.pos, t.galley.clone())),
+            _ => None,
+        })
+        .expect("the code is painted");
+    assert!(galley.rows.len() > 2, "the first line wraps: {} rows", galley.rows.len());
+    let mut numbers: Vec<String> = shapes
+        .iter()
+        .filter_map(|shape| match shape {
+            egui::Shape::Text(t) if t.pos.x < pos.x && t.galley.job.text.parse::<u32>().is_ok() => Some(t.galley.job.text.clone()),
+            _ => None,
+        })
+        .collect();
+    numbers.sort();
+    assert_eq!(numbers, vec!["1".to_string(), "2".to_string()]);
+}
+
+/// Measure: a frame of the Features tab showing a 256 KB entry with an error takes under 16 ms in a release build.
+#[test]
+#[ignore = "a measure: run with --release --ignored"]
+fn a_frame_with_a_256_kb_entry_takes_under_16_ms() {
+    let line = "sub a by b; # a statement of the measure\n";
+    let code = line.repeat(256 * 1024 / line.len());
+    let found = DiagnosticModel { id: 1, error: true, message: "unknown glyph".into(), line: 100, range: Some((4, 5)), fixes: vec!["Fix".into()] };
+    let (mut fixture, _) = panel(showing(&code, vec![found]));
+    let mut times: Vec<std::time::Duration> = (0..5)
+        .map(|_| {
+            let start = std::time::Instant::now();
+            fixture.frame_shapes();
+            start.elapsed()
+        })
+        .collect();
+    times.sort();
+    let median = times[2];
+    eprintln!("a frame with a {} byte entry: {median:?} median of 5", code.len());
+    if !cfg!(debug_assertions) {
+        assert!(median < std::time::Duration::from_millis(16), "{median:?}");
+    }
+}
+
+/// Alt-click on a glyph name in the code asks its preview, naming the characters it covers.
+#[test]
+fn alt_click_on_a_name_asks_its_preview() {
+    let (mut fixture, posted) = panel(features_model());
+    let (pos, galley) = painted_code(&mut fixture, "sub a by b;");
+    let at = galley.pos_from_cursor(egui::text::CCursor::new(4)).translate(pos.to_vec2()).center() + egui::vec2(2.0, 0.0);
+    fixture.hold(Modifiers::ALT).click_at(at).hold(Modifiers::NONE).settle();
+    let ask = PreviewAsk { key: key(EntryKind::Feature, "ss01", 1), name: "a".into(), start: 4, end: 5 };
+    assert!(posted.borrow().contains(&Msg::View(ViewMsg::FeaturePreview(Some(ask)))), "{:?}", posted.borrow());
+}
+
+/// The name under a click keeps a leading `@` or backslash and stops at punctuation and spaces.
+#[test]
+fn the_clicked_name_takes_name_characters_on_both_sides() {
+    use super::code_editor::name_at;
+    let code = "sub @Low' \\a.sc by [b-c];";
+    let name = |at: usize| name_at(code, at).map(|(s, e)| code.chars().skip(s).take(e - s).collect::<String>());
+    assert_eq!(name(6).as_deref(), Some("@Low"));
+    assert_eq!(name(12).as_deref(), Some("\\a.sc"));
+    assert_eq!(name(21).as_deref(), Some("b-c"));
+    assert_eq!(name(9), None);
+}
+
+/// A class preview lists its members, or the anchors of its markClass statements, and names unknown members; a lookup
+/// preview lists its rules and says when more follow.
+#[test]
+fn a_preview_lists_class_members_anchors_and_lookup_rules() {
+    use super::code_editor::{CodeEditorWords, preview_lines};
+    use crate::app::models::font_features::PreviewModel;
+    let words = CodeEditorWords::english();
+    let class = PreviewModel {
+        name: "@Top".into(),
+        kind: "class".into(),
+        glyphs: vec!["a".into(), "b".into()],
+        unknown: vec!["zz".into()],
+        ..PreviewModel::default()
+    };
+    assert_eq!(preview_lines(&class, &words), ["Class @Top: 2 glyphs", "a b", "Not in the font: zz"]);
+    let marks = PreviewModel {
+        name: "@MARKS".into(),
+        kind: "class".into(),
+        glyphs: vec!["acutecomb".into()],
+        anchors: vec![("<anchor 0 500>".into(), "acutecomb".into())],
+        ..PreviewModel::default()
+    };
+    assert_eq!(preview_lines(&marks, &words), ["Class @MARKS: 1 glyphs", "Anchor <anchor 0 500>: acutecomb"]);
+    let lookup =
+        PreviewModel { name: "Smallcaps".into(), kind: "lookup".into(), rules: vec!["sub a by a.sc;".into()], more: true, ..PreviewModel::default() };
+    assert_eq!(preview_lines(&lookup, &words), ["Lookup Smallcaps", "sub a by a.sc;", "More rules follow"]);
+}
+
+/// Cmd+/ comments three selected lines, and again uncomments them; Tab and Shift+Tab indent and outdent a selection;
+/// Return keeps the line's indentation; the bracket beside the caret finds its partner.
+#[test]
+fn editing_keys_comment_indent_and_keep_indentation() {
+    use super::code_editor::{bracket_pair, indent, new_line, toggle_comments};
+    use craft_ext::ui::text::TextSelection;
+    let code = "sub a by b;\n\tsub c by d;\n\nsub e by f;";
+    let all = TextSelection::new(0, code.chars().count());
+    let commented = toggle_comments(code, all).expect("an edit");
+    assert_eq!(commented.insert, "# sub a by b;\n\t# sub c by d;\n\n# sub e by f;");
+    assert_eq!(toggle_comments(&commented.insert, TextSelection::new(0, commented.insert.chars().count())).expect("an edit").insert, code);
+    let two = TextSelection::new(2, 14);
+    assert_eq!(indent(code, two, true).expect("an edit").insert, "\tsub a by b;\n\t\tsub c by d;");
+    assert_eq!(indent(code, two, false).expect("an edit").insert, "sub a by b;\nsub c by d;");
+    let ret = new_line(code, TextSelection::caret_at(24));
+    assert_eq!((ret.insert.as_str(), ret.select), ("\n\t", TextSelection::caret_at(26)));
+    let braces = "feature liga {\n\tsub a by b;\n} liga;";
+    assert_eq!(bracket_pair(braces, 14), vec![13, 28]);
+    assert!(bracket_pair(braces, 3).is_empty());
+}
+
+/// Cmd+/ in the code field comments the selected lines in the code as typed, without a commit.
+#[test]
+fn cmd_slash_in_the_code_field_comments_the_lines() {
+    let (mut fixture, posted) = panel(showing("sub a by b;\nsub c by d;", Vec::new()));
+    let code = fixture.by_label("Feature Code").expect("the code field");
+    fixture.click(&code).key(Key::A, Modifiers::COMMAND).settle();
+    fixture.key(Key::Slash, Modifiers::COMMAND).settle();
+    let draft = FeatureDraft { key: key(EntryKind::Feature, "ss01", 1), code: "# sub a by b;\n# sub c by d;".into() };
+    assert!(posted.borrow().contains(&Msg::View(ViewMsg::FeatureDraft(Some(draft)))), "{:?}", posted.borrow());
+    assert!(!posted.borrow().iter().any(|m| m.command_id() == Some("font.features.setCode")), "the key commits nothing");
+}
+
+/// Next selects the matches in turn and wraps past the last; Replace then replaces the selected one, the first.
+#[test]
+fn find_next_wraps_and_replace_takes_the_selected_match() {
+    use crate::app::models::font_features::FindModel;
+    use crate::shell::font_info_tabs::FindState;
+    let code = "sub a by b;\nsub a by c;";
+    let mut model = showing(code, Vec::new());
+    let state = FindState { query: "a".into(), replacement: "x".into(), ..FindState::default() };
+    if let Some(e) = model.features.entry.as_mut() {
+        e.find = Some(FindModel { state, here: vec![(4, 5), (16, 17)], total: 2, ..FindModel::default() });
+    }
+    let (mut fixture, posted) = panel(model);
+    for _ in 0..3 {
+        let next = fixture.by_label("Next").expect("the Next button");
+        fixture.click(&next).settle();
+    }
+    let replace = fixture.by_label("Replace").expect("the Replace button");
+    fixture.click(&replace).settle();
+    let expected = Msg::run(
+        "font.features.replace",
+        json!({ "kind": "feature", "name": "ss01", "index": 1, "query": "a", "matchCase": false, "wholeWord": false, "regex": false, "replacement": "x", "code": code, "start": 4 }),
+    );
+    assert!(posted.borrow().contains(&expected), "{:?}", posted.borrow());
+}
+
+/// A Replace Feature parameter is edited as coloured feature code, and the instance compile's problem shows under it
+/// with an error icon and its line.
+#[test]
+fn a_feature_parameter_is_coloured_and_shows_its_compile_problem() {
+    use crate::app::models::font_info::{Editor, RowModel, RowSort};
+    let text = "liga; sub a by zz;";
+    let mut model = exports_model();
+    model.exports.params = vec![RowModel {
+        sort: RowSort::Param,
+        key: "Replace Feature".into(),
+        label: "Replace Feature".into(),
+        enabled: true,
+        removable: true,
+        editor: Editor::Code { text: text.into(), problem: Some((1, "glyph not in font".into())) },
+        ..RowModel::default()
+    }];
+    let (mut fixture, _) = panel(model);
+    assert!(fixture.by_label("Problem in this parameter's feature code").is_some(), "the error icon");
+    let texts: Vec<String> = fixture
+        .frame_shapes()
+        .iter()
+        .filter_map(|shape| match shape {
+            egui::Shape::Text(t) => Some(t.galley.job.text.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(texts.iter().any(|t| t == "Line 1: glyph not in font"), "{texts:?}");
+    let (_, galley) = painted_code(&mut fixture, text);
+    let mut colors: Vec<egui::Color32> = galley.job.sections.iter().map(|s| s.format.color).collect();
+    colors.dedup();
+    assert!(colors.len() > 1, "the code is coloured: {colors:?}");
 }

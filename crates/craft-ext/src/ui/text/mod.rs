@@ -10,7 +10,7 @@ mod selection;
 mod step;
 
 pub use complete::{AsyncCompleter, CompletionAnswer, CompletionQuery, MAX_COMPLETIONS};
-pub use highlight::{Highlight, HighlightText, MAX_HIGHLIGHT_BYTES, MAX_HIGHLIGHTS, recoloured};
+pub use highlight::{Highlight, HighlightText, MAX_HIGHLIGHT_BYTES, MAX_HIGHLIGHTS, field_layout, recoloured};
 pub use selection::{FieldSelection, TextSelection};
 pub use step::{ArrowSteps, StepKeys, stepped};
 

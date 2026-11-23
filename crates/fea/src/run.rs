@@ -441,9 +441,26 @@ fn convert(tree: &ParseTree, set: &DiagnosticSet, max: usize) -> Vec<Diagnostic>
         .map(|d| {
             let file = tree.get_source(d.message.file).map(|s| s.path().to_string_lossy().into_owned()).unwrap_or_default();
             let severity = if d.is_error() { Severity::Error } else { Severity::Warning };
-            Diagnostic::at(file, d.span(), severity, d.text())
+            Diagnostic::at(file, d.span(), severity, worded(d.text()))
         })
         .collect()
+}
+
+/// fea-rs's message, reworded where it misleads: a class substituted by a class of another
+/// length names both counts, the target's first (fea-rs puts the target's count where it names
+/// the replacement).
+fn worded(text: &str) -> String {
+    let counts = text
+        .strip_prefix("class has different length (")
+        .and_then(|rest| rest.strip_suffix(')'))
+        .and_then(|rest| rest.split_once(") than target ("))
+        .and_then(|(target, replacement)| Some((target.trim().parse::<usize>().ok()?, replacement.trim().parse::<usize>().ok()?)));
+    match counts {
+        Some((target, replacement)) => format!(
+            "the replacement class has {replacement} glyphs and the target class {target}: a class replaced by a class needs the same number of glyphs in both"
+        ),
+        None => text.to_string(),
+    }
 }
 
 /// Puts fea-rs's messages about the code [`crate::split`] wrote out back at the place in the
@@ -492,8 +509,8 @@ impl<'a> Remap<'a> {
                 let start = self.original(span.start, false)?;
                 let end = self.original(span.end, true).unwrap_or(start).max(start);
                 Some(match self.locate(start, end) {
-                    Some((file, range)) => Diagnostic::at(file, range, severity, d.text()),
-                    None => Diagnostic::request(severity, d.text()),
+                    Some((file, range)) => Diagnostic::at(file, range, severity, worded(d.text())),
+                    None => Diagnostic::request(severity, worded(d.text())),
                 })
             })
             .collect()

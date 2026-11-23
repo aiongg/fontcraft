@@ -1,4 +1,5 @@
-//! Floating panels in OS windows of their own under a form dialog of the main window.
+//! Floating panels in OS windows of their own: under a form dialog of the main window, and driven through the control
+//! channel.
 
 use egui::{CursorIcon, Event, PointerButton, Pos2, ViewportCommand, ViewportId, WindowLevel};
 use serde_json::json;
@@ -74,4 +75,45 @@ fn a_form_dialog_lowers_and_blocks_a_floated_panel() {
     assert_eq!(t.window(font_info, |w| w.level), Some(WindowLevel::AlwaysOnTop), "the palette level comes back");
     click(&mut t, font_info, notes);
     assert_eq!(t.app.view.font_info.tab, FontInfoTab::Notes, "the floating window takes clicks again");
+}
+
+/// The centre of the control named `name` in the OS window `id`, in main-window points: where `ui.click` finds it.
+fn on_desktop(t: &NativeApp, id: ViewportId, name: &str) -> Pos2 {
+    control(t, id, name) + t.place(id).min.to_vec2()
+}
+
+/// A `ui.click` at a point over a floated panel lands in its OS window: it switches Font Info's tab.
+#[test]
+fn a_control_click_over_a_floated_panel_reaches_its_window() {
+    let mut t = NativeApp::new();
+    let font_info = float_font_info(&mut t);
+    let notes = on_desktop(&t, font_info, "Notes");
+    let reply = t.ok("ui.click", json!({"x": notes.x, "y": notes.y}));
+    assert_ne!(reply["window"], "main", "the click lands in Font Info's window: {reply}");
+    t.frames(3);
+    assert_eq!(t.app.view.font_info.tab, FontInfoTab::Notes, "the click reaches the floating window");
+    let inspected = t.ok("ui.inspect", json!({}));
+    let windows = inspected["windows"].as_array().expect("ui.inspect lists the windows");
+    assert_eq!(windows.len(), 2, "the main window and Font Info: {windows:?}");
+    assert_eq!(windows[0]["window"], "main");
+}
+
+/// After a `ui.click` on a field of a floated panel, its window has the keyboard, so `ui.text` and `ui.key` reach the
+/// field: the typed note is committed when Tab moves the keyboard on.
+#[test]
+fn control_text_types_into_a_field_of_a_floated_panel() {
+    let mut t = NativeApp::new();
+    let font_info = float_font_info(&mut t);
+    let notes = on_desktop(&t, font_info, "Notes");
+    t.ok("ui.click", json!({"x": notes.x, "y": notes.y}));
+    t.frames(3);
+    let field = on_desktop(&t, font_info, "Font Note");
+    t.ok("ui.click", json!({"x": field.x, "y": field.y}));
+    t.frames(3);
+    assert_eq!(t.focused(), font_info, "the click gives Font Info's window the keyboard");
+    assert_eq!(t.ok("ui.text", json!({"text": "Draft"}))["field"], true, "a field of the floating window has the keyboard");
+    t.frames(2);
+    assert_eq!(t.ok("ui.key", json!({"key": "Tab"}))["field"], true);
+    t.frames(3);
+    assert_eq!(t.app.session.font().unwrap().note, "Draft", "the text was typed into the floating window's field");
 }

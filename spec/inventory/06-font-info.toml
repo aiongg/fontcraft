@@ -2639,13 +2639,13 @@ label = "Compile"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{master?: id|name, force?: bool}"
+params = "{master?: id|name, instance?: index|id|name, force?: bool}"
 area = "features"
 milestone = "M8"
 summary = "Compiles the feature code so that Edit View can preview it and returns the errors found. Edit View previews hand-written substitution rules but not hand-written positioning rules."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed. The compile checks the whole code, positioning included, for one master and keeps the result as the document's feature state (session only, no undo step); the preview font Edit View shapes with holds substitutions only. One compile of the code gives the diagnostics, Edit View's font and Text Preview's font (generated kerning and marks included); a Text Preview build of the same document revision and master is taken without compiling. When that build fails outside the code's entries, the code is compiled on its own for its diagnostics. Compiling unchanged code again reuses the last result."
+notes = "Documented, not yet observed. The compile checks the whole code, positioning included, for one master and keeps the result as the document's feature state (session only, no undo step); the preview font Edit View shapes with holds substitutions only. One compile of the code gives the diagnostics, Edit View's font and Text Preview's font (generated kerning and marks included); a Text Preview build of the same document revision and master is taken without compiling. When that build fails outside the code's entries, the code is compiled on its own for its diagnostics. Compiling unchanged code again reuses the last result. With `instance` (M8.31) the code is compiled as that instance exports it, its Add, Replace and Remove parameters applied one by one, on its own and kept nowhere: the document's feature state stays the master's. A diagnostic in code an Add or Replace parameter wrote names it (`param: {name, index}`, the index among the instance's parameters of that name; the line counted in the parameter's code), and a parameter value that cannot be applied comes back under `refused`."
 observe = [
   "In any font, look for a shortcut or menu item for Compile in Font Info › Features: note both.",
 ]
@@ -2689,6 +2689,8 @@ guesses = [
   "Diagnostics stay valid while the compiler's input (assembled code, stored code, glyph order with code points, master) is unchanged, so a node move keeps them; moving a node after a compile with an error in the reference app would settle it.",
 ]
 observe = [
+  "In F1 (Latin features), compile `sub a by zzz;` in a feature: screenshot the editor and note where the message is drawn (after the line's text, under the line, or only in the popover) and whether the editor shows line numbers.",
+  "In F1, put two errors on one line and compile: note whether the line gets one icon or two.",
   "In F1 (Latin features), type `sub a by zzz;` into a feature without pressing Compile and wait two seconds: note whether an error marker appears.",
   "In F1, compile code with an error, then move a node of an unrelated glyph in Edit View and go back to Font Info › Features: note whether the error marker stays.",
 ]
@@ -2705,12 +2707,14 @@ milestone = "M8"
 summary = "Applies the correction suggested for an error; only errors drawn with a wrench icon carry such a suggestion."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. In the window the Fix buttons are in the details that the gutter icon of the error's line opens (`fontInfo.featureErrorDetails`, M8.26)."
 guesses = [
-  "Four fixes of ours carry a wrench: a glyph name that matches an existing one apart from case, a class name that matches a defined one apart from case, a missing semicolon at the end of a statement (inserted before any comment), and a class used before its entry (moving the class entry up); the reference app's error list on a font with these mistakes would settle its own set.",
+  "Our fixes carry a wrench: a glyph name that matches an existing one apart from case, a class or lookup name that matches a defined one apart from case, a missing semicolon at the end of a statement (inserted before any comment), a class used before its entry (moving the class entry up), a block left open (`} tag;` inserted before the next top-level statement, else at the end of the entry) and a closing tag that differs from the opening one; the reference app's error list on a font with these mistakes would settle its own set.",
+  "An unknown glyph name with no match apart from case is offered the font's nearest names: at most two edits away (one for names of at most four characters), the nearest first, at most five.",
 ]
 observe = [
   "In F1 (Latin features), write a misspelt glyph name, drop a semicolon, and use a class before its entry: note which errors show a wrench and what Fix does for each.",
+  "In F1, write `sub Agrav by c;` (one letter short of a glyph name) and a lookup block without its closing `} name;`: note whether either error shows a wrench and what Fix offers.",
 ]
 
 [[command]]
@@ -2835,7 +2839,14 @@ milestone = "M8"
 summary = "Shows a popover with a drawing of the glyph, or with all member glyphs of the class, for the glyph or class name that was Alt-clicked in the code editor."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed. An engine query returning the glyph, or the member glyphs of a class entry with nested classes and tokens resolved; the Features tab draws the popover (M8.17)."
+notes = "Documented, not yet observed. An engine query returning the glyph, or the member glyphs of a class with nested classes and tokens resolved (M8.17). Classes are class entries, `@Name = …;` definitions in the code of prefix and feature entries, and `markClass` classes, whose reply adds each statement's glyphs and anchor; a lookup name returns its first 50 rules and whether it has more (M8.30). Alt-click in the code editor opens the popover (M8.30b)."
+guesses = [
+  "A class entry wins over a class of the same name defined in code, and the first definition in code wins over later ones.",
+  "Alt-clicking a lookup name shows its first 50 rules, whitespace collapsed and each cut at 300 characters.",
+]
+observe = [
+  "In F1 (Latin features), Alt-click a class defined in the prefix, a markClass class and a lookup name in the code editor: note what each popover shows.",
+]
 
 [[behavior]]
 id = "fontInfo.features.sidebarGroups"
@@ -2950,9 +2961,12 @@ milestone = "M8"
 summary = "Code that fails to compile is flagged inline. Clicking the error icon expands the message, a wrench icon signals an available Fix, and every entry with errors also gets an icon in the sidebar."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed. The markers, messages, wrench and sidebar icons read `font.features.listErrors` (and the `errors` flag of `font.features.list`) for the last compile while it still describes the font (an outline edit keeps it). While code is typed, the underlines and the list under the code come from `font.features.check` of exactly the text shown, half a second after the last keystroke, without storing the code (M8.25)."
+notes = "Documented, not yet observed. The markers, messages, wrench and sidebar icons read `font.features.listErrors` (and the `errors` flag of `font.features.list`) for the last compile while it still describes the font (an outline edit keeps it). While code is typed, they come from `font.features.check` of exactly the text shown, half a second after the last keystroke, without storing the code (M8.25). A gutter left of the code numbers each line and marks a line with diagnostics with one icon (an error disc if any is an error, else a warning triangle) and a wrench when one has a fix; the line's first message is drawn dimmed after its text, and error ranges are underlined. A click on the icon opens `fontInfo.featureErrorDetails`; nothing is listed under the code (M8.26). The coloured runs are kept while the text, the underlined ranges and the colours stay the same."
 guesses = [
-  "Error ranges are underlined in the code and each error is listed under the code with its line and an icon, not drawn between the code lines; a screenshot of an error in the reference app settles it.",
+  "The code editor has a gutter with line numbers; a wrapped row gets no number.",
+  "One icon per line, whatever the number of diagnostics on it, with the error icon winning over the warning icon.",
+  "The first message of a line is drawn dimmed after the line's text, clipped at the editor's edge, rather than on a row of its own under the line.",
+  "Error ranges stay underlined besides the gutter icon.",
 ]
 
 [[behavior]]
@@ -3005,7 +3019,14 @@ milestone = "M8"
 summary = "Per-instance feature changes are made with the custom parameters Add, Remove and Replace for Prefix, Class and Feature. Automatic classes and features need no such parameters because they are regenerated for the glyph set of each instance."
 ref = "Font Info › Features › Export-Specific Features"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. FontCraft (M8.31): the six Add and Replace parameters are edited in a monospaced field of several lines, coloured as the feature code editor colours code (crates/ui/src/panels/font_info/param_value.rs); completion is not there yet. With one instance selected in the Exports tab, the instance compile (font.features.compile with `instance`) runs when the projection is made, and a parameter with an error shows an error icon and its first message, with the line in the parameter's code, under its field. Number values in the instance's code are those of the first master (or the master asked for), not interpolated at the instance's location."
+guesses = [
+  "The Exports tab shows an error icon and the first message under a feature parameter whose code does not compile; the reference app may show the error only at export.",
+  "An instance compile reads number values from the default master rather than at the instance's location.",
+]
+observe = [
+  "In F1 (Latin features), add a Replace Feature parameter with an unknown glyph to an instance in Font Info › Exports: note whether an error shows in the Exports tab, and what export reports.",
+]
 
 # ───────────────────────────── Other Settings tab ─────────────────────────────
 
@@ -3299,3 +3320,78 @@ summary = "Opened by a stem's scope button on the Masters tab: the glyphs the st
 ref = "Font Info › Masters › Stems"
 status = "inferred"
 notes = "FontCraft: crates/ui/src/dialogs/interp/masters.rs, a dialog of font.stems.set on `{stem: index}` that runs on OK; an emptied scope removes it."
+
+[[command]]
+id = "font.features.find"
+label = "Find in Feature Code"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{query: string, matchCase?: boolean, wholeWord?: boolean, regex?: boolean, kind?: 'prefix'|'class'|'feature', name?: string, index?: integer, code?: string}"
+area = "features"
+milestone = "M8"
+summary = "Lists the matches of a query in the feature code: in one entry (in the editor's unsaved text when given) or in every entry in sidebar order, with each match's entry, byte range and line. The data behind the Features tab's find bar."
+ref = "Font Info › Features"
+status = "inferred"
+notes = "Not in the handbook. A query; it changes nothing. The query is plain text unless `regex` is set; both run as one regular expression in time linear in the text, with the pattern's length (1,000 bytes) and compiled size (1 MB) capped. Matches of no characters are skipped; at most 10,000 are listed, with `truncated` set past that. FontCraft: crates/engine/src/cmd/features_find.rs (M8.27)."
+guesses = [
+  "The find options are Match Case, Whole Word and Regular Expression, case-insensitive by default; using the find bar of the reference app's feature editor would settle which exist.",
+  "Whole Word keeps a match that no letter, digit, `_` or `.` touches, so `a` does not find the `a` of `a.sc`.",
+  "Find can search every entry, not only the one shown; searching for a class name used in several features in the reference app would settle it.",
+]
+observe = [
+  "In F1 (Latin features), press Cmd+F in Font Info › Features with a feature shown: note the find bar's options, and whether a search reaches matches in other entries.",
+]
+
+[[command]]
+id = "font.features.replace"
+label = "Replace in Feature Code"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{query: string, matchCase?: boolean, wholeWord?: boolean, regex?: boolean, replacement: string, all?: boolean, kind?: 'prefix'|'class'|'feature', name?: string, index?: integer, code?: string, start?: integer}"
+area = "features"
+milestone = "M8"
+summary = "Replaces the match that begins at a byte of one entry (Replace), or every match in one entry or in every entry (Replace All). One undo step."
+ref = "Font Info › Features"
+status = "inferred"
+notes = "Not in the handbook. With `regex` the replacement expands `$1` and `${name}`. With `code` the entry's text is the editor's unsaved text and the result is stored. Replace All over every entry leaves automatic entries alone and lists them as `skipped`; naming an automatic entry is refused, as Set Feature Code refuses it. A bad pattern, no match at `start` or a result over 4 MB in one entry is refused and changes nothing. FontCraft: crates/engine/src/cmd/features_find.rs (M8.27)."
+guesses = [
+  "Replace All across entries skips automatic entries, since Update would write their code again.",
+]
+observe = [
+  "In F1 (Latin features), use Replace All in the feature editor's find bar with a name that also appears in an automatic feature: note whether the automatic feature's code changes.",
+]
+
+[[behavior]]
+id = "fontInfo.features.findBar"
+area = "features"
+milestone = "M8"
+summary = "Cmd+F in the feature code editor opens a find bar above the code: a query field, Match Case, Whole Word and Regular Expression, a scope (this entry or all entries), Previous and Next, a replacement field with Replace and Replace All, and the number of matches."
+ref = "Font Info › Features"
+status = "inferred"
+notes = "Not in the handbook. FontCraft: crates/ui/src/panels/font_info/code_find.rs (M8.27). The matches come from font.features.find with the editor's text as typed; matches in the shown entry are underlined in the accent colour and the current one is marked. Next and Previous select the following or preceding match in the code field and wrap at the end; in the all-entries scope they go on to the next or previous entry with matches and select it. Return in the query field is Next. Cmd+G and Shift+Cmd+G in the code field are Next and Previous. The keyboard stays where it is, so a match selected while the query field has it is marked by its underline only, and the field does not scroll to it yet. Replace runs font.features.replace on the selected match with the text as typed (with no match selected it acts as Next), Replace All on the scope; the close button hides the bar. Cmd+F with a selection inside one line puts it in the query."
+guesses = [
+  "The find bar sits above the code field and keeps its query while the tab shows; the reference app's find in the feature editor may be the system find panel instead.",
+  "Next and Previous wrap at the end of the scope.",
+]
+observe = [
+  "In F1 (Latin features), press Cmd+F in the feature code editor: note where the find interface appears, its controls, and what happens past the last match.",
+]
+
+[[behavior]]
+id = "fontInfo.features.editingKeys"
+area = "features"
+milestone = "M8"
+summary = "Editing keys of the feature code editor: Cmd+/ comments or uncomments the selected lines, Tab and Shift+Tab indent and outdent a selection over more than one line, Cmd+] and Cmd+[ indent and outdent the caret's lines, Return keeps the line's indentation, and the bracket matching the one beside the caret is marked."
+ref = "Font Info › Features"
+status = "inferred"
+notes = "Not in the handbook. FontCraft: crates/ui/src/panels/font_info/code_editor.rs (M8.27). The keys edit the text as typed; the code is stored when the field loses the keyboard, as typing is. Indentation is one tab; outdent removes a tab or up to four spaces. Tab without a selection over lines moves the keyboard on, so the field never traps it; the arrows keep moving the caret. Comments are `# ` after a line's indentation; a selection whose non-blank lines all start with `#` loses it. Bracket matching pairs (), [] and {}, looking at most 100,000 characters away."
+guesses = [
+  "Cmd+/ toggles `#` comments line by line.",
+  "Tab indents only a selection that spans lines; with a caret it moves the keyboard to the next control.",
+  "Indentation is one tab, as the generated code is written.",
+]
+observe = [
+  "In F1 (Latin features), select three lines in the feature code editor and press Cmd+/, then Tab and Shift+Tab: note what changes. Put the caret after a `{` and note whether its `}` is marked.",
+]

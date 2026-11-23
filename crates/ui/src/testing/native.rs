@@ -4,6 +4,7 @@
 //! embedded). The main window reports its place on the desktop, as under X11, so the dock opens floating panels as
 //! OS windows. A renderer like eframe's runs each window's pass nested inside the main window's, at the place its
 //! builder asks for, and keeps what the window was told: its level, its commands, its cursor and its AccessKit tree.
+//! A focus command moves the keyboard focus to its window, which the next passes report.
 
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -46,6 +47,8 @@ struct System {
     windows: Vec<Window>,
     /// The commands every pass sent to a window since the last [`NativeApp::take_commands`].
     commands: Vec<(ViewportId, ViewportCommand)>,
+    /// The window other than the main one that has the keyboard focus; `None`: the main window has it.
+    focused: Option<ViewportId>,
     time: f64,
 }
 
@@ -56,10 +59,11 @@ thread_local! {
 /// Every window the system knows, with its facts, as an integration lists them in each pass's input.
 fn viewports() -> egui::ViewportIdMap<ViewportInfo> {
     let mut all = egui::ViewportIdMap::default();
+    let focused = SYSTEM.with(|system| system.borrow().focused);
     let main = ViewportInfo {
         inner_rect: Some(MAIN),
         outer_rect: Some(MAIN),
-        focused: Some(true),
+        focused: Some(focused.is_none()),
         native_pixels_per_point: Some(1.0),
         ..ViewportInfo::default()
     };
@@ -70,7 +74,7 @@ fn viewports() -> egui::ViewportIdMap<ViewportInfo> {
                 parent: Some(ViewportId::ROOT),
                 inner_rect: Some(window.place),
                 outer_rect: Some(window.place),
-                focused: Some(false),
+                focused: Some(focused == Some(window.id)),
                 native_pixels_per_point: Some(1.0),
                 ..ViewportInfo::default()
             };
@@ -84,6 +88,9 @@ fn keep_commands(output: &egui::FullOutput) {
     SYSTEM.with(|system| {
         let mut system = system.borrow_mut();
         for (id, viewport) in &output.viewport_output {
+            if viewport.commands.iter().any(|command| matches!(command, ViewportCommand::Focus)) {
+                system.focused = (*id != ViewportId::ROOT).then_some(*id);
+            }
             system.commands.extend(viewport.commands.iter().map(|command| (*id, command.clone())));
         }
     });
@@ -93,7 +100,7 @@ fn keep_commands(output: &egui::FullOutput) {
 fn render_window(ctx: &Context, viewport: egui::ImmediateViewport<'_>) {
     let id = viewport.ids.this;
     let builder = viewport.builder;
-    let (place, events, time) = SYSTEM.with(|system| {
+    let (place, events, time, focused) = SYSTEM.with(|system| {
         let mut system = system.borrow_mut();
         let time = system.time;
         let index = match system.windows.iter().position(|window| window.id == id) {
@@ -114,13 +121,16 @@ fn render_window(ctx: &Context, viewport: egui::ImmediateViewport<'_>) {
         }
         window.level = builder.window_level.or(window.level);
         window.ran = true;
-        (window.place, std::mem::take(&mut window.events), time)
+        let place = window.place;
+        let events = std::mem::take(&mut window.events);
+        (place, events, time, system.focused == Some(id))
     });
     let input = egui::RawInput {
         viewport_id: id,
         viewports: viewports(),
         screen_rect: Some(Rect::from_min_size(Pos2::ZERO, place.size())),
         time: Some(time),
+        focused,
         events,
         ..egui::RawInput::default()
     };
@@ -168,16 +178,16 @@ impl NativeApp {
         let ctx = self.ctx.clone();
         self.app.logic(&ctx);
         set_input(&ctx, FrameInput::new(RootEnv::default()).commands(self.app.catalog.input()).host(Arc::clone(&self.app.host)));
-        let time = SYSTEM.with(|system| {
+        let (time, focused) = SYSTEM.with(|system| {
             let mut system = system.borrow_mut();
             system.time += FRAME_SECONDS;
             system.windows.iter_mut().for_each(|window| window.ran = false);
-            system.time
+            (system.time, system.focused.is_none())
         });
         let input = egui::RawInput {
             screen_rect: Some(Rect::from_min_size(Pos2::ZERO, MAIN.size())),
             time: Some(time),
-            focused: true,
+            focused,
             viewports: viewports(),
             ..egui::RawInput::default()
         };
@@ -185,7 +195,13 @@ impl NativeApp {
         let mut output = ctx.run_ui(input, |ui| app.ui(ui));
         output.textures_delta.clear();
         keep_commands(&output);
-        SYSTEM.with(|system| system.borrow_mut().windows.retain(|window| window.ran));
+        SYSTEM.with(|system| {
+            let mut system = system.borrow_mut();
+            system.windows.retain(|window| window.ran);
+            if system.focused.is_some_and(|id| !system.windows.iter().any(|window| window.id == id)) {
+                system.focused = None;
+            }
+        });
         self.app.output(take_output(&ctx));
     }
 
@@ -201,6 +217,16 @@ impl NativeApp {
         assert_eq!(reply["ok"], true, "{method}: {reply}");
         self.frames(3);
         reply["result"].clone()
+    }
+
+    /// The window that has the keyboard focus.
+    pub fn focused(&self) -> ViewportId {
+        SYSTEM.with(|system| system.borrow().focused).unwrap_or(ViewportId::ROOT)
+    }
+
+    /// Where the OS window `id` is on the desktop, whose origin is the main window's top left.
+    pub fn place(&self, id: ViewportId) -> Rect {
+        self.window(id, |window| window.place)
     }
 
     /// The OS windows open besides the main one.

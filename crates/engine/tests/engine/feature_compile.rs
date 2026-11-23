@@ -239,6 +239,27 @@ fn preview_name_lists_a_glyph_or_the_members_of_a_class() {
     refused(&mut s, "font.features.previewName", json!({"name": "nothing"}), "no glyph or class");
 }
 
+/// Classes that prefix code defines and `markClass` classes preview their members (a mark class
+/// with each statement's anchor), a class entry reaches into them, and a lookup name previews its
+/// first rules.
+#[test]
+fn preview_name_resolves_code_classes_mark_classes_and_lookups() {
+    let mut s = Session::with_document();
+    run(&mut s, "glyph.newGlyph", json!({"name": "acutecomb"}));
+    let prefix = "@Pre = [a b];\nmarkClass [acutecomb] <anchor 0 500> @TOP;\nlookup Smallcaps {\n    sub a by A;\n} Smallcaps;\n";
+    run(&mut s, "font.features.addPrefix", json!({"code": prefix}));
+    run(&mut s, "font.features.addClass", json!({"name": "Mixed", "code": "@Pre A"}));
+    let r = run(&mut s, "font.features.previewName", json!({"name": "@Pre"}));
+    assert_eq!(r, json!({"kind": "class", "name": "Pre", "glyphs": ["a", "b"], "unknown": []}));
+    let r = run(&mut s, "font.features.previewName", json!({"name": "@Mixed"}));
+    assert_eq!(r["glyphs"], json!(["a", "b", "A"]));
+    let r = run(&mut s, "font.features.previewName", json!({"name": "@TOP"}));
+    assert_eq!(r["glyphs"], json!(["acutecomb"]));
+    assert_eq!(r["anchors"], json!([{"glyphs": ["acutecomb"], "anchor": "<anchor 0 500>"}]));
+    let r = run(&mut s, "font.features.previewName", json!({"name": "Smallcaps"}));
+    assert_eq!(r, json!({"kind": "lookup", "name": "Smallcaps", "rules": ["sub a by A;"], "more": false}));
+}
+
 /// Many classes and many short feature entries: completion collects names in time linear in the
 /// font, and a class naming every other class is walked through one lookup per name.
 #[test]
@@ -706,4 +727,25 @@ fn check_reports_the_drafts_line_and_range_and_changes_nothing() {
     assert_eq!(run(&mut s, "font.features.check", json!({"kind": "feature", "name": "liga", "code": "sub a by b;"}))["ok"], true);
     let big = "#".repeat(fontcraft_engine::cmd::features_check::MAX_DRAFT_BYTES + 1);
     refused(&mut s, "font.features.check", json!({"kind": "feature", "name": "liga", "code": big}), "`code`");
+}
+
+/// An instance compile applies the instance's feature parameters as export does: a broken Replace Feature reports its
+/// line against that parameter, and the master compile is unaffected.
+#[test]
+fn an_instance_compile_reports_a_broken_replace_feature_at_its_parameter() {
+    let mut s = Session::with_document();
+    run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": "sub a by b;"}));
+    run(&mut s, "font.instance.add", json!({"styleName": "Bold"}));
+    let value = "liga; sub a by b;\nsub c by zzz;";
+    run(&mut s, "font.customParameters.add", json!({"scope": "instance", "targets": ["Bold"], "name": "Replace Feature", "value": value}));
+    let font = Arc::clone(&s.doc().unwrap().font);
+    let r = run(&mut s, "font.features.compile", json!({"instance": {"name": "Bold"}}));
+    assert_eq!(r["ok"], false, "{r}");
+    assert_eq!(r["instance"], "Bold");
+    let d = first_error(&r);
+    assert_eq!(d["param"], json!({"name": "Replace Feature", "index": 0}), "{d}");
+    assert_eq!(d["line"], 2, "{d}");
+    assert!(Arc::ptr_eq(&font, &s.doc().unwrap().font), "an instance compile changes nothing");
+    let master = run(&mut s, "font.features.compile", json!({}));
+    assert_eq!(master["ok"], true, "{master}");
 }

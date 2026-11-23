@@ -137,6 +137,13 @@ impl HighlightText for Response {
     }
 }
 
+/// Where the field of `response` painted its text in this pass, and how it laid the text out: the text shape's
+/// position and layout (the coloured one once [`HighlightText::highlight_text`] ran). Rows sit at `pos + row.pos`.
+/// `None` for an empty field. A gutter beside a code field reads its line positions from it.
+pub fn field_layout(ui: &Ui, response: &Response) -> Option<(egui::Pos2, Arc<Galley>)> {
+    field_text(ui, response).map(|(_, shape)| (shape.pos, shape.galley))
+}
+
 /// The last text shape painted inside `response`'s rect on its layer, and its place in the layer's list.
 fn field_text(ui: &Ui, response: &Response) -> Option<(usize, TextShape)> {
     let rect = response.rect;

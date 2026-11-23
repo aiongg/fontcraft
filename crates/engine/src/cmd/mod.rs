@@ -44,6 +44,7 @@ mod features;
 pub mod features_check;
 pub(crate) mod features_compile;
 mod features_entries;
+mod features_find;
 mod features_io;
 mod file;
 pub mod filter;
@@ -404,6 +405,7 @@ pub const COMMAND_TABLES: &[CommandTable] = &[
     project::specs,
     features::specs,
     features_entries::specs,
+    features_find::specs,
     numbers::specs,
     features_compile::specs,
     features_check::specs,

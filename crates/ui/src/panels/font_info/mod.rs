@@ -16,6 +16,7 @@
 //! A tab click posts `font.info.selectTab`; every edit posts an engine command.
 
 pub mod code_editor;
+pub mod code_find;
 #[cfg(test)]
 mod dialogs_tests;
 pub mod exports_tab;
@@ -68,6 +69,8 @@ craft::ui::words! {
         remove_row: "fontcraftFontInfo.removeRow" = "Remove this row";
         /// The field of targets that hold different values.
         multiple: "fontcraftFontInfo.multiple" = "Multiple Values";
+        code_line: "fontcraftFontInfo.codeLine" = "Line";
+        code_problem: "fontcraftFontInfo.codeProblem" = "Problem in this parameter's feature code";
         /// A menu whose value is none of its entries.
         choose: "fontcraftFontInfo.choose" = "Choose…";
         /// The button of a value edited in its own dialog.

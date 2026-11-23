@@ -9,17 +9,30 @@
 //! [`MAX_FIX_SCAN`] bytes) and returns at most a bounded number of items. Ranges are byte
 //! ranges of the code, always on character boundaries.
 //!
-//! The fixes (`font.features.applyFix`, our own choice of three):
+//! The fixes (`font.features.applyFix`, our own choice):
 //! - a glyph name the font has only in another case (`glyph not in font`): the font's spelling;
+//!   else the font's names nearest to it ([`MAX_NEAREST_DISTANCE`] edits at most, one for a name
+//!   of at most four bytes), from a bounded scan ([`MAX_NEAREST_SCAN`] names a call, and the
+//!   shared budget of [`CompletionNames::nearest_budget`]);
 //! - a class name the code defines only in another case (`undefined glyph class`): that
 //!   spelling;
+//! - a lookup name the code defines only in another case (`lookup is not defined`): that
+//!   spelling;
 //! - a missing semicolon (`Expected ';'`): one inserted after the statement, before any
-//!   comment or space.
+//!   comment or space;
+//! - a feature or lookup block left open (`Feature block is unclosed`, `Table is unclosed`):
+//!   `} tag;` inserted before the next line that only a top-level statement starts, else at
+//!   the end of the entry;
+//! - a closing tag that differs from the opening one (`expected tag 'liga'`): the opening tag.
+//!
+//! [`bodies`] reads the classes, mark classes and lookups the code defines with their bodies,
+//! for the name previews.
 //!
 //! The third fix of the row, a class used before its entry, moves an entry rather than editing
 //! code, so the engine offers it.
 
-use std::collections::HashSet;
+use std::cell::Cell;
+use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
 use fontcraft_fea::MAX_NESTING_DEPTH;
@@ -35,8 +48,29 @@ pub const MAX_FIXES: usize = 16;
 pub const MAX_HIGHLIGHTS: usize = 1_000_000;
 /// Most class or lookup names [`definitions`] returns of each kind.
 pub const MAX_DEFINITIONS: usize = 100_000;
-/// Most bytes the missing-semicolon fix looks back over for the end of the statement.
+/// Most bytes the missing-semicolon fix looks back over for the end of the statement, and the
+/// block-closing fix forward over for the end of the block.
 pub const MAX_FIX_SCAN: usize = 64 << 10;
+/// Most glyph names the nearest-name fix looks at in one call.
+pub const MAX_NEAREST_SCAN: usize = 70_000;
+/// Longest name, in bytes, the nearest-name fix compares; longer names are skipped.
+pub const MAX_NEAREST_NAME_BYTES: usize = 63;
+/// Most nearest names offered for one unknown glyph.
+pub const MAX_NEAREST: usize = 5;
+/// Most edits between an unknown glyph name and a name offered for it.
+pub const MAX_NEAREST_DISTANCE: usize = 2;
+/// Names up to this many bytes are offered names one edit away only.
+const SHORT_NAME_BYTES: usize = 4;
+/// Longest block tag or lookup label the block-closing fix writes.
+const MAX_LABEL_BYTES: usize = 64;
+/// Most bytes of one class body [`bodies`] keeps; a longer body is left out.
+pub const MAX_BODY_BYTES: usize = 64 << 10;
+/// Most rules [`bodies`] keeps of one lookup.
+pub const MAX_LOOKUP_RULES: usize = 50;
+/// Most characters of one rule [`bodies`] keeps; the rest is cut.
+pub const MAX_RULE_CHARS: usize = 300;
+/// Most `markClass` statements [`bodies`] keeps of one mark class.
+pub const MAX_MARK_STATEMENTS: usize = 10_000;
 
 /// What a stretch of code is, for colouring.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -572,6 +606,9 @@ pub struct CompletionNames<'a> {
     pub classes: &'a [String],
     pub lookups: &'a [String],
     pub numbers: &'a [String],
+    /// The glyph names the nearest-name fix may still look at, shared by the calls of one listing
+    /// so that many unknown glyphs stay bounded; `None`: [`MAX_NEAREST_SCAN`] for each call.
+    pub nearest_budget: Option<&'a Cell<usize>>,
 }
 
 /// `name` starts with `typed`, ignoring ASCII case.
@@ -806,6 +843,11 @@ pub fn fixes(code: &str, diagnostic: &EntryDiagnostic, names: &CompletionNames) 
         for glyph in names.glyphs.iter().filter(|g| g.as_str() != name && g.eq_ignore_ascii_case(name)).take(MAX_FIXES) {
             out.push(Fix { label: format!("Replace `{name}` with `{glyph}`"), edits: vec![(start..range.end, glyph.clone())] });
         }
+        if out.is_empty() {
+            for glyph in nearest_glyphs(name, names.glyphs, names.nearest_budget) {
+                out.push(Fix { label: format!("Replace `{name}` with `{glyph}`"), edits: vec![(start..range.end, glyph.to_string())] });
+            }
+        }
     } else if message.contains("undefined glyph class") {
         let Some(text) = code.get(range.clone()) else { return out };
         // The span holds the `@`; a span after it is read the same.
@@ -817,12 +859,296 @@ pub fn fixes(code: &str, diagnostic: &EntryDiagnostic, names: &CompletionNames) 
         for class in names.classes.iter().filter(|c| c.as_str() != name && c.eq_ignore_ascii_case(name)).take(MAX_FIXES) {
             out.push(Fix { label: format!("Replace `@{name}` with `@{class}`"), edits: vec![(start..range.end, class.clone())] });
         }
+    } else if message.contains("lookup is not defined") {
+        let Some(name) = code.get(range.clone()) else { return out };
+        for lookup in names.lookups.iter().filter(|l| l.as_str() != name && l.eq_ignore_ascii_case(name)).take(MAX_FIXES) {
+            out.push(Fix { label: format!("Replace `{name}` with `{lookup}`"), edits: vec![(range.clone(), lookup.clone())] });
+        }
     } else if message == "expected ';'"
         && let Some(at) = semicolon_position(code, range.start)
     {
         out.push(Fix { label: "Insert a semicolon".into(), edits: vec![(at..at, ";".into())] });
+    } else if (message.contains("feature block is unclosed") || message.contains("table is unclosed"))
+        && let Some(fix) = close_block(code, range.clone())
+    {
+        out.push(fix);
+    } else if let Some(open) = diagnostic.message().trim().strip_prefix("expected tag '").and_then(|rest| rest.strip_suffix('\''))
+        && let Some(close) = code.get(range.clone())
+        && !open.is_empty()
+        && open.len() <= MAX_LABEL_BYTES
+        && open != close
+    {
+        out.push(Fix { label: format!("Replace `{close}` with `{open}`"), edits: vec![(range, open.to_string())] });
     }
     out
+}
+
+/// The edit distance between `a` and `b` (insertions, deletions and substitutions of bytes)
+/// when it is at most `max`, else `None`. Only the cells within `max` of the diagonal are
+/// computed, at most `(a.len() + 1) * (2 * max + 3)`.
+fn distance_within(a: &[u8], b: &[u8], max: usize) -> Option<usize> {
+    if a.len().abs_diff(b.len()) > max {
+        return None;
+    }
+    let far = max + 1;
+    let n = b.len();
+    let mut prev: Vec<usize> = (0..=n).map(|j| j.min(far)).collect();
+    let mut cur: Vec<usize> = vec![far; n + 1];
+    for (row, &ca) in a.iter().enumerate() {
+        let i = row + 1;
+        let lo = i.saturating_sub(max);
+        let hi = (i + max).min(n);
+        // The cells next to the band read as too far.
+        for cell in cur.iter_mut().take(hi + 2).skip(lo.saturating_sub(1)) {
+            *cell = far;
+        }
+        let mut best = far;
+        if lo == 0 {
+            if let Some(cell) = cur.get_mut(0) {
+                *cell = i.min(far);
+            }
+            best = i.min(far);
+        }
+        for j in lo.max(1)..=hi {
+            let cb = b.get(j - 1).copied().unwrap_or(0);
+            let diagonal = prev.get(j - 1).copied().unwrap_or(far) + usize::from(ca != cb);
+            let up = prev.get(j).copied().unwrap_or(far) + 1;
+            let left = cur.get(j - 1).copied().unwrap_or(far) + 1;
+            let value = diagonal.min(up).min(left).min(far);
+            if let Some(cell) = cur.get_mut(j) {
+                *cell = value;
+            }
+            best = best.min(value);
+        }
+        if best > max {
+            return None;
+        }
+        std::mem::swap(&mut prev, &mut cur);
+    }
+    prev.get(n).copied().filter(|d| *d <= max)
+}
+
+/// The glyph names nearest to the unknown `name` that differ from it beyond case, nearest first
+/// and then by name, at most [`MAX_NEAREST`]. At most [`MAX_NEAREST_SCAN`] names are looked at,
+/// and no more than `budget` holds, which is lowered by those looked at.
+fn nearest_glyphs<'n>(name: &str, glyphs: &'n [String], budget: Option<&Cell<usize>>) -> Vec<&'n str> {
+    let typed = name.as_bytes();
+    if typed.is_empty() || typed.len() > MAX_NEAREST_NAME_BYTES {
+        return Vec::new();
+    }
+    let max = if typed.len() <= SHORT_NAME_BYTES { 1 } else { MAX_NEAREST_DISTANCE };
+    let allowed = budget.map_or(MAX_NEAREST_SCAN, |b| b.get().min(MAX_NEAREST_SCAN));
+    let mut found: Vec<(usize, &str)> = Vec::new();
+    let mut looked = 0usize;
+    for glyph in glyphs.iter().take(allowed) {
+        looked += 1;
+        let g = glyph.as_bytes();
+        if g.len() > MAX_NEAREST_NAME_BYTES || g.len().abs_diff(typed.len()) > max || glyph.eq_ignore_ascii_case(name) {
+            continue;
+        }
+        if let Some(d) = distance_within(typed, g, max) {
+            found.push((d, glyph.as_str()));
+        }
+    }
+    if let Some(b) = budget {
+        b.set(b.get().saturating_sub(looked));
+    }
+    found.sort_unstable();
+    found.into_iter().take(MAX_NEAREST).map(|(_, g)| g).collect()
+}
+
+/// The words that start a statement only outside feature and lookup blocks: an open block ends
+/// before the line that starts with one.
+const TOP_LEVEL_WORDS: &[&str] = &["feature", "table", "languagesystem", "variation", "conditionset", "anchorDef", "valueRecordDef"];
+
+/// Whether `code` has the word `word` at byte `at`, not followed by a name character.
+fn word_at(code: &str, at: usize, word: &str) -> bool {
+    code.get(at..).is_some_and(|rest| rest.starts_with(word)) && !code.as_bytes().get(at + word.len()).copied().is_some_and(is_name_byte)
+}
+
+/// The fix for a block left open whose tag or label is at `label`: `} label;` inserted before the
+/// first line inside the block, at its own depth, that starts with a word only a top-level
+/// statement starts with (and, for a lookup, `lookup`), else after the end of the code. `None`
+/// when no `{` follows the label, the block is closed by a brace, the scan passes
+/// [`MAX_FIX_SCAN`] bytes, or the code ends inside a nested block.
+fn close_block(code: &str, label: Range<usize>) -> Option<Fix> {
+    let name = code.get(label.clone())?.trim();
+    if name.is_empty() || name.len() > MAX_LABEL_BYTES {
+        return None;
+    }
+    let lookup = code.get(..label.start)?.trim_end().ends_with("lookup");
+    let bytes = code.as_bytes();
+    let limit = label.end.saturating_add(MAX_FIX_SCAN).min(bytes.len());
+    let open = label.end + bytes.get(label.end..limit)?.iter().position(|&b| b == b'{')?;
+    if !matches!(code.get(label.end..open)?.trim(), "" | "useExtension") {
+        return None;
+    }
+    let fix = |at: usize, text: String| Fix { label: format!("Close the block with `}} {name};`"), edits: vec![(at..at, text)] };
+    let mut depth = 1usize;
+    let mut at = open + 1;
+    while at < limit {
+        let b = bytes.get(at).copied()?;
+        match b {
+            b'#' => {
+                at = bytes.get(at..limit)?.iter().position(|&c| c == b'\n').map_or(limit, |p| at + p);
+                continue;
+            }
+            b'"' => {
+                at = bytes.get(at + 1..limit)?.iter().position(|&c| c == b'"').map_or(limit, |p| at + 2 + p);
+                continue;
+            }
+            b'{' => {
+                depth += 1;
+                if depth > MAX_NESTING_DEPTH {
+                    return None;
+                }
+            }
+            b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return None;
+                }
+            }
+            b'\n' if depth == 1 => {
+                let line = at + 1;
+                let first = line + bytes.get(line..limit)?.iter().position(|c| !matches!(c, b' ' | b'\t')).unwrap_or(limit - line);
+                let ends = TOP_LEVEL_WORDS.iter().any(|w| word_at(code, first, w)) || (lookup && word_at(code, first, "lookup"));
+                if ends {
+                    return Some(fix(line, format!("}} {name};\n")));
+                }
+            }
+            _ => {}
+        }
+        at += 1;
+    }
+    if limit < bytes.len() || depth != 1 {
+        return None;
+    }
+    let end = code.trim_end().len();
+    Some(fix(end, format!("\n}} {name};")))
+}
+
+/// The bodies of the classes, mark classes and lookups code defines, for the name previews
+/// (`font.features.previewName`). The first definition of a name is kept.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Bodies {
+    /// `@Name = body;`: the body between `=` and `;`, at most [`MAX_BODY_BYTES`].
+    pub classes: HashMap<String, String>,
+    /// `markClass glyphs <anchor …> @Name;`: each statement's glyphs and anchor, in order, at
+    /// most [`MAX_MARK_STATEMENTS`] a class.
+    pub mark_classes: HashMap<String, Vec<(String, String)>>,
+    /// `lookup Name { … } Name;`: its first [`MAX_LOOKUP_RULES`] rules, and whether it has more.
+    pub lookups: HashMap<String, (Vec<String>, bool)>,
+}
+
+/// The keywords a rule of a lookup starts with.
+const RULE_KEYWORDS: &[&str] = &["sub", "substitute", "rsub", "reversesub", "pos", "position", "ignore", "enum", "enumerate"];
+
+/// Adds the classes, mark classes and lookups `code` defines, with their bodies, to `into`; at
+/// most [`MAX_DEFINITIONS`] names of each kind. One pass over [`highlight`]'s stretches.
+pub fn bodies(code: &str, into: &mut Bodies) {
+    if code.is_empty() {
+        return;
+    }
+    let marks = highlight(code);
+    let text = |h: &Highlight| code.get(h.range.clone()).unwrap_or("");
+    let mut statement: Option<usize> = None;
+    let mut depth = 0usize;
+    // The open lookup's name and the depth of its body.
+    let mut lookup: Option<(String, usize)> = None;
+    for (k, h) in marks.iter().enumerate() {
+        if h.kind == HighlightKind::Comment {
+            continue;
+        }
+        let t = text(h);
+        if h.kind == HighlightKind::Punctuation && matches!(t, ";" | "{" | "}") {
+            match t {
+                ";" => {
+                    if let Some(first) = statement {
+                        let inside = lookup.as_ref().filter(|(_, d)| *d == depth).map(|(name, _)| name.as_str());
+                        statement_body(code, &marks, first, k, inside, into);
+                    }
+                }
+                "{" => {
+                    depth += 1;
+                    let opens = statement.and_then(|first| {
+                        let keyword = marks.get(first).filter(|m| m.kind == HighlightKind::Keyword && text(m) == "lookup")?;
+                        let name = marks.get(first + 1).filter(|m| m.kind == HighlightKind::LookupName)?;
+                        (keyword.range.end <= name.range.start).then(|| text(name).to_string())
+                    });
+                    if lookup.is_none()
+                        && let Some(name) = opens
+                    {
+                        if into.lookups.len() < MAX_DEFINITIONS {
+                            into.lookups.entry(name.clone()).or_default();
+                        }
+                        lookup = Some((name, depth));
+                    }
+                }
+                _ => {
+                    if lookup.as_ref().is_some_and(|(_, d)| *d == depth) {
+                        lookup = None;
+                    }
+                    depth = depth.saturating_sub(1);
+                }
+            }
+            statement = None;
+            continue;
+        }
+        if statement.is_none() {
+            statement = Some(k);
+        }
+    }
+}
+
+/// Reads one statement, the stretches `first..end` of `marks` (`end` is its `;`): a class
+/// definition, a `markClass` statement, or a rule of the lookup `inside`.
+fn statement_body(code: &str, marks: &[Highlight], first: usize, end: usize, inside: Option<&str>, into: &mut Bodies) {
+    let text = |h: &Highlight| code.get(h.range.clone()).unwrap_or("");
+    let (Some(head), Some(semi)) = (marks.get(first), marks.get(end)) else { return };
+    let between = |from: usize, to: usize| code.get(from..to).map(str::trim).unwrap_or("");
+    let next_is_equals = marks.get(first + 1).is_some_and(|m| m.kind == HighlightKind::Punctuation && text(m) == "=");
+    if head.kind == HighlightKind::ClassName && next_is_equals {
+        let name = text(head).trim_start_matches('@');
+        let Some(equals) = marks.get(first + 1) else { return };
+        let body = between(equals.range.end, semi.range.start);
+        if !name.is_empty() && body.len() <= MAX_BODY_BYTES && into.classes.len() < MAX_DEFINITIONS && !into.classes.contains_key(name) {
+            into.classes.insert(name.to_string(), body.to_string());
+        }
+    } else if head.kind == HighlightKind::Keyword && text(head) == "markClass" {
+        let inner = marks.get(first + 1..end).unwrap_or(&[]);
+        let Some(class) = inner.iter().rev().find(|m| m.kind == HighlightKind::ClassName) else { return };
+        let Some(anchor) = inner.iter().find(|m| m.kind == HighlightKind::Punctuation && text(m) == "<") else { return };
+        let name = text(class).trim_start_matches('@');
+        let glyphs = between(head.range.end, anchor.range.start);
+        let point = between(anchor.range.start, class.range.start);
+        if name.is_empty() || glyphs.len() > MAX_BODY_BYTES || point.len() > MAX_BODY_BYTES {
+            return;
+        }
+        if !into.mark_classes.contains_key(name) && into.mark_classes.len() >= MAX_DEFINITIONS {
+            return;
+        }
+        let list = into.mark_classes.entry(name.to_string()).or_default();
+        if list.len() < MAX_MARK_STATEMENTS {
+            list.push((glyphs.to_string(), point.to_string()));
+        }
+    } else if let Some(name) = inside
+        && head.kind == HighlightKind::Keyword
+        && RULE_KEYWORDS.contains(&text(head))
+        && let Some((rules, more)) = into.lookups.get_mut(name)
+    {
+        if rules.len() >= MAX_LOOKUP_RULES {
+            *more = true;
+            return;
+        }
+        let rule = code.get(head.range.start..semi.range.end).unwrap_or("");
+        let collapsed = rule.split_whitespace().collect::<Vec<_>>().join(" ");
+        let mut kept: String = collapsed.chars().take(MAX_RULE_CHARS).collect();
+        if kept.len() < collapsed.len() {
+            kept.push('…');
+        }
+        rules.push(kept);
+    }
 }
 
 #[cfg(test)]
@@ -954,7 +1280,7 @@ mod tests {
         let classes = vec!["Up".to_string(), "upper".to_string(), "Lower".to_string()];
         let lookups = vec!["L1".to_string(), "Other".to_string()];
         let numbers = vec!["tracking".to_string(), "gap".to_string()];
-        let names = CompletionNames { glyphs: &glyphs, classes: &classes, lookups: &lookups, numbers: &numbers };
+        let names = CompletionNames { glyphs: &glyphs, classes: &classes, lookups: &lookups, numbers: &numbers, nearest_budget: None };
         let labels = |code: &str| complete(code, code.len(), &names).into_iter().map(|c| c.label).collect::<Vec<_>>();
 
         // Glyphs in a rule, narrowed by the partial word, exact case first.
@@ -1029,5 +1355,118 @@ mod tests {
         assert!(fixes(code, &lost, &names).is_empty());
         assert_eq!(semicolon_position("{   ", 4), None);
         assert_eq!(semicolon_position("", 0), None);
+    }
+    /// The fix for the error whose message contains `wanted`, applied: the code that compiles.
+    fn fixed_by(code: &str, wanted: &str, lookups: &[String]) -> String {
+        let found = diagnostics(code);
+        let error = found
+            .iter()
+            .find(|d| d.diagnostic.is_error() && d.message().to_ascii_lowercase().contains(wanted))
+            .unwrap_or_else(|| panic!("{code}: no error `{wanted}` in {found:?}"));
+        let glyphs = glyphs();
+        let names = CompletionNames { glyphs: &glyphs, lookups, ..CompletionNames::default() };
+        let offered = fixes(code, error, &names);
+        let first = offered.first().unwrap_or_else(|| panic!("{code}: {error:?} has no fix"));
+        let new = first.apply(code).unwrap();
+        assert!(diagnostics(&new).iter().all(|d| !d.diagnostic.is_error()), "{new}: {:?}", diagnostics(&new));
+        new
+    }
+
+    /// Each new fix, applied, gives code that compiles: the nearest glyph name, a lookup name in
+    /// another case, a block left open, a closing tag that differs.
+    #[test]
+    fn each_new_fix_gives_code_that_compiles() {
+        assert_eq!(
+            fixed_by("feature liga {\n    sub Agrav by c;\n} liga;\n", "glyph not in font", &[]),
+            "feature liga {\n    sub Agrave by c;\n} liga;\n"
+        );
+        let lookups = vec!["Lone".to_string()];
+        assert_eq!(
+            fixed_by("lookup Lone {\n    sub a by b;\n} Lone;\nfeature liga {\n    lookup lone;\n} liga;\n", "lookup is not defined", &lookups),
+            "lookup Lone {\n    sub a by b;\n} Lone;\nfeature liga {\n    lookup Lone;\n} liga;\n"
+        );
+        assert_eq!(
+            fixed_by("lookup L1 {\n    sub a by b;\nfeature liga {\n    lookup L1;\n} liga;\n", "is unclosed", &[]),
+            "lookup L1 {\n    sub a by b;\n} L1;\nfeature liga {\n    lookup L1;\n} liga;\n"
+        );
+        assert_eq!(
+            fixed_by("feature liga {\n    sub a by b;\nfeature calt {\n    sub c by f;\n} calt;\n", "is unclosed", &[]),
+            "feature liga {\n    sub a by b;\n} liga;\nfeature calt {\n    sub c by f;\n} calt;\n"
+        );
+        assert_eq!(fixed_by("feature liga {\n    sub a by b;\n} lgia;\n", "expected tag", &[]), "feature liga {\n    sub a by b;\n} liga;\n");
+    }
+
+    #[test]
+    fn edit_distance_is_banded_and_exact() {
+        assert_eq!(distance_within(b"Agrav", b"Agrave", 2), Some(1));
+        assert_eq!(distance_within(b"abc", b"acb", 2), Some(2));
+        assert_eq!(distance_within(b"kitten", b"sitting", 2), None);
+        assert_eq!(distance_within(b"kitten", b"sitting", 3), Some(3));
+        assert_eq!(distance_within(b"", b"ab", 2), Some(2));
+        assert_eq!(distance_within(b"a", b"abcd", 2), None);
+        // A short name is offered names one edit away only.
+        let names: Vec<String> = ["ab", "abc", "xyz"].iter().map(|n| n.to_string()).collect();
+        assert_eq!(nearest_glyphs("a", &names, None), vec!["ab"]);
+    }
+
+    /// The fix search stays bounded: on 1 MB of code a block left open is looked for over at most
+    /// [`MAX_FIX_SCAN`] bytes, and the nearest-name search over a large glyph set takes from the
+    /// shared budget.
+    #[test]
+    fn fix_search_stays_bounded_on_a_megabyte_of_code() {
+        let small = "lookup L1 {\n    sub a by b;\nfeature liga {\n    lookup L1;\n} liga;\n";
+        let unclosed = diagnostics(small).into_iter().find(|d| d.message().contains("is unclosed")).expect("the block is unclosed");
+        let big = format!("lookup L1 {{\n{}", "    sub a by b;\n".repeat(70_000));
+        assert!(big.len() > 1 << 20);
+        let glyphs = glyphs();
+        let names = CompletionNames { glyphs: &glyphs, ..CompletionNames::default() };
+        let started = std::time::Instant::now();
+        assert!(fixes(&big, &unclosed, &names).is_empty(), "the end of the block is past the scan");
+        assert!(started.elapsed() < std::time::Duration::from_secs(2), "took {:?}", started.elapsed());
+
+        let unknown =
+            diagnostics("feature liga {\n    sub Agrav by c;\n} liga;\n").into_iter().find(|d| d.diagnostic.is_error()).expect("an unknown glyph");
+        let many: Vec<String> = (0..200_000).map(|i| format!("Agra{i:06}")).collect();
+        let budget = Cell::new(100_000);
+        let names = CompletionNames { glyphs: &many, nearest_budget: Some(&budget), ..CompletionNames::default() };
+        let started = std::time::Instant::now();
+        let code = "feature liga {\n    sub Agrav by c;\n} liga;\n";
+        fixes(code, &unknown, &names);
+        assert_eq!(budget.get(), 100_000 - MAX_NEAREST_SCAN, "one call looks at most at MAX_NEAREST_SCAN names");
+        fixes(code, &unknown, &names);
+        assert_eq!(budget.get(), 0);
+        assert!(fixes(code, &unknown, &names).is_empty(), "an empty budget looks at nothing");
+        assert!(started.elapsed() < std::time::Duration::from_secs(5), "took {:?}", started.elapsed());
+    }
+
+    /// Class definitions, mark classes with their anchors and the first rules of each lookup.
+    #[test]
+    fn bodies_read_classes_mark_classes_and_lookup_rules() {
+        let mut rules = String::new();
+        for i in 0..60 {
+            rules.push_str(&format!("    sub a{i} by b;\n"));
+        }
+        let code = format!(
+            "@Up = [A Agrave]; # caps\nmarkClass [acutecomb] <anchor 0 500> @TOP;\nmarkClass gravecomb <anchor 10 520> @TOP;\nlookup L1 {{\n    lookupflag 0;\n    sub a by b;\n}} L1;\nlookup L2 {{\n{rules}}} L2;\nfeature liga {{\n    @Low = [a b];\n    lookup L1;\n}} liga;\n"
+        );
+        let mut got = Bodies::default();
+        bodies(&code, &mut got);
+        assert_eq!(got.classes.get("Up").map(String::as_str), Some("[A Agrave]"));
+        assert_eq!(got.classes.get("Low").map(String::as_str), Some("[a b]"));
+        assert_eq!(
+            got.mark_classes.get("TOP"),
+            Some(&vec![("[acutecomb]".to_string(), "<anchor 0 500>".to_string()), ("gravecomb".to_string(), "<anchor 10 520>".to_string())])
+        );
+        assert_eq!(got.lookups.get("L1"), Some(&(vec!["sub a by b;".to_string()], false)));
+        let (l2, more) = got.lookups.get("L2").expect("L2");
+        assert_eq!(l2.len(), MAX_LOOKUP_RULES);
+        assert!(*more);
+        assert_eq!(l2.first().map(String::as_str), Some("sub a0 by b;"));
+    }
+    /// A class replaced by a class of another length: the message names both counts the right way round.
+    #[test]
+    fn a_class_of_another_length_gets_both_counts() {
+        let found = diagnostics("@Two = [a b];\n@Three = [a b c];\nfeature liga {\n    sub @Two by @Three;\n} liga;\n");
+        assert!(found.iter().any(|d| d.message().starts_with("the replacement class has 3 glyphs and the target class 2")), "{found:?}");
     }
 }
