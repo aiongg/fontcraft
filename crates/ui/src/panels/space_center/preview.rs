@@ -5,6 +5,11 @@
 //! helper and filled by the nonzero rule in horizontal bands, so counters stay open. Upside down, the whole preview
 //! turns half a circle about its middle.
 //!
+//! With Images on, a glyph's placed image (its transform, crop and opacity) is drawn before the glyph, so the glyph
+//! lies over it. With Color on, a glyph with a colour drawing is drawn through the canvas's colour path
+//! (`canvas::color::paint::draw`) in place of its filled outline; Stroke still outlines it. The cut-off band does not
+//! recolour colour drawings or images.
+//!
 //! The preview is a craft `Canvas` whose document is the laid-out text in points: the canvas scrolls it, and craft's
 //! `ToolHost` runs the drag tool (`shell::space_center::drag`) on the canvas's pass, as the edit view runs its tool.
 //! Painting hands the tool where each glyph sits, so its hit test sees wrapping, right-to-left placement and the half
@@ -22,6 +27,8 @@ use serde_json::json;
 use super::SpaceCenterWords;
 use crate::app::Msg;
 use crate::app::models::space_center::{PlacedGlyph, SpaceCenterModel, SpaceLine};
+use crate::canvas::images::cells::CellImages;
+use crate::canvas::images::tokens::ImageTokens;
 use crate::canvas::paint::{fill::nonzero, flatten};
 use crate::canvas::tokens::Tokens;
 use crate::shell::space_center::drag::{GlyphBox, MAX_BOXES, PreviewFrame, SpaceEdit, SpacePreview, drag_message};
@@ -131,7 +138,15 @@ fn rows<'m>(model: &'m SpaceCenterModel, span: f32) -> Vec<PreviewRow<'m>> {
 
 /// Shows the preview as a canvas that shares the panel's room with the matrix. The canvas scrolls over the lines;
 /// its tool (`shell::space_center::drag::SpaceTool`) takes the presses, drags and arrows, whose edits become messages in `sent`.
-pub fn show(ui: &mut Ui, words: &SpaceCenterWords, model: &SpaceCenterModel, tokens: &Tokens, preview: &mut SpacePreview, sent: &mut Vec<Msg>) {
+pub fn show(
+    ui: &mut Ui,
+    words: &SpaceCenterWords,
+    model: &SpaceCenterModel,
+    images: &CellImages,
+    tokens: &Tokens,
+    preview: &mut SpacePreview,
+    sent: &mut Vec<Msg>,
+) {
     let pad = tokens.label_size;
     let SpacePreview { view, tool } = preview;
     let drag_at = tool.drag_at();
@@ -156,7 +171,7 @@ pub fn show(ui: &mut Ui, words: &SpaceCenterWords, model: &SpaceCenterModel, tok
             let Some(space) = canvas_space(&Env::of(ui).view()) else { return };
             let clip = space.view.rect;
             let painter = ui.painter_at(clip);
-            let frame = paint(&painter, clip, content, space.view.affine(), pad, &rows, model, tokens);
+            let frame = paint(&painter, clip, content, space.view.affine(), pad, &rows, model, images, tokens);
             if let Some(at) = drag_at {
                 painter
                     .line_segment([pos2(at.x, clip.min.y), pos2(at.x, clip.max.y)], Stroke::new(tokens.metric_line_width, tokens.metric_highlight));
@@ -208,9 +223,11 @@ fn paint(
     pad: f32,
     rows: &[PreviewRow<'_>],
     model: &SpaceCenterModel,
+    images: &CellImages,
     t: &Tokens,
 ) -> PreviewFrame {
     let display = &model.state.display;
+    let image_tokens = ImageTokens::standard();
     let (ground, ink) = if display.inverse { (t.outline, t.canvas) } else { (t.canvas, t.outline) };
     painter.rect_filled(clip, 0.0, ground);
     let wide = content.width() - 2.0 * pad;
@@ -252,6 +269,16 @@ fn paint(
             painter
                 .line_segment([turned(pos2(left, baseline)), turned(pos2(left + length, baseline))], Stroke::new(t.metric_line_width, t.metric_line));
         }
+        // A glyph's origin at `x` on the baseline: font units (y up) to preview units (y down).
+        let glyph_at = |x: f32| Affine::new([f64::from(s), 0.0, 0.0, -f64::from(s), f64::from(x), f64::from(baseline)]);
+        // Every image of the row first, so no glyph lies under a neighbour's image.
+        if display.images {
+            for g in row.glyphs {
+                let Some(image) = g.glyph.as_ref().and_then(|name| images.by_glyph.get(name)) else { continue };
+                let x = left + ((g.offset - row.start) as f32) * s;
+                crate::canvas::images::draw(painter, image, to_screen * glyph_at(x), &image_tokens);
+            }
+        }
         let mut ink_shapes = Vec::new();
         let mut marks = Vec::new();
         for g in row.glyphs {
@@ -286,14 +313,22 @@ fn paint(
                 marks.push(Shape::rect_stroke(box_rect, 0.0, Stroke::new(t.outline_width, t.metric_highlight), egui::StrokeKind::Inside));
             }
             let Some(art) = g.glyph.as_ref().and_then(|name| model.art.get(name)) else { continue };
-            let affine = to_screen * Affine::new([f64::from(s), 0.0, 0.0, -f64::from(s), f64::from(x), f64::from(baseline)]);
+            let affine = to_screen * glyph_at(x);
+            let colored = match art.color.as_ref().filter(|_| display.color) {
+                Some(drawing) => {
+                    crate::canvas::color::paint::draw(painter, drawing, affine, crate::canvas::color::TEXT);
+                    true
+                }
+                None => false,
+            };
             let contours = flatten(&art.outline, affine);
             if display.fill
+                && !colored
                 && let Some(mesh) = nonzero(&contours, clip, ink)
             {
                 ink_shapes.push(Shape::mesh(mesh));
             }
-            if display.stroke || !display.fill {
+            if display.stroke || (!display.fill && !colored) {
                 ink_shapes.extend(contours.iter().map(|c| Shape::line(c.clone(), Stroke::new(t.outline_width, ink))));
             }
             for overlay in &art.overlays {

@@ -531,6 +531,7 @@ impl FontCraftApp {
         crate::canvas::reporters::refresh(self);
         crate::canvas::reference_font::refresh(self);
         crate::canvas::images::cells::refresh(self);
+        crate::canvas::images::cells::space_center(self);
         let engine = Stamp::of(&self.session, 0);
         if self.enabled_at != Some(engine) {
             self.enabled_at = Some(engine);

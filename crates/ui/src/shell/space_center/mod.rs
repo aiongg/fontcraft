@@ -6,7 +6,7 @@
 //! | `window.spaceCenter {open?, text?, before?, after?, size?, lineMode?, select?}` | shows or hides the window and sets its fields |
 //! | `view.setSpacingCutOff {on?, bottom?, top?}` | the band drawn inverted between two heights |
 //! | `view.setPreferredSuffix {suffix?}` | shows each glyph's variant with the suffix where the font has one |
-//! | `view.setSpaceCenterDisplay {…}` | direction, centring, turning and what is drawn over the glyphs |
+//! | `view.setSpaceCenterDisplay {…}` | direction, centring, turning and what is drawn with the glyphs |
 //! | `spaceCenter.setValue {column, row, text}` | a matrix entry: evaluates `text` and runs the row's spacing setter |
 //!
 //! The text is read by [`text`]; the projection (`app::models::space_center`) lays it out for the master shown. The
@@ -76,7 +76,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Space Center Display Options",
         menu: &[],
         shortcut: None,
-        params: "{rightToLeft?: bool, centered?: bool, upsideDown?: bool, metrics?: bool, beam?: bool, beamY?: units|null, fill?: bool, stroke?: bool, inverse?: bool, guides?: bool, zones?: bool, layers?: [layer or master names] (at most 8), lineSpace?: 0.5 to 4, tracking?: units (-1000 to 1000)} set how the Space Center draws its text; options left out keep their value. rightToLeft lays the text out right to left from the right edge with the right-to-left kerning, centered centres every line, upsideDown turns the whole preview half a circle; metrics draws the glyphs' edges, beam a line at height beamY (null: half the x-height) with the margins measured where it meets each outline, fill and stroke the outlines filled and outlined, inverse light glyphs on a dark ground, guides the master's and the glyphs' guides, zones the master's alignment zones, layers the outlines of those layers (by layer name or id, else the master of that name) over each glyph; lineSpace multiplies the line height and tracking adds space between glyphs. Giving beamY without beam also shows the beam",
+        params: "{rightToLeft?: bool, centered?: bool, upsideDown?: bool, metrics?: bool, beam?: bool, beamY?: units|null, fill?: bool, stroke?: bool, inverse?: bool, guides?: bool, zones?: bool, images?: bool, color?: bool, layers?: [layer or master names] (at most 8), lineSpace?: 0.5 to 4, tracking?: units (-1000 to 1000)} set how the Space Center draws its text; options left out keep their value. rightToLeft lays the text out right to left from the right edge with the right-to-left kerning, centered centres every line, upsideDown turns the whole preview half a circle; metrics draws the glyphs' edges, beam a line at height beamY (null: half the x-height) with the margins measured where it meets each outline, fill and stroke the outlines filled and outlined, inverse light glyphs on a dark ground, guides the master's and the glyphs' guides, zones the master's alignment zones, images the placed image of each glyph's layer behind the glyphs, color colour glyphs in their colour layers (or a layered font in its Master Colors) in place of their outline, layers the outlines of those layers (by layer name or id, else the master of that name) over each glyph; lineSpace multiplies the line height and tracking adds space between glyphs. Giving beamY without beam also shows the beam",
     },
     UiCommand {
         id: "spaceCenter.setValue",
@@ -132,6 +132,10 @@ pub struct Display {
     pub inverse: bool,
     pub guides: bool,
     pub zones: bool,
+    /// The placed image of each glyph's layer, behind the glyphs.
+    pub images: bool,
+    /// Colour glyphs in their colour drawing (`canvas::color`) in place of their outline.
+    pub color: bool,
     /// Layers drawn as outlines over each glyph, as typed (a layer name or id, or a master name).
     pub layers: Vec<String>,
     pub line_space: f64,
@@ -152,6 +156,8 @@ impl Default for Display {
             inverse: false,
             guides: false,
             zones: false,
+            images: false,
+            color: true,
             layers: Vec::new(),
             line_space: 1.0,
             tracking: 0.0,
@@ -160,7 +166,8 @@ impl Default for Display {
 }
 
 /// The parameters of `view.setSpaceCenterDisplay` that switch something on or off.
-pub const DISPLAY_FLAGS: [&str; 10] = ["rightToLeft", "centered", "upsideDown", "metrics", "beam", "fill", "stroke", "inverse", "guides", "zones"];
+pub const DISPLAY_FLAGS: [&str; 12] =
+    ["rightToLeft", "centered", "upsideDown", "metrics", "beam", "fill", "stroke", "inverse", "guides", "zones", "images", "color"];
 
 impl Display {
     /// The switch named by one of [`DISPLAY_FLAGS`].
@@ -176,6 +183,8 @@ impl Display {
             "inverse" => self.inverse,
             "guides" => self.guides,
             "zones" => self.zones,
+            "images" => self.images,
+            "color" => self.color,
             _ => return None,
         })
     }
@@ -193,6 +202,8 @@ impl Display {
             "inverse" => &mut self.inverse,
             "guides" => &mut self.guides,
             "zones" => &mut self.zones,
+            "images" => &mut self.images,
+            "color" => &mut self.color,
             _ => return None,
         })
     }
@@ -210,6 +221,8 @@ impl Display {
             "inverse": self.inverse,
             "guides": self.guides,
             "zones": self.zones,
+            "images": self.images,
+            "color": self.color,
             "layers": self.layers,
             "lineSpace": self.line_space,
             "tracking": self.tracking,

@@ -35,7 +35,10 @@ _Updated: 2026-11-23: X.fix96 and X.fix97: floating panels are OS windows on des
     refusals, `inspect`), `dialogs/strike_properties.rs` (property lines, the dialog's OK on one strike).
   - Left: the actual-size preview, the pointer position readout, the pointer, magnify and hand tools, the context
     menu, a strike chooser and property table in Strike Properties, reset to computed defaults; references are not
-    drawn into the edited bitmap. M13.23c (Space Center images and colour glyphs) is not started.
+    drawn into the edited bitmap. M13.23c (Space Center images and colour glyphs) is written on branch `w-M13.23c`,
+    not yet built or tested: Images and Color in `view.setSpaceCenterDisplay` and the Display menu; images worked out
+    by `canvas::images::cells::space_center` into `Models::space_images`; colour from `canvas::color::cell_color` in
+    the Space Center projection; frame tests in `panels/space_center/tests.rs`.
 
 - **Where M10.34 and M10.41 stand.** Merged and built with M13.64. Seen in the window: with the Instructor and two
   points selected, the canvas menu starts with Snap Point, Stem and Delta, Shift Points and Interpolate greyed out;

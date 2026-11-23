@@ -394,6 +394,7 @@ impl DockPanels<PanelId> for Panels<'_> {
                 ui,
                 panels::space_center::Props {
                     model: &self.models.space_center,
+                    images: &self.models.space_images,
                     tokens: &self.models.canvas_tokens,
                     preview: self.space_preview,
                     sent: self.sent,

@@ -4166,12 +4166,13 @@ summary = "A separate window dedicated to spacing: several lines of text at read
 ref = "RoboFont reference › Space Center"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5). Documented in the RoboFont reference, not yet observed. Built: the text with its Samples menu of stored sample strings, the before and after fields, the size, multi-line, single-line and waterfall display, the cut-off band, the preferred suffix, the matrix (width, left, right), and the Display menu (`view.setSpaceCenterDisplay`): right to left, centred, upside down, metrics, beam, fill, stroke, inverse, guides, zones, overlay layers, line space and tracking. Not built yet: images in the display menu."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5). Documented in the RoboFont reference, not yet observed. Built: the text with its Samples menu of stored sample strings, the before and after fields, the size, multi-line, single-line and waterfall display, the cut-off band, the preferred suffix, the matrix (width, left, right), and the Display menu (`view.setSpaceCenterDisplay`): right to left, centred, upside down, metrics, beam, fill, stroke, inverse, guides, zones, images, colour glyphs, overlay layers, line space and tracking."
 guesses = [
   "A new Space Center shows `hamburgefontsiv` at 72 points; the reference's default text and size would settle it.",
   "The Space Center draws the showing Edit View tab's master, else the first master; how the reference picks the master of a multi-master font would settle it.",
   "Matrix columns are the text's own glyphs; control glyphs get none. Opening a text with control glyphs in the reference would settle it.",
   "The matrix shows at most eight glyph rows and scrolls the rest, and the preview takes the room above it; the reference's matrix height with a long text would settle it.",
+  "The Display menu also offers Color, which draws colour glyphs from their colour layers as Font View does; the reference's Space Center menu has no such item, and the primary reference's preview of a colour font would settle whether it draws in colour unasked.",
 ]
 
 [[behavior]]
@@ -4244,14 +4245,14 @@ label = "Space Center Display Options"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{rightToLeft?: bool, centered?: bool, upsideDown?: bool, metrics?: bool, beam?: bool, beamY?: number, fill?: bool, stroke?: bool, inverse?: bool, guides?: bool, zones?: bool, layers?: [string], lineSpace?: number, tracking?: number}"
+params = "{rightToLeft?: bool, centered?: bool, upsideDown?: bool, metrics?: bool, beam?: bool, beamY?: number, fill?: bool, stroke?: bool, inverse?: bool, guides?: bool, zones?: bool, images?: bool, color?: bool, layers?: [string], lineSpace?: number, tracking?: number}"
 area = "spacing-kerning"
 milestone = "M13"
-summary = "Sets how the Space Center draws its text: right to left, centred or upside down, and what is drawn with the glyphs (metrics, the metrics beam with the margins measured on it, fill, stroke, inverse colours, guides, alignment zones, other layers as outlines), with the line spacing and tracking."
+summary = "Sets how the Space Center draws its text: right to left, centred or upside down, and what is drawn with the glyphs (metrics, the metrics beam with the margins measured on it, fill, stroke, inverse colours, guides, alignment zones, placed images, colour glyphs in colour, other layers as outlines), with the line spacing and tracking."
 ref = "RoboFont reference › Space Center › Display options"
 status = "docs"
 origin = "robofont"
-notes = "Documented in the RoboFont reference, not yet observed. The window's Display menu runs it with the option changed. Right to left lays the text out with the right-to-left kerning from the window's right edge. Upside down turns the whole preview half a circle; the arrow keys and drags still act on the glyphs' own left and right margins. The beam's height is the one `view.showMetricsBeam` keeps for the document (half the x-height until set), so Edit View and the Space Center measure at the same height; the Space Center's beam is switched on and off on its own. Tracking is added after the lines are broken."
+notes = "Documented in the RoboFont reference, not yet observed. The window's Display menu runs it with the option changed. Right to left lays the text out with the right-to-left kerning from the window's right edge. Upside down turns the whole preview half a circle; the arrow keys and drags still act on the glyphs' own left and right margins. The beam's height is the one `view.showMetricsBeam` keeps for the document (half the x-height until set), so Edit View and the Space Center measure at the same height; the Space Center's beam is switched on and off on its own. Tracking is added after the lines are broken. Images draws the placed image of each glyph's drawn layer behind the glyphs, at its transform, crop and opacity, whether or not View › Show Image is on; an iColor or svg layer's image is its colour drawing instead. Color draws a glyph with colour layers in the master shown (or every glyph of a layered font, in its Master Colors) through the canvas's colour path, in place of its filled outline; Stroke still outlines it. The cut-off band does not recolour images or colour drawings."
 guesses = [
   "Right to left uses the font's right-to-left kerning, as an Edit View tab set right to left does; the reference's kerning is not split by direction, and a font with right-to-left pairs would settle it.",
   "Upside down turns the preview half a circle, as Text Preview's Flip does, rather than mirroring it top to bottom; the reference app would settle it.",
@@ -4262,12 +4263,19 @@ guesses = [
   "Guides are drawn within each glyph's advance box, the master's and the glyph's own; the reference app would settle whether a horizontal guide runs across the whole line.",
   "Overlay layers are offered by master name in the menu, and the command also takes layer names or ids; the reference's layer list would settle it.",
   "Line space multiplies the master's line height, from 0.5 to 4; the reference app's control would settle the range.",
+  "Images is off and Color is on in a new Space Center; the reference app's defaults would settle it.",
+  "Images ignores View › Show Image and draws every glyph's image at its stored opacity; the reference app would settle whether the two switches are tied.",
+  "Images draws the foreground image of the layer drawn, not the background's; the reference app would settle whether a background image shows.",
+  "A colour glyph draws its colour layers in place of its filled outline rather than under it; the reference's preview of a colour font would settle it.",
+  "Images are drawn from a thumbnail of the em at the window's size in device pixels, so a very large file is not held at full size; the reference's sharpness at a large size would settle whether it draws the full file.",
 ]
 observe = [
   "In the reference's Space Center, turn on Right to Left with a Latin text: note the order and where the line starts.",
   "Turn on Upside Down: note whether the text is turned or mirrored, and press Right with a glyph selected: note which margin grows.",
   "Turn on Beam: note its default height, whether it can be dragged, and whether Edit View's beam moves with it.",
   "Turn on Guides with a horizontal font guide: note whether it runs across the line or within each glyph.",
+  "Place an image in a glyph, open the Space Center with Show Image off and turn on Images: note whether the image shows, at what opacity, and whether a background-layer image shows.",
+  "Note whether Images and the other display items are on or off in a new Space Center.",
 ]
 
 [[command]]
