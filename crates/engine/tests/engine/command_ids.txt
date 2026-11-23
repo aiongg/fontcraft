@@ -693,6 +693,12 @@ guide.addMarkers
 guide.setAppearance
 font.setStatusDefinitions
 glyph.setStatus
+capComponent.add
+capComponent.decompose
+capComponent.setFit
+capComponent.setGlyph
+capComponent.setScale
+capComponent.setAlignment
 file.exportWithProfiles
 file.saveExportProfile
 file.removeExportProfile

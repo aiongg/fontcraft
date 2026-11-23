@@ -149,7 +149,7 @@ fn extra_nodes(p: &Params) -> Result<Vec<Point>> {
 }
 
 /// The alignment a mode name stands for; `unused` (stored as 3) only when `stored` allows it.
-fn parse_mode(p: &Params, mode: &str, stored: bool) -> Result<CornerAlignment> {
+pub(super) fn parse_mode(p: &Params, mode: &str, stored: bool) -> Result<CornerAlignment> {
     match mode {
         "left" => Ok(CornerAlignment::Left),
         "right" => Ok(CornerAlignment::Right),
@@ -182,7 +182,7 @@ fn check_factor(p: &Params, key: &str, f: f64) -> Result<()> {
 
 /// A node index in the hint's numbering: on a closed path the model's node `m` is the file's
 /// node `m - 1`, the start node last.
-fn file_index(closed: bool, len: usize, node: usize) -> usize {
+pub(super) fn file_index(closed: bool, len: usize, node: usize) -> usize {
     if !closed {
         return node;
     }
@@ -448,7 +448,7 @@ fn set_alignment(s: &mut Session, v: &Value) -> Result<Value> {
 
 /// Sets `key` to `value`, or removes it for `None`. A new key goes where alphabetical order puts
 /// it, as the reference's files order a hint's keys.
-fn set_entry(d: &mut Dict, key: &str, value: Option<Plist>) {
+pub(super) fn set_entry(d: &mut Dict, key: &str, value: Option<Plist>) {
     let at = d.entries.iter().position(|(k, _)| k.as_str() == key);
     match (at, value) {
         (Some(_), Some(v)) => d.insert(key, v),
@@ -465,7 +465,7 @@ fn set_entry(d: &mut Dict, key: &str, value: Option<Plist>) {
 
 /// A number pair in the hint's spelling: a `{x, y}` string when its origin is one (version 2),
 /// else a list.
-fn pair(d: &Dict, x: f64, y: f64) -> Plist {
+pub(super) fn pair(d: &Dict, x: f64, y: f64) -> Plist {
     if matches!(d.get("origin"), Some(Plist::String(_))) {
         return Plist::String(Str::new(format!("{{{x}, {y}}}")));
     }

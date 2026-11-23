@@ -7,6 +7,7 @@ mod aligned_metrics;
 mod anchor_context;
 mod anchors;
 mod annotation;
+mod attach_cap;
 mod attributes;
 mod audit;
 mod audit_fix_binary;

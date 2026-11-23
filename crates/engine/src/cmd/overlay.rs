@@ -206,8 +206,11 @@ fn node_count(shapes: &[Shape]) -> usize {
 fn placed(p: &Params, src: &Source, name: &str, budget: &mut usize) -> Result<Option<(Vec<Shape>, Vec<Anchor>)>> {
     let Some(glyph) = src.font.glyph(name) else { return Ok(None) };
     let Some(layer) = glyph.layer(&src.master) else { return Ok(None) };
-    // A layer whose corners cannot be fitted is copied without them, as the outline draws it.
-    let cornered = fontcraft_model::corner::insert_corners(&src.font, layer).ok().flatten();
+    // Caps and corners are fitted as the outline draws them.
+    let cornered = fontcraft_model::attach::insert_attachments(&src.font, layer)
+        .ok()
+        .flatten()
+        .or_else(|| fontcraft_model::corner::insert_corners(&src.font, layer).ok().flatten());
     let shapes = cornered.as_deref().unwrap_or(&layer.shapes);
     let flat = super::decompose::decompose_where(&src.font, layer, shapes, |_: &str| true)
         .map_err(|e| p.bad(format!("glyph `{name}` of `{}`: {e}", src.title)))?;

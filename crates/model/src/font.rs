@@ -900,10 +900,11 @@ impl Font {
 
     /// The outline of `glyph` on `master` with its components resolved, in font units.
     ///
-    /// Corner components are fitted into the paths they sit on ([`crate::corner`]) and smart
+    /// Cap components ([`crate::attach`]) and corner components ([`crate::corner`]) are fitted
+    /// into the paths they sit on, caps first, and smart
     /// components are drawn interpolated ([`crate::smart`]), after the layer's other shapes, as
-    /// the reference compilers order them. A layer whose corners cannot be fitted is drawn without
-    /// them, and a smart component that cannot be interpolated is drawn as a plain component.
+    /// the reference compilers order them. A layer whose caps cannot be fitted is drawn with its
+    /// corners only, one whose corners cannot be fitted without them, and a smart component that cannot be interpolated is drawn as a plain component.
     ///
     /// Bounded work: components nest at most [`MAX_COMPONENT_DEPTH`] deep, the result has at most
     /// [`MAX_OUTLINE_ELEMENTS`] segments, every point is within [`MAX_COORDINATE`], and at most
@@ -927,8 +928,11 @@ impl Font {
         let bad = |message: &str| ModelError::BadOutline { glyph: glyph.to_string(), message: message.to_string() };
         let mut out = BezPath::new();
         let Some(layer) = g.layer(master) else { return Ok(out) };
-        // A layer whose corners cannot be fitted is drawn without them, as the compile leaves it.
-        let cornered = crate::corner::insert_corners(self, layer).ok().flatten();
+        // Caps and other attachments go in first, then corners. A layer whose attachments cannot
+        // be fitted is drawn with its corners only, and one whose corners cannot be fitted without
+        // them, as the compile leaves it.
+        let cornered =
+            crate::attach::insert_attachments(self, layer).ok().flatten().or_else(|| crate::corner::insert_corners(self, layer).ok().flatten());
         let shapes = cornered.as_deref().unwrap_or(&layer.shapes);
         // Smart components come after the layer's other shapes.
         let mut tail = BezPath::new();

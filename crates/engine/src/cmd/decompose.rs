@@ -206,7 +206,15 @@ impl<'f, 'b> Expander<'f, 'b> {
             Err(reason) => self.warnings.push(format!("the smart component `{}` was decomposed from its base layer: {reason}", c.glyph)),
         }
         let from = base_layer(base, layer, c).ok_or_else(|| format!("glyph `{}` has no layer for master `{}`", c.glyph, layer.master))?;
-        let cornered = match corner::insert_corners(font, from) {
+        let attached = match fontcraft_model::attach::insert_attachments(font, from) {
+            Ok(shapes) => shapes,
+            Err(e) => {
+                self.warnings.push(format!("glyph `{}` was decomposed without its cap components: {e}", c.glyph));
+                None
+            }
+        };
+        let fitted = if attached.is_some() { Ok(attached) } else { corner::insert_corners(font, from) };
+        let cornered = match fitted {
             Ok(shapes) => shapes,
             Err(e) => {
                 self.warnings.push(format!("glyph `{}` was decomposed without its corner components: {e}", c.glyph));

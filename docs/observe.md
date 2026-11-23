@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1578 rows to check: 2797 guesses and 700 observe steps.**
+**1579 rows to check: 2805 guesses and 700 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,10 +48,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 51 |
 | Built milestones (M0 to M6) | Settings and the window | 18 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **1018** |
+| **Later milestones (after M6)** | all | **1019** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 90 |
 | Later milestones (after M6) | Edit View: text mode and preview | 30 |
-| Later milestones (after M6) | Components and anchors | 43 |
+| Later milestones (after M6) | Components and anchors | 44 |
 | Later milestones (after M6) | Filters | 5 |
 | Later milestones (after M6) | Spacing and metrics keys | 13 |
 | Later milestones (after M6) | Kerning and the Kerning window | 16 |
@@ -1765,7 +1765,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (1018)
+## Later milestones (after M6) (1019)
 
 ### Edit View: drawing, guides, layers and the Palette (90)
 
@@ -2190,7 +2190,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A Waterfall button in the Text Preview's top row; the View menu item runs the same command.
   - Observe: In the reference app, turn on the waterfall with the Edit View text and then a Font View selection, and note the default sizes and whether each line is labelled.
 
-### Components and anchors (43)
+### Components and anchors (44)
 
 - [ ] `anchors.contextual` (behavior, M8, handbook): An anchor whose name starts with an asterisk (for example *bottom) is…
   - Guess: The contextual features are appended after the font's code, so their lookups come before the generated cursive and kerning lookups in the lookup list; a fontmake build with kerning, cursive and contextual anchors would settle the order.
@@ -2208,11 +2208,15 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `palette.anchorContext` (panel, M8, handbook): Anchor Context
   - Guess: The field is multi-line, since a context may hold several lines, commits when it loses the focus, and Escape restores the stored text; the running app would show its size and when it commits.
   - Observe: In F6 (contextual anchors), select a `*top` anchor in Edit View: note the Anchor Context field in the Palette and how it accepts a context with a token.
+- [ ] `cap.glyphNaming` (behavior, M13, handbook): A glyph is a cap glyph when its name starts with _cap
+  - Guess: A name of `_cap.` alone is not a cap glyph: the name needs at least one character after the dot.
 - [ ] `cap.attachesToTwoAdjacentNodes` (behavior, M13, handbook): A cap component is bound to two nodes that are neighbours on…
   - Guess: The two nodes may be selected in either order; the stored origin is the earlier one in path order, and on a closed path the last node and node 0 are neighbours with the last node as origin. A cap on the closing segment saved by the reference app settles it.
+  - Guess: The two nodes must follow each other in the node list, so they bound one straight segment; nodes with off-curve nodes between them are refused as not neighbours.
   - Observe: Select two nodes that are not neighbours on one path, then two nodes on different paths, and open the context menu: note whether Add Cap Component is shown, disabled or missing.
 - [ ] `cap.originAnchorSetup` (behavior, M13, handbook): Simple anchor setup for a cap glyph: a single anchor named origin…
   - Guess: In the origin setup the cap glyph is drawn as for the bottom end of a stem; its x axis is mapped onto the direction from the first to the second stem node and its origin onto the first node, so at a stem's top end it turns 180 degrees. Staff answers support the drawing rule; exporting `_cap.flag` on the top and bottom of a stem settles the mapping.
+  - Guess: A cap glyph with neither `node1` and `node2` nor an `origin` anchor is placed by its layer origin, as a corner glyph is.
 - [ ] `cap.node1Node2AnchorSetup` (behavior, M13, handbook): Flexible anchor setup for a cap glyph: two anchors named node1 and…
   - Guess: With node1 and node2 the cap's x axis is laid on the line from the first to the second host node and node1 lands on the first node; with Fit on, the horizontal scale is the host nodes' distance over the node1 to node2 distance and the vertical scale is the Info box value, so scaling is not uniform. Exporting `_cap.round` on the 80- and 120-unit stems settles it.
   - Observe: Add `_cap.round` (anchors node1 and node2 50 units apart) to the 80-unit stem of `l` and the 120-unit stem of `i`, export and send back: compare the cap's height in both to see whether scaling is uniform or along the stem end only.
@@ -2228,22 +2232,27 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A brush uses the brush glyph's first path; when that path is open, the brush draws nothing and its glyph is reported. A brush glyph whose first path is open, in the reference app, settles it.
 - [ ] `brush.startEndAnchors` (behavior, M13, handbook): Glyph › Set Anchors (Cmd+U) places a brush glyph's start and end…
   - Guess: Set Anchors puts a brush glyph's start at (0, 0) and its end at (advance width, 0); Set Anchors on a brush glyph in the reference app settles it.
-- [ ] `capComponent.add` (M13, handbook): Add Cap Component
+- [ ] `capComponent.add` (M13, handbook, live): Add Cap Component
   - Guess: The cap glyph's first path is open; it replaces the host segment between the two nodes, its start joins the side before the first node and its end the side after the second, and those sides are cut where the cap's ends meet them, as a corner's ends are fitted; left and right anchors act as for corners. The sources agree on the joining; an export of the cap test font settles the cut points.
+  - Guess: Each side is cut at its point nearest the cap's end node and then ends at that node, so a cap end that is off the side's line bends the side to it; the cap glyph's other paths are added to the layer, placed as the cap is.
+  - Guess: A new cap is stored with Fit off; adding a cap in the reference app and reading its Info box settles it.
   - Observe: In the cap test font (a `_cap.flag` glyph with an `origin` anchor and an open path, an `l` with an 80-unit stem), select the two top nodes of the stem, choose Add Cap Component from the context menu, pick `_cap.flag`, then export an OTF and send it back: its `l` outline shows where the cap's path goes and whether the stem's top segment is replaced.
-- [ ] `capComponent.decompose` (M13, handbook): Decompose Cap
+- [ ] `capComponent.decompose` (M13, handbook, live): Decompose Cap
   - Guess: Decompose Cap writes the fitted outline into the host path in place of the cap and keeps the node order of the host before the cap; settled by decomposing a cap in the reference app and comparing node order with the exported outline.
+  - Guess: After Decompose Cap the path keeps its start node; when the start node was one of the cap's nodes, the cap's start or end node takes its place, and the layer's other caps and corners move with the nodes they sat on.
   - Observe: After adding `_cap.flag` to `l`, right-click the cap, choose Decompose Cap and save the file: compare the stem path's nodes with those of the exported OTF from the Add Cap Component check.
-- [ ] `capComponent.setFit` (M13, handbook): Fit Cap to Stroke
+- [ ] `capComponent.setFit` (M13, handbook, live): Fit Cap to Stroke
   - Guess: With Fit on, the horizontal scale is the host nodes' distance over the cap's reference width and replaces the stored horizontal scale, which is kept but not used; the reference width is the node1 to node2 distance, or the cap glyph's advance width when it has only an origin anchor (no source names the latter). Reading the greyed horizontal scale of an origin-only cap in the reference app settles it.
+  - Guess: With Fit on, the computed horizontal scale is positive whatever the sign of the stored one, and a computed scale beyond ±10,000 % is refused with a message.
   - Observe: Add `_cap.flag` (origin anchor only, advance width 100) to the 80-unit stem of `l` with Fit on and read the greyed horizontal scale in its Info box: 80 % means the advance width is the reference width.
-- [ ] `capComponent.setGlyph` (M13, handbook): Replace Cap Component
+- [ ] `capComponent.setGlyph` (M13, handbook, live): Replace Cap Component
   - Guess: Replacing the cap glyph changes the hint's name only and keeps its scale, alignment and Fit, since they are stored apart; the observe step settles it.
   - Observe: Click the name of an attached cap in its Info box and note what opens (the cap picker, a text field or a menu) and whether the new cap keeps the old one's scale and alignment.
-- [ ] `capComponent.setScale` (M13, handbook): Set Cap Scale
+- [ ] `capComponent.setScale` (M13, handbook, live): Set Cap Scale
   - Guess: Scale applies in the cap glyph's own frame, about its origin or node1, before the cap is turned and placed on the stem; exporting a cap with each scale field at 50 % settles it.
+  - Guess: A negative scale mirrors the cap about its origin or node1 without reversing its path.
   - Observe: Type 50 into each scale field of an attached cap with Fit off and export: note whether the cap shrinks along the stroke end, across it, and about which point.
-- [ ] `capComponent.setAlignment` (M13, handbook): Set Cap Alignment
+- [ ] `capComponent.setAlignment` (M13, handbook, live): Set Cap Alignment
   - Guess: For a cap, left turns it to the side before the first node and right to the side after the second, as corners do; centre (both) follows the line between the two nodes and none keeps it unrotated, as staff answers say. Exporting the slanted-stem cap with each mode settles left and right.
   - Guess: A new cap is stored with options 0 (left), as a new corner is; the 3.0.3 screenshot shows four caps in centre alignment, which may have been set by hand. Adding a cap in the reference app and reading its Info box settles it.
   - Observe: Add `_cap.flag` to the slanted stem of `slash` and export once per alignment mode the Info box offers: note the cap's rotation in each export.

@@ -1801,6 +1801,37 @@ fn corner_and_smart_components_are_drawn_into_the_compiled_glyphs() {
     assert_eq!(right, 200.0, "the smart component is interpolated at its value");
 }
 
+/// The measure of M13.40: no reference compiler supports caps, so the check is that both
+/// outline flavours build and read back with the cap fitted as the model draws it.
+#[test]
+fn cap_components_are_fitted_into_both_outline_flavours() {
+    use fontcraft_model::Anchor;
+    use fontcraft_model::attach::CapHint;
+    let mut f = Font::new("Capped Sans");
+    let n = |x, y| Node::new(x, y, NodeKind::Line);
+    let mut cap = Glyph::new("_cap.flag");
+    let mut l = Layer::new("m01", 100.0);
+    l.shapes.push(path(false, vec![n(0.0, 20.0), n(-40.0, -30.0), n(100.0, -30.0), n(100.0, 20.0)]));
+    l.anchors.push(Anchor::new("origin", 0.0, 0.0));
+    cap.layers.push(l);
+    f.glyphs.push(cap);
+    {
+        let mut i = f.glyph_mut("I").unwrap();
+        i.layers[0].shapes = vec![Shape::Path(Path::rect(100.0, 0.0, 180.0, 700.0))];
+        i.layers[0].info.hints.push(CapHint { fit: true, ..CapHint::new("_cap.flag", 0, 1) }.to_hint());
+    }
+    let ttf = compile_ttf(&f, &Options::default()).unwrap();
+    let otf = compile(&f, &f.default_target().unwrap(), Flavour::Cff, &Options::default()).unwrap();
+    for out in [&ttf, &otf] {
+        assert!(!out.warnings.iter().any(|w| w.contains("cap components were not fitted")), "{:?}", out.warnings);
+        let font = FontRef::new(&out.bytes).unwrap();
+        let mut points: Vec<(f32, f32)> = drawn(&font, gid_of(out, "I")).concat();
+        points.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        points.dedup();
+        assert_eq!(points, [(100.0, 0.0), (100.0, 680.0), (100.0, 730.0), (180.0, 0.0), (180.0, 680.0), (212.0, 730.0)]);
+    }
+}
+
 // --- PostScript hints at export -------------------------------------------------------------
 
 mod ps_hints_export {

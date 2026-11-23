@@ -2,9 +2,26 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-23: X.fix101 smoked M8.25 to M8.31 and X.fix100 on the desktop, light and dark, and fixed the code field's width, the find bar's layout and the unseen Next selection (X.fix101a, X.fix101b). Gate: `cargo xtask ci` passed all 11 steps, 4,995 tests passed and 43 skipped._
+_Updated: 2026-11-23: M13.40 built cap components (fitting in `model::attach`, six `capComponent.*` commands, compile support) on the rows' guesses. Gate: `cargo xtask ci` passed all 11 steps (5,012 tests passed, 43 skipped)_
 
 ## State of the tree
+
+- **Where M13.40 stands (caps).** Built on the rows' guesses; no export from the reference app exists, so no
+  outline is compared with it. Model: `crates/model/src/attach.rs` reads and writes the `Cap` hint (`CapHint`,
+  `cap_hint`; `options` = alignment + 8 for Fit), fits caps (`decompose_attachments`, `fit_cap`) and gives outline
+  resolution its hook (`insert_attachments`: caps first, then the layer's corner hints moved to their nodes and fitted;
+  `Font::outline_at` falls back to corners only when caps fail). The fitting is described in the module header and in
+  `docs/spec/09-reusing-shapes.md` § 8.4. Fitting tracks each node's original index (`ids`), so hints on a fitted path
+  move with their nodes (`PathMap`, `remap_hint`, which handles corner, cap, segment and brush origins); M13.41 can fit
+  segments and brushes through the same bookkeeping by adding cases to `decompose_attachments`. Compile:
+  `prepare_source` runs `attach::insert_all_attachments` before the corner pass. Engine: `cmd/attach_cap.rs` (six
+  commands; shares `set_entry`, `pair`, `parse_mode`, `file_index` with `cmd/corner.rs`); component decompose and
+  Overlay Fonts fit caps too. Tests: model `attach::tests` (10: the § 8 setups, Fit, scale, alignments, decompose,
+  corner plus cap, two masters, hostile values), engine `attach_cap` (6: commands, refusals, undo, the `.glyphs` round
+  trip), compile `cap_components_are_fitted_into_both_outline_flavours` (the measure: TTF and OTF read back with the
+  cap). Left for M13.42: the cap Info box, picker, canvas highlight, selection and copy and paste
+  (`cap.highlightAndSelection`, `cap.copyPasteOntoSegments`); hint upkeep (M10.3) does not yet move cap hints when
+  nodes are edited, as the M10 row notes.
 
 - **Seen in the X.fix101 smoke** (Xvfb, no window manager, light and dark, whole-screen captures). Font Info
   floats as its own OS window; `ui.inspect` lists it under `windows`, and `ui.click` on its Exports tab switches the

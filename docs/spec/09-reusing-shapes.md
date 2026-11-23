@@ -450,6 +450,21 @@ an origin-only cap under Fit (`capComponent.setFit`), the point scale applies ab
 (`capComponent.setScale`), left and right alignment and the default alignment
 (`capComponent.setAlignment`).
 
+FontCraft fits caps in `crates/model/src/attach.rs`, from those guesses, until an export of the
+cap test font (`docs/plans/M13.md` § 8) settles them:
+
+- The cap glyph's first path is placed with its reference point (`node1`, else `origin`, else
+  the layer origin) on the first host node and the `node1` to `node2` line along the stem end; it
+  is scaled in its own frame, then turned by the alignment.
+- That path replaces the straight segment between the two nodes. The side before the first node
+  is cut at its point nearest the cap's start node and ends there; the side after the second node
+  starts at the cap's end node, cut the same way. Inserted nodes are rounded to whole units.
+- The cap glyph's other paths are added to the layer, placed the same way.
+- Outline resolution fits caps first, then moves the corner hints of the layer to the nodes they
+  sat on and fits the corners. A layer whose caps cannot be fitted is drawn with its corners only.
+- Limits: a scale (stored, or computed by Fit) beyond ±100 (10,000 %), a stem end shorter than
+  10⁻⁶ units and more than 50,000,000 node moves per layer are refused with a message.
+
 ### 8.5 Stored form of caps, segments and brushes
 
 Each is a hint on the layer, as a corner is (§ 7). The file-format specification (W1) lists the

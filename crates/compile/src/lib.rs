@@ -395,8 +395,9 @@ pub fn compile(font: &Font, target: &Target, flavour: Flavour, options: &Options
     Ok(compiled)
 }
 
-/// `font` as the compile stages read it: the corner components of every layer fitted into its
-/// paths ([`fontcraft_model::corner::insert_all_corner_components`]), then every smart component
+/// `font` as the compile stages read it: the cap components of every layer fitted into its paths
+/// with the corners of those layers ([`fontcraft_model::attach::insert_all_attachments`]), the
+/// corner components of the other layers ([`fontcraft_model::corner::insert_all_corner_components`]), then every smart component
 /// drawn as outlines ([`fontcraft_model::smart::draw_smart_components`]), the order in which
 /// both reference compilers apply them when they load a source. Corners go first because a
 /// smart glyph's pole layers can hold corners. A layer whose corners cannot be fitted, and a
@@ -405,7 +406,13 @@ pub fn compile(font: &Font, target: &Target, flavour: Flavour, options: &Options
 /// pass the source as it is stored.
 pub fn prepare_source<'a>(font: &'a Font, warnings: &mut Vec<String>) -> Cow<'a, Font> {
     let mut out = Cow::Borrowed(font);
-    let has_corners = font.glyphs.iter().any(|g| g.layers.iter().any(|l| l.info.hints.iter().any(fontcraft_model::corner::is_corner)));
+    let has_caps = font.glyphs.iter().any(|g| g.layers.iter().any(|l| l.info.hints.iter().any(fontcraft_model::attach::is_cap)));
+    if has_caps {
+        let (fitted, report) = fontcraft_model::attach::insert_all_attachments(&out);
+        warnings.extend(report.failed.into_iter().map(|e| format!("cap components were not fitted, so the paths were written without them: {e}")));
+        out = Cow::Owned(fitted);
+    }
+    let has_corners = out.glyphs.iter().any(|g| g.layers.iter().any(|l| l.info.hints.iter().any(fontcraft_model::corner::is_corner)));
     if has_corners {
         let (fitted, report) = fontcraft_model::corner::insert_all_corner_components(&out);
         warnings.extend(report.failed.into_iter().map(|e| format!("corner components were not fitted, so the paths were written without them: {e}")));
