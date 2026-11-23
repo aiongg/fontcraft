@@ -24,6 +24,9 @@ use serde_json::{Value, json};
 
 use crate::app::{APP, FontCraftApp};
 
+#[cfg(test)]
+pub mod native;
+
 /// The window size the frames run at, in points.
 pub const SCREEN: [f32; 2] = [1280.0, 800.0];
 /// Most frames [`TestApp::call`] runs for one request's window input.
