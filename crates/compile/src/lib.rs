@@ -406,10 +406,15 @@ pub fn compile(font: &Font, target: &Target, flavour: Flavour, options: &Options
 /// pass the source as it is stored.
 pub fn prepare_source<'a>(font: &'a Font, warnings: &mut Vec<String>) -> Cow<'a, Font> {
     let mut out = Cow::Borrowed(font);
-    let has_caps = font.glyphs.iter().any(|g| g.layers.iter().any(|l| l.info.hints.iter().any(fontcraft_model::attach::is_cap)));
-    if has_caps {
+    let has_attachments = font.glyphs.iter().any(|g| g.layers.iter().any(|l| l.info.hints.iter().any(fontcraft_model::attach::is_attachment)));
+    if has_attachments {
         let (fitted, report) = fontcraft_model::attach::insert_all_attachments(&out);
-        warnings.extend(report.failed.into_iter().map(|e| format!("cap components were not fitted, so the paths were written without them: {e}")));
+        warnings.extend(
+            report
+                .failed
+                .into_iter()
+                .map(|e| format!("cap components, segment components and brushes were not fitted, so the paths were written without them: {e}")),
+        );
         out = Cow::Owned(fitted);
     }
     let has_corners = out.glyphs.iter().any(|g| g.layers.iter().any(|l| l.info.hints.iter().any(fontcraft_model::corner::is_corner)));

@@ -2,10 +2,22 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-23: M13.40 built cap components (fitting in `model::attach`, six `capComponent.*` commands, compile support) on the rows' guesses. Gate: `cargo xtask ci` passed all 11 steps (5,012 tests passed, 43 skipped)_
+_Updated: 2026-11-23: M13.41 segment components and brushes written, not yet built. Before it: M13.40 built cap components (fitting in `model::attach`, six `capComponent.*` commands, compile support) on the rows' guesses. Gate: `cargo xtask ci` passed all 11 steps (5,012 tests passed, 43 skipped)_
 
 ## State of the tree
 
+- **Where M13.41 stands (segment components and brushes): written, not yet built.** Model
+  (`crates/model/src/attach.rs`): `SegmentHint` with `segment_hint`, `is_segment`, `is_brush`, `is_attachment`,
+  `Attachment::{name, origin, noun}`; `decompose_attachments` fits caps, then segment components
+  (`fit_segment_into`), then brushes (`brush_path`); `fit_segment` and `fit_brush` fit one; `insert_attachments`,
+  `insert_all_attachments` and the compile's `prepare_source` now act on every attachment kind. The bending
+  (arc-length fraction plus distance along the normal, rigid brush ends) is in the module header and
+  `docs/spec/09-reusing-shapes.md` § 10.1. Engine: `cmd/attach_segment.rs` (six commands; the glyph parameter of
+  the segment commands is `segmentGlyph`, since `segment` is a target key). Set Anchors already placed `start` and
+  `end` on `_segment.` and `_brush.` glyphs (`components::default_anchors`). Tests written, not run: model
+  `attach::tests` (7 new), engine `attach_segment` (7). `command_ids.txt` and the generated docs need regenerating.
+  Left for M13.42: Info boxes, pickers, highlight, selection, copy and paste; `tools::attachment::kind` still knows
+  only corners and caps.
 - **Where M13.40 stands (caps).** Built on the rows' guesses; no export from the reference app exists, so no
   outline is compared with it. Model: `crates/model/src/attach.rs` reads and writes the `Cap` hint (`CapHint`,
   `cap_hint`; `options` = alignment + 8 for Fit), fits caps (`decompose_attachments`, `fit_cap`) and gives outline

@@ -1823,7 +1823,7 @@ fn cap_components_are_fitted_into_both_outline_flavours() {
     let ttf = compile_ttf(&f, &Options::default()).unwrap();
     let otf = compile(&f, &f.default_target().unwrap(), Flavour::Cff, &Options::default()).unwrap();
     for out in [&ttf, &otf] {
-        assert!(!out.warnings.iter().any(|w| w.contains("cap components were not fitted")), "{:?}", out.warnings);
+        assert!(!out.warnings.iter().any(|w| w.contains("brushes were not fitted")), "{:?}", out.warnings);
         let font = FontRef::new(&out.bytes).unwrap();
         let mut points: Vec<(f32, f32)> = drawn(&font, gid_of(out, "I")).concat();
         points.sort_by(|a, b| a.partial_cmp(b).unwrap());

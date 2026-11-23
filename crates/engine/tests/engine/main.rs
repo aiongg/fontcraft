@@ -8,6 +8,7 @@ mod anchor_context;
 mod anchors;
 mod annotation;
 mod attach_cap;
+mod attach_segment;
 mod attributes;
 mod audit;
 mod audit_fix_binary;
