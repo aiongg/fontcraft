@@ -2737,6 +2737,7 @@ version = "0.0.1"
 dependencies = [
  "craft",
  "egui",
+ "web-sys",
 ]
 
 [[package]]
