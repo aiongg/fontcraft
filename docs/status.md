@@ -1244,8 +1244,9 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
   - `ui.key Escape` left About open (`handled: false`; its Close button worked). Fixed, not yet built (X.fix99b):
     while a modal dialog shows (`DialogState::modal`, read from egui's top modal layer each frame), `ui.key` sends
     the key to the window as the keyboard does, so Escape closes About and any other modal on the dialog host.
-  - The macro editor's multi-line field draws a short text in the middle of its 10 lines, not at the top (cause not
-    traced; likely craft's field layout).
+  - The macro editor's multi-line field draws a short text in the middle of its 10 lines, not at the top. Cause
+    found (X.fix99c): craft's text part gives egui's `TextEdit` a centre alignment whether it is multi-line or not,
+    and no option of `TextField` reaches it; recorded under Craft bugs in decision 0009, code unchanged.
   - The console's log does not follow the newest line: after a run, the new rows are below the log's fold until it
     is scrolled.
 - **Macro editor and Tab.** Craft's text part that inserts Tab keeps only Tab from the focus service and loses its
