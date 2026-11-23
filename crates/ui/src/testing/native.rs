@@ -143,6 +143,12 @@ pub struct NativeApp {
     pub ctx: Context,
 }
 
+impl Default for NativeApp {
+    fn default() -> Self {
+        NativeApp::new()
+    }
+}
+
 impl NativeApp {
     /// The app over a new font with one Edit View tab showing, after its first frames.
     pub fn new() -> NativeApp {
