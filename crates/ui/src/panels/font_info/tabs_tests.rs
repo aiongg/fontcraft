@@ -712,6 +712,19 @@ fn cmd_slash_in_the_code_field_comments_the_lines() {
     assert!(!posted.borrow().iter().any(|m| m.command_id() == Some("font.features.setCode")), "the key commits nothing");
 }
 
+/// The arrows move the caret in the code field and Shift with them selects, also while a selection over lines has
+/// Tab claimed for indenting (decision 0009: a field that keeps Tab loses its arrows to focus moves).
+#[test]
+fn arrows_move_the_caret_in_the_code_field() {
+    let (mut fixture, posted) = panel(showing("sub a by b;\nsub c by d;", Vec::new()));
+    let code = fixture.by_label("Feature Code").expect("the code field");
+    fixture.click(&code).key(Key::A, Modifiers::COMMAND).settle();
+    fixture.key(Key::ArrowLeft, Modifiers::NONE).key(Key::ArrowDown, Modifiers::NONE).key(Key::ArrowRight, Modifiers::NONE).settle();
+    fixture.key(Key::ArrowRight, Modifiers::SHIFT).type_text("Z").settle();
+    let draft = FeatureDraft { key: key(EntryKind::Feature, "ss01", 1), code: "sub a by b;\nsZb c by d;".into() };
+    assert!(posted.borrow().contains(&Msg::View(ViewMsg::FeatureDraft(Some(draft)))), "{:?}", posted.borrow());
+}
+
 /// Next selects the matches in turn and wraps past the last; Replace then replaces the selected one, the first.
 #[test]
 fn find_next_wraps_and_replace_takes_the_selected_match() {
@@ -769,3 +782,4 @@ fn a_feature_parameter_is_coloured_and_shows_its_compile_problem() {
     colors.dedup();
     assert!(colors.len() > 1, "the code is coloured: {colors:?}");
 }
+
