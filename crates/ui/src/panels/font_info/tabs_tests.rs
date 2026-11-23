@@ -782,4 +782,3 @@ fn a_feature_parameter_is_coloured_and_shows_its_compile_problem() {
     colors.dedup();
     assert!(colors.len() > 1, "the code is coloured: {colors:?}");
 }
-

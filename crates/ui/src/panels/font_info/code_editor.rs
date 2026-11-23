@@ -729,7 +729,14 @@ fn open_line_id(field: &Response) -> egui::Id {
 /// closes the line's details. Only rows inside the field's visible rect are painted. Returns the icon of the line whose
 /// details are open, while it shows; `None` when the field's text has no layout in this pass yet, as in a pass egui
 /// discards before painting.
-fn gutter(ui: &mut Ui, field: &Response, width: f32, font: &FontId, diagnostics: &[DiagnosticModel], words: &CodeEditorWords) -> Option<Option<Response>> {
+fn gutter(
+    ui: &mut Ui,
+    field: &Response,
+    width: f32,
+    font: &FontId,
+    diagnostics: &[DiagnosticModel],
+    words: &CodeEditorWords,
+) -> Option<Option<Response>> {
     let (pos, galley) = field_layout(ui, field)?;
     let env = Env::of(ui);
     let color = |c: Rgba| Color32::from(Srgba::from(c));
