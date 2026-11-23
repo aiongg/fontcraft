@@ -169,7 +169,11 @@ While a text field has the keyboard (a panel's field or the macro editor, after 
 it), every key goes to that field's window the same way, before the tools and Font View: the
 arrows move the caret, `shift` with them selects, and a character with no `cmd`, `ctrl` or `alt`
 is typed. The reply is `{queued, handled, field: true}`; a shortcut a key fires there is not named
-in it. `ui.text` types into such a field too (`{field: true}`).
+in it. `ui.text` types into such a field too (`{field: true}`). While a modal dialog shows over the
+window (About FontCraft, Settings, …) and no field of it has the keyboard, every key goes to the
+window the same way, and the dialog takes it as it takes the keyboard's: `Escape` closes it. The
+reply is `{queued, handled: true, dialog: true}`. A form dialog (`ui.dialog.inspect`) takes its own
+keys first, as below.
 
 In text mode (the Text tool), `ui.key` and `ui.text` type into the tab's text at the cursor, as
 the keyboard does: characters, `Space`, `Return`, `Backspace`, `Delete` and the arrows (with

@@ -226,6 +226,33 @@ mod tests {
         assert!(rows.len() <= MAX_LICENCE_LINES);
     }
 
+    /// Escape closes About, from the keyboard and as `ui.key` over the control channel: the open modal takes the
+    /// window's keys, so the key reaches the dialog rather than the tools.
+    #[test]
+    fn escape_closes_about_from_the_keyboard_and_the_control_channel() {
+        use craft::ui::runtime::commands::CommandRef;
+        use craft::ui::testing::input::key_press;
+        use serde_json::json;
+
+        let mut t = crate::testing::TestApp::new();
+        let open = |t: &mut crate::testing::TestApp| {
+            t.app.fire(CommandRef::new("app.about"));
+            t.frames(3);
+            assert_eq!(t.app.view.commands.about, About::Shown);
+            assert!(t.app.dialogs.modal, "About is modal");
+        };
+        open(&mut t);
+        let reply = t.ok("ui.key", json!({"key": "Escape"}));
+        assert_eq!(reply["handled"], true, "{reply}");
+        assert_eq!(reply["dialog"], true, "{reply}");
+        t.frames(2);
+        assert_eq!(t.app.view.commands.about, About::Closed, "ui.key Escape closed About");
+
+        open(&mut t);
+        t.frame_with(vec![key_press(egui::Key::Escape, egui::Modifiers::NONE)]).frames(2);
+        assert_eq!(t.app.view.commands.about, About::Closed, "Escape closed About");
+    }
+
     /// Without adapter information (a headless run, or a framework that does not report it) the graphics line still
     /// reads as a sentence; an adapter that is reported is named.
     #[test]

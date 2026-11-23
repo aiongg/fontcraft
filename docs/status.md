@@ -1241,7 +1241,9 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
 - **Seen in the X.fix98 smoke.**
   - About FontCraft showed NOTICE's hard line breaks as list rows, so sentences broke mid-row. Fixed, not yet built
     (X.fix99a): each NOTICE paragraph is one row that wraps at the dialog's width; ASSETS.md rows stay one a row.
-  - `ui.key Escape` leaves About open (`handled: false`; its Close button works).
+  - `ui.key Escape` left About open (`handled: false`; its Close button worked). Fixed, not yet built (X.fix99b):
+    while a modal dialog shows (`DialogState::modal`, read from egui's top modal layer each frame), `ui.key` sends
+    the key to the window as the keyboard does, so Escape closes About and any other modal on the dialog host.
   - The macro editor's multi-line field draws a short text in the middle of its 10 lines, not at the top (cause not
     traced; likely craft's field layout).
   - The console's log does not follow the newest line: after a run, the new rows are below the log's fold until it

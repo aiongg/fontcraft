@@ -34,6 +34,9 @@ pub struct DialogState {
     choosing: Option<(PickId, u64, String, bool)>,
     /// Text an action put out for the system clipboard, until the window copies it.
     pub clipboard: Option<String>,
+    /// Whether a modal dialog showed over the main window in the last frame: any dialog on the window's host, this
+    /// module's or another, that blocks the window.
+    pub modal: bool,
     /// The values of each filter dialog's last OK, by dialog id: the dialog opens with them again for the rest of the
     /// session.
     remembered: HashMap<String, Map<String, Value>>,
