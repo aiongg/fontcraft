@@ -2,9 +2,27 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-23: X.fix100, M8.26, M8.30, M8.30b, M8.27 and M8.31 built and gated (branch `w-M8.27`, fixes X.integ167 to X.integ174): `cargo xtask ci` passed all 11 steps, 4,993 tests passed and 43 skipped. No desktop smoke of this batch yet: still to look at, in light and dark, the gutter icon and dimmed message after the pause, the icon popover with Fix, the Cmd+F find bar and an Alt-click preview in the floating Font Info window (X.fix100 should let `ui.click` and `ui.text` reach it; capture the whole X screen, since `ui.screenshot` shows the main window only)._
+_Updated: 2026-11-23: X.fix101 smoked M8.25 to M8.31 and X.fix100 on the desktop, light and dark, and fixed the code field's width, the find bar's layout and the unseen Next selection (X.fix101a, X.fix101b). Gate: `cargo xtask ci` passed all 11 steps, 4,995 tests passed and 43 skipped._
 
 ## State of the tree
+
+- **Seen in the X.fix101 smoke** (Xvfb, no window manager, light and dark, whole-screen captures). Font Info
+  floats as its own OS window; `ui.inspect` lists it under `windows`, and `ui.click` on its Exports tab switches the
+  tab (X.fix100). Under Xvfb with no window manager the click does not give that window the keyboard (`focused` stays
+  false and `ui.text` types nothing): the smoke gave it the X input focus with `XSetInputFocus` (a ctypes script), after
+  which `ui.click` in the code field, `ui.key` and `ui.text` reached it. Not a FontCraft bug; on a desktop the window
+  manager grants the focus. Features tab: typing `sub O by Hx;` shows, after the pause, the error disc, the line
+  number and the dimmed `glyph not in font` after the line; the draft check carries no fixes, so the wrench appears
+  once the code is stored (the field loses the keyboard) and compiled. The disc opens the popover with `Line 2: glyph
+  not in font` and the Fix buttons (`H`, `x`); Fix stores `sub O by H;`. Cmd+F opens the bar with the query focused;
+  Next fills the first match. Alt-click on `H` shows `Glyph H`, `Unicode: 0048`. Exports: an instance with `Replace
+  Feature` = `liga; sub H by Zz;` shows the coloured code and the disc with `Line 1: glyph not in font`. Fixed: the
+  code field was sized to its text (about 190 points) and now fills the pane (X.fix101a); the find bar's one wrapping
+  row squeezed Regular Expression into a column of letters and pushed the code out of the window, and is three rows
+  (X.fix101a, a craft bug in 0009); Next selected a match the unfocused field did not paint, and the match now gets a
+  fill (X.fix101b, `Highlight::background` in craft-ext). Still as before: the code shows in the middle of the field
+  (the craft bug in 0009), and with the find bar open the Notes field runs past the bottom of the window at the
+  default size (the tab does not scroll).
 
 - **Where M8.31 stands.** Built (integrated with X.integ167 to X.integ174). Engine: `features_check::compile_instance`
   (on a font and a `CheckContext`, like `check_font`) answers `font.features.compile` with `instance`: each enabled
