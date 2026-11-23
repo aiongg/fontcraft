@@ -1247,8 +1247,9 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
   - The macro editor's multi-line field draws a short text in the middle of its 10 lines, not at the top. Cause
     found (X.fix99c): craft's text part gives egui's `TextEdit` a centre alignment whether it is multi-line or not,
     and no option of `TextField` reaches it; recorded under Craft bugs in decision 0009, code unchanged.
-  - The console's log does not follow the newest line: after a run, the new rows are below the log's fold until it
-    is scrolled.
+  - The console's log did not follow the newest line: after a run, the new rows were below the log's fold until it
+    was scrolled. Fixed, not yet built (X.fix99d): while its last row is in view, a row added reveals it through
+    craft `List::reveal`; scrolled up, the log stays put (`panels::command_console::command_log`).
 - **Macro editor and Tab.** Craft's text part that inserts Tab keeps only Tab from the focus service and loses its
   arrows (decision 0009), so the macro editor does not insert Tab; Tab leaves the field.
 - **`ui.screenshot` misses floating windows.** It captures the main window only. A capture of a floating

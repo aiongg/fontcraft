@@ -116,11 +116,7 @@ fn view(props: &mut Props<'_>, log_rows: u16, ui: &mut Ui) {
             sent.push(console_msg(json!({ "copy": true })));
         }
     });
-    let source = Lines(&model.lines);
-    let _ = List::new(words.log.clone())
-        .empty(words.empty.clone())
-        .max_rows(log_rows)
-        .show_items(ui, &source, &mut |at, _| ListRow::new(model.lines.get(*at).cloned().unwrap_or_default()));
+    command_log(ui, &words, model, log_rows);
     let completer = ConsoleCompleter { docs: Arc::clone(&model.docs), glyphs: Arc::clone(&model.glyphs), history: Arc::clone(&model.history) };
     let typed = TextField::new(words.input.clone(), Bind::given(model.input.clone()))
         .placeholder(words.placeholder.clone())
@@ -142,6 +138,34 @@ fn view(props: &mut Props<'_>, log_rows: u16, ui: &mut Ui) {
         Text::new(doc.clone()).role(TypeRole::Caption).shade(Shade::Muted).show(ui);
     }
     editor(ui, &words, model, sent);
+}
+
+/// How the log stood at the end of its last pass: its row count, and whether its last row was in view.
+#[derive(Clone, Copy)]
+struct LogTail {
+    rows: usize,
+    at_end: bool,
+}
+
+/// The log of lines run. While its last row is in view, a row added scrolls the log to it; scrolled up, the log stays
+/// where it is. Only a log longer than its `rows` scrolls itself: a shorter one asks nothing of the panel body's scroll.
+fn command_log(ui: &mut Ui, words: &ConsoleWords, model: &ConsoleModel, rows: u16) {
+    let tail_id = ui.id().with("fontcraftConsole.logTail");
+    let tail = ui.ctx().data(|data| data.get_temp::<LogTail>(tail_id)).unwrap_or(LogTail { rows: 0, at_end: true });
+    let count = model.lines.len();
+    let mut list = List::new(words.log.clone()).empty(words.empty.clone()).max_rows(rows);
+    if count > tail.rows
+        && tail.at_end
+        && count > usize::from(rows)
+        && let Some(last) = count.checked_sub(1)
+    {
+        list = list.reveal(last);
+    }
+    let source = Lines(&model.lines);
+    let out = list.show_items(ui, &source, &mut |at, _| ListRow::new(model.lines.get(*at).cloned().unwrap_or_default()));
+    let bottom = out.response.rect.bottom() + 0.5;
+    let at_end = count == 0 || out.shown.iter().any(|row| row.key + 1 == count && row.rect.bottom() <= bottom);
+    ui.ctx().data_mut(|data| data.insert_temp(tail_id, LogTail { rows: count, at_end }));
 }
 
 /// The macro editor and its buttons.
@@ -347,6 +371,33 @@ mod tests {
         fixture.frame(vec![pointer::moved(over_input)]).frame(vec![pointer::wheel(-600.0)]).settle();
         let editor = fixture.by_label("Macro").expect("the macro editor");
         assert!(editor.rect.bottom() <= fixture.shown().bottom(), "the editor scrolled into view: {:?}", editor.rect);
+    }
+
+    /// The log follows the newest row while its end is in view; scrolled up, it stays where the person left it.
+    #[test]
+    fn the_log_follows_new_rows_unless_scrolled_up() {
+        let lines = (0..30).map(|i| format!("row {i}")).collect();
+        let model = Rc::new(RefCell::new(Tracked::new(ConsoleModel { lines, ..Default::default() })));
+        let shared = Rc::clone(&model);
+        let mut fixture = Fixture::new(move |ui| {
+            let mut sent = Vec::new();
+            show(ui, Props { model: &shared.borrow(), sent: &mut sent });
+        });
+        fixture.room(egui::vec2(400.0, 900.0)).settle();
+        let painted = |f: &Fixture, text: &str| f.texts().iter().any(|t| t.text == text);
+        assert!(painted(&fixture, "row 29"), "the log opens on its newest row");
+        assert!(!painted(&fixture, "row 0"), "the oldest rows are above the fold");
+
+        model.borrow_mut().edit(|m| m.lines.push("row 30".into()));
+        fixture.settle();
+        assert!(painted(&fixture, "row 30"), "a row added comes into view");
+
+        let log = fixture.by_label("Command Log").expect("the log");
+        fixture.frame(vec![pointer::moved(log.rect.center())]).frame(vec![pointer::wheel(600.0)]).settle();
+        assert!(!painted(&fixture, "row 30"), "the wheel scrolled the log up");
+        model.borrow_mut().edit(|m| m.lines.push("row 31".into()));
+        fixture.settle();
+        assert!(!painted(&fixture, "row 31"), "a log scrolled up stays where it is");
     }
 
     /// Over the control channel, Shift+ArrowUp at the end of the docked macro editor selects into the line above, as
