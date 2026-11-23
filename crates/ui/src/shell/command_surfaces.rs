@@ -26,7 +26,13 @@ const COMMANDS: &[UiCommand] = &[
         shortcut: Some("Cmd+Shift+P"),
         params: "{} open the search over the commands in the menus; Return runs the one picked",
     },
-    UiCommand { id: "app.about", label: "About FontCraft", menu: &["Help"], shortcut: None, params: "{} show the version and the licences" },
+    UiCommand {
+        id: "app.about",
+        label: "About FontCraft",
+        menu: &["Help"],
+        shortcut: None,
+        params: "{} show the version, the graphics backend and the licences of FontCraft and of what it ships",
+    },
 ];
 
 fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {

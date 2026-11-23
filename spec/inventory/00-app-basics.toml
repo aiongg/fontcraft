@@ -190,14 +190,15 @@ label = "About FontCraft"
 menu = ["Help"]
 shortcut = ""
 kind = "ui"
-params = "{} → {version, licences}"
+params = "{} show the version, the graphics backend and the licences"
 area = "ui-chrome"
 milestone = "M14"
 summary = "Shows the version, the licences of FontCraft and of everything it ships, and the graphics adapter in use."
 ref = "platform convention"
 status = "inferred"
-notes = "The window (`crates/ui/src/dialogs/about.rs`) shows the name, the version and a licence line naming NOTICE and ASSETS.md in the framework's About dialog, from Help › About FontCraft. Not built yet: the graphics adapter line."
+notes = "M14.4c, `crates/ui/src/dialogs/about.rs`, from Help › About FontCraft (Help on every platform): the name, a one-line description, the version, a graphics line and the licences: NOTICE as written, then a line per row of the ASSETS.md table (path, author, licence), both read in at compile time, in a list sixteen lines high that scrolls. The graphics line names wgpu, the only renderer the window is built with; it would add the backend and adapter, but the framework's app runner passes neither its creation context nor its frame to the app (eframe only logs the adapter), so on the desktop it says the adapter is not reported, and on the web that it draws in the browser with WebGPU or WebGL. A plain dialog of the window replaces the framework's About dialog, which has no room for a scrolling list."
 guesses = [
+  "The licences are listed in full inside the About dialog rather than in a separate Acknowledgements window; the reference app's About window is not described in the sources.",
   "About FontCraft sits in the Help menu on every platform: the window has no macOS application menu to put it in, where the reference app keeps it; a macOS build with the native menu bar would move it there.",
 ]
 

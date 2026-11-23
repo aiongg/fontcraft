@@ -266,6 +266,9 @@ pub struct FontCraftApp {
     pub folder_poll: Option<startup::FolderPoll>,
     /// Where the browser build keeps the modules and macros it installs ([`web_store`]); the desktop app has none.
     pub web_extensions: web_store::WebExtensions,
+    /// The graphics adapter the window draws with, for About FontCraft; `None` while the framework does not report it
+    /// (and in tests).
+    pub graphics: Option<crate::dialogs::about::Graphics>,
     /// The canvas overlays' switches, data and the text note being typed (`canvas::overlays`).
     pub overlays: crate::canvas::overlays::Overlays,
     /// The control channel: its listener, the window its input goes to, the replies waiting on frames.
@@ -328,6 +331,7 @@ impl FontCraftApp {
             clipboard_flavours: None,
             folder_poll: None,
             web_extensions: web_store::WebExtensions::browser(),
+            graphics: None,
             control: crate::control::Control::default(),
             window: None,
             #[cfg(not(target_arch = "wasm32"))]
