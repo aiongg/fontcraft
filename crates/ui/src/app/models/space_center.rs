@@ -4,6 +4,10 @@
 //! The text is laid out with `textlayout` and kerned. Multi-line text is laid out with its own line breaks only;
 //! the view wraps each line at the window's width, which the projection does not know. Single-line and waterfall
 //! text is one line. Nothing is projected while the window is hidden.
+//!
+//! With the Color display option on, a glyph with colour layers in the master shown (or every glyph of a layered font)
+//! gets its colour drawing from the canvas's colour path (`canvas::color::cell_color`), as a Font View cell does. The
+//! placed images are worked out after the projections from the layers recorded here (`canvas::images::cells`).
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -14,6 +18,7 @@ use fontcraft_geom::BezPath;
 use fontcraft_textlayout::{Direction, KerningMode, LENGTH_RANGE, Layout, Options, Text};
 
 use super::ProjectCx;
+use crate::canvas::color::{self, ColorArt, ColorFiles};
 use crate::shell::dock::PanelId;
 use crate::shell::space_center::text::{MAX_GLYPHS_SHOWN, Resolved, Row, value, x_height};
 use crate::shell::space_center::{self as sc, LineMode, MAX_OVERLAY_LAYERS, SpaceCenterState};
@@ -71,10 +76,15 @@ impl MatrixColumn {
 /// A glyph's outlines as drawn: its own, and those of the overlay layers.
 #[derive(PlainData, Clone, Debug, Default, PartialEq)]
 pub struct GlyphArt {
+    /// The id of the layer drawn: the one its placed image comes from.
+    pub layer: String,
     #[plain_data(assume = "a kurbo path: owned points")]
     pub outline: BezPath,
     #[plain_data(assume = "kurbo paths: owned points")]
     pub overlays: Vec<BezPath>,
+    /// The glyph in colour, drawn in place of the outline while the Color option is on.
+    #[plain_data(assume = "a colour drawing behind an Arc, never changed after it is made")]
+    pub color: Option<Arc<ColorArt>>,
 }
 
 /// What the Space Center shows.
@@ -102,11 +112,14 @@ pub struct SpaceCenterModel {
     pub message: Option<String>,
 }
 
-pub fn project(model: &mut Tracked<SpaceCenterModel>, cx: &mut ProjectCx<'_>) {
+pub fn project(model: &mut Tracked<SpaceCenterModel>, files: &mut ColorFiles, cx: &mut ProjectCx<'_>) {
     if cx.view.workspace.layout.panel_state(&PanelId::SpaceCenter) == craft::behavior::dock::PanelState::Hidden {
         return;
     }
     let state = cx.view.space_center.clone();
+    files.follow(cx.session.active().map(|d| d.id));
+    let assets = cx.session.assets();
+    let mut src = color::Sources { assets: assets.as_ref(), files, text: color::TEXT };
     let Ok(font) = cx.session.font() else {
         super::set(model, SpaceCenterModel { state, ..Default::default() });
         return;
@@ -115,10 +128,10 @@ pub fn project(model: &mut Tracked<SpaceCenterModel>, cx: &mut ProjectCx<'_>) {
         super::set(model, SpaceCenterModel { has_font: true, state, ..Default::default() });
         return;
     };
-    super::set(model, build(font, &master, &resolved, state));
+    super::set(model, build(font, &master, &resolved, state, &mut src));
 }
 
-fn build(font: &Font, master: &str, resolved: &Resolved, state: SpaceCenterState) -> SpaceCenterModel {
+fn build(font: &Font, master: &str, resolved: &Resolved, state: SpaceCenterState, src: &mut color::Sources<'_>) -> SpaceCenterModel {
     let display = &state.display;
     let columns = resolved
         .columns
@@ -160,7 +173,7 @@ fn build(font: &Font, master: &str, resolved: &Resolved, state: SpaceCenterState
             model.ascender = layout.ascender;
             model.line_height = layout.line_height;
             model.lines = lines(font, master, resolved, &layout, beam_y);
-            model.art = art(font, master, resolved, &state, &model.lines);
+            model.art = art(font, master, resolved, &state, &model.lines, src);
         }
         Err(e) => model.message = Some(e),
     }
@@ -274,9 +287,18 @@ fn lines(font: &Font, master: &str, resolved: &Resolved, layout: &Layout, beam_y
         .collect()
 }
 
-/// The outlines of every glyph the lines draw, at most [`MAX_OUTLINES`] of them.
-fn art(font: &Font, master: &str, resolved: &Resolved, state: &SpaceCenterState, lines: &[SpaceLine]) -> BTreeMap<String, Arc<GlyphArt>> {
+/// The outlines of every glyph the lines draw, at most [`MAX_OUTLINES`] of them, and their colour drawings while the
+/// Color option is on.
+fn art(
+    font: &Font,
+    master: &str,
+    resolved: &Resolved,
+    state: &SpaceCenterState,
+    lines: &[SpaceLine],
+    src: &mut color::Sources<'_>,
+) -> BTreeMap<String, Arc<GlyphArt>> {
     let overlay: Vec<&String> = state.display.layers.iter().take(MAX_OVERLAY_LAYERS).collect();
+    let mode = state.display.color.then(|| color::cell_mode(font, master, false));
     let mut out = BTreeMap::new();
     for name in lines.iter().flat_map(|l| l.glyphs.iter()).filter_map(|g| g.glyph.as_deref()) {
         if out.contains_key(name) {
@@ -286,14 +308,17 @@ fn art(font: &Font, master: &str, resolved: &Resolved, state: &SpaceCenterState,
             break;
         }
         let Some(glyph) = font.glyph(name) else { continue };
-        let outline = drawn_layer(font, master, resolved, name).map(|layer| layer_outline(font, glyph, layer, master)).unwrap_or_default();
+        let drawn = drawn_layer(font, master, resolved, name);
+        let layer = drawn.map(|l| l.id.clone()).unwrap_or_default();
+        let outline = drawn.map(|l| layer_outline(font, glyph, l, master)).unwrap_or_default();
         let overlays = overlay
             .iter()
             .filter_map(|typed| sc::text::layer_named(font, name, master, typed))
             .filter_map(|id| glyph.layers.iter().find(|l| l.id == id))
             .map(|layer| layer_outline(font, glyph, layer, master))
             .collect();
-        out.insert(name.to_string(), Arc::new(GlyphArt { outline, overlays }));
+        let color = mode.as_ref().and_then(|mode| color::cell_color(font, glyph, mode, src));
+        out.insert(name.to_string(), Arc::new(GlyphArt { layer, outline, overlays, color }));
     }
     out
 }

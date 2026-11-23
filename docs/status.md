@@ -2,7 +2,7 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-23: X.fix96 and X.fix97: floating panels are OS windows on desktop again; while a form dialog is open they drop to the normal level and the main window comes forward, shown in a native-window harness test (`testing::native`) and not yet seen on a desktop with a window manager; `ui.key Escape` closes the canvas context menu; `ui.screenshot` still misses floating windows, an eframe gap (see "Known weak spots"). Before that, 2026-11-22: M10.34, M10.41 and M13.64 merged into `master`, built, tested and smoke-tested in the window (X.integ158 to X.integ161; see "Where M13.64 stands"); M13.23c not started. Before that: M5.30, M13.69, M13.70 and X.fix95 merged into `master`, built, tested and smoke-tested in the window (X.integ153 to X.integ156; see "Where M5.30, M13.69 and M13.70 stand"). Before that: M9.32, M3.41, M3.43 and M3.42 merged (X.integ148 to X.integ151); the Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
+_Updated: 2026-11-23: M13.76 (File › Open installs modules and macros; browser storage of them) and M14.4c (the About text) written on branch `w-M13.76`, on top of `w-M13.23c`, not yet built or tested (see "Where M13.64 stands" for the branch notes). Before that, X.fix96 and X.fix97: floating panels are OS windows on desktop again; while a form dialog is open they drop to the normal level and the main window comes forward, shown in a native-window harness test (`testing::native`) and not yet seen on a desktop with a window manager; `ui.key Escape` closes the canvas context menu; `ui.screenshot` still misses floating windows, an eframe gap (see "Known weak spots"). Before that, 2026-11-22: M10.34, M10.41 and M13.64 merged into `master`, built, tested and smoke-tested in the window (X.integ158 to X.integ161; see "Where M13.64 stands"); M13.23c not started. Before that: M5.30, M13.69, M13.70 and X.fix95 merged into `master`, built, tested and smoke-tested in the window (X.integ153 to X.integ156; see "Where M5.30, M13.69 and M13.70 stand"). Before that: M9.32, M3.41, M3.43 and M3.42 merged (X.integ148 to X.integ151); the Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
 
 ## State of the tree
 
@@ -35,7 +35,29 @@ _Updated: 2026-11-23: X.fix96 and X.fix97: floating panels are OS windows on des
     refusals, `inspect`), `dialogs/strike_properties.rs` (property lines, the dialog's OK on one strike).
   - Left: the actual-size preview, the pointer position readout, the pointer, magnify and hand tools, the context
     menu, a strike chooser and property table in Strike Properties, reset to computed defaults; references are not
-    drawn into the edited bitmap. M13.23c (Space Center images and colour glyphs) is not started.
+    drawn into the edited bitmap. M13.23c (Space Center images and colour glyphs) is written on branch `w-M13.23c`,
+    not yet built or tested: Images and Color in `view.setSpaceCenterDisplay` and the Display menu; images worked out
+    by `canvas::images::cells::space_center` into `Models::space_images`; colour from `canvas::color::cell_color` in
+    the Space Center projection; frame tests in `panels/space_center/tests.rs`. M13.74 (the Macro Panel editor) is
+    written on the same branch, not yet built or tested: `shell/macro_editor.rs` (`macroPanel.setText`, `runAll`,
+    `runSelection`, `open`, `save`, `record`; Open and Save pick files through `app::files::PICKED`), the editor in
+    `ConsoleState::editor` and `editor_macro`, the pane in `panels/command_console.rs`; tests in
+    `shell/macro_editor/tests.rs` and the panel's frame test of Run Selection and Save. Shell commands have no
+    `enabled` rule: the panel greys its own buttons.
+    M13.76 (install leftovers) is written on branch `w-M13.76`, on top of `w-M13.23c`, not yet built or tested:
+    File › Open… offers modules and macros and installs one chosen there (`app::dropped::open_as_install`, run from
+    `apply_now` for the person's own runs only); `Picks::poll` installs the modules and macros a browser chooser
+    reads (`Picked::Contents`); the engine installs a macro for the session when there is no Macros folder; the
+    browser store is `app::web_store` over `craft_ext::platform::storage::BrowserStorage` (web-sys `Storage`, a new
+    wasm32-only dependency of craft-ext, so Cargo.lock changes at the first build). Tests:
+    `dropped::tests::a_macro_chosen_in_file_open_is_installed_as_a_drop_is` and three in `web_store::tests`. The web
+    build has no entry point yet, so the store runs only in tests.
+    M14.4c (the About text) is written on the same branch, not yet built or tested: `dialogs/about.rs` is a plain
+    `StackDialog` (craft's `HostedAbout` has no room for a list) with the version, a graphics line from
+    `backend_text(app.graphics)`, and NOTICE plus a line per ASSETS.md row (`include_str!`) in a 16-line scrolling
+    list. `FontCraftApp::graphics` stays `None`: craft's `shell::app::run` gives the app neither eframe's
+    `CreationContext` nor its `Frame`, so the adapter cannot be read (decision 0009 lists the gap). Tests:
+    `dialogs::about::tests` (a frame test of the version and NOTICE's copyright line; the fallback text).
 
 - **Where M10.34 and M10.41 stand.** Merged and built with M13.64. Seen in the window: with the Instructor and two
   points selected, the canvas menu starts with Snap Point, Stem and Delta, Shift Points and Interpolate greyed out;

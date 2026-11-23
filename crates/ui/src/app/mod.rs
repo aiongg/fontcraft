@@ -25,6 +25,7 @@ pub mod preview_host;
 pub mod sidebar;
 pub mod startup;
 pub mod user_store;
+pub mod web_store;
 
 use std::sync::Arc;
 
@@ -263,6 +264,11 @@ pub struct FontCraftApp {
     /// When the extension folders were last read ([`startup::poll_folders`]); the desktop app polls them, tests and the
     /// browser build do not.
     pub folder_poll: Option<startup::FolderPoll>,
+    /// Where the browser build keeps the modules and macros it installs ([`web_store`]); the desktop app has none.
+    pub web_extensions: web_store::WebExtensions,
+    /// The graphics adapter the window draws with, for About FontCraft; `None` while the framework does not report it
+    /// (and in tests).
+    pub graphics: Option<crate::dialogs::about::Graphics>,
     /// The canvas overlays' switches, data and the text note being typed (`canvas::overlays`).
     pub overlays: crate::canvas::overlays::Overlays,
     /// The control channel: its listener, the window its input goes to, the replies waiting on frames.
@@ -324,6 +330,8 @@ impl FontCraftApp {
             clipboard_reader: None,
             clipboard_flavours: None,
             folder_poll: None,
+            web_extensions: web_store::WebExtensions::browser(),
+            graphics: None,
             control: crate::control::Control::default(),
             window: None,
             #[cfg(not(target_arch = "wasm32"))]
@@ -335,6 +343,8 @@ impl FontCraftApp {
         // The window's first tab set is the document it opens with.
         crate::shell::tabs::follow_document(&mut app);
         app.project();
+        // In the browser, the modules and macros installed on earlier visits.
+        web_store::restore(&mut app);
         app
     }
 
@@ -447,6 +457,13 @@ impl FontCraftApp {
     fn apply_now(&mut self, msg: Msg, ask_files: bool, origin: Origin) -> Result<Value, String> {
         match msg {
             Msg::Run(command) => {
+                // File › Open… of a module or macro installs it, as dropping it on the window does. A request that
+                // names `file.open` gets the engine's answer.
+                if origin == Origin::Person
+                    && let Some(install) = dropped::open_as_install(&command)
+                {
+                    return self.apply_now(install, false, origin);
+                }
                 if ask_files && self.picks.ask(&self.host, &self.session, &command) {
                     return Ok(json!({ "picker": true }));
                 }
@@ -482,6 +499,7 @@ impl FontCraftApp {
                 }
                 crate::shell::project::after_run(self, &command.id, &reply);
                 crate::shell::extension_downloads::after_run(self, &command.id, &params, &reply);
+                web_store::after_run(self, &command.id, &params, &reply);
                 crate::shell::text_preview::note_export(&mut self.view.text_preview, &reply);
                 let notice = self.after_command(&command, &reply).or_else(|| notices::notice(&command.id, &reply));
                 if let Some(notice) = opened.pop().or(notice) {
@@ -531,6 +549,7 @@ impl FontCraftApp {
         crate::canvas::reporters::refresh(self);
         crate::canvas::reference_font::refresh(self);
         crate::canvas::images::cells::refresh(self);
+        crate::canvas::images::cells::space_center(self);
         let engine = Stamp::of(&self.session, 0);
         if self.enabled_at != Some(engine) {
             self.enabled_at = Some(engine);

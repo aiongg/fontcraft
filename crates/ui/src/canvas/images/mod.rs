@@ -124,6 +124,8 @@ pub struct Images {
     drag: Option<Dragging>,
     /// What the Font View cell images were last worked out from (`cells`).
     cells_seen: Option<cells::CellsKey>,
+    /// What the Space Center's images were last worked out from (`cells::space_center`).
+    space_seen: Option<cells::SpaceKey>,
     /// The Font View cells' thumbnails (`cells`).
     thumbs: cells::Thumbs,
 }

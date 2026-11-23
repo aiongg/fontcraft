@@ -11,10 +11,11 @@ use serde_json::{Value, json};
 
 use super::{Props, show};
 use crate::app::Msg;
-use crate::app::models::space_center::{MatrixColumn, PlacedGlyph, SpaceCenterModel, SpaceLine};
+use crate::app::models::space_center::{GlyphArt, MatrixColumn, PlacedGlyph, SpaceCenterModel, SpaceLine};
+use crate::canvas::images::cells::CellImages;
 use crate::canvas::tokens::Tokens;
-use crate::shell::space_center::SpaceCenterState;
 use crate::shell::space_center::drag::SpacePreview;
+use crate::shell::space_center::{Display, SpaceCenterState};
 
 fn shell(id: &str, params: Value) -> Msg {
     Msg::Shell(CommandRef::with_params(id, params))
@@ -51,12 +52,13 @@ fn the_window_posts_text_selection_entries_and_display_options() {
         ..Default::default()
     });
     let tokens = Tokens::default();
+    let images = CellImages::default();
     let posted = Rc::new(RefCell::new(Vec::new()));
     let seen = Rc::clone(&posted);
     let mut preview = SpacePreview::default();
     let mut fixture = Fixture::new(move |ui| {
         let mut sent = Vec::new();
-        show(ui, Props { model: &model, tokens: &tokens, preview: &mut preview, sent: &mut sent });
+        show(ui, Props { model: &model, images: &images, tokens: &tokens, preview: &mut preview, sent: &mut sent });
         seen.borrow_mut().extend(sent);
     });
     fixture.room(egui::vec2(900.0, 700.0)).settle();
@@ -101,13 +103,14 @@ fn preview_drags_and_arrows_change_the_selected_glyph() {
         ..Default::default()
     });
     let tokens = Tokens::default();
+    let images = CellImages::default();
     let posted = Rc::new(RefCell::new(Vec::new()));
     let seen = Rc::clone(&posted);
     let preview = Rc::new(RefCell::new(SpacePreview::default()));
     let shown = Rc::clone(&preview);
     let mut fixture = Fixture::new(move |ui| {
         let mut sent = Vec::new();
-        show(ui, Props { model: &model, tokens: &tokens, preview: &mut shown.borrow_mut(), sent: &mut sent });
+        show(ui, Props { model: &model, images: &images, tokens: &tokens, preview: &mut shown.borrow_mut(), sent: &mut sent });
         seen.borrow_mut().extend(sent);
     });
     fixture.room(egui::vec2(900.0, 700.0)).settle();
@@ -129,4 +132,109 @@ fn preview_drags_and_arrows_change_the_selected_glyph() {
     posted.borrow_mut().clear();
     fixture.key(Key::ArrowRight, Modifiers::SHIFT).settle();
     assert_eq!(*posted.borrow(), vec![Msg::run("spacing.increaseRightSidebearing", json!({"glyphs": ["n"], "layer": "m01", "amount": 10.0}))]);
+}
+
+/// A model of one glyph, `n`, a square drawn with `art`, in the given display options.
+fn one_glyph(display: Display, art: GlyphArt) -> SpaceCenterModel {
+    let glyphs = vec![PlacedGlyph { glyph: Some("n".into()), offset: 0.0, advance: 500.0, column: Some(0), ..Default::default() }];
+    SpaceCenterModel {
+        has_font: true,
+        state: SpaceCenterState { text: "n".into(), display, ..Default::default() },
+        master: Some("m01".into()),
+        upm: 1000.0,
+        ascender: 800.0,
+        line_height: 1100.0,
+        lines: vec![SpaceLine { glyphs, length: 500.0 }],
+        art: [("n".to_string(), std::sync::Arc::new(art))].into_iter().collect(),
+        columns: vec![column("n", 50.0, 500.0)],
+        ..Default::default()
+    }
+}
+
+fn square() -> fontcraft_geom::BezPath {
+    let mut p = fontcraft_geom::BezPath::new();
+    p.move_to((50.0, 0.0));
+    p.line_to((450.0, 0.0));
+    p.line_to((450.0, 400.0));
+    p.line_to((50.0, 400.0));
+    p.close_path();
+    p
+}
+
+/// The shapes of one frame of the window showing `model` with `images`.
+fn drawn(model: SpaceCenterModel, images: CellImages) -> Vec<egui::Shape> {
+    let model = Tracked::new(model);
+    let tokens = Tokens::default();
+    let mut preview = SpacePreview::default();
+    let mut fixture = Fixture::new(move |ui| {
+        let mut sent = Vec::new();
+        show(ui, Props { model: &model, images: &images, tokens: &tokens, preview: &mut preview, sent: &mut sent });
+    });
+    fixture.room(egui::vec2(900.0, 700.0)).settle();
+    fixture.frame_shapes()
+}
+
+fn textured(shapes: &[egui::Shape]) -> usize {
+    shapes.iter().filter(|s| matches!(s, egui::Shape::Mesh(m) if m.texture_id != egui::TextureId::default())).count()
+}
+
+/// Untextured meshes in the glyphs' ink: filled outlines.
+fn inked(shapes: &[egui::Shape]) -> usize {
+    let ink = Tokens::default().outline;
+    shapes
+        .iter()
+        .filter(|s| matches!(s, egui::Shape::Mesh(m) if m.texture_id == egui::TextureId::default() && m.vertices.iter().any(|v| v.color == ink)))
+        .count()
+}
+
+/// With Images on, a glyph's placed image is drawn as one textured quad; with it off, not at all.
+#[test]
+fn the_images_option_draws_placed_images() {
+    use std::sync::Arc;
+
+    use fontcraft_engine::imagery::Rgba8;
+
+    use crate::canvas::images::files::Pixels;
+    use crate::canvas::images::{Look, PlacedImage};
+
+    let pixels = Pixels(Arc::new(Rgba8 { width: 2, height: 2, pixels: vec![200; 16] }));
+    let image = PlacedImage {
+        place: fontcraft_geom::Affine::scale(200.0),
+        visible: Some(fontcraft_geom::Rect::new(0.0, 0.0, 2.0, 2.0)),
+        alpha: 1.0,
+        look: Look::Pixels { pixels, size: [2, 2] },
+    };
+    let images = CellImages { by_glyph: [("n".to_string(), Arc::new(image))].into_iter().collect() };
+    let art = || GlyphArt { layer: "m01".into(), outline: square(), ..Default::default() };
+    let on = drawn(one_glyph(Display { images: true, ..Display::default() }, art()), images.clone());
+    let off = drawn(one_glyph(Display { images: false, ..Display::default() }, art()), images);
+    assert_eq!(textured(&on), textured(&off) + 1, "the image is one textured quad");
+    assert_eq!(inked(&on), inked(&off), "the outline is drawn either way");
+    // The image lies behind the glyph: its quad comes before the filled outline.
+    let image_at = on.iter().position(|s| matches!(s, egui::Shape::Mesh(m) if m.texture_id != egui::TextureId::default()));
+    let ink = Tokens::default().outline;
+    let outline_at = on
+        .iter()
+        .position(|s| matches!(s, egui::Shape::Mesh(m) if m.texture_id == egui::TextureId::default() && m.vertices.iter().any(|v| v.color == ink)));
+    assert!(image_at.is_some() && outline_at.is_some() && image_at < outline_at, "{image_at:?} {outline_at:?}");
+}
+
+/// With Color on, a colour glyph is drawn from its palette layers (one texture) in place of its filled outline; with
+/// it off, its outline is filled and no colour is drawn.
+#[test]
+fn the_color_option_draws_palette_layers_in_place_of_the_outline() {
+    use std::sync::Arc;
+
+    use fontcraft_render::color::artwork::{Drawable, Item, Leaf};
+
+    use crate::canvas::color::{ColorArt, Content};
+
+    let red = Leaf::Solid([1.0, 0.0, 0.0, 1.0]);
+    let drawing = Arc::new(ColorArt::new(Content::Items(vec![Item::Fill(Drawable { clips: vec![square()], leaf: red })])));
+    let art = || GlyphArt { layer: "m01".into(), outline: square(), color: Some(Arc::clone(&drawing)), ..Default::default() };
+    let on = drawn(one_glyph(Display { color: true, ..Display::default() }, art()), CellImages::default());
+    let off = drawn(one_glyph(Display { color: false, ..Display::default() }, art()), CellImages::default());
+    assert_eq!(textured(&on), textured(&off) + 1, "the palette layers are one texture");
+    assert!(inked(&off) >= 1, "with Color off the outline is filled");
+    assert_eq!(inked(&on) + 1, inked(&off), "with Color on the outline is not filled");
 }

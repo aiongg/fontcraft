@@ -108,7 +108,8 @@ pub fn rasterise(items: &[Item], to_pixels: Affine, width: u32, height: u32, pla
     (pixels, false)
 }
 
-/// Draws `art` with `painter`: `to_screen` maps its font units to screen points (y down), without rotation.
+/// Draws `art` with `painter`: `to_screen` maps its font units to screen points (y down); a half turn (the Space
+/// Center upside down) turns the drawing with it.
 /// `plain` is the text colour, the fill of vector art past its work budget.
 pub fn draw(painter: &Painter, art: &ColorArt, to_screen: Affine, plain: [f32; 4]) {
     match &art.content {
@@ -133,8 +134,9 @@ fn draw_items(painter: &Painter, key: u64, items: &[Item], to_screen: Affine, pl
     }
     let ppp = f64::from(painter.ctx().pixels_per_point());
     let Some((scale, width, height)) = texture_scale(to_screen.determinant().abs().sqrt() * ppp, b) else { return };
-    let (top_left, bottom_right) = (screen(to_screen, Point::new(b.x0, b.y1)), screen(to_screen, Point::new(b.x1, b.y0)));
-    if !(finite(top_left) && finite(bottom_right)) || !painter.clip_rect().intersects(Rect::from_two_pos(top_left, bottom_right)) {
+    // The texture's corners, top left first, where they land on screen.
+    let corners = [Point::new(b.x0, b.y1), Point::new(b.x1, b.y1), Point::new(b.x1, b.y0), Point::new(b.x0, b.y0)].map(|p| screen(to_screen, p));
+    if !corners.iter().all(|p| finite(*p)) || !painter.clip_rect().intersects(Rect::from_points(&corners)) {
         return;
     }
     let image = || {
@@ -143,7 +145,19 @@ fn draw_items(painter: &Painter, key: u64, items: &[Item], to_screen: Affine, pl
         ColorImage::from_rgba_premultiplied([width as usize, height as usize], &pixels)
     };
     let texture = TextureCache::texture_with(painter.ctx(), ("fontcraftColor", key, scale.to_bits()), TextureOptions::LINEAR, image);
-    painter.image(texture, Rect::from_two_pos(top_left, bottom_right), Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0)), UNTINTED);
+    textured_quad(painter, texture, corners);
+}
+
+/// A texture drawn on the quad `corners` (the texture's top left, top right, bottom right and bottom left on screen).
+fn textured_quad(painter: &Painter, texture: egui::TextureId, corners: [Pos2; 4]) {
+    let mut mesh = Mesh::with_texture(texture);
+    let uvs = [pos2(0.0, 0.0), pos2(1.0, 0.0), pos2(1.0, 1.0), pos2(0.0, 1.0)];
+    for (pos, uv) in corners.into_iter().zip(uvs) {
+        mesh.vertices.push(Vertex { pos, uv, color: UNTINTED });
+    }
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(0, 2, 3);
+    painter.add(Shape::mesh(mesh));
 }
 
 /// An iColor image as a textured quad: `to_screen` maps the image's pixels (y up from its bottom left) to screen
@@ -158,14 +172,7 @@ fn draw_bitmap(painter: &Painter, bitmap: &Bitmap, to_screen: Affine) {
     let size = [image.width as usize, image.height as usize];
     let key = ("fontcraftColorBitmap", std::sync::Arc::as_ptr(image) as usize, image.width, image.height);
     let texture = TextureCache::texture_with(painter.ctx(), key, TextureOptions::LINEAR, || ColorImage::from_rgba_unmultiplied(size, &image.pixels));
-    let mut mesh = Mesh::with_texture(texture);
-    let uvs = [pos2(0.0, 0.0), pos2(1.0, 0.0), pos2(1.0, 1.0), pos2(0.0, 1.0)];
-    for (pos, uv) in corners.into_iter().zip(uvs) {
-        mesh.vertices.push(Vertex { pos, uv, color: UNTINTED });
-    }
-    mesh.add_triangle(0, 1, 2);
-    mesh.add_triangle(0, 2, 3);
-    painter.add(Shape::mesh(mesh));
+    textured_quad(painter, texture, corners);
 }
 
 /// The edited glyph's colour picture, under its outline.

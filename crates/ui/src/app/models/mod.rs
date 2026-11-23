@@ -92,7 +92,8 @@ pub struct Models {
     /// What the hint layers draw (`canvas::hinting`).
     pub hint_canvas: Tracked<hint_canvas::HintCanvas>,
     hint_cache: hint_canvas::HintCache,
-    /// The files colour glyphs draw from (`canvas::color::files`), shared by the canvas, its text and Font View.
+    /// The files colour glyphs draw from (`canvas::color::files`), shared by the canvas, its text, Font View and the
+    /// Space Center.
     color_files: crate::canvas::color::ColorFiles,
     /// The hint layers' colours and sizes.
     pub hint_tokens: crate::canvas::hinting::tokens::HintTokens,
@@ -123,6 +124,8 @@ pub struct Models {
     pub text: Tracked<text::TextModel>,
     /// The Space Center (`panels::space_center`).
     pub space_center: Tracked<space_center::SpaceCenterModel>,
+    /// The placed images the Space Center draws behind its glyphs (`canvas::images::cells::space_center`).
+    pub space_images: Tracked<crate::canvas::images::cells::CellImages>,
     /// The Table Viewer (`panels::table_viewer`).
     pub table_viewer: Tracked<table_viewer::TableViewerModel>,
     /// Compare Fonts (`panels::compare_fonts`); projected outside the stamp, since it reads two documents.
@@ -221,7 +224,7 @@ impl Models {
         glyph_props::project_inspector(&mut self.inspector, cx);
         glyph_props::project_selection_info(&mut self.selection_info, cx);
         text::project(&mut self.text, &mut self.color_files, cx);
-        space_center::project(&mut self.space_center, cx);
+        space_center::project(&mut self.space_center, &mut self.color_files, cx);
         table_viewer::project(&mut self.table_viewer, cx);
         compare::project_family(&mut self.compare_family, cx);
         compare_list::project(&mut self.compare_list, cx);

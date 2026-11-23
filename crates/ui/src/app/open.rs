@@ -5,6 +5,7 @@
 //! `app/files.rs`) and opens each chosen file. A font source kept as a folder (`.ufo`, `.glyphspackage`, `.sfdir`) is
 //! a file on some platforms' pickers and a folder on others, so File › Open Folder… asks for a folder instead. A file
 //! that is already open is shown, not opened twice; a project file opens as a project (both decided by `file.open`).
+//! The picker lists modules and macros too, and one chosen there is installed (`app/dropped.rs`).
 //!
 //! [`take_dropped`] runs before the frame is drawn: it removes the font files from the frame's dropped files and
 //! posts a `file.open` for each, so the canvas, which places dropped images, sees only the rest.

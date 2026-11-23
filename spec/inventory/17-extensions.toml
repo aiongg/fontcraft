@@ -498,6 +498,129 @@ observe = [
   "Open Window › Macro Panel: screenshot it, note how code is run (a button, a shortcut, both), whether it has tabs, and whether the typed text is still there after closing and reopening the panel and after relaunching.",
 ]
 
+[[command]]
+id = "macroPanel.setText"
+label = "Set Macro Text"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{text: string}"
+area = "extensions"
+milestone = "M13"
+summary = "Puts text in the Macro Panel's editor, as typing there does: one macro step per line, written as the console's input line takes it."
+ref = "Our design"
+status = "inferred"
+own = true
+notes = "FontCraft (M13.74): the editor holds at most 4 MiB, a macro file's limit. A line is a command id then its JSON parameters, or a run-style line (`run --cmd ID --params JSON`, repeated), which gives one step per `--cmd`; blank lines are skipped."
+guesses = [
+  "The editor holds one step per line in the console's syntax rather than the macro file's JSON, so a macro reads and edits like the commands typed in the input line; the reference's editor holds Python, which FontCraft does not run.",
+]
+
+[[command]]
+id = "macroPanel.runAll"
+label = "Run All"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "extensions"
+milestone = "M13"
+summary = "Runs every line of the Macro Panel's editor as one macro through `script.run`: one undo step, and if a step fails none takes effect and the error names the step."
+ref = "Our design"
+status = "inferred"
+own = true
+notes = "FontCraft (M13.74): the macro carries the title, description, arguments and required modules of the file opened last, so `{\"$arg\": name}` placeholders take their defaults; `glyphs` and `layers` take the selection as the Script menu's macros do."
+guesses = [
+  "Run All runs the editor as one undo step, as a macro from the Script menu runs; the reference runs a script's statements one by one, and whether its undo takes them back together is not described.",
+]
+observe = [
+  "In the Macro Panel, run a script that makes two changes, then Undo once: note whether both are undone.",
+]
+
+[[command]]
+id = "macroPanel.runSelection"
+label = "Run Selection"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{first: line, last: line}"
+area = "extensions"
+milestone = "M13"
+summary = "Runs the Macro Panel editor's lines from `first` to `last`, counted from 1, as one macro, as Run All runs them all. The window's Run Selection button sends the lines its selection touches, or the caret's line when nothing is selected."
+ref = "Our design"
+status = "inferred"
+own = true
+notes = "FontCraft (M13.74): lines outside the text, or `first` after `last`, are refused before anything runs."
+guesses = [
+  "Run Selection runs whole lines: every line the selection touches, a selection that ends at the start of a line leaving that line out; the reference's handling of a selection that starts or ends inside a line is not described.",
+  "With nothing selected, Run Selection runs the caret's line; the reference may refuse or run the whole script.",
+  "The command takes line numbers rather than the selected text, so an agent names the lines it means without the editor's selection.",
+]
+observe = [
+  "In the Macro Panel, select part of a script and look for a Run Selection item or shortcut: note whether it runs only the selection.",
+  "Select from the middle of one line to the middle of the next and run the selection: note whether whole lines run.",
+]
+
+[[command]]
+id = "macroPanel.open"
+label = "Open Macro…"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{path?: path}"
+area = "extensions"
+milestone = "M13"
+summary = "Reads a `.fcmacro` file into the Macro Panel's editor in place of its text, one step per line; without a path the window asks for the file."
+ref = "Our design"
+status = "inferred"
+own = true
+notes = "FontCraft (M13.74): the file is read as `script.run` reads one (format, version and limits); its title, description, arguments and required modules are kept for Run and Save. Over the control channel the path is required. `path` is a file read."
+guesses = [
+  "Open replaces the editor's text rather than adding to it or opening a second tab; the reference's panel with several scripts would settle it.",
+]
+observe = [
+  "In the Macro Panel, look for an Open command: note whether it replaces the script, adds a tab, or adds to the text.",
+]
+
+[[command]]
+id = "macroPanel.save"
+label = "Save Macro…"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{path?: path}"
+area = "extensions"
+milestone = "M13"
+summary = "Writes the Macro Panel's editor as a `.fcmacro` file through `script.saveActionSet`, replacing a file at the path; without a path the window asks for the file."
+ref = "Our design"
+status = "inferred"
+own = true
+notes = "FontCraft (M13.74): every line must read as steps and every command and placeholder is checked before anything is written. The macro is titled as the file opened last, else after the file's name. Over the control channel the path is required. `path` is a file written."
+guesses = [
+  "Save replaces a file at the chosen path, because the file chooser already asked; the command run with a path replaces it too.",
+]
+observe = [
+  "In the Macro Panel, look for a Save command: note whether it saves the script to a file and in what format.",
+]
+
+[[command]]
+id = "macroPanel.record"
+label = "Record into Editor"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "extensions"
+milestone = "M13"
+summary = "Starts recording every font-changing command that succeeds, as `script.recordMacro` does, or stops and adds the recorded steps to the end of the Macro Panel's editor, one per line. Without `on` it switches."
+ref = "Our design"
+status = "inferred"
+own = true
+notes = "FontCraft (M13.74): the window's Record button reads Stop while a recording runs, whichever surface started it. Steps that would take the editor past 4 MiB are refused and the recording goes on, so nothing is lost."
+guesses = [
+  "Recorded steps go at the end of the editor's text; the reference records nothing into its panel, and whether a recorder should insert at the caret is our choice.",
+]
+
 [[panel]]
 id = "window.macroPanel"
 label = "Macro Panel"
@@ -507,16 +630,22 @@ controls = [
   "completion list of command ids and glyph names with the parameter docs of the chosen command",
   "log pane: every command run from any surface with its result or error, and module log lines",
   "Clear and Copy buttons",
+  "macro editor: several lines, one step per line",
+  "Run All, Run Selection, Open…, Save… and Record (Stop while recording) buttons under the editor",
 ]
 area = "extensions"
 milestone = "M13"
 summary = "Window with a console showing script and plug-in log output; in the reference it also runs ad-hoc Python (recalled, not stated in these chapters). FontCraft: the Command Console: an input line with completion of command ids and glyph names and the parameter docs of the command being typed, a history, and a log pane holding each command run, its result or error, and module log lines."
 ref = "Settings › Addons › Console Output"
 status = "inferred"
-notes = "FontCraft (M13.9): completion offers command ids for the first word (or the word after `--cmd`) and glyph names inside a JSON string value; prefix matches come first, then matches in any case, at most 50. Tab takes the first suggestion, a click any of them."
+notes = "FontCraft (M13.9): completion offers command ids for the first word (or the word after `--cmd`) and glyph names inside a JSON string value; prefix matches come first, then matches in any case, at most 50. Tab takes the first suggestion, a click any of them. FontCraft (M13.74): under the input line, an editor of several lines holds a macro, one step per line, with Run All, Run Selection, Open… and Save… as `.fcmacro` files, and Record (`macroPanel.*`)."
 guesses = [
-  "The console's input is one line with a history, not a multi-line editor, because commands are one line of JSON; the reference's panel layout is not described (open question).",
+  "The input line stays one line with a history, and macros are written in a separate editor of several lines under it; the reference's panel layout is not described (open question).",
+  "The editor and its buttons sit under the log and the input line in one window rather than in a tab of their own; the reference app would settle the layout.",
   "Tab takes the first completion suggestion and Up and Down stay with the history, because the history is the row's documented use of those keys; nothing describes completion keys in the reference.",
+]
+observe = [
+  "Open the Macro Panel: note whether it runs a selection, and whether it saves scripts to files.",
 ]
 
 # --- Plug-in kinds ---
@@ -571,9 +700,10 @@ milestone = "M13"
 summary = "A plug-in outside the catalogue is installed by dropping its bundle on the app's Dock icon; the app moves it into the Plugins folder. FontCraft: dropping a `.wasm` or `.fcmacro` file on the window, opening it with File › Open, or calling this command with a path validates it (manifest, ABI version, no imports, limits) and copies it into its folder; on the web the file's bytes are stored in the browser."
 ref = "Extensions › Plug-ins › Installing Plug-ins"
 status = "inferred"
-notes = "X.ui3, crates/ui/src/app/dropped.rs: a `.wasm` or `.fcmacro` file dropped anywhere on the desktop window runs this command with its path, before the canvas or the Font View can take it as an image. The web build does not install from a drop, since a dropped file there has no path and its bytes arrive asynchronously."
+notes = "X.ui3, crates/ui/src/app/dropped.rs: a `.wasm` or `.fcmacro` file dropped anywhere on the desktop window runs this command with its path, before the canvas or the Font View can take it as an image. The web build does not install from a drop, since a dropped file there has no path and its bytes arrive asynchronously. M13.76: File › Open… lists modules and macros in its chooser (a filter of everything it opens, one of fonts, one of modules and macros); a module or macro chosen there runs this command instead of opening a document, through the same code as a drop. A `file.open` request over the control channel (`engine.execute`) gets the engine's answer and does not install. In the browser the chooser gives a name and bytes, which install through `dataBase64` and `name`. Without a Modules or Macros folder (the web build) a module or macro is installed for the session; the web build keeps it in browser storage (`plugin.pluginsFolder`)."
 guesses = [
   "A module keeps the file name it had (or `<id>.wasm`); installing the same module again only turns it on, and a different module with an installed id needs `replace`; the reference's handling of a second copy is not documented.",
+  "File › Open… of a module or macro installs it, since the reference installs from a drop and FontCraft treats Open as the keyboard path to the same action; the reference's Open dialog does not list plug-ins.",
 ]
 
 [[behavior]]
@@ -583,8 +713,10 @@ milestone = "M13"
 summary = "Installed plug-ins live in a Plugins folder that sits beside the Scripts folder. FontCraft: a Modules folder beside the Macros folder in the per-user data folder (for example `~/Library/Application Support/FontCraft/` on macOS); Settings › Extensions shows both paths."
 ref = "Extensions › Plug-ins › Installing Plug-ins"
 status = "inferred"
+notes = "M13.76, crates/ui/src/app/web_store.rs: the web build has no folders. A module or macro installed there from bytes is kept in the page's localStorage under `fontcraft.extensions` (JSON: version, then kind, id, file name and base64 bytes per entry) and installed again when the app starts; removing it drops it from the store. A file that does not fit stays installed for the visit and the status line says it was not kept. Module on/off switches are not kept on the web."
 guesses = [
   "The folders are `Macros` and `Modules` in FontCraft's settings folder (the per-user application data folder); the reference's folder names and location are not given in the handbook (open question).",
+  "The web build keeps at most 64 modules and macros and 4 Mi characters of them in browser storage (localStorage gives a site about 5 million characters); larger modules install for the visit only. The reference has no web build.",
 ]
 
 [[behavior]]

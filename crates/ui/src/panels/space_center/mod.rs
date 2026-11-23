@@ -11,7 +11,8 @@
 //! | press, drag or arrow keys in the preview | selects the glyph; drags and arrows change its margins (`shell::space_center::drag`) |
 //!
 //! The preview ([`preview`]) paints the projected lines (`app::models::space_center`) and wraps multi-line text at
-//! the panel's width.
+//! the panel's width. The Display menu's Images item draws each glyph's placed image behind it; its Color item draws a
+//! colour glyph in its colour drawing in place of its outline.
 
 mod preview;
 
@@ -34,6 +35,7 @@ use serde_json::{Value, json};
 
 use crate::app::Msg;
 use crate::app::models::space_center::{MatrixColumn, SpaceCenterModel};
+use crate::canvas::images::cells::CellImages;
 use crate::canvas::tokens::Tokens;
 use crate::shell::space_center::drag::SpacePreview;
 use crate::shell::space_center::text::Row as MatrixRow;
@@ -63,6 +65,8 @@ craft::ui::words! {
         inverse: "fontcraftSpaceCenter.inverse" = "Inverse";
         guides: "fontcraftSpaceCenter.guides" = "Guides";
         zones: "fontcraftSpaceCenter.zones" = "Zones";
+        images: "fontcraftSpaceCenter.images" = "Images";
+        color: "fontcraftSpaceCenter.color" = "Color";
         line_space: "fontcraftSpaceCenter.lineSpace" = "Line Space";
         tracking: "fontcraftSpaceCenter.tracking" = "Tracking";
         matrix: "fontcraftSpaceCenter.matrix" = "Spacing matrix";
@@ -88,6 +92,8 @@ const RIGHT: ColumnKey = ColumnKey::new("right");
 
 pub struct Props<'a> {
     pub model: &'a Tracked<SpaceCenterModel>,
+    /// The placed images drawn behind the glyphs while the Images option is on (`canvas::images::cells::space_center`).
+    pub images: &'a CellImages,
     /// The canvas's colours and sizes: the preview draws glyphs as the canvas does.
     pub tokens: &'a Tokens,
     /// The preview canvas's view and drag tool (`shell::space_center::drag`).
@@ -112,6 +118,7 @@ pub fn format_value(v: Option<f64>) -> String {
 
 fn view(props: &mut Props<'_>, ui: &mut Ui) {
     let model: &SpaceCenterModel = props.model;
+    let images = props.images;
     let tokens = props.tokens;
     let space_preview = &mut *props.preview;
     let sent = &mut *props.sent;
@@ -128,7 +135,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
         }
         // The selected glyph's fields come before the two parts that share the room left.
         cells(ui, &words, model, sent);
-        preview::show(ui, &words, model, tokens, space_preview, sent);
+        preview::show(ui, &words, model, images, tokens, space_preview, sent);
         matrix(ui, &words, model, sent);
     });
 }
@@ -192,6 +199,8 @@ fn flag_label(words: &SpaceCenterWords, key: &str) -> Label {
         "stroke" => words.stroke.clone(),
         "inverse" => words.inverse.clone(),
         "guides" => words.guides.clone(),
+        "images" => words.images.clone(),
+        "color" => words.color.clone(),
         _ => words.zones.clone(),
     }
 }

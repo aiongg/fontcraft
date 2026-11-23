@@ -7,7 +7,7 @@
 //! Form dialogs over one command's parameters are specs ([`spec::DialogSpec`]): a package lists its specs and adds one
 //! line to [`SPECS`]; `form.rs` keeps the open one in the app layer and `host.rs` shows it. `docs/ui.md` has the API.
 
-mod about;
+pub mod about;
 pub mod actions;
 mod add_pixel_glyph;
 pub mod after;
