@@ -66,8 +66,14 @@ craft::ui::words! {
     }
 }
 
-/// Rows of the log shown before it scrolls; the input line and the macro editor stay in view under it.
-const LOG_ROWS: u16 = 12;
+/// Rows of the log shown before it scrolls, in a tall room and in a short one. Between them the log takes the room
+/// the input line leaves, so a short dock keeps the input line in view and the panel body scrolls to the editor.
+const LOG_ROWS_MAX: u16 = 12;
+const LOG_ROWS_MIN: u16 = 3;
+/// A log row's height and the room the buttons, the input line and its caption take, in points: estimates that only
+/// choose the row count.
+const LOG_ROW_HEIGHT: f32 = 28.0;
+const ROOM_BESIDE_LOG: f32 = 110.0;
 
 /// Lines the macro editor shows.
 const EDITOR_LINES: usize = 10;
@@ -79,10 +85,26 @@ pub struct Props<'a> {
 }
 
 pub fn show(ui: &mut Ui, mut props: Props<'_>) {
-    view(&mut props, ui);
+    let rows = log_rows(ui.available_height());
+    super::widgets::scrolling(ui, |ui| view(&mut props, rows, ui));
 }
 
-fn view(props: &mut Props<'_>, ui: &mut Ui) {
+/// The log rows that fit in a panel `room` points high, between [`LOG_ROWS_MIN`] and [`LOG_ROWS_MAX`].
+fn log_rows(room: f32) -> u16 {
+    if !room.is_finite() {
+        return LOG_ROWS_MAX;
+    }
+    let fit = ((room - ROOM_BESIDE_LOG) / LOG_ROW_HEIGHT).floor();
+    if fit >= f32::from(LOG_ROWS_MAX) {
+        LOG_ROWS_MAX
+    } else if fit > f32::from(LOG_ROWS_MIN) {
+        u16::try_from(fit as i64).unwrap_or(LOG_ROWS_MIN)
+    } else {
+        LOG_ROWS_MIN
+    }
+}
+
+fn view(props: &mut Props<'_>, log_rows: u16, ui: &mut Ui) {
     let words = Env::of(ui).words::<ConsoleWords>();
     let model = props.model;
     let sent = &mut *props.sent;
@@ -97,7 +119,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
     let source = Lines(&model.lines);
     let _ = List::new(words.log.clone())
         .empty(words.empty.clone())
-        .max_rows(LOG_ROWS)
+        .max_rows(log_rows)
         .show_items(ui, &source, &mut |at, _| ListRow::new(model.lines.get(*at).cloned().unwrap_or_default()));
     let completer = ConsoleCompleter { docs: Arc::clone(&model.docs), glyphs: Arc::clone(&model.glyphs), history: Arc::clone(&model.history) };
     let typed = TextField::new(words.input.clone(), Bind::given(model.input.clone()))
@@ -234,7 +256,7 @@ mod tests {
     use std::rc::Rc;
 
     use craft::ui::contract::Tracked;
-    use craft::ui::testing::Fixture;
+    use craft::ui::testing::{Fixture, pointer};
     use egui::{Key, Modifiers};
     use serde_json::json;
 
@@ -302,6 +324,41 @@ mod tests {
         let save = fixture.by_label("Save…").expect("the Save button");
         fixture.click(&save).settle();
         assert_eq!(*posted.borrow(), vec![Msg::Shell(CommandRef::new("macroPanel.save"))]);
+    }
+
+    /// In a short dock the input line shows under the log without scrolling, and a wheel over the panel body brings
+    /// the macro editor into view.
+    #[test]
+    fn a_short_room_keeps_the_input_line_and_scrolls_to_the_editor() {
+        let lines = (0..40).map(|i| format!("edit.undo {{}} → {i}")).collect();
+        let model = Tracked::new(ConsoleModel { lines, editor: "edit.undo".into(), ..Default::default() });
+        let mut fixture = Fixture::new(move |ui| {
+            let mut sent = Vec::new();
+            show(ui, Props { model: &model, sent: &mut sent });
+        });
+        fixture.room(egui::vec2(300.0, 280.0)).settle();
+        let bottom = fixture.shown().bottom();
+        let input = fixture.by_label("Command").expect("the input line");
+        assert!(input.rect.bottom() <= bottom, "input line at {:?}, room ends at {bottom}", input.rect);
+        let editor = fixture.by_label("Macro").expect("the macro editor");
+        assert!(editor.rect.bottom() > bottom, "the editor starts out of view: {:?}", editor.rect);
+
+        let over_input = input.rect.center();
+        fixture.frame(vec![pointer::moved(over_input)]).frame(vec![pointer::wheel(-600.0)]).settle();
+        let editor = fixture.by_label("Macro").expect("the macro editor");
+        assert!(editor.rect.bottom() <= fixture.shown().bottom(), "the editor scrolled into view: {:?}", editor.rect);
+    }
+
+    /// A tall room lets the log grow to its cap; a short one shrinks it to its floor.
+    #[test]
+    fn the_log_follows_the_room() {
+        use super::{LOG_ROWS_MAX, LOG_ROWS_MIN, log_rows};
+
+        assert_eq!(log_rows(f32::INFINITY), LOG_ROWS_MAX);
+        assert_eq!(log_rows(900.0), LOG_ROWS_MAX);
+        assert_eq!(log_rows(100.0), LOG_ROWS_MIN);
+        let docked = log_rows(280.0);
+        assert!((LOG_ROWS_MIN..LOG_ROWS_MAX).contains(&docked), "{docked}");
     }
 
     /// The lines a selection touches: an empty selection is its caret's line, and a selection ending at a line's
