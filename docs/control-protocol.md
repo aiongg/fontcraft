@@ -73,7 +73,7 @@ is checked for.
 | `engine.execute` | `{command, params?}` | runs any engine or UI command; the command's own result |
 | `engine.commands` | | `{commands: [{id, label, menu, shortcut, params, query, enabled, disabled_reason?}]}`; UI commands carry `ui: true` |
 | `document.inspect` | | `{documents: [{index, active, title, path, modified, revision, familyName, glyphs, masters, undo, redo}], active}` |
-| `ui.inspect` | | the UI state: `selected_glyphs`, `tabs` (each `{id, glyphs, edited, view: {scale, center}, selection, focus, selection_glyph}`: `selection` and the path `focus` belong to the glyph `selection_glyph`), `active_tab` (an index into `tabs`; `null` while Font View shows), `editing` (the edited glyph's name), `closed_tabs`, `display` (the View toggles), `show_palette`, `canvas_size`, `status`, `pendingInput` (window input events not yet drawn) |
+| `ui.inspect` | | the UI state: `selected_glyphs`, `tabs` (each `{id, glyphs, edited, view: {scale, center}, selection, focus, selection_glyph}`: `selection` and the path `focus` belong to the glyph `selection_glyph`), `active_tab` (an index into `tabs`; `null` while Font View shows), `editing` (the edited glyph's name), `closed_tabs`, `display` (the View toggles), `show_palette`, `canvas_size`, `status`, `pendingInput` (window input events not yet drawn), `windows` (the app's OS windows with their rects in main-window points; see [Window input](#window-input)) |
 | `ui.menu.list` | | the menu tree: `[{title, items: [{command, label, path, shortcut, enabled, disabled_reason?, checked?, alternate?, alternateOf?}]}]`. A row with an Option alternate names its command in `alternate`; the alternate follows as an item of its own, with `alternateOf` naming the row: what the row reads and runs while Alt is held |
 | `ui.menu.invoke` | `{command, params?}` | runs a menu item as a click on it does, and returns the command's result: a command with a dialog fired without parameters opens the dialog on the selection and returns `{dialog}`; Close and Quit with unsaved work ask about it and return null; the follow-up question its result asks (a pasted outline outside the glyph, imported files without a glyph) opens as a dialog; an Option alternate (`alternateOf` in `ui.menu.list`) is invoked by its own id, as a click with Alt held; an id that is in no menu is an error |
 | `ui.screenshot` | `{path?}` | captures the window as PNG, written to `path` or returned as base64 `png`; `{width, height, pixelsPerPoint, path?, png?}`. Sizes are in pixels. The reply comes after the next frame is drawn. The image is the main window only: panels floating in OS windows of their own are not in it. Headless hosts (tests, MCP) answer with an error |
@@ -82,7 +82,7 @@ is checked for.
 | `ui.tool.list` | | the pointer tools (the command `tool.list`): `{active, tools: [{id, label, shortcut, group}]}` |
 | `ui.pointer` | `{events: [{kind, x, y, space?, mods?}]}` | drives the active tool like the mouse; see below |
 | `ui.key` | `{key, shift?, alt?, cmd?, ctrl?, action?}` | a key as the keyboard gives it; see below |
-| `ui.text` | `{text}` | types as the keyboard does, at most 4,096 characters: into the open dialog's field that has the keyboard, else into the text field that has it, at the next frame (`{field: true}`); else, in text mode, into the tab's text at the cursor (`{typed: true}`); otherwise it types nothing (`{typed: false}`) |
+| `ui.text` | `{text}` | types as the keyboard does, at most 4,096 characters: into the open dialog's field that has the keyboard, else into the text field that has it, in the window that has the keyboard (a floating panel's OS window after a `ui.click` in it), at the next frame (`{field: true}`); else, in text mode, into the tab's text at the cursor (`{typed: true}`); otherwise it types nothing (`{typed: false}`) |
 | `ui.dialog.inspect` | | the open dialog: `{open, dialog, title, command, mode: "preview" \| "runOnOk", message, tabs, fields: [{id, label, kind, value, focused, min?, max?, choices?, labels?, default, doc}], editing, params, error, actions, buttons, captions: {ok, cancel}, canChooseFolder}`; a dialog with a third button lists its id in `buttons` (`["ok", "replace", "cancel"]`) and its caption in `captions`; `{open: false}` when none is. `tabs` (`[{id, tab, label, active}]`) and `actions` (`[{id, label, command}]`) are `null` when the dialog has none |
 | `ui.dialog.set` | `{field, value}` | gives a field of the open dialog a value and previews it; a number field also takes text. The `ui.dialog.inspect` reply |
 | `ui.dialog.confirm` | | OK: the preview becomes one undo step, `{confirmed, changed, command, params}`; in a `runOnOk` dialog the command runs once, `{confirmed, command, params, result}`, and a failure keeps the dialog open |
@@ -163,10 +163,11 @@ A character no shortcut there takes (a letter with no `cmd`, `ctrl` or `alt`) is
 window the same way, and the grid or list that has the keyboard selects the first glyph whose
 name starts with what was typed (type-ahead); with nothing focused it does nothing. Every other
 key goes on to the menu shortcuts. While a context menu is open (the canvas menu or Font View's
-glyph menu), every key goes to the window as the keyboard sends it, and the menu takes it as it
-takes the keyboard's (`Escape` closes it). The reply is `{queued, handled: true, contextMenu: true}`.
+glyph menu), every key goes to the window that has the keyboard as the keyboard sends it, and the
+menu takes it as it takes the keyboard's (`Escape` closes it). The reply is `{queued, handled: true, contextMenu: true}`.
 While a text field has the keyboard (a panel's field or the macro editor, after a `ui.click` on
-it), every key goes to that field's window the same way, before the tools and Font View: the
+it, in the main window or a floating panel's OS window), every key goes to that field's window the
+same way, before the tools and Font View: the
 arrows move the caret, `shift` with them selects, and a character with no `cmd`, `ctrl` or `alt`
 is typed. The reply is `{queued, handled, field: true}`; a shortcut a key fires there is not named
 in it. `ui.text` types into such a field too (`{field: true}`). While a modal dialog shows over the
@@ -191,15 +192,27 @@ and the canvas, where a right-click (`button: "right"`) opens the context menu t
 
 | Field | Values |
 |---|---|
-| `x`, `y` (`toX`, `toY`) | window points from the top left, as `ui.screenshot` divided by `pixelsPerPoint` shows them; at most 100,000 either way |
+| `x`, `y` (`toX`, `toY`) | main-window points from the top left, as `ui.screenshot` divided by `pixelsPerPoint` shows them; at most 100,000 either way. The desktop around the main window uses the same origin and unit, so a point over a floating panel's OS window reaches that window (see below) |
 | `button` | `left` (default), `right`, `middle` |
 | `count` | clicks, 1 (default) to 16; `2` is a double click. On a drag the extra clicks come at the end point |
 | `steps` | moves of a drag between press and release, 1 to 256 (default 8) |
 | `dy`, `dx` | wheel notches: `dy` up (+) or down (−), `dx` right (+) or left (−); at most 100 each. `unit: "point"` makes them points |
 | `mods` | as in `ui.pointer`; the flags `shift`, `alt`, `cmd` and `ctrl` (true) add to it |
 
-The reply is `{queued, pending}`: the events this request added and the events not yet drawn in
-all. The events are handed to the window one per drawn frame (each press and release after a move
+Panels floating in OS windows of their own (Font Info, the Bitmap Glyph Editor, Space Center, …)
+are palettes above the main window. A point inside one of them goes to that window, at the same
+place on the desktop; every other point goes to the main window. `ui.inspect` lists the windows
+under `windows`: `[{window, rect: [x0, y0, x1, y1], focused}]`, the main window first as `main`,
+each `rect` the window's inside in main-window points, so the centre of a control at (cx, cy) in a
+floating window is at (x0 + cx, y0 + cy). A drag stays in the window its press lands in, as a held
+mouse button does. A click or drag gives its window the keyboard, as a click on the desktop does, so
+`ui.text` and `ui.key` then reach the field it focused; nothing is asked of the system for a click
+in the main window while no window of the app has the keyboard. Where the main window does not
+report its place on the desktop (Wayland), panels float inside it and every point is the main
+window's.
+
+The reply is `{queued, pending, window}`: the events this request added, the events not yet drawn
+in all, and the window they went to (`main` or the id `ui.inspect` lists). The events are handed to the window one per drawn frame (each press and release after a move
 to its position), so egui sees hover, clicks, double clicks and drags as it does from a mouse.
 While the window is minimized or hidden no event is handed out. `ui.inspect` reports the count as
 `pendingInput`; once it is 0 the last event has been drawn and the commands it ran are done, so

@@ -2,7 +2,9 @@
 //! `ui.set`.
 //!
 //! - Clicks, drags, moves and wheel turns are queued on the window host at window points, one step per pass, so
-//!   they reach every widget a mouse reaches. The modifiers a request names are held for the steps it queues. A
+//!   they reach every widget a mouse reaches. A point is in the main window's points; the desktop around the main
+//!   window has the same origin and unit, so a point over a panel floating in an OS window of its own reaches that
+//!   window ([`land`]). A press gives its window the keyboard, as a click on the desktop does. The modifiers a request names are held for the steps it queues. A
 //!   request is checked whole before anything of it is queued. In the desktop app the reply comes once the frames
 //!   have carried the input.
 //! - `ui.click {id}` presses a control of the open dialog: it runs `ui.dialog.click`, which the dialogs package
@@ -49,10 +51,65 @@ fn window(app: &FontCraftApp, method: &str) -> Result<WindowHost, String> {
     app.control.window.clone().ok_or_else(|| format!("{method}: no window: window input needs the desktop app or a test frame"))
 }
 
-/// The reply of a request that queued `steps` window input steps.
-fn queued(app: &mut FontCraftApp, steps: usize) -> Value {
+/// The reply of a request that queued `steps` window input steps in `viewport`.
+fn queued(app: &mut FontCraftApp, steps: usize, viewport: ViewportId) -> Value {
     app.control.queued += steps;
-    json!({ "queued": steps })
+    json!({ "queued": steps, "window": window_name(viewport) })
+}
+
+/// How replies and `ui.inspect` name a window: `main`, else the viewport id in hex.
+pub(super) fn window_name(viewport: ViewportId) -> String {
+    if viewport == ViewportId::ROOT { "main".into() } else { format!("{:016x}", viewport.0.value()) }
+}
+
+/// The window the main-window point `at` lands in, and the point in that window's own points. A point inside a
+/// panel floating in an OS window of its own lands there: floating panels are palettes above the main window. Where
+/// floating windows overlap, the order is [`WindowHost::viewports_at`]'s. Every other point, and every point while
+/// the main window has not reported where it is, lands in the main window unchanged.
+fn land(host: &WindowHost, at: Pos2) -> (ViewportId, Pos2) {
+    let Some(main) = host.facts(ViewportId::ROOT) else { return (ViewportId::ROOT, at) };
+    let desktop = main.inner.min + at.to_vec2();
+    host.viewports_at(desktop)
+        .into_iter()
+        .filter(|viewport| *viewport != ViewportId::ROOT)
+        .find_map(|viewport| {
+            let facts = host.facts(viewport).filter(|facts| facts.inner.contains(desktop))?;
+            Some((viewport, desktop - facts.inner.min.to_vec2()))
+        })
+        .unwrap_or((ViewportId::ROOT, at))
+}
+
+/// A press in `viewport` gives its window the keyboard, as a click on the desktop does, so `ui.text` and `ui.key`
+/// reach the field the click focused. Nothing is asked of the platform when the window has the keyboard already, or
+/// for the main window while no window of the app has it ([`WindowHost::key_window`] is then the main window).
+fn focus_on_press(host: &WindowHost, viewport: ViewportId) {
+    if viewport != host.key_window() {
+        host.act(viewport, WindowAction::Focus);
+    }
+}
+
+/// `ui.inspect` key `windows`: the app's OS windows, the main one first, each `{window, rect: [x0, y0, x1, y1],
+/// focused}` with its inner rect in main-window points, the points `ui.click` and the other window input take.
+/// Absent without frames, and while the main window has not reported where it is.
+pub fn inspect(app: &FontCraftApp, state: &mut Map<String, Value>) {
+    let (Some(host), Some(ctx)) = (app.control.window.as_ref(), app.window.as_ref()) else { return };
+    let Some(main) = host.facts(ViewportId::ROOT) else { return };
+    let origin = main.inner.min.to_vec2();
+    let mut viewports: Vec<ViewportId> = ctx.input(|input| input.raw.viewports.keys().copied().collect());
+    viewports.sort_by_key(|viewport| *viewport != ViewportId::ROOT);
+    let windows: Vec<Value> = viewports
+        .into_iter()
+        .filter_map(|viewport| {
+            let facts = host.facts(viewport)?;
+            let rect = facts.inner.translate(-origin);
+            Some(json!({
+                "window": window_name(viewport),
+                "rect": [rect.min.x, rect.min.y, rect.max.x, rect.max.y],
+                "focused": facts.focused,
+            }))
+        })
+        .collect();
+    state.insert("windows".into(), Value::Array(windows));
 }
 
 /// A window coordinate `key` of `params`.
@@ -128,7 +185,7 @@ fn host_mods(m: Modifiers) -> Mods {
     mods
 }
 
-/// `ui.click {x, y, button?, count?, mods?}` clicks at a window point; `ui.click {id}` presses a control of the
+/// `ui.click {x, y, button?, count?, mods?}` clicks at a window point ([`land`]); `ui.click {id}` presses a control of the
 /// open dialog (`ui.dialog.click`).
 fn click(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
     const M: &str = "ui.click";
@@ -144,14 +201,18 @@ fn click(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
             let mods = host_mods(modifiers(M, params)?);
             let at = point(M, params, "x", "y")?;
             let host = window(app, M)?;
-            host.inject_click(ViewportId::ROOT, at, button, clicks, mods, false);
-            Ok(queued(app, 1 + 2 * clicks as usize))
+            let (viewport, at) = land(&host, at);
+            focus_on_press(&host, viewport);
+            host.inject_click(viewport, at, button, clicks, mods, false);
+            Ok(queued(app, 1 + 2 * clicks as usize, viewport))
         }
     }
 }
 
 /// `ui.drag {x, y, toX, toY, steps?, count?, button?, mods?}`: a press at (x, y), the moves of the drag in
-/// `steps`, the release at (toX, toY), then the further clicks of `count` there.
+/// `steps`, the release at (toX, toY), then the further clicks of `count` there. The whole drag goes to the window
+/// the press lands in, as a held mouse button keeps its window; the end point is in that window's points as the
+/// pointer's position there.
 fn drag(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
     const M: &str = "ui.drag";
     let steps = count(M, params, "steps", DEFAULT_DRAG_STEPS, MAX_DRAG_STEPS)?;
@@ -161,15 +222,18 @@ fn drag(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
     let from = point(M, params, "x", "y")?;
     let to = point(M, params, "toX", "toY")?;
     let host = window(app, M)?;
-    host.inject_click(ViewportId::ROOT, from, button, 1, mods, true);
+    let (viewport, local) = land(&host, from);
+    let (from, to) = (local, to + (local - from));
+    focus_on_press(&host, viewport);
+    host.inject_click(viewport, from, button, 1, mods, true);
     for i in 1..=steps {
-        host.inject_move(ViewportId::ROOT, from + (to - from) * (i as f32 / steps as f32), mods, 0.0);
+        host.inject_move(viewport, from + (to - from) * (i as f32 / steps as f32), mods, 0.0);
     }
-    host.inject_release(ViewportId::ROOT, Some(to), Released::Button(button));
+    host.inject_release(viewport, Some(to), Released::Button(button));
     if clicks > 1 {
-        host.inject_click(ViewportId::ROOT, to, button, clicks - 1, mods, false);
+        host.inject_click(viewport, to, button, clicks - 1, mods, false);
     }
-    Ok(queued(app, 2 + steps as usize + 2 * (clicks as usize - 1)))
+    Ok(queued(app, 2 + steps as usize + 2 * (clicks as usize - 1), viewport))
 }
 
 /// `ui.move {x, y}`: the pointer moves to a window point (hover).
@@ -178,8 +242,9 @@ fn move_to(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
     let at = point(M, params, "x", "y")?;
     let mods = host_mods(modifiers(M, params)?);
     let host = window(app, M)?;
-    host.inject_move(ViewportId::ROOT, at, mods, 0.0);
-    Ok(queued(app, 1))
+    let (viewport, at) = land(&host, at);
+    host.inject_move(viewport, at, mods, 0.0);
+    Ok(queued(app, 1, viewport))
 }
 
 /// `ui.wheel {x, y, dx?, dy?, unit?: line | point, mods?}`: a wheel turn over a window point. `dy` positive turns
@@ -203,8 +268,9 @@ fn wheel(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
     };
     let mods = host_mods(modifiers(M, params)?);
     let host = window(app, M)?;
-    host.inject_wheel(ViewportId::ROOT, at, delta * scale, mods);
-    Ok(queued(app, 2))
+    let (viewport, at) = land(&host, at);
+    host.inject_wheel(viewport, at, delta * scale, mods);
+    Ok(queued(app, 2, viewport))
 }
 
 /// `ui.resize {width, height}`: the window's inner size in points, at the next frame. A size larger than the

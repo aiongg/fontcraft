@@ -5,7 +5,8 @@
 //! View's keys to the window, where the grid or the list that has the keyboard takes them, and none to the tools.
 //! While a context menu is open, every key goes to the window, where the menu takes it as it takes the keyboard's, and
 //! so does every key while a text field has the keyboard (a panel's field, the macro editor) or a modal dialog is open
-//! (About, Settings, …), whose Escape and Return are the dialog's.
+//! (About, Settings, …), whose Escape and Return are the dialog's. Those keys go to the window that has the keyboard,
+//! which may be a panel floating in an OS window of its own; Font View's keys go to the main window, where it shows.
 
 use craft::keymap::{Key as WindowKey, Mods};
 use craft::ui::runtime::commands::{Binding, CommandRef};
@@ -224,16 +225,19 @@ fn key(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
     Ok(reply)
 }
 
-/// Queues the key `name` on the main window as the keyboard sends it → the steps queued; `None` without a window or for
-/// a key the window has no name for.
+/// Queues the key `name` on the window that has the keyboard ([`WindowHost::key_window`]) as the keyboard sends it → the
+/// steps queued; `None` without a window or for a key the window has no name for.
+///
+/// [`WindowHost::key_window`]: craft::ui::runtime::windows::WindowHost::key_window
 fn to_window(app: &mut FontCraftApp, name: &str, mods: Modifiers, press: bool, release: bool) -> Option<usize> {
     let host = app.control.window.clone()?;
     let key = WindowKey::parse(name)?;
     let held = Mods { cmd: mods.cmd, ctrl: mods.ctrl, alt: mods.alt, shift: mods.shift };
+    let viewport = host.key_window();
     if press {
-        host.inject_key(ViewportId::ROOT, key, held, !release);
+        host.inject_key(viewport, key, held, !release);
     } else if release {
-        host.inject_let_go(ViewportId::ROOT, key);
+        host.inject_let_go(viewport, key);
     }
     let steps = usize::from(press) + usize::from(release);
     app.control.queued += steps;

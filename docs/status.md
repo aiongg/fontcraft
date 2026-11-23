@@ -6,6 +6,16 @@ _Updated: 2026-11-23: M8.25, the live feature check, built on branch `w-M8.25` w
 
 ## State of the tree
 
+- **Where X.fix100 stands.** Written on branch `w-M8.26`, not yet built. Control-channel input reaches floating OS
+  windows. `ui.click`, `ui.drag`, `ui.move` and `ui.wheel` take main-window points; a point inside a floating panel's
+  OS window lands there, in that window's points (`control::window_input::land`, over `WindowHost::viewports_at`).
+  A click or drag sends its window a focus request, as a desktop click does, so `ui.text` and `ui.key` (which follow
+  `WindowHost::key_window`) reach the field it focused. `ui.inspect` lists `windows` with their rects; replies name
+  the `window`. The native harness turns a focus command into the reported focus. Tests (not run):
+  `a_control_click_over_a_floated_panel_reaches_its_window`, `control_text_types_into_a_field_of_a_floated_panel`
+  (`testing/native/tests.rs`). Font View's keys still go to the main window. Not yet seen on a desktop: whether the
+  window manager grants the focus request.
+
 - **Where M8.25 stands.** Built (builder, depth wave 2) and gated: `cargo xtask ci` passed all 11 steps, 4,967 tests passed and 42 skipped. Smoke, light: About wraps NOTICE paragraphs at about 450 points; `ui.key Escape` closes it; the docked Command Console log follows 30 new lines. Not smoked: typing into Font Info › Features (a floating OS window that `ui.click` and `ui.text` cannot reach, and the box has no X input tool), covered by the two frame tests; and dark mode (the second Xvfb did not start).
   - Engine: `FeatureState::is_current(session, doc)` answers by the compiler's input hash
     (`cmd::features_compile::prepare`: assembled code, stored entry code, glyph order with code points, master,
