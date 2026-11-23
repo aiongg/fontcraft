@@ -1250,6 +1250,8 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
   - The console's log did not follow the newest line: after a run, the new rows were below the log's fold until it
     was scrolled. Fixed, not yet built (X.fix99d): while its last row is in view, a row added reveals it through
     craft `List::reveal`; scrolled up, the log stays put (`panels::command_console::command_log`).
+  - `docs/control-protocol.md` said `ui.text` with no field focused taps each character as `ui.key`; the code
+    answers `{typed: false}` outside text mode. Fixed (X.fix99e): the row says what the code does.
 - **Macro editor and Tab.** Craft's text part that inserts Tab keeps only Tab from the focus service and loses its
   arrows (decision 0009), so the macro editor does not insert Tab; Tab leaves the field.
 - **`ui.screenshot` misses floating windows.** It captures the main window only. A capture of a floating
