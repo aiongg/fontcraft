@@ -806,3 +806,30 @@ fn the_find_bar_and_the_code_field_fit_the_panels_default_size() {
     let next = fixture.by_label("Next").expect("the Next button").rect;
     assert!(code.width() > room.x / 2.0 && code.top() > next.bottom(), "{code:?}");
 }
+
+/// Next selects a match while the query keeps the keyboard: the code shows that match on a fill, and only that one.
+#[test]
+fn next_shows_the_selected_match_while_the_query_has_the_keyboard() {
+    use crate::app::models::font_features::FindModel;
+    use crate::shell::font_info_tabs::FindState;
+    let code = "sub a by b;\nsub a by c;";
+    let mut model = showing(code, Vec::new());
+    if let Some(e) = model.features.entry.as_mut() {
+        let state = FindState { query: "a".into(), ..FindState::default() };
+        e.find = Some(FindModel { state, here: vec![(4, 5), (16, 17)], total: 2, ..FindModel::default() });
+    }
+    let (mut fixture, _) = panel(model);
+    let filled = |fixture: &mut Fixture| -> Vec<String> {
+        let (_, galley) = painted_code(fixture, code);
+        let job = &galley.job;
+        job.sections
+            .iter()
+            .filter(|s| s.format.background != egui::Color32::TRANSPARENT)
+            .filter_map(|s| job.text.get(s.byte_range.start.0..s.byte_range.end.0).map(str::to_string))
+            .collect()
+    };
+    assert!(filled(&mut fixture).is_empty(), "no match is selected yet");
+    let next = fixture.by_label("Next").expect("the Next button");
+    fixture.click(&next).settle();
+    assert_eq!(filled(&mut fixture), vec!["a".to_string()]);
+}

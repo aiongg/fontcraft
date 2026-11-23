@@ -160,6 +160,10 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
     let caret = out.selection(ui.ctx()).filter(|s| focused && s.is_empty()).map(|s| s.caret);
     let found: &[(usize, usize)] = entry.find.as_ref().map(|f| f.here.as_slice()).unwrap_or_default();
     let accent = Color32::from(Srgba::from(env.tokens.color.accent.solid));
+    // The field paints its selection only while it has the keyboard; Next and Previous select a match while the find
+    // bar's query keeps it, so the selected match gets the selection's fill here.
+    let picked = out.last_selection(ui.ctx()).filter(|s| !focused && !s.is_empty() && entry.find.is_some()).map(|s| s.range());
+    let fill = Color32::from(Srgba::from(env.tokens.color.accent.soft));
     out.highlight_text(ui, |text| {
         if text != entry.code {
             typed = Some(text.to_string());
@@ -167,6 +171,12 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
         let mut runs = kept_runs(ui.ctx(), runs_id, text, shown_diagnostics(entry, text), found, &env.tokens);
         if let Some(c) = caret {
             runs.extend(bracket_pair(text, c).into_iter().map(|at| Highlight::underline(at..at.saturating_add(1), accent)));
+        }
+        if let Some(r) = &picked {
+            let bytes = (byte_of(text, r.start), byte_of(text, r.end));
+            if found.contains(&bytes) {
+                runs.push(Highlight::background(bytes.0..bytes.1, fill));
+            }
         }
         runs
     });

@@ -1,4 +1,5 @@
-//! Colour runs and underlines over the text of a field: syntax colouring and error underlines on a code field.
+//! Colour runs, underlines and fills over the text of a field: syntax colouring, error underlines and the current find
+//! match on a code field.
 //!
 //! Meant for craft-ui-contract, `src/primitives/text_input.rs` and `src/runtime/egui/text_edit.rs`: there it is a
 //! `highlight` option on `TextOptions` (a function from the text to its runs) that the text widget's layouter turns into
@@ -38,17 +39,24 @@ pub struct Highlight {
     pub ink: Option<Color32>,
     /// An underline in this colour, as thick as the theme's thin stroke.
     pub underline: Option<Color32>,
+    /// A fill behind the text in this colour.
+    pub background: Option<Color32>,
 }
 
 impl Highlight {
     /// `range` in `ink`.
     pub fn ink(range: Range<usize>, ink: Color32) -> Self {
-        Highlight { range, ink: Some(ink), underline: None }
+        Highlight { range, ink: Some(ink), underline: None, background: None }
     }
 
     /// `range` underlined in `color` (an error).
     pub fn underline(range: Range<usize>, color: Color32) -> Self {
-        Highlight { range, ink: None, underline: Some(color) }
+        Highlight { range, ink: None, underline: Some(color), background: None }
+    }
+
+    /// `range` on a fill of `color` (a found match the field does not show selected).
+    pub fn background(range: Range<usize>, color: Color32) -> Self {
+        Highlight { range, ink: None, underline: None, background: Some(color) }
     }
 }
 
@@ -72,15 +80,17 @@ pub fn recoloured(job: &LayoutJob, runs: &[Highlight], underline_width: f32) -> 
     let mut lines: Vec<(Range<usize>, Color32)> =
         runs.iter().take(MAX_HIGHLIGHTS).filter_map(|h| Some((clamp(&h.range), h.underline?))).filter(|(r, _)| r.start < r.end).collect();
     lines.sort_by_key(|(r, _)| r.start);
+    let fills: Vec<(Range<usize>, Color32)> =
+        runs.iter().take(MAX_HIGHLIGHTS).filter_map(|h| Some((clamp(&h.range), h.background?))).filter(|(r, _)| r.start < r.end).collect();
     // Every place the format may change, in order.
-    let mut cuts: Vec<usize> = Vec::with_capacity(2 * (job.sections.len() + inks.len() + lines.len()) + 2);
+    let mut cuts: Vec<usize> = Vec::with_capacity(2 * (job.sections.len() + inks.len() + lines.len() + fills.len()) + 2);
     cuts.push(0);
     cuts.push(text.len());
     for section in &job.sections {
         cuts.push(floor_boundary(text, section.byte_range.start.0));
         cuts.push(floor_boundary(text, section.byte_range.end.0));
     }
-    for (r, _) in inks.iter().chain(&lines) {
+    for (r, _) in inks.iter().chain(&lines).chain(&fills) {
         cuts.push(r.start);
         cuts.push(r.end);
     }
@@ -107,6 +117,10 @@ pub fn recoloured(job: &LayoutJob, runs: &[Highlight], underline_width: f32) -> 
         // Underlines are few (errors): the last one over the piece gives the colour.
         if let Some((_, color)) = lines.iter().rev().find(|(r, _)| r.start <= *from && *from < r.end) {
             format.underline = Stroke::new(underline_width, *color);
+        }
+        // Fills are few (the current match): the last one over the piece gives the colour.
+        if let Some((_, color)) = fills.iter().rev().find(|(r, _)| r.start <= *from && *from < r.end) {
+            format.background = *color;
         }
         // Only the first piece of a section keeps its leading space (a first-row indent).
         let leading_space = if base.byte_range.start.0 == *from { base.leading_space } else { 0.0 };
