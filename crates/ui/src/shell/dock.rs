@@ -538,7 +538,7 @@ pub fn show(ui: &mut Ui, app: &mut FontCraftApp) {
         words,
         preview_area,
     };
-    let out = DockArea::new(label, Bind::given(given), &mut panels, DockConfig::default()).show(ui);
+    let out = DockArea::new(label, Bind::given(given), &mut panels, DockConfig::default().native_windows(cfg!(not(target_arch = "wasm32")))).show(ui);
     let actions: Vec<_> = out.actions.into_iter().chain(out.requested).collect();
     if !actions.is_empty()
         && let Err(error) = view.workspace.apply_all(actions, false, |p| p.permissions())

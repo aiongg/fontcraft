@@ -1202,10 +1202,14 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
 
 ## Known weak spots
 
-- **Form dialogs draw beneath floating windows.** A dialog opened while a floating window (Font Info, the Bitmap
-  Glyph Editor, …) covers the window's centre is hidden behind that window until it closes; seen under Xvfb with
-  `import -window root`. `ui.screenshot` shows the dialog and leaves the floating windows out, so the app's own
-  screenshots miss it. The layer order comes from craft's overlay host (dialogs and floating windows); not yet traced.
+- **Form dialogs draw beneath floating windows.** A floating panel (Font Info, the Bitmap Glyph Editor, …) is a
+  palette OS window, always on top while the app is active; a form dialog is a modal layer of the main window, so a
+  palette over the window's centre hides it (decision 0009, Craft bugs). While a modal is open,
+  `craft_ext::ui::runtime::windows::keep_modal_on_top` lowers the other windows to the normal level and focuses the
+  main window, then restores them (X.fix96a). Not yet seen working: under Xvfb there is no window manager, so levels
+  and focus do not restack and the dialog stays hidden; check on a desktop. `ui.screenshot` captures only the main
+  window, so floating windows are missing from it; capturing another viewport through the capture queue timed out in
+  a first try.
 
 - **The inventory is unreviewed line by line.** It passed mechanical checks and one sample audit
   (209 handbook rows re-read by a second reader: 1 wrong, 14 imprecise, all corrected; patterns in

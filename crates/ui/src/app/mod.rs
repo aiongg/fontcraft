@@ -758,6 +758,7 @@ impl ShellApp for FontCraftApp {
 
     fn ui(&mut self, ui: &mut egui::Ui) {
         crate::shell::show(self, ui);
+        craft_ext::ui::runtime::windows::keep_modal_on_top(ui.ctx());
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(panels) = self.file_panels.as_mut() {
             panels.pump::<eframe::Frame>(None);
