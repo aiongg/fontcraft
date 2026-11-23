@@ -202,7 +202,7 @@ fn ui_set_turns_panels_on_and_off() {
 #[test]
 fn window_input_reaches_the_frames() {
     let mut t = TestApp::new();
-    assert_eq!(t.ok("ui.move", json!({"x": 300, "y": 200})), json!({"queued": 1}));
+    assert_eq!(t.ok("ui.move", json!({"x": 300, "y": 200})), json!({"queued": 1, "window": "main"}));
     assert_eq!(t.pointer(), Some(egui::pos2(300.0, 200.0)));
     t.ok("ui.drag", json!({"x": 400, "y": 300, "toX": 500, "toY": 350, "steps": 4, "mods": ["shift"]}));
     assert_eq!(t.pointer(), Some(egui::pos2(500.0, 350.0)));
@@ -269,7 +269,7 @@ fn the_listener_answers_between_frames() {
     }
     let (replies, closed) = client.join().unwrap();
     assert_eq!((&replies[0]["id"], &replies[0]["ok"], &replies[0]["result"]["name"]), (&json!(7), &json!(true), &json!("wire")), "{}", replies[0]);
-    assert_eq!(replies[1], json!({"id": "m", "ok": true, "result": {"queued": 1}}));
+    assert_eq!(replies[1], json!({"id": "m", "ok": true, "result": {"queued": 1, "window": "main"}}));
     assert_eq!(t.pointer(), Some(egui::pos2(111.0, 222.0)), "the reply came after the move ran");
     assert_eq!(replies[2]["ok"], false);
     assert!(closed, "a line that is no request closes the connection");
