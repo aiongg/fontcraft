@@ -60,6 +60,9 @@ const SELECT_ALL: &str = "edit.selectAll";
 const GLYPHS_FORMAT: &str = "fontcraft-glyphs";
 /// The `format` of copied corner components (`edit.copy` with `corners`).
 const CORNERS_FORMAT: &str = "fontcraft-corners";
+/// The `format` of copied caps, segment components and brushes (`edit.copy` with `caps`, `segmentComponents` or
+/// `brushes`).
+const ATTACHMENTS_FORMAT: &str = "fontcraft-attachments";
 /// Longest clipboard text a paste takes.
 pub const MAX_PASTE_BYTES: usize = 16 * 1024 * 1024;
 
@@ -205,9 +208,10 @@ fn holds_glyphs(text: &str) -> bool {
     text.trim_start().starts_with('{') && text.contains(GLYPHS_FORMAT)
 }
 
-/// Whether clipboard text holds copied corner components, which `edit.paste` puts onto the nodes in `points`.
+/// Whether clipboard text holds copied corner components, or copied caps, segment components or brushes, which
+/// `edit.paste` puts onto the nodes in `points`.
 fn holds_corners(text: &str) -> bool {
-    text.trim_start().starts_with('{') && text.contains(CORNERS_FORMAT)
+    text.trim_start().starts_with('{') && (text.contains(CORNERS_FORMAT) || text.contains(ATTACHMENTS_FORMAT))
 }
 
 /// The message that pastes `text` as `kind` asks: `edit.paste` into the edited glyph (on the canvas) or the copied

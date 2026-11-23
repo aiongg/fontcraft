@@ -176,20 +176,24 @@ fn shown_name(kind: EntryKind, name: &str) -> String {
     if kind == EntryKind::Class { format!("@{name}") } else { name.to_string() }
 }
 
+/// The tab scrolls as one body: with the find bar open, the code field and the notes under it outgrow the panel's
+/// default size.
 pub fn view(ui: &mut Ui, model: &FeaturesModel, sent: &mut Vec<Msg>) {
     let words = Env::of(ui).words::<FeaturesWords>();
-    Row::new().show(ui, |ui, _| {
-        Stack::new().id_salt("fontcraftFeatures.sidebar").show(ui, |ui, _| {
-            for group in &model.groups {
-                sidebar_group(ui, model, group, &words, sent);
-            }
-            bottom_buttons(ui, model, &words, sent);
-        });
-        Stack::new().id_salt("fontcraftFeatures.entry").fill_width().show(ui, |ui, _| match &model.entry {
-            Some(entry) => entry_pane(ui, entry, &model.snippets, &words, sent),
-            None => {
-                Text::new(words.empty.clone()).shade(Shade::Muted).show(ui);
-            }
+    crate::panels::widgets::scrolling(ui, |ui| {
+        Row::new().show(ui, |ui, _| {
+            Stack::new().id_salt("fontcraftFeatures.sidebar").show(ui, |ui, _| {
+                for group in &model.groups {
+                    sidebar_group(ui, model, group, &words, sent);
+                }
+                bottom_buttons(ui, model, &words, sent);
+            });
+            Stack::new().id_salt("fontcraftFeatures.entry").fill_width().show(ui, |ui, _| match &model.entry {
+                Some(entry) => entry_pane(ui, entry, &model.snippets, &words, sent),
+                None => {
+                    Text::new(words.empty.clone()).shade(Shade::Muted).show(ui);
+                }
+            });
         });
     });
 }

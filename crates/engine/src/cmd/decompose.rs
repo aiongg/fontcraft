@@ -209,7 +209,7 @@ impl<'f, 'b> Expander<'f, 'b> {
         let attached = match fontcraft_model::attach::insert_attachments(font, from) {
             Ok(shapes) => shapes,
             Err(e) => {
-                self.warnings.push(format!("glyph `{}` was decomposed without its cap components: {e}", c.glyph));
+                self.warnings.push(format!("glyph `{}` was decomposed without its cap components, segment components and brushes: {e}", c.glyph));
                 None
             }
         };

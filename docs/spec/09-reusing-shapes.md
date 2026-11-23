@@ -550,6 +550,31 @@ Forum threads cited: 7812, 10109, 11603, 15594, 16992, 17009, 18125, 19101, 2011
 - `brush.decompose` (Decompose Brush) gives the brushed outline (forum 20115).
 - Info box (`infoBox.brush`): name (`brush.setGlyph`), arrow (`brush.editGlyph`).
 
+### 10.1 How FontCraft bends segment components and brushes
+
+`crates/model/src/attach.rs` bends both from the rows' guesses until an export of the segment
+and brush test fonts (`docs/plans/M13.md` § 8) settles them:
+
+- The glyph is read in a frame running from its `start` anchor to its `end` anchor: a point's
+  position is its fraction of that length and its distance to the left of the line. Without
+  anchors, a segment glyph uses its path's end nodes and a brush glyph (0, 0) and (advance
+  width, 0).
+- The host segment is measured by arc length. Each point, handles included, goes to the host
+  point at the same fraction of the length and keeps its distance along the host's left normal.
+  Only existing points move, so the node count never changes and a line stays a line.
+- A segment component's open path replaces the host segment; its end nodes take the places of
+  the host's end nodes. Points past `start` or `end` keep scaling along the host's end
+  directions.
+- A brush's closed path is added to the layer beside the host path, which stays. Outline before
+  `start` and after `end` moves rigidly with the host's direction at that end.
+- Outline resolution fits caps, then segment components, then brushes, then corners.
+- Limits: a glyph whose start and end lie on one point, a host segment of zero length, a glyph
+  path of more than 500,000 nodes and more than 50,000,000 node moves per layer are refused with a
+  message; a brush glyph with more than one closed path is refused (a guess). The arc length is
+  sampled at most 4,096 times per host segment, 64 times per curve piece.
+- Hints store `type`, `name` and `origin` (the on-curve node that ends the host segment, in file
+  order).
+
 ## 11. Pixel tool and pixel fonts
 
 - Tool `pixel`, shortcut X; Shift+B when the Pencil tool is active.

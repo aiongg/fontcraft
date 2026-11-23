@@ -160,7 +160,7 @@ pub(super) fn parse_mode(p: &Params, mode: &str, stored: bool) -> Result<CornerA
     }
 }
 
-fn mode_name(a: CornerAlignment) -> &'static str {
+pub(super) fn mode_name(a: CornerAlignment) -> &'static str {
     match a {
         CornerAlignment::Left => "left",
         CornerAlignment::Right => "right",

@@ -1,6 +1,7 @@
 //! The glyph picker of the component commands (`editView.chooseGlyph`): a search field over a result list. Add
 //! Component, the base glyph name of the component Info box, Add Corner Component, the corner Info box's name and the
-//! cap equivalents all open it.
+//! cap, segment component and brush equivalents all open it. The attachment pickers are this one module, each listing
+//! only the glyphs of its kind's prefix (`_corner.`, `_cap.`, `_segment.`, `_brush.`).
 //!
 //! | Purpose | Opened by | Lists | OK runs |
 //! |---|---|---|---|
@@ -11,6 +12,10 @@
 //! | `cornerGlyph` | the name of the corner Info box | corner glyphs | `cornerComponent.setGlyph` |
 //! | `addCap` | Add Cap Component (`dialog.capPicker`) | cap glyphs (`_cap.` names) | `capComponent.add` |
 //! | `capGlyph` | the name of the cap Info box | cap glyphs | `capComponent.setGlyph` |
+//! | `addSegment` | Add Segment Component (`dialog.segmentPicker`) | segment glyphs (`_segment.` names) | `segmentComponent.add` |
+//! | `segmentGlyph` | the name of the segment component Info box | segment glyphs | `segmentComponent.setGlyph` |
+//! | `addBrush` | Add Brush (`dialog.brushPicker`) | brush glyphs (`_brush.` names) | `brush.add` |
+//! | `brushGlyph` | the name of the brush Info box | brush glyphs | `brush.setGlyph` |
 //!
 //! Typing searches again and highlights the first result; OK (Return) runs the purpose's command with the highlighted
 //! glyph and closes the picker; Cancel (Escape) changes nothing. What the command acts on is fixed when the picker
@@ -29,12 +34,14 @@ use craft::ui::runtime::env::Env;
 use craft::ui::table::Table;
 use craft::ui::text::TextField;
 use egui::Ui;
+use fontcraft_engine::model::attach;
 use serde_json::{Map, Value, json};
 
 use crate::app::models::Stamp;
-use crate::app::models::components::{caps_on_nodes, corners_on_nodes};
+use crate::app::models::components::{caps_on_nodes, corners_on_nodes, segments_on_nodes};
 use crate::app::{FontCraftApp, Msg};
 use crate::canvas::tools::scene;
+use crate::canvas::tools::targets::selected_segments;
 use crate::shell::commands::{Module, UiCommand};
 use crate::shell::masters::shown_layer;
 use crate::shell::params::{flag, quoted, string};
@@ -46,6 +53,8 @@ craft::ui::words! {
         base: "fontcraftGlyphPicker.base" = "Choose Base Glyph";
         corner: "fontcraftGlyphPicker.corner" = "Choose Corner Component";
         cap: "fontcraftGlyphPicker.cap" = "Choose Cap Component";
+        segment: "fontcraftGlyphPicker.segment" = "Choose Segment Component";
+        brush: "fontcraftGlyphPicker.brush" = "Choose Brush";
         search: "fontcraftGlyphPicker.search" = "Search";
         results: "fontcraftGlyphPicker.results" = "Glyphs";
         name: "fontcraftGlyphPicker.name" = "Name";
@@ -61,7 +70,7 @@ pub const COMMAND: &str = "editView.chooseGlyph";
 const MAX_QUERY_CHARS: usize = 64;
 /// Most results one search lists (the search's own limit).
 const MAX_RESULTS: usize = 1000;
-/// Most entries in a `points`, `corners` or `caps` list given to the picker.
+/// Most entries in a target list given to the picker.
 const MAX_TARGET_ITEMS: usize = 4096;
 /// Rows the result table shows before it scrolls.
 const LIST_ROWS: u16 = 12;
@@ -73,7 +82,7 @@ const COMMANDS: &[UiCommand] = &[UiCommand {
     label: "Choose Glyph",
     menu: &[],
     shortcut: None,
-    params: "{purpose?: \"addComponent\" (default) | \"addComponentAllMasters\" | \"baseGlyph\" | \"addCorner\" | \"cornerGlyph\" | \"addCap\" | \"capGlyph\", glyph?: name, layer?: id, component?: index, points?: [[shape, node]], corners?: [indices], caps?: [indices], query?: string, select?: name, pick?: bool, open?: bool (default true)} show the glyph picker of a component command. Component purposes search the font as glyph.search does; corner and cap purposes list the glyphs named _corner.… or _cap.… whose names hold every word of the query. The purpose and its targets are fixed when the picker opens: glyph and layer default to the edited ones, component to the selected component, points to the selected nodes, corners and caps to those on the selected nodes. select highlights a result; pick runs the purpose's command with the highlighted glyph and closes the picker",
+    params: "{purpose?: \"addComponent\" (default) | \"addComponentAllMasters\" | \"baseGlyph\" | \"addCorner\" | \"cornerGlyph\" | \"addCap\" | \"capGlyph\" | \"addSegment\" | \"segmentGlyph\" | \"addBrush\" | \"brushGlyph\", glyph?: name, layer?: id, component?: index, points?: [[shape, node]], segments?: [[shape, node]], corners?: [indices], caps?: [indices], segmentComponents?: [indices], brushes?: [indices], query?: string, select?: name, pick?: bool, open?: bool (default true)} show the glyph picker of a component command. Component purposes search the font as glyph.search does; the corner, cap, segment and brush purposes list the glyphs named _corner.…, _cap.…, _segment.… or _brush.… whose names hold every word of the query. The purpose and its targets are fixed when the picker opens: glyph and layer default to the edited ones, component to the selected component, points to the selected nodes, segments to the selected segments (a brush falls back to the selected nodes), and corners, caps, segment components and brushes to the selected ones or those on the selected nodes. select highlights a result; pick runs the purpose's command with the highlighted glyph and closes the picker",
 }];
 
 /// What a pick does.
@@ -87,10 +96,14 @@ pub enum Purpose {
     CornerGlyph,
     AddCap,
     CapGlyph,
+    AddSegment,
+    SegmentGlyph,
+    AddBrush,
+    BrushGlyph,
 }
 
 impl Purpose {
-    const ALL: [(&'static str, Purpose); 7] = [
+    const ALL: [(&'static str, Purpose); 11] = [
         ("addComponent", Purpose::AddComponent),
         ("addComponentAllMasters", Purpose::AddComponentAllMasters),
         ("baseGlyph", Purpose::BaseGlyph),
@@ -98,6 +111,10 @@ impl Purpose {
         ("cornerGlyph", Purpose::CornerGlyph),
         ("addCap", Purpose::AddCap),
         ("capGlyph", Purpose::CapGlyph),
+        ("addSegment", Purpose::AddSegment),
+        ("segmentGlyph", Purpose::SegmentGlyph),
+        ("addBrush", Purpose::AddBrush),
+        ("brushGlyph", Purpose::BrushGlyph),
     ];
 
     /// The command a pick runs.
@@ -110,6 +127,10 @@ impl Purpose {
             Purpose::CornerGlyph => "cornerComponent.setGlyph",
             Purpose::AddCap => "capComponent.add",
             Purpose::CapGlyph => "capComponent.setGlyph",
+            Purpose::AddSegment => "segmentComponent.add",
+            Purpose::SegmentGlyph => "segmentComponent.setGlyph",
+            Purpose::AddBrush => "brush.add",
+            Purpose::BrushGlyph => "brush.setGlyph",
         }
     }
 
@@ -120,6 +141,8 @@ impl Purpose {
             Purpose::BaseGlyph => "base",
             Purpose::AddCorner | Purpose::CornerGlyph => "corner",
             Purpose::AddCap | Purpose::CapGlyph => "cap",
+            Purpose::AddSegment | Purpose::SegmentGlyph => "segmentGlyph",
+            Purpose::AddBrush | Purpose::BrushGlyph => "brush",
         }
     }
 
@@ -128,6 +151,8 @@ impl Purpose {
         match self {
             Purpose::AddCorner | Purpose::CornerGlyph => Some("_corner."),
             Purpose::AddCap | Purpose::CapGlyph => Some("_cap."),
+            Purpose::AddSegment | Purpose::SegmentGlyph => Some("_segment."),
+            Purpose::AddBrush | Purpose::BrushGlyph => Some("_brush."),
             _ => None,
         }
     }
@@ -283,12 +308,56 @@ fn targets(app: &FontCraftApp, p: &Value, purpose: Purpose) -> Result<Map<String
             m.insert("corners".into(), need(found, "select a node that holds a corner component, or give `corners`")?);
         }
         Purpose::CapGlyph => {
-            let on: Vec<usize> = caps_on_nodes(layer, &points).into_iter().map(|(i, _)| i).collect();
+            let mut on: Vec<usize> = selected_kind(layer, selection, |h| attach::is_cap(h));
+            on.extend(caps_on_nodes(layer, &points).into_iter().map(|(i, _)| i));
+            on.sort_unstable();
+            on.dedup();
             let found = list("caps")?.unwrap_or_else(|| json!(on));
-            m.insert("caps".into(), need(found, "select a node of a cap component, or give `caps`")?);
+            m.insert("caps".into(), need(found, "select a cap component or one of its nodes, or give `caps`")?);
+        }
+        Purpose::AddSegment | Purpose::AddBrush => {
+            let segments = match list("segments")? {
+                Some(given) => given,
+                None => {
+                    let found = match (shown.as_ref(), selection) {
+                        (Some(scene), Some(sel)) => selected_segments(scene, sel),
+                        _ => Vec::new(),
+                    };
+                    Value::Array(found.iter().map(|&(a, b)| json!([a, b])).collect())
+                }
+            };
+            let has_segments = segments.as_array().is_some_and(|a| !a.is_empty());
+            if purpose == Purpose::AddSegment {
+                m.insert("segments".into(), need(segments, "select the segments to attach it to, or give `segments`")?);
+            } else if has_segments {
+                m.insert("segments".into(), segments);
+            } else {
+                let given = list("points")?;
+                let found = given.unwrap_or_else(|| Value::Array(points.iter().map(|&(a, b)| json!([a, b])).collect()));
+                m.insert("points".into(), need(found, "select the segments or their end nodes to attach it to, or give `segments` or `points`")?);
+            }
+        }
+        Purpose::SegmentGlyph | Purpose::BrushGlyph => {
+            let brush = purpose == Purpose::BrushGlyph;
+            let (key, what) = if brush { ("brushes", "a brush") } else { ("segmentComponents", "a segment component") };
+            let mut on: Vec<usize> = selected_kind(layer, selection, |h| if brush { attach::is_brush(h) } else { attach::is_segment(h) });
+            on.extend(segments_on_nodes(layer, &points, brush).into_iter().map(|(i, _)| i));
+            on.sort_unstable();
+            on.dedup();
+            let found = list(key)?.unwrap_or_else(|| json!(on));
+            m.insert(key.into(), need(found, &format!("select {what} or the node that ends its segment, or give `{key}`"))?);
         }
     }
     Ok(m)
+}
+
+/// The selected hints of `layer` that `is` accepts, in selection order.
+fn selected_kind(
+    layer: &fontcraft_engine::model::Layer,
+    selection: Option<&fontcraft_tools::Selection>,
+    is: impl Fn(&fontcraft_engine::model::Hint) -> bool,
+) -> Vec<usize> {
+    selection.map(|s| s.hints.iter().copied().filter(|&i| layer.info.hints.get(i).is_some_and(&is)).collect()).unwrap_or_default()
 }
 
 fn purpose_arg(p: &Value) -> Result<Option<Purpose>, String> {
@@ -302,7 +371,9 @@ fn purpose_arg(p: &Value) -> Result<Option<Purpose>, String> {
 }
 
 fn has_targets(p: &Value) -> bool {
-    ["glyph", "layer", "component", "points", "corners", "caps"].iter().any(|k| p.get(*k).is_some_and(|v| !v.is_null()))
+    ["glyph", "layer", "component", "points", "segments", "corners", "caps", "segmentComponents", "brushes"]
+        .iter()
+        .any(|k| p.get(*k).is_some_and(|v| !v.is_null()))
 }
 
 fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
@@ -356,6 +427,8 @@ pub fn fired(app: &mut FontCraftApp, id: &str, params: &Value) -> bool {
         "glyph.addComponentAllMasters" => Purpose::AddComponentAllMasters,
         "cornerComponent.add" => Purpose::AddCorner,
         "capComponent.add" => Purpose::AddCap,
+        "segmentComponent.add" => Purpose::AddSegment,
+        "brush.add" => Purpose::AddBrush,
         _ => return false,
     };
     if params.get(purpose.key()).is_some_and(|v| !v.is_null()) {
@@ -401,6 +474,8 @@ impl StackDialog for GlyphPicker {
             Purpose::BaseGlyph => words.base.clone(),
             Purpose::AddCorner | Purpose::CornerGlyph => words.corner.clone(),
             Purpose::AddCap | Purpose::CapGlyph => words.cap.clone(),
+            Purpose::AddSegment | Purpose::SegmentGlyph => words.segment.clone(),
+            Purpose::AddBrush | Purpose::BrushGlyph => words.brush.clone(),
         };
         let GlyphPicker { shown, intent, open, .. } = self;
         let positions: Vec<usize> = (0..shown.results.len()).collect();

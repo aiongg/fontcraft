@@ -186,3 +186,50 @@ fn the_cap_hint_round_trips_through_a_glyphs_file() {
     assert_eq!(hints(&back), hints(font));
     assert_eq!(fontcraft_io_glyphs::write(&back).unwrap(), text);
 }
+
+/// A copied cap keeps its glyph, scale, alignment and Fit, and goes onto the straight segment whose
+/// two nodes are selected; one node, or two nodes of no segment, are refused with nothing changed
+/// (`cap.copyPasteOntoSegments`).
+#[test]
+fn a_copied_cap_pastes_onto_the_two_nodes_of_a_segment() {
+    let mut s = session();
+    add(&mut s, json!([[0, 3], [0, 2]]));
+    run(&mut s, "capComponent.setFit", json!({"glyph": "l", "caps": [0], "fit": true}));
+    run(&mut s, "capComponent.setAlignment", json!({"glyph": "l", "caps": [0], "mode": "both"}));
+    let text = run(&mut s, "edit.copy", json!({"glyph": "l", "caps": [0]}))["json"].as_str().unwrap().to_string();
+    // The bottom segment runs from model node 0, which the file numbers 3, to model node 1.
+    let r = run(&mut s, "edit.paste", json!({"glyph": "l", "json": text, "points": [[0, 0], [0, 1]]}));
+    assert_eq!((r["caps"].clone(), r["flavour"].clone()), (json!([1]), json!("caps")));
+    let caps = caps(&s, "l");
+    assert_eq!(caps.len(), 2);
+    assert_eq!((caps[1].shape, caps[1].node), (0, 3));
+    assert_eq!((caps[1].fit, caps[1].alignment, caps[1].scale), (caps[0].fit, caps[0].alignment, caps[0].scale));
+    assert!(caps[1].fit && caps[1].alignment == CornerAlignment::Both);
+    let e = run_err(&mut s, "edit.paste", json!({"glyph": "l", "json": text, "points": [[0, 0]]}));
+    assert!(e.contains("no segment to paste"), "{e}");
+    let e = run_err(&mut s, "edit.paste", json!({"glyph": "l", "json": text, "points": [[0, 0], [1, 0]]}));
+    assert!(e.contains("no segment to paste"), "{e}");
+    let e = run_err(&mut s, "edit.copy", json!({"glyph": "l", "caps": [0], "brushes": [0]}));
+    assert!(e.contains("one kind at a time"), "{e}");
+}
+
+/// The hint upkeep moves a cap with its first node: a node inserted before the capped segment keeps
+/// the cap on that segment, and deleting the cap's node removes the cap and reports it, as it does
+/// a corner component.
+#[test]
+fn a_cap_follows_its_nodes_through_node_edits() {
+    let mut s = session();
+    add(&mut s, json!([[0, 3], [0, 2]]));
+    // A node in the right side (the segment ending at model node 2) comes before the top segment.
+    let r = run(&mut s, "path.insertNode", json!({"glyph": "l", "segment": [0, 2]}));
+    assert!(r.get("hintUpkeep").is_none(), "{r}");
+    // The top segment now runs from model node 3, which the file numbers 2, to model node 4.
+    assert_eq!(caps(&s, "l"), [CapHint::new("_cap.flag", 0, 2)]);
+    let outline = s.font().unwrap().outline("l", "m01").unwrap();
+    let ys: Vec<f64> = outline.elements().iter().filter_map(|e| e.end_point()).map(|p| p.y).collect();
+    assert!(ys.contains(&730.0), "the cap is still drawn on the top: {ys:?}");
+    let r = run(&mut s, "edit.delete", json!({"glyph": "l", "points": [[0, 3]]}));
+    let removed = r["hintUpkeep"]["removed"].to_string();
+    assert!(removed.contains("cap component"), "{r}");
+    assert!(caps(&s, "l").is_empty());
+}

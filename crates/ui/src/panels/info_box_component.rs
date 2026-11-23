@@ -1,5 +1,5 @@
-//! The component, corner and cap parts of the Info box. Each shows under the selection part while its item is
-//! selected; the models are in `app::models::components`.
+//! The component, corner, cap, segment component and brush parts of the Info box. Each shows under the selection part
+//! while its item is selected; the models are in `app::models::components`.
 //!
 //! | Part | Control | Runs |
 //! |---|---|---|
@@ -12,6 +12,8 @@
 //! | corner | horizontal and vertical scale; four alignment buttons | `cornerComponent.setScale`; `cornerComponent.setAlignment` |
 //! | cap | cap glyph name; arrow button | the picker for `capComponent.setGlyph`; `cornerComponent.editGlyph` on the cap's hint |
 //! | cap | ↔ and ↕ scale; four alignment buttons; Fit | `capComponent.setScale`; `capComponent.setAlignment`; `capComponent.setFit` |
+//! | segment component | segment glyph name; arrow button | the picker for `segmentComponent.setGlyph`; `segmentComponent.editGlyph` |
+//! | brush | brush glyph name; arrow button | the picker for `brush.setGlyph`; `brush.editGlyph` |
 //!
 //! X and Y are greyed out while the component is aligned automatically (only X while it is aligned horizontally), and
 //! every field while it is locked. With Fit on, the cap's horizontal scale is computed and greyed out.
@@ -30,7 +32,7 @@ use serde_json::{Map, Value, json};
 
 use super::widgets::{self, NumberEdit};
 use crate::app::Msg;
-use crate::app::models::components::{CapBox, ComponentBox, CornerBox, MODES};
+use crate::app::models::components::{CapBox, ComponentBox, CornerBox, MODES, SegmentBox};
 
 craft::ui::words! {
     /// The words of the component, corner and cap parts of the Info box.
@@ -38,9 +40,13 @@ craft::ui::words! {
         component: "fontcraftComponentBox.component" = "Component";
         corner: "fontcraftComponentBox.corner" = "Corner Component";
         cap: "fontcraftComponentBox.cap" = "Cap Component";
+        segment: "fontcraftComponentBox.segment" = "Segment Component";
+        brush: "fontcraftComponentBox.brush" = "Brush";
         choose_base: "fontcraftComponentBox.chooseBase" = "Choose another glyph for this component";
         choose_corner: "fontcraftComponentBox.chooseCorner" = "Choose another corner glyph";
         choose_cap: "fontcraftComponentBox.chooseCap" = "Choose another cap glyph";
+        choose_segment: "fontcraftComponentBox.chooseSegment" = "Choose another segment glyph";
+        choose_brush: "fontcraftComponentBox.chooseBrush" = "Choose another brush glyph";
         /// The tooltip of a name whose glyph is missing.
         missing: "fontcraftComponentBox.missing" = "This glyph does not exist: choose another one";
         anchor: "fontcraftComponentBox.anchor" = "Anchor";
@@ -51,6 +57,8 @@ craft::ui::words! {
         edit_base: "fontcraftComponentBox.editBase" = "Edit the base glyph";
         edit_corner: "fontcraftComponentBox.editCorner" = "Edit the corner glyph";
         edit_cap: "fontcraftComponentBox.editCap" = "Edit the cap glyph";
+        edit_segment: "fontcraftComponentBox.editSegment" = "Edit the segment glyph";
+        edit_brush: "fontcraftComponentBox.editBrush" = "Edit the brush glyph";
         x: "fontcraftComponentBox.x" = "X";
         y: "fontcraftComponentBox.y" = "Y";
         x_tip: "fontcraftComponentBox.xTip" = "Horizontal offset";
@@ -129,14 +137,13 @@ pub fn corner_part(ui: &mut Ui, b: &CornerBox, sent: &mut Vec<Msg>) {
     let target = json!({"glyph": b.glyph, "layer": b.layer, "corners": [b.corner]});
     Section::new(words.corner.clone()).show(ui, |ui, _| {
         let names = Names {
-            glyph: &b.glyph,
-            layer: &b.layer,
             name: &b.name,
             exists: b.exists,
             choose: &words.choose_corner,
             edit: &words.edit_corner,
             purpose: "cornerGlyph",
-            hint: b.corner,
+            edit_command: "cornerComponent.editGlyph",
+            edit_params: json!({"glyph": b.glyph, "layer": b.layer, "corner": b.corner}),
         };
         name_row(ui, &words, &names, &target, sent);
         let _ = Row::new().show(ui, |ui, _| {
@@ -152,14 +159,13 @@ pub fn cap_part(ui: &mut Ui, b: &CapBox, sent: &mut Vec<Msg>) {
     let target = json!({"glyph": b.glyph, "layer": b.layer, "caps": [b.cap]});
     Section::new(words.cap.clone()).show(ui, |ui, _| {
         let names = Names {
-            glyph: &b.glyph,
-            layer: &b.layer,
             name: &b.name,
             exists: b.exists,
             choose: &words.choose_cap,
             edit: &words.edit_cap,
             purpose: "capGlyph",
-            hint: b.cap,
+            edit_command: "cornerComponent.editGlyph",
+            edit_params: json!({"glyph": b.glyph, "layer": b.layer, "corner": b.cap}),
         };
         name_row(ui, &words, &names, &target, sent);
         let _ = Row::new().show(ui, |ui, _| {
@@ -175,18 +181,42 @@ pub fn cap_part(ui: &mut Ui, b: &CapBox, sent: &mut Vec<Msg>) {
     });
 }
 
-/// What the name row of a corner or cap shows.
+/// The segment component or brush part (M13.42): the glyph's name, which opens the picker for the kind's `setGlyph`,
+/// and the arrow button that edits the glyph. Neither kind has scale, alignment or fit controls.
+pub fn segment_part(ui: &mut Ui, b: &SegmentBox, sent: &mut Vec<Msg>) {
+    let words = Env::of(ui).words::<ComponentBoxWords>();
+    let (title, list_key, purpose, edit_command, index_key, choose, edit) = if b.brush {
+        (&words.brush, "brushes", "brushGlyph", "brush.editGlyph", "brush", &words.choose_brush, &words.edit_brush)
+    } else {
+        (
+            &words.segment,
+            "segmentComponents",
+            "segmentGlyph",
+            "segmentComponent.editGlyph",
+            "segmentComponent",
+            &words.choose_segment,
+            &words.edit_segment,
+        )
+    };
+    let target = with(&json!({"glyph": b.glyph, "layer": b.layer}), keyed_value(list_key, json!([b.hint])));
+    let edit_params = with(&json!({"glyph": b.glyph, "layer": b.layer}), keyed_value(index_key, json!(b.hint)));
+    Section::new(title.clone()).show(ui, |ui, _| {
+        let names = Names { name: &b.name, exists: b.exists, choose, edit, purpose, edit_command, edit_params: edit_params.clone() };
+        name_row(ui, &words, &names, &target, sent);
+    });
+}
+
+/// What the name row of an attachment shows.
 struct Names<'a> {
-    glyph: &'a str,
-    layer: &'a str,
     name: &'a str,
     exists: bool,
     choose: &'a Label,
     edit: &'a Label,
     /// The glyph picker's purpose.
     purpose: &'a str,
-    /// The hint index `cornerComponent.editGlyph` takes.
-    hint: usize,
+    /// The shell command of the arrow button and its parameters.
+    edit_command: &'a str,
+    edit_params: Value,
 }
 
 fn name_row(ui: &mut Ui, words: &ComponentBoxWords, n: &Names<'_>, target: &Value, sent: &mut Vec<Msg>) {
@@ -196,7 +226,7 @@ fn name_row(ui: &mut Ui, words: &ComponentBoxWords, n: &Names<'_>, target: &Valu
             sent.push(shell("editView.chooseGlyph", with(target, json!({ "purpose": n.purpose }))));
         }
         if Button::new(words.edit.clone()).tooltip(n.edit.clone()).enabled(n.exists).id_salt("editGlyph").show(ui).clicked() && n.exists {
-            sent.push(shell("cornerComponent.editGlyph", json!({"glyph": n.glyph, "layer": n.layer, "corner": n.hint})));
+            sent.push(shell(n.edit_command, n.edit_params.clone()));
         }
     });
 }
@@ -235,8 +265,12 @@ fn field(ui: &mut Ui, label: &Label, tip: &Label, value: Option<f64>, enabled: b
 }
 
 fn keyed(key: &str, n: f64) -> Value {
+    keyed_value(key, json!(n))
+}
+
+fn keyed_value(key: &str, v: Value) -> Value {
     let mut m = Map::new();
-    m.insert(key.into(), json!(n));
+    m.insert(key.into(), v);
     Value::Object(m)
 }
 
@@ -262,9 +296,9 @@ mod tests {
     use egui::{Key, Modifiers, Ui};
     use serde_json::json;
 
-    use super::{cap_part, component_part, corner_part};
+    use super::{cap_part, component_part, corner_part, segment_part};
     use crate::app::Msg;
-    use crate::app::models::components::{CapBox, ComponentBox, ComponentValues, CornerBox};
+    use crate::app::models::components::{CapBox, ComponentBox, ComponentValues, CornerBox, SegmentBox};
 
     fn fixture(show: impl Fn(&mut Ui, &mut Vec<Msg>) + 'static) -> (Fixture, Rc<RefCell<Vec<Msg>>>) {
         let posted = Rc::new(RefCell::new(Vec::new()));
@@ -370,5 +404,34 @@ mod tests {
         let fit = f.by_label("Fit").expect("the Fit checkbox");
         f.click(&fit).settle();
         assert_eq!(*posted.borrow(), vec![Msg::run("capComponent.setFit", json!({"glyph": "l", "layer": "m01", "caps": [0], "fit": false}))]);
+    }
+
+    /// The segment and brush parts show the glyph's name and the arrow button only: the name opens the picker for the
+    /// kind's `setGlyph` on that attachment, the arrow posts the kind's `editGlyph` (`infoBox.segmentComponent`,
+    /// `infoBox.brush`).
+    #[test]
+    fn segment_and_brush_parts_open_the_picker_and_the_glyph() {
+        for (brush, name, purpose, list_key, edit, index_key) in [
+            (false, "_segment.wave", "segmentGlyph", "segmentComponents", "segmentComponent.editGlyph", "segmentComponent"),
+            (true, "_brush.bar", "brushGlyph", "brushes", "brush.editGlyph", "brush"),
+        ] {
+            let b = SegmentBox { glyph: "l".into(), layer: "m01".into(), hint: 3, name: name.into(), exists: true, brush };
+            let (mut f, posted) = fixture(move |ui, sent| segment_part(ui, &b, sent));
+            assert!(f.by_label("↔%").is_none() && f.by_label("Fit").is_none(), "no scale or fit controls");
+            let named = f.by_label(name).expect("the glyph name");
+            f.click(&named).settle();
+            let arrow = f.by_label("↗").expect("the arrow button");
+            f.click(&arrow).settle();
+            let mut chooser = serde_json::Map::new();
+            chooser.insert("glyph".into(), json!("l"));
+            chooser.insert("layer".into(), json!("m01"));
+            chooser.insert(list_key.into(), json!([3]));
+            chooser.insert("purpose".into(), json!(purpose));
+            let mut opened = serde_json::Map::new();
+            opened.insert("glyph".into(), json!("l"));
+            opened.insert("layer".into(), json!("m01"));
+            opened.insert(index_key.into(), json!(3));
+            assert_eq!(*posted.borrow(), vec![super::shell("editView.chooseGlyph", chooser.into()), super::shell(edit, opened.into())], "{name}");
+        }
     }
 }

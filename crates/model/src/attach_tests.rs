@@ -252,3 +252,146 @@ fn hostile_scales_and_zero_length_stems_fail_with_a_message() {
     f.glyph_mut("i").unwrap().layers[0].shapes = vec![lines(false, &[(100.0, 0.0), (200.0, 0.0)])];
     assert!(fit_error(&f, "i", &CapHint::new("_cap.flag", 0, 1)).contains("ends the open path"));
 }
+
+// ── Segment components and brushes (M13.41) ─────────────────────────────────────────────────────
+// Expected outlines worked out by hand from the bending the module documentation describes.
+
+/// `_segment.wave` (three nodes on the baseline, 200 units start to end), `_segment.curl` (a
+/// cubic wave), `_segment.dot` (start and end on one point), `_brush.arrow` (a shaft from start
+/// to end, a head past end), `_brush.pair` (two closed paths), and hosts: `box` (a closed
+/// 400 × 400 rectangle), `arch` (one open symmetric cubic, straight in Bold), `stroke` (an open
+/// 400-unit line) and `flat` (an open segment of zero length).
+fn stroke_font() -> Font {
+    let mut f = cap_font();
+    let n = |x, y, k| Node::new(x, y, k);
+    use NodeKind::{Curve as C, Line as L, OffCurve as O};
+    let ends = |s: (f64, f64), e: (f64, f64)| vec![Anchor::new("start", s.0, s.1), Anchor::new("end", e.0, e.1)];
+    let both =
+        |shapes: Vec<Shape>, width: f64, anchors: Vec<Anchor>| vec![("m01", width, shapes.clone(), anchors.clone()), ("m02", width, shapes, anchors)];
+    let wave = lines(false, &[(0.0, 0.0), (100.0, 30.0), (200.0, 0.0)]);
+    let curl = Shape::Path(Path::new(false, vec![n(0.0, 0.0, L), n(50.0, 40.0, O), n(150.0, 40.0, O), n(200.0, 0.0, C)]));
+    let arrow = lines(true, &[(0.0, -10.0), (100.0, -10.0), (100.0, -30.0), (140.0, 0.0), (100.0, 30.0), (100.0, 10.0), (0.0, 10.0)]);
+    let square = lines(true, &[(0.0, -5.0), (10.0, -5.0), (10.0, 5.0), (0.0, 5.0)]);
+    put(&mut f, glyph("_segment.wave", &both(vec![wave.clone()], 200.0, ends((0.0, 0.0), (200.0, 0.0)))));
+    put(&mut f, glyph("_segment.curl", &both(vec![curl], 200.0, ends((0.0, 0.0), (200.0, 0.0)))));
+    put(&mut f, glyph("_segment.dot", &both(vec![wave], 200.0, ends((50.0, 0.0), (50.0, 0.0)))));
+    put(&mut f, glyph("_brush.arrow", &both(vec![arrow.clone()], 140.0, ends((0.0, 0.0), (100.0, 0.0)))));
+    put(&mut f, glyph("_brush.pair", &both(vec![arrow, square], 140.0, ends((0.0, 0.0), (100.0, 0.0)))));
+    put(&mut f, glyph("box", &both(vec![lines(true, &[(100.0, 0.0), (500.0, 0.0), (500.0, 400.0), (100.0, 400.0)])], 600.0, vec![])));
+    let arch = Shape::Path(Path::new(false, vec![n(0.0, 0.0, L), n(0.0, 100.0, O), n(200.0, 100.0, O), n(200.0, 0.0, C)]));
+    let level = Shape::Path(Path::new(false, vec![n(0.0, 0.0, L), n(50.0, 0.0, O), n(150.0, 0.0, O), n(200.0, 0.0, C)]));
+    put(&mut f, glyph("arch", &[("m01", 300.0, vec![arch], vec![]), ("m02", 300.0, vec![level], vec![])]));
+    put(&mut f, glyph("stroke", &both(vec![lines(false, &[(0.0, 0.0), (400.0, 0.0)])], 500.0, vec![])));
+    put(&mut f, glyph("flat", &both(vec![lines(false, &[(0.0, 0.0), (0.0, 0.0)])], 500.0, vec![])));
+    f
+}
+
+fn bent(font: &Font, host: &str, master: &str, hint: &SegmentHint, brush: bool) -> Result<Vec<Vec<(f64, f64)>>, String> {
+    let layer = font.glyph(host).unwrap().layer(master).unwrap();
+    let shapes = if brush { fit_brush(font, master, &layer.shapes, hint) } else { fit_segment(font, master, &layer.shapes, hint) }
+        .map_err(|e| e.to_string())?;
+    Ok(shapes.iter().map(|s| if let Shape::Path(p) = s { p.nodes.iter().map(|n| (n.x, n.y)).collect() } else { Vec::new() }).collect())
+}
+
+#[test]
+fn a_segment_component_on_a_straight_host_scales_along_it_only() {
+    let f = stroke_font();
+    // The bottom segment ends at model node 1, file node 0: 400 units long, twice the glyph.
+    let paths = bent(&f, "box", "m01", &SegmentHint::new("_segment.wave", 0, 0), false).unwrap();
+    assert_eq!(paths[0], [(100.0, 0.0), (300.0, 30.0), (500.0, 0.0), (500.0, 400.0), (100.0, 400.0)]);
+    // The closing segment (file node 3 ends it at model node 0) runs down the left side: the
+    // left of its direction is +x, and the path still starts at (100, 0).
+    let paths = bent(&f, "box", "m01", &SegmentHint::new("_segment.wave", 0, 3), false).unwrap();
+    assert_eq!(paths[0], [(100.0, 0.0), (500.0, 0.0), (500.0, 400.0), (100.0, 400.0), (130.0, 200.0)]);
+}
+
+#[test]
+fn a_segment_component_on_a_curved_host_keeps_its_distance_along_the_normal() {
+    let f = stroke_font();
+    // Half way along the symmetric arch lies (100, 75), its tangent level: 30 units above.
+    let paths = bent(&f, "arch", "m01", &SegmentHint::new("_segment.wave", 0, 3), false).unwrap();
+    assert_eq!(paths[0], [(0.0, 0.0), (100.0, 105.0), (200.0, 0.0)]);
+    let layer = f.glyph("arch").unwrap().layer("m01").unwrap();
+    let shapes = fit_segment(&f, "m01", &layer.shapes, &SegmentHint::new("_segment.wave", 0, 3)).unwrap();
+    let Shape::Path(p) = &shapes[0] else { panic!("not a path") };
+    assert!(p.nodes.iter().all(|n| n.kind == NodeKind::Line), "a line without handles stays a line: {:?}", p.nodes);
+}
+
+#[test]
+fn bending_adds_no_nodes_and_two_masters_stay_compatible() {
+    let f = stroke_font();
+    let hint = SegmentHint::new("_segment.curl", 0, 3);
+    let curved = bent(&f, "arch", "m01", &hint, false).unwrap();
+    let level = bent(&f, "arch", "m02", &hint, false).unwrap();
+    assert_eq!(curved[0].len(), 4, "the glyph's four nodes, none added: {curved:?}");
+    assert_eq!(level[0].len(), curved[0].len());
+    // On the straight Bold host, handles keep their place scaled along: 200 over 200 units.
+    assert_eq!(level[0], [(0.0, 0.0), (50.0, 40.0), (150.0, 40.0), (200.0, 0.0)]);
+    // On a straight line host too.
+    let line = bent(&f, "stroke", "m01", &SegmentHint::new("_segment.curl", 0, 1), false).unwrap();
+    assert_eq!(line[0], [(0.0, 0.0), (100.0, 40.0), (300.0, 40.0), (400.0, 0.0)]);
+}
+
+#[test]
+fn a_brush_stretches_between_its_anchors_and_keeps_its_head_rigid() {
+    let f = stroke_font();
+    let hint = SegmentHint::new("_brush.arrow", 0, 1);
+    let straight = bent(&f, "stroke", "m01", &hint, true).unwrap();
+    assert_eq!(straight[0], [(0.0, 0.0), (400.0, 0.0)], "the host path stays");
+    assert_eq!(straight[1], [(0.0, -10.0), (400.0, -10.0), (400.0, -30.0), (440.0, 0.0), (400.0, 30.0), (400.0, 10.0), (0.0, 10.0)]);
+    // On the arch the head turns with the host's end direction, straight down, unscaled; the
+    // tail starts across the host's upward start.
+    let curved = bent(&f, "arch", "m01", &SegmentHint::new("_brush.arrow", 0, 3), true).unwrap();
+    assert_eq!(curved[1][0], (10.0, 0.0));
+    assert_eq!(curved[1][6], (-10.0, 0.0));
+    assert_eq!(&curved[1][2..5], &[(170.0, 0.0), (200.0, -40.0), (230.0, 0.0)]);
+}
+
+#[test]
+fn segment_and_brush_hints_store_type_name_and_origin() {
+    let hint = Attachment::Segment(SegmentHint::new("_segment.wave", 2, 5)).to_hint();
+    let d = hint.value.as_dict().unwrap();
+    let keys: Vec<&str> = d.entries.iter().map(|(k, _)| k.as_str()).collect();
+    assert_eq!(keys, ["name", "origin", "type"]);
+    assert_eq!(attachment(&hint).unwrap(), Some(Attachment::Segment(SegmentHint::new("_segment.wave", 2, 5))));
+    let brush = Attachment::Brush(SegmentHint::new("_brush.arrow", 0, 1)).to_hint();
+    assert!(is_brush(&brush) && is_attachment(&brush) && !is_segment(&brush));
+    assert_eq!(attachment(&brush).unwrap(), Some(Attachment::Brush(SegmentHint::new("_brush.arrow", 0, 1))));
+}
+
+#[test]
+fn outline_resolution_draws_segments_and_brushes() {
+    let mut f = stroke_font();
+    let mut layer = f.glyph("stroke").unwrap().layer("m01").unwrap().clone();
+    layer.info.hints.push(Attachment::Brush(SegmentHint::new("_brush.arrow", 0, 1)).to_hint());
+    let shapes = insert_attachments(&f, &layer).unwrap().unwrap();
+    assert_eq!(shapes.len(), 2);
+    let (fitted, report) = {
+        let mut g = f.glyph("stroke").unwrap().clone();
+        g.layers[0] = layer;
+        put(&mut f, g);
+        insert_all_attachments(&f)
+    };
+    assert_eq!(report.layers, 1, "{:?}", report.failed);
+    let l = fitted.glyph("stroke").unwrap().layer("m01").unwrap();
+    assert!(l.info.hints.is_empty() && l.shapes.len() == 2);
+}
+
+#[test]
+fn hostile_segments_and_brushes_fail_with_a_message() {
+    let mut f = stroke_font();
+    let e = bent(&f, "box", "m01", &SegmentHint::new("_segment.dot", 0, 0), false).unwrap_err();
+    assert!(e.contains("zero length"), "{e}");
+    let e = bent(&f, "flat", "m01", &SegmentHint::new("_segment.wave", 0, 1), false).unwrap_err();
+    assert!(e.contains("zero length"), "{e}");
+    let e = bent(&f, "stroke", "m01", &SegmentHint::new("_segment.wave", 0, 0), false).unwrap_err();
+    assert!(e.contains("starts the open path"), "{e}");
+    let e = bent(&f, "stroke", "m01", &SegmentHint::new("_brush.pair", 0, 1), true).unwrap_err();
+    assert!(e.contains("2 closed paths"), "{e}");
+    let e = bent(&f, "stroke", "m01", &SegmentHint::new("_brush.arrow", 0, 7), true).unwrap_err();
+    assert!(e.contains("has 2 nodes"), "{e}");
+    let huge: Vec<(f64, f64)> = (0..1_000_000).map(|i| (f64::from(i % 1000), f64::from(i / 1000))).collect();
+    put(&mut f, glyph("_brush.huge", &[("m01", 100.0, vec![lines(true, &huge)], vec![])]));
+    let e = bent(&f, "stroke", "m01", &SegmentHint::new("_brush.huge", 0, 1), true).unwrap_err();
+    assert!(e.contains("more than 500000"), "{e}");
+}

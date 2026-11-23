@@ -1,11 +1,13 @@
-//! Corner components in the Edit View: the hit on their fitted outline, click and `Shift`-click,
-//! the marquee leaving them out, and the selection keeping them through an edit.
+//! Attachments in the Edit View: the hit on the fitted outline of corner, cap and segment
+//! components and brushes, click and `Shift`-click, the marquee leaving them out, and the
+//! selection keeping them through an edit.
 
 use fontcraft_geom::{ParamCurve, Point};
+use fontcraft_model::attach::{Attachment, CapHint, SegmentHint};
 use fontcraft_model::corner::CornerHint;
-use fontcraft_model::{Font, Node, NodeKind, Path, Shape};
+use fontcraft_model::{Anchor, Font, Node, NodeKind, Path, Shape};
 
-use crate::attachment::{AttachmentKind, selected_corners};
+use crate::attachment::{AttachmentKind, copied_kind, selected, selected_corners};
 use crate::event::PointerKind::{Down, Drag, Up};
 use crate::select::SelectTool;
 use crate::*;
@@ -117,4 +119,92 @@ fn selected_corners_stay_while_the_layer_has_them() {
     font.glyph_mut("A").unwrap().layer_mut("m01").unwrap().info.hints.truncate(1);
     selection.retain_valid(&Scene::from_font(&font, "A", None).unwrap());
     assert_eq!(selection, Selection::from_items([Item::Hint(0)]));
+}
+
+/// Glyph `A`: the rectangle (100, 0) (400, 0) (400, 500) (100, 500) with `_cap.flag` (Fit on) on
+/// its top segment (hint 0), `_segment.wave` on its bottom segment (hint 1) and `_brush.bar` on
+/// its right segment (hint 2). Hint node indices count in file order, with the start node last.
+fn attachment_font() -> Font {
+    let mut font = Font::new("Test");
+    let glyphs: [(&str, Path, f64, Vec<Anchor>); 3] = [
+        (
+            "_cap.flag",
+            Path::new(false, vec![on(0.0, 20.0), on(-40.0, -30.0), on(100.0, -30.0), on(100.0, 20.0)]),
+            100.0,
+            vec![Anchor::new("origin", 0.0, 0.0)],
+        ),
+        (
+            "_segment.wave",
+            Path::new(false, vec![on(0.0, 0.0), on(100.0, 60.0), on(200.0, 0.0)]),
+            200.0,
+            vec![Anchor::new("start", 0.0, 0.0), Anchor::new("end", 200.0, 0.0)],
+        ),
+        (
+            "_brush.bar",
+            Path::new(true, vec![on(0.0, -20.0), on(100.0, -20.0), on(100.0, 20.0), on(0.0, 20.0)]),
+            100.0,
+            vec![Anchor::new("start", 0.0, 0.0), Anchor::new("end", 100.0, 0.0)],
+        ),
+    ];
+    for (name, path, width, anchors) in glyphs {
+        font.add_glyph(name, Vec::new(), width).unwrap();
+        let mut g = font.glyph_mut(name).unwrap();
+        let l = g.layer_mut("m01").unwrap();
+        l.shapes.push(Shape::Path(path));
+        l.anchors = anchors;
+    }
+    {
+        let mut glyph = font.glyph_mut("A").unwrap();
+        let layer = glyph.layer_mut("m01").unwrap();
+        layer.shapes.push(Shape::Path(Path::new(true, vec![on(100.0, 0.0), on(400.0, 0.0), on(400.0, 500.0), on(100.0, 500.0)])));
+        let mut cap = CapHint::new("_cap.flag", 0, 1);
+        cap.fit = true;
+        layer.info.hints.push(cap.to_hint());
+        layer.info.hints.push(Attachment::Segment(SegmentHint::new("_segment.wave", 0, 0)).to_hint());
+        layer.info.hints.push(Attachment::Brush(SegmentHint::new("_brush.bar", 0, 1)).to_hint());
+    }
+    font
+}
+
+/// A point on the outline of attachment `hint` that a click there hits.
+fn point_on(scene: &Scene, hint: usize) -> Point {
+    let mark = scene.attachments.iter().find(|m| m.hint == hint).unwrap_or_else(|| panic!("attachment {hint} is fitted"));
+    let view = View::default();
+    mark.outline
+        .segments()
+        .flat_map(|seg| [0.25, 0.5, 0.75].map(|t| seg.eval(t)))
+        .find(|&p| hit_test_with_corners(scene, &view, p, 6.0).map(|h| h.hit) == Some(Hit::Attachment { hint }))
+        .unwrap_or_else(|| panic!("no point of attachment {hint}'s outline hits it"))
+}
+
+/// Caps, segment components and brushes are marked and selected as corners are: a click on the
+/// fitted outline selects one, `Shift`-click adds the others, and the selection hands each kind to
+/// `edit.copy` under its own key (`cap.highlightAndSelection`, `segment.highlightAndSelection`,
+/// `brush.highlightAndSelection`). The brush is marked along the path it adds, not inside its host.
+#[test]
+fn caps_segments_and_brushes_are_marked_and_selected_by_a_click() {
+    let font = attachment_font();
+    let scene = Scene::from_font(&font, "A", None).unwrap();
+    let kinds: Vec<(usize, AttachmentKind)> = scene.attachments.iter().map(|m| (m.hint, m.kind)).collect();
+    assert_eq!(kinds, vec![(0, AttachmentKind::Cap), (1, AttachmentKind::Segment), (2, AttachmentKind::Brush)]);
+    let brush = scene.attachments.iter().find(|m| m.kind == AttachmentKind::Brush).unwrap();
+    let ends: Vec<Point> = brush.band.elements().iter().filter_map(|e| e.end_point()).collect();
+    assert!(ends.iter().any(|p| (p.x - 420.0).abs() < 1.0) && ends.iter().any(|p| (p.x - 380.0).abs() < 1.0), "{ends:?}");
+
+    let (cap, segment, brush) = (point_on(&scene, 0), point_on(&scene, 1), point_on(&scene, 2));
+    let mut tool = SelectTool::default();
+    let mut selection = Selection::new();
+    gesture(&mut tool, &scene, &mut selection, &[(Down, segment), (Up, segment)], Modifiers::NONE);
+    assert_eq!(selection, Selection::from_items([Item::Hint(1)]));
+    assert_eq!(copied_kind(&scene, &selection), Some((AttachmentKind::Segment, vec![1])));
+    gesture(&mut tool, &scene, &mut selection, &[(Down, cap), (Up, cap)], Modifiers::SHIFT);
+    gesture(&mut tool, &scene, &mut selection, &[(Down, brush), (Up, brush)], Modifiers::SHIFT);
+    assert_eq!(selection, Selection::from_items([Item::Hint(0), Item::Hint(1), Item::Hint(2)]));
+    assert_eq!(selected(&scene, &selection, AttachmentKind::Brush), vec![2]);
+    assert_eq!(copied_kind(&scene, &selection), Some((AttachmentKind::Cap, vec![0])));
+    assert_eq!(selection.targets(&scene).get("hints"), Some(&serde_json::json!([0, 1, 2])));
+    // A second Shift-click takes the brush out again.
+    gesture(&mut tool, &scene, &mut selection, &[(Down, brush), (Up, brush)], Modifiers::SHIFT);
+    assert_eq!(selection, Selection::from_items([Item::Hint(0), Item::Hint(1)]));
+    assert!(selected_corners(&scene, &selection).is_empty());
 }
