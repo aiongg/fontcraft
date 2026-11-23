@@ -2,7 +2,7 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-23: M13.76 (File › Open installs modules and macros; browser storage of them) and M14.4c (the About text) written on branch `w-M13.76`, on top of `w-M13.23c`, not yet built or tested (see "Where M13.64 stands" for the branch notes). Before that, X.fix96 and X.fix97: floating panels are OS windows on desktop again; while a form dialog is open they drop to the normal level and the main window comes forward, shown in a native-window harness test (`testing::native`) and not yet seen on a desktop with a window manager; `ui.key Escape` closes the canvas context menu; `ui.screenshot` still misses floating windows, an eframe gap (see "Known weak spots"). Before that, 2026-11-22: M10.34, M10.41 and M13.64 merged into `master`, built, tested and smoke-tested in the window (X.integ158 to X.integ161; see "Where M13.64 stands"); M13.23c not started. Before that: M5.30, M13.69, M13.70 and X.fix95 merged into `master`, built, tested and smoke-tested in the window (X.integ153 to X.integ156; see "Where M5.30, M13.69 and M13.70 stand"). Before that: M9.32, M3.41, M3.43 and M3.42 merged (X.integ148 to X.integ151); the Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
+_Updated: 2026-11-23: M13.23c, M13.74, M13.76 and M14.4c merged into `master`, built, tested and smoke-tested in the window, light and dark (X.integ162 to X.integ166, X.fix98; see "Where M13.64 stands" for the package notes). The docked Command Console's body scrolls and its log takes the rows the room leaves, so the input line stays in view; Shift+Arrow selects in the macro editor, which no longer inserts Tab (a craft text part that inserts Tab loses its arrows: decision 0009); `ui.key` and `ui.text` go to a text field that has the keyboard. Before that, M13.76 and M14.4c were written on branch `w-M13.76`. Before that, X.fix96 and X.fix97: floating panels are OS windows on desktop again; while a form dialog is open they drop to the normal level and the main window comes forward, shown in a native-window harness test (`testing::native`) and not yet seen on a desktop with a window manager; `ui.key Escape` closes the canvas context menu; `ui.screenshot` still misses floating windows, an eframe gap (see "Known weak spots"). Before that, 2026-11-22: M10.34, M10.41 and M13.64 merged into `master`, built, tested and smoke-tested in the window (X.integ158 to X.integ161; see "Where M13.64 stands"); M13.23c not started. Before that: M5.30, M13.69, M13.70 and X.fix95 merged into `master`, built, tested and smoke-tested in the window (X.integ153 to X.integ156; see "Where M5.30, M13.69 and M13.70 stand"). Before that: M9.32, M3.41, M3.43 and M3.42 merged (X.integ148 to X.integ151); the Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
 
 ## State of the tree
 
@@ -35,24 +35,29 @@ _Updated: 2026-11-23: M13.76 (File › Open installs modules and macros; browser
     refusals, `inspect`), `dialogs/strike_properties.rs` (property lines, the dialog's OK on one strike).
   - Left: the actual-size preview, the pointer position readout, the pointer, magnify and hand tools, the context
     menu, a strike chooser and property table in Strike Properties, reset to computed defaults; references are not
-    drawn into the edited bitmap. M13.23c (Space Center images and colour glyphs) is written on branch `w-M13.23c`,
-    not yet built or tested: Images and Color in `view.setSpaceCenterDisplay` and the Display menu; images worked out
+    drawn into the edited bitmap. M13.23c (Space Center images and colour glyphs) is merged and built; seen in the
+    window in dark mode, an image on H and a palette-coloured O: Images and Color in `view.setSpaceCenterDisplay` and the Display menu; images worked out
     by `canvas::images::cells::space_center` into `Models::space_images`; colour from `canvas::color::cell_color` in
     the Space Center projection; frame tests in `panels/space_center/tests.rs`. M13.74 (the Macro Panel editor) is
-    written on the same branch, not yet built or tested: `shell/macro_editor.rs` (`macroPanel.setText`, `runAll`,
+    merged and built: `shell/macro_editor.rs` (`macroPanel.setText`, `runAll`,
     `runSelection`, `open`, `save`, `record`; Open and Save pick files through `app::files::PICKED`), the editor in
     `ConsoleState::editor` and `editor_macro`, the pane in `panels/command_console.rs`; tests in
     `shell/macro_editor/tests.rs` and the panel's frame test of Run Selection and Save. Shell commands have no
-    `enabled` rule: the panel greys its own buttons.
-    M13.76 (install leftovers) is written on branch `w-M13.76`, on top of `w-M13.23c`, not yet built or tested:
+    `enabled` rule: the panel greys its own buttons. The pane's body scrolls (`widgets::scrolling`) and the log shows
+    3 to 12 rows by the room it has (`log_rows`), so a short dock keeps the input line in view; the editor fills the
+    pane's width and does not insert Tab, so its arrows move the caret and Shift with them selects (decision 0009).
+    Seen in the window, light and dark: Shift+ArrowUp over the control channel selected two lines and Run Selection
+    ran them.
+    M13.76 (install leftovers) is merged and built:
     File › Open… offers modules and macros and installs one chosen there (`app::dropped::open_as_install`, run from
     `apply_now` for the person's own runs only); `Picks::poll` installs the modules and macros a browser chooser
     reads (`Picked::Contents`); the engine installs a macro for the session when there is no Macros folder; the
     browser store is `app::web_store` over `craft_ext::platform::storage::BrowserStorage` (web-sys `Storage`, a new
-    wasm32-only dependency of craft-ext, so Cargo.lock changes at the first build). Tests:
+    wasm32-only dependency of craft-ext, in Cargo.lock since X.integ163). Tests:
     `dropped::tests::a_macro_chosen_in_file_open_is_installed_as_a_drop_is` and three in `web_store::tests`. The web
-    build has no entry point yet, so the store runs only in tests.
-    M14.4c (the About text) is written on the same branch, not yet built or tested: `dialogs/about.rs` is a plain
+    build has no entry point yet, so the store runs only in tests. Under Xvfb with no desktop portal, File › Open…
+    reports that no file chooser is available, so the chooser's filters have not been seen.
+    M14.4c (the About text) is merged and built; seen light and dark, its licence list scrolls: `dialogs/about.rs` is a plain
     `StackDialog` (craft's `HostedAbout` has no room for a list) with the version, a graphics line from
     `backend_text(app.graphics)`, and NOTICE plus a line per ASSETS.md row (`include_str!`) in a 16-line scrolling
     list. `FontCraftApp::graphics` stays `None`: craft's `shell::app::run` gives the app neither eframe's
@@ -384,7 +389,7 @@ _Updated: 2026-11-23: M13.76 (File › Open installs modules and macros; browser
     tool's command: the catalog keeps the tool's definition, `app::catalog::chosen_tool` picks the named tool, and a
     name that is no tool reaches the shell command, which refuses it. Every tool command run through
     `engine.execute` replies `{tool, previous}`.
-  - 1000 of 1056 commands live; M3 has 187 of 187.
+  - 1014 of 1065 commands live; M3 has 187 of 187.
   - The `[patch.crates-io]` egui entries cargo reports unused stay: they mirror `craft::egui_fork::PACKAGES`.
 - **Where UI.49 and UI.50 stand.** Merged on `master` and pushed; the gate (`cargo xtask ci`) is green with 4,808
   tests (the removed window's tests went with it). The desktop app is the package and binary `fontcraft` in
@@ -451,8 +456,8 @@ _Updated: 2026-11-23: M13.76 (File › Open installs modules and macros; browser
   regraded yet. 3,081 guesses on 1,606 rows are listed in `docs/guesses.md`; `docs/observe.md` lists 1,500 rows. CLI option coverage: 672 of
   770 reference options present (`docs/cli-options.md`).
 - Packages built (done of total, counted from commit subjects; the totals include the depth packages that carry a
-  new number): M6 21 of 26, M7 21 of 24, M8 27 of 36, M9 30 of 40, M10 35 of 42, M11 20 of 22, M12 77 of 87, M13 63
-  of 83; 294 of 360 in all. Depth packages (`docs/plans/depth.md`): 77 of 167 (wave 1 and 63 writers of waves 2 to
+  new number): M6 21 of 26, M7 21 of 24, M8 27 of 36, M9 30 of 40, M10 35 of 42, M11 20 of 22, M12 77 of 87, M13 66
+  of 83; 297 of 360 in all. Depth packages (`docs/plans/depth.md`): 87 of 167 (wave 1 and 63 writers of waves 2 to
   11, listed in ROADMAP.md › Where we are); no builder of waves 2 to 13. The lettered follow-ups (M10.37b, M10.37c,
   M13.65b and those of earlier batches) are not counted.
 - **Baselines** (from the fifteenth batch; the sixteenth ran none of them, and a later change that moves one of these numbers needs a reason):
@@ -1233,6 +1238,13 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
   blocked under the dialog (X.fix97a). Not yet seen on a desktop with a window manager: Xvfb has none, so levels
   and focus do not restack there and a floating window can still cover the dialog.
 
+- **Seen in the X.fix98 smoke, not yet fixed.** About FontCraft shows NOTICE's hard line breaks as list rows, so
+  sentences break mid-row; `ui.key Escape` leaves About open (`handled: false`; its Close button works). The macro
+  editor's multi-line field draws a short text in the middle of its 10 lines, not at the top (cause not traced;
+  likely craft's field layout). The console's log does not follow the newest line: after a run, the new rows are
+  below the log's fold until it is scrolled.
+- **Macro editor and Tab.** Craft's text part that inserts Tab keeps only Tab from the focus service and loses its
+  arrows (decision 0009), so the macro editor does not insert Tab; Tab leaves the field.
 - **`ui.screenshot` misses floating windows.** It captures the main window only. A capture of a floating
   window's viewport is never answered: the craft fork's eframe paints immediate viewports without their screenshot
   requests (decision 0009, Craft bugs). Compositing the floating windows into the image waits for that fix.
