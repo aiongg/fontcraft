@@ -150,7 +150,7 @@ struct LogTail {
 /// The log of lines run. While its last row is in view, a row added scrolls the log to it; scrolled up, the log stays
 /// where it is. Only a log longer than its `rows` scrolls itself: a shorter one asks nothing of the panel body's scroll.
 fn command_log(ui: &mut Ui, words: &ConsoleWords, model: &ConsoleModel, rows: u16) {
-    let tail_id = ui.id().with("fontcraftConsole.logTail");
+    let tail_id = ui.scope_id().with("fontcraftConsole.logTail");
     let tail = ui.ctx().data(|data| data.get_temp::<LogTail>(tail_id)).unwrap_or(LogTail { rows: 0, at_end: true });
     let count = model.lines.len();
     let mut list = List::new(words.log.clone()).empty(words.empty.clone()).max_rows(rows);

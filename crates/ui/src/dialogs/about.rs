@@ -24,6 +24,8 @@ const NOTICE: &str = include_str!("../../../../NOTICE");
 const ASSETS: &str = include_str!("../../../../ASSETS.md");
 /// Most rows the licences list holds.
 pub const MAX_LICENCE_LINES: usize = 4_000;
+/// The widest the dialog's body grows, in body line heights.
+const MAX_WIDTH_EMS: f32 = 36.0;
 /// The licences list's height, in lines of body text.
 const LIST_ROWS: f32 = 16.0;
 
@@ -135,6 +137,8 @@ impl AboutText {
 /// The dialog's body: the name, the version, the graphics line and the licences in a list that scrolls.
 pub fn view(ui: &mut Ui, about: &AboutText) {
     let w = Env::of(ui).words::<AboutWords>();
+    // The paragraphs wrap at this width, so the dialog does not grow across the window.
+    ui.set_max_width(MAX_WIDTH_EMS * ui.text_style_height(&egui::TextStyle::Body));
     let list_height = ui.text_style_height(&egui::TextStyle::Body) * LIST_ROWS;
     Stack::new().show(ui, |ui, _| {
         Text::new(APP.name).show(ui);
