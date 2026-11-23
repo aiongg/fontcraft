@@ -2,7 +2,7 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-22: M10.34, M10.41 and M13.64 merged into `master`, built, tested and smoke-tested in the window (X.integ158 to X.integ161; see "Where M13.64 stands"); M13.23c not started. Found in the smoke: form dialogs draw beneath floating windows (see "Known weak spots"). Before that: M5.30, M13.69, M13.70 and X.fix95 merged into `master`, built, tested and smoke-tested in the window (X.integ153 to X.integ156; see "Where M5.30, M13.69 and M13.70 stand"). Before that: M9.32, M3.41, M3.43 and M3.42 merged (X.integ148 to X.integ151); the Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
+_Updated: 2026-11-23: X.fix96 and X.fix97: floating panels are OS windows on desktop again; while a form dialog is open they drop to the normal level and the main window comes forward, shown in a native-window harness test (`testing::native`) and not yet seen on a desktop with a window manager; `ui.key Escape` closes the canvas context menu; `ui.screenshot` still misses floating windows, an eframe gap (see "Known weak spots"). Before that, 2026-11-22: M10.34, M10.41 and M13.64 merged into `master`, built, tested and smoke-tested in the window (X.integ158 to X.integ161; see "Where M13.64 stands"); M13.23c not started. Before that: M5.30, M13.69, M13.70 and X.fix95 merged into `master`, built, tested and smoke-tested in the window (X.integ153 to X.integ156; see "Where M5.30, M13.69 and M13.70 stand"). Before that: M9.32, M3.41, M3.43 and M3.42 merged (X.integ148 to X.integ151); the Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
 
 ## State of the tree
 
@@ -1202,14 +1202,18 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
 
 ## Known weak spots
 
-- **Form dialogs draw beneath floating windows.** A floating panel (Font Info, the Bitmap Glyph Editor, …) is a
-  palette OS window, always on top while the app is active; a form dialog is a modal layer of the main window, so a
-  palette over the window's centre hides it (decision 0009, Craft bugs). While a modal is open,
-  `craft_ext::ui::runtime::windows::keep_modal_on_top` lowers the other windows to the normal level and focuses the
-  main window, then restores them (X.fix96a). Not yet seen working: under Xvfb there is no window manager, so levels
-  and focus do not restack and the dialog stays hidden; check on a desktop. `ui.screenshot` captures only the main
-  window, so floating windows are missing from it; capturing another viewport through the capture queue timed out in
-  a first try.
+- **Form dialogs over floating windows: fixed, not yet seen on a desktop.** A floating panel (Font Info, the
+  Bitmap Glyph Editor, …) is a palette OS window, always on top while the app is active; a form dialog is a modal
+  layer of the main window, so a palette over the window's centre hid it (decision 0009, Craft bugs). While a modal
+  is open, `craft_ext::ui::runtime::windows::keep_modal_on_top` lowers the other windows to the normal level and
+  focuses the main window, then restores them (X.fix96a). `testing::native::tests` runs the app with floating
+  panels in OS windows over a stand-in window system and shows the levels, the focus, and the floating window
+  blocked under the dialog (X.fix97a). Not yet seen on a desktop with a window manager: Xvfb has none, so levels
+  and focus do not restack there and a floating window can still cover the dialog.
+
+- **`ui.screenshot` misses floating windows.** It captures the main window only. A capture of a floating
+  window's viewport is never answered: the craft fork's eframe paints immediate viewports without their screenshot
+  requests (decision 0009, Craft bugs). Compositing the floating windows into the image waits for that fix.
 
 - **The inventory is unreviewed line by line.** It passed mechanical checks and one sample audit
   (209 handbook rows re-read by a second reader: 1 wrong, 14 imprecise, all corrected; patterns in
