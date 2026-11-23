@@ -2795,6 +2795,7 @@ dependencies = [
  "fontcraft-testkit",
  "fontcraft-textlayout",
  "log",
+ "regex",
  "serde",
  "serde_json",
  "skrifa 0.48.0",
