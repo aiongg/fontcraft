@@ -2,10 +2,16 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-23: M13.42 the cap, segment and brush interface written, not yet built, on top of the unbuilt M13.41. Before them: M13.40 built cap components (fitting in `model::attach`, six `capComponent.*` commands, compile support) on the rows' guesses. Gate: `cargo xtask ci` passed all 11 steps (5,012 tests passed, 43 skipped)_
+_Updated: 2026-11-23: M13.42 the cap, segment and brush interface and M13.42b (attachment hints follow node edits) written, not yet built, on top of the unbuilt M13.41. Before them: M13.40 built cap components (fitting in `model::attach`, six `capComponent.*` commands, compile support) on the rows' guesses. Gate: `cargo xtask ci` passed all 11 steps (5,012 tests passed, 43 skipped)_
 
 ## State of the tree
 
+- **M13.42b (attachment hints follow node edits): written, not yet built.** `crates/hinting/src/remap.rs`: the
+  corner list (`corners`, struct `Corner` with `name`, `noun`, `target`) also reads `Cap`, `Segment` and `Brush`
+  hints by their stored node; `follows_nodes` accepts them on a path; `slots_moved` counts them.
+  `cmd/shared.rs::hint_shapes_on` keeps their origin as a shape index. Tests written, not run:
+  `a_cap_follows_its_nodes_through_node_edits` (engine `attach_cap`),
+  `segment_components_and_brushes_follow_their_nodes_through_node_edits` (engine `attach_segment`).
 - **Where M13.42 stands (cap, segment and brush interface): written, not yet built.** Canvas:
   `fontcraft_tools::attachment` knows `Segment` and `Brush`, every kind is selectable, `marks` fits segments
   (band from the inserted nodes, else the host segment) and brushes (the path fitting adds after the shapes);

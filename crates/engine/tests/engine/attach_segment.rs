@@ -222,3 +222,28 @@ fn copied_segment_components_and_brushes_paste_onto_selected_segments() {
     // A copied brush is not a segment component: pasting keeps the kind it was copied as.
     assert!(attachments(&s, "zig").iter().all(|a| matches!(a, Attachment::Brush(_))));
 }
+
+/// The hint upkeep moves segment components and brushes with the node that ends their segment: a
+/// node inserted before the segment keeps them on it, and deleting that node removes them and
+/// reports it, as it does a corner component.
+#[test]
+fn segment_components_and_brushes_follow_their_nodes_through_node_edits() {
+    let mut s = session();
+    // The top segment of box ends at model node 3, which the file numbers 2.
+    run(&mut s, "segmentComponent.add", json!({"glyph": "box", "segments": [[0, 3]], "segmentGlyph": "_segment.wave"}));
+    let r = run(&mut s, "path.insertNode", json!({"glyph": "box", "segment": [0, 1]}));
+    assert!(r.get("hintUpkeep").is_none(), "{r}");
+    // A node came in before it: the segment ends at model node 4, file node 3.
+    assert_eq!(attachments(&s, "box"), [Attachment::Segment(SegmentHint::new("_segment.wave", 0, 3))]);
+    let r = run(&mut s, "edit.delete", json!({"glyph": "box", "points": [[0, 4]]}));
+    assert!(r["hintUpkeep"]["removed"].to_string().contains("segment component"), "{r}");
+    assert!(attachments(&s, "box").is_empty());
+
+    run(&mut s, "brush.add", json!({"glyph": "zig", "segments": [[0, 3]], "brush": "_brush.bar"}));
+    run(&mut s, "path.insertNode", json!({"glyph": "zig", "segment": [0, 1]}));
+    assert_eq!(attachments(&s, "zig"), [Attachment::Brush(SegmentHint::new("_brush.bar", 0, 4))]);
+    assert_eq!(closed_paths(&s, "zig"), 1, "the brush is still drawn");
+    let r = run(&mut s, "edit.delete", json!({"glyph": "zig", "points": [[0, 4]]}));
+    assert!(r["hintUpkeep"]["removed"].to_string().contains("brush"), "{r}");
+    assert!(attachments(&s, "zig").is_empty());
+}

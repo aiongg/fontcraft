@@ -64,7 +64,7 @@ pub(crate) fn hint_shapes(hint: &Hint) -> Vec<usize> {
 /// indices; a reference past the paths comes back as `usize::MAX`.
 pub(crate) fn hint_shapes_on(hint: &Hint, shapes: &[Shape]) -> Vec<usize> {
     let refs = hint_shapes(hint);
-    if fontcraft_model::corner::is_corner(hint) || !fontcraft_hinting::follows_nodes(hint, shapes) {
+    if fontcraft_model::corner::is_corner(hint) || fontcraft_model::attach::is_attachment(hint) || !fontcraft_hinting::follows_nodes(hint, shapes) {
         return refs;
     }
     let slots: Vec<usize> = shapes.iter().enumerate().filter(|(_, sh)| matches!(sh, Shape::Path(_))).map(|(i, _)| i).collect();

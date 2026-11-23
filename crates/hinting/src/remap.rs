@@ -30,7 +30,10 @@
 //! stored anew when a shape before the path is added or removed. A corner on a gone node is
 //! removed and reported, as a TrueType instruction is, and moves with them under
 //! [`RemapMode::OverlapRemoval`] (a corner on an extra node lands on the node the removal made
-//! there). Caps, segments and brushes are left alone.
+//! there). Cap components, segment components and brushes (`Cap`, `Segment` and `Brush` hints)
+//! follow their stored node the same way: a cap its first node, the others the node that ends
+//! their segment, so a node inserted before or inside the segment leaves them on it. One whose
+//! stored node is gone is removed and reported, as a corner is.
 //!
 //! A layer's background is remapped against the background before the edit, apart from the
 //! layer's own hints.
@@ -53,7 +56,8 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
-use fontcraft_model::corner::{CornerHint, CornerTarget, corner_hint, is_corner};
+use fontcraft_model::attach;
+use fontcraft_model::corner::{CornerTarget, corner_hint, is_corner};
 use fontcraft_model::plist::Value;
 use fontcraft_model::{Background, Font, Hint, Layer, LayerSide, Node, NodeKind, Path, Shape};
 
@@ -198,21 +202,23 @@ pub fn renumber_side(old: &Layer, new: &Layer, side: LayerSide, glyph: &str, pat
 }
 
 /// Whether the node references of `hint` are kept by this module when the hint sits on a layer
-/// side whose shapes are `shapes`: PostScript hints, TrueType instructions and corner components on
-/// a path. Other hints (caps, segments, brushes, corners on anything else) are left to the command.
+/// side whose shapes are `shapes`: PostScript hints, TrueType instructions, and corner and cap
+/// components, segment components and brushes on a path. Other hints (attachments on anything
+/// else) are left to the command.
 pub fn follows_nodes(hint: &Hint, shapes: &[Shape]) -> bool {
     if crate::ps::is_ps(hint) || crate::tt::is_tt(hint) {
         return true;
     }
-    match corner_hint(hint) {
-        Ok(Some(c)) => {
-            let shape = match c.target {
-                CornerTarget::Node { shape, .. } | CornerTarget::Intersection { shape, .. } => shape,
-            };
-            matches!(shapes.get(shape), Some(Shape::Path(_)))
-        }
-        _ => false,
-    }
+    let shape = match corner_hint(hint) {
+        Ok(Some(c)) => match c.target {
+            CornerTarget::Node { shape, .. } | CornerTarget::Intersection { shape, .. } => shape,
+        },
+        _ => match attach::attachment(hint) {
+            Ok(Some(a)) => a.origin().0,
+            _ => return false,
+        },
+    };
+    matches!(shapes.get(shape), Some(Shape::Path(_)))
 }
 
 /// `new` with the hints of its background remapped against the background of `old` (the same
@@ -258,8 +264,8 @@ fn remap_hints(
     }
     let (old_paths, new_paths) = (paths(old), paths(new));
     let (old_slots, new_slots) = (path_slots(old), path_slots(new));
-    // A corner's origin counts shapes, so it changes when only the shapes around a path do.
-    let slots_moved = old_slots != new_slots && old.info.hints.iter().any(is_corner);
+    // An attachment's origin counts shapes, so it changes when only the shapes around a path do.
+    let slots_moved = old_slots != new_slots && old.info.hints.iter().any(|h| is_corner(h) || attach::is_attachment(h));
     if !slots_moved && old_paths.len() == new_paths.len() && old_paths.iter().zip(&new_paths).all(|(a, b)| same_nodes(a, b)) {
         return None;
     }
@@ -316,8 +322,9 @@ fn remap_hints(
         let Some((after, reattached)) = m.point_after(c.point, &map, overlap) else {
             corner_edits.insert(c.index, None);
             local.removed.push(format!(
-                "glyph `{glyph}`, {place}: the corner component `{}` on {} was removed: its node is gone",
-                c.hint.name,
+                "glyph `{glyph}`, {place}: the {} `{}` on {} was removed: its node is gone",
+                c.noun,
+                c.name,
                 point_text(&c.point)
             ));
             continue;
@@ -334,7 +341,7 @@ fn remap_hints(
                     .map(|((shape, node), (other_shape, other_node))| CornerTarget::Intersection { shape, node, other_shape, other_node }),
                 TtPoint::Lsb | TtPoint::Rsb => None,
             };
-        let Some(target) = target.filter(|t| *t != c.hint.target) else { continue };
+        let Some(target) = target.filter(|t| *t != c.target) else { continue };
         let Some(mut value) = old.info.hints.get(c.index).map(|h| h.value.clone()) else { continue };
         let Value::Dict(d) = &mut value else { continue };
         let items = match target {
@@ -479,16 +486,19 @@ fn path_slots(layer: &Layer) -> Vec<usize> {
     layer.shapes.iter().enumerate().filter_map(|(i, s)| matches!(s, Shape::Path(_)).then_some(i)).collect()
 }
 
-/// A corner component the remap can follow: its index in the stored hints, the hint, and the
-/// node or extra node it sits on in the model's order.
+/// A corner, cap or segment component or a brush the remap can follow: its index in the stored
+/// hints, its glyph and kind for messages, the target its origin stores, and the node or extra
+/// node it sits on in the model's order. A cap, segment component or brush stores one node.
 struct Corner {
     index: usize,
-    hint: CornerHint,
+    name: String,
+    noun: &'static str,
+    target: CornerTarget,
     point: TtPoint,
 }
 
-/// The layer's corner components whose origin names a path; `slots` and `order` are the layer's.
-/// Others are left alone.
+/// The layer's attachments (corner, cap and segment components and brushes) whose origin names a
+/// path; `slots` and `order` are the layer's. Others are left alone.
 fn corners(layer: &Layer, slots: &[usize], order: &NodeOrder) -> Vec<Corner> {
     let at = |shape: usize, node: usize| slots.binary_search(&shape).ok().map(|path| order.to_model(NodeRef::new(path, node)));
     layer
@@ -497,14 +507,26 @@ fn corners(layer: &Layer, slots: &[usize], order: &NodeOrder) -> Vec<Corner> {
         .iter()
         .enumerate()
         .filter_map(|(index, h)| {
-            let hint = corner_hint(h).ok()??;
-            let point = match hint.target {
+            let (name, noun, target) = match corner_hint(h) {
+                Ok(Some(c)) => (c.name, "corner component", c.target),
+                _ => {
+                    let a = attach::attachment(h).ok()??;
+                    let (shape, node) = a.origin();
+                    let noun = match a {
+                        attach::Attachment::Cap(_) => "cap component",
+                        attach::Attachment::Segment(_) => "segment component",
+                        attach::Attachment::Brush(_) => "brush",
+                    };
+                    (a.name().to_string(), noun, CornerTarget::Node { shape, node })
+                }
+            };
+            let point = match target {
                 CornerTarget::Node { shape, node } => TtPoint::Node(at(shape, node)?),
                 CornerTarget::Intersection { shape, node, other_shape, other_node } => {
                     TtPoint::Intersection { a: at(shape, node)?, b: at(other_shape, other_node)? }
                 }
             };
-            Some(Corner { index, hint, point })
+            Some(Corner { index, name, noun, target, point })
         })
         .collect()
 }
