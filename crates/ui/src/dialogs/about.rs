@@ -1,8 +1,8 @@
 //! About FontCraft (`app.about`, Help › About FontCraft): the version, the graphics backend in use, and the licences
 //! of FontCraft and of everything it ships, in a scrolling list.
 //!
-//! The licences are `NOTICE` as written, then a line for each row of the table in `ASSETS.md` (path, author, licence),
-//! both read in at compile time. The graphics line names wgpu, the only renderer the window is built with, and the
+//! The licences are `NOTICE` a paragraph to a row, each row wrapping at the dialog's width, then a row for each row of
+//! the table in `ASSETS.md` (path, author, licence), both read in at compile time. The graphics line names wgpu, the only renderer the window is built with, and the
 //! adapter and backend when the app was told them ([`FontCraftApp::graphics`]); the framework does not hand them to the
 //! app yet, so without them it says they are not reported. The web build says it draws in the browser.
 
@@ -22,7 +22,7 @@ use crate::panels::widgets;
 const NOTICE: &str = include_str!("../../../../NOTICE");
 /// The table of every asset the repository ships, with its author and licence.
 const ASSETS: &str = include_str!("../../../../ASSETS.md");
-/// Most lines the licences list holds.
+/// Most rows the licences list holds.
 pub const MAX_LICENCE_LINES: usize = 4_000;
 /// The licences list's height, in lines of body text.
 const LIST_ROWS: f32 = 16.0;
@@ -64,14 +64,46 @@ fn or_unknown(text: &str) -> &str {
     if text.trim().is_empty() { "an unnamed adapter" } else { text.trim() }
 }
 
-/// The licences list: `NOTICE` line by line, a blank line, then one line for each asset of `ASSETS.md`.
+/// The licences list: `NOTICE` a paragraph to a row, a blank row, then a row for each asset of `ASSETS.md`.
 pub fn licence_lines() -> Vec<String> {
-    let mut lines: Vec<String> = NOTICE.lines().map(|l| l.trim_end().to_string()).collect();
+    let mut lines = paragraphs(NOTICE);
     lines.push(String::new());
     lines.push("Assets (ASSETS.md):".into());
     lines.extend(ASSETS.lines().filter_map(asset_line));
     lines.truncate(MAX_LICENCE_LINES);
     lines
+}
+
+/// `text` with the hard-wrapped lines of each paragraph joined by spaces. Blank lines separate paragraphs and stay as
+/// one empty row between them; a line that starts a list item (`- `) starts a paragraph of its own. A paragraph keeps
+/// the indent of its first line.
+fn paragraphs(text: &str) -> Vec<String> {
+    let mut rows: Vec<String> = Vec::new();
+    let mut open = false;
+    for line in text.lines() {
+        let words = line.trim();
+        if words.is_empty() {
+            if rows.last().is_some_and(|row| !row.is_empty()) {
+                rows.push(String::new());
+            }
+            open = false;
+            continue;
+        }
+        if open
+            && !words.starts_with("- ")
+            && let Some(row) = rows.last_mut()
+        {
+            row.push(' ');
+            row.push_str(words);
+        } else {
+            rows.push(line.trim_end().to_string());
+            open = true;
+        }
+    }
+    while rows.last().is_some_and(String::is_empty) {
+        rows.pop();
+    }
+    rows
 }
 
 /// One row of the assets table as a line: `path: author; licence`. `None` for any other line, the header and the
@@ -167,7 +199,7 @@ mod tests {
     use super::*;
 
     /// The dialog shows the version, the graphics line and the licences, starting with NOTICE's copyright line, and
-    /// lists the assets of ASSETS.md.
+    /// lists the assets of ASSETS.md one to a row.
     #[test]
     fn about_shows_the_version_and_the_notices() {
         let about = AboutText::new(None);
@@ -178,8 +210,20 @@ mod tests {
         let painted: Vec<&str> = f.texts().iter().map(|t| t.text.as_str()).collect();
         let version = format!("Version {}", APP.version);
         assert!(painted.contains(&version.as_str()), "{painted:?}");
-        assert!(painted.iter().any(|t| t.starts_with("Copyright (c) 2026 The FontCraft contributors")), "{painted:?}");
+        assert!(painted.iter().any(|t| t.contains("Copyright (c) 2026 The FontCraft contributors")), "{painted:?}");
         assert!(painted.iter().any(|t| t.starts_with("Graphics: wgpu")), "{painted:?}");
+    }
+
+    /// NOTICE's hard-wrapped lines join into one row a paragraph; blank lines leave one empty row, and each list item
+    /// is a row of its own.
+    #[test]
+    fn notice_rows_are_whole_paragraphs() {
+        let text = "Title\nfirst line\nsecond line.\n\n\n  Intro:\n\n  - one\n    more\n  - two\n\n";
+        assert_eq!(paragraphs(text), ["Title first line second line.", "", "  Intro:", "", "  - one more", "  - two"]);
+        let rows = licence_lines();
+        let sentence = "It follows the conventions of the ArtCraft Crafting Apps (https://github.com/storytold) and is not";
+        assert!(rows.iter().any(|row| row.contains(sentence)), "a sentence NOTICE wraps is one row");
+        assert!(rows.len() <= MAX_LICENCE_LINES);
     }
 
     /// Without adapter information (a headless run, or a framework that does not report it) the graphics line still

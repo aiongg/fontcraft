@@ -1238,11 +1238,14 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
   blocked under the dialog (X.fix97a). Not yet seen on a desktop with a window manager: Xvfb has none, so levels
   and focus do not restack there and a floating window can still cover the dialog.
 
-- **Seen in the X.fix98 smoke, not yet fixed.** About FontCraft shows NOTICE's hard line breaks as list rows, so
-  sentences break mid-row; `ui.key Escape` leaves About open (`handled: false`; its Close button works). The macro
-  editor's multi-line field draws a short text in the middle of its 10 lines, not at the top (cause not traced;
-  likely craft's field layout). The console's log does not follow the newest line: after a run, the new rows are
-  below the log's fold until it is scrolled.
+- **Seen in the X.fix98 smoke.**
+  - About FontCraft showed NOTICE's hard line breaks as list rows, so sentences broke mid-row. Fixed, not yet built
+    (X.fix99a): each NOTICE paragraph is one row that wraps at the dialog's width; ASSETS.md rows stay one a row.
+  - `ui.key Escape` leaves About open (`handled: false`; its Close button works).
+  - The macro editor's multi-line field draws a short text in the middle of its 10 lines, not at the top (cause not
+    traced; likely craft's field layout).
+  - The console's log does not follow the newest line: after a run, the new rows are below the log's fold until it
+    is scrolled.
 - **Macro editor and Tab.** Craft's text part that inserts Tab keeps only Tab from the focus service and loses its
   arrows (decision 0009), so the macro editor does not insert Tab; Tab leaves the field.
 - **`ui.screenshot` misses floating windows.** It captures the main window only. A capture of a floating
