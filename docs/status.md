@@ -2,10 +2,26 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-23: M13.41 segment components and brushes written, not yet built. Before it: M13.40 built cap components (fitting in `model::attach`, six `capComponent.*` commands, compile support) on the rows' guesses. Gate: `cargo xtask ci` passed all 11 steps (5,012 tests passed, 43 skipped)_
+_Updated: 2026-11-23: M13.42 the cap, segment and brush interface written, not yet built, on top of the unbuilt M13.41. Before them: M13.40 built cap components (fitting in `model::attach`, six `capComponent.*` commands, compile support) on the rows' guesses. Gate: `cargo xtask ci` passed all 11 steps (5,012 tests passed, 43 skipped)_
 
 ## State of the tree
 
+- **Where M13.42 stands (cap, segment and brush interface): written, not yet built.** Canvas:
+  `fontcraft_tools::attachment` knows `Segment` and `Brush`, every kind is selectable, `marks` fits segments
+  (band from the inserted nodes, else the host segment) and brushes (the path fitting adds after the shapes);
+  `copied_kind` picks the kind Copy takes. UI: `models::components::{SegmentBox, segment_box, segments_on_nodes}`,
+  `cap_box` also for a selected cap; `info_box_component::segment_part`; shell commands
+  `segmentComponent.editGlyph` and `brush.editGlyph` (`shell/components.rs`); picker purposes `addSegment`,
+  `segmentGlyph`, `addBrush`, `brushGlyph` (`dialogs/glyph_picker.rs`); context menu `PICKS` (the four Add items
+  open their picker directly instead of `dialog.open`, which had no dialog for them), `item_state::{visible,
+  selected_attachments, decompose_kind}`; `targets::corner_targets` hands Copy and Cut one kind's list; the app
+  clipboard passes `points` for `fontcraft-attachments` text. Engine: `cmd/attach_clipboard.rs` (copy, paste onto
+  segments, Cut refusal), hooked into `cmd/clipboard.rs`; `corner::mode_name` is `pub(super)`. Tests written, not run:
+  tools `caps_segments_and_brushes_are_marked_and_selected_by_a_click`; ui `canvas/tools/attach_tests.rs` (5),
+  `segment_and_brush_parts_open_the_picker_and_the_glyph`; engine
+  `copied_segment_components_and_brushes_paste_onto_selected_segments`,
+  `a_copied_cap_pastes_onto_the_two_nodes_of_a_segment`. `command_ids.txt` and the generated docs need
+  regenerating (two new shell commands). Screenshots of the three kinds are not filed yet.
 - **X.fix102: written, not yet built.** Font Info › Features scrolls as one body (`widgets::scrolling` in
   `features_tab::view`), so with the find bar open at the panel's default size (780 × 560) the notes field is reached by
   scrolling; the code field keeps its 18 lines. Test written, not run:

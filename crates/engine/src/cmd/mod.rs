@@ -147,6 +147,7 @@ pub mod variation_tools;
 mod variations_file;
 // M13 command modules (M13.1 skeleton; each package fills its own file).
 mod attach_cap;
+mod attach_clipboard;
 mod attach_segment;
 mod autokern;
 mod autospace;

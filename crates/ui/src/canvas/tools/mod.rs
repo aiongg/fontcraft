@@ -231,3 +231,7 @@ pub fn scene<'a>(font: &'a Font, data: Option<&GlyphData>, view: &ViewState, foc
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 mod tests;
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
+mod attach_tests;

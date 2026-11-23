@@ -96,9 +96,10 @@ pub fn selection_targets(scene: &Scene, selection: &Selection, spec: &CommandSpe
     m
 }
 
-/// The selected corner components as the commands that act on them take them: `edit.delete` as `hints`, beside the
-/// other lists; Copy, Cut and the two mirrors as `corners`, alone. Copy takes corners without their nodes, Cut
-/// refuses them rather than cutting the whole layer, and the mirrors flip them in place.
+/// The selected attachments as the commands that act on them take them: `edit.delete` as `hints`, beside the other
+/// lists; Copy and Cut as `corners`, `caps`, `segmentComponents` or `brushes` (one kind, corners first), alone; the two
+/// mirrors as `corners`, alone. Copy takes attachments without their nodes, Cut refuses them rather than cutting the
+/// whole layer, and the mirrors flip corners in place.
 fn corner_targets(scene: &Scene, selection: &Selection, id: &str, m: &mut Map<String, Value>) {
     let hints: Vec<usize> = fontcraft_tools::attachment::items(scene, selection)
         .into_iter()
@@ -115,14 +116,17 @@ fn corner_targets(scene: &Scene, selection: &Selection, id: &str, m: &mut Map<St
             m.insert("hints".into(), json!(hints));
         }
         "edit.copy" | "edit.cut" | "transform.mirrorHorizontal" | "transform.mirrorVertical" => {
-            let corners = fontcraft_tools::attachment::selected_corners(scene, selection);
-            if corners.is_empty() {
-                return;
-            }
+            let picked = if id.starts_with("edit.") {
+                fontcraft_tools::attachment::copied_kind(scene, selection)
+            } else {
+                let corners = fontcraft_tools::attachment::selected_corners(scene, selection);
+                (!corners.is_empty()).then_some((fontcraft_tools::attachment::AttachmentKind::Corner, corners))
+            };
+            let Some((kind, list)) = picked else { return };
             for key in ["points", "segments", "shapes", "anchors", "guides", "annotations", "side"] {
                 m.remove(key);
             }
-            m.insert("corners".into(), json!(corners));
+            m.insert(kind.list_key().into(), json!(list));
         }
         _ => {}
     }

@@ -2,7 +2,7 @@
 //!
 //! | Rule | Items |
 //! |---|---|
-//! | [`visible`] | Lock Path or Unlock Path, never both; a guide's Lock or Unlock, Make Global or Make Local; Guide Properties… for one editable guide; Open Corner for a selected corner node that is not an open end; Make Node First for nodes of closed paths; Decompose Corner on a node that holds a corner component |
+//! | [`visible`] | Lock Path or Unlock Path, never both; a guide's Lock or Unlock, Make Global or Make Local; Guide Properties… for one editable guide; Open Corner for a selected corner node that is not an open end; Make Node First for nodes of closed paths; Decompose Corner on a node that holds a corner component; Add Cap Component for the two nodes of one straight segment; Add Segment Component for selected segments; Add Brush for selected segments or nodes that end one; Decompose Cap, Segment Component or Brush for one selected or on a selected node |
 //! | [`ready`] | Connect Nodes needs two open ends; Close Open Paths needs an open path |
 //! | [`checked`] | Locked (the glyph), Measurement Guide |
 
@@ -12,9 +12,11 @@ use fontcraft_engine::CommandSpec;
 use fontcraft_engine::model::corner::{CornerTarget, corner_hint, is_corner};
 use fontcraft_engine::model::{Layer, Path, Shape};
 use fontcraft_engine::params::TargetKind;
+use fontcraft_tools::attachment::{self, AttachmentKind};
 use fontcraft_tools::{GuideScope, Scene, Selection, guide_drag};
 
-use crate::canvas::tools::targets::selection_targets;
+use crate::app::models::components::{caps_on_nodes, segments_on_nodes};
+use crate::canvas::tools::targets::{selected_segments, selection_targets};
 
 /// The context menu item that opens the Guide Properties dialog.
 pub const GUIDE_PROPERTIES: &str = guide_drag::PROPERTIES_DIALOG;
@@ -53,8 +55,8 @@ pub fn objects_wanted(spec: &CommandSpec) -> Option<String> {
 pub fn supplies(scene: &Scene, selection: &Selection, spec: &CommandSpec) -> Result<(), String> {
     let Some(what) = objects_wanted(spec) else { return Ok(()) };
     let m = selection_targets(scene, selection, spec);
-    // Selected corner components reach Delete as `hints`, Copy, Cut and the mirrors as `corners`.
-    let corners = m.contains_key("hints") || m.contains_key("corners");
+    // Selected attachments reach Delete as `hints`, Copy and Cut under their kind's key, the mirrors as `corners`.
+    let corners = ["hints", "corners", "caps", "segmentComponents", "brushes"].iter().any(|k| m.contains_key(*k));
     if !corners && !OBJECT_TARGETS.iter().any(|(kind, key, _)| spec.targets.contains(kind) && m.contains_key(*key)) {
         return Err(format!("select {what} first"));
     }
@@ -99,7 +101,16 @@ pub fn visible(scene: &Scene, selection: &Selection, id: &str) -> bool {
             !nodes.is_empty() && nodes.iter().all(|&(s, _)| scene.path(s).is_some_and(|p| p.closed))
         }
         "cornerComponent.decompose" => !selected_corners(scene, selection).is_empty(),
-        _ => true,
+        "capComponent.add" => cap_nodes(scene, selection),
+        "segmentComponent.add" => !selected_segments(scene, selection).is_empty(),
+        "brush.add" => {
+            !selected_segments(scene, selection).is_empty()
+                || selection.on_curve_points(scene).iter().any(|&(s, n)| scene.path(s).is_some_and(|p| p.ends_segment(n)))
+        }
+        _ => match decompose_kind(id) {
+            Some(kind) => !selected_attachments(scene, selection, kind).is_empty(),
+            None => true,
+        },
     }
 }
 
@@ -129,6 +140,44 @@ pub fn checked(scene: &Scene, selection: &Selection, id: &str) -> Option<bool> {
         }
         _ => None,
     }
+}
+
+/// Whether exactly two on-curve nodes are selected and they are the two ends of one straight segment, where a cap
+/// sits.
+fn cap_nodes(scene: &Scene, selection: &Selection) -> bool {
+    let &[(sa, a), (sb, b)] = selection.on_curve_points(scene).as_slice() else { return false };
+    if sa != sb {
+        return false;
+    }
+    let Some(path) = scene.path(sa) else { return false };
+    path.segments().iter().any(|seg| seg.handles.is_empty() && ((seg.start == a && seg.end == b) || (seg.start == b && seg.end == a)))
+}
+
+/// The attachment kind a Decompose item acts on, other than corners.
+pub fn decompose_kind(id: &str) -> Option<AttachmentKind> {
+    match id {
+        "capComponent.decompose" => Some(AttachmentKind::Cap),
+        "segmentComponent.decompose" => Some(AttachmentKind::Segment),
+        "brush.decompose" => Some(AttachmentKind::Brush),
+        _ => None,
+    }
+}
+
+/// The selected caps, segment components or brushes (by `kind`) and those on the selected nodes, by hint index: a cap
+/// on either of its nodes, the others on the node that ends their segment.
+pub fn selected_attachments(scene: &Scene, selection: &Selection, kind: AttachmentKind) -> Vec<usize> {
+    let mut out = attachment::selected(scene, selection, kind);
+    let points: Vec<(usize, usize)> = selection.points.iter().copied().collect();
+    match kind {
+        AttachmentKind::Cap => out.extend(caps_on_nodes(&scene.layer, &points).into_iter().map(|(i, _)| i)),
+        AttachmentKind::Segment | AttachmentKind::Brush => {
+            out.extend(segments_on_nodes(&scene.layer, &points, kind == AttachmentKind::Brush).into_iter().map(|(i, _)| i));
+        }
+        AttachmentKind::Corner => out.extend(selected_corners(scene, selection)),
+    }
+    out.sort_unstable();
+    out.dedup();
+    out
 }
 
 /// The selected corner components and those on the selected nodes, by hint index.

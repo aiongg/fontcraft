@@ -1,18 +1,19 @@
-//! The view models of the component, corner and cap parts of the Info box and of the Smart Component controls, and
-//! the highlight bands that mark corner and cap components on the canvas.
+//! The view models of the component, corner, cap, segment component and brush parts of the Info box and of the Smart
+//! Component controls, and the highlight bands that mark attachments on the canvas.
 //!
 //! | Model | Shows while |
 //! |---|---|
 //! | [`ComponentBox`] | a component of the edited layer is selected: the first in shape order |
 //! | [`CornerBox`] | a corner component is selected, or a selected node holds one: the first selected corner, else the first on a selected node in the layer's hint order |
-//! | [`CapBox`] | a selected node is one of the two nodes of a cap component |
+//! | [`CapBox`] | a cap component is selected, or a selected node is one of the two nodes of one |
+//! | [`SegmentBox`] | a segment component (or brush) is selected, or a selected node ends the segment it sits on |
 //! | [`SmartModel`] | smart components are selected (`palette.smartComponent`, `dialog.smartComponentSettings`) |
 
 use craft::ui::contract::PlainData;
 use fontcraft_engine::cmd::smart::is_toggle;
 use fontcraft_engine::components::align::{AlignMode, component_alignment};
 use fontcraft_engine::components::propagate::{base_layer, effective_anchors_with};
-use fontcraft_engine::model::attach::{Attachment, CapHint, attachment};
+use fontcraft_engine::model::attach::{Attachment, CapHint, SegmentHint, attachment};
 use fontcraft_engine::model::corner::{CornerAlignment, CornerTarget, corner_hint, is_corner};
 use fontcraft_engine::model::glyphdata::GlyphData;
 use fontcraft_engine::model::smart::pole_layers;
@@ -102,6 +103,20 @@ pub struct CapBox {
     /// Sized to the stroke's width.
     pub fit: bool,
     pub exists: bool,
+}
+
+/// The segment component or brush part of the Info box: the glyph's name and the arrow button that edits it.
+#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+pub struct SegmentBox {
+    pub glyph: String,
+    pub layer: String,
+    /// The attachment's index in the layer's hint list.
+    pub hint: usize,
+    /// The segment or brush glyph.
+    pub name: String,
+    pub exists: bool,
+    /// A brush rather than a segment component.
+    pub brush: bool,
 }
 
 /// One property of the selected smart components, as the Smart Component controls show it.
@@ -309,9 +324,16 @@ pub fn corner_box(font: &Font, glyph: &str, layer: &Layer, selection: &Selection
     })
 }
 
-/// The cap part for the first cap of `layer` that sits on a selected node.
+/// The cap part for the first selected cap of `layer`, else the first cap that sits on a selected node.
 pub fn cap_box(font: &Font, glyph: &str, layer: &Layer, selection: &Selection) -> Option<CapBox> {
-    let (cap, hint) = caps_on_nodes(layer, &selected_points(selection)).into_iter().next()?;
+    let picked = selection.hints.iter().copied().find_map(|i| match layer.info.hints.get(i).map(attachment) {
+        Some(Ok(Some(Attachment::Cap(cap)))) => Some((i, cap)),
+        _ => None,
+    });
+    let (cap, hint) = match picked {
+        Some(found) => found,
+        None => caps_on_nodes(layer, &selected_points(selection)).into_iter().next()?,
+    };
     Some(CapBox {
         glyph: glyph.to_string(),
         layer: layer.id.clone(),
@@ -322,6 +344,39 @@ pub fn cap_box(font: &Font, glyph: &str, layer: &Layer, selection: &Selection) -
         fit: hint.fit,
         name: hint.name,
     })
+}
+
+/// The segment components (`brush` false) or brushes of `layer`, by hint index, whose host segment ends at one of
+/// `points` (model order).
+pub fn segments_on_nodes(layer: &Layer, points: &[(usize, usize)], brush: bool) -> Vec<(usize, SegmentHint)> {
+    layer
+        .info
+        .hints
+        .iter()
+        .enumerate()
+        .filter_map(|(i, h)| match (attachment(h), brush) {
+            (Ok(Some(Attachment::Segment(s))), false) | (Ok(Some(Attachment::Brush(s))), true) => Some((i, s)),
+            _ => None,
+        })
+        .filter(|(_, s)| {
+            let Some(Shape::Path(path)) = layer.shapes.get(s.shape) else { return false };
+            points.contains(&(s.shape, model_node(path, s.node)))
+        })
+        .collect()
+}
+
+/// The segment component part (`brush` false) or the brush part for the first selected one of `layer`, else the
+/// first whose host segment ends at a selected node.
+pub fn segment_box(font: &Font, glyph: &str, layer: &Layer, selection: &Selection, brush: bool) -> Option<SegmentBox> {
+    let picked = selection.hints.iter().copied().find_map(|i| match (layer.info.hints.get(i).map(attachment), brush) {
+        (Some(Ok(Some(Attachment::Segment(s)))), false) | (Some(Ok(Some(Attachment::Brush(s)))), true) => Some((i, s)),
+        _ => None,
+    });
+    let (hint, s) = match picked {
+        Some(found) => found,
+        None => segments_on_nodes(layer, &selected_points(selection), brush).into_iter().next()?,
+    };
+    Some(SegmentBox { glyph: glyph.to_string(), layer: layer.id.clone(), hint, exists: font.glyph(&s.name).is_some(), name: s.name, brush })
 }
 
 /// The component at shape `index` of `shapes` and its glyph, when that glyph has properties.
@@ -382,7 +437,7 @@ pub fn smart_model(font: &Font, glyph: &str, layer: &Layer, side: LayerSide, com
     Some(SmartModel { glyph: glyph.to_string(), layer: layer.id.clone(), background: side == LayerSide::Background, components: picked, rows })
 }
 
-/// One corner or cap component's highlight band: the part of its host path that fitting it put in, in font units.
+/// One attachment's highlight band: the part of its host path that fitting it put in, in font units.
 #[derive(PlainData, Clone, Debug, PartialEq)]
 pub struct AttachmentBand {
     /// The attachment's position in the layer's hint list: its selection address.
@@ -391,7 +446,7 @@ pub struct AttachmentBand {
     pub band: BezPath,
 }
 
-/// The highlight bands of `layer`'s corner and cap components, at most [`attachment::MAX_ATTACHMENTS`]. An attachment that does
+/// The highlight bands of `layer`'s attachments (corner, cap and segment components and brushes), at most [`attachment::MAX_ATTACHMENTS`]. An attachment that does
 /// not fit has no band.
 pub fn attachment_bands(font: &Font, layer: &Layer) -> Vec<AttachmentBand> {
     attachment::marks(font, layer, |_| true).into_iter().map(|m| AttachmentBand { hint: m.hint, band: m.band }).collect()

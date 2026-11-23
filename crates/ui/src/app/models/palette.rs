@@ -10,7 +10,7 @@ use fontcraft_engine::model::{Dimension, Shape};
 use fontcraft_tools::Selection;
 use serde_json::{Map, Value, json};
 
-use super::components::{self, CapBox, ComponentBox, CornerBox, SmartModel};
+use super::components::{self, CapBox, ComponentBox, CornerBox, SegmentBox, SmartModel};
 use super::{ProjectCx, Stamp};
 use crate::canvas::tools::{Tools, scene, targets};
 use crate::panels::widgets::{KeyState, KeyedNumber, format_number};
@@ -131,10 +131,13 @@ pub struct InfoBoxModel {
     pub ps_hint: Option<super::hint_canvas::PsHintBox>,
     /// The TrueType Instructor's box, in place of the whole box while it is the chosen tool (`panels::info_box_tt`).
     pub tt: Option<super::hint_canvas::TtBox>,
-    /// The selected component, the corner and the cap on the selected nodes (`super::components`).
+    /// The selected component, and the selected corner, cap, segment component and brush or those on the selected nodes
+    /// (`super::components`).
     pub component: Option<ComponentBox>,
     pub corner: Option<CornerBox>,
     pub cap: Option<CapBox>,
+    pub segment: Option<SegmentBox>,
+    pub brush: Option<SegmentBox>,
     /// The one selected node's interpolation curve and its timing graph (`panels::info_box_hoi`).
     pub hoi: Option<super::hoi::HoiBox>,
     /// The one selected guide (`panels::info_box_guide`).
@@ -400,6 +403,8 @@ fn info_box(cx: &mut ProjectCx<'_>, edit: Option<&Edit>) -> InfoBoxModel {
         b.component = components::component_box(font, data.as_deref(), &edit.glyph, layer, &edit.selection);
         b.corner = components::corner_box(font, &edit.glyph, layer, &edit.selection);
         b.cap = components::cap_box(font, &edit.glyph, layer, &edit.selection);
+        b.segment = components::segment_box(font, &edit.glyph, layer, &edit.selection, false);
+        b.brush = components::segment_box(font, &edit.glyph, layer, &edit.selection, true);
     }
     if !cx.view.edit_background {
         b.hoi = cx.session.font().ok().and_then(|font| super::hoi::hoi_of(font, &edit.glyph, &edit.layer, &edit.selection.points));

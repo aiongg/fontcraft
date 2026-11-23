@@ -77,7 +77,8 @@ pub const SWITCHES: &[&str] = &[
 const EDIT_ROWS: &[&str] = &["edit.copy", "edit.cut", "edit.paste", "edit.pasteSpecial", "edit.selectAll"];
 
 /// Rows that open the component picker, which asks for what is missing (`dialogs::glyph_picker`).
-const PICKER_ROWS: &[&str] = &["glyph.addComponent", "glyph.addComponentAllMasters", "cornerComponent.add", "capComponent.add"];
+const PICKER_ROWS: &[&str] =
+    &["glyph.addComponent", "glyph.addComponentAllMasters", "cornerComponent.add", "capComponent.add", "segmentComponent.add", "brush.add"];
 
 /// Brings the menu bar's check marks and greyed rows up to date; the bar is rebuilt only when one changed. The greyed
 /// rows are worked out again only when what they read moved, and not while a tool drags.

@@ -123,6 +123,9 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
     if let Some(b) = &model.cap {
         super::info_box_component::cap_part(ui, b, sent);
     }
+    for b in [&model.segment, &model.brush].into_iter().flatten() {
+        super::info_box_component::segment_part(ui, b, sent);
+    }
     if let Some(guide) = &model.guide {
         super::info_box_guide::view(ui, guide, sent);
     }

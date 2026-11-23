@@ -186,3 +186,39 @@ fn segment_and_brush_hints_round_trip_through_a_glyphs_file() {
     }
     assert_eq!(fontcraft_io_glyphs::write(&back).unwrap(), text);
 }
+
+/// A copied segment component goes onto the segments whose two end nodes are selected, and a copied
+/// brush onto listed segments, each as one Paste step; a selection that holds no segment, or none
+/// at all, is refused with nothing changed, and Cut refuses them (`segment.copyPasteOntoSegments`,
+/// `brush.copyPasteOntoSegments`).
+#[test]
+fn copied_segment_components_and_brushes_paste_onto_selected_segments() {
+    let mut s = session();
+    run(&mut s, "segmentComponent.add", json!({"glyph": "box", "segments": [[0, 1]], "segmentGlyph": "_segment.wave"}));
+    let r = run(&mut s, "edit.copy", json!({"glyph": "box", "segmentComponents": [0]}));
+    assert_eq!(r["segmentComponents"], json!(1));
+    let text = r["json"].as_str().unwrap().to_string();
+    assert!(text.contains("fontcraft-attachments"), "{text}");
+    // The top segment runs from model node 2 to model node 3, which the file numbers 2.
+    let r = run(&mut s, "edit.paste", json!({"glyph": "box", "json": text, "points": [[0, 2], [0, 3]]}));
+    assert_eq!((r["pasted"].clone(), r["flavour"].clone(), r["segmentComponents"].clone()), (json!(1), json!("segmentComponents"), json!([1])));
+    assert_eq!(r["selection"]["segmentComponents"], json!([1]));
+    let wave = |node| Attachment::Segment(SegmentHint::new("_segment.wave", 0, node));
+    assert_eq!(attachments(&s, "box"), [wave(0), wave(2)]);
+    let e = run_err(&mut s, "edit.paste", json!({"glyph": "box", "json": text, "points": [[0, 2]]}));
+    assert!(e.contains("no segment to paste"), "{e}");
+    let e = run_err(&mut s, "edit.paste", json!({"glyph": "box", "json": text, "points": [[0, 0], [0, 2]]}));
+    assert!(e.contains("no segment to paste"), "{e}");
+    let e = run_err(&mut s, "edit.paste", json!({"glyph": "box", "json": text}));
+    assert!(e.contains("select the segments"), "{e}");
+    let e = run_err(&mut s, "edit.cut", json!({"glyph": "box", "segmentComponents": [0]}));
+    assert!(e.contains("cannot be cut"), "{e}");
+
+    run(&mut s, "brush.add", json!({"glyph": "zig", "segments": [[0, 1]], "brush": "_brush.bar"}));
+    let text = run(&mut s, "edit.copy", json!({"glyph": "zig", "brushes": [0]}))["json"].as_str().unwrap().to_string();
+    let r = run(&mut s, "edit.paste", json!({"glyph": "zig", "json": text, "segments": [[0, 2], [0, 3]]}));
+    assert_eq!(r["brushes"], json!([1, 2]));
+    assert_eq!(closed_paths(&s, "zig"), 3, "each pasted brush draws its outline");
+    // A copied brush is not a segment component: pasting keeps the kind it was copied as.
+    assert!(attachments(&s, "zig").iter().all(|a| matches!(a, Attachment::Brush(_))));
+}

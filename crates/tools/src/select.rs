@@ -6,7 +6,7 @@
 //! |---|---|
 //! | click an object | select it; a segment selects its two end nodes |
 //! | `Shift`+click | toggle it in the selection |
-//! | click a corner component's fitted outline, `Shift`+click | select it, toggle it; a drag from it moves nothing |
+//! | click the fitted outline of a corner, cap or segment component or of a brush, `Shift`+click | select it, toggle it; a drag from it moves nothing |
 //! | drag on empty canvas | marquee: nodes, handles and anchors inside; `Shift` toggles them, `Alt` takes on-curve nodes only and components too, `Ctrl` turns the marquee |
 //! | drag an object | `selection.move` in one interaction; snapping unless `Ctrl` is held; a badge beside the pointer gives the offset (`x:… y:…`) |
 //! | `Alt` held at mouse-down | the drag moves a copy (`duplicate: true`) |

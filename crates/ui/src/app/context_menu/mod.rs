@@ -36,7 +36,8 @@
 //! - While the TrueType Instructor is the active tool, a last section ([`TT_INSTRUCTOR`]) offers its view items: Show
 //!   Pixel Preview, the Hinting Preview's three scales ([`PREVIEW_SCALES`]), Show Preview Address… and Show Point
 //!   Indexes, checked as their state is. Other tools' menus leave them out.
-//! - Items that need a choice first ask for it through `dialog.open` ([`ASKS`]).
+//! - Items that need a choice first ask for it through `dialog.open` ([`ASKS`]); Add Corner Component, Add Cap
+//!   Component, Add Segment Component and Add Brush open the glyph picker of their kind ([`PICKS`]).
 //! - An item runs with its targets from the selection, plus what the click adds: the clicked segment, node or guide,
 //!   and the click position for the commands that place something ([`params_for`], [`steps_for`]).
 //! - The glyph section starts with the twelve colour label swatches and a cross: they set the edited glyph's colour,
@@ -145,14 +146,29 @@ const UI_CONTEXT: &[(&str, &[&str])] = &[
 ];
 
 /// Engine commands the object sections show, whose registry entries list no context.
-const OBJECT_ITEMS: &[(&str, &[&str])] = &[("cornerComponent.add", &[NODE]), ("cornerComponent.decompose", &[NODE])];
+/// The attachment items show only for a selection they can act on ([`item_state::visible`]).
+const OBJECT_ITEMS: &[(&str, &[&str])] = &[
+    ("cornerComponent.add", &[NODE]),
+    ("cornerComponent.decompose", &[NODE]),
+    ("capComponent.add", &[NODE]),
+    ("capComponent.decompose", &[NODE]),
+    ("segmentComponent.add", &[NODE, SEGMENT, PATH]),
+    ("segmentComponent.decompose", &[NODE, SEGMENT]),
+    ("brush.add", &[NODE, SEGMENT, PATH]),
+    ("brush.decompose", &[NODE, SEGMENT]),
+];
 
 /// Commands whose registry entries list a context but that the menus leave out: the attachment anchor is chosen from
 /// the anchor menu of the component Info box.
 const HIDDEN: &[&str] = &["component.setAnchor"];
 
 /// Items that open a picker or a dialog for their choice instead of running at once.
-pub const ASKS: &[&str] = &["glyph.addComponent", "component.setBaseGlyph", "cornerComponent.add", "glyph.componentFromSelection"];
+pub const ASKS: &[&str] = &["glyph.addComponent", "component.setBaseGlyph", "glyph.componentFromSelection"];
+
+/// Items that open the glyph picker of their kind on the targets the selection gives (`dialogs::glyph_picker`), and
+/// the picker's purpose.
+const PICKS: &[(&str, &str)] =
+    &[("cornerComponent.add", "addCorner"), ("capComponent.add", "addCap"), ("segmentComponent.add", "addSegment"), ("brush.add", "addBrush")];
 
 /// Engine commands the glyph section shows, whose registry entries list no context.
 const GLYPH_ITEMS: &[&str] = &["glyph.setExport"];
@@ -515,7 +531,7 @@ pub fn kinds(scene: &Scene, selection: &Selection, hit: Option<&HitResult>) -> V
         Some(Hit::Anchor { .. }) => Some(ANCHOR),
         Some(Hit::Component { .. }) => Some(COMPONENT),
         Some(Hit::Guide { .. }) => Some(GUIDE),
-        // A corner component's items (Decompose Corner) are in the node menu.
+        // An attachment's items (Decompose Corner, Decompose Cap…) are in the node menu.
         Some(Hit::Attachment { .. }) => Some(NODE),
         None if !whole.is_empty() || selection.shapes.iter().any(|&s| scene.path(s).is_some()) => Some(PATH),
         None if !selection.on_curve_points(scene).is_empty() => Some(NODE),
@@ -523,7 +539,7 @@ pub fn kinds(scene: &Scene, selection: &Selection, hit: Option<&HitResult>) -> V
         None if !selection.anchors.is_empty() => Some(ANCHOR),
         None if !selection.shapes.is_empty() => Some(COMPONENT),
         None if !scene.ps_hints.selected(selection).is_empty() => Some(HINT),
-        None if !fontcraft_tools::attachment::selected_corners(scene, selection).is_empty() => Some(NODE),
+        None if !fontcraft_tools::attachment::items(scene, selection).is_empty() => Some(NODE),
         None => None,
     };
     object.into_iter().chain([CANVAS]).collect()
@@ -878,6 +894,19 @@ pub fn params_for(app: &mut FontCraftApp, menu: &CanvasMenu, id: &str) -> Value 
                 m.insert("corners".into(), corners);
             }
         }
+        "capComponent.decompose" | "segmentComponent.decompose" | "brush.decompose" => {
+            let kind = item_state::decompose_kind(id);
+            if let Some(kind) = kind
+                && let Some(list) = scene_says(&|scene, selection| json!(item_state::selected_attachments(scene, selection, kind)))
+            {
+                m.insert(kind.list_key().into(), list);
+            }
+            if let Some(Value::Object(target)) = scene_says(&|scene, _| json!({"glyph": scene.glyph, "layer": scene.layer_id})) {
+                for (k, v) in target {
+                    m.entry(k).or_insert(v);
+                }
+            }
+        }
         "hint.tt.autohintGlyph" => {
             m.insert("glyphs".into(), json!([menu.glyph]));
             if let Some(master) = scene_says(&|scene, _| json!(scene.layer.master)) {
@@ -950,6 +979,11 @@ pub fn steps_for(app: &mut FontCraftApp, menu: &CanvasMenu, id: &str) -> Vec<Msg
         return vec![FontCraftApp::route(CommandRef::with_params(id, params))];
     }
     let params = params_for(app, menu, id);
+    if let Some((_, purpose)) = PICKS.iter().find(|(item, _)| *item == id) {
+        let mut m = params.as_object().cloned().unwrap_or_default();
+        m.insert("purpose".into(), json!(purpose));
+        return vec![shell(crate::dialogs::glyph_picker::COMMAND, Value::Object(m))];
+    }
     if ASKS.contains(&id) {
         return vec![shell("dialog.open", json!({"command": id, "params": params}))];
     }

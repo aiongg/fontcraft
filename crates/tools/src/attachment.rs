@@ -1,14 +1,18 @@
-//! Components attached to a path through a layer hint (corner components now; caps, segments and
-//! brushes share the code), as the Edit View draws and selects them.
+//! Components attached to a path through a layer hint (corner, cap and segment components and
+//! brushes), as the Edit View draws and selects them.
 //!
 //! Each attachment is fitted into its host path on its own; what fitting put in is its band (the
 //! highlight the canvas draws), and the stretch between two inserted nodes is what a click hits
-//! (`corner.highlightAndSelection`). A selected attachment is [`Item::Hint`] with its position in
-//! the layer's hint list, the address `edit.delete`, `edit.copy` (`corners`) and the corner
-//! commands take.
+//! (`corner.highlightAndSelection`, `cap.highlightAndSelection`,
+//! `segment.highlightAndSelection`). A segment component whose glyph adds no node is marked along
+//! its host segment. A brush adds a path after the layer's shapes instead of nodes: that path is
+//! both its band and what a click hits (`brush.highlightAndSelection`). A selected attachment is
+//! [`Item::Hint`] with its position in the layer's hint list, the address `edit.delete`,
+//! `edit.copy` (`corners`, `caps`, `segmentComponents`, `brushes`) and the attachment commands
+//! take.
 
 use fontcraft_geom::{BezPath, ParamCurve, ParamCurveExtrema, ParamCurveNearest, Point};
-use fontcraft_model::attach::{Attachment, attachment, fit_cap};
+use fontcraft_model::attach::{Attachment, attachment, fit_brush, fit_cap, fit_segment};
 use fontcraft_model::corner::{CornerTarget, corner_hint, insert_corners, is_corner};
 use fontcraft_model::{Font, Hint, Layer, Path, Shape};
 
@@ -30,6 +34,20 @@ const NEAREST_ACCURACY: f64 = 1e-3;
 pub enum AttachmentKind {
     Corner,
     Cap,
+    Segment,
+    Brush,
+}
+
+impl AttachmentKind {
+    /// The key under which `edit.copy` and the kind's commands take hint indices of this kind.
+    pub fn list_key(self) -> &'static str {
+        match self {
+            AttachmentKind::Corner => "corners",
+            AttachmentKind::Cap => "caps",
+            AttachmentKind::Segment => "segmentComponents",
+            AttachmentKind::Brush => "brushes",
+        }
+    }
 }
 
 /// The kind of attachment `hint` is; `None` for any other hint (PostScript and TrueType hints).
@@ -39,16 +57,17 @@ pub fn kind(hint: &Hint) -> Option<AttachmentKind> {
     }
     match attachment(hint) {
         Ok(Some(Attachment::Cap(_))) => Some(AttachmentKind::Cap),
+        Ok(Some(Attachment::Segment(_))) => Some(AttachmentKind::Segment),
+        Ok(Some(Attachment::Brush(_))) => Some(AttachmentKind::Brush),
         _ => None,
     }
 }
 
-/// Whether the Edit View selects attachments of `kind` by a click. Caps, segments and brushes
-/// join with their own Info box and clipboard support.
+/// Whether the Edit View selects attachments of `kind` by a click: every kind has its Info box
+/// part and its clipboard support.
 pub fn selectable_kind(kind: AttachmentKind) -> bool {
     match kind {
-        AttachmentKind::Corner => true,
-        AttachmentKind::Cap => false,
+        AttachmentKind::Corner | AttachmentKind::Cap | AttachmentKind::Segment | AttachmentKind::Brush => true,
     }
 }
 
@@ -90,6 +109,37 @@ pub fn marks(font: &Font, layer: &Layer, wanted: impl Fn(AttachmentKind) -> bool
                 Ok(Some(Attachment::Cap(cap))) => fit_cap(font, &layer.master, &layer.shapes, &cap).ok().map(|shapes| (cap.shape, shapes)),
                 _ => None,
             },
+            AttachmentKind::Segment => match attachment(hint) {
+                Ok(Some(Attachment::Segment(seg))) => {
+                    let Ok(shapes) = fit_segment(font, &layer.master, &layer.shapes, &seg) else { continue };
+                    let mark = match (layer.shapes.get(seg.shape), shapes.get(seg.shape)) {
+                        (Some(Shape::Path(before)), Some(Shape::Path(after))) => {
+                            inserted(before, after).or_else(|| host_segment(before, seg.node).map(|b| (b.clone(), b)))
+                        }
+                        _ => None,
+                    };
+                    if let Some((band, outline)) = mark {
+                        out.push(AttachmentMark { hint: i, kind: k, shape: seg.shape, band, outline });
+                    }
+                    continue;
+                }
+                _ => None,
+            },
+            AttachmentKind::Brush => match attachment(hint) {
+                Ok(Some(Attachment::Brush(brush))) => {
+                    let Ok(shapes) = fit_brush(font, &layer.master, &layer.shapes, &brush) else { continue };
+                    // The brush's outline is the path fitting added after the layer's shapes.
+                    let drawn = match shapes.get(layer.shapes.len()) {
+                        Some(Shape::Path(p)) if p.nodes.len() <= MAX_BAND_NODES => p.to_bez().ok(),
+                        _ => None,
+                    };
+                    if let Some(band) = drawn.filter(|b| !b.elements().is_empty()) {
+                        out.push(AttachmentMark { hint: i, kind: k, shape: brush.shape, band: band.clone(), outline: band });
+                    }
+                    continue;
+                }
+                _ => None,
+            },
         };
         let Some((shape, shapes)) = fitted else { continue };
         if let (Some(Shape::Path(before)), Some(Shape::Path(after))) = (layer.shapes.get(shape), shapes.get(shape))
@@ -106,6 +156,22 @@ fn with_one_hint(layer: &Layer, index: usize) -> Layer {
     let mut one = layer.clone();
     one.info.hints = layer.info.hints.get(index).cloned().into_iter().collect();
     one
+}
+
+/// The segment of `path` that ends at the node a segment hint stores as `file_node` (file order:
+/// on a closed path the start node is last), as a curve in font units.
+fn host_segment(path: &Path, file_node: usize) -> Option<BezPath> {
+    let len = path.nodes.len();
+    if len > MAX_BAND_NODES {
+        return None;
+    }
+    let model = if path.closed && len > 0 { (file_node + 1) % len } else { file_node };
+    let seg = path.segment_ending_at(model)?;
+    let node = |i: usize| path.nodes.get(i).map(|n| Point::new(n.x, n.y));
+    let mut out = BezPath::new();
+    let mut last = None;
+    append(&mut out, &mut last, seg.start, seg.handles.as_slice(), seg.end, &node)?;
+    Some(out)
 }
 
 /// What fitting an attachment into `before` put into `after`: the segments touching a node
@@ -199,6 +265,15 @@ pub fn selected(scene: &Scene, selection: &Selection, kind: AttachmentKind) -> V
 /// The selected corner components, by hint index.
 pub fn selected_corners(scene: &Scene, selection: &Selection) -> Vec<usize> {
     selected(scene, selection, AttachmentKind::Corner)
+}
+
+/// The kind of the selected attachments that `edit.copy` takes, and their hint indices: corners
+/// first, then caps, segment components and brushes. The clipboard holds one kind at a time.
+pub fn copied_kind(scene: &Scene, selection: &Selection) -> Option<(AttachmentKind, Vec<usize>)> {
+    [AttachmentKind::Corner, AttachmentKind::Cap, AttachmentKind::Segment, AttachmentKind::Brush]
+        .into_iter()
+        .map(|k| (k, selected(scene, selection, k)))
+        .find(|(_, list)| !list.is_empty())
 }
 
 /// The selection items of the selected attachments, for keeping them through a change that

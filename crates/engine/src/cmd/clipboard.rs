@@ -38,7 +38,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cut",
             ["Edit"],
             Some("Cmd+X"),
-            "{glyph: name, layer?: id, side?: \"foreground\" | \"background\", points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: local|global, index}]} copies the targets as edit.copy does, then deletes them with edit.delete, as one undo step. Without a target list it cuts what edit.copy copies. A locked glyph refuses it, and so does `corners`: corner components are copied, not cut → {json: string, svg: string, selection}",
+            "{glyph: name, layer?: id, side?: \"foreground\" | \"background\", points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: local|global, index}]} copies the targets as edit.copy does, then deletes them with edit.delete, as one undo step. Without a target list it cuts what edit.copy copies. A locked glyph refuses it, and so do `corners`, `caps`, `segmentComponents` and `brushes`: attachments are copied, not cut → {json: string, svg: string, selection}",
             has_doc,
             cut
         )
@@ -48,7 +48,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Copy",
             ["Edit"],
             Some("Cmd+C"),
-            "{glyph: name, layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\", points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: local|global, index}]} the targets as clipboard text, at their own coordinates. A path is copied whole when it is in `shapes` or every on-curve node of it is in `points`; otherwise each run of its selected segments (both end nodes in `points`, or the segment in `segments`) becomes an open path. Without a target list the whole side of the layer is copied with its local guides. Images, annotations and shapes the model keeps unread are not copied. With a Point To Unit Ratio parameter on the master (else the font), the SVG is written in points, that many font units to the point, with its size in pt. With `glyphs: [names]` (and `master?: id`, the master shown) it copies those glyphs whole instead, for edit.paste and edit.pasteSpecial; with `corners: [hint index]` it copies those corner components without their nodes, for edit.paste onto other nodes → {json: our clipboard fragment, svg: an SVG document for other apps, skipped?: shapes left out} | {json: the copied glyphs, glyphs: [names]} | {json: the copied corners, corners: count}",
+            "{glyph: name, layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\", points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: local|global, index}]} the targets as clipboard text, at their own coordinates. A path is copied whole when it is in `shapes` or every on-curve node of it is in `points`; otherwise each run of its selected segments (both end nodes in `points`, or the segment in `segments`) becomes an open path. Without a target list the whole side of the layer is copied with its local guides. Images, annotations and shapes the model keeps unread are not copied. With a Point To Unit Ratio parameter on the master (else the font), the SVG is written in points, that many font units to the point, with its size in pt. With `glyphs: [names]` (and `master?: id`, the master shown) it copies those glyphs whole instead, for edit.paste and edit.pasteSpecial; with `corners: [hint index]` it copies those corner components without their nodes, for edit.paste onto other nodes; with `caps`, `segmentComponents` or `brushes: [hint index]` (one of them) it copies those attachments without their segments, for edit.paste onto other segments → {json: our clipboard fragment, svg: an SVG document for other apps, skipped?: shapes left out} | {json: the copied glyphs, glyphs: [names]} | {json: the copied corners, corners: count} | {json: the copied attachments, caps | segmentComponents | brushes: count}",
             has_doc,
             copy
         )
@@ -58,7 +58,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Paste",
             ["Edit"],
             Some("Cmd+V"),
-            "{glyph: name, layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\", json?: string, svg?: string, pdf?: base64, text?: string, at?: [x, y], points?: [[shape, node]]} adds clipboard contents to the layer. `json` is our fragment, `svg` a drawing read at one font unit per SVG unit with SVG y = 0 on the baseline, `pdf` a drawing app's PDF clipboard data as base64 (at most 64 MiB), read as outlines at one font unit per point with the page's bottom-left corner on the origin, `text` either `json` or `svg`, told apart by its content. `json` wins, then `svg`, then `pdf`: a flavour that cannot be read gives way to the next one given. Pasted things keep their coordinates, or with `at` the bottom left of their box lands there. Coordinates are rounded to the font's grid unless its spacing is 0. A pasted anchor replaces the layer's anchor of the same name, global guides go to the layer's master. `outOfBounds` is true when the pasted box lies more than half an em outside the glyph box, and `correction` is the move that puts its bottom left at the origin. A locked glyph refuses it. When `json` or `text` holds copied glyphs (edit.copy with `glyphs`), each is added as a new glyph at its place in the default sort order, with the first free counter suffix (A.001) and no code points when its name is taken, and no `glyph` is needed. Copied corner components (edit.copy with `corners`) go onto the nodes in `points`: one corner onto every node, several onto as many nodes in order; any other selection is refused → {pasted: count, flavour: \"json\" | \"svg\" | \"pdf\" | \"glyphs\" | \"corners\", glyphs?: [names], corners?: [hint index], renamed?: [{from, to}], outOfBounds: bool, bounds?: [xMin, yMin, xMax, yMax], correction?: [dx, dy], notes?: what the SVG or PDF reader left out, selection}",
+            "{glyph: name, layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\", json?: string, svg?: string, pdf?: base64, text?: string, at?: [x, y], points?: [[shape, node]]} adds clipboard contents to the layer. `json` is our fragment, `svg` a drawing read at one font unit per SVG unit with SVG y = 0 on the baseline, `pdf` a drawing app's PDF clipboard data as base64 (at most 64 MiB), read as outlines at one font unit per point with the page's bottom-left corner on the origin, `text` either `json` or `svg`, told apart by its content. `json` wins, then `svg`, then `pdf`: a flavour that cannot be read gives way to the next one given. Pasted things keep their coordinates, or with `at` the bottom left of their box lands there. Coordinates are rounded to the font's grid unless its spacing is 0. A pasted anchor replaces the layer's anchor of the same name, global guides go to the layer's master. `outOfBounds` is true when the pasted box lies more than half an em outside the glyph box, and `correction` is the move that puts its bottom left at the origin. A locked glyph refuses it. When `json` or `text` holds copied glyphs (edit.copy with `glyphs`), each is added as a new glyph at its place in the default sort order, with the first free counter suffix (A.001) and no code points when its name is taken, and no `glyph` is needed. Copied corner components (edit.copy with `corners`) go onto the nodes in `points`: one corner onto every node, several onto as many nodes in order; any other selection is refused. Copied caps, segment components and brushes go onto the segments whose two end nodes are in `points` and those in `segments: [[shape, node]]` (by their end node), a cap onto straight segments only: one onto every segment, several onto as many segments in path order; a selection with no such segment is refused → {pasted: count, flavour: \"json\" | \"svg\" | \"pdf\" | \"glyphs\" | \"corners\" | \"caps\" | \"segmentComponents\" | \"brushes\", glyphs?: [names], corners?: [hint index], caps?, segmentComponents?, brushes?: [hint index], renamed?: [{from, to}], outOfBounds: bool, bounds?: [xMin, yMin, xMax, yMax], correction?: [dx, dy], notes?: what the SVG or PDF reader left out, selection}",
             has_doc,
             paste
         )
@@ -95,6 +95,9 @@ fn copy(s: &mut Session, p: &Value) -> Result<Value> {
     if p.get("corners").is_some() {
         return super::corner::copy_corners(s, &p);
     }
+    if let Some(copied) = super::attach_clipboard::copy(s, &p)? {
+        return Ok(copied);
+    }
     let c = gather(s.font()?, &p)?;
     let mut out = json!({"json": c.json, "svg": c.svg});
     if c.skipped > 0
@@ -111,6 +114,7 @@ fn cut(s: &mut Session, p: &Value) -> Result<Value> {
     if p.get("corners").is_some() {
         return Err(p.bad("corner components cannot be cut: copy them with edit.copy, then remove them from their nodes"));
     }
+    super::attach_clipboard::refuse_cut(&p)?;
     let c = gather(s.font()?, &p)?;
     if let Ok(r) = c.targets.resolve(s.font()?) {
         crate::check_unlocked(r.glyph)?;
@@ -389,6 +393,9 @@ fn paste(s: &mut Session, p: &Value) -> Result<Value> {
         return super::glyph_set::paste_glyphs(s, &p, text);
     }
     if let Some(pasted) = super::corner::paste_onto_nodes(s, &p)? {
+        return Ok(pasted);
+    }
+    if let Some(pasted) = super::attach_clipboard::paste(s, &p)? {
         return Ok(pasted);
     }
     let mut t = Targets::parse(&p)?;

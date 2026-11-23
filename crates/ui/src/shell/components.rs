@@ -5,6 +5,8 @@
 //! |---|---|---|
 //! | `component.editBaseGlyph` | the arrow button of the component Info box | edits the component's base glyph |
 //! | `cornerComponent.editGlyph` | the arrow button of the corner and cap Info boxes | edits the corner or cap glyph |
+//! | `segmentComponent.editGlyph` | the arrow button of the segment component Info box | edits the segment glyph |
+//! | `brush.editGlyph` | the arrow button of the brush Info box | edits the brush glyph |
 //! | `glyph.showGlyphsUsingAsComponent` | the canvas context menu | selects in Font View every glyph with a component of the glyph |
 //! | `smartGlyph.showSettings` | Glyph menu, the smart glyph's context menu | opens Smart Glyph Settings (`dialogs::smart_settings`) |
 //! | `smartComponent.showSettings` | the Smart badge of the component Info box | opens Smart Component Settings |
@@ -43,6 +45,20 @@ const COMMANDS: &[UiCommand] = &[
         menu: &[],
         shortcut: None,
         params: "{glyph?: name (default the edited glyph), layer?: id (default the edited layer), corner: index (in the layer's hint list)} edit the glyph of that corner or cap component",
+    },
+    UiCommand {
+        id: "segmentComponent.editGlyph",
+        label: "Edit Segment Glyph",
+        menu: &[],
+        shortcut: None,
+        params: "{glyph?: name (default the edited glyph), layer?: id (default the edited layer), segmentComponent: index (in the layer's hint list)} edit the glyph of that segment component",
+    },
+    UiCommand {
+        id: "brush.editGlyph",
+        label: "Edit Brush Glyph",
+        menu: &[],
+        shortcut: None,
+        params: "{glyph?: name (default the edited glyph), layer?: id (default the edited layer), brush: index (in the layer's hint list)} edit the glyph of that brush",
     },
     UiCommand {
         id: "glyph.showGlyphsUsingAsComponent",
@@ -108,6 +124,8 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
     match command.id.as_str() {
         "component.editBaseGlyph" => edit_base_glyph(app, p),
         "cornerComponent.editGlyph" => edit_corner_glyph(app, p),
+        "segmentComponent.editGlyph" => edit_stroke_glyph(app, p, false),
+        "brush.editGlyph" => edit_stroke_glyph(app, p, true),
         "glyph.showGlyphsUsingAsComponent" => show_users(app, p),
         "smartGlyph.showSettings" => show_smart_glyph(app, p),
         "smartComponent.showSettings" => show_smart_component(app, p),
@@ -193,6 +211,29 @@ fn edit_corner_glyph(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
         (_, Ok(Some(Attachment::Cap(cap)))) => cap.name,
         (Err(e), _) => return Err(e),
         _ => return Err(format!("hint {corner} is not a corner or cap component")),
+    };
+    if font.glyph(&name).is_none() {
+        return Err(format!("the glyph `{}` does not exist", quoted(&name)));
+    }
+    edit(app, name);
+    Ok(())
+}
+
+/// `segmentComponent.editGlyph` (`brush` false) and `brush.editGlyph`: edits the glyph of the attachment the
+/// parameters name.
+fn edit_stroke_glyph(app: &mut FontCraftApp, p: &Value, brush: bool) -> Result<(), String> {
+    let (key, noun) = if brush { ("brush", "brush") } else { ("segmentComponent", "segment component") };
+    let at = index(p, key)?.ok_or_else(|| format!("give `{key}`, the {noun}'s index in the layer's hint list"))?;
+    let font = app.session.font().map_err(|e| e.to_string())?;
+    let glyph = match string(p, "glyph")? {
+        Some(g) => g.to_string(),
+        None => edited(app)?.0,
+    };
+    let layer = layer_of(app, font, &glyph, string(p, "layer")?)?;
+    let hint = layer.info.hints.get(at).ok_or_else(|| format!("the layer has no hint {at}"))?;
+    let name = match (attachment(hint)?, brush) {
+        (Some(Attachment::Segment(s)), false) | (Some(Attachment::Brush(s)), true) => s.name,
+        _ => return Err(format!("hint {at} is not a {noun}")),
     };
     if font.glyph(&name).is_none() {
         return Err(format!("the glyph `{}` does not exist", quoted(&name)));

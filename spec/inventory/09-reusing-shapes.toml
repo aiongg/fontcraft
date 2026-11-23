@@ -1836,6 +1836,9 @@ summary = "Shown for a selected cap component when View › Show Info is on: the
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
 notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the controls are those in the 3.0.3 release-notes screenshot (W5), a still image, not a video, so the row stays `handbook`; with several caps selected, a field whose values differ shows `Multi`. The greyed horizontal value under Fit is from forum 22406."
+guesses = [
+  "The cap part shows for a selected cap as well as for a cap on a selected node.",
+]
 observe = [
   "Screenshot the Info box of a selected segment component and of a selected brush with View › Show Info on; list each control and its default.",
   "Add a new cap and note the default state of its fit checkbox and alignment buttons.",
@@ -1876,6 +1879,10 @@ summary = "A selected cap component can be copied and then pasted onto other sel
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
 notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): a staff fix (forum 16992, 2021) made copied and pasted outlines carry their corner and cap components; the corner tutorial (W8) says pasting works with several targets selected."
+guesses = [
+  "A copied cap pastes onto each straight segment whose two nodes are selected: one copied cap onto every such segment, several onto as many segments in path order, as copied corners do on nodes.",
+  "Cut refuses selected caps, segment components and brushes rather than cutting the layer; Copy, then Delete, moves them.",
+]
 observe = [
   "Copy a selected cap, select two adjacent nodes on another stem and paste; then select a single node and paste: note what is pasted in each case.",
 ]
@@ -2045,6 +2052,9 @@ summary = "A segment component is tinted with a faint blue background in Edit Vi
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
 notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the segment tutorial's curve screenshot (W6) shows the highlight as a faint blue band along the fitted segment outline."
+guesses = [
+  "A segment component whose glyph puts no node inside its host segment is highlighted, and hit, along the host segment itself.",
+]
 
 [[behavior]]
 id = "segment.copyPasteOntoSegments"
@@ -2054,6 +2064,9 @@ summary = "A selected segment component can be copied and pasted onto other sele
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
 notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): a staff answer (forum 33636, 2025) says pasting onto a curved segment works even where Add Segment Component is not offered; the same thread reports that pasting onto a curved segment ending at the path's start node attached it to the previous segment."
+guesses = [
+  "A copied segment component pastes onto each segment whose two end nodes are selected; a selection that holds no such segment is refused and changes nothing.",
+]
 
 # =====================================================================================
 # Brushes
@@ -2229,6 +2242,9 @@ summary = "A brush is tinted with a faint blue background in Edit View. Clicking
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
 notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the brush tutorial's screenshot (W7) shows a faint blue band along each brush outline. A staff answer (forum 21893, 2024) says pressing Cmd-A several times selects all brushes."
+guesses = [
+  "A brush is highlighted along the whole outline it draws, and a click anywhere on that outline selects it.",
+]
 
 [[behavior]]
 id = "brush.copyPasteOntoSegments"
@@ -2238,6 +2254,9 @@ summary = "The standard Copy and Paste commands carry a selected brush over to o
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
 notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+guesses = [
+  "A copied brush pastes onto each segment whose two end nodes are selected; a selection that holds no such segment is refused and changes nothing.",
+]
 
 # =====================================================================================
 # Pixel tool and pixel fonts
