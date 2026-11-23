@@ -2,7 +2,7 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-23: X.fix100, M8.26, M8.30, M8.30b, M8.27 and M8.31 built and gated (branch `w-M8.27`, fixes X.integ167 to X.integ174): `cargo xtask ci` passed all 11 steps, 4,993 tests passed and 43 skipped. The smoke of this batch is under "Where M8.26 stands"._
+_Updated: 2026-11-23: X.fix100, M8.26, M8.30, M8.30b, M8.27 and M8.31 built and gated (branch `w-M8.27`, fixes X.integ167 to X.integ174): `cargo xtask ci` passed all 11 steps, 4,993 tests passed and 43 skipped. No desktop smoke of this batch yet: still to look at, in light and dark, the gutter icon and dimmed message after the pause, the icon popover with Fix, the Cmd+F find bar and an Alt-click preview in the floating Font Info window (X.fix100 should let `ui.click` and `ui.text` reach it; capture the whole X screen, since `ui.screenshot` shows the main window only)._
 
 ## State of the tree
 
