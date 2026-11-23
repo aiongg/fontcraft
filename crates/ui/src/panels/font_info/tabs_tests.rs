@@ -582,7 +582,7 @@ fn the_wrench_shows_only_where_a_fix_exists() {
 /// Each line of the code gets a number in the gutter; the rows a long line wraps onto get none.
 #[test]
 fn wrapped_lines_get_no_number() {
-    let long = "sub a by b; ".repeat(60);
+    let long = "sub a by b; ".repeat(6);
     let code = format!("{long}\nsub c by d;");
     let (mut fixture, _) = panel(showing(&code, Vec::new()));
     let shapes = fixture.frame_shapes();

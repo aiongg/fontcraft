@@ -192,8 +192,11 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
     {
         sent.push(Msg::run("font.features.setCode", key.with(&[("code", json!(text))])));
     }
-    let opener = gutter(ui, &out.response, gutter_width, &number_font, listed, &words);
-    details(ui, &out.response, opener, listed, &words, &mut sent);
+    // Without a layout of the field the open details stay as they are: closing them there would lose them in a pass
+    // egui discards.
+    if let Some(opener) = gutter(ui, &out.response, gutter_width, &number_font, listed, &words) {
+        details(ui, &out.response, opener, listed, &words, &mut sent);
+    }
     preview(ui, &out.response, entry, &words, &mut sent);
     CodeOut { sent, selection }
 }
@@ -724,8 +727,9 @@ fn open_line_id(field: &Response) -> egui::Id {
 /// Paints the gutter left of the code field `field` (`width` wide): the line numbers, and for each line with
 /// diagnostics its icon, its wrench and its first message, dimmed, after the line's text. A click on an icon opens or
 /// closes the line's details. Only rows inside the field's visible rect are painted. Returns the icon of the line whose
-/// details are open, while it shows.
-fn gutter(ui: &mut Ui, field: &Response, width: f32, font: &FontId, diagnostics: &[DiagnosticModel], words: &CodeEditorWords) -> Option<Response> {
+/// details are open, while it shows; `None` when the field's text has no layout in this pass yet, as in a pass egui
+/// discards before painting.
+fn gutter(ui: &mut Ui, field: &Response, width: f32, font: &FontId, diagnostics: &[DiagnosticModel], words: &CodeEditorWords) -> Option<Option<Response>> {
     let (pos, galley) = field_layout(ui, field)?;
     let env = Env::of(ui);
     let color = |c: Rgba| Color32::from(Srgba::from(c));
@@ -785,7 +789,7 @@ fn gutter(ui: &mut Ui, field: &Response, width: f32, font: &FontId, diagnostics:
             opener = Some(response);
         }
     }
-    opener
+    Some(opener)
 }
 
 /// An error icon (a disc) or a warning icon (a triangle) in `rect`.
