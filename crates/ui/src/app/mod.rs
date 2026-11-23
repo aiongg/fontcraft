@@ -592,6 +592,7 @@ impl FontCraftApp {
             ViewMsg::FeatureCompletion(ask) => self.view.font_info.features.completion = ask,
             ViewMsg::FeatureDraft(draft) => self.view.font_info.features.draft = draft,
             ViewMsg::FeatureCaretPlaced => self.view.font_info.features.caret = None,
+            ViewMsg::FeaturePreview(ask) => self.view.font_info.features.preview = ask,
             ViewMsg::FontViewSearchFocused => self.view.font_view.focus_search = false,
             ViewMsg::Bitmap(input) => return crate::shell::bitmap_editor::input(self, input),
         }

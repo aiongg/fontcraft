@@ -155,6 +155,17 @@ pub struct FeaturesView {
     pub draft: Option<FeatureDraft>,
     /// The check of the last draft: its diagnostics, placed in the draft.
     pub checked: Option<CheckedDraft>,
+    /// The name Alt-clicked in the code editor, which the projection previews with `font.features.previewName`.
+    pub preview: Option<PreviewAsk>,
+}
+
+/// A name Alt-clicked in an entry's code: its text and its characters in the code as shown.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PreviewAsk {
+    pub key: EntryKey,
+    pub name: String,
+    pub start: usize,
+    pub end: usize,
 }
 
 /// The code as typed in an entry's code editor.

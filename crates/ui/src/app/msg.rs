@@ -59,6 +59,8 @@ pub enum ViewMsg {
     FeatureDraft(Option<crate::shell::font_info_tabs::FeatureDraft>),
     /// The feature code editor placed the caret a snippet left.
     FeatureCaretPlaced,
+    /// The feature code editor asks a preview of an Alt-clicked name; `None` closes it.
+    FeaturePreview(Option<crate::shell::font_info_tabs::PreviewAsk>),
     /// Font View's search field took the keyboard (`fontView.focusSearch`).
     FontViewSearchFocused,
     /// A press, drag or release on the Bitmap Glyph Editor's pixel canvas (`shell::bitmap_editor::input`).

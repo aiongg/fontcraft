@@ -82,6 +82,34 @@ pub struct EntryPane {
     pub completion: Option<CompletionModel>,
     /// Where the code editor puts the caret, in characters (after a snippet went in).
     pub caret: Option<usize>,
+    /// The preview of the name Alt-clicked in this entry's code.
+    pub preview: Option<PreviewModel>,
+}
+
+/// What `font.features.previewName` gives for a name Alt-clicked in the code: a glyph, a class's members (with the
+/// anchors of `markClass` statements), a lookup's first rules, or why there is nothing to show.
+#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+pub struct PreviewModel {
+    /// The name as clicked, and its characters in the code as shown.
+    pub name: String,
+    pub start: usize,
+    pub end: usize,
+    /// `glyph`, `class` or `lookup`; empty when `problem` says why there is no preview.
+    pub kind: String,
+    /// A glyph's Unicode values, as hexadecimal.
+    pub unicodes: Vec<String>,
+    /// A glyph that does not export.
+    pub hidden: bool,
+    /// A class's member glyphs, nested classes and tokens resolved.
+    pub glyphs: Vec<String>,
+    /// Names in a class that are neither glyphs nor classes.
+    pub unknown: Vec<String>,
+    /// Each `markClass` statement of a class: its anchor and its glyphs, space-separated.
+    pub anchors: Vec<(String, String)>,
+    /// A lookup's first rules, and whether it has more.
+    pub rules: Vec<String>,
+    pub more: bool,
+    pub problem: Option<String>,
 }
 
 /// The names that fit at a place in the code (`font.features.complete`), for the code as typed and the caret's byte
@@ -166,12 +194,13 @@ pub fn project(cx: &mut ProjectCx<'_>) -> FeaturesModel {
         _ => None,
     };
     let completion = entry.as_ref().and_then(|e| completion(cx, e));
+    let preview = entry.as_ref().and_then(|e| preview(cx, e, master.as_deref()));
     let caret = entry.as_ref().and_then(|e| cx.view.font_info.features.caret.as_ref().filter(|(k, _)| *k == e.key).map(|(_, c)| *c));
     let view = &cx.view.font_info.features;
     let entry = entry.map(|e| {
         let draft = view.draft.as_ref().filter(|d| d.key == e.key).map(|d| d.code.clone());
         let check = view.checked.as_ref().filter(|c| c.draft.key == e.key).map(|c| (c.draft.code.clone(), c.diagnostics.clone()));
-        EntryPane { spec_url, completion, caret, compiled, draft, check, ..e }
+        EntryPane { spec_url, completion, caret, compiled, draft, check, preview, ..e }
     });
     FeaturesModel { groups, selected, entry, master, snippets }
 }
@@ -208,6 +237,7 @@ fn pane(font: &Font, key: &EntryKey, diagnostics: &[(Option<EntryKey>, Diagnosti
         spec_url: None,
         completion: None,
         caret: None,
+        preview: None,
         compiled: false,
         draft: None,
         check: None,
@@ -264,6 +294,52 @@ fn completion(cx: &mut ProjectCx<'_>, e: &EntryPane) -> Option<CompletionModel> 
         })
         .collect();
     Some(CompletionModel { code: ask.code.clone(), position: ask.position, items })
+}
+
+/// Most entries of each list a preview shows.
+const MAX_PREVIEW_ITEMS: usize = 500;
+
+/// The preview of the name the code editor asked about, when it asks about the shown entry.
+fn preview(cx: &mut ProjectCx<'_>, e: &EntryPane, master: Option<&str>) -> Option<PreviewModel> {
+    let ask = cx.view.font_info.features.preview.as_ref().filter(|a| a.key == e.key)?;
+    let mut params = serde_json::Map::new();
+    params.insert("name".into(), json!(ask.name));
+    if let Some(m) = master {
+        params.insert("master".into(), json!(m));
+    }
+    let base = PreviewModel { name: ask.name.clone(), start: ask.start, end: ask.end, ..PreviewModel::default() };
+    let r = match cx.session.query("font.features.previewName", &Value::Object(params)) {
+        Ok(r) => r,
+        Err(err) => return Some(PreviewModel { problem: Some(err.to_string()), ..base }),
+    };
+    let list = |key: &str| strings(r.get(key)).into_iter().take(MAX_PREVIEW_ITEMS).collect::<Vec<_>>();
+    let anchors = r
+        .get("anchors")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or_default()
+        .iter()
+        .take(MAX_PREVIEW_ITEMS)
+        .map(|a| {
+            let anchor = match a.get("anchor") {
+                Some(Value::String(text)) => text.clone(),
+                Some(other) => other.to_string(),
+                None => String::new(),
+            };
+            (anchor, strings(a.get("glyphs")).join(" "))
+        })
+        .collect();
+    Some(PreviewModel {
+        kind: r.get("kind").and_then(Value::as_str).unwrap_or_default().to_string(),
+        unicodes: list("unicodes"),
+        hidden: r.get("export").and_then(Value::as_bool) == Some(false),
+        glyphs: list("glyphs"),
+        unknown: list("unknown"),
+        anchors,
+        rules: list("rules"),
+        more: r.get("more").and_then(Value::as_bool).unwrap_or(false),
+        ..base
+    })
 }
 
 /// A diagnostic's `range`, `[start, end]` in bytes; `None` when it is missing or ends before it starts.

@@ -20,7 +20,7 @@ use crate::app::models::font_info::FontInfoModel;
 use crate::app::{APP, FontCraftApp, Msg, ViewMsg};
 use crate::dialogs::feature_picker::FeaturePicker;
 use crate::shell::font_info::FontInfoTab;
-use crate::shell::font_info_tabs::{CompletionAsk, EntryKey, EntryKind, FeatureDraft};
+use crate::shell::font_info_tabs::{CompletionAsk, EntryKey, EntryKind, FeatureDraft, PreviewAsk};
 
 const ROOM: egui::Vec2 = egui::vec2(1280.0, 900.0);
 
@@ -626,4 +626,55 @@ fn a_frame_with_a_256_kb_entry_takes_under_16_ms() {
     if !cfg!(debug_assertions) {
         assert!(median < std::time::Duration::from_millis(16), "{median:?}");
     }
+}
+
+/// Alt-click on a glyph name in the code asks its preview, naming the characters it covers.
+#[test]
+fn alt_click_on_a_name_asks_its_preview() {
+    let (mut fixture, posted) = panel(features_model());
+    let (pos, galley) = painted_code(&mut fixture, "sub a by b;");
+    let at = galley.pos_from_cursor(egui::text::CCursor::new(4)).translate(pos.to_vec2()).center() + egui::vec2(2.0, 0.0);
+    fixture.hold(Modifiers::ALT).click_at(at).hold(Modifiers::NONE).settle();
+    let ask = PreviewAsk { key: key(EntryKind::Feature, "ss01", 1), name: "a".into(), start: 4, end: 5 };
+    assert!(posted.borrow().contains(&Msg::View(ViewMsg::FeaturePreview(Some(ask)))), "{:?}", posted.borrow());
+}
+
+/// The name under a click keeps a leading `@` or backslash and stops at punctuation and spaces.
+#[test]
+fn the_clicked_name_takes_name_characters_on_both_sides() {
+    use super::code_editor::name_at;
+    let code = "sub @Low' \\a.sc by [b-c];";
+    let name = |at: usize| name_at(code, at).map(|(s, e)| code.chars().skip(s).take(e - s).collect::<String>());
+    assert_eq!(name(6).as_deref(), Some("@Low"));
+    assert_eq!(name(12).as_deref(), Some("\\a.sc"));
+    assert_eq!(name(21).as_deref(), Some("b-c"));
+    assert_eq!(name(9), None);
+}
+
+/// A class preview lists its members, or the anchors of its markClass statements, and names unknown members; a lookup
+/// preview lists its rules and says when more follow.
+#[test]
+fn a_preview_lists_class_members_anchors_and_lookup_rules() {
+    use super::code_editor::{CodeEditorWords, preview_lines};
+    use crate::app::models::font_features::PreviewModel;
+    let words = CodeEditorWords::english();
+    let class = PreviewModel {
+        name: "@Top".into(),
+        kind: "class".into(),
+        glyphs: vec!["a".into(), "b".into()],
+        unknown: vec!["zz".into()],
+        ..PreviewModel::default()
+    };
+    assert_eq!(preview_lines(&class, &words), ["Class @Top: 2 glyphs", "a b", "Not in the font: zz"]);
+    let marks = PreviewModel {
+        name: "@MARKS".into(),
+        kind: "class".into(),
+        glyphs: vec!["acutecomb".into()],
+        anchors: vec![("<anchor 0 500>".into(), "acutecomb".into())],
+        ..PreviewModel::default()
+    };
+    assert_eq!(preview_lines(&marks, &words), ["Class @MARKS: 1 glyphs", "Anchor <anchor 0 500>: acutecomb"]);
+    let lookup =
+        PreviewModel { name: "Smallcaps".into(), kind: "lookup".into(), rules: vec!["sub a by a.sc;".into()], more: true, ..PreviewModel::default() };
+    assert_eq!(preview_lines(&lookup, &words), ["Lookup Smallcaps", "sub a by a.sc;", "More rules follow"]);
 }
