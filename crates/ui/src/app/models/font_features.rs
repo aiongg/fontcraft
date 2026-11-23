@@ -11,7 +11,7 @@ use fontcraft_engine::model::{Features, Font};
 use serde_json::{Value, json};
 
 use super::ProjectCx;
-use crate::shell::font_info_tabs::{EntryKey, EntryKind};
+use crate::shell::font_info_tabs::{EntryKey, EntryKind, FindState};
 
 /// Most entries listed per sidebar group.
 pub const MAX_SHOWN_ENTRIES: usize = 5_000;
@@ -84,6 +84,24 @@ pub struct EntryPane {
     pub caret: Option<usize>,
     /// The preview of the name Alt-clicked in this entry's code.
     pub preview: Option<PreviewModel>,
+    /// The find bar, while it is open, with its matches.
+    pub find: Option<FindModel>,
+}
+
+/// The find bar and what `font.features.find` found for it.
+#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+pub struct FindModel {
+    pub state: FindState,
+    /// The matches in the shown entry's text as shown (the draft, else the stored code), as byte ranges.
+    pub here: Vec<(usize, usize)>,
+    /// Matches in the scope.
+    pub total: usize,
+    /// More matches exist than were listed.
+    pub truncated: bool,
+    /// In the all-entries scope, the entries with matches in sidebar order.
+    pub entries: Vec<EntryKey>,
+    /// Why the query cannot run (an invalid regular expression).
+    pub problem: Option<String>,
 }
 
 /// What `font.features.previewName` gives for a name Alt-clicked in the code: a glyph, a class's members (with the
@@ -195,12 +213,13 @@ pub fn project(cx: &mut ProjectCx<'_>) -> FeaturesModel {
     };
     let completion = entry.as_ref().and_then(|e| completion(cx, e));
     let preview = entry.as_ref().and_then(|e| preview(cx, e, master.as_deref()));
+    let find = entry.as_ref().and_then(|e| find(cx, e));
     let caret = entry.as_ref().and_then(|e| cx.view.font_info.features.caret.as_ref().filter(|(k, _)| *k == e.key).map(|(_, c)| *c));
     let view = &cx.view.font_info.features;
     let entry = entry.map(|e| {
         let draft = view.draft.as_ref().filter(|d| d.key == e.key).map(|d| d.code.clone());
         let check = view.checked.as_ref().filter(|c| c.draft.key == e.key).map(|c| (c.draft.code.clone(), c.diagnostics.clone()));
-        EntryPane { spec_url, completion, caret, compiled, draft, check, preview, ..e }
+        EntryPane { spec_url, completion, caret, compiled, draft, check, preview, find, ..e }
     });
     FeaturesModel { groups, selected, entry, master, snippets }
 }
@@ -238,6 +257,7 @@ fn pane(font: &Font, key: &EntryKey, diagnostics: &[(Option<EntryKey>, Diagnosti
         completion: None,
         caret: None,
         preview: None,
+        find: None,
         compiled: false,
         draft: None,
         check: None,
@@ -294,6 +314,46 @@ fn completion(cx: &mut ProjectCx<'_>, e: &EntryPane) -> Option<CompletionModel> 
         })
         .collect();
     Some(CompletionModel { code: ask.code.clone(), position: ask.position, items })
+}
+
+/// The find bar's matches in the shown entry `e`, and in the all-entries scope the entries with matches.
+fn find(cx: &mut ProjectCx<'_>, e: &EntryPane) -> Option<FindModel> {
+    let view = &cx.view.font_info.features;
+    let state = view.find.clone()?;
+    let shown = view.draft.as_ref().filter(|d| d.key == e.key).map_or_else(|| e.code.clone(), |d| d.code.clone());
+    let mut model = FindModel { state: state.clone(), ..FindModel::default() };
+    if state.query.is_empty() {
+        return Some(model);
+    }
+    let mut here = state.params();
+    here.extend(e.key.params());
+    here.insert("code".into(), json!(shown));
+    let r = match cx.session.query("font.features.find", &Value::Object(here)) {
+        Ok(r) => r,
+        Err(err) => return Some(FindModel { problem: Some(err.to_string()), ..model }),
+    };
+    let listed = r.get("matches").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
+    model.here = listed
+        .iter()
+        .filter_map(|m| Some((usize::try_from(m.get("start")?.as_u64()?).ok()?, usize::try_from(m.get("end")?.as_u64()?).ok()?)))
+        .collect();
+    model.total = model.here.len();
+    model.truncated = r.get("truncated").and_then(Value::as_bool).unwrap_or(false);
+    if state.all_entries
+        && let Ok(r) = cx.session.query("font.features.find", &Value::Object(state.params()))
+    {
+        let listed = r.get("matches").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
+        for k in listed.iter().filter_map(EntryKey::from_json) {
+            if model.entries.last() != Some(&k) {
+                model.entries.push(k.clone());
+            }
+            if k != e.key {
+                model.total += 1;
+            }
+        }
+        model.truncated |= r.get("truncated").and_then(Value::as_bool).unwrap_or(false);
+    }
+    Some(model)
 }
 
 /// Most entries of each list a preview shows.

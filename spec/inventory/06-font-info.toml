@@ -3313,3 +3313,78 @@ summary = "Opened by a stem's scope button on the Masters tab: the glyphs the st
 ref = "Font Info › Masters › Stems"
 status = "inferred"
 notes = "FontCraft: crates/ui/src/dialogs/interp/masters.rs, a dialog of font.stems.set on `{stem: index}` that runs on OK; an emptied scope removes it."
+
+[[command]]
+id = "font.features.find"
+label = "Find in Feature Code"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{query: string, matchCase?: boolean, wholeWord?: boolean, regex?: boolean, kind?: 'prefix'|'class'|'feature', name?: string, index?: integer, code?: string}"
+area = "features"
+milestone = "M8"
+summary = "Lists the matches of a query in the feature code: in one entry (in the editor's unsaved text when given) or in every entry in sidebar order, with each match's entry, byte range and line. The data behind the Features tab's find bar."
+ref = "Font Info › Features"
+status = "inferred"
+notes = "Not in the handbook. A query; it changes nothing. The query is plain text unless `regex` is set; both run as one regular expression in time linear in the text, with the pattern's length (1,000 bytes) and compiled size (1 MB) capped. Matches of no characters are skipped; at most 10,000 are listed, with `truncated` set past that. FontCraft: crates/engine/src/cmd/features_find.rs (M8.27)."
+guesses = [
+  "The find options are Match Case, Whole Word and Regular Expression, case-insensitive by default; using the find bar of the reference app's feature editor would settle which exist.",
+  "Whole Word keeps a match that no letter, digit, `_` or `.` touches, so `a` does not find the `a` of `a.sc`.",
+  "Find can search every entry, not only the one shown; searching for a class name used in several features in the reference app would settle it.",
+]
+observe = [
+  "In F1 (Latin features), press Cmd+F in Font Info › Features with a feature shown: note the find bar's options, and whether a search reaches matches in other entries.",
+]
+
+[[command]]
+id = "font.features.replace"
+label = "Replace in Feature Code"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{query: string, matchCase?: boolean, wholeWord?: boolean, regex?: boolean, replacement: string, all?: boolean, kind?: 'prefix'|'class'|'feature', name?: string, index?: integer, code?: string, start?: integer}"
+area = "features"
+milestone = "M8"
+summary = "Replaces the match that begins at a byte of one entry (Replace), or every match in one entry or in every entry (Replace All). One undo step."
+ref = "Font Info › Features"
+status = "inferred"
+notes = "Not in the handbook. With `regex` the replacement expands `$1` and `${name}`. With `code` the entry's text is the editor's unsaved text and the result is stored. Replace All over every entry leaves automatic entries alone and lists them as `skipped`; naming an automatic entry is refused, as Set Feature Code refuses it. A bad pattern, no match at `start` or a result over 4 MB in one entry is refused and changes nothing. FontCraft: crates/engine/src/cmd/features_find.rs (M8.27)."
+guesses = [
+  "Replace All across entries skips automatic entries, since Update would write their code again.",
+]
+observe = [
+  "In F1 (Latin features), use Replace All in the feature editor's find bar with a name that also appears in an automatic feature: note whether the automatic feature's code changes.",
+]
+
+[[behavior]]
+id = "fontInfo.features.findBar"
+area = "features"
+milestone = "M8"
+summary = "Cmd+F in the feature code editor opens a find bar above the code: a query field, Match Case, Whole Word and Regular Expression, a scope (this entry or all entries), Previous and Next, a replacement field with Replace and Replace All, and the number of matches."
+ref = "Font Info › Features"
+status = "inferred"
+notes = "Not in the handbook. FontCraft: crates/ui/src/panels/font_info/code_find.rs (M8.27). The matches come from font.features.find with the editor's text as typed; matches in the shown entry are underlined in the accent colour and the current one is marked. Next and Previous select the following or preceding match in the code field and wrap at the end; in the all-entries scope they go on to the next or previous entry with matches and select it. Return in the query field is Next. Cmd+G and Shift+Cmd+G in the code field are Next and Previous. The keyboard stays where it is, so a match selected while the query field has it is marked by its underline only, and the field does not scroll to it yet. Replace runs font.features.replace on the selected match with the text as typed (with no match selected it acts as Next), Replace All on the scope; the close button hides the bar. Cmd+F with a selection inside one line puts it in the query."
+guesses = [
+  "The find bar sits above the code field and keeps its query while the tab shows; the reference app's find in the feature editor may be the system find panel instead.",
+  "Next and Previous wrap at the end of the scope.",
+]
+observe = [
+  "In F1 (Latin features), press Cmd+F in the feature code editor: note where the find interface appears, its controls, and what happens past the last match.",
+]
+
+[[behavior]]
+id = "fontInfo.features.editingKeys"
+area = "features"
+milestone = "M8"
+summary = "Editing keys of the feature code editor: Cmd+/ comments or uncomments the selected lines, Tab and Shift+Tab indent and outdent a selection over more than one line, Cmd+] and Cmd+[ indent and outdent the caret's lines, Return keeps the line's indentation, and the bracket matching the one beside the caret is marked."
+ref = "Font Info › Features"
+status = "inferred"
+notes = "Not in the handbook. FontCraft: crates/ui/src/panels/font_info/code_editor.rs (M8.27). The keys edit the text as typed; the code is stored when the field loses the keyboard, as typing is. Indentation is one tab; outdent removes a tab or up to four spaces. Tab without a selection over lines moves the keyboard on, so the field never traps it; the arrows keep moving the caret. Comments are `# ` after a line's indentation; a selection whose non-blank lines all start with `#` loses it. Bracket matching pairs (), [] and {}, looking at most 100,000 characters away."
+guesses = [
+  "Cmd+/ toggles `#` comments line by line.",
+  "Tab indents only a selection that spans lines; with a caret it moves the keyboard to the next control.",
+  "Indentation is one tab, as the generated code is written.",
+]
+observe = [
+  "In F1 (Latin features), select three lines in the feature code editor and press Cmd+/, then Tab and Shift+Tab: note what changes. Put the caret after a `{` and note whether its `}` is marked.",
+]

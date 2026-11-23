@@ -678,3 +678,61 @@ fn a_preview_lists_class_members_anchors_and_lookup_rules() {
         PreviewModel { name: "Smallcaps".into(), kind: "lookup".into(), rules: vec!["sub a by a.sc;".into()], more: true, ..PreviewModel::default() };
     assert_eq!(preview_lines(&lookup, &words), ["Lookup Smallcaps", "sub a by a.sc;", "More rules follow"]);
 }
+
+/// Cmd+/ comments three selected lines, and again uncomments them; Tab and Shift+Tab indent and outdent a selection;
+/// Return keeps the line's indentation; the bracket beside the caret finds its partner.
+#[test]
+fn editing_keys_comment_indent_and_keep_indentation() {
+    use super::code_editor::{bracket_pair, indent, new_line, toggle_comments};
+    use craft_ext::ui::text::TextSelection;
+    let code = "sub a by b;\n\tsub c by d;\n\nsub e by f;";
+    let all = TextSelection::new(0, code.chars().count());
+    let commented = toggle_comments(code, all).expect("an edit");
+    assert_eq!(commented.insert, "# sub a by b;\n\t# sub c by d;\n\n# sub e by f;");
+    assert_eq!(toggle_comments(&commented.insert, TextSelection::new(0, commented.insert.chars().count())).expect("an edit").insert, code);
+    let two = TextSelection::new(2, 14);
+    assert_eq!(indent(code, two, true).expect("an edit").insert, "\tsub a by b;\n\t\tsub c by d;");
+    assert_eq!(indent(code, two, false).expect("an edit").insert, "sub a by b;\nsub c by d;");
+    let ret = new_line(code, TextSelection::caret_at(24));
+    assert_eq!((ret.insert.as_str(), ret.select), ("\n\t", TextSelection::caret_at(26)));
+    let braces = "feature liga {\n\tsub a by b;\n} liga;";
+    assert_eq!(bracket_pair(braces, 14), vec![13, 28]);
+    assert!(bracket_pair(braces, 3).is_empty());
+}
+
+/// Cmd+/ in the code field comments the selected lines in the code as typed, without a commit.
+#[test]
+fn cmd_slash_in_the_code_field_comments_the_lines() {
+    let (mut fixture, posted) = panel(showing("sub a by b;\nsub c by d;", Vec::new()));
+    let code = fixture.by_label("Feature Code").expect("the code field");
+    fixture.click(&code).key(Key::A, Modifiers::COMMAND).settle();
+    fixture.key(Key::Slash, Modifiers::COMMAND).settle();
+    let draft = FeatureDraft { key: key(EntryKind::Feature, "ss01", 1), code: "# sub a by b;\n# sub c by d;".into() };
+    assert!(posted.borrow().contains(&Msg::View(ViewMsg::FeatureDraft(Some(draft)))), "{:?}", posted.borrow());
+    assert!(!posted.borrow().iter().any(|m| m.command_id() == Some("font.features.setCode")), "the key commits nothing");
+}
+
+/// Next selects the matches in turn and wraps past the last; Replace then replaces the selected one, the first.
+#[test]
+fn find_next_wraps_and_replace_takes_the_selected_match() {
+    use crate::app::models::font_features::FindModel;
+    use crate::shell::font_info_tabs::FindState;
+    let code = "sub a by b;\nsub a by c;";
+    let mut model = showing(code, Vec::new());
+    let state = FindState { query: "a".into(), replacement: "x".into(), ..FindState::default() };
+    if let Some(e) = model.features.entry.as_mut() {
+        e.find = Some(FindModel { state, here: vec![(4, 5), (16, 17)], total: 2, ..FindModel::default() });
+    }
+    let (mut fixture, posted) = panel(model);
+    for _ in 0..3 {
+        let next = fixture.by_label("Next").expect("the Next button");
+        fixture.click(&next).settle();
+    }
+    let replace = fixture.by_label("Replace").expect("the Replace button");
+    fixture.click(&replace).settle();
+    let expected = Msg::run(
+        "font.features.replace",
+        json!({ "kind": "feature", "name": "ss01", "index": 1, "query": "a", "matchCase": false, "wholeWord": false, "regex": false, "replacement": "x", "code": code, "start": 4 }),
+    );
+    assert!(posted.borrow().contains(&expected), "{:?}", posted.borrow());
+}

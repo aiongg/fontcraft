@@ -39,12 +39,14 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
+use craft::keymap::{Chord, Key, Mods};
 use craft::ui::contract::{Bind, Props as _, Show as _, ShowContainer as _};
 use craft::ui::display::{Shade, Text};
 use craft::ui::popover::Popover;
 use craft::ui::primitives::Completion;
 use craft::ui::runtime::env::Env;
 use craft::ui::runtime::focus::{self, FocusTarget};
+use craft::ui::runtime::keys;
 use craft::ui::style::UiTokens;
 use craft::ui::text::TextField;
 use craft_ext::ui::text::{
@@ -53,11 +55,12 @@ use craft_ext::ui::text::{
 use egui::text::CCursor;
 use egui::{Align2, Color32, FontId, Galley, Rect, Response, Sense, Shape, Stroke, TextStyle, Ui, pos2, vec2};
 use fontcraft_engine::features::edit::{HighlightKind, highlight};
-use serde_json::json;
+use serde_json::{Value, json};
 
-use crate::app::models::font_features::{DiagnosticModel, EntryPane, PreviewModel};
+use super::code_find::{self, FindAction};
+use crate::app::models::font_features::{DiagnosticModel, EntryPane, FindModel, PreviewModel};
 use crate::app::{Msg, ViewMsg};
-use crate::shell::font_info_tabs::{CompletionAsk, EntryKey, FeatureDraft, PreviewAsk};
+use crate::shell::font_info_tabs::{CompletionAsk, EntryKey, EntryKind, FeatureDraft, FindState, PreviewAsk, select_entries};
 
 craft::ui::words! {
     /// The words of the feature code editor.
@@ -100,6 +103,13 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
     let words = Env::of(ui).words::<CodeEditorWords>();
     let key = &entry.key;
     let mut sent = Vec::new();
+    let action = code_find::bar(ui, entry, &mut sent);
+    let edit_id = egui::Id::new(("fontcraftFeatureCode.edit", key.kind.name(), key.index, key.name.as_str()));
+    let pending: Option<PendingEdit> = ui.ctx().data_mut(|d| {
+        let pending = d.get_temp::<PendingEdit>(edit_id);
+        d.remove::<PendingEdit>(edit_id);
+        pending
+    });
     let field = TextField::new(words.code.clone(), Bind::given(entry.code.clone()))
         .mono()
         .lines(CODE_LINES)
@@ -114,6 +124,10 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
         completer.answer(CompletionQuery { text: c.code.clone(), caret: c.position }, CompletionAnswer { range, items });
     }
     let field = if entry.automatic { field.tooltip(words.automatic_hint.clone()) } else { field.complete(completer.clone()).complete_on_enter() };
+    let field = match &pending {
+        Some(p) if !entry.automatic => field.replace_selection(p.insert.clone()),
+        _ => field,
+    };
     let number_font = TextStyle::Monospace.resolve(ui.style());
     let gutter_width = gutter_width(ui, entry.draft.as_deref().unwrap_or(&entry.code), &number_font);
     let out = ui
@@ -122,6 +136,9 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
             field.show(ui)
         })
         .inner;
+    if let Some(p) = &pending {
+        out.select(ui.ctx(), p.select);
+    }
     if let Some(q) = completer.take_query() {
         let ask = wants_completion(&q.text, q.caret).then(|| CompletionAsk { key: key.clone(), code: q.text, position: q.caret });
         if ask.is_some() || entry.completion.is_some() {
@@ -138,11 +155,19 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
     let env = Env::of(ui);
     let mut typed: Option<String> = None;
     let runs_id = out.response.id.with("fontcraftFeatureCode.runs");
+    let focused = text_focused(ui.ctx(), out.response.id);
+    let caret = out.selection(ui.ctx()).filter(|s| focused && s.is_empty()).map(|s| s.caret);
+    let found: &[(usize, usize)] = entry.find.as_ref().map_or(&[], |f| f.here.as_slice());
+    let accent = Color32::from(Srgba::from(env.tokens.color.accent.solid));
     out.highlight_text(ui, |text| {
         if text != entry.code {
             typed = Some(text.to_string());
         }
-        kept_runs(ui.ctx(), runs_id, text, shown_diagnostics(entry, text), &env.tokens)
+        let mut runs = kept_runs(ui.ctx(), runs_id, text, shown_diagnostics(entry, text), found, &env.tokens);
+        if let Some(c) = caret {
+            runs.extend(bracket_pair(text, c).into_iter().map(|at| Highlight::underline(at..at.saturating_add(1), accent)));
+        }
+        runs
     });
     let typed = typed.filter(|_| !entry.automatic);
     if typed != entry.draft {
@@ -153,6 +178,13 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
         sent.push(Msg::View(ViewMsg::FeaturePreview(Some(ask))));
     }
     let listed = shown_diagnostics(entry, shown);
+    let mut action = action;
+    if focused {
+        action = action.or(editing_keys(ui, &out.response, entry, shown, edit_id, &mut sent));
+    }
+    if let Some(found) = &entry.find {
+        find_action(ui, &out.response, entry, found, shown, action, &mut sent);
+    }
     let selection = out.last_selection(ui.ctx()).and_then(|s| s.within(entry.code.chars().count()));
     if let Some(text) = out.events.committed()
         && !entry.automatic
@@ -164,6 +196,345 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
     details(ui, &out.response, opener, listed, &words, &mut sent);
     preview(ui, &out.response, entry, &words, &mut sent);
     CodeOut { sent, selection }
+}
+
+/// A change of the code field's text the editor makes in the next pass: the field selects `replace` in this pass,
+/// `insert` takes its place in the next (`TextField::replace_selection`), and `select` is selected after it.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct PendingEdit {
+    pub replace: TextSelection,
+    pub insert: String,
+    pub select: TextSelection,
+}
+
+/// The chord of `key` with Cmd (Ctrl off macOS), and Shift when `shift`.
+fn cmd_chord(key: Key, shift: bool) -> Chord {
+    Chord::new(Mods { cmd: true, shift, ..Mods::NONE }, key)
+}
+
+/// The editing keys (`fontInfo.features.editingKeys`) while the field `field` has the keyboard: they are claimed from
+/// the focus service and the shortcuts each pass, so they reach the field from the next one. Cmd+F opens the find bar,
+/// Cmd+G and Shift+Cmd+G return Next and Previous; the others edit the code as typed through a [`PendingEdit`].
+fn editing_keys(ui: &Ui, field: &Response, entry: &EntryPane, shown: &str, edit_id: egui::Id, sent: &mut Vec<Msg>) -> Option<FindAction> {
+    let ctx = ui.ctx();
+    let owner = field.id;
+    let selection = field.selection(ctx);
+    let find = [cmd_chord(Key::F, false), cmd_chord(Key::G, false), cmd_chord(Key::G, true)];
+    let tab = [Chord::plain(Key::Tab), Chord::new(Mods::SHIFT, Key::Tab)];
+    let edits = [cmd_chord(Key::Slash, false), cmd_chord(Key::CloseBracket, false), cmd_chord(Key::OpenBracket, false), Chord::plain(Key::Enter)];
+    for chord in find {
+        keys::claim(ctx, owner, chord);
+    }
+    if !entry.automatic {
+        for chord in edits {
+            keys::claim(ctx, owner, chord);
+        }
+        if selection.is_some_and(|s| spans_lines(shown, s)) {
+            for chord in tab {
+                keys::claim(ctx, owner, chord);
+            }
+        }
+    }
+    let [open_find, find_next, find_previous] = find.map(|chord| keys::take_claimed(ctx, owner, chord));
+    let [indent_tab, outdent_tab] = tab.map(|chord| keys::take_claimed(ctx, owner, chord));
+    let [comment, indent_key, outdent_key, enter] = edits.map(|chord| keys::take_claimed(ctx, owner, chord));
+    if open_find {
+        let mut state = entry.find.as_ref().map(|f| f.state.clone()).unwrap_or_default();
+        if let Some(picked) = selection.filter(|s| !s.is_empty() && !spans_lines(shown, *s)) {
+            let range = picked.range();
+            state.query = shown.chars().skip(range.start).take(range.len()).take(code_find::MAX_QUERY_CHARS).collect();
+        }
+        state.focus = true;
+        sent.push(Msg::View(ViewMsg::FeatureFind(Some(state))));
+    }
+    if let Some(s) = selection.filter(|_| !entry.automatic) {
+        let edit = if comment {
+            toggle_comments(shown, s)
+        } else if indent_key || indent_tab {
+            indent(shown, s, true)
+        } else if outdent_key || outdent_tab {
+            indent(shown, s, false)
+        } else if enter {
+            Some(new_line(shown, s))
+        } else {
+            None
+        };
+        if let Some(edit) = edit {
+            field.select(ctx, edit.replace);
+            ctx.data_mut(|d| d.insert_temp(edit_id, edit));
+            ctx.request_repaint();
+        }
+    }
+    if find_next {
+        Some(FindAction::Next)
+    } else if find_previous {
+        Some(FindAction::Previous)
+    } else {
+        None
+    }
+}
+
+/// Most bytes of code one editing key rewrites.
+const MAX_EDIT_BYTES: usize = 1 << 20;
+/// The indentation one indent adds.
+const INDENT: &str = "\t";
+/// Most spaces one outdent removes where a line has no tab.
+const OUTDENT_SPACES: usize = 4;
+
+/// The byte of character `chars` of `text`, or its end.
+fn byte_of(text: &str, chars: usize) -> usize {
+    text.char_indices().nth(chars).map_or(text.len(), |(b, _)| b)
+}
+
+/// The characters of `text` before byte `byte`.
+fn chars_before(text: &str, byte: usize) -> usize {
+    text.get(..byte).map_or(0, |s| s.chars().count())
+}
+
+/// Whether the selection `s` of `text` holds a line break.
+pub(super) fn spans_lines(text: &str, s: TextSelection) -> bool {
+    let range = s.range();
+    !s.is_empty() && text.get(byte_of(text, range.start)..byte_of(text, range.end)).is_some_and(|t| t.contains('\n'))
+}
+
+/// The whole lines the selection `s` touches, as bytes of `text`; a selection that ends at the start of a line leaves
+/// that line out.
+fn line_block(text: &str, s: TextSelection) -> (usize, usize) {
+    let range = s.range();
+    let (lo, mut hi) = (byte_of(text, range.start), byte_of(text, range.end));
+    if hi > lo && text.get(..hi).is_some_and(|t| t.ends_with('\n')) {
+        hi -= 1;
+    }
+    let start = text.get(..lo).and_then(|t| t.rfind('\n')).map_or(0, |i| i + 1);
+    let end = text.get(hi..).and_then(|t| t.find('\n')).map_or(text.len(), |i| hi + i);
+    (start, end.max(start))
+}
+
+/// The edit that puts `lines(block)` in place of the lines the selection `s` touches: the new lines are selected after
+/// it, or for a caret the caret moves with its line.
+fn rewrite_lines(text: &str, s: TextSelection, lines: impl Fn(&str) -> String) -> Option<PendingEdit> {
+    let (start, end) = line_block(text, s);
+    if end - start > MAX_EDIT_BYTES {
+        return None;
+    }
+    let block = text.get(start..end)?;
+    let insert = block.split('\n').map(&lines).collect::<Vec<_>>().join("\n");
+    if insert == block {
+        return None;
+    }
+    let first = chars_before(text, start);
+    let old_len = block.chars().count();
+    let new_len = insert.chars().count();
+    let select = if s.is_empty() {
+        let moved = s.caret.saturating_add(new_len).saturating_sub(old_len).max(first);
+        TextSelection::caret_at(moved)
+    } else {
+        TextSelection::new(first, first.saturating_add(new_len))
+    };
+    Some(PendingEdit { replace: TextSelection::new(first, first.saturating_add(old_len)), insert, select })
+}
+
+/// A line's leading tabs and spaces.
+fn indentation(line: &str) -> &str {
+    let body = line.trim_start_matches([' ', '\t']);
+    line.get(..line.len() - body.len()).unwrap_or_default()
+}
+
+/// Indents (`more`) or outdents the lines the selection `s` touches: one tab more, or one tab (else up to four spaces)
+/// fewer. Empty lines stay empty.
+pub(super) fn indent(text: &str, s: TextSelection, more: bool) -> Option<PendingEdit> {
+    rewrite_lines(text, s, |line| {
+        if line.is_empty() {
+            String::new()
+        } else if more {
+            format!("{INDENT}{line}")
+        } else if let Some(rest) = line.strip_prefix('\t') {
+            rest.to_string()
+        } else {
+            let spaces = line.len() - line.trim_start_matches(' ').len();
+            line.get(spaces.min(OUTDENT_SPACES)..).unwrap_or_default().to_string()
+        }
+    })
+}
+
+/// Comments the lines the selection `s` touches with `# ` after their indentation, or, when every line with text
+/// already starts with `#`, takes that `#` (and one space after it) away.
+pub(super) fn toggle_comments(text: &str, s: TextSelection) -> Option<PendingEdit> {
+    let (start, end) = line_block(text, s);
+    let block = text.get(start..end)?;
+    let commented = block.split('\n').filter(|l| !l.trim().is_empty()).all(|l| l.trim_start().starts_with('#'));
+    rewrite_lines(text, s, |line| {
+        if line.trim().is_empty() {
+            return line.to_string();
+        }
+        let lead = indentation(line);
+        let body = line.get(lead.len()..).unwrap_or_default();
+        if commented {
+            let rest = body.strip_prefix('#').unwrap_or(body);
+            format!("{lead}{}", rest.strip_prefix(' ').unwrap_or(rest))
+        } else {
+            format!("{lead}# {body}")
+        }
+    })
+}
+
+/// Return: a line break in place of the selection `s`, followed by the indentation of the line the selection starts
+/// in.
+pub(super) fn new_line(text: &str, s: TextSelection) -> PendingEdit {
+    let range = s.range();
+    let lo = byte_of(text, range.start);
+    let start = text.get(..lo).and_then(|t| t.rfind('\n')).map_or(0, |i| i + 1);
+    let lead = indentation(text.get(start..lo).unwrap_or_default());
+    let insert = format!("\n{lead}");
+    let caret = range.start.saturating_add(insert.chars().count());
+    PendingEdit { replace: s, insert, select: TextSelection::caret_at(caret) }
+}
+
+/// Most characters bracket matching looks through.
+const MAX_BRACKET_SCAN: usize = 100_000;
+
+/// The bytes of the bracket beside the caret (character `caret` of `text`; the one before it first) and of its partner,
+/// when both are there within [`MAX_BRACKET_SCAN`] characters.
+pub(super) fn bracket_pair(text: &str, caret: usize) -> Vec<usize> {
+    let at = byte_of(text, caret);
+    let before = text.get(..at).and_then(|t| t.char_indices().next_back());
+    let after = text.get(at..).and_then(|t| t.chars().next()).map(|c| (at, c));
+    for (byte, c) in [before, after].into_iter().flatten() {
+        let partner = match c {
+            '(' | '[' | '{' => scan(text, byte, c, true),
+            ')' | ']' | '}' => scan(text, byte, c, false),
+            _ => continue,
+        };
+        if let Some(p) = partner {
+            return vec![byte, p];
+        }
+    }
+    Vec::new()
+}
+
+/// The partner of the bracket `c` at byte `at`, forward from an opening one or back from a closing one.
+fn scan(text: &str, at: usize, c: char, forward: bool) -> Option<usize> {
+    let (open, close) = match c {
+        '(' | ')' => ('(', ')'),
+        '[' | ']' => ('[', ']'),
+        _ => ('{', '}'),
+    };
+    let mut depth = 0usize;
+    let step = |ch: char, depth: &mut usize| -> bool {
+        let (deeper, shallower) = if forward { (open, close) } else { (close, open) };
+        if ch == deeper {
+            *depth += 1;
+        } else if ch == shallower {
+            if *depth == 0 {
+                return true;
+            }
+            *depth -= 1;
+        }
+        false
+    };
+    if forward {
+        let from = at.saturating_add(c.len_utf8());
+        text.get(from..)?.char_indices().take(MAX_BRACKET_SCAN).find(|(_, ch)| step(*ch, &mut depth)).map(|(i, _)| from + i)
+    } else {
+        text.get(..at)?.char_indices().rev().take(MAX_BRACKET_SCAN).find(|(_, ch)| step(*ch, &mut depth)).map(|(i, _)| i)
+    }
+}
+
+/// Carries out the find bar's `action` on the field `field`, and selects the first or last match of an entry Next or
+/// Previous moved to. Next and Previous select the following or preceding match and wrap at the end of the entry, or
+/// in the all-entries scope go on to the next or previous entry with matches. Replace replaces the selected match
+/// (else it acts as Next); Replace All replaces in the scope.
+fn find_action(ui: &Ui, field: &Response, entry: &EntryPane, found: &FindModel, shown: &str, action: Option<FindAction>, sent: &mut Vec<Msg>) {
+    let ctx = ui.ctx();
+    let here = match_chars(shown, &found.here);
+    if let Some(first) = found.state.reveal
+        && let Some(m) = if first { here.first() } else { here.last() }
+    {
+        field.select(ctx, TextSelection::new(m.0, m.1));
+        sent.push(Msg::View(ViewMsg::FeatureFind(Some(FindState { reveal: None, ..found.state.clone() }))));
+    }
+    let Some(action) = action else { return };
+    let selection = field.last_selection(ctx).unwrap_or_default();
+    let range = selection.range();
+    let mut options = found.state.params();
+    options.insert("replacement".into(), json!(found.state.replacement));
+    match action {
+        FindAction::Next | FindAction::Previous | FindAction::Replace => {
+            let current = here.iter().position(|m| m.0 == range.start && m.1 == range.end);
+            if action == FindAction::Replace
+                && let Some(i) = current
+                && let Some((start, _)) = found.here.get(i)
+            {
+                let mut p = entry.key.params();
+                p.extend(options);
+                p.insert("code".into(), json!(shown));
+                p.insert("start".into(), json!(start));
+                sent.push(Msg::run("font.features.replace", Value::Object(p)));
+                return;
+            }
+            let forward = action != FindAction::Previous;
+            let pick = if forward { here.iter().find(|m| m.0 >= range.end) } else { here.iter().rev().find(|m| m.1 <= range.start) };
+            if let Some(m) = pick {
+                field.select(ctx, TextSelection::new(m.0, m.1));
+                return;
+            }
+            let others: Vec<&EntryKey> = found.entries.iter().filter(|k| **k != entry.key).collect();
+            if found.state.all_entries && !others.is_empty() {
+                let at = found.entries.iter().position(|k| *k == entry.key);
+                let target = match (at, forward) {
+                    (Some(i), true) => found.entries.iter().skip(i + 1).chain(found.entries.iter()).find(|k| **k != entry.key),
+                    (Some(i), false) => found.entries.iter().take(i).rev().chain(found.entries.iter().rev()).find(|k| **k != entry.key),
+                    (None, true) => found.entries.iter().find(|k| next_after(k, &entry.key)).or(others.first().copied()),
+                    (None, false) => found.entries.iter().rev().find(|k| !next_after(k, &entry.key)).or(others.last().copied()),
+                };
+                if let Some(k) = target {
+                    sent.push(Msg::Shell(select_entries(std::slice::from_ref(k))));
+                    sent.push(Msg::View(ViewMsg::FeatureFind(Some(FindState { reveal: Some(forward), ..found.state.clone() }))));
+                    return;
+                }
+            }
+            if let Some(m) = if forward { here.first() } else { here.last() } {
+                field.select(ctx, TextSelection::new(m.0, m.1));
+            }
+        }
+        FindAction::ReplaceAll => {
+            let mut p = options;
+            p.insert("all".into(), json!(true));
+            if !found.state.all_entries {
+                p.extend(entry.key.params());
+                p.insert("code".into(), json!(shown));
+            }
+            sent.push(Msg::run("font.features.replace", Value::Object(p)));
+        }
+    }
+}
+
+/// Whether the entry `k` comes after `shown` in sidebar order.
+fn next_after(k: &EntryKey, shown: &EntryKey) -> bool {
+    let group = |kind: EntryKind| EntryKind::ALL.iter().position(|g| *g == kind).unwrap_or(0);
+    (group(k.kind), k.index) > (group(shown.kind), shown.index)
+}
+
+/// The byte ranges `ranges` of `text`, in order, as character ranges, in one pass over the text.
+fn match_chars(text: &str, ranges: &[(usize, usize)]) -> Vec<(usize, usize)> {
+    let mut out = Vec::with_capacity(ranges.len());
+    let (mut byte, mut chars) = (0usize, 0usize);
+    let to = |target: usize, byte: &mut usize, chars: &mut usize| {
+        if target > *byte {
+            *chars += text.get(*byte..target).map_or(0, |s| s.chars().count());
+            *byte = target;
+        }
+        *chars
+    };
+    for (start, end) in ranges {
+        if *start < byte || end < start {
+            continue;
+        }
+        let s = to(*start, &mut byte, &mut chars);
+        let e = to(*end, &mut byte, &mut chars);
+        out.push((s, e));
+    }
+    out
 }
 
 /// Most characters a name Alt-click reads on each side of the click.
@@ -499,18 +870,26 @@ fn shown_diagnostics<'a>(entry: &'a EntryPane, text: &str) -> &'a [DiagnosticMod
 
 /// The runs of `text` ([`runs`]), kept in the context's memory under `id` while the text, the underlined ranges and the
 /// colours stay the same, so a long entry is classed once rather than every frame.
-fn kept_runs(ctx: &egui::Context, id: egui::Id, text: &str, diagnostics: &[DiagnosticModel], tokens: &UiTokens) -> Vec<Highlight> {
+fn kept_runs(
+    ctx: &egui::Context,
+    id: egui::Id,
+    text: &str,
+    diagnostics: &[DiagnosticModel],
+    found: &[(usize, usize)],
+    tokens: &UiTokens,
+) -> Vec<Highlight> {
     let mut hasher = DefaultHasher::new();
     text.hash(&mut hasher);
     for d in diagnostics.iter().take(MAX_UNDERLINES) {
         d.range.hash(&mut hasher);
     }
+    found.iter().take(MAX_UNDERLINES).for_each(|m| m.hash(&mut hasher));
     palette(tokens).hash(&mut hasher);
     let key = hasher.finish();
     if let Some(kept) = ctx.data(|d| d.get_temp::<Arc<(u64, Vec<Highlight>)>>(id)).filter(|kept| kept.0 == key) {
         return kept.1.clone();
     }
-    let fresh = runs(text, diagnostics, tokens);
+    let fresh = runs(text, diagnostics, found, tokens);
     ctx.data_mut(|d| d.insert_temp(id, Arc::new((key, fresh.clone()))));
     fresh
 }
@@ -533,12 +912,14 @@ fn palette(tokens: &UiTokens) -> [Color32; 11] {
     ]
 }
 
-/// The runs of the field's `text`: a colour per class, and the ranges of `diagnostics`, which belong to `text`,
-/// underlined.
-fn runs(text: &str, diagnostics: &[DiagnosticModel], tokens: &UiTokens) -> Vec<Highlight> {
+/// The runs of the field's `text`: a colour per class, the ranges of `diagnostics`, which belong to `text`, underlined in
+/// the error colour, and the find bar's matches `found` in the accent colour.
+fn runs(text: &str, diagnostics: &[DiagnosticModel], found: &[(usize, usize)], tokens: &UiTokens) -> Vec<Highlight> {
     let color = |c: Rgba| Color32::from(Srgba::from(c));
     let mut out: Vec<Highlight> = highlight(text).into_iter().map(|h| Highlight::ink(h.range, color(ink(h.kind, tokens)))).collect();
     let bad = color(tokens.color.status.bad.fg);
     out.extend(diagnostics.iter().filter_map(|d| d.range).take(MAX_UNDERLINES).map(|(start, end)| Highlight::underline(start..end, bad)));
+    let accent = color(tokens.color.accent.solid);
+    out.extend(found.iter().take(MAX_UNDERLINES).map(|(start, end)| Highlight::underline(*start..*end, accent)));
     out
 }

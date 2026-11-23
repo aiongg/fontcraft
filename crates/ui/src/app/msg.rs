@@ -61,6 +61,8 @@ pub enum ViewMsg {
     FeatureCaretPlaced,
     /// The feature code editor asks a preview of an Alt-clicked name; `None` closes it.
     FeaturePreview(Option<crate::shell::font_info_tabs::PreviewAsk>),
+    /// The feature code editor's find bar changed, or closed (`None`).
+    FeatureFind(Option<crate::shell::font_info_tabs::FindState>),
     /// Font View's search field took the keyboard (`fontView.focusSearch`).
     FontViewSearchFocused,
     /// A press, drag or release on the Bitmap Glyph Editor's pixel canvas (`shell::bitmap_editor::input`).

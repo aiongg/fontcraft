@@ -157,6 +157,37 @@ pub struct FeaturesView {
     pub checked: Option<CheckedDraft>,
     /// The name Alt-clicked in the code editor, which the projection previews with `font.features.previewName`.
     pub preview: Option<PreviewAsk>,
+    /// The code editor's find bar, while it is open; the projection lists its matches with `font.features.find`.
+    pub find: Option<FindState>,
+}
+
+/// What the feature code editor's find bar holds.
+#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+pub struct FindState {
+    pub query: String,
+    pub replacement: String,
+    pub match_case: bool,
+    pub whole_word: bool,
+    pub regex: bool,
+    /// Search every entry, not only the shown one.
+    pub all_entries: bool,
+    /// The query field takes the keyboard in the next pass (Cmd+F).
+    pub focus: bool,
+    /// After Next or Previous moved to another entry: select its first match (`true`) or its last (`false`) once its
+    /// matches show.
+    pub reveal: Option<bool>,
+}
+
+impl FindState {
+    /// The query options as `font.features.find` and `font.features.replace` take them.
+    pub fn params(&self) -> Map<String, Value> {
+        let mut p = Map::new();
+        p.insert("query".into(), json!(self.query));
+        p.insert("matchCase".into(), json!(self.match_case));
+        p.insert("wholeWord".into(), json!(self.whole_word));
+        p.insert("regex".into(), json!(self.regex));
+        p
+    }
 }
 
 /// A name Alt-clicked in an entry's code: its text and its characters in the code as shown.
