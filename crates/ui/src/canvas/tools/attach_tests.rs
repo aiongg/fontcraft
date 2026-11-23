@@ -30,9 +30,13 @@ fn run(app: &mut FontCraftApp, id: &str, params: Value) {
     assert!(app.status.is_empty(), "{id}: {}", app.status);
 }
 
+/// Runs a shell command, then what it posted (a picker's pick posts its command for the next drain).
 fn shell(app: &mut FontCraftApp, id: &str, params: Value) {
     app.sent.push(Msg::Shell(CommandRef::with_params(id, params)));
     app.drain();
+    if !app.sent.is_empty() {
+        app.drain();
+    }
     assert!(app.status.is_empty(), "{id}: {}", app.status);
 }
 
