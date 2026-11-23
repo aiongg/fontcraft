@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1579 rows to check: 2805 guesses and 700 observe steps.**
+**1585 rows to check: 2824 guesses and 702 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,10 +48,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 51 |
 | Built milestones (M0 to M6) | Settings and the window | 18 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **1019** |
+| **Later milestones (after M6)** | all | **1025** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 90 |
 | Later milestones (after M6) | Edit View: text mode and preview | 30 |
-| Later milestones (after M6) | Components and anchors | 44 |
+| Later milestones (after M6) | Components and anchors | 50 |
 | Later milestones (after M6) | Filters | 5 |
 | Later milestones (after M6) | Spacing and metrics keys | 13 |
 | Later milestones (after M6) | Kerning and the Kerning window | 16 |
@@ -1765,7 +1765,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (1019)
+## Later milestones (after M6) (1025)
 
 ### Edit View: drawing, guides, layers and the Palette (90)
 
@@ -2190,7 +2190,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A Waterfall button in the Text Preview's top row; the View menu item runs the same command.
   - Observe: In the reference app, turn on the waterfall with the Edit View text and then a Font View selection, and note the default sizes and whether each line is labelled.
 
-### Components and anchors (44)
+### Components and anchors (50)
 
 - [ ] `anchors.contextual` (behavior, M8, handbook): An anchor whose name starts with an asterisk (for example *bottom) is…
   - Guess: The contextual features are appended after the font's code, so their lookups come before the generated cursive and kerning lookups in the lookup list; a fontmake build with kerning, cursive and contextual anchors would settle the order.
@@ -2223,15 +2223,35 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `cap.highlightAndSelection` (behavior, M13, handbook): A cap component is tinted with a faint blue background in Edit…
   - Observe: Screenshot a selected and an unselected cap at 400 % zoom to record how a selected cap differs from the plain highlight.
 - [ ] `cap.copyPasteOntoSegments` (behavior, M13, handbook): A selected cap component can be copied and then pasted onto other…
+  - Guess: A copied cap pastes onto each straight segment whose two nodes are selected: one copied cap onto every such segment, several onto as many segments in path order, as copied corners do on nodes.
+  - Guess: Cut refuses selected caps, segment components and brushes rather than cutting the layer; Copy, then Delete, moves them.
   - Observe: Copy a selected cap, select two adjacent nodes on another stem and paste; then select a single node and paste: note what is pasted in each case.
+- [ ] `segment.glyphNaming` (behavior, M13, handbook): A glyph is a segment glyph when its name starts with _segment
+  - Guess: A name of `_segment.` alone is not a segment glyph: the name needs at least one character after the dot.
+  - Guess: A segment glyph without `start` and `end` anchors is laid out from its path's first node to its last.
 - [ ] `segment.startEndAnchors` (behavior, M13, handbook): The start and end anchors belong on the first and last node…
+  - Guess: Points of a segment glyph before `start` or after `end` keep being scaled past the host's ends, along the host's direction there, so misplaced anchors make the component overshoot or fall short of the host segment.
   - Observe: Move the end anchor of `_segment.wave` 40 units left of the end node and look at an attached segment component: note how much shorter it is.
 - [ ] `segment.appliesToStraightAndCurved` (behavior, M13, handbook): A segment component replaces one straight or curved host segment with its…
   - Guess: Add Segment Component accepts a curved host segment, as the handbook says; a 2025 staff answer says the menu item is not offered on smooth curve segments, so the reference app may refuse it. Adding one to a smooth curve of an `o` in the reference app settles it.
+- [ ] `segment.highlightAndSelection` (behavior, M13, handbook): A segment component is tinted with a faint blue background in Edit…
+  - Guess: A segment component whose glyph puts no node inside its host segment is highlighted, and hit, along the host segment itself.
+- [ ] `segment.copyPasteOntoSegments` (behavior, M13, handbook): A selected segment component can be copied and pasted onto other selected…
+  - Guess: A copied segment component pastes onto each segment whose two end nodes are selected; a selection that holds no such segment is refused and changes nothing.
 - [ ] `brush.glyphNaming` (behavior, M13, handbook): A glyph is a brush glyph when its name starts with _brush
   - Guess: A brush uses the brush glyph's first path; when that path is open, the brush draws nothing and its glyph is reported. A brush glyph whose first path is open, in the reference app, settles it.
+  - Guess: A brush glyph with more than one closed path is refused with a message instead of having its further shapes ignored; open paths after its closed path are ignored.
+  - Guess: A name of `_brush.` alone is not a brush glyph: the name needs at least one character after the dot.
+  - Observe: Give `_brush.arrow` a second closed shape and look at an attached brush: note whether the second shape is drawn, ignored or reported.
 - [ ] `brush.startEndAnchors` (behavior, M13, handbook): Glyph › Set Anchors (Cmd+U) places a brush glyph's start and end…
   - Guess: Set Anchors puts a brush glyph's start at (0, 0) and its end at (advance width, 0); Set Anchors on a brush glyph in the reference app settles it.
+  - Guess: A brush glyph without `start` and `end` anchors is laid out from (0, 0) to (advance width, 0), where Set Anchors would put them.
+- [ ] `brush.expandsSegments` (behavior, M13, handbook): A brush turns a host path segment, straight or curved, into the…
+  - Guess: The host path stays when a brush is drawn and when it is decomposed; the brush's outline is added beside it as a path of its own.
+- [ ] `brush.highlightAndSelection` (behavior, M13, handbook): A brush is tinted with a faint blue background in Edit View
+  - Guess: A brush is highlighted along the whole outline it draws, and a click anywhere on that outline selects it.
+- [ ] `brush.copyPasteOntoSegments` (behavior, M13, handbook): The standard Copy and Paste commands carry a selected brush over to…
+  - Guess: A copied brush pastes onto each segment whose two end nodes are selected; a selection that holds no such segment is refused and changes nothing.
 - [ ] `capComponent.add` (M13, handbook, live): Add Cap Component
   - Guess: The cap glyph's first path is open; it replaces the host segment between the two nodes, its start joins the side before the first node and its end the side after the second, and those sides are cut where the cap's ends meet them, as a corner's ends are fitted; left and right anchors act as for corners. The sources agree on the joining; an export of the cap test font settles the cut points.
   - Guess: Each side is cut at its point nearest the cap's end node and then ends at that node, so a cap end that is off the side's line bends the side to it; the cap glyph's other paths are added to the layer, placed as the cap is.
@@ -2256,30 +2276,36 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: For a cap, left turns it to the side before the first node and right to the side after the second, as corners do; centre (both) follows the line between the two nodes and none keeps it unrotated, as staff answers say. Exporting the slanted-stem cap with each mode settles left and right.
   - Guess: A new cap is stored with options 0 (left), as a new corner is; the 3.0.3 screenshot shows four caps in centre alignment, which may have been set by hand. Adding a cap in the reference app and reading its Info box settles it.
   - Observe: Add `_cap.flag` to the slanted stem of `slash` and export once per alignment mode the Info box offers: note the cap's rotation in each export.
-- [ ] `segmentComponent.add` (M13, handbook): Add Segment Component
+- [ ] `segmentComponent.add` (M13, handbook, live): Add Segment Component
   - Guess: On a straight host segment the segment glyph's path is scaled along the baseline so start lands on the segment's first node and end on its last, and is not scaled across; the tutorial supports both, and the straight-segment export check settles the details.
   - Guess: On a curved host segment each point of the segment glyph, handles included, is moved to the host curve at the same fraction of its length and keeps its distance from the baseline along the curve's normal (the tutorial states the distance rule; the fraction of length is ours). The side above the baseline maps to the left of the host path's direction, a turn without mirroring, as the staff answer on direction implies. The curved-segment export check settles it.
   - Guess: A segment component's hint stores only `type`, `name` and `origin`, with no `options` or `scale`, since no source shows either on one; a source saved by the reference app with a segment component settles it.
+  - Guess: The segment glyph's end nodes take the places of the host segment's end nodes, so an end node off the start-to-end line moves the host node; the start node keeps its own type and the end node takes the type of the segment glyph's last node.
+  - Guess: Adding a segment component to a segment that already holds one replaces it, and several selected segments each get one in a single step.
+  - Guess: The segment glyph is named by the parameter `segmentGlyph`, since `segment` addresses a segment in every command.
   - Observe: In the segment test font (`_segment.wave`: a three-node open path on the baseline with start and end anchors on its end nodes), add the segment component to the bottom straight segment of a square and to one curved segment of an `o`, export an OTF and send it back: the outlines show the length and normal mapping, and whether the node count stays three.
-- [ ] `segmentComponent.decompose` (M13, handbook): Decompose Segment Component
+  - Observe: Add a segment component to a segment that already holds one: note whether it replaces the first or both are kept.
+- [ ] `segmentComponent.decompose` (M13, handbook, live): Decompose Segment Component
   - Observe: Decompose a segment component on the `o` and save: compare the resulting path with the exported outline of the Add Segment Component check.
-- [ ] `segmentComponent.setGlyph` (M13, handbook): Replace Segment Component
+- [ ] `segmentComponent.setGlyph` (M13, handbook, live): Replace Segment Component
   - Observe: Click the name in a segment component's Info box: note what opens and whether the replacement keeps the attachment.
-- [ ] `segmentComponent.editGlyph` (M13, handbook): Edit Segment Glyph
+- [ ] `segmentComponent.editGlyph` (M13, handbook, live): Edit Segment Glyph
   - Observe: Click the arrow button in a segment component's Info box: note whether the segment glyph opens in the same tab after the current glyph or in a new tab.
-- [ ] `brush.add` (M13, handbook): Add Brush
+- [ ] `brush.add` (M13, handbook, live): Add Brush
   - Guess: The brush outline between start and end follows the host segment as segment components do; the parts before start and after end keep their shape (tutorial) and are moved rigidly with the host's direction at its two ends (ours). The brush export check settles it.
   - Guess: With nodes selected, a node at the start of an open path gets no brush, since no segment ends there; the tutorial covers only end nodes. Selecting the first node of an open path in the reference app settles it.
   - Guess: A brush's hint stores only `type`, `name` and `origin`, with no `options` or `scale`, since no source shows either on one; a source saved by the reference app with a brush settles it.
+  - Guess: Adding a brush to a segment that already holds one replaces it.
   - Observe: In the brush test font (`_brush.arrow`: one closed arrow outline, start anchor at the tail, end anchor where the head begins), add the brush to a straight open path and to a curved open path, export an OTF and send it back: the head should keep its shape and the shaft follow the curve.
   - Observe: Select only the first node of a three-segment open path and choose Add Brush: note whether a brush is added.
-- [ ] `brush.decompose` (M13, handbook): Decompose Brush
+- [ ] `brush.decompose` (M13, handbook, live): Decompose Brush
   - Observe: Decompose a brush on the curved open path and save: note whether the open host path is removed and replaced by the closed outline.
-- [ ] `brush.setGlyph` (M13, handbook): Replace Brush
+- [ ] `brush.setGlyph` (M13, handbook, live): Replace Brush
   - Observe: Click the name in a brush's Info box and note what opens.
-- [ ] `brush.editGlyph` (M13, handbook): Edit Brush Glyph
+- [ ] `brush.editGlyph` (M13, handbook, live): Edit Brush Glyph
   - Observe: Click the arrow button in a brush's Info box: note where the brush glyph opens.
 - [ ] `infoBox.capComponent` (panel, M13, handbook): Cap component Info box
+  - Guess: The cap part shows for a selected cap as well as for a cap on a selected node.
   - Observe: Screenshot the Info box of a selected segment component and of a selected brush with View › Show Info on; list each control and its default.
   - Observe: Add a new cap and note the default state of its fit checkbox and alignment buttons.
 - [ ] `dialog.capPicker` (panel, M13, handbook): Cap glyph picker
@@ -4000,6 +4026,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: An edit that deletes the node a hint end is linked to turns that end into a number at the node's last position; deleting a linked node in the reference app would settle it.
   - Guess: After an edit, a linked node is found again by index, then by place and on- or off-curve class within half a unit, then by index when its path keeps the same node classes; reversing a contour and changing its start point with linked hints in the reference app would settle whether links follow the node.
   - Guess: Hints in a layer's background keep their links through background edits as the layer's own do; inserting a node before a linked node in the background of a hinted glyph in the reference app would settle it.
+  - Guess: A cap, segment component or brush follows the one node its hint stores and is removed when that node is deleted, as a corner component is; deleting a node of a capped stem end in the reference app would settle it.
   - Observe: T1: link a stem hint of I to two nodes, delete one of them, and note whether the hint keeps its position as a number, is deleted, or moves.
   - Observe: T1: link a stem hint of O to two nodes, reverse the contour, then make another node first, and note whether the hint stays on the same nodes.
   - Observe: T1: in I, choose Edit › Copy to Background (or swap with the background), link a background stem hint to two background nodes, insert a node before one of them in the background, and note whether the hint stays on the same nodes.
