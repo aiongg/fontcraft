@@ -2,11 +2,11 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-23: M8.30b, M8.27 and M8.31 written on branch `w-M8.27`, not yet built (the Alt-click name preview; find, replace and editing keys in the feature code editor; feature parameters edited as code and compiled per instance; see "Where M8.30b stands", "Where M8.27 stands" and "Where M8.31 stands"). Before that: X.fix100, M8.26 and M8.30 written on branch `w-M8.26`, not yet built (control input reaches floating windows; a gutter with inline errors in the feature code editor; previews of code classes, mark classes and lookups, and more fixes); see "Where X.fix100 stands", "Where M8.26 stands" and "Where M8.30 stands". Before that: M8.25, the live feature check, built on branch `w-M8.25` with X.fix99a to X.fix99f (About joins NOTICE paragraphs and is at most 36 line heights wide; `ui.key` reaches a modal, so Escape closes About; the Command Console log follows new rows); see "Where M8.25 stands". Before that: M13.23c, M13.74, M13.76 and M14.4c merged into `master`, built, tested and smoke-tested in the window, light and dark (X.integ162 to X.integ166, X.fix98; see "Where M13.64 stands" for the package notes). The docked Command Console's body scrolls and its log takes the rows the room leaves, so the input line stays in view; Shift+Arrow selects in the macro editor, which no longer inserts Tab (a craft text part that inserts Tab loses its arrows: decision 0009); `ui.key` and `ui.text` go to a text field that has the keyboard. Before that, M13.76 and M14.4c were written on branch `w-M13.76`. Before that, X.fix96 and X.fix97: floating panels are OS windows on desktop again; while a form dialog is open they drop to the normal level and the main window comes forward, shown in a native-window harness test (`testing::native`) and not yet seen on a desktop with a window manager; `ui.key Escape` closes the canvas context menu; `ui.screenshot` still misses floating windows, an eframe gap (see "Known weak spots"). Before that, 2026-11-22: M10.34, M10.41 and M13.64 merged into `master`, built, tested and smoke-tested in the window (X.integ158 to X.integ161; see "Where M13.64 stands"); M13.23c not started. Before that: M5.30, M13.69, M13.70 and X.fix95 merged into `master`, built, tested and smoke-tested in the window (X.integ153 to X.integ156; see "Where M5.30, M13.69 and M13.70 stand"). Before that: M9.32, M3.41, M3.43 and M3.42 merged (X.integ148 to X.integ151); the Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
+_Updated: 2026-11-23: X.fix100, M8.26, M8.30, M8.30b, M8.27 and M8.31 built and gated (branch `w-M8.27`, fixes X.integ167 to X.integ174): `cargo xtask ci` passed all 11 steps, 4,993 tests passed and 43 skipped. The smoke of this batch is under "Where M8.26 stands"._
 
 ## State of the tree
 
-- **Where M8.31 stands.** Written on branch `w-M8.27`, not yet built. Engine: `features_check::compile_instance`
+- **Where M8.31 stands.** Built (integrated with X.integ167 to X.integ174). Engine: `features_check::compile_instance`
   (on a font and a `CheckContext`, like `check_font`) answers `font.features.compile` with `instance`: each enabled
   parameter goes through `apply_instance_params` alone, a failing one lands in `refused`, and the entries the Add and
   Replace parameters wrote are found again by name and code to put `param: {name, index}` on their diagnostics;
@@ -14,13 +14,13 @@ _Updated: 2026-11-23: M8.30b, M8.27 and M8.31 written on branch `w-M8.27`, not y
   (`models/font_info.rs`, `FEATURE_CODE_PARAMS`) for the six Add and Replace parameters, drawn by `param_value` as a
   mono field coloured with `code_editor::code_runs`, with `code_problem` (a disc and `Line n: message`) under it;
   `font_exports::code_problems` runs the instance compile in the projection when the one selected instance has such a
-  parameter (on the window's thread, under `guard::catch_panic`). Tests (not run): engine `feature_compile`
+  parameter (on the window's thread, under `guard::catch_panic`). Tests (pass): engine `feature_compile`
   `an_instance_compile_reports_a_broken_replace_feature_at_its_parameter`; ui `tabs_tests`
   `a_feature_parameter_is_coloured_and_shows_its_compile_problem`. Left: completion in the parameter field, the
   instance compile on a worker, the parameter rows of the six parameters in `spec/inventory` (only
   `fontInfo.features.exportSpecific` and `font.features.compile` describe M8.31).
 
-- **Where M8.27 stands.** Written on branch `w-M8.27`, not yet built. Engine: `cmd/features_find.rs` with
+- **Where M8.27 stands.** Built (integrated with X.integ167 to X.integ174). Engine: `cmd/features_find.rs` with
   `font.features.find` (query) and `font.features.replace`; one `regex::Regex` per query (plain text escaped), pattern
   1,000 bytes and compiled size 1 MB at most, empty matches skipped, Whole Word by name characters, at most 10,000
   matches listed, a replaced entry refused past 4 MB as it grows. `regex` is a new dependency of the engine crate
@@ -33,24 +33,23 @@ _Updated: 2026-11-23: M8.30b, M8.27 and M8.31 written on branch `w-M8.27`, not y
   Replace All, going on to the next entry with matches in the all-entries scope (`FindState::reveal`). Tests (not
   run): engine `feature_find` (three) and `features_find` unit tests (three); ui `tabs_tests`
   `editing_keys_comment_indent_and_keep_indentation`, `cmd_slash_in_the_code_field_comments_the_lines`,
-  `find_next_wraps_and_replace_takes_the_selected_match`. Unsure until built: that the field's focus stop id is the
-  response id the claims name, that a claimed Enter reaches the completion list first while it is open, and that a
-  selection written in one pass is the one `replace_selection` replaces in the next. Command ids changed: bless
-  `command_ids.txt`.
+  `find_next_wraps_and_replace_takes_the_selected_match`, and `arrows_move_the_caret_in_the_code_field` (the arrows
+  and Shift+Arrow still move the caret while a selection over lines has Tab claimed). The claims name the field's
+  focus stop (the Cmd+/ test passes), and the two-pass `replace_selection` edit lands. Not checked: that a claimed
+  Enter reaches the completion list first while it is open.
 
-- **Where M8.30b stands.** Written on branch `w-M8.27` (on top of `w-M8.26`), not yet built. Alt-click in the
+- **Where M8.30b stands.** Built (integrated with X.integ167 to X.integ174). Alt-click in the
   feature code editor: `code_editor::alt_clicked` reads the click's character from the field's galley
   (`Galley::cursor_from_pos`), `name_at` takes name characters on both sides (200 at most, a leading `@` or
   backslash kept), and `ViewMsg::FeaturePreview` stores a `PreviewAsk` in `FeaturesView::preview`. The projection
   runs `font.features.previewName` with the current master into `EntryPane::preview` (`PreviewModel`), and the editor
   shows a `Popover` at the name's bottom-left (`at_point`) with `preview_lines`; closing it sends `None`. The glyph is
-  not drawn. The code field drops `tab_inserts(true)` (decision 0009). Tests (not run):
+  not drawn. The code field drops `tab_inserts(true)` (decision 0009). Tests (pass):
   `alt_click_on_a_name_asks_its_preview`, `the_clicked_name_takes_name_characters_on_both_sides`,
-  `a_preview_lists_class_members_anchors_and_lookup_rules` (ui `tabs_tests`). Unsure until built: that an Alt-held
-  click reaches `i.pointer.primary_clicked()` in the fixture (`Fixture::hold`), and that `at_point` takes the
-  field's layer coordinates.
+  `a_preview_lists_class_members_anchors_and_lookup_rules` (ui `tabs_tests`). The Alt-held click reaches the
+  field in the fixture. Not checked by a test: that `at_point` takes the field's layer coordinates.
 
-- **Where M8.30 stands.** Written on branch `w-M8.26`, not yet built. Checked first: `previewName` resolved
+- **Where M8.30 stands.** Built (integrated with X.integ167 to X.integ174). Checked first: `previewName` resolved
   only class entries (a class defined in prefix code or by `markClass` was "no class"), and no lookup preview
   existed. Now `edit::bodies` reads `@Name = …;`, `markClass` statements and each lookup's first 50 rules from the
   enabled prefix and feature code (at most 4 MB), and `preview_name` walks class entries, then code classes, then
@@ -58,33 +57,33 @@ _Updated: 2026-11-23: M8.30b, M8.27 and M8.31 written on branch `w-M8.27`, not y
   `edit::fixes`: nearest glyph names (`distance_within`, banded; `MAX_NEAREST_SCAN` names a call and
   `Names::nearest`, 500,000, over one listing), a lookup name in another case, `close_block` for `Feature block is
   unclosed` and `Table is unclosed`, and the opening tag for `expected tag '…'`. `fea::run::worded` rewrites fea-rs's
-  class-length message, which puts the target's count where it names the replacement. Tests (not run):
+  class-length message, which puts the target's count where it names the replacement. Tests (pass):
   `each_new_fix_gives_code_that_compiles`, `edit_distance_is_banded_and_exact`,
   `fix_search_stays_bounded_on_a_megabyte_of_code`, `bodies_read_classes_mark_classes_and_lookup_rules`,
   `a_class_of_another_length_gets_both_counts` (features `edit.rs`);
-  `preview_name_resolves_code_classes_mark_classes_and_lookups` (engine `feature_compile`). Unsure until built:
-  which errors fea-rs reports for an open block in the test cases. The code editor has no Alt-click preview yet.
+  `preview_name_resolves_code_classes_mark_classes_and_lookups` (engine `feature_compile`). The fea-rs messages the new fixes
+  match were read from its source; `each_new_fix_gives_code_that_compiles` passes on them.
 
-- **Where M8.26 stands.** Written on branch `w-M8.26`, not yet built. The feature code editor
+- **Where M8.26 stands.** Built (integrated with X.integ167 to X.integ174). The feature code editor
   (`panels/font_info/code_editor.rs`) draws a gutter left of the field: line numbers from the field's own layout
   (`craft_ext::ui::text::field_layout`; a wrapped row gets no number), one icon per line with diagnostics (a disc for
   an error, a triangle for a warning) and a wrench when one has a fix, and the line's first message dimmed after its
   text. The icon (accessible name `Problems on line N`, plus ` (a fix is available)`) opens a popover with each
   diagnostic of the line and its Fix buttons (`font.features.applyFix`); the list under the editor is gone. The
   coloured runs are kept in the context's memory while the text, the underlined ranges and the colours stay the
-  same (`kept_runs`). Tests (not run), in `panels/font_info/tabs_tests.rs`:
+  same (`kept_runs`). Tests (pass), in `panels/font_info/tabs_tests.rs`:
   `the_gutter_marks_the_diagnostics_line_and_its_icon_opens_the_fix`, `the_wrench_shows_only_where_a_fix_exists`,
   `wrapped_lines_get_no_number`, the updated `features_entry_pane_posts_code_fixes_and_names`, and the measure
-  `a_frame_with_a_256_kb_entry_takes_under_16_ms` (ignored; release). Unsure until built: the field fills the room a
-  horizontal row leaves it, the gutter icon is in the AccessKit tree for `by_label`, and the code field wraps long
-  lines.
+  `a_frame_with_a_256_kb_entry_takes_under_16_ms` (ignored; release). The gutter icon is in the AccessKit tree and
+  the field wraps long lines. The open details survive a pass in which the field has no layout yet (egui discards
+  that pass; X.integ171). Not checked: that the field fills the room a horizontal row leaves it.
 
-- **Where X.fix100 stands.** Written on branch `w-M8.26`, not yet built. Control-channel input reaches floating OS
+- **Where X.fix100 stands.** Built (integrated with X.integ167 to X.integ174). Control-channel input reaches floating OS
   windows. `ui.click`, `ui.drag`, `ui.move` and `ui.wheel` take main-window points; a point inside a floating panel's
   OS window lands there, in that window's points (`control::window_input::land`, over `WindowHost::viewports_at`).
   A click or drag sends its window a focus request, as a desktop click does, so `ui.text` and `ui.key` (which follow
   `WindowHost::key_window`) reach the field it focused. `ui.inspect` lists `windows` with their rects; replies name
-  the `window`. The native harness turns a focus command into the reported focus. Tests (not run):
+  the `window`. The native harness turns a focus command into the reported focus. Tests (pass):
   `a_control_click_over_a_floated_panel_reaches_its_window`, `control_text_types_into_a_field_of_a_floated_panel`
   (`testing/native/tests.rs`). Font View's keys still go to the main window. Not yet seen on a desktop: whether the
   window manager grants the focus request.
