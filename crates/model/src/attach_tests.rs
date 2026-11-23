@@ -367,7 +367,7 @@ fn outline_resolution_draws_segments_and_brushes() {
     let shapes = insert_attachments(&f, &layer).unwrap().unwrap();
     assert_eq!(shapes.len(), 2);
     let (fitted, report) = {
-        let mut g = f.glyph("stroke").unwrap().clone();
+        let mut g = (**f.glyph("stroke").unwrap()).clone();
         g.layers[0] = layer;
         put(&mut f, g);
         insert_all_attachments(&f)

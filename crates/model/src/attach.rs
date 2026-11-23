@@ -1140,11 +1140,12 @@ fn fit_segment_into(path: &mut Path, ids: &mut Vec<Option<usize>>, glyph: &Strok
     out.extend(nodes.get(to + 1..).unwrap_or_default().iter().cloned());
     // Back to the path's own start. A segment that wraps past the start of a closed path held
     // it: its end node starts the path again when it was the start, else the first bent node.
+    let count = out.len();
     if a > b {
         let at = if b == 0 { 1 + middle.len() } else { 1 };
-        out.rotate_left(at.min(out.len()));
+        out.rotate_left(at.min(count));
     } else {
-        out.rotate_right(a.min(out.len()));
+        out.rotate_right(a.min(count));
     }
     (path.nodes, *ids) = out.into_iter().unzip();
     Ok(())
