@@ -264,3 +264,21 @@ fn the_instructor_section_lists_its_view_items_checked_as_their_state_is() {
     assert_eq!(checked(&menu, "contextMenu.hintingPreviewScale4x"), json!(true));
     assert_eq!(checked(&menu, "contextMenu.hintingPreviewScale1x"), json!(false));
 }
+
+/// `ui.key Escape` closes the open canvas menu as the keyboard's Escape does: the menu takes the window's keys, so
+/// the key goes to the window rather than to the tools.
+#[test]
+fn escape_over_the_control_channel_closes_the_canvas_menu() {
+    let mut t = crate::testing::TestApp::new();
+    t.app.sent.push(Msg::View(ViewMsg::SelectGlyph("A".into())));
+    t.app.drain();
+    t.ok("engine.execute", json!({"command": "path.addRectangle", "params": {"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200}}));
+    t.frame();
+    let at = t.app.view.canvas.rect.center();
+    t.app.fire(CommandRef::with_params("contextMenu.open", json!({"x": at.x, "y": at.y})));
+    t.frames(2);
+    assert!(t.app.context_menus.canvas.is_some(), "the canvas menu is open");
+    let reply = t.ok("ui.key", json!({"key": "Escape"}));
+    assert_eq!(reply["contextMenu"], true, "{reply}");
+    assert!(t.app.context_menus.canvas.is_none(), "Escape closed the canvas menu");
+}

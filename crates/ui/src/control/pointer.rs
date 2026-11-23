@@ -3,6 +3,7 @@
 //! The events take the path the canvas's own input takes (`canvas::tools::apply::input`), so a script and the mouse
 //! do the same thing. Each method answers with the tools' state after it. While Font View shows, `ui.key` gives Font
 //! View's keys to the window, where the grid or the list that has the keyboard takes them, and none to the tools.
+//! While a context menu is open, every key goes to the window, where the menu takes it as it takes the keyboard's.
 
 use craft::keymap::{Key as WindowKey, Mods};
 use craft::ui::runtime::commands::{Binding, CommandRef};
@@ -146,6 +147,23 @@ fn key(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
         Some("release") => (false, true),
         Some(_) => return Err(format!("{M}: `action` must be tap, press or release")),
     };
+    // An open context menu takes the window's keys before anything under it, so the key goes to the window as the
+    // keyboard sends it.
+    let menu_open = app.context_menus.canvas.is_some() || app.context_menus.glyph.is_some();
+    if menu_open
+        && let Some(host) = app.control.window.clone()
+        && let Some(key) = WindowKey::parse(name)
+    {
+        let held = Mods { cmd: mods.cmd, ctrl: mods.ctrl, alt: mods.alt, shift: mods.shift };
+        if press {
+            host.inject_key(ViewportId::ROOT, key, held, !release);
+        } else if release {
+            host.inject_let_go(ViewportId::ROOT, key);
+        }
+        let steps = usize::from(press) + usize::from(release);
+        app.control.queued += steps;
+        return Ok(json!({"queued": steps, "handled": true, "contextMenu": true}));
+    }
     let tool_key = Key::parse(name);
     // While Font View shows, its own keys go to the window as the keyboard sends them, and no key reaches the edit
     // view's tools.

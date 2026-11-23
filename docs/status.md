@@ -39,8 +39,8 @@ _Updated: 2026-11-22: M10.34, M10.41 and M13.64 merged into `master`, built, tes
 
 - **Where M10.34 and M10.41 stand.** Merged and built with M13.64. Seen in the window: with the Instructor and two
   points selected, the canvas menu starts with Snap Point, Stem and Delta, Shift Points and Interpolate greyed out;
-  the glyph section has Autohint and Remove Hints. `ui.key Escape` does not close the canvas menu over the control
-  channel (a real Escape reaches egui's popup and does). One commit each:
+  the glyph section has Autohint and Remove Hints. While a context menu is open, `ui.key` hands the key to the
+  window, so `Escape` closes the menu as the keyboard's does (X.fix96c). One commit each:
   - M10.34a: the Instructor's context menus (`app/context_menu/mod.rs`). Snap Point, Stem, Shift Points,
     Interpolate and Delta have `context = ["canvas.node", "canvas.path"]` (engine `POINT_MENUS` in
     `cmd/hint_tt.rs`, and their rows); `candidates` drops a command whose `when` names a tool other than the active

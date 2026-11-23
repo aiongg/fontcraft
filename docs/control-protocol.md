@@ -162,7 +162,9 @@ selection, opens it or asks to remove it; the reply is `{queued, handled: true, 
 A character no shortcut there takes (a letter with no `cmd`, `ctrl` or `alt`) is typed into the
 window the same way, and the grid or list that has the keyboard selects the first glyph whose
 name starts with what was typed (type-ahead); with nothing focused it does nothing. Every other
-key goes on to the menu shortcuts.
+key goes on to the menu shortcuts. While a context menu is open (the canvas menu or Font View's
+glyph menu), every key goes to the window as the keyboard sends it, and the menu takes it as it
+takes the keyboard's (`Escape` closes it). The reply is `{queued, handled: true, contextMenu: true}`.
 
 In text mode (the Text tool), `ui.key` and `ui.text` type into the tab's text at the cursor, as
 the keyboard does: characters, `Space`, `Return`, `Backspace`, `Delete` and the arrows (with
