@@ -6,6 +6,20 @@ _Updated: 2026-11-23: M8.25, the live feature check, built on branch `w-M8.25` w
 
 ## State of the tree
 
+- **Where M8.26 stands.** Written on branch `w-M8.26`, not yet built. The feature code editor
+  (`panels/font_info/code_editor.rs`) draws a gutter left of the field: line numbers from the field's own layout
+  (`craft_ext::ui::text::field_layout`; a wrapped row gets no number), one icon per line with diagnostics (a disc for
+  an error, a triangle for a warning) and a wrench when one has a fix, and the line's first message dimmed after its
+  text. The icon (accessible name `Problems on line N`, plus ` (a fix is available)`) opens a popover with each
+  diagnostic of the line and its Fix buttons (`font.features.applyFix`); the list under the editor is gone. The
+  coloured runs are kept in the context's memory while the text, the underlined ranges and the colours stay the
+  same (`kept_runs`). Tests (not run), in `panels/font_info/tabs_tests.rs`:
+  `the_gutter_marks_the_diagnostics_line_and_its_icon_opens_the_fix`, `the_wrench_shows_only_where_a_fix_exists`,
+  `wrapped_lines_get_no_number`, the updated `features_entry_pane_posts_code_fixes_and_names`, and the measure
+  `a_frame_with_a_256_kb_entry_takes_under_16_ms` (ignored; release). Unsure until built: the field fills the room a
+  horizontal row leaves it, the gutter icon is in the AccessKit tree for `by_label`, and the code field wraps long
+  lines.
+
 - **Where X.fix100 stands.** Written on branch `w-M8.26`, not yet built. Control-channel input reaches floating OS
   windows. `ui.click`, `ui.drag`, `ui.move` and `ui.wheel` take main-window points; a point inside a floating panel's
   OS window lands there, in that window's points (`control::window_input::land`, over `WindowHost::viewports_at`).

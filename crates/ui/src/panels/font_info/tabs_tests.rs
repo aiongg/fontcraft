@@ -233,14 +233,16 @@ fn a_snippet_replaces_the_selected_code() {
 #[test]
 fn features_entry_pane_posts_code_fixes_and_names() {
     let (mut fixture, posted) = panel(features_model());
+    let mark = fixture.by_label("Problems on line 1 (a fix is available)").expect("the line's icon");
+    fixture.click(&mark).settle();
+    let fix = fixture.by_label("Fix: Remove").expect("the Fix button");
+    fixture.click(&fix).settle();
     let code = fixture.by_label("Feature Code").expect("the code field");
     fixture.click(&code).key(Key::A, Modifiers::COMMAND).type_text("sub b by c;").settle();
     let notes = fixture.by_label("Notes").expect("the notes field");
     fixture.click(&notes).settle();
     let automatic = fixture.by_label("Generate Feature Automatically").expect("the box");
     fixture.click(&automatic).settle();
-    let fix = fixture.by_label("Fix: Remove").expect("the Fix button");
-    fixture.click(&fix).settle();
     let minus = fixture.by_label("Remove this name").expect("the name's minus");
     fixture.click(&minus).settle();
     let entry = json!({ "kind": "feature", "name": "ss01", "index": 1 });
@@ -507,4 +509,121 @@ fn an_inserted_snippet_leaves_the_caret_after_it() {
     app.sent.push(Msg::View(ViewMsg::FeatureCaretPlaced));
     app.drain();
     assert_eq!(app.view.font_info.features.caret, None);
+}
+
+/// The painted code of the Features tab whose text is `code`, with where it was painted.
+fn painted_code(fixture: &mut Fixture, code: &str) -> (egui::Pos2, Arc<egui::Galley>) {
+    fixture
+        .frame_shapes()
+        .iter()
+        .find_map(|shape| match shape {
+            egui::Shape::Text(t) if t.galley.job.text == code => Some((t.pos, t.galley.clone())),
+            _ => None,
+        })
+        .expect("the code is painted")
+}
+
+/// The features model showing `code` with the compile's `diagnostics`.
+fn showing(code: &str, diagnostics: Vec<DiagnosticModel>) -> FontInfoModel {
+    let mut model = features_model();
+    if let Some(e) = model.features.entry.as_mut() {
+        e.code = code.into();
+        e.diagnostics = diagnostics;
+    }
+    model
+}
+
+/// The gutter marks the diagnostic's line with an icon beside that line, and no other; the list under the code is
+/// gone, and the icon opens the details, whose Fix posts the same `font.features.applyFix` as the command takes.
+#[test]
+fn the_gutter_marks_the_diagnostics_line_and_its_icon_opens_the_fix() {
+    let code = "sub a by b;\nsub c by d;";
+    let found =
+        DiagnosticModel { id: 3, error: true, message: "unknown glyph".into(), line: 2, range: Some((16, 17)), fixes: vec!["Use c.sc".into()] };
+    let (mut fixture, posted) = panel(showing(code, vec![found]));
+    assert!(fixture.by_label("Fix: Use c.sc").is_none(), "no list under the code");
+    assert!(fixture.by_label("Problems on line 1").is_none());
+    let mark = fixture.by_label("Problems on line 2 (a fix is available)").expect("an icon at line 2");
+    let (pos, galley) = painted_code(&mut fixture, code);
+    let second = galley.rows.get(1).expect("two rows").rect().translate(pos.to_vec2());
+    assert!(second.y_range().contains(mark.rect.center().y), "the icon {:?} sits beside line 2 {second:?}", mark.rect);
+    fixture.click(&mark).settle();
+    let fix = fixture.by_label("Fix: Use c.sc").expect("the details show the Fix");
+    fixture.click(&fix).settle();
+    assert_eq!(*posted.borrow(), vec![Msg::run("font.features.applyFix", json!({ "error": 3, "fix": 0 }))]);
+}
+
+/// A line gets one mark: an error icon if any of its diagnostics is an error, a wrench only if one has a fix, and the
+/// first message; the icon's name says when a fix is available.
+#[test]
+fn the_wrench_shows_only_where_a_fix_exists() {
+    let d = |id: u64, error: bool, line: u64, fixes: &[&str]| DiagnosticModel {
+        id,
+        error,
+        message: format!("problem {id}"),
+        line,
+        range: None,
+        fixes: fixes.iter().map(|f| (*f).to_string()).collect(),
+    };
+    let found = vec![d(1, false, 3, &[]), d(2, true, 1, &[]), d(3, true, 3, &["Fix it"]), d(4, false, 0, &["Nowhere"])];
+    let got = super::code_editor::marks(&found);
+    let want = vec![
+        super::code_editor::LineMark { line: 1, error: true, fixable: false, message: "problem 2" },
+        super::code_editor::LineMark { line: 3, error: true, fixable: true, message: "problem 1" },
+    ];
+    assert_eq!(got, want);
+
+    let (fixture, _) = panel(showing("sub a by b;\nsub c by d;\nsub e by f;", found.clone()));
+    assert!(fixture.by_label("Problems on line 1").is_some(), "no fix, no wrench");
+    assert!(fixture.by_label("Problems on line 1 (a fix is available)").is_none());
+    assert!(fixture.by_label("Problems on line 3 (a fix is available)").is_some());
+}
+
+/// Each line of the code gets a number in the gutter; the rows a long line wraps onto get none.
+#[test]
+fn wrapped_lines_get_no_number() {
+    let long = "sub a by b; ".repeat(60);
+    let code = format!("{long}\nsub c by d;");
+    let (mut fixture, _) = panel(showing(&code, Vec::new()));
+    let shapes = fixture.frame_shapes();
+    let (pos, galley) = shapes
+        .iter()
+        .find_map(|shape| match shape {
+            egui::Shape::Text(t) if t.galley.job.text == code => Some((t.pos, t.galley.clone())),
+            _ => None,
+        })
+        .expect("the code is painted");
+    assert!(galley.rows.len() > 2, "the first line wraps: {} rows", galley.rows.len());
+    let mut numbers: Vec<String> = shapes
+        .iter()
+        .filter_map(|shape| match shape {
+            egui::Shape::Text(t) if t.pos.x < pos.x && t.galley.job.text.parse::<u32>().is_ok() => Some(t.galley.job.text.clone()),
+            _ => None,
+        })
+        .collect();
+    numbers.sort();
+    assert_eq!(numbers, vec!["1".to_string(), "2".to_string()]);
+}
+
+/// Measure: a frame of the Features tab showing a 256 KB entry with an error takes under 16 ms in a release build.
+#[test]
+#[ignore = "a measure: run with --release --ignored"]
+fn a_frame_with_a_256_kb_entry_takes_under_16_ms() {
+    let line = "sub a by b; # a statement of the measure\n";
+    let code = line.repeat(256 * 1024 / line.len());
+    let found = DiagnosticModel { id: 1, error: true, message: "unknown glyph".into(), line: 100, range: Some((4, 5)), fixes: vec!["Fix".into()] };
+    let (mut fixture, _) = panel(showing(&code, vec![found]));
+    let mut times: Vec<std::time::Duration> = (0..5)
+        .map(|_| {
+            let start = std::time::Instant::now();
+            fixture.frame_shapes();
+            start.elapsed()
+        })
+        .collect();
+    times.sort();
+    let median = times[2];
+    eprintln!("a frame with a {} byte entry: {median:?} median of 5", code.len());
+    if !cfg!(debug_assertions) {
+        assert!(median < std::time::Duration::from_millis(16), "{median:?}");
+    }
 }

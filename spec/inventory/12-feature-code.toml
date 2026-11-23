@@ -87,7 +87,14 @@ milestone = "M8"
 summary = "Opened by clicking an inline error icon in the code editor: gives the long form of the compile error and, for errors marked with a wrench, a Fix button that applies the suggested correction."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. A popover hanging from the gutter icon of a line (M8.26): each diagnostic of that line (at most 50) as `Line N: message`, then a `Fix: label` button per suggested fix, which runs `font.features.applyFix {error, fix}` and closes the popover. A second click on the icon, Escape or a press outside closes it."
+guesses = [
+  "The details are a popover hanging from the icon, listing every diagnostic of the line, not only the first.",
+  "Our compiler has no long form of a message: the details repeat the message with its line.",
+]
+observe = [
+  "In F1 (Latin features), compile a misspelt glyph name, click the error icon: note what the details show (a longer text than the inline message?), where they open and how they close.",
+]
 
 [[panel]]
 id = "fontInfo.featureSnippetsMenu"

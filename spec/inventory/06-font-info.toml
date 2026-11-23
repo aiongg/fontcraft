@@ -2689,6 +2689,8 @@ guesses = [
   "Diagnostics stay valid while the compiler's input (assembled code, stored code, glyph order with code points, master) is unchanged, so a node move keeps them; moving a node after a compile with an error in the reference app would settle it.",
 ]
 observe = [
+  "In F1 (Latin features), compile `sub a by zzz;` in a feature: screenshot the editor and note where the message is drawn (after the line's text, under the line, or only in the popover) and whether the editor shows line numbers.",
+  "In F1, put two errors on one line and compile: note whether the line gets one icon or two.",
   "In F1 (Latin features), type `sub a by zzz;` into a feature without pressing Compile and wait two seconds: note whether an error marker appears.",
   "In F1, compile code with an error, then move a node of an unrelated glyph in Edit View and go back to Font Info › Features: note whether the error marker stays.",
 ]
@@ -2705,7 +2707,7 @@ milestone = "M8"
 summary = "Applies the correction suggested for an error; only errors drawn with a wrench icon carry such a suggestion."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. In the window the Fix buttons are in the details that the gutter icon of the error's line opens (`fontInfo.featureErrorDetails`, M8.26)."
 guesses = [
   "Four fixes of ours carry a wrench: a glyph name that matches an existing one apart from case, a class name that matches a defined one apart from case, a missing semicolon at the end of a statement (inserted before any comment), and a class used before its entry (moving the class entry up); the reference app's error list on a font with these mistakes would settle its own set.",
 ]
@@ -2950,9 +2952,12 @@ milestone = "M8"
 summary = "Code that fails to compile is flagged inline. Clicking the error icon expands the message, a wrench icon signals an available Fix, and every entry with errors also gets an icon in the sidebar."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed. The markers, messages, wrench and sidebar icons read `font.features.listErrors` (and the `errors` flag of `font.features.list`) for the last compile while it still describes the font (an outline edit keeps it). While code is typed, the underlines and the list under the code come from `font.features.check` of exactly the text shown, half a second after the last keystroke, without storing the code (M8.25)."
+notes = "Documented, not yet observed. The markers, messages, wrench and sidebar icons read `font.features.listErrors` (and the `errors` flag of `font.features.list`) for the last compile while it still describes the font (an outline edit keeps it). While code is typed, they come from `font.features.check` of exactly the text shown, half a second after the last keystroke, without storing the code (M8.25). A gutter left of the code numbers each line and marks a line with diagnostics with one icon (an error disc if any is an error, else a warning triangle) and a wrench when one has a fix; the line's first message is drawn dimmed after its text, and error ranges are underlined. A click on the icon opens `fontInfo.featureErrorDetails`; nothing is listed under the code (M8.26). The coloured runs are kept while the text, the underlined ranges and the colours stay the same."
 guesses = [
-  "Error ranges are underlined in the code and each error is listed under the code with its line and an icon, not drawn between the code lines; a screenshot of an error in the reference app settles it.",
+  "The code editor has a gutter with line numbers; a wrapped row gets no number.",
+  "One icon per line, whatever the number of diagnostics on it, with the error icon winning over the warning icon.",
+  "The first message of a line is drawn dimmed after the line's text, clipped at the editor's edge, rather than on a row of its own under the line.",
+  "Error ranges stay underlined besides the gutter icon.",
 ]
 
 [[behavior]]
