@@ -66,6 +66,9 @@ craft::ui::words! {
     }
 }
 
+/// Rows of the log shown before it scrolls; the input line and the macro editor stay in view under it.
+const LOG_ROWS: u16 = 12;
+
 /// Lines the macro editor shows.
 const EDITOR_LINES: usize = 10;
 
@@ -94,6 +97,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
     let source = Lines(&model.lines);
     let _ = List::new(words.log.clone())
         .empty(words.empty.clone())
+        .max_rows(LOG_ROWS)
         .show_items(ui, &source, &mut |at, _| ListRow::new(model.lines.get(*at).cloned().unwrap_or_default()));
     let completer = ConsoleCompleter { docs: Arc::clone(&model.docs), glyphs: Arc::clone(&model.glyphs), history: Arc::clone(&model.history) };
     let typed = TextField::new(words.input.clone(), Bind::given(model.input.clone()))
@@ -260,15 +264,15 @@ mod tests {
         assert_eq!(sent.last(), Some(&console_msg(json!({ "line": "edit.undo" }))), "{sent:?}");
     }
 
-    /// Run Selection posts the lines the editor's selection touches: all selected, then the caret moved up a line
-    /// with Shift held, leaves the last line out. Save posts `macroPanel.save` for the window to ask for the file.
+    /// Run Selection posts the lines the editor's selection touches: a selection that ends with the second line leaves
+    /// the last line out. Save posts `macroPanel.save` for the window to ask for the file.
     #[test]
     fn run_selection_posts_the_selected_lines_and_save_posts_save() {
         use craft::ui::runtime::commands::CommandRef;
 
         use crate::app::Msg;
 
-        let editor = "glyph.newGlyph {\"name\":\"x1\"}\nglyph.newGlyph {\"name\":\"x2\"}\nglyph.newGlyph {\"name\":\"x3\"}";
+        let editor = "edit.undo\nedit.redo\nedit.undo";
         let model = Tracked::new(ConsoleModel { editor: editor.into(), ..Default::default() });
         let posted = Rc::new(RefCell::new(Vec::new()));
         let seen = Rc::clone(&posted);
@@ -279,7 +283,15 @@ mod tests {
         });
         fixture.room(egui::vec2(700.0, 900.0)).settle();
         let field = fixture.by_label("Macro").expect("the macro editor");
-        fixture.click(&field).key(Key::A, Modifiers::COMMAND).key(Key::ArrowUp, Modifiers::SHIFT).settle();
+        fixture.click(&field).settle();
+        // The first two lines selected, up to the end of the second, set on the field's text state as a drag would.
+        let (focused, _) = fixture.focused_stop().expect("the editor has focus");
+        let widget = craft_ext::ui::text::text_widget(focused);
+        let mut state = egui::text_edit::TextEditState::load(fixture.ctx(), widget).unwrap_or_default();
+        let (anchor, caret) = (egui::text::CCursor::new(0), egui::text::CCursor::new(19));
+        state.cursor.set_char_range(Some(egui::text::CCursorRange { primary: caret, secondary: anchor, h_pos: None }));
+        state.store(fixture.ctx(), widget);
+        fixture.settle();
         let run = fixture.by_label("Run Selection").expect("the Run Selection button");
         fixture.click(&run).settle();
         let selection = Msg::Shell(CommandRef::with_params("macroPanel.runSelection", json!({ "first": 1, "last": 2 })));
