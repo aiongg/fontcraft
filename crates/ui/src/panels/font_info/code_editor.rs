@@ -104,7 +104,7 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
     let key = &entry.key;
     let mut sent = Vec::new();
     let action = code_find::bar(ui, entry, &mut sent);
-    let edit_id = egui::Id::new(("fontcraftFeatureCode.edit", key.kind.name(), key.index, key.name.as_str()));
+    let edit_id = egui::Id::unique(("fontcraftFeatureCode.edit", key.kind.name(), key.index, key.name.as_str()));
     let pending: Option<PendingEdit> = ui.ctx().data_mut(|d| {
         let pending = d.get_temp::<PendingEdit>(edit_id);
         d.remove::<PendingEdit>(edit_id);
@@ -667,14 +667,15 @@ pub(super) fn marks(diagnostics: &[DiagnosticModel]) -> Vec<LineMark<'_>> {
     sorted.sort_by_key(|d| d.line);
     let mut out: Vec<LineMark<'_>> = Vec::new();
     for d in sorted {
-        match out.last_mut() {
-            Some(mark) if mark.line == d.line => {
-                mark.error |= d.error;
-                mark.fixable |= !d.fixes.is_empty();
-            }
-            _ if out.len() >= MAX_MARKS => break,
-            _ => out.push(LineMark { line: d.line, error: d.error, fixable: !d.fixes.is_empty(), message: &d.message }),
+        if let Some(mark) = out.last_mut().filter(|mark| mark.line == d.line) {
+            mark.error |= d.error;
+            mark.fixable |= !d.fixes.is_empty();
+            continue;
         }
+        if out.len() >= MAX_MARKS {
+            break;
+        }
+        out.push(LineMark { line: d.line, error: d.error, fixable: !d.fixes.is_empty(), message: &d.message });
     }
     out
 }
@@ -770,7 +771,13 @@ fn gutter(ui: &mut Ui, field: &Response, width: f32, font: &FontId, diagnostics:
         response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label.clone()));
         if response.clicked() {
             let opened = open != Some(mark.line);
-            ui.ctx().data_mut(|d| if opened { d.insert_temp(open_id, mark.line) } else { d.remove::<u64>(open_id) });
+            ui.ctx().data_mut(|d| {
+                if opened {
+                    d.insert_temp(open_id, mark.line);
+                } else {
+                    d.remove::<u64>(open_id);
+                }
+            });
             if opened {
                 opener = Some(response);
             }

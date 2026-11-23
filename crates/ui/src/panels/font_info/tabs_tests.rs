@@ -657,7 +657,7 @@ fn the_clicked_name_takes_name_characters_on_both_sides() {
 fn a_preview_lists_class_members_anchors_and_lookup_rules() {
     use super::code_editor::{CodeEditorWords, preview_lines};
     use crate::app::models::font_features::PreviewModel;
-    let words = CodeEditorWords::english();
+    let words = CodeEditorWords::default();
     let class = PreviewModel {
         name: "@Top".into(),
         kind: "class".into(),
