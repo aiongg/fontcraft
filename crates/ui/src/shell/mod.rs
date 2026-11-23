@@ -19,6 +19,7 @@ pub mod extension_downloads;
 pub mod extension_manager;
 pub mod extensions;
 pub mod external_changes;
+pub mod feature_work;
 pub mod font_audit;
 pub mod font_info;
 pub mod font_info_masters;

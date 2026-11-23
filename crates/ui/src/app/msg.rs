@@ -55,6 +55,8 @@ pub enum ViewMsg {
     SidebarMenu(Option<Vec<String>>),
     /// The feature code editor asks completions for its code and caret; `None` drops the question.
     FeatureCompletion(Option<crate::shell::font_info_tabs::CompletionAsk>),
+    /// The code as typed in the Features tab's editor, or `None` once it is the stored code again.
+    FeatureDraft(Option<crate::shell::font_info_tabs::FeatureDraft>),
     /// The feature code editor placed the caret a snippet left.
     FeatureCaretPlaced,
     /// Font View's search field took the keyboard (`fontView.focusSearch`).

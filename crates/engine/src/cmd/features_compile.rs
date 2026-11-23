@@ -35,7 +35,9 @@ use fontcraft_compile::preview::{self, PreviewBuild, PreviewFont, PreviewKind};
 use fontcraft_fea::{CompileRequest, Diagnostic, GlyphOrder, LayoutTable, MAX_DIAGNOSTICS, MAX_GLYPHS, Severity};
 use fontcraft_features::edit::{self, CompletionKind, CompletionNames, Definitions, Fix, MAX_FIXES};
 use fontcraft_features::tokens::{self, TokenValue};
-use fontcraft_features::{EntryDiagnostic, EntryKind, EntryRef, FeatureError, MAX_ENTRY_BYTES, MasterValues, Target, TargetValues, assemble};
+use fontcraft_features::{
+    EntryDiagnostic, EntryKind, EntryRef, FeatureError, MAX_ENTRY_BYTES, MasterValues, SourceMap, Target, TargetValues, assemble,
+};
 use fontcraft_model::{Features, Font, Snippet};
 use serde_json::{Value, json};
 
@@ -165,7 +167,7 @@ fn group(f: &Features, kind: EntryKind) -> &Vec<Snippet> {
     }
 }
 
-fn group_mut(f: &mut Features, kind: EntryKind) -> &mut Vec<Snippet> {
+pub(super) fn group_mut(f: &mut Features, kind: EntryKind) -> &mut Vec<Snippet> {
     match kind {
         EntryKind::Prefix => &mut f.prefixes,
         EntryKind::Class => &mut f.classes,
@@ -179,7 +181,7 @@ fn snippet_of(f: &Features, entry: EntryRef) -> Option<&Snippet> {
 
 /// The entry the parameters `kind`, `name` and `index?` name; `None` when `kind` is absent and
 /// `required` is false.
-fn entry_param(p: &Params, f: &Features, required: bool) -> Result<Option<EntryRef>> {
+pub(super) fn entry_param(p: &Params, f: &Features, required: bool) -> Result<Option<EntryRef>> {
     let kind = match p.opt_str("kind")? {
         Some(k) => parse_kind(p, k)?,
         None if required => return Err(p.bad("`kind` is required")),
@@ -213,7 +215,7 @@ fn entry_json(f: &Features, entry: EntryRef) -> Value {
     json!({ "kind": kind_name(entry.kind), "name": name, "index": entry.index })
 }
 
-fn master_id(p: &Params, font: &Font, value: Option<&str>) -> Result<String> {
+pub(super) fn master_id(p: &Params, font: &Font, value: Option<&str>) -> Result<String> {
     match value {
         None => Ok(font.default_master()?.id.clone()),
         Some(v) => font
@@ -226,7 +228,7 @@ fn master_id(p: &Params, font: &Font, value: Option<&str>) -> Result<String> {
     }
 }
 
-fn feature_error(p: &Params, e: FeatureError) -> EngineError {
+pub(super) fn feature_error(p: &Params, e: FeatureError) -> EngineError {
     match e {
         FeatureError::NotYetImplemented(what) => EngineError::Unsupported(what.to_string()),
         FeatureError::Unsupported(what) => EngineError::Unsupported(what),
@@ -401,15 +403,83 @@ fn hash_included_files(files: &fontcraft_fea::VirtualFiles, dir: &std::path::Pat
 // ── Compile ─────────────────────────────────────────────────────────────────────────────────────
 
 /// The compiled font's glyphs: `.notdef` first, then the exporting glyphs in the font's order.
-fn glyph_order(font: &Font) -> Vec<String> {
+pub(super) fn glyph_order(font: &Font) -> Vec<String> {
     let mut names = vec![".notdef".to_string()];
     names.extend(font.glyphs.as_arcs().iter().filter(|g| g.export && g.name != ".notdef").map(|g| g.name.clone()));
     names
 }
 
 /// A diagnostic about no entry.
-fn request_diagnostic(message: impl Into<String>) -> EntryDiagnostic {
+pub(super) fn request_diagnostic(message: impl Into<String>) -> EntryDiagnostic {
     EntryDiagnostic { place: None, diagnostic: Diagnostic::request(Severity::Error, message) }
+}
+
+/// The assembled code of one master, ready for the compiler, and the hash of the compiler's input.
+pub(crate) struct Prepared {
+    /// Places the compiler's diagnostics in the entries.
+    pub map: SourceMap,
+    pub files: fontcraft_fea::VirtualFiles,
+    /// [`FeatureState::source_hash`]: the assembled files, the glyph order with the code points, the master, the include
+    /// folder and the included files. Never zero.
+    pub hash: u64,
+    /// [`FeatureState::code_hash`]: the stored code of every entry.
+    pub code_hash: u64,
+    /// The code includes files from outside the assembly.
+    pub includes: bool,
+    /// Every included file is in `hash`.
+    pub keyed: bool,
+}
+
+/// Assembles `features` for `master` and hashes what the compiler reads, and apart from it the stored code: the
+/// diagnostics' places are ranges of the stored code, which can change where the assembled code does not (a token
+/// written out as its value).
+pub(crate) fn prepare(
+    font: &Font,
+    features: &Features,
+    master: &str,
+    include_dir: Option<&std::path::Path>,
+    values: &MasterValues,
+) -> std::result::Result<Prepared, FeatureError> {
+    let assembly = assemble(font, features, &Target::Master(master.to_string()), values)?;
+    let mut files = assembly.files;
+    if let Some(dir) = include_dir {
+        files = files.with_include_dir(dir.to_path_buf());
+    }
+    if let Some(check) = crate::file_access::include_check() {
+        files = files.with_include_check(check);
+    }
+    let mut hasher = DefaultHasher::new();
+    master.hash(&mut hasher);
+    include_dir.hash(&mut hasher);
+    for (path, text) in files.iter() {
+        path.hash(&mut hasher);
+        text.hash(&mut hasher);
+    }
+    for g in font.glyphs.as_arcs().iter().filter(|g| g.export) {
+        g.name.hash(&mut hasher);
+        g.unicodes.hash(&mut hasher);
+    }
+    let keyed = include_dir.is_none_or(|dir| hash_included_files(&files, dir, &mut hasher));
+    // Zero marks a state that compiled nothing.
+    let hash = hasher.finish().max(1);
+    // The entries are virtual files the assembly includes; only other files count.
+    let includes = files.iter().any(|(_, text)| include_names(text).any(|name| files.get(name).is_none()));
+    let mut stored = DefaultHasher::new();
+    for entry in features.prefixes.iter().chain(&features.classes).chain(&features.features) {
+        entry.code.hash(&mut stored);
+    }
+    Ok(Prepared { map: assembly.map, files, hash, code_hash: stored.finish(), includes, keyed })
+}
+
+/// The hashes [`prepare`] gives for the document as it is now and `master`, the compiler's input and the stored code;
+/// `None` when the code does not assemble or an included file is not in the hash.
+pub(crate) fn input_hash(s: &Session, doc: &crate::DocState, master: &str) -> Option<(u64, u64)> {
+    let include_dir = doc.path.as_deref().and_then(super::shared::source_feature_dir);
+    let data = s.glyph_data_of(doc).ok()?;
+    let font = doc.font.as_ref();
+    let values = MasterValues::new(font, &data, master).ok()?;
+    let prepared = prepare(font, &font.features, master, include_dir.as_deref(), &values).ok()?;
+    prepared.keyed.then_some((prepared.hash, prepared.code_hash))
 }
 
 fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
@@ -433,9 +503,9 @@ fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
 
     let mut cached = false;
     let mut preview_message = None;
-    let state = match assemble(font, &font.features, &Target::Master(master.clone()), &values) {
+    let state = match prepare(font, &font.features, &master, include_dir.as_deref(), &values) {
         Err(FeatureError::Code(diagnostics)) => {
-            FeatureState { revision, master: master.clone(), preview: None, features: Vec::new(), diagnostics, source_hash: 0 }
+            FeatureState { revision, master: master.clone(), preview: None, features: Vec::new(), diagnostics, source_hash: 0, code_hash: 0 }
         }
         Err(e @ (FeatureError::NotYetImplemented(_) | FeatureError::Unsupported(_))) => return Err(feature_error(&p, e)),
         Err(other) => FeatureState {
@@ -445,47 +515,18 @@ fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
             features: Vec::new(),
             diagnostics: vec![request_diagnostic(other.to_string())],
             source_hash: 0,
+            code_hash: 0,
         },
-        Ok(assembly) => {
+        Ok(Prepared { map, files, hash, code_hash, includes, keyed: includes_keyed }) => {
             let names = glyph_order(font);
-            let mut files = assembly.files;
-            if let Some(dir) = &include_dir {
-                files = files.with_include_dir(dir.clone());
-            }
-            if let Some(check) = crate::file_access::include_check() {
-                files = files.with_include_check(check);
-            }
-            let mut hasher = DefaultHasher::new();
-            master.hash(&mut hasher);
-            include_dir.hash(&mut hasher);
-            for (path, text) in files.iter() {
-                path.hash(&mut hasher);
-                text.hash(&mut hasher);
-            }
-            for g in font.glyphs.as_arcs().iter().filter(|g| g.export) {
-                g.name.hash(&mut hasher);
-                g.unicodes.hash(&mut hasher);
-            }
-            let includes_keyed = include_dir.as_deref().is_none_or(|dir| hash_included_files(&files, dir, &mut hasher));
-            // Zero marks a state that compiled nothing.
-            let hash = hasher.finish().max(1);
-            let key = BuildKey {
-                doc: doc_id,
-                revision,
-                master: &master,
-                hash,
-                // The entries are virtual files the assembly includes; only other files count.
-                includes: files.iter().any(|(_, text)| include_names(text).any(|name| files.get(name).is_none())),
-                keyed: includes_keyed,
-                force,
-            };
+            let key = BuildKey { doc: doc_id, revision, master: &master, hash, includes, keyed: includes_keyed, force };
             let builds = s.preview_builds();
             match previous.filter(|prev| !force && includes_keyed && prev.source_hash == hash && prev.master == master) {
                 Some(prev) => {
                     cached = true;
                     // The stored code may differ where the assembled code does not (a token
                     // replaced by its value), so the places are mapped again.
-                    let diagnostics: Vec<EntryDiagnostic> = prev.diagnostics.iter().map(|d| assembly.map.map(d.diagnostic.clone())).collect();
+                    let diagnostics: Vec<EntryDiagnostic> = prev.diagnostics.iter().map(|d| map.map(d.diagnostic.clone())).collect();
                     // The compiled features depend only on the hashed code and glyph order; the
                     // preview font also holds outlines and widths, so it is reused only from the
                     // same revision of the document.
@@ -499,7 +540,7 @@ fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
                             Err(_) => build_preview(font, &master, &preview_options, &mut preview_message),
                         }
                     };
-                    FeatureState { revision, diagnostics, preview, ..prev.as_ref().clone() }
+                    FeatureState { revision, diagnostics, preview, code_hash, ..prev.as_ref().clone() }
                 }
                 None => match GlyphOrder::new(names) {
                     Err(d) => FeatureState {
@@ -509,6 +550,7 @@ fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
                         features: Vec::new(),
                         diagnostics: vec![EntryDiagnostic { place: None, diagnostic: d }],
                         source_hash: hash,
+                        code_hash,
                     },
                     Ok(order) => {
                         let built = shared_build(font, &preview_options, &builds, &key);
@@ -521,15 +563,15 @@ fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
                                 // give them; then Edit View's font without `GPOS`.
                                 let request = CompileRequest::new(&files, &order);
                                 let (features, diagnostics): (_, Vec<EntryDiagnostic>) = match fontcraft_fea::compile(&request) {
-                                    Ok(compiled) => (compiled.features, compiled.warnings.into_iter().map(|d| assembly.map.map(d)).collect()),
-                                    Err(found) => (Vec::new(), found.into_iter().map(|d| assembly.map.map(d)).collect()),
+                                    Ok(compiled) => (compiled.features, compiled.warnings.into_iter().map(|d| map.map(d)).collect()),
+                                    Err(found) => (Vec::new(), found.into_iter().map(|d| map.map(d)).collect()),
                                 };
                                 let errors = diagnostics.iter().any(|d| d.diagnostic.is_error());
                                 let preview = if errors { None } else { build_preview(font, &master, &preview_options, &mut preview_message) };
                                 (preview, features, diagnostics)
                             }
                         };
-                        FeatureState { revision, master: master.clone(), preview, features, diagnostics, source_hash: hash }
+                        FeatureState { revision, master: master.clone(), preview, features, diagnostics, source_hash: hash, code_hash }
                     }
                 },
             }
@@ -537,7 +579,7 @@ fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
     };
 
     let fixes = fix_labels(font, &state, true);
-    let diagnostics: Vec<Value> = diagnostics_json(font, &state, None, &fixes);
+    let diagnostics: Vec<Value> = diagnostics_json(&font.features, &state, None, &fixes);
     let features: Vec<Value> = state
         .features
         .iter()
@@ -569,7 +611,7 @@ fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
     Ok(out)
 }
 
-fn counts(state: &FeatureState) -> (usize, usize) {
+pub(super) fn counts(state: &FeatureState) -> (usize, usize) {
     let errors = state.diagnostics.iter().filter(|d| d.diagnostic.is_error()).count();
     (errors, state.diagnostics.len() - errors)
 }
@@ -605,7 +647,7 @@ fn positions(code: &str, offsets: &[usize]) -> Vec<(usize, usize)> {
 }
 
 /// The line and column of the start of each diagnostic that has a place, by id.
-fn diagnostic_positions(font: &Font, state: &FeatureState, only: Option<&[usize]>) -> BTreeMap<usize, (usize, usize)> {
+pub(super) fn diagnostic_positions(features: &Features, state: &FeatureState, only: Option<&[usize]>) -> BTreeMap<usize, (usize, usize)> {
     let mut by_entry: BTreeMap<EntryRef, Vec<(usize, usize)>> = BTreeMap::new();
     for (id, d) in state.diagnostics.iter().enumerate() {
         if only.is_some_and(|ids| !ids.contains(&id)) {
@@ -617,7 +659,7 @@ fn diagnostic_positions(font: &Font, state: &FeatureState, only: Option<&[usize]
     }
     let mut out = BTreeMap::new();
     for (entry, items) in by_entry {
-        let Some(snippet) = snippet_of(&font.features, entry) else { continue };
+        let Some(snippet) = snippet_of(features, entry) else { continue };
         let offsets: Vec<usize> = items.iter().map(|(_, at)| *at).collect();
         for ((id, _), position) in items.iter().zip(positions(&snippet.code, &offsets)) {
             out.insert(*id, position);
@@ -717,10 +759,10 @@ fn fix_labels(font: &Font, state: &FeatureState, current: bool) -> BTreeMap<usiz
     out
 }
 
-fn diagnostic_json(font: &Font, id: usize, d: &EntryDiagnostic, position: Option<(usize, usize)>, fixes: &[String]) -> Value {
+fn diagnostic_json(features: &Features, id: usize, d: &EntryDiagnostic, position: Option<(usize, usize)>, fixes: &[String]) -> Value {
     let severity = if d.diagnostic.is_error() { "error" } else { "warning" };
     let (entry, range) = match &d.place {
-        Some(place) => (entry_json(&font.features, place.entry), json!([place.range.start, place.range.end])),
+        Some(place) => (entry_json(features, place.entry), json!([place.range.start, place.range.end])),
         None => (Value::Null, Value::Null),
     };
     let (line, column) = match position {
@@ -740,7 +782,12 @@ fn diagnostic_json(font: &Font, id: usize, d: &EntryDiagnostic, position: Option
 }
 
 /// The diagnostics of `state` as data, those of `entry` only when given.
-fn diagnostics_json(font: &Font, state: &FeatureState, entry: Option<EntryRef>, fixes: &BTreeMap<usize, Vec<String>>) -> Vec<Value> {
+pub(super) fn diagnostics_json(
+    features: &Features,
+    state: &FeatureState,
+    entry: Option<EntryRef>,
+    fixes: &BTreeMap<usize, Vec<String>>,
+) -> Vec<Value> {
     let ids: Vec<usize> = state
         .diagnostics
         .iter()
@@ -748,11 +795,11 @@ fn diagnostics_json(font: &Font, state: &FeatureState, entry: Option<EntryRef>, 
         .filter(|(_, d)| entry.is_none() || d.place.as_ref().map(|p| p.entry) == entry)
         .map(|(id, _)| id)
         .collect();
-    let positions = diagnostic_positions(font, state, Some(&ids));
+    let positions = diagnostic_positions(features, state, Some(&ids));
     ids.iter()
         .filter_map(|&id| {
             let d = state.diagnostics.get(id)?;
-            Some(diagnostic_json(font, id, d, positions.get(&id).copied(), fixes.get(&id).map(Vec::as_slice).unwrap_or(&[])))
+            Some(diagnostic_json(features, id, d, positions.get(&id).copied(), fixes.get(&id).map(Vec::as_slice).unwrap_or(&[])))
         })
         .collect()
 }
@@ -761,7 +808,7 @@ fn diagnostics_json(font: &Font, state: &FeatureState, entry: Option<EntryRef>, 
 fn state_of(s: &Session, p: &Params) -> Result<(Arc<FeatureState>, bool)> {
     let doc = s.doc()?;
     let state = s.feature_state_of(doc.id).ok_or_else(|| p.bad("the feature code has not been compiled yet"))?;
-    let current = state.is_current(doc);
+    let current = state.is_current(s, doc);
     Ok((state, current))
 }
 
@@ -780,9 +827,9 @@ fn list_errors(s: &mut Session, raw: &Value) -> Result<Value> {
     let Some(state) = s.feature_state() else {
         return Ok(json!({ "compiled": false, "current": false, "errors": 0, "warnings": 0, "diagnostics": [] }));
     };
-    let current = state.is_current(s.doc()?);
+    let current = state.is_current(s, s.doc()?);
     let fixes = fix_labels(font, &state, current);
-    let diagnostics = diagnostics_json(font, &state, entry, &fixes);
+    let diagnostics = diagnostics_json(&font.features, &state, entry, &fixes);
     let (errors, warnings) = counts(&state);
     Ok(json!({
         "compiled": true,
@@ -797,10 +844,10 @@ fn list_errors(s: &mut Session, raw: &Value) -> Result<Value> {
 /// One diagnostic as data, with its position and fixes.
 fn one_json(font: &Font, state: &FeatureState, id: usize, current: bool) -> Value {
     let Some(d) = state.diagnostics.get(id) else { return Value::Null };
-    let position = diagnostic_positions(font, state, Some(std::slice::from_ref(&id))).get(&id).copied();
+    let position = diagnostic_positions(&font.features, state, Some(std::slice::from_ref(&id))).get(&id).copied();
     let labels: Vec<String> =
         if current { remedies(font, d, &Names::of(font, None)).iter().map(|r| r.label().to_string()).collect() } else { Vec::new() };
-    diagnostic_json(font, id, d, position, &labels)
+    diagnostic_json(&font.features, id, d, position, &labels)
 }
 
 fn jump_to_error(s: &mut Session, raw: &Value) -> Result<Value> {
@@ -873,7 +920,7 @@ fn show_error_details(s: &mut Session, raw: &Value) -> Result<Value> {
         return Err(p.bad(format!("error {id} is not in this {}", kind_name(entry.kind))));
     }
     let mut out = one_json(font, &state, id, current);
-    let position = if current { diagnostic_positions(font, &state, Some(std::slice::from_ref(&id))).get(&id).copied() } else { None };
+    let position = if current { diagnostic_positions(&font.features, &state, Some(std::slice::from_ref(&id))).get(&id).copied() } else { None };
     let text = details(font, d, position);
     if let Some(obj) = out.as_object_mut() {
         obj.insert("details".into(), Value::String(text));

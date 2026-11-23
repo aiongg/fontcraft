@@ -275,6 +275,8 @@ pub struct FontCraftApp {
     pub control: crate::control::Control,
     /// The window's context, kept from the last frame, so an edit command the person fires can reach the list that
     /// holds the keyboard focus ([`clipboard::to_focused_list`]).
+    /// The Features tab's checks and compiles off the window's thread.
+    pub(crate) feature_work: crate::shell::feature_work::FeatureWork,
     pub(crate) window: Option<egui::Context>,
     #[cfg(not(target_arch = "wasm32"))]
     file_panels: Option<craft::dialogs::service::FilePanels>,
@@ -333,6 +335,7 @@ impl FontCraftApp {
             web_extensions: web_store::WebExtensions::browser(),
             graphics: None,
             control: crate::control::Control::default(),
+            feature_work: Default::default(),
             window: None,
             #[cfg(not(target_arch = "wasm32"))]
             file_panels: None,
@@ -587,6 +590,7 @@ impl FontCraftApp {
             ViewMsg::TextPreviewArea(area) => self.view.text_preview.area = area,
             ViewMsg::SidebarMenu(path) => self.view.sidebar.menu_row = path,
             ViewMsg::FeatureCompletion(ask) => self.view.font_info.features.completion = ask,
+            ViewMsg::FeatureDraft(draft) => self.view.font_info.features.draft = draft,
             ViewMsg::FeatureCaretPlaced => self.view.font_info.features.caret = None,
             ViewMsg::FontViewSearchFocused => self.view.font_view.focus_search = false,
             ViewMsg::Bitmap(input) => return crate::shell::bitmap_editor::input(self, input),
@@ -751,6 +755,7 @@ impl ShellApp for FontCraftApp {
         }
         self.set_system_dark(appearance::system_dark(&self.root, ctx));
         models::text_preview::logic(&mut self.models.text_preview, ctx);
+        crate::shell::feature_work::logic(self, ctx);
         dropped::take(self, ctx);
         crate::shell::external_changes::on_focus(self, ctx);
         crate::canvas::images::logic(self, ctx);

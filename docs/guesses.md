@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**3287 guesses on 1686 rows (689 of them live commands).**
+**3289 guesses on 1687 rows (690 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -791,6 +791,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `font.features.compile` | M8 | handbook | yes | Compile reads the master the Features tab passes (the active Edit View tab's), else the first master; compiling in a two-master font whose masters differ in a number value used by the code, with the second master showing, would settle it. |
 | `font.features.compile` | M8 | handbook | yes | Compile checks the code without the generated kerning and mark features; an error the reference app reports only when the generated code is added would show the difference. |
 | `font.features.listErrors` | M8 | inferred | yes | The error list is the one of the last Compile and is marked out of date after an edit rather than recomputed; editing code after a compile in the reference app and watching whether the error markers move or vanish would settle it. |
+| `font.features.check` | M8 | inferred | yes | The Features tab checks the code as it is typed, half a second after the last keystroke; watching the error markers while typing a misspelt glyph name in the reference app would settle whether it checks before Compile and after what pause. |
+| `font.features.check` | M8 | inferred | yes | Diagnostics stay valid while the compiler's input (assembled code, stored code, glyph order with code points, master) is unchanged, so a node move keeps them; moving a node after a compile with an error in the reference app would settle it. |
 | `font.features.applyFix` | M8 | handbook | yes | Four fixes of ours carry a wrench: a glyph name that matches an existing one apart from case, a class name that matches a defined one apart from case, a missing semicolon at the end of a statement (inserted before any comment), and a class used before its entry (moving the class entry up); the reference app's error list on a font with these mistakes would settle its own set. |
 | `font.features.listSnippets` | M8 | inferred | yes | The built-in snippets come before the user's groups, and the groups follow file-name order; opening the snippets menu with two snippet files in the folder would settle the order. |
 | `font.features.insertSnippet` | M8 | handbook | yes | A title without a group finds the built-in snippet first, then the first user snippet of that title in menu order; only the menu names snippets in the reference app, so nothing there settles it. |

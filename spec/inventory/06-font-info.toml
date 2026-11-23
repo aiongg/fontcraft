@@ -2666,9 +2666,31 @@ milestone = "M8"
 summary = "Returns the current compile errors with entry, text range, message, expanded description and, where one exists, the suggested fix. The UI shows the same data as inline markers and sidebar icons."
 ref = "Font Info › Features › Manual Feature Code"
 status = "inferred"
-notes = "Returns the last compile's diagnostics with ids, entry, byte range, line, column and fix labels, and whether the font changed since; it never compiles on its own (M8.15)."
+notes = "Returns the last compile's diagnostics with ids, entry, byte range, line, column and fix labels, and whether they still describe the font; it never compiles on its own (M8.15). They do while the compiler's input is unchanged: the assembled code, the stored code of the entries, the glyph order with the code points, the master and the included files (M8.25). A node move or a width edit keeps them; an edit to the code or the glyph set does not."
 guesses = [
   "The error list is the one of the last Compile and is marked out of date after an edit rather than recomputed; editing code after a compile in the reference app and watching whether the error markers move or vanish would settle it.",
+]
+
+[[command]]
+id = "font.features.check"
+label = "Check Feature Code"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{kind: 'prefix'|'class'|'feature', name: string, index?: integer, code: string, master?: id|name}"
+area = "features"
+milestone = "M8"
+summary = "Compiles the font's feature code with one entry's code replaced by a draft and returns the errors found in it, placed in the draft, without changing the font. The Features tab checks the code as it is typed."
+ref = "Font Info › Features › Manual Feature Code"
+status = "inferred"
+notes = "A query (M8.25). The draft is at most 1 MB, the most one entry may hold; the code is compiled on its own, without generated kerning and marks, and the answer has the shape of font.features.listErrors without fixes. The Features tab runs it on a worker thread (at once on the web) once the typed code has stood for half a second, one check at a time, and drops an answer whose draft is no longer the one typed. After setCode, Update and Update Entry the tab builds the preview fonts in the background and then runs font.features.compile, which takes that build. Measured on the corpus: on Inter Roman's largest feature entry (ss07, 9,530 bytes; 49 entries, 3,017 glyphs) a check takes 15.5 ms median of 5 runs in a release build (target 250 ms)."
+guesses = [
+  "The Features tab checks the code as it is typed, half a second after the last keystroke; watching the error markers while typing a misspelt glyph name in the reference app would settle whether it checks before Compile and after what pause.",
+  "Diagnostics stay valid while the compiler's input (assembled code, stored code, glyph order with code points, master) is unchanged, so a node move keeps them; moving a node after a compile with an error in the reference app would settle it.",
+]
+observe = [
+  "In F1 (Latin features), type `sub a by zzz;` into a feature without pressing Compile and wait two seconds: note whether an error marker appears.",
+  "In F1, compile code with an error, then move a node of an unrelated glyph in Edit View and go back to Font Info › Features: note whether the error marker stays.",
 ]
 
 [[command]]
@@ -2928,7 +2950,7 @@ milestone = "M8"
 summary = "Code that fails to compile is flagged inline. Clicking the error icon expands the message, a wrench icon signals an available Fix, and every entry with errors also gets an icon in the sidebar."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed. The markers, messages, wrench and sidebar icons read `font.features.listErrors` (and the `errors` flag of `font.features.list`) for the last compile while the font is unchanged since."
+notes = "Documented, not yet observed. The markers, messages, wrench and sidebar icons read `font.features.listErrors` (and the `errors` flag of `font.features.list`) for the last compile while it still describes the font (an outline edit keeps it). While code is typed, the underlines and the list under the code come from `font.features.check` of exactly the text shown, half a second after the last keystroke, without storing the code (M8.25)."
 guesses = [
   "Error ranges are underlined in the code and each error is listed under the code with its line and an icon, not drawn between the code lines; a screenshot of an error in the reference app settles it.",
 ]

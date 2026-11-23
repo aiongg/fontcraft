@@ -2,9 +2,32 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-23: M13.23c, M13.74, M13.76 and M14.4c merged into `master`, built, tested and smoke-tested in the window, light and dark (X.integ162 to X.integ166, X.fix98; see "Where M13.64 stands" for the package notes). The docked Command Console's body scrolls and its log takes the rows the room leaves, so the input line stays in view; Shift+Arrow selects in the macro editor, which no longer inserts Tab (a craft text part that inserts Tab loses its arrows: decision 0009); `ui.key` and `ui.text` go to a text field that has the keyboard. Before that, M13.76 and M14.4c were written on branch `w-M13.76`. Before that, X.fix96 and X.fix97: floating panels are OS windows on desktop again; while a form dialog is open they drop to the normal level and the main window comes forward, shown in a native-window harness test (`testing::native`) and not yet seen on a desktop with a window manager; `ui.key Escape` closes the canvas context menu; `ui.screenshot` still misses floating windows, an eframe gap (see "Known weak spots"). Before that, 2026-11-22: M10.34, M10.41 and M13.64 merged into `master`, built, tested and smoke-tested in the window (X.integ158 to X.integ161; see "Where M13.64 stands"); M13.23c not started. Before that: M5.30, M13.69, M13.70 and X.fix95 merged into `master`, built, tested and smoke-tested in the window (X.integ153 to X.integ156; see "Where M5.30, M13.69 and M13.70 stand"). Before that: M9.32, M3.41, M3.43 and M3.42 merged (X.integ148 to X.integ151); the Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
+_Updated: 2026-11-23: M8.25, the live feature check, built on branch `w-M8.25` with X.fix99a to X.fix99f (About joins NOTICE paragraphs and is at most 36 line heights wide; `ui.key` reaches a modal, so Escape closes About; the Command Console log follows new rows); see "Where M8.25 stands". Before that: M13.23c, M13.74, M13.76 and M14.4c merged into `master`, built, tested and smoke-tested in the window, light and dark (X.integ162 to X.integ166, X.fix98; see "Where M13.64 stands" for the package notes). The docked Command Console's body scrolls and its log takes the rows the room leaves, so the input line stays in view; Shift+Arrow selects in the macro editor, which no longer inserts Tab (a craft text part that inserts Tab loses its arrows: decision 0009); `ui.key` and `ui.text` go to a text field that has the keyboard. Before that, M13.76 and M14.4c were written on branch `w-M13.76`. Before that, X.fix96 and X.fix97: floating panels are OS windows on desktop again; while a form dialog is open they drop to the normal level and the main window comes forward, shown in a native-window harness test (`testing::native`) and not yet seen on a desktop with a window manager; `ui.key Escape` closes the canvas context menu; `ui.screenshot` still misses floating windows, an eframe gap (see "Known weak spots"). Before that, 2026-11-22: M10.34, M10.41 and M13.64 merged into `master`, built, tested and smoke-tested in the window (X.integ158 to X.integ161; see "Where M13.64 stands"); M13.23c not started. Before that: M5.30, M13.69, M13.70 and X.fix95 merged into `master`, built, tested and smoke-tested in the window (X.integ153 to X.integ156; see "Where M5.30, M13.69 and M13.70 stand"). Before that: M9.32, M3.41, M3.43 and M3.42 merged (X.integ148 to X.integ151); the Info box scrolls in its fixed-height palette group. Before that: M4.21, M4.24, M13.81, M14.5 and part of M14.4 (X.integ142 to X.integ147). Craft's panel number fields overflow the stack on a deep paste of `(`: a craft bug, recorded under Known limits and in decision 0009._
 
 ## State of the tree
+
+- **Where M8.25 stands.** Built (builder, depth wave 2), tested, gated and smoke-tested: GATE_LINE.
+  - Engine: `FeatureState::is_current(session, doc)` answers by the compiler's input hash
+    (`cmd::features_compile::prepare`: assembled code, stored entry code, glyph order with code points, master,
+    include folder and files), kept per document revision in the features slot; a node move keeps the diagnostics,
+    a code or glyph-set edit drops them. `font.features.check` (`cmd/features_check.rs`, query) compiles the code
+    with one entry replaced by a draft (at most `MAX_DRAFT_BYTES`, 1 MB), code only, and changes nothing;
+    `check_font` runs it without a session. `feature_state::prebuild` builds the preview fonts and keeps them under
+    the compile's hash.
+  - Window: the code editor sends `ViewMsg::FeatureDraft` while the shown text differs from the stored code and
+    underlines the check of exactly that text (`EntryPane::check`), or the last compile's diagnostics while it is
+    current (`EntryPane::compiled`). `shell/feature_work.rs` runs the check 0.5 s after the last change through the
+    host's jobs (a thread on the desktop, inline on the web and in tests), one at a time, dropping stale answers;
+    after setCode, Update and Update Entry it builds in the background and then runs `font.features.compile`, which
+    takes the kept build.
+  - Tests: `an_error_survives_a_node_move_and_goes_with_a_code_or_glyph_set_edit`,
+    `check_reports_the_drafts_line_and_range_and_changes_nothing` (engine `feature_compile`);
+    `a_typed_statement_is_underlined_from_its_check_without_a_commit`,
+    `a_draft_is_checked_after_the_pause_and_stored_code_compiles_in_the_background` (`panels/font_info/tabs_tests.rs`).
+    Measure: `corpus_feature_check` (ignored; release): on Inter Roman's largest feature entry (ss07, 9,530 bytes; 49 entries, 3,017 glyphs) a check takes 15.5 ms median of 5 runs in a release build (target 250 ms). No harness measures a UI frame during a
+    check, so that measure is not taken.
+  - Left: the gutter and inline messages (M8.26); the Compile button still compiles on the window's thread; the
+    observe steps of `font.features.check`.
 
 - **Where M13.64 stands.** Merged into `master` with M10.34 and M10.41 and built; the gate is green (X.integ158
   to X.integ161). Seen in the window, light and dark: the editor opens as a floating window on a 12 ppem strike, the

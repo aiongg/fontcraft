@@ -20,7 +20,7 @@ use crate::app::models::font_info::FontInfoModel;
 use crate::app::{APP, FontCraftApp, Msg, ViewMsg};
 use crate::dialogs::feature_picker::FeaturePicker;
 use crate::shell::font_info::FontInfoTab;
-use crate::shell::font_info_tabs::{CompletionAsk, EntryKey, EntryKind};
+use crate::shell::font_info_tabs::{CompletionAsk, EntryKey, EntryKind, FeatureDraft};
 
 const ROOM: egui::Vec2 = egui::vec2(1280.0, 900.0);
 
@@ -72,6 +72,7 @@ fn features_model() -> FontInfoModel {
                 range: Some((4, 5)),
                 fixes: vec!["Remove".into()],
             }],
+            compiled: true,
             ..EntryPane::default()
         }),
         master: Some("m01".into()),
@@ -125,6 +126,73 @@ fn feature_code_is_coloured_and_its_errors_underlined() {
     let mut colors: Vec<egui::Color32> = sections.iter().map(|s| s.format.color).collect();
     colors.dedup();
     assert!(colors.len() > 1, "the keyword and the glyph names differ in colour: {colors:?}");
+}
+
+/// Typing a bad statement shows the underline of its check without a commit: the code as typed goes to the app, and the
+/// check of exactly that text is underlined.
+#[test]
+fn a_typed_statement_is_underlined_from_its_check_without_a_commit() {
+    let typed = "sub a by zz;";
+    let mut model = features_model();
+    if let Some(e) = model.features.entry.as_mut() {
+        let found = DiagnosticModel { id: 0, error: true, message: "glyph not in font".into(), line: 1, range: Some((9, 11)), fixes: Vec::new() };
+        e.check = Some((typed.into(), vec![found]));
+    }
+    let (mut fixture, posted) = panel(model);
+    let code = fixture.by_label("Feature Code").expect("the code field");
+    fixture.click(&code).key(Key::A, Modifiers::COMMAND).type_text(typed).settle();
+    let draft = FeatureDraft { key: key(EntryKind::Feature, "ss01", 1), code: typed.into() };
+    assert!(posted.borrow().contains(&Msg::View(ViewMsg::FeatureDraft(Some(draft)))), "{:?}", posted.borrow());
+    assert!(!posted.borrow().iter().any(|m| m.command_id() == Some("font.features.setCode")), "typing commits nothing");
+    let galley = fixture
+        .frame_shapes()
+        .iter()
+        .find_map(|shape| match shape {
+            egui::Shape::Text(t) if t.galley.job.text == typed => Some(t.galley.clone()),
+            _ => None,
+        })
+        .expect("the typed code is painted");
+    let underlined: Vec<(usize, usize)> =
+        galley.job.sections.iter().filter(|s| s.format.underline.width > 0.0).map(|s| (s.byte_range.start.0, s.byte_range.end.0)).collect();
+    assert_eq!(underlined, vec![(9, 11)]);
+}
+
+/// A draft is checked once it has stood for the pause, on the font as it is, and its diagnostics reach the shown entry
+/// while the font keeps its code; stored code is then compiled in the background.
+#[test]
+fn a_draft_is_checked_after_the_pause_and_stored_code_compiles_in_the_background() {
+    use crate::shell::feature_work::step;
+    use fontcraft_engine::feature_state::SessionFeaturesExt as _;
+    // Inline jobs: each check and build finishes inside the step that starts it.
+    let host = Host::builder(APP).jobs(Arc::new(craft::host::InlineJobs)).build();
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(host));
+    app.sent.push(Msg::run("font.features.addFeature", json!({ "tag": "liga", "automatic": false, "code": "sub a by b;" })));
+    app.sent.push(shell("font.info", json!({ "tab": "features" })));
+    app.drain();
+    let font = Arc::clone(&app.session.doc().expect("a document").font);
+    let draft = FeatureDraft { key: key(EntryKind::Feature, "liga", 0), code: "sub a by b;\nsub c by qq;".into() };
+    app.sent.push(Msg::View(ViewMsg::FeatureDraft(Some(draft.clone()))));
+    app.drain();
+    assert!(step(&mut app, 10.0).is_some(), "the check waits for the pause");
+    assert!(app.view.font_info.features.checked.is_none());
+    step(&mut app, 10.6);
+    step(&mut app, 10.7);
+    app.drain();
+    let entry = app.models.font_info.features.entry.clone().expect("the shown entry");
+    let (code, found) = entry.check.expect("the check landed");
+    assert_eq!(code, draft.code);
+    assert_eq!(found.iter().map(|d| (d.error, d.line, d.range)).collect::<Vec<_>>(), vec![(true, 2, Some((21, 23)))]);
+    assert!(Arc::ptr_eq(&font, &app.session.doc().expect("a document").font), "the check changes nothing");
+    assert!(app.session.feature_state().is_none(), "nor compiles");
+
+    app.sent.push(Msg::run("font.features.setCode", json!({ "kind": "feature", "name": "liga", "code": draft.code })));
+    app.drain();
+    step(&mut app, 20.0);
+    step(&mut app, 20.6);
+    step(&mut app, 20.7);
+    let state = app.session.feature_state().expect("compiled in the background");
+    assert!(state.has_errors());
+    assert!(state.is_current(&app.session, app.session.doc().expect("a document")));
 }
 
 /// Typing a name in the code asks for the names that fit at the caret.

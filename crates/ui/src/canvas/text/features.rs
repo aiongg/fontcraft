@@ -196,7 +196,7 @@ pub fn compiled_features(state: Option<&FeatureState>) -> Vec<(String, &'static 
 pub fn menu(session: &Session, features: &Features, shaping_error: Option<String>) -> FeaturesModel {
     let state = session.feature_state();
     let current = match (state.as_deref(), session.doc()) {
-        (Some(s), Ok(doc)) => s.is_current(doc),
+        (Some(s), Ok(doc)) => s.is_current(session, doc),
         _ => false,
     };
     FeaturesModel {

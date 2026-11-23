@@ -13,11 +13,14 @@
 //! answered by the projection with `font.features.complete`); the list under the field shows them once the answer
 //! matches the code as typed, and Tab, Return or a click puts the picked name in (`fontInfo.features.autocomplete`).
 //!
-//! The diagnostics show only while the font is unchanged since the compile (`font.features.listErrors`).
+//! The code as typed goes to the app while it differs from the stored code (`ViewMsg::FeatureDraft`), which checks it
+//! after a pause with `font.features.check` (`crate::shell::feature_work`) without storing it.
 //!
-//! The code is coloured by the classes the feature parser's highlighter gives (`fontInfo.features.syntaxColouring`),
-//! and the ranges of the diagnostics are underlined in the error colour while the field shows the stored code
-//! (`fontInfo.features.inlineErrors`): typed text moves them.
+//! The code is coloured by the classes the feature parser's highlighter gives (`fontInfo.features.syntaxColouring`).
+//! The diagnostics of the text shown are underlined in the error colour and listed under the field
+//! (`fontInfo.features.inlineErrors`): those of the last compile while the field shows the stored code and the compile
+//! still describes the font (`font.features.listErrors`), else those of the check of exactly the text shown. Typed text
+//! hides the underlines until its check lands.
 
 use craft::theme::variant::Tone;
 use craft::theme::{Rgba, Srgba};
@@ -40,7 +43,7 @@ use serde_json::json;
 
 use crate::app::models::font_features::{DiagnosticModel, EntryPane};
 use crate::app::{Msg, ViewMsg};
-use crate::shell::font_info_tabs::CompletionAsk;
+use crate::shell::font_info_tabs::{CompletionAsk, FeatureDraft};
 
 craft::ui::words! {
     /// The words of the feature code editor.
@@ -99,7 +102,18 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
         sent.push(Msg::View(ViewMsg::FeatureCaretPlaced));
     }
     let env = Env::of(ui);
-    out.highlight_text(ui, |text| runs(text, &entry.code, &entry.diagnostics, &env.tokens));
+    let mut typed: Option<String> = None;
+    out.highlight_text(ui, |text| {
+        if text != entry.code {
+            typed = Some(text.to_string());
+        }
+        runs(text, shown_diagnostics(entry, text), &env.tokens)
+    });
+    let typed = typed.filter(|_| !entry.automatic);
+    if typed != entry.draft {
+        sent.push(Msg::View(ViewMsg::FeatureDraft(typed.clone().map(|code| FeatureDraft { key: key.clone(), code }))));
+    }
+    let listed = shown_diagnostics(entry, typed.as_deref().unwrap_or(&entry.code));
     let selection = out.last_selection(ui.ctx()).and_then(|s| s.within(entry.code.chars().count()));
     if let Some(text) = out.events.committed()
         && !entry.automatic
@@ -107,7 +121,7 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
     {
         sent.push(Msg::run("font.features.setCode", key.with(&[("code", json!(text))])));
     }
-    for d in &entry.diagnostics {
+    for d in listed {
         Row::new().id_salt(("fontcraftFeatureCode.diagnostic", d.id)).show(ui, |ui, _| {
             let text = Text::new(format!("{} {}: {}", words.line.as_str(), d.line, d.message));
             if d.error { text.tone(Tone::Bad) } else { text.shade(Shade::Muted) }.show(ui);
@@ -147,14 +161,22 @@ fn ink(kind: HighlightKind, tokens: &UiTokens) -> Rgba {
     }
 }
 
-/// The runs of the field's `text`: a colour per class, and the diagnostics' ranges underlined while `text` is the
-/// stored `code` they belong to.
-fn runs(text: &str, code: &str, diagnostics: &[DiagnosticModel], tokens: &UiTokens) -> Vec<Highlight> {
+/// The diagnostics that belong to `text`: the last compile's while it is the stored code and the compile still
+/// describes the font, else those of the check of `text`, else none.
+fn shown_diagnostics<'a>(entry: &'a EntryPane, text: &str) -> &'a [DiagnosticModel] {
+    match &entry.check {
+        _ if entry.compiled && text == entry.code => &entry.diagnostics,
+        Some((checked, found)) if checked == text => found,
+        _ => &[],
+    }
+}
+
+/// The runs of the field's `text`: a colour per class, and the ranges of `diagnostics`, which belong to `text`,
+/// underlined.
+fn runs(text: &str, diagnostics: &[DiagnosticModel], tokens: &UiTokens) -> Vec<Highlight> {
     let color = |c: Rgba| Color32::from(Srgba::from(c));
     let mut out: Vec<Highlight> = highlight(text).into_iter().map(|h| Highlight::ink(h.range, color(ink(h.kind, tokens)))).collect();
-    if text == code {
-        let bad = color(tokens.color.status.bad.fg);
-        out.extend(diagnostics.iter().filter_map(|d| d.range).take(MAX_UNDERLINES).map(|(start, end)| Highlight::underline(start..end, bad)));
-    }
+    let bad = color(tokens.color.status.bad.fg);
+    out.extend(diagnostics.iter().filter_map(|d| d.range).take(MAX_UNDERLINES).map(|(start, end)| Highlight::underline(start..end, bad)));
     out
 }

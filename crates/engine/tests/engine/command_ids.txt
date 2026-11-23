@@ -362,6 +362,7 @@ font.features.showErrorDetails
 font.features.evaluateToken
 font.features.complete
 font.features.previewName
+font.features.check
 smartGlyph.addProperty
 smartGlyph.setProperty
 smartGlyph.removeProperty

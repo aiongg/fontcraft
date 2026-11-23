@@ -84,7 +84,7 @@ fn compile_reports_a_broken_feature_at_its_entry_and_range_and_keeps_the_state()
     let liga = r["features"].as_array().unwrap().iter().find(|f| f["tag"] == "liga").unwrap_or_else(|| panic!("{r}"));
     assert_eq!(liga["table"], "GSUB");
     let state = s.feature_state().unwrap();
-    assert!(state.is_current(s.doc().unwrap()) && !state.has_errors());
+    assert!(state.is_current(&s, s.doc().unwrap()) && !state.has_errors());
     assert!(state.features.iter().any(|f| f.tag == "liga"));
 }
 
@@ -661,5 +661,49 @@ fn a_compile_inside_a_rolled_back_batch_is_not_current_after_a_later_edit() {
     set_code(&mut s, "feature", "liga", "sub a by c;");
     let errors = run(&mut s, "font.features.listErrors", json!({}));
     assert_eq!(errors["current"], false, "{errors}");
-    assert!(!s.feature_state().unwrap().is_current(s.doc().unwrap()));
+    assert!(!s.feature_state().unwrap().is_current(&s, s.doc().unwrap()));
+}
+
+#[test]
+fn an_error_survives_a_node_move_and_goes_with_a_code_or_glyph_set_edit() {
+    let mut s = Session::with_document();
+    run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": "sub a by zzz;"}));
+    assert_eq!(run(&mut s, "font.features.compile", json!({}))["errors"], 1);
+    // An outline edit leaves the compiler's input alone: the diagnostics stay, with their fixes and sidebar mark.
+    run(&mut s, "path.addRectangle", json!({"glyph": "a", "x": 10, "y": 10, "width": 100, "height": 100}));
+    let errors = run(&mut s, "font.features.listErrors", json!({}));
+    assert_eq!((errors["current"].clone(), errors["errors"].clone()), (json!(true), json!(1)), "{errors}");
+    assert_eq!(run(&mut s, "font.features.list", json!({"kind": "feature"}))["entries"][0]["errors"], true);
+    // A new exporting glyph changes the glyph order.
+    run(&mut s, "glyph.newGlyph", json!({"name": "zzz"}));
+    assert_eq!(run(&mut s, "font.features.listErrors", json!({}))["current"], false);
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(run(&mut s, "font.features.listErrors", json!({}))["current"], true);
+    set_code(&mut s, "feature", "liga", "sub a by zzz; ");
+    assert_eq!(run(&mut s, "font.features.listErrors", json!({}))["current"], false);
+}
+
+#[test]
+fn check_reports_the_drafts_line_and_range_and_changes_nothing() {
+    let mut s = Session::with_document();
+    run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": "sub a by b;"}));
+    run(&mut s, "font.features.compile", json!({}));
+    let font = Arc::clone(&s.doc().unwrap().font);
+    let state = s.feature_state().unwrap();
+    let draft = "sub a by b;\nsub c by qqq;";
+    let r = run(&mut s, "font.features.check", json!({"kind": "feature", "name": "liga", "code": draft}));
+    assert_eq!((r["ok"].clone(), r["errors"].clone()), (json!(false), json!(1)), "{r}");
+    let e = first_error(&r);
+    assert_eq!(e["entry"], json!({"kind": "feature", "name": "liga", "index": 0}));
+    let range = e["range"].as_array().unwrap();
+    let (start, end) = (range[0].as_u64().unwrap() as usize, range[1].as_u64().unwrap() as usize);
+    assert_eq!(&draft[start..end], "qqq");
+    assert_eq!((e["line"].clone(), e["column"].clone()), (json!(2), json!(10)));
+    // Nothing changed: the font, the stored code and the last compile.
+    assert!(Arc::ptr_eq(&font, &s.doc().unwrap().font));
+    assert_eq!(code_of(&mut s, "feature", "liga"), "sub a by b;");
+    assert!(Arc::ptr_eq(&state, &s.feature_state().unwrap()));
+    assert_eq!(run(&mut s, "font.features.check", json!({"kind": "feature", "name": "liga", "code": "sub a by b;"}))["ok"], true);
+    let big = "#".repeat(fontcraft_engine::cmd::features_check::MAX_DRAFT_BYTES + 1);
+    refused(&mut s, "font.features.check", json!({"kind": "feature", "name": "liga", "code": big}), "`code`");
 }

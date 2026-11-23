@@ -150,10 +150,31 @@ pub struct FeaturesView {
     /// Where the caret goes in the entry's code field, in characters: after a snippet went in
     /// (`font.features.insertSnippet`'s `caret`). The code editor places it and drops it.
     pub caret: Option<(EntryKey, usize)>,
+    /// The code as typed in the code editor, while it differs from the entry's stored code; checked after a pause
+    /// (`crate::shell::feature_work`).
+    pub draft: Option<FeatureDraft>,
+    /// The check of the last draft: its diagnostics, placed in the draft.
+    pub checked: Option<CheckedDraft>,
 }
 
-/// After a run of `id` the person asked for: an inserted snippet leaves the caret after itself.
+/// The code as typed in an entry's code editor.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FeatureDraft {
+    pub key: EntryKey,
+    pub code: String,
+}
+
+/// What `font.features.check` found in a draft.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CheckedDraft {
+    pub draft: FeatureDraft,
+    pub diagnostics: Vec<crate::app::models::font_features::DiagnosticModel>,
+}
+
+/// After a run of `id` the person asked for: an inserted snippet leaves the caret after itself; new code is compiled in
+/// the background.
 pub fn after_run(app: &mut crate::app::FontCraftApp, id: &str, reply: &Value) {
+    crate::shell::feature_work::after_run(app, id);
     if id != "font.features.insertSnippet" {
         return;
     }

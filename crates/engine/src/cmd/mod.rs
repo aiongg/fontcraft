@@ -41,7 +41,8 @@ mod decompose;
 mod dimensions;
 mod edit;
 mod features;
-mod features_compile;
+pub mod features_check;
+pub(crate) mod features_compile;
 mod features_entries;
 mod features_io;
 mod file;
@@ -405,6 +406,7 @@ pub const COMMAND_TABLES: &[CommandTable] = &[
     features_entries::specs,
     numbers::specs,
     features_compile::specs,
+    features_check::specs,
     smart::specs,
     snippets::specs,
     anchor_context::specs,

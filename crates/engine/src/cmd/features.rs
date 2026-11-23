@@ -372,7 +372,7 @@ fn generatable(name: &str) -> bool {
 /// as it is now.
 fn entries_with_errors(s: &Session) -> HashSet<EntryRef> {
     let (Some(state), Ok(doc)) = (s.feature_state(), s.doc()) else { return HashSet::new() };
-    if !state.is_current(doc) {
+    if !state.is_current(s, doc) {
         return HashSet::new();
     }
     state.diagnostics.iter().filter(|d| d.diagnostic.is_error()).filter_map(|d| d.place.as_ref().map(|r| r.entry)).collect()

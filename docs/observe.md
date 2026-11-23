@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1570 rows to check: 2775 guesses and 688 observe steps.**
+**1571 rows to check: 2777 guesses and 690 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 51 |
 | Built milestones (M0 to M6) | Settings and the window | 18 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **1010** |
+| **Later milestones (after M6)** | all | **1011** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 90 |
 | Later milestones (after M6) | Edit View: text mode and preview | 30 |
 | Later milestones (after M6) | Components and anchors | 43 |
@@ -56,7 +56,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Spacing and metrics keys | 13 |
 | Later milestones (after M6) | Kerning and the Kerning window | 16 |
 | Later milestones (after M6) | Font View | 22 |
-| Later milestones (after M6) | Font Info and features | 310 |
+| Later milestones (after M6) | Font Info and features | 311 |
 | Later milestones (after M6) | Interpolation | 91 |
 | Later milestones (after M6) | Hinting | 115 |
 | Later milestones (after M6) | Colour fonts | 81 |
@@ -1765,7 +1765,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (1010)
+## Later milestones (after M6) (1011)
 
 ### Edit View: drawing, guides, layers and the Palette (90)
 
@@ -2604,7 +2604,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A new status takes the next code after the highest one, the name Status n and a grey colour, and ticking Default on one status unticks the others; the reference's panel would settle both.
   - Observe: In the reference app, open Font › Status definitions, add a status, and note its starting code, name and colour.
 
-### Font Info and features (310)
+### Font Info and features (311)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
@@ -3010,6 +3010,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: In any font, look for a shortcut or menu item for Compile in Font Info › Features: note both.
 - [ ] `font.features.listErrors` (M8, inferred, live): List Feature Errors
   - Guess: The error list is the one of the last Compile and is marked out of date after an edit rather than recomputed; editing code after a compile in the reference app and watching whether the error markers move or vanish would settle it.
+- [ ] `font.features.check` (M8, inferred, live): Check Feature Code
+  - Guess: The Features tab checks the code as it is typed, half a second after the last keystroke; watching the error markers while typing a misspelt glyph name in the reference app would settle whether it checks before Compile and after what pause.
+  - Guess: Diagnostics stay valid while the compiler's input (assembled code, stored code, glyph order with code points, master) is unchanged, so a node move keeps them; moving a node after a compile with an error in the reference app would settle it.
+  - Observe: In F1 (Latin features), type `sub a by zzz;` into a feature without pressing Compile and wait two seconds: note whether an error marker appears.
+  - Observe: In F1, compile code with an error, then move a node of an unrelated glyph in Edit View and go back to Font Info › Features: note whether the error marker stays.
 - [ ] `font.features.applyFix` (M8, handbook, live): Fix
   - Guess: Four fixes of ours carry a wrench: a glyph name that matches an existing one apart from case, a class name that matches a defined one apart from case, a missing semicolon at the end of a statement (inserted before any comment), and a class used before its entry (moving the class entry up); the reference app's error list on a font with these mistakes would settle its own set.
   - Observe: In F1 (Latin features), write a misspelt glyph name, drop a semicolon, and use a class before its entry: note which errors show a wrench and what Fix does for each.

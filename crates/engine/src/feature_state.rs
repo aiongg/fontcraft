@@ -6,10 +6,12 @@
 //! `textPreview.shaping` (the shared build).
 //!
 //! Session state only: not undoable, never saved, dropped when the document closes. A compile
-//! records the document revision it read, so readers can tell whether the font changed since
-//! ([`FeatureState::is_current`]), and a hash of what it compiled (the assembled code, the
-//! glyph order, the master), so `font.features.compile` asked again for the same code reuses
-//! the result instead of compiling it again. One compile is kept per open document.
+//! records the document revision it read and a hash of what it compiled (the assembled code,
+//! the glyph order with the code points, the master), so `font.features.compile` asked again for
+//! the same code reuses the result instead of compiling it again. The result describes the font
+//! while that hash and the hash of the entries' stored code are unchanged
+//! ([`FeatureState::is_current`]): moving a node or editing a width keeps the diagnostics, an
+//! edit to the code or to the glyph set does not. One compile is kept per open document.
 //!
 //! The code is compiled once per document revision and master: `font.features.compile` and
 //! Text Preview both build through [`build_previews`], which gives Edit View's font, Text
@@ -45,12 +47,32 @@ pub struct FeatureState {
     /// The hash of the compiler's input: the assembled files, the glyph order with the code
     /// points, the master and the include folder.
     pub source_hash: u64,
+    /// The hash of the stored code of every entry, which the diagnostics' places are ranges of.
+    pub code_hash: u64,
 }
 
 impl FeatureState {
-    /// The compile read the document as it is now.
-    pub fn is_current(&self, doc: &DocState) -> bool {
-        self.revision == doc.revision
+    /// The compile describes the document as it is now: it read this revision, or the compiler's input is the one it
+    /// read ([`FeatureState::source_hash`]). The answer for a later revision is kept per document, so asking again
+    /// each frame assembles the code once per edit.
+    pub fn is_current(&self, s: &Session, doc: &DocState) -> bool {
+        if self.revision == doc.revision {
+            return true;
+        }
+        // Zero: the code did not assemble, and nothing was hashed.
+        if self.source_hash == 0 {
+            return false;
+        }
+        let answers = s.slot::<FeaturesSlot>().map(|f| f.answers.clone()).unwrap_or_default();
+        let key = (doc.revision, self.source_hash);
+        if let Some(known) = answers.lock().ok().and_then(|a| a.get(&doc.id).filter(|(k, _)| *k == key).map(|(_, same)| *same)) {
+            return known;
+        }
+        let same = crate::cmd::features_compile::input_hash(s, doc, &self.master) == Some((self.source_hash, self.code_hash));
+        if let Ok(mut a) = answers.lock() {
+            a.insert(doc.id, (key, same));
+        }
+        same
     }
 
     pub fn has_errors(&self) -> bool {
@@ -107,11 +129,34 @@ pub fn build_previews(font: &Font, master: &str, options: &Options) -> Result<Pr
     fontcraft_compile::preview::layout_fonts_with(font, master, options)
 }
 
+/// Whether a document's last compile still describes it, by document id: for (revision, source hash).
+type Answers = Arc<Mutex<HashMap<u64, ((u64, u64), bool)>>>;
+
+/// Builds the preview fonts of document `doc` at `revision` for `master` and keeps the build in `builds` under the
+/// input hash `font.features.compile` keys its compiles with, so a compile of the same revision that follows takes it
+/// instead of compiling: the Features tab runs this on a worker thread after the code changes. `options` are the ones
+/// the compile reads (the glyph data and the include folder of `crate::cmd::features_check::check_context`). Nothing is
+/// kept when the code does not assemble or includes files the hash cannot cover.
+pub fn prebuild(font: &Font, doc: u64, revision: u64, master: &str, options: &Options, builds: &PreviewBuilds) {
+    let Some(data) = options.glyph_data.0.as_ref() else { return };
+    let Ok(values) = fontcraft_features::MasterValues::new(font, data, master) else { return };
+    let Ok(prepared) = crate::cmd::features_compile::prepare(font, &font.features, master, options.feature_dir.as_deref(), &values) else {
+        return;
+    };
+    if !prepared.keyed {
+        return;
+    }
+    let result = build_previews(font, master, options).map(Arc::new).map_err(Arc::new);
+    builds.put(SharedBuild { doc, revision, master: master.to_string(), source_hash: Some(prepared.hash), result });
+}
+
 /// The features area's session slot.
 #[derive(Default)]
 struct FeaturesSlot {
     states: HashMap<u64, Arc<FeatureState>>,
     preview_builds: PreviewBuilds,
+    /// [`FeatureState::is_current`]'s answers, kept through `&Session`.
+    answers: Answers,
 }
 
 /// Every session starts with the features slot, so the preview builds store exists before
@@ -157,6 +202,9 @@ impl SessionFeaturesExt for Session {
         let slot = self.slot_mut::<FeaturesSlot>();
         slot.states.retain(|id, _| open.contains(id));
         slot.preview_builds.retain(&open);
+        if let Ok(mut answers) = slot.answers.lock() {
+            answers.retain(|id, _| open.contains(id));
+        }
         if open.contains(&doc_id) {
             slot.states.insert(doc_id, Arc::new(state));
         }
@@ -178,16 +226,25 @@ mod tests {
         let revision = s.doc().map(|d| d.revision).unwrap_or_default();
         s.set_feature_state(
             id,
-            FeatureState { revision, master: String::new(), preview: None, features: Vec::new(), diagnostics: Vec::new(), source_hash: 0 },
+            FeatureState {
+                revision,
+                master: String::new(),
+                preview: None,
+                features: Vec::new(),
+                diagnostics: Vec::new(),
+                source_hash: 0,
+                code_hash: 0,
+            },
         );
         let Some(state) = s.feature_state() else { panic!("no state kept") };
-        assert!(state.is_current(s.doc().unwrap()));
+        assert!(state.is_current(&s, s.doc().unwrap()));
         s.edit("Rename", |f| {
             f.family_name = "Other".into();
             Ok(())
         })
         .unwrap();
-        assert!(!state.is_current(s.doc().unwrap()));
+        // Zero: a state that hashed nothing describes only the revision it read.
+        assert!(!state.is_current(&s, s.doc().unwrap()));
         s.set_feature_state(id + 1000, state.as_ref().clone());
         assert!(s.feature_state_of(id + 1000).is_none());
     }

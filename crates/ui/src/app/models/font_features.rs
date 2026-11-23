@@ -71,6 +71,13 @@ pub struct EntryPane {
     /// The feature's section of the OpenType specification.
     pub spec_url: Option<String>,
     pub diagnostics: Vec<DiagnosticModel>,
+    /// The last compile describes the font as it is (`font.features.listErrors`'s `current`): `diagnostics` hold for
+    /// the stored code.
+    pub compiled: bool,
+    /// The code as typed that the app holds for this entry (`FeaturesView::draft`).
+    pub draft: Option<String>,
+    /// The check of a draft of this entry (`font.features.check`): the code it checked and its diagnostics.
+    pub check: Option<(String, Vec<DiagnosticModel>)>,
     /// The answer to the code editor's completion question about this entry.
     pub completion: Option<CompletionModel>,
     /// Where the code editor puts the caret, in characters (after a snippet went in).
@@ -122,6 +129,7 @@ pub fn project(cx: &mut ProjectCx<'_>) -> FeaturesModel {
     let snippets = snippets(cx.session.query("font.features.listSnippets", &json!({})));
     let Ok(font) = cx.session.font() else { return FeaturesModel::default() };
     let f = &font.features;
+    let compiled = errors.as_ref().and_then(|r| r.get("current")).and_then(Value::as_bool).unwrap_or(false);
     let diagnostics = diagnostics(errors.as_ref());
     let with_errors: HashSet<(EntryKind, usize)> =
         diagnostics.iter().filter(|(_, d)| d.error).filter_map(|(e, _)| e.as_ref().map(|e| (e.kind, e.index))).collect();
@@ -159,7 +167,12 @@ pub fn project(cx: &mut ProjectCx<'_>) -> FeaturesModel {
     };
     let completion = entry.as_ref().and_then(|e| completion(cx, e));
     let caret = entry.as_ref().and_then(|e| cx.view.font_info.features.caret.as_ref().filter(|(k, _)| *k == e.key).map(|(_, c)| *c));
-    let entry = entry.map(|e| EntryPane { spec_url, completion, caret, ..e });
+    let view = &cx.view.font_info.features;
+    let entry = entry.map(|e| {
+        let draft = view.draft.as_ref().filter(|d| d.key == e.key).map(|d| d.code.clone());
+        let check = view.checked.as_ref().filter(|c| c.draft.key == e.key).map(|c| (c.draft.code.clone(), c.diagnostics.clone()));
+        EntryPane { spec_url, completion, caret, compiled, draft, check, ..e }
+    });
     FeaturesModel { groups, selected, entry, master, snippets }
 }
 
@@ -195,6 +208,9 @@ fn pane(font: &Font, key: &EntryKey, diagnostics: &[(Option<EntryKey>, Diagnosti
         spec_url: None,
         completion: None,
         caret: None,
+        compiled: false,
+        draft: None,
+        check: None,
         diagnostics: diagnostics.iter().filter(|(k, _)| k.as_ref() == Some(key)).map(|(_, d)| d.clone()).take(MAX_SHOWN_ERRORS).collect(),
     })
 }
@@ -206,6 +222,16 @@ fn diagnostics(result: Option<&Value>) -> Vec<(Option<EntryKey>, DiagnosticModel
     if !r.get("current").and_then(Value::as_bool).unwrap_or(false) {
         return Vec::new();
     }
+    diagnostic_list(r)
+}
+
+/// The diagnostics of a `font.features.check` result that are in the checked entry, `key`.
+pub fn checked(result: &Value, key: &EntryKey) -> Vec<DiagnosticModel> {
+    diagnostic_list(result).into_iter().filter(|(k, _)| k.as_ref() == Some(key)).map(|(_, d)| d).take(MAX_SHOWN_ERRORS).collect()
+}
+
+/// The `diagnostics` of a `listErrors` or `check` result with the entry each is in.
+fn diagnostic_list(r: &Value) -> Vec<(Option<EntryKey>, DiagnosticModel)> {
     let list = r.get("diagnostics").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
     list.iter()
         .take(MAX_DIAGNOSTICS)
