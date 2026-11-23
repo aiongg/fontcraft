@@ -6,7 +6,7 @@ _Updated: 2026-11-23: M8.25, the live feature check, built on branch `w-M8.25` w
 
 ## State of the tree
 
-- **Where M8.25 stands.** Built (builder, depth wave 2), tested, gated and smoke-tested: GATE_LINE.
+- **Where M8.25 stands.** Built (builder, depth wave 2) and gated: `cargo xtask ci` passed all 11 steps, 4,967 tests passed and 42 skipped. Smoke, light: About wraps NOTICE paragraphs at about 450 points; `ui.key Escape` closes it; the docked Command Console log follows 30 new lines. Not smoked: typing into Font Info › Features (a floating OS window that `ui.click` and `ui.text` cannot reach, and the box has no X input tool), covered by the two frame tests; and dark mode (the second Xvfb did not start).
   - Engine: `FeatureState::is_current(session, doc)` answers by the compiler's input hash
     (`cmd::features_compile::prepare`: assembled code, stored entry code, glyph order with code points, master,
     include folder and files), kept per document revision in the features slot; a node move keeps the diagnostics,
