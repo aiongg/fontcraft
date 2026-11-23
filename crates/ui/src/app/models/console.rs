@@ -33,6 +33,10 @@ pub struct ConsoleModel {
     pub glyphs: Arc<[String]>,
     /// The lines run, oldest first.
     pub history: Arc<[String]>,
+    /// The Macro Panel's editor text (`shell::macro_editor`).
+    pub editor: String,
+    /// A macro is being recorded (`script.recordMacro`).
+    pub recording: bool,
     /// What the model was made from: the log's next entry, the pane's start, the active document and its revision,
     /// and the history's length.
     pub made_from: (u64, u64, Option<(u64, u64)>, usize),
@@ -47,7 +51,13 @@ pub fn project(model: &mut Tracked<ConsoleModel>, cx: &mut ProjectCx<'_>) {
     let log = &cx.session.extensions().log;
     let document = cx.session.active().map(|d| (d.id, d.revision));
     let made_from = (log.next_seq(), state.shown_from, document, state.history.len());
-    if model.made_from == made_from && model.input == state.input && !model.docs.is_empty() {
+    let recording = cx.session.extensions().recording.is_some();
+    if model.made_from == made_from
+        && model.input == state.input
+        && model.editor == state.editor
+        && model.recording == recording
+        && !model.docs.is_empty()
+    {
         return;
     }
     let skip = log.from_seq(state.shown_from).count().saturating_sub(MAX_PANE_LINES);
@@ -62,7 +72,8 @@ pub fn project(model: &mut Tracked<ConsoleModel>, cx: &mut ProjectCx<'_>) {
     let history: Arc<[String]> = if same_history { Arc::clone(&model.history) } else { state.history.clone().into() };
     let input = state.input.chars().take(MAX_LINE_BYTES).collect::<String>();
     let doc = console::complete(&docs, &[], &[], &input).doc.filter(|_| !input.trim().is_empty()).map(|(id, doc)| drawn(&format!("{id} {doc}")));
-    super::set(model, ConsoleModel { lines, input, doc, docs, glyphs, history, made_from });
+    let editor = state.editor.clone();
+    super::set(model, ConsoleModel { lines, input, doc, docs, glyphs, history, editor, recording, made_from });
 }
 
 /// `text` cut at [`MAX_DRAWN_CHARS`] characters, with an ellipsis when cut.

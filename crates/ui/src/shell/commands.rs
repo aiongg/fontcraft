@@ -44,6 +44,7 @@ pub const MODULES: &[Module] = &[
     super::selection::MODULE,
     super::masters::MODULE,
     super::command_surfaces::MODULE,
+    super::macro_editor::MODULE,
     crate::dialogs::form::MODULE,
     crate::dialogs::export::MODULE,
     super::kerning_window::MODULE,

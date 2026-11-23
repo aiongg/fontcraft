@@ -17,6 +17,7 @@
 //! | `tableViewer.openFont`, `tableViewer.compareWithFile` | a compiled font for the Table Viewer ([`COMPILED_EXTENSIONS`]) |
 //! | `plugin.installFromFile` | a `.wasm` module or `.fcmacro` macro, unless `dataBase64` or `name` names the file |
 //! | `view.filterByEncodingFile` | an encoding file, unless `name` names a built-in encoding |
+//! | `macroPanel.open`, `macroPanel.save` | a `.fcmacro` file to read into the Macro Panel's editor, or to write it to |
 //!
 //! Engine and shell commands alike: a shell command of the table asks before it runs, as an engine command does.
 //!
@@ -42,6 +43,8 @@ pub const PICKED: &[(&str, &str)] = &[
     ("tableViewer.compareWithFile", "path"),
     ("plugin.installFromFile", "path"),
     ("view.filterByEncodingFile", "path"),
+    ("macroPanel.open", "path"),
+    ("macroPanel.save", "path"),
 ];
 
 /// Most files one picker answer opens; the rest are left alone.
@@ -145,6 +148,19 @@ fn request(session: &Session, command: &CommandRef) -> Option<(PickRequest, &'st
                 return None;
             }
             (PickRequest::open("encoding").title("Filter by Encoding File"), Fill::One)
+        }
+        "macroPanel.open" => {
+            let filter = [crate::shell::macro_editor::EXTENSION];
+            (PickRequest::open("macro").title("Open Macro").filter("Macros", &filter), Fill::One)
+        }
+        "macroPanel.save" => {
+            let extension = crate::shell::macro_editor::EXTENSION;
+            let request = PickRequest::save("macro")
+                .title("Save Macro")
+                .filter("Macros", &[extension])
+                .file_name(format!("Macro.{extension}"))
+                .suggested_extension(extension);
+            (request, Fill::One)
         }
         _ => return None,
     };

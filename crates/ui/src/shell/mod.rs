@@ -30,6 +30,7 @@ pub mod images;
 pub mod kerning_review;
 pub mod kerning_tools;
 pub mod kerning_window;
+pub mod macro_editor;
 pub mod masters;
 pub mod numbered_keys;
 pub mod overlays;

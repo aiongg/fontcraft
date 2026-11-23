@@ -56,7 +56,8 @@ pub enum About {
     Shown,
 }
 
-/// The Command Console's state: the input line, the history and where the pane starts.
+/// The Command Console's state: the input line, the history, where the pane starts, and the Macro Panel's editor
+/// (`shell::macro_editor`).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ConsoleState {
     /// The text in the input line.
@@ -67,6 +68,11 @@ pub struct ConsoleState {
     pub shown_from: u64,
     /// Text Copy asked for, waiting for the shell to put it on the clipboard.
     pub copy_out: Option<String>,
+    /// The editor's text: one step per line, as the input line takes them.
+    pub editor: String,
+    /// The title, description, arguments and required modules of the macro file opened last; its steps are the
+    /// editor's lines, so this holds none.
+    pub editor_macro: fontcraft_engine::macros::Macro,
 }
 
 impl ConsoleState {

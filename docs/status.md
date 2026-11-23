@@ -38,7 +38,12 @@ _Updated: 2026-11-23: X.fix96 and X.fix97: floating panels are OS windows on des
     drawn into the edited bitmap. M13.23c (Space Center images and colour glyphs) is written on branch `w-M13.23c`,
     not yet built or tested: Images and Color in `view.setSpaceCenterDisplay` and the Display menu; images worked out
     by `canvas::images::cells::space_center` into `Models::space_images`; colour from `canvas::color::cell_color` in
-    the Space Center projection; frame tests in `panels/space_center/tests.rs`.
+    the Space Center projection; frame tests in `panels/space_center/tests.rs`. M13.74 (the Macro Panel editor) is
+    written on the same branch, not yet built or tested: `shell/macro_editor.rs` (`macroPanel.setText`, `runAll`,
+    `runSelection`, `open`, `save`, `record`; Open and Save pick files through `app::files::PICKED`), the editor in
+    `ConsoleState::editor` and `editor_macro`, the pane in `panels/command_console.rs`; tests in
+    `shell/macro_editor/tests.rs` and the panel's frame test of Run Selection and Save. Shell commands have no
+    `enabled` rule: the panel greys its own buttons.
 
 - **Where M10.34 and M10.41 stand.** Merged and built with M13.64. Seen in the window: with the Instructor and two
   points selected, the canvas menu starts with Snap Point, Stem and Delta, Shift Points and Interpolate greyed out;
