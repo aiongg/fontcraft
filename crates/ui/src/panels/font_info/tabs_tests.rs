@@ -807,6 +807,40 @@ fn the_find_bar_and_the_code_field_fit_the_panels_default_size() {
     assert!(code.width() > room.x / 2.0 && code.top() > next.bottom(), "{code:?}");
 }
 
+/// At the panel's default size with the find bar open, the notes field under the code field can be reached: it lies in
+/// the room, or the tab scrolls to it.
+#[test]
+fn the_notes_field_is_reachable_at_the_panels_default_size_with_the_find_bar_open() {
+    use craft::ui::runtime::access::Role;
+    use craft::ui::testing::pointer;
+
+    use crate::app::models::font_features::FindModel;
+    use crate::shell::font_info_tabs::FindState;
+    let mut model = showing("sub a by b;", Vec::new());
+    if let Some(e) = model.features.entry.as_mut() {
+        e.find =
+            Some(FindModel { state: FindState { query: "a".into(), ..FindState::default() }, here: vec![(4, 5)], total: 1, ..FindModel::default() });
+    }
+    let (mut fixture, _) = panel(model);
+    let room = egui::vec2(780.0, 560.0);
+    fixture.room(room).settle();
+    // The notes field is the lowest text field of the pane.
+    let notes = |fixture: &Fixture| {
+        let mut fields = fixture.by_role(Role::MULTILINE_TEXT_INPUT);
+        fields.extend(fixture.by_role(Role::TEXT_INPUT));
+        fields.into_iter().max_by(|a, b| a.rect.top().total_cmp(&b.rect.top())).expect("the notes field")
+    };
+    if notes(&fixture).rect.bottom() > fixture.shown().bottom() {
+        let over = fixture.by_label("Generate Feature Automatically").expect("the automatic check box").rect.center();
+        fixture.frame(vec![pointer::moved(over)]).frame(vec![pointer::wheel(-2000.0)]).settle();
+    }
+    let shown = fixture.shown();
+    let rect = notes(&fixture).rect;
+    assert!(rect.bottom() <= shown.bottom() && rect.top() >= shown.top(), "the notes field at {rect:?}, the room {shown:?}");
+    let code = fixture.by_label("Feature Code").expect("the code field").rect;
+    assert!(code.width() > room.x / 2.0, "the code field keeps the pane's width: {code:?}");
+}
+
 /// Next selects a match while the query keeps the keyboard: the code shows that match on a fill, and only that one.
 #[test]
 fn next_shows_the_selected_match_while_the_query_has_the_keyboard() {

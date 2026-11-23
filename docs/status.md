@@ -6,6 +6,10 @@ _Updated: 2026-11-23: M13.41 segment components and brushes written, not yet bui
 
 ## State of the tree
 
+- **X.fix102: written, not yet built.** Font Info › Features scrolls as one body (`widgets::scrolling` in
+  `features_tab::view`), so with the find bar open at the panel's default size (780 × 560) the notes field is reached by
+  scrolling; the code field keeps its 18 lines. Test written, not run:
+  `the_notes_field_is_reachable_at_the_panels_default_size_with_the_find_bar_open` (`font_info/tabs_tests.rs`).
 - **Where M13.41 stands (segment components and brushes): written, not yet built.** Model
   (`crates/model/src/attach.rs`): `SegmentHint` with `segment_hint`, `is_segment`, `is_brush`, `is_attachment`,
   `Attachment::{name, origin, noun}`; `decompose_attachments` fits caps, then segment components
