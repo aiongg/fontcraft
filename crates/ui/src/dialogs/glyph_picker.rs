@@ -308,7 +308,7 @@ fn targets(app: &FontCraftApp, p: &Value, purpose: Purpose) -> Result<Map<String
             m.insert("corners".into(), need(found, "select a node that holds a corner component, or give `corners`")?);
         }
         Purpose::CapGlyph => {
-            let mut on: Vec<usize> = selected_kind(layer, selection, |h| attach::is_cap(h));
+            let mut on: Vec<usize> = selected_kind(layer, selection, attach::is_cap);
             on.extend(caps_on_nodes(layer, &points).into_iter().map(|(i, _)| i));
             on.sort_unstable();
             on.dedup();
