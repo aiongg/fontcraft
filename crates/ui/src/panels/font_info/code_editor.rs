@@ -40,7 +40,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use craft::keymap::{Chord, Key, Mods};
-use craft::ui::contract::{Bind, Props as _, Show as _, ShowContainer as _};
+use craft::ui::contract::{Bind, Props as _, Show as _, ShowContainer as _, Sizing};
 use craft::ui::display::{Shade, Text};
 use craft::ui::popover::Popover;
 use craft::ui::primitives::Completion;
@@ -113,6 +113,7 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
     let field = TextField::new(words.code.clone(), Bind::given(entry.code.clone()))
         .mono()
         .lines(CODE_LINES)
+        .sizing(Sizing::FillWidth)
         .limit(None)
         .enabled(!entry.automatic)
         .id_salt(("fontcraftFeatureCode", key.kind.name(), key.index, key.name.as_str()));

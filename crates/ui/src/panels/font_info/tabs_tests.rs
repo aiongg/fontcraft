@@ -582,7 +582,7 @@ fn the_wrench_shows_only_where_a_fix_exists() {
 /// Each line of the code gets a number in the gutter; the rows a long line wraps onto get none.
 #[test]
 fn wrapped_lines_get_no_number() {
-    let long = "sub a by b; ".repeat(6);
+    let long = "sub a by b; ".repeat(30);
     let code = format!("{long}\nsub c by d;");
     let (mut fixture, _) = panel(showing(&code, Vec::new()));
     let shapes = fixture.frame_shapes();
@@ -781,4 +781,28 @@ fn a_feature_parameter_is_coloured_and_shows_its_compile_problem() {
     let mut colors: Vec<egui::Color32> = galley.job.sections.iter().map(|s| s.format.color).collect();
     colors.dedup();
     assert!(colors.len() > 1, "the code is coloured: {colors:?}");
+}
+
+/// At the panel's default size, with the find bar open, the find bar's controls each keep one line and the code field
+/// spans the pane beside the gutter.
+#[test]
+fn the_find_bar_and_the_code_field_fit_the_panels_default_size() {
+    use crate::app::models::font_features::FindModel;
+    use crate::shell::font_info_tabs::FindState;
+    let mut model = showing("sub a by b;", Vec::new());
+    if let Some(e) = model.features.entry.as_mut() {
+        e.find =
+            Some(FindModel { state: FindState { query: "a".into(), ..FindState::default() }, here: vec![(4, 5)], total: 1, ..FindModel::default() });
+    }
+    let (mut fixture, _) = panel(model);
+    let room = egui::vec2(780.0, 560.0);
+    fixture.room(room).settle();
+    let line = fixture.by_label("Next").expect("the Next button").rect.height();
+    for label in ["Match Case", "Whole Word", "Regular Expression", "Close Find", "Replace All"] {
+        let rect = fixture.by_label(label).unwrap_or_else(|| panic!("{label}")).rect;
+        assert!(rect.height() <= line * 1.5 && rect.right() <= room.x, "{label}: {rect:?}");
+    }
+    let code = fixture.by_label("Feature Code").expect("the code field").rect;
+    let next = fixture.by_label("Next").expect("the Next button").rect;
+    assert!(code.width() > room.x / 2.0 && code.top() > next.bottom(), "{code:?}");
 }

@@ -66,6 +66,8 @@ pub fn bar(ui: &mut Ui, entry: &EntryPane, sent: &mut Vec<Msg>) -> Option<FindAc
     let mut next = state.clone();
     let mut closed = false;
     let any = found.total > 0;
+    // Three rows, each narrower than the Features tab's code pane at the panel's default size: a wrapping row of
+    // craft squeezes a checkbox it ends a line with to the width left, its label then a column of letters.
     Row::new().wrap(true).show(ui, |ui, _| {
         let query = TextField::search(words.find.clone(), Bind::given(state.query.clone()))
             .placeholder(words.find.clone())
@@ -90,20 +92,6 @@ pub fn bar(ui: &mut Ui, entry: &EntryPane, sent: &mut Vec<Msg>) -> Option<FindAc
         if Button::new(words.next.clone()).enabled(any).id_salt("fontcraftFeatureFind.next").show(ui).clicked() && any {
             action = Some(FindAction::Next);
         }
-        if let Some(on) = Checkbox::new(Bind::given(state.match_case)).label(words.match_case.clone()).show(ui).events.committed() {
-            next.match_case = *on;
-        }
-        if let Some(on) = Checkbox::new(Bind::given(state.whole_word)).label(words.whole_word.clone()).show(ui).events.committed() {
-            next.whole_word = *on;
-        }
-        if let Some(on) = Checkbox::new(Bind::given(state.regex)).label(words.regex.clone()).show(ui).events.committed() {
-            next.regex = *on;
-        }
-        let scopes = vec![Entry::new("entry".to_string(), words.this_entry.clone()), Entry::new("all".to_string(), words.all_entries.clone())];
-        let shown = if state.all_entries { "all" } else { "entry" }.to_string();
-        if let Some(picked) = Select::new(words.scope.clone(), Bind::given(shown), &scopes).show(ui).events.committed() {
-            next.all_entries = picked.as_str() == "all";
-        }
         if Button::new(words.close.clone()).id_salt("fontcraftFeatureFind.close").show(ui).clicked() {
             closed = true;
         }
@@ -124,6 +112,22 @@ pub fn bar(ui: &mut Ui, entry: &EntryPane, sent: &mut Vec<Msg>) -> Option<FindAc
         let all = any && (state.all_entries || !entry.automatic);
         if Button::new(words.replace_all.clone()).enabled(all).id_salt("fontcraftFeatureFind.replaceAll").show(ui).clicked() && all {
             action = Some(FindAction::ReplaceAll);
+        }
+    });
+    Row::new().wrap(true).show(ui, |ui, _| {
+        let scopes = vec![Entry::new("entry".to_string(), words.this_entry.clone()), Entry::new("all".to_string(), words.all_entries.clone())];
+        let shown = if state.all_entries { "all" } else { "entry" }.to_string();
+        if let Some(picked) = Select::new(words.scope.clone(), Bind::given(shown), &scopes).show(ui).events.committed() {
+            next.all_entries = picked.as_str() == "all";
+        }
+        if let Some(on) = Checkbox::new(Bind::given(state.match_case)).label(words.match_case.clone()).show(ui).events.committed() {
+            next.match_case = *on;
+        }
+        if let Some(on) = Checkbox::new(Bind::given(state.whole_word)).label(words.whole_word.clone()).show(ui).events.committed() {
+            next.whole_word = *on;
+        }
+        if let Some(on) = Checkbox::new(Bind::given(state.regex)).label(words.regex.clone()).show(ui).events.committed() {
+            next.regex = *on;
         }
     });
     if closed {
