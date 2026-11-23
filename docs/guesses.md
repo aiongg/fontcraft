@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**3269 guesses on 1680 rows (683 of them live commands).**
+**3287 guesses on 1686 rows (689 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -30,6 +30,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `window.closePrompt` | M14 | inferred | yes | Don't Save sits on the left, Cancel and Save on the right with Save rightmost, as macOS document apps place them. |
 | `window.closePrompt` | M14 | inferred | yes | A failed or cancelled save stops the whole quit rather than moving on to the next document. |
 | `window.closePrompt` | M14 | inferred | yes | A document changed after the question about it was answered with Save is asked about again before the window closes; one answered Don't Save is not. |
+| `app.about` | M14 | inferred | yes | The licences are listed in full inside the About dialog rather than in a separate Acknowledgements window; the reference app's About window is not described in the sources. |
 | `app.about` | M14 | inferred | yes | About FontCraft sits in the Help menu on every platform: the window has no macOS application menu to put it in, where the reference app keeps it; a macOS build with the native menu bar would move it there. |
 | `path.convertToCubic` | M3 | handbook | yes | New handles are not rounded to the grid, so the outline stays exact; the handbook does not say whether the reference rounds them. |
 | `window.titleShowsDocument` (behavior) | M14 | inferred | – | The edited mark is the word Edited after the name, as macOS document windows show it; off macOS the app's name follows because the taskbar shows only the title. |
@@ -2080,7 +2081,16 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `window.macroPanel` | M13 | inferred | yes | A run-style line with several commands runs them as one transaction and one undo step, and may name engine commands only, so a failing line changes nothing; the command-line tool runs them one by one and simply does not save after a failure. |
 | `window.macroPanel` | M13 | inferred | yes | Clear empties the console's pane but keeps the session's command log, which other readers use; the reference's clear behaviour is not described. |
 | `window.macroPanel` | M13 | inferred | yes | The history lives for the session only and is not saved between launches; watching whether the reference keeps typed text after a relaunch would settle it. |
+| `macroPanel.setText` | M13 | inferred | yes | The editor holds one step per line in the console's syntax rather than the macro file's JSON, so a macro reads and edits like the commands typed in the input line; the reference's editor holds Python, which FontCraft does not run. |
+| `macroPanel.runAll` | M13 | inferred | yes | Run All runs the editor as one undo step, as a macro from the Script menu runs; the reference runs a script's statements one by one, and whether its undo takes them back together is not described. |
+| `macroPanel.runSelection` | M13 | inferred | yes | Run Selection runs whole lines: every line the selection touches, a selection that ends at the start of a line leaving that line out; the reference's handling of a selection that starts or ends inside a line is not described. |
+| `macroPanel.runSelection` | M13 | inferred | yes | With nothing selected, Run Selection runs the caret's line; the reference may refuse or run the whole script. |
+| `macroPanel.runSelection` | M13 | inferred | yes | The command takes line numbers rather than the selected text, so an agent names the lines it means without the editor's selection. |
+| `macroPanel.open` | M13 | inferred | yes | Open replaces the editor's text rather than adding to it or opening a second tab; the reference's panel with several scripts would settle it. |
+| `macroPanel.save` | M13 | inferred | yes | Save replaces a file at the chosen path, because the file chooser already asked; the command run with a path replaces it too. |
+| `macroPanel.record` | M13 | inferred | yes | Recorded steps go at the end of the editor's text; the reference records nothing into its panel, and whether a recorder should insert at the caret is our choice. |
 | `plugin.installFromFile` | M13 | inferred | yes | A module keeps the file name it had (or `<id>.wasm`); installing the same module again only turns it on, and a different module with an installed id needs `replace`; the reference's handling of a second copy is not documented. |
+| `plugin.installFromFile` | M13 | inferred | yes | File › Open… of a module or macro installs it, since the reference installs from a drop and FontCraft treats Open as the keyboard path to the same action; the reference's Open dialog does not list plug-ins. |
 | `plugin.runFilter` | M13 | inferred | yes | Without `layer` or `layers` the module runs on every master layer of each glyph; a locked glyph among `glyphs` refuses the whole run rather than being skipped. |
 | `plugin.runFilter` | M13 | inferred | yes | With `selectionOnly`, only the paths that hold a selected node take the module's result, and the module must return the layer's shapes in their order; the reference leaves selection handling to each plug-in. |
 | `view.showReporter` | M13 | inferred | yes | Which reporters are shown is kept between runs, as other view switches are; relaunching the reference with a reporter shown would settle it. |
@@ -2098,6 +2108,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `script.importExistingPython` (behavior) | M13 | inferred | – | The repository ships no Python client package, only documented examples, because the code base is Rust only; nothing in the reference decides it. |
 | `plugin.kind.palette` (behavior) | M13 | inferred | – | A filter module's Filter menu item runs it at once with its default parameters; other values are given in its Palette section or by agents in plugin.runFilter's `params`. |
 | `plugin.pluginsFolder` (behavior) | M13 | inferred | – | The folders are `Macros` and `Modules` in FontCraft's settings folder (the per-user application data folder); the reference's folder names and location are not given in the handbook (open question). |
+| `plugin.pluginsFolder` (behavior) | M13 | inferred | – | The web build keeps at most 64 modules and macros and 4 Mi characters of them in browser storage (localStorage gives a site about 5 million characters); larger modules install for the visit only. The reference has no web build. |
 | `plugin.noManualMove` (behavior) | M13 | inferred | – | Each module file's switch is kept in a hidden `.switches.json` in the Modules folder; a manual copy is recorded as off the first time it is seen, so at the next launch it is off but no longer marked new. |
 | `plugin.kind.check` (behavior) | M13 | inferred | – | Module checks run under every profile that runs layer checks (outlines, universal, strict, and custom profiles with outline checks) and not under opentype; user feedback on which profiles should include them would settle it. |
 | `plugin.kind.check` (behavior) | M13 | inferred | – | A module that fails on a layer is listed once as `check.plugin.<module id>` with status `error` and is not run on the remaining layers of that audit run, so a slow or broken module costs one time-out per run; user feedback would settle it. |
@@ -2105,7 +2116,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `window.pluginManager` (panel) | M13 | inferred | – | Screenshots are shown only when the entry's Preview button is pressed, not in the list, so opening the window downloads no images; the reference shows preview images in the list. |
 | `window.pluginManager` (panel) | M13 | inferred | – | Entries are listed in index order (first index first), then installed modules no index lists, then macros of the Macros folder; the reference's order is not documented. |
 | `window.pluginManager` (panel) | M13 | inferred | – | The type buttons are Filters, Reporters, Checks and Macros in place of Plugins, Scripts and Modules, because FontCraft has no Python modules; settled by nothing in the reference (our own extension model, decision 0005). |
-| `window.macroPanel` (panel) | M13 | inferred | – | The console's input is one line with a history, not a multi-line editor, because commands are one line of JSON; the reference's panel layout is not described (open question). |
+| `window.macroPanel` (panel) | M13 | inferred | – | The input line stays one line with a history, and macros are written in a separate editor of several lines under it; the reference's panel layout is not described (open question). |
+| `window.macroPanel` (panel) | M13 | inferred | – | The editor and its buttons sit under the log and the input line in one window rather than in a tab of their own; the reference app would settle the layout. |
 | `window.macroPanel` (panel) | M13 | inferred | – | Tab takes the first completion suggestion and Up and Down stay with the history, because the history is the row's documented use of those keys; nothing describes completion keys in the reference. |
 
 ## `18-custom-parameters.toml`
@@ -3224,6 +3236,11 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `view.setSpaceCenterDisplay` | M13 | docs | yes | Guides are drawn within each glyph's advance box, the master's and the glyph's own; the reference app would settle whether a horizontal guide runs across the whole line. |
 | `view.setSpaceCenterDisplay` | M13 | docs | yes | Overlay layers are offered by master name in the menu, and the command also takes layer names or ids; the reference's layer list would settle it. |
 | `view.setSpaceCenterDisplay` | M13 | docs | yes | Line space multiplies the master's line height, from 0.5 to 4; the reference app's control would settle the range. |
+| `view.setSpaceCenterDisplay` | M13 | docs | yes | Images is off and Color is on in a new Space Center; the reference app's defaults would settle it. |
+| `view.setSpaceCenterDisplay` | M13 | docs | yes | Images ignores View › Show Image and draws every glyph's image at its stored opacity; the reference app would settle whether the two switches are tied. |
+| `view.setSpaceCenterDisplay` | M13 | docs | yes | Images draws the foreground image of the layer drawn, not the background's; the reference app would settle whether a background image shows. |
+| `view.setSpaceCenterDisplay` | M13 | docs | yes | A colour glyph draws its colour layers in place of its filled outline rather than under it; the reference's preview of a colour font would settle it. |
+| `view.setSpaceCenterDisplay` | M13 | docs | yes | Images are drawn from a thumbnail of the em at the window's size in device pixels, so a very large file is not held at full size; the reference's sharpness at a large size would settle whether it draws the full file. |
 | `spaceCenter.setValue` | M13 | docs | yes | A matrix entry is its own command that evaluates the text and then runs the spacing setter as a second step; the reference's undo history after one entry would settle whether it is one step. |
 | `view.setPreferredSuffix` | M13 | docs | yes | The suffix replaces control glyphs as well as the text's glyphs; the reference app would settle it. |
 | `guide.setAppearance` | M13 | docs | yes | Magnetism is a distance in screen points from 0 to 100, 0 meaning not magnetic, as the manual's number field suggests. |
@@ -3352,6 +3369,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `window.spaceCenter` (panel) | M13 | docs | – | The Space Center draws the showing Edit View tab's master, else the first master; how the reference picks the master of a multi-master font would settle it. |
 | `window.spaceCenter` (panel) | M13 | docs | – | Matrix columns are the text's own glyphs; control glyphs get none. Opening a text with control glyphs in the reference would settle it. |
 | `window.spaceCenter` (panel) | M13 | docs | – | The matrix shows at most eight glyph rows and scrolls the rest, and the preview takes the room above it; the reference's matrix height with a long text would settle it. |
+| `window.spaceCenter` (panel) | M13 | docs | – | The Display menu also offers Color, which draws colour glyphs from their colour layers as Font View does; the reference's Space Center menu has no such item, and the primary reference's preview of a colour font would settle whether it draws in colour unasked. |
 | `dialog.externalChanges` (panel) | M13 | docs | – | Every item starts ticked, so Accept Selected with no change of the ticks takes everything; the reference's manual does not say which state the ticks start in, and opening the window there settles it. |
 | `dialog.externalChanges` (panel) | M13 | docs | – | The stored-text view on double-click shows the glyph in FontCraft's native JSON form rather than as a .glif file, since the comparison is between models; the reference shows the file text, and a file-per-glyph text view would follow it more closely. |
 | `window.crossAxisMappings` (panel) | M13 | docs | – | Edits collect in a draft that Apply writes, rather than each edit changing the font at once; watching the secondary reference's undo after editing a card would settle it. |

@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1570 rows to check: 2765 guesses and 685 observe steps.**
+**1570 rows to check: 2775 guesses and 688 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -2429,10 +2429,17 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Guides are drawn within each glyph's advance box, the master's and the glyph's own; the reference app would settle whether a horizontal guide runs across the whole line.
   - Guess: Overlay layers are offered by master name in the menu, and the command also takes layer names or ids; the reference's layer list would settle it.
   - Guess: Line space multiplies the master's line height, from 0.5 to 4; the reference app's control would settle the range.
+  - Guess: Images is off and Color is on in a new Space Center; the reference app's defaults would settle it.
+  - Guess: Images ignores View › Show Image and draws every glyph's image at its stored opacity; the reference app would settle whether the two switches are tied.
+  - Guess: Images draws the foreground image of the layer drawn, not the background's; the reference app would settle whether a background image shows.
+  - Guess: A colour glyph draws its colour layers in place of its filled outline rather than under it; the reference's preview of a colour font would settle it.
+  - Guess: Images are drawn from a thumbnail of the em at the window's size in device pixels, so a very large file is not held at full size; the reference's sharpness at a large size would settle whether it draws the full file.
   - Observe: In the reference's Space Center, turn on Right to Left with a Latin text: note the order and where the line starts.
   - Observe: Turn on Upside Down: note whether the text is turned or mirrored, and press Right with a glyph selected: note which margin grows.
   - Observe: Turn on Beam: note its default height, whether it can be dragged, and whether Edit View's beam moves with it.
   - Observe: Turn on Guides with a horizontal font guide: note whether it runs across the line or within each glyph.
+  - Observe: Place an image in a glyph, open the Space Center with Show Image off and turn on Images: note whether the image shows, at what opacity, and whether a background-layer image shows.
+  - Observe: Note whether Images and the other display items are on or off in a new Space Center.
 - [ ] `spaceCenter.setValue` (M13, docs, live): Set Space Center Value
   - Guess: A matrix entry is its own command that evaluates the text and then runs the spacing setter as a second step; the reference's undo history after one entry would settle whether it is one step.
 - [ ] `palette.pairsAndPhrases` (panel, M13, docs): Pairs & Phrases
@@ -2444,6 +2451,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The Space Center draws the showing Edit View tab's master, else the first master; how the reference picks the master of a multi-master font would settle it.
   - Guess: Matrix columns are the text's own glyphs; control glyphs get none. Opening a text with control glyphs in the reference would settle it.
   - Guess: The matrix shows at most eight glyph rows and scrolls the rest, and the preview takes the room above it; the reference's matrix height with a long text would settle it.
+  - Guess: The Display menu also offers Color, which draws colour glyphs from their colour layers as Font View does; the reference's Space Center menu has no such item, and the primary reference's preview of a colour font would settle whether it draws in colour unasked.
 
 ### Kerning and the Kerning window (16)
 
@@ -4905,8 +4913,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The history lives for the session only and is not saved between launches; watching whether the reference keeps typed text after a relaunch would settle it.
   - Observe: Open Window › Macro Panel: screenshot it, note how code is run (a button, a shortcut, both), whether it has tabs, and whether the typed text is still there after closing and reopening the panel and after relaunching.
 - [ ] `window.macroPanel` (panel, M13, inferred): Macro Panel
-  - Guess: The console's input is one line with a history, not a multi-line editor, because commands are one line of JSON; the reference's panel layout is not described (open question).
+  - Guess: The input line stays one line with a history, and macros are written in a separate editor of several lines under it; the reference's panel layout is not described (open question).
+  - Guess: The editor and its buttons sit under the log and the input line in one window rather than in a tab of their own; the reference app would settle the layout.
   - Guess: Tab takes the first completion suggestion and Up and Down stay with the history, because the history is the row's documented use of those keys; nothing describes completion keys in the reference.
+  - Observe: Open the Macro Panel: note whether it runs a selection, and whether it saves scripts to files.
 - [ ] `window.titleShowsDocument` (behavior, M14, inferred): The window title names the active document and says Edited while it…
   - Guess: The edited mark is the word Edited after the name, as macOS document windows show it; off macOS the app's name follows because the taskbar shows only the title.
   - Observe: Open a font, change it and note the window title before and after, and after saving.
@@ -4922,6 +4932,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: Change a font, click the window's close box: note the question's text, its buttons and their order.
   - Observe: In the question, choose Save for a font never saved and cancel the file chooser: note whether the window stays open and the question closes.
 - [ ] `app.about` (M14, inferred, live): About FontCraft
+  - Guess: The licences are listed in full inside the About dialog rather than in a separate Acknowledgements window; the reference app's About window is not described in the sources.
   - Guess: About FontCraft sits in the Help menu on every platform: the window has no macOS application menu to put it in, where the reference app keeps it; a macOS build with the native menu bar would move it there.
 - [ ] `settings.menuItemNameOnOlderSystem` (behavior, M14, handbook): On macOS 12 the menu item that opens the window is labelled…
   - Guess: One label and place on every platform, Settings… in the Edit menu, as many Linux and Windows applications do; a native macOS menu bar would move it to the application menu.
@@ -5067,6 +5078,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Open (our design, not confirmed): Plug-ins are loaded once when the app starts, hence the relaunch after installing. FontCraft: modules in the modules folder are validated and compiled at launch and whenever the folder changes; each run uses a fresh instance, so nothing needs a relaunch.
 - [ ] `plugin.pluginsFolder` (behavior, M13, inferred): Installed plug-ins live in a Plugins folder that sits beside the Scripts…
   - Guess: The folders are `Macros` and `Modules` in FontCraft's settings folder (the per-user application data folder); the reference's folder names and location are not given in the handbook (open question).
+  - Guess: The web build keeps at most 64 modules and macros and 4 Mi characters of them in browser storage (localStorage gives a site about 5 million characters); larger modules install for the visit only. The reference has no web build.
 - [ ] `plugin.noManualMove` (behavior, M13, inferred): Plug-ins must not be copied into the Plugins folder by hand because…
   - Guess: Each module file's switch is kept in a hidden `.switches.json` in the Modules folder; a manual copy is recorded as off the first time it is seen, so at the next launch it is off but no longer marked new.
 - [ ] `plugin.uninstall` (behavior, M13, inferred): Plug-ins from the manager are removed there; any plug-in can also be…
@@ -5118,6 +5130,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: Open the Script menu without and then with Option held: note whether Reload Scripts replaces Open Scripts Folder or is added below it, and where it sits in the menu.
 - [ ] `plugin.installFromFile` (M13, inferred, live): Install Plug-in from File
   - Guess: A module keeps the file name it had (or `<id>.wasm`); installing the same module again only turns it on, and a different module with an installed id needs `replace`; the reference's handling of a second copy is not documented.
+  - Guess: File › Open… of a module or macro installs it, since the reference installs from a drop and FontCraft treats Open as the keyboard path to the same action; the reference's Open dialog does not list plug-ins.
 - [ ] `view.showReporter` (M13, inferred, live): Show (reporter name)
   - Guess: Which reporters are shown is kept between runs, as other view switches are; relaunching the reference with a reporter shown would settle it.
   - Guess: Reporter entries are listed at the foot of the View menu in the order of their names, below a separator; the handbook does not give the order.
