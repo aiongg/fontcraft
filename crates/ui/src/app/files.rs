@@ -6,7 +6,7 @@
 //!
 //! | Command | Picker |
 //! |---|---|
-//! | `file.open` | several files of every format `file.open` reads ([`super::open::OPEN_EXTENSIONS`]) |
+//! | `file.open` | several files of every format `file.open` reads ([`super::open::OPEN_EXTENSIONS`]), and modules and macros, which install ([`super::dropped::open_as_install`]) |
 //! | `file.openFolder` | a folder (a `.ufo`, `.glyphspackage` or `.sfdir` source) |
 //! | `file.saveAs` | a file to write, offered as the document's title with its format's extension |
 //! | `file.save` | as Save As, for a document without a file it can write back to (never saved, or a compiled font) |
@@ -107,7 +107,16 @@ fn request(session: &Session, command: &CommandRef) -> Option<(PickRequest, &'st
         Some(request)
     };
     let request = match command.id.as_str() {
-        "file.open" => (PickRequest::open_many("document").title("Open").filter("Fonts", super::open::OPEN_EXTENSIONS), Fill::Each),
+        "file.open" => {
+            let fonts = super::open::OPEN_EXTENSIONS;
+            let all: Vec<&str> = fonts.iter().chain(EXTENSION_FILES.iter()).copied().collect();
+            let request = PickRequest::open_many("document")
+                .title("Open")
+                .filter("Fonts, modules and macros", &all)
+                .filter("Fonts", fonts)
+                .filter("Modules and macros", &EXTENSION_FILES);
+            (request, Fill::Each)
+        }
         "file.openFolder" => (PickRequest::folder("document").title("Open Folder"), Fill::One),
         "file.saveAs" => (save_as(session, "Save As")?, Fill::One),
         "file.save" => {
@@ -211,13 +220,36 @@ impl Picks {
                         Fill::All => {}
                     }
                 }
+                Picked::Contents(files) if matches!(command.id.as_str(), "file.open" | "plugin.installFromFile") => {
+                    ready.extend(read_installs(&command.id, files, &mut *failed));
+                }
                 Picked::Cancelled => {}
+                Picked::Contents(files) => {
+                    failed.push(format!("{}: this build cannot open files the browser read ({} files)", command.id, files.len()))
+                }
                 other => failed.push(format!("{}: no file picker ({other:?})", command.id)),
             }
             false
         });
         ready
     }
+}
+
+/// The installs of the modules and macros among the files the browser read for `command` (File › Open… or Install
+/// from File), at most [`MAX_OPENED`]. The browser gives names and bytes, no paths; a file that is neither, or is over
+/// the module size limit, is named in `failed`.
+fn read_installs(command: &str, files: Vec<(String, Vec<u8>)>, failed: &mut Vec<String>) -> Vec<CommandRef> {
+    let mut installs = Vec::new();
+    for (name, bytes) in files.into_iter().take(MAX_OPENED) {
+        let install = if super::dropped::is_extension_name(&name) { super::dropped::install_bytes(&name, &bytes) } else { None };
+        match install {
+            Some(install) => installs.push(install),
+            None => failed.push(format!(
+                "{command}: {name} was not installed: this build installs modules and macros the browser reads, within the size limit"
+            )),
+        }
+    }
+    installs
 }
 
 #[cfg(test)]

@@ -49,7 +49,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Install Plug-in from File",
             [],
             None,
-            "{path?: path to a .wasm module or a .fcmacro macro, dataBase64?: the file's bytes in place of path, name?: its file name in the Modules or Macros folder, replace?: bool} validate a module (manifest, ABI version, no imports, limits) or a macro, copy it into the Modules or Macros folder and turn it on at once, with no relaunch. A module whose id is installed already is replaced only with replace: true, and keeps its file name unless `name` gives another. With only `name`, turn on a module file that is already in the Modules folder (one copied there by hand). Without a Modules folder, the module is installed for this session only → {kind: \"filter\" | \"reporter\" | \"check\" | \"macro\", id?, name?, version?, file?, path?, enabled: true, replaced: bool, warning?}",
+            "{path?: path to a .wasm module or a .fcmacro macro, dataBase64?: the file's bytes in place of path, name?: its file name in the Modules or Macros folder, replace?: bool} validate a module (manifest, ABI version, no imports, limits) or a macro, copy it into the Modules or Macros folder and turn it on at once, with no relaunch. A module whose id is installed already is replaced only with replace: true, and keeps its file name unless `name` gives another. With only `name`, turn on a module file that is already in the Modules folder (one copied there by hand). Without a Modules or Macros folder (the web build), the module or macro is installed for this session only → {kind: \"filter\" | \"reporter\" | \"check\" | \"macro\", id?, name?, version?, file?, path?, enabled: true, replaced: bool, warning?}",
             always,
             install_from_file
         )
@@ -299,9 +299,18 @@ fn install_macro(s: &mut Session, p: &Params, bytes: &[u8], name: Option<&str>, 
         return Err(p.bad(format!("a macro file holds at most {} MiB", MAX_MACRO_BYTES >> 20)));
     }
     let m = Macro::parse(bytes).map_err(|e| p.bad(e.to_string()))?;
-    let dir = s.extensions().macros_dir.clone().ok_or_else(|| p.bad("this session has no Macros folder"))?;
     let name = name.ok_or_else(|| p.bad("give the macro's file `name`"))?;
     let file = folder_file_name(p, name, MACRO_EXTENSION)?;
+    let Some(dir) = s.extensions().macros_dir.clone() else {
+        // No Macros folder (the web build): installed for this session.
+        let replaced = s.extensions().macros.iter().any(|e| e.path == file);
+        if replaced && !replace {
+            return Err(p.bad(format!("a macro named {file:?} is installed already: pass replace: true to replace it")));
+        }
+        let title = m.title.clone();
+        s.extensions_mut().put_macro(file.clone(), m);
+        return Ok(json!({"kind": "macro", "id": file, "name": title, "file": file, "path": null, "enabled": true, "replaced": replaced}));
+    };
     let target = dir.join(&file);
     let replaced = target.exists();
     if replaced && !replace {

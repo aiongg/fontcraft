@@ -44,6 +44,14 @@ _Updated: 2026-11-23: X.fix96 and X.fix97: floating panels are OS windows on des
     `ConsoleState::editor` and `editor_macro`, the pane in `panels/command_console.rs`; tests in
     `shell/macro_editor/tests.rs` and the panel's frame test of Run Selection and Save. Shell commands have no
     `enabled` rule: the panel greys its own buttons.
+    M13.76 (install leftovers) is written on branch `w-M13.76`, on top of `w-M13.23c`, not yet built or tested:
+    File › Open… offers modules and macros and installs one chosen there (`app::dropped::open_as_install`, run from
+    `apply_now` for the person's own runs only); `Picks::poll` installs the modules and macros a browser chooser
+    reads (`Picked::Contents`); the engine installs a macro for the session when there is no Macros folder; the
+    browser store is `app::web_store` over `craft_ext::platform::storage::BrowserStorage` (web-sys `Storage`, a new
+    wasm32-only dependency of craft-ext, so Cargo.lock changes at the first build). Tests:
+    `dropped::tests::a_macro_chosen_in_file_open_is_installed_as_a_drop_is` and three in `web_store::tests`. The web
+    build has no entry point yet, so the store runs only in tests.
 
 - **Where M10.34 and M10.41 stand.** Merged and built with M13.64. Seen in the window: with the Instructor and two
   points selected, the canvas menu starts with Snap Point, Stem and Delta, Shift Points and Interpolate greyed out;

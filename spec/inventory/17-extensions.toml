@@ -700,9 +700,10 @@ milestone = "M13"
 summary = "A plug-in outside the catalogue is installed by dropping its bundle on the app's Dock icon; the app moves it into the Plugins folder. FontCraft: dropping a `.wasm` or `.fcmacro` file on the window, opening it with File › Open, or calling this command with a path validates it (manifest, ABI version, no imports, limits) and copies it into its folder; on the web the file's bytes are stored in the browser."
 ref = "Extensions › Plug-ins › Installing Plug-ins"
 status = "inferred"
-notes = "X.ui3, crates/ui/src/app/dropped.rs: a `.wasm` or `.fcmacro` file dropped anywhere on the desktop window runs this command with its path, before the canvas or the Font View can take it as an image. The web build does not install from a drop, since a dropped file there has no path and its bytes arrive asynchronously."
+notes = "X.ui3, crates/ui/src/app/dropped.rs: a `.wasm` or `.fcmacro` file dropped anywhere on the desktop window runs this command with its path, before the canvas or the Font View can take it as an image. The web build does not install from a drop, since a dropped file there has no path and its bytes arrive asynchronously. M13.76: File › Open… lists modules and macros in its chooser (a filter of everything it opens, one of fonts, one of modules and macros); a module or macro chosen there runs this command instead of opening a document, through the same code as a drop. A `file.open` request over the control channel (`engine.execute`) gets the engine's answer and does not install. In the browser the chooser gives a name and bytes, which install through `dataBase64` and `name`. Without a Modules or Macros folder (the web build) a module or macro is installed for the session; the web build keeps it in browser storage (`plugin.pluginsFolder`)."
 guesses = [
   "A module keeps the file name it had (or `<id>.wasm`); installing the same module again only turns it on, and a different module with an installed id needs `replace`; the reference's handling of a second copy is not documented.",
+  "File › Open… of a module or macro installs it, since the reference installs from a drop and FontCraft treats Open as the keyboard path to the same action; the reference's Open dialog does not list plug-ins.",
 ]
 
 [[behavior]]
@@ -712,8 +713,10 @@ milestone = "M13"
 summary = "Installed plug-ins live in a Plugins folder that sits beside the Scripts folder. FontCraft: a Modules folder beside the Macros folder in the per-user data folder (for example `~/Library/Application Support/FontCraft/` on macOS); Settings › Extensions shows both paths."
 ref = "Extensions › Plug-ins › Installing Plug-ins"
 status = "inferred"
+notes = "M13.76, crates/ui/src/app/web_store.rs: the web build has no folders. A module or macro installed there from bytes is kept in the page's localStorage under `fontcraft.extensions` (JSON: version, then kind, id, file name and base64 bytes per entry) and installed again when the app starts; removing it drops it from the store. A file that does not fit stays installed for the visit and the status line says it was not kept. Module on/off switches are not kept on the web."
 guesses = [
   "The folders are `Macros` and `Modules` in FontCraft's settings folder (the per-user application data folder); the reference's folder names and location are not given in the handbook (open question).",
+  "The web build keeps at most 64 modules and macros and 4 Mi characters of them in browser storage (localStorage gives a site about 5 million characters); larger modules install for the visit only. The reference has no web build.",
 ]
 
 [[behavior]]
