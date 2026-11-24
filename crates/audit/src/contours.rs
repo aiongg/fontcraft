@@ -237,16 +237,19 @@ pub(crate) fn path_direction(input: &LayerInput<'_>, _: &Params<'_>, sink: &mut 
     }
     for (r, (depth, _)) in regions.iter().zip(nesting(&regions)) {
         let counter_clockwise = r.area > 0.0;
-        let expected = depth % 2 == 0;
+        // Sources wind outer contours counter-clockwise; a compiled glyf table winds them clockwise.
+        let expected = (depth % 2 == 0) != input.ctx.glyf_outlines;
         if counter_clockwise == expected {
             continue;
         }
+        // The codes name the source convention; on glyf outlines both directions are reversed.
+        let wrong = if input.ctx.glyf_outlines { "counter-clockwise" } else { "clockwise" };
         let (code, message) = match depth {
-            0 => ("outer-clockwise", format!("Path {} is an outer contour but runs clockwise.", Nth(r.shape))),
+            0 => ("outer-clockwise", format!("Path {} is an outer contour but runs {wrong}.", Nth(r.shape))),
             d if d % 2 == 1 => {
                 ("counter-same-direction", format!("Path {} is a counter but runs the same way as the contour around it.", Nth(r.shape)))
             }
-            _ => ("nested-clockwise", format!("Path {} lies inside a counter but runs clockwise.", Nth(r.shape))),
+            _ => ("nested-clockwise", format!("Path {} lies inside a counter but runs {wrong}.", Nth(r.shape))),
         };
         sink.push(Hit::new(code, message).shapes(vec![r.shape]).bounds(r.bbox).data("depth", depth as f64));
     }

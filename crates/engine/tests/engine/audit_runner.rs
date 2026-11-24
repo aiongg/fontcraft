@@ -60,6 +60,19 @@ fn a_compiled_font_by_path_runs_binary_and_outline_checks() {
 }
 
 #[test]
+fn path_direction_follows_the_truetype_convention_on_a_compiled_glyf_font() {
+    let dir = scratch("direction");
+    let (mut s, ttf) = exported(&dir, "Font.ttf");
+    let id = "check.outlines.pathDirection";
+    let source = run(&mut s, "audit.run", json!({"checks": [id], "includePassed": true}));
+    assert_eq!(check(&source, id).unwrap()["status"], "pass", "the source winds its outer contour counter-clockwise");
+    // The compiler reverses the contour for glyf, where outer contours run clockwise.
+    let compiled = run(&mut s, "audit.run", json!({"target": ttf, "checks": [id], "includePassed": true}));
+    assert_eq!(check(&compiled, id).unwrap()["status"], "pass", "{}", compiled["results"]);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
 fn a_folder_of_fonts_is_one_family() {
     let dir = scratch("family");
     let (mut s, _) = exported(&dir, "One.ttf");

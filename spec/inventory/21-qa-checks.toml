@@ -100,7 +100,7 @@ scope = "source"
 fixable = true
 area = "qa"
 milestone = "M3"
-summary = "A contour winds the wrong way for its nesting depth: outer contours run counter-clockwise (the PostScript convention of sources), counters clockwise, and so on alternately. A contour encloses another when the inner contour's bounding box lies inside the outer one's (and is not equal to it) and every sampled on-curve point of the inner contour (up to 16) is inside the outer contour. Message codes: `outer-clockwise`, `counter-same-direction`, `nested-clockwise`. The fix runs Correct Path Direction on the layer: directions from nesting, each closed path starting at its lowest, then leftmost, node, and the paths sorted."
+summary = "A contour winds the wrong way for its nesting depth: outer contours run counter-clockwise (the PostScript convention of sources), counters clockwise, and so on alternately. Outlines decoded from a compiled `glyf` table follow the TrueType convention instead, outer contours clockwise; the codes keep their names. A contour encloses another when the inner contour's bounding box lies inside the outer one's (and is not equal to it) and every sampled on-curve point of the inner contour (up to 16) is inside the outer contour. Message codes: `outer-clockwise`, `counter-same-direction`, `nested-clockwise`. The fix runs Correct Path Direction on the layer: directions from nesting, each closed path starting at its lowest, then leftmost, node, and the paths sorted."
 ref = "fontbakery outline_direction"
 status = "docs"
 

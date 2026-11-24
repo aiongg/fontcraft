@@ -132,7 +132,13 @@ impl Staged {
     }
 
     fn facts(&self, source: bool) -> audit::run::Facts {
-        audit::run::Facts { source, variable: source && self.font.masters.len() > 1, network: self.run.network, values: self.values.clone() }
+        audit::run::Facts {
+            source,
+            variable: source && self.font.masters.len() > 1,
+            network: self.run.network,
+            values: self.values.clone(),
+            ..Default::default()
+        }
     }
 
     /// Does the next piece of work.

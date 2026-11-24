@@ -44,6 +44,8 @@ pub struct Facts {
     pub source: bool,
     /// A source with more than one master, or a compiled font with `fvar`.
     pub variable: bool,
+    /// A compiled font whose outlines come from a `glyf` table.
+    pub glyf_outlines: bool,
     /// The run allows network access (`audit.networkOptIn`).
     pub network: bool,
     /// The project values the source sets (`audit.projectValues`).

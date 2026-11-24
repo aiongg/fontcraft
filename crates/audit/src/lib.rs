@@ -312,6 +312,9 @@ pub struct AuditContext<'a> {
     pub main_curve: Option<CurveType>,
     /// The source has more than one master.
     pub variable: bool,
+    /// The outlines were decoded from a compiled `glyf` table, whose convention is the reverse
+    /// of a source's: outer contours run clockwise.
+    pub glyf_outlines: bool,
     /// The masters' comparison order for the compatibility checks, built by the first glyph
     /// that needs it.
     compat_masters: std::cell::OnceCell<checks::compat::MasterOrder>,
@@ -320,7 +323,14 @@ pub struct AuditContext<'a> {
 impl<'a> AuditContext<'a> {
     /// A context with facts the caller already surveyed (see [`AuditContext::new`]).
     pub fn with_facts(font: &'a Font, grid_step: Option<f64>, main_curve: Option<CurveType>, variable: bool) -> Self {
-        Self { font, grid_step, main_curve, variable, compat_masters: std::cell::OnceCell::new() }
+        Self { font, grid_step, main_curve, variable, glyf_outlines: false, compat_masters: std::cell::OnceCell::new() }
+    }
+
+    /// The same context, for outlines decoded from a compiled `glyf` table.
+    #[must_use]
+    pub fn with_glyf_outlines(mut self, glyf: bool) -> Self {
+        self.glyf_outlines = glyf;
+        self
     }
 
     pub(crate) fn compat_masters(&self) -> &checks::compat::MasterOrder {

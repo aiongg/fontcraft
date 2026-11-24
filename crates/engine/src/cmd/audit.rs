@@ -549,7 +549,7 @@ type Raw = Vec<(usize, Finding)>;
 fn examine_font(font: &Font, fi: usize, run: &Run, facts: &audit::run::Facts, ex: &mut Examined, raw: &mut Raw, places: &mut HashMap<usize, Places>) {
     let layer_checks = start_font(font, fi, run, facts, ex, places);
     let chosen = layers_of(font, run);
-    examine_layers(&AuditContext::new(font), fi, run, &layer_checks, &chosen, ex, raw, places);
+    examine_layers(&AuditContext::new(font).with_glyf_outlines(facts.glyf_outlines), fi, run, &layer_checks, &chosen, ex, raw, places);
     examine_rest(font, fi, run, facts, ex, raw);
 }
 
@@ -619,7 +619,7 @@ fn examine_layers(
 
 /// Runs the glyph and source checks of `run` on `font`.
 fn examine_rest(font: &Font, fi: usize, run: &Run, facts: &audit::run::Facts, ex: &mut Examined, raw: &mut Raw) {
-    let ctx = AuditContext::new(font);
+    let ctx = AuditContext::new(font).with_glyf_outlines(facts.glyf_outlines);
     let services = super::audit_services::EngineServices;
     audit::run::run_glyphs(&ctx, &services, &run.checks, &run.config, facts, run.glyphs.as_ref(), &mut ex.tally);
     audit::run::run_source(&ctx, &services, &run.checks, &run.config, facts, &mut ex.tally);
@@ -771,6 +771,8 @@ struct Src {
     model: Arc<Font>,
     /// A source (true) or a decoded compiled font.
     source: bool,
+    /// A compiled font whose outlines were decoded from its `glyf` table.
+    glyf: bool,
 }
 
 /// What a run examines.
@@ -812,7 +814,7 @@ impl Target {
 fn document_target_of(doc: &DocState) -> Target {
     let mut t = Target { kind: "source", path: doc.path.as_ref().map(|p| p.to_string_lossy().into_owned()), ..Target::default() };
     let i = t.add_font(&doc.font.family_name, t.path.clone().as_deref(), None, "source");
-    t.srcs.push(Src { font: i, model: doc.font.clone(), source: true });
+    t.srcs.push(Src { font: i, model: doc.font.clone(), source: true, glyf: false });
     t.settings = DocumentSettings::read(&doc.font).0;
     t.document = Some(json!({"title": doc.title, "revision": doc.revision}));
     t
@@ -964,7 +966,8 @@ fn load_one(path: &std::path::Path, t: &mut Target) -> Result<()> {
                 let i = t.add_font(&name, Some(&text), None, input.kind.name());
                 t.notes.extend(warnings.into_iter().take(MAX_NOTES_PER_FONT).map(|w| format!("f{i}: {w}")));
                 if let Some(model) = model {
-                    t.srcs.push(Src { font: i, model: Arc::new(model), source: false });
+                    let glyf = skrifa::FontRef::from_index(&sfnt, face).is_ok_and(|f| f.table_data(skrifa::raw::types::Tag::new(b"glyf")).is_some());
+                    t.srcs.push(Src { font: i, model: Arc::new(model), source: false, glyf });
                 }
                 t.bins.push(Bin { font: i, bytes: Arc::clone(&sfnt), face, path: Some(text.clone()), size, map: None });
             }
@@ -973,7 +976,7 @@ fn load_one(path: &std::path::Path, t: &mut Target) -> Result<()> {
     }
     let (font, _) = crate::io::open(path, None)?;
     let i = t.add_font(&font.family_name, Some(&text), None, "source");
-    t.srcs.push(Src { font: i, model: Arc::new(font), source: true });
+    t.srcs.push(Src { font: i, model: Arc::new(font), source: true, glyf: false });
     Ok(())
 }
 
@@ -1069,16 +1072,17 @@ fn examine_target(t: &mut Target, run: &Run) -> Examined {
     compile_sources(t, run, &mut ex);
     let (mut raw, mut places) = (Raw::new(), HashMap::new());
     let values = t.settings.values.keys().cloned().collect();
-    let facts = |source: bool, font: &Font| audit::run::Facts {
-        source,
-        variable: font.masters.len() > 1,
+    let facts = |src: &Src| audit::run::Facts {
+        source: src.source,
+        variable: src.model.masters.len() > 1,
+        glyf_outlines: src.glyf,
         network: run.network,
         values: BTreeSet::clone(&values),
     };
     for src in &t.srcs {
-        examine_font(&src.model, src.font, run, &facts(src.source, &src.model), &mut ex, &mut raw, &mut places);
+        examine_font(&src.model, src.font, run, &facts(src), &mut ex, &mut raw, &mut places);
     }
-    let base = audit::run::Facts { source: false, variable: false, network: run.network, values: values.clone() };
+    let base = audit::run::Facts { network: run.network, values: values.clone(), ..Default::default() };
     examine_binaries(&t.bins, &t.ids(), &t.settings.values, run, &base, &mut ex, &mut raw);
     let ignore = t.settings.ignore_index();
     finish(raw, run, &places, &ignore, true, &mut ex);
