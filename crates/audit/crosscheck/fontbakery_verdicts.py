@@ -133,12 +133,82 @@ KNOWN: dict[tuple[str, str], object] = {
     ("mandatory_glyphs", "fc"): aots_only("data", "conformance-suite font whose .notdef is a zero-area outline"),
     ("caps_vertically_centered", "fc"): aots_only("data", "conformance-suite font: upstream finds capitals "
                                                   "by glyph name and skips; ours by cmap, where they are arbitrary shapes"),
-    ("opentype/xavgcharwidth", "fb"): aots_only("data", "conformance-suite font with fewer glyphs than "
-                                                "upstream's weighted average needs; ours skips"),
-    ("outline_alignment_miss", "fc"): aots_only("data", "conformance-suite font with arbitrary shapes"),
     ("cmap/format_12", "fb"): aots_only("data", "conformance-suite font with no cmap format 4 subtable, which "
                                         "our cmapSubtables check reports"),
 }
+
+
+def only_codes(codes: set[str], cls: str, why: str):
+    """A difference explained when upstream reports these codes and no others."""
+    return lambda font, fb, ours: (cls, why) if fb.get("codes") and set(fb["codes"]) <= codes else None
+
+
+def only_ours(codes: set[str], cls: str, why: str):
+    """A difference explained when our flags carry these codes and no others."""
+    def f(font, fb, ours):
+        got = {c for o in ours.values() for c in o.get("codes", [])}
+        return (cls, why) if got and got <= codes else None
+    return f
+
+
+CORPUS = [Path(".")]  # set by main()
+
+
+def lacks(tag: bytes, cls: str, why: str):
+    """A difference explained when the font (TrueType or CFF, not WOFF) has no `tag` table."""
+    def f(font, fb, ours):
+        try:
+            with open(font if font.is_absolute() else CORPUS[0] / font, "rb") as fh:
+                head = fh.read(12)
+                count = int.from_bytes(head[4:6], "big") if len(head) == 12 else 0
+                tags = {fh.read(16)[:4] for _ in range(min(count, 512))}
+        except OSError:
+            return None
+        return (cls, why) if head[:4] in (b"\0\1\0\0", b"OTTO", b"true") and tag not in tags else None
+    return f
+
+
+ONE_FILE = "the corpus run hands upstream one file at a time, so its family check cannot see the other styles"
+KNOWN[("opentype/STAT/ital_axis", "fb")] = only_codes({"missing-roman"}, "data", ONE_FILE)
+CUTOFF = ("upstream passes a font once it finds more than 100 cases, counted over the decomposed "
+          "glyphs; ours counts each layer's own points and collapses past audit.resultCap (also 100)")
+
+
+def cutoff_or(other=None):
+    """Upstream gave up past its false-positive cutoff; otherwise ask `other`."""
+    return lambda font, fb, ours: ("purpose", CUTOFF) if fb.get("by_design") else (
+        other(font, fb, ours) if other else None)
+
+
+KNOWN[("outline_alignment_miss", "fc")] = cutoff_or(aots_only("data", "conformance-suite font with arbitrary shapes"))
+for _c in ("outline_short_segments", "outline_colinear_vectors", "outline_jaggy_segments",
+           "outline_semi_vertical"):
+    KNOWN.setdefault((_c, "fc"), cutoff_or())
+KNOWN[("opentype/fsselection", "fc")] = ("purpose", "ours takes the style from the name table, upstream "
+                                         "from the file name; on these fonts the two disagree")
+KNOWN[("transformed_components", "fc")] = only_ours({"scaled-or-rotated"}, "purpose",
+    "a source does not say whether its export will be hinted, so ours warns on any scale or rotation; "
+    "upstream flags those only on hinted fonts (the row's guess)")
+KNOWN[("fontwerk/style_linking", "fc")] = ("purpose", MERGED_OWN + ": a subfamily name other than "
+                                           "Regular, Bold, Italic or Bold Italic (office_ribz_req)")
+KNOWN[("microsoft/office_ribz_req", "fc")] = ("purpose", MERGED_OWN + ": the subfamily name against the "
+                                              "bold and italic bits (style_linking)")
+KNOWN[("notofonts/unicode_range_bits", "fb")] = ("purpose", "ours compares each Unicode range bit with "
+                                                 "the cmap only when its strict parameter is on, which "
+                                                 "the strict profile leaves off")
+for _c in ("name_length_req", "instances_name_length_req"):
+    KNOWN[(_c, "fb")] = lacks(b"name", "purpose", NO_TABLE)
+KNOWN[("googlefonts/name/mandatory_entries", "fb")] = only_codes({"missing-entry"}, "purpose",
+    "vendor policy: name IDs 16 and 17 for every style outside Regular, Bold, Italic and Bold Italic; "
+    "ours requires the records the OpenType specification requires")
+KNOWN[("opentype/xavgcharwidth", "fb")] = only_codes({"missing-glyphs"}, "data", "the font lacks glyphs "
+                                                    "that upstream's weighted average needs; ours skips")
+KNOWN[("notofonts/hmtx/encoded_latin_digits", "fb")] = only_codes({"missing-digit"}, "purpose",
+    "vendor policy: every font encodes the digits; ours compares digit widths only when there are digits")
+KNOWN[("overlapping_path_segments", "fb")] = (
+    "purpose", "upstream compares end points only, so it also flags zero-length segments and curves "
+    "that share their ends but not their handles; ours needs the handles to match too")
+
 for _c in ("family/vertical_metrics", "family/win_ascent_and_descent", "googlefonts/vertical_metrics",
            "linegaps", "opentype/family/panose_familytype", "opentype/monospace", "os2_metrics_match_hhea",
            "typenetwork/font_is_centered_vertically", "typoascender_exceeds_Agrave",
@@ -146,14 +216,31 @@ for _c in ("family/vertical_metrics", "family/win_ascent_and_descent", "googlefo
            "notofonts/cmap/unexpected_subtables", "opentype/varfont/distinct_instance_records"):
     KNOWN.setdefault((_c, "fb"), ("purpose", NO_TABLE))
 
+# FontBakery conditions that make upstream skip for a reason outside the check itself: how the
+# corpus is run (data), or a scope we chose to widen (purpose).
+SKIP_CONDITIONS = {
+    "network": ("data", "upstream needs the network for this check and skips under --skip-network"),
+    "style": ("data", "upstream takes the style from the file name and skips when the name holds no "
+              "style it knows; ours reads the style from the font"),
+    "is_ttf": ("purpose", "upstream runs this check on TrueType outlines only; ours also on CFF outlines"),
+    "not is_italic": ("data", "the font sets the italic style bits with an italic angle of 0; upstream "
+                      "skips italic fonts, ours skips by the italic angle"),
+    "not is_variable_font": ("purpose", "upstream skips variable fonts; ours checks their default outlines"),
+}
+
 # Codes of a merged FontCraft check that belong to one upstream check; a merged check's result
 # counts for an upstream check only when one of its codes belongs to it or to none listed here.
-# "" marks a code that belongs to no upstream check (a FontCraft addition).
+# "" marks a code that belongs to no upstream check (a FontCraft addition); a tuple, a code that
+# several upstream checks share.
+# A code may carry "#<name ID>" when the finding names one record; without its own entry it
+# belongs where its bare code does.
 CODE_OWNER = {
     "check.layout.gdefMarkClass": {"mark-chars": "opentype/gdef_mark_chars",
                                    "non-mark-chars": "opentype/gdef_non_mark_chars",
                                    "spacing-mark-glyphs": "opentype/gdef_spacing_marks"},
-    "check.names.requiredRecords": {"missing-recommended": ""},
+    "check.names.requiredRecords": {"missing-recommended": "", "missing-recommended#0": "microsoft/copyright",
+                                    "missing-recommended#7": "microsoft/trademark",
+                                    "missing-recommended#8": "microsoft/manufacturer"},
     "check.names.postScriptNameCharacters": {"bad-psname": "opentype/postscript_name"},
     "check.names.postScriptNameConsistency": {"ps-cff-name-mismatch": "opentype/name/postscript_vs_cff"},
     "check.metrics.digitWidths": {"bad-digit-width": "notofonts/hmtx/encoded_latin_digits",
@@ -162,8 +249,20 @@ CODE_OWNER = {
     "check.metrics.whitespaceWidths": {"bad-whitespace-advance": "notofonts/hmtx/whitespace_advances"},
     "check.names.copyrightInDescription": {"copyright-on-description": "name/no_copyright_on_description"},
     "check.tables.fsSelection": {"bad-regular": "opentype/fsselection"},
-    "check.variations.statValueQuality": {"axis-order-invalid": "microsoft/STAT_table_axis_order"},
-    "check.names.familyAndStyleLength": {"nameid1-too-long": "name/family_and_style_max_length"},
+    "check.variations.statValueQuality": {"axis-order-invalid": "microsoft/STAT_table_axis_order",
+                                          "missing-axis-value": "googlefonts/STAT/compulsory_axis_values"},
+    "check.variations.defaultInstanceNames": {
+        "invalid-default-instance-postscript-name": "opentype/varfont/valid_default_instance_nameids"},
+    "check.tables.weightClassRange": {"cff-below-250": ""},
+    "check.names.familyAndStyleLength": {
+        "nameid1-too-long": ("name/family_and_style_max_length", "name_length_req"),
+        "familyname-plus-stat-entries-too-long": "name/family_and_style_max_length",
+        "fvar-instance-too-long": ("name/family_and_style_max_length", "instances_name_length_req")},
+    "check.tables.codePageRanges": {"no-code-pages": "opentype/code_pages", "bad-code-page-bit": "",
+                                    "bad-range-bit": "notofonts/unicode_range_bits",
+                                    "non-plane-0-without-format-12": ""},
+    "check.metrics.tabularWidths": {"tnum-unequal": "tnum_glyphs_equal_widths", "group-unequal": "",
+                                    "figure-space": ""},
 }
 
 
@@ -172,7 +271,10 @@ def for_upstream(fb_check: str, check: str, res: dict) -> dict:
     owners = CODE_OWNER.get(check)
     if not owners or res["status"] not in FC_FLAGGED:
         return res
-    mine = [c for c in res["codes"] if owners.get(c, fb_check) == fb_check]
+    def owner(code):
+        return owners[code] if code in owners else owners.get(code.split("#")[0], fb_check)
+
+    mine = [c for c in res["codes"] if fb_check in ((o,) if isinstance(o := owner(c), str) else o)]
     return res if mine else {**res, "status": "pass", "codes": [], "other_codes": res["codes"]}
 
 
@@ -355,7 +457,15 @@ def fb_results(path: Path) -> dict[str, dict]:
                 for log in check.get("logs", [])
                 if log.get("status") in FB_FLAGGED | {"ERROR"}
             } - {""})
-            res[m.group(1)] = {"status": check.get("result", "ERROR"), "codes": codes}
+            unmet = set()
+            for log in check.get("logs", []):
+                msg = str((log.get("message") or {}).get("message", ""))
+                if log.get("status") == "SKIP" and msg.startswith("Unfulfilled Conditions:"):
+                    unmet |= {c.strip() for c in msg.split(":", 1)[1].split(",")}
+            by_design = any("probably by design" in str((log.get("message") or {}).get("message", ""))
+                            for log in check.get("logs", []))
+            res[m.group(1)] = {"status": check.get("result", "ERROR"), "codes": codes,
+                               "unmet": sorted(unmet), "by_design": by_design}
     return res
 
 
@@ -371,9 +481,15 @@ def fc_results(path: Path) -> tuple[dict[str, dict], str | None]:
     for r in doc.get("results", []):
         if r.get("severity") in FC_FLAGGED and not r.get("ignored"):
             codes[r.get("check", "")].add(str(r.get("code", "")))
+            name_id = (r.get("location") or {}).get("nameId")
+            if isinstance(name_id, int):
+                # The name ID tells apart upstream checks that each test one record.
+                codes[r.get("check", "")].add(f"{r.get('code', '')}#{name_id}")
+    collapsed = {r.get("check", "") for r in doc.get("results", []) if r.get("code") == "too-many-results"}
     res = {}
     for c in doc.get("checks", []):
-        res[c["id"]] = {"status": c.get("status", "error"), "codes": sorted(codes.get(c["id"], ()))}
+        res[c["id"]] = {"status": c.get("status", "error"), "codes": sorted(codes.get(c["id"], ())),
+                        "collapsed": c["id"] in collapsed}
     return res, None
 
 
@@ -402,6 +518,15 @@ def classify(fb_check: str, direction: str, font: Path, fb_res: dict, ours: dict
         return ("data", "the upstream check raised an error on this font, so it gives no verdict")
     if direction == "error" and not fb_res:
         return ("data", "FontBakery could not load this font")
+    unmet = SKIP_CONDITIONS.keys() & set(fb_res.get("unmet", ()))
+    if direction == "fc" and unmet:
+        return SKIP_CONDITIONS[min(unmet)]
+    if direction == "fb" and any(o.get("collapsed") for o in ours.values()):
+        return ("purpose", "ours found more than audit.resultCap cases and collapsed them into one "
+                "information result (21-qa.md § 3)")
+    if direction == "fb" and ours and all(c.startswith("check.family.") and o["status"] == "skipped"
+                                          for c, o in ours.items()):
+        return ("data", ONE_FILE + "; ours skips a family check given a single font")
     entry = KNOWN.get((fb_check, direction))
     if callable(entry):
         got = entry(font, fb_res, ours)
@@ -430,6 +555,7 @@ def main() -> int:
     args = ap.parse_args()
 
     out = args.out.expanduser()
+    CORPUS[0] = args.corpus.resolve()
     for d in ("fb", "fc"):
         (out / d).mkdir(parents=True, exist_ok=True)
 

@@ -9,3 +9,6 @@
 # Sources of generated data files (`cargo xtask glyphsets --fetch`). Never committed.
 /data-sources/
 .DS_Store
+
+# Python bytecode from the crosscheck scripts
+__pycache__/

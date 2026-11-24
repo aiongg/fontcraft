@@ -2,9 +2,19 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-24: M13.41 (segment components and brushes), X.fix102, M13.42 (the cap, segment and brush interface) and M13.42b (attachment hints follow node edits) built, with integration fixes X.integ177 to X.integ181. Gate: the 11 steps of `cargo xtask ci` passed one at a time on dd35125 (5,038 tests passed, 43 skipped)_
+_Updated: 2026-11-24: M12.81 (the FontBakery verdict measure), M13.41 (segment components and brushes), X.fix102, M13.42 (the cap, segment and brush interface) and M13.42b (attachment hints follow node edits) built, with integration fixes X.integ177 to X.integ181. Gate: the 11 steps of `cargo xtask ci` passed one at a time on dd35125 (5,038 tests passed, 43 skipped)_
 
 ## State of the tree
+
+- **M12.81 (FontBakery verdict measure): built and run.** `python3 -I crates/audit/crosscheck/fontbakery_verdicts.py
+  --cli target/release/fontcraft-cli --corpus <main checkout>/corpus --out <dir>` (FontBakery 1.1.0 as a uv tool,
+  the afdko uv tool's fontTools for WOFF, fontc for the sources; reports are reused unless `--fresh`). Last run: 394
+  fonts, 252 checks; both flag 8,676, both clean 65,698, data 8,161, on purpose 3,682, ours 69 in 26 groups.
+  The table, the on-purpose list and the open groups are in `docs/spec/21-qa.md` § 9. Fixed:
+  `pathDirection` on `glyf` outlines (`Facts.glyf_outlines`; test
+  `path_direction_follows_the_truetype_convention_on_a_compiled_glyf_font`). Next for M12.82: the 28
+  `outline_direction` pairs (overlapping contours of variable fonts read as counters; inner contours of
+  `degree`, `ring` and `copyright` reported as outer on the Oswald 2.x and 3.0 TrueType fonts).
 
 - **Desktop smoke of M13.41 and M13.42 (light and dark, Xvfb, 1440 × 860).** Glyph A: a 400-unit square with
   `_cap.flag` (Fit) on its top segment, `_segment.wave` on its bottom segment and `_brush.bar` on its right one.
@@ -759,7 +769,7 @@ _Updated: 2026-11-24: M13.41 (segment components and brushes), X.fix102, M13.42 
   Hinting Preview waterfall takes 0.024 ms. FontBakery's verdicts agree on the 44 pairs compared
   (the `fsSelection` and `mac_style` checks are merged by design). Not run: ttxn and tx for the
   normalised dump, sfntdiff for `diff`, cu2qu and ttfcomponentizer for the curve tools, otfautohint for
-  the `autohint` shell and over the corpus (target 99.5%), FontBakery over the corpus, and the § 5 measures of
+  the `autohint` shell and over the corpus (target 99.5%), and the § 5 measures of
   M6 (but mark attachment), M7 (but names) and M8. The TrueType debugger's end points are tested against the hinted preview's.
 - **Measures that need AFDKO's tools** (tx, makeotf, rotatefont, cffsubr) write temporary files the agent sessions
   cannot write, so the owner runs them outside the sessions' sandbox. They last ran at `601ebf0`; the results are in
@@ -1208,7 +1218,7 @@ linked file is checked against it, and a linked file outside the read root reads
    glyphs), fontc's combinatorial bracket kerning and decreasing-axis tables, and brace sources for composites of
    non-exported brace glyphs (with M9.39); subsetting sources (M12.74).
 9. **The measures not yet run:** ttxn and tx for the normalised dump, sfntdiff, cu2qu, ttfcomponentizer,
-   otfautohint for the `autohint` shell and over the corpus (M10.33), FontBakery over the corpus (M12.81), and the
+   otfautohint for the `autohint` shell and over the corpus (M10.33), and the
    § 5 measures of M6 (M6.22; mark attachment is run), M7 (names are run) and M8 (M8.34). M6's commands:
    `cargo test -p fontcraft-oracle --features oracle --test marks -- --ignored`;
    `crates/engine/tests/engine/corpus_propagation.rs` (it reads a JSON file of glyphsLib's results made outside
