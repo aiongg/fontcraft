@@ -2,9 +2,24 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-23: M13.42 the cap, segment and brush interface and M13.42b (attachment hints follow node edits) written, not yet built, on top of the unbuilt M13.41. Before them: M13.40 built cap components (fitting in `model::attach`, six `capComponent.*` commands, compile support) on the rows' guesses. Gate: `cargo xtask ci` passed all 11 steps (5,012 tests passed, 43 skipped)_
+_Updated: 2026-11-24: M13.41 (segment components and brushes), X.fix102, M13.42 (the cap, segment and brush interface) and M13.42b (attachment hints follow node edits) built, with integration fixes X.integ177 to X.integ181. Gate: the 11 steps of `cargo xtask ci` passed one at a time on dd35125 (5,038 tests passed, 43 skipped)_
 
 ## State of the tree
+
+- **Desktop smoke of M13.41 and M13.42 (light and dark, Xvfb, 1440 × 860).** Glyph A: a 400-unit square with
+  `_cap.flag` (Fit) on its top segment, `_segment.wave` on its bottom segment and `_brush.bar` on its right one.
+  - Every kind draws its highlight band. A click on a band selects it; the band darkens and the Info box shows the
+    kind's part: the cap part with name, arrow, scale fields, Fit and the four alignments; the segment and brush
+    parts with name and arrow.
+  - With two nodes selected, the context menu shows Add Cap Component, Add Segment Component and Add Brush, plus
+    Decompose Cap and Decompose Brush only when that kind is on the selection.
+  - The wave bends into the square (the host's left normal); the brush is a bar about 80 units wide centred on the
+    right side.
+  - The cap looks lopsided. The origin-only flag under Fit ends about 260 units right of the top-left corner, just inside the square. The left
+    side, cut to the cap's end node, becomes a diagonal down to the bottom-left node. This follows the § 8.4
+    guesses; check it against the reference app's export of the cap test font before changing it.
+  - The cap's band also covers the two cut sides.
+  - Not tried: copy and paste of attachments, and the pickers' Add and replace flows.
 
 - **M13.42b (attachment hints follow node edits): built.** `crates/hinting/src/remap.rs`: the
   corner list (`corners`, struct `Corner` with `name`, `noun`, `target`) also reads `Cap`, `Segment` and `Brush`
