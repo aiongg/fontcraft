@@ -37,6 +37,9 @@ mod window_input;
 #[allow(clippy::unwrap_used, clippy::indexing_slicing)]
 mod audit_tests;
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
+mod features_tests;
+#[cfg(test)]
 mod tests;
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
