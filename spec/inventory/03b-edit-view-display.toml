@@ -1903,6 +1903,7 @@ notes = "M5.50 and M5.41 (`crates/ui/src/app/targets.rs`): every command whose t
 guesses = [
   "Every glyph command in text mode, not only filters, takes the glyphs of the text selection, as Font View's batch commands take the selected glyphs; the handbook says so for filters only, and the reference app with a selected text would settle it.",
   "A selected glyph changes in the layer its own text item shows (Show All Masters), not in the tab's master; a glyph that appears in two layers of the selection changes in both.",
+  "A text selection shown in several layers changes as one step per layer, all or none: a command that refuses one layer's glyphs changes no glyph, and the message names the step.",
 ]
 observe = [
   "In text mode select three of five glyphs and run Tidy up Paths, Correct Path Direction, Update Metrics and a colour label: note which glyphs change, and how many undo steps it makes.",

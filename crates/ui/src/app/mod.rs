@@ -702,10 +702,6 @@ pub(crate) fn select_glyph_first(id: &str) -> String {
     format!("{label}: select a glyph first")
 }
 
-fn is_empty(params: &Value) -> bool {
-    params.is_null() || params.as_object().is_some_and(Map::is_empty)
-}
-
 /// `error` with the id of the command that failed in front, when the message ran one.
 fn with_command_id(id: Option<String>, error: String) -> String {
     match id {

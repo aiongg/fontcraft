@@ -563,7 +563,7 @@ fn confirm_by(app: &mut FontCraftApp, person: bool) -> Result<Value, String> {
     if let Some(e) = &d.error {
         return Err(format!("{}: the preview failed, so OK has nothing to keep: {e}", d.title));
     }
-    let (title, command, params) = (d.title.clone(), d.command.clone(), d.params());
+    let (title, CommandRef { id: command, params }) = (d.title.clone(), d.run());
     let kept = d.remember.then(|| (d.id.clone(), d.values.clone()));
     let changed = app.session.commit().map_err(|e| e.to_string())?;
     if let Some((id, values)) = kept {

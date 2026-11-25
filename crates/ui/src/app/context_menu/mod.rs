@@ -991,13 +991,13 @@ pub fn params_for(app: &mut FontCraftApp, menu: &CanvasMenu, id: &str) -> Value 
             }
         }
         "hint.tt.autohintGlyph" => {
-            m.insert("glyphs".into(), json!([menu.glyph]));
+            m.insert("glyphs".into(), json!(menu.glyphs()));
             if let Some(master) = scene_says(&|scene, _| json!(scene.layer.master)) {
                 m.insert("layer".into(), master);
             }
         }
         "hint.tt.removeHints" => {
-            m.insert("glyphs".into(), json!([menu.glyph]));
+            m.insert("glyphs".into(), json!(menu.glyphs()));
             if let Some(layer) = scene_says(&|scene, _| json!(scene.layer_id)) {
                 m.insert("layer".into(), layer);
             }
@@ -1201,6 +1201,11 @@ pub fn color_steps(app: &FontCraftApp, menu: &CanvasMenu, color: Option<u8>, lay
         }
         let Ok(font) = app.session.font() else { return Vec::new() };
         let groups = targets::text_selection(font, &app.view);
+        // The menu's glyphs were fixed when it opened; a selection that moved since is not theirs.
+        let now: std::collections::HashSet<&str> = groups.iter().flat_map(|group| group.glyphs.iter().map(String::as_str)).collect();
+        if now != menu.glyphs.iter().map(String::as_str).collect() {
+            return Vec::new();
+        }
         let steps: Vec<Msg> = groups
             .into_iter()
             .flat_map(|group| {

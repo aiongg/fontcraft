@@ -207,6 +207,11 @@ fn repeat_last_filter_runs_the_last_filter_on_new_targets() {
     assert_eq!(on_curve(&mut s, "A")[0], (100.0, 10.0));
 
     run(&mut s, "path.addPath", json!({"glyph": "C", "nodes": rect(0.0, 0.0, 100.0, 100.0)}));
+    // A filter run as a step of a batch, as on a text selection shown in several layers.
+    let step = json!({"command": "filter.roundCorners", "params": {"glyph": "B", "radius": 7}});
+    run(&mut s, "command.batch", json!({"steps": [step]}));
+    let v = run(&mut s, "filter.repeatLastFilter", json!({"glyph": "B"}));
+    assert_eq!(v["repeated"]["params"]["radius"], 7);
     run(&mut s, "filter.apply", json!({"glyph": "L", "string": "RoundCorner;5;0;"}));
     // Other commands in between do not count; the repeat of a repeat is the same filter.
     run(&mut s, "path.addPath", json!({"glyph": "D", "nodes": rect(0.0, 0.0, 100.0, 100.0)}));

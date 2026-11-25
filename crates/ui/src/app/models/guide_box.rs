@@ -55,7 +55,7 @@ pub fn guide_box(cx: &ProjectCx<'_>, tools: &Tools) -> Option<GuideBox> {
     let flag = |key: &str| values.get(key).and_then(Value::as_bool).unwrap_or(false);
     let text = |key: &str| values.get(key).and_then(Value::as_str).unwrap_or_default().to_string();
     Some(GuideBox {
-        target: Targets { json: Value::Object(target).to_string() },
+        target: Targets { json: Value::Object(target).to_string(), ..Default::default() },
         global: r.scope == GuideScope::Global,
         x: number("x"),
         y: number("y"),

@@ -152,10 +152,13 @@ pub(crate) fn on_glyphs(command: CommandRef, groups: &[GlyphLayers]) -> CommandR
     }
 }
 
+/// A layer parameter's key and value, and the glyphs that go with it.
+type GlyphSet<'g> = (Option<(&'static str, Value)>, Vec<&'g str>);
+
 /// The parameters of a command whose layer parameter is `param`: one set for each value of it, with the glyphs it goes
 /// with, each once.
 fn glyph_sets(param: Option<LayerParam>, groups: &[GlyphLayers]) -> Vec<Map<String, Value>> {
-    let mut sets: Vec<(Option<(&'static str, Value)>, Vec<&str>)> = Vec::new();
+    let mut sets: Vec<GlyphSet<'_>> = Vec::new();
     let mut at: HashMap<Option<&str>, usize> = HashMap::new();
     let mut seen: HashSet<(usize, &str)> = HashSet::new();
     for group in groups {

@@ -203,7 +203,9 @@ fn a_played_key_with_nothing_selected_in_font_view_refuses() {
     let mut app = app();
     shell(&mut app, "fontView.show", json!({}));
     let before = layers(&app);
-    let _ = crate::control::dispatch(&mut app, "ui.key", &json!({"key": "t", "modifiers": ["cmd", "shift"]}));
+    let reply = crate::control::dispatch(&mut app, "ui.key", &json!({"key": "t", "mods": ["cmd", "shift"]})).unwrap();
+    assert_eq!(reply["command"], json!("path.tidyUpPaths"));
+    assert!(reply["errors"].to_string().contains("select a glyph first"), "{reply}");
     app.drain();
     assert_eq!(changed(&app, &before), pairs(&[]));
 }
@@ -275,6 +277,17 @@ fn the_canvas_menu_in_text_mode_acts_on_the_selected_glyphs() {
     let font = app.session.font().unwrap();
     let labelled: Vec<&str> = font.glyphs.iter().filter(|g| g.info.color.is_some()).map(|g| g.name.as_str()).collect();
     assert_eq!(labelled, ["A", "B"]);
+}
+
+/// With every glyph of the text selection locked, Transformations has nothing to change: not the glyph after the cursor.
+#[test]
+fn a_locked_text_selection_leaves_the_palette_no_target() {
+    let mut app = app();
+    select_text(&mut app);
+    assert!(app.models.palette.transform.targets.is_some());
+    app.session.execute("glyph.toggleLocked", &json!({"glyphs": ["A", "B"]})).unwrap();
+    app.drain();
+    assert!(app.models.palette.transform.targets.is_none() && app.models.palette.transform.boolean.is_none());
 }
 
 /// With Font View in front, Transformations and Fit Curve act on its selection; with nothing selected they have no

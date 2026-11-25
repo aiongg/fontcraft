@@ -657,8 +657,10 @@ fn transform(cx: &ProjectCx<'_>, edit: Option<&Edit>) -> TransformModel {
         OriginMode::Metrics => "metrics",
         OriginMode::Layer => "layer",
     };
-    let chosen = cx.session.font().ok().map(|font| whole_layers(font, &chosen_glyphs(font, cx.view))).filter(|sets| !sets.is_empty());
-    let several = chosen.is_some();
+    let groups = cx.session.font().map(|font| chosen_glyphs(font, cx.view)).unwrap_or_default();
+    let several = !groups.is_empty();
+    // Chosen glyphs that are all locked leave nothing to change: the edited glyph does not take their place.
+    let chosen = several.then(|| cx.session.font().map(|font| whole_layers(font, &groups)).unwrap_or_default());
     let first = chosen.as_ref().and_then(|sets| sets.first()?.get("glyphs")?.get(0)?.as_str().map(str::to_string));
     let cjk_glyph = first.or_else(|| edit.map(|e| e.glyph.clone()));
     let (targets, boolean) = match chosen {

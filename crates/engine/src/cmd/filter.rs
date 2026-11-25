@@ -641,9 +641,19 @@ fn param_json(p: &Param) -> Value {
 // ── filter.repeatLastFilter ─────────────────────────────────────────────────────────────────────
 
 /// The last filter run in this session, from the journal: a `filter.*` command of the registry,
-/// or `filter.apply`.
-fn last_filter(s: &Session) -> Option<&(String, Value)> {
-    s.journal().iter().rev().find(|(id, _)| id == "filter.apply" || filters::registry().iter().any(|f| f.id() == id))
+/// or `filter.apply`, run by itself or as a step of a `command.batch`.
+fn last_filter(s: &Session) -> Option<(String, Value)> {
+    let is_filter = |id: &str| id == "filter.apply" || filters::registry().iter().any(|f| f.id() == id);
+    s.journal().iter().rev().find_map(|(id, params)| {
+        if is_filter(id) {
+            return Some((id.clone(), params.clone()));
+        }
+        let steps = params.get("steps").filter(|_| id == "command.batch")?.as_array()?;
+        steps.iter().rev().find_map(|step| {
+            let id = step.get("command")?.as_str().filter(|id| is_filter(id))?;
+            Some((id.to_string(), step.get("params").cloned().unwrap_or_default()))
+        })
+    })
 }
 
 fn can_repeat(s: &Session) -> std::result::Result<(), String> {
@@ -656,7 +666,7 @@ fn repeat(s: &mut Session, v: &Value) -> Result<Value> {
     if p.get("glyph").is_none() && p.get("glyphs").is_none() {
         return Err(p.bad("`glyph` or `glyphs` is required"));
     }
-    let (id, last) = last_filter(s).cloned().ok_or_else(|| p.bad("no filter has run yet"))?;
+    let (id, last) = last_filter(s).ok_or_else(|| p.bad("no filter has run yet"))?;
     let mut params = match last {
         Value::Object(m) => m,
         _ => Map::new(),

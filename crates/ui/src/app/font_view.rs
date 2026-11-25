@@ -276,6 +276,26 @@ pub fn incompatible_notice(id: &str, reply: &Value) -> Option<String> {
     Some(listed(NoticeWords::english().incompatible.as_str(), &names))
 }
 
+/// [`incompatible_notice`] of `command`, or of the steps of a batch.
+fn incompatible_after(command: &CommandRef, reply: &Value) -> Option<String> {
+    if command.id != super::targets::BATCH {
+        return incompatible_notice(&command.id, reply);
+    }
+    let steps = command.params.get("steps").and_then(Value::as_array)?;
+    let results = reply.get("results").and_then(Value::as_array)?;
+    let mut seen = HashSet::new();
+    let names: Vec<&str> = steps
+        .iter()
+        .zip(results)
+        .filter(|(step, _)| step.get("command").and_then(Value::as_str).is_some_and(|id| REPORTS_INCOMPATIBLE.contains(&id)))
+        .filter_map(|(_, result)| result.get("incompatible").and_then(Value::as_array))
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter(|name| seen.insert(*name))
+        .collect();
+    (!names.is_empty()).then(|| listed(NoticeWords::english().incompatible.as_str(), &names))
+}
+
 /// `what: A, B`, with at most [`MAX_NOTICE_NAMES`] names.
 fn listed(what: &str, names: &[&str]) -> String {
     let mut list = names.iter().take(MAX_NOTICE_NAMES).copied().collect::<Vec<_>>().join(", ");
@@ -314,7 +334,7 @@ impl FontCraftApp {
             self.view.font_view.anchor = Some(name.to_string());
             self.view_revision += 1;
         }
-        incompatible_notice(&command.id, reply)
+        incompatible_after(command, reply)
     }
 
     /// Drops the selected glyphs the font no longer has.
