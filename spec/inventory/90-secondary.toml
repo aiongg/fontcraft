@@ -2009,12 +2009,20 @@ shortcut = ""
 kind = "ui"
 params = "{on?: bool}"
 area = "interpolation"
-milestone = "M13"
+milestone = "M9"
 summary = "While on, structural edits are repeated on the corresponding nodes of every compatible master: adding or deleting nodes, setting a start point, reversing a contour, adding corner effects. A separate drag mode moves the matching nodes of all visible masters together."
 ref = "FontLab 8 What's new › Families & variation › Variation (Match when Editing); What's new since VI › Match Moves"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M9 to M13 by the M9 planning pass: a secondary-reference feature beyond the primary reference, as the M3 and M6 passes moved such rows (owner decision, docs/plans/M3.md § 7, question 3)."
+notes = "Built (M9.35): path.insertNode, edit.delete, path.makeNodeFirst and path.reverseContours take `matchLayers` (crates/engine/src/cmd/node/matching.rs): the same edit by the same addresses on every other master, intermediate and alternate layer of the glyph with the edited layer's shapes and node types, in one undo step; a master or intermediate layer that differs is left alone and named in `skipped`, and an edit one layer cannot take, or that would leave a layer incompatible, is refused whole. The toggle is window state: while it is on, the window passes the parameter. Not built: corner effects, and the drag mode that moves the matching nodes of all visible masters."
+guesses = [
+  "`matchLayers` covers four structural edits: adding and deleting nodes (and whole paths), setting the start node and reversing contours.",
+  "A node is added at the same parameter along the corresponding segment of each layer; the secondary reference may place it at the same share of the length.",
+  "Alternate layers with the same structure are edited too, and one drawn differently is left alone without a message; a backup layer or the background matches nothing.",
+]
+observe = [
+  "With Match when Editing on, add a node near the middle of a curve in one master and note where it lands on the corresponding curve of another master whose handles have other lengths.",
+]
 
 [[command]]
 id = "font.mergeFontsToMasters"

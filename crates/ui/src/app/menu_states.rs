@@ -47,6 +47,7 @@ pub const SWITCHES: &[&str] = &[
     "view.showImage",
     "view.showMasterCompatibility",
     "edit.keepLayerSelectionInSync",
+    "edit.toggleMatchWhenEditing",
     "view.showGroupMembers",
     "view.showHints",
     "view.showTunniLines",
@@ -170,6 +171,7 @@ fn checked(app: &FontCraftApp, display: &mut Display, switches: &mut Switches, i
     Some(match id {
         "view.showMasterCompatibility" => app.view.display.master_compatibility,
         "edit.keepLayerSelectionInSync" => app.view.display.keep_layer_selection_in_sync,
+        "edit.toggleMatchWhenEditing" => app.view.display.match_when_editing,
         "view.showHints" => app.view.display.hints,
         "view.showGroupMembers" => app.view.text.group_members,
         "view.showMeasurementLine" => app.view.text.measurement,

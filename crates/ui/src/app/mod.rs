@@ -475,7 +475,10 @@ impl FontCraftApp {
                 if ask_files && self.picks.ask(&self.host, &self.session, &command) {
                     return Ok(json!({ "picker": true }));
                 }
-                let params = if command.params.is_null() { json!({}) } else { command.params.clone() };
+                let mut params = if command.params.is_null() { json!({}) } else { command.params.clone() };
+                if origin == Origin::Person {
+                    params = crate::shell::compatibility::with_matching(self, &command.id, params);
+                }
                 if matches!(command.id.as_str(), "file.save" | "file.saveAs") {
                     crate::shell::tabs::upkeep::store_display_strings(self);
                 }

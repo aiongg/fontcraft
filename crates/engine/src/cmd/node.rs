@@ -8,6 +8,7 @@
 //! master layer of the glyph; a layer whose shapes or node types differ from the edited layer's
 //! is left alone and listed in `skipped`.
 
+mod matching;
 mod moving;
 mod ops;
 mod refit;
@@ -19,6 +20,7 @@ use fontcraft_geom::{Point, Rect, Shape as _, Vec2, round_point};
 use fontcraft_model::{Font, Layer, LayerParts, LayerPartsMut, LayerSide, MAX_COORDINATE, Node, NodeKind, Path, Shape};
 use serde_json::{Map, Value, json};
 
+use self::matching::Plan;
 use self::moving::Mode;
 use super::common::grid;
 use super::*;
@@ -96,7 +98,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Delete",
             [],
             Some("Delete"),
-            "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope, index}], annotations?: [index], hints?: [hint index], image?: bool} removes what the targets name; `image: true` removes the layer's placed image on that side (a locked image, or none, refuses it). `hints` are positions in the layer's hint list (corner components and other hints of the foreground); with `side: background` they are refused. A deleted node leaves the path closed: the segments it joined become one, refitted to the old curve; a curve segment that loses a handle becomes a line; a path with every point named, or fewer than two nodes left, is removed → {selection}",
+            "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope, index}], annotations?: [index], hints?: [hint index], image?: bool, matchLayers?: bool} removes what the targets name; `image: true` removes the layer's placed image on that side (a locked image, or none, refuses it). `hints` are positions in the layer's hint list (corner components and other hints of the foreground); with `side: background` they are refused. A deleted node leaves the path closed: the segments it joined become one, refitted to the old curve; a curve segment that loses a handle becomes a line; a path with every point named, or fewer than two nodes left, is removed. `matchLayers: true` makes the same edit on every other master, intermediate and alternate layer of the glyph with the same shapes and node types, in the same undo step; a master or intermediate layer that differs is left alone and listed in `skipped`, and an edit one of them cannot take is refused (`points` and `shapes` only) → {selection, matched?: [{glyph, layer}], skipped?: [{glyph, layer, reason}]}",
             has_doc,
             delete
         )
@@ -140,7 +142,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Insert Node",
             [],
             None,
-            "{glyph: name, layer?: id, side?, segment: [shape, node], t?: number strictly between 0 and 1 (default 0.5), near?: [x, y] (the segment's point nearest to it), snap?: \"extremum\" | \"inflection\" (the one nearest to near, else to t)} splits the segment without changing its shape (up to grid rounding) → {node: [shape, node], selection}",
+            "{glyph: name, layer?: id, side?, segment: [shape, node], t?: number strictly between 0 and 1 (default 0.5), near?: [x, y] (the segment's point nearest to it), snap?: \"extremum\" | \"inflection\" (the one nearest to near, else to t), matchLayers?: bool} splits the segment without changing its shape (up to grid rounding). `matchLayers: true` makes the same edit on every other master, intermediate and alternate layer of the glyph with the same shapes and node types, in the same undo step; a master or intermediate layer that differs is left alone and listed in `skipped`, and an edit one of them cannot take is refused, the segment split at the same t → {node: [shape, node], selection, matched?: [{glyph, layer}], skipped?: [{glyph, layer, reason}]}",
             has_doc,
             insert_node
         )
@@ -173,7 +175,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Make Node First",
             [],
             None,
-            "{glyph: name, layer?: id, side?, point: [shape, node]} makes the on-curve node the start node of its closed path; the outline does not change → {selection}",
+            "{glyph: name, layer?: id, side?, point: [shape, node], matchLayers?: bool} makes the on-curve node the start node of its closed path; the outline does not change. `matchLayers: true` makes the same edit on every other master, intermediate and alternate layer of the glyph with the same shapes and node types, in the same undo step; a master or intermediate layer that differs is left alone and listed in `skipped`, and an edit one of them cannot take is refused → {selection, matched?: [{glyph, layer}], skipped?: [{glyph, layer, reason}]}",
             has_doc,
             make_node_first
         )
@@ -184,7 +186,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Reverse Contours",
             ["Path"],
             Some("Cmd+Ctrl+Alt+R"),
-            "{glyphs: [names] | glyph: name, layer?: id (default the first master's), side?, shapes?: [index] (with one glyph; default every path)} reverses the direction of the paths; a closed path keeps its start node → {reversed: count, selection?}",
+            "{glyphs: [names] | glyph: name, layer?: id (default the first master's), side?, shapes?: [index] (with one glyph; default every path), matchLayers?: bool} reverses the direction of the paths; a closed path keeps its start node. `matchLayers: true` makes the same edit on every other master, intermediate and alternate layer of the glyph with the same shapes and node types, in the same undo step; a master or intermediate layer that differs is left alone and listed in `skipped`, and an edit one of them cannot take is refused → {reversed: count (on the layer named), selection?, matched?: [{glyph, layer}], skipped?: [{glyph, layer, reason}]}",
             has_doc,
             reverse_contours
         )
@@ -305,6 +307,14 @@ fn none_selected(t: &Targets) -> Targets {
     let mut out = Targets::new("selection", t.glyph.clone(), t.layer.clone());
     out.side = t.side;
     out
+}
+
+/// `reply` with the layers `matchLayers` matched and skipped, when it was given.
+fn with_matched(mut reply: Value, plan: Option<Plan>) -> Value {
+    if let Some(plan) = plan {
+        Plan::report(vec![plan], &mut reply);
+    }
+    reply
 }
 
 /// Removes the entries at `indices` from `v`.
@@ -687,18 +697,27 @@ fn insert_node(s: &mut Session, v: &Value) -> Result<Value> {
         }
         (at, grid(font))
     };
+    let plan = Plan::of(s.font()?, &p, &t)?;
     let index = s.edit("Insert Node", |font| {
-        t.edit_layer(font, |layer| {
+        let index = t.edit_layer(font, |layer| {
             let mut parts = layer.parts_mut(t.side);
             let path = parts.path_mut(shape).ok_or_else(|| p.bad("`segment` does not resolve"))?;
             let (new, index) = ops::insert_node(path, end, at, step).map_err(|m| p.bad(m))?;
             *path = new;
             Ok(index)
-        })
+        })?;
+        if let Some(plan) = &plan {
+            plan.apply(font, &p, |parts| {
+                let path = matching::path_at(parts, shape)?;
+                *path = ops::insert_node(path, end, at, step)?.0;
+                Ok(())
+            })?;
+        }
+        Ok(index)
     })?;
     let mut sel = none_selected(&t);
     sel.points = vec![(shape, index)];
-    Ok(json!({ "node": [shape, index], "selection": sel.to_json() }))
+    Ok(with_matched(json!({ "node": [shape, index], "selection": sel.to_json() }), plan))
 }
 
 // ── Deleting ────────────────────────────────────────────────────────────────────────────────────
@@ -746,6 +765,7 @@ fn delete(s: &mut Session, v: &Value) -> Result<Value> {
         return Err(p.bad("give what to delete: `points`, `shapes`, `anchors`, `guides`, `annotations`, `hints` or `image`"));
     }
     let step = grid(s.font()?);
+    let plan = if t.points.is_empty() && t.shapes.is_empty() { None } else { Plan::of(s.font()?, &p, &t)? };
     s.edit("Delete", |font| {
         let master = t.resolve(font)?.master.id.clone();
         t.edit_layer(font, |layer| {
@@ -760,6 +780,13 @@ fn delete(s: &mut Session, v: &Value) -> Result<Value> {
             remove_at(&mut layer.info.hints, &hints);
             delete_in(&mut layer.parts_mut(t.side), &t, step).map_err(|m| p.bad(m))
         })?;
+        if let Some(plan) = &plan {
+            // Nodes and shapes correspond by index across the layers; the other objects need not.
+            let mut outline = none_selected(&t);
+            outline.points.clone_from(&t.points);
+            outline.shapes.clone_from(&t.shapes);
+            plan.apply(font, &p, |parts| delete_in(parts, &outline, step))?;
+        }
         let global: BTreeSet<usize> = t.guides.iter().filter(|g| g.scope == GuideScope::Global).map(|g| g.index).collect();
         if !global.is_empty()
             && let Some(m) = Arc::make_mut(&mut font.masters).iter_mut().find(|m| m.id == master)
@@ -768,7 +795,7 @@ fn delete(s: &mut Session, v: &Value) -> Result<Value> {
         }
         Ok(())
     })?;
-    Ok(json!({ "selection": none_selected(&t).to_json() }))
+    Ok(with_matched(json!({ "selection": none_selected(&t).to_json() }), plan))
 }
 
 /// `hints?`: positions in the layer's hint list, at most [`MAX_TARGETS`](crate::params::MAX_TARGETS).
@@ -949,6 +976,7 @@ fn make_node_first(s: &mut Session, v: &Value) -> Result<Value> {
     let &[(shape, node)] = t.points.as_slice() else {
         return Err(p.bad("give one `point`: [shape, node]"));
     };
+    let plan = Plan::of(s.font()?, &p, &t)?;
     s.edit("Make Node First", |font| {
         t.edit_layer(font, |layer| {
             let mut parts = layer.parts_mut(t.side);
@@ -961,11 +989,22 @@ fn make_node_first(s: &mut Session, v: &Value) -> Result<Value> {
             }
             path.nodes.rotate_left(node);
             Ok(())
-        })
+        })?;
+        match &plan {
+            Some(plan) => plan.apply(font, &p, |parts| {
+                let path = matching::path_at(parts, shape)?;
+                if node >= path.nodes.len() {
+                    return Err(format!("path {shape} has no node {node}"));
+                }
+                path.nodes.rotate_left(node);
+                Ok(())
+            }),
+            None => Ok(()),
+        }
     })?;
     let mut sel = none_selected(&t);
     sel.points = vec![(shape, 0)];
-    Ok(json!({ "selection": sel.to_json() }))
+    Ok(with_matched(json!({ "selection": sel.to_json() }), plan))
 }
 
 /// Reverses the paths at `shapes` (every path when empty). Returns how many.
@@ -1029,19 +1068,31 @@ fn glyph_targets(s: &Session, p: &Params, v: &Value, command: &'static str) -> R
 fn reverse_contours(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("path.reverseContours", v)?;
     let list = glyph_targets(s, &p, v, "path.reverseContours")?;
-    let count = s.edit("Reverse Contours", |font| {
+    let (count, plans) = s.edit("Reverse Contours", |font| {
         let mut count = 0;
+        let mut plans = Vec::new();
         for t in &list {
-            count += t.edit_layer(font, |layer| {
+            let plan = Plan::of(font, &p, t)?;
+            let reversed = t.edit_layer(font, |layer| {
                 if layer.parts(t.side).shapes.is_empty() {
                     return Ok(0);
                 }
                 reverse_in(&mut layer.parts_mut(t.side), &t.shapes).map_err(|m| p.bad(m))
             })?;
+            count += reversed;
+            if let Some(plan) = plan {
+                if reversed > 0 {
+                    plan.apply(font, &p, |parts| reverse_in(parts, &t.shapes).map(|_| ()))?;
+                }
+                plans.push(plan);
+            }
         }
-        Ok(count)
+        Ok((count, plans))
     })?;
     let mut out = json!({ "reversed": count });
+    if p.bool_or("matchLayers", false)? {
+        Plan::report(plans, &mut out);
+    }
     if let ([t], Some(o)) = (list.as_slice(), out.as_object_mut()) {
         o.insert("selection".into(), t.to_json());
     }
