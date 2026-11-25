@@ -90,7 +90,7 @@ pub(crate) fn scope(p: &Params, font: &Font) -> Result<Scope> {
 }
 
 /// `layers` or `layer`; the first master's layer when neither is given.
-fn layer_ids(p: &Params, font: &Font) -> Result<Vec<String>> {
+pub(crate) fn layer_ids(p: &Params, font: &Font) -> Result<Vec<String>> {
     match (p.get("layer"), p.get("layers")) {
         (Some(_), Some(_)) => Err(p.bad("give `layer` or `layers`, not both")),
         (Some(_), None) => Ok(vec![p.str("layer")?.to_string()]),

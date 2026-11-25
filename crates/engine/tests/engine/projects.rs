@@ -179,7 +179,8 @@ fn a_refused_project_command_changes_nothing() {
             "project.editInstance",
             json!({"instance": 0, "changes": {"styleName": "X", "customParameters": [{"action": "set", "name": "fileName", "value": "A"}]}}),
         ),
-        ("project.addInstance", json!({"kind": "variableFontSetting"})),
+        ("project.addInstance", json!({"kind": "variableFontSetting", "weightClass": 700})),
+        ("project.editInstance", json!({"instance": 0, "changes": {"fields": [{"action": "set", "key": "noSuchField", "value": "A"}]}})),
         ("project.linkFont", json!({"font": dir.join("missing.glyphs").to_string_lossy()})),
         ("project.save", json!({"path": dir.join("p.glyphsproject").to_string_lossy()})),
         ("project.save", json!({"path": dir.join("p.txt").to_string_lossy()})),
@@ -196,6 +197,88 @@ fn a_refused_project_command_changes_nothing() {
     std::fs::write(&junk, br#"{"format": "fontcraft-project", "instances": [{"name": "A", "location": [1e308]}]}"#).unwrap();
     fails(&mut s, "project.open", json!({"path": junk.to_string_lossy()}));
     assert_eq!(s.projects().len(), 1);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Saves a two-master font with a drawn `A` and no instances to `dir/Axis.fontcraft`, closes it, and returns its path.
+fn saved_variable_font(dir: &Path) -> PathBuf {
+    let mut s = Session::with_document();
+    run(&mut s, "font.axes.add", json!({"name": "Weight", "tag": "wght"}));
+    run(&mut s, "font.master.add", json!({"name": "Bold"}));
+    run(&mut s, "font.master.setAxisLocation", json!({"masters": [0], "location": [400]}));
+    run(&mut s, "font.master.setAxisLocation", json!({"masters": [1], "location": [700]}));
+    let masters: Vec<String> = s.font().unwrap().masters.iter().map(|m| m.id.clone()).collect();
+    for (id, right) in masters.iter().zip([400.0, 560.0]) {
+        run(&mut s, "path.addPath", json!({"glyph": "A", "layer": id, "nodes": rect(60.0, 0.0, right, 700.0)}));
+    }
+    let path = dir.join("Axis.fontcraft");
+    run(&mut s, "file.saveAs", json!({"path": path.to_string_lossy()}));
+    path
+}
+
+/// A retail and a trial setting of a project give the variable fonts a font holding the same settings gives, byte for
+/// byte. A setting that is not active is left out.
+#[test]
+fn variable_font_settings_of_a_project_export_as_the_fonts_own_do() {
+    let dir = temp("variable");
+    let font_path = saved_variable_font(&dir);
+    let out = dir.join("project");
+    let mut s = Session::new();
+    run(&mut s, "file.newProject", json!({}));
+    run(&mut s, "project.linkFont", json!({"font": font_path.to_string_lossy()}));
+    for name in ["Retail", "Trial", "Off"] {
+        run(&mut s, "project.addInstance", json!({"kind": "variableFontSetting", "styleName": name}));
+        let stem = json!({"customParameters": [{"action": "add", "name": "fileName", "value": format!("{name}VF")}]});
+        run(&mut s, "project.editInstance", json!({"instance": name, "changes": stem}));
+    }
+    run(&mut s, "project.editInstance", json!({"instance": "Off", "changes": {"active": false}}));
+    run(&mut s, "project.setExportDestination", json!({"folder": out.to_string_lossy()}));
+    run(&mut s, "project.save", json!({"path": dir.join("p.fontcraftproject").to_string_lossy()}));
+    let r = run(&mut s, "project.export", json!({"timestamp": 0}));
+    assert_eq!(r["written"], 2, "{r}");
+
+    let own = dir.join("font");
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({"path": font_path.to_string_lossy()}));
+    for name in ["Retail", "Trial"] {
+        let at = run(&mut s, "font.instance.addVariableFontSetting", json!({"name": name}))["index"].clone();
+        let stem = json!({"scope": "instance", "targets": [at], "name": "fileName", "value": format!("{name}VF")});
+        run(&mut s, "font.customParameters.add", stem);
+    }
+    run(&mut s, "file.exportVariable", json!({"destination": own.to_string_lossy(), "timestamp": 0}));
+    for name in ["RetailVF.ttf", "TrialVF.ttf"] {
+        assert_eq!(std::fs::read(out.join(name)).unwrap(), std::fs::read(own.join(name)).unwrap(), "{name}");
+    }
+    assert!(!out.join("OffVF.ttf").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// General fields and coordinates of a project instance are edited; with the axis gone from the linked font the project
+/// still opens, keeps its instances and warns.
+#[test]
+fn a_project_edits_fields_and_coordinates_and_survives_a_removed_axis() {
+    let dir = temp("axis");
+    let font_path = saved_variable_font(&dir);
+    let mut s = Session::new();
+    run(&mut s, "file.newProject", json!({}));
+    run(&mut s, "project.linkFont", json!({"font": font_path.to_string_lossy()}));
+    run(&mut s, "project.addInstance", json!({"styleName": "Medium", "axes": {"wght": 500}}));
+    let fields = json!([
+        {"action": "set", "key": "familyNames", "value": "Trial Sans"},
+        {"action": "setLanguage", "key": "familyNames", "language": "DEU", "value": "Probe Sans"},
+    ]);
+    let edited = run(&mut s, "project.editInstance", json!({"instance": "Medium", "changes": {"axes": {"wght": 600}, "fields": fields}}));
+    assert_eq!(edited["changed"].as_array().unwrap().len(), 2, "{edited}");
+    let medium = |s: &Session| s.projects()[0].data.instances.iter().find(|i| i.name == "Medium").unwrap().clone();
+    assert_eq!(medium(&s).location, [600.0]);
+    let project_path = dir.join("p.fontcraftproject");
+    run(&mut s, "project.save", json!({"path": project_path.to_string_lossy()}));
+    run(&mut s, "project.close", json!({}));
+
+    std::fs::rename(saved_font(&dir), &font_path).unwrap();
+    let opened = run(&mut s, "project.open", json!({"path": project_path.to_string_lossy()}));
+    assert!(opened["warnings"].as_array().unwrap().iter().any(|w| w.as_str().unwrap().contains("more axes")), "{opened}");
+    assert_eq!(medium(&s).location, [600.0], "the coordinates are kept");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

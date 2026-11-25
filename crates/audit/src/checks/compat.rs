@@ -547,6 +547,38 @@ pub(crate) fn masters_share_location(ctx: &SourceCtx<'_>, _: &Params<'_>, sink: 
     }
 }
 
+/// The codes of [`designspace_setup`]; the other problems of a designspace have checks of their own
+/// ([`masters_share_location`], [`instance_outside_axis_range`]).
+pub(crate) const SETUP_CODES: &[&str] = &[
+    "designspace-unusable",
+    "virtual-master-shares-location",
+    "virtual-master-unknown-axis",
+    "axis-without-range",
+    "axis-mapping-ignored",
+    "origin-not-minimal",
+    "master-not-exported",
+    "unknown-disabled-master",
+];
+
+pub(crate) fn designspace_setup(ctx: &SourceCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
+    let font = ctx.audit.font;
+    if font.axes.is_empty() || font.masters.len() < 2 {
+        return;
+    }
+    let problems = match ctx.services.designspace_problems(font) {
+        Ok(problems) => problems,
+        Err(e) => {
+            sink.skip(e.reason);
+            return;
+        }
+    };
+    for p in problems {
+        let Some(&code) = SETUP_CODES.iter().find(|c| **c == p.code) else { continue };
+        let place = Location { master: p.masters.first().cloned(), masters: p.masters, instance: p.instance, axis: p.axis, ..Location::default() };
+        sink.push(Hit::new(code, p.message).place(place));
+    }
+}
+
 pub(crate) fn instance_outside_axis_range(ctx: &SourceCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let font = ctx.audit.font;
     if font.masters.len() < 2 {

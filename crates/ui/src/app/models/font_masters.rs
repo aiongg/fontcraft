@@ -53,6 +53,7 @@ pub struct MastersTabModel {
     pub params: Vec<RowModel>,
     /// Each number's name and the selection's value.
     pub numbers: Vec<(String, Option<f64>)>,
+    pub designspace: super::designspace::DesignspaceModel,
 }
 
 /// One master of the list.
@@ -97,7 +98,8 @@ fn shared(mut values: impl Iterator<Item = f64>) -> Option<f64> {
     values.all(|v| v == first).then_some(first)
 }
 
-pub fn project(font: &Font, view: &MastersTabView) -> MastersTabModel {
+/// `exports`: the selected entries of the Exports list; `None` while another tab shows, which leaves the designspace out.
+pub fn project(font: &Font, view: &MastersTabView, exports: Option<&[usize]>) -> MastersTabModel {
     let count = font.masters.len().min(MAX_MASTERS);
     if count == 0 {
         return MastersTabModel::default();
@@ -161,6 +163,7 @@ pub fn project(font: &Font, view: &MastersTabView) -> MastersTabModel {
             .enumerate()
             .map(|(at, n)| (n.name.clone(), shared(chosen.iter().map(|m| m.number_values.get(at).copied().unwrap_or_default()))))
             .collect(),
+        designspace: exports.map(|exports| super::designspace::project(font, view, &selected, exports)).unwrap_or_default(),
         selected,
     }
 }

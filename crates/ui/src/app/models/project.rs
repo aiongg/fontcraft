@@ -62,6 +62,10 @@ pub struct ShownProject {
     pub selected: Vec<usize>,
     /// The selected entries' built-in fields; `None` without entries.
     pub fields: Option<ExportFields>,
+    /// The tag of each axis of [`ExportFields::axes`].
+    pub axis_tags: Vec<String>,
+    /// The selected entries' General fields.
+    pub general: Vec<RowModel>,
     /// The selected entries' custom parameters.
     pub params: Vec<RowModel>,
 }
@@ -122,11 +126,16 @@ fn project(cx: &mut ProjectCx<'_>) -> ProjectModel {
     // The shared field and row builders read a font: the linked font's axes and masters with the project's instances.
     let mut scratch = doc.font.as_deref().cloned().unwrap_or_else(|| Font::new(""));
     scratch.instances = Arc::clone(instances);
-    let (fields, params) = if selected.is_empty() {
-        (None, Vec::new())
+    let axis_tags = scratch.axes.iter().take(MAX_SHOWN).map(|a| a.tag.clone()).collect();
+    let (fields, general, params) = if selected.is_empty() {
+        (None, Vec::new(), Vec::new())
     } else {
         let target = Target { scope: Scope::Instance, indices: selected.clone() };
-        (fields(&scratch, &selected, &serde_json::Value::Null, &serde_json::Value::Null), rows(&scratch, &target, RowKind::Param))
+        (
+            fields(&scratch, &selected, &serde_json::Value::Null, &serde_json::Value::Null),
+            rows(&scratch, &target, RowKind::Field),
+            rows(&scratch, &target, RowKind::Param),
+        )
     };
     let path = |p: &std::path::Path| p.to_string_lossy().into_owned();
     let shown = ShownProject {
@@ -141,6 +150,8 @@ fn project(cx: &mut ProjectCx<'_>) -> ProjectModel {
         entries,
         selected,
         fields,
+        axis_tags,
+        general,
         params,
     };
     ProjectModel { projects, shown: Some(shown) }

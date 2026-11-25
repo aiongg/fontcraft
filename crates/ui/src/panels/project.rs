@@ -8,13 +8,14 @@
 //! | Project (several open) | `window.project.select`: the project shown |
 //! | Choose… beside the font | `project.linkFont` without `font`: the file picker asks for it |
 //! | list entry: click, Cmd-click, Shift-click | `window.project.select` |
-//! | list entry: drag onto another | `project.moveInstances` |
+//! | list entry: drag onto another, with Option | `project.moveInstances`, `project.duplicateInstances` there |
 //! | list entry: context menu › Copy, Paste, Duplicate | `window.project.copy`, `window.project.paste`, `project.duplicateInstances` on the selection |
 //! | Copy, Paste (Cmd+C, Cmd+V) while the instance list has the keyboard focus | `window.project.copy`, `window.project.paste` |
-//! | plus menu › Add Instance, Duplicate | `project.addInstance`, `project.duplicateInstances` on the selection |
+//! | plus menu › Add Instance, Add Variable Font Setting, Duplicate | `project.addInstance`, `project.duplicateInstances` on the selection |
 //! | minus | `project.removeInstances` on the selection |
 //! | revert | `project.revertInstances` |
-//! | Active, Style Name, Weight Class, Width Class, Style Linking | `project.editInstance` with those keys, once per selected entry |
+//! | Active, Style Name, Weight Class, Width Class, Axes Coordinates, Style Linking | `project.editInstance` with those keys, once per selected entry |
+//! | General fields | `project.editInstance` with `fields` |
 //! | Custom Parameters: plus | `window.project.addCustomParameter`: the picker, whose Add runs `project.editInstance` |
 //! | Custom Parameters: checkbox, value, minus | `project.editInstance` with `customParameters` |
 //! | Choose… beside Export Destination | `project.setExportDestination` without `folder`: the folder picker asks |
@@ -22,7 +23,7 @@
 //! | Export | `project.export`; disabled until the project is saved, linked to a font and has a destination |
 //! | Close | `project.close`, which keeps a project with unsaved changes open and says why in the status line |
 //!
-//! Axes Coordinates come from the linked font as last read and are read-only.
+//! Axes Coordinates are those of the linked font's axes, as last read.
 
 use std::borrow::Cow;
 
@@ -50,7 +51,7 @@ use super::font_info::param_value::{Edit, number_json};
 use super::font_info::rows::{self, RowAction};
 use crate::app::Msg;
 use crate::app::models::font_exports::{ExportFields, WEIGHT_CLASSES, WIDTH_CLASSES};
-use crate::app::models::font_info::RowModel;
+use crate::app::models::font_info::{Editor, RowModel};
 use crate::app::models::project::{Blocked, ProjectModel, ShownProject};
 use crate::shell::project::{ADD_PARAMETER, COPY, PASTE, select};
 
@@ -76,14 +77,13 @@ craft::ui::words! {
         save_tip: "fontcraftProject.saveTip" = "Save the project to its file";
         save_as_tip: "fontcraftProject.saveAsTip" = "Choose the file to save the project to";
         export: "fontcraftProject.export" = "Export";
-        export_tip: "fontcraftProject.exportTip" = "Export every active instance into the export destination";
+        export_tip: "fontcraftProject.exportTip" = "Export every active instance and variable font setting into the export destination";
         blocked_font: "fontcraftProject.blockedFont" = "Choose the font to export first";
         blocked_destination: "fontcraftProject.blockedDestination" = "Choose an export destination first";
         blocked_never_saved: "fontcraftProject.blockedNeverSaved" = "Save the project first";
         blocked_unsaved: "fontcraftProject.blockedUnsaved" = "Save the project's changes first";
         close: "fontcraftProject.close" = "Close";
         close_tip: "fontcraftProject.closeTip" = "Close the project; one with unsaved changes stays open";
-        axes_read_only: "fontcraftProject.axesReadOnly" = "Axes Coordinates (read-only)";
         entry_menu: "fontcraftProject.entryMenu" = "Instance";
         copy: "fontcraftProject.copy" = "Copy";
         paste: "fontcraftProject.paste" = "Paste";
@@ -131,7 +131,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
                     return;
                 };
                 Text::new(exports.general.clone()).show(ui);
-                general(ui, p, fields, &words, &exports, sent);
+                general(ui, p, fields, &exports, sent);
                 let plus = rows::section(ui, "projectParameters", exports.parameters.clone(), exports.add_parameter.clone(), |ui| {
                     parameter_rows(ui, p, sent);
                 });
@@ -182,7 +182,7 @@ fn instance_list(ui: &mut Ui, p: &ShownProject, words: &ProjectWords, exports: &
     let out = List::<usize>::new(exports.list.clone())
         .header(false)
         .natural_height(true)
-        .reorder(ReorderRule::new())
+        .reorder(ReorderRule::new().copy_with_alt())
         .selection(Bind::bound(&mut after))
         .show_items(ui, &source, &mut |at, icx| {
             let Some(e) = entries.get(*at) else { return ListRow::new(Label::Empty) };
@@ -204,6 +204,13 @@ fn instance_list(ui: &mut Ui, p: &ShownProject, words: &ProjectWords, exports: &
         match event {
             CollectionEvent::Reorder(edit) => {
                 if let Some(moved) = done(edit)
+                    && moved.copy
+                {
+                    // `to` counts the rows without the dragged ones; the copies go there with the originals still in place.
+                    let to = copy_position(entries.len(), &moved.keys, moved.to);
+                    sent.push(Msg::run("project.duplicateInstances", json!({ "project": p.id, "instances": moved.keys, "to": to })));
+                    sent.push(Msg::Shell(select(p.id, &(to..to.saturating_add(moved.keys.len())).collect::<Vec<_>>())));
+                } else if let Some(moved) = done(edit)
                     && moved.keys.len() == 1
                     && moved.to != moved.key
                 {
@@ -243,11 +250,15 @@ fn instance_list(ui: &mut Ui, p: &ShownProject, words: &ProjectWords, exports: &
         let items = [
             Entry::new("instance", exports.add_instance.clone()),
             Entry::new("duplicate", words.duplicate.clone()).enabled(count > 0),
-            Entry::new("variable", exports.add_variable.clone()).enabled(false).disabled_reason(exports.not_yet.clone()),
+            Entry::new("variable", exports.add_variable.clone()),
         ];
         match Menu::new(exports.add.clone()).opened_by(&plus.response, Trigger::Click).pick(ui, &items).picked {
             Some("instance") => {
                 sent.push(Msg::run("project.addInstance", json!({ "project": p.id })));
+                sent.push(Msg::Shell(select(p.id, &[count])));
+            }
+            Some("variable") => {
+                sent.push(Msg::run("project.addInstance", json!({ "project": p.id, "kind": "variableFontSetting" })));
                 sent.push(Msg::Shell(select(p.id, &[count])));
             }
             Some("duplicate") => {
@@ -270,13 +281,19 @@ fn instance_list(ui: &mut Ui, p: &ShownProject, words: &ProjectWords, exports: &
     });
 }
 
+/// Where copies of the rows `keys` land in the list of `count` rows as it is, when they are dropped before the row at
+/// `to` of the rows without them.
+fn copy_position(count: usize, keys: &[usize], to: usize) -> usize {
+    (0..count).filter(|at| !keys.contains(at)).nth(to).unwrap_or(count)
+}
+
 /// One `project.editInstance` per entry of `targets` with the same `changes`.
 fn edits(project: u64, targets: &[usize], changes: &Value) -> Vec<Msg> {
     targets.iter().map(|k| Msg::run("project.editInstance", json!({ "project": project, "instance": k, "changes": changes }))).collect()
 }
 
 /// The built-in fields of the selected entries.
-fn general(ui: &mut Ui, p: &ShownProject, f: &ExportFields, words: &ProjectWords, exports: &ExportsWords, sent: &mut Vec<Msg>) {
+fn general(ui: &mut Ui, p: &ShownProject, f: &ExportFields, exports: &ExportsWords, sent: &mut Vec<Msg>) {
     let all = |key: &str, value: Value| edits(p.id, &p.selected, &json!({ key: value }));
     let statics = |key: &str, value: Value| edits(p.id, &f.statics, &json!({ key: value }));
     Field::new(exports.active.clone()).show(ui, |ui, _| {
@@ -291,6 +308,12 @@ fn general(ui: &mut Ui, p: &ShownProject, f: &ExportFields, words: &ProjectWords
             sent.extend(all("styleName", json!(text)));
         }
     });
+    for row in &p.general {
+        let languages = if matches!(row.editor, Editor::Languages(_)) { rows::language_entries() } else { Vec::new() };
+        if let Some(changes) = rows::one(ui, row, &[], &languages).map(|a| field_edits(row, &a)).filter(|list| !list.is_empty()) {
+            sent.extend(edits(p.id, &p.selected, &json!({ "fields": changes })));
+        }
+    }
     if f.variable {
         return;
     }
@@ -303,11 +326,16 @@ fn general(ui: &mut Ui, p: &ShownProject, f: &ExportFields, words: &ProjectWords
         sent.extend(statics("widthClass", number_json(v)));
     }
     if !f.axes.is_empty() {
-        Text::new(words.axes_read_only.clone()).shade(Shade::Muted).show(ui);
-        for (at, (axis, value)) in f.axes.iter().enumerate() {
+        Text::new(exports.axes.clone()).show(ui);
+        for (at, ((axis, value), tag)) in f.axes.iter().zip(&p.axis_tags).enumerate() {
             Field::new(axis.clone()).id_salt(("fontcraftProject.axis", at)).show(ui, |ui, _| {
                 let given = value.map_or(Mixed::Mixed, |v| Mixed::Same(Some(v)));
-                let _ = NumberField::new(axis.clone(), Bind::given(given)).enabled(false).show(ui);
+                let typed = NumberField::new(axis.clone(), Bind::given(given)).show(ui).edit.events.committed().copied().flatten();
+                if let Some(v) = typed {
+                    let mut axes = serde_json::Map::new();
+                    axes.insert(tag.clone(), json!(v));
+                    sent.extend(statics("axes", Value::Object(axes)));
+                }
             });
         }
     }
@@ -338,6 +366,27 @@ pub fn parameter_edit(row: &RowModel, action: &RowAction) -> Option<Value> {
         RowAction::SetEnabled(on) => Some(json!({"action": "set", "name": row.key, "index": row.occurrence, "enabled": on})),
         RowAction::Remove => Some(json!({"action": "remove", "name": row.key, "index": row.occurrence})),
         RowAction::Edit(_) => None,
+    }
+}
+
+/// The `fields` edits of `project.editInstance` a General row's action makes.
+pub fn field_edits(row: &RowModel, action: &RowAction) -> Vec<Value> {
+    let set = |language: &str, text: &str| json!({"action": "setLanguage", "key": row.key, "language": language, "value": text});
+    let remove = |language: &str| json!({"action": "removeLanguage", "key": row.key, "language": language});
+    match action {
+        RowAction::Edit(Edit::Value(v)) => vec![json!({"action": "set", "key": row.key, "value": v})],
+        RowAction::Remove => vec![json!({"action": "remove", "key": row.key})],
+        RowAction::Edit(Edit::Language { language, text }) => vec![set(language, text)],
+        RowAction::Edit(Edit::AddLanguage(language)) => vec![set(language, "")],
+        RowAction::Edit(Edit::RemoveLanguage(language)) => vec![remove(language)],
+        RowAction::Edit(Edit::ChangeLanguage { from, to }) => {
+            let text = match &row.editor {
+                Editor::Languages(l) => l.iter().find(|(l, _)| l == from).map(|(_, t)| t.as_str()).unwrap_or_default(),
+                _ => "",
+            };
+            vec![set(to, text), remove(from)]
+        }
+        RowAction::SetEnabled(_) | RowAction::Edit(Edit::Dialog(_)) => Vec::new(),
     }
 }
 
@@ -497,6 +546,23 @@ mod tests {
         assert!(!deliver(&ctx, EditCommand::SelectAll));
         let shell = |id: &str| Msg::Shell(CommandRef::with_params(id, json!({"project": 7})));
         assert_eq!(*posted.borrow(), vec![shell(COPY), shell(PASTE)]);
+    }
+
+    /// A language change is a set and a remove in one `project.editInstance`; copies dropped among the rows land before
+    /// the row they were dropped on.
+    #[test]
+    fn a_field_row_action_becomes_fields_edits_and_copies_land_where_dropped() {
+        let row = RowModel { key: "familyNames".into(), editor: Editor::Languages(vec![("DEU".into(), "Probe".into())]), ..Default::default() };
+        let change = RowAction::Edit(Edit::ChangeLanguage { from: "DEU".into(), to: "FRA".into() });
+        assert_eq!(
+            field_edits(&row, &change),
+            [
+                json!({"action": "setLanguage", "key": "familyNames", "language": "FRA", "value": "Probe"}),
+                json!({"action": "removeLanguage", "key": "familyNames", "language": "DEU"}),
+            ]
+        );
+        assert!(field_edits(&row, &RowAction::SetEnabled(true)).is_empty());
+        assert_eq!((copy_position(4, &[0], 2), copy_position(4, &[1], 1), copy_position(4, &[3], 3)), (3, 2, 4));
     }
 
     #[test]

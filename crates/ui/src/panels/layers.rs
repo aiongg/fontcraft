@@ -14,9 +14,11 @@
 //!
 //! Special layers show their label in place of the name: `[…]` for an alternate layer, `{…}` for an intermediate
 //! one, both for a layer that is both. A master layer with a range shows its `[…]` after the master's name.
-//! Double-clicking a special row opens its editor (`layers.editSpecialLayerSettings`). In the context menu,
-//! Intermediate and Alternate are ticked while the layer has that status: choosing one opens its editor, unticking it
-//! removes the status (`layers.clearIntermediate`, `layers.clearAlternate`), so those two have no item of their own.
+//! Double-clicking a special row opens its editor (`layers.editSpecialLayerSettings`); on a row with both labels the
+//! `{…}` label is a part of its own, which opens the coordinates. In the context menu, Intermediate and Alternate are
+//! ticked while the layer has that status: choosing one opens its editor, unticking it removes the status
+//! (`layers.clearIntermediate`, `layers.clearAlternate`), so those two have no item of their own. On one of several
+//! selected rows they act on all of those (Intermediate on those that are no master layers).
 //!
 //! Colour layers show their kind's label after the name: a Color Palette layer also its colour, a click on which opens
 //! the chooser (`layer.setColorPaletteIndex`); an iColor layer its size in a field (`layer.setIColorSize`).
@@ -74,6 +76,8 @@ craft::ui::words! {
         master_stays: "fontcraftLayers.masterStays" = "A master layer goes with its master";
         /// Why only a backup can become the master layer.
         only_backups: "fontcraftLayers.onlyBackups" = "Only a backup layer can become the master layer";
+        /// The `{…}` label of a row with both labels.
+        edit_coordinates: "fontcraftLayers.editCoordinates" = "Edit the coordinates";
         /// Why a master layer cannot be intermediate.
         master_not_intermediate: "fontcraftLayers.masterNotIntermediate" = "A master layer cannot be an intermediate layer";
     }
@@ -85,6 +89,8 @@ const EYE: ColumnKey = ColumnKey::new("eye");
 const NAME: ColumnKey = ColumnKey::new("name");
 /// A Color Palette layer's swatch.
 const SWATCH: TrailingPart = TrailingPart::new(1);
+/// The `{…}` label of a row that has both.
+const BRACE: TrailingPart = TrailingPart::new(2);
 /// The iColor sizes the size field takes, in pixels per em.
 const SIZES: std::ops::RangeInclusive<f64> = 1.0..=4096.0;
 
@@ -108,10 +114,12 @@ struct Rows<'a> {
 }
 
 impl Rows<'_> {
-    /// What the row shows: a special layer's label, else its name.
+    /// What the row shows: a special layer's label (of two, the ranges), else its name.
     fn label_of(&self, row: &LayerRow) -> String {
-        if !row.is_master() && (row.bracket.is_some() || row.brace.is_some()) {
-            return [row.bracket.as_deref(), row.brace.as_deref()].into_iter().flatten().collect::<Vec<_>>().join(" ");
+        if !row.is_master()
+            && let Some(label) = row.bracket.as_ref().or(row.brace.as_ref())
+        {
+            return label.clone();
         }
         if row.name.is_empty() { self.untitled.to_string() } else { row.name.clone() }
     }
@@ -170,6 +178,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
     // What the last drop test decided: the release that lands a drag runs the test once more first.
     let decided: Cell<Option<DropAction>> = Cell::new(None);
     let mut swatches = Vec::new();
+    let mut braces = Vec::new();
     let sizes: RefCell<Vec<(String, f64)>> = RefCell::new(Vec::new());
     Stack::new().fill().show(ui, |ui, _| {
         let out = List::<String>::new(words.list.clone())
@@ -203,6 +212,9 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
                     if let Some(bracket) = &row.bracket {
                         item = item.trailing_strong(bracket.clone(), bracket.clone());
                     }
+                } else if let (Some(_), Some(brace)) = (&row.bracket, &row.brace) {
+                    item = item.trailing_part(BRACE, TrailingFace::Strong(brace.clone().into()), words.edit_coordinates.clone());
+                    braces.push((row.id.clone(), icx.part_opener(BRACE.part())));
                 } else if row.bracket.is_none() && row.brace.is_none() {
                     match &row.color {
                         Some(ColorEntry::Palette { label, current, palette }) => {
@@ -257,7 +269,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
                 }
                 CollectionEvent::Activate(id) => {
                     if let Some(part) = model.row(id).and_then(special_part) {
-                        sent.push(edit_special(&glyph, id, part));
+                        sent.push(edit_special(&glyph, &[id.as_str()], part));
                     }
                 }
                 CollectionEvent::Reorder(edit) => {
@@ -275,6 +287,11 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
                 sent.push(Msg::run("layer.setIColorSize", json!({ "glyph": glyph, "layer": id, "size": value as u16 })));
             }
         }
+        for (id, opener) in braces.drain(..) {
+            if out.opener(opener).is_some_and(egui::Response::clicked) {
+                sent.push(edit_special(&glyph, &[id.as_str()], Part::Intermediate));
+            }
+        }
         for (id, opener) in swatches.drain(..) {
             let Some(row) = model.row(&id) else { continue };
             let Some(button) = out.opener(opener) else { continue };
@@ -290,7 +307,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
                 if command == "layers.rename" {
                     request_rename(ui.ctx(), out.response.id, &row.id);
                 } else {
-                    sent.push(row_command(&glyph, row, &command));
+                    sent.push(row_command(model, &glyph, row, &command));
                 }
             }
             let wanted = open.then(|| row.id.clone());
@@ -394,8 +411,22 @@ fn special_part(row: &LayerRow) -> Option<Part> {
     }
 }
 
-fn edit_special(glyph: &str, layer: &str, part: Part) -> Msg {
-    Msg::Shell(CommandRef::with_params("layers.editSpecialLayerSettings", json!({ "glyph": glyph, "layer": layer, "part": part.name() })))
+fn edit_special(glyph: &str, layers: &[&str], part: Part) -> Msg {
+    let params = match layers {
+        [layer] => json!({ "glyph": glyph, "layer": layer, "part": part.name() }),
+        _ => json!({ "glyph": glyph, "layers": layers, "part": part.name() }),
+    };
+    Msg::Shell(CommandRef::with_params("layers.editSpecialLayerSettings", params))
+}
+
+/// The rows a status item of `row`'s menu acts on: every selected row when `row` is one of them, else `row`. Master
+/// layers cannot be intermediate.
+fn status_rows<'m>(model: &'m LayersModel, row: &'m LayerRow, part: Part) -> Vec<&'m LayerRow> {
+    if !model.selection.contains(&row.id) {
+        return vec![row];
+    }
+    let takes = |r: &&LayerRow| part == Part::Alternate || !r.is_master();
+    model.all.iter().filter(|r| model.selection.contains(&r.id)).filter(takes).collect()
 }
 
 /// Why command `id` of the row menu cannot act on `row`, if it cannot.
@@ -427,10 +458,19 @@ fn row_entries(model: &LayersModel, row: &LayerRow, words: &LayersWords) -> Vec<
         .collect()
 }
 
-/// The message the row menu's command `id` sends for `row`.
-fn row_command(glyph: &str, row: &LayerRow, id: &str) -> Msg {
+/// The message the row menu's command `id` sends for `row`: a status goes to [`status_rows`], taken off those that have
+/// it when `row` has it.
+fn row_command(model: &LayersModel, glyph: &str, row: &LayerRow, id: &str) -> Msg {
     if let Some((_, clear, part)) = STATUSES.iter().find(|(set, _, _)| *set == id) {
-        return if row.has(*part) { Msg::run(clear, json!({ "glyph": glyph, "layer": row.id })) } else { edit_special(glyph, &row.id, *part) };
+        let rows = status_rows(model, row, *part);
+        if !row.has(*part) {
+            return edit_special(glyph, &rows.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), *part);
+        }
+        let having: Vec<&str> = rows.iter().filter(|r| r.has(*part)).map(|r| r.id.as_str()).collect();
+        return match having.as_slice() {
+            [one] => Msg::run(clear, json!({ "glyph": glyph, "layer": one })),
+            many => Msg::run(clear, json!({ "glyph": glyph, "layers": many })),
+        };
     }
     let params = match id {
         "layers.delete" => json!({ "glyphs": [glyph], "layers": [row.id] }),

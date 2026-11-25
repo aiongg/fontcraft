@@ -1287,6 +1287,7 @@ ref = "Import & Export › Projects › Setting up a Project"
 status = "handbook"
 notes = "Documented, not yet observed. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14."
 guesses = [
+  "Coordinates on axes the linked font no longer has are kept and not used, with a warning when the project opens or the font is chosen; unlinking an axis of a project's font in the reference app settles it.",
   "The link is stored relative to the project file when both share a folder tree, else absolute; linking copies the font's instances into the project only when the project has none; saving a project in the reference app settles the path form.",
   "A link that no longer resolves is kept when the project opens and reported as a warning; only export and revert refuse it; opening a project whose font was moved in the reference app settles it.",
 ]
@@ -1307,8 +1308,11 @@ summary = "The plus button in the project window: appends a new static instance 
 ref = "Import & Export › Projects › Setting up a Project"
 status = "handbook"
 notes = "Documented, not yet observed. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14."
+observe = [
+  "In a project, open the plus menu: note which entries it offers, and edit an axis coordinate of an instance.",
+]
 guesses = [
-  "A new project instance has the defaults of font.instance.add; a variable font setting waits for M9 and is refused until then.",
+  "A new project instance has the defaults of font.instance.add, a new variable font setting those of font.instance.addVariableFontSetting.",
   "`at` places the new instance in the list (default: the end); the plus button in the reference app adds at the end or after the selection, which observing it settles.",
 ]
 
@@ -1384,13 +1388,13 @@ label = "Edit Instance"
 menu = []
 shortcut = ""
 kind = "engine"
-params = '{project?: id|path|title, instance: id|name|index, changes: {active?, styleName?, weightClass?, widthClass?, axes?, isBold?, isItalic?, linkStyle?, customParameters?: [{action: "add"|"set"|"remove", name, index?, value?, enabled?}]}}'
+params = '{project?: id|path|title, instance: id|name|index, changes: {active?, styleName?, weightClass?, widthClass?, axes?, isBold?, isItalic?, linkStyle?, fields?: [{action: "set"|"remove"|"setLanguage"|"removeLanguage", key, value?, language?}], customParameters?: [{action: "add"|"set"|"remove", name, index?, value?, enabled?}]}}'
 area = "font-info"
 milestone = "M7"
 summary = "Changes the properties and custom parameters of one project instance. The right half of the project window is the same editor as Font Info › Exports."
 ref = "Import & Export › Projects › Setting up a Project"
 status = "handbook"
-notes = "Documented, not yet observed. `changes` takes the keys of font.instance.set plus a list of custom parameter edits, each in the form of font.customParameters.add, set or remove. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14."
+notes = "Documented, not yet observed. `changes` takes the keys of font.instance.set plus a list of General field edits (font.info.set, removeField, setLocalizedValue, removeLocalizedValue) and a list of custom parameter edits (font.customParameters.add, set, remove). The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14."
 guesses = [
   "Edits are checked as Font Info › Exports checks an export of the linked font (its axes and masters), or of a new empty font while no font is linked.",
 ]
@@ -1424,11 +1428,11 @@ milestone = "M7"
 summary = "Compiles every instance configured in the project from the linked font into the project's export destination. Requires a saved project and a resolvable font link; the linked font need not be open."
 ref = "Import & Export › Projects › Exporting a Project"
 status = "handbook"
-notes = "Documented, not yet observed. Export reads the linked font from disk and builds the project's instances in place of the font's, through the same build as File › Export. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14. M2.20: a refused font lists every problem; the window cannot show its glyphs, since the linked font need not be open."
+notes = "Documented, not yet observed. Export reads the linked font from disk and builds the project's active instances and variable font settings in place of the font's, through the same builds as File › Export. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14. M2.20: a refused font lists every problem; the window cannot show its glyphs, since the linked font need not be open."
 guesses = [
   "Export refuses a project with unsaved changes as well as one never saved; exporting in the reference app with an unsaved change settles it.",
   "Export reads the font file on disk even when the font is open with unsaved changes; exporting with the font open and edited settles it.",
-  "Export builds TrueType outlines in plain files unless asked otherwise, and a project without an active static instance is refused rather than exporting the font's first master; the reference app's export from a project settles both.",
+  "Export builds TrueType outlines in plain files unless asked otherwise, and a project without an active instance or variable font setting is refused rather than exporting the font's first master; the reference app's export from a project settles both.",
   "Export is refused, writing nothing, when one of its files would replace the linked font (a compiled font in the destination folder); exporting such a project in the reference app settles it.",
 ]
 
@@ -1525,7 +1529,7 @@ guesses = [
   "Closing the window closes the project, and a project with unsaved changes stays open with the reason in the status bar; the reference app's close prompt is not documented. Closing an edited project in the reference app settles it.",
   "The entry's context menu offers Duplicate beside copy and paste; checking the reference app's context menu on a project instance settles it.",
   "Paste puts the copies together after the last selected instance (at the end with none selected), and pastes only in the project the instances were copied from, leaving out a copied instance that changed since; pasting in the reference app after changing the selection, and in a second project, settles it.",
-  "General fields an instance carries are shown read-only, since the project commands edit only the built-in fields and the custom parameters; editing a localized name in a project in the reference app settles whether they are editable there.",
+  "General fields an instance carries are edited as in Font Info › Exports, but the panel adds none; looking for a plus beside General in a project in the reference app settles whether it has one.",
 ]
 observe = [
   "Open a new project, link font B, right-click an instance in the sidebar: note the context menu's items.",

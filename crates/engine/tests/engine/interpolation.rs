@@ -155,6 +155,12 @@ fn interpolation_describe_designspace_lists_axes_masters_instances_and_special_l
     let vf = run(&mut s, "interpolation.describeDesignspace", json!({"variableFontSetting": "VF"}));
     assert_eq!(vf["setting"], json!({"index": 2, "name": "VF"}));
     assert!(refused(&mut s, "interpolation.describeDesignspace", json!({"variableFontSetting": "Regular"})).contains("static instance"));
+
+    run(&mut s, "font.master.setAxisLocation", json!({"masters": ["Black"], "location": {"wght": 100}}));
+    let d = run(&mut s, "interpolation.describeDesignspace", json!({}));
+    let problems = d["problems"].as_array().unwrap();
+    assert!(problems.iter().any(|p| p["code"] == "masters-share-location" && p["masters"] == json!(["thin", "black"])), "{problems:?}");
+    assert!(problems.iter().any(|p| p["code"] == "axis-without-range" && p["axis"] == "wght"), "{problems:?}");
 }
 
 #[test]

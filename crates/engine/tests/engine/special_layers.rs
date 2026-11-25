@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use fontcraft_engine::interp::instance::interpolate_layer;
-use fontcraft_engine::interp::{Designspace, GlyphSources, InterpOptions, Location};
+use fontcraft_engine::interp::{AlternateSet, Designspace, GlyphSources, InterpOptions, Location, RangeSet};
 use fontcraft_engine::model::corner::{CornerHint, corner_hint};
 use fontcraft_engine::model::{Axis, Font, Glyph, GlyphTable, Layer, Master, Path, Shape};
 use fontcraft_engine::{EngineError, Session};
@@ -116,6 +116,106 @@ fn layers_set_alternate_and_clear_alternate() {
     assert_eq!(run(&mut s, "layers.clearAlternate", json!({"glyph": "e", "layer": "b"}))["label"], "{400}");
     assert!(e_layer(&s, "b").info.attrs.axis_rules.is_empty());
     refused(&mut s, "layers.clearAlternate", json!({"glyph": "e", "layer": "b"}));
+}
+
+/// Six masters on two axes and the glyph `e`, a box on each, with a backup layer `b` under the first; the masters' ids.
+fn six_masters() -> (Session, Vec<String>) {
+    let places: Vec<(String, f64, f64)> =
+        [75.0, 100.0].into_iter().flat_map(|wd| [100.0, 400.0, 900.0].map(|wg| (format!("m{wg}-{wd}"), wg, wd))).collect();
+    let mut f = Font::new("Special");
+    let axis = |name: &str, tag: &str| Axis { name: name.into(), tag: tag.into(), ..Axis::default() };
+    f.axes = Arc::new(vec![axis("Weight", "wght"), axis("Width", "wdth")]);
+    let master = |(id, wg, wd): &(String, f64, f64)| Master { id: id.clone(), name: id.clone(), location: vec![*wg, *wd], ..Master::default() };
+    f.masters = Arc::new(places.iter().map(master).collect());
+    let mut e = Glyph::new("e");
+    e.layers = places.iter().map(|(id, wg, wd)| layer(id, id, vec![rect(0.0, wg / 4.0 + wd)])).collect();
+    e.layers.push(layer(&places[0].0, "b", vec![rect(0.0, 10.0)]));
+    let mut spare = Glyph::new("o");
+    spare.layers = places.iter().map(|(id, ..)| layer(id, id, vec![rect(0.0, 50.0)])).collect();
+    f.glyphs = GlyphTable::from_glyphs(vec![Arc::new(e), Arc::new(spare)]);
+    let mut s = Session::new();
+    s.add_document(f, None).unwrap();
+    (s, places.into_iter().map(|p| p.0).collect())
+}
+
+/// The layers of `glyph` without their ids: what interpolates and what is exported.
+fn drawings(s: &Session, glyph: &str) -> Vec<(String, Vec<Shape>, Value)> {
+    let font = s.font().unwrap();
+    let layers = &font.glyph(glyph).unwrap().layers;
+    layers.iter().map(|l| (l.master.clone(), l.shapes.clone(), serde_json::to_value(&l.info.attrs).unwrap())).collect()
+}
+
+/// For All Masters sets up an alternate shape over six masters in one undo step, as adding and setting a layer under
+/// each master by hand does: same layers, same sources. The layers of one list take a range together and lose it
+/// together, and a second run finds nothing to add.
+#[test]
+fn for_all_masters_sets_up_what_layers_added_by_hand_do() {
+    let ranges = json!({"wght": {"min": 600}});
+    let (mut s, masters) = six_masters();
+    let before = s.font().unwrap().clone();
+    let steps = s.doc().unwrap().history.undo.len();
+    let out = run(&mut s, "layers.setAlternate", json!({"glyph": "e", "layer": "b", "allMasters": true, "ranges": ranges}));
+    assert_eq!(s.doc().unwrap().history.undo.len(), steps + 1, "one undo step");
+    let rows = out["layers"].as_array().unwrap();
+    assert_eq!((rows.len(), &rows[0]["layer"], &rows[0]["added"]), (6, &json!("b"), &json!(false)), "{out}");
+    assert!(rows.iter().all(|r| r["label"] == "[600‹wg]") && rows[1..].iter().all(|r| r["added"] == true), "{out}");
+
+    let (mut hand, _) = six_masters();
+    run(&mut hand, "layers.setAlternate", json!({"glyph": "e", "layer": "b", "ranges": ranges}));
+    for m in &masters[1..] {
+        let id = run(&mut hand, "layers.addBackupLayer", json!({"glyphs": ["e"], "master": m, "name": "x"}))["layer"].clone();
+        run(&mut hand, "layers.setAlternate", json!({"glyph": "e", "layer": id, "ranges": ranges}));
+    }
+    assert_eq!(drawings(&s, "e"), drawings(&hand, "e"));
+    let sources = |s: &Session| -> Vec<(RangeSet, Vec<(String, Location)>)> {
+        let font = s.font().unwrap();
+        let sources = GlyphSources::of(font, &Designspace::new(font).unwrap(), "e").unwrap();
+        let places = |a: &AlternateSet| a.sources.iter().map(|x| (x.master.clone(), x.location.clone())).collect();
+        sources.alternates.iter().map(|a| (a.ranges.clone(), places(a))).collect()
+    };
+    let (one, by_hand) = (sources(&s), sources(&hand));
+    assert_eq!(one, by_hand);
+    assert_eq!((one.len(), one[0].1.len()), (1, 6));
+    let m = refused(&mut s, "layers.setAlternate", json!({"glyphs": ["e"], "allMasters": true, "ranges": ranges}));
+    assert!(m.contains("every master"), "{m}");
+
+    // The layers of a list change together.
+    let ids: Vec<Value> = rows.iter().map(|r| r["layer"].clone()).collect();
+    let out = run(&mut s, "layers.setAlternate", json!({"glyph": "e", "layers": ids, "ranges": {"wght": {"min": 700}}}));
+    assert!(out["layers"].as_array().unwrap().iter().all(|r| r["label"] == "[700‹wg]"), "{out}");
+    let out = run(&mut s, "layers.clearAlternate", json!({"glyph": "e", "layers": ids}));
+    assert_eq!(out["layers"].as_array().unwrap().len(), 6);
+    run(&mut s, "edit.undo", json!({}));
+    run(&mut s, "edit.undo", json!({}));
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(s.font().unwrap().glyphs, before.glyphs, "undone");
+
+    // Other glyphs get a layer under each master; a layer that is not the glyph's, or no layer, is refused.
+    let out = run(&mut s, "layers.setAlternate", json!({"glyph": "e", "layer": "b", "allMasters": true, "glyphs": ["e", "o"], "ranges": ranges}));
+    assert_eq!(out["layers"].as_array().unwrap().iter().filter(|r| r["glyph"] == "o").count(), 6, "{out}");
+    refused(&mut s, "layers.setAlternate", json!({"glyph": "e", "layers": ["b", "none"], "ranges": ranges}));
+    refused(&mut s, "layers.setAlternate", json!({"glyph": "e", "ranges": ranges}));
+}
+
+/// Intermediate layers for all masters: one per place the coordinates and the masters' own give, none where the glyph
+/// has a source already. Two layers of a list that land in one place are refused.
+#[test]
+fn for_all_masters_adds_one_intermediate_layer_per_place() {
+    let (mut s, masters) = six_masters();
+    let at = json!({"wght": 650, "wdth": null});
+    let out = run(&mut s, "layers.setIntermediate", json!({"glyph": "e", "layer": "b", "allMasters": true, "coordinates": at}));
+    let rows = out["layers"].as_array().unwrap();
+    assert_eq!(rows.len(), 2, "one at each width: {out}");
+    assert_eq!((&rows[0]["layer"], &rows[0]["label"]), (&json!("b"), &json!("{650, 75}")));
+    assert_eq!((&rows[1]["added"], &rows[1]["label"]), (&json!(true), &json!("{650, 100}")));
+    let added = e_layer(&s, rows[1]["layer"].as_str().unwrap());
+    assert_eq!((added.master.as_str(), &added.shapes), (masters[3].as_str(), &e_layer(&s, &masters[3]).shapes), "a copy of its master layer");
+    refused(&mut s, "layers.setIntermediate", json!({"glyphs": ["e"], "allMasters": true, "coordinates": at}));
+
+    let other = run(&mut s, "layers.addBackupLayer", json!({"glyphs": ["e"], "master": masters[1], "name": "x"}))["layer"].clone();
+    let m = refused(&mut s, "layers.setIntermediate", json!({"glyph": "e", "layers": ["b", other], "coordinates": {"wght": 500}}));
+    assert!(m.contains("same location"), "{m}");
+    refused(&mut s, "layers.setIntermediate", json!({"glyph": "e", "layers": [masters[0], "b"], "coordinates": {"wght": 500}}));
 }
 
 /// A source added at a location is the interpolation there, so it changes no instance at that location; it is one undo

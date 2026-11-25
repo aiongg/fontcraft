@@ -5,7 +5,7 @@
 //!
 //! Services: the in-memory compile of a source's instances, with the source map that lets
 //! binary findings name source glyphs and Font Info fields, and the master-compatibility report
-//! (`fontcraft_audit::structural_report`), shaping through `fontcraft_shaping`, and automatic
+//! (`fontcraft_audit::structural_report`), the designspace problems, shaping through `fontcraft_shaping`, and automatic
 //! alignment and the default anchors (`fontcraft_components`). The TTX
 //! round trip and rasterising answer "not available", which makes the checks that need them skip
 //! with the reason.
@@ -14,7 +14,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use fontcraft_audit::run::MAX_SOURCE_INSTANCES;
-use fontcraft_audit::services::{Attachment, CompiledInstance, LayerAlignment, MAX_SHAPED_GLYPHS, ShapeRequest, ShapedGlyph};
+use fontcraft_audit::services::{Attachment, CompiledInstance, DesignspaceProblem, LayerAlignment, MAX_SHAPED_GLYPHS, ShapeRequest, ShapedGlyph};
 use fontcraft_audit::{AuditServices, CompatibilityReport, SourceMap, Unavailable};
 use fontcraft_compile::var::VariableOptions;
 use fontcraft_compile::{Flavour, Options};
@@ -51,6 +51,17 @@ impl AuditServices for EngineServices {
 
     fn compatibility(&self, font: &Font) -> std::result::Result<CompatibilityReport, Unavailable> {
         Ok(fontcraft_audit::structural_report(font))
+    }
+
+    fn designspace_problems(&self, font: &Font) -> std::result::Result<Vec<DesignspaceProblem>, Unavailable> {
+        let problems = fontcraft_interp::problems::problems(font).into_iter().map(|p| DesignspaceProblem {
+            code: p.code,
+            message: p.message,
+            masters: p.masters.iter().filter_map(|&i| font.masters.get(i)).map(|m| m.id.clone()).collect(),
+            instance: p.instances.first().and_then(|&i| font.instances.get(i)).map(|i| i.name.clone()),
+            axis: p.axis.and_then(|i| font.axes.get(i)).map(|a| a.tag.clone()),
+        });
+        Ok(problems.collect())
     }
 
     fn shape(&self, bytes: &[u8], request: &ShapeRequest) -> std::result::Result<Vec<ShapedGlyph>, Unavailable> {

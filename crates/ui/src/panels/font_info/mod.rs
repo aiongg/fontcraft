@@ -13,6 +13,7 @@
 //! | [`exported_names`] | the Exports tab's As Exported section |
 //! | [`features_tab`] | Features: the sidebar of prefixes, classes and features, and the shown entry |
 //! | [`code_editor`] | the Features tab's code field and its diagnostics |
+//! | [`designspace`] | the Masters tab's Designspace section: the map, its table and the problems |
 //! | [`masters_tab`] | Masters: the master list and the selected masters' sections |
 //!
 //! Each tab scrolls in its own pane under the tab strip; the Masters and Exports tabs scroll their list and their
@@ -22,6 +23,7 @@
 
 pub mod code_editor;
 pub mod code_find;
+pub mod designspace;
 #[cfg(test)]
 mod dialogs_tests;
 pub mod expanded_code;

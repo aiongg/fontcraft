@@ -11,6 +11,7 @@ pub mod compare_list;
 pub mod compatibility;
 pub mod components;
 pub mod console;
+pub mod designspace;
 pub mod dimensions;
 pub mod exported_names;
 pub mod font_audit;
