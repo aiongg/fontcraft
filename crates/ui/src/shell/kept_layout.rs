@@ -143,6 +143,8 @@ mod tests {
         assert_ne!(workspace.layout.panel_state(&PanelId::Layers), PanelState::Hidden);
         assert_ne!(workspace.layout.panel_state(&PanelId::Document), PanelState::Hidden);
 
+        // Font Info opened in front of the Glyph Metrics and the Info box; moved out, it left the Info box in front.
+        assert_eq!(t.app.view.workspace.layout.panel_state(&PanelId::InfoBox), PanelState::Front);
         t.app.fire(CommandRef::new("window.palette"));
         t.frame();
         kept = to_value(&t.app.view.workspace, &t.app.view.palette.hidden).unwrap();
@@ -152,7 +154,9 @@ mod tests {
         assert!(!crate::shell::window::palette_shows(&next.app), "a hidden Palette stays hidden");
         next.app.fire(CommandRef::new("window.palette"));
         next.frame();
-        assert_eq!(next.app.view.workspace.layout.panel_state(&PanelId::GlyphMetrics), PanelState::Front);
+        let layout = &next.app.view.workspace.layout;
+        assert_eq!(layout.panel_state(&PanelId::InfoBox), PanelState::Front, "the same tab is in front");
+        assert_eq!(layout.panel_state(&PanelId::GlyphMetrics), PanelState::Open);
         let root = next.app.view.workspace.layout.root.as_mut().unwrap();
         assert_eq!(columns(root, DockEdge::End).unwrap()[0].width, Some(401.0), "at its width");
 

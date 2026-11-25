@@ -346,7 +346,8 @@ fn interpolation_app() -> FontCraftApp {
         run(&mut app, "font.master.add", json!({}));
     }
     for (master, weight, x, width) in [(0, 300, 100, 100), (1, 400, 200, 200), (2, 700, 300, 300)] {
-        run(&mut app, "font.master.setAxisLocation", json!({"masters": [master], "location": {"wght": weight}}));
+        // Not through `run`: the masters not placed yet share a location, which the status line says.
+        app.session.execute("font.master.setAxisLocation", &json!({"masters": [master], "location": {"wght": weight}})).unwrap();
         let layer = app.session.font().unwrap().masters[master].id.clone();
         run(&mut app, "path.addRectangle", json!({"glyph": "A", "layer": layer, "x": x, "y": 0, "width": width, "height": 500}));
     }
