@@ -8,7 +8,7 @@
 //! cubic split in two, the unsplit cubic is tried as well. The work is bounded: a fixed number
 //! of samples and iterations, whatever the input.
 
-use fontcraft_geom::{CubicBez, ParamCurve, ParamCurveNearest, Piece, Point, Vec2};
+use fontcraft_geom::{CubicBez, ParamCurve, ParamCurveNearest, Piece, Point, Vec2, cubics_to_quadratic_splines};
 
 use super::ops::{EPS, end_tangent, start_tangent};
 
@@ -16,6 +16,8 @@ use super::ops::{EPS, end_tangent, start_tangent};
 const SAMPLES_PER_PIECE: usize = 24;
 /// Most samples in all.
 const MAX_SAMPLES: usize = 2_000;
+/// How far a quadratic segment may lie from the cubic it stands for, in font units.
+const QUADRATIC_TOLERANCE: f64 = 1.0;
 /// Rounds of fitting and reparameterising.
 const ITERATIONS: usize = 12;
 
@@ -36,6 +38,15 @@ pub(super) fn fit(pieces: &[Piece]) -> Option<CubicBez> {
         }
     }
     best.map(|(_, c)| c)
+}
+
+/// The off-curve points of one quadratic segment that follows `c`; `None` when none does.
+pub(super) fn quadratic(c: CubicBez) -> Option<Vec<Point>> {
+    let spline = cubics_to_quadratic_splines(&[c], QUADRATIC_TOLERANCE)?.into_iter().next()?;
+    match spline.points() {
+        [_, off @ .., _] if !off.is_empty() => Some(off.to_vec()),
+        _ => None,
+    }
 }
 
 /// The largest distance from a sample to the curve `c`.

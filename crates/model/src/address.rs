@@ -3,7 +3,7 @@
 //! annotations by index. A layer has two sides that hold such things: the foreground and the
 //! background.
 
-use fontcraft_geom::{NodePoint, NodeType, Segment};
+use fontcraft_geom::{NodePoint, NodeType, Point, Segment};
 
 use crate::{Anchor, Annotation, Guide, Layer, Node, NodeKind, Path, Shape};
 
@@ -161,6 +161,45 @@ impl Path {
     /// the first on-curve node of an open path.
     pub fn segment_ending_at(&self, node: usize) -> Option<Segment> {
         fontcraft_geom::segment_ending_at(&self.node_points(), self.closed, node)
+    }
+
+    /// The implied nodes of quadratic segments: the two neighbouring off-curve nodes each lies halfway between, in path
+    /// order, and its place.
+    pub fn implied_nodes(&self) -> Vec<((usize, usize), Point)> {
+        let n = self.nodes.len();
+        let mut out = Vec::new();
+        let mut pair = |a: usize, b: usize| {
+            if let (Some(p), Some(q)) = (self.nodes.get(a), self.nodes.get(b)) {
+                out.push(((a, b), p.point().midpoint(q.point())));
+            }
+        };
+        let Some(first) = self.nodes.iter().position(Node::on_curve) else {
+            if self.closed && n > 1 {
+                for a in 0..n {
+                    pair(a, if a + 1 == n { 0 } else { a + 1 });
+                }
+            }
+            return out;
+        };
+        let mut run: Vec<usize> = Vec::new();
+        let steps = if self.closed { n } else { n - first - 1 };
+        for step in 1..=steps {
+            let i = (first + step) % n;
+            let Some(node) = self.nodes.get(i) else { continue };
+            if !node.on_curve() {
+                run.push(i);
+                continue;
+            }
+            if node.kind == NodeKind::QCurve {
+                for w in run.windows(2) {
+                    if let [a, b] = w {
+                        pair(*a, *b);
+                    }
+                }
+            }
+            run.clear();
+        }
+        out
     }
 
     /// Whether node `node` ends a segment, without building the segments.

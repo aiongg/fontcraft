@@ -369,7 +369,7 @@ milestone = "M3"
 summary = "Holding Option while a menu or context menu is open swaps some items for an alternate form, typically the same action applied to all masters (Tidy up Paths, Correct Path Direction, Reverse Contours, Set/Reset Anchors, Expand Outline), plus Force Extremes, Add Global Guide and Reopen Last Closed Tab."
 ref = "Edit View › Editing Paths"
 status = "handbook"
-notes = "The window (`crates/ui/src/app/menu_alternates.rs`, `ALTERNATES`) puts each pair on the base row of the menu bar: choosing the row with Alt held runs the alternate, and the alternate has no row of its own. While Alt is held the row shows the alternate command's own label and shortcut (`craft_ext::menu::held_alternate_labels`); the label updates as Alt goes down and up while the menu is open. The table takes shell commands too: Reopen Last Closed Tab is Close Tab's alternate in the View menu (M14.4b). `ui.menu.list` names a row's alternate in `alternate` and lists the alternate after it with `alternateOf`; `ui.menu.invoke` runs an alternate by its id. Expand Outline for All Masters is Expand Outline's alternate in the canvas context menu (`context_menu::ALTERNATES`), since neither has a menu bar row. Delete has no menu row anywhere, so Delete in All Masters stays its Alt+Delete key. Not yet in the table: the Font View batch forms, whose commands the window does not have yet."
+notes = "The window (`crates/ui/src/app/menu_alternates.rs`, `ALTERNATES`) puts each pair on the base row of the menu bar: choosing the row with Alt held runs the alternate, and the alternate has no row of its own. While Alt is held the row shows the alternate command's own label and shortcut (`craft_ext::menu::held_alternate_labels`); the label updates as Alt goes down and up while the menu is open. The table takes shell commands too: Reopen Last Closed Tab is Close Tab's alternate in the View menu (M14.4b). `ui.menu.list` names a row's alternate in `alternate` and lists the alternate after it with `alternateOf`; `ui.menu.invoke` runs an alternate by its id. Expand Outline for All Masters and the node commands in All Masters (M3.52) are alternates in the canvas context menu (`context_menu::ALTERNATES`), since their base commands have no menu bar row; Align Selection in All Masters is Align Selection's alternate in the Path menu. Delete has no menu row anywhere, so Delete in All Masters stays its Alt+Delete key. Not yet in the table: the Font View batch forms, whose commands the window does not have yet."
 guesses = [
   "Clear Background is the Alt alternate of Assign Background; the handbook says only that it shows while Alt is held. Holding Option in the reference app's Path menu settles it.",
   "An alternate row shows its own command's label and shortcut, as native macOS alternate items do; the handbook names the alternates but not their labels. The observe step below settles it.",
@@ -449,6 +449,7 @@ gestures = [
   "click on the first node of the open path being drawn: close the path",
   "click on a node of an existing path: open the path at that node",
   "Shift+click on a segment: insert a node at the extremum or inflection nearest to the click",
+  "Backspace: remove the last node of the path being drawn",
 ]
 area = "drawing"
 milestone = "M3"
@@ -463,6 +464,55 @@ guesses = [
   "A missing handle of a curved segment lies a third of the way from its node to the other handle.",
   "Shift keeps nodes and handles to 45° steps (03a question 4).",
   "Escape or another tool ends the path.",
+  "Backspace removes the last node while that node, or nothing, is selected, and the drawing goes on from the node before it.",
+]
+
+[[behavior]]
+id = "draw.undoKeepsDrawing"
+area = "drawing"
+milestone = "M3"
+summary = "Undo while a path is being drawn takes back the last node and leaves the drawing running: the next click goes on from the node that is the end now, with the handle that left it. Redo brings the node back the same way. The drawing ends when its path is gone or closed."
+ref = "updates.glyphsapp.com/Glyphs4.1-4100.html, build 3824"
+status = "docs"
+notes = "The release note says that undo no longer stops drawing. The Draw tool finds its path again by the place of either end node; another edit of the path (an inserted node, a moved end) leaves the drawing running too."
+guesses = [
+  "Redo after undoing the whole path brings the path back, not drawn any more.",
+]
+observe = [
+  "Draw five nodes with drags, undo twice and click: note whether the new segment leaves the third node with its handle.",
+]
+
+[[behavior]]
+id = "draw.curveTypeFollowsGlyph"
+area = "drawing"
+milestone = "M3"
+summary = "The Draw tool draws quadratic curves in a glyph whose curves are quadratic, and cubic ones otherwise; in a glyph without a curve the font's curves decide. A path that has curves is continued with its own type. Convert Segment to Curve and a corner turned smooth follow the same rule, after the path's own curves."
+ref = "updates.glyphsapp.com/Glyphs4.1-4100.html, build 3848"
+status = "docs"
+notes = "The release note says that new segments take the curve type of the glyph. One quadratic segment makes a layer quadratic; the font's type is that of its first layer with a curve, in glyph order."
+guesses = [
+  "A quadratic segment drawn with two dragged handles has them as its two off-curve points; with one handle it has that one off-curve point.",
+  "A new path in a layer that mixes both types is quadratic.",
+  "Two paths of different types that are joined keep their own curves; the joining segment has the type of the path being drawn.",
+]
+observe = [
+  "In a TrueType master, draw a circle with four drags: note the number of off-curve points of each segment and whether they lie where the handles were dragged.",
+]
+
+[[behavior]]
+id = "segments.orthogonalHandles"
+area = "drawing"
+milestone = "M3"
+summary = "Option+Shift-clicking a diagonal line segment with the Select tool turns it into a curve with one horizontal and one vertical handle, a quarter of an oval."
+ref = "glyphsapp.com/learn/drawing-good-paths"
+status = "docs"
+notes = "`path.convertSegmentToCurve` with `orthogonal: true`. A horizontal or vertical segment is converted as without Shift."
+guesses = [
+  "The handle at the start is horizontal or vertical so that the curve continues the neighbouring segments better; horizontal when both ways do equally well.",
+  "The handles are 55% of the oval's radii long (41% for the two handles of a quadratic segment).",
+]
+observe = [
+  "Option+Shift-click a lone diagonal line, then one between a vertical and a horizontal line: note which handle is horizontal and how long both are.",
 ]
 
 [[tool]]
@@ -712,6 +762,25 @@ guesses = [
 ]
 
 [[behavior]]
+id = "nodes.tangentFollowsLine"
+area = "drawing"
+milestone = "M3"
+summary = "A smooth node with a line on one side and a handle on the other keeps the handle in line with the line. When the node, or the far end of its line, moves (by a drag, the arrow keys, nudging, a typed position or an alignment), the handle turns about the node onto the line and keeps its length; when both move together nothing turns. Moving only the selected points (Option) leaves the handle where it is. A smooth node that gets a new line because its neighbour was deleted has its handle turned onto that line."
+ref = "Edit View › Draw Tool"
+status = "inferred"
+notes = "Follows from nodes.smoothAndCornerTypes (a smooth node's two sides stay in line at all times) for a side that is a line. `node/ops.rs` keep_tangents serves selection.move, selection.setPosition, Align Selection and the Palette's align buttons; edit.delete uses the same turn. A line or a handle without length has no direction and turns nothing. The only handle of a quadratic segment between two smooth nodes is left alone (M3.54)."
+guesses = [
+  "The handle turns onto the line and the line stays where the move put it; the far end of the line never moves to meet the handle.",
+  "The handle turns also when it is selected together with its node.",
+  "Align Selection and the align buttons leave a handle that is itself among the selected points on the aligned coordinate.",
+  "Deleting a handle, which makes its segment a line, turns the handles on the other side of that line's smooth ends onto it.",
+]
+observe = [
+  "In a straight stem ending in a curve, drag the corner at the far end of the stem's line sideways: note whether the handle beyond the smooth node turns and whether its length changes.",
+  "Drag the smooth node itself sideways, once alone and once with its handle selected: note what the handle does.",
+]
+
+[[behavior]]
 id = "handles.display"
 area = "drawing"
 milestone = "M3"
@@ -763,10 +832,13 @@ gestures = [
   "Ctrl while dragging a marquee: turn the marquee to a new angle; releasing Ctrl goes back to resizing at that angle (slanted selection)",
   "click a node, handle or segment: select it",
   "Shift+click or Shift+marquee: add to or remove from the selection",
+  "Shift+drag from an object: add it to the selection and drag the selection",
+  "Shift while dragging: horizontal or vertical only (a lone handle: along the axes through its node)",
   "double-click near a segment: select the whole path",
   "double-click a node: toggle it between smooth and corner (Alt keeps the outline unchanged)",
   "Shift+double-click a node: toggle super-smooth",
   "Alt+click a line segment: turn it into a curve segment",
+  "Alt+Shift+click a line segment: turn it into a curve segment with one horizontal and one vertical handle",
   "drag a selected node: move the selection; attached handles follow",
   "Alt while moving nodes: move only the selected points, leaving unselected attached handles behind",
   "Ctrl+Alt while moving nodes (or Alt added after the drag started): nudge, scaling the neighbouring unselected handles in proportion",
@@ -837,6 +909,23 @@ milestone = "M3"
 summary = "With Shift held, clicking or marquee-selecting toggles the hit items in the existing selection rather than replacing it. Handles are selectable on their own, so Shift-clicking handles builds a non-contiguous selection."
 ref = "Edit View › Selecting Nodes and Paths"
 status = "handbook"
+
+[[behavior]]
+id = "selection.shiftPressDrags"
+area = "drawing"
+milestone = "M3"
+summary = "A press with Shift held on an object that is not selected adds it to the selection at once, and a drag from there moves the whole selection. On a selected object the press changes nothing yet: released in place it drops the object from the selection, dragged it moves the selection. Annotations behave the same with the annotation tools."
+ref = "Edit View › Selecting Nodes and Paths"
+status = "inferred"
+notes = "The handbook says only that Shift extends or reduces the selection. A segment that is only half selected joins as a whole."
+guesses = [
+  "Shift on an unselected object adds it at mouse-down, and Shift on a selected one drops it at the release, so both presses can drag.",
+  "A guide that a Shift press added to other objects moves with them; alone it turns or moves as in guides.knobAndSelection.",
+]
+observe = [
+  "Select one node, Shift-press another and drag in the same press: note whether both move.",
+  "Select two nodes, Shift-press one of them and drag: note whether both move and whether the pressed one stays selected.",
+]
 
 [[behavior]]
 id = "selection.doubleClickSelectsPath"
@@ -1001,6 +1090,25 @@ ref = "Edit View › Moving Selected Nodes and Paths"
 status = "handbook"
 guesses = [
   "Alt with an arrow key moves only the selected points (03a question 1).",
+  "Only the handle of a smooth node next to a line turns when the node moves (nodes.tangentFollowsLine); all other handles keep their offset from their node.",
+]
+
+[[behavior]]
+id = "move.shiftConstrains"
+area = "drawing"
+milestone = "M3"
+summary = "Holding Shift while dragging the selection (nodes, handles, segments, components, anchors, guides, annotations, the placed image) keeps the drag horizontal or vertical, whichever is nearer to the pointer's way; Shift can be pressed and released during the drag. A single dragged handle goes onto the horizontal or the vertical through its node. Snapping then works along the drag only. Shift+Option on a node is the sliding aid."
+ref = "Edit View › Moving Selected Nodes and Paths"
+status = "docs"
+notes = "Users of the reference app describe the constraint for dragged nodes on the public forum (forum.glyphsapp.com topics 36658, 24347, 31911 and 35615). `snap_along` in tools/snap.rs: nodes and handles count as targets only on the held line, then guides where they cross it, sidebearings or metric lines, and lining up with a node; the suggestions are off. A drag of handles with Option keeps the angle and ignores Shift. Image: ImageDrag."
+guesses = [
+  "A single handle is held to the axes through its node, not to the axes through its place at the press.",
+  "In an italic master the vertical is upright; the italic angle adds no axis.",
+  "Only horizontal and vertical; no 45° directions, unlike the Draw tool.",
+]
+observe = [
+  "Shift-drag a node, then a lone handle, then a component: note the directions each drag allows.",
+  "In a master with an italic angle of 12°, Shift-drag a node upwards: note whether it goes straight up or along the angle.",
 ]
 
 [[behavior]]
@@ -1012,6 +1120,7 @@ ref = "Edit View › Moving Selected Nodes and Paths"
 status = "handbook"
 guesses = [
   "Ctrl+Alt with an arrow key nudges, by the arrow increments 1, 10 and 100 (03a question 2).",
+  "After the handles are scaled, the handle of a smooth node next to a line turns onto the line (nodes.tangentFollowsLine); a smooth node between two curves is left as the scaling puts it.",
 ]
 
 [[behavior]]
@@ -1024,6 +1133,27 @@ status = "handbook"
 notes = "Documented, not yet observed. M3.19: a drag of handles only (nothing else selected) runs selection.move with mode pointsOnly while Alt is held, whether Alt went down before or during the drag; a handle alone has nothing to copy, so Alt never duplicates it."
 observe = [
   "Option-drag a handle of a smooth node, then press Option halfway through a plain handle drag: note whether the angle is kept in both cases and whether the opposite handle turns.",
+]
+
+[[behavior]]
+id = "nodes.impliedOnCurve"
+area = "drawing"
+milestone = "M3"
+summary = "In a quadratic segment with several off-curve nodes, the implied node halfway between two of them shows and can be grabbed: a press selects its two handles and a drag moves both, so the implied node follows the pointer. A one-handle quadratic segment keeps both its smooth ends smooth when its handle, an end or a line beside it moves."
+ref = "Edit View › Moving Selected Nodes and Paths"
+status = "inferred"
+own = true
+notes = "Built in M3.54: `Hit::Implied` (the Select tool and the context menu only), drawn as a hollow handle (`canvas/paint/nodes.rs`), `Path::implied_nodes`. The one-handle rule is `keep_both_smooth` in crates/engine/src/cmd/node/moving.rs. Deleting a node between quadratic segments refits with one quadratic segment (builds 3848 and 3826 of the release notes name adding, removing and copying points of quadratic outlines without detail); Fit Curve refuses quadratic segments with a message."
+guesses = [
+  "Grabbing the implied node moves its two handles.",
+  "Where a smooth node lies between the only handles of two segments, it slides onto the line between them, dividing it as before; where the side beyond is a curve with another handle, that handle turns and keeps its length.",
+  "Between two straight sides, an only handle stays where their lines cross; with no crossing ahead of both, it stays in place.",
+  "Fit Curve leaves quadratic segments alone and says so, since its percentages describe cubic handles.",
+]
+observe = [
+  "In a TrueType outline with a segment of three off-curve points, press and drag the place halfway between two of them, and note what is selected and what moves.",
+  "Drag the off-curve point between two smooth on-curve nodes of a TrueType circle and note whether the nodes or the next off-curve points move.",
+  "Select an off-curve point of a TrueType outline and press a Fit Curve step: note whether anything changes.",
 ]
 
 [[behavior]]
@@ -1051,7 +1181,7 @@ milestone = "M3"
 summary = "Dragging a segment moves its two end nodes together with their handles. Option-dragging a curve segment instead lengthens or shortens its handles along their existing angles, leaving the nodes in place."
 ref = "Edit View › Moving Selected Nodes and Paths"
 status = "handbook"
-notes = "Documented, not yet observed. M3.19: an Alt-drag that starts on a cubic segment selected alone runs path.reshapeSegment as one interaction; the segment's point under the pointer at the press follows the pointer. An Alt-drag on a line segment copies it (duplicate.optionDrag); an Alt-drag on a segment of a larger selection copies the selection."
+notes = "Documented, not yet observed. M3.19: an Alt-drag that starts on a cubic segment selected alone runs path.reshapeSegment as one interaction; the segment's point under the pointer at the press follows the pointer. An Alt-drag on a line segment copies it (duplicate.optionDrag); an Alt-drag on a segment of a larger selection copies the selection. M3.54: a quadratic segment is reshaped too: its first and last handles keep their directions, the handles between them move freely by the smallest change, and an only handle moves freely with the handles beyond its smooth ends following."
 guesses = [
   "The two handle lengths are solved so the grabbed point of the curve lands on the pointer (a 2x2 least-squares problem; with parallel handles, the smallest change that gets nearest); observing the curve under the pointer during an Option-drag would settle it.",
   "With nearly parallel handles the solve is damped, so the lengths change smoothly and the point may stop short of the pointer instead of the handles swinging by thousands of units; observing an Option-drag on a segment with almost parallel handles would settle it.",
@@ -1072,10 +1202,10 @@ kind = "engine"
 params = "{glyph: name, layer?: id, side?, segment: [shape, node], t: number, to: [x, y]} → {changed, selection}"
 area = "drawing"
 milestone = "M3"
-summary = "Changes the lengths of a cubic segment's two handles, keeping both end nodes and each handle's direction, so that the segment's point at t lands on a given position. It is what an Option-drag on a curve segment runs."
+summary = "Changes the lengths of a curve segment's first and last handles, keeping both end nodes and each handle's direction, so that the segment's point at t lands on a given position. It is what an Option-drag on a curve segment runs."
 ref = "Edit View › Moving Selected Nodes and Paths"
 status = "handbook"
-notes = "Documented gesture (move.dragSegment), not yet observed; the construction is ours. t runs from 0.01 to 0.99. A line segment is left as it is and returns changed: false; a quadratic segment is refused. The selection afterwards is the segment's two end nodes, as the press selected them."
+notes = "Documented gesture (move.dragSegment), not yet observed; the construction is ours. t runs from 0.01 to 0.99. A line segment is left as it is and returns changed: false; a quadratic segment is reshaped as move.dragSegment says. The selection afterwards is the segment's two end nodes, as the press selected them."
 guesses = [
   "A handle that lies on its node takes the direction towards the other handle, else towards the other end node.",
 ]
@@ -1136,10 +1266,10 @@ menu = []
 context = ["canvas.segment"]
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer?: id, side?, segments: [[shape, node]]} → {selection}"
+params = "{glyph: name, layer?: id, side?, segments: [[shape, node]], orthogonal?: bool} → {selection}"
 area = "drawing"
 milestone = "M3"
-summary = "Turns a straight segment into a curve segment by adding one handle at each of its two nodes. The reference triggers it by Option-clicking the line segment."
+summary = "Turns a straight segment into a curve segment by adding one handle at each of its two nodes. The reference triggers it by Option-clicking the line segment; with Shift added the handles are one horizontal and one vertical (segments.orthogonalHandles)."
 ref = "Edit View › Converting Nodes and Segments"
 status = "handbook"
 
@@ -1458,16 +1588,18 @@ status = "handbook"
 id = "duplicate.optionDrag"
 area = "drawing"
 milestone = "M3"
-summary = "Dragging a selection with Option held leaves the original in place and drags a copy to the new position. If only part of a path is selected, the selected segments are copied as a new open path (useful for repeating serifs and similar parts). Copy (Cmd+C) and paste (Cmd+V) is the alternative."
+summary = "Dragging a selection with Option held leaves the original in place and drags a copy to the new position. If only part of a path is selected, the selected segments are copied as a new open path (useful for repeating serifs and similar parts). The corner, cap and segment components and the brushes on what is copied come along. Copy (Cmd+C) and paste (Cmd+V) is the alternative."
 ref = "Edit View › Duplicating Paths"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 6:42–6:44 and 18:36–18:38: dragging a selected shape leaves the original and moves a copy, drawn darker during the drag, with a badge showing the offset. The modifier key is not visible. M3.20: a move or an Alt-drag copy shows its offset beside the pointer (`x:30 y:-20`)."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 6:42–6:44 and 18:36–18:38: dragging a selected shape leaves the original and moves a copy, drawn darker during the drag, with a badge showing the offset. The modifier key is not visible. M3.20: a move or an Alt-drag copy shows its offset beside the pointer (`x:30 y:-20`). Release notes (updates.glyphsapp.com/Glyphs4.1-4100.html, build 3810): corner components stay on an Option-dragged copy."
 guesses = [
   "The move badge shows the offset in whole units as `x:… y:…`; the reference app's wording is not visible in the video.",
   "Alt held at mouse-down on a selection drags a copy, and Alt pressed after the drag started switches to nudge (03a question 1).",
   "Alt held at mouse-down on lone nodes, with no whole segment, path or other object to copy, moves only the selected points (selection.move mode pointsOnly), as for nodes moved with Option; observing an Option-drag of one node would settle it.",
+  "A copy of part of a path keeps a corner component when both segments at its node are copied, a cap with the segment after its node, and a segment component or brush with its own segment.",
 ]
 observe = [
+  "Option-drag a stem end with a corner component and a cap, once with all its nodes selected and once with half of them: note which attachments the copy has.",
   "Option-drag one selected node of a path: note whether a copy appears, or the node moves without its handles.",
 ]
 
@@ -1498,14 +1630,14 @@ menu = []
 shortcut = "Alt+Delete"
 when = "editView"
 kind = "engine"
-params = "{glyph: name, layer?: id (whose addresses are given), side?, points?: [[shape, node]], shapes?: [index]} → {selection, skipped: [{layer, reason}]}"
+params = "{glyph: name, layer?: id (whose addresses are given), side?, points?: [[shape, node]], shapes?: [index]} → {selection, matched: [{glyph, layer}], skipped: [{glyph, layer, reason}]}"
 area = "drawing"
 milestone = "M3"
-summary = "Deletes the selected nodes with shape reconstruction, and removes the corresponding nodes in every master of the glyph as well."
+summary = "Deletes the selected nodes with shape reconstruction, and removes the corresponding nodes in every master of the glyph as well. Intermediate and alternate layers with the same structure take part, backup layers do not."
 ref = "Edit View › Deleting Nodes"
 status = "handbook"
 guesses = [
-  "Nodes are matched across masters by address; a layer whose structure differs is skipped and listed (03a question 11).",
+  "Nodes are matched across masters by address; a master or intermediate layer whose structure differs is skipped and listed, and an edit that would leave one layer incompatible is refused whole (03a question 11).",
   "In text mode it is refused with a message, so it never deletes nodes the person cannot see; the Edit menu of the running reference app in text mode settles it.",
 ]
 
@@ -1530,12 +1662,215 @@ menu = []
 shortcut = "Alt+Shift+Delete"
 when = "editView"
 kind = "engine"
-params = "{glyph: name, layer?: id (whose addresses are given), side?, points?: [[shape, node]], segments?: [[shape, node]]} → {selection, skipped: [{layer, reason}]}"
+params = "{glyph: name, layer?: id (whose addresses are given), side?, points?: [[shape, node]], segments?: [[shape, node]]} → {selection, matched: [{glyph, layer}], skipped: [{glyph, layer, reason}]}"
 area = "drawing"
 milestone = "M3"
-summary = "Same as path.deleteAndBreak, applied to the corresponding nodes in every master of the glyph."
+summary = "Same as path.deleteAndBreak, applied to the corresponding nodes in every compatible layer of the glyph: masters, intermediate and alternate layers."
 ref = "Edit View › Deleting Nodes"
 status = "handbook"
+notes = "Alt+Shift+Delete on the canvas. A master or intermediate layer whose shapes or node types differ is left alone and named in the status line."
+
+# ───────────────────────────── In all masters ─────────────────────────────
+
+[[command]]
+id = "path.toggleNodeTypeInAllMasters"
+label = "Toggle Node Type in All Masters"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id (whose addresses are given), side?, points: [[shape, node]], to?: smooth | corner, keepOutline?: bool} → {selection, matched: [{glyph, layer}], skipped: [{glyph, layer, reason}]}"
+context = ["canvas.node"]
+area = "drawing"
+milestone = "M3"
+summary = "Switches the selected nodes between smooth and corner on every compatible layer of the glyph; each node gets the type it gets on the edited layer. A master or intermediate layer whose shapes or node types differ is left alone and named."
+ref = "Edit View › Converting Nodes and Segments"
+status = "inferred"
+own = true
+notes = "Built in M3.52 on the model of the all-masters forms the release notes name. The same edit by the same addresses on every other master, intermediate and alternate layer with the edited layer's shapes and node types, in one undo step (`crates/engine/src/cmd/node/matching.rs`, shared with `matchLayers`); an edit that one layer cannot take, or that would leave one incompatible, is refused whole. It is the Alt alternate of `path.toggleNodeType` in the menus."
+guesses = [
+  "An Alt form of Toggle Node Type; no public source has one, and its key with Alt (Alt+Return) keeps the outline instead.",
+]
+observe = [
+  "Select a node in one of two compatible masters, hold Option in its context menu and note whether an item for all masters replaces the smooth/corner item.",
+]
+
+[[command]]
+id = "path.convertSegmentToCurveInAllMasters"
+label = "Convert Segment to Curve in All Masters"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id (whose addresses are given), side?, segments: [[shape, node]] (or segment: [shape, node]), orthogonal?: bool} → {selection, matched: [{glyph, layer}], skipped: [{glyph, layer, reason}]}"
+context = ["canvas.segment"]
+area = "drawing"
+milestone = "M3"
+summary = "Turns the straight segments into curves on every compatible layer of the glyph. A master or intermediate layer whose shapes or node types differ is left alone and named."
+ref = "Release notes 4.1 (4100), build 3838"
+status = "docs"
+notes = "Release notes of the reference app (updates.glyphsapp.com/Glyphs4.1-4100.html), build 3838; build 3821: forms for all masters act on compatible layers only. The same edit by the same addresses on every other master, intermediate and alternate layer with the edited layer's shapes and node types, in one undo step (`crates/engine/src/cmd/node/matching.rs`, shared with `matchLayers`); an edit that one layer cannot take, or that would leave one incompatible, is refused whole. It is the Alt alternate of `path.convertSegmentToCurve` in the menus."
+guesses = [
+  "The other layers' curves take the edited layer's curve type.",
+]
+
+[[command]]
+id = "path.insertNodeInAllMasters"
+label = "Insert Node in All Masters"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id (whose addresses are given), side?, segment: [shape, node], t?: number strictly between 0 and 1 (default 0.5), near?: [x, y], snap?: extremum | inflection} → {node: [shape, node], selection, matched: [{glyph, layer}], skipped: [{glyph, layer, reason}]}"
+context = ["canvas.segment"]
+area = "drawing"
+milestone = "M3"
+summary = "Adds a node on the corresponding segment of every compatible layer of the glyph, at the same parameter of the segment. A master or intermediate layer whose shapes or node types differ is left alone and named."
+ref = "Release notes 4.1 (4100), build 3806"
+status = "docs"
+notes = "Release notes of the reference app (updates.glyphsapp.com/Glyphs4.1-4100.html), build 3806; build 3821: forms for all masters act on compatible layers only. The same edit by the same addresses on every other master, intermediate and alternate layer with the edited layer's shapes and node types, in one undo step (`crates/engine/src/cmd/node/matching.rs`, shared with `matchLayers`); an edit that one layer cannot take, or that would leave one incompatible, is refused whole. It is the Alt alternate of `path.insertNode` in the menus."
+guesses = [
+  "The node is placed at the same parameter t of each layer's segment, not at the same share of its length.",
+]
+observe = [
+  "Add a node in all masters near the middle of a curve whose handles differ between two masters and note where it lands on the other master.",
+]
+
+[[command]]
+id = "path.connectNodesInAllMasters"
+label = "Connect Nodes in All Masters"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id (whose addresses are given), side?, points: [[shape, node], [shape, node]]} → {selection, matched: [{glyph, layer}], skipped: [{glyph, layer, reason}]}"
+context = ["canvas.node"]
+area = "drawing"
+milestone = "M3"
+summary = "Joins the two open ends on every compatible layer of the glyph. A master or intermediate layer whose shapes or node types differ is left alone and named."
+ref = "Release notes 4.1 (4100), build 3855"
+status = "docs"
+notes = "Release notes of the reference app (updates.glyphsapp.com/Glyphs4.1-4100.html), build 3855; build 3821: forms for all masters act on compatible layers only. The same edit by the same addresses on every other master, intermediate and alternate layer with the edited layer's shapes and node types, in one undo step (`crates/engine/src/cmd/node/matching.rs`, shared with `matchLayers`); an edit that one layer cannot take, or that would leave one incompatible, is refused whole. It is the Alt alternate of `path.connectNodes` in the menus."
+guesses = [
+  "Ends that lie on each other on some layers only are joined by a straight segment on every layer, which may have no length.",
+]
+
+[[command]]
+id = "path.closeOpenPathsInAllMasters"
+label = "Close Open Paths in All Masters"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id (whose addresses are given), side?, shapes?: [index], points?: [[shape, node]] (their paths)} → {selection, matched: [{glyph, layer}], skipped: [{glyph, layer, reason}]}"
+context = ["canvas.node", "canvas.path"]
+area = "drawing"
+milestone = "M3"
+summary = "Closes the selected open paths on every compatible layer of the glyph. A master or intermediate layer whose shapes or node types differ is left alone and named."
+ref = "Release notes 4.1 (4100), build 3821"
+status = "docs"
+notes = "Release notes of the reference app (updates.glyphsapp.com/Glyphs4.1-4100.html), build 3821; build 3821: forms for all masters act on compatible layers only. The same edit by the same addresses on every other master, intermediate and alternate layer with the edited layer's shapes and node types, in one undo step (`crates/engine/src/cmd/node/matching.rs`, shared with `matchLayers`); an edit that one layer cannot take, or that would leave one incompatible, is refused whole. It is the Alt alternate of `path.closeOpenPaths` in the menus."
+guesses = [
+  "Ends that lie on each other on some layers only are joined by a straight segment on every layer, which may have no length.",
+]
+
+[[command]]
+id = "path.openCornerInAllMasters"
+label = "Open Corner in All Masters"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id (whose addresses are given), side?, points?: [[shape, node]] (corner nodes), segments?: [[shape, node]] (both end nodes), overlap?: number | [x, y] (default from each layer's master, as path.openCorner)} → {selection, matched: [{glyph, layer}], skipped: [{glyph, layer, reason}]}"
+context = ["canvas.node", "canvas.segment"]
+area = "drawing"
+milestone = "M3"
+summary = "Opens the selected corners on every compatible layer of the glyph, each with the overlap of its own master's stems. A master or intermediate layer whose shapes or node types differ is left alone and named."
+ref = "Release notes 4.1 (4100), build 3855"
+status = "docs"
+notes = "Release notes of the reference app (updates.glyphsapp.com/Glyphs4.1-4100.html), build 3855; build 3821: forms for all masters act on compatible layers only. The same edit by the same addresses on every other master, intermediate and alternate layer with the edited layer's shapes and node types, in one undo step (`crates/engine/src/cmd/node/matching.rs`, shared with `matchLayers`); an edit that one layer cannot take, or that would leave one incompatible, is refused whole. It is the Alt alternate of `path.openCorner` in the menus."
+guesses = [
+  "Open Corner has an all-masters form; the release note says only that more items got one.",
+]
+observe = [
+  "Select a corner node, hold Option in its context menu and note which items change to a form for all masters.",
+]
+
+[[command]]
+id = "path.reconnectNodesInAllMasters"
+label = "Reconnect Nodes in All Masters"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id (whose addresses are given), side?, points: [[shape, node]] (an even number of on-curve nodes)} → {selection, matched: [{glyph, layer}], skipped: [{glyph, layer, reason}]}"
+context = ["canvas.node"]
+area = "drawing"
+milestone = "M3"
+summary = "Reconnects the selected nodes on every compatible layer of the glyph, paired as on the edited layer. A master or intermediate layer whose shapes or node types differ is left alone and named."
+ref = "Release notes 4.1 (4100), build 3855"
+status = "docs"
+notes = "Release notes of the reference app (updates.glyphsapp.com/Glyphs4.1-4100.html), build 3855; build 3821: forms for all masters act on compatible layers only. The same edit by the same addresses on every other master, intermediate and alternate layer with the edited layer's shapes and node types, in one undo step (`crates/engine/src/cmd/node/matching.rs`, shared with `matchLayers`); an edit that one layer cannot take, or that would leave one incompatible, is refused whole. It is the Alt alternate of `path.reconnectNodes` in the menus."
+guesses = [
+  "Reconnect Nodes has an all-masters form; the release note says only that more items got one.",
+]
+
+[[command]]
+id = "path.makeNodeFirstInAllMasters"
+label = "Make Node First in All Masters"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id (whose addresses are given), side?, point: [shape, node]} → {selection, matched: [{glyph, layer}], skipped: [{glyph, layer, reason}]}"
+context = ["canvas.node"]
+area = "drawing"
+milestone = "M3"
+summary = "Makes the node the start node of its path on every compatible layer of the glyph. A master or intermediate layer whose shapes or node types differ is left alone and named."
+ref = "Release notes 4.1 (4100), build 3855"
+status = "docs"
+notes = "Release notes of the reference app (updates.glyphsapp.com/Glyphs4.1-4100.html), build 3855; build 3821: forms for all masters act on compatible layers only. The same edit by the same addresses on every other master, intermediate and alternate layer with the edited layer's shapes and node types, in one undo step (`crates/engine/src/cmd/node/matching.rs`, shared with `matchLayers`); an edit that one layer cannot take, or that would leave one incompatible, is refused whole. It is the Alt alternate of `path.makeNodeFirst` in the menus."
+guesses = [
+  "Make Node First alone changes the edited layer; its Alt form changes every compatible layer. The release note can also be read as the plain item doing it.",
+]
+observe = [
+  "With two compatible masters choose Make Node First without Option and note whether the other master's start node changes too.",
+]
+
+[[command]]
+id = "path.alignSelectionInAllMasters"
+label = "Align Selection in All Masters"
+menu = ["Path"]
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id (whose addresses are given), side?, points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index] (paths, or one component), anchors?: [name], axis?: auto (default) | vertical | horizontal, origin?: as path.alignSelection} → {glyph, moved: count (on that layer), axis?, coordinate?, anchor?, x?, component?, origin?, message?, matched: [{glyph, layer}], skipped: [{glyph, layer, reason}]}"
+area = "drawing"
+milestone = "M3"
+summary = "Lines the selected points up on every compatible layer of the glyph, along the edited layer's axis, each layer on its own coordinate. A master or intermediate layer whose shapes or node types differ is left alone and named."
+ref = "Release notes 4.1 (4100), build 3806"
+status = "docs"
+notes = "Release notes of the reference app (updates.glyphsapp.com/Glyphs4.1-4100.html), build 3806; build 3821: forms for all masters act on compatible layers only. The same edit by the same addresses on every other master, intermediate and alternate layer with the edited layer's shapes and node types, in one undo step (`crates/engine/src/cmd/node/matching.rs`, shared with `matchLayers`); an edit that one layer cannot take, or that would leave one incompatible, is refused whole. It is the Alt alternate of `path.alignSelection` in the menus."
+guesses = [
+  "Each layer lines up on a coordinate of its own; a layer without one of the selected anchors is left alone.",
+  "The edited layer's axis is used on every layer.",
+]
+observe = [
+  "Align two nodes in all masters of a glyph whose masters have other widths there, and note the coordinate on each.",
+]
+
+[[command]]
+id = "path.cutWithLineInAllMasters"
+label = "Cut with Line in All Masters"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id (whose addresses are given), side?, from: [x, y], to: [x, y], shapes?: [index] (default every path)} → {selection, matched: [{glyph, layer}], skipped: [{glyph, layer, reason}]}"
+area = "drawing"
+milestone = "M3"
+summary = "The Knife on every compatible layer of the glyph: each is cut at the places on its paths where the line cuts the edited one. A master or intermediate layer whose shapes or node types differ is left alone and named."
+ref = "Release notes 4.1 (4100), build 4002"
+status = "docs"
+notes = "Release notes of the reference app (updates.glyphsapp.com/Glyphs4.1-4100.html), build 4002; build 3821: forms for all masters act on compatible layers only. The same edit by the same addresses on every other master, intermediate and alternate layer with the edited layer's shapes and node types, in one undo step (`crates/engine/src/cmd/node/matching.rs`, shared with `matchLayers`); an edit that one layer cannot take, or that would leave one incompatible, is refused whole. It is the Alt alternate of `path.cutWithLine` in the menus and the Knife tool."
+guesses = [
+  "The release note's word is Cut; it is read as the Knife's cut.",
+  "Holding Alt at the end of a Knife drag cuts all masters.",
+  "The other layers are cut at the same places of the same segments, not along the same line.",
+]
+observe = [
+  "Cut a stem with the Knife holding Option at the release, and note whether the other masters are cut, and along which line.",
+]
 
 # ───────────────────────────── Opening, closing, cutting ─────────────────────────────
 

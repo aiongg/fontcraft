@@ -1,7 +1,8 @@
 //! The Knife tool (`E`, sharing its toolbar button with Erase): drag a straight line across
 //! outlines to cut them along it (`docs/spec/03a-edit-view-drawing.md` § 12). While the drag
 //! goes on the canvas draws the line; on release the tool runs `path.cutWithLine` once, which is
-//! one undo step. A press that does not move past the drag threshold cuts nothing.
+//! one undo step, or with `Alt` held `path.cutWithLineInAllMasters`. A press that does not move past
+//! the drag threshold cuts nothing.
 //!
 //! Locked paths, and paths outside the path focus, are left out of the cut: the pointer tools
 //! leave them alone.
@@ -55,7 +56,7 @@ impl Tool for KnifeTool {
                 if !p.dragged || p.start == ev.pos || cx.scene.locked {
                     return Output::handled();
                 }
-                match cut(cx, p.start, ev.pos) {
+                match cut(cx, p.start, ev.pos, ev.mods.alt) {
                     Some(invocation) => Output::with(Action::Run { invocation }),
                     None => Output::handled(),
                 }
@@ -90,9 +91,9 @@ impl Tool for KnifeTool {
     }
 }
 
-/// `path.cutWithLine` from `from` to `to` on the scene's layer. When some paths are locked or
+/// `path.cutWithLine` from `from` to `to` on the scene's layer, with `all` in all masters. When some paths are locked or
 /// outside the focus, `shapes` names the others; `None` when no path may be cut.
-fn cut(cx: &Context<'_>, from: Point, to: Point) -> Option<Invocation> {
+fn cut(cx: &Context<'_>, from: Point, to: Point, all: bool) -> Option<Invocation> {
     let scene = cx.scene;
     let paths: Vec<(usize, bool)> = scene
         .layer
@@ -114,7 +115,7 @@ fn cut(cx: &Context<'_>, from: Point, to: Point) -> Option<Invocation> {
     if usable.len() < paths.len() {
         params.insert("shapes".into(), json!(usable));
     }
-    Some(Invocation::new("path.cutWithLine", Value::Object(params)))
+    Some(Invocation::new(if all { "path.cutWithLineInAllMasters" } else { "path.cutWithLine" }, Value::Object(params)))
 }
 
 #[cfg(test)]
@@ -126,10 +127,14 @@ mod tests {
     use crate::{Modifiers, Scene, Selection, ToolSettings, View};
 
     fn pointer(knife: &mut KnifeTool, layer: &Layer, kind: PointerKind, x: f64, y: f64) -> Output {
+        pointer_with(knife, layer, kind, x, y, Modifiers::NONE)
+    }
+
+    fn pointer_with(knife: &mut KnifeTool, layer: &Layer, kind: PointerKind, x: f64, y: f64, mods: Modifiers) -> Output {
         let scene = Scene::new("A", "m01", layer);
         let selection = Selection::new();
         let cx = Context { scene: &scene, view: View::default(), selection: &selection, settings: ToolSettings::default() };
-        knife.pointer(&cx, &PointerEvent::new(kind, x, y, Modifiers::NONE))
+        knife.pointer(&cx, &PointerEvent::new(kind, x, y, mods))
     }
 
     fn layer() -> Layer {
@@ -152,6 +157,11 @@ mod tests {
         let expected = json!({"glyph": "A", "layer": "m01", "from": [50.0, -20.0], "to": [50.0, 120.0], "shapes": [0]});
         assert_eq!(out.actions, vec![Action::Run { invocation: Invocation::new("path.cutWithLine", expected) }], "the locked path is left out");
         assert!(!knife.busy() && knife.overlays().is_empty());
+
+        pointer(&mut knife, &layer, PointerKind::Down, 50.0, -20.0);
+        pointer(&mut knife, &layer, PointerKind::Drag, 50.0, 40.0);
+        let out = pointer_with(&mut knife, &layer, PointerKind::Up, 50.0, 120.0, Modifiers { alt: true, ..Modifiers::NONE });
+        assert!(matches!(&out.actions[..], [Action::Run { invocation }] if invocation.id == "path.cutWithLineInAllMasters"), "Alt: {out:?}");
     }
 
     #[test]

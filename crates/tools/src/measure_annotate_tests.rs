@@ -207,6 +207,19 @@ fn dragging_an_annotation_moves_the_selection_in_one_interaction() {
 }
 
 #[test]
+fn a_shift_drag_adds_the_pressed_annotation_and_stays_on_an_axis() {
+    let mut shell = Shell::new(layer());
+    let mut tool = AnnotateTool::new("annotationSelect").unwrap();
+    shell.selection = Selection::from_items([Item::Annotation(1)]);
+    shell.drag(&mut tool, (301.0, 301.0), (341.0, 311.0), Modifiers::SHIFT);
+    let preview = shell.last_preview().unwrap();
+    assert_eq!(preview.params, json!({"glyph": "A", "layer": "m01", "annotations": [0, 1], "dx": 40.0, "dy": 0.0}));
+    // A Shift click on a selected one drops it.
+    shell.click(&mut tool, 301.0, 301.0, Modifiers::SHIFT);
+    assert_eq!(shell.selection, Selection::from_items([Item::Annotation(1)]));
+}
+
+#[test]
 fn handle_drags_update_width_angle_and_diameter() {
     let cases: [(usize, (f64, f64), Value); 3] =
         [(1, (500.0, 420.0), json!({"diameter": 160.0})), (2, (900.0, 100.0), json!({"width": 300.0})), (0, (300.0, 400.0), json!({"angle": 90.0}))];

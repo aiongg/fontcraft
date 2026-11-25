@@ -6,6 +6,7 @@
 
 use fontcraft_engine::Session;
 use fontcraft_geom::Vec2;
+use fontcraft_model::attach::{Attachment, CapHint, SegmentHint, attachment};
 use fontcraft_model::corner::{CornerAlignment, CornerHint, CornerTarget, corner_hint, insert_corners};
 use fontcraft_model::{Font, Node, NodeKind, Path, Shape};
 use fontcraft_testkit::snapshot;
@@ -326,4 +327,53 @@ fn edit_delete_removes_selected_corners() {
     assert!(e.contains("foreground"), "{e}");
     run(&mut s, "edit.undo", json!({}));
     assert_eq!(corners(&s, "I").len(), 3);
+}
+
+/// Option-drag (`selection.move` with `duplicate`) copies the attachments of what it copies. Nodes of a hint count in
+/// file order: on the closed rectangle the file's node k is the model's node k + 1.
+#[test]
+fn a_duplicate_keeps_the_attachments_whose_nodes_are_copied() {
+    let mut s = session();
+    s.edit("hints", |font| {
+        let mut g = font.glyph_mut("I")?;
+        let hints = &mut g.layers.first_mut().unwrap().info.hints;
+        hints.push(CornerHint::new("_corner.one", 0, 0).to_hint());
+        hints.push(CornerHint::new("_corner.two", 0, 2).to_hint());
+        hints.push(CapHint::new("_cap.round", 0, 3).to_hint());
+        hints.push(Attachment::Segment(SegmentHint::new("_segment.wave", 0, 1)).to_hint());
+        hints.push(Attachment::Brush(SegmentHint::new("_brush.dry", 0, 3)).to_hint());
+        Ok(())
+    })
+    .unwrap();
+    let origins = |s: &Session| -> Vec<(String, usize, usize)> {
+        s.font().unwrap().glyph("I").unwrap().layers[0]
+            .info
+            .hints
+            .iter()
+            .map(|h| match (corner_hint(h).unwrap(), attachment(h).unwrap()) {
+                (Some(c), _) => match c.target {
+                    CornerTarget::Node { shape, node } => (c.name, shape, node),
+                    other => panic!("{other:?}"),
+                },
+                (None, Some(a)) => (a.name().to_string(), a.origin().0, a.origin().1),
+                (None, None) => panic!("{h:?}"),
+            })
+            .collect()
+    };
+    let before = origins(&s);
+    let at = |name: &str, shape: usize, node: usize| (name.to_string(), shape, node);
+
+    // The whole rectangle: every attachment, on the same nodes of the copy.
+    let all = json!([[0, 0], [0, 1], [0, 2], [0, 3]]);
+    run(&mut s, "selection.move", json!({"glyph": "I", "points": all, "dx": 500, "dy": 0, "duplicate": true}));
+    let copied: Vec<_> = before.iter().map(|(n, _, node)| at(n, 3, *node)).collect();
+    assert_eq!(origins(&s), [before.clone(), copied].concat());
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(origins(&s), before);
+
+    // Two of its segments, as an open path of three nodes: the corner between them, the cap that starts on the first
+    // and the segment component that ends on the last.
+    run(&mut s, "selection.move", json!({"glyph": "I", "points": [[0, 0], [0, 1], [0, 2]], "dx": 500, "dy": 0, "duplicate": true}));
+    let copied = vec![at("_corner.one", 3, 1), at("_cap.round", 3, 0), at("_segment.wave", 3, 2)];
+    assert_eq!(origins(&s), [before, copied].concat());
 }

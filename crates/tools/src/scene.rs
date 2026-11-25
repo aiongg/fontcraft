@@ -86,6 +86,8 @@ pub struct Scene<'a> {
     pub hoi: Option<crate::hoi::HoiMarks>,
     components: Vec<ComponentGeom>,
     component_points: usize,
+    /// The document's font; `None` for a bare layer.
+    font: Option<&'a Font>,
 }
 
 /// A smart handle (`smart.handlesFromPropertyAnchors`): the anchor named after a property of a
@@ -176,6 +178,7 @@ impl<'a> Scene<'a> {
             suggest: crate::suggestions::Suggest::default(),
             hoi: None,
             component_points: 0,
+            font: None,
         }
     }
 
@@ -195,6 +198,7 @@ impl<'a> Scene<'a> {
             None => g.layer(&font.masters.first()?.id)?,
         };
         let mut scene = Scene::new(g.name.clone(), layer.id.clone(), layer);
+        scene.font = Some(font);
         scene.side = side;
         scene.layer = side_view(layer, side);
         scene.locked = g.info.locked;
@@ -227,6 +231,11 @@ impl<'a> Scene<'a> {
             }
         }
         Some(scene)
+    }
+
+    /// Whether new curves are quadratic: as the layer's own curves, else as the font's.
+    pub fn draws_quadratic(&self) -> bool {
+        fontcraft_model::curve_type::quadratic_curves(&self.layer.shapes).unwrap_or_else(|| self.font.is_some_and(Font::draws_quadratic))
     }
 
     /// Adds the outline of the component at shape index `shape`, already placed in the layer.

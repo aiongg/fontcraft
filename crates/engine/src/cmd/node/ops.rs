@@ -2,7 +2,7 @@
 //! returns the new path (or paths), or a message saying why it cannot; none panics on a
 //! malformed list. Points an operation creates or moves are rounded to the grid step it is given.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use fontcraft_geom::{Piece, Point, Segment, Vec2, round_point};
 use fontcraft_model::{Node, NodeKind, Path};
@@ -186,8 +186,9 @@ pub(super) fn break_path(path: &Path, nodes: &BTreeSet<usize>, segment_ends: &BT
 }
 
 /// Copies of the segments of `path` whose two end nodes are both in `selected`, as open paths
-/// (a closed path with every segment selected is copied whole).
-pub(super) fn selected_segments(path: &Path, selected: &BTreeSet<usize>) -> Vec<Path> {
+/// (a closed path with every segment selected is copied whole). Each comes with the node of
+/// `path` that each of its nodes copies; `None` for a whole copy.
+pub(super) fn selected_segments(path: &Path, selected: &BTreeSet<usize>) -> Vec<(Path, Option<Vec<usize>>)> {
     let segs = path.segments();
     let removed: Vec<bool> = segs.iter().map(|s| !(selected.contains(&s.start) && selected.contains(&s.end))).collect();
     if path.closed && !segs.is_empty() && !removed.iter().any(|r| *r) {
@@ -195,38 +196,44 @@ pub(super) fn selected_segments(path: &Path, selected: &BTreeSet<usize>) -> Vec<
         if whole.info.identifier.is_some() {
             whole.info.identifier = None;
         }
-        return vec![whole];
+        return vec![(whole, None)];
     }
     if !removed.iter().any(|r| !*r) {
         return Vec::new();
     }
-    kept_runs(path, &segs, &removed).iter().filter_map(|run| run_path(path, run)).collect()
+    let sources = |run: &[&Segment]| -> Vec<usize> {
+        let start = run.first().map(|s| s.start);
+        start.into_iter().chain(run.iter().flat_map(|s| s.handles.iter().copied().chain([s.end]))).collect()
+    };
+    kept_runs(path, &segs, &removed).iter().filter_map(|run| Some((run_path(path, run)?, Some(sources(run))))).collect()
 }
 
 /// `path` with each straight segment that ends at a node of `ends` turned into a curve whose
-/// handles lie on the line (at one third and two thirds; one handle at the middle in a path with
-/// quadratic segments), so the outline keeps its shape. Returns the new path and the new index
-/// of every old node.
-pub(super) fn curves_from_lines(path: &Path, ends: &BTreeSet<usize>, step: f64) -> (Path, Vec<usize>) {
-    let quad = path.nodes.iter().any(|n| n.kind == NodeKind::QCurve);
+/// handles lie on the line (at one third and two thirds; one handle at the middle of a quadratic
+/// segment), so the outline keeps its shape. With `orthogonal`, see [`orthogonal_handles`]. The
+/// curves are quadratic in a path with quadratic segments, and in one without curves when
+/// `quadratic` says so. Returns the new path and the new index of every old node.
+pub(super) fn curves_from_lines(path: &Path, ends: &BTreeSet<usize>, step: f64, quadratic: bool, orthogonal: bool) -> (Path, Vec<usize>) {
+    let has = |kind: NodeKind| path.nodes.iter().any(|n| n.kind == kind);
+    let quad = has(NodeKind::QCurve) || (quadratic && !has(NodeKind::Curve));
     let mut nodes = Vec::with_capacity(path.nodes.len() + 2 * ends.len());
     let mut map = Vec::with_capacity(path.nodes.len());
     let mut tail = Vec::new();
     for (i, node) in path.nodes.iter().enumerate() {
         let start = if ends.contains(&i) && node.on_curve() && path.ends_segment(i) {
-            prev(path, i).filter(|&s| on(path, s)).and_then(|s| point(path, s))
+            prev(path, i).filter(|&s| on(path, s)).and_then(|s| Some((s, point(path, s)?)))
         } else {
             None
         };
         let mut node = node.clone();
-        if let Some(s) = start {
+        if let Some((k, s)) = start {
             let e = node.point();
-            let handles = if quad {
-                node.kind = NodeKind::QCurve;
-                vec![off(s.lerp(e, 0.5), step)]
-            } else {
-                node.kind = NodeKind::Curve;
-                vec![off(s.lerp(e, 1.0 / 3.0), step), off(s.lerp(e, 2.0 / 3.0), step)]
+            node.kind = if quad { NodeKind::QCurve } else { NodeKind::Curve };
+            let turned = if orthogonal { orthogonal_handles(path, k, i, quad) } else { None };
+            let handles = match turned {
+                Some((h1, h2)) => vec![off(h1, step), off(h2, step)],
+                None if quad => vec![off(s.lerp(e, 0.5), step)],
+                None => vec![off(s.lerp(e, 1.0 / 3.0), step), off(s.lerp(e, 2.0 / 3.0), step)],
             };
             // The handles of the segment that ends at a closed path's first node go at the end.
             if i == 0 && path.closed {
@@ -242,6 +249,32 @@ pub(super) fn curves_from_lines(path: &Path, ends: &BTreeSet<usize>, step: f64) 
     let mut out = path.clone();
     out.nodes = nodes;
     (out, map)
+}
+
+/// The handles that turn the line from node `s` to node `e` into a quarter of an oval, one
+/// horizontal and one vertical: the way round that continues the neighbouring segments better,
+/// horizontal at the start when both do equally well. `None` for a horizontal or vertical line.
+fn orthogonal_handles(path: &Path, s: usize, e: usize, quad: bool) -> Option<(Point, Point)> {
+    /// The length of an oval's handles, as a share of its radii: for a cubic quarter, and for a
+    /// quadratic quarter of two pieces (the tangent of 22.5 degrees).
+    const CUBIC: f64 = 0.552_284_749_830_793_6;
+    const QUADRATIC: f64 = std::f64::consts::SQRT_2 - 1.0;
+    let (a, b) = (point(path, s)?, point(path, e)?);
+    let d = b - a;
+    if !(d.x.abs() > EPS && d.y.abs() > EPS && d.x.is_finite() && d.y.is_finite()) {
+        return None;
+    }
+    let unit = |v: Vec2| {
+        let l = v.hypot();
+        if l > EPS && l.is_finite() { v / l } else { Vec2::ZERO }
+    };
+    let before = prev(path, s).filter(|&k| k != e).and_then(|k| point(path, k)).map_or(Vec2::ZERO, |p| unit(a - p));
+    let after = next(path, e).filter(|&k| k != s).and_then(|k| point(path, k)).map_or(Vec2::ZERO, |p| unit(p - b));
+    let (across, up) = (Vec2::new(d.x.signum(), 0.0), Vec2::new(0.0, d.y.signum()));
+    let start_horizontal = before.dot(across) + after.dot(up) + EPS >= before.dot(up) + after.dot(across);
+    let corner = if start_horizontal { Point::new(b.x, a.y) } else { Point::new(a.x, b.y) };
+    let k = if quad { QUADRATIC } else { CUBIC };
+    Some((a.lerp(corner, k), b.lerp(corner, k)))
 }
 
 /// Turns the two handles of the on-curve node `i` onto one line through it, along the bisector
@@ -281,18 +314,66 @@ pub(super) fn align_handles(path: &mut Path, i: usize, step: f64) {
     }
 }
 
-/// `path.toggleNodeType` on one path: switches each on-curve node of `nodes` to `to` (or to the
-/// other type). A node turning smooth gets handles on straight sides and its handles lined up,
-/// unless `keep_outline`. Returns the new path and the new index of every old node.
-pub(super) fn toggle(path: &Path, nodes: &BTreeSet<usize>, to: Option<bool>, keep_outline: bool, step: f64) -> (Path, Vec<usize>) {
-    let mut out = path.clone();
-    let mut smoothed = Vec::new();
-    for &i in nodes {
-        let Some(n) = out.nodes.get_mut(i).filter(|n| n.on_curve()) else { continue };
-        let smooth = to.unwrap_or(!n.smooth);
-        if smooth == n.smooth {
+/// The handle and the line of a tangent: a smooth on-curve node with a line on one side and a
+/// handle on the other. Returns the handle and the line's other end. A handle that is also the
+/// only handle of a smooth node at its segment's other end belongs to no single tangent.
+fn tangent(path: &Path, k: usize) -> Option<(usize, usize)> {
+    path.nodes.get(k).filter(|n| n.on_curve() && n.smooth)?;
+    let (a, b) = (prev(path, k)?, next(path, k)?);
+    let (handle, far, beyond) = match (on(path, a), on(path, b)) {
+        (false, true) => (a, b, prev(path, a)),
+        (true, false) => (b, a, next(path, b)),
+        _ => return None,
+    };
+    let shared = beyond.filter(|&o| o != k).and_then(|o| path.nodes.get(o)).is_some_and(|n| n.on_curve() && n.smooth);
+    (!shared).then_some((handle, far))
+}
+
+/// Turns the handle of the tangent `k` about its node onto the node's line, keeping its length.
+/// A line or a handle without length has no direction: the handle then stays.
+fn straighten_tangent(path: &mut Path, k: usize, step: f64) {
+    let Some((handle, far)) = tangent(path, k) else { return };
+    let (Some(pk), Some(pf), Some(ph)) = (point(path, k), point(path, far), point(path, handle)) else { return };
+    let (line, length) = (pk - pf, (ph - pk).hypot());
+    let span = line.hypot();
+    if !(span > EPS && length > EPS && span.is_finite() && length.is_finite()) {
+        return;
+    }
+    let to = round_point(pk + line * (length / span), step);
+    if let Some(n) = path.nodes.get_mut(handle) {
+        (n.x, n.y) = (to.x, to.y);
+    }
+}
+
+/// After nodes of `path` moved from the places `old`: every tangent whose node, handle and line
+/// end did not all move by the same offset has its handle turned onto its line
+/// ([`straighten_tangent`]). Handles for which `stays` holds are left where they are.
+pub(in crate::cmd) fn keep_tangents(path: &mut Path, old: &[Point], step: f64, stays: impl Fn(usize) -> bool) {
+    const SAME: f64 = 1e-6;
+    if old.len() != path.nodes.len() {
+        return;
+    }
+    for k in 0..old.len() {
+        let Some((handle, far)) = tangent(path, k) else { continue };
+        if stays(handle) {
             continue;
         }
+        let offset = |i: usize| Some(point(path, i)? - *old.get(i)?);
+        let (Some(dk), Some(dh), Some(df)) = (offset(k), offset(handle), offset(far)) else { continue };
+        if (dk - dh).hypot() > SAME || (dk - df).hypot() > SAME {
+            straighten_tangent(path, k, step);
+        }
+    }
+}
+
+/// `path.toggleNodeType` on one path: gives each on-curve node of `types` its type there, smooth or
+/// corner. A node turning smooth gets handles on straight sides and its handles lined up,
+/// unless `keep_outline`; `quadratic` as for [`curves_from_lines`]. Returns the new path and the new index of every old node.
+pub(super) fn toggle(path: &Path, types: &BTreeMap<usize, bool>, keep_outline: bool, step: f64, quadratic: bool) -> (Path, Vec<usize>) {
+    let mut out = path.clone();
+    let mut smoothed = Vec::new();
+    for (&i, &smooth) in types {
+        let Some(n) = out.nodes.get_mut(i).filter(|n| n.on_curve()) else { continue };
         n.smooth = smooth;
         if smooth {
             smoothed.push(i);
@@ -315,7 +396,7 @@ pub(super) fn toggle(path: &Path, nodes: &BTreeSet<usize>, to: Option<bool>, kee
             ends.insert(b);
         }
     }
-    let (mut out, map) = curves_from_lines(&out, &ends, step);
+    let (mut out, map) = curves_from_lines(&out, &ends, step, quadratic, false);
     for &i in &smoothed {
         if let Some(&k) = map.get(i) {
             align_handles(&mut out, k, step);
@@ -406,9 +487,9 @@ pub(super) fn coincide(a: Point, b: Point, step: f64) -> bool {
     a.distance(b) <= step.max(0.0) / 2.0 + 1e-6
 }
 
-/// Closes an open path. When its two ends coincide they become one node; otherwise a straight
+/// Closes an open path. With `merge` its two ends become one node, the first; otherwise a straight
 /// segment joins them.
-pub(super) fn close(path: &Path, step: f64) -> Result<Path, String> {
+pub(super) fn close(path: &Path, merge: bool) -> Result<Path, String> {
     if path.closed {
         return Err("it is already closed".into());
     }
@@ -418,7 +499,7 @@ pub(super) fn close(path: &Path, step: f64) -> Result<Path, String> {
     let mut out = path.clone();
     out.closed = true;
     let (Some(first), Some(last)) = (path.nodes.first(), path.nodes.last()) else { return Err(malformed()) };
-    if coincide(first.point(), last.point(), step) {
+    if merge {
         let kind = last.kind;
         out.nodes.pop();
         if let Some(f) = out.nodes.first_mut() {
@@ -432,13 +513,11 @@ pub(super) fn close(path: &Path, step: f64) -> Result<Path, String> {
 
 /// Joins two open paths at the open ends `a_end` of `a` and `b_end` of `b` (each the first or
 /// the last node). `a` keeps its direction where it can. Returns the joined path and the
-/// indices in it of the joined nodes (one when the ends coincide and become one node).
-pub(super) fn join(a: &Path, a_end: usize, b: &Path, b_end: usize, step: f64) -> Result<(Path, Vec<usize>), String> {
+/// indices in it of the joined nodes (one with `merge`, which makes the ends one node).
+pub(super) fn join(a: &Path, a_end: usize, b: &Path, b_end: usize, merge: bool) -> Result<(Path, Vec<usize>), String> {
     let a = if a_end == 0 && a.nodes.len() > 1 { reversed(a)? } else { a.clone() };
     let b = if b_end + 1 == b.nodes.len() && b.nodes.len() > 1 { reversed(b)? } else { b.clone() };
-    let (Some(a_last), Some(b_first)) = (a.nodes.last(), b.nodes.first()) else { return Err(malformed()) };
-    let at = a.nodes.len() - 1;
-    let merge = coincide(a_last.point(), b_first.point(), step);
+    let Some(at) = a.nodes.len().checked_sub(1) else { return Err(malformed()) };
     let mut out = a.clone();
     let mut rest = b.nodes.into_iter();
     let joined = if merge {
@@ -455,15 +534,24 @@ pub(super) fn join(a: &Path, a_end: usize, b: &Path, b_end: usize, step: f64) ->
 }
 
 /// `edit.delete` on one path: removes the on-curve nodes of `selected` and refits the segments
-/// they joined into one; a curve segment that loses a handle (its end nodes kept) becomes a
-/// line. `None` when the path is to be removed: every node selected, or fewer than two
-/// on-curve nodes left.
+/// they joined into one, quadratic when they were; a curve segment that loses a handle (its end
+/// nodes kept) becomes a line. A path of off-curve nodes only loses the nodes named. The handle of a smooth node that has a new line on its other side turns onto it. `None`
+/// when the path is to be removed: every node selected, or fewer than two on-curve nodes left.
 pub(super) fn delete_points(path: &Path, selected: &BTreeSet<usize>, step: f64) -> Result<Option<Path>, String> {
     if (0..path.nodes.len()).all(|i| selected.contains(&i)) {
         return Ok(None);
     }
     let segs = path.segments();
     if segs.is_empty() {
+        if path.closed && path.nodes.iter().all(|n| !n.on_curve()) {
+            let mut out = path.clone();
+            let mut i = 0;
+            out.nodes.retain(|_| {
+                i += 1;
+                !selected.contains(&(i - 1))
+            });
+            return Ok((out.nodes.len() >= 2).then_some(out));
+        }
         return Ok((!selected.iter().any(|&i| on(path, i))).then(|| path.clone()));
     }
     let ons = on_curve_order(path, &segs);
@@ -502,8 +590,12 @@ pub(super) fn delete_points(path: &Path, selected: &BTreeSet<usize>, step: f64) 
                 if pieces.iter().all(|p| matches!(p, Piece::Line(_))) {
                     (Vec::new(), NodeKind::Line)
                 } else {
+                    let quadratic = !pieces.iter().any(|p| matches!(p, Piece::Cubic(_)));
                     match refit::fit(&pieces) {
-                        Some(c) => (vec![off(c.p1, step), off(c.p2, step)], NodeKind::Curve),
+                        Some(c) => match quadratic.then(|| refit::quadratic(c)).flatten() {
+                            Some(handles) => (handles.into_iter().map(|p| off(p, step)).collect(), NodeKind::QCurve),
+                            None => (vec![off(c.p1, step), off(c.p2, step)], NodeKind::Curve),
+                        },
                         None => (Vec::new(), NodeKind::Line),
                     }
                 }
@@ -520,16 +612,29 @@ pub(super) fn delete_points(path: &Path, selected: &BTreeSet<usize>, step: f64) 
     };
     let mut nodes = vec![first_node];
     let count = pairs.len();
-    for (k, (&(_, b), (handles, kind))) in pairs.iter().zip(built).enumerate() {
+    // The ends of the segments that became another one: a tangent there has a new line.
+    let mut rebuilt = BTreeSet::new();
+    for (k, (&(a, b), (handles, kind))) in pairs.iter().zip(built).enumerate() {
+        let start = nodes.len().saturating_sub(1);
+        let same = b == a + 1 && segs.get(a % m).is_some_and(|s| s.handles.len() == handles.len());
         nodes.extend(handles);
         if path.closed && k + 1 == count {
             // The last segment ends at the first node: its handles close the list.
+            if !same {
+                rebuilt.extend([start, 0]);
+            }
             break;
         }
         nodes.push(with_kind(&node_at(b)?, kind));
+        if !same {
+            rebuilt.extend([start, nodes.len().saturating_sub(1)]);
+        }
     }
     let mut out = path.clone();
     out.nodes = nodes;
+    for k in rebuilt {
+        straighten_tangent(&mut out, k, step);
+    }
     Ok(Some(out))
 }
 

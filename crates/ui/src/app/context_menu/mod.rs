@@ -16,8 +16,8 @@
 //! - A click on the edited side's shown image, where no other object lies, opens the image section (`canvas.image`)
 //!   and the glyph section: Unlock Image on a locked image, Set Crop to Layer Bounds and Reset Crop on an unlocked one,
 //!   which the click selects (`canvas::images`).
-//! - Add Global Guide replaces Add Guide, and Expand Outline for All Masters replaces Expand Outline, while Alt is held
-//!   ([`ContextItem::alternate`]).
+//! - Add Global Guide replaces Add Guide, Expand Outline for All Masters replaces Expand Outline, and a node command's
+//!   form "in All Masters" replaces it, while Alt is held ([`ContextItem::alternate`]).
 //! - While the layer's PostScript hints show, the hint items join the menu ([`HINT_ITEMS`]); a click on a hint's badge
 //!   or marker selects that hint first. Their parameters come from `fontcraft_tools::hint_drag::menu_params`.
 //! - While the TrueType Instructor is the active tool, the node and path sections start with the instructions added on
@@ -189,7 +189,18 @@ const GLYPH_ITEMS: &[&str] = &["glyph.setExport"];
 pub const SHOW_IN_FONT_VIEW: &str = "contextMenu.showGlyphInFontView";
 
 /// Items drawn only while Alt is held, in place of the item before them.
-const ALTERNATES: &[&str] = &["guide.addGlobal", "path.expandOutlineForAllMasters"];
+const ALTERNATES: &[&str] = &[
+    "guide.addGlobal",
+    "path.expandOutlineForAllMasters",
+    "path.toggleNodeTypeInAllMasters",
+    "path.convertSegmentToCurveInAllMasters",
+    "path.connectNodesInAllMasters",
+    "path.closeOpenPathsInAllMasters",
+    "path.openCornerInAllMasters",
+    "path.reconnectNodesInAllMasters",
+    "path.makeNodeFirstInAllMasters",
+    "path.insertNodeInAllMasters",
+];
 
 /// Items whose command removes something from the glyph: their rows show the danger tone.
 pub const DESTRUCTIVE: &[&str] =
@@ -204,15 +215,23 @@ const ORDER: &[&str] = &[
     "hint.tt.interpolate",
     "hint.tt.addDelta",
     "path.toggleNodeType",
+    "path.toggleNodeTypeInAllMasters",
     "path.convertSegmentToCurve",
+    "path.convertSegmentToCurveInAllMasters",
     "path.connectNodes",
+    "path.connectNodesInAllMasters",
     "path.closeOpenPaths",
+    "path.closeOpenPathsInAllMasters",
     "path.openCorner",
+    "path.openCornerInAllMasters",
     "path.reconnectNodes",
+    "path.reconnectNodesInAllMasters",
     "path.sharpenCorner",
     "path.makeNodeFirst",
+    "path.makeNodeFirstInAllMasters",
     "path.reverseContours",
     "path.insertNode",
+    "path.insertNodeInAllMasters",
     "path.focusOnSelectedPath",
     "path.clearFocusOnPaths",
     "path.lockPath",
@@ -608,8 +627,12 @@ fn instructor_steps(app: &FontCraftApp, id: &str) -> Option<Vec<Msg>> {
 pub fn kinds(scene: &Scene, selection: &Selection, hit: Option<&HitResult>) -> Vec<&'static str> {
     let whole = tools::targets::selected_paths(scene, selection);
     let object = match hit.map(|h| &h.hit) {
-        Some(Hit::Node { shape, .. } | Hit::Handle { shape, .. } | Hit::Segment { shape, .. }) if whole.contains(shape) => Some(PATH),
-        Some(Hit::Node { .. } | Hit::Handle { .. }) => Some(NODE),
+        Some(Hit::Node { shape, .. } | Hit::Handle { shape, .. } | Hit::Implied { shape, .. } | Hit::Segment { shape, .. })
+            if whole.contains(shape) =>
+        {
+            Some(PATH)
+        }
+        Some(Hit::Node { .. } | Hit::Handle { .. } | Hit::Implied { .. }) => Some(NODE),
         Some(Hit::Segment { .. }) => Some(SEGMENT),
         Some(Hit::Anchor { .. }) => Some(ANCHOR),
         Some(Hit::Component { .. }) => Some(COMPONENT),
@@ -947,7 +970,7 @@ pub fn params_for(app: &mut FontCraftApp, menu: &CanvasMenu, id: &str) -> Value 
     if let Some(components) = components {
         m.insert("components".into(), json!(components));
     }
-    match id {
+    match item_state::one_layer(id) {
         "path.makeNodeFirst" => {
             if let Some(Hit::Node { shape, node }) = hit {
                 m.remove("points");

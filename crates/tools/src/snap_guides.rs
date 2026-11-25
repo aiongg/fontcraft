@@ -18,7 +18,7 @@ use fontcraft_model::Shape;
 
 use crate::geometry::{direction, dist, finite};
 use crate::scene::Scene;
-use crate::snap::{Snap, SnapKind};
+use crate::snap::{HoldAxis, Snap, SnapKind};
 
 /// Lines closer to parallel than this (the sine of the angle between them) do not cross.
 const PARALLEL: f64 = 1e-9;
@@ -82,12 +82,22 @@ pub fn background(scene: &Scene, p: Point, tol: f64) -> Option<Snap> {
     None
 }
 
+/// The guides that show in the scene, as lines.
+fn lines<'s>(scene: &'s Scene<'_>) -> impl Iterator<Item = Line> + 's {
+    scene.local_guides().iter().chain(scene.shown_global_guides().map(|(_, g)| g)).filter_map(move |g| Line::new(scene.knob(g), g.angle))
+}
+
+/// Where the guides cross the line through `p` along `axis`.
+pub fn crossings<'s>(scene: &'s Scene<'_>, p: Point, axis: HoldAxis) -> impl Iterator<Item = Point> + 's {
+    let held = Line::new(p, if axis == HoldAxis::Horizontal { 0.0 } else { 90.0 });
+    lines(scene).filter_map(move |guide| held?.crossing(&guide))
+}
+
 /// The guide nearest to `p` within `tol` font units: where it crosses another guide, a metric
 /// line or a sidebearing, when that crossing is also within `tol`, else the nearest point of the
 /// guide.
 pub fn guides(scene: &Scene, p: Point, tol: f64) -> Option<Snap> {
-    let all: Vec<Line> =
-        scene.local_guides().iter().chain(scene.shown_global_guides().map(|(_, g)| g)).filter_map(|g| Line::new(scene.knob(g), g.angle)).collect();
+    let all: Vec<Line> = lines(scene).collect();
     let mut nearest: Option<(f64, usize, Point)> = None;
     for (i, line) in all.iter().enumerate() {
         let Some((d, foot)) = line.nearest(p) else { continue };

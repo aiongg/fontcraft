@@ -22,7 +22,7 @@ enum At {
     Inside { seg: usize, piece: usize, t: f64 },
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 struct Crossing {
     contour: usize,
     closed: bool,
@@ -42,6 +42,21 @@ struct Crossing {
 /// crosses it. New points are rounded to `grid`. Points where the line only touches a contour
 /// are not crossings.
 pub fn cut_with_line(contours: &[Contour], from: Point, to: Point, grid: f64) -> Result<Rewired, PathOpError> {
+    cut_at(contours, &find_cuts(contours, from, to)?, grid)
+}
+
+/// Where a line cuts contours: places on their segments, which [`cut_at`] cuts at on these contours or on others with
+/// the same node types.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Cuts {
+    /// Crossings of closed contours, joined along the line.
+    pairs: Vec<(Crossing, Crossing)>,
+    /// Crossings of open contours, which are split there.
+    splits: Vec<Crossing>,
+}
+
+/// The cuts of [`cut_with_line`].
+pub fn find_cuts(contours: &[Contour], from: Point, to: Point) -> Result<Cuts, PathOpError> {
     for v in [from.x, from.y, to.x, to.y] {
         check(v)?;
     }
@@ -52,7 +67,7 @@ pub fn cut_with_line(contours: &[Contour], from: Point, to: Point, grid: f64) ->
     let dir = to - from;
     let len2 = dir.hypot2();
     if len2 < 1e-12 {
-        return Ok(Rewired::unchanged(contours));
+        return Ok(Cuts::default());
     }
     let rings = contours.iter().map(Ring::from_contour).collect::<Result<Vec<_>, _>>()?;
     let side = |p: Point| dir.cross(p - from);
@@ -111,6 +126,18 @@ pub fn cut_with_line(contours: &[Contour], from: Point, to: Point, grid: f64) ->
         }
     }
     let splits: Vec<Crossing> = crossings.iter().filter(|x| !x.closed && (0.0..=1.0).contains(&x.s)).copied().collect();
+    Ok(Cuts { pairs, splits })
+}
+
+/// Cuts `contours` at `cuts`, found on them or on contours with the same node types. New points are rounded to `grid`.
+/// A cut that has no place on them is left out.
+pub fn cut_at(contours: &[Contour], cuts: &Cuts, grid: f64) -> Result<Rewired, PathOpError> {
+    let total: usize = contours.iter().map(|c| c.nodes.len()).sum();
+    if total > crate::MAX_NODES {
+        return Err(PathOpError::TooManyNodes(total));
+    }
+    let Cuts { pairs, splits } = cuts;
+    let rings = contours.iter().map(Ring::from_contour).collect::<Result<Vec<_>, _>>()?;
     if pairs.is_empty() && splits.is_empty() {
         return Ok(Rewired::unchanged(contours));
     }
@@ -156,12 +183,12 @@ pub fn cut_with_line(contours: &[Contour], from: Point, to: Point, grid: f64) ->
             g.r.mark = true;
         }
     }
-    for (a, b) in &pairs {
+    for (a, b) in pairs {
         if let (Some(a), Some(b)) = (id_of(a), id_of(b)) {
             graph.rewire(a, b);
         }
     }
-    for x in &splits {
+    for x in splits {
         if let Some(id) = id_of(x) {
             graph.split(id);
         }

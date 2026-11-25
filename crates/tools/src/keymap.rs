@@ -44,7 +44,9 @@ pub const KEYMAP: &[KeyBinding] = &[
     KeyBinding { keys: "Return", when: "editView", command: "anchor.editName", note: "with one anchor selected alone" },
     KeyBinding { keys: "Alt+Return", when: "editView", command: "path.toggleNodeTypeKeepingOutline", note: "the selected on-curve nodes" },
     KeyBinding { keys: "Delete", when: "editView", command: "edit.delete", note: "the selection" },
+    KeyBinding { keys: "Backspace", when: "tool:draw", command: "edit.delete", note: "the last node of the path being drawn" },
     KeyBinding { keys: "Shift+Delete", when: "editView", command: "path.deleteAndBreak", note: "the selected points" },
+    KeyBinding { keys: "Alt+Shift+Delete", when: "editView", command: "path.deleteAndBreakInAllMasters", note: "the selected points" },
     KeyBinding { keys: "Alt+Delete", when: "editView", command: "edit.deleteInAllMasters", note: "the selected points and shapes" },
     KeyBinding { keys: "Tab", when: "editView", command: "selection.selectNext", note: "" },
     KeyBinding { keys: "Shift+Tab", when: "editView", command: "selection.selectPrevious", note: "" },
@@ -181,7 +183,7 @@ pub fn edit_view_key(cx: &Context<'_>, ev: &KeyEvent) -> Option<Action> {
                 }
                 let mut params = crate::Selection::new().targets(scene);
                 params.insert("points".into(), json!(sel.points.iter().map(|&(s, n)| [s, n]).collect::<Vec<_>>()));
-                Some(run("path.deleteAndBreak", params))
+                Some(run(if m.alt { "path.deleteAndBreakInAllMasters" } else { "path.deleteAndBreak" }, params))
             } else if m.alt {
                 let all = sel.targets(scene);
                 let mut params = Map::new();

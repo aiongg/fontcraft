@@ -283,6 +283,78 @@ fn alt_pressed_during_a_drag_nudges() {
     assert!(last.params.get("duplicate").is_none());
 }
 
+fn last_offset(h: &Harness) -> (f64, f64) {
+    let p = &h.previews().last().unwrap().params;
+    (p["dx"].as_f64().unwrap(), p["dy"].as_f64().unwrap())
+}
+
+#[test]
+fn shift_holds_a_drag_to_the_nearer_axis_and_snaps_along_it_only() {
+    let mut h = Harness::new(test_layer());
+    let mut t = SelectTool::default();
+    h.pointer(&mut t, Down, 100.0, 0.0, NONE);
+    h.pointer(&mut t, Drag, 160.0, 37.0, NONE);
+    assert_eq!(last_offset(&h), (60.0, 37.0));
+    // Shift pressed and released during the drag, without moving the pointer.
+    h.run(|cx| t.modifiers(cx, Modifiers::SHIFT));
+    assert_eq!(last_offset(&h), (60.0, 0.0));
+    h.run(|cx| t.modifiers(cx, NONE));
+    assert_eq!(last_offset(&h), (60.0, 37.0));
+    // A node on the held line is a target, and so is the guide that crosses it.
+    h.pointer(&mut t, Drag, 198.0, 9.0, Modifiers::SHIFT);
+    assert_eq!(last_offset(&h), (100.0, 0.0));
+    h.pointer(&mut t, Drag, 109.0, 298.0, Modifiers::SHIFT);
+    assert_eq!(last_offset(&h), (0.0, 300.0));
+    h.pointer(&mut t, Up, 109.0, 298.0, Modifiers::SHIFT);
+
+    // A lone handle goes onto the horizontal or the vertical through its node at (200,0).
+    h.pointer(&mut t, Down, 200.0, 50.0, NONE);
+    h.pointer(&mut t, Drag, 260.0, 30.0, Modifiers::SHIFT);
+    assert_eq!(last_offset(&h), (60.0, -50.0));
+    h.pointer(&mut t, Drag, 230.0, 70.0, Modifiers::SHIFT);
+    assert_eq!(last_offset(&h), (0.0, 20.0));
+    h.pointer(&mut t, Up, 230.0, 70.0, Modifiers::SHIFT);
+
+    // An anchor and a guide, pressed with Shift held.
+    h.selection.clear();
+    h.pointer(&mut t, Down, 50.0, 150.0, Modifiers::SHIFT);
+    h.pointer(&mut t, Drag, 63.0, 190.0, Modifiers::SHIFT);
+    assert_eq!(last_offset(&h), (0.0, 40.0));
+    h.pointer(&mut t, Up, 63.0, 190.0, Modifiers::SHIFT);
+    h.selection.clear();
+    h.pointer(&mut t, Down, 0.0, 300.0, Modifiers::SHIFT);
+    h.pointer(&mut t, Drag, 40.0, 317.0, Modifiers::SHIFT);
+    let guide = h.previews().last().cloned().cloned().unwrap();
+    assert_eq!(guide.id, "guide.setProperties");
+    assert_eq!((guide.params["x"].as_f64(), guide.params["y"].as_f64()), (Some(40.0), Some(300.0)));
+    h.pointer(&mut t, Up, 40.0, 317.0, Modifiers::SHIFT);
+}
+
+#[test]
+fn a_shift_press_adds_to_the_selection_and_drags_it_and_drops_a_selected_object_at_the_release() {
+    let mut h = Harness::new(test_layer());
+    let mut t = SelectTool::default();
+    h.selection = points(&[(0, 0)]);
+    h.pointer(&mut t, Down, 100.0, 0.0, Modifiers::SHIFT);
+    assert_eq!(h.selection, points(&[(0, 0), (0, 1)]), "added at the press");
+    h.pointer(&mut t, Drag, 109.0, 60.0, Modifiers::SHIFT);
+    h.pointer(&mut t, Up, 109.0, 60.0, Modifiers::SHIFT);
+    let moved = h.previews().last().cloned().cloned().unwrap();
+    assert_eq!(moved.params["points"], json!([[0, 0], [0, 1]]));
+    assert_eq!(last_offset(&h), (0.0, 60.0));
+    assert!(matches!(h.actions.last(), Some(Action::Commit)));
+    assert_eq!(h.selection, points(&[(0, 0), (0, 1)]), "a drag keeps the selection");
+
+    // A selected object leaves at the release, and not when the press becomes a drag.
+    h.pointer(&mut t, Down, 0.0, 0.0, Modifiers::SHIFT);
+    assert_eq!(h.selection, points(&[(0, 0), (0, 1)]));
+    h.pointer(&mut t, Drag, 9.0, 60.0, Modifiers::SHIFT);
+    h.pointer(&mut t, Up, 9.0, 60.0, Modifiers::SHIFT);
+    assert_eq!(h.selection, points(&[(0, 0), (0, 1)]));
+    h.click(&mut t, 0.0, 0.0, Modifiers::SHIFT);
+    assert_eq!(h.selection, points(&[(0, 1)]));
+}
+
 #[test]
 fn escape_during_a_drag_cancels_it() {
     let mut h = Harness::new(test_layer());
@@ -370,6 +442,11 @@ fn alt_click_on_a_line_segment_makes_it_a_curve() {
     assert_eq!(run.len(), 1);
     assert_eq!(run[0].id, "path.convertSegmentToCurve");
     assert_eq!(run[0].params["segments"], json!([[0, 1]]));
+    assert!(run[0].params.get("orthogonal").is_none());
+    h.actions.clear();
+    h.click(&mut t, 50.0, 1.0, Modifiers::SHIFT.with_alt());
+    let Some(Action::Run { invocation }) = h.actions.last() else { panic!("{:?}", h.actions) };
+    assert_eq!((invocation.id.as_str(), &invocation.params["orthogonal"]), ("path.convertSegmentToCurve", &json!(true)));
 }
 
 #[test]
@@ -440,6 +517,8 @@ fn edit_view_keys_run_their_commands() {
     assert_eq!(runs(&out)[0].params["points"], json!([[1, 0], [1, 1]]));
     let out = h.key(&mut tools, Key::Delete, Modifiers::SHIFT);
     assert_eq!(runs(&out)[0].id, "path.deleteAndBreak");
+    let out = h.key(&mut tools, Key::Delete, Modifiers { shift: true, ..Modifiers::ALT });
+    assert_eq!(runs(&out)[0].id, "path.deleteAndBreakInAllMasters");
     let out = h.key(&mut tools, Key::Tab, NONE);
     assert_eq!(runs(&out)[0].id, "selection.selectNext");
     let out = h.key(&mut tools, Key::Tab, Modifiers::SHIFT);
@@ -847,6 +926,22 @@ fn alt_on_lone_nodes_moves_only_them_and_a_selected_segment_still_duplicates() {
     let copy = modifier_drag(&mut h, (400.0, 0.0), (437.0, 61.0), Modifiers::ALT);
     assert_eq!(copy.params["duplicate"], json!(true));
     assert!(copy.params.get("mode").is_none());
+}
+
+/// An implied node of a quadratic segment is grabbed with its two handles; Alt on the segment elsewhere reshapes it.
+#[test]
+fn an_implied_node_drags_its_two_handles() {
+    let mut layer = Layer::new("m01", 600.0);
+    let mut end = on(200.0, 0.0);
+    end.kind = NodeKind::QCurve;
+    layer.shapes.push(Shape::Path(Path::new(false, vec![on(0.0, 0.0), off(0.0, 100.0), off(200.0, 100.0), end])));
+    let mut h = Harness::new(layer);
+    let inv = modifier_drag(&mut h, (100.0, 100.0), (120.0, 130.0), NONE);
+    assert_eq!(h.selection, points(&[(0, 1), (0, 2)]));
+    assert_eq!((inv.id.as_str(), &inv.params["points"]), ("selection.move", &json!([[0, 1], [0, 2]])));
+    h.selection = Selection::new();
+    let inv = modifier_drag(&mut h, (25.0, 75.0), (20.0, 90.0), Modifiers::ALT);
+    assert_eq!((inv.id.as_str(), &inv.params["segment"]), ("path.reshapeSegment", &json!([0, 3])));
 }
 
 #[test]

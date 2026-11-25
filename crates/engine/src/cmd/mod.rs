@@ -157,6 +157,7 @@ mod variations_file;
 mod attach_cap;
 mod attach_clipboard;
 mod attach_segment;
+mod attributes_clipboard;
 mod autokern;
 mod autospace;
 mod autotrace;
@@ -364,6 +365,7 @@ pub const COMMAND_TABLES: &[CommandTable] = &[
     export_settings::specs,
     edit::specs,
     clipboard::specs,
+    attributes_clipboard::specs,
     corner::specs,
     pixel::specs,
     glyph::specs,

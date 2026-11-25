@@ -810,8 +810,10 @@ impl Followers {
         if list.is_empty() {
             return inv;
         }
-        let mut steps = vec![json!({ "command": inv.id, "params": inv.params })];
-        steps.extend(point_steps(scene, &list));
+        // The followers go first: the selection's move, last, turns the handles of the smooth
+        // nodes next to a line onto the lines between the final places.
+        let mut steps = point_steps(scene, &list);
+        steps.push(json!({ "command": inv.id, "params": inv.params }));
         Invocation::new("command.batch", json!({ "label": "Move", "steps": steps }))
     }
 }

@@ -15,6 +15,11 @@
 //! the coordinate limit. A length already below the minimum may stay there. When one length is
 //! held, the other is solved again with it fixed; when both are, the change of both is scaled
 //! back together to where the first reaches its limit.
+//!
+//! A quadratic segment: its first and last handles keep their directions and change their lengths,
+//! the handles between them move freely, all by the smallest change that puts the point on `to`
+//! (the same damping as above). The only handle of a segment moves freely, and the handles beyond
+//! its smooth ends follow as when it is dragged ([`super::node::move_handle`]).
 
 use fontcraft_geom::{Point, Vec2, round_point};
 use fontcraft_model::{MAX_COORDINATE, NodeKind, Path};
@@ -47,7 +52,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Reshape Segment",
             [],
             None,
-            "{glyph: name, layer?: id, side?, segment: [shape, node], t: number, to: [x, y]} changes the lengths of the two handles of the cubic segment that ends at `node`, keeping both end nodes and each handle's direction, so that the segment's point at `t` (0.01 to 0.99, from the start node) lands on `to`, or as near as the directions allow. Each handle stays between 1 unit (or the grid step, if larger) and 10 times the larger of the end nodes' distance and the current handle lengths, and within the coordinate limit; a handle already shorter may stay so. With nearly parallel handles the point moves only as far as moderate length changes take it. A straight segment is left as it is and returns `changed: false`; a quadratic segment is refused. The selection afterwards is the segment's two end nodes → {changed, selection}",
+            "{glyph: name, layer?: id, side?, segment: [shape, node], t: number, to: [x, y]} changes the lengths of the first and last handle of the curve segment that ends at `node`, keeping both end nodes and the two directions, so that the segment's point at `t` (0.01 to 0.99, from the start node) lands on `to`, or as near as the directions allow. Each handle stays between 1 unit (or the grid step, if larger) and 10 times the larger of the end nodes' distance and the current handle lengths, and within the coordinate limit; a handle already shorter may stay so. With nearly parallel handles the point moves only as far as moderate length changes take it. The handles between them in a quadratic segment move by the smallest change that does it, and a quadratic segment's only handle moves freely, the handles beyond its smooth ends following. A straight segment is left as it is and returns `changed: false`. The selection afterwards is the segment's two end nodes → {changed, selection}",
             has_doc,
             reshape_segment
         )
@@ -74,13 +79,24 @@ fn reshape_segment(s: &mut Session, v: &Value) -> Result<Value> {
         let r = t.resolve(font)?;
         let path = r.parts.path(shape).ok_or_else(|| p.bad(format!("shape {shape} is not a path")))?;
         let seg = path.segment_ending_at(end).ok_or_else(|| p.bad(format!("node {end} of path {shape} does not end a segment")))?;
-        (seg.start, cubic_handles(path, &seg.handles, end), grid(font))
+        (seg.start, curve(path, &seg.handles, end), grid(font))
     };
     let mut selection = Targets::new("path.reshapeSegment", t.glyph.clone(), t.layer.clone());
     selection.side = t.side;
     selection.points = vec![(shape, start), (shape, end)];
-    let Some((h1, h2)) = handles.map_err(|m| p.bad(m))? else {
-        return Ok(json!({"changed": false, "selection": selection.to_json()}));
+    let (h1, h2) = match handles.map_err(|m| p.bad(m))? {
+        Curve::Straight => return Ok(json!({"changed": false, "selection": selection.to_json()})),
+        Curve::Cubic(h1, h2) => (h1, h2),
+        Curve::Quadratic(handles) => {
+            s.edit("Reshape Segment", |font| {
+                t.edit_layer(font, |layer| {
+                    let mut parts = layer.parts_mut(t.side);
+                    let path = parts.path_mut(shape).ok_or_else(|| p.bad(format!("shape {shape} is not a path")))?;
+                    reshape_quadratic(path, start, &handles, end, at, to, step).map_err(|m| p.bad(m))
+                })
+            })?;
+            return Ok(json!({"changed": true, "selection": selection.to_json()}));
+        }
     };
     s.edit("Reshape Segment", |font| {
         t.edit_layer(font, |layer| {
@@ -118,13 +134,136 @@ fn target_point(p: &Params) -> Result<Point> {
     Ok(Point::new(x, y))
 }
 
-/// The two handles of a cubic segment, `None` for a straight one, and an error for any other.
-fn cubic_handles(path: &Path, handles: &[usize], end: usize) -> std::result::Result<Option<(usize, usize)>, String> {
-    match handles {
-        [] => Ok(None),
-        &[h1, h2] if path.nodes.get(end).is_some_and(|n| n.kind == NodeKind::Curve) => Ok(Some((h1, h2))),
-        _ => Err("only cubic curve segments can be reshaped; this one is quadratic".into()),
+/// What a segment is, with its handles.
+enum Curve {
+    Straight,
+    Cubic(usize, usize),
+    Quadratic(Vec<usize>),
+}
+
+fn curve(path: &Path, handles: &[usize], end: usize) -> std::result::Result<Curve, String> {
+    match (handles, path.nodes.get(end).map(|n| n.kind)) {
+        ([], _) => Ok(Curve::Straight),
+        (&[h1, h2], Some(NodeKind::Curve)) => Ok(Curve::Cubic(h1, h2)),
+        (_, Some(NodeKind::QCurve)) => Ok(Curve::Quadratic(handles.to_vec())),
+        _ => Err("the segment's points do not make a curve".into()),
     }
+}
+
+/// Reshapes the quadratic segment from `start` through `handles` to `end` so that its point at `t` lands on `to`.
+fn reshape_quadratic(path: &mut Path, start: usize, handles: &[usize], end: usize, t: f64, to: Point, step: f64) -> std::result::Result<(), String> {
+    let point = |i: usize| path.nodes.get(i).map(|n| n.point());
+    let (Some(p0), Some(p3)) = (point(start), point(end)) else { return Err("the segment's points do not resolve".into()) };
+    let old: Vec<Point> = handles.iter().filter_map(|&h| point(h)).collect();
+    let new = solve_quadratic(p0, &old, p3, t, to, step).ok_or("the segment has no handle directions to keep")?;
+    if !new.iter().all(|q| in_range(q.x) && in_range(q.y)) {
+        return Err("the reshaped handles would lie beyond the coordinate limit".into());
+    }
+    if let (&[h], &[from], &[to]) = (handles, old.as_slice(), new.as_slice()) {
+        super::node::move_handle(path, h, to - from, step);
+        return Ok(());
+    }
+    for (&h, q) in handles.iter().zip(new) {
+        let q = round_point(q, step);
+        if let Some(node) = path.nodes.get_mut(h) {
+            (node.x, node.y) = (q.x, q.y);
+        }
+    }
+    Ok(())
+}
+
+/// The new off-curve points of the quadratic segment from `p0` through `old` to `p3` that put its point at `t`, counted
+/// over all its pieces, on `to` or near it. `None` when the segment has no directions.
+fn solve_quadratic(p0: Point, old: &[Point], p3: Point, t: f64, to: Point, step: f64) -> Option<Vec<Point>> {
+    let n = old.len();
+    let last = n.checked_sub(1)?;
+    let scaled = t.clamp(0.0, 1.0) * n as f64;
+    let i = (scaled.floor() as usize).min(last);
+    let s = scaled - i as f64;
+    let mt = 1.0 - s;
+    let at = |k: usize| old.get(k).copied();
+    let (before, after) = (i.checked_sub(1), (i < last).then_some(i + 1));
+    let c = at(i)?;
+    let a = before.and_then(at).map_or(p0, |q| q.midpoint(c));
+    let b = after.and_then(at).map_or(p3, |q| c.midpoint(q));
+    let current = a.to_vec2() * (mt * mt) + c.to_vec2() * (2.0 * s * mt) + b.to_vec2() * (s * s);
+    let r = to.to_vec2() - current;
+    if !(r.hypot() > EPS) {
+        return Some(old.to_vec());
+    }
+    // How much the point moves with each handle near it.
+    let mut weights: Vec<(usize, f64)> = vec![(i, 2.0 * s * mt)];
+    for (k, w) in [(before, mt * mt / 2.0), (after, s * s / 2.0)] {
+        if let Some(k) = k {
+            weights.push((k, w));
+            if let Some(own) = weights.first_mut() {
+                own.1 += w;
+            }
+        }
+    }
+    let span = (p3 - p0).hypot();
+    let longest = |l: f64| MAX_HANDLE_RATIO * span.max(l).max(MIN_HANDLE_LENGTH);
+    if n == 1 {
+        let w = 2.0 * s * mt;
+        let d = r / w;
+        let limit = longest((c - p0).hypot().max((c - p3).hypot()));
+        return d.is_finite().then(|| vec![c + d * (limit / d.hypot()).min(1.0)]);
+    }
+    let u1 = direction([at(0)? - p0, at(1)? - p0, p3 - p0])?;
+    let u2 = direction([at(last)? - p3, at(last - 1)? - p3, p0 - p3])?;
+    let along = |k: usize| if k == 0 { Some(u1) } else { (k == last).then_some(u2) };
+    let (mut s11, mut s12, mut s22) = (0.0, 0.0, 0.0);
+    for &(k, w) in &weights {
+        let columns = match along(k) {
+            Some(u) => [u * w, Vec2::ZERO],
+            None => [Vec2::new(w, 0.0), Vec2::new(0.0, w)],
+        };
+        for m in columns {
+            s11 += m.x * m.x;
+            s12 += m.x * m.y;
+            s22 += m.y * m.y;
+        }
+    }
+    let y = damped([s11, s12, s22], r)?;
+    let shortest = MIN_HANDLE_LENGTH.max(if step.is_finite() { step } else { 0.0 });
+    let mut new = old.to_vec();
+    for (k, w) in weights {
+        let Some(q) = new.get_mut(k) else { continue };
+        match along(k) {
+            Some(u) => {
+                let from = if k == 0 { p0 } else { p3 };
+                let l0 = (*q - from).hypot();
+                let l = l0 + w * u.dot(y);
+                let hi = longest(l0);
+                *q = from + u * if l.is_finite() { l.clamp(shortest.min(l0).min(hi), hi) } else { l0 };
+            }
+            None => *q += y * w,
+        }
+    }
+    Some(new)
+}
+
+/// `M⁻¹·r` for the symmetric `M = [[s11, s12], [s12, s22]]` of a least-squares problem, through its eigenvalues (the
+/// squared singular values) and unit eigenvectors. Along the weaker one, weak / (weak² + damping²) stands for 1 / weak:
+/// the same while the two singular values are of a size, bounded as the weaker one goes to zero ([`MIN_SPREAD`]).
+fn damped([s11, s12, s22]: [f64; 3], r: Vec2) -> Option<Vec2> {
+    let half = (s11 + s22) / 2.0;
+    let spread = (((s11 - s22) / 2.0).powi(2) + s12 * s12).sqrt();
+    let (strong, weak) = (half + spread, (half - spread).max(0.0));
+    if strong.is_nan() || strong <= EPS {
+        return None;
+    }
+    let v1 = if s12.abs() > EPS * strong {
+        let v = Vec2::new(strong - s22, s12);
+        v / v.hypot()
+    } else if s11 >= s22 {
+        Vec2::new(1.0, 0.0)
+    } else {
+        Vec2::new(0.0, 1.0)
+    };
+    let v2 = Vec2::new(-v1.y, v1.x);
+    let damping = MIN_SPREAD * MIN_SPREAD * strong;
+    Some(v1 * (v1.dot(r) / strong) + v2 * (v2.dot(r) * weak / (weak * weak + damping * damping)))
 }
 
 /// The unit vector along the first of `candidates` that is not zero.
@@ -159,29 +298,9 @@ pub(crate) fn solve([p0, p1, p2, p3]: [Point; 4], t: f64, to: Point, step: f64) 
     if moved.is_nan() || moved <= EPS {
         return Some((p1, p2));
     }
-    // The normal matrix [[m1·m1, m1·m2], [m1·m2, m2·m2]], its eigenvalues (the squared singular
-    // values) and unit eigenvectors.
+    // The normal matrix [[m1·m1, m1·m2], [m1·m2, m2·m2]].
     let (s11, s12, s22) = (m1.hypot2(), m1.dot(m2), m2.hypot2());
-    let half = (s11 + s22) / 2.0;
-    let spread = (((s11 - s22) / 2.0).powi(2) + s12 * s12).sqrt();
-    let (strong, weak) = (half + spread, (half - spread).max(0.0));
-    if strong.is_nan() || strong <= EPS {
-        return None;
-    }
-    let v1 = if s12.abs() > EPS * strong {
-        let v = Vec2::new(strong - s22, s12);
-        v / v.hypot()
-    } else if s11 >= s22 {
-        Vec2::new(1.0, 0.0)
-    } else {
-        Vec2::new(0.0, 1.0)
-    };
-    let v2 = Vec2::new(-v1.y, v1.x);
-    let g = Vec2::new(m1.dot(r), m2.dot(r));
-    // Along the weaker eigenvector, weak / (weak² + damping²) instead of 1 / weak: the same while
-    // the two singular values are of a size, bounded as the weaker one goes to zero.
-    let damping = MIN_SPREAD * MIN_SPREAD * strong;
-    let d = v1 * (v1.dot(g) / strong) + v2 * (v2.dot(g) * weak / (weak * weak + damping * damping));
+    let d = damped([s11, s12, s22], Vec2::new(m1.dot(r), m2.dot(r)))?;
     let (da, db) = (d.x, d.y);
     let shortest = MIN_HANDLE_LENGTH.max(if step.is_finite() { step } else { 0.0 });
     let longest = MAX_HANDLE_RATIO * (p3 - p0).hypot().max(a0).max(b0).max(MIN_HANDLE_LENGTH);
@@ -353,7 +472,30 @@ mod tests {
 
         let quad = json!([{"x": 0, "y": 0}, {"x": 150, "y": 200, "type": "offcurve"}, {"x": 300, "y": 0, "type": "qcurve"}]);
         let mut s = session(quad);
-        let e = s.execute("path.reshapeSegment", &json!({"glyph": "A", "segment": [0, 2], "t": 0.5, "to": [150, 150]})).expect_err("quadratic");
-        assert!(e.to_string().contains("cubic"), "{e}");
+        run(&mut s, "path.reshapeSegment", json!({"glyph": "A", "segment": [0, 2], "t": 0.5, "to": [150, 150]}));
+        assert_eq!(points(&s)[1], Point::new(150.0, 300.0), "the only handle of a quadratic segment moves freely");
+    }
+
+    #[test]
+    fn a_quadratic_segment_keeps_its_end_directions_and_follows_the_pointer() {
+        let chain = json!([
+            {"x": 0, "y": 0},
+            {"x": 0, "y": 100, "type": "offcurve"}, {"x": 150, "y": 260, "type": "offcurve"}, {"x": 300, "y": 100, "type": "offcurve"},
+            {"x": 300, "y": 0, "type": "qcurve"},
+        ]);
+        let mut s = session(chain);
+        let at = |s: &Session, t: f64| {
+            s.font().unwrap().glyph("A").unwrap().layers[0].shapes.iter().find_map(|shape| match shape {
+                fontcraft_model::Shape::Path(p) => p.segment_ending_at(4).and_then(|seg| seg.eval(t)),
+                _ => None,
+            })
+        };
+        let grab = at(&s, 0.3).unwrap();
+        let to = grab + Vec2::new(-20.0, 25.0);
+        run(&mut s, "path.reshapeSegment", json!({"glyph": "A", "segment": [0, 4], "t": 0.3, "to": [to.x, to.y]}));
+        let p = points(&s);
+        assert!(p.len() == 5 && p[0] == Point::ZERO && p[4] == Point::new(300.0, 0.0), "{p:?}");
+        assert!(p[1].x == 0.0 && p[1].y > 0.0 && p[3].x == 300.0, "the end directions stay: {p:?}");
+        assert!((at(&s, 0.3).unwrap() - to).hypot() < 2.0, "{:?} for {to:?}", at(&s, 0.3));
     }
 }

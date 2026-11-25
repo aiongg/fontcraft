@@ -220,6 +220,10 @@ fn selected_pieces(path: &Path, nodes: &BTreeSet<usize>, ends: &BTreeSet<usize>)
         return vec![path.clone()];
     }
     let segs = path.segments();
+    // A path of off-curve nodes only has no node that ends a segment.
+    if segs.is_empty() && !path.nodes.is_empty() && (0..path.nodes.len()).all(|i| nodes.contains(&i)) {
+        return vec![path.clone()];
+    }
     let picked: Vec<bool> = segs.iter().map(|s| ends.contains(&s.end) || (nodes.contains(&s.start) && nodes.contains(&s.end))).collect();
     if !picked.is_empty() && picked.iter().all(|b| *b) {
         return vec![path.clone()];

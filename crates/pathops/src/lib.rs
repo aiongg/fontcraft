@@ -57,9 +57,9 @@ use fontcraft_geom::{BezPath, CubicBez, ParamCurve, PathEl, Point, QuadBez, Rect
 
 pub use boolean::{BoolOp, OpenPaths, OverlapOptions, SMOOTH_MAX_DEGREES, binary, boolean, difference, intersection, remove_overlap};
 pub use contour::{Contour, MAX_NODES, MIN_GRID, Node, NodeKind, contours_from_bez, round_to_grid};
-pub use corner::{MAX_RECONNECT_NODES, Opened, open_corners, reconnect_nodes};
+pub use corner::{MAX_RECONNECT_NODES, Opened, Reconnection, open_corners, reconnect_nodes, reconnect_nodes_paired, reconnect_pairs};
 pub use cursivy::{CursivyOptions, cursivy};
-pub use cut::cut_with_line;
+pub use cut::{Cuts, cut_at, cut_with_line, find_cuts};
 pub use direction::{Directed, MAX_NESTING_CONTOURS, correct_direction, shape_order};
 pub use extremes::{
     ExtremesOptions, MAX_EXTREME_SHIFT, MIN_EXTREME_SEGMENT, NEAR_EXTREME_DEGREES, NEAR_EXTREME_DISTANCE, NEAR_EXTREME_SHARE, SHORT_EXTREME_SEGMENT,

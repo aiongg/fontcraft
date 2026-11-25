@@ -157,6 +157,9 @@ are in decision 0004 › How commands name their targets. In short:
   - `Cmd` during the drag: only the outgoing handle's length changes; both handles keep their
     common angle (asymmetric smooth node).
   - `Space` during the drag: move the node instead of shaping handles.
+- In a glyph (else a font) with quadratic curves, the drawn curves are quadratic
+  (`draw.curveTypeFollowsGlyph`).
+- Undo and redo keep the drawing; `Backspace` removes its last node (`draw.undoKeepsDrawing`).
 - Click the path's first node: close the path.
 - Click a node of an existing closed path: open the path there (`paths.openAtNodeWithDrawTool`).
 - `Shift`+click a segment: insert a node at the nearest extremum or inflection (section 14).
@@ -247,6 +250,8 @@ Tools: `select` (`V`), `lasso` (`V` / `Shift+V`).
   angle (`selection.slantedMarquee`).
 - Click a point or segment to select it; `Shift` toggles membership
   (`selection.shiftExtendsOrReduces`). Handles are selectable independently of their nodes.
+  A `Shift` press on an unselected object adds it and can drag the selection; on a selected one
+  the toggle waits for the release (`selection.shiftPressDrags`).
 - Double-click near a segment selects the whole path (`selection.doubleClickSelectsPath`).
 - Lasso: drag a free-form region.
 - A segment counts as selected when both end nodes are selected or one of its handles is
@@ -305,6 +310,9 @@ Nodes:
 - `Ctrl+Alt`, or `Alt` pressed after a drag has started: **nudge**. Selected nodes move and the
   neighbouring unselected handles are rescaled proportionally so adjacent curves adapt
   (`move.nudge`, `mode: nudge`).
+- `Shift` during a drag: horizontal or vertical only, whichever is nearer, for everything the drag
+  moves; a lone handle keeps to the axes through its node. Snapping works along the drag only
+  (`move.shiftConstrains`).
 
 Handles (`move.handles`, `move.mirrorHandleAcrossSmoothNode`):
 
@@ -330,11 +338,15 @@ Construction details where the handbook is silent (our design, `inferred`):
   line instead.
 - Moved points are rounded to the grid; points that do not move keep their coordinates.
 - `duplicate` with part of a path selected copies the segments whose two end nodes are selected,
-  as open paths. A copied anchor gets the first free name of the form `top.1`.
+  as open paths. A copied anchor gets the first free name of the form `top.1`. Corner, cap and
+  segment components and brushes are copied with the nodes they sit on.
 - The Select tool reads `Alt` at mouse-down by what is selected. Something to copy (a whole
   path, a segment with both end nodes selected, a component, an anchor, a guide): a duplicate.
   Lone nodes with nothing to copy: `pointsOnly`. Handles only: `pointsOnly` while `Alt` is held,
   `mirror` while `Ctrl+Alt` is held. A cubic segment pressed on its own: `path.reshapeSegment`.
+- In every mode but `pointsOnly`, a smooth node with a line on one side keeps the handle on the
+  other side in line with it: when the node, the line's far end or (nudging) the handle moved, the
+  handle turns about the node onto the line and keeps its length (`nodes.tangentFollowsLine`).
 - `mirror` puts the opposite handle of a smooth node at the moved handle's mirror image through
   the node. A corner node's other handle stays. When the other side is straight, the handle
   slides along that line as in `normal`.
@@ -353,7 +365,9 @@ Construction details where the handbook is silent (our design, `inferred`):
   nodes. Corner → smooth adds missing handles on both sides and may move points so the handles
   line up, which can change the outline.
 - `path.toggleNodeTypeKeepingOutline` (`Alt+Return`, `Alt`+double-click): same, but nothing moves.
-- `path.convertSegmentToCurve` (`Alt`+click a line segment): adds a handle at each end node.
+- `path.convertSegmentToCurve` (`Alt`+click a line segment): adds a handle at each end node. With
+  `Shift` too, one handle is horizontal and the other vertical (`orthogonal: true`,
+  `segments.orthogonalHandles`).
 - Curve → line: delete one or both handles of the segment (`segments.deleteHandleMakesLine`).
 
 ### Tidy up Paths (`path.tidyUpPaths` `Cmd+Shift+T`, `path.tidyUpPathsForAllMasters` `Cmd+Alt+Shift+T`)
@@ -444,7 +458,7 @@ carries a message. The anchor and component cases are M6.
   selected segments are copied. Works for anchors and guides too. Copy/paste is the alternative.
 - `edit.delete` (`Delete`): removes selected nodes while keeping the path closed, refitting the
   neighbouring handles to approximate the old segment. Also removes anchors and free pen points.
-- `edit.deleteInAllMasters` (`Alt+Delete`): the same in every master.
+- `edit.deleteInAllMasters` (`Alt+Delete`): the same in every master ("In all masters" below).
 - `path.deleteAndBreak` (`Shift+Delete`): removes the node **and** both adjoining segments,
   opening the path. With whole segments selected, only those segments go.
 - `path.deleteAndBreakInAllMasters` (`Alt+Shift+Delete`).
@@ -453,6 +467,27 @@ Construction details (our design): `edit.delete` removes a path left with fewer 
 nodes. `path.deleteAndBreak` removes only the segment between two neighbouring selected nodes (or
 a segment named in `segments`); a selected node with no selected neighbour goes with both its
 segments. What is left becomes open paths, in the place of the original.
+
+### In all masters
+
+The node commands have a form that acts on every compatible layer of the glyph (release notes of
+the reference app, builds 3806 to 4002): Delete, Delete and Break, Insert Node, Convert Segment to
+Curve, Toggle Node Type, Make Node First, Connect Nodes, Close Open Paths, Open Corner, Reconnect
+Nodes, Align Selection, Cut with Line. The ids end in `InAllMasters`. Holding Option changes the
+menu or context menu row to the form; `Alt+Delete`, `Alt+Shift+Delete`, `Alt+Shift`-click on a
+segment with the Draw tool and `Alt` at the end of a Knife drag run it directly.
+
+- The layers are the master, intermediate and alternate layers whose shapes and node types (on the
+  edited side) equal the edited layer's; a layer is compatible when it has the same paths with the
+  same node types, and the same components. Backup layers take no part.
+- The addresses are the edited layer's. One undo step holds the whole edit.
+- A master or intermediate layer that differs is left alone and named in the status line; one
+  without any shape is left alone silently.
+- What depends on the drawing is settled on the edited layer: the `t` of an inserted node and of a
+  cut, the new type of each toggled node, the corners that open, how nodes pair up, Align
+  Selection's axis. Two open ends become one node only where they meet on every layer.
+- Where the edit would still leave a layer incompatible, or a layer refuses it, nothing changes
+  and the message names the layer.
 
 ## 12. Opening, closing and cutting paths
 

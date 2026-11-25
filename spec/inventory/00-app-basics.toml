@@ -70,6 +70,47 @@ guesses = [
 ]
 
 [[command]]
+id = "edit.copyAttributes"
+label = "Copy Attributes"
+menu = ["Edit"]
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id, side?: foreground|background, points?: [[shape, node]], shapes?: [index]} → {text: string, kind: path|node}"
+area = "drawing"
+milestone = "M3"
+summary = "Copies how the selected path is drawn (stroke, fill, colours, gradient, shadows, mask), or the type and name of one selected node, for Paste Attributes. The text goes on the system clipboard."
+ref = "Release notes 4.1 (4100), builds 3820 and 3824"
+status = "docs"
+notes = "Release notes of the reference app (updates.glyphsapp.com/Glyphs4.1-4100.html): path and node attributes can be copied and pasted (build 3824), and the Shape sidebar has Copy and Paste Attributes (build 3820). Built in M3.57 (`crates/engine/src/cmd/attributes_clipboard.rs`); the same note's copying of glyph tags is not built."
+guesses = [
+  "The attributes are the stroke's width, height, position, join, caps and cap axis, the fill flag, the fill and stroke colours, gradient, shadows and mask of a path, and the type and name of a node; no source lists them.",
+  "The items are in the Edit menu; the release notes name only a sidebar.",
+  "One selected node copies the node's attributes; a whole path, several nodes or a handle copy the path's.",
+]
+observe = [
+  "Select a stroked path and look for Copy Attributes in the Edit menu, the context menu and the Palette; note where it is and whether it has a shortcut.",
+  "Copy the attributes of a named smooth node and paste them onto a corner node: note whether the type, the name, or both arrive, and whether handles move.",
+]
+
+[[command]]
+id = "edit.pasteAttributes"
+label = "Paste Attributes"
+menu = ["Edit"]
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id, side?: foreground|background, points?: [[shape, node]], shapes?: [index], text: string} → {glyph, kind: path|node, changed: count, selection}"
+area = "drawing"
+milestone = "M3"
+summary = "Gives the attributes copied with Copy Attributes to every selected path, or the copied node's type and name to every selected on-curve node, as one undo step. No point moves."
+ref = "Release notes 4.1 (4100), builds 3820 and 3824"
+status = "docs"
+notes = "See edit.copyAttributes. The window reads the system clipboard as Paste does; the text is checked before anything changes."
+guesses = [
+  "Pasting replaces: a path without a stroke takes the target's stroke away. Colours, gradient and shadows arrive on full-colour layers only.",
+  "A pasted node type changes the type alone, as Toggle Node Type with Option does; a node copied without a name leaves the target's name.",
+]
+
+[[command]]
 id = "edit.paste"
 label = "Paste"
 menu = ["Edit"]

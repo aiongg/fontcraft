@@ -5,6 +5,7 @@
 //! | smooth node | circle, `node_smooth` |
 //! | corner node | square, `node_corner` |
 //! | handle | small circle, `node_handle`, with a `handle_line` to its node |
+//! | implied node of a quadratic segment | small hollow circle, `node_handle` |
 //! | start node of a closed path | arrowhead in path direction, `node_smooth` or `node_corner` |
 //! | ends of an open path | strokes across the path, `open_end`; the first node also a triangle, `open_end_start` |
 //! | node on a metric line / in a zone | diamond / circle behind it, `metric_highlight` |
@@ -105,6 +106,12 @@ pub fn layer_shapes(cx: &PaintCx<'_>, layer: &Layer, metrics: &Metrics) -> Vec<S
                         marks.push(arrow(tip, d, t.start_arrow_size, t.open_end_start));
                     }
                 }
+            }
+        }
+        for (_, p) in path.implied_nodes() {
+            let at = cx.camera.to_screen(p);
+            if at.x.is_finite() && at.y.is_finite() {
+                handles.push(Shape::circle_stroke(at, t.handle_radius, Stroke::new(t.handle_line_width, t.node_handle)));
             }
         }
         duplicates(path, &screen, &on_curve, t, &mut marks);

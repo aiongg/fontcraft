@@ -2,7 +2,7 @@
 //!
 //! | Reply | Notice |
 //! |---|---|
-//! | `glyph.matchMasters`, `glyph.relocateStartPoints`, the two hinting Autohints, the edits that take `matchLayers`: `skipped` | the label, then each skipped glyph with its reason |
+//! | `glyph.matchMasters`, `glyph.relocateStartPoints`, the two hinting Autohints, the edits that take `matchLayers`, the commands "in All Masters": `skipped` | the label, then each skipped glyph with its reason |
 //! | `font.info.pasteRows`: `skipped` | the label, then each skipped row with its reason |
 //! | `component.setTransform`, `component.setAnchor` on several components: `skipped` | the label, then the base glyph of each skipped component with its reason |
 //! | `color.generateDarkPalette`: `palette`, `name` | the new palette's number and name |
@@ -51,7 +51,7 @@ const REPORTS_SKIPPED: [&str; 6] = [
 
 /// The notice for `reply` of command `id`, or `None` when it has nothing to say.
 pub fn notice(id: &str, reply: &Value) -> Option<String> {
-    if REPORTS_SKIPPED.contains(&id) || crate::shell::compatibility::MATCHED.contains(&id) {
+    if REPORTS_SKIPPED.contains(&id) || id.ends_with("InAllMasters") || crate::shell::compatibility::MATCHED.contains(&id) {
         return skipped(id, reply).or_else(|| format_warning(reply));
     }
     if id == "font.features.compile" {
@@ -198,6 +198,8 @@ mod tests {
         assert_eq!(notice("glyph.relocateStartPoints", &json!({"glyphs": ["A"], "skipped": []})), None);
         let reply = json!({"components": [0], "skipped": [{"component": 1, "base": "acutecomb", "reason": "is locked"}]});
         assert_eq!(notice("component.setTransform", &reply).as_deref(), Some("Set Component Transform: skipped acutecomb (is locked)"));
+        let reply = json!({"selection": {}, "matched": [], "skipped": [{"glyph": "A", "layer": "m2", "reason": "Bold: paths differ"}]});
+        assert_eq!(notice("path.insertNodeInAllMasters", &reply).as_deref(), Some("Insert Node in All Masters: skipped A (Bold: paths differ)"));
         assert_eq!(notice("color.generateDarkPalette", &json!({"palette": 1, "name": "Dark"})).as_deref(), Some("Added dark palette 1: Dark"));
         assert_eq!(
             notice("glyph.newGlyph", &json!({"name": "a", "warnings": ["UFO drops x", "UFO drops y"]})).as_deref(),

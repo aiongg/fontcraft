@@ -537,7 +537,7 @@ fn open_recovered(s: &mut Session, p: &Value) -> Result<Value> {
         Some((read, native, stamp))
     });
     // Save writes the original's format: the copy is native whatever it was.
-    let named_native = || free.as_deref().is_some_and(|path| SaveFormat::of_path(path) == Some(SaveFormat::Native));
+    let named_native = || free.as_deref().is_some_and(|path| crate::io::SaveFormat::of_path(path) == Some(crate::io::SaveFormat::Native));
     let native = base.as_ref().map_or_else(named_native, |(_, native, _)| *native);
     let base = base.map(|(read, _, stamp)| (read, stamp));
     let mut warnings = Vec::new();

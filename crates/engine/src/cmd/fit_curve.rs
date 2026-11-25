@@ -144,6 +144,17 @@ struct Named {
     frame: Frame,
 }
 
+/// Why [`named`] finds nothing: `t` names quadratic segments, or no curve.
+fn nothing_named(parts: LayerParts, t: &Targets) -> &'static str {
+    let on = t.points.iter().chain(&t.segments).map(|&(s, _)| s).collect::<BTreeSet<_>>();
+    let quadratic = on.into_iter().filter_map(|s| parts.path(s)).flat_map(|p| &p.nodes).any(|n| n.kind == NodeKind::QCurve);
+    if quadratic {
+        "the targets are on quadratic segments, whose off-curve points have no lengths to fit: Fit Curve changes cubic segments"
+    } else {
+        "none of the targets is on a curve segment"
+    }
+}
+
 /// The cubic segments `t` names in `parts`, in path order.
 fn named(parts: LayerParts, t: &Targets) -> Vec<Named> {
     let points = group(&t.points);
@@ -222,7 +233,7 @@ fn change(s: &mut Session, p: &Params, label: &str, t: &Targets, new: impl Fn(f6
         t.edit_layer(font, |layer| {
             let list = named(layer.parts(t.side), t);
             if list.is_empty() {
-                return Err(p.bad("none of the targets is on a curve segment"));
+                return Err(p.bad(nothing_named(layer.parts(t.side), t)));
             }
             let mut parts = layer.parts_mut(t.side);
             for n in &list {
@@ -315,7 +326,7 @@ fn get_handle_length(s: &mut Session, v: &Value) -> Result<Value> {
     let r = t.resolve(s.font()?)?;
     let list = named(r.parts, &t);
     if list.is_empty() {
-        return Err(p.bad("none of the targets is on a curve segment"));
+        return Err(p.bad(nothing_named(r.parts, &t)));
     }
     let mut sum = 0.0;
     let segments: Vec<Value> = list

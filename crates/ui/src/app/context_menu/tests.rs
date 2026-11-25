@@ -57,6 +57,9 @@ fn a_click_on_a_node_lists_the_node_commands_and_runs_them_like_the_command() {
     assert!(!node.contains(&"path.unlockPath".to_string()), "an unlocked path offers Lock Path only");
     let position = |id: &str| node.iter().position(|c| c == id).unwrap();
     assert!(position("path.toggleNodeType") < position("path.openCorner"), "rows' order: {node:?}");
+    for id in ["path.toggleNodeType", "path.openCorner", "path.makeNodeFirst"] {
+        assert_eq!(position(&format!("{id}InAllMasters")), position(id) + 1, "{id}: its Alt form comes right after it");
+    }
     let glyph = commands(&menu, 1);
     assert!(glyph.contains(&"glyph.toggleLocked".to_string()) && glyph.contains(&super::SHOW_IN_FONT_VIEW.to_string()), "{glyph:?}");
     let connect = menu["sections"][0]["items"].as_array().unwrap().iter().find(|i| i["command"] == "path.connectNodes").unwrap();

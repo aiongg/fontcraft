@@ -7,6 +7,8 @@
 //!   (the `fontcraft-glyphs` text) on the clipboard; Paste runs `edit.paste` with that text, which adds the glyphs (a
 //!   taken name gets the first free `.001` suffix), in this document or another. Text that holds no copied glyphs is
 //!   not pasted in Font View.
+//! - Copy Attributes puts the `text` of `edit.copyAttributes` on the clipboard; Paste Attributes waits for the
+//!   clipboard's text as Paste does and runs `edit.pasteAttributes` on the canvas selection.
 //! - Copy Glyph Names (the glyph menus) puts the `text` of `glyph.copyGlyphNames` on the clipboard.
 //! - Edit › Paste and Paste Special fired without text wait for the clipboard's text ([`Clipboard::request`]). On the
 //!   desktop the shell reads it from the system clipboard at once ([`read_waiting`], through
@@ -65,6 +67,8 @@ const SELECT_ALL: &str = "edit.selectAll";
 /// The commands whose shortcut is Cmd+Delete.
 const REMOVE_GLYPH: &str = "glyph.removeGlyph";
 const REMOVE_FIELD: &str = "font.info.removeField";
+const COPY_ATTRIBUTES: &str = "edit.copyAttributes";
+const PASTE_ATTRIBUTES: &str = "edit.pasteAttributes";
 /// The `format` the engine writes into copied glyphs (`edit.copy` with `glyphs`).
 const GLYPHS_FORMAT: &str = "fontcraft-glyphs";
 /// The `format` of copied corner components (`edit.copy` with `corners`).
@@ -120,6 +124,8 @@ pub fn system_text() -> Result<Option<String>, String> {
 pub enum PasteKind {
     Paste,
     Special,
+    /// Copied attributes onto the selected paths or nodes.
+    Attributes,
     /// Feature entries into the Features sidebar.
     FeatureEntries,
     /// Font Info rows into what the shown tab shows (`font.info.rows.paste`).
@@ -145,7 +151,7 @@ pub struct Clipboard {
 pub fn after_run(app: &mut FontCraftApp, id: &str, result: &Value) {
     let key = match id {
         COPY | CUT => "json",
-        "glyph.copyGlyphNames" | "font.features.copyEntries" | "font.info.copyRows" => "text",
+        COPY_ATTRIBUTES | "glyph.copyGlyphNames" | "font.features.copyEntries" | "font.info.copyRows" => "text",
         _ => return,
     };
     if let Some(text) = result.get(key).and_then(Value::as_str) {
@@ -164,6 +170,10 @@ pub fn fired(app: &mut FontCraftApp, command: CommandRef) -> Option<CommandRef> 
     match command.id.as_str() {
         PASTE | PASTE_SPECIAL if ["json", "svg", "pdf", "text"].iter().all(|k| command.params.get(k).is_none_or(Value::is_null)) => {
             app.clipboard.request = Some(if command.id == PASTE { PasteKind::Paste } else { PasteKind::Special });
+            None
+        }
+        PASTE_ATTRIBUTES if command.params.get("text").is_none_or(Value::is_null) => {
+            app.clipboard.request = Some(PasteKind::Attributes);
             None
         }
         COPY if is_empty(&command.params) && in_font_view(app) => {
@@ -271,6 +281,19 @@ pub fn paste_msg(app: &mut FontCraftApp, text: &str, kind: PasteKind) -> Result<
     if let PasteKind::ProjectInstances(project) = kind {
         let params = json!({ "project": project, "text": text });
         return Ok(Msg::Shell(CommandRef::with_params(crate::shell::project::PASTE, params)));
+    }
+    if kind == PasteKind::Attributes {
+        if app.font_view_shows() || !app.targets_chosen() {
+            return Err(super::select_glyph_first(PASTE_ATTRIBUTES));
+        }
+        let mut command = crate::canvas::tools::targets::with_targets(app, CommandRef::new(PASTE_ATTRIBUTES));
+        let mut params = match command.params {
+            Value::Object(m) => m,
+            _ => Map::new(),
+        };
+        params.insert("text".into(), json!(text));
+        command.params = Value::Object(params);
+        return Ok(Msg::Run(command));
     }
     let glyphs = holds_glyphs(text);
     if kind == PasteKind::Special {

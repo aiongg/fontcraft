@@ -7,7 +7,7 @@ use fontcraft_geom::{Point, Vec2};
 
 use crate::contour::{Contour, Node, NodeKind, RNode, Ring, round_to_grid};
 use crate::graph::{Graph, Rewired, assemble};
-use crate::{MAX_COORDINATE, PathOpError};
+use crate::{MAX_COORDINATE, PathOpError, check};
 
 /// Most nodes Reconnect Nodes pairs in one call; the candidate pairs grow with the square.
 pub const MAX_RECONNECT_NODES: usize = 1_000;
@@ -20,6 +20,17 @@ pub struct Opened {
     pub contour: Contour,
     /// The nodes of the opened corners in the result, two for each corner.
     pub nodes: Vec<usize>,
+    /// The corners that opened, as indices into the input's nodes.
+    pub corners: Vec<usize>,
+}
+
+/// One pair of nodes Reconnect Nodes reconnects, as `(contour, node)` addresses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Reconnection {
+    pub a: (usize, usize),
+    pub b: (usize, usize),
+    /// Whether the two are an open corner, which becomes one node again; otherwise their paths are rewired.
+    pub corner: bool,
 }
 
 /// Open Corner on the corner nodes `nodes` (indices into `contour.nodes`) of one contour. Each
@@ -42,10 +53,12 @@ pub fn open_corners(contour: &Contour, nodes: &[usize], overlap: Vec2, grid: f64
     let ring = Ring::from_contour(contour)?;
     let wanted: HashSet<usize> = nodes.iter().copied().collect();
     let mut out = Vec::with_capacity(2 * ring.len());
+    let mut corners = Vec::new();
     for (j, r) in ring.nodes.iter().enumerate() {
         let open = r.src.is_some_and(|s| wanted.contains(&s)) && !r.node.smooth;
         match open.then(|| corner_pair(&ring, j, overlap, grid)).flatten() {
             Some((c1, c2)) => {
+                corners.extend(r.src);
                 out.push(RNode { node: Node { point: c1, smooth: false, ..r.node }, ctrl: r.ctrl.clone(), src: r.src, mark: true });
                 out.push(RNode { node: Node::new(c2, NodeKind::Line), ctrl: Vec::new(), src: None, mark: true });
             }
@@ -54,7 +67,7 @@ pub fn open_corners(contour: &Contour, nodes: &[usize], overlap: Vec2, grid: f64
     }
     let ring = Ring { closed: ring.closed, nodes: out };
     let nodes = (0..ring.len()).filter(|&k| ring.nodes.get(k).is_some_and(|r| r.mark)).map(|k| ring.list_index(k)).collect();
-    Ok(Opened { contour: ring.to_contour(), nodes })
+    Ok(Opened { contour: ring.to_contour(), nodes, corners })
 }
 
 /// The two points that replace corner node `j`: past it on the incoming direction, and behind it
@@ -84,10 +97,12 @@ fn corner_pair(ring: &Ring, j: usize, overlap: Vec2, grid: f64) -> Option<(Point
 /// the other node's place and continues along the other node's path, which joins two contours
 /// into one, or splits one into two, with overlapping corners. Needs an even number of nodes.
 pub fn reconnect_nodes(contours: &[Contour], nodes: &[(usize, usize)], grid: f64) -> Result<Rewired, PathOpError> {
-    let total: usize = contours.iter().map(|c| c.nodes.len()).sum();
-    if total > crate::MAX_NODES {
-        return Err(PathOpError::TooManyNodes(total));
-    }
+    Ok(reconnect_nodes_paired(contours, nodes, grid)?.0)
+}
+
+/// [`reconnect_nodes`], and what it did with each pair: [`reconnect_pairs`] does the same on contours with the same
+/// node types drawn differently.
+pub fn reconnect_nodes_paired(contours: &[Contour], nodes: &[(usize, usize)], grid: f64) -> Result<(Rewired, Vec<Reconnection>), PathOpError> {
     let mut chosen = nodes.to_vec();
     chosen.sort_unstable();
     chosen.dedup();
@@ -97,7 +112,38 @@ pub fn reconnect_nodes(contours: &[Contour], nodes: &[(usize, usize)], grid: f64
     if chosen.len() < 2 || !chosen.len().is_multiple_of(2) {
         return Err(PathOpError::Invalid("Reconnect Nodes needs an even number of nodes".into()));
     }
-    let involved: Vec<bool> = (0..contours.len()).map(|i| chosen.iter().any(|(c, _)| *c == i)).collect();
+    let mut points: Vec<((usize, usize), Point)> = Vec::with_capacity(chosen.len());
+    for &(c, n) in &chosen {
+        let node = contours.get(c).and_then(|c| c.nodes.get(n)).filter(|n| n.on_curve()).ok_or_else(|| off_curve(c, n))?;
+        check(node.point.x)?;
+        check(node.point.y)?;
+        points.push(((c, n), node.point));
+    }
+    reconnect(contours, pairs(&points).into_iter().map(|(a, b)| (a, b, None)).collect(), grid)
+}
+
+/// Reconnects `pairs`, each as it says. A pair that is to become a corner and is no open corner is refused.
+pub fn reconnect_pairs(contours: &[Contour], pairs: &[Reconnection], grid: f64) -> Result<Rewired, PathOpError> {
+    if pairs.len() > MAX_RECONNECT_NODES {
+        return Err(PathOpError::Invalid(format!("Reconnect Nodes takes at most {MAX_RECONNECT_NODES} nodes, not {}", pairs.len())));
+    }
+    Ok(reconnect(contours, pairs.iter().map(|p| (p.a, p.b, Some(p.corner))).collect(), grid)?.0)
+}
+
+fn off_curve(contour: usize, node: usize) -> PathOpError {
+    PathOpError::Invalid(format!("node {node} of path {contour} is not an on-curve node"))
+}
+
+/// A pair of addresses, and whether they are to become a corner (`None`: when they are an open one).
+type Wanted = ((usize, usize), (usize, usize), Option<bool>);
+
+fn reconnect(contours: &[Contour], wanted: Vec<Wanted>, grid: f64) -> Result<(Rewired, Vec<Reconnection>), PathOpError> {
+    let total: usize = contours.iter().map(|c| c.nodes.len()).sum();
+    if total > crate::MAX_NODES {
+        return Err(PathOpError::TooManyNodes(total));
+    }
+    let chosen: HashSet<usize> = wanted.iter().flat_map(|(a, b, _)| [a.0, b.0]).collect();
+    let involved: Vec<bool> = (0..contours.len()).map(|i| chosen.contains(&i)).collect();
     let mut graph = Graph::default();
     let mut ids: HashMap<(usize, usize), usize> = HashMap::new();
     for (i, c) in contours.iter().enumerate() {
@@ -112,29 +158,29 @@ pub fn reconnect_nodes(contours: &[Contour], nodes: &[(usize, usize)], grid: f64
             }
         }
     }
-    let mut points: Vec<(usize, Point)> = Vec::with_capacity(chosen.len());
-    for (c, n) in &chosen {
-        let Some(&id) = ids.get(&(*c, *n)) else {
-            return Err(PathOpError::Invalid(format!("node {n} of path {c} is not an on-curve node")));
-        };
-        let p = graph.get(id).map_or(Point::ZERO, |g| g.r.node.point);
-        points.push((id, p));
-    }
-    for (a, b) in pairs(&points) {
+    let id_of = |at: (usize, usize)| ids.get(&at).copied().ok_or_else(|| off_curve(at.0, at.1));
+    let mut done = Vec::with_capacity(wanted.len());
+    for (at_a, at_b, corner) in wanted {
+        let (a, b) = (id_of(at_a)?, id_of(at_b)?);
         for id in [a, b] {
             if let Some(g) = graph.get_mut(id) {
                 g.r.mark = true;
             }
         }
-        if !restore_corner(&mut graph, a, b, grid) {
+        let restored = corner != Some(false) && restore_corner(&mut graph, a, b, grid);
+        if corner == Some(true) && !restored {
+            return Err(PathOpError::Invalid(format!("nodes {} and {} of path {} are not an open corner", at_a.1, at_b.1, at_a.0)));
+        }
+        if !restored {
             graph.rewire(a, b);
         }
+        done.push(Reconnection { a: at_a, b: at_b, corner: restored });
     }
-    Ok(assemble(contours, &involved, graph.trace()))
+    Ok((assemble(contours, &involved, graph.trace()), done))
 }
 
-/// Pairs of ids, nearest first; ties go to the pair that comes first in `points`.
-fn pairs(points: &[(usize, Point)]) -> Vec<(usize, usize)> {
+/// Pairs of keys, nearest first; ties go to the pair that comes first in `points`.
+fn pairs<K: Copy>(points: &[(K, Point)]) -> Vec<(K, K)> {
     let mut candidates: Vec<(f64, usize, usize)> = Vec::new();
     for (i, (_, p)) in points.iter().enumerate() {
         for (k, (_, q)) in points.iter().enumerate().skip(i + 1) {

@@ -196,12 +196,24 @@ fn suggest(scene: &Scene, view: &View, dragged: Dragged<'_>, target: Point, tol:
 }
 
 /// The handle being dragged, when the selection is one off-curve point.
-fn single_handle(scene: &Scene, selection: &Selection) -> Option<(usize, usize)> {
+pub(crate) fn single_handle(scene: &Scene, selection: &Selection) -> Option<(usize, usize)> {
     if selection.len() != 1 {
         return None;
     }
     let &(s, n) = selection.points.iter().next()?;
     scene.node(s, n).filter(|node| !node.on_curve()).map(|_| (s, n))
+}
+
+/// The on-curve node a lone selected handle belongs to.
+pub(crate) fn single_handle_node(scene: &Scene, selection: &Selection) -> Option<Point> {
+    let (s, n) = single_handle(scene, selection)?;
+    let path = scene.path(s)?;
+    [false, true]
+        .into_iter()
+        .filter_map(|forward| neighbour(path.nodes.len(), path.closed, n, forward))
+        .filter_map(|j| path.nodes.get(j))
+        .find(|node| node.on_curve())
+        .map(Node::point)
 }
 
 /// The index before (`forward == false`) or after `i` in a path of `count` nodes.

@@ -128,6 +128,82 @@ fn moving_carries_handles_keeps_smooth_nodes_in_line_and_nudges() {
 }
 
 #[test]
+fn orthogonal_conversion_continues_the_neighbours_and_follows_the_glyphs_curve_type() {
+    let mut s = Session::with_document();
+    let up_and_over = [(0.0, 0.0), (0.0, 100.0), (50.0, 200.0), (150.0, 200.0)];
+    add(&mut s, "A", line(&up_and_over), false);
+    run(&mut s, "path.convertSegmentToCurve", json!({"glyph": "A", "segments": [[0, 2]], "orthogonal": true}));
+    let n = nodes(&mut s, "A", 0);
+    assert_eq!(xy(&n), [(0.0, 0.0), (0.0, 100.0), (0.0, 155.0), (22.0, 200.0), (50.0, 200.0), (150.0, 200.0)]);
+    assert_eq!(n[4].kind, "curve");
+    // A horizontal segment has no oval to become: its handles lie on it.
+    run(&mut s, "path.convertSegmentToCurve", json!({"glyph": "A", "segments": [[0, 5]], "orthogonal": true}));
+    assert!(nodes(&mut s, "A", 0)[4..].iter().all(|n| n.y == 200.0));
+
+    // In a glyph drawn with quadratic curves the new curve is quadratic, with two handles.
+    let quad = json!([{"x": 300, "y": 0}, {"x": 350, "y": 50, "type": "offcurve"}, {"x": 400, "y": 0, "type": "qcurve"}]);
+    add(&mut s, "B", quad, false);
+    add(&mut s, "B", line(&up_and_over), false);
+    run(&mut s, "path.convertSegmentToCurve", json!({"glyph": "B", "segments": [[1, 2]], "orthogonal": true}));
+    let n = nodes(&mut s, "B", 1);
+    assert_eq!(xy(&n[2..5]), [(0.0, 141.0), (29.0, 200.0), (50.0, 200.0)]);
+    assert_eq!(n[4].kind, "qcurve");
+}
+
+/// A corner, a line up to a smooth node, and a curve from it.
+fn tangent_path() -> Value {
+    json!([
+        {"x": 0, "y": 0}, {"x": 0, "y": 100, "smooth": true},
+        {"x": 0, "y": 150, "type": "offcurve"}, {"x": 50, "y": 200, "type": "offcurve"}, {"x": 100, "y": 200, "type": "curve"},
+    ])
+}
+
+#[test]
+fn the_handle_of_a_smooth_node_next_to_a_line_turns_onto_the_line() {
+    let mut s = Session::with_document();
+    add(&mut s, "A", tangent_path(), false);
+    let start = xy(&nodes(&mut s, "A", 0));
+    let handle_after = |s: &mut Session, id: &str, p: Value| {
+        run(s, id, p);
+        let n = nodes(s, "A", 0);
+        let at = (n[1].x, n[1].y, n[2].x, n[2].y);
+        run(s, "edit.undo", json!({}));
+        assert_eq!(xy(&nodes(s, "A", 0)), start, "{id}: one undo step");
+        at
+    };
+    let moved = |points: Value, dx: f64, dy: f64, mode: &str| json!({"glyph": "A", "points": points, "dx": dx, "dy": dy, "mode": mode});
+
+    // The node moves, or the far end of its line: the handle keeps its length of 50 and turns.
+    assert_eq!(handle_after(&mut s, "selection.move", moved(json!([[0, 1]]), 30.0, 0.0, "normal")), (30.0, 100.0, 44.0, 148.0));
+    assert_eq!(handle_after(&mut s, "selection.move", moved(json!([[0, 1], [0, 2]]), 30.0, 0.0, "normal")), (30.0, 100.0, 44.0, 148.0));
+    assert_eq!(handle_after(&mut s, "selection.move", moved(json!([[0, 0]]), -30.0, 0.0, "normal")), (0.0, 100.0, 14.0, 148.0));
+    assert_eq!(handle_after(&mut s, "selection.setPosition", json!({"glyph": "A", "points": [[0, 0]], "x": -30})), (0.0, 100.0, 14.0, 148.0));
+    let (px, py, hx, hy) = handle_after(&mut s, "selection.move", moved(json!([[0, 1]]), 30.0, 0.0, "nudge"));
+    assert!((30.0 * (hy - py) - 100.0 * (hx - px)).abs() / 30f64.hypot(100.0) <= 1.0, "nudged: ({hx}, {hy})");
+    // Both move: nothing turns. A line without length gives no direction. pointsOnly leaves handles alone.
+    assert_eq!(handle_after(&mut s, "selection.move", moved(json!([[0, 0], [0, 1]]), 30.0, 7.0, "normal")), (30.0, 107.0, 30.0, 157.0));
+    assert_eq!(handle_after(&mut s, "selection.move", moved(json!([[0, 1]]), 0.0, -100.0, "normal")), (0.0, 0.0, 0.0, 50.0));
+    assert_eq!(handle_after(&mut s, "selection.move", moved(json!([[0, 1]]), 30.0, 0.0, "pointsOnly")), (30.0, 100.0, 0.0, 150.0));
+
+    // Align Selection moves the line's far end.
+    let align = json!({"glyph": "A", "points": [[0, 0], [0, 4]], "axis": "vertical"});
+    assert_eq!(handle_after(&mut s, "path.alignSelection", align), (0.0, 100.0, -22.0, 145.0));
+
+    // Deleting a corner gives the node a new line.
+    add(
+        &mut s,
+        "B",
+        json!([
+            {"x": -100, "y": 100}, {"x": 0, "y": 0}, {"x": 0, "y": 100, "smooth": true},
+            {"x": 0, "y": 150, "type": "offcurve"}, {"x": 50, "y": 200, "type": "offcurve"}, {"x": 100, "y": 200, "type": "curve"},
+        ]),
+        false,
+    );
+    run(&mut s, "edit.delete", json!({"glyph": "B", "points": [[0, 1]]}));
+    assert_eq!(xy(&nodes(&mut s, "B", 0)), [(-100.0, 100.0), (0.0, 100.0), (50.0, 100.0), (50.0, 200.0), (100.0, 200.0)]);
+}
+
+#[test]
 fn moving_shapes_anchors_and_guides_and_duplicating() {
     let mut s = Session::with_document();
     add(&mut s, "A", rect(0.0, 0.0, 100.0, 100.0), true);

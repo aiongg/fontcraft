@@ -25,6 +25,7 @@ use fontcraft_spacing::{SIDEBEARING_RANGE, WIDTH_RANGE};
 use serde_json::{Map, Value, json};
 
 use super::common::{grid, in_range, master_metrics};
+use super::node::{Plan, undo_label, with_matched};
 use super::transform_metrics::{self as tm, Shift};
 use super::*;
 use crate::EngineError;
@@ -717,6 +718,32 @@ pub(crate) fn apply(p: &Params, layer: &mut Layer, side: LayerSide, sel: &Select
     Ok(())
 }
 
+/// Runs `edit`, which moves the points `touched`, then turns the handles of the smooth nodes next
+/// to a line in those paths back onto their lines ([`super::node::keep_tangents`]), except the
+/// handles in `placed`.
+fn keeping_tangents<T>(
+    layer: &mut Layer,
+    side: LayerSide,
+    touched: &BTreeSet<NodeRef>,
+    placed: &BTreeSet<NodeRef>,
+    step: f64,
+    edit: impl FnOnce(&mut Layer) -> Result<T>,
+) -> Result<T> {
+    let paths: BTreeSet<usize> = touched.iter().map(|p| p.0).collect();
+    let before: Vec<(usize, Vec<Point>)> = {
+        let parts = layer.parts(side);
+        paths.into_iter().filter_map(|i| Some((i, parts.path(i)?.nodes.iter().map(Node::point).collect()))).collect()
+    };
+    let out = edit(layer)?;
+    let mut parts = layer.parts_mut(side);
+    for (i, old) in before {
+        if let Some(path) = parts.path_mut(i) {
+            super::node::keep_tangents(path, &old, step, |j| placed.contains(&(i, j)));
+        }
+    }
+    Ok(out)
+}
+
 /// Where Cursivy puts the nodes of `sel` that it moves off the place the map `m` gives them,
 /// unrounded.
 fn cursivy_places(p: &Params, parts: LayerParts, sel: &Selection, m: Affine, options: po::CursivyOptions) -> Result<Vec<(usize, usize, Point)>> {
@@ -1229,17 +1256,22 @@ fn align(s: &mut Session, v: &Value, id: &'static str, label: &str, edge: Edge) 
         Edge::CenterVertical => Vec2::new(0.0, centre(all.y0, all.y1) - centre(b.y0, b.y1)),
         Edge::Bottom => Vec2::new(0.0, all.y0 - b.y0),
     };
+    // Handles that are objects of their own stay where the alignment puts them.
+    let touched: BTreeSet<NodeRef> = units.iter().flat_map(|u| u.sel.points.iter().copied()).collect();
+    let lone: BTreeSet<NodeRef> = units.iter().filter(|u| u.sel.points.len() == 1).flat_map(|u| u.sel.points.iter().copied()).collect();
     let moved = s.edit(label, |font| {
         let mut moved = t.edit_layer(font, |l| {
-            let mut moved = 0usize;
-            for u in units.iter().filter(|u| u.sel.global_guides.is_empty()) {
-                let d = shift(u.bounds);
-                if d != Vec2::ZERO {
-                    apply(&p, l, t.side, &u.sel, Affine::translate(d), step)?;
-                    moved += 1;
+            keeping_tangents(l, t.side, &touched, &lone, step, |l| {
+                let mut moved = 0usize;
+                for u in units.iter().filter(|u| u.sel.global_guides.is_empty()) {
+                    let d = shift(u.bounds);
+                    if d != Vec2::ZERO {
+                        apply(&p, l, t.side, &u.sel, Affine::translate(d), step)?;
+                        moved += 1;
+                    }
                 }
-            }
-            Ok(moved)
+                Ok(moved)
+            })
         })?;
         // Global guides belong to the master, not the layer.
         let global: Vec<(usize, Vec2)> =
@@ -1282,31 +1314,57 @@ fn align_bottom(s: &mut Session, v: &Value) -> Result<Value> {
     align(s, v, "transform.alignBottom", "Align Bottom", Edge::Bottom)
 }
 
+/// What Align Selection lines up along.
+#[derive(Clone, Copy, PartialEq)]
+enum AlignAxis {
+    /// The smaller of the selection's width and height.
+    Auto,
+    /// One x.
+    X,
+    /// One y.
+    Y,
+}
+
 /// Path › Align Selection: the selected points onto one coordinate.
 fn align_selection(s: &mut Session, v: &Value) -> Result<Value> {
-    let p = Params::new("path.alignSelection", v)?;
+    align_selection_as(s, v, "path.alignSelection")
+}
+
+pub(super) fn align_selection_as(s: &mut Session, v: &Value, command: &'static str) -> Result<Value> {
+    let p = Params::new(command, v)?;
     let t = Targets::parse(&p)?;
     if !t.guides.is_empty() || !t.annotations.is_empty() {
         return Err(p.bad("aligns nodes, handles and anchors; guides and annotations are not aligned"));
     }
-    #[derive(Clone, Copy, PartialEq)]
-    enum Axis {
-        Auto,
-        X,
-        Y,
-    }
     let axis = match p.opt_str("axis")? {
-        None | Some("auto") => Axis::Auto,
-        Some("vertical") => Axis::X,
-        Some("horizontal") => Axis::Y,
+        None | Some("auto") => AlignAxis::Auto,
+        Some("vertical") => AlignAxis::X,
+        Some("horizontal") => AlignAxis::Y,
         Some(other) => return Err(p.bad(format!("`axis` must be auto, vertical or horizontal, got \"{other}\""))),
     };
     let origin = parse_origin(&p, Origin::Box(BoxPoint::Center))?;
-    if let Some(out) = super::anchor::align_special(s, &p, &t)? {
+    let plan = Plan::of(s.font()?, &p, &t)?;
+    let reply = s.edit(&undo_label(&p, "Align Selection"), |font| {
+        let reply = align_in(font, &p, &t, axis, origin)?;
+        if let Some(plan) = &plan {
+            let axis = match reply.get("axis").and_then(Value::as_str) {
+                Some("x") => AlignAxis::X,
+                Some(_) => AlignAxis::Y,
+                None => axis,
+            };
+            plan.apply_targets(font, &p, &t, |font, at| align_in(font, &p, at, axis, origin).map(|_| ()))?;
+        }
+        Ok(reply)
+    })?;
+    Ok(with_matched(reply, plan))
+}
+
+/// Align Selection on the layer `t` names. Returns the reply.
+fn align_in(font: &mut Font, p: &Params, t: &Targets, axis: AlignAxis, origin: Origin) -> Result<Value> {
+    if let Some(out) = super::anchor::align_special(font, p, t)? {
         return Ok(out);
     }
-    let step = grid(s.font()?);
-    let font = s.font()?;
+    let step = grid(font);
     let r = t.resolve(font)?;
     // Whole paths take part with all their points; a component only in the case above.
     let mut points: BTreeSet<(usize, usize)> = BTreeSet::new();
@@ -1320,7 +1378,7 @@ fn align_selection(s: &mut Session, v: &Value) -> Result<Value> {
             }
         }
     }
-    let sel = selection(&t, r.parts);
+    let sel = selection(t, r.parts);
     points.extend(sel.named_points.iter().copied());
     let anchors = sel.anchors.clone();
     let none = || json!({"glyph": t.glyph, "moved": 0, "message": "Select at least two points to align them."});
@@ -1354,7 +1412,9 @@ fn align_selection(s: &mut Session, v: &Value) -> Result<Value> {
             return Ok(json!({"glyph": t.glyph, "moved": 0, "message": "The background has no node to align the node with."}));
         };
         let sel = Selection { points: std::iter::once((s0, n0)).chain(handles_of(r.parts, s0, n0)).collect(), ..Selection::default() };
-        s.edit("Align Selection", |font| t.edit_layer(font, |l| apply(&p, l, t.side, &sel, Affine::translate(to - from), step)))?;
+        t.edit_layer(font, |l| {
+            keeping_tangents(l, t.side, &sel.points, &BTreeSet::new(), step, |l| apply(p, l, t.side, &sel, Affine::translate(to - from), step))
+        })?;
         return Ok(json!({"glyph": t.glyph, "moved": 1, "to": [to.x, to.y]}));
     }
 
@@ -1368,9 +1428,9 @@ fn align_selection(s: &mut Session, v: &Value) -> Result<Value> {
     }
     let Some(bounds) = fontcraft_geom::bounds(positions.iter().copied()) else { return Ok(none()) };
     let on_x = match axis {
-        Axis::X => true,
-        Axis::Y => false,
-        Axis::Auto => bounds.width() <= bounds.height(),
+        AlignAxis::X => true,
+        AlignAxis::Y => false,
+        AlignAxis::Auto => bounds.width() <= bounds.height(),
     };
     let o = origin_point(origin, Some(bounds), font, r.master, r.layer.width);
     let target = if on_x { o.x } else { o.y };
@@ -1385,8 +1445,8 @@ fn align_selection(s: &mut Session, v: &Value) -> Result<Value> {
         }
     }
     let shift = |at: Point| if on_x { Vec2::new(target - at.x, 0.0) } else { Vec2::new(0.0, target - at.y) };
-    let moved = s.edit("Align Selection", |font| {
-        t.edit_layer(font, |l| {
+    let moved = t.edit_layer(font, |l| {
+        let mut moved = keeping_tangents(l, t.side, &points, &points, step, |l| {
             let mut moved = 0usize;
             for &(s0, n0) in &points {
                 let Some(at) = l.parts(t.side).node(s0, n0).map(Node::point) else { continue };
@@ -1398,19 +1458,20 @@ fn align_selection(s: &mut Session, v: &Value) -> Result<Value> {
                 if let Some((_, handles)) = followers.iter().find(|(k, _)| *k == (s0, n0)) {
                     sel.points.extend(handles.iter().copied());
                 }
-                apply(&p, l, t.side, &sel, Affine::translate(d), step)?;
+                apply(p, l, t.side, &sel, Affine::translate(d), step)?;
                 moved += 1;
             }
-            for &i in &anchors {
-                let Some(at) = l.parts(t.side).anchors.get(i).map(|a| Point::new(a.x, a.y)) else { continue };
-                let d = shift(at);
-                if d != Vec2::ZERO {
-                    apply(&p, l, t.side, &Selection { anchors: BTreeSet::from([i]), ..Selection::default() }, Affine::translate(d), step)?;
-                    moved += 1;
-                }
-            }
             Ok(moved)
-        })
+        })?;
+        for &i in &anchors {
+            let Some(at) = l.parts(t.side).anchors.get(i).map(|a| Point::new(a.x, a.y)) else { continue };
+            let d = shift(at);
+            if d != Vec2::ZERO {
+                apply(p, l, t.side, &Selection { anchors: BTreeSet::from([i]), ..Selection::default() }, Affine::translate(d), step)?;
+                moved += 1;
+            }
+        }
+        Ok(moved)
     })?;
     Ok(json!({"glyph": t.glyph, "moved": moved, "axis": if on_x { "x" } else { "y" }, "coordinate": target}))
 }
