@@ -9,6 +9,7 @@
 //! | kerning, while the glyph shows in the edit view's text | kern fields and locks towards its neighbours (`info_box_kerning`) | `kerning.setPair`, `…removePair`, `…addException`, `…removeException` |
 //! | one node | X, Y | `selection.setPosition` |
 //! | one handle | X, Y, dX, dY and its length, measured from its node | `selection.setPosition` on the handle |
+//! | one anchor | its name, over the box's fields | `anchor.rename` |
 //! | anything else | X, Y of the box at the reference point, width, height, lock | `selection.setPosition`; `transform.scale` about the reference point |
 //!
 //! A selected component, corner component or cap component adds its part below (`info_box_component`). A selected
@@ -61,6 +62,8 @@ craft::ui::words! {
         /// Before the name of the master whose metrics show.
         linked: "fontcraftInfoBox.linked" = "Metrics of master";
         reference: "fontcraftInfoBox.reference" = "Reference Point";
+        /// The name of the selected anchor.
+        anchor: "fontcraftInfoBox.anchor" = "Anchor";
         x: "fontcraftInfoBox.x" = "X";
         y: "fontcraftInfoBox.y" = "Y";
         dx: "fontcraftInfoBox.dx" = "dX";
@@ -225,6 +228,17 @@ fn selection_part(ui: &mut Ui, words: &InfoBoxWords, s: &SelectionBox, sent: &mu
         extra.insert("referencePoint".into(), json!(s.reference));
         sent.push(Msg::run("selection.setPosition", s.place.with(Value::Object(extra))));
     };
+    if let Some(anchor) = &s.anchor {
+        let committed = widgets::labelled(ui, &words.anchor, |ui| {
+            let field = TextField::new(words.anchor.clone(), Bind::given(anchor.clone())).select_on_focus().limit(widgets::MAX_KEY_CHARS);
+            field.show(ui).events.committed().cloned()
+        });
+        if let Some(Some(name)) = committed
+            && name.trim() != anchor
+        {
+            sent.push(Msg::run("anchor.rename", s.rename.with(json!({"anchor": anchor, "name": name.trim()}))));
+        }
+    }
     if let Some(point) = widgets::box_point(ui, words.reference.clone(), Some(&s.reference)) {
         sent.push(shell("infoBox.setReferencePoint", json!({ "point": point })));
     }
@@ -421,6 +435,23 @@ mod tests {
                 "selection.setPosition",
                 json!({"glyph": "A", "layer": "m01", "points": [[0, 0]], "x": 140.0, "referencePoint": "center"})
             )]
+        );
+    }
+
+    /// The name field of an anchor selected alone renames it.
+    #[test]
+    fn the_anchor_field_renames_the_selected_anchor() {
+        let selection = SelectionBox {
+            kind: SelectionKind::Box,
+            reference: "center".into(),
+            anchor: Some("top".into()),
+            rename: Targets { json: json!({"glyph": "A", "layer": "m01"}).to_string() },
+            ..Default::default()
+        };
+        let model = InfoBoxModel { glyph: Some(glyph(false)), selection: Some(selection), ..Default::default() };
+        assert_eq!(
+            posted_after(model, "Anchor", "ogonek"),
+            vec![Msg::run("anchor.rename", json!({"glyph": "A", "layer": "m01", "anchor": "top", "name": "ogonek"}))]
         );
     }
 

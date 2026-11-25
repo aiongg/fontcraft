@@ -557,6 +557,7 @@ pub fn show(ui: &mut Ui, app: &mut FontCraftApp) {
             tool: active_tool.as_mut(),
             overlays: &overlays.data,
             note: &mut overlays.note,
+            anchor: &mut overlays.anchor,
             hinting,
         },
         space_preview,

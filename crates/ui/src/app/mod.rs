@@ -400,6 +400,7 @@ impl FontCraftApp {
         if let Some(last) = failed.pop() {
             self.status = last;
         }
+        crate::canvas::anchor_editor::finish(self);
         // A shell command may have switched or closed the active document: its tab set shows before anything reads
         // the tabs, and again after a close the drain answered.
         crate::shell::tabs::follow_document(self);

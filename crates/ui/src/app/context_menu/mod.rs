@@ -1103,12 +1103,17 @@ pub fn invoke_choice(
         None => steps_for(app, &menu, item.command),
     };
     let (first, steps) = one_transaction(steps, item.label);
+    let adds_anchor = item.command == "anchor.add";
     let mut result = None;
     for msg in steps {
         let value = run(app, msg)?;
         result.get_or_insert(if first { value.pointer("/results/0").cloned().unwrap_or(value) } else { value });
     }
-    Ok(result.unwrap_or(Value::Null))
+    let result = result.unwrap_or(Value::Null);
+    if adds_anchor {
+        crate::canvas::anchor_editor::after_add(app, &result);
+    }
+    Ok(result)
 }
 
 /// `steps` with the engine commands they start with as one `command.batch` labelled `label`, so that they are one undo

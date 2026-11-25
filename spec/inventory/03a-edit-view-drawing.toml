@@ -2282,9 +2282,13 @@ milestone = "M6"
 summary = "Canvas context-menu command that places an anchor at the clicked position. It is named new anchor and its name is immediately in edit state; Return or a click on the canvas confirms the typed name."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
-notes = "Documented, not yet observed. The position is rounded to the font's grid. The name's edit state is the shell's (M6.10); the command takes the name as a parameter."
+notes = "Documented, not yet observed. The position is rounded to the font's grid. The command takes the name as a parameter. M6.31: the context menu's Add Anchor opens a field at the new anchor with its name selected; Return or a click outside commits, and adding and naming are one undo step (`crates/ui/src/canvas/anchor_editor.rs`)."
 guesses = [
   "When `name` is omitted the anchor is named new anchor, and a name already on the layer, given or not, gets underscores appended until it is unique, as Option-drag duplication does (anchors.uniqueNamesPerLayer); adding two anchors without renaming in the reference app settles it.",
+  "Escape in the field of a new anchor leaves the anchor there, named new anchor; pressing Escape right after Add Anchor in the reference app settles it.",
+]
+observe = [
+  "Choose Add Anchor, then press Escape, and note whether the anchor stays.",
 ]
 
 [[command]]
@@ -2299,9 +2303,29 @@ milestone = "M6"
 summary = "Renames an anchor. In the UI this starts by double-clicking the anchor, by pressing Return with it selected, or by editing the name field of the Info box."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
-notes = "Documented, not yet observed. Return with an anchor selected starts the rename in Edit View; the shell maps that (M6.10), because Return with nodes selected is Toggle Node Type (`path.toggleNodeType`), so the command itself has no shortcut."
+notes = "Documented, not yet observed. M6.31: a double-click on an anchor, and Return with one anchor selected alone, open a field on the canvas (`anchor.editName`); Return with nodes selected is Toggle Node Type (`path.toggleNodeType`), so the command itself has no shortcut. The Info box has a name field while one anchor is selected alone."
 guesses = [
-  "Renaming an anchor to a name already on the layer is refused with a message; the reference app settles it.",
+  "Renaming an anchor to a name already on the layer is refused with a message, and the field stays open with the message under it; the reference app settles it.",
+]
+observe = [
+  "Rename an anchor to a name another anchor of the layer has and note what happens.",
+]
+
+[[command]]
+id = "anchor.editName"
+label = "Edit Anchor Name"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{anchor?: name (default the only selected anchor)}"
+area = "components"
+milestone = "M6"
+summary = "Opens the field that renames an anchor of the edited layer, at the anchor's place on the canvas: what double-clicking an anchor, or Return with an anchor selected, does."
+ref = "Edit View › Adding, Editing, & Removing Anchors"
+status = "handbook"
+notes = "Documented, not yet observed. Return or a click outside the field runs anchor.rename, Escape keeps the name; a name that is empty, taken or refused keeps the field open with the reason under it. Refused in text mode and in a locked glyph."
+guesses = [
+  "A click outside the field commits the typed name, as it does for a new anchor; trying it on an existing anchor in the reference app settles it.",
 ]
 
 [[command]]
@@ -2444,7 +2468,10 @@ milestone = "M6"
 summary = "Anchor names are unique within a layer. An Option-drag that duplicates an anchor therefore gives the copy the original name with an underscore appended."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
-notes = "Documented, not yet observed. anchor.add appends underscores to a taken name and anchor.rename refuses one; Option-drag duplication in `cmd/node/moving.rs` still names copies top.1, top.2 and is to follow the underscore rule."
+notes = "Documented, not yet observed. anchor.add and Option-drag duplication (`cmd/node/moving.rs`) append underscores to a taken name (top_, top__) and anchor.rename refuses one."
+observe = [
+  "Option-drag an anchor twice and note the two names.",
+]
 
 [[behavior]]
 id = "anchors.originAnchor"

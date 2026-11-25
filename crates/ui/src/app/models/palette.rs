@@ -119,6 +119,9 @@ pub struct SelectionBox {
     /// The targets of `selection.setPosition` and of `transform.scale`.
     pub place: Targets,
     pub scale: Targets,
+    /// The anchor selected alone, and the targets of `anchor.rename`.
+    pub anchor: Option<String>,
+    pub rename: Targets,
 }
 
 /// The Info box.
@@ -348,6 +351,7 @@ const TARGETED: &[&str] = &[
     "transform.mirrorHorizontal",
     "fitCurve.applyStep",
     "anchor.setContext",
+    "anchor.rename",
     "path.setStroke",
 ];
 
@@ -589,6 +593,8 @@ fn selection_box(cx: &mut ProjectCx<'_>, edit: &Edit) -> Option<SelectionBox> {
         total: edit.total,
         place: Targets::of(edit.targets("selection.setPosition").unwrap_or_default()),
         scale: Targets::of(edit.targets("transform.scale").unwrap_or_default()),
+        anchor: edit.selection.anchors.first().filter(|_| edit.selection.len() == 1).cloned(),
+        rename: Targets::of(edit.targets("anchor.rename").unwrap_or_default()),
         ..Default::default()
     };
     if let Some(node) = info.get("node") {

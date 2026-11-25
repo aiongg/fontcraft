@@ -6,6 +6,7 @@
 //! the background press, hover and keys and paints its feedback over the layers.
 
 pub mod access;
+pub mod anchor_editor;
 pub mod annotation_editor;
 pub mod badges;
 pub mod camera;
@@ -130,6 +131,8 @@ pub struct CanvasProps<'a> {
     pub overlays: &'a overlays::OverlayData,
     /// The text note being typed, with its field over the note.
     pub note: &'a mut Option<annotation_editor::NoteEdit>,
+    /// The anchor name being typed, with its field at the anchor.
+    pub anchor: &'a mut Option<anchor_editor::AnchorEdit>,
     /// The hint layers' model and state.
     pub hinting: hinting::HintPaint<'a>,
 }
@@ -157,6 +160,7 @@ pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
         (props.model, props.tokens, props.display, props.edit_background, props.tools, props.text, props.hinting);
     let overlay_data = props.overlays;
     let note = &mut *props.note;
+    let anchor = &mut *props.anchor;
     let compatibility = props.compatibility;
     let tool = &mut *props.tool;
     let mut reply = None;
@@ -188,6 +192,13 @@ pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
             let at = model.glyph.as_ref().and_then(|g| g.layer.info.annotations.get(edit.index)).map(|a| fontcraft_geom::Point::new(a.x, a.y));
             if let Some(at) = at.map(|p| camera.to_screen(p)).filter(|p| p.x.is_finite() && p.y.is_finite()) {
                 annotation_editor::show(ui, annotation_editor::EditorProps { note: edit, at });
+            }
+        }
+        if let Some(edit) = anchor.as_mut() {
+            let at = model.glyph.as_ref().and_then(|g| g.layer.anchors.iter().find(|a| a.name == edit.anchor));
+            let at = at.map(|a| camera.to_screen(fontcraft_geom::Point::new(a.x, a.y))).filter(|p| p.x.is_finite() && p.y.is_finite());
+            if let Some(at) = at {
+                anchor_editor::show(ui, anchor_editor::EditorProps { edit, at });
             }
         }
         tool.set_camera(camera);
