@@ -380,6 +380,15 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
         glyph_sources.insert(g.name.clone(), fontcraft_interp::GlyphSources::of(prepared, &designspace, &g.name)?);
     }
 
+    options.components.keep_open_corners =
+        crate::components_opt::uneven_open_corners(prepared, &origin.id, glyph_sources.values(), &options.components);
+    if !options.components.keep_open_corners.is_empty() {
+        let mut names: Vec<&str> = options.components.keep_open_corners.iter().map(String::as_str).collect();
+        names.sort_unstable();
+        names.truncate(MAX_NAMED_GLYPHS);
+        notes.push(format!("open corners were kept in glyphs whose masters do not all have the same ones: {}", names.join(", ")));
+    }
+
     // The sources besides the origin: the other masters, then each intermediate location.
     let mut sources: Vec<Source> = Vec::new();
     let mut add = |master: Option<String>,

@@ -3,8 +3,8 @@
 //! of `docs/spec/21-qa.md` § 5 "Fix calls" that are not M3's.
 //!
 //! - `path.eraseOpenCorners` trims an open corner (segments `a` and `b` that cross just before
-//!   they meet, joined by a short segment between them) back to the crossing point: the two
-//!   nodes of the corner become one corner node there.
+//!   they meet, joined by a short segment between them, [`find_open_corners`]) back to the crossing
+//!   point: the two nodes of the corner become one corner node there.
 //! - `component.flatten` replaces a nested component by components of the innermost glyphs.
 //!
 //! The audit fix `fixCompatibility` reorders shapes with `glyph.setShapeOrder`.
@@ -16,19 +16,13 @@ use fontcraft_components::propagate::base_layer;
 use fontcraft_geom::{Affine, Piece, Point, Segment, Vec2, round_point};
 use fontcraft_hinting::Renumbered;
 use fontcraft_model::{Alignment, Component, Font, Glyph, Layer, LayerSide, MAX_COMPONENT_DEPTH, Node, NodeKind, Path, Shape, Transform};
+use fontcraft_pathops::{OpenCorner, find_open_corners};
 use serde_json::{Value, json};
 
 use super::common::grid;
 use super::shared::{MAX_LAYER_SHAPES, renumber_hints};
 use super::*;
 use crate::params::{MAX_TARGETS, Params, TargetKind as K, Targets, kind};
-
-/// Samples per piece when looking for the crossing of two segments.
-const CROSSING_SAMPLES: usize = 64;
-/// Newton steps that refine a sampled crossing.
-const CROSSING_REFINE_STEPS: usize = 12;
-/// How close (font units) a refined crossing must bring the two segments to replace the sampled one.
-const CROSSING_TOLERANCE: f64 = 1e-6;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -92,16 +86,6 @@ fn erase_open_corners(s: &mut Session, v: &Value) -> Result<Value> {
     Ok(json!({"erased": erased, "skipped": skipped, "selection": sel.to_json()}))
 }
 
-/// An open corner of a path: the segments before, between and after, by place in the segment
-/// list, and where the outer two cross.
-struct Corner {
-    a: usize,
-    mid: usize,
-    b: usize,
-    ta: f64,
-    tb: f64,
-}
-
 /// Erases the open corners of `path`: those at the nodes in `asked` (by index and position in the
 /// unchanged path), or every one. Returns the new path, how many corners went, and the asked
 /// nodes that had none.
@@ -113,7 +97,7 @@ fn erase_in_path(path: &Path, asked: Option<&[(usize, Point)]>, step: f64) -> (P
     let rounds = path.segments().len();
     for _ in 0..rounds {
         let segs = out.segments();
-        let corner = find_corners(&out, &segs).into_iter().find(|c| match asked {
+        let corner = find_open_corners(out.closed, &segs).into_iter().find(|c| match asked {
             None => true,
             Some(_) => corner_nodes(&segs, c).iter().any(|n| out.nodes.get(*n).is_some_and(|node| left.iter().any(|(_, at)| *at == node.point()))),
         });
@@ -128,109 +112,9 @@ fn erase_in_path(path: &Path, asked: Option<&[(usize, Point)]>, step: f64) -> (P
 }
 
 /// The two nodes of a corner: where the first segment ends and where the second starts.
-fn corner_nodes(segs: &[Segment], c: &Corner) -> [usize; 2] {
+fn corner_nodes(segs: &[Segment], c: &OpenCorner) -> [usize; 2] {
     let mid = segs.get(c.mid);
     [mid.map_or(usize::MAX, |m| m.start), mid.map_or(usize::MAX, |m| m.end)]
-}
-
-/// The open corners of a path, in segment order.
-fn find_corners(path: &Path, segs: &[Segment]) -> Vec<Corner> {
-    let n = segs.len();
-    let enough = if path.closed { n >= 4 } else { n >= 3 };
-    if !enough {
-        return Vec::new();
-    }
-    let last = if path.closed { n } else { n - 2 };
-    let mut out = Vec::new();
-    for k in 0..last {
-        let (ia, im, ib) = (k, (k + 1) % n, (k + 2) % n);
-        let (Some(a), Some(mid), Some(b)) = (segs.get(ia), segs.get(im), segs.get(ib)) else { continue };
-        if a.end != mid.start || mid.end != b.start {
-            continue;
-        }
-        let Some((ta, tb)) = crossing(a, b) else { continue };
-        // The loop beyond the crossing is the smaller part of both segments.
-        if ta > 0.5 && tb < 0.5 {
-            out.push(Corner { a: ia, mid: im, b: ib, ta, tb });
-        }
-    }
-    out
-}
-
-/// Where segments `a` and `b` cross, as their parameters, both strictly inside. Touching ends (a
-/// middle segment of length zero) do not count.
-fn crossing(a: &Segment, b: &Segment) -> Option<(f64, f64)> {
-    let (pa, pb) = (polyline(a), polyline(b));
-    for w in pa.windows(2) {
-        let (Some(&(t0, p0)), Some(&(t1, p1))) = (w.first(), w.get(1)) else { continue };
-        for x in pb.windows(2) {
-            let (Some(&(u0, q0)), Some(&(u1, q1))) = (x.first(), x.get(1)) else { continue };
-            if !boxes_overlap(p0, p1, q0, q1) {
-                continue;
-            }
-            let Some((s, r)) = line_crossing(p0, p1, q0, q1) else { continue };
-            let (ta, tb) = (t0 + (t1 - t0) * s, u0 + (u1 - u0) * r);
-            let (ta, tb) = refine(a, b, ta, tb).unwrap_or((ta, tb));
-            if ta > 0.0 && ta < 1.0 && tb > 0.0 && tb < 1.0 {
-                return Some((ta, tb));
-            }
-        }
-    }
-    None
-}
-
-/// A segment as points with their parameters.
-fn polyline(seg: &Segment) -> Vec<(f64, Point)> {
-    let steps = CROSSING_SAMPLES.saturating_mul(seg.pieces.len().max(1));
-    (0..=steps)
-        .filter_map(|i| {
-            let t = i as f64 / steps as f64;
-            seg.eval(t).filter(|p| p.is_finite()).map(|p| (t, p))
-        })
-        .collect()
-}
-
-fn boxes_overlap(p0: Point, p1: Point, q0: Point, q1: Point) -> bool {
-    p0.x.max(p1.x) >= q0.x.min(q1.x) && q0.x.max(q1.x) >= p0.x.min(p1.x) && p0.y.max(p1.y) >= q0.y.min(q1.y) && q0.y.max(q1.y) >= p0.y.min(p1.y)
-}
-
-/// Where lines p0–p1 and q0–q1 cross, as fractions along each; parallel lines do not cross.
-fn line_crossing(p0: Point, p1: Point, q0: Point, q1: Point) -> Option<(f64, f64)> {
-    let (d, e) = (p1 - p0, q1 - q0);
-    let den = d.cross(e);
-    if den == 0.0 || !den.is_finite() {
-        return None;
-    }
-    let w = q0 - p0;
-    let (s, r) = (w.cross(e) / den, w.cross(d) / den);
-    ((0.0..=1.0).contains(&s) && (0.0..=1.0).contains(&r)).then_some((s, r))
-}
-
-/// Newton steps on a(ta) = b(tb), from the sampled crossing; `None` when they do not settle.
-fn refine(a: &Segment, b: &Segment, mut ta: f64, mut tb: f64) -> Option<(f64, f64)> {
-    const H: f64 = 1e-7;
-    for _ in 0..CROSSING_REFINE_STEPS {
-        let f = a.eval(ta)? - b.eval(tb)?;
-        if f.hypot() <= CROSSING_TOLERANCE {
-            return Some((ta, tb));
-        }
-        let da = (a.eval((ta + H).min(1.0))? - a.eval((ta - H).max(0.0))?) / (2.0 * H);
-        let db = (b.eval((tb + H).min(1.0))? - b.eval((tb - H).max(0.0))?) / (2.0 * H);
-        // Solve [da, -db] · [dta, dtb] = -f.
-        let det = da.cross(-db);
-        if det == 0.0 || !det.is_finite() {
-            return None;
-        }
-        let dta = (-f).cross(-db) / det;
-        let dtb = da.cross(-f) / det;
-        ta += dta;
-        tb += dtb;
-        if !(ta.is_finite() && tb.is_finite()) || !(0.0..=1.0).contains(&ta) || !(0.0..=1.0).contains(&tb) {
-            return None;
-        }
-    }
-    let f = a.eval(ta)? - b.eval(tb)?;
-    (f.hypot() <= CROSSING_TOLERANCE).then_some((ta, tb))
 }
 
 /// The nodes that draw `pieces` after their start: handles and the on-curve end of each piece.
@@ -271,7 +155,7 @@ struct Entry {
 }
 
 /// `path` with corner `c` erased; `None` when the path cannot be rebuilt.
-fn erase_corner(path: &Path, segs: &[Segment], c: &Corner, step: f64) -> Option<Path> {
+fn erase_corner(path: &Path, segs: &[Segment], c: &OpenCorner, step: f64) -> Option<Path> {
     let (a, b) = (segs.get(c.a)?, segs.get(c.b)?);
     let (before, _) = a.split(c.ta)?;
     let (_, after) = b.split(c.tb)?;

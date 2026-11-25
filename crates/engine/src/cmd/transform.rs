@@ -16,10 +16,15 @@ use std::sync::Arc;
 
 use fontcraft_geom::{Affine, Point, Rect, Shape as _, Vec2, round_point};
 use fontcraft_model::glyphdata::GlyphData;
-use fontcraft_model::{Font, Guide, Layer, LayerParts, LayerSide, MAX_COORDINATE, MAX_GLYPHS, Master, Metrics, Node, Shape, Transform, metric};
+use fontcraft_model::{
+    Font, Guide, Layer, LayerParts, LayerSide, MAX_COORDINATE, MAX_GLYPHS, Master, Metrics, Node, NodeKind, Shape, Transform, metric,
+};
+use fontcraft_pathops as po;
+use fontcraft_spacing::{SIDEBEARING_RANGE, WIDTH_RANGE};
 use serde_json::{Map, Value, json};
 
 use super::common::{grid, in_range, master_metrics};
+use super::transform_metrics::{self as tm, Shift};
 use super::*;
 use crate::EngineError;
 use crate::params::{GuideScope, Params, TargetKind, Targets, kind};
@@ -227,7 +232,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Transformations",
             ["Path"],
             None,
-            "{glyph?: name, glyphs?: [names], layer?: id, layers?: [ids] (with glyphs; default the first master's layer), side?, points?: [[shape, node]], segments?, shapes?: [index] (target lists with glyph; without them, whole layers), translate?: {x, y}, scale?: {x: percent, y?: percent (default x)}, slant?: degrees, cursivy?: bool, origin?: \"capHeight\" | \"halfCapHeight\" | \"xHeight\" | \"halfXHeight\" | \"baseline\" (default) or an origin object as for transform.mirrorHorizontal, string?: export-filter string} scales, then slants, about the origin, then translates. `string` takes the place of the other settings, e.g. \"Transformations;ScaleX:90;ScaleY:90;Slant:10;SlantCorrection:0;OffsetX:20;Origin:4;\" (Origin 0 cap height … 4 baseline; include: or exclude: name the glyphs); with `string` and no glyph or glyphs, every glyph is changed. cursivy needs the master's stems and is not supported yet. Points and anchors are rounded to the grid → {glyphs: [names], layers: count, origin?: [x, y]}",
+            "{glyph?: name, glyphs?: [names], layer?: id, layers?: [ids] (with glyphs; default the first master's layer), side?, points?: [[shape, node]], segments?, shapes?: [index] (target lists with glyph; without them, whole layers), translate?: {x, y}, scale?: {x: percent, y?: percent (default x)}, slant?: degrees, cursivy?: bool, origin?: \"capHeight\" | \"halfCapHeight\" | \"xHeight\" | \"halfXHeight\" | \"baseline\" (default) or an origin object as for transform.mirrorHorizontal, string?: export-filter string} scales, then slants, about the origin, then translates. `string` takes the place of the other settings, e.g. \"Transformations;ScaleX:90;ScaleY:90;Slant:10;SlantCorrection:0;OffsetX:20;Origin:4;\" (Origin 0 cap height … 4 baseline; LSB, RSB or Width change the metrics after the transformation, added with a sign and set without one; include: or exclude: name the glyphs); with `string` and no glyph or glyphs, every glyph is changed. cursivy needs a horizontal and a vertical stem in the layer's master: the slant is corrected so that round strokes keep their thickness; closed paths' curves move, straight segments stay on the plain slant. Points and anchors are rounded to the grid → {glyphs: [names], layers: count, origin?: [x, y]}",
             has_doc,
             transformations
         )
@@ -699,6 +704,41 @@ pub(crate) fn apply(p: &Params, layer: &mut Layer, side: LayerSide, sel: &Select
     Ok(())
 }
 
+/// Where Cursivy puts the nodes of `sel` that it moves off the place the map `m` gives them,
+/// unrounded.
+fn cursivy_places(p: &Params, parts: LayerParts, sel: &Selection, m: Affine, options: po::CursivyOptions) -> Result<Vec<(usize, usize, Point)>> {
+    let moves = |s: usize, n: usize| sel.shapes.contains(&s) || sel.points.contains(&(s, n));
+    let (mut contours, mut shapes) = (Vec::new(), Vec::new());
+    for (i, shape) in parts.shapes.iter().enumerate() {
+        let Shape::Path(path) = shape else { continue };
+        let nodes = path
+            .nodes
+            .iter()
+            .enumerate()
+            .map(|(k, n)| po::Node {
+                point: if moves(i, k) { m * n.point() } else { n.point() },
+                kind: match n.kind {
+                    NodeKind::Line => po::NodeKind::Line,
+                    NodeKind::Curve => po::NodeKind::Curve,
+                    NodeKind::QCurve => po::NodeKind::QCurve,
+                    NodeKind::OffCurve => po::NodeKind::OffCurve,
+                },
+                smooth: n.smooth,
+                tag: None,
+            })
+            .collect();
+        let contour = po::Contour::new(path.closed, nodes);
+        // A path that makes no outline is slanted only.
+        if contour.to_bez().is_ok() {
+            contours.push(contour);
+            shapes.push(i);
+        }
+    }
+    let shape = |c: usize| shapes.get(c).copied();
+    let places = po::cursivy(&contours, |c, n| shape(c).is_some_and(|s| moves(s, n)), options).map_err(|e| p.bad(e.to_string()))?;
+    Ok(places.into_iter().filter_map(|(c, n, at)| Some((shape(c)?, n, at))).collect())
+}
+
 // ── Running a transformation ───────────────────────────────────────────────────────────────────
 
 /// The layers a transformation changes: one target object (`glyph`, with or without target
@@ -757,7 +797,9 @@ fn jobs(p: &Params, font: &Font, many_layers: bool, all_glyphs: bool) -> Result<
 /// used in each layer.
 ///
 /// `image` is the box of the layer's placed image when the image is transformed too (one job):
-/// see [`image_bounds`].
+/// see [`image_bounds`]. `settings` holds the rest of a transformation: the optical correction of
+/// its slant, for which every layer's master needs its stems ([`primary_stems`]), and the metrics
+/// changed once every layer is transformed.
 #[allow(clippy::too_many_arguments)]
 fn run_jobs(
     s: &mut Session,
@@ -768,6 +810,7 @@ fn run_jobs(
     lin: Affine,
     shift: Vec2,
     image: Option<Rect>,
+    settings: Option<&Transformations>,
 ) -> Result<Vec<Point>> {
     let step = grid(s.font()?);
     let data = if matches!(origin, Origin::Metric(_)) { s.glyph_data().ok() } else { None };
@@ -784,17 +827,31 @@ fn run_jobs(
                     o
                 }
             };
-            let (sel, o, master) = {
+            let (sel, o, master, stems) = {
                 let r = t.resolve(font)?;
                 crate::check_unlocked(r.glyph)?;
                 // The image alone, when it is given without target lists.
                 let sel = if image.is_some() && !t.has_lists() { Selection::default() } else { selection(t, r.parts) };
                 let bounds = if matches!(origin, Origin::Box(_)) { union(selection_box(font, r.master, r.parts, &sel), image) } else { None };
-                (sel, origin_point(origin, bounds, font, r.master, r.layer.width), r.master.id.clone())
+                let stems = match settings.filter(|s| s.cursivy) {
+                    Some(c) => Some(c.cursivy_options(font, r.master).ok_or_else(|| no_stems(p, r.master))?),
+                    None => None,
+                };
+                (sel, origin_point(origin, bounds, font, r.master, r.layer.width), r.master.id.clone(), stems)
             };
             let m = Affine::translate(shift) * about(o, lin);
             t.edit_layer(font, |l| {
+                let corrected = match stems {
+                    Some(options) => cursivy_places(p, l.parts(t.side), &sel, m, options)?,
+                    None => Vec::new(),
+                };
                 apply(p, l, t.side, &sel, m, step)?;
+                let mut parts = l.parts_mut(t.side);
+                for (s, n, at) in corrected {
+                    let node = parts.node_mut(s, n).ok_or_else(|| p.bad(format!("point [{s}, {n}] does not resolve")))?;
+                    let q = map_point(p, Affine::IDENTITY, at, step)?;
+                    (node.x, node.y) = (q.x, q.y);
+                }
                 if image.is_some() {
                     let placed = super::image::target_mut(p, t, l)?;
                     placed.transform = compose(p, &placed.transform, m)?;
@@ -810,6 +867,11 @@ fn run_jobs(
                 }
             }
             origins.push(o);
+        }
+        if let Some(mode) = settings.and_then(Transformations::metrics_mode) {
+            for t in jobs {
+                tm::change_target(p, font, t, mode, step)?;
+            }
         }
         Ok(origins)
     })
@@ -855,7 +917,7 @@ fn palette(s: &mut Session, v: &Value, id: &'static str, label: &str, lin: impl 
     // A drag with the Rotate or Scale tool previews from the interaction's start: no memory.
     if s.interaction().is_some() {
         s.slot_mut::<LastPalette>().0 = None;
-        return run_jobs(s, &p, label, &jobs, origin, lin, Vec2::ZERO, image).map(|origins| result(&jobs, &origins));
+        return run_jobs(s, &p, label, &jobs, origin, lin, Vec2::ZERO, image, None).map(|origins| result(&jobs, &origins));
     }
     let (doc, before) = {
         let d = s.doc()?;
@@ -867,7 +929,7 @@ fn palette(s: &mut Session, v: &Value, id: &'static str, label: &str, lin: impl 
             restore(s, &p, label, &step.jobs, layers)?;
             origins
         }
-        None => run_jobs(s, &p, label, &step.jobs, origin, lin, Vec2::ZERO, image)?,
+        None => run_jobs(s, &p, label, &step.jobs, origin, lin, Vec2::ZERO, image, None)?,
     };
     let out = result(&step.jobs, &origins);
     let revision = s.doc()?.revision;
@@ -1354,6 +1416,10 @@ pub struct Transformations {
     /// The slant with optical correction (`SlantCorrection` in the string).
     pub cursivy: bool,
     pub origin: Origin,
+    /// Changes of the sidebearings or the width, which only the export string carries.
+    pub lsb: Option<Shift>,
+    pub rsb: Option<Shift>,
+    pub width: Option<Shift>,
     /// Glyph scoping of the export string: only these glyphs, or every glyph but these.
     pub include: Vec<String>,
     pub exclude: Vec<String>,
@@ -1367,6 +1433,9 @@ impl Default for Transformations {
             slant: 0.0,
             cursivy: false,
             origin: Origin::Metric(MetricPoint::Baseline),
+            lsb: None,
+            rsb: None,
+            width: None,
             include: Vec::new(),
             exclude: Vec::new(),
         }
@@ -1379,6 +1448,23 @@ impl Transformations {
         let (sx, sy) = (self.scale.0 / 100.0, self.scale.1 / 100.0);
         let shear = self.slant.to_radians().tan();
         Affine::new([1.0, 0.0, shear, 1.0, 0.0, 0.0]) * Affine::scale_non_uniform(sx, sy)
+    }
+
+    /// The change of metrics, as Transform Metrics makes it.
+    fn metrics_mode(&self) -> Option<tm::Mode> {
+        match (self.width, self.lsb, self.rsb) {
+            (Some(width), _, _) => Some(tm::Mode::Width { width, both: false }),
+            (None, None, None) => None,
+            (None, lsb, rsb) => Some(tm::Mode::Sides { lsb, rsb }),
+        }
+    }
+
+    /// The correction of this slant in a layer of `master`; `None` without stems. The outline's
+    /// stems are scaled with it.
+    fn cursivy_options(&self, font: &Font, master: &Master) -> Option<po::CursivyOptions> {
+        let (vertical, horizontal) = primary_stems(font, master)?;
+        let (sx, sy) = (self.scale.0 / 100.0, self.scale.1 / 100.0);
+        Some(po::CursivyOptions { shear: self.slant.to_radians().tan(), vertical_stem: vertical * sx.abs(), horizontal_stem: horizontal * sy.abs() })
     }
 
     /// Whether the export string's glyph scoping lets `glyph` through.
@@ -1396,6 +1482,17 @@ impl Transformations {
         }
         if !(in_range(self.translate.0) && in_range(self.translate.1)) {
             return Err(format!("the offset must be within ±{MAX_COORDINATE}"));
+        }
+        if self.width.is_some() && (self.lsb.is_some() || self.rsb.is_some()) {
+            return Err("give `Width`, or `LSB` and `RSB`, not both".into());
+        }
+        for (key, side) in [("LSB", self.lsb), ("RSB", self.rsb)] {
+            if side.is_some_and(|s| !SIDEBEARING_RANGE.contains(&s.value)) {
+                return Err(format!("`{key}` must be between -32768 and 32767"));
+            }
+        }
+        if self.width.is_some_and(|w| !WIDTH_RANGE.contains(&w.value.abs())) {
+            return Err("`Width` must be between 0 and 65535, or change it by at most that".into());
         }
         Ok(())
     }
@@ -1429,8 +1526,8 @@ fn transformations_from_params(p: &Params) -> Result<Transformations> {
 }
 
 /// Reads a `Transformations` export-filter string: `Transformations;Key:value;…`, spaces
-/// allowed around items, keys and values. `LSB`, `RSB` and `Width` belong to Transform Metrics
-/// and are refused.
+/// allowed around items, keys and values. A `LSB`, `RSB` or `Width` value with a sign is added to
+/// the metric; one without replaces it.
 pub fn parse_transformations(text: &str) -> std::result::Result<Transformations, String> {
     if text.len() > MAX_FILTER_STRING {
         return Err(format!("the string is longer than {MAX_FILTER_STRING} bytes"));
@@ -1443,6 +1540,9 @@ pub fn parse_transformations(text: &str) -> std::result::Result<Transformations,
     }
     let number = |key: &str, value: &str| -> std::result::Result<f64, String> {
         value.parse::<f64>().ok().filter(|v| v.is_finite()).ok_or_else(|| format!("`{key}` must be a number, got \"{value}\""))
+    };
+    let shift = |key: &str, value: &str| -> std::result::Result<Shift, String> {
+        Ok(Shift { value: number(key, value)?, relative: value.starts_with(['+', '-']) })
     };
     let names = |key: &str, value: &str| -> std::result::Result<Vec<String>, String> {
         let list: Vec<String> = value.split([' ', ',']).filter(|n| !n.is_empty()).map(str::to_string).collect();
@@ -1477,7 +1577,9 @@ pub fn parse_transformations(text: &str) -> std::result::Result<Transformations,
                     format!("`Origin` must be 0 (cap height), 1 (half cap height), 2 (x-height), 3 (half x-height) or 4 (baseline), got \"{value}\"")
                 })?
             }
-            "LSB" | "RSB" | "Width" => return Err(format!("`{key}` changes metrics, which Transform Metrics does; it is not supported yet")),
+            "LSB" => out.lsb = Some(shift(key, value)?),
+            "RSB" => out.rsb = Some(shift(key, value)?),
+            "Width" => out.width = Some(shift(key, value)?),
             "include" => out.include = names(key, value)?,
             "exclude" => out.exclude = names(key, value)?,
             other => return Err(format!("unknown key `{other}`")),
@@ -1501,6 +1603,13 @@ pub fn write_transformations(t: &Transformations) -> std::result::Result<String,
     let mut item = |key: &str, value: &dyn std::fmt::Display| {
         let _ = write!(out, "{key}:{value};");
     };
+    for (key, shift) in [("LSB", t.lsb), ("RSB", t.rsb), ("Width", t.width)] {
+        match shift {
+            Some(Shift { value, relative: true }) => item(key, &format_args!("{value:+}")),
+            Some(Shift { value, relative: false }) => item(key, &value),
+            None => {}
+        }
+    }
     if t.scale.0 != 100.0 {
         item("ScaleX", &t.scale.0);
     }
@@ -1527,12 +1636,15 @@ pub fn write_transformations(t: &Transformations) -> std::result::Result<String,
     Ok(out)
 }
 
-/// Whether `master` has a horizontal and a vertical stem value, which Cursivy needs.
-fn has_stems(font: &Font, master: &Master) -> bool {
-    let has = |horizontal: bool| {
-        font.stems.iter().enumerate().any(|(i, s)| s.horizontal == horizontal && master.stem_values.get(i).is_some_and(|v| *v > 0.0))
-    };
-    has(true) && has(false)
+/// The first vertical and the first horizontal stem value of `master` that are above zero, which
+/// Cursivy needs.
+fn primary_stems(font: &Font, master: &Master) -> Option<(f64, f64)> {
+    let first = |horizontal: bool| font.stem_widths(master, horizontal).into_iter().find(|v| v.is_finite() && *v > 0.0);
+    Some((first(false)?, first(true)?))
+}
+
+fn no_stems(p: &Params, master: &Master) -> EngineError {
+    p.bad(format!("Cursivy needs a horizontal and a vertical stem in master `{}` (Font Info › Masters › Stems)", master.name))
 }
 
 fn transformations(s: &mut Session, v: &Value) -> Result<Value> {
@@ -1548,19 +1660,11 @@ fn transformations(s: &mut Session, v: &Value) -> Result<Value> {
         None => (transformations_from_params(&p)?, jobs(&p, s.font()?, true, false)?),
     };
     jobs.retain(|t| args.includes(&t.glyph));
-    if args.cursivy {
-        let font = s.font()?;
-        for t in &jobs {
-            let r = t.resolve(font)?;
-            if !has_stems(font, r.master) {
-                return Err(
-                    p.bad(format!("Cursivy needs a horizontal and a vertical stem in master `{}` (Font Info › Masters › Stems)", r.master.name))
-                );
-            }
-        }
-        return Err(EngineError::Unsupported("Cursivy (a slant with optical correction of the curves)".into()));
+    if args.metrics_mode().is_some() && jobs.iter().any(|t| t.has_lists() || t.side != LayerSide::Foreground) {
+        return Err(p.bad("`LSB`, `RSB` and `Width` change whole layers: leave out the target lists and the background"));
     }
-    let origins = run_jobs(s, &p, "Transformations", &jobs, args.origin, args.linear(), Vec2::new(args.translate.0, args.translate.1), None)?;
+    let shift = Vec2::new(args.translate.0, args.translate.1);
+    let origins = run_jobs(s, &p, "Transformations", &jobs, args.origin, args.linear(), shift, None, Some(&args))?;
     Ok(result(&jobs, &origins))
 }
 
@@ -1594,6 +1698,13 @@ mod tests {
         assert_eq!(t.include, ["a", "b", "c"]);
         assert!(t.includes("b") && !t.includes("d"));
         assert_eq!(parse_transformations(&write_transformations(&t).unwrap()).unwrap(), t);
+        // A sign adds to the metric, no sign replaces it.
+        let t = parse_transformations("Transformations; LSB: +20; RSB: 35; Origin: 4").unwrap();
+        assert_eq!((t.lsb, t.rsb), (Some(Shift { value: 20.0, relative: true }), Some(Shift { value: 35.0, relative: false })));
+        assert_eq!(write_transformations(&t).unwrap(), "Transformations;LSB:+20;RSB:35;Origin:4;");
+        let t = parse_transformations("Transformations;Width:-12.5;Origin:4;").unwrap();
+        assert_eq!(t.width, Some(Shift { value: -12.5, relative: true }));
+        assert_eq!(write_transformations(&t).unwrap(), "Transformations;Width:-12.5;Origin:4;");
         // Neutral settings are left out; the origin is always written.
         assert_eq!(write_transformations(&Transformations::default()).unwrap(), "Transformations;Origin:4;");
 
@@ -1604,7 +1715,9 @@ mod tests {
             "Transformations;Slant:90",
             "Transformations;ScaleX:abc",
             "Transformations;Origin:5",
-            "Transformations;LSB:10",
+            "Transformations;LSB:10;Width:500",
+            "Transformations;RSB:40000",
+            "Transformations;Width:wide",
             "Transformations;Mystery:1",
             "Transformations;Slant:1;Slant:2",
             "Transformations;include:a;exclude:b",

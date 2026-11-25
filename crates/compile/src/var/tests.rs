@@ -872,3 +872,27 @@ fn cff2_exports_are_subroutinised_and_draw_as_without_subroutines() {
         }
     }
 }
+
+#[test]
+fn open_corners_go_only_when_every_master_has_them() {
+    let eared = |ear: f64| {
+        let n = |x, y| Node::new(x, y, NodeKind::Line);
+        Shape::Path(Path::new(true, vec![n(0.0, 0.0), n(100.0, 0.0), n(100.0, 100.0 + ear), n(100.0 + ear, 100.0), n(0.0, 100.0)]))
+    };
+    let with_black = |ear: f64| {
+        let mut f = two_masters();
+        let mut glyphs: Vec<Arc<Glyph>> = f.glyphs.as_arcs().to_vec();
+        glyphs[0] = Arc::new(glyph("a", 0x61, vec![layer("thin", 300.0, vec![eared(40.0)]), layer("black", 500.0, vec![eared(ear)])]));
+        f.glyphs = GlyphTable::from_glyphs(glyphs);
+        build(&f, None)
+    };
+    let both = with_black(60.0);
+    for w in [100.0, 500.0, 900.0] {
+        assert_eq!(at(&both, "a", &[("wght", w)]).0, (0.0, 0.0, 100.0, 100.0));
+    }
+    // The black master's ear is larger than its sides, so it is part of the shape there.
+    let one = with_black(150.0);
+    assert_eq!(at(&one, "a", &[("wght", 100.0)]).0, (0.0, 0.0, 140.0, 140.0));
+    assert_eq!(at(&one, "a", &[("wght", 900.0)]).0, (0.0, 0.0, 250.0, 250.0));
+    assert!(one.compiled.warnings.iter().any(|w| w.contains("open corners were kept") && w.contains(": a")), "{:?}", one.compiled.warnings);
+}

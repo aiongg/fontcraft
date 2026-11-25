@@ -285,6 +285,7 @@ fn render(s: &mut Session, v: &Value) -> Result<Value> {
     let mut filled = BezPath::new();
     let mut drawn: Vec<String> = Vec::new();
     let mut previous: Option<&str> = None;
+    let corners = stroke::OpenCorners::of(&font);
     for name in &names {
         let Some(layer) = font.glyph(name).and_then(|g| g.layer(&master_id)) else {
             warnings.push(match instance {
@@ -306,6 +307,7 @@ fn render(s: &mut Session, v: &Value) -> Result<Value> {
             }),
             Err(_) => font.outline(name, &master_id).unwrap_or_default(),
         };
+        outline = corners.filled(&master_id, name, &outline).unwrap_or(outline);
         outline.apply_affine(Affine::translate((x, 0.0)));
         filled.extend(outline.elements().iter().copied());
         x += if layer.width.is_finite() { layer.width.max(0.0) } else { 0.0 };

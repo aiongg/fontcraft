@@ -65,7 +65,10 @@ FontCraft is specified from public documentation of existing font tools (docs/re
 written without their code. Where a permissively licensed project's code or data is ported or
 bundled, the file says so in its header and the project is listed here with its licence:
 
-  glyphsLib (https://github.com/googlefonts/glyphsLib), Apache License 2.0. The key orders that
+  glyphsLib (https://github.com/googlefonts/glyphsLib), Apache License 2.0. The rule for invisible
+  open corners and the order they are erased in are ported from its eraseOpenCorners filter
+  (crates/pathops/src/open_corners.rs, from Lib/glyphsLib/filters/eraseOpenCorners.py), with the
+  crossing of two curves from fontTools (MIT, misc/bezierTools.py) that it cuts at. The key orders that
   format 2 of the .glyphs format uses for glyphs, layers, masters and instances, its default
   axes and its axis value defaults are taken from its format 2 writer (crates/io-glyphs/src/v2.rs);
   the rule that joins a format 2 master's name parts into its name is ported from its master

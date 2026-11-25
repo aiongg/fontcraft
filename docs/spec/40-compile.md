@@ -63,6 +63,17 @@ Input: the source model plus export options. Output: a list of errors and warnin
   two paths of a corner on an extra node become one outline before the corner is fitted; fontc
   reads the first two numbers of such a corner's origin and fits it on that node. A layer whose corners cannot be fitted, or a
   smart component that cannot be interpolated, is written as it is, with a warning.
+- Erasing open corners (`openCorner.invisibleWhenSmall`): a path that runs past a corner, turns on
+  a straight segment and comes back across itself loses the loop beyond the crossing, when the
+  loop is on the outside and small next to the segments it belongs to (the shares of the two
+  segments beyond the crossing are both under 0.5, or one is under 0.3 and the other under 0.99;
+  glyphsLib's `eraseOpenCorners` filter, which fontc follows too). It runs on each resolved
+  glyph's own contours before they are decomposed, for both outline formats. A filter list in the
+  master's user data (else the font's) says which glyphs; without one, a `.glyphs` or native
+  source erases in every glyph and a UFO, a designspace or an opened compiled font in none. In a
+  variable font a glyph whose masters and intermediate layers do not all lose the same corners
+  keeps them, with a warning, so that it stays compatible; fontmake and fontc erase in each master
+  by itself and then refuse the glyph. A project compile does the same as any other compile.
 - Glyphs-style pre-steps when the source enables them: erase open corners, propagate anchors;
   propagation precedes any flattening (`compile.glyphsOutlinePreSteps`). Propagation reads the
   source as stored, so a smart component passes on its glyph's anchors, interpolated at the
@@ -339,8 +350,8 @@ fontTools does.
 
 fontmake's `--cff-round-tolerance`, `--optimize-cff`, `--max-subrs` and `--optimize-widths` are
 the models. FontCraft keeps the source's `defaultWidthX` and `nominalWidthX` unless asked;
-fontmake optimises them by default. `--erase-open-corners` waits for the export step that erases
-open corners (M3.31). The options with no counterpart are refused with the reason; the list is in
+fontmake optimises them by default. `--erase-open-corners` and `--no-erase-open-corners` override
+what the source asks (§ 1.2). The options with no counterpart are refused with the reason; the list is in
 the `compile` row's notes.
 
 ---

@@ -793,6 +793,15 @@ summary = "Slant is a plain shear with no compensation. Clicking the Slant label
 ref = "Filters › Built-in Filters › Transformations › Transformations"
 status = "handbook"
 notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 1:53–2:47: the Slant label carries a pop-up arrow; the pop-up is not opened. A plain 10° slant is copied as Slant:10;SlantCorrection:0. FontCraft's dialog shows the choice as a Slant Kind pop-up field beside the Slant field, since its field labels are plain text."
+guesses = [
+  "Cursivy is our construction (docs/spec/11-filters.md › Cursivy): each curve moves along its normal by half the stroke's thickness times what the slant changes it by, from the master's first vertical and first horizontal stem; a stroke keeps its upright thickness at the diagonals, tops and bottoms and a stem's horizontal width at the sides.",
+  "Straight segments, open paths, corner nodes and nodes between a straight segment and a curve keep the plain slant.",
+  "Handles keep their directions and change in length only, and no node is added.",
+  "SlantCorrection:1 in an export string is Cursivy.",
+]
+observe = [
+  "In a font whose master has a vertical stem of 90 and a horizontal stem of 80, run Transformations with Cursivy and a slant of 12° from the baseline on an O of two round contours and an H, and note every node's coordinates.",
+]
 
 [[behavior]]
 id = "path.transformations.cursivyNeedsStems"
@@ -1069,6 +1078,15 @@ summary = "Export string: Transformations; LSB: shift; RSB: shift; Width: shift;
 ref = "Appendix › Custom Parameters › Filter"
 status = "handbook"
 notes = "Documented, not yet observed. Run at export by the engine's export stage (M7.10)."
+guesses = [
+  "An LSB, RSB or Width value with a sign is added to the metric; a value without one replaces it.",
+  "The metrics change after the scale, the slant and the offset.",
+  "Width does not go with LSB or RSB: a string with both is refused.",
+]
+observe = [
+  "Export a font with the Filter parameters Transformations; LSB:20 and Transformations; LSB:+20 in turn, and compare the sidebearings of H.",
+  "Do the same with Transformations; LSB:+20; ScaleX:50 to see whether the 20 units are scaled.",
+]
 
 [[behavior]]
 id = "filter.customParameter.extrudeUndocumented"

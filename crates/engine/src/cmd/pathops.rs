@@ -57,7 +57,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Remove Overlap",
             ["Path"],
             Some("Cmd+Shift+O"),
-            "{glyph: name, layer?: id (default the first master's), side?: \"foreground\" | \"background\", shapes?: [index] (default every path)} or {glyphs: [names], layer?: id | layers?: [ids]}, keepOpenPaths?: bool = false. Merges the overlapping closed paths into outlines without overlaps (nonzero rule; new points on the grid) and deletes the open paths and one-node paths among them unless keepOpenPaths. Components stay. With `glyphs`, a locked glyph or a layer that cannot be done (one taking longer than 5 s included) is skipped and left as it was → {glyphs: [names], skipped: [{glyph, layer?, reason}], selection?: {glyph, layer, shapes} (one glyph: the result paths)}",
+            "{glyph: name, layer?: id (default the first master's), side?: \"foreground\" | \"background\", shapes?: [index] (default every path)} or {glyphs: [names], layer?: id | layers?: [ids]}, keepOpenPaths?: bool = false. Merges the overlapping closed paths into outlines without overlaps (nonzero rule; new points on the grid) and deletes the open paths and one-node paths among them unless keepOpenPaths. Small open corners are erased first when an export of the font erases them in every glyph. Components stay. With `glyphs`, a locked glyph or a layer that cannot be done (one taking longer than 5 s included) is skipped and left as it was → {glyphs: [names], skipped: [{glyph, layer?, reason}], selection?: {glyph, layer, shapes} (one glyph: the result paths)}",
             has_doc,
             remove_overlap
         )
@@ -649,23 +649,40 @@ fn overlap_options(p: &Params, font: &Font) -> Result<OverlapOptions> {
     Ok(OverlapOptions { grid: grid(font), open_paths: if keep { OpenPaths::Keep } else { OpenPaths::Remove } })
 }
 
-fn remove_overlap_in(layer: &mut Layer, side: LayerSide, t: Option<&Targets>, options: OverlapOptions) -> Op<Option<Picked>> {
+/// Remove Overlap on one layer. Invisible open corners are erased first in a font whose export
+/// erases them (`openCorner.invisibleWhenSmall`).
+fn remove_overlap_in(layer: &mut Layer, side: LayerSide, t: Option<&Targets>, options: OverlapOptions, corners: bool) -> Op<Option<Picked>> {
     let shapes = layer.parts_mut(side).shapes;
     let chosen = chosen_paths(t, shapes)?;
     let input = Input::new(shapes, |i| chosen.as_ref().is_none_or(|c| c.contains(&i)));
-    apply(shapes, input, TIME_LIMIT, move |c| Ok(Done::merged(po::remove_overlap(&c, options)?)))
+    apply(shapes, input, TIME_LIMIT, move |c| {
+        let mut contours = c;
+        for c in contours.iter_mut().filter(|c| corners && c.closed) {
+            if let Some(erased) = po::erase_invisible_corners_in(c, options.grid)? {
+                *c = erased;
+            }
+        }
+        Ok(Done::merged(po::remove_overlap(&contours, options)?))
+    })
 }
 
 fn remove_overlap(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("path.removeOverlap", v)?;
     let options = overlap_options(&p, s.font()?)?;
-    run_layers(s, &p, "Remove Overlap", &["shapes"], |layer, side, t| remove_overlap_in(layer, side, t, options))
+    let corners = erases_corners(s.font()?);
+    run_layers(s, &p, "Remove Overlap", &["shapes"], |layer, side, t| remove_overlap_in(layer, side, t, options, corners))
 }
 
 fn remove_overlap_for_all_masters(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("path.removeOverlapForAllMasters", v)?;
     let options = overlap_options(&p, s.font()?)?;
-    run_all_masters(s, &p, "Remove Overlap for All Masters", master_layer, |layer, side, t| remove_overlap_in(layer, side, t, options))
+    let corners = erases_corners(s.font()?);
+    run_all_masters(s, &p, "Remove Overlap for All Masters", master_layer, |layer, side, t| remove_overlap_in(layer, side, t, options, corners))
+}
+
+/// Whether an export of `font` erases the invisible open corners of every glyph of every master.
+fn erases_corners(font: &Font) -> bool {
+    super::stroke::OpenCorners::of(font).all()
 }
 
 /// Takes part in a boolean operation: a closed path of more than one node.

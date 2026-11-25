@@ -437,3 +437,25 @@ fn bad_parameters_change_nothing() {
         assert_eq!(snapshot(&s), before, "{id} {p}");
     }
 }
+
+#[test]
+fn remove_overlap_closes_the_open_corners_an_export_erases() {
+    let ear =
+        |ear: f64| json!([{"x": 0, "y": 0}, {"x": 100, "y": 0}, {"x": 100, "y": 100.0 + ear}, {"x": 100.0 + ear, "y": 100}, {"x": 0, "y": 100}]);
+    let points = |s: &mut Session| -> Vec<(i64, i64)> {
+        let v = s.execute("layer.inspect", &json!({"glyph": "A"})).unwrap();
+        let nodes = v["shapes"].as_array().unwrap().iter().flat_map(|p| p["nodes"].as_array().unwrap().clone());
+        let mut out: Vec<(i64, i64)> = nodes.map(|n| (n["x"].as_f64().unwrap() as i64, n["y"].as_f64().unwrap() as i64)).collect();
+        out.sort_unstable();
+        out
+    };
+    let mut s = Session::with_document();
+    s.execute("path.addPath", &json!({"glyph": "A", "nodes": ear(40.0)})).unwrap();
+    s.execute("path.removeOverlap", &json!({"glyph": "A"})).unwrap();
+    assert_eq!(points(&mut s), [(0, 0), (0, 100), (100, 0), (100, 100)]);
+    // A larger ear is part of the shape.
+    let mut s = Session::with_document();
+    s.execute("path.addPath", &json!({"glyph": "A", "nodes": ear(150.0)})).unwrap();
+    s.execute("path.removeOverlap", &json!({"glyph": "A"})).unwrap();
+    assert!(points(&mut s).contains(&(250, 100)));
+}

@@ -7,7 +7,7 @@
 use std::collections::HashSet;
 
 use craft::ui::contract::{PlainData, Tracked};
-use fontcraft_engine::cmd::stroke::{format_version, layer_outline, mask_mode, shapes_outline, stroke_style};
+use fontcraft_engine::cmd::stroke::{OpenCorners, format_version, layer_outline, mask_mode, shapes_outline, stroke_style};
 use fontcraft_engine::components::align::{AlignMode, component_alignment};
 use fontcraft_engine::model::glyphdata::GlyphData;
 use fontcraft_engine::model::shown_metrics::{ShownMetric, shown_metrics};
@@ -51,6 +51,9 @@ pub struct EditedGlyph {
     /// The composite outline (strokes expanded, masks applied); the plain outline while the background is edited.
     #[plain_data(assume = "a kurbo path: owned points")]
     pub outline: BezPath,
+    /// The outline as Fill Preview fills it, when it has open corners that an export erases.
+    #[plain_data(assume = "a kurbo path: owned points")]
+    pub fill: Option<BezPath>,
     /// The paths as drawn, when strokes or masks make the composite differ from them.
     #[plain_data(assume = "a kurbo path: owned points")]
     pub source: Option<BezPath>,
@@ -130,6 +133,7 @@ pub fn edited_glyph(font: &Font, data: Option<&GlyphData>, glyph: &Glyph, full: 
             Err(_) => (plain, None),
         }
     };
+    let fill = OpenCorners::of(font).filled(&layer.master, &glyph.name, &outline);
     let components = layer
         .shapes
         .iter()
@@ -156,6 +160,7 @@ pub fn edited_glyph(font: &Font, data: Option<&GlyphData>, glyph: &Glyph, full: 
         status: fontcraft_engine::cmd::status::effective_status(font, &glyph.name).map(|def| def.color),
         layer,
         outline,
+        fill,
         source,
         components,
         background,

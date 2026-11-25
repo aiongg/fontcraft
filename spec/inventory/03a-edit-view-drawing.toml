@@ -1700,7 +1700,15 @@ milestone = "M3"
 summary = "An opened corner whose triangular overlap is small compared with the visible segments next to it is treated as invisible and does not show in the final outline, which allows opened corners on the outside of a shape. Once the overlap exceeds the threshold it becomes visible. The threshold is not specified."
 ref = "Edit View › Re-segmenting Outlines"
 status = "handbook"
-notes = "Video \"Glyphs 3 quick tutorial. Open corners for better control\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=gcx9H6knvjM; it shows Glyphs 3, not Glyphs 4), 0:24.5: in the filled preview the join is clean and the overlap loop of an opened corner does not show. The threshold is not visible."
+notes = "Video \"Glyphs 3 quick tutorial. Open corners for better control\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=gcx9H6knvjM; it shows Glyphs 3, not Glyphs 4), 0:24.5: in the filled preview the join is clean and the overlap loop of an opened corner does not show. The threshold is not visible. M3.31: the rule of glyphsLib's eraseOpenCorners filter (Apache-2.0), whose thresholds its authors had from the reference app's maker; export, Fill Preview, the Preview panel, preview.render and Remove Overlap use it. The previews close corners on the resolved outline, so a mirrored component's corners show there; an export erases them in the base glyph."
+guesses = [
+  "The size test is that of glyphsLib's filter: the parts of the two segments beyond their crossing are both under half of the segment, or one is under 0.3 and the other under 0.99.",
+  "Only a loop closed by a straight segment, on the outside of a path drawn in the PostScript direction, is invisible.",
+  "Remove Overlap erases invisible open corners only in a font whose export erases them in every glyph, which a UFO's does when its filter list says so.",
+]
+observe = [
+  "Open the top right corner of a 100-unit square by 20, 40, 60, 90 and 150 units, export each and note at which size the ear shows; do the same in Fill Preview and with Remove Overlap.",
+]
 
 # ───────────────────────────── Path direction ─────────────────────────────
 

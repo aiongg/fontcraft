@@ -376,7 +376,7 @@ options = [
   "--decompose-components: turn every component into contours",
   "--decompose-transformed-components: decompose components whose 2x2 transform is not the identity",
   "--prefer-simple-glyphs / --no-prefer-simple-glyphs: when a glyph mixes contours and components, decompose its components (default, what every build does); --no-prefer-simple-glyphs is refused",
-  "--erase-open-corners / --no-erase-open-corners: refused until the export step that erases open corners (M3.31) is built; --no-erase-open-corners changes nothing",
+  "--erase-open-corners / --no-erase-open-corners: erase small open corners in every glyph, or in none; default from the source (every glyph of a .glyphs or native source without a filter list, the glyphs the filter list names otherwise)",
   "--propagate-anchors / --no-propagate-anchors: refused; anchors are propagated as the source asks (always for the reference's format, by the filter list for a UFO)",
   "--auto-use-my-metrics / --no-auto-use-my-metrics: set the USE_MY_METRICS composite flag on the component that gives a static TrueType composite its advance (default), or on none",
   "--drop-implied-oncurves: remove on-curve points lying exactly midway between two off-curve points (TrueType)",

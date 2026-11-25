@@ -167,7 +167,7 @@ fn hostile_strings_and_arguments_are_errors_that_change_nothing() {
         "RoundCorner;20;include:A;exclude:B",
         "RoundCorner;20;include:A;include:B",
         "RoundCorner;20;include:",
-        "Transformations;LSB:+10",
+        "Transformations;LSB:+10;Width:500",
         "Transformations;Slant:95",
         "Transformations;Bogus:1",
         long.as_str(),
