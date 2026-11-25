@@ -203,7 +203,7 @@ fn correct_path_direction_nests_restarts_and_sorts_components_among_paths() {
     run(&mut s, "path.correctPathDirection", json!({"glyph": "O"}));
     let all = shapes(&s, "O", None);
     let kinds: Vec<&str> = all.iter().map(|s| if matches!(s, Shape::Path(_)) { "path" } else { "component" }).collect();
-    assert_eq!(kinds, ["path", "path", "component"], "sorted by left edge");
+    assert_eq!(kinds, ["path", "path", "component"], "the component lies farthest to the right");
     let ps = paths(&s, "O", None);
     assert!(area(&ps[0]) > 0.0, "outer counter-clockwise");
     assert!(area(&ps[1]) < 0.0, "counter clockwise");

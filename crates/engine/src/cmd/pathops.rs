@@ -107,7 +107,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Correct Path Direction",
             ["Path"],
             Some("Cmd+Shift+R"),
-            "{glyph: name, layer?: id, side?} or {glyphs: [names], layer?: id | layers?: [ids]}. Outer closed paths run counter-clockwise and counters clockwise, by nesting; each closed path starts at its lowest, then leftmost, on-curve node; paths and components are sorted by the bottom-left corner of their bounds (left edge first). Open paths keep their direction → {glyphs, skipped, selection?: {glyph, layer}}",
+            "{glyph: name, layer?: id, side?} or {glyphs: [names], layer?: id | layers?: [ids]}. Outer closed paths run counter-clockwise and counters clockwise, by nesting; each closed path starts at its lowest, then leftmost, on-curve node; paths and components are sorted from the bottom left to the top right, by the sum of the coordinates of the bottom-left corner of their bounds. Open paths keep their direction → {glyphs, skipped, selection?: {glyph, layer}}",
             has_doc,
             correct_path_direction
         )
@@ -127,7 +127,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Add Extremes",
             ["Path"],
             None,
-            "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index]} or {glyphs: [names], layer?: id | layers?: [ids]}. Adds a node at each horizontal and vertical extreme of the segments whose two end nodes are in `points`, of the paths in `shapes`, or of every path; skips an extreme closer than 3 units to a segment end or to the extreme before it; a node within 2 units and 2° of an extreme gets its handles made exactly horizontal or vertical. New nodes are smooth and on the grid → {glyphs, skipped, selection?: {glyph, layer, shapes}}",
+            "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index]} or {glyphs: [names], layer?: id | layers?: [ids]}. Adds a node at each horizontal and vertical extreme of the segments whose two end nodes are in `points`, of the paths in `shapes`, or of every path; skips an extreme closer than 3 units, or than both 10 units and a tenth of the segment's chord, to a segment end or to the extreme before it. First, a smooth node between two cubics within 2 units or 1% of the curve's chord of an extreme moves onto it when the refitted curves stay within half a unit, and any other node within 2 units and 2° of an extreme gets its handles made exactly horizontal or vertical. New nodes are smooth and on the grid → {glyphs, skipped, selection?: {glyph, layer, shapes}}",
             has_doc,
             add_extremes
         )
@@ -776,15 +776,13 @@ fn correct_direction_in(layer: &mut Layer, side: LayerSide, outlines: &Outlines)
         run_with_time_limit(TIME_LIMIT, move || po::correct_direction(&contours)).map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
     let done = Done { contours: directed.order.into_iter().map(Some).zip(directed.contours).collect(), selection: Vec::new() };
     let paths = to_paths(&input, &done)?;
-    // Paths and components sorted together, as the paths among themselves are sorted: by the
-    // left edge of their bounds, then the bottom edge; shapes without bounds go last.
-    let corner = |r: Option<Rect>| r.map_or((f64::INFINITY, f64::INFINITY), |r| (r.x0, r.y0));
+    // Paths and components sorted together, as the paths among themselves are sorted.
     let mut items: Vec<((f64, f64), Shape)> =
-        paths.into_iter().map(|(_, path)| (corner(path.to_bez().ok().as_ref().and_then(bounds_of)), Shape::Path(path))).collect();
+        paths.into_iter().map(|(_, path)| (po::shape_order(path.to_bez().ok().as_ref().and_then(bounds_of)), Shape::Path(path))).collect();
     for shape in shapes.iter() {
         if let Shape::Component(c) = shape {
             let b = serde_json::to_string(c).ok().and_then(|json| outlines.get(&(json, master.clone()))).and_then(bounds_of);
-            items.push((corner(b), shape.clone()));
+            items.push((po::shape_order(b), shape.clone()));
         }
     }
     items.sort_by(|a, b| a.0.0.total_cmp(&b.0.0).then(a.0.1.total_cmp(&b.0.1)));

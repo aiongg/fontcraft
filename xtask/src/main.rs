@@ -17,6 +17,7 @@ mod observe;
 mod overlap;
 mod paramcatalog;
 mod parity;
+mod pathops_noop;
 mod roundtrip;
 mod sha256;
 mod spec;
@@ -73,6 +74,9 @@ commands:
                   contour-level operation and report start points and merge points)
                   (inputs for crates/pathops/crosscheck/reference.py go to DIR/layers.jsonl; one
                   --reference per operation that script ran)
+  pathops-noop [--out DIR] [--match TEXT]
+                  run Correct Path Direction and Add Extremes on every master layer of the corpus's .glyphs
+                  sources and report what they change (the full lists go to DIR/summary.txt)
   testfonts [--out DIR]
                   build the synthetic test fonts for the checks in the reference app and write them
                   as .glyphs files with a README (default DIR: plan/local/testfonts/)
@@ -99,6 +103,7 @@ fn main() -> ExitCode {
         Some("roundtrip") => roundtrip::run(&root(), &rest),
         Some("audit") => audit::run(&root(), &rest),
         Some("overlap") => overlap::run(&root(), &rest),
+        Some("pathops-noop") => pathops_noop::run(&root(), &rest),
         Some("testfonts") => testfonts::run(&root(), &rest),
         Some("-h" | "--help" | "help") | None => {
             print!("{USAGE}");

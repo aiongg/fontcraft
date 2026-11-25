@@ -55,8 +55,11 @@ pub use boolean::{BoolOp, OpenPaths, OverlapOptions, SMOOTH_MAX_DEGREES, binary,
 pub use contour::{Contour, MAX_NODES, MIN_GRID, Node, NodeKind, contours_from_bez, round_to_grid};
 pub use corner::{MAX_RECONNECT_NODES, Opened, open_corners, reconnect_nodes};
 pub use cut::cut_with_line;
-pub use direction::{Directed, MAX_NESTING_CONTOURS, correct_direction};
-pub use extremes::{ExtremesOptions, MIN_EXTREME_SEGMENT, NEAR_EXTREME_DEGREES, NEAR_EXTREME_DISTANCE, add_extremes};
+pub use direction::{Directed, MAX_NESTING_CONTOURS, correct_direction, shape_order};
+pub use extremes::{
+    ExtremesOptions, MAX_EXTREME_SHIFT, MIN_EXTREME_SEGMENT, NEAR_EXTREME_DEGREES, NEAR_EXTREME_DISTANCE, NEAR_EXTREME_SHARE,
+    SHORT_EXTREME_SEGMENT, SHORT_EXTREME_SHARE, add_extremes,
+};
 pub use graph::Rewired;
 pub use inflections::{MIN_INFLECTION_DISTANCE, add_inflections};
 pub use limit::{TIME_LIMIT, Unfinished, catch_panic, run_with_time_limit};

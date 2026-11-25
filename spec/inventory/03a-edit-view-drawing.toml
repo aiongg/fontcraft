@@ -1785,7 +1785,11 @@ status = "handbook"
 notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30 and 30:21–30:23: the Path menu lists Correct Path Direction with Cmd+Shift+R, and it is run. The reordering and the start-node change are not visible. FontCraft: sample points are nodes and segment midpoints. Open paths keep their direction and start node. Components are sorted among the paths by the same key (the bottom-left corner of their outline's bounds); images keep their places."
 guesses = [
   "A path is inside another when that one is larger, holds its bounding box and holds most of its sample points; paths that only overlap are both outer.",
-  "Shapes are sorted by the bottom-left corner of their bounds, and the start node is the lowest, then leftmost, on-curve node (03a question 16).",
+  "Shapes are sorted by the sum of the coordinates of the bottom-left corner of their bounds, then by its x (03a question 16).",
+  "The start node is the lowest, then leftmost, on-curve node; 96% to 99.5% of the contours of the corpus sources that keep their starts tidy agree (03a question 16).",
+]
+observe = [
+  "Draw three separate closed paths, one at the bottom right, one at the top left and one in the middle, plus a small path inside the middle one; run Correct Path Direction and read the shape order in Filter › Shape Order.",
 ]
 
 [[command]]
@@ -1825,8 +1829,12 @@ ref = "Edit View › Extremes & Inflections"
 status = "handbook"
 notes = "New nodes are smooth and rounded to the grid, with their handles lined up with them."
 guesses = [
-  "A node within 2 units and 2° of an extreme keeps its place, and its handles within 2° of the axis are made exactly horizontal or vertical (03a question 17).",
-  "An extreme is skipped when the chord from it to the end of its segment, or to the extreme before it, is shorter than 3 units.",
+  "A smooth node between two cubics moves onto an extreme within 2 units or 1% of the curve's chord, and the two curves are refitted, when they stay within half a unit of the old ones (03a question 17).",
+  "Any other node within 2 units and 2° of an extreme keeps its place, and its handles within 2° of the axis are made exactly horizontal or vertical (03a question 17).",
+  "An extreme is skipped when the chord from it to the end of its segment, or to the extreme before it, is shorter than 3 units, or shorter than both 10 units and a tenth of the segment's chord.",
+]
+observe = [
+  "Draw a smooth node 2 units off the top of an arch, between two curves, and run Add Extremes: does the node move, by how much, and do the neighbouring handles change length?",
 ]
 
 [[command]]
