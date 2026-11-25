@@ -97,6 +97,7 @@ mod palette_dark;
 mod path;
 mod pathops;
 pub mod preview;
+pub mod preview_compare;
 pub mod preview_line;
 mod project;
 mod scale_upm;
@@ -430,6 +431,7 @@ pub const COMMAND_TABLES: &[CommandTable] = &[
     variation_tools::specs,
     compare::specs,
     preview::specs,
+    preview_compare::specs,
     hint_ps::specs,
     hint_tt_defs::specs,
     hint_tt::specs,

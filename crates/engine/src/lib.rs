@@ -159,9 +159,9 @@ fn with_hint_upkeep(v: Value, upkeep: fontcraft_hinting::RemapReport) -> Value {
     }
 }
 
-/// Records `before` as the step that undoes the document's last change, and drops the redo steps.
-pub(crate) fn push_undo(doc: &mut DocState, label: Arc<str>, before: Arc<Font>) {
-    doc.history.undo.push(HistoryEntry { label, font: before, path: doc.path.clone() });
+/// Records `before`, the document at `revision`, as the step that undoes its last change, and drops the redo steps.
+pub(crate) fn push_undo(doc: &mut DocState, label: Arc<str>, before: Arc<Font>, revision: u64) {
+    doc.history.undo.push(HistoryEntry { label, font: before, path: doc.path.clone(), revision });
     if doc.history.undo.len() > UNDO_LIMIT {
         let extra = doc.history.undo.len() - UNDO_LIMIT;
         doc.history.undo.drain(..extra);
@@ -203,6 +203,8 @@ pub struct HistoryEntry {
     /// from that file's folder; undo and redo rewrite them when the document was saved into
     /// another folder since.
     pub path: Option<PathBuf>,
+    /// The document's revision while `font` was current.
+    pub revision: u64,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -322,6 +324,8 @@ struct Interaction {
     doc: u64,
     /// The font when it began; every preview starts from it.
     before: Arc<Font>,
+    /// The document's revision then.
+    revision: u64,
     /// The last preview that succeeded: what the commit journals.
     last: Option<(String, Value)>,
 }
@@ -329,7 +333,8 @@ struct Interaction {
 /// The state of a running `command.batch` (see [`Session::edit`]).
 pub(crate) struct Batch {
     pub(crate) label: Arc<str>,
-    pub(crate) before: Vec<(u64, Arc<Font>)>,
+    /// The documents changed so far: each one's id, its font before the batch and that font's revision.
+    pub(crate) before: Vec<(u64, Arc<Font>, u64)>,
 }
 
 impl Session {
@@ -338,8 +343,7 @@ impl Session {
     }
 
     /// A session without documents that has this one's settings, glyph data and clock: for work
-    /// on a file that is not open here.
-    #[cfg(not(target_arch = "wasm32"))]
+    /// on a file that is not open here, or on an earlier state of one that is.
     pub(crate) fn without_documents(&self) -> Self {
         let mut s = Self::new();
         s.settings = self.settings.clone();
@@ -451,15 +455,15 @@ impl Session {
             clock::stamp_changed(&mut next, &doc.font, &stamp);
         }
         next.check_changed(&doc.font)?;
-        let before = std::mem::replace(&mut doc.font, Arc::new(next));
+        let (before, revision) = (std::mem::replace(&mut doc.font, Arc::new(next)), doc.revision);
         doc.bump_revision();
         match &mut self.batch {
             Some(batch) => {
-                if !batch.before.iter().any(|(id, _)| *id == doc.id) {
-                    batch.before.push((doc.id, before));
+                if !batch.before.iter().any(|(id, ..)| *id == doc.id) {
+                    batch.before.push((doc.id, before, revision));
                 }
             }
-            None => push_undo(doc, label.into(), before),
+            None => push_undo(doc, label.into(), before, revision),
         }
         Ok(out)
     }
@@ -483,12 +487,12 @@ impl Session {
             if out.is_ok()
                 && let Some(batch) = finished
             {
-                for (id, before) in batch.before {
+                for (id, before, revision) in batch.before {
                     let Some(i) = self.position_of(id) else { continue };
                     if let Some(doc) = self.docs.get_mut(i)
                         && !doc.font.same_as(&before)
                     {
-                        push_undo(doc, batch.label.clone(), before);
+                        push_undo(doc, batch.label.clone(), before, revision);
                     }
                 }
             }
@@ -819,7 +823,7 @@ impl Session {
             return Err(EngineError::Interaction("an interaction cannot begin inside a command".into()));
         }
         let doc = self.doc()?;
-        self.interaction = Some(Interaction { label: label.into(), doc: doc.id, before: doc.font.clone(), last: None });
+        self.interaction = Some(Interaction { label: label.into(), doc: doc.id, before: doc.font.clone(), revision: doc.revision, last: None });
         Ok(())
     }
 
@@ -901,7 +905,7 @@ impl Session {
                 return Err(e);
             }
         }
-        push_undo(doc, it.label, it.before);
+        push_undo(doc, it.label, it.before, it.revision);
         if let Some(entry) = it.last {
             // The interaction counts as one top-level command, its last preview's: the command
             // log and a running macro recording see it once.

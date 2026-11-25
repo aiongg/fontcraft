@@ -156,6 +156,65 @@ fn render_shapes_with_the_features_asked_for() {
 }
 
 #[test]
+fn render_draws_locations_layers_nodes_and_a_frame_by_scale() {
+    let mut s = session();
+    let png = |r: &Value| r["png"].as_str().unwrap().to_string();
+    // Regular lies at 500: the location there draws the same outline.
+    let instance = run(&mut s, "preview.render", json!({"glyphs": ["a"], "instance": "Regular", "perEm": 100}));
+    let location = run(&mut s, "preview.render", json!({"glyphs": ["a"], "location": {"wght": 500}, "perEm": 100}));
+    assert_eq!(png(&instance), png(&location));
+    assert_eq!((location["instance"].clone(), location["width"].clone()), (Value::Null, json!(46)), "300 units at 0.1 and 8 pixels around");
+    let nodes = run(&mut s, "preview.render", json!({"glyphs": ["a"], "location": {"wght": 500}, "perEm": 100, "showNodes": true}));
+    assert_ne!(png(&nodes), png(&location));
+    let black = run(&mut s, "preview.render", json!({"glyphs": ["a"], "master": "black", "perEm": 100}));
+    let layer = run(&mut s, "preview.render", json!({"glyphs": ["a"], "layer": "black", "perEm": 100}));
+    assert_eq!((png(&black), json!("black")), (png(&layer), layer["master"].clone()));
+    let mixed = run(&mut s, "preview.render", json!({"glyphs": ["a", "b"], "layers": {"b": "black"}, "perEm": 100}));
+    assert_eq!(mixed["width"], json!(102), "a thin (200), b black (700), kerned -40");
+    for bad in [
+        json!({"glyphs": ["a"], "location": {"opsz": 1}}),
+        json!({"glyphs": ["a"], "location": {"wght": "x"}}),
+        json!({"glyphs": ["a"], "location": {"wght": 500}, "instance": "Regular"}),
+        json!({"glyphs": ["a", "b"], "layer": "black"}),
+        json!({"glyphs": ["a"], "layer": "nope"}),
+        json!({"glyphs": ["a"], "layers": {"a": "black"}, "instance": "Regular"}),
+        json!({"glyphs": ["a"], "palette": 1}),
+        json!({"glyphs": ["a"], "color": true, "palette": 9}),
+        json!({"glyphs": ["a"], "perEm": 0}),
+        json!({"glyphs": ["a"], "scale": 1e9}),
+        json!({"glyphs": ["a"], "scale": 1, "size": 100}),
+    ] {
+        run_err(&mut s, "preview.render", bad);
+    }
+}
+
+#[test]
+fn compare_marks_the_glyph_an_edit_changed() {
+    let mut s = session();
+    let revision = s.doc().unwrap().revision;
+    run(&mut s, "path.addRectangle", json!({"glyph": "a", "layer": "thin", "x": 300, "y": 0, "width": 50, "height": 50}));
+    let r = run(&mut s, "preview.compare", json!({"revision": revision, "glyphs": ["a", "b"], "perEm": 100}));
+    assert_eq!((r["changed"].clone(), r["changedCount"].clone(), r["kerningChanged"].clone()), (json!(["a"]), json!(1), json!(false)));
+    let slots: Vec<bool> = r["glyphs"].as_array().unwrap().iter().map(|g| g["changed"].as_bool().unwrap()).collect();
+    assert_eq!(slots, [true, false]);
+    let default = run(&mut s, "preview.compare", json!({}));
+    assert_eq!(default["glyphs"].as_array().unwrap().len(), 1, "the changed glyphs, one undo step back");
+    // Undone, the document is at a new revision; the step is found among the redo steps.
+    let edited = s.doc().unwrap().revision;
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(run(&mut s, "preview.compare", json!({"revision": edited}))["changed"], json!(["a"]));
+    let same = run(&mut s, "preview.compare", json!({"steps": 0}));
+    assert_eq!((same["changedCount"].clone(), same.get("png").is_some()), (json!(0), false));
+    let removed = run(&mut s, "preview.compare", json!({"steps": 0, "glyphs": ["a"], "instance": "Regular"}));
+    assert_eq!(removed["glyphs"][0]["changed"], json!(false));
+    for bad in
+        [json!({"revision": u64::MAX}), json!({"steps": 1000}), json!({"steps": 1, "revision": 1}), json!({"steps": -1}), json!({"color": true})]
+    {
+        run_err(&mut s, "preview.compare", bad);
+    }
+}
+
+#[test]
 fn toggle_instance_visibility_is_one_undo_step_and_a_no_op_changes_nothing() {
     let mut s = session();
     assert!(s.font().unwrap().instances[0].visible);

@@ -250,7 +250,7 @@ impl<'a> LineColors<'a> {
         if let Some(kept) = self.arts.arts.get(&key) {
             return kept.clone();
         }
-        let mut src = Sources { assets: self.assets.as_ref(), files: &mut *self.files, text: self.text };
+        let mut src = Sources { assets: self.assets.as_ref(), files: &mut *self.files, text: self.text, palette: 0 };
         let art = self
             .font
             .glyph(name)

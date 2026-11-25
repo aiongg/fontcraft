@@ -251,7 +251,7 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, fil
     files.follow(cx.session.active().map(|d| d.id));
     let assets = cx.session.assets();
     let mode = color::cell_mode(&font, &master, false);
-    let mut src = color::Sources { assets: assets.as_ref(), files, text: color::TEXT };
+    let mut src = color::Sources { assets: assets.as_ref(), files, text: color::TEXT, palette: 0 };
     let defs = status::definitions(&font);
     let statuses: Vec<StatusChoice> = defs.iter().map(|d| StatusChoice { code: d.code, name: d.name.clone(), color: status_rgba(d.color) }).collect();
     let mut glyphs: Vec<&Arc<Glyph>> = Vec::with_capacity(order.len());

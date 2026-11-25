@@ -2878,18 +2878,39 @@ label = "Render Preview"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{text?: string, glyphs?: [names], instance?: name|'master', master?: id, features?: [tags], script?: tag, language?: tag, direction?: 'ltr'|'rtl', color?: bool, size?: number, invert?: bool, flip?: bool, blur?: number, format?: 'png'|'svg'}"
+params = "{text?: string, glyphs?: [names], instance?: name|'master', location?: {tag: value}, master?: id, layer?: id|name, layers?: {glyph: layer}, features?: [tags], script?: tag, language?: tag, direction?: 'ltr'|'rtl', color?: bool, palette?: index, showNodes?: bool, size?: number, perEm?: number, scale?: number, invert?: bool, flip?: bool, blur?: number, format?: 'png'|'svg'}"
 area = "automation"
 milestone = "M9"
 summary = "Renders the preview line to an image so an agent can inspect what the Preview Area would show. Not a reference feature."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "inferred"
-notes = "Built in M9.20 (`engine/src/cmd/preview.rs`): the glyphs on one line with their advances and kerning, at the master or the instance view, scaled so the preview edges fill `size` pixels of height; PNG as base64 or SVG text. M11.30 (`preview_line.rs`): shaped with the features, script and language asked for through the preview font of the master or instance, laid out as Edit View lays text out, and with `color` in colour; an SVG holds a flat colour layer as a path and any other colour glyph as an embedded image."
+notes = "Built in M9.20 (`engine/src/cmd/preview.rs`): the glyphs on one line with their advances and kerning, at the master or the instance view, scaled so the preview edges fill `size` pixels of height; PNG as base64 or SVG text. M11.30 (`preview_line.rs`): shaped with the features, script and language asked for through the preview font of the master or instance, laid out as Edit View lays text out, and with `color` in colour; an SVG holds a flat colour layer as a path and any other colour glyph as an embedded image. M13.92: locations, layers, palettes, nodes and a frame by scale; `ui.render` and the MCP tool `render` draw through it, the tool headless too."
 guesses = [
   "`size` is the image height in pixels, the strip from Preview Descender to Preview Ascender filling it, as the Preview Area scales to its height.",
   "Without `features`, `script` and `language` nothing is substituted, as in Edit View; feature code that does not compile leaves the line unshaped, with a warning.",
   "Without `direction` the line runs in the direction of its first letter.",
+  "`location` takes internal axis values; a location is shaped as the first master is.",
+  "With `perEm` or `scale` the image reaches from the master's descender to its ascender with 8 pixels around.",
+  "`showNodes` marks the nodes of each drawn layer's own paths, not of its components.",
   "`color` draws what a Font View cell draws: a layered font's masters in their Master Colors, else each glyph's colour layers in the master or at the instance, in palette 0; with `invert` the text colour is white and Master Color Dark stands in for Master Color.",
+]
+
+[[command]]
+id = "preview.compare"
+label = "Compare with Revision"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{revision?: number | steps?: number, glyphs?: [names], text?: string, instance?: name|index, location?: {tag: value}, master?: id, perEm?: number | scale?: number, showNodes?: bool}"
+area = "automation"
+milestone = "M13"
+summary = "Draws the font's glyphs over the state they had at an earlier document revision, for agents, with a list of the glyphs that changed. Not a reference feature."
+ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
+status = "inferred"
+notes = "Built in M13.92 (`engine/src/cmd/preview_compare.rs`). The earlier state is one of the document's undo or redo steps, each of which keeps the revision it had; undoing gives the restored state a new revision, so an older number may be gone, and `steps` counts back instead. Each glyph stands in a slot as wide as the wider state."
+guesses = [
+  "The earlier state is red, the current one blue over it, an unchanged drawing grey.",
+  "`changed` lists the glyphs whose data differs; a composite whose base changed is not listed, but its slot is marked changed when it is drawn.",
 ]
 
 [[behavior]]

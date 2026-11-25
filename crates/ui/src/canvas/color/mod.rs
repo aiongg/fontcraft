@@ -68,7 +68,7 @@ pub fn project(cx: &ProjectCx<'_>, files: &mut ColorFiles) -> Option<ColorPictur
     // The canvas is light: black text colour, Master Color rather than Master Color Dark.
     let mode = mode(font, glyph, layer, false)?;
     let assets = cx.session.assets();
-    let mut src = Sources { assets: assets.as_ref(), files, text: TEXT };
+    let mut src = Sources { assets: assets.as_ref(), files, text: TEXT, palette: 0 };
     let content = content(font, glyph, &mode, Some(layer), &mut src).filter(|c| !c.is_empty())?;
     Some(ColorPicture { art: ColorArt::new(content), text: TEXT })
 }
@@ -85,7 +85,7 @@ pub fn text_colors(session: &fontcraft_engine::Session, view: &ViewState, files:
     let Some(layer) = crate::shell::masters::shown_layer(font, &view.layers, edited) else { return Vec::new() };
     let Some(mode) = mode(font, edited, layer, false) else { return Vec::new() };
     let assets = session.assets();
-    let mut src = Sources { assets: assets.as_ref(), files, text: TEXT };
+    let mut src = Sources { assets: assets.as_ref(), files, text: TEXT, palette: 0 };
     let mut found: HashMap<(&str, Option<&str>), Option<Arc<ColorArt>>> = HashMap::new();
     let mut out = Vec::new();
     for &(name, own, at) in glyphs {

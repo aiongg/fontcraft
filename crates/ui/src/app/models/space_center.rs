@@ -119,7 +119,7 @@ pub fn project(model: &mut Tracked<SpaceCenterModel>, files: &mut ColorFiles, cx
     let state = cx.view.space_center.clone();
     files.follow(cx.session.active().map(|d| d.id));
     let assets = cx.session.assets();
-    let mut src = color::Sources { assets: assets.as_ref(), files, text: color::TEXT };
+    let mut src = color::Sources { assets: assets.as_ref(), files, text: color::TEXT, palette: 0 };
     let Ok(font) = cx.session.font() else {
         super::set(model, SpaceCenterModel { state, ..Default::default() });
         return;

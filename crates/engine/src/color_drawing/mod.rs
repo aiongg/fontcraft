@@ -148,6 +148,8 @@ pub struct Sources<'a> {
     pub assets: &'a dyn AssetStore,
     pub files: &'a mut ColorFiles,
     pub text: [f32; 4],
+    /// The palette vector layers take their colours from, from 0.
+    pub palette: usize,
 }
 
 fn concat(parts: Vec<BezPath>) -> BezPath {
@@ -163,7 +165,7 @@ fn vector(font: &Font, glyph: &Glyph, master: &str, src: &mut Sources<'_>) -> Op
     let assets = src.assets;
     let files = &mut *src.files;
     let mut pattern = |attrs: &ShapeAttrs| files.pattern(assets, attrs);
-    let mut art = artwork::Sources { outline: &outline, pattern: &mut pattern, text: src.text };
+    let mut art = artwork::Sources { outline: &outline, pattern: &mut pattern, text: src.text, palette: src.palette };
     artwork::collect(font, glyph, master, &mut art).map(Content::Items)
 }
 

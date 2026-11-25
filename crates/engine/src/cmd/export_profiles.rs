@@ -972,7 +972,7 @@ fn colour_items(font: &Font, glyph: &Glyph, layer: &Layer, art: &mut ArtSources)
         })
     };
     let mut pattern = |attrs: &ShapeAttrs| art.pattern(attrs);
-    let mut src = Sources { outline: &outline, pattern: &mut pattern, text: [0.0, 0.0, 0.0, 1.0] };
+    let mut src = Sources { outline: &outline, pattern: &mut pattern, text: [0.0, 0.0, 0.0, 1.0], palette: 0 };
     artwork::collect(font, glyph, &layer.master, &mut src)
 }
 
