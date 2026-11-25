@@ -318,12 +318,14 @@ pub struct AuditContext<'a> {
     /// The masters' comparison order for the compatibility checks, built by the first glyph
     /// that needs it.
     compat_masters: std::cell::OnceCell<checks::compat::MasterOrder>,
+    /// The anchor names marks of the font attach to, built by the first glyph that needs them.
+    mark_anchors: std::cell::OnceCell<std::collections::HashSet<String>>,
 }
 
 impl<'a> AuditContext<'a> {
     /// A context with facts the caller already surveyed (see [`AuditContext::new`]).
     pub fn with_facts(font: &'a Font, grid_step: Option<f64>, main_curve: Option<CurveType>, variable: bool) -> Self {
-        Self { font, grid_step, main_curve, variable, glyf_outlines: false, compat_masters: std::cell::OnceCell::new() }
+        Self { font, grid_step, main_curve, variable, glyf_outlines: false, compat_masters: Default::default(), mark_anchors: Default::default() }
     }
 
     /// The same context, for outlines decoded from a compiled `glyf` table.
@@ -335,6 +337,10 @@ impl<'a> AuditContext<'a> {
 
     pub(crate) fn compat_masters(&self) -> &checks::compat::MasterOrder {
         self.compat_masters.get_or_init(|| checks::compat::MasterOrder::new(self.font))
+    }
+
+    pub(crate) fn mark_anchors(&self) -> &std::collections::HashSet<String> {
+        self.mark_anchors.get_or_init(|| checks::anchors::mark_anchors(self.font))
     }
 
     pub fn new(font: &'a Font) -> Self {

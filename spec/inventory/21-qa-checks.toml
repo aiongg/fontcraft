@@ -588,7 +588,11 @@ milestone = "M12"
 summary = "A mark component is not where its anchor pair would put it, or a composite's width differs from its base letter although automatic alignment would apply. The fix re-applies automatic alignment."
 ref = "Editor audit convention (components out of alignment)"
 status = "inferred"
-notes = "Not registered yet: the check needs the alignment routine of the components crate, which the audit crate does not depend on."
+notes = "Runs on the master and special layers of a source, in the profile strict; threshold `tolerance` (1 unit). Positions and width are those of components.autoAlign*. A component next to a path, or in a font with Disable Automatic Alignment on, is not reported. The fix (component.enableAutomaticAlignment) needs safeOnly: false, because the component moves and the width then follows the bases; a component aligned horizontally only is reported without a fix. Built in M12.84; tested on FontCraft fonts only."
+guesses = [
+  "A mark whose automatic alignment was turned off by hand is reported when it is more than one unit from where its anchors put it, measured from where the glyphs before it stand; the row's source names no such exception, and the reference's own audit on a hand-placed accent would settle it.",
+  "A width is compared only where at least one component of the layer is aligned automatically; a composite with every component placed by hand keeps its own width.",
+]
 
 [[check]]
 id = "check.components.caronAlternate"
@@ -627,7 +631,11 @@ milestone = "M12"
 summary = "A base letter lacks an anchor that its glyph-data entry expects (such as top or bottom) while the font contains marks that attach there. The fix adds the default anchors for the glyph at their computed positions."
 ref = "Editor audit convention (missing anchors)"
 status = "inferred"
-notes = "Not registered yet: the check needs the default-anchor table of the components crate, which the audit crate does not depend on."
+notes = "Runs on the drawn master layers of exporting glyphs of a source, in the profile outlines. The expected anchors are those Set Anchors adds (custom glyph data first, then the default table of fontcraft-components); an anchor counts as expected only when some glyph has the attaching anchor of that name (`_top` for `top`), and anchors taken over from components count as present. Built in M12.84; tested on FontCraft fonts only."
+guesses = [
+  "A base is any glyph to which the glyph data gives anchors but no attaching one, so a figure with anchors in custom glyph data is checked like a letter.",
+  "Master layers only: a special layer without the anchors of its master is not reported.",
+]
 
 [[check]]
 id = "check.anchors.markWithoutAttachment"
@@ -639,7 +647,10 @@ milestone = "M12"
 summary = "A combining mark has no attaching anchor (one whose name starts with an underscore), so it cannot be positioned or used to build composites. The fix adds the default mark anchor."
 ref = "Editor audit convention (mark anchors)"
 status = "inferred"
-notes = "Not registered yet: telling combining marks apart needs the glyph data and the default-anchor table of the components crate, which the audit crate does not depend on."
+notes = "Runs on the drawn master layers of a source, in the profile outlines. A combining mark is a glyph to which the glyph data or the default table gives an attaching anchor; one attaching anchor of any name, its own or taken over from a component, is enough. Built in M12.84; tested on FontCraft fonts only."
+guesses = [
+  "Marks outside the default-anchor table (spacing marks, enclosing marks) and marks that draw nothing are not reported, because Set Anchors has nothing to add to them.",
+]
 
 [[check]]
 id = "check.anchors.duplicateName"
@@ -3693,7 +3704,10 @@ summary = "Returns the cached results of the last run for a target without runni
 ref = "Our design"
 status = "inferred"
 own = true
-notes = "M3 keeps the last run of each open document until the next run or until the document closes; saving keeps it. A glyph counts as edited when its layers differ from the run's. The document carries the run's runId; a call with another runId is refused (M12.64b)."
+notes = "M3 keeps the last run of each open document until the next run or until the document closes; saving keeps it. A glyph counts as edited when its layers differ from the run's. The document carries the run's runId; a call with another runId is refused (M12.64b). The last run of each of the eight paths audited last is kept for the session (M12.84); a run of a list of files is not. On a path every result is stale once the files on disk changed, and results on the ignore list are those the run found ignored."
+guesses = [
+  "The runs of eight paths are kept; no source says how many a session holds.",
+]
 
 [[command]]
 id = "audit.fix"
@@ -3707,7 +3721,7 @@ milestone = "M3"
 summary = "Applies the registered fix of every selected result that has one, as a single undo step, then re-runs the affected checks and returns what changed and what remains. `dryRun` reports the planned edits only; `safeOnly` (default true) skips fixes that alter the design; `output` writes a fixed copy of a file target instead of overwriting it."
 ref = "AFDKO checkoutlinesufo -e, -o, -w, -d, --ignore-contour-order"
 status = "docs"
-notes = "M3 fixes the open document. `results` takes ids of the kept run and cannot be combined with the filters; a result whose glyph changed since the run is skipped. The first stage runs each selected Font Info fix (syncVerticalMetrics, syncVersion, syncStyleLinking, syncFamilyValues, sortZones, clearInfoFields, and the source side of cleanNameRecords and cleanInstances) once, through its font.info or font.instance command with that command's defaults, for findings of any scope; with filters, the checks of those fixes run in full, compiling the source when they read compiled fonts. Then the glyph-data steps 1 to 6 (addMandatoryGlyphs, removeGlyphs, removeCodepoints, updateGlyphInfo, useProductionNames, setGdefClasses) run once each on the whole font, then each layer runs the steps of audit.outlineFixOrder, and last the font-wide steps 34 to 38 that read the final outlines (cleanKerning, with the stored pairs behind tabular-kerning results; renameLanguageTag, addDefaultLanguagesystem and reorderFeatures through font.features.setCode and font.features.reorder; autohint). Each font-wide step runs its checks again, compiling the source when they read compiled fonts, builds its calls from what they report now, and is undone as a whole when one of its calls fails. A call by result ids limits those steps to the glyphs of the results, or takes the whole font when a result names no glyph. A fix whose call audit.fix cannot build yet (the table fixes on the open document) is skipped with the reason, and its result reports `available: false`. The result cap does not hide findings from a fix. On the open document `output` is refused. A compiled font file as target (M12.61) runs the checks on the file, then the table repairs of docs/spec/21-qa.md § 5 › Fix calls in that table's order on a temporary copy next to the output, each call reading the previous one's output; the copy replaces `output` (default FONT.fixed.EXT, or the input with `inPlace`) only when every call succeeded, and a failing call leaves nothing written. When checking the written file again fails, the result has `remaining: null` and a warning. patchTable results pass their `table.field` to tables.recalculate (OS/2.fsType passes the project's value from the result); glyph-data and Font Info fixes are skipped with the reason. `results`, `masters`, `layers` and `keepOriginal` are refused on a file. A list of files as target (a family) runs the checks on all of them, plans each file's table repairs as for one file, and turns syncFamilyValues results into tables.recalculate `values`: for vertical-metric mismatches the widest value of the fonts the result compares (lowest descenders, highest of the rest), for underline results the value of the font the others are compared with; outputs follow outputDir or inPlace (`output` is refused), are written to temporary files, and replace their files only when every call on every file succeeded; `remaining` checks the family as written. `decimal` and `keepContourOrder` wait for later packages. `runId` (M12.64b) refuses the call when the document no longer keeps that run, so result ids cannot reach a later run. The Font Audit panel previews a fix with dryRun before applying it."
+notes = "M3 fixes the open document. `results` takes ids of the kept run and cannot be combined with the filters; a result whose glyph changed since the run is skipped. The first stage runs each selected Font Info fix (syncVerticalMetrics, syncVersion, syncStyleLinking, syncFamilyValues, sortZones, clearInfoFields, and the source side of cleanNameRecords and cleanInstances) once, through its font.info or font.instance command with that command's defaults, for findings of any scope; with filters, the checks of those fixes run in full, compiling the source when they read compiled fonts. Then the glyph-data steps 1 to 6 (addMandatoryGlyphs, removeGlyphs, removeCodepoints, updateGlyphInfo, useProductionNames, setGdefClasses) run once each on the whole font, then each layer runs the steps of audit.outlineFixOrder, and last the font-wide steps 34 to 38 that read the final outlines (cleanKerning, with the stored pairs behind tabular-kerning results; renameLanguageTag, addDefaultLanguagesystem and reorderFeatures through font.features.setCode and font.features.reorder; autohint). Each font-wide step runs its checks again, compiling the source when they read compiled fonts, builds its calls from what they report now, and is undone as a whole when one of its calls fails. A call by result ids limits those steps to the glyphs of the results, or takes the whole font when a result names no glyph. A fix whose call audit.fix cannot build yet (the table fixes on the open document) is skipped with the reason, and its result reports `available: false`. The result cap does not hide findings from a fix. On the open document `output` is refused. A compiled font file as target (M12.61) runs the checks on the file, then the table repairs of docs/spec/21-qa.md § 5 › Fix calls in that table's order on a temporary copy next to the output, each call reading the previous one's output; the copy replaces `output` (default FONT.fixed.EXT, or the input with `inPlace`) only when every call succeeded, and a failing call leaves nothing written. When checking the written file again fails, the result has `remaining: null` and a warning. patchTable results pass their `table.field` to tables.recalculate (OS/2.fsType passes the project's value from the result); glyph-data and Font Info fixes are skipped with the reason. `results`, `masters`, `layers` and `keepOriginal` are refused on a file. A list of files as target (a family) runs the checks on all of them, plans each file's table repairs as for one file, and turns syncFamilyValues results into tables.recalculate `values`: for vertical-metric mismatches the widest value of the fonts the result compares (lowest descenders, highest of the rest), for underline results the value of the font the others are compared with; outputs follow outputDir or inPlace (`output` is refused), are written to temporary files, and replace their files only when every call on every file succeeded; `remaining` checks the family as written. A source file as target (M12.84: .glyphs, .glyphspackage, .fontcraft, UFO, UFOZ; a designspace with `inPlace`) is opened in a session of its own with the user's settings and glyph data, gets the fixes of the open document as one call, and is written through the save path, each file atomically, to `output` (default FONT.fixed.EXT; another extension is another format) or over the input with `inPlace`; nothing is written when a step of the call fails, nothing changed, the file changed on disk meanwhile, or on `dryRun`; `results` is refused, and the open documents and the kept runs stay as they are. A package or a designspace holds many files: each one is replaced atomically, not all of them at once. `decimal` and `keepContourOrder` wait for later packages. `runId` (M12.64b) refuses the call when the document no longer keeps that run, so result ids cannot reach a later run. The Font Audit panel previews a fix with dryRun before applying it."
 guesses = [
   "An outline fix on a composite glyph only reports unless `safeOnly` is false (21-qa question 4).",
   "The fixes of M12 run in the three stages and the order of docs/spec/21-qa.md § 5 › Fix calls (glyph data, then layers, then kerning, feature code and hints); no reference tool fixes all of these, so a case where the order changes the result would settle it.",
@@ -3715,6 +3729,7 @@ guesses = [
   "alignHandles turns both handles onto the line that bisects their two directions, keeping their lengths; a type designer's review of fixed kinks would settle whether one handle should stay put instead.",
   "setGdefClasses makes a glyph that must not be a mark a Symbol when the glyph database classes it as a mark; a review of the fixed glyphs' categories would settle it.",
   "cleanKerning leaves a tabular glyph that is kerned through a group shared with other glyphs in the report, because removing the group pair would change their kerning; an exception pair of zero is the other choice, which a review of fixed fonts would settle.",
+  "A copy of a designspace is refused, because it would name the UFOs of the original; checkoutlinesufo -o writes one UFO and has no such case.",
   "A compiled font fixed with inPlace through a symbolic link replaces the file the link points to and keeps the link, with that file's permissions; fixing a linked font with the reference tools would settle whether the link should be replaced instead.",
 ]
 
@@ -3730,7 +3745,7 @@ milestone = "M12"
 summary = "Discards cached results and the per-glyph change hashes of a target, so the next run examines every glyph again."
 ref = "AFDKO checkoutlinesufo --clear-hash-map"
 status = "docs"
-notes = "Built in M12.59. Clearing drops the run kept for audit.results and audit.fix together with its per-glyph layer-check results (audit.glyphHashCache); a file target keeps no cache and reports `cleared: false`."
+notes = "Built in M12.59. Clearing drops the run kept for audit.results and audit.fix together with its per-glyph layer-check results (audit.glyphHashCache); a path drops the run kept for that file target (M12.84)."
 
 [[command]]
 id = "audit.profile.list"

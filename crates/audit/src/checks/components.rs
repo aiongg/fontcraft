@@ -23,7 +23,7 @@ use skrifa::{GlyphNameSource, GlyphNames};
 
 use crate::contour::{Bez, dist_to_segment, overlaps, proper_cross};
 use crate::contours::MAX_OVERLAP_TESTS;
-use crate::{BinaryCtx, Hit, LayerInput, Location, MAX_LAYER_NODES, Nth, Params, Severity, Sink, Threshold, num};
+use crate::{BinaryCtx, GlyphCtx, Hit, LayerInput, Location, MAX_LAYER_NODES, Nth, Params, Severity, Sink, Threshold, num};
 
 /// Most glyph layers the search for a component cycle visits from one layer.
 pub(crate) const MAX_CHAIN_VISITS: usize = 10_000;
@@ -42,6 +42,14 @@ pub(crate) const MAX_OUTLINE_SHARE: Threshold = Threshold {
     min: 0.0,
     max: 100.0,
     doc: "Highest share, in percent of all glyphs, of glyphs stored as outlines rather than composites. Glyphs named with one ASCII character do not count as outlines.",
+};
+
+pub(crate) const ALIGNMENT_TOLERANCE: Threshold = Threshold {
+    name: "tolerance",
+    default: 1.0,
+    min: 0.0,
+    max: 1000.0,
+    doc: "Largest distance in units, in either direction, between a component's position or the width and what automatic alignment gives, that is not reported.",
 };
 
 /// The components of a layer with their indices in its shape list.
@@ -63,6 +71,60 @@ fn has_components(layer: &Layer) -> bool {
 /// A finding about the component at shape index `shape`.
 fn at_component(code: &'static str, message: String, shape: usize) -> Hit {
     Hit::new(code, message).shapes(vec![shape]).place(Location { components: vec![shape], ..Location::default() })
+}
+
+/// A component attached through its anchors that is not where they put it, or a layer whose
+/// width differs from the one its aligned components give it, by more than `tolerance`. Where
+/// automatic alignment is off for the font, or by a path on the layer, nothing is reported.
+pub(crate) fn misaligned(ctx: &GlyphCtx<'_>, params: &Params<'_>, sink: &mut Sink) {
+    let tolerance = params.get(&ALIGNMENT_TOLERANCE);
+    let live = ctx.glyph.layers.iter().filter(|l| l.is_master_layer() || !l.info.attrs.is_empty());
+    for layer in live.filter(|l| has_components(l)) {
+        let found = match ctx.services.alignment(ctx.audit.font, ctx.glyph, layer) {
+            Ok(found) => found,
+            Err(e) => {
+                sink.skip(e.reason);
+                continue;
+            }
+        };
+        let place = |components: Vec<usize>| Location {
+            layer: layer.id.clone(),
+            master: Some(layer.master.clone()),
+            shapes: components.clone(),
+            components,
+            ..Location::default()
+        };
+        for a in &found.attachments {
+            let (dx, dy) = (a.stored.x - a.wanted.x, a.stored.y - a.wanted.y);
+            if dx.abs() <= tolerance && dy.abs() <= tolerance {
+                continue;
+            }
+            let Some(Shape::Component(c)) = layer.shapes.get(a.shape) else { continue };
+            let message = format!(
+                "Shape {} ({}) is at {}, {}, but its anchors put it at {}, {}.",
+                Nth(a.shape),
+                c.glyph,
+                num(a.stored.x),
+                num(a.stored.y),
+                num(a.wanted.x),
+                num(a.wanted.y)
+            );
+            let hit = Hit::new("misplaced", message).data("dx", dx).data("dy", dy).at(a.stored).place(place(vec![a.shape]));
+            // Aligning the component in full would also give up its vertical position.
+            sink.push(if a.horizontal { hit.without_fix() } else { hit });
+        }
+        if let Some(width) = found.width
+            && (layer.width - width).abs() > tolerance
+        {
+            let message = format!("{} is {} wide, but its aligned components give it a width of {}.", ctx.glyph.name, num(layer.width), num(width));
+            let hit = Hit::new("width-differs", message).data("width", layer.width).data("expected", width).place(place(found.aligned.clone()));
+            let horizontal = found
+                .aligned
+                .iter()
+                .any(|&i| matches!(layer.shapes.get(i), Some(Shape::Component(c)) if c.info.alignment == fontcraft_model::Alignment::Horizontal));
+            sink.push(if horizontal { hit.without_fix() } else { hit });
+        }
+    }
 }
 
 /// A component's transform as `[xx, yx, xy, yy, dx, dy]`; `None` when a number is not finite.

@@ -11,6 +11,7 @@ mod attach_cap;
 mod attach_segment;
 mod attributes;
 mod audit;
+mod audit_files;
 mod audit_fix_binary;
 mod audit_fix_glyph;
 mod audit_fix_info;

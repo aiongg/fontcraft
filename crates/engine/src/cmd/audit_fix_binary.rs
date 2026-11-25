@@ -3,7 +3,7 @@
 //! Whole-file commands follow [`super::file_io`]: paths in, the input never changed, the output
 //! written atomically, a refusal on the web.
 //!
-//! `audit.fix` with a file target ([`fix_file`]) runs the checks on the file, builds one call per
+//! `audit.fix` with a compiled font as target ([`fix_file`]) runs the checks on the file, builds one call per
 //! fix in the order of the file-target table of `docs/spec/21-qa.md` § 5 › Fix calls, and runs
 //! the calls one after the other on a temporary copy next to the output, each reading what the
 //! previous one wrote. The copy replaces the output (or the input with `inPlace`) only when every
@@ -227,7 +227,7 @@ pub(super) fn file_fix_command(id: &str) -> Option<&'static str> {
 
 /// The `audit.run` parameters `audit.fix` passes through on a file.
 const RUN_KEYS: [&str; 7] = ["profile", "checks", "exclude", "groups", "glyphs", "minSeverity", "config"];
-/// `audit.fix` parameters that only make sense on the open document.
+/// `audit.fix` parameters that only make sense on a source.
 const DOCUMENT_KEYS: [&str; 4] = ["results", "masters", "layers", "keepOriginal"];
 /// Results read from one run, whatever `maxResults` the caller gave.
 const ALL_RESULTS: i64 = 1_000_000;
@@ -408,16 +408,19 @@ fn call_params(call: &Call, font: &Path, in_place: bool) -> Value {
     Value::Object(params)
 }
 
-/// `audit.fix` on a compiled font file.
+/// `audit.fix` on a file: a compiled font, or a source ([`super::audit_fix_source`]).
 pub(super) fn fix_file(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("audit.fix", v)?;
     let target = match p.get("target") {
         Some(Value::String(t)) => t.clone(),
         Some(Value::Array(_)) => return fix_family(s, &p),
-        _ => return Err(p.bad("`target` names a compiled font file, or the files of a family")),
+        _ => return Err(p.bad("`target` names a file, or the compiled fonts of a family")),
     };
+    if !super::audit::is_compiled_font(Path::new(&target)) {
+        return super::audit_fix_source::fix_source(s, &p, &target);
+    }
     if let Some(key) = DOCUMENT_KEYS.iter().find(|k| p.get(k).is_some()) {
-        return Err(p.bad(format!("`{key}` applies to the open document; on a file, select results with `checks` and the other filters")));
+        return Err(p.bad(format!("`{key}` applies to a source; on a compiled font, select results with `checks` and the other filters")));
     }
     let safe_only = p.bool_or("safeOnly", true)?;
     let dry = p.bool_or("dryRun", false)?;
@@ -426,7 +429,7 @@ pub(super) fn fix_file(s: &mut Session, v: &Value) -> Result<Value> {
     let output = file_io::output_path(&input, &req, SUFFIX, None)?;
     let source = file_io::read_input(&input)?;
     if !source.kind.is_font() {
-        return Err(p.bad(format!("{target} is not a compiled font; open a source and fix the document")));
+        return Err(p.bad(format!("{target} is neither a compiled font nor a source")));
     }
 
     let mut run = Map::new();
@@ -437,7 +440,7 @@ pub(super) fn fix_file(s: &mut Session, v: &Value) -> Result<Value> {
     }
     run.insert("target".into(), json!(target));
     run.insert("maxResults".into(), json!(ALL_RESULTS));
-    let before = s.execute("audit.run", &Value::Object(run.clone()))?;
+    let before = super::audit::check_files(s, &Value::Object(run.clone()))?;
     let results = before.get("results").and_then(Value::as_array).cloned().unwrap_or_default();
 
     let mut report = FileReport::default();
@@ -480,7 +483,7 @@ pub(super) fn fix_file(s: &mut Session, v: &Value) -> Result<Value> {
     super::file_io::commit(std::slice::from_ref(&staged))?;
     // The fixed file is in place, so a check run that fails now is reported, not an error.
     run.insert("target".into(), json!(output));
-    let (remaining, warnings) = match s.execute("audit.run", &Value::Object(run)) {
+    let (remaining, warnings) = match super::audit::check_files(s, &Value::Object(run)) {
         Ok(remaining) => (remaining, None),
         Err(e) => (Value::Null, Some(json!([format!("the fixed file was written, but checking it again failed: {e}")]))),
     };
@@ -540,7 +543,7 @@ fn fix_family(s: &mut Session, p: &Params) -> Result<Value> {
         return Err(p.bad(format!("`target` lists 1 to {} files", fontcraft_audit::run::MAX_TARGET_FONTS)));
     }
     if let Some(key) = DOCUMENT_KEYS.iter().find(|k| p.get(k).is_some()) {
-        return Err(p.bad(format!("`{key}` applies to the open document; on files, select results with `checks` and the other filters")));
+        return Err(p.bad(format!("`{key}` applies to a source; on compiled fonts, select results with `checks` and the other filters")));
     }
     if p.get("output").is_some() {
         return Err(p.bad("a family is written one output per file: give outputDir or inPlace, not output"));
@@ -556,7 +559,7 @@ fn fix_family(s: &mut Session, p: &Params) -> Result<Value> {
         }
         let source = file_io::read_input(&input)?;
         if !source.kind.is_font() {
-            return Err(p.bad(format!("{t} is not a compiled font; open a source and fix the document")));
+            return Err(p.bad(format!("{t} is not a compiled font; a source is fixed on its own, with its path as `target`")));
         }
         let output = file_io::output_path(&input, &req, SUFFIX, None)?;
         if files.iter().any(|f| f.output == output) {
@@ -574,7 +577,7 @@ fn fix_family(s: &mut Session, p: &Params) -> Result<Value> {
     }
     run.insert("target".into(), json!(targets));
     run.insert("maxResults".into(), json!(ALL_RESULTS));
-    let before = s.execute("audit.run", &Value::Object(run.clone()))?;
+    let before = super::audit::check_files(s, &Value::Object(run.clone()))?;
     let results = before.get("results").and_then(Value::as_array).cloned().unwrap_or_default();
 
     // Font id → (file, face): a collection's faces follow each other under one path.
@@ -735,7 +738,7 @@ fn fix_family(s: &mut Session, p: &Params) -> Result<Value> {
     // The family as written: the outputs, and the files that needed nothing.
     let written: Vec<&PathBuf> = files.iter().map(|f| if f.calls.is_empty() { &f.input } else { &f.output }).collect();
     run.insert("target".into(), json!(written));
-    let (remaining, warnings) = match s.execute("audit.run", &Value::Object(run)) {
+    let (remaining, warnings) = match super::audit::check_files(s, &Value::Object(run)) {
         Ok(remaining) => (remaining, None),
         Err(e) => (Value::Null, Some(json!([format!("the fixed files were written, but checking them again failed: {e}")]))),
     };

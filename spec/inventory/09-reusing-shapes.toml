@@ -392,7 +392,7 @@ milestone = "M6"
 summary = "Context-menu item on a manually placed component that turns automatic alignment back on for it."
 ref = "Reusing Shapes › Components › Automatic Alignment"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. The layer is laid out at once, also when the component was aligned already but stood elsewhere, so audit.fix can put a misaligned component right."
 guesses = [
   "Enable stores 0 (decided by the layer) on a layer of components only and 1 (forced) on a layer that has paths, so the item always aligns the component; enabling alignment on a component next to a path in the reference app settles it.",
 ]

@@ -437,3 +437,100 @@ fn audit_fix_last_stage_removes_the_stored_pairs_behind_tabular_kerning() {
     assert_eq!(font.kerning.ltr.get(&master, "V", "@MMK_R_fourX"), Some(-30.0), "the pair also kerns X");
     assert_eq!(font.kerning.ltr.get(&master, "T", "O"), Some(-40.0), "a pair without figures stays");
 }
+
+/// A mark without an attaching anchor and a letter without the anchor the mark attaches to are
+/// reported, get the default anchors and are then silent; composites take over what they need,
+/// and nothing is expected where no mark attaches.
+#[test]
+fn audit_fix_adds_the_anchors_marks_and_letters_lack() {
+    let mut s = Session::with_document();
+    add(&mut s, "A", rect(0.0, 0.0, 600.0, 700.0));
+    run(&mut s, "glyph.newGlyph", json!({"name": "acutecomb"}));
+    add(&mut s, "acutecomb", rect(50.0, 550.0, 150.0, 700.0));
+    let missing = "check.anchors.missing";
+    let none = run(&mut s, "audit.run", json!({"profile": "outlines", "checks": [missing]}));
+    assert_eq!(count(&none, missing), 0, "no mark attaches anywhere yet: {none}");
+
+    fix_one(&mut s, "check.anchors.markWithoutAttachment", None, "glyph.setAnchors");
+    let found = run(&mut s, "audit.run", json!({"profile": "outlines", "checks": [missing]}));
+    assert_eq!(count(&found, missing), 1, "only A is drawn: {found}");
+    assert_eq!(found["results"][0]["location"]["glyph"], json!("A"));
+    assert_eq!(found["results"][0]["location"]["anchors"], json!(["top"]), "no mark attaches to bottom or ogonek");
+
+    s.edit("composite", |font| {
+        font.glyph_mut("B")?.layers[0].shapes =
+            vec![Shape::Component(Component::new("A", 0.0, 0.0)), Shape::Component(Component::new("acutecomb", 0.0, 0.0))];
+        Ok(())
+    })
+    .unwrap();
+    fix_one(&mut s, missing, None, "glyph.setAnchors");
+    let font = s.font().unwrap();
+    assert!(font.glyph("B").unwrap().layers[0].anchors.is_empty(), "the composite inherits its anchors");
+    assert!(font.glyph("A").unwrap().layers[0].anchors.iter().any(|a| a.name == "top"));
+}
+
+/// A mark moved off its anchors is reported whether its alignment is on or off, as is a width the
+/// aligned components do not give; the fix puts both right, and a font that turns automatic
+/// alignment off is left alone.
+#[test]
+fn audit_fix_realigns_misaligned_components() {
+    use fontcraft_engine::model::Alignment;
+    let check = "check.components.misaligned";
+    let place = |s: &mut Session, x: f64, alignment: Alignment, width: f64| {
+        s.edit("misplace", |font| {
+            let mut g = font.glyph_mut("C")?;
+            let mut mark = Component::new("acutecomb", x, 200.0);
+            mark.info.alignment = alignment;
+            g.layers[0].shapes = vec![Shape::Component(Component::new("A", 0.0, 0.0)), Shape::Component(mark)];
+            g.layers[0].width = width;
+            Ok(())
+        })
+        .unwrap();
+    };
+    let at = |s: &Session| match &s.font().unwrap().glyph("C").unwrap().layers[0].shapes[1] {
+        Shape::Component(c) => (c.affine().as_coeffs()[4], c.affine().as_coeffs()[5]),
+        _ => panic!("no component"),
+    };
+    let mut s = Session::with_document();
+    add(&mut s, "A", rect(0.0, 0.0, 600.0, 700.0));
+    run(&mut s, "glyph.newGlyph", json!({"name": "acutecomb"}));
+    add(&mut s, "acutecomb", rect(50.0, 550.0, 150.0, 700.0));
+    s.edit("anchors", |font| {
+        font.glyph_mut("A")?.layers[0].anchors.push(Anchor::new("top", 300.0, 700.0));
+        font.glyph_mut("acutecomb")?.layers[0].anchors.push(Anchor::new("_top", 100.0, 500.0));
+        Ok(())
+    })
+    .unwrap();
+    let width = s.font().unwrap().glyph("A").unwrap().layers[0].width;
+    let codes = |doc: &Value| -> Vec<String> {
+        let mut v: Vec<String> = doc["results"].as_array().unwrap().iter().map(|r| r["code"].as_str().unwrap().to_string()).collect();
+        v.sort();
+        v
+    };
+    let select = json!({"profile": "strict", "checks": [check]});
+
+    place(&mut s, 200.0, Alignment::Default, width);
+    assert!(codes(&run(&mut s, "audit.run", select.clone())).is_empty(), "in its place");
+
+    place(&mut s, 150.0, Alignment::Default, width + 40.0);
+    let doc = run(&mut s, "audit.run", select.clone());
+    assert_eq!(codes(&doc), ["misplaced", "width-differs"], "{doc}");
+    let mark = doc["results"].as_array().unwrap().iter().find(|r| r["code"] == "misplaced").unwrap();
+    assert_eq!((&mark["data"]["dx"], &mark["location"]["components"]), (&json!(-50.0), &json!([1])));
+    fix_one(&mut s, check, Some("C"), "component.enableAutomaticAlignment");
+    assert_eq!((at(&s), s.font().unwrap().glyph("C").unwrap().layers[0].width), ((200.0, 200.0), width));
+
+    place(&mut s, 150.0, Alignment::Disabled, width);
+    let kept = run(&mut s, "audit.fix", select.clone());
+    assert_eq!((kept["applied"].clone(), at(&s)), (json!([]), (150.0, 200.0)), "a hand-placed mark moves only with safeOnly: false");
+    fix_one(&mut s, check, Some("C"), "component.enableAutomaticAlignment");
+    assert_eq!(at(&s), (200.0, 200.0));
+
+    place(&mut s, 150.0, Alignment::Disabled, width + 40.0);
+    s.edit("off", |font| {
+        std::sync::Arc::make_mut(&mut font.info).settings.disables_automatic_alignment = Some(true);
+        Ok(())
+    })
+    .unwrap();
+    assert!(codes(&run(&mut s, "audit.run", select)).is_empty(), "automatic alignment does not apply in this font");
+}

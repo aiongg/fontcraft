@@ -1,7 +1,4 @@
-//! Registry entries of the `check.components.*` checks (M12.46).
-//!
-//! `check.components.misaligned` is not registered: it needs the alignment routine of the
-//! `components` crate, which the audit does not depend on.
+//! Registry entries of the `check.components.*` checks (M12.46, M12.84).
 
 use crate::Profile::{Opentype, Outlines, Strict, Universal};
 use crate::Severity::{Fail, Info, Warn};
@@ -131,6 +128,26 @@ pub(super) const CHECKS: &[CheckSpec] = &[
         profile: Universal,
         codes: &["empty-base"],
         run: Runner::Layer(c::empty_base),
+        ..LAYER
+    },
+    CheckSpec {
+        id: "check.components.misaligned",
+        label: "Components out of alignment",
+        description: "A component attached through its anchors is not where they put it, or a composite's width differs from the one its automatically aligned components give it.",
+        scope: CheckScope::Glyph,
+        severity: Info,
+        profile: Strict,
+        thresholds: &[c::ALIGNMENT_TOLERANCE],
+        // Turning alignment on again moves the component and lets the width follow the bases.
+        fix: Some(FixSpec {
+            id: "realignComponents",
+            command: Some("component.enableAutomaticAlignment"),
+            safe: false,
+            description: "Align the reported components automatically again; the layer's width then follows its bases.",
+        }),
+        codes: &["misplaced", "width-differs"],
+        preconditions: &[Precondition::SourceData],
+        run: Runner::Glyph(c::misaligned),
         ..LAYER
     },
     CheckSpec {
