@@ -6,9 +6,11 @@
 
 use std::sync::Arc;
 
-use fontcraft_engine::feature_state::{SharedBuild, build_previews};
+use fontcraft_engine::cmd::features_check::check_context;
+use fontcraft_engine::cmd::features_targets::{all_targets, check_targets};
+use fontcraft_engine::feature_state::{SharedBuild, build_previews, compile_ahead};
 use fontcraft_engine::prelude::*;
-use fontcraft_engine::{EngineError, Session};
+use fontcraft_engine::{EngineError, Session, work};
 use serde_json::{Value, json};
 
 fn run(s: &mut Session, id: &str, p: Value) -> Value {
@@ -808,6 +810,47 @@ fn equal_targets_compile_once() {
     assert_eq!(r["targets"], json!(["master Regular", "master Bold", "instance Middle", "variable font"]), "{r}");
     assert_eq!(r["targetsCompiled"], 2, "{r}");
     assert_eq!((r["ok"].clone(), r["targetErrors"].clone()), (json!(true), json!(0)), "{r}");
+}
+
+/// The check of every target goes with the names of the number values, which variable code may use.
+#[test]
+fn a_renamed_number_drops_the_check_of_every_target() {
+    let mut s = two_masters();
+    run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": "sub a by b;"}));
+    run(&mut s, "font.features.compile", json!({"targets": "all"}));
+    s.edit("date", |font| {
+        Arc::make_mut(&mut font.info).date = Some("2026-01-02 03:04:05 +0000".into());
+        Ok(())
+    })
+    .unwrap();
+    assert!(s.target_check().is_some(), "the code does not read the date");
+    s.edit("number", |font| {
+        Arc::make_mut(&mut font.numbers)[0].name = "space".into();
+        Ok(())
+    })
+    .unwrap();
+    assert!(s.target_check().is_none());
+}
+
+/// A cancelled check of every target gives nothing, nor does the compile ahead that asked for it, and its stopped build
+/// is not kept for others.
+#[test]
+fn a_cancelled_check_of_every_target_gives_nothing() {
+    let mut s = two_masters();
+    run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": "sub a by b;"}));
+    let cx = check_context(&s).unwrap();
+    let (id, revision, font) = s.active().map(|d| (d.id, d.revision, Arc::clone(&d.font))).unwrap();
+    let master = font.masters[0].id.clone();
+    let token = work::Token::new();
+    assert!(token.cancel());
+    let builds = s.preview_builds();
+    work::with(token, None, || {
+        let found = check_targets(&font, &font.features, &cx, all_targets(&font));
+        assert!(matches!(found, Err(EngineError::Cancelled)), "{found:?}");
+        assert!(compile_ahead(&font, id, revision, &master, &cx, None, &builds, true).is_none());
+    });
+    assert!(builds.get(id, revision, &master).is_none());
+    assert!(compile_ahead(&font, id, revision, &master, &cx, None, &builds, true).is_some_and(|c| c.targets.is_some()));
 }
 
 /// An error inside `#ifdef VARIABLE` is the variable font's alone, and a jump to the entry finds it; the check of a draft

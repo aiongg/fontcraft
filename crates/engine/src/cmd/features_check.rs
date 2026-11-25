@@ -89,7 +89,7 @@ pub fn check_font(font: &Font, cx: &CheckContext, raw: &Value) -> Result<Value> 
     };
     snippet.code = code.to_string();
     if let Some((targets, _)) = targets_param(&p, font)? {
-        let check = check_targets(font, &features, cx, targets);
+        let check = check_targets(font, &features, cx, targets)?;
         let (errors, warnings) = count(check.found.iter());
         return Ok(json!({
             "targets": names_json(&check),

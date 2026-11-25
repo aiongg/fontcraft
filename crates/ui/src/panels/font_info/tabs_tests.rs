@@ -227,6 +227,36 @@ fn the_compile_button_is_busy_until_the_compile_of_the_font_as_it_is_lands() {
     assert!(app.models.font_info.features.groups.iter().any(|g| g.entries.iter().any(|e| e.error)), "its errors show");
 }
 
+/// An edit stops the compile under way; the compile of the code as it is then lands.
+#[test]
+fn an_edit_stops_the_background_compile() {
+    use crate::shell::feature_work::step;
+    use fontcraft_engine::feature_state::SessionFeaturesExt as _;
+    let jobs = Arc::new(craft::host::ManualJobs::new());
+    let host = Host::builder(APP).jobs(Arc::<craft::host::ManualJobs>::clone(&jobs)).build();
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(host));
+    app.sent.push(Msg::run("font.features.addFeature", json!({ "tag": "liga", "automatic": false, "code": "sub a by b;" })));
+    app.sent.push(shell("font.info", json!({ "tab": "features" })));
+    app.sent.push(Msg::Shell(CommandRef::new(COMPILE)));
+    app.drain();
+    let doc = app.session.doc().expect("a document");
+    let (id, revision, master) = (doc.id, doc.revision, doc.font.masters.first().expect("a master").id.clone());
+    app.sent.push(Msg::run("font.features.setCode", json!({ "kind": "feature", "name": "liga", "code": "sub b by a;" })));
+    app.drain();
+    step(&mut app, 10.0);
+    jobs.run_all();
+    assert!(app.session.preview_builds().get(id, revision, &master).is_none(), "the stopped build is not kept");
+    step(&mut app, 10.1);
+    assert!(app.session.feature_state().is_none(), "nothing has landed");
+    step(&mut app, 10.7);
+    jobs.run_all();
+    step(&mut app, 10.8);
+    let state = app.session.feature_state().expect("the compile landed");
+    assert!(state.is_current(&app.session, app.session.doc().expect("a document")));
+    assert!(app.session.target_check().is_some());
+    assert!(!app.view.font_info.features.compiling);
+}
+
 /// The Exports tab compiles the shown instance's feature parameters as a job: the problem shows once it landed, goes
 /// with the code it was found in, and a result for a revision before is dropped.
 #[test]
@@ -1084,8 +1114,10 @@ fn the_filter_hides_rows_and_changes_no_data() {
     if let Some(ss01) = model.features.groups.iter_mut().find(|g| g.kind == EntryKind::Feature).and_then(|g| g.entries.last_mut()) {
         ss01.filtered = true;
     }
-    let (fixture, _) = panel(model);
+    let (fixture, posted) = panel(model);
     assert!(fixture.by_label("liga").is_some() && fixture.by_label("ss01").is_none(), "the row is hidden, its entry stays shown");
+    let selects = |m: &Msg| matches!(m, Msg::Shell(c) if c.id == "font.info.features.select");
+    assert!(!posted.borrow().iter().any(selects), "{:?}", posted.borrow());
 }
 
 /// Measure: a frame of the Features tab with 2,000 entries takes under 16 ms in a release build.

@@ -286,13 +286,16 @@ fn shared_build(
         return kept.result.clone();
     }
     let result = crate::feature_state::build_previews(font, key.master, options).map(Arc::new).map_err(Arc::new);
-    builds.put(SharedBuild {
-        doc: key.doc,
-        revision: key.revision,
-        master: key.master.to_string(),
-        source_hash: Some(key.hash),
-        result: result.clone(),
-    });
+    // A build that was stopped says nothing of the document.
+    if !crate::work::cancelled() {
+        builds.put(SharedBuild {
+            doc: key.doc,
+            revision: key.revision,
+            master: key.master.to_string(),
+            source_hash: Some(key.hash),
+            result: result.clone(),
+        });
+    }
     result
 }
 
@@ -504,10 +507,13 @@ fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
     let master = master_id(&p, font, p.opt_str("master")?)?;
     let targets = targets_param(&p, font)?;
     let ahead = s.ahead_compile_of(doc_id).filter(|a| !force && a.revision == revision && a.state.master == master);
-    let check = targets.map(|(targets, all)| match ahead.as_ref().and_then(|a| a.targets.clone()).filter(|_| all) {
-        Some(check) => (check, all),
-        None => (Arc::new(check_targets(font, &font.features, &cx, targets)), all),
-    });
+    let check = match targets {
+        None => None,
+        Some((targets, all)) => Some(match ahead.as_ref().and_then(|a| a.targets.clone()).filter(|_| all) {
+            Some(check) => (check, all),
+            None => (Arc::new(check_targets(font, &font.features, &cx, targets)?), all),
+        }),
+    };
     let compiled = match ahead {
         Some(ahead) => ahead.as_ref().clone(),
         None => {
@@ -689,7 +695,7 @@ fn compile_state(
         }
     };
     state.preview_message = preview_message;
-    let targets = of.targets.then(|| Arc::new(check_targets(font, &font.features, cx, all_targets(font))));
+    let targets = if of.targets { Some(Arc::new(check_targets(font, &font.features, cx, all_targets(font))?)) } else { None };
     Ok(AheadCompile { doc: of.doc, revision, state, cached, targets })
 }
 

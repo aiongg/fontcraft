@@ -152,7 +152,9 @@ pub struct AheadCompile {
 /// without the session: the Features tab runs it on a worker and hands the result to
 /// [`SessionFeaturesExt::keep_ahead_compile`]. `cx` is `crate::cmd::features_check::check_context`'s, `previous` the
 /// document's last compile, `builds` the session's preview builds, which Text Preview reads too. `targets` also checks
-/// the code for every target, as the command's `targets: "all"` does. Nothing is changed besides `builds`. `None` when the compile fails; the command then says why.
+/// the code for every target, as the command's `targets: "all"` does. Nothing is changed besides `builds`. `None` when the
+/// compile fails, and the command then says why, or when the work it is part of (`crate::work`) was cancelled.
+#[allow(clippy::too_many_arguments, reason = "what a compile reads, without the session")]
 pub fn compile_ahead(
     font: &Font,
     doc: u64,

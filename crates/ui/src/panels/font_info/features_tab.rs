@@ -308,8 +308,9 @@ fn sidebar_group(ui: &mut Ui, model: &FeaturesModel, group: &GroupModel, words: 
             return;
         }
         let key_of = |at: usize| entries.get(at).map(|e| EntryKey { kind, name: e.name.clone(), index: at });
-        let mine: Vec<usize> = model.selected.iter().filter(|k| k.kind == kind).map(|k| k.index).collect();
-        let lead = model.selected.last().filter(|k| k.kind == kind).map(|k| k.index);
+        // The list knows the entries the filter leaves; a selected one it hides stays selected until a row is picked.
+        let mine: Vec<usize> = model.selected.iter().filter(|k| k.kind == kind).map(|k| k.index).filter(|at| positions.contains(at)).collect();
+        let lead = model.selected.last().filter(|k| k.kind == kind).map(|k| k.index).filter(|at| positions.contains(at));
         let before = Selection::new(mine, lead, lead);
         let mut after = before.clone();
         let source = keyed(&positions, |at| *at).with_text(|at| Cow::Owned(entries.get(*at).map_or_else(String::new, |e| shown_name(kind, &e.name))));

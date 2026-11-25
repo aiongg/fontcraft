@@ -14,7 +14,8 @@
 //!   variable font, once the document has stood still for [`CHECK_PAUSE`] seconds, and at once when the tab's Compile button
 //!   asks ([`ask`]; the button is busy meanwhile). The job runs all of `font.features.compile` but the keeping of its
 //!   result (`fontcraft_engine::feature_state::compile_ahead`). When it lands on the revision it read,
-//!   `font.features.compile` runs on the window's thread and takes that result; an edit in between starts it again.
+//!   `font.features.compile` runs on the window's thread and takes that result. An edit in between stops the check of the
+//!   targets before the next one and starts the compile again; so does the Compile button for another master.
 //! - **Instance compile.** While the Exports tab shows one instance with feature-code parameters, that instance's code
 //!   is compiled the same way (`fontcraft_engine::cmd::features_check::compile_instance`): at once for an instance not
 //!   compiled yet, after the pause when the document changed. A result of a revision or an instance no longer shown is
@@ -27,6 +28,7 @@ use fontcraft_engine::cmd::features_check::{CheckContext, check_context, check_f
 use fontcraft_engine::cmd::features_expand::expand_font;
 use fontcraft_engine::feature_state::{AheadCompile, SessionFeaturesExt as _, compile_ahead};
 use fontcraft_engine::model::{Features, Font, Snippet};
+use fontcraft_engine::work::{self, Token};
 use serde_json::{Value, json};
 
 use crate::app::{FontCraftApp, Msg};
@@ -44,6 +46,9 @@ type Landing<T> = Arc<Mutex<Option<T>>>;
 
 /// What a compile job read: the document's id and revision, and the master.
 type CompileKey = (u64, u64, String);
+
+/// A compile under way: what it reads, what stops it, and its result to come.
+type CompileJob = (CompileKey, Arc<Token>, Landing<Option<AheadCompile>>);
 
 /// What an instance compile reads: the document's id and revision, and the instance's index.
 type InstanceKey = (u64, u64, usize);
@@ -65,7 +70,7 @@ pub struct FeatureWork {
     /// The document revision last seen while a compile waits, and the time it was first seen.
     still: Option<((u64, u64), f64)>,
     /// The compile under way.
-    compile: Option<(CompileKey, Landing<Option<AheadCompile>>)>,
+    compile: Option<CompileJob>,
     /// The document and master the Compile button asked for, until that compile lands.
     asked: Option<(u64, String)>,
     /// The instance the Exports tab shows, and the time it was first seen at this revision.
@@ -102,7 +107,7 @@ const KEEP_CODE: [&str; 3] = ["font.features.compile", "font.features.setNotes",
 
 /// After a run of `id`: code that changed is compiled in the background.
 pub fn after_run(app: &mut FontCraftApp, id: &str) {
-    let changes = id.starts_with("font.features.") && !KEEP_CODE.contains(&id) && fontcraft_engine::find_command(id).is_some_and(|c| !c.query);
+    let changes = id.starts_with("font.features.") && !KEEP_CODE.contains(&id) && fontcraft_engine::find_command(id).is_some_and(|c| c.journal);
     if changes {
         app.feature_work.compile_wanted = true;
     }
@@ -144,6 +149,8 @@ pub fn ask(app: &mut FontCraftApp) -> Result<(), String> {
         app.feature_work.compile_wanted = false;
         app.feature_work.still = None;
         start_compile(app);
+    } else {
+        stop_unwanted(app);
     }
     show_busy(app);
     Ok(())
@@ -253,18 +260,19 @@ fn step_compile(app: &mut FontCraftApp, now: f64) -> Option<f64> {
     if app.feature_work.asked.as_ref().is_some_and(|(id, _)| active.map(|a| a.0) != Some(*id)) {
         app.feature_work.asked = None;
     }
-    if let Some((key, landing)) = &app.feature_work.compile
+    stop_unwanted(app);
+    if let Some((key, token, landing)) = &app.feature_work.compile
         && let Some(result) = take(landing)
     {
-        let key = key.clone();
+        let (key, stopped) = (key.clone(), token.is_cancelled());
         app.feature_work.compile = None;
-        if active == Some((key.0, key.1)) {
-            land_compile(app, key, result);
-        } else {
+        if active != Some((key.0, key.1)) || (stopped && app.feature_work.asked.is_none()) {
             app.feature_work.compile_wanted = true;
+        } else if !stopped {
+            land_compile(app, key, result);
         }
         if app.feature_work.asked.is_some() && !app.feature_work.compile_wanted {
-            // The compile that landed was of another master.
+            // The compile that landed, or was stopped, was of another master.
             start_compile(app);
         }
     }
@@ -292,6 +300,17 @@ fn step_compile(app: &mut FontCraftApp, now: f64) -> Option<f64> {
     work.still = None;
     start_compile(app);
     app.feature_work.compile.is_some().then_some(POLL)
+}
+
+/// Stops the compile under way when its result would be dropped: the document it read changed or is no longer the active
+/// one, or the Compile button asked for another master.
+fn stop_unwanted(app: &FontCraftApp) {
+    let Some(((doc, revision, master), token, _)) = &app.feature_work.compile else { return };
+    let current = app.session.active().is_some_and(|d| d.id == *doc && d.revision == *revision);
+    let other = app.feature_work.asked.as_ref().is_some_and(|(d, m)| d == doc && m != master);
+    if !current || other {
+        token.cancel();
+    }
 }
 
 /// Keeps the compile that landed on the revision it read: `font.features.compile` takes it and only maps the
@@ -332,8 +351,11 @@ fn start_compile(app: &mut FontCraftApp) {
     let wake = app.window.clone();
     let key: CompileKey = (id, revision, master);
     let job_master = key.2.clone();
+    let token = Token::new();
+    let stop = Arc::clone(&token);
     let job = move || {
-        let result = fontcraft_engine::guard::catch_panic(|| compile_ahead(&font, id, revision, &job_master, &cx, previous, &builds, true));
+        let compile = || compile_ahead(&font, id, revision, &job_master, &cx, previous, &builds, true);
+        let result = fontcraft_engine::guard::catch_panic(|| work::with(stop, None, compile));
         if let Ok(mut slot) = out.lock() {
             *slot = Some(result.ok().flatten());
         }
@@ -341,7 +363,7 @@ fn start_compile(app: &mut FontCraftApp) {
             ctx.request_repaint();
         }
     };
-    app.feature_work.compile = Some((key, landing));
+    app.feature_work.compile = Some((key, token, landing));
     app.host.jobs().spawn("feature code compile", Box::new(job));
 }
 

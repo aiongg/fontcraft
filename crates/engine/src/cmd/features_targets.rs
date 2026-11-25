@@ -9,6 +9,9 @@
 //!
 //! [`check_targets`] runs on a font and a [`CheckContext`] without the session, so the Features tab runs it on a worker.
 //!
+//! A check that its host cancels (`crate::work`) stops between two targets and gives nothing: the window cancels the one
+//! of a font that changed since, a client the command it asked for.
+//!
 //! Limits: at most [`MAX_TARGETS`] targets, [`MAX_DIAGNOSTICS`] diagnostics; each compile is capped by
 //! `fontcraft_fea`'s limits.
 
@@ -153,8 +156,9 @@ pub(super) fn targets_param(p: &Params, font: &Font) -> Result<Option<(Vec<Check
     }
 }
 
-/// Checks `features` (the font's own, or with a draft in place of an entry's code) for `targets`.
-pub fn check_targets(font: &Font, features: &Features, cx: &CheckContext, mut targets: Vec<CheckTarget>) -> TargetCheck {
+/// Checks `features` (the font's own, or with a draft in place of an entry's code) for `targets`. Fails only when the work
+/// it is part of was cancelled, which is asked before each target.
+pub fn check_targets(font: &Font, features: &Features, cx: &CheckContext, mut targets: Vec<CheckTarget>) -> Result<TargetCheck> {
     let skipped = targets.len().saturating_sub(MAX_TARGETS);
     targets.truncate(MAX_TARGETS);
     let mut out = TargetCheck { skipped, ..TargetCheck::default() };
@@ -164,12 +168,13 @@ pub fn check_targets(font: &Font, features: &Features, cx: &CheckContext, mut ta
             let every = (0..targets.len()).collect();
             out.found.push(TargetDiagnostic { found: EntryDiagnostic { place: None, diagnostic: d }, targets: every });
             out.targets = targets.into_iter().map(|t| (t.label(font), t)).map(|(label, t)| (t, label)).collect();
-            return out;
+            return Ok(out);
         }
     };
     let mut run = Run { font, features, cx, order: &order, compiled: HashMap::new() };
     let mut places: HashMap<(Option<EntryRangeKey>, Severity, String), usize> = HashMap::new();
     for (at, target) in targets.into_iter().enumerate() {
+        crate::work::check()?;
         for found in run.target(&target) {
             let key = (found.place.as_ref().map(range_key), found.diagnostic.severity, found.diagnostic.message.clone());
             match places.get(&key).copied() {
@@ -189,7 +194,7 @@ pub fn check_targets(font: &Font, features: &Features, cx: &CheckContext, mut ta
         out.targets.push((target, label));
     }
     out.compiled = run.compiled.len();
-    out
+    Ok(out)
 }
 
 /// An entry's range as a map key.
@@ -272,7 +277,7 @@ pub(crate) struct TargetInputs<'a> {
 /// What [`at_target`] read.
 pub(crate) struct AtTarget<'a, T> {
     /// What the reader made, or why the build's values cannot be had.
-    pub read: Result<T, String>,
+    pub read: std::result::Result<T, String>,
     /// The entries, an instance's parameters applied.
     pub features: Cow<'a, Features>,
     /// The instance's feature parameters that cannot be applied, each with the reason.
@@ -315,7 +320,12 @@ pub(crate) fn at_target<'f, T>(
     AtTarget { read, features: made, refused }
 }
 
-fn variable_inputs<T>(font: &Font, features: &Features, data: &GlyphData, read: impl FnOnce(&TargetInputs<'_>) -> T) -> Result<T, String> {
+fn variable_inputs<T>(
+    font: &Font,
+    features: &Features,
+    data: &GlyphData,
+    read: impl FnOnce(&TargetInputs<'_>) -> T,
+) -> std::result::Result<T, String> {
     let failed = |e: String| format!("the variable font's code cannot be compiled: {e}");
     let (origin, layout) = fontcraft_compile::var::feature_layout(font).map_err(|e| failed(e.to_string()))?;
     let values = MasterValues::new(font, data, &origin).map_err(|e| failed(e.to_string()))?.for_variable_font();
@@ -330,7 +340,7 @@ fn instance_inputs<T>(
     index: usize,
     interpolate: bool,
     read: impl FnOnce(&TargetInputs<'_>) -> T,
-) -> Result<T, String> {
+) -> std::result::Result<T, String> {
     let target = fontcraft_model::Target::Instance(index);
     let away = fontcraft_compile::needs_instance_font(font, &target).is_some();
     let at: Cow<'_, Font> = if away && (interpolate || uses_tokens(features)) {
@@ -425,6 +435,9 @@ pub(crate) fn targets_key(font: &Font) -> Option<u64> {
     }
     for g in font.glyphs.as_arcs() {
         (&g.name, g.export, &g.unicodes).hash(&mut hasher);
+    }
+    for n in font.numbers.iter() {
+        n.name.hash(&mut hasher);
     }
     for m in font.masters.iter() {
         (&m.id, &m.name).hash(&mut hasher);
