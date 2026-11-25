@@ -285,7 +285,7 @@ fn stroke_model(scene: &fontcraft_tools::Scene<'_>, paths: &[usize], targets: Op
 #[derive(Default)]
 pub struct PaletteModels {
     /// What the models were last projected from.
-    seen: Option<(Stamp, Selection, Option<Vec<usize>>, bool)>,
+    seen: Option<(Stamp, Selection, Option<Vec<usize>>, bool, Vec<fontcraft_tools::hoi::Knob>)>,
     pub info_box: Tracked<InfoBoxModel>,
     pub transform: Tracked<TransformModel>,
     pub fit_curve: Tracked<FitCurveModel>,
@@ -296,13 +296,13 @@ pub struct PaletteModels {
 
 /// Projects the Info box and Palette models when the stamp, the selection or the focus moved.
 pub fn project(models: &mut PaletteModels, cx: &mut ProjectCx<'_>, tools: &Tools, stamp: Stamp) {
-    let key = (stamp, tools.selection.clone(), tools.focus.clone(), tools.image);
+    let key = (stamp, tools.selection.clone(), tools.focus.clone(), tools.image, tools.toolbox.hoi_picks().to_vec());
     if models.seen.as_ref() == Some(&key) {
         return;
     }
     models.seen = Some(key);
     let edit = Edit::read(cx, tools);
-    let mut info = info_box(cx, edit.as_ref());
+    let mut info = info_box(cx, edit.as_ref(), tools.toolbox.hoi_picks());
     info.ps_hint = super::hint_canvas::ps_hint_box(cx, &tools.selection);
     info.tt = super::hint_canvas::tt_box(cx);
     info.kerning = info.glyph.as_ref().and_then(|_| super::info_box_kerning::kern_box(cx));
@@ -389,7 +389,7 @@ fn has_lists(targets: &Map<String, Value>) -> bool {
         .any(|k| targets.get(*k).and_then(Value::as_array).is_some_and(|l| !l.is_empty()))
 }
 
-fn info_box(cx: &mut ProjectCx<'_>, edit: Option<&Edit>) -> InfoBoxModel {
+fn info_box(cx: &mut ProjectCx<'_>, edit: Option<&Edit>, knobs: &[fontcraft_tools::hoi::Knob]) -> InfoBoxModel {
     let Some(edit) = edit else { return InfoBoxModel::default() };
     let selected = text_selection_glyphs(cx);
     let glyph = if selected.len() > 1 { shared_glyph_box(cx, edit, selected) } else { glyph_box(cx, edit) };
@@ -407,7 +407,13 @@ fn info_box(cx: &mut ProjectCx<'_>, edit: Option<&Edit>) -> InfoBoxModel {
         b.brush = components::segment_box(font, &edit.glyph, layer, &edit.selection, true);
     }
     if !cx.view.edit_background {
-        b.hoi = cx.session.font().ok().and_then(|font| super::hoi::hoi_of(font, &edit.glyph, &edit.layer, &edit.selection.points));
+        b.hoi = cx.session.font().ok().and_then(|font| {
+            if knobs.is_empty() {
+                super::hoi::hoi_of(font, &edit.glyph, &edit.layer, &edit.selection.points)
+            } else {
+                super::hoi::knob_box(font, cx.view, &edit.glyph, &edit.layer, knobs)
+            }
+        });
     }
     b
 }

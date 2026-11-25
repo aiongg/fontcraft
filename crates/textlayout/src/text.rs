@@ -164,6 +164,8 @@ fn parse_items(map: &Charmap, s: &str, limit: usize, cut: bool) -> Result<(Vec<I
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Text {
     items: Vec<Item>,
+    /// Each item's own layer (a layer id); as long as `items`.
+    layers: Vec<Option<Arc<str>>>,
     limit: usize,
     cursor: usize,
     anchor: usize,
@@ -179,7 +181,7 @@ impl Default for Text {
 impl Text {
     /// An empty text that holds at most [`MAX_ITEMS`] items (an Edit View tab).
     pub fn new() -> Text {
-        Text { items: Vec::new(), limit: MAX_ITEMS, cursor: 0, anchor: 0, current: None }
+        Text { items: Vec::new(), layers: Vec::new(), limit: MAX_ITEMS, cursor: 0, anchor: 0, current: None }
     }
 
     /// An empty text that holds at most `limit` items, up to [`MAX_PREVIEW_ITEMS`] (Text Preview).
@@ -246,6 +248,7 @@ impl Text {
             return Err(TextError::TooManyItems { limit: self.limit });
         }
         let end = range.start + items.len();
+        self.layers.splice(range.clone(), std::iter::repeat_n(None, items.len()));
         self.items.splice(range, items);
         self.set_cursor(end);
         Ok(())
@@ -259,6 +262,38 @@ impl Text {
     /// Deletes the items in `range`.
     pub fn delete(&mut self, range: Range<usize>) -> Result<(), TextError> {
         self.replace(range, Vec::new())
+    }
+
+    /// The layer id item `index` is shown in, when it has its own; the item keeps it through edits elsewhere in
+    /// the text. [`crate::layout()`] spaces the item with that layer of its glyph.
+    pub fn layer(&self, index: usize) -> Option<&str> {
+        self.layers.get(index)?.as_deref()
+    }
+
+    /// Item `index`'s own layer, while the item shows glyph `name` (its own, or the current glyph for a placeholder).
+    pub fn layer_of(&self, index: usize, name: &str) -> Option<&str> {
+        let shows = match self.items.get(index)? {
+            Item::Glyph { name: own, .. } => &**own == name,
+            Item::Placeholder => self.current_glyph() == Some(name),
+            Item::Missing(_) | Item::LineBreak => false,
+        };
+        self.layer(index).filter(|_| shows)
+    }
+
+    /// Gives item `index` its own layer, or takes it away. Returns whether the text has that item.
+    pub fn set_layer(&mut self, index: usize, layer: Option<&str>) -> bool {
+        match self.layers.get_mut(index) {
+            Some(own) => {
+                *own = layer.map(Arc::from);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Takes every item's own layer away.
+    pub fn clear_layers(&mut self) {
+        self.layers.fill(None);
     }
 
     /// The glyph after the cursor; at the end of the text or of a line, the glyph before it. When

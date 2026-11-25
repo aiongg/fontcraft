@@ -10,7 +10,7 @@ use craft::ui::contract::{PlainData, Tracked};
 use fontcraft_engine::Session;
 use fontcraft_engine::cmd::stroke::OpenCorners;
 use fontcraft_engine::compile::preview::PreviewFont;
-use fontcraft_engine::model::Font;
+use fontcraft_engine::model::{Font, Glyph, Layer};
 use fontcraft_engine::prelude::*;
 use fontcraft_engine::settings::UserSettings;
 use fontcraft_geom::{Affine, BezPath};
@@ -215,7 +215,8 @@ pub struct LayoutKey {
 pub fn project(model: &mut Tracked<TextModel>, files: &mut crate::canvas::color::ColorFiles, cx: &mut ProjectCx<'_>) {
     let shaper = model.shaper.for_preview(text::features::preview(cx.session, &cx.view.text.features));
     let mut value = build(cx.session, cx.view, &shaper).unwrap_or_default();
-    let placed: Vec<(&str, [f64; 2])> = value.glyphs.iter().map(|g| (g.name.as_str(), g.at)).collect();
+    let placed: Vec<crate::canvas::color::TextPlace<'_>> =
+        value.glyphs.iter().map(|g| (g.name.as_str(), cx.view.text.text.layer_of(g.item, &g.name), g.at)).collect();
     value.colors = crate::canvas::color::text_colors(cx.session, cx.view, files, &placed);
     value.shaper = shaper;
     super::set(model, value);
@@ -303,7 +304,7 @@ fn build(session: &mut Session, view: &ViewState, shaper: &ShaperSlot) -> Option
     let move_box = |[x0, y0, x1, y1]: [f64; 4]| [x0 - origin[0], y0 - origin[1], x1 - origin[0], y1 - origin[1]];
 
     let corners = OpenCorners::of(font);
-    let mut outlines: HashMap<&str, Option<(BezPath, Option<BezPath>)>> = HashMap::new();
+    let mut outlines: HashMap<ItemKey<'_>, Option<(BezPath, Option<BezPath>)>> = HashMap::new();
     let mut glyphs = Vec::new();
     for (item, placed) in layout.placed.iter().enumerate() {
         if item == edited {
@@ -313,11 +314,8 @@ fn build(session: &mut Session, view: &ViewState, shaper: &ShaperSlot) -> Option
         if glyphs.len() >= MAX_DRAWN_GLYPHS {
             break;
         }
-        let outline = outlines.entry(name).or_insert_with(|| {
-            let outline = font.outline(name, master).ok()?;
-            let fill = corners.filled(master, name, &outline);
-            Some((outline, fill))
-        });
+        let own = state.text.layer_of(item, name);
+        let outline = outlines.entry((name, own)).or_insert_with(|| item_outline(font, view, &corners, master, name, own));
         if let Some((outline, fill)) = outline {
             let place = |path: &BezPath| (shift * Affine::translate((placed.x, placed.y))) * path;
             glyphs.push(TextGlyph {
@@ -378,21 +376,50 @@ fn build(session: &mut Session, view: &ViewState, shaper: &ShaperSlot) -> Option
     })
 }
 
+/// A glyph of the text and the own layer of the item that shows it: what its drawing depends on.
+type ItemKey<'a> = (&'a str, Option<&'a str>);
+
+/// The layer an item of the text draws `glyph` in: `own`, the item's own, while the glyph has it, else the glyph's
+/// shown layer.
+pub fn item_layer<'f>(font: &'f Font, view: &ViewState, glyph: &'f Glyph, own: Option<&str>) -> Option<&'f Layer> {
+    own.and_then(|id| glyph.layers.iter().find(|l| l.id == id)).or_else(|| crate::shell::masters::base_layer(font, &view.layers, glyph))
+}
+
+/// The outline an item of the text draws `name` as, and what Fill Preview fills in its place when an export erases
+/// open corners of it; a glyph shown in its layer of `master` draws as in the font.
+pub fn item_outline(
+    font: &Font,
+    view: &ViewState,
+    corners: &OpenCorners,
+    master: &str,
+    name: &str,
+    own: Option<&str>,
+) -> Option<(BezPath, Option<BezPath>)> {
+    let glyph = font.glyph(name)?;
+    let (outline, master) = match item_layer(font, view, glyph, own) {
+        Some(layer) if layer.id != master => (super::space_center::layer_outline(font, glyph, layer, &layer.master), layer.master.as_str()),
+        _ => (font.outline_of(glyph, master).ok()?, master),
+    };
+    let fill = corners.filled(master, name, &outline);
+    Some((outline, fill))
+}
+
 /// Each glyph's metrics labels (`spacing.metricsOverlayInTextMode`), at most [`MAX_DRAWN_GLYPHS`]. `descender` is
 /// the bottom of the box the labels hang under, above the baseline.
 fn metrics_labels(font: &Font, view: &ViewState, layout: &Layout, origin: [f64; 2], descender: f64) -> Vec<MetricsLabel> {
     use fontcraft_spacing::{Field, metric};
     let vertical = layout.direction == Direction::Vertical;
     let (a, b) = if vertical { (Field::Top, Field::Bottom) } else { (Field::Left, Field::Right) };
-    let mut sides: HashMap<&str, Option<(f64, f64)>> = HashMap::new();
+    let mut sides: HashMap<ItemKey<'_>, Option<(f64, f64)>> = HashMap::new();
     let mut out = Vec::new();
     for (i, p) in layout.placed.iter().enumerate() {
         let Some(name) = p.glyph.as_deref() else { continue };
         if out.len() >= MAX_DRAWN_GLYPHS {
             break;
         }
-        let measured = *sides.entry(name).or_insert_with(|| {
-            let layer = crate::shell::masters::shown_layer(font, &view.layers, font.glyph(name)?)?;
+        let own = view.text.text.layer_of(i, name);
+        let measured = *sides.entry((name, own)).or_insert_with(|| {
+            let layer = item_layer(font, view, font.glyph(name)?, own)?;
             match (metric(font, layer, a), metric(font, layer, b)) {
                 (Ok(Some(a)), Ok(Some(b))) if a.is_finite() && b.is_finite() => Some((a, b)),
                 _ => None,
@@ -429,16 +456,16 @@ pub fn measurement_height(font: &Font, view: &ViewState) -> f64 {
 fn measurement_line(font: &Font, view: &ViewState, layout: &Layout, origin: [f64; 2]) -> MeasurementLine {
     let height = measurement_height(font, view);
     let rules = layout.lines.iter().map(|l| l.baseline + height - origin[1]).collect();
-    let mut sides: HashMap<&str, Option<(f64, f64)>> = HashMap::new();
+    let mut sides: HashMap<ItemKey<'_>, Option<(f64, f64)>> = HashMap::new();
     let mut glyphs = Vec::new();
-    for p in &layout.placed {
+    for (item, p) in layout.placed.iter().enumerate() {
         let Some(name) = p.glyph.as_deref() else { continue };
         if glyphs.len() >= MAX_DRAWN_GLYPHS {
             break;
         }
-        let measured = *sides.entry(name).or_insert_with(|| {
-            let glyph = font.glyph(name)?;
-            let layer = crate::shell::masters::shown_layer(font, &view.layers, glyph)?;
+        let own = view.text.text.layer_of(item, name);
+        let measured = *sides.entry((name, own)).or_insert_with(|| {
+            let layer = item_layer(font, view, font.glyph(name)?, own)?;
             match fontcraft_spacing::sidebearings_at_height(font, layer, height) {
                 Ok(Some((l, r))) if l.is_finite() && r.is_finite() => Some((l, r)),
                 _ => None,

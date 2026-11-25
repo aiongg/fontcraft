@@ -45,6 +45,7 @@ pub mod reference_font;
 pub mod selection;
 pub mod settings;
 pub mod shape_order;
+pub mod show_all_masters;
 pub mod sidebar;
 pub mod space_center;
 pub mod start;
@@ -93,8 +94,9 @@ pub fn show(app: &mut FontCraftApp, ui: &mut Ui) {
         })
         .status(true, |ui, _, app: &mut FontCraftApp| {
             let edit = bars::edit_state(app);
+            let hoi = crate::canvas::hoi::axis_choice(app);
             let FontCraftApp { status, models, sent, .. } = app;
-            bars::status(ui, bars::StatusProps { status, features: &models.features, edit, sent });
+            bars::status(ui, bars::StatusProps { status, features: &models.features, edit, hoi, sent });
         })
         .start(Slot::new("fontcraft.tools").size(SlotSize::RailWidth), |ui, _, app: &mut FontCraftApp| {
             let FontCraftApp { tool_slots, view, sent, .. } = app;

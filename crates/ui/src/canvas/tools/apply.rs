@@ -12,7 +12,7 @@ use craft::ui::runtime::commands::CommandRef;
 use fontcraft_engine::Session;
 use fontcraft_engine::model::Font;
 use fontcraft_geom::Point;
-use fontcraft_tools::{Action, Context, Output, Selection, ToolSettings, Toolbox, View, ViewChange};
+use fontcraft_tools::{Action, Context, Modifiers, Output, PointerEvent, PointerKind, Selection, ToolSettings, Toolbox, View, ViewChange};
 use serde_json::Value;
 
 use super::tokens::ToolTokens;
@@ -64,10 +64,30 @@ fn with_tool<R>(app: &mut FontCraftApp, f: impl FnOnce(&mut Toolbox, &Context<'_
     let font = app.session.font().map_err(|e| e.to_string())?;
     let mut scene = scene(font, app.session.glyph_data().ok().as_deref(), &app.view, app.tools.focus.as_ref()).ok_or("no glyph is being edited")?;
     scene.ps_hints = marks;
+    scene.hoi = crate::app::models::hoi::marks(font, &app.view);
     scene.suggest = crate::canvas::overlays::suggest::suggest(&app.session, font, &app.view, app.overlays.switches.suggest);
     let settings = settings(&app.session, font, app);
     let cx = Context { scene: &scene, view, selection: &app.tools.selection, settings };
     Ok(f(&mut app.tools.toolbox, &cx))
+}
+
+/// A right click with the Higher-Order Interpolation tool: whether a knob lies at `pos` (font units). A knob that is
+/// not picked becomes the only pick.
+pub fn pick_knob(app: &mut FontCraftApp, pos: Point) -> bool {
+    if !crate::canvas::hoi::active(&app.view) {
+        return false;
+    }
+    let hit = |_: &mut Toolbox, cx: &Context<'_>| cx.scene.hoi.as_ref().and_then(|m| m.hit(pos, cx.view.units(cx.settings.hit_tolerance)));
+    let Ok(Some(knob)) = with_tool(app, hit) else { return false };
+    if !app.tools.toolbox.hoi_picks().contains(&knob) {
+        for kind in [PointerKind::Down, PointerKind::Up] {
+            let ev = PointerEvent { kind, pos, mods: Modifiers::NONE };
+            if let Ok(out) = with_tool(app, |toolbox, cx| toolbox.pointer(cx, &ev)) {
+                let _ = apply(app, out);
+            }
+        }
+    }
+    true
 }
 
 /// Brings the tools in line with the app before they see an event.

@@ -416,7 +416,11 @@ fn replace_current(font: &Font, text: &mut EditText, name: &str) {
     if let Some(i) = at
         && !placeholder
     {
-        let _ = text.text.replace(i..i + 1, vec![glyph_item(font, name)]);
+        // The item keeps its own layer while the new glyph has one of the same id (a master's).
+        let own = text.text.layer(i).filter(|id| font.glyph(name).is_some_and(|g| g.layers.iter().any(|l| l.id == *id))).map(str::to_string);
+        if text.text.replace(i..i + 1, vec![glyph_item(font, name)]).is_ok() {
+            text.text.set_layer(i, own.as_deref());
+        }
     }
     text.text.select(anchor, cursor);
     text.text.set_current_glyph(Some(name));

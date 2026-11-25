@@ -1014,6 +1014,18 @@ milestone = "M9"
 summary = "In Edit View, inserts every master layer of the current glyph into the tab's text, followed by its intermediate and alternate layers, so all can be seen and edited side by side."
 ref = "Interpolation › Editing Multiple Masters › Show All Masters"
 status = "handbook"
+notes = "Built in M9.28 (crates/ui/src/shell/show_all_masters.rs). A text item can have its own layer (`fontcraft_textlayout::Text::set_layer`): the Edit View and the previews space and draw the item with it, and while the item is the edited one (the cursor is before it) its layer is the active layer, which the canvas draws and the tools edit (`canvas::text::sync_layer`). Tabs keep the item layers while another tab shows; edits elsewhere in the text move them with their items. Display strings do not hold them, so a saved document's tabs open without them. Color, backup and other layers are not inserted."
+guesses = [
+  "The layers go after the edited glyph, which stays, masters first and then the intermediate and alternate layers in the order of the Layers panel; settle by choosing the menu item with one glyph in a tab of the reference app and counting the glyphs.",
+  "The cursor stays before the edited glyph, so it stays the edited one; settle in the reference app.",
+  "Choosing a layer in the Layers panel or a master icon while an item with its own layer is edited changes that item alone, and another master leaves the other items' layers; settle by pressing a master icon in a tab with all masters shown in the reference app.",
+  "The text kerns in the current master, whatever layers its items show; settle by kerning a pair in one master and reading the gap between two layers in the reference app.",
+  "An item keeps its own layer when Next or Previous Glyph puts another glyph in its place, while that glyph has a layer of the same id (a master's); settle in the reference app.",
+]
+observe = [
+  "In F2 (special layers), open one glyph with an intermediate layer in a tab, choose Edit › Show All Masters and note where the layers are inserted, their order, and whether the glyph that was there is replaced.",
+  "With all masters shown, click another layer's glyph, then press Cmd+1 and Cmd+2: note which glyphs of the tab change master.",
+]
 
 [[command]]
 id = "edit.keepLayerSelectionInSync"
@@ -1083,11 +1095,21 @@ gestures = [
   "pop-up button at the bottom right of the window: choose the axis being edited",
 ]
 area = "interpolation"
-milestone = "M13"
+milestone = "M9"
 summary = "Edits, per node and per axis, the path a node follows between neighbouring layers: straight (default), through one intermediate point, shaped by two handles, or rotating about a centre. It requires a font with one axis or more and no fewer than two masters. The result affects static and variable export alike."
 ref = "Interpolation › Higher-Order Interpolation"
 status = "handbook"
-notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
+notes = "Built in M9.31 (crates/tools/src/hoi.rs; drawn by crates/ui/src/canvas/hoi). Every node of the edited layer shows its path to the next layer up and the next layer down the axis. A drag runs `hoi.setControlPoints` as one undo step; Return, Delete and the Interpolation submenu run `hoi.convertToHandles`, `hoi.removeCurve` and `hoi.setInterpolationType` on the picked knobs, once per side of the layer. The letter I is shared with the TrueType Instructor; Shift+I steps to the other. The tool can be chosen in any font, and shows nothing without an axis and two masters or while the background is edited."
+guesses = [
+  "A click picks a knob, Shift+click adds or removes one, and a marquee from empty canvas picks the knobs inside it; settle by picking knobs in the reference app.",
+  "Return and Delete do nothing to the outline while the tool is active, whatever is picked; both Delete and Backspace remove a curve. Settle by selecting nodes, choosing the tool and pressing Delete in the reference app.",
+  "Dragging one of several picked knobs moves that knob alone, and a dragged knob lands on whole units; settle by dragging one of two picked knobs in the reference app.",
+  "Off-curve nodes have a path and a knob like on-curve nodes; settle by looking at a curve's handles with the tool in the reference app.",
+]
+observe = [
+  "With the HOI tool in a two-master font, pick a knob with an intermediate point: press Return, then Delete, then Backspace, and note which of them act; then select two nodes with the Select tool, choose the HOI tool and press Delete.",
+  "Draw a curve in a two-master font and look at its handles with the HOI tool: note whether they have diamonds, dotted lines and knobs.",
+]
 
 [[command]]
 id = "hoi.setInterpolationType"
@@ -1215,11 +1237,14 @@ shortcut = ""
 kind = "ui"
 params = "{axis: tag}"
 area = "interpolation"
-milestone = "M13"
+milestone = "M9"
 summary = "The pop-up button at the bottom right of the window while the HOI tool is active: picks the axis along which neighbouring layers are found and curves are edited."
 ref = "Interpolation › Higher-Order Interpolation › Node Visualization"
 status = "handbook"
-notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
+notes = "Built in M9.31 (crates/ui/src/canvas/hoi): a shell command and the pop-up at the right end of the status bar (crates/ui/src/panels/edit_bar.rs), shown while the tool is the current one. The first axis is edited until one is chosen; choosing one drops the picked knobs."
+guesses = [
+  "The first axis of the font is the one shown until another is chosen; settle by choosing the tool in a two-axis font of the reference app.",
+]
 
 [[panel]]
 id = "infoBox.higherOrderInterpolation"
@@ -1237,10 +1262,9 @@ milestone = "M13"
 summary = "Info box shown for a selected HOI knob. Sets the interpolation type and rotation options and displays the resulting timing curve, which cannot be edited directly."
 ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves; Interpolation Timing"
 status = "handbook"
-notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf). Written in M9.32 (crates/ui/src/panels/info_box_hoi.rs, model `app::models::hoi::hoi_of`): an Interpolation Curve part of the Info box for the one selected node of a font with an axis and two masters, over the span from the node's layer up along the first of its curves' axes with a layer above, else the first font axis with one. Interpolation Type runs `hoi.setInterpolationType`; Point X/Y, Lower and Upper Handle X/Y and Center X/Y run `hoi.setControlPoints` (both handles sent together); Center Rotation in Bounds runs `hoi.centerRotation`; Rotation Direction runs `hoi.setRotationDirection`. The canvas has no HOI tool yet, so the part shows for a node rather than for a selected knob. The animated dots are not drawn."
+notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf). Written in M9.32 (crates/ui/src/panels/info_box_hoi.rs, model `app::models::hoi::hoi_of`): an Interpolation Curve part of the Info box for the one selected node of a font with an axis and two masters, over the span from the node's layer up along the first of its curves' axes with a layer above, else the first font axis with one. Interpolation Type runs `hoi.setInterpolationType`; Point X/Y, Lower and Upper Handle X/Y and Center X/Y run `hoi.setControlPoints` (both handles sent together); Center Rotation in Bounds runs `hoi.centerRotation`; Rotation Direction runs `hoi.setRotationDirection`. While knobs are picked with the HOI tool (M9.31) the part shows the span they belong to, along the tool's axis (`knob_box`), and nothing when they belong to several. The animated dots are not drawn."
 guesses = [
-  "The part shows for one selected node in the Info box, since there is no HOI tool on the canvas to select a knob with.",
-  "One span is shown: the first of the node's curves with a layer above it, else the first axis with one; there is no axis pop-up.",
+  "The part also shows for one selected node without the HOI tool: the span up the first of the node's curves' axes with a layer above it, else the first axis with one.",
   "The knobs are edited as X and Y fields in glyph coordinates, labelled Point, Lower Handle, Upper Handle and Center.",
   "The rotation controls show only for a rotation; the knob fields only for a curve with knobs.",
 ]
@@ -1265,20 +1289,23 @@ guesses = [
 [[behavior]]
 id = "hoi.nodeMarkers"
 area = "interpolation"
-milestone = "M13"
+milestone = "M9"
 summary = "The tool draws small diamonds at node positions: blue for the current layer, light yellow for the next layer below along the chosen axis, dark purple for the next layer above; layers further away are not drawn. With masters Light, Regular, Medium, Bold on Weight and Regular current: yellow at Light, blue at Regular, purple at Medium, nothing for Bold; with Bold current only yellow and blue appear."
 ref = "Interpolation › Higher-Order Interpolation › Node Visualization"
 status = "handbook"
-notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
+notes = "Built in M9.31 (crates/ui/src/canvas/hoi, model `app::models::hoi::marks`): diamonds in `here`, `below` and `above`. The neighbours are the layers the commands use: the next layer along the axis with the same coordinates on the other axes. At most 4000 nodes of a layer are marked."
 
 [[behavior]]
 id = "hoi.knobOnDottedLine"
 area = "interpolation"
-milestone = "M13"
+milestone = "M9"
 summary = "Each node's default path to its neighbour is drawn as a grey dotted line with a grey knob at its midpoint; the knob is the handle for creating a curve."
 ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
 status = "handbook"
-notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
+notes = "Built in M9.31 (crates/ui/src/canvas/hoi). A curved path is drawn as its curve: through its intermediate point, with lines to its two handles, or with lines from the rotation's centre to both nodes; its knobs stand there. Paths show between layers whose shape has the same number of nodes on both."
+guesses = [
+  "A node at the same place on both layers has its knob on the node; settle in the reference app with a node that does not move.",
+]
 
 [[behavior]]
 id = "hoi.curveTypes"

@@ -127,6 +127,8 @@ pub struct ViewState {
     pub text_preview: crate::shell::text_preview::TextPreviewState,
     /// Show Hints aside: the TrueType Instructor's state, the badge under a drag, the Review Hints dialog.
     pub hinting: crate::canvas::hinting::HintingView,
+    /// The Higher-Order Interpolation tool's axis.
+    pub hoi: crate::canvas::hoi::HoiView,
     /// The Actions window's state.
     pub actions: crate::dialogs::actions::ActionsState,
     pub font_audit: crate::shell::font_audit::FontAuditView,
@@ -195,6 +197,7 @@ impl Default for ViewState {
             preview: Default::default(),
             overlay_fonts: Default::default(),
             shape_order: Default::default(),
+            hoi: Default::default(),
             bitmap_editor: Default::default(),
             axis_mappings: Default::default(),
             cross_axis: Default::default(),
@@ -387,11 +390,13 @@ impl FontCraftApp {
         // A shell command may have switched or closed the active document: its tab set shows before anything reads
         // the tabs, and again after a close the drain answered.
         crate::shell::tabs::follow_document(self);
+        crate::canvas::text::sync_layer(self);
         crate::canvas::tools::apply::sync(self);
         crate::canvas::text::sync(self);
         self.tools.refresh();
         close::after_drain(self);
         crate::shell::tabs::follow_document(self);
+        crate::canvas::text::sync_layer(self);
         self.project();
         crate::canvas::text::after_project(self);
         crate::control::events::observe(self);

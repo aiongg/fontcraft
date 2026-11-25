@@ -479,6 +479,7 @@ pub(crate) fn follow_document(app: &mut FontCraftApp) -> bool {
 /// Takes the edit-view fields out of the view state, leaving fresh ones.
 fn take_live(app: &mut FontCraftApp) -> TabState {
     let view = &mut app.view;
+    view.layers.item = None;
     TabState {
         glyph: view.glyph.take(),
         canvas: std::mem::replace(&mut view.canvas, fresh_canvas()),
@@ -499,9 +500,10 @@ fn put_live(app: &mut FontCraftApp, state: TabState) {
     view.text.restore(state.text);
     view.layers.master = state.master;
     view.layers.layers = state.layers;
-    view.layers.selection = state.layer_selection;
     view.edit_background = state.edit_background;
     view.preview.area_open = state.preview_area;
+    crate::canvas::text::sync_layer(app);
+    app.view.layers.selection = state.layer_selection;
     app.tools.restore(state.selection);
 }
 

@@ -30,6 +30,9 @@ pub struct CanvasModel {
     pub glyph: Option<EditedGlyph>,
     /// The edited glyph in colour (`canvas::color`).
     pub color: Option<crate::canvas::color::ColorPicture>,
+    /// The interpolation paths, while the Higher-Order Interpolation tool is the current one (`canvas::hoi`).
+    #[plain_data(assume = "owned points, strings and numbers, no interior mutability")]
+    pub hoi: Option<fontcraft_tools::hoi::HoiMarks>,
 }
 
 /// The edited glyph in its active layer, in font units.
@@ -114,7 +117,8 @@ pub fn project(model: &mut Tracked<CanvasModel>, files: &mut crate::canvas::colo
         let master = masters::layer_master(font, &cx.view.layers, layer)?;
         edited_glyph(font, data.as_deref(), glyph, layer, master, side)
     });
-    super::set(model, CanvasModel { glyph: edited, color: crate::canvas::color::project(cx, files) });
+    let hoi = cx.session.font().ok().and_then(|font| super::hoi::marks(font, cx.view));
+    super::set(model, CanvasModel { glyph: edited, color: crate::canvas::color::project(cx, files), hoi });
 }
 
 /// The canvas's picture of `glyph`'s layer `full`, editing its `side`, with the metric lines and zones of `master`.

@@ -36,6 +36,8 @@
 //! - While the TrueType Instructor is the active tool, a last section ([`TT_INSTRUCTOR`]) offers its view items: Show
 //!   Pixel Preview, the Hinting Preview's three scales ([`PREVIEW_SCALES`]), Show Preview Address… and Show Point
 //!   Indexes, checked as their state is. Other tools' menus leave them out.
+//! - On a knob of the Higher-Order Interpolation tool, the first section ([`HOI`]) is the Interpolation submenu: the
+//!   four types, the one the picked knobs share checked.
 //! - Items that need a choice first ask for it through `dialog.open` ([`ASKS`]); Add Corner Component, Add Cap
 //!   Component, Add Segment Component and Add Brush open the glyph picker of their kind ([`PICKS`]).
 //! - An item runs with its targets from the selection, plus what the click adds: the clicked segment, node or guide,
@@ -58,6 +60,7 @@ use fontcraft_engine::model::LayerSide;
 use fontcraft_engine::params::TargetKind;
 use fontcraft_engine::{CommandSpec, command_specs, find_command};
 use fontcraft_geom::Point;
+use fontcraft_tools::hoi::Kind;
 use fontcraft_tools::tt_instructor;
 use fontcraft_tools::{Hit, HitResult, Item, Scene, Selection, guide_drag, hint_drag, hit_test_with_corners};
 use serde_json::{Map, Value, json};
@@ -86,6 +89,9 @@ pub const HINT: &str = "canvas.hint";
 pub const TT_INSTRUCTION: &str = "canvas.ttInstruction";
 /// The TrueType Instructor's view items, the last section while that tool is active.
 pub const TT_INSTRUCTOR: &str = "canvas.ttInstructor";
+/// The knobs of the Higher-Order Interpolation tool, and the command of their submenu.
+pub const HOI: &str = "canvas.hoi";
+pub const INTERPOLATION: &str = "hoi.setInterpolationType";
 
 /// The Hinting Preview scale items: (item id, label, `hint.tt.setPreviewScale` scale).
 pub const PREVIEW_SCALES: [(&str, &str, u8); 3] = [
@@ -358,11 +364,12 @@ impl Space {
 }
 
 /// The edited glyph's scene and the selection, as the tools see them; the PostScript hints come from the hint canvas
-/// model.
+/// model and the interpolation paths from the canvas model.
 pub(crate) fn scene_of(app: &FontCraftApp) -> Option<(Scene<'_>, &Selection)> {
     let font = app.session.font().ok()?;
     let mut scene = tools::scene(font, app.session.glyph_data().ok().as_deref(), &app.view, app.tools.focus.as_ref())?;
     scene.ps_hints = app.models.hint_canvas.ps.clone();
+    scene.hoi = app.models.canvas.hoi.clone();
     Some((scene, &app.tools.selection))
 }
 
@@ -394,6 +401,13 @@ pub fn open_canvas(app: &mut FontCraftApp, at: Point, space: Space) -> Result<()
             (at, [s.x, s.y])
         }
     };
+    if apply::pick_knob(app, pos) {
+        app.tools.refresh();
+        let glyph = scene_glyph(app).ok_or("no glyph is being edited")?;
+        let sections = sections(app, &[HOI, CANVAS]);
+        app.context_menus.canvas = Some(CanvasMenu { glyph, screen, at: [pos.x, pos.y], hit: None, sections, alt: false });
+        return Ok(());
+    }
     if let Some(index) = crate::canvas::hinting::badges::badge_at(app, egui::pos2(screen[0], screen[1])) {
         return open_on_instruction(app, index, screen, pos);
     }
@@ -479,6 +493,35 @@ fn with_instructor(app: &FontCraftApp, mut kinds: Vec<&'static str>) -> Vec<&'st
         kinds.push(TT_INSTRUCTOR);
     }
     kinds
+}
+
+/// The Interpolation submenu of the knobs picked with the Higher-Order Interpolation tool; `None` without one.
+fn hoi_section(app: &FontCraftApp) -> Option<Section> {
+    let spans = app.models.canvas.hoi.as_ref()?.by_key();
+    let mut kinds = app.tools.toolbox.hoi_picks().iter().filter_map(|k| spans.get(&k.key())).map(|s| s.kind);
+    let first = kinds.next()?;
+    let shared = kinds.all(|k| k == first).then_some(first);
+    let label = |kind: Kind| match kind {
+        Kind::Linear => "Linear",
+        Kind::IntermediatePoint => "Intermediate Point",
+        Kind::Handles => "Handles",
+        Kind::Rotation => "Rotation",
+    };
+    let choices = Kind::ALL
+        .into_iter()
+        .map(|kind| ItemChoice { value: kind.as_str().to_string(), label: label(kind).to_string(), checked: shared == Some(kind) })
+        .collect();
+    let check = (find_command(INTERPOLATION)?.enabled)(&app.session);
+    let item = ContextItem {
+        command: INTERPOLATION,
+        label: "Interpolation",
+        enabled: check.is_ok(),
+        disabled_reason: check.err(),
+        checked: None,
+        alternate: false,
+        choices,
+    };
+    Some(Section { context: HOI, items: vec![item] })
 }
 
 /// The TrueType Instructor's view items, checked as their state is.
@@ -613,6 +656,10 @@ pub fn sections(app: &FontCraftApp, kinds: &[&'static str]) -> Vec<Section> {
     let mut shown: Vec<&'static str> = Vec::new();
     let mut out = Vec::new();
     for &kind in kinds {
+        if kind == HOI {
+            out.extend(hoi_section(app));
+            continue;
+        }
         if kind == TT_INSTRUCTOR {
             if instructor_active(app) {
                 out.push(instructor_section(app));
@@ -1057,8 +1104,16 @@ pub fn invoke_choice(
     Ok(result.unwrap_or(Value::Null))
 }
 
-/// The messages a submenu item posts for `value`: its command with the value under the key the submenu chooses.
+/// The messages a submenu item posts for `value`: its command with the value under the key the submenu chooses. The
+/// Interpolation submenu's command runs once per side of the layer the picked knobs are on.
 fn choice_steps(app: &mut FontCraftApp, menu: &CanvasMenu, id: &str, value: &str) -> Vec<Msg> {
+    if id == INTERPOLATION {
+        let picks = app.tools.toolbox.hoi_picks();
+        let runs = scene_of(app)
+            .map(|(scene, _)| fontcraft_tools::hoi::invocations(&scene, picks, id, &[("type", json!(value))], |_| true))
+            .unwrap_or_default();
+        return runs.into_iter().map(|i| FontCraftApp::route(CommandRef::with_params(i.id, i.params))).collect();
+    }
     let mut params = params_for(app, menu, id);
     if let Some(m) = params.as_object_mut() {
         m.insert("stem".into(), json!(value));

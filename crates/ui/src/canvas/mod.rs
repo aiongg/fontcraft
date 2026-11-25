@@ -11,6 +11,7 @@ pub mod camera;
 pub mod color;
 pub mod compatibility;
 pub mod hinting;
+pub mod hoi;
 pub mod images;
 pub mod layers;
 pub mod overlays;

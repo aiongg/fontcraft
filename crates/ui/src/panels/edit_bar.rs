@@ -1,6 +1,7 @@
 //! The Edit View's controls in the status bar, shown while an Edit View tab shows (row `editView.bottomBar`): the
 //! Preview Area button after the Features menu, and at the bar's end the writing direction buttons, the kerning mode
-//! button, and zoom out, the zoom field and zoom in.
+//! button, and zoom out, the zoom field and zoom in; while the Higher-Order Interpolation tool is the current one, its
+//! axis after them.
 //!
 //! | Control | Command |
 //! |---|---|
@@ -8,12 +9,14 @@
 //! | Left to Right, Right to Left, Top to Bottom | `editView.setWritingDirection {direction}` |
 //! | Kerning mode: no kerning, kerning, locked kerning | `kerning.setMode`, which goes to the next of the three |
 //! | Zoom Out, Zoom In | `view.zoomOut`, `view.zoomIn` |
+//! | Interpolation Axis pop-up | `hoi.selectAxis {axis}` |
 //! | Zoom field: screen points per 1000 units, as the font size the text shows at | `view.setZoom {size}` |
 
 use craft::behavior::IconId;
 use craft::ui::buttons::IconButton;
-use craft::ui::contract::{Bind, Props as _, Show as _};
+use craft::ui::contract::{Bind, Entry, Props as _, Show as _};
 use craft::ui::display::Divider;
+use craft::ui::pickers::Select;
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::{Env, Label};
 use craft::ui::text::NumberField;
@@ -23,6 +26,7 @@ use serde_json::json;
 
 use super::widgets;
 use crate::app::Msg;
+use crate::canvas::hoi::AxisChoice;
 use crate::canvas::text::WritingDirection;
 
 craft::ui::words! {
@@ -42,6 +46,8 @@ craft::ui::words! {
         zoom: "fontcraftEditBar.zoom" = "Zoom";
         /// The unit after the zoom value: display points per 1000 units.
         zoom_unit: "fontcraftEditBar.zoomUnit" = "pt";
+        /// The Higher-Order Interpolation tool's axis pop-up.
+        hoi_axis: "fontcraftEditBar.hoiAxis" = "Interpolation Axis";
         preview: "fontcraftEditBar.preview" = "Preview Area";
         preview_tip: "fontcraftEditBar.previewTip" = "Show or hide the Preview Area";
     }
@@ -124,6 +130,18 @@ pub fn end_controls(ui: &mut Ui, props: Props<'_>) {
     }
     if IconButton::new(IconId::new("zoom_in")).label(words.zoom_in.clone()).tooltip(words.zoom_in.clone()).show(ui).clicked() {
         sent.push(shell("view.zoomIn", json!({})));
+    }
+}
+
+/// The Higher-Order Interpolation tool's axis pop-up, at the bar's right end.
+pub fn hoi_axis(ui: &mut Ui, choice: &AxisChoice, sent: &mut Vec<Msg>) {
+    let words = Env::of(ui).words::<EditBarWords>();
+    let entries: Vec<Entry<String>> =
+        choice.axes.iter().map(|(tag, name)| Entry::new(tag.clone(), if name.is_empty() { tag.clone() } else { name.clone() })).collect();
+    Divider::vertical().show(ui);
+    let out = Select::new(words.hoi_axis.clone(), Bind::given(choice.current.clone()), &entries).show(ui);
+    if let Some(tag) = out.events.committed().filter(|tag| **tag != choice.current) {
+        sent.push(shell("hoi.selectAxis", json!({ "axis": tag })));
     }
 }
 

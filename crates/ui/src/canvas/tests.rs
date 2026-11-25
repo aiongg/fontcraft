@@ -336,3 +336,92 @@ fn a_drag_badge_is_painted_beside_the_pointer() {
     let pointer = Camera::new(view, top).to_screen(fontcraft_geom::Point::new(0.0, 0.0));
     assert!(boxes[0].min.x > pointer.x && boxes[0].min.y > pointer.y, "{:?} {pointer:?}", boxes[0]);
 }
+
+/// Glyph A on three masters along Weight, its rectangle moving and widening; Medium shown with the Higher-Order
+/// Interpolation tool.
+fn interpolation_app() -> FontCraftApp {
+    let mut app = app();
+    run(&mut app, "font.axes.add", json!({"name": "Weight", "tag": "wght"}));
+    for _ in 0..2 {
+        run(&mut app, "font.master.add", json!({}));
+    }
+    for (master, weight, x, width) in [(0, 300, 100, 100), (1, 400, 200, 200), (2, 700, 300, 300)] {
+        run(&mut app, "font.master.setAxisLocation", json!({"masters": [master], "location": {"wght": weight}}));
+        let layer = app.session.font().unwrap().masters[master].id.clone();
+        run(&mut app, "path.addRectangle", json!({"glyph": "A", "layer": layer, "x": x, "y": 0, "width": width, "height": 500}));
+    }
+    edit(&mut app, "A");
+    shell(&mut app, "view.selectMaster", json!({"master": 1}));
+    app.sent.push(Msg::View(ViewMsg::SelectTool(fontcraft_tools::hoi::ID)));
+    app.drain();
+    let ascender = app.models.canvas.glyph.as_ref().unwrap().ascender;
+    app.view.canvas = CanvasView::new(RECT, Point::new(350.0, ascender - 250.0), 0.8);
+    app
+}
+
+fn pointer(app: &mut FontCraftApp, kind: fontcraft_tools::PointerKind, x: f64, y: f64) {
+    let ev = fontcraft_tools::PointerEvent::new(kind, x, y, fontcraft_tools::Modifiers::NONE);
+    app.sent.push(Msg::Tool(crate::canvas::tools::ToolInput::Pointer(ev)));
+    app.drain();
+    assert!(app.status.is_empty(), "{}", app.status);
+}
+
+#[test]
+fn the_interpolation_tool_marks_the_layer_its_neighbours_and_the_paths_between() {
+    use super::hoi::tokens::HoiTokens;
+    let mut app = interpolation_app();
+    let t = HoiTokens::standard();
+    let diamonds = |app: &FontCraftApp| {
+        let shapes = painted(app, super::hoi::shapes);
+        [count(&shapes, t.below), count(&shapes, t.here), count(&shapes, t.above)]
+    };
+    assert_eq!(diamonds(&app), [4, 4, 4]);
+    let shapes = painted(&app, super::hoi::shapes);
+    assert_eq!(count(&shapes, t.linear_knob), 8, "a knob on each node's path up and down");
+    assert!(count(&shapes, t.line) > 8, "the paths are dotted");
+    assert_eq!(count(&shapes, t.curve), 0);
+
+    shell(&mut app, "view.selectMaster", json!({"master": 2}));
+    assert_eq!(diamonds(&app), [4, 4, 0], "the heaviest master has no layer above");
+    shell(&mut app, "view.selectMaster", json!({"master": 0}));
+    assert_eq!(diamonds(&app), [0, 4, 4]);
+
+    app.sent.push(Msg::View(ViewMsg::SelectTool("select")));
+    app.drain();
+    assert!(painted(&app, super::hoi::shapes).is_empty(), "only with the tool");
+}
+
+#[test]
+fn a_dragged_knob_bends_the_path_and_the_context_menu_sets_the_type() {
+    use fontcraft_tools::PointerKind::{Down, Drag, Up};
+    use fontcraft_tools::hoi::Kind;
+
+    use super::hoi::tokens::HoiTokens;
+    use crate::app::context_menu::{INTERPOLATION, Space, invoke_choice, open_canvas};
+    let mut app = interpolation_app();
+    let t = HoiTokens::standard();
+    let spans = |app: &FontCraftApp| app.models.canvas.hoi.clone().unwrap().spans;
+    let at = spans(&app).iter().position(|s| s.toward == fontcraft_tools::hoi::Toward::Down && s.node == 0).unwrap();
+    let knob = spans(&app)[at].knobs[0];
+    pointer(&mut app, Down, knob.x, knob.y);
+    pointer(&mut app, Drag, knob.x + 20.0, knob.y + 60.0);
+    pointer(&mut app, Up, knob.x + 20.0, knob.y + 60.0);
+    let bent = &spans(&app)[at];
+    assert_eq!((bent.kind, bent.knobs[0].y), (Kind::IntermediatePoint, knob.y + 60.0));
+    assert!(count(&painted(&app, super::hoi::shapes), t.curve) >= 1, "the curve is drawn");
+    let lower = app.session.font().unwrap().masters[0].id.clone();
+    let hoi = app.models.palette.info_box.hoi.as_ref().unwrap();
+    assert_eq!((hoi.layer.as_str(), hoi.kind.as_str()), (lower.as_str(), "intermediatePoint"), "the Info box shows the picked knob's curve");
+
+    open_canvas(&mut app, bent.knobs[0], Space::Font).unwrap();
+    invoke_choice(&mut app, INTERPOLATION, Some("rotation"), |app, msg| app.run_now(msg, false)).unwrap();
+    assert_eq!(spans(&app)[at].kind, Kind::Rotation);
+    run(&mut app, "edit.undo", json!({}));
+    run(&mut app, "edit.undo", json!({}));
+    assert_eq!(spans(&app)[at].kind, Kind::Linear, "the drag was one undo step");
+
+    shell(&mut app, "hoi.selectAxis", json!({"axis": "wght"}));
+    app.sent.push(Msg::Shell(CommandRef::with_params("hoi.selectAxis", json!({"axis": "none"}))));
+    app.drain();
+    assert!(app.status.contains("no axis"), "{}", app.status);
+}
