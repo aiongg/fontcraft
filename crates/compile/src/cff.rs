@@ -45,6 +45,11 @@ pub const ROUND_TOLERANCE: f64 = 0.5;
 /// written out, not `2.0 / 3.0`, so the arithmetic is the reference's to the last bit.
 const TWO_THIRDS: f64 = 0.666_666_666_666_666_7;
 
+/// Whether `table` (a `CFF ` table) has subroutines.
+pub fn has_subroutines(table: &[u8]) -> bool {
+    cff::subr::charstrings_of_table(table, false).is_ok_and(|s| !s.global_subrs.is_empty() || s.local_subrs.iter().any(|l| !l.is_empty()))
+}
+
 pub(crate) fn table_error(e: cff::Error) -> CompileError {
     CompileError::Table { table: "CFF ", message: e.to_string() }
 }

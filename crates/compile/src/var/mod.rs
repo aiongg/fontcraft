@@ -16,6 +16,7 @@
 //! | Feature variations | [`featvar`]: alternate layers as `GSUB` feature variations, merged into the feature code's `GSUB` by the layout stage | M9.8 |
 //! | Variable layout | `fontcraft_features::var_layout`: kerning and marks with deltas | M9.9 |
 //! | CFF2 | [`cff2`] | M9.13 |
+//! | Interpolatable masters | [`interpolatable`]: the outline stage's result written as one font per master | M2.9 |
 //! | Hinting variations | [`cvar`]: the masters' TrueType control values, once the table stage knows the `cvt ` | M10.19 |
 //!
 //! Contract: each table builder takes plain data ([`VarAxes`], per-glyph source outlines, per
@@ -36,6 +37,7 @@ pub mod glyf;
 pub mod gvar;
 pub mod hoi;
 pub mod hvar;
+pub mod interpolatable;
 pub mod mvar;
 pub mod names;
 pub mod stat;
@@ -252,6 +254,24 @@ const MVAR_TAGS: [(&[u8; 4], Metric); 27] = [
     (b"xhgt", |m| m.x_height),
 ];
 
+/// Keeps the invisible open corners of the glyphs whose sources do not all have the same ones.
+fn keep_uneven_corners(
+    font: &Font,
+    origin: &str,
+    sources: &HashMap<String, fontcraft_interp::GlyphSources>,
+    options: &mut Options,
+    notes: &mut Vec<String>,
+) {
+    let kept = crate::components_opt::uneven_open_corners(font, origin, sources.values(), &options.components);
+    if !kept.is_empty() {
+        let mut names: Vec<&str> = kept.iter().map(String::as_str).collect();
+        names.sort_unstable();
+        names.truncate(MAX_NAMED_GLYPHS);
+        notes.push(format!("open corners were kept in glyphs whose masters do not all have the same ones: {}", names.join(", ")));
+    }
+    options.components.keep_open_corners = kept;
+}
+
 /// The `MVAR` values of the masters: the origin's metrics first, then each master source's.
 fn mvar_values(origin: &crate::info::GlobalMetrics, sources: &[Source]) -> Result<Vec<(Tag, VarValue)>, CompileError> {
     // Masters that share a location (or the origin's) give one value.
@@ -379,21 +399,7 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
     let origin = designspace.origin().cloned().ok_or(CompileError::NotYetImplemented("a designspace without an origin"))?;
     let axis_count = u16::try_from(designspace.axes().len()).map_err(|_| CompileError::Table { table: "fvar", message: "too many axes".into() })?;
 
-    // Preflight (`compatibility.exportBlocked`): every exported glyph compatible in every master.
-    let scope = fontcraft_interp::MasterPairs { masters: designspace.masters().iter().map(|m| m.id.clone()).collect(), indicators: true };
-    let mut incompatible: Vec<String> = Vec::new();
-    for g in font.glyphs.iter().filter(|g| g.export) {
-        let sources = fontcraft_interp::GlyphSources::of(font, &designspace, &g.name)?;
-        if !fontcraft_interp::compat::check_glyph(font, &sources, &scope).ok {
-            incompatible.push(g.name.clone());
-        }
-    }
-    if !incompatible.is_empty() {
-        let count = incompatible.len();
-        incompatible.truncate(MAX_NAMED_GLYPHS);
-        let more = if count > MAX_NAMED_GLYPHS { format!(" and {} more", count - MAX_NAMED_GLYPHS) } else { String::new() };
-        return Err(CompileError::Incompatible(format!("{}{more}", incompatible.join(", "))));
-    }
+    refuse_incompatible(font, &designspace)?;
 
     let mut options = options.clone();
     options.remove_overlap = false;
@@ -423,14 +429,7 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
         glyph_sources.insert(g.name.clone(), fontcraft_interp::GlyphSources::of(prepared, &designspace, &g.name)?);
     }
 
-    options.components.keep_open_corners =
-        crate::components_opt::uneven_open_corners(prepared, &origin.id, glyph_sources.values(), &options.components);
-    if !options.components.keep_open_corners.is_empty() {
-        let mut names: Vec<&str> = options.components.keep_open_corners.iter().map(String::as_str).collect();
-        names.sort_unstable();
-        names.truncate(MAX_NAMED_GLYPHS);
-        notes.push(format!("open corners were kept in glyphs whose masters do not all have the same ones: {}", names.join(", ")));
-    }
+    keep_uneven_corners(prepared, &origin.id, &glyph_sources, &mut options, &mut notes);
 
     // The sources besides the origin: the other masters, then each intermediate location.
     let mut sources: Vec<Source> = Vec::new();
@@ -526,6 +525,7 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
         glyph_sources: &glyph_sources,
         samples: &samples,
         flavour,
+        keep_implied: false,
     };
     let mut stage = |origin_resolved: &fontcraft_model::Resolved,
                      glyphs: &[ResolvedGlyph],
@@ -594,6 +594,26 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
     Ok(VariableFont { compiled, setting, file_stem: vnames.file_stem })
 }
 
+/// Preflight (`compatibility.exportBlocked`): every exported glyph is compatible in every master
+/// of `designspace`, or the compile is refused, naming the glyphs.
+fn refuse_incompatible(font: &Font, designspace: &fontcraft_interp::Designspace) -> Result<(), CompileError> {
+    let scope = fontcraft_interp::MasterPairs { masters: designspace.masters().iter().map(|m| m.id.clone()).collect(), indicators: true };
+    let mut incompatible: Vec<String> = Vec::new();
+    for g in font.glyphs.iter().filter(|g| g.export) {
+        let sources = fontcraft_interp::GlyphSources::of(font, designspace, &g.name)?;
+        if !fontcraft_interp::compat::check_glyph(font, &sources, &scope).ok {
+            incompatible.push(g.name.clone());
+        }
+    }
+    if incompatible.is_empty() {
+        return Ok(());
+    }
+    let count = incompatible.len();
+    incompatible.truncate(MAX_NAMED_GLYPHS);
+    let more = if count > MAX_NAMED_GLYPHS { format!(" and {} more", count - MAX_NAMED_GLYPHS) } else { String::new() };
+    Err(CompileError::Incompatible(format!("{}{more}", incompatible.join(", "))))
+}
+
 /// Optimize Variable Deltas, or its second name; on unless one is off.
 fn optimize_deltas(font: &Font) -> bool {
     const NAMES: [&str; 2] = ["Optimize Variable Deltas", "Variable Font Optimize Deltas"];
@@ -620,6 +640,8 @@ struct Outlines<'a> {
     samples: &'a hoi::Samples,
     /// `Cff` for a CFF2 font: every composite decomposed, cubic outlines kept.
     flavour: Flavour,
+    /// Keep the on-curve points of the source that could be implied ([`interpolatable`]).
+    keep_implied: bool,
 }
 
 impl Outlines<'_> {
@@ -958,7 +980,13 @@ impl Outlines<'_> {
                 .collect();
             // A glyph whose TrueType instructions are compiled keeps the on-curve points its
             // nodes give, so the instructions find them ([`crate::points`]).
-            let keep = if programs { crate::points::kept_nodes(self.prepared, &g.name, self.origin) } else { Vec::new() };
+            let keep = if self.keep_implied {
+                contours.iter().take(1).flatten().flat_map(crate::outline::on_curve_nodes).collect()
+            } else if programs {
+                crate::points::kept_nodes(self.prepared, &g.name, self.origin)
+            } else {
+                Vec::new()
+            };
             let mut simples = match Some(&keep).filter(|k| !k.is_empty()).and_then(|k| crate::points::interpolatable_glyphs(&paths, k)) {
                 Some(s) => s,
                 None => SimpleGlyph::interpolatable_glyphs_from_bezpaths(&paths).map_err(|e| CompileError::Glyph {

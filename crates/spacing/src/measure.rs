@@ -41,7 +41,12 @@ pub fn outline(font: &Font, layer: &Layer) -> Result<BezPath, EvalError> {
 /// For a layer of a master with an italic angle: the tangent of the angle and the height the
 /// slanted measuring lines are taken through.
 fn slant(font: &Font, layer: &Layer) -> Option<(f64, f64)> {
-    let m = font.masters.iter().find(|m| m.id == layer.master)?;
+    master_slant(font, &layer.master)
+}
+
+/// [`slant`] of the master with the id `master`.
+pub(crate) fn master_slant(font: &Font, master: &str) -> Option<(f64, f64)> {
+    let m = font.masters.iter().find(|m| m.id == master)?;
     let angle = font.metric_pos(m, metric::ITALIC_ANGLE, 0.0);
     if !angle.is_finite() || angle == 0.0 || angle.abs() >= 89.0 {
         return None;
@@ -53,8 +58,12 @@ fn slant(font: &Font, layer: &Layer) -> Option<(f64, f64)> {
 /// The outline sidebearings are measured on: [`outline`], slanted back around half the x-height
 /// in a master with an italic angle. Moving the layer sideways moves this outline by as much.
 pub fn measured_outline(font: &Font, layer: &Layer) -> Result<BezPath, EvalError> {
+    slanted_back(font, layer, slant(font, layer))
+}
+
+fn slanted_back(font: &Font, layer: &Layer, slant: Option<(f64, f64)>) -> Result<BezPath, EvalError> {
     let mut path = outline(font, layer)?;
-    if let Some((tan, y0)) = slant(font, layer) {
+    if let Some((tan, y0)) = slant {
         path.apply_affine(Affine::new([1.0, 0.0, -tan, 1.0, tan * y0, 0.0]));
     }
     Ok(path)
@@ -63,6 +72,11 @@ pub fn measured_outline(font: &Font, layer: &Layer) -> Result<BezPath, EvalError
 /// The bounds of a layer's outline, slanted back in an italic master; `None` for an empty layer.
 pub fn bounds(font: &Font, layer: &Layer) -> Result<Option<Rect>, EvalError> {
     path_bounds(&measured_outline(font, layer)?)
+}
+
+/// [`bounds`] with the layer's slant ([`master_slant`]) at hand.
+pub(crate) fn bounds_with(font: &Font, layer: &Layer, slant: Option<(f64, f64)>) -> Result<Option<Rect>, EvalError> {
+    path_bounds(&slanted_back(font, layer, slant)?)
 }
 
 /// The bounds of a layer's outline as drawn, not slanted back in an italic master (the box an

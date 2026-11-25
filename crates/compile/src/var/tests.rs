@@ -15,6 +15,8 @@ use skrifa::{FontRef, MetadataProvider};
 
 use super::*;
 
+mod interpolatable;
+
 fn rect(w: f64) -> Shape {
     Shape::Path(Path::rect(0.0, 0.0, w, 700.0))
 }

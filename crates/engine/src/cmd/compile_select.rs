@@ -1,5 +1,5 @@
 //! What `font.compile` and `font.compilePlan` build, and where each file goes (M2.8): the formats
-//! (static, variable, and the ones still refused), the instances picked by name or by pattern,
+//! (static, variable and interpolatable masters), the instances picked by name or by pattern,
 //! the variable fonts `variableFonts` picks, `familyName`, and the folder layout and naming of
 //! the files (`outputLayout`, `nameBy`).
 //!
@@ -43,6 +43,9 @@ pub(super) struct Naming {
     /// The request writes both TrueType and CFF outlines (static or variable): the flat layout
     /// then splits them into `ttf` and `otf` subfolders.
     pub split_outlines: bool,
+    /// The request writes interpolatable masters besides other formats: the flat layout then puts
+    /// them into subfolders named by their format, so they do not overwrite the static masters.
+    pub split_masters: bool,
 }
 
 /// What a by-format folder holds.
@@ -54,7 +57,6 @@ pub(super) enum FolderKind {
     Instance,
     Variable,
     /// Master fonts that keep their overlaps and share their point structure.
-    #[allow(dead_code)] // The interpolatable formats are refused until M2.9 builds them.
     Interpolatable,
 }
 
@@ -90,7 +92,8 @@ pub(super) fn naming(p: &Params, formats: &Formats) -> Result<Naming> {
     };
     let truetype = formats.statics.contains(&Flavour::TrueType) || formats.variable.contains(&VarFlavour::TrueType);
     let cff = formats.statics.contains(&Flavour::Cff) || formats.variable.contains(&VarFlavour::Cff2);
-    Ok(Naming { layout, postscript_names, split_outlines: truetype && cff })
+    let several = formats.statics.len() + formats.variable.len() + formats.masters.len() > 1;
+    Ok(Naming { layout, postscript_names, split_outlines: truetype && cff, split_masters: several })
 }
 
 // ---------- formats ----------
@@ -100,8 +103,12 @@ pub(super) fn naming(p: &Params, formats: &Formats) -> Result<Naming> {
 pub(super) struct Formats {
     /// Static fonts, one per instance or master picked.
     pub statics: Vec<Flavour>,
+    /// The static CFF fonts are written as CFF2 (`otf-cff2`, which does not go with `otf`).
+    pub cff2: bool,
     /// Variable fonts, one per variable font picked.
     pub variable: Vec<VarFlavour>,
+    /// Interpolatable masters, one font per master.
+    pub masters: Vec<Flavour>,
 }
 
 impl Formats {
@@ -124,7 +131,7 @@ impl Formats {
     /// The outline flavour of each format's files, static formats first: a static and a variable
     /// TrueType format give TrueType twice.
     pub(super) fn file_flavours(&self) -> Vec<Flavour> {
-        self.statics.iter().copied().chain(self.variable.iter().map(|&v| Self::file_flavour(v))).collect()
+        self.statics.iter().copied().chain(self.variable.iter().map(|&v| Self::file_flavour(v))).chain(self.masters.iter().copied()).collect()
     }
 }
 
@@ -160,16 +167,19 @@ pub(super) fn formats(p: &Params, font: &Font, project: bool, dest: &Dest) -> Re
             && !matches!(dest.extension(), Some("otf"))
             && !collection_destination(dest);
         return Ok(if variable {
-            Formats { statics: Vec::new(), variable: vec![VarFlavour::TrueType] }
+            Formats { variable: vec![VarFlavour::TrueType], ..Formats::default() }
         } else {
-            Formats { statics: vec![Flavour::TrueType], variable: Vec::new() }
+            Formats { statics: vec![Flavour::TrueType], ..Formats::default() }
         });
     };
     let mut out = Formats::default();
+    let mut cff1 = false;
     for name in names {
         match name {
-            "ttf" | "otf" => {
+            "ttf" | "otf" | "otf-cff2" => {
                 let flavour = if name == "ttf" { Flavour::TrueType } else { Flavour::Cff };
+                cff1 |= name == "otf";
+                out.cff2 |= name == "otf-cff2";
                 if !out.statics.contains(&flavour) {
                     out.statics.push(flavour);
                 }
@@ -180,8 +190,11 @@ pub(super) fn formats(p: &Params, font: &Font, project: bool, dest: &Dest) -> Re
                     out.variable.push(flavour);
                 }
             }
-            "otf-cff2" | "ttf-interpolatable" | "otf-interpolatable" => {
-                return Err(EngineError::Unsupported(format!("building {name} fonts (ROADMAP.md, M2.9)")));
+            "ttf-interpolatable" | "otf-interpolatable" => {
+                let flavour = if name == "ttf-interpolatable" { Flavour::TrueType } else { Flavour::Cff };
+                if !out.masters.contains(&flavour) {
+                    out.masters.push(flavour);
+                }
             }
             other => {
                 return Err(p.bad(format!(
@@ -190,23 +203,34 @@ pub(super) fn formats(p: &Params, font: &Font, project: bool, dest: &Dest) -> Re
             }
         }
     }
-    if out.statics.is_empty() && out.variable.is_empty() {
+    if out.statics.is_empty() && out.variable.is_empty() && out.masters.is_empty() {
         return Err(p.bad("`formats` names no format"));
     }
-    if !out.variable.is_empty() {
+    if cff1 && out.cff2 {
+        return Err(p.bad("\"otf\" and \"otf-cff2\" in `formats` would write the same files: build them in separate commands"));
+    }
+    if out.cff2 {
         if project {
-            return Err(p.bad("a project compile builds static fonts: leave the variable formats out of `formats`"));
+            return Err(p.bad("a project compile writes CFF outlines in a CFF table: leave \"otf-cff2\" out of `formats`"));
+        }
+        if p.get("collection").is_some_and(|v| v != &Value::Bool(false)) || collection_destination(dest) {
+            return Err(p.bad("a collection packs TrueType and CFF fonts: leave \"otf-cff2\" out of `formats`"));
+        }
+    }
+    if !out.variable.is_empty() || !out.masters.is_empty() {
+        if project {
+            return Err(p.bad("a project compile builds static fonts: leave the variable and interpolatable formats out of `formats`"));
         }
         if out.statics.is_empty()
             && let Some(key) = static_only(p)
         {
-            return Err(p.bad(format!("`{key}` applies to static fonts, and `formats` names only variable ones")));
+            return Err(p.bad(format!("`{key}` applies to static fonts, and `formats` names none")));
         }
         for key in ["collection", "interpolateBinaryLayout"] {
             if p.get(key).is_some_and(|v| v != &Value::Bool(false)) {
-                return Err(
-                    p.bad(format!("`{key}` cannot go with a variable format in `formats`: build the variable fonts in a request of their own"))
-                );
+                return Err(p.bad(format!(
+                    "`{key}` cannot go with a variable or interpolatable format in `formats`: build those fonts in a request of their own"
+                )));
             }
         }
     }

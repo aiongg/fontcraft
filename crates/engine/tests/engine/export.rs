@@ -307,9 +307,66 @@ fn compile_plan_describes_what_compile_builds_without_writing() {
     let summary = run(&mut s, "font.compile", json!({"instances": ["Bold"], "formats": ["otf"]}));
     assert_eq!(summary["fonts"][0]["files"][0]["name"], "TestSans-Heavy.otf");
     assert!(summary["fonts"][0]["files"][0].get("dataBase64").is_none());
-    // Formats that are not built yet are refused by name.
-    let e = s.execute("font.compile", &json!({"formats": ["otf-cff2"]})).unwrap_err().to_string();
-    assert!(e.contains("otf-cff2") && e.contains("M2.9"), "{e}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn compile_writes_cff2_fonts_and_interpolatable_masters_where_the_plan_says() {
+    let dir = temp("cff2-masters");
+    let mut s = two_masters(&dir, TWO_MASTERS);
+    let out_dir = dir.join("out");
+    let request = json!({
+        "formats": ["otf-cff2", "ttf-interpolatable", "otf-interpolatable"], "instances": ["Regular"], "destination": out_dir, "timestamp": 0,
+        "outputLayout": "by-format",
+    });
+    let plan = run(&mut s, "font.compilePlan", request.clone());
+    assert!(!out_dir.exists(), "a plan writes nothing");
+    let built = run(&mut s, "font.compile", request);
+    let field = |v: &Value, list: &str, key: &str| -> Vec<Value> { v[list].as_array().unwrap().iter().map(|f| f[key].clone()).collect() };
+    for key in ["instance", "source", "format"] {
+        assert_eq!(field(&plan, "outputs", key), field(&built, "fonts", key));
+    }
+    assert_eq!(
+        field(&built, "fonts", "format"),
+        [json!("otf-cff2"), json!("ttf-interpolatable"), json!("ttf-interpolatable"), json!("otf-interpolatable"), json!("otf-interpolatable")]
+    );
+    for (planned, font) in plan["outputs"].as_array().unwrap().iter().zip(built["fonts"].as_array().unwrap()) {
+        assert_eq!(planned["files"][0]["path"], font["files"][0]["path"]);
+    }
+    assert_eq!(
+        names(&out_dir),
+        [
+            "instance_otf/TestSans-Regular.otf",
+            "master_otf_interpolatable/TestSans-Bold.otf",
+            "master_otf_interpolatable/TestSans-Regular.otf",
+            "master_ttf_interpolatable/TestSans-Bold.ttf",
+            "master_ttf_interpolatable/TestSans-Regular.ttf",
+        ]
+    );
+
+    // The CFF2 font has no CFF table and keeps its glyph names in post; the plan lists its tables.
+    let cff2 = tables(&std::fs::read(out_dir.join("instance_otf/TestSans-Regular.otf")).unwrap());
+    let tags: Vec<&str> = cff2.iter().map(|(tag, _)| tag.as_str()).collect();
+    assert!(tags.contains(&"CFF2") && !tags.contains(&"CFF "), "{tags:?}");
+    assert_eq!(plan["outputs"][0]["tables"], json!(tags));
+    let post = &cff2.iter().find(|(tag, _)| tag == "post").unwrap().1;
+    assert_eq!(post[..4], [0, 2, 0, 0]);
+
+    // In one folder, the masters of a request that writes other fonts too keep their own folder.
+    let flat = dir.join("flat");
+    run(
+        &mut s,
+        "font.compile",
+        json!({"formats": ["ttf", "ttf-interpolatable"], "mastersAsInstances": true, "instances": false, "destination": flat}),
+    );
+    assert!(flat.join("TestSans-Regular.ttf").exists() && flat.join("ttf-interpolatable/TestSans-Regular.ttf").exists());
+
+    for (formats, why) in [(json!(["otf", "otf-cff2"]), "same files"), (json!(["otf-cff2"]), "collection"), (json!(["ttf-interpolatable"]), "static")]
+    {
+        let collection = why == "collection";
+        let e = s.execute("font.compile", &json!({"formats": formats, "collection": collection, "cbdt": why == "static"})).unwrap_err().to_string();
+        assert!(e.contains(why), "{e}");
+    }
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

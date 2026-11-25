@@ -356,6 +356,46 @@ fn the_cache_equals_a_full_scan_after_renames_additions_removals_and_edits() {
     same_as_scan(&mut cache, &font, "removing a glyph keys and a component read");
 }
 
+/// Of the glyphs whose keys lead to an edited glyph, only those that read a metric with another
+/// value are scanned again (the docs/plans/M5.md § 5 speed measure).
+#[test]
+fn an_edit_rescans_only_the_keys_whose_metric_changed() {
+    let mut f = font();
+    set_glyph_key(&mut f, "o", Field::Left, "=n");
+    set_glyph_key(&mut f, "x", Field::Right, "=n");
+    // Chains through o, and a key on a composite of n.
+    set_glyph_key(&mut f, "B", Field::Left, "=o");
+    set_glyph_key(&mut f, "A", Field::Left, "=n.alt");
+    let mut font = Arc::new(f);
+    let mut cache = SyncCache::default();
+    same_as_scan(&mut cache, &font, "the first update");
+    let scans = |cache: &mut SyncCache, font: &Arc<Font>, step: &str| {
+        let before = cache.computed();
+        same_as_scan(cache, font, step);
+        cache.computed() - before
+    };
+
+    // A wider n has another right sidebearing: n and x.
+    Arc::make_mut(&mut font).glyph_mut("n").unwrap().layers[0].width += 10.0;
+    assert_eq!(scans(&mut cache, &font, "a width edit"), 2);
+    // Its left edge moves: n, o and A, not B, which reads o.
+    let shape = |left: f64, right: f64| vec![Shape::Path(Path::rect(left, 0.0, right, 500.0))];
+    let right = 430.0;
+    Arc::make_mut(&mut font).glyph_mut("n").unwrap().layers[0].shapes = shape(70.0, right);
+    same_as_scan(&mut cache, &font, "a first outline");
+    Arc::make_mut(&mut font).glyph_mut("n").unwrap().layers[0].shapes = shape(75.0, right);
+    assert_eq!(scans(&mut cache, &font, "an edit to the left edge"), 3);
+    // The same outline drawn higher changes no metric a key reads.
+    Arc::make_mut(&mut font).glyph_mut("n").unwrap().layers[0].shapes = vec![Shape::Path(Path::rect(75.0, 20.0, right, 520.0))];
+    assert_eq!(scans(&mut cache, &font, "an edit that moves no side"), 1);
+    // A key added to the edited glyph can change any chain: every reader is scanned again.
+    set_glyph_key(Arc::make_mut(&mut font), "n", Field::Left, "=B");
+    same_as_scan(&mut cache, &font, "a key that closes a cycle");
+    assert!(cache.glyph("o").iter().any(|x| x.problem == Problem::Error(EvalError::Cycle)), "{:?}", cache.glyph("o"));
+    Arc::make_mut(&mut font).glyph_mut("n").unwrap().layers[0].width += 10.0;
+    same_as_scan(&mut cache, &font, "a width edit inside the cycle");
+}
+
 #[test]
 fn a_rename_rescans_only_the_glyphs_that_name_it() {
     let mut f = font();
