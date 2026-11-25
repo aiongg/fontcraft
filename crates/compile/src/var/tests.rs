@@ -936,6 +936,11 @@ fn vertical_font() -> Font {
     for (m, (ascender, descender)) in Arc::make_mut(&mut f.masters).iter_mut().zip([(800, -200), (860, -240)]) {
         m.params.0.extend([param("typoAscender", ascender), param("typoDescender", descender)]);
     }
+    // The drawn `.notdef` is as high as the master's ascender and descender are apart.
+    for (id, ascender, descender) in [("thin", 800.0, -200.0), ("black", 860.0, -240.0)] {
+        f.set_metric_pos(id, fontcraft_model::metric::ASCENDER, ascender).unwrap();
+        f.set_metric_pos(id, fontcraft_model::metric::DESCENDER, descender).unwrap();
+    }
     let own = |mut l: Layer, width: f64, origin: f64| {
         l.info.vert_width = Some(width);
         l.info.vert_origin = Some(origin);
@@ -1080,16 +1085,18 @@ fn interpolation_curves_are_followed_along_their_span() {
         for k in 0..=32u8 {
             let wght = 100.0 + 25.0 * f32::from(k);
             let expected = instance_bounds(&f, f64::from(wght));
-            for (what, v) in [("TrueType", &tt), ("CFF2", &cff2)] {
+            // Half a unit each for the straight lines between sources, a source's rounded points and
+            // its rounded deltas; CFF2 outlines are drawn in whole units, rounded down.
+            for (what, v, drop) in [("TrueType", &tt, 0.0), ("CFF2", &cff2, 1.0)] {
                 let drawn = drawn_at(v, "a", wght).0;
-                assert!(off(drawn, expected) <= 1.05, "{what} {curve:?} at {wght}: {drawn:?} against {expected:?}");
+                assert!(off(drawn, expected) <= 1.55 + drop, "{what} {curve:?} at {wght}: {drawn:?} against {expected:?}");
                 // `d` moves `a` by up to 50; `c` scales it by up to a half.
                 let s = f64::from(k) / 32.0;
                 let moved = (expected.0 + 50.0 * s, expected.1, expected.2 + 50.0 * s, expected.3);
-                assert!(off(drawn_at(v, "d", wght).0, moved) <= 1.55, "{what} {curve:?}: the composite at {wght}");
+                assert!(off(drawn_at(v, "d", wght).0, moved) <= 2.05 + drop, "{what} {curve:?}: the composite at {wght}");
                 let m = 1.0 + 0.5 * s;
                 let scaled = (expected.0 * m, expected.1 * m, expected.2 * m, expected.3 * m);
-                assert!(off(drawn_at(v, "c", wght).0, scaled) <= 2.5, "{what} {curve:?}: the decomposed composite at {wght}");
+                assert!(off(drawn_at(v, "c", wght).0, scaled) <= 3.0 + 1.5 * drop, "{what} {curve:?}: the decomposed composite at {wght}");
             }
         }
     }

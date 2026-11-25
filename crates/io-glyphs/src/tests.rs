@@ -521,9 +521,10 @@ fn a_kerning_table_with_other_values_is_kept_as_written() {
 
 #[test]
 fn malformed_files_are_errors_not_panics() {
-    for bad in ["(", "()", "{\n.formatVersion = 3;\n}", "{\n.formatVersion = 9;\nunitsPerEm = 1000;\n}", "{\nunitsPerEm = 1000;\n}"] {
+    for bad in ["(", "()", "{\n.formatVersion = 3;\n}", "{\n.formatVersion = 9;\nunitsPerEm = 1000;\n}"] {
         assert!(read(bad).is_err(), "{bad:?}");
     }
+    assert_eq!(read("{\nunitsPerEm = 1000;\n}").unwrap().masters.len(), 1, "a file without masters gets one");
     for i in 0..V3.len() {
         if let Some(prefix) = V3.get(..i) {
             let _ = read(prefix);

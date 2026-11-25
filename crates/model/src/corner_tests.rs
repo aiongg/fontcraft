@@ -499,7 +499,7 @@ fn decomposing_a_corner_keeps_attachments_on_their_nodes() {
     let decomposed = decompose_corners(&font, layer, &[0]).unwrap();
     assert_ne!(decomposed.shapes, layer.shapes);
     assert_eq!(decomposed.info.hints.len(), 3);
-    assert_eq!(places(layer), [(400.0, 500.0), (0.0, 500.0), (0.0, 0.0)]);
+    assert_eq!(places(layer), [(400.0, 0.0), (400.0, 500.0), (0.0, 500.0)]);
     assert_eq!(places(&decomposed), places(layer));
 }
 

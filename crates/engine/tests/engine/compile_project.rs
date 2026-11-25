@@ -709,16 +709,17 @@ fn the_menu_name_db_is_read_by_the_expanded_postscript_name() {
     let ufo = write_ufo(&dir);
     let info = std::fs::read_to_string(ufo.join("fontinfo.plist")).unwrap();
     let info = info
-        .replace("<string>Synth</string>", "<string>Synth{{{versionMajor}}}</string>")
+        .replace("<string>Synth</string>", "<string>Synth{{{buildNumber}}}</string>")
         .replace("<key>postscriptFontName</key><string>Synth-Regular</string>", "");
     std::fs::write(ufo.join("fontinfo.plist"), info).unwrap();
     let db = dir.join("FontMenuNameDB");
-    std::fs::write(&db, "[Synth1-Regular]\n\tf=Found\n").unwrap();
+    let name = format!("Synth{}-Regular", fontcraft_fontinfo::tokens::BUILD_NUMBER);
+    std::fs::write(&db, format!("[{name}]\n\tf=Found\n")).unwrap();
     let mut s = Session::new();
     s.execute("file.open", &json!({ "path": ufo, "keepGlyphNames": true })).unwrap();
     let out = dir.join("out.otf");
     let r = s.execute("font.compile", &json!({"formats": ["otf"], "destination": out, "timestamp": 0, "menuNames": db})).unwrap();
     let n = names(&std::fs::read(&out).unwrap());
-    assert_eq!((win(&n, 1), win(&n, 6)), (Some("Found"), Some("Synth1-Regular")), "{r}");
+    assert_eq!((win(&n, 1), win(&n, 6)), (Some("Found"), Some(name.as_str())), "{r}");
     std::fs::remove_dir_all(&dir).unwrap();
 }

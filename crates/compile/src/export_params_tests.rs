@@ -450,8 +450,14 @@ fn a_grid_finer_than_a_unit_keeps_hundredths_in_cff_outlines() {
     let draw = |out: &Compiled| {
         let font = FontRef::new(&out.bytes).unwrap();
         let mut pen = points_pen::Points::default();
-        let glyph = font.outline_glyphs().get(gid(out, "B")).unwrap();
-        glyph.draw(skrifa::outline::DrawSettings::unhinted(Size::unscaled(), LocationRef::default()), &mut pen).unwrap();
+        // skrifa draws CFF outlines in whole units, so those are read from the table.
+        if let Some(table) = font.table_data(skrifa::Tag::new(b"CFF ")) {
+            let cff = read_fonts::ps::cff::CffFontRef::new_cff(table.as_bytes(), 0, None).unwrap();
+            cff.evaluate_charstring(&cff.subfont(0, &[]).unwrap(), gid(out, "B"), &[], &mut pen).unwrap();
+        } else {
+            let glyph = font.outline_glyphs().get(gid(out, "B")).unwrap();
+            glyph.draw(skrifa::outline::DrawSettings::unhinted(Size::unscaled(), LocationRef::default()), &mut pen).unwrap();
+        }
         pen.0
     };
     let left = |out: &Compiled| draw(out).iter().map(|p| p.0).fold(f32::MAX, f32::min);

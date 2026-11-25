@@ -1,5 +1,8 @@
 //! Interpolatable masters (M2.9) of the fonts built in code.
 
+use read_fonts::ps::cff::CffFontRef;
+use read_fonts::ps::cs::CommandSink;
+use read_fonts::types::Fixed;
 use skrifa::raw::tables::glyf::Glyph as GlyfGlyph;
 
 use super::*;
@@ -27,7 +30,14 @@ fn structure(font: &MasterFont, name: &str) -> (Vec<bool>, Vec<u16>, Vec<(u16, i
 fn advance(font: &MasterFont, name: &str) -> u16 {
     let parsed = FontRef::new(&font.compiled.bytes).unwrap();
     let gid = font.compiled.glyph_order.iter().position(|g| g == name).unwrap();
-    parsed.hmtx().unwrap().advance(GlyphId::new(gid as u32)).unwrap()
+    match parsed.hmtx() {
+        Ok(hmtx) => hmtx.advance(GlyphId::new(gid as u32)).unwrap(),
+        // A sparse font has no `hhea` to say how many advances there are; here every glyph has one.
+        Err(_) => {
+            let data = parsed.table_data(skrifa::Tag::new(b"hmtx")).unwrap().as_bytes();
+            u16::from_be_bytes([data[4 * gid], data[4 * gid + 1]])
+        }
+    }
 }
 
 fn tags(font: &MasterFont) -> Vec<String> {
@@ -68,30 +78,28 @@ fn masters_share_their_points_and_intermediate_layers_become_sparse_fonts() {
 fn cubic_masters_draw_the_same_commands_without_subroutines() {
     #[derive(Default, Debug, PartialEq)]
     struct Commands(String);
-    impl OutlinePen for Commands {
-        fn move_to(&mut self, _: f32, _: f32) {
+    impl CommandSink for Commands {
+        fn move_to(&mut self, _: Fixed, _: Fixed) {
             self.0.push('M');
         }
-        fn line_to(&mut self, _: f32, _: f32) {
+        fn line_to(&mut self, _: Fixed, _: Fixed) {
             self.0.push('L');
         }
-        fn quad_to(&mut self, _: f32, _: f32, _: f32, _: f32) {
-            self.0.push('Q');
-        }
-        fn curve_to(&mut self, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32) {
+        fn curve_to(&mut self, _: Fixed, _: Fixed, _: Fixed, _: Fixed, _: Fixed, _: Fixed) {
             self.0.push('C');
         }
         fn close(&mut self) {
             self.0.push('Z');
         }
     }
+    // Read from the table itself: a sparse font has too few tables for skrifa's outlines.
     let commands = |font: &MasterFont, name: &str| {
         let parsed = FontRef::new(&font.compiled.bytes).unwrap();
         let gid = font.compiled.glyph_order.iter().position(|g| g == name).unwrap();
-        let mut pen = Commands::default();
-        let glyph = parsed.outline_glyphs().get(GlyphId::new(gid as u32)).unwrap();
-        glyph.draw(DrawSettings::unhinted(Size::unscaled(), skrifa::instance::LocationRef::default()), &mut pen).unwrap();
-        pen
+        let cff = CffFontRef::new_cff(parsed.table_data(skrifa::Tag::new(b"CFF ")).unwrap().as_bytes(), 0, None).unwrap();
+        let mut sink = Commands::default();
+        cff.evaluate_charstring(&cff.subfont(0, &[]).unwrap(), GlyphId::new(gid as u32), &[], &mut sink).unwrap();
+        sink
     };
     let fonts = compile_masters(&two_masters(), Flavour::Cff, &Options::default()).unwrap();
     let [thin, black, sparse] = fonts.as_slice() else { panic!("{} fonts", fonts.len()) };

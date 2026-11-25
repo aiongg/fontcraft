@@ -126,8 +126,9 @@ fn spacing_auto_space_references_change_the_match() {
     run(&mut s, "spacing.setLeftSidebearing", json!({"glyphs": ["e"], "value": 90}));
     let out = run(&mut s, "spacing.autoSpace", json!({"glyphs": ["c", "e"], "references": ["e", "n"]}));
     assert_eq!(out["classes"]["c"]["m01"]["left"], "e left", "{out}");
-    assert_eq!(lrw(&s, "c").0, 90.0);
-    assert_eq!(lrw(&s, "e").0, 90.0, "a reference keeps its spacing");
+    for (glyph, why) in [("c", "the same shape as the reference"), ("e", "a reference keeps its spacing")] {
+        assert!((lrw(&s, glyph).0 - 90.0).abs() < 1e-9, "{why}: {}", lrw(&s, glyph).0);
+    }
     // A reference without ink is reported; a master without n, o and v can space by references.
     let out = run(&mut s, "spacing.autoSpace", json!({"glyphs": ["c"], "references": ["x"]}));
     assert!(out["skipped"].as_array().unwrap().iter().any(|v| v["glyph"] == "x" && v["reason"].as_str().unwrap().contains("reference")), "{out}");

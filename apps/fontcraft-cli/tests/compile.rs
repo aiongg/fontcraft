@@ -89,7 +89,7 @@ fn compile_builds_each_format_and_container_and_plans_without_writing() {
     // Usage errors exit with 2, a refused build with 4.
     assert_eq!(cli(&["compile"]).0, 2);
     assert_eq!(cli(&["compile", src, src, "-o", one.to_str().unwrap()]).0, 2);
-    assert_eq!(cli(&["compile", src, "--format", "otf,otf-cff2", "--output-dir", out]).0, 2);
+    assert_eq!(cli(&["compile", src, "--format", "otf,otf-cff2", "--output-dir", out]).0, 4);
     assert_eq!(cli(&["compile", src, "--output-layout", "nested", "--output-dir", out]).0, 2);
     std::fs::remove_dir_all(&dir).unwrap();
 }
