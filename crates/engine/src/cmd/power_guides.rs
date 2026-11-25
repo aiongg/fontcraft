@@ -20,6 +20,7 @@ use std::sync::Arc;
 
 use fontcraft_geom::{BezPath, Line, Point, Vec2, round_to_grid};
 use fontcraft_model::guide_data::{self, Link, MAX_GUIDE_MARKERS, MAX_MAGNETISM};
+use fontcraft_model::guide_follow::{place_x, placed};
 use fontcraft_model::{Font, Guide, LayerSide, MAX_COORDINATE, MAX_LAYER_GUIDES, Path, Shape};
 use fontcraft_pathops::stems::{StemDirection, StemOptions, detect_stems};
 use serde_json::{Value, json};
@@ -119,6 +120,7 @@ pub fn specs() -> Vec<CommandSpec> {
 }
 
 // ── geometry ────────────────────────────────────────────────────────────────────────────────────
+// The guides here are placed in the layer they are read in (`guide_follow::placed`).
 
 fn knob(g: &Guide) -> Point {
     Point::new(g.x, g.y)
@@ -321,7 +323,7 @@ fn locked_guide(p: &Params, r: GuideRef) -> EngineError {
     p.bad(format!("{} guide {} is locked: unlock it first (guide.unlock)", r.scope.as_str(), r.index))
 }
 
-/// The guide `r` of the target layer, and the layer's master id.
+/// The guide `r` of the target layer, as stored, and the layer's master id.
 fn read_guide(font: &Font, t: &Targets, r: GuideRef, p: &Params) -> Result<(Guide, String)> {
     let rt = t.resolve(font)?;
     let list = match r.scope {
@@ -395,7 +397,7 @@ fn make_power_guide(s: &mut Session, v: &Value) -> Result<Value> {
         }
         let picked = match &nodes {
             Some(list) => list.clone(),
-            None => nodes_on(rt.parts.shapes, &g),
+            None => nodes_on(rt.parts.shapes, &placed(&g, rt.layer.width)),
         };
         if picked.is_empty() {
             return Err(p.bad(format!("no node lies on {} guide {}: give `nodes`", r.scope.as_str(), r.index)));
@@ -473,8 +475,9 @@ fn add_power_guides(s: &mut Session, v: &Value) -> Result<Value> {
                 if on.is_empty() {
                     continue;
                 }
+                let width = layer.width;
                 let list = &mut layer.info.guides;
-                let index = match list.iter().position(|g| !g.locked && parallel(g, &new) && on_guide(g, knob(&new))) {
+                let index = match list.iter().position(|g| !g.locked && parallel(g, &new) && on_guide(&placed(g, width), knob(&new))) {
                     Some(i) => i,
                     None => {
                         if list.len() >= MAX_LAYER_GUIDES {
@@ -624,13 +627,16 @@ fn unlink_power_guides(s: &mut Session, v: &Value) -> Result<Value> {
 
 /// The power guides a layer holds that are parallel to `moved` (before the move), as anchors of
 /// a move of `delta` along `moved`'s normal. `moved_ref` is the moved guide's place among them;
-/// it comes first.
+/// it comes first. `moved` is placed in the layer, which is `width` wide; `local` and `global` are
+/// as stored.
+#[allow(clippy::too_many_arguments)]
 fn anchors_for(
     moved: &Guide,
     delta: f64,
     moved_links: Vec<(usize, usize)>,
     local: &[Guide],
     global: &[Guide],
+    width: f64,
     glyph: &str,
     skip: Option<GuideRef>,
 ) -> Vec<Anchor> {
@@ -653,7 +659,7 @@ fn anchors_for(
             if nodes.is_empty() {
                 continue;
             }
-            let at = (knob(g) - origin).dot(n);
+            let at = (knob(&placed(g, width)) - origin).dot(n);
             if at.is_finite() {
                 out.push(Anchor { at, delta: 0.0, nodes });
             }
@@ -670,11 +676,13 @@ fn move_power_guide(s: &mut Session, v: &Value) -> Result<Value> {
         return Err(p.bad("give `x`, `y` or both: the guide's new knob position"));
     }
     let font = s.font()?;
-    let (old, master) = read_guide(font, &t, r, &p)?;
-    if old.locked {
+    let (stored, master) = read_guide(font, &t, r, &p)?;
+    if stored.locked {
         return Err(locked_guide(&p, r));
     }
     let rt = t.resolve(font)?;
+    let width = rt.layer.width;
+    let old = placed(&stored, width);
     if r.scope == GuideScope::Local {
         crate::check_unlocked(rt.glyph)?;
     }
@@ -723,16 +731,19 @@ fn move_power_guide(s: &mut Session, v: &Value) -> Result<Value> {
             };
             let local = layer.parts(side).guides.to_vec();
             let global_here: &[Guide] = if layer.is_master_layer() && side == LayerSide::Foreground { &global } else { &[] };
-            let anchors = anchors_for(&old, delta, nodes, &local, global_here, &name, Some(r));
+            // A global guide has its own place in each glyph.
+            let here = placed(&stored, layer.width);
+            let anchors = anchors_for(&here, delta, nodes, &local, global_here, layer.width, &name, Some(r));
             let mut g = font.glyph_mut(&name)?;
             let Some(layer) = g.layers.iter_mut().find(|l| l.id == layer_id) else { continue };
             let count =
-                reshape(layer.parts_mut(side).shapes, knob(&old), normal(&old), &anchors).map_err(|e| p.bad(format!("glyph `{name}`: {e}")))?;
+                reshape(layer.parts_mut(side).shapes, knob(&here), normal(&here), &anchors).map_err(|e| p.bad(format!("glyph `{name}`: {e}")))?;
             moved_nodes += count;
             done.push(name);
         }
         change_guide(font, &t, r, &p, |g| {
-            (g.x, g.y) = (nx, ny);
+            place_x(g, nx, width);
+            g.y = ny;
             Ok(())
         })
     })?;
@@ -781,7 +792,7 @@ fn add_markers(s: &mut Session, v: &Value) -> Result<Value> {
     }
     if auto {
         let rt = t.resolve(font)?;
-        markers.extend(crossings(rt.parts.shapes, &g));
+        markers.extend(crossings(rt.parts.shapes, &placed(&g, rt.layer.width)));
     }
     markers.sort_by(f64::total_cmp);
     markers.dedup_by(|a, b| (*a - *b).abs() < MARKER_MERGE);

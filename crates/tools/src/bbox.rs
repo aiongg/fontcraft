@@ -129,7 +129,7 @@ pub fn selection_box(scene: &Scene, selection: &Selection) -> Option<Rect> {
             crate::selection::GuideScope::Local => scene.local_guides(),
             crate::selection::GuideScope::Global => scene.global_guides,
         };
-        list.get(g.index).map(|g| Point::new(g.x, g.y))
+        list.get(g.index).map(|g| scene.knob(g))
     }));
     let notes = fontcraft_geom::bounds(selection.annotations.iter().filter_map(|&i| layer.info.annotations.get(i)).map(|a| Point::new(a.x, a.y)));
     [points, shapes, anchors(Some(selection)), guides, notes].into_iter().flatten().reduce(|a, b| a.union(b))

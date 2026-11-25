@@ -16,7 +16,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use fontcraft_geom::{Point, Vec2, round_point, round_to_grid};
-use fontcraft_model::{Component, Font, LayerParts, LayerPartsMut, LayerSide, Node, Path, Shape, Transform};
+use fontcraft_model::guide_follow::{place_x, placed_x};
+use fontcraft_model::{Component, Font, Guide, LayerParts, LayerPartsMut, LayerSide, Node, Path, Shape, Transform};
 
 use super::ops::{EPS, handle_owner, next, on, prev};
 use crate::params::{GuideRef, GuideScope, ResolvedTargets, Targets};
@@ -244,6 +245,13 @@ fn shift(x: &mut f64, y: &mut f64, d: Vec2, step: f64) {
     *y = round_to_grid(*y + d.y, step);
 }
 
+/// Moves the place of a guide in a layer `width` wide.
+fn shift_guide(g: &mut Guide, width: f64, d: Vec2, step: f64) {
+    let mut x = placed_x(g, width);
+    shift(&mut x, &mut g.y, d, step);
+    place_x(g, x, width);
+}
+
 /// Why a component the targets name does not move freely.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Held {
@@ -315,10 +323,10 @@ fn check_something_moves(t: &Targets, points: &BTreeMap<usize, BTreeSet<usize>>,
 /// and automatically aligned components where they are (see the module notes); `alone` says the
 /// target lists are all the command moves, so that it fails when none of them can move.
 pub(super) fn apply(font: &mut Font, t: &Targets, d: Vec2, mode: Mode, duplicate: bool, step: f64, alone: bool) -> Result<Targets> {
-    let (master, points, held) = {
+    let (master, width, points, held) = {
         let r = t.resolve(font)?;
         let held = if duplicate { BTreeMap::new() } else { held_components(font, t, &r) };
-        (r.master.id.clone(), points_by_shape(t, r.parts), held)
+        (r.master.id.clone(), r.layer.width, points_by_shape(t, r.parts), held)
     };
     if alone {
         check_something_moves(t, &points, &held, d)?;
@@ -339,7 +347,7 @@ pub(super) fn apply(font: &mut Font, t: &Targets, d: Vec2, mode: Mode, duplicate
         let m = masters.iter_mut().find(|m| m.id == master).ok_or_else(|| EngineError::Internal(format!("master `{master}` went missing")))?;
         for i in global {
             let Some(mut g) = m.guides.get(i).cloned() else { continue };
-            shift(&mut g.x, &mut g.y, d, step);
+            shift_guide(&mut g, width, d, step);
             if duplicate {
                 new_global.push(GuideRef { scope: GuideScope::Global, index: m.guides.len() });
                 m.guides.push(g);
@@ -389,7 +397,7 @@ fn move_in(
     }
     for g in t.guides.iter().filter(|g| g.scope == GuideScope::Local) {
         if let Some(guide) = parts.guides.get_mut(g.index) {
-            shift(&mut guide.x, &mut guide.y, d, step);
+            shift_guide(guide, parts.width, d, step);
         }
     }
     for &i in &t.annotations {
@@ -457,7 +465,7 @@ fn duplicate_in(parts: &mut LayerPartsMut, t: &Targets, points: &BTreeMap<usize,
     }
     for g in t.guides.iter().filter(|g| g.scope == GuideScope::Local) {
         let Some(mut copy) = parts.guides.get(g.index).cloned() else { continue };
-        shift(&mut copy.x, &mut copy.y, d, step);
+        shift_guide(&mut copy, parts.width, d, step);
         copies.guides.push(GuideRef { scope: GuideScope::Local, index: parts.guides.len() });
         parts.guides.push(copy);
     }

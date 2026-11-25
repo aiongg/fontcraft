@@ -12,6 +12,7 @@
 
 use egui::{Color32, Pos2, Shape, Stroke};
 use fontcraft_engine::model::guide_data::{self, Link};
+use fontcraft_engine::model::guide_follow::placed_x;
 use fontcraft_engine::model::{Guide, Layer, Shape as ModelShape};
 use fontcraft_geom::{Point, Vec2};
 
@@ -75,7 +76,7 @@ pub fn power_guide_shapes(cx: &PaintCx<'_>) -> Drawn {
 }
 
 fn guide(cx: &PaintCx<'_>, t: &OverlayTokens, layer: &Layer, g: &Guide, color: Color32, mine: impl Fn(&Link) -> bool, out: &mut Drawn) {
-    let knob = Point::new(g.x, g.y);
+    let knob = Point::new(placed_x(g, layer.width), g.y);
     if !(knob.x.is_finite() && knob.y.is_finite()) {
         return;
     }

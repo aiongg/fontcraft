@@ -14,7 +14,7 @@ use fontcraft_spacing::{Field, SIDEBEARING_RANGE, WIDTH_RANGE, metric};
 use serde_json::{Value, json};
 
 use super::common::{each_layer, grid, scope};
-use super::shared::shift_layer;
+use super::shared::shift_with_right_edge;
 use super::*;
 use crate::params::{Params, TargetKind, Targets};
 
@@ -118,7 +118,7 @@ fn plan(p: &Params, font: &Font, glyph: &str, layer: &Layer, mode: Mode, step: f
 fn change_layer(layer: &mut Layer, change: Change) -> std::result::Result<(), String> {
     // The shift moves the guides with the contents; they then follow the rest of the change.
     let before = layer.width + change.dx;
-    shift_layer(layer, change.dx)?;
+    shift_with_right_edge(layer, change.dx)?;
     layer.width = change.width;
     fontcraft_model::guide_follow::follow_width(layer, before);
     Ok(())

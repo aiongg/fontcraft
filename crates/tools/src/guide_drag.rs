@@ -45,13 +45,9 @@ pub fn editable(scene: &Scene, r: GuideRef, g: &Guide) -> bool {
     !g.locked && (r.scope == GuideScope::Global || !scene.locked)
 }
 
-fn knob(g: &Guide) -> Point {
-    Point::new(g.x, g.y)
-}
-
 /// Whether `pos` (font units) is on the guide's knob.
 pub fn on_knob(cx: &Context<'_>, g: &Guide, pos: Point) -> bool {
-    dist(cx.view.to_screen(knob(g)), cx.view.to_screen(pos)) <= cx.settings.hit_tolerance
+    dist(cx.view.to_screen(cx.scene.knob(g)), cx.view.to_screen(pos)) <= cx.settings.hit_tolerance
 }
 
 /// An angle in degrees, kept from 0 to 360 as the guide commands keep it.
@@ -81,7 +77,7 @@ fn relative_to(g: &Guide) -> &'static str {
 /// properties, named as `guide.setProperties` names them.
 pub fn properties(scene: &Scene, r: GuideRef, g: &Guide) -> Map<String, Value> {
     let mut m = target(scene, r);
-    m.insert("x".into(), json!(g.x));
+    m.insert("x".into(), json!(scene.knob(g).x));
     m.insert("y".into(), json!(g.y));
     m.insert("angle".into(), json!(norm_angle(g.angle)));
     m.insert("angleLocked".into(), json!(g.angle_locked));
@@ -137,7 +133,7 @@ impl GuideDrag {
     /// line. `None` when the guide may not change.
     pub fn press(cx: &Context<'_>, r: GuideRef, pos: Point, at: Point) -> Option<Self> {
         let g = guide(cx.scene, r)?;
-        let k = knob(g);
+        let k = cx.scene.knob(g);
         if !editable(cx.scene, r, g) || !finite(k) || !finite(pos) || !g.angle.is_finite() {
             return None;
         }

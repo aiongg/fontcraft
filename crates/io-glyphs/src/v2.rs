@@ -28,7 +28,8 @@
 //!   parameter or from the name parts `weight`, `width` and `custom`.
 //! - Stems are two plain lists, `horizontalStems` and `verticalStems`; the model's stem
 //!   definitions (without names) are made from them when every master has the same number of each.
-//!   Guides are `guideLines`, with a `position` string `"{x, y}"`.
+//!   Guides are `guideLines`, with a `position` string `"{x, y}"` and version 3's `orientation` as
+//!   `alignment`.
 //! - An instance is left out of the export by `exports = 0` (the format document) or `active = 0`
 //!   (glyphsLib writes both); either key is kept as written.
 //!
@@ -1115,6 +1116,9 @@ fn usable_name(s: &str) -> bool {
     !s.trim().is_empty() && s.len() <= MAX_NAME_LEN && !s.chars().any(char::is_control)
 }
 
+/// Version 2's key of a guide's sidebearing reference.
+const GUIDE_ALIGNMENT: &str = "alignment";
+
 pub(crate) fn read_guide(v: &Value) -> Option<Guide> {
     let mut d = v.as_dict()?.clone();
     let mut g = Guide::default();
@@ -1122,7 +1126,7 @@ pub(crate) fn read_guide(v: &Value) -> Option<Guide> {
         let n = braced_numbers(p.as_str()?, 2)?;
         (g.x, g.y) = (*n.first()?, *n.get(1)?);
     }
-    design::take_guide_rest(&mut d, &mut g)?;
+    design::take_guide_rest(&mut d, &mut g, GUIDE_ALIGNMENT)?;
     g.extra = into_extra(d);
     Some(g)
 }
@@ -1135,7 +1139,7 @@ pub(crate) fn write_guide(g: &Guide) -> Option<Value> {
         }
         e.push(("position".into(), Value::String(Str::new(braced(&[g.x, g.y])))));
     }
-    design::push_guide_rest(&mut e, g)?;
+    design::push_guide_rest(&mut e, g, GUIDE_ALIGNMENT)?;
     Some(Value::Dict(finish(e, &g.extra)))
 }
 

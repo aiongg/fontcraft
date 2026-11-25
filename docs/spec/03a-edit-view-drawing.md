@@ -755,9 +755,11 @@ Rules (our design where the handbook is silent):
 - The sidebearing reference is the guide's `orientation` key in `.glyphs` data from version 3 on
   (`alignment` in version 2): absent for left, `right`, or `center` for both. A right-referenced
   guide's position counts from the right sidebearing, local and global alike, in the public SDK's
-  sample file; what `center` counts from is not documented. FontCraft keeps the reference as
-  `alignment` in every version and positions as absolute, and moves local guides with the width
-  (`guides.sidebearingReference` lists the departures).
+  sample file; what `center` counts from is not documented. FontCraft keeps both as the file has
+  them. Where a guide lies in a layer comes from its stored x and the layer's width
+  (`fontcraft_model::guide_follow`): a right-referenced one at the width plus x, the others at x.
+  Commands take and return that place, the one in the layer they name, and a change of reference
+  leaves the guide where that layer shows it. `guides.sidebearingReference` lists our choices.
 - A global guide's `filter` is kept as predicate text. Showing a global guide only on the glyphs
   its filter selects waits for the Smart Filter rules (M4).
 

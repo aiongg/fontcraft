@@ -68,7 +68,8 @@ use fontcraft_geom::expr::{Expr, MAX_EXPR_BYTES, MAX_EXPR_DEPTH};
 use fontcraft_geom::{Affine, Point, Rect, Shape as _};
 use fontcraft_glyphdata::GlyphData;
 use fontcraft_model::{
-    Alignment, ColorLabel, Component, Font, Glyph, Guide, Layer, MAX_COORDINATE, MAX_NAME_LEN, Master, Metrics, Shape, Transform, metric,
+    Alignment, ColorLabel, Component, Font, Glyph, Guide, Layer, MAX_COORDINATE, MAX_NAME_LEN, Master, Metrics, Shape, Transform, guide_follow,
+    metric,
 };
 
 use crate::auto_layer::reaches;
@@ -986,7 +987,7 @@ impl<'a> MasterCx<'a> {
             let anchors = effective_anchors_with(self.font, self.data, name, id)
                 .map(|list| list.into_iter().map(|a| (a.name, a.x, a.y)).collect())
                 .unwrap_or_default();
-            let guides = layer.map(|l| l.info.guides.clone()).unwrap_or_default();
+            let guides = layer.map(|l| l.info.guides.iter().map(|g| guide_follow::placed(g, l.width)).collect()).unwrap_or_default();
             Rc::new(Facts { bounds, width, height, anchors, guides })
         });
         self.cache.insert(name.to_string(), f.clone());
@@ -1204,7 +1205,7 @@ impl<'a> MasterCx<'a> {
         let mut name = name;
         if let Some(g) = self.master.guides.iter().find(|g| g.name.as_deref() == Some(name)) {
             if !is_base {
-                return (Point::new(g.x, g.y), g.angle, fixed);
+                return (Point::new(guide_follow::placed_x(g, f.width), g.y), g.angle, fixed);
             }
             name = match dir {
                 Dir::X => "center",

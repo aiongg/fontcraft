@@ -833,14 +833,15 @@ pub(crate) fn background_of(l: Layer) -> fontcraft_model::Background {
 /// A background as the layer its GLIF is written from (the inverse of [`background_of`]). Its
 /// width is the file's, else the one a `.glyphs` file states in the background's user data
 /// (glyphsLib's `backgroundWidth`); its user data is its lib but the keys
-/// [`crate::glyphkeys`] typed.
-pub(crate) fn background_layer(b: &fontcraft_model::Background, master: &str) -> Layer {
+/// [`crate::glyphkeys`] typed. `over` is the width of the layer it belongs to, whose sidebearings
+/// its guides are referenced to.
+pub(crate) fn background_layer(b: &fontcraft_model::Background, master: &str, over: f64) -> Layer {
     let number = |k: &str| ufo_get(&b.extra, k).and_then(Value::as_num).map(|n| n.as_f64());
     let mut l = Layer::new(master, number("width").or_else(|| glyphkeys::background_width(b)).unwrap_or(0.0));
     l.id = format!("{master}#{BACKGROUND}");
     l.shapes = b.shapes.clone();
     l.anchors = b.anchors.clone();
-    l.info.guides = b.guides.clone();
+    l.info.guides = b.guides.iter().map(|g| fontcraft_model::guide_follow::placed(g, over)).collect();
     l.info.image = b.image.clone();
     l.info.vert_width = number("height").filter(|h| h.abs() <= fontcraft_model::MAX_COORDINATE);
     if let Some(lib) = ufo_get(&b.extra, "lib").and_then(Value::as_dict) {
@@ -1487,7 +1488,7 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
             parts.extend(font.glyphs.iter().filter_map(|g| g.layer(&master.id).map(|l| (g.as_ref(), Cow::Borrowed(l), false))));
         } else if let Some((_, items)) = plan.iter().find(|(n, _)| n == layer_name) {
             for (g, part) in items {
-                parts.push((*g, part.layer(&master.id), matches!(part, Part::Background(_))));
+                parts.push((*g, part.layer(&master.id), matches!(part, Part::Background(..))));
             }
         }
         for (g, layer, is_background) in parts {
@@ -1638,7 +1639,9 @@ fn info_entries(font: &Font, master: &Master, read: &Dict) -> fontinfo::Written 
 
 /// A master's design values as a UFO holds them: as zones, the overshoots of every metric except
 /// the italic angle, then the master's other zones (glyphsLib's alignment zones of a format 3
-/// master); its stem values split by their definitions' direction; its guides.
+/// master); its stem values split by their definitions' direction; its guides. A guide referenced to
+/// the right goes out at its stored x, for a UFO's global guide has one place in every glyph
+/// ([`design::write`] names the reference as lost).
 fn design_of(font: &Font, m: &Master) -> Design {
     Design { zones: font.alignment_zones(m), stems_h: font.stem_widths(m, true), stems_v: font.stem_widths(m, false), guides: m.guides.clone() }
 }
@@ -2071,7 +2074,7 @@ pub const LAYER_LOSSES: [&str; 15] = [
     "the backgrounds' annotations, and annotation keys glyphsLib's form has no place for",
     "the layers' image crops and opacity stated as their default",
     "the layers' images without a file",
-    "the layers' guide filters, angle locks, measurements and label positions",
+    "the layers' guide filters, angle locks, measurements and sidebearing references",
     "the layers' guides and images, which UFO 2 has no place for",
     "the ids of layers other than master layers",
     "the layers' image files, which are not PNG files in the UFO's images folder",
@@ -2091,17 +2094,17 @@ pub const GLYPH_LOSSES: [&str; 10] = [
     "glyphs without layers, which a UFO has no file for",
 ];
 
-/// What one glyph puts into a UFO layer: a layer, or a layer's background.
+/// What one glyph puts into a UFO layer: a layer, or a layer's background with the layer's width.
 enum Part<'a> {
     Layer(&'a Layer),
-    Background(&'a fontcraft_model::Background),
+    Background(&'a fontcraft_model::Background, f64),
 }
 
 impl<'a> Part<'a> {
     fn layer(&self, master: &str) -> Cow<'a, Layer> {
         match self {
             Part::Layer(l) => Cow::Borrowed(*l),
-            Part::Background(b) => Cow::Owned(background_layer(b, master)),
+            Part::Background(b, over) => Cow::Owned(background_layer(b, master, *over)),
         }
     }
 }
@@ -2123,13 +2126,13 @@ fn layer_plan<'a>(font: &'a Font, target: &Target<'a>) -> Plan<'a> {
         {
             // A glyph made of an alternate layer has that layer's background UFO layer.
             let name = l.extra.get(Family::Designspace, BACKGROUND_LAYER).and_then(Value::as_str).unwrap_or(BACKGROUND);
-            plan_add(&mut plan, name.to_string(), g, Part::Background(b), false);
+            plan_add(&mut plan, name.to_string(), g, Part::Background(b, l.width), false);
         }
         for (m, name) in &target.layer_masters {
             if let Some(l) = g.layers.iter().find(|l| l.id == m.id && l.master == m.id) {
                 plan_add(&mut plan, name.clone(), g, Part::Layer(l), false);
                 if let Some(b) = &l.info.background {
-                    plan_add(&mut plan, format!("{name}{BACKGROUND_SUFFIX}"), g, Part::Background(b), false);
+                    plan_add(&mut plan, format!("{name}{BACKGROUND_SUFFIX}"), g, Part::Background(b, l.width), false);
                 }
             }
         }
@@ -2139,7 +2142,7 @@ fn layer_plan<'a>(font: &'a Font, target: &Target<'a>) -> Plan<'a> {
             let Some(name) = ufo_layer_name(font, l) else { continue };
             let Some(given) = plan_add(&mut plan, name, g, Part::Layer(l), true) else { continue };
             if let Some(b) = &l.info.background {
-                plan_add(&mut plan, format!("{given}{BACKGROUND_SUFFIX}"), g, Part::Background(b), false);
+                plan_add(&mut plan, format!("{given}{BACKGROUND_SUFFIX}"), g, Part::Background(b, l.width), false);
             }
         }
     }
@@ -2813,6 +2816,26 @@ mod tests {
         let mut not_xml = good;
         not_xml.insert("fontinfo.plist".into(), b"\xff\xfe".to_vec());
         assert!(read(&not_xml).is_err());
+    }
+
+    #[test]
+    fn right_referenced_guides_go_to_their_place() {
+        use fontcraft_model::{Background, Guide};
+        let mut font = Font::new("Guides");
+        let right = Guide { x: -74.0, angle: 90.0, orientation: Some("right".into()), ..Default::default() };
+        {
+            let mut a = font.glyph_mut("A").unwrap();
+            let l = a.layer_mut("m01").unwrap();
+            l.width = 459.0;
+            l.info.guides.push(right.clone());
+            l.info.background =
+                Some(Background { shapes: vec![Shape::Path(Path::rect(0.0, 0.0, 9.0, 9.0))], guides: vec![right.clone()], ..Default::default() });
+        }
+        Arc::make_mut(&mut font.masters)[0].guides.push(right);
+        let files = write(&font).unwrap();
+        let placed = files.values().filter(|f| std::str::from_utf8(f).is_ok_and(|t| t.contains("<guideline x=\"385\"/>"))).count();
+        assert_eq!(placed, 2, "the layer's guide and the background's");
+        assert!(s(&files["fontinfo.plist"]).contains("<integer>-74</integer>"), "a global guide has no width to add");
     }
 
     /// A font whose glyph `A` has, beside its master layer, the layers a `.glyphs` source has.

@@ -19,6 +19,7 @@
 
 use std::fmt::Write as _;
 
+use fontcraft_model::guide_follow::placed_x;
 use fontcraft_model::plist::Value;
 use fontcraft_model::{Features, Font, Guide, Layer, Master, Snippet};
 
@@ -70,15 +71,15 @@ fn number(value: &Value) -> Option<f64> {
 
 /// Where the first guide of `layer` named `name` that is not horizontal crosses the baseline.
 pub fn guide_position(layer: &Layer, name: &str) -> Option<f64> {
-    layer.info.guides.iter().filter(|g| g.name.as_deref() == Some(name)).find_map(baseline_crossing)
+    layer.info.guides.iter().filter(|g| g.name.as_deref() == Some(name)).find_map(|g| baseline_crossing(g, layer.width))
 }
 
-fn baseline_crossing(guide: &Guide) -> Option<f64> {
+fn baseline_crossing(guide: &Guide, width: f64) -> Option<f64> {
     let (sin, cos) = guide.angle.to_radians().sin_cos();
     if !sin.is_finite() || sin.abs() < MIN_GUIDE_SINE {
         return None;
     }
-    let x = guide.x - guide.y * cos / sin;
+    let x = placed_x(guide, width) - guide.y * cos / sin;
     x.is_finite().then_some(x)
 }
 

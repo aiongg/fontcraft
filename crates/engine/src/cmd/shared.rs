@@ -2,8 +2,9 @@
 //! sideways, the kerning parameter readers, path parameter checks, finding an open document,
 //! aligning an imported font and the clock.
 
+use fontcraft_model::guide_follow::{self, Reference};
 use fontcraft_model::plist::{Num, Number, Str, Value as Plist};
-use fontcraft_model::{Font, Hint, Layer, LayerSide, MAX_COORDINATE, Shape, Transform};
+use fontcraft_model::{Font, Guide, Hint, Layer, LayerSide, MAX_COORDINATE, Shape, Transform};
 use fontcraft_spacing::kerning::Direction;
 use fontcraft_spacing::metrics_source;
 
@@ -189,16 +190,34 @@ fn write_ref(v: &mut Plist, old: &[usize], new: &[usize]) {
 /// coordinate would leave the model's range or a shape cannot be moved, and then leaves the
 /// layer as it was.
 pub(crate) fn shift_layer(layer: &mut Layer, dx: f64) -> std::result::Result<(), String> {
+    shift(layer, dx, false)
+}
+
+/// Moves a layer as [`shift_layer`] does for an edit that moves the right edge as well: a guide
+/// referenced to the right sidebearing keeps its distance from that edge, so its stored x stays
+/// (`guide_follow`).
+pub(crate) fn shift_with_right_edge(layer: &mut Layer, dx: f64) -> std::result::Result<(), String> {
+    shift(layer, dx, true)
+}
+
+fn shift(layer: &mut Layer, dx: f64, right_edge: bool) -> std::result::Result<(), String> {
     if dx == 0.0 {
         return Ok(());
     }
     let mut moved = layer.clone();
-    shift_in_place(&mut moved, dx)?;
+    shift_in_place(&mut moved, dx, right_edge)?;
     *layer = moved;
     Ok(())
 }
 
-fn shift_in_place(layer: &mut Layer, dx: f64) -> std::result::Result<(), String> {
+fn shift_guides(guides: &mut [Guide], dx: f64, right_edge: bool) -> std::result::Result<(), String> {
+    for g in guides.iter_mut().filter(|g| !(right_edge && guide_follow::reference(g) == Reference::Right)) {
+        shift_x(&mut g.x, dx)?;
+    }
+    Ok(())
+}
+
+fn shift_in_place(layer: &mut Layer, dx: f64, right_edge: bool) -> std::result::Result<(), String> {
     shift_shapes(&mut layer.shapes, dx)?;
     for a in &mut layer.anchors {
         shift_x(&mut a.x, dx)?;
@@ -207,9 +226,7 @@ fn shift_in_place(layer: &mut Layer, dx: f64) -> std::result::Result<(), String>
         return Ok(());
     }
     let info = &mut *layer.info;
-    for g in &mut info.guides {
-        shift_x(&mut g.x, dx)?;
-    }
+    shift_guides(&mut info.guides, dx, right_edge)?;
     for a in &mut info.annotations {
         shift_x(&mut a.x, dx)?;
     }
@@ -221,9 +238,7 @@ fn shift_in_place(layer: &mut Layer, dx: f64) -> std::result::Result<(), String>
         for a in &mut b.anchors {
             shift_x(&mut a.x, dx)?;
         }
-        for g in &mut b.guides {
-            shift_x(&mut g.x, dx)?;
-        }
+        shift_guides(&mut b.guides, dx, right_edge)?;
         for a in &mut b.annotations {
             shift_x(&mut a.x, dx)?;
         }

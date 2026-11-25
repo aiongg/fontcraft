@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use fontcraft_engine::model::plist::Value as PValue;
-use fontcraft_engine::model::{Shape, metric};
+use fontcraft_engine::model::{Guide, Shape, metric};
 use fontcraft_engine::{EngineError, Session};
 use fontcraft_testkit::{rect, snapshot};
 use serde_json::{Value, json};
@@ -270,6 +270,67 @@ fn guides_follow_the_width_by_their_sidebearing_reference() {
     // A left sidebearing change moves every guide with the outline.
     run(&mut s, "spacing.setLeftSidebearing", json!({"glyphs": ["A"], "value": 100}));
     assert_eq!(xs(&mut s), vec![150.0, 650.0, 400.0]);
+}
+
+/// A guide a version 3 file references to the right counts from the right sidebearing: it is listed, measured and moved
+/// at the width plus its stored x, in every glyph for a global one, and a width change leaves the stored x alone.
+#[test]
+fn a_right_referenced_guide_counts_from_the_right_sidebearing() {
+    let mut s = session();
+    let right = |x: f64| Guide { x, y: 271.0, angle: 90.0, orientation: Some("right".into()), ..Guide::default() };
+    s.edit("guides", |font| {
+        let mut g = font.glyph_mut("A").unwrap();
+        let layer = g.layer_mut("m01").unwrap();
+        layer.width = 459.0;
+        layer.info.guides.push(right(-74.0));
+        drop(g);
+        Arc::make_mut(&mut font.masters)[0].guides.push(right(-34.0));
+        Ok(())
+    })
+    .unwrap();
+    run(&mut s, "spacing.setWidth", json!({"glyphs": ["B"], "value": 300}));
+    let xs = |s: &mut Session, glyph: &str| guides(s, glyph).iter().map(|g| g["x"].as_f64().unwrap()).collect::<Vec<f64>>();
+    let stored = |s: &Session| {
+        let font = s.font().unwrap();
+        (font.glyph("A").unwrap().layer("m01").unwrap().info.guides[0].x, font.masters[0].guides[0].x)
+    };
+    assert_eq!((xs(&mut s, "A"), xs(&mut s, "B")), (vec![385.0, 425.0], vec![266.0]));
+    run(&mut s, "spacing.setWidth", json!({"glyphs": ["A"], "value": 500}));
+    assert_eq!((xs(&mut s, "A"), stored(&s)), (vec![426.0, 466.0], (-74.0, -34.0)), "both follow the width");
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!((xs(&mut s, "A"), stored(&s)), (vec![385.0, 425.0], (-74.0, -34.0)));
+    // The right edge moves with the outline, and with it the guide.
+    run(&mut s, "spacing.setLeftSidebearing", json!({"glyphs": ["A"], "value": 10}));
+    assert_eq!((xs(&mut s, "A"), stored(&s)), (vec![395.0, 435.0], (-74.0, -34.0)));
+    run(&mut s, "edit.undo", json!({}));
+
+    // Commands take places and store offsets.
+    let (local, global) = (json!({"scope": "local", "index": 0}), json!({"scope": "global", "index": 0}));
+    run(&mut s, "guide.setProperties", json!({"glyph": "A", "guide": local, "x": 400}));
+    run(&mut s, "selection.move", json!({"glyph": "A", "guides": [global], "dx": 5, "dy": 0}));
+    assert_eq!((xs(&mut s, "A"), stored(&s)), (vec![400.0, 430.0], (-59.0, -29.0)));
+    run(&mut s, "transform.alignLeft", json!({"glyph": "A", "guides": [local, global]}));
+    assert_eq!((xs(&mut s, "A"), xs(&mut s, "B")), (vec![400.0, 400.0], vec![241.0]), "lined up in A, 59 from the edge in B");
+    run(&mut s, "guide.setProperties", json!({"glyph": "A", "guide": local, "relativeTo": "left"}));
+    assert_eq!((xs(&mut s, "A"), stored(&s).0), (vec![400.0, 400.0], 400.0), "a new reference leaves the guide where it is");
+    run(&mut s, "guide.makeLocal", json!({"glyph": "B", "guides": [global]}));
+    assert_eq!((xs(&mut s, "A"), xs(&mut s, "B")), (vec![400.0], vec![241.0]));
+}
+
+/// What a both-referenced guide counts from is not documented: its number is taken as it stands.
+#[test]
+fn a_both_referenced_guide_is_where_its_number_says() {
+    let mut s = session();
+    s.edit("guide", |font| {
+        let both = Guide { x: 40.0, angle: 90.0, orientation: Some("center".into()), ..Guide::default() };
+        Arc::make_mut(&mut font.masters)[0].guides.push(both);
+        Ok(())
+    })
+    .unwrap();
+    run(&mut s, "spacing.setWidth", json!({"glyphs": ["B"], "value": 300}));
+    for glyph in ["A", "B"] {
+        assert_eq!(guides(&mut s, glyph)[0]["x"], 40.0, "{glyph}");
+    }
 }
 
 #[test]

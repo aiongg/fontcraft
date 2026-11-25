@@ -86,12 +86,8 @@ pub fn background(scene: &Scene, p: Point, tol: f64) -> Option<Snap> {
 /// line or a sidebearing, when that crossing is also within `tol`, else the nearest point of the
 /// guide.
 pub fn guides(scene: &Scene, p: Point, tol: f64) -> Option<Snap> {
-    let all: Vec<Line> = scene
-        .local_guides()
-        .iter()
-        .chain(scene.shown_global_guides().map(|(_, g)| g))
-        .filter_map(|g| Line::new(Point::new(g.x, g.y), g.angle))
-        .collect();
+    let all: Vec<Line> =
+        scene.local_guides().iter().chain(scene.shown_global_guides().map(|(_, g)| g)).filter_map(|g| Line::new(scene.knob(g), g.angle)).collect();
     let mut nearest: Option<(f64, usize, Point)> = None;
     for (i, line) in all.iter().enumerate() {
         let Some((d, foot)) = line.nearest(p) else { continue };

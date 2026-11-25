@@ -22,6 +22,7 @@ use std::collections::BTreeMap;
 
 use egui::{Align2, Color32, Pos2, Rect, Shape, Stroke};
 use fontcraft_engine::Session;
+use fontcraft_engine::model::guide_follow::placed_x;
 use fontcraft_engine::model::{Font, Guide};
 use fontcraft_tools::{GuideRef, GuideScope};
 use serde_json::Value;
@@ -354,11 +355,12 @@ pub(super) fn clip(at: Pos2, dir: egui::Vec2, rect: Rect) -> Option<(Pos2, Pos2)
     (lo.is_finite() && hi.is_finite() && lo <= hi).then(|| (at + dir * lo, at + dir * hi))
 }
 
-/// The guide's line across the canvas, its left end first, and its knob.
-fn guide_line(cx: &PaintCx<'_>, g: &Guide) -> Option<(Pos2, Pos2, Pos2)> {
+/// The line across the canvas of a guide of a layer `width` wide, its left end first, and its knob.
+fn guide_line(cx: &PaintCx<'_>, g: &Guide, width: f64) -> Option<(Pos2, Pos2, Pos2)> {
     let a = if g.angle.is_finite() { g.angle.to_radians() } else { 0.0 };
-    let at = screen(cx, g.x, g.y)?;
-    let ahead = screen(cx, g.x + a.cos(), g.y + a.sin())?;
+    let x = placed_x(g, width);
+    let at = screen(cx, x, g.y)?;
+    let ahead = screen(cx, x + a.cos(), g.y + a.sin())?;
     let dir = (ahead - at).normalized();
     if !(dir.x.is_finite() && dir.y.is_finite()) {
         return None;
@@ -410,7 +412,7 @@ pub fn guide_shapes(cx: &PaintCx<'_>) -> Drawn {
             })
             .gamma_multiply(cx.tokens.guide_opacity);
         colors.insert(r, color);
-        let Some((left, right, knob)) = guide_line(cx, g) else { continue };
+        let Some((left, right, knob)) = guide_line(cx, g, glyph.layer.width) else { continue };
         out.shapes.push(Shape::line_segment([left, right], Stroke::new(t.guide_width, color)));
         if usable(knob) && cx.rect.contains(knob) {
             if g.locked {

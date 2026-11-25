@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 use fontcraft_geom::{Affine, Point, Rect, Shape as _, Vec2, round_point};
 use fontcraft_model::glyphdata::GlyphData;
+use fontcraft_model::guide_follow::{edit_placed, placed_x};
 use fontcraft_model::{
     Font, Guide, Layer, LayerParts, LayerSide, MAX_COORDINATE, MAX_GLYPHS, Master, Metrics, Node, NodeKind, Shape, Transform, metric,
 };
@@ -586,7 +587,7 @@ pub fn selection_box(font: &Font, master: &Master, parts: LayerParts, sel: &Sele
             .iter()
             .filter_map(|i| parts.guides.get(*i))
             .chain(sel.global_guides.iter().filter_map(|i| master.guides.get(*i)))
-            .map(|g| Point::new(g.x, g.y)),
+            .map(|g| Point::new(placed_x(g, parts.width), g.y)),
     );
     let notes = fontcraft_geom::bounds(sel.annotations.iter().filter_map(|i| parts.annotations.get(*i)).map(|a| Point::new(a.x, a.y)));
     union(union(main, anchors), union(guides, notes))
@@ -645,8 +646,12 @@ fn compose(p: &Params, t: &Transform, m: Affine) -> Result<Transform> {
     }
 }
 
-/// A guide through the mapped point, along the mapped direction.
-fn map_guide(p: &Params, g: &mut Guide, m: Affine) -> Result<()> {
+/// A guide through the mapped point, along the mapped direction, in a layer `width` wide.
+fn map_guide(p: &Params, g: &mut Guide, m: Affine, width: f64) -> Result<()> {
+    edit_placed(g, width, |g| map_placed(p, g, m))
+}
+
+fn map_placed(p: &Params, g: &mut Guide, m: Affine) -> Result<()> {
     let q = m * Point::new(g.x, g.y);
     if !(in_range(q.x) && in_range(q.y)) {
         return Err(p.bad(format!("the result puts a guide at ({}, {}), beyond ±{MAX_COORDINATE}", q.x, q.y)));
@@ -694,7 +699,7 @@ pub(crate) fn apply(p: &Params, layer: &mut Layer, side: LayerSide, sel: &Select
     }
     for &i in &sel.local_guides {
         let g = parts.guides.get_mut(i).ok_or_else(|| p.bad(format!("local guide {i} does not resolve")))?;
-        map_guide(p, g, m)?;
+        map_guide(p, g, m, parts.width)?;
     }
     for &i in &sel.annotations {
         let a = parts.annotations.get_mut(i).ok_or_else(|| p.bad(format!("annotation {i} does not resolve")))?;
@@ -827,7 +832,7 @@ fn run_jobs(
                     o
                 }
             };
-            let (sel, o, master, stems) = {
+            let (sel, o, master, width, stems) = {
                 let r = t.resolve(font)?;
                 crate::check_unlocked(r.glyph)?;
                 // The image alone, when it is given without target lists.
@@ -837,7 +842,7 @@ fn run_jobs(
                     Some(c) => Some(c.cursivy_options(font, r.master).ok_or_else(|| no_stems(p, r.master))?),
                     None => None,
                 };
-                (sel, origin_point(origin, bounds, font, r.master, r.layer.width), r.master.id.clone(), stems)
+                (sel, origin_point(origin, bounds, font, r.master, r.layer.width), r.master.id.clone(), r.layer.width, stems)
             };
             let m = Affine::translate(shift) * about(o, lin);
             t.edit_layer(font, |l| {
@@ -863,7 +868,7 @@ fn run_jobs(
                 let master = masters.iter_mut().find(|x| x.id == master).ok_or_else(|| p.bad(format!("there is no master `{master}`")))?;
                 for &i in &sel.global_guides {
                     let g = master.guides.get_mut(i).ok_or_else(|| p.bad(format!("global guide {i} does not resolve")))?;
-                    map_guide(p, g, m)?;
+                    map_guide(p, g, m, width)?;
                 }
             }
             origins.push(o);
@@ -1176,13 +1181,14 @@ fn align_units(font: &Font, master: &Master, parts: LayerParts, t: &Targets) -> 
         let Some(a) = parts.anchors.get(i) else { continue };
         units.push(Unit { bounds: dot(Point::new(a.x, a.y)), sel: Selection { anchors: BTreeSet::from([i]), ..Selection::default() } });
     }
+    let at = |g: &Guide| Point::new(placed_x(g, parts.width), g.y);
     for &i in &sel.local_guides {
         let Some(g) = parts.guides.get(i) else { continue };
-        units.push(Unit { bounds: dot(Point::new(g.x, g.y)), sel: Selection { local_guides: BTreeSet::from([i]), ..Selection::default() } });
+        units.push(Unit { bounds: dot(at(g)), sel: Selection { local_guides: BTreeSet::from([i]), ..Selection::default() } });
     }
     for &i in &sel.global_guides {
         let Some(g) = master.guides.get(i) else { continue };
-        units.push(Unit { bounds: dot(Point::new(g.x, g.y)), sel: Selection { global_guides: BTreeSet::from([i]), ..Selection::default() } });
+        units.push(Unit { bounds: dot(at(g)), sel: Selection { global_guides: BTreeSet::from([i]), ..Selection::default() } });
     }
     for &i in &sel.annotations {
         let Some(a) = parts.annotations.get(i) else { continue };
@@ -1195,10 +1201,10 @@ fn align(s: &mut Session, v: &Value, id: &'static str, label: &str, edge: Edge) 
     let p = Params::new(id, v)?;
     let t = Targets::parse(&p)?;
     let step = grid(s.font()?);
-    let (units, master) = {
+    let (units, master, width) = {
         let font = s.font()?;
         let r = t.resolve(font)?;
-        (align_units(font, r.master, r.parts, &t), r.master.id.clone())
+        (align_units(font, r.master, r.parts, &t), r.master.id.clone(), r.layer.width)
     };
     let Some(all) = units.iter().map(|u| u.bounds).reduce(|a, b| a.union(b)) else {
         return Ok(json!({"glyph": t.glyph, "moved": 0, "message": "Nothing is selected to align."}));
@@ -1235,7 +1241,7 @@ fn align(s: &mut Session, v: &Value, id: &'static str, label: &str, edge: Edge) 
             let m = masters.iter_mut().find(|x| x.id == master).ok_or_else(|| p.bad(format!("there is no master `{master}`")))?;
             for (i, d) in global {
                 let g = m.guides.get_mut(i).ok_or_else(|| p.bad(format!("global guide {i} does not resolve")))?;
-                map_guide(&p, g, Affine::translate(d))?;
+                map_guide(&p, g, Affine::translate(d), width)?;
                 moved += 1;
             }
         }

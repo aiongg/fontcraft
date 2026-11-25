@@ -37,7 +37,7 @@ use fontcraft_spacing::{self as spacing, Field, SIDEBEARING_RANGE, Scope, WIDTH_
 use serde_json::{Map, Value, json};
 
 use super::common::{self, in_range, master_metrics};
-use super::shared::shift_layer;
+use super::shared::{shift_layer, shift_with_right_edge};
 use super::*;
 use crate::EngineError;
 use crate::params::{Params, TargetKind};
@@ -437,7 +437,7 @@ fn auto_space(s: &mut Session, v: &Value) -> Result<Value> {
                 continue;
             }
             let before = l.width + plan.shift;
-            shift_layer(l, plan.shift).map_err(|e| p.bad(format!("glyph `{}`: {e}", plan.glyph)))?;
+            shift_with_right_edge(l, plan.shift).map_err(|e| p.bad(format!("glyph `{}`: {e}", plan.glyph)))?;
             l.width = plan.width;
             follow_width(l, before);
             if seen.insert(plan.glyph.as_str()) {
@@ -701,7 +701,7 @@ fn copy_metrics(s: &mut Session, v: &Value) -> Result<Value> {
                         }),
                         What::Lsb => {
                             let d = value - current.unwrap_or(*value);
-                            check_width(l.width + d).and_then(|()| shift_layer(l, d)).map(|()| l.width += d)
+                            check_width(l.width + d).and_then(|()| shift_with_right_edge(l, d)).map(|()| l.width += d)
                         }
                         What::Rsb => {
                             let width = l.width + value - current.unwrap_or(*value);

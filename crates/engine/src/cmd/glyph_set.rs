@@ -709,7 +709,7 @@ fn apply(target: &mut Glyph, o: &Overwrite, parts: &Parts, shown: &str) -> Vec<S
             let mut dx = 0.0;
             if parts.lsb {
                 match (lsb, bounds) {
-                    (Some(lsb), Some(b)) => match super::shared::shift_layer(to, lsb - b.min_x()) {
+                    (Some(lsb), Some(b)) => match super::shared::shift_with_right_edge(to, lsb - b.min_x()) {
                         Ok(()) => {
                             dx = lsb - b.min_x();
                             to.width += dx;

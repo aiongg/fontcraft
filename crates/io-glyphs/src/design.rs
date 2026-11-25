@@ -163,27 +163,31 @@ pub(crate) fn push_values(e: &mut Vec<(Str, Value)>, key: &str, values: &[f64]) 
 
 // ── guides ─────────────────────────────────────────────────────────────────────────────────────
 
-/// A guide's keys other than its position, which the versions write differently.
-pub(crate) fn take_guide_rest(d: &mut Dict, g: &mut Guide) -> Option<()> {
+/// The key of a guide's sidebearing reference from version 3 on.
+const ORIENTATION: &str = "orientation";
+
+/// A guide's keys other than its position, which the versions write differently, as they name the
+/// key `orientation` of its sidebearing reference.
+pub(crate) fn take_guide_rest(d: &mut Dict, g: &mut Guide, orientation: &str) -> Option<()> {
     if let Some(a) = take(d, "angle") {
         g.angle = a.as_num()?.as_f64();
     }
     g.name = take_text(d, "name");
     g.filter = take_text(d, "filter");
-    g.orientation = take_text(d, "orientation");
+    g.orientation = take_text(d, orientation);
     g.locked = take_flag(d, "locked");
     g.angle_locked = take_flag(d, "lockAngle");
     g.show_measurement = take_flag(d, "showMeasurement");
     Some(())
 }
 
-pub(crate) fn push_guide_rest(e: &mut Vec<(Str, Value)>, g: &Guide) -> Option<()> {
+pub(crate) fn push_guide_rest(e: &mut Vec<(Str, Value)>, g: &Guide, orientation: &str) -> Option<()> {
     if g.angle != 0.0 {
         e.push(("angle".into(), num(g.angle, "guide").ok()?));
     }
     push_text(e, "name", &folded_name(g));
     push_text(e, "filter", &g.filter);
-    push_text(e, "orientation", &g.orientation);
+    push_text(e, orientation, &g.orientation);
     push_flag(e, "locked", g.locked);
     push_flag(e, "lockAngle", g.angle_locked);
     push_flag(e, "showMeasurement", g.show_measurement);
@@ -215,7 +219,7 @@ pub(crate) fn read_guide(v: &Value) -> Option<Guide> {
     if let Some(p) = take(&mut d, "pos") {
         (g.x, g.y) = as_pair(&p, "pos").ok()?;
     }
-    take_guide_rest(&mut d, &mut g)?;
+    take_guide_rest(&mut d, &mut g, ORIENTATION)?;
     g.extra = into_extra(d);
     Some(g)
 }
@@ -226,7 +230,7 @@ pub(crate) fn write_guide(g: &Guide) -> Option<Value> {
     if (g.x, g.y) != (0.0, 0.0) {
         e.push(("pos".into(), pair(g.x, g.y, "guide").ok()?));
     }
-    push_guide_rest(&mut e, g)?;
+    push_guide_rest(&mut e, g, ORIENTATION)?;
     Some(Value::Dict(finish(e, &g.extra)))
 }
 

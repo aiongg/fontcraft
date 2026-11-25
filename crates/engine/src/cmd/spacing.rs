@@ -10,7 +10,7 @@ use fontcraft_spacing::{self as spacing, Entry, Field, Scope, WIDTH_RANGE};
 use serde_json::{Map, Value, json};
 
 use super::common::in_range;
-use super::shared::shift_layer;
+use super::shared::{shift_layer, shift_with_right_edge};
 use super::*;
 use crate::params::{Params, TargetKind};
 
@@ -324,7 +324,7 @@ fn apply(layer: &mut Layer, field: Field, delta: f64, vertical: Option<f64>) -> 
     }
     match field {
         Field::Left => {
-            shift_layer(layer, delta)?;
+            shift_with_right_edge(layer, delta)?;
             set_layer_width(layer, layer.width + delta)
         }
         Field::Right | Field::Width => {
@@ -482,7 +482,7 @@ fn nudge(s: &mut Session, v: &Value, id: &'static str, label: &str, edge: Nudge,
             let mut g = font.glyph_mut(name)?;
             let l = g.layers.iter_mut().find(|l| l.id == layer).ok_or_else(|| p.bad(format!("glyph `{name}` has no layer `{layer}`")))?;
             let moved = match edge {
-                Nudge::Left => shift_layer(l, d).and_then(|()| set_layer_width(l, l.width + d)),
+                Nudge::Left => shift_with_right_edge(l, d).and_then(|()| set_layer_width(l, l.width + d)),
                 Nudge::Right => {
                     let before = l.width;
                     set_layer_width(l, l.width + d).map(|()| follow_width(l, before))

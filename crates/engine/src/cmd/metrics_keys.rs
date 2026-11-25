@@ -3,7 +3,7 @@
 //! The parser, the evaluator and the out-of-sync scan are in `fontcraft_spacing`; the scan's
 //! cache lives on the session ([`SessionSpacingExt::metrics_sync`]). Updating a metric sets it
 //! to its key's value the way the setters do: a left sidebearing moves everything drawn in the
-//! layer (`shared::shift_layer`) and keeps the right sidebearing; a right sidebearing or a
+//! layer (`shared::shift_with_right_edge`) and keeps the right sidebearing; a right sidebearing or a
 //! width moves the right edge; a top sidebearing moves the vertical origin and keeps the bottom one; a
 //! bottom sidebearing or a vertical width changes the vertical width; a vertical origin moves the
 //! vertical box and keeps its height.
@@ -204,7 +204,7 @@ fn plan(font: &Font, layer: &Layer, field: Field, value: f64, actual: f64) -> st
 fn apply(layer: &mut Layer, change: &Change) -> std::result::Result<(), String> {
     match *change {
         Change::Left(dx) => {
-            super::shared::shift_layer(layer, dx)?;
+            super::shared::shift_with_right_edge(layer, dx)?;
             layer.width += dx;
         }
         Change::Width(w) => {

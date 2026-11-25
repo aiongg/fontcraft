@@ -129,7 +129,7 @@ fn write_typed(d: &Design, skip: &[String], out: &mut Vec<(String, Value)>, lost
                 ("filters", g.filter.is_some()),
                 ("angle locks", g.angle_locked),
                 ("measurements", g.show_measurement),
-                ("label positions", g.orientation.is_some()),
+                ("sidebearing references", g.orientation.is_some()),
                 ("other data", !g.extra.is_empty()),
             ];
             for (what, set) in parts {

@@ -771,7 +771,7 @@ fn import_glyph_metrics(font: &mut Font, master: &str, source: &Source, mode: Mo
         let mut gm = font.glyph_mut(want.glyph)?;
         let Some(l) = gm.layers.iter_mut().find(|l| l.id == master) else { continue };
         let before = l.width + dx;
-        if let Err(e) = super::shared::shift_layer(l, dx) {
+        if let Err(e) = super::shared::shift_with_right_edge(l, dx) {
             drop(gm);
             if aligned {
                 restore(font, &original)?;

@@ -138,6 +138,7 @@ pub struct NumberDef {
 /// (`docs/spec/30-source-formats.md` § 2.9 has the open question on its direction).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Guide {
+    /// As stored: for a guide referenced to the right, the distance from the right sidebearing.
     #[serde(default)]
     pub x: f64,
     #[serde(default)]
@@ -157,7 +158,8 @@ pub struct Guide {
     /// The glyphs it is shown in, as a glyph predicate.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub filter: Option<String>,
-    /// The sidebearing a version 3 or later source counts the position from (`left`, `center` or `right`), as read.
+    /// The sidebearing the guide follows (`left`, `center` or `right`), and for `right` what `x`
+    /// counts from: [`crate::guide_follow`] gives the guide's place in a layer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub orientation: Option<String>,
     /// A UFO guideline's colour, as the UFO writes it (`"r,g,b,a"`).

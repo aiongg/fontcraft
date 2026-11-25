@@ -371,7 +371,7 @@ fn guidelines(scene: &Scene, view: &View, moving: &Moving, p: Point) -> Vec<Guid
     if scene.guides_shown {
         let guides = scene.local_guides().iter().chain(scene.shown_global_guides().map(|(_, g)| g));
         for g in guides {
-            let a = Point::new(g.x, g.y);
+            let a = scene.knob(g);
             let off_axis = g.angle.rem_euclid(90.0);
             if !usable(a) || !g.angle.is_finite() || off_axis <= DIAGONAL_MARGIN || off_axis >= 90.0 - DIAGONAL_MARGIN {
                 continue;

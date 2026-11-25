@@ -406,3 +406,31 @@ fn version_2_colour_layer_names_give_their_attributes() {
     assert_eq!(v2_attrs("iColor 128").sbix_size, Some(128));
     assert!(v2_attrs("iColor").is_empty() && v2_attrs("iColor x").is_empty() && v2_attrs("Colorful").is_empty());
 }
+
+/// The local guides of the public format sample, then the two other references: each round-trips as written, and
+/// version 2 names the key `alignment`.
+#[test]
+fn guides_keep_their_reference_and_offset() {
+    use fontcraft_model::guide_follow::{Reference, placed_x, reference};
+    let guides = "{\nangle = 8.1446;\nlockAngle = 1;\nlocked = 1;\npos = (151,402);\nshowMeasurement = 1;\n},\n{\nname = \"guide name\";\npos = (186,310);\n},\n{\nangle = 90;\norientation = right;\npos = (-74,271);\n},\n{\nangle = 90;\norientation = center;\npos = (-1000,0);\n},\n{\nangle = 90;\norientation = left;\npos = (20,0);\n}";
+    let text = format!("{{\nguides = (\n{guides}\n);\nlayerId = m01;\nwidth = 459;\n}}");
+    let (l, out) = round_trip(&text, 3);
+    assert_eq!(out, text);
+    let at: Vec<(Reference, f64, f64)> = l.info.guides.iter().map(|g| (reference(g), g.x, placed_x(g, l.width))).collect();
+    let expected = [
+        (Reference::Left, 151.0, 151.0),
+        (Reference::Left, 186.0, 186.0),
+        (Reference::Right, -74.0, 385.0),
+        (Reference::Both, -1000.0, -1000.0),
+        (Reference::Left, 20.0, 20.0),
+    ];
+    assert_eq!(at, expected);
+
+    let v2 = write(&l, 2);
+    assert!(v2.contains("alignment = right;\nangle = 90;\nposition = \"{-74, 271}\";"), "{v2}");
+    assert!(!v2.contains("orientation"), "{v2}");
+    let (back, again) = round_trip(&v2, 2);
+    assert_eq!(again, v2);
+    assert_eq!(back.info.guides, l.info.guides);
+    assert!(write(&back, 3).contains(guides));
+}

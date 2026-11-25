@@ -19,6 +19,7 @@ use std::path::PathBuf;
 
 use base64::Engine as _;
 use fontcraft_geom::{BezPath, PathEl, Point, Rect, Shape as _};
+use fontcraft_model::guide_follow::placed;
 use fontcraft_model::{Font, Guide, Layer, Master, NodeKind, Shape, metric};
 use fontcraft_proof::{Mark, Segment, VectorFormat, VectorGlyph, VectorInk, VectorPage};
 use fontcraft_textlayout::{Direction, KerningMode, LENGTH_RANGE, Options, Text};
@@ -200,7 +201,7 @@ fn export_window(s: &mut Session, v: &Value) -> Result<Value> {
         for d in drawn.iter().filter(|d| edited.as_ref().is_none_or(|e| e.contains(&d.item))) {
             let guides = d.layer.info.guides.iter().chain(&master.guides);
             for g in guides {
-                if let Some((from, to)) = guide_line(g, |x, y| to_page(d.x + x, d.y + y), [page_w, page_h])
+                if let Some((from, to)) = guide_line(&placed(g, d.layer.width), |x, y| to_page(d.x + x, d.y + y), [page_w, page_h])
                     && seen.insert(key_of(from, to))
                 {
                     marks.push(Mark::Line { from, to, ink: VectorInk::Guide })?;
@@ -355,7 +356,7 @@ fn nodes(layer: &Layer, at: impl Fn(f64, f64) -> [f64; 2], marks: &mut Marks) ->
     Ok(())
 }
 
-/// The part of guide `g` inside a page of `size` points; `at` turns font units around the
+/// The part of guide `g`, placed in its layer, inside a page of `size` points; `at` turns font units around the
 /// glyph's origin into page points.
 fn guide_line(g: &Guide, at: impl Fn(f64, f64) -> [f64; 2], size: [f64; 2]) -> Option<([f64; 2], [f64; 2])> {
     if ![g.x, g.y, g.angle].iter().all(|v| v.is_finite()) {
