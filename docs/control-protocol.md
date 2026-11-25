@@ -23,6 +23,17 @@ are served at once. There is no authentication: enable the port only while you u
 Requests are answered on the UI thread between frames, exactly as a click would be. A bug inside a
 request becomes an error reply; the app keeps running.
 
+A request can have two more keys beside `method`:
+
+- `progress: true`: while an `engine.execute` command that reports progress runs, lines
+  `{"id": …, "progress": {"done", "total", "message"}}` come before the reply, at most one every
+  100 ms and 1,000 in all. The commands are those `docs/mcp.md` lists.
+- `cancelKey`: a string of at most 128 bytes that no other running request has.
+  `control.cancel {key}`, sent on another connection, cancels the request: one that waits does not
+  run, and an `engine.execute` command stops at its next step and changes nothing (`ok: false`, error
+  `cancelled`). The reply is `{cancelled}`: `false` when no request has the key or it has finished.
+  `control.cancel` is answered at once, also while the window is busy.
+
 Transport: `crates/ui/src/control/server.rs`, given its listener by the desktop app. Dispatch:
 `crates/ui/src/control/mod.rs`. `ui.screenshot` needs the window, so the reply waits until the
 next frame is captured.
@@ -104,6 +115,7 @@ is checked for.
 | `ui.contextMenu.list` | `{x?, y?, space?}` | the open canvas context menu: `{open, glyph, screen, at, hit, sections: [{context, items: [{command, label, enabled, disabled_reason?, checked?, alternate?, choices?: [{value, label, checked}]}]}]}`; `{open: false}` when none is. With `x` and `y` it first opens the menu there, as a right-click does (`space` as in `ui.pointer`, default `font`); that is refused while a tool is dragging or a dialog is open |
 | `ui.contextMenu.invoke` | `{command, value?}` | runs an item of the open canvas context menu as a click on it does, and closes the menu; the item's result. A submenu item (one `ui.contextMenu.list` shows with `choices`) needs `value`, one of its choices' values; a plain item takes none. The item is checked as the menu would show it now: a disabled or missing item is refused and the menu stays open; a menu whose tab or glyph changed, or that a dialog covers, closes and the request is refused. Refused while the question about unsaved changes is open |
 | `ui.wait` | `{frames?, idle?, timeoutMs?}` | the reply waits until `frames` frames (at most 3,600) have been drawn, or until the window is idle, or both: `{frames, idle, timedOut, elapsedMs}`. Without `frames` it waits for idle; with `frames` alone only for the frames. Idle means no window input queued or running, no screenshot or input reply waiting, and at least two frames drawn since the request, so what the request before it fired has been applied and drawn. `timeoutMs` (default 5,000, at most 30,000) ends the wait with `timedOut: true`. Headless hosts answer with an error |
+| `control.cancel` | `{key}` | cancels the request with that `cancelKey`: `{cancelled}`; see the top of this page. Headless hosts answer with an error |
 | `events.list` | `{since?}` | what happened, oldest first: `{events: [{seq, kind, …}], last, dropped}`; see [Events](#events) |
 | `events.clear` | | empties the event ring: `{cleared}`. Sequence numbers keep counting |
 | `control.methods` | | this table |

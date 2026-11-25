@@ -21,8 +21,8 @@ use fontcraft_model::{Font, Resolved, SourceFormat, Target};
 
 use super::shared::source_feature_dir;
 use super::*;
-use crate::EngineError;
 use crate::params::Params;
+use crate::{EngineError, work};
 
 /// Most fonts (instances times outline formats) one command builds.
 pub const MAX_FONTS: usize = 1_000;
@@ -527,7 +527,10 @@ impl Sink {
         match self {
             Sink::Memory { .. } => Ok(()),
             #[cfg(not(target_arch = "wasm32"))]
-            Sink::Disk(stage) => stage.commit(),
+            Sink::Disk(stage) => {
+                work::check()?;
+                stage.commit()
+            }
         }
     }
 }
@@ -535,6 +538,7 @@ impl Sink {
 /// Moves the staged files of every sink into place as one step: when one file cannot be moved,
 /// the files of every sink are taken back out and the files they replaced are put back.
 pub(super) fn commit_all(sinks: Vec<Sink>) -> Result<()> {
+    work::check()?;
     #[cfg(not(target_arch = "wasm32"))]
     {
         let mut stages: Vec<Stage> = sinks
@@ -609,7 +613,9 @@ fn build_with(
         source_includes(&mut options, path);
     }
     let prepared = fontcraft_compile::prepare_source(font, &mut report.warnings);
+    work::plan(jobs.len().saturating_mul(req.flavours.len()));
     for job in jobs {
+        work::check()?;
         if req.first_only && !report.fonts.is_empty() {
             report.skipped.push(skip(job, "the destination is one file: give a folder to export every instance"));
             continue;
@@ -658,6 +664,7 @@ fn build_with(
             continue;
         }
         for &flavour in &req.flavours {
+            work::check()?;
             let mut compiled = fontcraft_compile::compile_resolved_from(font, resolved.clone(), flavour, &job_options)?;
             if flavour == Flavour::TrueType
                 && let Some(external) =
@@ -689,6 +696,7 @@ fn build_with(
                 report.feature_code = compiled.feature_code.take();
             }
             report.fonts.push(FontOut { job: job.clone(), flavour, glyph_order: compiled.glyph_order, warnings: compiled.warnings, files });
+            work::advance(1, &job.label);
         }
     }
     Ok(())
@@ -1665,7 +1673,10 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
     let prepared = fontcraft_compile::prepare_source(font, &mut warnings);
     let mut glyph_order: Option<Vec<String>> = None;
     let mut production_names: Option<Map<String, Value>> = None;
+    work::plan(jobs.len());
     for job in &jobs {
+        work::check()?;
+        work::advance(1, &job.label);
         // Propagation reads the job's source as stored; the drawing reads it prepared.
         let source_job = crate::export_steps::prepare(font, job, &ctx, &mut warnings)?;
         // An instance away from the masters is built from the font interpolated at it.

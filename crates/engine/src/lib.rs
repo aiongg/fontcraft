@@ -52,7 +52,7 @@ pub use fontcraft_color as color;
 pub use fontcraft_compile as compile;
 pub use fontcraft_components as components;
 pub use fontcraft_container as container;
-pub use fontcraft_engine_core::{Clock, EngineError, Result, check_unlocked, clock, guard, params, settings};
+pub use fontcraft_engine_core::{Clock, EngineError, Result, check_unlocked, clock, guard, params, settings, work};
 pub use fontcraft_fea as fea;
 pub use fontcraft_features as features;
 pub use fontcraft_fontinfo as fontinfo;
@@ -696,6 +696,8 @@ impl Session {
             _ => None,
         };
         let params = checked.as_ref().unwrap_or(params);
+        work::check()?;
+        let _level = work::enter();
         if self.depth > 0 {
             // A step of another command: the outer call owns the snapshot and the journal. The
             // modules are read again, so a step sees what an earlier step installed or removed.
@@ -724,6 +726,16 @@ impl Session {
             (Ok(v), Some((before, ..))) if record => Ok(cmd::format_warnings::attach(&self.docs, before, id, v)),
             (r, _) => r,
         };
+        // A cancel the command did not stop at undoes it here; from here on it is too late. Files already written
+        // stand, so a command that writes some is kept.
+        let result = result.and_then(|v| {
+            if spec.files.iter().any(|f| f.access == cmd::FileAccess::Write) {
+                work::keep();
+            } else if spec.journal {
+                work::seal()?;
+            }
+            Ok(v)
+        });
         if record {
             self.extensions.after_command(id, params, spec.journal, &result);
         }

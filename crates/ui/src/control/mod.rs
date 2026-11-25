@@ -70,8 +70,9 @@ pub const MODULES: &[&[(&str, Method)]] = &[
     text::METHODS,
 ];
 
-/// Methods answered once the window has drawn (`answer` takes them before [`dispatch`]); headless hosts refuse them.
-const WINDOW_METHODS: &[&str] = &["ui.screenshot", "ui.wait"];
+/// Methods only the desktop app's listener answers: `control.cancel` at once, the others once the window has drawn
+/// (`answer` takes them before [`dispatch`]). Headless hosts refuse them.
+const WINDOW_METHODS: &[&str] = &["control.cancel", "ui.screenshot", "ui.wait"];
 
 /// Methods of the protocol whose package is not built yet: `(method or prefix ending in `.`, package)`. A package
 /// that adds its methods to [`MODULES`] removes its line here.
@@ -88,6 +89,8 @@ pub struct Control {
     queued: usize,
     /// Where the window input requests queued stands; while it is not idle, `drain` runs confined.
     input: Input,
+    /// What cancels the command of the request being answered and takes its progress.
+    pub work: Option<Work>,
     /// What happened, for `events.list`.
     pub events: events::Events,
     #[cfg(not(target_arch = "wasm32"))]
@@ -112,6 +115,13 @@ impl Control {
         }
         false
     }
+}
+
+/// What cancels the engine command a request names, and takes its progress. Nothing else the request's answer runs is
+/// cancelled: what was fired before it is the person's.
+pub struct Work {
+    pub token: Arc<fontcraft_engine::work::Token>,
+    pub report: Option<fontcraft_engine::work::Report>,
 }
 
 /// Where control-channel window input stands. The commands it fires run in the `drain` after the pass that
@@ -190,6 +200,9 @@ fn answer(app: &mut FontCraftApp, method: &str, params: &Value) -> Answer {
                 Ok(path) => Answer::Screenshot(path),
                 Err(e) => Answer::Reply(Err(format!("ui.screenshot: {e}"))),
             };
+        }
+        if method == "control.cancel" {
+            return Answer::Reply(Err("control.cancel: this app answers one request at a time and has none to cancel".into()));
         }
         if method == "ui.wait" {
             return match wait::Wait::parse(params) {

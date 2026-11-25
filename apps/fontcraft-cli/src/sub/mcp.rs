@@ -123,5 +123,6 @@ fn mcp(args: &[String]) -> Outcome {
         return http::serve(server, listener, http::Limits::default()).map_err(|e| Failure::Failed(format!("MCP transport: {e}")));
     }
     // stdout carries only protocol messages; everything else goes to stderr.
-    server.serve(std::io::stdin().lock(), std::io::stdout().lock()).map_err(|e| Failure::Failed(format!("MCP transport: {e}")))
+    let input = std::io::BufReader::new(std::io::stdin());
+    server.serve(input, std::io::stdout()).map_err(|e| Failure::Failed(format!("MCP transport: {e}")))
 }

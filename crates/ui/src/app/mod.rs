@@ -475,7 +475,12 @@ impl FontCraftApp {
                     crate::shell::tabs::upkeep::store_display_strings(self);
                 }
                 let before = self.session.active().map(|d| (d.id, Arc::clone(&d.font)));
-                let reply = match self.session.execute(&command.id, &params) {
+                let work = if origin == Origin::Control { self.control.work.take() } else { None };
+                let result = match work {
+                    Some(work) => fontcraft_engine::work::with(work.token, work.report, || self.session.execute(&command.id, &params)),
+                    None => self.session.execute(&command.id, &params),
+                };
+                let reply = match result {
                     Ok(reply) => reply,
                     Err(e) => {
                         let error = e.to_string();

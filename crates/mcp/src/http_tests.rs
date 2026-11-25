@@ -305,3 +305,46 @@ fn a_connection_is_closed_after_its_time() {
     let mut rest = [0u8; 16];
     assert_eq!(stream.read(&mut rest).unwrap(), 0, "the connection is closed after the reply");
 }
+
+/// A cancellation on another connection stops a running request, in its own session only.
+#[test]
+fn a_running_request_is_cancelled_from_another_connection() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    std::thread::spawn(move || serve(Server::new(Box::new(crate::stdio::tests::Slow)), listener, Limits::default()));
+    let start = json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}).to_string();
+    let session = || post_raw(addr, "", start.as_bytes()).header("mcp-session-id").unwrap().to_string();
+    let (session, other) = (session(), session());
+    let header = format!("Mcp-Session-Id: {session}\r\n");
+    let call = json!({"jsonrpc": "2.0", "id": "long", "method": "tools/call", "params": {"name": "run_command", "arguments": {"command": "slow"}}})
+        .to_string();
+    let running = {
+        let header = header.clone();
+        std::thread::spawn(move || post_raw(addr, &header, call.as_bytes()))
+    };
+    let cancel = json!({"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {"requestId": "long"}}).to_string();
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(post_raw(addr, &format!("Mcp-Session-Id: {other}\r\n"), cancel.as_bytes()).status, 202);
+    assert!(!running.is_finished(), "another session cannot cancel it");
+    assert_eq!(post_raw(addr, &header, cancel.as_bytes()).status, 202);
+    let reply = running.join().unwrap();
+    assert_eq!((reply.status, reply.json()["error"]["code"].as_i64()), (200, Some(CANCELLED)));
+}
+
+/// A session hears of a subscribed resource another session changed with its next reply.
+#[test]
+fn a_session_hears_of_a_change_by_another_with_its_next_reply() {
+    let addr = start(Limits::default());
+    let initialize = json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}).to_string();
+    let open = || post_raw(addr, "", initialize.as_bytes()).header("mcp-session-id").unwrap().to_string();
+    let (one, two) = (open(), open());
+    let post = |session: &str, message: Value| post_raw(addr, &format!("Mcp-Session-Id: {session}\r\n"), message.to_string().as_bytes());
+    post(&one, json!({"jsonrpc": "2.0", "id": 2, "method": "resources/subscribe", "params": {"uri": "fontcraft://glyph/A"}}));
+    let draw = json!({"command": "path.addRectangle", "params": {"glyph": "A", "x": 0, "y": 0, "width": 10, "height": 10}});
+    let changed = post(&two, json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "run_command", "arguments": draw}}));
+    assert_eq!(changed.json()["result"]["isError"], false, "the other session has no subscription: {}", changed.body);
+    let ping = json!({"jsonrpc": "2.0", "id": 3, "method": "ping"});
+    let told = post(&one, ping.clone());
+    assert!(told.body.contains("notifications/resources/updated") && told.body.contains("fontcraft://glyph/A"), "{}", told.body);
+    assert_eq!(post(&one, ping).json()["result"], json!({}), "once");
+}
