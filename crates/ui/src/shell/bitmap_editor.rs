@@ -3,7 +3,7 @@
 //! | Command | Does |
 //! |---|---|
 //! | `window.bitmapEditor {open?, glyph?, strike?}` | shows or hides the window, on a named glyph and strike or on the glyph being edited and the font's first strike |
-//! | `view.setBitmapEditor {tool?, level?, outline?, grid?}` | picks the drawing tool and the shade it draws with, and switches the outline guide and the pixel grid |
+//! | `view.setBitmapEditor {tool?, level?, outline?, grid?, pixelSize?, fit?}` | picks the tool and the shade it draws with, switches the outline guide and the pixel grid, and sets how large a pixel shows |
 //!
 //! A press on the pixel canvas starts a stroke of the current tool (`fontcraft_tools::bitmap`); the stroke previews
 //! as `bitmap.setPixels` on a snapshot while the pointer moves, and its release keeps it as one undo step. Alt with a
@@ -37,16 +37,47 @@ const COMMANDS: &[UiCommand] = &[
         label: "Bitmap Glyph Editor",
         menu: &["Window"],
         shortcut: None,
-        params: "{open?: bool (default true), glyph?: name (default: the glyph being edited, followed as it changes), strike?: {ppem, depth?} (default: the font's first strike; without depth the lowest depth of that size)} show or hide the Bitmap Glyph Editor: the glyph's bitmap in the strike, its outline scaled to the strike behind it, the pencil, line and shift tools, the Shades palette in a grey strike and the Strike Properties button. Each stroke is one bitmap.setPixels. ui.inspect reports {open, glyph, strike, tool, level, maxLevel, outline, grid, bitmap: {width, height, left, bottom, advance} | null} under bitmapEditor",
+        params: "{open?: bool (default true), glyph?: name (default: the glyph being edited, followed as it changes), strike?: {ppem, depth?} (default: the font's first strike; without depth the lowest depth of that size)} show or hide the Bitmap Glyph Editor: the glyph's bitmap in the strike, its outline scaled to the strike behind it, the bitmap at its actual size, the drawing, magnify and hand tools, the Shades palette in a grey strike and the Strike Properties button. Each stroke is one bitmap.setPixels. ui.inspect reports {open, glyph, strike, tool, level, maxLevel, outline, grid, pixelSize (null: fitted to the window), bitmap: {width, height, left, bottom, advance} | null} under bitmapEditor",
     },
     UiCommand {
         id: SET,
         label: "Bitmap Glyph Editor Options",
         menu: &[],
         shortcut: None,
-        params: "{tool?: \"pencil\" | \"line\" | \"shift\", level?: number (0 to 255, the shade the tools draw with; above the strike's top level draws the top level), outline?: bool, grid?: bool} the Bitmap Glyph Editor's tool, shade and overlays",
+        params: "{tool?: \"pencil\" | \"line\" | \"shift\" | \"rectangle\" | \"filledRectangle\" | \"ellipse\" | \"filledEllipse\" | \"magnify\" | \"hand\", level?: number (0 to 255, the shade the tools draw with; above the strike's top level draws the top level), outline?: bool, grid?: bool, pixelSize?: number (points a pixel shows at, 2 to 48), fit?: bool (true: the pixels fit the window again)} the Bitmap Glyph Editor's tool, shade, overlays and pixel size",
     },
 ];
+
+/// Smallest and largest size a pixel shows at, in points.
+pub const MIN_PIXEL_SIZE: u8 = 2;
+pub const MAX_PIXEL_SIZE: u8 = 48;
+
+/// A tool of the editor: one that draws a stroke, or one that moves the view.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EditorTool {
+    Draw(BitmapTool),
+    Magnify,
+    Hand,
+}
+
+impl EditorTool {
+    /// The word `view.setBitmapEditor` takes for the tool.
+    pub fn word(self) -> &'static str {
+        match self {
+            EditorTool::Draw(tool) => tool.word(),
+            EditorTool::Magnify => "magnify",
+            EditorTool::Hand => "hand",
+        }
+    }
+
+    pub fn from_word(word: &str) -> Option<EditorTool> {
+        match word {
+            "magnify" => Some(EditorTool::Magnify),
+            "hand" => Some(EditorTool::Hand),
+            _ => BitmapTool::from_word(word).map(EditorTool::Draw),
+        }
+    }
+}
 
 /// The window's view state.
 #[derive(Clone, Debug, PartialEq)]
@@ -55,19 +86,30 @@ pub struct BitmapEditorView {
     pub glyph: Option<String>,
     /// The strike `(ppem, depth)` it was opened on; `None` shows the font's first strike.
     pub strike: Option<(u16, u8)>,
-    pub tool: BitmapTool,
+    pub tool: EditorTool,
     /// The shade the tools draw with; `None` draws the strike's top level.
     pub level: Option<u8>,
     /// Whether the outline guide and the pixel grid show.
     pub outline: bool,
     pub grid: bool,
+    /// Points a pixel shows at; `None` fits the pixels to the window.
+    pub pixel_size: Option<u8>,
     /// The stroke in progress and the glyph and strike it draws on.
     pub stroke: Option<(BitmapStroke, String, (u16, u8))>,
 }
 
 impl Default for BitmapEditorView {
     fn default() -> Self {
-        BitmapEditorView { glyph: None, strike: None, tool: BitmapTool::Pencil, level: None, outline: true, grid: true, stroke: None }
+        BitmapEditorView {
+            glyph: None,
+            strike: None,
+            tool: EditorTool::Draw(BitmapTool::Pencil),
+            level: None,
+            outline: true,
+            grid: true,
+            pixel_size: None,
+            stroke: None,
+        }
     }
 }
 
@@ -137,7 +179,10 @@ fn find_strike(strikes: &[BitmapStrike], v: &Value) -> Result<(u16, u8), String>
 fn set(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
     let tool = match string(p, "tool")? {
         None => None,
-        Some(word) => Some(BitmapTool::from_word(word).ok_or_else(|| format!("`tool` must be pencil, line or shift, not `{}`", quoted(word)))?),
+        Some(word) => Some(EditorTool::from_word(word).ok_or_else(|| {
+            let draw: Vec<&str> = BitmapTool::ALL.iter().map(|t| t.word()).collect();
+            format!("`tool` must be {}, magnify or hand, not `{}`", draw.join(", "), quoted(word))
+        })?),
     };
     let level = match p.get("level") {
         None | Some(Value::Null) => None,
@@ -145,7 +190,26 @@ fn set(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
     };
     let outline = flag(p, "outline")?;
     let grid = flag(p, "grid")?;
+    let pixel_size = match p.get("pixelSize") {
+        None | Some(Value::Null) => None,
+        Some(v) => Some(
+            v.as_u64()
+                .and_then(|n| u8::try_from(n).ok())
+                .filter(|n| (MIN_PIXEL_SIZE..=MAX_PIXEL_SIZE).contains(n))
+                .ok_or_else(|| format!("`pixelSize` must be a whole number from {MIN_PIXEL_SIZE} to {MAX_PIXEL_SIZE}"))?,
+        ),
+    };
+    let fit = flag(p, "fit")?.unwrap_or(false);
+    if fit && pixel_size.is_some() {
+        return Err("give `pixelSize` or `fit`, not both".into());
+    }
+    if tool.is_some_and(|t| t != app.view.bitmap_editor.tool) {
+        cancel_stroke(app);
+    }
     let state = &mut app.view.bitmap_editor;
+    if pixel_size.is_some() || fit {
+        state.pixel_size = pixel_size;
+    }
     if let Some(tool) = tool {
         state.tool = tool;
     }
@@ -188,6 +252,7 @@ fn strike_param((ppem, depth): (u16, u8)) -> Value {
 
 fn press(app: &mut FontCraftApp, at: [f64; 2], alt: bool) -> Result<(), String> {
     cancel_stroke(app);
+    let EditorTool::Draw(tool) = app.view.bitmap_editor.tool else { return Ok(()) };
     let Some(pixel) = pixel_at(at[0], at[1]) else { return Ok(()) };
     let font = app.session.font().map_err(|e| e.to_string())?;
     let Some((glyph, strike)) = shown(font, &app.view) else { return Err("the Bitmap Glyph Editor shows no glyph".into()) };
@@ -197,7 +262,6 @@ fn press(app: &mut FontCraftApp, at: [f64; 2], alt: bool) -> Result<(), String> 
         app.view.bitmap_editor.level = Some(under.min(max_level(strike.depth)));
         return Ok(());
     }
-    let tool = app.view.bitmap_editor.tool;
     if tool == BitmapTool::Shift && own.is_none_or(|b| b.width == 0 || b.height == 0) {
         return Ok(());
     }
@@ -273,6 +337,7 @@ pub fn inspect(app: &FontCraftApp, state: &mut Map<String, Value>) {
         "maxLevel": shown.map(|(_, strike)| max_level(strike.depth)),
         "outline": view.outline,
         "grid": view.grid,
+        "pixelSize": view.pixel_size,
         "bitmap": bitmap,
     });
     state.insert("bitmapEditor".into(), out);

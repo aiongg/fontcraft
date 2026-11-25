@@ -141,3 +141,28 @@ fn the_commands_refuse_what_the_font_lacks() {
     assert_eq!(state["bitmapEditor"]["strike"], json!("12"));
     assert_eq!(state["bitmapEditor"]["bitmap"]["width"], json!(1));
 }
+
+/// A shape is one undo step of its pixels; Magnify and Hand draw nothing; the pixel size is set, refused outside its
+/// range and fitted again.
+#[test]
+fn shapes_draw_in_one_step_and_the_view_tools_draw_nothing() {
+    let mut app = app();
+    ok(&mut app, "view.setBitmapEditor", json!({"tool": "rectangle"}));
+    gesture(&mut app, &[BitmapInput::Press { at: at(3, 3), alt: false }, BitmapInput::Move(at(9, 9)), BitmapInput::Release(at(5, 6))]);
+    let b = bitmap(&app, 1);
+    assert!(level(&b, 1, 3, 3) == 1 && level(&b, 1, 5, 6) == 1 && level(&b, 1, 4, 3) == 1);
+    assert!(level(&b, 1, 4, 4) == 0 && level(&b, 1, 9, 9) == 0);
+    undo(&mut app);
+    assert_eq!(level(&bitmap(&app, 1), 1, 3, 3), 0, "one undo step");
+    let before = bitmap(&app, 1);
+    for tool in ["hand", "magnify"] {
+        ok(&mut app, "view.setBitmapEditor", json!({"tool": tool}));
+        gesture(&mut app, &[BitmapInput::Press { at: at(3, 3), alt: false }, BitmapInput::Release(at(3, 3))]);
+    }
+    assert_eq!(bitmap(&app, 1), before);
+    ok(&mut app, "view.setBitmapEditor", json!({"pixelSize": 16}));
+    assert_eq!(app.view.bitmap_editor.pixel_size, Some(16));
+    assert!(shell(&mut app, "view.setBitmapEditor", json!({"pixelSize": 1})).is_err());
+    ok(&mut app, "view.setBitmapEditor", json!({"fit": true}));
+    assert_eq!(app.view.bitmap_editor.pixel_size, None);
+}

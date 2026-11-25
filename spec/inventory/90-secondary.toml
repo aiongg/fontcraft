@@ -3552,11 +3552,13 @@ milestone = "M13"
 summary = "Edits one glyph of one strike pixel by pixel, with the scaled outline shown behind as a guide. Only the bitmap is editable here; the outline and grid are overlays."
 ref = "FontForge main views › Bitmap View"
 status = "docs"
-notes = "Written in M13.64, not yet built: the dock panel `bitmapEditor` (`crates/ui/src/panels/bitmap_editor.rs`, view model `crates/ui/src/app/models/bitmap_editor.rs`), shown as a window by `window.bitmapEditor`. A top row with the glyph and strike, the Pencil, Line and Shift tools, Outline and Grid switches, Recalculate (`bitmap.regenerateGlyphs` on this glyph and strike) and Strike Properties (`dialog.strikeProperties`); in a grey strike the Shades palette; then a pixel canvas over the strike's line band and advance, the default master's outline scaled to the strike behind the pixels. The canvas sizes its pixels to fit the window. Each stroke is one `bitmap.setPixels` (`crates/ui/src/shell/bitmap_editor.rs`, rules in `crates/tools/src/bitmap.rs`). Not built: the actual-size preview, the pointer position and drag distance readout, the pointer, magnify and hand tools, and the context menu (rectangles, ellipses, flips, turns, set width). The glyph's own pixels are drawn; bitmaps it places by reference are not. Moved from M11 to M13 by the M11 planning pass (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Written in M13.64, not yet built: the dock panel `bitmapEditor` (`crates/ui/src/panels/bitmap_editor.rs`, view model `crates/ui/src/app/models/bitmap_editor.rs`), shown as a window by `window.bitmapEditor`. A top row with the glyph and strike, the bitmap at its actual size (one screen pixel a pixel), the Magnify, Pencil, Line, Shift and Hand tools, Outline and Grid switches, Recalculate (`bitmap.regenerateGlyphs` on this glyph and strike) and Strike Properties (`dialog.strikeProperties`); in a grey strike the Shades palette; then a pixel canvas over the strike's line band and advance, the default master's outline scaled to the strike behind the pixels. The canvas sizes its pixels to fit the window until Magnify or `view.setBitmapEditor {pixelSize}` sets their size. Its context menu (X.fix105) holds the rectangle and ellipse tools, outlined and filled, the flips and turns (`bitmap.transform` on this glyph), Set Width (`dialog.bitmapWidth`; off in a font with outlines) and Fit in Window. Each stroke is one `bitmap.setPixels` (`crates/ui/src/shell/bitmap_editor.rs`, rules in `crates/tools/src/bitmap.rs`). Not built: the pointer position and drag distance readout and the pointer tool (selecting a region of pixels). The glyph's own pixels are drawn; bitmaps it places by reference are not. Moved from M11 to M13 by the M11 planning pass (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
 guesses = [
   "The tool palette and the Shades palette sit in the editor window's top rows rather than floating beside it; the secondary reference's Bitmap View would show where they live.",
-  "The pixel size follows the window, from 2 to 48 points a pixel, instead of a zoom the person sets; the reference's magnify tool would settle how it scales.",
+  "The pixel size follows the window, from 2 to 48 points a pixel, until Magnify sets one of the steps 2, 3, 4, 6, 8, 12, 16, 32 and 48; the reference's magnify tool would settle how it scales.",
+  "The context menu picks a rectangle or ellipse tool, which stays until another tool is picked; the secondary reference may draw one shape and go back.",
+  "The actual-size preview shows one screen pixel per bitmap pixel, cut off at 256 points a side.",
 ]
 observe = [
   "In the secondary reference, open a glyph of a 4-bit strike in the Bitmap View: note where the tool and Shades palettes sit and the order of the shades.",
@@ -3575,7 +3577,7 @@ milestone = "M13"
 summary = "Shows or hides the Bitmap Glyph Editor on a glyph and strike, by default the glyph being edited and the font's first strike."
 ref = "FontForge main views › Bitmap View"
 status = "inferred"
-notes = "Written in M13.64, not yet built (`crates/ui/src/shell/bitmap_editor.rs`). Refused when the font has no strikes, or names a glyph or strike the font lacks; a strike without `depth` is the lowest depth of that size. Shell commands reply with nothing, so ui.inspect reports the window under `bitmapEditor`: {open, glyph, strike, tool, level, maxLevel, outline, grid, bitmap}."
+notes = "Written in M13.64, not yet built (`crates/ui/src/shell/bitmap_editor.rs`). Refused when the font has no strikes, or names a glyph or strike the font lacks; a strike without `depth` is the lowest depth of that size. Shell commands reply with nothing, so ui.inspect reports the window under `bitmapEditor`: {open, glyph, strike, tool, level, maxLevel, outline, grid, pixelSize, bitmap}."
 origin = "fontforge"
 guesses = [
   "A shell command of ours that opens the editor on a named glyph and strike; the secondary reference opens it from a glyph in a bitmap font view.",
@@ -3587,10 +3589,10 @@ label = "Bitmap Glyph Editor Options"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{tool?: \"pencil\" | \"line\" | \"shift\", level?: number, outline?: bool, grid?: bool}"
+params = "{tool?: \"pencil\" | \"line\" | \"shift\" | \"rectangle\" | \"filledRectangle\" | \"ellipse\" | \"filledEllipse\" | \"magnify\" | \"hand\", level?: number, outline?: bool, grid?: bool, pixelSize?: number, fit?: bool}"
 area = "color"
 milestone = "M13"
-summary = "Picks the Bitmap Glyph Editor's tool and the grey level it draws with, and switches its outline guide and pixel grid."
+summary = "Picks the Bitmap Glyph Editor's tool and the grey level it draws with, and switches its outline guide and pixel grid, and sets how many points a pixel shows at (`fit` fits the window again)."
 ref = "FontForge main views › Bitmap View"
 status = "inferred"
 notes = "Written in M13.64, not yet built (`crates/ui/src/shell/bitmap_editor.rs`). `level` is 0 to 255; a level above the strike's top level draws the top level. The tool buttons, the switches and the Shades palette post it."
@@ -3653,6 +3655,93 @@ summary = "Repositions the entire bitmap of the glyph relative to its origin. Th
 ref = "FontForge main views › Bitmap View (Four-arrow; Pointer)"
 status = "docs"
 notes = "Written in M13.64, not yet built (`crates/tools/src/bitmap.rs`): the drag sets the bitmap's `origin` by the whole pixels the pointer moved, previewed while it moves; a drag back to its start changes nothing and leaves no undo step. A glyph without a bitmap is not moved. Moved from M11 to M13 by the M11 planning pass (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+origin = "fontforge"
+
+[[tool]]
+id = "bitmapRectangle"
+label = "Bitmap Rectangle"
+shortcut = ""
+group = "bitmap"
+gestures = [
+  "drag: draw a rectangle of pixels, its outline or filled, in the box from press to release, setting or clearing by the state the first pixel took",
+]
+area = "color"
+milestone = "M13"
+summary = "Draws pixel rectangles in a bitmap glyph, outlined or filled. Both are picked in the Bitmap Glyph Editor's context menu."
+ref = "FontForge main views › Bitmap View"
+status = "docs"
+notes = "Built in X.fix105, not yet compiled: `fontcraft_tools::bitmap::shape`, words `rectangle` and `filledRectangle` of `view.setBitmapEditor`. One `bitmap.setPixels` undo step."
+origin = "fontforge"
+guesses = [
+  "A shape is at most 256 pixels a side, so a filled one fits in one stroke; it stops growing there.",
+]
+
+[[tool]]
+id = "bitmapEllipse"
+label = "Bitmap Ellipse"
+shortcut = ""
+group = "bitmap"
+gestures = [
+  "drag: draw an ellipse of pixels, its outline or filled, inscribed in the box from press to release, setting or clearing by the state the first pixel took",
+]
+area = "color"
+milestone = "M13"
+summary = "Draws pixel ellipses in a bitmap glyph, outlined or filled. Both are picked in the Bitmap Glyph Editor's context menu."
+ref = "FontForge main views › Bitmap View"
+status = "docs"
+notes = "Built in X.fix105, not yet compiled: `fontcraft_tools::bitmap::shape`, words `ellipse` and `filledEllipse` of `view.setBitmapEditor`. One `bitmap.setPixels` undo step."
+origin = "fontforge"
+guesses = [
+  "A pixel is in the ellipse when its centre is, and every row holds at least its middle pixels, so the ellipse reaches its box; the outline is the filled ellipse's border pixels. An ellipse drawn in the secondary reference would settle its pixels.",
+]
+
+[[tool]]
+id = "bitmapMagnify"
+label = "Bitmap Magnify"
+shortcut = ""
+group = "bitmap"
+gestures = [
+  "click: show the pixels one size larger, the pixel clicked in the middle of the view",
+  "Alt+click: show the pixels one size smaller",
+]
+area = "color"
+milestone = "M13"
+summary = "Changes how large the Bitmap Glyph Editor shows its pixels."
+ref = "FontForge main views › Bitmap View (Magnify)"
+status = "docs"
+notes = "Built in X.fix105, not yet compiled (`crates/ui/src/panels/bitmap_editor.rs`). It posts `view.setBitmapEditor {pixelSize}`; Fit in Window in the context menu fits the window again."
+origin = "fontforge"
+guesses = [
+  "The pixel clicked moves to the middle of the view, and a drag does nothing more than a click; the secondary reference's magnify tool would settle both.",
+]
+
+[[tool]]
+id = "bitmapHand"
+label = "Bitmap Hand"
+shortcut = ""
+group = "bitmap"
+gestures = [
+  "drag: move the view of the pixels",
+]
+area = "color"
+milestone = "M13"
+summary = "Scrolls the Bitmap Glyph Editor's view."
+ref = "FontForge main views › Bitmap View (Hand)"
+status = "docs"
+notes = "Built in X.fix105, not yet compiled, on the shared canvas hand tool. Escape during a drag puts the view back."
+origin = "fontforge"
+
+[[panel]]
+id = "dialog.bitmapWidth"
+label = "Set Bitmap Width"
+location = "dialog"
+controls = ["width in pixels"]
+area = "color"
+milestone = "M13"
+summary = "Sets the advance of one bitmap glyph in a font without outlines."
+ref = "FontForge main views › Bitmap View (Set Width)"
+status = "docs"
+notes = "Built in X.fix105, not yet compiled (`crates/ui/src/dialogs/strike_properties.rs`): a run-on-OK dialog over `bitmap.setPixels {advance}`, opened by the Bitmap Glyph Editor's context menu. In a font with outlines the menu item is off and the command refuses."
 origin = "fontforge"
 
 [[panel]]
@@ -3795,10 +3884,10 @@ milestone = "M13"
 summary = "Edits the property list that a BDF file carries for a strike, such as its font descriptor string, resolution, ascent and descent."
 ref = "FontForge Element menu › BDF Info; FontForge dialogs › BDF Info Dialog"
 status = "docs"
-notes = "Written in M13.64, not yet built: a run-on-OK dialog over `bitmap.setStrikeProperties` (`crates/ui/src/dialogs/strike_properties.rs`), opened by the Bitmap Glyph Editor's Strike Properties button on its strike, or by `dialog.open` with `params.strike`. Fields: name, point size, horizontal and vertical resolution, ascent, descent, and the properties as text, one `NAME value` per line (a whole number or text). Not built: a strike chooser inside the dialog, a property table with add and remove buttons, and reset to computed defaults. Moved from M11 to M13 by the M11 planning pass (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Written in M13.64, not yet built: a run-on-OK dialog over `bitmap.setStrikeProperties` (`crates/ui/src/dialogs/strike_properties.rs`), opened by the Bitmap Glyph Editor's Strike Properties button on its strike, or by `dialog.open` with `params.strike`. Fields: name, point size, horizontal and vertical resolution, ascent, descent, and the properties as a table (X.fix105): a row per property with its name, its value (a whole number, or text) and Remove, and Add Property. Not built: a strike chooser inside the dialog and reset to computed defaults. Moved from M11 to M13 by the M11 planning pass (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
 guesses = [
-  "The properties are edited as lines of text rather than a table; the secondary reference's BDF Info dialog shows a table.",
+  "A value that reads as a whole number is one and quotes around a value make it text, rather than a type column; the secondary reference's BDF Info dialog would show how it types a value.",
 ]
 
 [[command]]
