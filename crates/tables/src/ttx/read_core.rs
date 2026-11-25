@@ -493,7 +493,6 @@ fn name(element: &Element) -> Result<Vec<u8>> {
 // ── post ───────────────────────────────────────────────────────────────────────────────────────
 
 fn post(element: &Element, ctx: &ReadContext) -> Result<Vec<u8>> {
-    use read_fonts::tables::post::DEFAULT_GLYPH_NAMES;
     let f = fields(element);
     let format = float_to_fixed(float_lit(field_text(&f, "post", "formatType")?)?, 16)?;
     let mut out = Out::default();
@@ -504,20 +503,34 @@ fn post(element: &Element, ctx: &ReadContext) -> Result<Vec<u8>> {
     for name in ["isFixedPitch", "minMemType42", "maxMemType42", "minMemType1", "maxMemType1"] {
         out.u32(field_int(&f, "post", name)?, name)?;
     }
+    let names = if format == 0x0002_0000 {
+        let mapping: HashMap<&str, &str> = f
+            .get("psNames")
+            .map(|p| p.children.iter().filter(|c| c.name == "psName").map(|c| Ok((attr(c, "name")?, attr(c, "psName")?))).collect::<Result<_>>())
+            .transpose()?
+            .unwrap_or_default();
+        let extra: Vec<String> = f
+            .get("extraNames")
+            .map(|p| p.children.iter().filter(|c| c.name == "psName").map(|c| attr(c, "name").map(str::to_string)).collect::<Result<_>>())
+            .transpose()?
+            .unwrap_or_default();
+        post_name_data(format, ctx, &mapping, extra)?
+    } else {
+        post_name_data(format, ctx, &HashMap::new(), Vec::new())?
+    };
+    out.bytes(&names);
+    Ok(out.0)
+}
+
+/// What follows the header of a `post` table of `format`: the names of the glyph order, or their codes. `mapping` is
+/// the glyph names that stand for another name, `extra` the names that come first in the name list.
+fn post_name_data(format: i32, ctx: &ReadContext, mapping: &HashMap<&str, &str>, mut extra: Vec<String>) -> Result<Vec<u8>> {
+    use read_fonts::tables::post::DEFAULT_GLYPH_NAMES;
+    let mut out = Out::default();
     match format {
         0x0001_0000 | 0x0003_0000 => {}
         0x0002_0000 => {
             let order = ctx.order()?;
-            let mapping: HashMap<&str, &str> = f
-                .get("psNames")
-                .map(|p| p.children.iter().filter(|c| c.name == "psName").map(|c| Ok((attr(c, "name")?, attr(c, "psName")?))).collect::<Result<_>>())
-                .transpose()?
-                .unwrap_or_default();
-            let mut extra: Vec<String> = f
-                .get("extraNames")
-                .map(|p| p.children.iter().filter(|c| c.name == "psName").map(|c| attr(c, "name").map(str::to_string)).collect::<Result<_>>())
-                .transpose()?
-                .unwrap_or_default();
             let standard: HashMap<&str, usize> = DEFAULT_GLYPH_NAMES.iter().enumerate().map(|(i, n)| (*n, i)).rev().collect();
             extra.retain(|n| !standard.contains_key(n.as_str()));
             let mut extra_ids: HashMap<String, usize> = HashMap::new();
@@ -554,6 +567,22 @@ fn post(element: &Element, ctx: &ReadContext) -> Result<Vec<u8>> {
         _ => return Err(TablesError::Unsupported(format!("'post' table format {}", super::py_float(format as f64 / 65536.0)))),
     }
     Ok(out.0)
+}
+
+/// A font's own `post` table compiled again for the glyph order of `ctx`, as fontTools compiles a table it has
+/// decompiled. An error when the table cannot be read, or the order has not one name for each of its `count` glyphs.
+pub(crate) fn reload_post(data: &[u8], count: usize, ctx: &ReadContext) -> Result<Vec<u8>> {
+    let names = super::core::post_names(data, count)?;
+    let order = ctx.order()?;
+    if order.len() != count {
+        return Err(TablesError::invalid(format!("the glyph order names {} glyphs of {count}", order.len())));
+    }
+    let header = data.get(..32).ok_or_else(|| TablesError::invalid("the 'post' table is cut off"))?;
+    let format = header.get(..4).and_then(|b| <[u8; 4]>::try_from(b).ok()).map_or(0, i32::from_be_bytes);
+    let mapping: HashMap<&str, &str> = names.mapping.iter().flatten().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+    let mut out = header.to_vec();
+    out.extend(post_name_data(format, ctx, &mapping, names.extra_names.clone().unwrap_or_default())?);
+    Ok(out)
 }
 
 /// The code `post` format 4 stores for a glyph name: its Adobe Glyph List code point, the
