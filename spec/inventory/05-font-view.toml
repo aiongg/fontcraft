@@ -3136,6 +3136,7 @@ milestone = "M3"
 summary = "Path → Assign Background… fills the background of all selected glyphs from a chosen source. With Option the command becomes Clear Background, which empties the backgrounds."
 ref = "Font View › Batch-Processing › Batch Commands"
 status = "handbook"
+notes = "The source is asked in dialog.assignBackground (M3.90)."
 
 [[behavior]]
 id = "fontView.batch.swapWithBackground"

@@ -67,10 +67,10 @@ pub fn specs() -> Vec<CommandSpec> {
         .targets(&[TargetKind::Glyphs, TargetKind::Layer]),
         cmd!(
             "path.assignBackground",
-            "Assign Background",
+            "Assign Background…",
             ["Path"],
             None,
-            "{file?: path (a font source; default: this font, which keeps a copy of the current outlines), glyphs?: [names] (default: every glyph), master?: id (default: every master)} replace the shapes and anchors of the master layers' backgrounds with the foreground of the glyph of the same name in the source. Masters are matched by name, then by position; a source with fewer masters gives its first. Glyphs the source lacks, and locked glyphs, are skipped and listed → {glyphs: [names], skipped: [{glyph, layer?, reason}]}",
+            "{file?: path (a font source) | font?: index|title|path (an open document); default: this font, which keeps a copy of the current outlines, glyphs?: [names] (default: every glyph), master?: id (default: every master), masterMap?: {master id: the source master's id or name}, onUnmatchedMaster?: \"position\" | \"ask\" (default position)} replace the shapes and anchors of the master layers' backgrounds with the foreground of the glyph of the same name in the source. A master takes the source master `masterMap` gives it, else the one of the same name, else the one at the same position, else the first. With `ask` nothing changes when a master has no source master of its name and none in `masterMap`: the reply lists those masters. Glyphs the source lacks, and locked glyphs, are skipped and listed → {glyphs: [names], skipped: [{glyph, layer?, reason}], unmatched?: [{master, name, source: the source master's id by position}]}",
             has_doc,
             assign_background
         ).files(const { &[FileParam::read("file")] })
@@ -262,21 +262,30 @@ fn assign_background(s: &mut Session, p: &Value) -> Result<Value> {
         }
         None => font.masters.iter().enumerate().collect(),
     };
-    let source = match p.opt_str("file")? {
-        Some(path) => open_file(path)?,
-        None => Font::clone(font),
-    };
-    if source.masters.is_empty() {
-        return Err(p.bad("the source has no masters"));
-    }
+    let source = assign_source(s, &p)?;
+    let given = given_masters(&p, font, &source)?;
     // This font's master id → the source master id it takes its outlines from.
-    let pairs: Vec<(String, String)> = masters
-        .iter()
-        .filter_map(|(i, m)| {
-            let from = source.masters.iter().find(|sm| sm.name == m.name).or_else(|| source.masters.get(*i)).or_else(|| source.masters.first())?;
-            Some((m.id.clone(), from.id.clone()))
-        })
-        .collect();
+    let mut pairs: Vec<(String, String)> = Vec::with_capacity(masters.len());
+    let mut unmatched = Vec::new();
+    for pair in master_pairs(font, &source).into_iter().filter(|pair| masters.iter().any(|(_, m)| m.id == pair.master)) {
+        match given.iter().find(|(id, _)| *id == pair.master) {
+            Some(chosen) => pairs.push(chosen.clone()),
+            None => {
+                if !pair.by_name {
+                    unmatched.push(json!({"master": pair.master, "name": pair.name, "source": pair.from}));
+                }
+                pairs.push((pair.master, pair.from));
+            }
+        }
+    }
+    let ask = match p.opt_str("onUnmatchedMaster")? {
+        None | Some("position") => false,
+        Some("ask") => true,
+        Some(other) => return Err(p.bad(format!("`onUnmatchedMaster` must be \"position\" or \"ask\", got \"{other}\""))),
+    };
+    if ask && !unmatched.is_empty() {
+        return Ok(json!({"glyphs": [], "skipped": [], "unmatched": unmatched}));
+    }
     let scope = Scope { glyphs, layers: pairs.iter().map(|(id, _)| id.clone()).collect(), single: false };
     let out = s.edit("Assign Background", |font| {
         let mut out = Outcome::default();
@@ -310,6 +319,71 @@ fn assign_background(s: &mut Session, p: &Value) -> Result<Value> {
         Ok(out)
     })?;
     Ok(out.to_json())
+}
+
+/// The source `path.assignBackground` copies from: the font file, the open document, or the font itself.
+fn assign_source(s: &Session, p: &Params) -> Result<Font> {
+    let source = match (p.opt_str("file")?, p.get("font")) {
+        (Some(_), Some(_)) => return Err(p.bad("give only one of `file` and `font`")),
+        (Some(path), None) => open_file(path)?,
+        (None, Some(v)) => {
+            let index = super::compare::document_index(s, p, "font", v)?;
+            let doc = s.documents().get(index).ok_or(crate::EngineError::NoDocument)?;
+            Font::clone(&doc.font)
+        }
+        (None, None) => Font::clone(s.font()?),
+    };
+    if source.masters.is_empty() {
+        return Err(p.bad("the source has no masters"));
+    }
+    Ok(source)
+}
+
+/// `masterMap` as ids of `font`'s masters and of the source's.
+fn given_masters(p: &Params, font: &Font, source: &Font) -> Result<Vec<(String, String)>> {
+    let Some(map) = p.opt_object("masterMap")? else { return Ok(Vec::new()) };
+    map.iter()
+        .map(|(id, v)| {
+            if !font.masters.iter().any(|m| m.id == *id) {
+                return Err(p.bad(format!("`masterMap`: there is no master `{id}`")));
+            }
+            let want = v.as_str().ok_or_else(|| p.bad("`masterMap` holds master ids or names"))?;
+            let by_id = source.masters.iter().find(|m| m.id == want);
+            let from = by_id.or_else(|| source.masters.iter().find(|m| m.name == want));
+            let from = from.ok_or_else(|| p.bad(format!("`masterMap`: the source has no master `{want}`")))?;
+            Ok((id.clone(), from.id.clone()))
+        })
+        .collect()
+}
+
+/// A master and the source master it takes outlines from when nobody says which.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MasterPair {
+    pub master: String,
+    pub name: String,
+    /// The source master's id.
+    pub from: String,
+    /// The two masters have the same name; else they have the same position, or the source's is its first.
+    pub by_name: bool,
+}
+
+/// Each master of `font` with the master of `source` it takes outlines from by itself.
+pub fn master_pairs(font: &Font, source: &Font) -> Vec<MasterPair> {
+    let pair = |(i, m): (usize, &fontcraft_model::Master)| {
+        let named = source.masters.iter().find(|sm| sm.name == m.name);
+        let from = named.or_else(|| source.masters.get(i)).or_else(|| source.masters.first())?;
+        Some(MasterPair { master: m.id.clone(), name: m.name.clone(), from: from.id.clone(), by_name: named.is_some() })
+    };
+    font.masters.iter().enumerate().filter_map(pair).collect()
+}
+
+/// What the window pairs masters from: the pairs and the source's masters (id and name) for `params` of
+/// `path.assignBackground`.
+pub fn assign_masters(s: &Session, params: &Value) -> Result<(Vec<MasterPair>, Vec<(String, String)>)> {
+    let p = Params::new("path.assignBackground", params)?;
+    let source = assign_source(s, &p)?;
+    let masters = source.masters.iter().map(|m| (m.id.clone(), m.name.clone())).collect();
+    Ok((master_pairs(s.font()?, &source), masters))
 }
 
 #[cfg(not(target_arch = "wasm32"))]

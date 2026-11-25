@@ -300,7 +300,10 @@ fn open_one(app: &mut FontCraftApp, spec: &DialogSpec, given: &Map<String, Value
     let fields = match spec.fields {
         Fields::Filter => fields::filter_fields(&super::filter_entry(spec.command).ok_or_else(|| format!("`{}` is not a filter", spec.command))?)?,
         Fields::Fixed(list) => list(&app.session),
-        Fields::Targeted(list) => {
+        Fields::Targeted(list) | Fields::TargetedShaped(list, _) => {
+            if let Fields::TargetedShaped(_, params) = spec.fields {
+                shaped = Some(Shaped { fields: |_| Vec::new(), given: |_, given| Ok(given.clone()), params, link: |_, _| {} });
+            }
             let mut targets = given.clone();
             if !targets.contains_key("glyph") && !targets.contains_key("glyphs") {
                 targets.extend(selection_targets(app, spec.command).into_iter().next().unwrap_or_default());

@@ -344,7 +344,7 @@ pub fn form_for(session: &fontcraft_engine::Session, spec: &CommandSpec) -> Opti
         Fields::Filter => (fields::filter_fields(&super::filter_entry(spec.id)?).ok()?, None),
         Fields::Fixed(list) => (list(session), None),
         Fields::Shaped(s) => ((s.fields)(session), Some(s)),
-        Fields::Targeted(_) | Fields::Tabs(_) => return None,
+        Fields::Targeted(_) | Fields::TargetedShaped(..) | Fields::Tabs(_) => return None,
     };
     if fields.len() > fields::MAX_FIELDS || !fields.iter().all(drawable) {
         return None;

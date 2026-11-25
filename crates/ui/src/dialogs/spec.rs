@@ -165,6 +165,9 @@ pub type Annotate = fn(&Session, &Value) -> Map<String, Value>;
 /// Builds the fields of [`Fields::Targeted`] from the session and the dialog's targets.
 pub type TargetedFields = fn(&mut Session, &Map<String, Value>) -> Result<Vec<Field>, String>;
 
+/// The command's parameters from the field values.
+pub type Shape = fn(&Map<String, Value>) -> Map<String, Value>;
+
 /// Field values from the parameters `dialog.open` was given, read with the session (see [`Shaped::given`]).
 pub type Given = fn(&Session, &Map<String, Value>) -> Result<Map<String, Value>, String>;
 
@@ -180,6 +183,8 @@ pub enum Fields {
     Targeted(TargetedFields),
     /// Fields the dialog shapes into the command's parameters.
     Shaped(Shaped),
+    /// Fields that depend on what the command acts on and are shaped into its parameters ([`Shaped::params`]).
+    TargetedShaped(TargetedFields, Shape),
     /// One dialog per tab; the dialog opens on the first.
     Tabs(&'static [Tab]),
 }
@@ -193,7 +198,7 @@ pub struct Shaped {
     /// through (the targets). An error keeps the dialog closed.
     pub given: Given,
     /// The command's parameters from the field values.
-    pub params: fn(&Map<String, Value>) -> Map<String, Value>,
+    pub params: Shape,
     /// Brings linked fields in step after the field named by the `&str` took a value (an empty name when the dialog
     /// opens).
     pub link: fn(&mut Map<String, Value>, &str),

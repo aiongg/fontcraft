@@ -18,7 +18,7 @@ mod autohint_font;
 mod autohint_report;
 mod autohint_tt;
 mod axes;
-mod background;
+pub mod background;
 pub mod bitmap_edit;
 mod bitmap_strikes;
 mod clipboard;

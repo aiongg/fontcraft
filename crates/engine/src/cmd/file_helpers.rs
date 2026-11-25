@@ -45,7 +45,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Copy Layer to Layer…",
             ["Edit"],
             None,
-            "{glyphs?: [names] (default: every glyph), from: layer id, to: layer id, mode?: \"replace\" | \"append\" (default replace)} copies the paths and components of layer `from` into layer `to` of each glyph, as one undo step. replace removes the paths and components `to` had (its images and other shapes stay); append adds the copies after them. Widths, anchors and the background are not copied. A glyph without both layers is skipped and listed; a locked glyph refuses the command; when no glyph has both layers the command fails → {copied: [names], skipped: [{glyph, reason}]}",
+            "{glyphs?: [names] (default: every glyph), from: layer id | fromName: layer name, to: layer id | toName: layer name, mode?: \"replace\" | \"append\" (default replace)} copies the paths and components of layer `from` into layer `to` of each glyph, as one undo step. A name stands for each glyph's first layer of that name that is not a master layer, or for the master layer of the master called so. replace removes the paths and components `to` had (its images and other shapes stay); append adds the copies after them. Widths, anchors and the background are not copied. A glyph without both layers is skipped and listed; a locked glyph refuses the command; when no glyph has both layers the command fails → {copied: [names], skipped: [{glyph, reason}]}",
             has_doc,
             copy_layer_to_layer
         )
@@ -65,7 +65,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Compare Layers…",
             ["Edit"],
             None,
-            "{glyphs?: [names] (default: every glyph), layerA: layer id, layerB: layer id, tolerance?: units (default 0)} compares two layers of each glyph: the advance widths, and the paths and components in order (each node's kind and position, each component's glyph and transform). Positions, widths and component offsets may differ by up to `tolerance` on each axis. A glyph without both layers is listed in `missing`; when no glyph has both the command fails. The shell selects `different` and scrolls to `first` → {different: [names], first?: name, same: count, missing: [names], details: [{glyph, reason}]}",
+            "{glyphs?: [names] (default: every glyph), layerA: layer id | nameA: layer name, layerB: layer id | nameB: layer name, tolerance?: units (default 0)} compares two layers of each glyph (a name stands for each glyph's first layer of that name that is not a master layer, or for the master layer of the master called so): the advance widths, and the paths and components in order (each node's kind and position, each component's glyph and transform). Positions, widths and component offsets may differ by up to `tolerance` on each axis. A glyph without both layers is listed in `missing`; when no glyph has both the command fails. The shell selects `different` and scrolls to `first` → {different: [names], first?: name, same: count, missing: [names], details: [{glyph, reason}]}",
             has_doc,
             compare_layers
         )
@@ -85,6 +85,42 @@ fn glyph_names(p: &Params, font: &Font) -> Result<Vec<String>> {
 
 fn find_layer<'g>(glyph: &'g Glyph, id: &str) -> Option<&'g Layer> {
     glyph.layers.iter().find(|l| l.id == id)
+}
+
+/// A layer of each glyph, by id or by name.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum LayerRef {
+    Id(String),
+    Name(String),
+}
+
+impl LayerRef {
+    /// From the parameter `id`, else `name`; one of the two is needed.
+    fn read(p: &Params, id: &str, name: &str) -> Result<LayerRef> {
+        match (p.opt_str(id)?, p.opt_str(name)?) {
+            (Some(v), None) => Ok(LayerRef::Id(v.to_string())),
+            (None, Some(v)) => Ok(LayerRef::Name(v.to_string())),
+            (Some(_), Some(_)) => Err(p.bad(format!("give only one of `{id}` and `{name}`"))),
+            (None, None) => Err(p.bad(format!("`{id}` or `{name}` is required"))),
+        }
+    }
+
+    fn find<'g>(&self, font: &Font, glyph: &'g Glyph) -> Option<&'g Layer> {
+        match self {
+            LayerRef::Id(id) => find_layer(glyph, id),
+            LayerRef::Name(name) => {
+                let named = glyph.layers.iter().find(|l| !l.is_master_layer() && l.info.name.as_deref() == Some(name.as_str()));
+                let master = || font.masters.iter().find(|m| m.name == *name).and_then(|m| glyph.layer(&m.id));
+                named.or_else(master)
+            }
+        }
+    }
+
+    fn text(&self) -> &str {
+        match self {
+            LayerRef::Id(text) | LayerRef::Name(text) => text,
+        }
+    }
 }
 
 fn same_glyph(a: &Arc<Glyph>, b: &Arc<Glyph>) -> bool {
@@ -224,8 +260,8 @@ fn revert_glyph(s: &mut Session, p: &Value) -> Result<Value> {
 
 fn copy_layer_to_layer(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("edit.copyLayerToLayer", p)?;
-    let from = p.str("from")?;
-    let to = p.str("to")?;
+    let from = LayerRef::read(&p, "from", "fromName")?;
+    let to = LayerRef::read(&p, "to", "toName")?;
     if from == to {
         return Err(p.bad("`from` and `to` are the same layer"));
     }
@@ -237,28 +273,33 @@ fn copy_layer_to_layer(s: &mut Session, p: &Value) -> Result<Value> {
     let font = s.font()?;
     let names = glyph_names(&p, font)?;
 
-    let mut plan: Vec<(String, Vec<Shape>)> = Vec::new();
+    // Each glyph with the id of the layer that takes the shapes.
+    let mut plan: Vec<(String, String, Vec<Shape>)> = Vec::new();
     let mut skipped = Vec::new();
     for name in &names {
         let Some(g) = font.glyph(name) else { continue };
-        let (Some(src), Some(dst)) = (find_layer(g, from), find_layer(g, to)) else {
-            let missing = if find_layer(g, from).is_none() { from } else { to };
-            skipped.push(json!({"glyph": name, "reason": format!("it has no layer `{missing}`")}));
+        let (Some(src), Some(dst)) = (from.find(font, g), to.find(font, g)) else {
+            let missing = if from.find(font, g).is_none() { &from } else { &to };
+            skipped.push(json!({"glyph": name, "reason": format!("it has no layer `{}`", missing.text())}));
             continue;
         };
+        if src.id == dst.id {
+            skipped.push(json!({"glyph": name, "reason": "the two layers are the same"}));
+            continue;
+        }
         let mut shapes: Vec<Shape> = if append { dst.shapes.clone() } else { dst.shapes.iter().filter(|s| !is_outline(s)).cloned().collect() };
         shapes.extend(src.shapes.iter().filter(|s| is_outline(s)).cloned());
         if shapes != dst.shapes {
             crate::check_unlocked(g)?;
         }
-        plan.push((name.clone(), shapes));
+        plan.push((name.clone(), dst.id.clone(), shapes));
     }
     if plan.is_empty() {
-        return Err(p.bad(format!("no glyph has both layer `{from}` and layer `{to}`")));
+        return Err(p.bad(format!("no glyph has both layer `{}` and layer `{}`", from.text(), to.text())));
     }
-    let copied: Vec<String> = plan.iter().map(|(n, _)| n.clone()).collect();
+    let copied: Vec<String> = plan.iter().map(|(n, ..)| n.clone()).collect();
     s.edit("Copy Layer to Layer", |font| {
-        for (name, shapes) in plan {
+        for (name, to, shapes) in plan {
             let mut g = font.glyph_mut(&name)?;
             let layer =
                 g.layers.iter_mut().find(|l| l.id == to).ok_or_else(|| EngineError::Internal(format!("layer `{to}` of `{name}` vanished")))?;
@@ -408,8 +449,8 @@ fn paste_after(s: &mut Session, p: &Value) -> Result<Value> {
 
 fn compare_layers(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("font.compareLayers", p)?;
-    let a = p.str("layerA")?;
-    let b = p.str("layerB")?;
+    let a = LayerRef::read(&p, "layerA", "nameA")?;
+    let b = LayerRef::read(&p, "layerB", "nameB")?;
     let tolerance = p.opt_f64("tolerance")?.unwrap_or(0.0);
     if !tolerance.is_finite() || !(0.0..=MAX_COORDINATE).contains(&tolerance) {
         return Err(p.bad(format!("`tolerance` must be between 0 and {MAX_COORDINATE}")));
@@ -423,7 +464,7 @@ fn compare_layers(s: &mut Session, p: &Value) -> Result<Value> {
     let mut same = 0usize;
     for name in &names {
         let Some(g) = font.glyph(name) else { continue };
-        let (Some(la), Some(lb)) = (find_layer(g, a), find_layer(g, b)) else {
+        let (Some(la), Some(lb)) = (a.find(font, g), b.find(font, g)) else {
             missing.push(name.clone());
             continue;
         };
@@ -438,7 +479,7 @@ fn compare_layers(s: &mut Session, p: &Value) -> Result<Value> {
         }
     }
     if same == 0 && different.is_empty() && !names.is_empty() {
-        return Err(p.bad(format!("no glyph has both layer `{a}` and layer `{b}`")));
+        return Err(p.bad(format!("no glyph has both layer `{}` and layer `{}`", a.text(), b.text())));
     }
     let mut out = json!({"different": different, "same": same, "missing": missing, "details": details});
     if let (Some(first), Some(o)) = (different.first(), out.as_object_mut()) {

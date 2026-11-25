@@ -3226,14 +3226,14 @@ label = "Compare Layers…"
 menu = ["Edit"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, layerA: id, layerB: id, tolerance?: number}"
+params = "{glyphs?, layerA: id | nameA: name, layerB: id | nameB: name, tolerance?: number}"
 area = "layers"
 milestone = "M13"
 summary = "Reports which of the given glyphs differ between two layers of the same font; from Font View it selects the differing glyphs and scrolls to the first."
 ref = "FontForge Element menu › Compare Layer To Layer"
 status = "docs"
 origin = "fontforge"
-notes = "Documented in the secondary reference's manual, not yet observed. The engine command returns the differing glyphs and the first of them; selecting them and scrolling is the shell's part."
+notes = "Documented in the secondary reference's manual, not yet observed. The engine command returns the differing glyphs and the first of them; after the dialog (dialog.compareLayers) Font View in front selects them and scrolls to the first."
 guesses = [
   "Two layers match when their advance widths, their paths (closed or open, node count, each node's kind and position) and their components (glyph and placement) agree in order; anchors, hints and images are not compared. Watching the secondary reference compare layers with different anchors would settle it.",
   "The tolerance applies on each axis to node positions, advance widths and component offsets, and defaults to 0; component scale, rotation and slant must match exactly. The secondary reference's dialog would settle it.",
@@ -3327,7 +3327,7 @@ label = "Copy Layer to Layer…"
 menu = ["Edit"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, from: id, to: id, mode?: 'replace' | 'append'}"
+params = "{glyphs?, from: id | fromName: name, to: id | toName: name, mode?: 'replace' | 'append'}"
 area = "layers"
 milestone = "M13"
 summary = "Copies the paths and components of one layer into another for all selected glyphs, either replacing the target's contents or adding to them."
@@ -3338,7 +3338,34 @@ notes = "Documented in the secondary reference's manual, not yet observed."
 guesses = [
   "The mode defaults to replace, and replace keeps the target's images; widths, anchors and the background are not copied. The secondary reference's dialog defaults would settle it.",
   "A glyph without one of the two layers is skipped and listed rather than refusing the command. The secondary reference has font-wide layers, so nothing there settles it.",
+  "The dialog lists the masters and the names of the glyphs' other layers; a name stands for each glyph's first layer of that name that is not a master layer, else for the master called so.",
 ]
+
+[[panel]]
+id = "dialog.copyLayerToLayer"
+label = "Copy Layer to Layer"
+location = "dialog"
+controls = ["From and To: pop-up menus of the masters and the layer names of the glyphs", "Mode: Replace or Add", "Copy / Cancel"]
+area = "layers"
+milestone = "M13"
+summary = "Asks for the two layers and the mode of edit.copyLayerToLayer."
+ref = "FontForge Edit menu › Copy Layer To Layer"
+status = "docs"
+origin = "fontforge"
+notes = "M3.90 (`crates/ui/src/dialogs/layers.rs`). Copy runs the command once, as one undo step."
+
+[[panel]]
+id = "dialog.compareLayers"
+label = "Compare Layers"
+location = "dialog"
+controls = ["Layer and Compare With: pop-up menus of the masters and the layer names of the glyphs", "Tolerance in units", "Compare / Cancel"]
+area = "layers"
+milestone = "M13"
+summary = "Asks for the two layers and the tolerance of font.compareLayers; Font View then selects the glyphs that differ."
+ref = "FontForge Element menu › Compare Layer To Layer"
+status = "docs"
+origin = "fontforge"
+notes = "M3.90 (`crates/ui/src/dialogs/layers.rs`). The status line names the glyphs that differ."
 
 [[command]]
 id = "edit.pasteAfter"

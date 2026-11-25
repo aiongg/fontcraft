@@ -922,11 +922,11 @@ guesses = [
 
 [[command]]
 id = "path.assignBackground"
-label = "Assign Background"
+label = "Assign Background…"
 menu = ["Path"]
 shortcut = ""
 kind = "engine"
-params = "{file?: path (default: this font), glyphs?: [names], master?: id} → {glyphs: [names], skipped: [{glyph, layer?, reason}]}"
+params = "{file?: path | font?: index|title|path (default: this font), glyphs?: [names], master?: id, masterMap?: {id: source master}, onUnmatchedMaster?: position | ask} → {glyphs: [names], skipped: [{glyph, layer?, reason}], unmatched?: [{master, name, source}]}"
 area = "layers"
 milestone = "M3"
 summary = "Copies outlines from another font file into the background of every selected glyph. Glyphs are matched by name and masters by name, then by position; glyphs the source lacks are skipped and listed. Choosing the font itself as the source snapshots the current outlines so later edits can be compared against them."
@@ -935,6 +935,40 @@ status = "handbook"
 notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Assign Background… without a shortcut. Not run."
 guesses = [
   "Glyphs are matched by name and masters by name, then by position; a source with fewer masters gives its first (03b question 3).",
+  "From the menu the command asks for its source, this font first, then the open documents and a font file; when a master has no source master of its name, a second dialog asks which one it takes. Path › Assign Background… in the reference app, with a second font open whose masters have other names, settles both.",
+]
+observe = [
+  "Open two fonts whose masters have different names and choose Path › Assign Background… with two glyphs selected: which sources are offered, and what happens to the masters?",
+]
+
+[[panel]]
+id = "dialog.assignBackground"
+label = "Assign Background"
+location = "dialog"
+controls = ["Source: pop-up menu of this font, a font file and the other open documents", "File: the font file", "Assign / Cancel"]
+area = "layers"
+milestone = "M3"
+summary = "Asks where Path › Assign Background takes its outlines from."
+ref = "Edit View › Background"
+status = "inferred"
+notes = "M3.90 (`crates/ui/src/dialogs/layers.rs`). Assign runs path.assignBackground once, as one undo step, on the selected glyphs (every glyph when none is chosen)."
+guesses = [
+  "The dialog's controls; the handbook says only that another font or the font itself can be the source.",
+]
+
+[[panel]]
+id = "dialog.assignBackgroundMasters"
+label = "Assign Background: Masters"
+location = "dialog"
+controls = ["one pop-up menu of the source's masters per master without one of its name", "Assign / Cancel"]
+area = "layers"
+milestone = "M3"
+summary = "Pairs the masters the source has no master of the same name for, before Assign Background changes anything."
+ref = "Edit View › Background"
+status = "inferred"
+notes = "M3.90. Opens on the pairing by position; Cancel changes nothing."
+guesses = [
+  "That the pairing is asked, and that it opens on the masters at the same positions.",
 ]
 
 [[behavior]]
