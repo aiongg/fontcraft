@@ -302,6 +302,10 @@ pub fn load(root: &Path) -> Result<Inventory, Vec<String>> {
                         err("a parameter's `values` is a non-empty list of distinct non-empty strings".into());
                     }
                 }
+                // What a parameter's value names in the font.
+                if fields.contains_key("names") && (kind != "parameter" || !matches!(s("names").as_str(), "axis" | "master" | "glyph")) {
+                    err("only a parameter has `names`: axis, master or glyph".into());
+                }
                 if fields.contains_key("context") && kind != "command" {
                     err("only a command has `context`".into());
                 }

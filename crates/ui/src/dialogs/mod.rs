@@ -29,6 +29,7 @@ mod filters;
 pub mod find_glyphs;
 pub mod font_data;
 pub mod form;
+pub mod glyph_list;
 pub mod glyph_picker;
 mod glyph_set;
 mod guide_properties;
@@ -44,6 +45,7 @@ pub mod overlay_fonts;
 pub mod panose;
 pub mod path;
 pub mod primitive_measurements;
+pub mod record_table;
 pub mod rename_by_namelist;
 pub mod review_hints;
 pub mod rule_tree;
@@ -90,6 +92,8 @@ pub const MODULES: &[Module] = &[
     actions::run_dialog,
     audit_profile::run,
     glyph_picker::run_dialog,
+    glyph_list::run,
+    record_table::run,
     smart_settings::run,
     sample_strings::run_dialog,
     find_glyphs::run_dialog,

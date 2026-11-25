@@ -16,7 +16,8 @@
 
 use craft::ui::contract::PlainData;
 use craft::ui::runtime::commands::CommandRef;
-use fontcraft_engine::fontinfo::Scope;
+use fontcraft_engine::fontinfo::names::names_of;
+use fontcraft_engine::fontinfo::{Names, Scope};
 use serde_json::{Map, Value, json};
 
 use super::commands::{Module, UiCommand};
@@ -47,7 +48,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Open Font Info Dialog",
         menu: &[],
         shortcut: None,
-        params: "{dialog: 'fieldPicker'|'parameterPicker'|'os2Bits'|'panose'|'featurePicker', scope: 'font'|'master'|'instance', targets?: [index], name?: string, index?: number} open a picker of the Font Info panel, or the dialog of the parameter `name` (its `index`th row of that name)",
+        params: "{dialog: 'fieldPicker'|'parameterPicker'|'os2Bits'|'panose'|'glyphs'|'records'|'featurePicker', scope: 'font'|'master'|'instance', targets?: [index], name?: string, index?: number} open a picker of the Font Info panel, or the dialog of the parameter `name` (its `index`th row of that name)",
     },
     UiCommand {
         id: SELECT_ROWS,
@@ -234,6 +235,18 @@ pub enum InfoDialog {
         target: Target,
         index: usize,
     },
+    /// The glyph picker of the `index`th row of the parameter `name`, which names glyphs.
+    Glyphs {
+        target: Target,
+        name: String,
+        index: usize,
+    },
+    /// The row table of the `index`th row of `name` (gasp Table, meta Table, Name Table Entry).
+    Records {
+        target: Target,
+        name: String,
+        index: usize,
+    },
     /// Add Feature, from the plus beside the Features heading.
     FeaturePicker,
 }
@@ -257,6 +270,8 @@ pub fn open_params(dialog: &InfoDialog) -> Value {
         InfoDialog::ParameterPicker(t) => ("parameterPicker", t, None),
         InfoDialog::Bits { target, name, index } => ("os2Bits", target, Some((name.as_str(), *index))),
         InfoDialog::Panose { target, index } => ("panose", target, Some(("panose", *index))),
+        InfoDialog::Glyphs { target, name, index } => ("glyphs", target, Some((name.as_str(), *index))),
+        InfoDialog::Records { target, name, index } => ("records", target, Some((name.as_str(), *index))),
         InfoDialog::FeaturePicker => return json!({ "dialog": "featurePicker" }),
     };
     let mut p = target.params();
@@ -343,8 +358,16 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
                 "os2Bits" if crate::dialogs::os2_bits::BitSet::of(&name).is_some() => InfoDialog::Bits { target, name, index },
                 "os2Bits" => return Err(format!("`{name}` has no bit dialog: use fsType, codePageRanges or unicodeRanges")),
                 "panose" => InfoDialog::Panose { target, index },
+                "glyphs" if names_of(&name) == Names::Glyph => InfoDialog::Glyphs { target, name, index },
+                "glyphs" => return Err(format!("`{name}` is no parameter that names glyphs")),
+                "records" if crate::dialogs::record_table::RecordKind::of(&name).is_some() => InfoDialog::Records { target, name, index },
+                "records" => return Err(format!("`{name}` has no row table: use gasp Table, meta Table or Name Table Entry")),
                 "featurePicker" => InfoDialog::FeaturePicker,
-                other => return Err(format!("unknown dialog `{other}`: use fieldPicker, parameterPicker, os2Bits, panose or featurePicker")),
+                other => {
+                    return Err(format!(
+                        "unknown dialog `{other}`: use fieldPicker, parameterPicker, os2Bits, panose, glyphs, records or featurePicker"
+                    ));
+                }
             };
             app.view.font_info.request = Some(request);
             Ok(())

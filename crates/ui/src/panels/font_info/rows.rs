@@ -13,7 +13,7 @@
 use craft::behavior::IconId;
 use craft::theme::Srgba;
 use craft::theme::variant::Tone;
-use craft::ui::buttons::IconButton;
+use craft::ui::buttons::{Button, IconButton};
 use craft::ui::choice::Checkbox;
 use craft::ui::contract::{Bind, CollectionResponse, Entry, Props as _, Show as _, ShowContainer as _};
 use craft::ui::display::{Shade, Text};
@@ -196,6 +196,12 @@ fn draw(ui: &mut Ui, row: &RowModel, masters: &[(String, String)], languages: &[
             if let Some(edit) = param_value::editor(ui, row, masters, languages) {
                 action = Some(RowAction::Edit(edit));
             }
+            if let Some(dialog) = row.picker {
+                let pick = Button::new(words.edit.clone()).tooltip(words.edit_tip.clone()).id_salt((row.key.as_str(), row.occurrence, "picker"));
+                if pick.show(ui).clicked() {
+                    action = Some(RowAction::Edit(Edit::Dialog(dialog)));
+                }
+            }
             if !row.holders.is_empty() {
                 let held = format!("{}/{total}", row.holders.len());
                 Text::new(held).shade(Shade::Muted).tooltip(words.some_lack.clone()).show(ui);
@@ -272,6 +278,12 @@ pub fn dialog_message(target: &Target, row: &RowModel, dialog: RowDialog) -> Opt
             shell("font.info.openDialog", open_params(&InfoDialog::Bits { target: target.clone(), name: row.key.clone(), index: row.occurrence }))
         }
         RowDialog::Panose => shell("font.info.openDialog", open_params(&InfoDialog::Panose { target: target.clone(), index: row.occurrence })),
+        RowDialog::Glyphs => {
+            shell("font.info.openDialog", open_params(&InfoDialog::Glyphs { target: target.clone(), name: row.key.clone(), index: row.occurrence }))
+        }
+        RowDialog::Records => {
+            shell("font.info.openDialog", open_params(&InfoDialog::Records { target: target.clone(), name: row.key.clone(), index: row.occurrence }))
+        }
         RowDialog::TtfStems => shell("window.ttfStems", json!({"master": target.first()})),
         RowDialog::TtfZones => shell("window.ttfZones", json!({"master": target.first()})),
         RowDialog::AxisLocation => open("dialog.axisLocation", json!({"scope": target.scope.name(), "targets": target.first()})),

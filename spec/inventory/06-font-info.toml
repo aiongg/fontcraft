@@ -80,10 +80,10 @@ label = "Open Font Info Dialog"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{dialog: 'fieldPicker'|'parameterPicker'|'os2Bits'|'panose'|'featurePicker', scope: 'font'|'master'|'instance', targets?: [index], name?: string, index?: number}"
+params = "{dialog: 'fieldPicker'|'parameterPicker'|'os2Bits'|'panose'|'glyphs'|'records'|'featurePicker', scope: 'font'|'master'|'instance', targets?: [index], name?: string, index?: number}"
 area = "font-info"
 milestone = "M7"
-summary = "Opens one of the Font Info window's pickers (fields, custom parameters, features) or the dialog that edits one parameter's value (OS/2 bit fields, PANOSE)."
+summary = "Opens one of the Font Info window's pickers (fields, custom parameters, features) or the dialog that edits one parameter's value (OS/2 bit fields, PANOSE, the glyphs a parameter names, the records of gasp Table, meta Table and Name Table Entry)."
 ref = "Font Info"
 status = "inferred"
 notes = "Our command behind the Font Info panel's plus buttons and parameter value fields in `crates/ui`, so the dialogs open through the command channel as clicks open them. The reference app opens the same pickers and editors from those buttons and fields; it has no command for them."
@@ -404,15 +404,20 @@ milestone = "M7"
 summary = "A custom parameter row edits its value with the control its kind calls for: a check box for yes or no, a number field, a text field, a field of several lines for a list, a menu for a value from a fixed list, check boxes for a list of such values, a menu of the font's masters for a parameter that names a master, and an Edit button for a value with a dialog of its own (OS/2 bits, PANOSE, TTFZones, TTFStems and the others). A value the parameter's check refuses is not stored, and the check's message shows under the row."
 ref = "Font Info › Font › Custom Parameters"
 status = "inferred"
-notes = "Not documented and not yet observed. M7 plan: M7.22, `crates/ui/src/panels/font_info/param_value.rs` and `rows.rs`; the editor of each row is chosen in `crates/ui/src/app/models/font_info.rs` from the catalogue's kind and value list. A typed value goes through the check of font.customParameters.set (`fontcraft_fontinfo::value::check`) before anything is sent, so the row and the command refuse the same values with the same words; a dictionary or localized value is checked as a whole when one of its fields changes. Every edit is one font.customParameters.set. A master's TTFZones and TTFStems rows open their editors with window.ttfZones and window.ttfStems on that master."
+notes = "Not documented and not yet observed. M7 plan: M7.22, `crates/ui/src/panels/font_info/param_value.rs` and `rows.rs`; the editor of each row is chosen in `crates/ui/src/app/models/font_info.rs` from the catalogue's kind and value list. A typed value goes through the check of font.customParameters.set (`fontcraft_fontinfo::value::check`) before anything is sent, so the row and the command refuse the same values with the same words; a dictionary or localized value is checked as a whole when one of its fields changes. Every edit is one font.customParameters.set. A master's TTFZones and TTFStems rows open their editors with window.ttfZones and window.ttfStems on that master. M7.33: what a value names in the font comes from the parameter rows' `names` key (axis, master, glyph): an axis tag is a menu of the font's axes, Disable Masters check boxes for its masters, a parameter that names glyphs has an Edit button that opens a glyph picker, and a name the font lacks shows a warning under the row and is kept. gasp Table, meta Table and Name Table Entry are edited in a row table (crates/ui/src/dialogs/record_table.rs)."
 guesses = [
   "Variable Font Origin, Get Hints From Master and Link Metrics With Master are menus of the font's masters that store the master's id; the reference app's row and the file it writes settle it.",
   "A refused value's message stays under its row until the next edit; the reference app with vendorID ABCDE settles it.",
+  "An axis-tag value is a menu of the font's axes and Disable Masters check boxes for its masters, stored as a list of names; the reference app's rows settle it.",
+  "A parameter that names glyphs keeps its text field with a button for a glyph picker, and names the font lacks are only pointed out; the reference app's rows settle both.",
+  "gasp Table, meta Table and Name Table Entry open a table of their records; the reference app's editors settle it.",
   "A value from a fixed list of whole numbers (Post Table Type) is stored as a number, any other as text; the file the reference app writes after picking one settles it.",
 ]
 observe = [
   "In font A (m7-one), add Variable Font Origin and Get Hints From Master on the Font tab and Link Metrics With Master on a master: note whether each is a menu of masters or a text field, and what the file stores after picking one.",
   "In font A (m7-one), add Post Table Type and Webfont Formats on the Font tab: note whether the first is a menu and the second check boxes, and what the file stores.",
+  "In font B (m7-two), add Style Name as STAT entry and Disable Masters on an export and Keep Glyphs on the Font tab: note the editor of each, and what Keep Glyphs shows for a glyph the font lacks.",
+  "In font A (m7-one), add gasp Table, meta Table and Name Table Entry on the Font tab: note which editor each opens.",
   "In font A (m7-one), add TTFZones on a master and click its value: note whether the TTFZones editor opens.",
 ]
 

@@ -41,8 +41,23 @@ pub struct ParamSpec {
     /// The values the parameter takes, from the row's `values`: the one value of a number or text,
     /// each item of a list, the `tag` of each meta Table entry. Empty for a free value.
     pub choices: &'static [&'static str],
+    /// What the value, or each item of a list, names in the font.
+    pub names: Names,
     /// One line for the picker, in our own words, naming no vendor.
     pub summary: &'static str,
+}
+
+/// What a parameter's value names in the font ([`crate::names`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Names {
+    #[default]
+    Nothing,
+    /// An axis, by tag.
+    Axis,
+    /// A master, by name or id.
+    Master,
+    /// Glyphs, in the parameter's own form ([`crate::names::glyph_names`]).
+    Glyph,
 }
 
 /// The kind of value a parameter takes. The inventory's `choice` rows are [`ParamKind::String`];
