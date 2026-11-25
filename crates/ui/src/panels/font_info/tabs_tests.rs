@@ -715,14 +715,14 @@ fn alt_click_on_a_name_asks_its_preview() {
     let (pos, galley) = painted_code(&mut fixture, "sub a by b;");
     let at = galley.pos_from_cursor(egui::text::CCursor::new(4)).translate(pos.to_vec2()).center() + egui::vec2(2.0, 0.0);
     fixture.hold(Modifiers::ALT).click_at(at).hold(Modifiers::NONE).settle();
-    let ask = PreviewAsk { key: key(EntryKind::Feature, "ss01", 1), name: "a".into(), start: 4, end: 5 };
+    let ask = PreviewAsk { key: key(EntryKind::Feature, "ss01", 1), name: "a".into(), start: 4, end: 5, token: false };
     assert!(posted.borrow().contains(&Msg::View(ViewMsg::FeaturePreview(Some(ask)))), "{:?}", posted.borrow());
 }
 
 /// The name under a click keeps a leading `@` or backslash and stops at punctuation and spaces.
 #[test]
 fn the_clicked_name_takes_name_characters_on_both_sides() {
-    use super::code_editor::name_at;
+    use super::feature_previews::name_at;
     let code = "sub @Low' \\a.sc by [b-c];";
     let name = |at: usize| name_at(code, at).map(|(s, e)| code.chars().skip(s).take(e - s).collect::<String>());
     assert_eq!(name(6).as_deref(), Some("@Low"));
@@ -735,21 +735,23 @@ fn the_clicked_name_takes_name_characters_on_both_sides() {
 /// preview lists its rules and says when more follow.
 #[test]
 fn a_preview_lists_class_members_anchors_and_lookup_rules() {
-    use super::code_editor::{CodeEditorWords, preview_lines};
+    use super::feature_previews::{PreviewWords, preview_lines};
     use crate::app::models::font_features::PreviewModel;
-    let words = CodeEditorWords::default();
+    let words = PreviewWords::default();
     let class = PreviewModel {
         name: "@Top".into(),
         kind: "class".into(),
         glyphs: vec!["a".into(), "b".into()],
+        total: 600,
         unknown: vec!["zz".into()],
         ..PreviewModel::default()
     };
-    assert_eq!(preview_lines(&class, &words), ["Class @Top: 2 glyphs", "a b", "Not in the font: zz"]);
+    assert_eq!(preview_lines(&class, &words), ["Class @Top: 600 glyphs, first drawn: 2", "Not in the font: zz"]);
     let marks = PreviewModel {
         name: "@MARKS".into(),
         kind: "class".into(),
         glyphs: vec!["acutecomb".into()],
+        total: 1,
         anchors: vec![("<anchor 0 500>".into(), "acutecomb".into())],
         ..PreviewModel::default()
     };

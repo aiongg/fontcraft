@@ -2,7 +2,7 @@
 //!
 //! Commands: `font.features.list`, `get`, `listAvailable`, `addPrefix`, `addClass`, `addFeature`,
 //! `remove`, `rename`, `reorder`, `setCode`, `setAutomatic`, `setNotes`, `update`, `updateEntry`,
-//! `setLabel`, `removeLabel`, `openSpec`, `expandCode`. Entry data and Update logic live in
+//! `setLabel`, `removeLabel`, `openSpec`, and the row of `expandCode` (`features_expand`). Entry data and Update logic live in
 //! `fontcraft_features` (`auto`, `assemble`, `registry`).
 //!
 //! An entry is named by its group (`kind`), its name (a feature's tag, a class name without `@`)
@@ -15,7 +15,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use fontcraft_features::auto::{self, AutoContext};
-use fontcraft_features::{EntryKind, EntryRef, FeatureError, MAX_ENTRIES, MAX_ENTRY_BYTES, MasterValues, Target, assemble, registry};
+use fontcraft_features::{EntryKind, EntryRef, FeatureError, MAX_ENTRIES, MAX_ENTRY_BYTES, registry};
 use fontcraft_model::{DEFAULT_LANGUAGE, Extra, Features, Font, Localized, MAX_NAME_LEN, Snippet, language_id};
 use serde_json::{Value, json};
 
@@ -193,9 +193,9 @@ pub fn specs() -> Vec<CommandSpec> {
             "Expand Feature Code",
             [],
             None,
-            "{target?: {master?: id|name} (default: the first master), includeImplicit?: bool (default: false)} the complete standard feature file for one master after tokens, conditional blocks and syntax extensions are resolved, every included entry written in place. Instances, the variable font and the implicit features are not available yet → {target: {master}, code}",
+            "{target?: {master: id|name} | {instance: index|id|name} | {variable: true} (default: the first master), includeImplicit?: bool (default: false)} the complete standard feature file of one build after tokens, conditional blocks and syntax extensions are resolved, every included entry written in place: an instance with its Add, Replace and Remove feature parameters applied and its interpolated values, the variable font with its `#ifdef VARIABLE` blocks. includeImplicit gives the code an export of that build compiles (font.compile's debugFile): the automatic code regenerated for the glyphs it exports, the code of the generated contextual mark attachment at the end; kerning and the other mark attachment are generated as lookups, not as code → {target, name, code, refused: [string] (an instance's feature parameters that cannot be applied)}",
             has_doc,
-            expand_code
+            super::features_expand::expand_code
         ),
     ]
 }
@@ -821,46 +821,4 @@ fn open_spec(_: &mut Session, raw: &Value) -> Result<Value> {
     let tag = p.str("tag")?;
     let t = registry::lookup(tag).ok_or_else(|| p.bad(format!("`{tag}` is not a registered feature tag")))?;
     Ok(json!({ "tag": t.tag, "name": t.name, "url": t.spec_url() }))
-}
-
-fn master_id(p: &Params, font: &Font, key: &str, value: Option<&str>) -> Result<String> {
-    match value {
-        None => Ok(font.default_master()?.id.clone()),
-        Some(v) => font
-            .masters
-            .iter()
-            .find(|m| m.id == v)
-            .or_else(|| font.masters.iter().find(|m| m.name == v))
-            .map(|m| m.id.clone())
-            .ok_or_else(|| p.bad(format!("`{key}`: the font has no master `{v}`"))),
-    }
-}
-
-fn expand_code(s: &mut Session, raw: &Value) -> Result<Value> {
-    let p = Params::new("font.features.expandCode", raw)?;
-    if p.bool_or("includeImplicit", false)? {
-        return Err(EngineError::Unsupported("writing the implicit features (kern, mark, mkmk, curs, dist) as feature code".into()));
-    }
-    let master = match p.opt_object("target")? {
-        None => None,
-        Some(target) => {
-            if target.contains_key("instance") || target.contains_key("variable") {
-                return Err(EngineError::Unsupported("expanding feature code for an instance or the variable font".into()));
-            }
-            if let Some(key) = target.keys().find(|k| k.as_str() != "master") {
-                return Err(p.bad(format!("`target` takes `master`, found `{key}`")));
-            }
-            match target.get("master") {
-                None | Some(Value::Null) => None,
-                Some(Value::String(m)) => Some(m.as_str()),
-                Some(other) => return Err(p.bad(format!("`target.master` must be a string, got {}", crate::params::kind(other)))),
-            }
-        }
-    };
-    let data = s.glyph_data()?;
-    let font = s.font()?;
-    let master = master_id(&p, font, "target.master", master)?;
-    let values = MasterValues::new(font, &data, &master).map_err(|e| feature_error(&p, e))?;
-    let assembly = assemble(font, &font.features, &Target::Master(master.clone()), &values).map_err(|e| feature_error(&p, e))?;
-    Ok(json!({ "target": {"master": master}, "code": assembly.expanded_text() }))
 }

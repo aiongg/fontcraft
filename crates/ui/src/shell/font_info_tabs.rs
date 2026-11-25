@@ -9,6 +9,8 @@
 //! The selection is view state: the projection resolves it against the font (an entry that moved or was renamed
 //! keeps its place in the selection), so a stale selection never names an entry the font lacks.
 
+use std::sync::Arc;
+
 use craft::ui::contract::PlainData;
 use craft::ui::runtime::commands::CommandRef;
 use fontcraft_engine::model::{Features, Snippet};
@@ -176,6 +178,10 @@ pub struct FeaturesView {
     pub checked: Option<CheckedDraft>,
     /// The name Alt-clicked in the code editor, which the projection previews with `font.features.previewName`.
     pub preview: Option<PreviewAsk>,
+    /// The expanded-code view, while it is open in place of the entry.
+    pub expanded: Option<ExpandedView>,
+    /// The last expansion for that view (`crate::shell::feature_work`).
+    pub expansion: Option<Expansion>,
     /// The code editor's find bar, while it is open; the projection lists its matches with `font.features.find`.
     pub find: Option<FindState>,
 }
@@ -209,13 +215,62 @@ impl FindState {
     }
 }
 
-/// A name Alt-clicked in an entry's code: its text and its characters in the code as shown.
+/// A name or `$` token Alt-clicked in an entry's code: its text and its characters in the code as shown.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct PreviewAsk {
     pub key: EntryKey,
     pub name: String,
     pub start: usize,
     pub end: usize,
+    /// It is a token.
+    pub token: bool,
+}
+
+/// The build the expanded-code view shows the code of.
+#[derive(PlainData, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ExpandTarget {
+    /// The master with this id.
+    Master(String),
+    /// The instance at this index.
+    Instance(usize),
+    /// The variable font of the whole designspace.
+    Variable,
+}
+
+impl ExpandTarget {
+    /// The `target` parameter of `font.features.expandCode`.
+    pub fn param(&self) -> Value {
+        match self {
+            ExpandTarget::Master(id) => json!({ "master": id }),
+            ExpandTarget::Instance(index) => json!({ "instance": index }),
+            ExpandTarget::Variable => json!({ "variable": true }),
+        }
+    }
+}
+
+/// What the expanded-code view is set to.
+#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+pub struct ExpandedView {
+    /// The build shown; `None` is the current master.
+    pub target: Option<ExpandTarget>,
+    /// With the automatic code regenerated and the generated features, as an export compiles it.
+    pub generated: bool,
+    /// The text of the find field.
+    pub query: String,
+}
+
+/// What an expansion reads: the document's id and revision, the build, and whether with the generated features.
+pub type ExpandKey = (u64, u64, ExpandTarget, bool);
+
+/// What `font.features.expandCode` gave.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Expansion {
+    pub key: ExpandKey,
+    pub code: Arc<String>,
+    /// An instance's feature parameters that cannot be applied.
+    pub refused: Vec<String>,
+    /// Why there is no code.
+    pub problem: Option<String>,
 }
 
 /// The code as typed in an entry's code editor.
@@ -263,6 +318,7 @@ fn show_error(app: &mut FontCraftApp, reply: &Value) {
     });
     let view = &mut app.view.font_info.features;
     view.selected = vec![key];
+    view.expanded = None;
     view.jump = jump;
     app.view_changed();
 }
@@ -337,6 +393,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
                 }
             }
             app.view.font_info.features.selected = selected;
+            app.view.font_info.features.expanded = None;
             Ok(())
         }
         "font.info.exports.select" => {

@@ -213,7 +213,11 @@ pub fn project(model: &mut Tracked<FontInfoModel>, cx: &mut ProjectCx<'_>) {
     let warnings = axis_warnings(cx);
     let settings = cx.session.query("font.settings.get", &json!({})).unwrap_or(Json::Null);
     let info_warnings = cx.session.query("font.info.get", &json!({"keys": ["warnings"]})).map(|reply| field_warnings(&reply)).unwrap_or_default();
-    let features = if tab == FontInfoTab::Features { super::font_features::project(cx) } else { Default::default() };
+    let features = if tab == FontInfoTab::Features {
+        super::font_features::project(cx, model.features.entry.as_ref().and_then(|e| e.preview.as_ref()))
+    } else {
+        Default::default()
+    };
     let exports = if tab == FontInfoTab::Exports { super::font_exports::project(cx) } else { Default::default() };
     let Ok(font) = cx.session.font() else {
         super::set(model, FontInfoModel { tab, ..FontInfoModel::default() });

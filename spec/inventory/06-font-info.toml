@@ -2858,7 +2858,7 @@ milestone = "M8"
 summary = "Shows a popover with a drawing of the glyph, or with all member glyphs of the class, for the glyph or class name that was Alt-clicked in the code editor."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed. An engine query returning the glyph, or the member glyphs of a class with nested classes and tokens resolved (M8.17). Classes are class entries, `@Name = …;` definitions in the code of prefix and feature entries, and `markClass` classes, whose reply adds each statement's glyphs and anchor; a lookup name returns its first 50 rules and whether it has more (M8.30). Alt-click in the code editor opens the popover (M8.30b)."
+notes = "Documented, not yet observed. An engine query returning the glyph, or the member glyphs of a class with nested classes and tokens resolved (M8.17). Classes are class entries, `@Name = …;` definitions in the code of prefix and feature entries, and `markClass` classes, whose reply adds each statement's glyphs and anchor; a lookup name returns its first 50 rules and whether it has more (M8.30). Alt-click in the code editor opens the popover (M8.30b), which draws the glyph or the members (M8.52)."
 guesses = [
   "A class entry wins over a class of the same name defined in code, and the first definition in code wins over later ones.",
   "Alt-clicking a lookup name shows its first 50 rules, whitespace collapsed and each cut at 300 characters.",

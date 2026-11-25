@@ -139,6 +139,12 @@ pub fn evaluate(token: &str, values: &dyn TargetValues) -> Result<TokenValue, St
     }
 }
 
+/// The glyph a property token's text (`${glyph:…}`) names.
+pub fn token_glyph(token: &str) -> Option<&str> {
+    let inner = token.trim().strip_prefix("${")?.strip_suffix('}')?;
+    inner.split_once(':').map(|(glyph, _)| glyph.trim()).filter(|glyph| !glyph.is_empty())
+}
+
 /// The byte ranges of the tokens in `code`, in order, at most [`MAX_TOKENS`] (syntax colouring,
 /// the token under the pointer).
 pub fn token_ranges(code: &str) -> Vec<Range<usize>> {

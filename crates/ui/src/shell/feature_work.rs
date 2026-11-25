@@ -1,6 +1,9 @@
 //! The Features tab's work off the window's thread (M8.25): the check of the code as typed, and the compile after the
 //! code changed.
 //!
+//! - **Expansion.** While the Features tab shows the expanded code of a build (`FeaturesView::expanded`),
+//!   `font.features.expandCode` runs the same way (`fontcraft_engine::cmd::features_expand::expand_font`): at once for a
+//!   build or setting not expanded yet, after the pause when the document changed.
 //! - **Check.** The code editor reports the code as typed (`ViewMsg::FeatureDraft`). Once the draft has stood for
 //!   [`CHECK_PAUSE`] seconds, `font.features.check` runs on it through the host's jobs (a thread of its own on the
 //!   desktop; at once on the web and in tests with inline jobs), with the font of the revision shown then. One check
@@ -21,14 +24,15 @@ use std::sync::{Arc, Mutex};
 
 use craft::behavior::dock::PanelState;
 use fontcraft_engine::cmd::features_check::{CheckContext, check_context, check_font, compile_instance};
+use fontcraft_engine::cmd::features_expand::expand_font;
 use fontcraft_engine::feature_state::{AheadCompile, SessionFeaturesExt as _, compile_ahead};
-use fontcraft_engine::model::{Features, Snippet};
+use fontcraft_engine::model::{Features, Font, Snippet};
 use serde_json::{Value, json};
 
 use crate::app::{FontCraftApp, Msg};
 use crate::shell::dock::PanelId;
 use crate::shell::font_info::FontInfoTab;
-use crate::shell::font_info_tabs::{CheckedDraft, FeatureDraft, InstanceProblems, ParamProblem};
+use crate::shell::font_info_tabs::{CheckedDraft, ExpandKey, ExpandTarget, Expansion, FeatureDraft, InstanceProblems, ParamProblem};
 
 /// How long, in seconds, a draft or a document must stand still before it is checked or compiled.
 pub const CHECK_PAUSE: f64 = 0.5;
@@ -68,6 +72,10 @@ pub struct FeatureWork {
     shown: Option<(InstanceKey, f64)>,
     /// The instance compile under way.
     instance: Option<InstanceJob>,
+    /// The expansion the Features tab shows, and the time it was first seen at this revision.
+    expand_seen: Option<(ExpandKey, f64)>,
+    /// The expansion under way.
+    expand: Option<(ExpandKey, Landing<Result<Value, String>>)>,
 }
 
 impl FeatureWork {
@@ -81,6 +89,9 @@ impl FeatureWork {
             *since = f64::NEG_INFINITY;
         }
         if let Some((_, since)) = &mut self.shown {
+            *since = f64::NEG_INFINITY;
+        }
+        if let Some((_, since)) = &mut self.expand_seen {
             *since = f64::NEG_INFINITY;
         }
     }
@@ -158,7 +169,7 @@ pub fn logic(app: &mut FontCraftApp, ctx: &egui::Context) {
 /// [`logic`] at time `now`, in seconds; returns how many seconds until a frame should look again.
 pub fn step(app: &mut FontCraftApp, now: f64) -> Option<f64> {
     watch_entries(app);
-    let waits = [step_check(app, now), step_compile(app, now), step_instance(app, now)];
+    let waits = [step_check(app, now), step_compile(app, now), step_instance(app, now), step_expand(app, now)];
     show_busy(app);
     waits.into_iter().flatten().reduce(f64::min)
 }
@@ -332,6 +343,104 @@ fn start_compile(app: &mut FontCraftApp) {
     };
     app.feature_work.compile = Some((key, landing));
     app.host.jobs().spawn("feature code compile", Box::new(job));
+}
+
+/// The build the expanded-code view shows: the one picked, else the current master, also when the one picked is gone.
+pub fn expand_target(font: &Font, layers: &crate::shell::masters::LayersView, picked: Option<&ExpandTarget>) -> Option<ExpandTarget> {
+    let there = picked.filter(|t| match t {
+        ExpandTarget::Master(id) => font.masters.iter().any(|m| m.id == *id),
+        ExpandTarget::Instance(at) => font.instances.get(*at).is_some_and(|i| i.kind.is_none()),
+        ExpandTarget::Variable => true,
+    });
+    there.cloned().or_else(|| crate::shell::masters::current_master_id(font, layers).map(ExpandTarget::Master))
+}
+
+/// What the Features tab's expanded-code view needs, while it shows.
+fn wanted_expansion(app: &FontCraftApp) -> Option<ExpandKey> {
+    if app.view.font_info.tab != FontInfoTab::Features || app.view.workspace.layout.panel_state(&PanelId::FontInfo) == PanelState::Hidden {
+        return None;
+    }
+    let shown = app.view.font_info.features.expanded.as_ref()?;
+    let doc = app.session.active()?;
+    Some((doc.id, doc.revision, expand_target(&doc.font, &app.view.layers, shown.target.as_ref())?, shown.generated))
+}
+
+fn step_expand(app: &mut FontCraftApp, now: f64) -> Option<f64> {
+    let wanted = wanted_expansion(app);
+    if let Some((key, landing)) = &app.feature_work.expand
+        && let Some(result) = take(landing)
+    {
+        let key = key.clone();
+        app.feature_work.expand = None;
+        if wanted.as_ref() == Some(&key) {
+            app.view.font_info.features.expansion = Some(expansion(key, result));
+            app.view_changed();
+        }
+    }
+    let Some(wanted) = wanted else {
+        app.feature_work.expand_seen = None;
+        if app.view.font_info.features.expansion.take().is_some() {
+            app.view_changed();
+        }
+        return None;
+    };
+    if app.feature_work.expand.is_some() {
+        return Some(POLL);
+    }
+    let known = app.view.font_info.features.expansion.as_ref().map(|e| e.key.clone());
+    if known.as_ref() == Some(&wanted) {
+        return None;
+    }
+    let since = match &app.feature_work.expand_seen {
+        Some((seen, since)) if *seen == wanted => *since,
+        _ => {
+            app.feature_work.expand_seen = Some((wanted.clone(), now));
+            now
+        }
+    };
+    // The build shown before waits until the document stands still.
+    let wait = CHECK_PAUSE - (now - since);
+    if known.is_some_and(|(doc, _, target, generated)| (doc, &target, generated) == (wanted.0, &wanted.2, wanted.3)) && wait > 0.0 {
+        return Some(wait.max(POLL));
+    }
+    start_expand(app, wanted);
+    app.feature_work.expand.is_some().then_some(POLL)
+}
+
+/// The expansion that `result`, `font.features.expandCode`'s answer, is.
+fn expansion(key: ExpandKey, result: Result<Value, String>) -> Expansion {
+    match result {
+        Ok(reply) => Expansion {
+            key,
+            code: Arc::new(reply.get("code").and_then(Value::as_str).unwrap_or_default().to_string()),
+            refused: crate::app::models::font_features::strings(reply.get("refused")),
+            problem: None,
+        },
+        Err(problem) => Expansion { key, code: Arc::default(), refused: Vec::new(), problem: Some(problem) },
+    }
+}
+
+/// Starts the expansion of `key`.
+fn start_expand(app: &mut FontCraftApp, key: ExpandKey) {
+    let Some(doc) = app.session.active() else { return };
+    let font = Arc::clone(&doc.font);
+    let Ok(cx) = check_context(&app.session) else { return };
+    let landing: Landing<Result<Value, String>> = Arc::default();
+    let out = Arc::clone(&landing);
+    let wake = app.window.clone();
+    let raw = json!({ "target": key.2.param(), "includeImplicit": key.3 });
+    let job = move || {
+        let result = fontcraft_engine::guard::catch_panic(|| expand_font(&font, &cx, &raw).map_err(|e| e.to_string()))
+            .unwrap_or_else(|e| Err(format!("the expansion stopped: {e}")));
+        if let Ok(mut slot) = out.lock() {
+            *slot = Some(result);
+        }
+        if let Some(ctx) = wake {
+            ctx.request_repaint();
+        }
+    };
+    app.feature_work.expand = Some((key, landing));
+    app.host.jobs().spawn("feature code expansion", Box::new(job));
 }
 
 /// The one instance the Exports tab shows while Font Info shows that tab.

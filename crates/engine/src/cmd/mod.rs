@@ -44,6 +44,7 @@ mod features;
 pub mod features_check;
 pub(crate) mod features_compile;
 mod features_entries;
+pub mod features_expand;
 mod features_find;
 mod features_io;
 pub mod features_targets;

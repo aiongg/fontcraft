@@ -19,13 +19,17 @@ pub mod code_editor;
 pub mod code_find;
 #[cfg(test)]
 mod dialogs_tests;
+pub mod expanded_code;
 pub mod exports_tab;
+pub mod feature_previews;
 pub mod features_tab;
 pub mod font_tab;
 pub mod masters_tab;
 pub mod notes_tab;
 pub mod other_tab;
 pub mod param_value;
+#[cfg(test)]
+mod previews_tests;
 pub mod rows;
 #[cfg(test)]
 mod tabs_tests;

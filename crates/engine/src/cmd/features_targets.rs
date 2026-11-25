@@ -21,6 +21,7 @@ use fontcraft_features::params::apply_instance_params;
 use fontcraft_features::var_info::VariableFeatures;
 use fontcraft_features::{EntryDiagnostic, EntryRange, FeatureError, MasterValues, Target, TargetValues, assemble};
 use fontcraft_fontinfo::target as lists;
+use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Features, Font, Params as FontParams};
 use serde_json::{Value, json};
 
@@ -45,7 +46,8 @@ pub enum CheckTarget {
 }
 
 impl CheckTarget {
-    fn label(&self, font: &Font) -> String {
+    /// The name the target is reported under.
+    pub(crate) fn label(&self, font: &Font) -> String {
         match self {
             CheckTarget::Master(id) => {
                 let name = font.masters.iter().find(|m| m.id == *id).map(|m| m.name.as_str()).filter(|n| !n.is_empty());
@@ -209,103 +211,20 @@ struct Run<'a> {
 impl Run<'_> {
     /// The diagnostics of `target`, placed in the stored entries.
     fn target(&mut self, target: &CheckTarget) -> Vec<EntryDiagnostic> {
-        match target {
-            CheckTarget::Master(id) => self.master(id),
-            CheckTarget::Instance(index) => self.instance(*index),
-            CheckTarget::Variable => self.variable(),
+        let (font, stored, cx) = (self.font, self.features, self.cx);
+        let at = at_target(font, stored, &cx.glyph_data, target, false, |made| self.compile(made));
+        let mut out: Vec<EntryDiagnostic> = at.refused.into_iter().map(request_diagnostic).collect();
+        match at.read {
+            Ok(found) => out.extend(found.into_iter().map(|d| stored_place(stored, &at.features, d))),
+            Err(message) => out.push(request_diagnostic(message)),
         }
-    }
-
-    fn master(&mut self, id: &str) -> Vec<EntryDiagnostic> {
-        match MasterValues::new(self.font, &self.cx.glyph_data, id) {
-            Ok(values) => self.compile(self.font, self.features, &Target::Master(id.to_string()), &values, None),
-            Err(e) => vec![request_diagnostic(e.to_string())],
-        }
-    }
-
-    fn variable(&mut self) -> Vec<EntryDiagnostic> {
-        let failed = |e: String| vec![request_diagnostic(format!("the variable font's code cannot be compiled: {e}"))];
-        let (origin, layout) = match fontcraft_compile::var::feature_layout(self.font) {
-            Ok(found) => found,
-            Err(e) => return failed(e.to_string()),
-        };
-        let values = match MasterValues::new(self.font, &self.cx.glyph_data, &origin) {
-            Ok(values) => values.for_variable_font(),
-            Err(e) => return failed(e.to_string()),
-        };
-        let variations = match VariableFeatures::new(self.font, &layout) {
-            Ok(v) => v,
-            Err(e) => return failed(e.to_string()),
-        };
-        self.compile(self.font, self.features, &Target::Variable, &values, Some(&variations))
-    }
-
-    fn instance(&mut self, index: usize) -> Vec<EntryDiagnostic> {
-        let font = self.font;
-        let Some(inst) = font.instances.get(index) else { return vec![request_diagnostic("the instance is gone")] };
-        // The instance's parameters, applied one by one, so one that cannot be applied is reported and the rest hold.
-        let mut made: Cow<'_, Features> = Cow::Borrowed(self.features);
-        let mut out = Vec::new();
-        for param in inst.params.0.iter().filter(|p| !p.disabled) {
-            match apply_instance_params(&made, &FontParams(vec![param.clone()])) {
-                Ok(next) if next == *made => {}
-                Ok(next) => made = Cow::Owned(next),
-                Err(e) => out.push(request_diagnostic(e.to_string())),
-            }
-        }
-        let target = fontcraft_model::Target::Instance(index);
-        let found = match fontcraft_compile::needs_instance_font(font, &target) {
-            Some(_) if uses_tokens(&made) => match interpolated(font, index) {
-                Ok(at) => {
-                    let Some(master) = at.masters.first().map(|m| m.id.clone()) else {
-                        return vec![request_diagnostic("the instance has no master")];
-                    };
-                    match MasterValues::new(&at, &self.cx.glyph_data, &master) {
-                        Ok(values) => {
-                            let values = match fontcraft_compile::instance_feature_axes(font, &target) {
-                                Some((axes, location)) => values.with_feature_axes(axes, location),
-                                None => values,
-                            };
-                            self.compile(&at, &made, &Target::Master(master), &values, None)
-                        }
-                        Err(e) => vec![request_diagnostic(e.to_string())],
-                    }
-                }
-                Err(message) => vec![request_diagnostic(format!("the instance cannot be interpolated: {message}"))],
-            },
-            needs => {
-                // Without tokens the code reads nothing of the instance but its location.
-                let master = match needs {
-                    Some(_) => font.masters.first(),
-                    None => font.master_at(&inst.location).or(font.masters.first()),
-                };
-                let Some(master) = master.map(|m| m.id.clone()) else { return vec![request_diagnostic("the font has no master")] };
-                match MasterValues::new(font, &self.cx.glyph_data, &master) {
-                    Ok(values) => {
-                        let values = match fontcraft_compile::instance_feature_axes(font, &target) {
-                            Some((axes, location)) => values.with_feature_axes(axes, location),
-                            None => values,
-                        };
-                        self.compile(font, &made, &Target::Master(master), &values, None)
-                    }
-                    Err(e) => vec![request_diagnostic(e.to_string())],
-                }
-            }
-        };
-        out.extend(found.into_iter().map(|d| stored_place(self.features, &made, d)));
         out
     }
 
-    /// The diagnostics of `features` assembled with `values`, compiled unless the same text was before.
-    fn compile(
-        &mut self,
-        font: &Font,
-        features: &Features,
-        target: &Target,
-        values: &dyn TargetValues,
-        variations: Option<&VariableFeatures>,
-    ) -> Vec<EntryDiagnostic> {
-        let assembly = match assemble(font, features, target, values) {
+    /// The diagnostics of the code of one build, compiled unless the same text was before.
+    fn compile(&mut self, made: &TargetInputs<'_>) -> Vec<EntryDiagnostic> {
+        let variations = made.variations;
+        let assembly = match assemble(made.font, made.features, &made.target, made.values) {
             Ok(assembly) => assembly,
             Err(FeatureError::Code(found)) => return found,
             Err(e) => return vec![request_diagnostic(e.to_string())],
@@ -336,6 +255,103 @@ impl Run<'_> {
         out.extend(found.iter().cloned().map(|d| map.map(d)));
         out
     }
+}
+
+/// What one build's feature code is assembled from.
+pub(crate) struct TargetInputs<'a> {
+    /// The font, or the instance's interpolated one.
+    pub font: &'a Font,
+    /// The entries, an instance's parameters applied.
+    pub features: &'a Features,
+    pub target: Target,
+    pub values: &'a dyn TargetValues,
+    /// For the variable font.
+    pub variations: Option<&'a VariableFeatures>,
+}
+
+/// What [`at_target`] read.
+pub(crate) struct AtTarget<'a, T> {
+    /// What the reader made, or why the build's values cannot be had.
+    pub read: Result<T, String>,
+    /// The entries, an instance's parameters applied.
+    pub features: Cow<'a, Features>,
+    /// The instance's feature parameters that cannot be applied, each with the reason.
+    pub refused: Vec<String>,
+}
+
+/// Gives `read` what the code of `target` is assembled from. An instance between the masters is interpolated when its
+/// code has a token or `interpolate` asks for it, since nothing else reads its values.
+pub(crate) fn at_target<'f, T>(
+    font: &Font,
+    features: &'f Features,
+    data: &GlyphData,
+    target: &CheckTarget,
+    interpolate: bool,
+    read: impl FnOnce(&TargetInputs<'_>) -> T,
+) -> AtTarget<'f, T> {
+    let mut made: Cow<'f, Features> = Cow::Borrowed(features);
+    let mut refused = Vec::new();
+    let read = match target {
+        CheckTarget::Master(id) => MasterValues::new(font, data, id).map_err(|e| e.to_string()).map(|values| {
+            let target = Target::Master(id.clone());
+            read(&TargetInputs { font, features, target, values: &values, variations: None })
+        }),
+        CheckTarget::Variable => variable_inputs(font, features, data, read),
+        CheckTarget::Instance(index) => match font.instances.get(*index) {
+            Some(inst) => {
+                // One parameter at a time, so one that cannot be applied is reported and the rest hold.
+                for param in inst.params.0.iter().filter(|p| !p.disabled) {
+                    match apply_instance_params(&made, &FontParams(vec![param.clone()])) {
+                        Ok(next) if next == *made => {}
+                        Ok(next) => made = Cow::Owned(next),
+                        Err(e) => refused.push(e.to_string()),
+                    }
+                }
+                instance_inputs(font, &made, data, *index, interpolate, read)
+            }
+            None => Err("the instance is gone".to_string()),
+        },
+    };
+    AtTarget { read, features: made, refused }
+}
+
+fn variable_inputs<T>(font: &Font, features: &Features, data: &GlyphData, read: impl FnOnce(&TargetInputs<'_>) -> T) -> Result<T, String> {
+    let failed = |e: String| format!("the variable font's code cannot be compiled: {e}");
+    let (origin, layout) = fontcraft_compile::var::feature_layout(font).map_err(|e| failed(e.to_string()))?;
+    let values = MasterValues::new(font, data, &origin).map_err(|e| failed(e.to_string()))?.for_variable_font();
+    let variations = VariableFeatures::new(font, &layout).map_err(|e| failed(e.to_string()))?;
+    Ok(read(&TargetInputs { font, features, target: Target::Variable, values: &values, variations: Some(&variations) }))
+}
+
+fn instance_inputs<T>(
+    font: &Font,
+    features: &Features,
+    data: &GlyphData,
+    index: usize,
+    interpolate: bool,
+    read: impl FnOnce(&TargetInputs<'_>) -> T,
+) -> Result<T, String> {
+    let target = fontcraft_model::Target::Instance(index);
+    let away = fontcraft_compile::needs_instance_font(font, &target).is_some();
+    let at: Cow<'_, Font> = if away && (interpolate || uses_tokens(features)) {
+        Cow::Owned(interpolated(font, index).map_err(|e| format!("the instance cannot be interpolated: {e}"))?)
+    } else {
+        Cow::Borrowed(font)
+    };
+    let master = match &at {
+        Cow::Owned(made) => made.masters.first(),
+        // Without tokens the code reads nothing of the instance but its location.
+        Cow::Borrowed(font) => {
+            let location = font.instances.get(index).filter(|_| !away).map(|inst| &inst.location);
+            location.and_then(|l| font.master_at(l)).or(font.masters.first())
+        }
+    };
+    let master = master.map(|m| m.id.clone()).ok_or("the font has no master")?;
+    let mut values = MasterValues::new(&at, data, &master).map_err(|e| e.to_string())?;
+    if let Some((axes, location)) = fontcraft_compile::instance_feature_axes(font, &target) {
+        values = values.with_feature_axes(axes, location);
+    }
+    Ok(read(&TargetInputs { font: &at, features, target: Target::Master(master), values: &values, variations: None }))
 }
 
 /// `font` at its instance `index`, reduced to one master.

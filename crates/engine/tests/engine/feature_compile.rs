@@ -836,6 +836,55 @@ fn an_error_in_a_variable_block_is_the_variable_fonts() {
     refused(&mut s, "font.features.check", json!({"kind": "feature", "name": "liga", "code": code, "targets": ["nothing"]}), "`targets`");
 }
 
+/// A token's value in every build, at an instance by name and by a glyph's interpolated width; a predicate lists glyphs.
+#[test]
+fn a_tokens_value_is_given_for_each_master_and_instance() {
+    let mut s = two_masters();
+    s.edit("width", |font| {
+        let mut a = font.glyphs.get_mut("a").unwrap();
+        a.layers[0].width = 500.0;
+        a.layers[1].width = 600.0;
+        Ok(())
+    })
+    .unwrap();
+    let values = |s: &mut Session, token: &str| -> Vec<(String, Value)> {
+        let r = run(s, "font.features.evaluateToken", json!({"token": token, "targets": "all"}));
+        r["targets"].as_array().unwrap().iter().map(|t| (t["name"].as_str().unwrap().to_string(), t["value"].clone())).collect()
+    };
+    let named = |regular: i64, bold: i64, middle: i64| {
+        vec![("master Regular".to_string(), json!(regular)), ("master Bold".to_string(), json!(bold)), ("instance Middle".to_string(), json!(middle))]
+    };
+    assert_eq!(values(&mut s, "$gap"), named(-100, 100, 0));
+    assert_eq!(values(&mut s, "${a:width * 2}"), named(1000, 1200, 1100));
+    let r = run(&mut s, "font.features.evaluateToken", json!({"token": "${a:width}", "instance": "Middle"}));
+    assert_eq!(r, json!({"token": "${a:width}", "instance": 0, "kind": "number", "value": 550}));
+    let r = run(&mut s, "font.features.evaluateToken", json!({"token": "$[name == \"a\"]", "instance": 0, "targets": "all"}));
+    assert_eq!(r, json!({"token": "$[name == \"a\"]", "instance": 0, "kind": "glyphs", "glyphs": ["a"]}));
+    // A token with no value at one build still shows the others'.
+    let r = run(&mut s, "font.features.evaluateToken", json!({"token": "${gap / gap}", "targets": "all"}));
+    assert_eq!(r["targets"][1]["value"], 1, "{r}");
+    assert!(r["targets"][2]["problem"].is_string(), "{r}");
+    refused(&mut s, "font.features.evaluateToken", json!({"token": "$gap", "targets": ["variable"]}), "expandCode");
+}
+
+/// The expanded code of an instance and of the variable font; with the generated features it is what an export compiles.
+#[test]
+fn code_expands_for_an_instance_and_the_variable_font() {
+    let mut s = two_masters();
+    run(&mut s, "font.features.addFeature", json!({"tag": "cpsp", "code": "pos a 10;"}));
+    set_code(&mut s, "feature", "cpsp", "pos a ${gap + 5};\n#ifdef VARIABLE\npos b 7;\n#endif");
+    let code = |s: &mut Session, params: Value| run(s, "font.features.expandCode", params)["code"].as_str().unwrap().to_string();
+    let middle = code(&mut s, json!({"target": {"instance": "Middle"}}));
+    assert!(middle.contains("pos a 5;") && !middle.contains("pos b"), "{middle}");
+    let variable = code(&mut s, json!({"target": {"variable": true}}));
+    assert!(variable.contains("pos b 7;"), "{variable}");
+    let exported = code(&mut s, json!({"target": {"instance": 0}, "includeImplicit": true}));
+    let plan = run(&mut s, "font.compilePlan", json!({"formats": ["ttf"], "instances": ["Middle"], "sections": ["outputs", "features"]}));
+    assert_eq!(plan["outputs"][0]["features"], json!(exported), "{plan}");
+    refused(&mut s, "font.features.expandCode", json!({"target": {"instance": "Nowhere"}}), "target.instance");
+    refused(&mut s, "font.features.expandCode", json!({"target": {"master": "Bold", "variable": true}}), "one of");
+}
+
 /// A token that fails at one instance, and a parameter that breaks one instance's code, name that instance.
 #[test]
 fn a_token_or_parameter_that_fails_at_an_instance_names_it() {

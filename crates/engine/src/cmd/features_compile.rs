@@ -2,7 +2,7 @@
 //! [`crate::feature_state`] (M8.15).
 //!
 //! Commands: `font.features.compile`, `listErrors`, `applyFix`, `jumpToError`, `showErrorDetails`,
-//! `evaluateToken`, `complete`, `previewName`.
+//! `complete`, `previewName`, and the row of `evaluateToken` (`features_expand`).
 //!
 //! Compile assembles the entries for one master (tokens expanded, extensions lowered) and
 //! builds the preview fonts (`crate::feature_state::build_previews`): one run of the feature
@@ -26,7 +26,7 @@
 //! the entry's stored code; lines and columns count from 1, columns in characters.
 //!
 //! The editor's queries read the active document: `complete` (`fontInfo.features.autocomplete`),
-//! `evaluateToken` (Option-click on a token), `previewName` (Alt-click on a glyph or class name).
+//! `previewName` (Alt-click on a glyph or class name).
 
 use std::cell::Cell;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -38,7 +38,7 @@ use fontcraft_compile::CompileError;
 use fontcraft_compile::preview::{self, PreviewBuild, PreviewFont, PreviewKind};
 use fontcraft_fea::{CompileRequest, Diagnostic, GlyphOrder, LayoutTable, MAX_DIAGNOSTICS, MAX_GLYPHS, Severity};
 use fontcraft_features::edit::{self, Bodies, CompletionKind, CompletionNames, Definitions, Fix, MAX_FIXES};
-use fontcraft_features::tokens::{self, TokenValue};
+use fontcraft_features::tokens;
 use fontcraft_features::{
     EntryDiagnostic, EntryKind, EntryRef, FeatureError, MAX_ENTRY_BYTES, MasterValues, SourceMap, Target, TargetValues, assemble,
 };
@@ -123,9 +123,9 @@ pub fn specs() -> Vec<CommandSpec> {
             "Evaluate Token",
             [],
             None,
-            "{token: string (`$name`, `${…}`, `$[…]`), master?: id|name (default: the first master; the Features tab passes the master of the active Edit View tab), instance?: id (not available yet)} what one feature-code token evaluates to → {token, master, kind: \"number\", value: integer} or {token, master, kind: \"glyphs\", glyphs: [name] (in the font's order)}",
+            "{token: string (`$name`, `${…}`, `$[…]`), master?: id|name (default: the first master; the Features tab passes the master of the active Edit View tab) or instance?: index|id|name, targets?: \"all\"|[{master: id|name}|{instance: index|id|name}] (also a number token's value in each of these builds; \"all\" is every master and every exported instance, the variable font left out)} what one feature-code token evaluates to → {token, master: id or instance: index, kind: \"number\", value: integer} or {token, master or instance, kind: \"glyphs\", glyphs: [name] (in the font's order)}; with targets and a number token also targets: [{target: {master} or {instance}, name, value: integer or problem: string}] and skippedTargets: n (past the limit of 256)",
             has_doc,
-            evaluate_token
+            super::features_expand::evaluate_token
         ),
         cmd!(
             query "font.features.complete",
@@ -1125,22 +1125,6 @@ fn apply_fix(s: &mut Session, raw: &Value) -> Result<Value> {
 }
 
 // ── Editor queries ──────────────────────────────────────────────────────────────────────────────
-
-fn evaluate_token(s: &mut Session, raw: &Value) -> Result<Value> {
-    let p = Params::new("font.features.evaluateToken", raw)?;
-    if p.get("instance").is_some() {
-        return Err(EngineError::Unsupported("evaluating a token for an instance".into()));
-    }
-    let token = p.str("token")?;
-    let data = s.glyph_data()?;
-    let font = s.font()?;
-    let master = master_id(&p, font, p.opt_str("master")?)?;
-    let values = MasterValues::new(font, &data, &master).map_err(|e| feature_error(&p, e))?;
-    match tokens::evaluate(token, &values).map_err(|message| p.bad(message))? {
-        TokenValue::Number(value) => Ok(json!({ "token": token.trim(), "master": master, "kind": "number", "value": value })),
-        TokenValue::Glyphs(glyphs) => Ok(json!({ "token": token.trim(), "master": master, "kind": "glyphs", "glyphs": glyphs })),
-    }
-}
 
 fn completion_kind(kind: CompletionKind) -> &'static str {
     match kind {

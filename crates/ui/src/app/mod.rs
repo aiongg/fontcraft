@@ -607,6 +607,7 @@ impl FontCraftApp {
             ViewMsg::FeatureNotesHeight(height) => {
                 self.view.font_info.features.notes_height = Some(height).filter(|h| h.is_finite() && *h > 0.0);
             }
+            ViewMsg::FeatureExpanded(shown) => self.view.font_info.features.expanded = shown,
             ViewMsg::FeaturePreview(ask) => self.view.font_info.features.preview = ask,
             ViewMsg::FeatureFind(find) => self.view.font_info.features.find = find,
             ViewMsg::FontViewSearchFocused => self.view.font_view.focus_search = false,

@@ -54,8 +54,10 @@ milestone = "M8"
 summary = "Popover opened by Option-clicking a glyph name or class name in the code editor: shows the glyph, or for a class all member glyphs."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed. The data comes from `font.features.previewName`, which resolves class entries, classes defined in code and `markClass` classes with their anchors, and gives a lookup's first 50 rules (M8.30). FontCraft: crates/ui/src/panels/font_info/code_editor.rs (M8.30b). Alt-click on a name in the code editor opens the popover under the name: a glyph's name, Unicode values and whether it exports (the drawing of the glyph is not there yet), a class's member count and members (or each markClass statement's anchor and glyphs) and the names that are not in the font, or a lookup's rules; a name that is none of these shows why. The name is read from name characters on both sides of the click, with a leading `@` or backslash."
+notes = "Documented, not yet observed. The data comes from `font.features.previewName`, which resolves class entries, classes defined in code and `markClass` classes with their anchors, and gives a lookup's first 50 rules (M8.30). FontCraft: crates/ui/src/panels/font_info/feature_previews.rs (M8.52). Alt-click on a name in the code editor opens the popover under the name: a glyph's drawing, name, Unicode values and whether it exports, a class's member count with its first 500 members drawn in a wrapping grid, the anchor and glyphs of each markClass statement and the names that are not in the font, or a lookup's rules; a name that is none of these shows why. A double click on a drawn glyph opens it in a tab. The name is read from name characters on both sides of the click, with a leading `@` or backslash."
 guesses = [
+  "A double click on a drawn glyph in the preview opens it in a new tab and closes the preview.",
+  "A class of more than 500 glyphs draws the first 500 and gives the count.",
   "Alt-clicking a lookup name opens the same popover with the lookup's rules.",
   "The glyph is drawn as it is in the master of the active Edit View tab, else the master Font View shows; Option-clicking a glyph name with another master active in the reference app settles it.",
 ]
@@ -73,7 +75,13 @@ milestone = "M8"
 summary = "Popover opened by Option-clicking a token in the code editor: a number value or glyph property token shows its computed value, a predicate token shows every glyph it matches."
 ref = "Feature Code › Tokens"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/panels/font_info/feature_previews.rs (M8.52). Alt-click anywhere in a `$` token, in any entry (an automatic one too), opens the popover under the token: a number or property token's value for the current master, then its value in every master and exported instance (or why it has none there); a predicate token's count and its first 500 glyphs drawn in a grid, where a double click opens a glyph in a tab."
+guesses = [
+  "Below the current master's value the popover lists the value in every master and every exported instance.",
+]
+observe = [
+  "In F5 (tokens), Option-click `$tracking`, `${b:LSB}` and `$[name endswith \".sc\"]` in a feature: note whether one value or a value per master and instance shows, and whether the matched glyphs are names or drawings.",
+]
 
 [[panel]]
 id = "fontInfo.featureErrorDetails"
@@ -156,13 +164,13 @@ label = "Evaluate Token"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{token: string, master?: id, instance?: id}"
+params = "{token: string, master?: id|name, instance?: index|id|name, targets?: \"all\"|[{master}|{instance}]}"
 area = "features"
 milestone = "M8"
 summary = "Query: evaluates one feature-code token and returns the number for number-value and glyph-property tokens or the glyph list for predicate tokens. Backs the Option-click token popover."
 ref = "Feature Code › Tokens"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. FontCraft: crates/engine/src/cmd/features_expand.rs (M8.52). `targets` adds a number token's value in each master and instance named; an instance between the masters is interpolated with the glyphs the token reads. The variable font is refused as a target: its code can hold several values."
 
 [[command]]
 id = "font.features.expandCode"
@@ -170,14 +178,15 @@ label = "Expand Feature Code"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font?, target?: {master?: id}|{instance: id}|{variable: true}, includeImplicit?: bool}"
+params = "{target?: {master: id|name}|{instance: index|id|name}|{variable: true}, includeImplicit?: bool}"
 area = "features"
 milestone = "M8"
 summary = "Query: returns the complete standard feature file for one export target after resolving tokens, conditional blocks, syntax extensions and, optionally, the implicit features. Not a reference command; needed so agents and the CLI can inspect what the compiler receives."
 ref = "Feature Code › Tokens; Feature Code › Conditional Feature Code"
 status = "inferred"
-notes = "Expands the code for a master (`target: {master}`); instances, the variable font and the implicit features are refused until their values and writers can be written as code."
+notes = "FontCraft: crates/engine/src/cmd/features_expand.rs (M8.52): a master, an instance (its Add, Replace and Remove feature parameters applied, its values interpolated) or the variable font. `includeImplicit` gives the code an export of that target compiles, the text of `font.compile`'s `features.debugFile`: automatic code regenerated for the exported glyphs and the generated contextual mark code after it; kerning and the other mark features are generated as lookups and have no code. Show Expanded Code (under the code and in the sidebar's context menu of the Features tab) opens a read-only view of it in the entry's place, with a menu of the targets, With Generated Features, find and Copy (crates/ui/src/panels/font_info/expanded_code.rs)."
 guesses = [
+  "The view of the expanded code takes the entry's place in the Features tab; the reference app has no such view.",
   "The expanded code is the assembled feature file for one master, includes inlined; the feature file the reference app writes when exporting would settle the layout.",
 ]
 
@@ -428,7 +437,7 @@ milestone = "M8"
 summary = "Option-clicking a number value token shows the value it currently evaluates to."
 ref = "Feature Code › Number Value Tokens"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. In the window since M8.52 (`fontInfo.featureTokenPreview`)."
 guesses = [
   "Option-click evaluates the token for the master of the active Edit View tab, else the first master; Option-clicking a token in a two-master font with the second master showing in the reference app would settle it.",
 ]
@@ -497,7 +506,7 @@ milestone = "M8"
 summary = "Option-clicking a glyph property token shows its value."
 ref = "Feature Code › Glyph Property Tokens"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. In the window since M8.52 (`fontInfo.featureTokenPreview`)."
 
 [[behavior]]
 id = "token.predicate.syntax"
@@ -667,7 +676,7 @@ milestone = "M8"
 summary = "Option-clicking a predicate token lists every glyph it currently matches."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. In the window since M8.52 (`fontInfo.featureTokenPreview`)."
 
 [[behavior]]
 id = "token.predicate.compilerSupport"

@@ -21,6 +21,7 @@
 //! | the notes field | `font.features.setNotes` when it loses the keyboard |
 //! | the line over the notes field | a drag sets the field's height (`ViewMsg::FeatureNotesHeight`) |
 //! | Snippets | `font.features.insertSnippet` (at the end of the code), `font.features.showSnippetFolder` |
+//! | Show Expanded Code (under the code, and in the context menu) | shows the code of a build in the entry's place ([`expanded_code`]) |
 //!
 //! An entry with an error from the last compile shows a mark in the sidebar while the font is unchanged since. A
 //! disabled entry's name is struck through and dimmed. The context menu acts on the selected entries; a right click on
@@ -59,12 +60,12 @@ use fontcraft_engine::language_name;
 use fontcraft_engine::model::{DEFAULT_LANGUAGE, LANGUAGES};
 use serde_json::{Value, json};
 
-use super::code_editor;
 use super::rows;
+use super::{code_editor, expanded_code};
 use crate::app::models::font_features::{EntryPane, EntryRow, FeaturesModel, GroupModel, SnippetsModel};
 use crate::app::{Msg, ViewMsg};
 use crate::shell::font_info::{InfoDialog, open_params};
-use crate::shell::font_info_tabs::{COMPILE, EntryKey, EntryKind, PASTE_ENTRIES, select_entries};
+use crate::shell::font_info_tabs::{COMPILE, EntryKey, EntryKind, ExpandedView, PASTE_ENTRIES, select_entries};
 
 craft::ui::words! {
     /// The words of the Features tab.
@@ -102,6 +103,8 @@ craft::ui::words! {
         notes: "fontcraftFeatures.notes" = "Notes";
         notes_divider: "fontcraftFeatures.notesDivider" = "Resize Notes";
         notes_hint: "fontcraftFeatures.notesHint" = "Notes about this entry, kept in the source and never exported";
+        show_expanded: "fontcraftFeatures.showExpanded" = "Show Expanded Code";
+        show_expanded_tip: "fontcraftFeatures.showExpandedTip" = "Show the code the compiler reads, with tokens and conditional blocks resolved";
         snippets: "fontcraftFeatures.snippets" = "Snippets";
         show_folder: "fontcraftFeatures.showFolder" = "Show Snippet Folder";
         /// The sidebar's context menu.
@@ -167,6 +170,7 @@ enum MenuItem {
     Copy,
     Paste,
     Delete,
+    ShowExpanded,
 }
 
 /// The sidebar row of `key`.
@@ -194,6 +198,7 @@ fn menu_entries(model: &FeaturesModel, kind: EntryKind, words: &FeaturesWords) -
         with(Entry::new(MenuItem::Copy, words.copy.clone()), some, &words.nothing_selected).into(),
         Entry::new(MenuItem::Paste, words.paste.clone()).into(),
         MarkedEntry::new(with(Entry::new(MenuItem::Delete, words.delete.clone()), some, &words.nothing_selected)).danger(true),
+        Entry::new(MenuItem::ShowExpanded, words.show_expanded.clone()).into(),
     ]
 }
 
@@ -225,11 +230,14 @@ pub fn view(ui: &mut Ui, model: &FeaturesModel, sent: &mut Vec<Msg>) {
                     sidebar_group(ui, model, group, &words, &mut middle);
                 }
             });
-        Stack::new().id_salt("fontcraftFeatures.entry").scroll(Scroll::vertical()).fill().show_at(ui, pane, |ui, _| match &model.entry {
-            Some(entry) => entry_pane(ui, model, entry, pane.height(), &words, &mut entry_sent),
-            None => {
-                unplaced(ui, model, &words);
-                Text::new(words.empty.clone()).shade(Shade::Muted).show(ui);
+        Stack::new().id_salt("fontcraftFeatures.entry").scroll(Scroll::vertical()).fill().show_at(ui, pane, |ui, _| {
+            match (&model.expanded, &model.entry) {
+                (Some(expanded), _) => expanded_code::view(ui, expanded, pane.height(), &mut entry_sent),
+                (None, Some(entry)) => entry_pane(ui, model, entry, pane.height(), &words, &mut entry_sent),
+                (None, None) => {
+                    unplaced(ui, model, &words);
+                    Text::new(words.empty.clone()).shade(Shade::Muted).show(ui);
+                }
             }
         });
     });
@@ -425,6 +433,7 @@ fn sidebar_group(ui: &mut Ui, model: &FeaturesModel, group: &GroupModel, words: 
             Some(MenuItem::Copy) => posted.push(Msg::run("font.features.copyEntries", json!({ "entries": entries_param(model) }))),
             Some(MenuItem::Paste) => posted.push(Msg::Shell(CommandRef::new(PASTE_ENTRIES))),
             Some(MenuItem::Delete) => posted.push(Msg::run("font.features.remove", json!({ "entries": entries_param(model) }))),
+            Some(MenuItem::ShowExpanded) => posted.push(Msg::View(ViewMsg::FeatureExpanded(Some(ExpandedView::default())))),
             None => {}
         }
         if group.hidden > 0 {
@@ -538,7 +547,13 @@ fn entry_pane(ui: &mut Ui, model: &FeaturesModel, entry: &EntryPane, height: f32
         }
     });
     sent.extend(notes_sent);
-    snippet_menu(ui, entry, &model.snippets, selection, words, sent);
+    Row::new().id_salt("fontcraftFeatures.underCode").show(ui, |ui, _| {
+        snippet_menu(ui, entry, &model.snippets, selection, words, sent);
+        let show = Button::new(words.show_expanded.clone()).tooltip(words.show_expanded_tip.clone()).id_salt("fontcraftFeatures.showExpanded");
+        if show.show(ui).clicked() {
+            sent.push(Msg::View(ViewMsg::FeatureExpanded(Some(ExpandedView::default()))));
+        }
+    });
     let took = ui.cursor().min.y - divider_top;
     if (took - memory.under).abs() > 1.0 {
         memory.under = took;
