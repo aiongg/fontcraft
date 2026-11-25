@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use super::fields::{self, Field, Kind, format_value, lock_key};
 use super::spec::{Action, DialogSpec, Fields, Mode, Shaped, Tab, Third};
 use crate::app::FontCraftApp;
-use crate::shell::masters::current_master_id;
+use crate::shell::masters::{self, current_master_id};
 use craft::ui::runtime::commands::CommandRef;
 
 /// The dialog state the app keeps: the open dialog and the folder chooser it waits for.
@@ -69,6 +69,9 @@ pub struct OpenDialog {
     pub values: Map<String, Value>,
     /// What the command acts on (glyph, glyphs, layer, points…), fixed when the dialog opened.
     pub targets: Map<String, Value>,
+    /// The other targets, when the command runs once for each: glyphs of a text selection shown in several layers. The
+    /// runs are one step.
+    pub also: Vec<Map<String, Value>>,
     /// The text field taking the keyboard of the control channel (`ui.dialog.click`, then `ui.text` and `ui.key`).
     pub editing: Option<Editing>,
     /// Why the last preview failed (OK waits until a preview succeeds), or, in [`Mode::RunOnOk`], why OK's run failed
@@ -136,6 +139,11 @@ impl OpenDialog {
     /// The command's parameters: the targets and every field's value (shaped, for a [`Fields::Shaped`] dialog). An
     /// empty folder or file field is left out.
     pub fn params(&self) -> Value {
+        self.params_on(&self.targets)
+    }
+
+    /// The command's parameters on `targets`.
+    fn params_on(&self, targets: &Map<String, Value>) -> Value {
         let values: Map<String, Value> = self
             .values
             .iter()
@@ -143,12 +151,24 @@ impl OpenDialog {
             .filter(|(k, _)| !self.fields.iter().any(|f| f.same_as.is_some() && lock_key(&f.key) == **k))
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
-        let mut m = self.targets.clone();
+        let mut m = targets.clone();
         m.extend(match &self.shaped {
             Some(s) => (s.params)(&values),
             None => values,
         });
         Value::Object(m)
+    }
+
+    /// What OK and the preview run: the command, or one `command.batch` of it on every set of targets.
+    fn run(&self) -> CommandRef {
+        let Some(spec) = fontcraft_engine::find_command(&self.command).filter(|_| !self.also.is_empty()) else {
+            return CommandRef::with_params(self.command.clone(), self.params());
+        };
+        let sets = std::iter::once(&self.targets).chain(&self.also).filter_map(|targets| match self.params_on(targets) {
+            Value::Object(m) => Some(m),
+            _ => None,
+        });
+        crate::app::targets::batch(spec, sets)
     }
 
     /// Gives the field `key` the checked `value` and brings linked fields in step.
@@ -283,7 +303,7 @@ fn open_one(app: &mut FontCraftApp, spec: &DialogSpec, given: &Map<String, Value
         Fields::Targeted(list) => {
             let mut targets = given.clone();
             if !targets.contains_key("glyph") && !targets.contains_key("glyphs") {
-                targets.extend(selection_targets(app, spec.command));
+                targets.extend(selection_targets(app, spec.command).into_iter().next().unwrap_or_default());
             }
             list(&mut app.session, &targets)?
         }
@@ -312,8 +332,11 @@ fn open_one(app: &mut FontCraftApp, spec: &DialogSpec, given: &Map<String, Value
             }
         }
     }
+    let mut also = Vec::new();
     if targets.is_empty() {
-        targets = selection_targets(app, spec.command);
+        let mut sets = selection_targets(app, spec.command).into_iter();
+        targets = sets.next().unwrap_or_default();
+        also.extend(sets);
     }
     // A tab shown before gets its values back; one shown first takes the values of the fields it shares with the tab
     // shown before it.
@@ -364,6 +387,7 @@ fn open_one(app: &mut FontCraftApp, spec: &DialogSpec, given: &Map<String, Value
         fields,
         values,
         targets,
+        also,
         editing: None,
         error: None,
         actions: spec.actions,
@@ -403,7 +427,9 @@ pub fn switch_tab(app: &mut FontCraftApp, index: usize) -> Result<Value, String>
     let mut saved = d.tabs.as_ref().map(|t| t.saved.clone()).unwrap_or_default();
     saved.insert(d.id.clone(), Value::Object(d.values.clone()));
     saved.insert(CARRY.into(), Value::Object(d.values.clone()));
-    match open_tab_as(app, list, index, &d.targets, &saved, Some(d.serial)) {
+    // Several sets of targets are read from the selection again.
+    let given = if d.also.is_empty() { d.targets.clone() } else { Map::new() };
+    match open_tab_as(app, list, index, &given, &saved, Some(d.serial)) {
         Ok(shown) => Ok(shown),
         Err(e) => {
             // The tab showing stays, unless putting its preview away already closed it.
@@ -416,30 +442,35 @@ pub fn switch_tab(app: &mut FontCraftApp, index: usize) -> Result<Value, String>
     }
 }
 
-/// What the command acts on when the dialog names nothing: when the person chose glyphs
-/// ([`FontCraftApp::targets_chosen`]), what a fired command takes ([`FontCraftApp::with_targets`]: Font View's
-/// selection while Font View shows with glyphs selected, else the canvas selection), else the glyph the glyph panels
-/// show, as `glyph` for a command that acts on one layer and as `glyphs` for one that acts on glyphs.
-fn selection_targets(app: &mut FontCraftApp, command: &str) -> Map<String, Value> {
+/// What the command acts on when the dialog names nothing, one set of parameters per run: when the person chose glyphs
+/// ([`FontCraftApp::targets_chosen`]), what a fired command takes ([`FontCraftApp::with_targets`]: Font View's selection
+/// while Font View shows with glyphs selected, else the text selection, else the canvas selection), else the glyph the
+/// glyph panels show, as `glyph` with its shown layer for a command that acts on one layer and as `glyphs` for one that
+/// acts on glyphs.
+fn selection_targets(app: &mut FontCraftApp, command: &str) -> Vec<Map<String, Value>> {
     use fontcraft_engine::params::TargetKind;
     if !app.targets_chosen() {
-        return Map::new();
+        return Vec::new();
     }
     let targeted = app.with_targets(CommandRef::new(command));
-    if targeted.id == command
-        && let Value::Object(m) = targeted.params
-        && !m.is_empty()
-    {
-        return m;
+    let sets = crate::app::targets::target_sets(&targeted, command);
+    if !sets.is_empty() {
+        return sets;
     }
     let mut m = Map::new();
-    let (Some(spec), Some(glyph)) = (fontcraft_engine::find_command(command), app.view.glyph.as_ref()) else { return m };
+    let (Some(spec), Ok(font)) = (fontcraft_engine::find_command(command), app.session.font()) else { return Vec::new() };
+    let Some(glyph) = masters::shown_glyph(font, &app.view) else { return Vec::new() };
     if spec.targets.contains(&TargetKind::Layer) {
-        m.insert("glyph".into(), json!(glyph));
+        m.insert("glyph".into(), json!(glyph.name));
+        if let Some(layer) = masters::panel_layer(font, &app.view) {
+            m.insert("layer".into(), json!(layer.id));
+        }
     } else if spec.targets.contains(&TargetKind::Glyphs) {
-        m.insert("glyphs".into(), json!([glyph]));
+        m.insert("glyphs".into(), json!([glyph.name]));
+    } else {
+        return Vec::new();
     }
-    m
+    vec![m]
 }
 
 /// Runs the dialog's command on the font as it was when the dialog opened. A dialog that runs on OK only forgets the
@@ -455,8 +486,8 @@ fn preview(app: &mut FontCraftApp) {
         d.error = None;
         return;
     }
-    let (command, params) = (d.command.clone(), d.params());
-    let result = app.session.preview(&command, &params);
+    let run = d.run();
+    let result = app.session.preview(&run.id, &run.params);
     if let Some(d) = app.dialogs.open.as_mut() {
         d.error = result.err().map(|e| e.to_string());
         if let Some(e) = &d.error {
@@ -563,7 +594,7 @@ fn run_on_ok(app: &mut FontCraftApp, person: bool) -> Result<Value, String> {
         app.status = message.clone();
         return Err(format!("{title}: {message}"));
     }
-    let (title, command, params) = (d.title.clone(), d.command.clone(), d.params());
+    let (title, CommandRef { id: command, params }) = (d.title.clone(), d.run());
     let kept = d.remember.then(|| (d.id.clone(), d.values.clone()));
     match app.session.execute(&command, &params) {
         Ok(result) => {

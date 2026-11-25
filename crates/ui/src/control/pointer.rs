@@ -199,10 +199,19 @@ fn key(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
                     errors.push(e);
                     Vec::new()
                 }
-                None => vec![match FontCraftApp::route(fired) {
-                    Msg::Run(c) => Msg::Run(app.with_targets(c)),
-                    other => other,
-                }],
+                None => match FontCraftApp::route(fired) {
+                    Msg::Run(c) => {
+                        let targeted = app.with_targets(c.clone());
+                        match app.refused(&c, &targeted).filter(|_| font_view) {
+                            Some(why) => {
+                                errors.push(why);
+                                Vec::new()
+                            }
+                            None => vec![Msg::Run(targeted)],
+                        }
+                    }
+                    other => vec![other],
+                },
             };
             for msg in msgs {
                 if let Err(e) = app.apply_msg(msg) {

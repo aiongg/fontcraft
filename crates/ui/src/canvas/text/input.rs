@@ -348,7 +348,8 @@ fn shortcut(app: &mut FontCraftApp, id: &'static str) -> Result<(), String> {
         (false, KerningMode::Locked, _) => return Err("The spacing keys are off in the locked kerning mode".into()),
         _ => {}
     }
-    let master = crate::shell::masters::current_master(font, &app.view.layers).map(|m| m.id.clone()).ok_or("the font has no master")?;
+    // The edited item's own master, which the Info box beside the cursor shows.
+    let master = crate::canvas::tools::active_master(font, &app.view).map(|m| m.id.clone()).ok_or("the font has no master")?;
     let params = if kerning {
         let current = state.edited_index().ok_or("the edit view has no current glyph")?;
         let before = current.checked_sub(1).and_then(|i| state.item_glyph(i));

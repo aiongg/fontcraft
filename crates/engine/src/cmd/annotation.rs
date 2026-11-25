@@ -49,7 +49,7 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             move_annotations
         )
-        .targets(&[TargetKind::Annotations]),
+        .targets(&[TargetKind::Layer, TargetKind::Annotations]),
         cmd!(
             "annotation.delete",
             "Delete Annotations",
@@ -59,7 +59,7 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             delete
         )
-        .targets(&[TargetKind::Annotations])
+        .targets(&[TargetKind::Layer, TargetKind::Annotations])
         .when("tool:annotation"),
         cmd!(
             query "annotation.list",

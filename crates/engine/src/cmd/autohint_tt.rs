@@ -48,7 +48,8 @@ pub fn specs() -> Vec<CommandSpec> {
             "{glyphs: [names], layer?: master id (default: the main master)} generate Snap and Stem instructions for each glyph's layer of that master as a starting point, replacing the instructions it has; one undo step → {hinted: [{glyph, instructions}], skipped: [{glyph, reason}], ignoredOptions: [names], warnings}",
             has_doc,
             autohint_glyph_cmd
-        ),
+        )
+        .targets(&[crate::params::TargetKind::Glyphs]),
     ]
 }
 

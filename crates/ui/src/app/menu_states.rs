@@ -6,7 +6,7 @@
 //! | Window state | Rows greyed out | Why (the row's tooltip, `disabled_reason` in `ui.menu.list`) |
 //! |---|---|---|
 //! | No glyph chosen ([`FontCraftApp::targets_chosen`]) | every command that takes targets | `<label>: select a glyph first`, the refusal firing it gives |
-//! | Font View in front with glyphs selected | commands that act on selected nodes, paths, anchors… and not on whole glyphs | `edit a glyph and select … first` |
+//! | Font View in front with glyphs selected | commands that act on one layer or its nodes, paths, anchors… and not on whole glyphs | `edit a glyph first`, `edit a glyph and select … first` |
 //! | A glyph in the edit view | commands whose objects the canvas selection does not supply ([`item_state::supplies`]) | `select … first` |
 //!
 //! A selected placed image supplies the commands that take `image` (Move, Delete, the transformations), with or without
@@ -132,7 +132,11 @@ pub fn greyed(app: &FontCraftApp) -> Vec<(&'static str, String)> {
         let refused = if !chosen {
             Err(super::select_glyph_first(spec.id))
         } else if font_view {
-            item_state::objects_wanted(spec).map_or(Ok(()), |what| Err(format!("edit a glyph and select {what} first")))
+            match item_state::objects_wanted(spec) {
+                _ if super::targets::takes_glyphs(spec) => Ok(()),
+                Some(what) => Err(format!("edit a glyph and select {what} first")),
+                None => Err("edit a glyph first".to_string()),
+            }
         } else if image && crate::canvas::tools::targets::takes_param(spec, "image?: bool") {
             Ok(())
         } else {

@@ -36,7 +36,7 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             make_ink_trap
         )
-        .targets(&[TargetKind::Points]),
+        .targets(&[TargetKind::Layer, TargetKind::Points]),
         cmd!(
             "path.loopCorner",
             "Loop Corner",
@@ -46,7 +46,7 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             loop_corner
         )
-        .targets(&[TargetKind::Points]),
+        .targets(&[TargetKind::Layer, TargetKind::Points]),
         cmd!(
             "path.replaceWithCorner",
             "Replace with Corner",
@@ -56,7 +56,7 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             replace_with_corner
         )
-        .targets(&[TargetKind::Segments, TargetKind::Shapes]),
+        .targets(&[TargetKind::Layer, TargetKind::Segments, TargetKind::Shapes]),
         cmd!(
             "path.alignToMask",
             "Align Points to Background",
@@ -66,7 +66,7 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             align_to_mask
         )
-        .targets(&[TargetKind::Points]),
+        .targets(&[TargetKind::Layer, TargetKind::Points]),
         cmd!(
             "path.collapsePoints",
             "Collapse Points",
@@ -76,7 +76,7 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             collapse_points
         )
-        .targets(&[TargetKind::Points]),
+        .targets(&[TargetKind::Layer, TargetKind::Points]),
         cmd!(
             "path.scaleToSameSize",
             "Same Width / Same Height",
@@ -86,7 +86,7 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             scale_to_same_size
         )
-        .targets(&[TargetKind::Shapes]),
+        .targets(&[TargetKind::Layer, TargetKind::Shapes]),
     ]
 }
 

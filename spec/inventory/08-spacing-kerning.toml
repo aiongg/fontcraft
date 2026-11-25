@@ -607,7 +607,7 @@ milestone = "M5"
 summary = "Re-evaluates every metrics key on the current layer of the current glyph, or of all selected glyphs, and applies the results, clearing all out-of-sync flags there."
 ref = "Spacing & Kerning › Spacing › Metrics Keys"
 status = "handbook"
-notes = "Documented, not yet observed: Glyph › Update Metrics (Cmd+Ctrl+M) brings the keys of the current layer in line. Keys of empty glyphs are not applied (4.0 release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs4.0-4000.html and updates.glyphsapp.com/Glyphs3.4-3434.html), build 3812; version 3, build 3235), which agrees with ours."
+notes = "Documented, not yet observed: Glyph › Update Metrics (Cmd+Ctrl+M) brings the keys of the current layer in line. Keys of empty glyphs are not applied (4.0 release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs4.0-4000.html and updates.glyphsapp.com/Glyphs3.4-3434.html), build 3812; version 3, build 3235), which agrees with ours. Fired in the edit view it gets the shown layer, in a text selection each item's layer, in Font View the current master's layer of the selected glyphs (M5.50)."
 guesses = [
   "Keys are evaluated in dependency order (the metrics a key reads, and the left sidebearings of the glyphs a composite's components show, come first), so a glyph whose reference or base was updated in the same run gets the new value; one Update Metrics on a two-step chain and on a composite of a keyed base in the reference app settles it.",
   "A key that cannot be evaluated (unlinked, in error, or on an empty layer) is skipped and the other keys are still updated; running it on a font with one unlinked key in the reference app would settle it.",
@@ -1080,6 +1080,7 @@ ref = "Spacing & Kerning › Kerning › Kerning Shortcuts"
 status = "handbook"
 notes = "Documented, not yet observed: with the Text tool and the cursor between the pair, Ctrl+Alt+Left increases the kerning with the glyph on the left, and Shift gives steps of 10. The handbook does not say which way the number moves; reading \"increase\" as a more positive value is our inference (guess on kerning.increaseLeft)."
 guesses = [
+  "The kerning keys write to the master of the layer the edited text item shows, as the Info box beside the cursor does, not to the tab's master; a kerning key on an item of Show All Masters in the reference app settles it.",
   "Increase adds to the kerning value (more space) and decrease subtracts; the handbook names the directions without a sign, and the reference kerning tutorial says negative values tighten a pair. The Info box kern value after one keypress, in the running app or a video, settles it.",
 ]
 observe = [

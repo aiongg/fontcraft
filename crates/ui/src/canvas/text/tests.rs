@@ -456,6 +456,35 @@ fn a_kerning_key_in_text_mode_kerns_the_pair_at_the_cursor() {
     assert!(try_post(&mut app, Msg::Tool(ToolInput::Key(KeyEvent::press(Key::Left, mods)))).is_err(), "off without kerning");
 }
 
+/// A kerning key writes to the master of the layer the edited item shows.
+#[test]
+fn a_kerning_key_writes_to_the_edited_items_own_master() {
+    let mut app = text_app();
+    app.session
+        .edit("setup", |font| {
+            let mut m = font.default_master().unwrap().clone();
+            m.id = "m02".into();
+            m.name = "Bold".into();
+            Arc::make_mut(&mut font.masters).push(m);
+            for name in ["A", "V"] {
+                font.glyph_mut(name)?.layers.push(fontcraft_engine::model::Layer::new("m02", 600.0));
+            }
+            Ok(())
+        })
+        .unwrap();
+    let first = app.session.font().unwrap().masters[0].id.clone();
+    shell(&mut app, "editView.setText", json!({"glyphs": ["A", "V"]}));
+    shell(&mut app, "editView.toggleTextMode", json!({"mode": "text"}));
+    assert!(app.view.text.text.set_layer(1, Some("m02")));
+    shell(&mut app, "editView.setCursor", json!({"index": 1}));
+    let pair =
+        |app: &mut FontCraftApp, master: &str| app.session.query("kerning.getPair", &json!({"left": "A", "right": "V", "master": master})).unwrap();
+    let before = (pair(&mut app, &first), pair(&mut app, "m02"));
+    key(&mut app, Key::Left, Modifiers { ctrl: true, alt: true, ..Modifiers::NONE });
+    assert_eq!(pair(&mut app, &first), before.0, "the tab's master keeps its kerning");
+    assert_ne!(pair(&mut app, "m02"), before.1);
+}
+
 #[test]
 fn the_measurement_line_measures_each_glyph_in_text_mode_and_moves_with_cmd_ctrl_alt() {
     let mut app = text_app();

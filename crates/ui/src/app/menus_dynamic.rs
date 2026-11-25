@@ -26,6 +26,7 @@ use serde_json::{Map, Value, json};
 
 use super::FontCraftApp;
 use super::font_view::StrikeView;
+use super::targets;
 use crate::shell::font_view::SET_STRIKE;
 
 /// The command a filter module's row runs.
@@ -191,29 +192,49 @@ pub fn fill_targets(app: &mut FontCraftApp, command: CommandRef) -> Result<Comma
         return if is_macro { Ok(command) } else { Err(super::select_glyph_first(&command.id)) };
     }
     let found = app.with_targets(CommandRef::new(RUN_FILTER));
-    let Value::Object(targets) = found.params else { return Ok(command) };
-    if found.id != RUN_FILTER {
-        return Ok(command);
-    }
+    let mut sets = targets::target_sets(&found, RUN_FILTER);
     if is_macro {
-        params.extend(macro_targets(&targets));
-    } else {
-        params.extend(targets);
+        params.extend(macro_targets(&sets));
+        return Ok(CommandRef::with_params(command.id, Value::Object(params)));
     }
-    Ok(CommandRef::with_params(command.id, Value::Object(params)))
+    let Some(spec) = fontcraft_engine::find_command(RUN_FILTER) else { return Ok(command) };
+    match sets.pop() {
+        Some(only) if sets.is_empty() => {
+            params.extend(only);
+            Ok(CommandRef::with_params(command.id, Value::Object(params)))
+        }
+        // The text selection's glyphs show several layers: one run per layer.
+        Some(last) => {
+            sets.push(last);
+            let runs = sets.into_iter().map(|set| {
+                let mut run = params.clone();
+                run.extend(set);
+                run
+            });
+            Ok(targets::batch(spec, runs))
+        }
+        None => Ok(command),
+    }
 }
 
 /// The arguments a macro gets from a filter's targets: the edited glyph and its layer as one-item lists, or the
-/// selected glyphs alone.
-fn macro_targets(targets: &Map<String, Value>) -> Map<String, Value> {
+/// selected glyphs alone, each once.
+fn macro_targets(sets: &[Map<String, Value>]) -> Map<String, Value> {
     let mut out = Map::new();
-    if let Some(glyph) = targets.get("glyph") {
+    if let Some(one) = sets.first()
+        && let Some(glyph) = one.get("glyph")
+    {
         out.insert("glyphs".into(), json!([glyph]));
-        if let Some(layer) = targets.get("layer") {
+        if let Some(layer) = one.get("layer") {
             out.insert("layers".into(), json!([layer]));
         }
-    } else if let Some(glyphs) = targets.get("glyphs") {
-        out.insert("glyphs".into(), glyphs.clone());
+        return out;
+    }
+    let named = sets.iter().filter_map(|set| set.get("glyphs").and_then(Value::as_array)).flatten();
+    let mut seen = std::collections::HashSet::new();
+    let glyphs: Vec<&str> = named.filter_map(Value::as_str).filter(|name| seen.insert(*name)).collect();
+    if !glyphs.is_empty() {
+        out.insert("glyphs".into(), json!(glyphs));
     }
     out
 }
@@ -228,10 +249,13 @@ mod tests {
     fn a_macro_in_a_subfolder_is_a_script_submenu_row_and_takes_the_edited_glyph_as_a_list() {
         let targets = json!({"glyph": "A", "layer": "m01", "points": [[0, 1]]});
         let Value::Object(targets) = targets else { panic!() };
-        assert_eq!(Value::Object(macro_targets(&targets)), json!({"glyphs": ["A"], "layers": ["m01"]}));
+        assert_eq!(Value::Object(macro_targets(&[targets])), json!({"glyphs": ["A"], "layers": ["m01"]}));
         let only = json!({"glyphs": ["A", "B"], "layer": "m01"});
         let Value::Object(only) = only else { panic!() };
-        assert_eq!(Value::Object(macro_targets(&only)), json!({"glyphs": ["A", "B"]}));
+        assert_eq!(Value::Object(macro_targets(&[only.clone()])), json!({"glyphs": ["A", "B"]}));
+        let more = json!({"glyphs": ["B", "C"], "layer": "m02"});
+        let Value::Object(more) = more else { panic!() };
+        assert_eq!(Value::Object(macro_targets(&[only, more])), json!({"glyphs": ["A", "B", "C"]}));
 
         let mut out = Vec::new();
         section(&mut out, "Script", Vec::new());

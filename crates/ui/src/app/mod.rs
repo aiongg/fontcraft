@@ -26,6 +26,7 @@ pub mod preview_host;
 pub mod print_host;
 pub mod sidebar;
 pub mod startup;
+pub(crate) mod targets;
 pub mod user_store;
 pub mod web_store;
 
@@ -530,7 +531,8 @@ impl FontCraftApp {
                 crate::shell::extension_downloads::after_run(self, &command.id, &params, &reply);
                 web_store::after_run(self, &command.id, &params, &reply);
                 crate::shell::text_preview::note_export(&mut self.view.text_preview, &reply);
-                let notice = self.after_command(&command, &reply).or_else(|| notices::notice(&command.id, &reply));
+                let locked = self.session.font().ok().and_then(|font| font_view::locked_notice(font, &reply));
+                let notice = self.after_command(&command, &reply).or_else(|| notices::notice(&command.id, &reply)).or(locked);
                 if let Some(notice) = opened.pop().or(notice) {
                     self.status = notice;
                 }
@@ -639,39 +641,6 @@ impl FontCraftApp {
             Kind::Engine => Msg::Run(command),
         }
     }
-
-    /// `command` with its targets filled: from Font View's selection while Font View is in front with glyphs
-    /// selected, else from the canvas selection.
-    /// In text mode a filter takes the glyphs of the text selection, on the layer the canvas edits.
-    pub(crate) fn with_targets(&mut self, command: CommandRef) -> CommandRef {
-        if self.font_view_targets() {
-            return self.with_font_view_targets(command);
-        }
-        let text_glyphs = crate::canvas::text::filter_glyphs(&self.view, &command);
-        let targeted = crate::canvas::tools::targets::with_targets(self, command);
-        let Some(glyphs) = text_glyphs else { return targeted };
-        let mut m = Map::new();
-        if let Some(layer) = targeted.params.get("layer") {
-            m.insert("layer".into(), layer.clone());
-        }
-        m.insert("glyphs".into(), json!(glyphs));
-        CommandRef::with_params(targeted.id, Value::Object(m))
-    }
-
-    /// Whether the person chose what a fired command acts on: glyphs selected in Font View while it is in front, or a
-    /// glyph opened in the edit view while the edit view is in front. With neither, [`Self::fired`] takes no targets
-    /// from [`Self::with_targets`], whose canvas part falls back to the font's first glyph: a dialog's command then acts
-    /// on every glyph or the dialog asks for a glyph, and any other glyph command refuses ([`select_glyph_first`]).
-    pub(crate) fn targets_chosen(&self) -> bool {
-        // `view.glyph` keeps the glyph the live tab shows while Font View is in front.
-        let glyph_shown = self.view.glyph.is_some() && !self.view.tabs.font_view_shows();
-        self.font_view_targets() || glyph_shown
-    }
-
-    /// Whether fired commands take Font View's selection: glyphs are selected and Font View is the showing tab.
-    fn font_view_targets(&self) -> bool {
-        !self.view.font_view.selected.is_empty() && self.view.tabs.font_view_shows()
-    }
 }
 
 impl FontCraftApp {
@@ -703,11 +672,10 @@ impl FontCraftApp {
                 }
                 // An extension's menu row fills in the filter or macro it runs.
                 let fired = menus_dynamic::fill_targets(self, fired)?;
-                let given = !is_empty(&fired.params);
                 let targeted = self.with_targets(fired.clone());
                 let Some(command) = clipboard::fired(self, targeted) else { return Ok(None) };
                 let chosen = self.targets_chosen();
-                // Font View's per-glyph batch is no target list for the dialog, which then reads the selection itself.
+                // A batch is no target list for the dialog, which then reads the selection itself.
                 let targets = match &command.params {
                     Value::Object(m) if command.id == fired.id && chosen => m.clone(),
                     _ => Map::new(),
@@ -715,9 +683,8 @@ impl FontCraftApp {
                 if crate::dialogs::after::fired(self, &fired.id, &fired.params, &targets) {
                     return Ok(None);
                 }
-                // Targets filled with nothing chosen come from the font's first glyph, which the person never picked.
-                if !chosen && !given && command.id == fired.id && !is_empty(&command.params) {
-                    return Err(select_glyph_first(&fired.id));
+                if let Some(why) = self.refused(&fired, &command) {
+                    return Err(why);
                 }
                 Msg::Run(command)
             }

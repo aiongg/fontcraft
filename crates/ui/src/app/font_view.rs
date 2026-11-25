@@ -1,5 +1,4 @@
-//! Font View's view state and List View's columns, and what the app layer does for Font View: the targets that
-//! commands fired from menus and keys take from its glyph selection (`fontView.batch.appliesToSelection`), and what
+//! Font View's view state and List View's columns, and what the app layer does for Font View: what
 //! follows a command it ran (the new glyph selected, the compatibility notice of Tidy up and Round Coordinates).
 
 use std::collections::HashSet;
@@ -7,7 +6,6 @@ use std::collections::HashSet;
 use craft::ui::contract::PlainData;
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::WordSet as _;
-use fontcraft_engine::params::TargetKind;
 use serde_json::{Map, Value, json};
 
 use super::FontCraftApp;
@@ -254,6 +252,8 @@ craft::ui::words! {
     pub struct NoticeWords {
         /// After Tidy up Paths or Round Coordinates, before the glyphs whose masters no longer interpolate.
         incompatible: "fontcraftNotice.incompatible" = "No longer compatible across masters";
+        /// Before the locked glyphs a command on several glyphs left out.
+        locked: "fontcraftNotice.locked" = "Locked, left as they were";
     }
 }
 
@@ -273,70 +273,35 @@ pub fn incompatible_notice(id: &str, reply: &Value) -> Option<String> {
     if names.is_empty() {
         return None;
     }
+    Some(listed(NoticeWords::english().incompatible.as_str(), &names))
+}
+
+/// `what: A, B`, with at most [`MAX_NOTICE_NAMES`] names.
+fn listed(what: &str, names: &[&str]) -> String {
     let mut list = names.iter().take(MAX_NOTICE_NAMES).copied().collect::<Vec<_>>().join(", ");
     if names.len() > MAX_NOTICE_NAMES {
         list.push_str(", …");
     }
-    Some(format!("{}: {list}", NoticeWords::english().incompatible.as_str()))
+    format!("{what}: {list}")
 }
 
-/// Commands that address one glyph and that Font View runs once per selected glyph, as one undo step
-/// (`fontView.batch.addComponent`).
-const PER_GLYPH: [&str; 2] = ["glyph.addComponent", "glyph.addComponentAllMasters"];
+/// The status message for `reply` of a command that ran on several glyphs: the locked ones among those it lists under
+/// `skipped`, as names or as objects with a `glyph`.
+pub(super) fn locked_notice(font: &fontcraft_engine::model::Font, reply: &Value) -> Option<String> {
+    let batched = reply.get("results").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
+    let skipped = std::iter::once(reply).chain(batched).filter_map(|r| r.get("skipped").and_then(Value::as_array)).flatten();
+    let mut seen = HashSet::new();
+    let names: Vec<&str> = skipped
+        .filter_map(|entry| entry.as_str().or_else(|| entry.get("glyph").and_then(Value::as_str)))
+        .filter(|name| font.glyph(name).is_some_and(|g| g.info.locked) && seen.insert(*name))
+        .collect();
+    (!names.is_empty()).then(|| listed(NoticeWords::english().locked.as_str(), &names))
+}
 
 impl FontCraftApp {
     /// Whether Font View is the document area's showing tab.
     pub fn font_view_shows(&self) -> bool {
         self.view.tabs.font_view_shows()
-    }
-
-    /// Font View's master: the current master (`view.selectMaster`).
-    fn font_view_master(&self) -> Option<String> {
-        let font = self.session.font().ok()?;
-        crate::shell::masters::current_master(font, &self.view.layers).map(|m| m.id.clone())
-    }
-
-    /// `command` fired from a menu or a key with its targets filled from the Font View selection: the selected
-    /// glyphs, and the layer of Font View's master when the command takes `layer`. A command given parameters, one
-    /// that takes no glyphs, and every command while Font View is hidden or has no selection stay as they are. The
-    /// [`PER_GLYPH`] commands become one `command.batch` with a step per glyph.
-    pub fn with_font_view_targets(&self, command: CommandRef) -> CommandRef {
-        let given = match &command.params {
-            Value::Null => Map::new(),
-            Value::Object(m) => m.clone(),
-            _ => return command,
-        };
-        let selected = &self.view.font_view.selected;
-        if selected.is_empty() || !self.font_view_shows() {
-            return command;
-        }
-        let Some(spec) = fontcraft_engine::find_command(&command.id) else { return command };
-        let takes_layer = spec.params.split('→').next().is_some_and(|p| p.contains("layer?"));
-        let layer = if takes_layer && !given.contains_key("layer") { self.font_view_master() } else { None };
-        let glyphs: Vec<&String> = selected.iter().take(MAX_BATCH_GLYPHS).collect();
-        if PER_GLYPH.contains(&command.id.as_str()) && !given.contains_key("glyph") {
-            let steps: Vec<Value> = glyphs
-                .iter()
-                .map(|glyph| {
-                    let mut m = given.clone();
-                    m.insert("glyph".into(), json!(glyph));
-                    if let Some(layer) = &layer {
-                        m.insert("layer".into(), json!(layer));
-                    }
-                    json!({"command": command.id, "params": m})
-                })
-                .collect();
-            return CommandRef::with_params("command.batch", json!({"label": spec.label, "steps": steps}));
-        }
-        if !given.is_empty() || !spec.targets.contains(&TargetKind::Glyphs) {
-            return command;
-        }
-        let mut m = Map::new();
-        m.insert("glyphs".into(), json!(glyphs));
-        if let Some(layer) = layer {
-            m.insert("layer".into(), json!(layer));
-        }
-        CommandRef::with_params(command.id, Value::Object(m))
     }
 
     /// What follows engine command `command` that returned `reply`: a new glyph becomes the Font View selection;
