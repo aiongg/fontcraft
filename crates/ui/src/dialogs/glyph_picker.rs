@@ -398,7 +398,7 @@ fn open(app: &FontCraftApp, p: &Value, purpose: Purpose) -> Result<PickerState, 
             return Err(crate::app::select_glyph_first(purpose.command()));
         }
         if !groups.is_empty() {
-            let batch = crate::app::targets::on_glyphs(CommandRef::new(purpose.command()), &groups);
+            let batch = crate::app::targets::on_glyphs(CommandRef::new(purpose.command()), font, &groups);
             let each = crate::app::targets::target_sets(&batch, purpose.command());
             return Ok(PickerState { purpose, each, ..PickerState::default() });
         }

@@ -20,7 +20,7 @@ use serde_json::{Map, Value, json};
 use super::font_view::MAX_BATCH_GLYPHS;
 use super::{FontCraftApp, ViewState, select_glyph_first};
 use crate::app::context_menu::item_state;
-use crate::canvas::text;
+use crate::canvas::{hinting, text};
 use crate::canvas::tools::targets::{LayerParam, layer_param, with_targets};
 use crate::shell::masters;
 
@@ -116,14 +116,18 @@ pub(crate) fn takes_glyphs(spec: &CommandSpec) -> bool {
 /// `command` on the glyphs of `groups`: `glyphs`, with their layer when the command changes one ([`layer_param`]).
 /// Glyphs in several layers become one `command.batch` with a step per layer, and [`PER_GLYPH`] commands one with a
 /// step per glyph. A command that takes no glyphs, or was given parameters, stays as it is; a `PER_GLYPH` command
-/// keeps the parameters it was given unless they name a glyph.
-pub(crate) fn on_glyphs(command: CommandRef, groups: &[GlyphLayers]) -> CommandRef {
+/// keeps the parameters it was given unless they name a glyph. The hint commands on glyphs take the main master's layers
+/// ([`hint_command`]).
+pub(crate) fn on_glyphs(command: CommandRef, font: &fontcraft_engine::model::Font, groups: &[GlyphLayers]) -> CommandRef {
     let given = match &command.params {
         Value::Null => Map::new(),
         Value::Object(m) => m.clone(),
         _ => return command,
     };
     let Some(spec) = fontcraft_engine::find_command(&command.id).filter(|_| !groups.is_empty()) else { return command };
+    if hinting::GLYPH_COMMANDS.contains(&spec.id) && given.is_empty() {
+        return hint_command(command, font, groups);
+    }
     let param = layer_param(spec);
     if PER_GLYPH.contains(&spec.id) && !given.contains_key("glyph") {
         let sets =
@@ -150,6 +154,18 @@ pub(crate) fn on_glyphs(command: CommandRef, groups: &[GlyphLayers]) -> CommandR
         }
         None => command,
     }
+}
+
+/// `command`, one of [`hinting::GLYPH_COMMANDS`], on the glyphs of `groups`, each once, with [`hinting::glyphs_layer`].
+fn hint_command(command: CommandRef, font: &fontcraft_engine::model::Font, groups: &[GlyphLayers]) -> CommandRef {
+    let mut seen = HashSet::new();
+    let glyphs: Vec<&str> = groups.iter().flat_map(|group| &group.glyphs).map(String::as_str).filter(|glyph| seen.insert(*glyph)).collect();
+    let mut m = Map::new();
+    m.insert("glyphs".into(), json!(glyphs));
+    if let Some(layer) = hinting::glyphs_layer(font, &command.id) {
+        m.insert("layer".into(), json!(layer));
+    }
+    CommandRef::with_params(command.id, Value::Object(m))
 }
 
 /// A layer parameter's key and value, and the glyphs that go with it.
@@ -219,7 +235,7 @@ impl FontCraftApp {
         {
             let groups = text_selection(font, &self.view);
             if !groups.is_empty() {
-                return on_glyphs(command, &groups);
+                return on_glyphs(command, font, &groups);
             }
         }
         with_targets(self, command)
@@ -231,7 +247,7 @@ impl FontCraftApp {
             return command;
         }
         let Ok(font) = self.session.font() else { return command };
-        on_glyphs(command, &font_view_selection(font, &self.view))
+        on_glyphs(command, font, &font_view_selection(font, &self.view))
     }
 
     /// Whether the person chose what a fired command acts on: glyphs selected in Font View while it is in front, or a
