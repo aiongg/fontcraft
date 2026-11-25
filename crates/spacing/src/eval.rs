@@ -1,14 +1,15 @@
 //! Evaluating metrics keys.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use fontcraft_geom::Rect;
 use fontcraft_model::{Font, Glyph, Layer, MAX_COMPONENT_DEPTH, Shape};
 
-use crate::aligned::derived_field;
+use crate::aligned::{derived_field, derives_metrics, is_derived_field};
 use crate::keys::{Body, Key, KeyError, Op, Scope, parse_stored};
-use crate::measure::{at_height, bounds, metric_from, outline};
-use crate::{Field, MAX_CHAIN, referenced_layer, round_half_up};
+use crate::measure::{at_height, bounds_with, master_slant, metric_from, outline};
+use crate::{Field, MAX_CHAIN, metrics_source, referenced_layer, round_half_up};
 
 #[derive(Clone, Debug, PartialEq, thiserror::Error)]
 pub enum EvalError {
@@ -77,12 +78,79 @@ fn address<T>(t: &T) -> usize {
     std::ptr::from_ref(t) as usize
 }
 
-/// One evaluation run over one font: measured bounds are kept, and the names of the glyphs read
-/// are collected for the out-of-sync cache.
+/// The measured bounds of layers, by the layer's address in memory: they hold while the layer's
+/// glyph is kept alive and neither it nor what it shows through components changes.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct LayerBounds {
+    by_layer: HashMap<usize, Result<Option<Rect>, EvalError>>,
+    /// The layers of `by_layer` that hold components.
+    composites: Vec<usize>,
+}
+
+impl LayerBounds {
+    pub(crate) fn clear(&mut self) {
+        self.by_layer.clear();
+        self.composites.clear();
+    }
+
+    /// Forgets the layers of `glyph`.
+    pub(crate) fn forget(&mut self, glyph: &Glyph) {
+        for layer in &glyph.layers {
+            self.by_layer.remove(&address(layer));
+        }
+    }
+
+    /// Forgets every layer that shows other glyphs.
+    pub(crate) fn forget_composites(&mut self) {
+        for at in self.composites.drain(..) {
+            self.by_layer.remove(&at);
+        }
+    }
+}
+
+/// One metric a key's value was read from.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Read {
+    pub(crate) glyph: String,
+    /// Index of the layer in the glyph.
+    layer: usize,
+    field: Field,
+    /// The height of an `@` key.
+    at: Option<f64>,
+    /// The layer shows other glyphs.
+    pub(crate) composite: bool,
+    value: Result<Option<f64>, EvalError>,
+}
+
+/// What a run keeps of the results it computes, for the out-of-sync cache.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Collect {
+    Nothing,
+    /// The metrics read.
+    Reads,
+    /// The metrics read and the names of the glyphs the results depend on.
+    ReadsAndNames,
+}
+
+/// A key's text by its place in memory, with what decides how it parses.
+type KeyAt = (usize, usize, Scope, Field);
+
+/// One evaluation run over one font: measured bounds and parsed keys are kept, and what the
+/// results read is collected for the out-of-sync cache.
 pub(crate) struct Ctx<'a> {
     pub(crate) font: &'a Font,
-    /// By layer address.
-    bounds: HashMap<usize, Result<Option<Rect>, EvalError>>,
+    pub(crate) bounds: LayerBounds,
+    /// The keys parsed, by the place of their text, which lives as long as the font.
+    keys: HashMap<KeyAt, Result<Arc<Key>, KeyError>>,
+    /// Whether alignment derives a layer's metrics, by layer address.
+    derived: HashMap<usize, bool>,
+    /// The slant of the masters met.
+    slants: Vec<(&'a str, Option<(f64, f64)>)>,
+    /// The masters that show their own metrics.
+    own_metrics: Option<Vec<&'a str>>,
+    collect: Collect,
+    /// The metrics the results read.
+    pub(crate) reads: Vec<Read>,
     /// Glyphs whose data the results read.
     pub(crate) deps: HashSet<String>,
     /// Layers whose components were added to `deps`.
@@ -91,20 +159,98 @@ pub(crate) struct Ctx<'a> {
 
 impl<'a> Ctx<'a> {
     pub(crate) fn new(font: &'a Font) -> Self {
-        Self { font, bounds: HashMap::new(), deps: HashSet::new(), walked: HashSet::new() }
+        Self::with_bounds(font, LayerBounds::default())
     }
 
-    /// Starts collecting the reads of another result.
-    pub(crate) fn forget_reads(&mut self) {
+    /// A run that starts from the bounds of an earlier one.
+    pub(crate) fn with_bounds(font: &'a Font, bounds: LayerBounds) -> Self {
+        Self {
+            font,
+            bounds,
+            keys: HashMap::new(),
+            derived: HashMap::new(),
+            slants: Vec::new(),
+            own_metrics: None,
+            collect: Collect::Nothing,
+            reads: Vec::new(),
+            deps: HashSet::new(),
+            walked: HashSet::new(),
+        }
+    }
+
+    /// Starts collecting what another result reads.
+    pub(crate) fn start(&mut self, collect: Collect) {
+        self.collect = collect;
+        self.reads.clear();
         self.deps.clear();
         self.walked.clear();
     }
 
-    pub(crate) fn exists(&self, name: &str) -> bool {
-        self.font.glyph(name).is_some()
+    /// The stored key `text`, parsed once however many layers and chains read it.
+    pub(crate) fn parse(&mut self, text: &'a str, scope: Scope, field: Field) -> Result<Arc<Key>, KeyError> {
+        let font = self.font;
+        self.keys
+            .entry((text.as_ptr() as usize, text.len(), scope, field))
+            .or_insert_with(|| parse_stored(text, scope, field, |n| font.glyph(n).is_some()).map(Arc::new))
+            .clone()
+    }
+
+    /// [`derives_metrics`], looked up once per layer.
+    pub(crate) fn derives(&mut self, layer: &Layer) -> bool {
+        let font = self.font;
+        *self.derived.entry(address(layer)).or_insert_with(|| derives_metrics(font, layer))
+    }
+
+    fn derived_field(&mut self, layer: &Layer, field: Field) -> bool {
+        is_derived_field(field) && self.derives(layer)
+    }
+
+    /// Whether `layer`'s master shows its own metrics ([`metrics_source`]).
+    pub(crate) fn own_metrics(&mut self, layer: &Layer) -> bool {
+        let font = self.font;
+        let own = self.own_metrics.get_or_insert_with(|| {
+            font.masters.iter().filter(|m| metrics_source(font, &m.id).is_some_and(|s| s.id == m.id)).map(|m| m.id.as_str()).collect()
+        });
+        own.iter().any(|id| *id == layer.master)
+    }
+
+    fn slant(&mut self, layer: &Layer) -> Option<(f64, f64)> {
+        if let Some((_, slant)) = self.slants.iter().find(|(id, _)| *id == layer.master) {
+            return *slant;
+        }
+        let slant = master_slant(self.font, &layer.master);
+        // A layer of a master the font lacks has no slant and nothing to keep it under.
+        if let Some(m) = self.font.masters.iter().find(|m| m.id == layer.master) {
+            self.slants.push((m.id.as_str(), slant));
+        }
+        slant
+    }
+
+    /// Whether the metric of `read` is another one now.
+    pub(crate) fn differs(&mut self, read: &Read) -> bool {
+        let font = self.font;
+        let Some((g, l)) = font.glyph(&read.glyph).and_then(|g| Some((g, g.layers.get(read.layer)?))) else { return true };
+        let now = match read.at {
+            Some(y) => self.metric_at(g, l, read.field, y),
+            None => self.metric(g, l, read.field),
+        };
+        now != read.value
+    }
+
+    /// Records that a result read `value`, the metric `field` of `layer` of `glyph`.
+    fn record(&mut self, glyph: &Glyph, layer: &Layer, field: Field, at: Option<f64>, value: &Result<Option<f64>, EvalError>) {
+        if self.collect == Collect::Nothing {
+            return;
+        }
+        let Some(index) = glyph.layers.iter().position(|l| std::ptr::eq(l, layer)) else { return };
+        let composite = layer.shapes.iter().any(|s| matches!(s, Shape::Component(_)));
+        self.reads.push(Read { glyph: glyph.name.clone(), layer: index, field, at, composite, value: value.clone() });
     }
 
     fn read(&mut self, glyph: &Glyph, layer: &Layer) {
+        if self.collect != Collect::ReadsAndNames {
+            return;
+        }
         if !self.deps.contains(&glyph.name) {
             self.deps.insert(glyph.name.clone());
         }
@@ -130,8 +276,17 @@ impl<'a> Ctx<'a> {
 
     fn bounds(&mut self, glyph: &Glyph, layer: &Layer) -> Result<Option<Rect>, EvalError> {
         self.read(glyph, layer);
-        let font = self.font;
-        self.bounds.entry(address(layer)).or_insert_with(|| bounds(font, layer)).clone()
+        let at = address(layer);
+        if let Some(known) = self.bounds.by_layer.get(&at) {
+            return known.clone();
+        }
+        let slant = self.slant(layer);
+        let measured = bounds_with(self.font, layer, slant);
+        if layer.shapes.iter().any(|s| matches!(s, Shape::Component(_))) {
+            self.bounds.composites.push(at);
+        }
+        self.bounds.by_layer.insert(at, measured.clone());
+        measured
     }
 
     /// A layer's current metric (`None`: a sidebearing of an empty layer).
@@ -161,17 +316,23 @@ impl<'a> Ctx<'a> {
         self.check_chain(glyph, layer, field, key)?;
         let raw = match &key.body {
             Body::Constant(v) | Body::Signed(v) => *v,
-            Body::SelfMirror => self.metric(glyph, layer, field.opposite())?.ok_or_else(|| EvalError::Empty(glyph.name.clone()))?,
+            Body::SelfMirror => {
+                let v = self.metric(glyph, layer, field.opposite());
+                self.record(glyph, layer, field.opposite(), None, &v);
+                v?.ok_or_else(|| EvalError::Empty(glyph.name.clone()))?
+            }
             Body::Name { name, mirrored, op, .. } => {
                 let font = self.font;
                 let r = font.glyph(name).ok_or_else(|| EvalError::Unlinked(name.clone()))?;
                 let rl = referenced_layer(r, layer).ok_or_else(|| EvalError::NoLayer(name.clone()))?;
                 let f = if *mirrored { field.opposite() } else { field };
-                let v = match key.at {
-                    Some(y) if matches!(f, Field::Left | Field::Right) => self.metric_at(r, rl, f, y)?,
-                    _ => self.metric(r, rl, f)?,
+                let at = key.at.filter(|_| matches!(f, Field::Left | Field::Right));
+                let v = match at {
+                    Some(y) => self.metric_at(r, rl, f, y),
+                    None => self.metric(r, rl, f),
                 };
-                let v = v.ok_or_else(|| EvalError::Empty(name.clone()))?;
+                self.record(r, rl, f, at, &v);
+                let v = v?.ok_or_else(|| EvalError::Empty(name.clone()))?;
                 match op {
                     None => v,
                     Some(o) => match o.op {
@@ -233,15 +394,15 @@ impl<'a> Ctx<'a> {
                 break;
             }
             seen.push(node);
-            if !self.deps.contains(&g.name) {
+            if self.collect == Collect::ReadsAndNames && !self.deps.contains(&g.name) {
                 self.deps.insert(g.name.clone());
             }
             // Alignment sets this metric: the key stored there does not continue the chain.
-            if derived_field(font, l, f) {
+            if self.derived_field(l, f) {
                 break;
             }
             let Some((scope, text)) = effective_key(g, l, f) else { break };
-            let Ok(k) = parse_stored(text, scope, f, |n| self.exists(n)) else { break };
+            let Ok(k) = self.parse(text, scope, f) else { break };
             next = self.step(l, f, &k, g);
             at_layer = l;
         }
