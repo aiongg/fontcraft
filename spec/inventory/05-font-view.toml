@@ -1197,7 +1197,7 @@ observe = [
   "Drag a rectangle across the grid, then again with Shift and with Cmd held: note how each changes the selection.",
   "In a font with a glyphOrder parameter look for section headers, then choose a filter, search and sort in turn: note when the headers show.",
 ]
-notes = "Cells draw the filled closed contours of Font View's master; open paths are not drawn in cells. Only the lines in view are laid out. Version 4 has a third view, a detail mode between grid and list that shows glyph information beside each glyph image, more of it the larger the cell (4.0 release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs4.0-4000.html), build 3831; news page \"Glyphs 4: Create. Love the process.\"). A glyph's note shows as a tooltip (build 3835)."
+notes = "Cells draw the filled closed contours of Font View's master; open paths are not drawn in cells. Only the lines in view are laid out. A note shows at the start of the cell's tooltip, before what its badges say (at most 400 characters). Version 4 has a third view, a detail mode between grid and list that shows glyph information beside each glyph image, more of it the larger the cell (4.0 release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs4.0-4000.html), build 3831; news page \"Glyphs 4: Create. Love the process.\"). A glyph's note shows as a tooltip (build 3835)."
 
 [[panel]]
 id = "fontView.list"
@@ -1789,10 +1789,11 @@ status = "handbook"
 guesses = [
   "CJK glyphs are those whose first code point is in the Han, Hiragana, Katakana, Hangul or Bopomofo script; the character is drawn with the interface font, and the marker is drawn when that font lacks it. Settled by observation.",
   "The marker is a small grey square. Settled by observation.",
+  "The marker sits at the bottom right of the drawing, just above the name line, and shows from the size names show at. Settled by observation.",
 ]
 observe = [
   "Look at the marker of 字, か, ㄅ, 한 and Ω: note which show a character; add a CJK glyph the system fonts lack.",
-  "Zoom into the marker of A and note its shape and colour.",
+  "Zoom into the marker of A and note its shape and colour, and whether it stands in the name line or above it.",
 ]
 
 [[behavior]]
@@ -1802,6 +1803,7 @@ milestone = "M4"
 summary = "With the application setting Display Unicode Value on, cells print the full hexadecimal code point instead of the small marker."
 ref = "Font View › Grid View"
 status = "handbook"
+notes = "Drawn where the marker is (fontView.cell.unicodeIndicator), in grey."
 
 [[behavior]]
 id = "fontView.cell.badgeMetricsOutOfSync"
@@ -1826,7 +1828,8 @@ summary = "A yellow note badge marks a glyph that has an annotation on the layer
 ref = "Font View › Grid View"
 status = "handbook"
 guesses = [
-  "Drawn in the top-left corner; the handbook gives no position. Settled by observation (05 question 15).",
+  "Drawn at the top left, beside the corner of a glyph whose layers cannot interpolate; the handbook gives no position. Settled by observation (05 question 15).",
+  "Every badge is 16% of the cell's side, 5 to 12 points, and shows at every cell size. Settled by observation.",
 ]
 observe = [
   "Add an annotation to a glyph and note the corner its badge is drawn in.",
@@ -1865,6 +1868,7 @@ summary = "A glyph whose export flag is off is marked by a struck-through red ri
 ref = "Font View › Grid View"
 status = "handbook"
 guesses = [
+  "The cell is not dimmed otherwise. Settled by observation.",
   "Drawn at the top centre of the cell; the handbook gives no position. Settled by observation (05 question 15).",
 ]
 observe = [
@@ -1878,6 +1882,12 @@ milestone = "M4"
 summary = "A glyph colour label tints the whole cell."
 ref = "Font View › Glyph Properties › Color Label"
 status = "handbook"
+guesses = [
+  "The tint covers the drawing, not the name line under it, and is see-through enough for the outline to stay readable. Settled by observation.",
+]
+observe = [
+  "Give a glyph a colour label and note whether the name line is tinted too, and the tint of a selected cell.",
+]
 
 [[behavior]]
 id = "fontView.cell.colorLayerOnly"

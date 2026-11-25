@@ -9,7 +9,7 @@
 //! outline, its references drawn in. Bitmaps are kept per glyph until the font's strikes or the choice change, at most
 //! [`MAX_STRIKE_CACHE_BYTES`] of them; a glyph past that, or without a bitmap in the strike, shows an empty cell.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use craft::behavior::kurbo::{BezPath, PathEl, Point, Shape as _};
@@ -21,6 +21,7 @@ use fontcraft_engine::model::{ColorLabel, Font, Glyph, GlyphProps, Prop, Shape, 
 use serde_json::Value;
 
 use super::ProjectCx;
+use super::cell_marks::{self, CellMarks};
 use crate::app::font_view::{Column, Sort, ViewMode};
 use crate::canvas::color;
 
@@ -115,7 +116,6 @@ pub struct StatusChoice {
 #[derive(PlainData, Clone, Debug, Default, PartialEq)]
 pub struct GlyphRow {
     pub name: String,
-    /// Exported; a glyph that is not shows veiled.
     pub export: bool,
     /// The first code point as four to six hexadecimal digits.
     pub unicode: Option<String>,
@@ -129,6 +129,8 @@ pub struct GlyphRow {
     pub status_color: Option<[u8; 4]>,
     /// Grid View with a strike shown: the glyph's bitmap in it, if it has one.
     pub bitmap: Option<Arc<StrikeCell>>,
+    /// Grid View: the colour labels, badges, Unicode mark and note of the cell. Empty in List View.
+    pub marks: CellMarks,
 }
 
 /// A cell outline: the closed contours, flattened, in font units.
@@ -233,6 +235,8 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, fil
     }
     // Font View draws the current master (`fontView.cell.followsMaster`), not the layer the Layers panel picked.
     let master = crate::shell::masters::current_master(&font, &cx.view.layers).map(|m| m.id.clone()).unwrap_or_default();
+    let display_value = cx.session.settings().get_bool("appearance.displayUnicodeValue").unwrap_or(false);
+    let out_of_sync = if state.mode == ViewMode::Grid { cell_marks::out_of_sync(cx.session, &font) } else { HashSet::new() };
     let props = Props::of(cx);
     let order = glyph_order(&font);
     let arcs = font.glyphs.as_arcs();
@@ -268,10 +272,14 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, fil
             ..GlyphRow::default()
         };
         match state.mode {
-            ViewMode::Grid => match strike {
-                Some((_, s)) => row.bitmap = cache.strikes.cell(&font.bitmap_strikes, s, &glyph.name),
-                None => row.art = Some(art(&font, glyph, &master, &by_name, cache, &mode, &mut src)),
-            },
+            ViewMode::Grid => {
+                match strike {
+                    Some((_, s)) => row.bitmap = cache.strikes.cell(&font.bitmap_strikes, s, &glyph.name),
+                    None => row.art = Some(art(&font, glyph, &master, &by_name, cache, &mode, &mut src)),
+                }
+                let custom = props.get(glyph).is_some_and(|p| p.has_custom_info);
+                row.marks = CellMarks::of(glyph, &master, custom, out_of_sync.contains(&glyph.name), display_value);
+            }
             ViewMode::List => {
                 let status = in_status.map(|s| s.name.as_str());
                 let cell = Cell { font: &font, glyph, id, master: &master, props: props.get(glyph), status };
@@ -281,6 +289,8 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, fil
         glyphs.push(glyph);
         rows.push(row);
     }
+    // The query brings the session's cache up to date, which copies it while another holder keeps it.
+    drop(props);
     let index: HashMap<&str, usize> = rows.iter().enumerate().map(|(i, r)| (r.name.as_str(), i)).collect();
     let mut error = None;
     let mut visible: Vec<usize> = match state.query() {
@@ -294,7 +304,7 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, fil
         },
     };
     if let Some(sort) = state.sort {
-        let props = &props;
+        let props = Props::of(cx);
         let key = |i: usize| {
             let glyph = glyphs.get(i).copied()?;
             let status = glyph_status(&font, glyph, &statuses, &defs).map(|s| s.name.as_str());
@@ -378,7 +388,7 @@ fn sort_rows(visible: &mut Vec<usize>, sort: Sort, key: impl Fn(usize) -> Option
     *visible = keyed.into_iter().map(|(_, i)| i).collect();
 }
 
-/// The glyph properties the List View columns read: the session's cache, else computed from the glyph data.
+/// The glyph properties the List View columns and the custom info badge read: the session's cache, else computed from the glyph data.
 struct Props {
     cache: Option<Arc<fontcraft_engine::model::PropsCache>>,
     data: Option<Arc<GlyphData>>,
@@ -387,9 +397,6 @@ struct Props {
 
 impl Props {
     fn of(cx: &mut ProjectCx<'_>) -> Props {
-        if cx.view.font_view.mode == ViewMode::Grid && cx.view.font_view.sort.is_none() {
-            return Props { cache: None, data: None, keep_alternates: false };
-        }
         let keep_alternates = cx.session.font().is_ok_and(keeps_alternates);
         let data = cx.session.glyph_data().ok();
         let cache = cx.session.effective_props().ok().filter(|c| data.as_deref().is_some_and(|d| c.is_for(d, keep_alternates)));

@@ -9,9 +9,11 @@ use craft::ui::testing::Fixture;
 use egui::{Key, Modifiers};
 use serde_json::json;
 
+use super::marks::{Badge, MarkTokens, badge_rect};
 use super::{Props, show};
 use crate::app::Msg;
 use crate::app::font_view::{Column, ViewMode};
+use crate::app::models::cell_marks::{CellMarks, UnicodeMark};
 use crate::app::models::font_view::{FontViewModel, GlyphRow};
 
 fn model(mode: ViewMode, selected: Vec<usize>) -> FontViewModel {
@@ -287,4 +289,95 @@ fn a_strike_cell_draws_its_bitmap_and_an_empty_cell_its_name() {
         })
         .collect();
     assert!(texts.iter().any(|t| t == "B"), "B has no bitmap and shows its name: {texts:?}");
+}
+
+/// The fills a Grid View of one cell paints, its texts and the cell's picture rect.
+fn painted_cell(marks: CellMarks, cell_size: f64) -> (Vec<(egui::Color32, egui::Rect)>, Vec<String>) {
+    let mut grid = model_of(&["A"], ViewMode::Grid, Vec::new());
+    grid.cell_size = cell_size;
+    if let Some(row) = grid.rows.get_mut(0) {
+        row.marks = marks;
+    }
+    let (mut fixture, _) = open(grid);
+    let (mut fills, mut texts) = (Vec::new(), Vec::new());
+    for shape in fixture.frame_shapes() {
+        match shape {
+            egui::Shape::Rect(r) => fills.push((r.fill, r.rect)),
+            egui::Shape::Path(p) => fills.push((p.fill, egui::Rect::from_points(&p.points))),
+            egui::Shape::Circle(c) => {
+                let shown = if c.fill == egui::Color32::TRANSPARENT { c.stroke.color } else { c.fill };
+                fills.push((shown, egui::Rect::from_center_size(c.center, egui::Vec2::splat(c.radius * 2.0))));
+            }
+            egui::Shape::Text(t) => texts.push(t.galley.job.text.clone()),
+            _ => {}
+        }
+    }
+    (fills, texts)
+}
+
+/// A glyph colour fills the cell, a layer colour alone fills it but for the cut-out, and with both the layer colour
+/// takes the right half.
+#[test]
+fn colour_labels_fill_the_cell() {
+    let t = MarkTokens::standard();
+    let (glyph, layer) = ([200, 10, 20], [20, 10, 200]);
+    let rect_of = |fills: &[(egui::Color32, egui::Rect)], c| fills.iter().find(|(fill, _)| *fill == t.tint(c)).map(|(_, r)| *r);
+
+    let (fills, _) = painted_cell(CellMarks { color: Some(glyph), ..CellMarks::default() }, 64.0);
+    let whole = rect_of(&fills, glyph).expect("the glyph's colour");
+    assert!((whole.width() - whole.height()).abs() < 1.0, "{whole:?}");
+
+    let (fills, _) = painted_cell(CellMarks { layer_color: Some(layer), ..CellMarks::default() }, 64.0);
+    assert_eq!(rect_of(&fills, layer), Some(whole), "the cut-out is inside the cell's bounds");
+
+    let (fills, _) = painted_cell(CellMarks { color: Some(glyph), layer_color: Some(layer), ..CellMarks::default() }, 64.0);
+    let (left, right) = (rect_of(&fills, glyph).expect("the glyph's colour"), rect_of(&fills, layer).expect("the layer's colour"));
+    assert!((left.width() - right.width()).abs() < 0.1 && left.right() <= right.left() && right.right() == whole.right());
+}
+
+/// Each badge paints in its corner and is said beside the glyph's name; a glyph without one has its plain name, and a
+/// glyph that does not export is not veiled.
+#[test]
+fn badges_paint_in_their_corners_and_are_said() {
+    let t = MarkTokens::standard();
+    let cases = [
+        (CellMarks { annotated: true, ..CellMarks::default() }, t.note, "A, Annotation on this master's layer"),
+        (CellMarks { custom: true, ..CellMarks::default() }, t.info, "A, Custom glyph properties"),
+        (CellMarks { not_exported: true, ..CellMarks::default() }, t.not_exported, "A, Not exported"),
+        (CellMarks { out_of_sync: true, ..CellMarks::default() }, t.out_of_sync, "A, Metrics keys out of sync"),
+    ];
+    let (plain, _) = painted_cell(CellMarks::default(), 64.0);
+    for (marks, color, said) in cases {
+        let (fills, _) = painted_cell(marks.clone(), 64.0);
+        assert!(fills.iter().any(|(c, _)| *c == color), "{said}");
+        assert!(plain.iter().all(|(c, _)| *c != color), "{said} without the state");
+        let mut grid = model(ViewMode::Grid, Vec::new());
+        if let Some(row) = grid.rows.get_mut(0) {
+            row.marks = marks;
+        }
+        let (fixture, _) = open(grid);
+        assert!(fixture.by_label(said).is_some(), "{said}");
+        assert!(fixture.by_label("B").is_some(), "a glyph without a badge has its plain name");
+    }
+    let cell = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(64.0));
+    let [note, info, ring, warning] =
+        [Badge::Annotation, Badge::CustomInfo, Badge::NotExported, Badge::OutOfSync].map(|b| badge_rect(cell, b, &t).center());
+    assert!(note.x < ring.x && ring.x < warning.x && note.y < 32.0 && warning.y < 32.0 && info.x < 32.0 && info.y > 32.0);
+}
+
+/// The Unicode mark shows with the name: a marker, or the code point while Display Unicode Value is on; a cell too
+/// small for names has neither.
+#[test]
+fn the_unicode_mark_shows_with_the_name() {
+    let t = MarkTokens::standard();
+    let marked = |unicode: UnicodeMark, size: f64| painted_cell(CellMarks { unicode, ..CellMarks::default() }, size);
+    let has_marker = |fills: &[(egui::Color32, egui::Rect)]| fills.iter().any(|(c, r)| *c == t.marker && r.width() <= t.marker_side + 0.1);
+    let (fills, texts) = marked(UnicodeMark::Marker, 64.0);
+    assert!(has_marker(&fills) && texts.iter().any(|s| s == "A"), "{texts:?}");
+    let (fills, texts) = marked(UnicodeMark::Value("0041".into()), 64.0);
+    assert!(!has_marker(&fills) && texts.iter().any(|s| s == "0041"), "{texts:?}");
+    let (fills, _) = marked(UnicodeMark::None, 64.0);
+    assert!(!has_marker(&fills));
+    let (fills, texts) = marked(UnicodeMark::Marker, 40.0);
+    assert!(!has_marker(&fills) && !texts.iter().any(|s| s == "A"), "{texts:?}");
 }

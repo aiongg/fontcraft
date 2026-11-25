@@ -251,3 +251,47 @@ fn a_strike_replaces_the_outlines_in_the_cells() {
     assert!(app.models.font_view.strike.is_none());
     assert!(app.models.font_view.rows.iter().all(|r| r.art.is_some() && r.bitmap.is_none()), "back to the outlines");
 }
+
+/// Each state of a glyph marks its own cell: the colour labels, an annotation, stored properties, an export flag that
+/// is off, a metrics key out of sync, and the code point with Display Unicode Value.
+#[test]
+fn cells_mark_the_state_of_their_glyphs() {
+    use crate::app::models::cell_marks::{CellMarks, UnicodeMark, label_rgb};
+    use fontcraft_engine::model::ColorLabel;
+
+    let mut app = app();
+    let marks = |app: &FontCraftApp, name: &str| -> CellMarks {
+        app.models.font_view.rows.iter().find(|r| r.name == name).map(|r| r.marks.clone()).expect("the row")
+    };
+    let edit = |app: &mut FontCraftApp, id: &str, params: Value| {
+        app.session.execute(id, &params).unwrap();
+        app.drain();
+    };
+    let master = app.models.font_view.master.clone().expect("a master");
+    assert_eq!(marks(&app, "A"), CellMarks { unicode: UnicodeMark::Marker, ..CellMarks::default() });
+    edit(&mut app, "glyph.setColorLabel", json!({"glyphs": ["A"], "color": 3}));
+    edit(&mut app, "glyph.setLayerColorLabel", json!({"glyphs": ["A"], "layer": master, "color": 7}));
+    edit(&mut app, "annotation.add", json!({"glyph": "B", "layer": master, "type": "plus", "position": [10, 20]}));
+    edit(&mut app, "glyph.setCategory", json!({"glyphs": ["C"], "category": "Symbol"}));
+    edit(&mut app, "glyph.setExport", json!({"glyphs": ["D"], "export": false}));
+    edit(&mut app, "glyph.setNote", json!({"glyphs": ["E"], "note": "check the serif"}));
+    let a = marks(&app, "A");
+    assert_eq!((a.color, a.layer_color), (Some(label_rgb(ColorLabel::Index(3))), Some(label_rgb(ColorLabel::Index(7)))));
+    assert!(marks(&app, "B").annotated && marks(&app, "C").custom && marks(&app, "D").not_exported);
+    assert_eq!(marks(&app, "E").note, "check the serif");
+
+    // A key follows the glyph it reads: an edit of that glyph marks the one with the key and no other.
+    for (glyph, x) in [("n", 50), ("o", 40)] {
+        edit(&mut app, "path.addRectangle", json!({"glyph": glyph, "x": x, "y": 0, "width": 300, "height": 500}));
+    }
+    edit(&mut app, "spacing.setLeftSidebearing", json!({"glyphs": ["o"], "layer": master, "value": "=n"}));
+    assert!(!marks(&app, "o").out_of_sync, "the key was just applied");
+    edit(&mut app, "spacing.setLeftSidebearing", json!({"glyphs": ["n"], "layer": master, "value": 80}));
+    let out: Vec<String> = app.models.font_view.rows.iter().filter(|r| r.marks.out_of_sync).map(|r| r.name.clone()).collect();
+    assert_eq!(out, ["o"]);
+
+    edit(&mut app, "settings.set", json!({"id": "appearance.displayUnicodeValue", "value": true}));
+    assert_eq!(marks(&app, "A").unicode, UnicodeMark::Value("0041".into()));
+    shell(&mut app, "fontView.setViewMode", json!({"mode": "list"}));
+    assert_eq!(marks(&app, "A"), CellMarks::default(), "List View projects no marks");
+}

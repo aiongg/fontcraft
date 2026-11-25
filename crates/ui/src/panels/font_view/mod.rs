@@ -6,6 +6,7 @@
 //! | [`grid`] | Grid View: one tile per shown glyph, its outline, its name from the label size up |
 //! | [`list`] | List View: one row per shown glyph, a column per property, sort and column choice, edits in place |
 //! | [`cells`] | the outline painter of a grid cell |
+//! | [`marks`] | a grid cell's colour labels, badges and Unicode mark |
 //! | [`keys`] | what the grid's and the list's selection, keys and requests post |
 //! | [`search`] | the search field and the mode buttons |
 //! | [`status`] | the New Glyph and Remove Glyph buttons, the counts and the cell size slider |
@@ -18,6 +19,7 @@ pub mod grid;
 pub mod inspector;
 pub mod keys;
 pub mod list;
+pub mod marks;
 pub mod metrics;
 pub mod search;
 pub mod sidebar;
@@ -57,6 +59,11 @@ craft::ui::words! {
         no_glyphs: "fontcraftFontView.noGlyphs" = "No glyphs";
         /// Without an open font.
         no_font: "fontcraftFontView.noFont" = "File › New to start a font";
+        /// What the badges of a grid cell say.
+        badge_annotation: "fontcraftFontView.badgeAnnotation" = "Annotation on this master's layer";
+        badge_custom: "fontcraftFontView.badgeCustom" = "Custom glyph properties";
+        badge_not_exported: "fontcraftFontView.badgeNotExported" = "Not exported";
+        badge_out_of_sync: "fontcraftFontView.badgeOutOfSync" = "Metrics keys out of sync";
     }
 }
 
