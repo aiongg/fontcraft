@@ -252,6 +252,11 @@ fn display_lines_follow_font_info_and_parameters() {
 #[test]
 fn guides_follow_the_width_by_their_sidebearing_reference() {
     let mut s = session();
+    s.edit("version", |font| {
+        font.source.glyphs_version = Some(2);
+        Ok(())
+    })
+    .unwrap();
     for (x, to) in [(50.0, "left"), (550.0, "right"), (300.0, "both")] {
         let out = run(&mut s, "guide.add", json!({"glyph": "A", "x": x, "y": 0, "angle": 90}));
         run(&mut s, "guide.setProperties", json!({"glyph": "A", "guide": out["guide"], "relativeTo": to}));
@@ -270,6 +275,18 @@ fn guides_follow_the_width_by_their_sidebearing_reference() {
     // A left sidebearing change moves every guide with the outline.
     run(&mut s, "spacing.setLeftSidebearing", json!({"glyphs": ["A"], "value": 100}));
     assert_eq!(xs(&mut s), vec![150.0, 650.0, 400.0]);
+    run(&mut s, "edit.undo", json!({}));
+
+    // In a document of another version no spacing command writes the both guide's x.
+    s.edit("version", |font| {
+        font.source.glyphs_version = Some(3);
+        Ok(())
+    })
+    .unwrap();
+    run(&mut s, "spacing.setWidth", json!({"glyphs": ["A"], "value": 900}));
+    assert_eq!(xs(&mut s), vec![50.0, 850.0, 300.0]);
+    run(&mut s, "spacing.setLeftSidebearing", json!({"glyphs": ["A"], "value": 100}));
+    assert_eq!(xs(&mut s), vec![150.0, 950.0, 300.0]);
 }
 
 /// A guide a version 3 file references to the right counts from the right sidebearing: it is listed, measured and moved

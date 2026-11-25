@@ -10,6 +10,7 @@
 
 use std::collections::HashSet;
 
+use fontcraft_model::guide_follow::{BothGuides, follow_width};
 use fontcraft_model::{Font, Glyph, Layer, Master};
 use fontcraft_spacing::{
     EvalError, Field, Finding, Key, KeyError, Problem, Scope, Slot, WIDTH_RANGE, effective_key, metric, parse_field, parse_stored,
@@ -201,16 +202,16 @@ fn plan(font: &Font, layer: &Layer, field: Field, value: f64, actual: f64) -> st
     }
 }
 
-fn apply(layer: &mut Layer, change: &Change) -> std::result::Result<(), String> {
+fn apply(layer: &mut Layer, change: &Change, both: BothGuides) -> std::result::Result<(), String> {
     match *change {
         Change::Left(dx) => {
-            super::shared::shift_with_right_edge(layer, dx)?;
+            super::shared::shift_with_right_edge(layer, dx, both)?;
             layer.width += dx;
         }
         Change::Width(w) => {
             let before = layer.width;
             layer.width = w;
-            fontcraft_model::guide_follow::follow_width(layer, before);
+            follow_width(layer, before, both);
         }
         Change::Vertical { origin, width } => {
             if layer.info.vert_origin != origin {
@@ -241,9 +242,10 @@ fn update_slot(font: &mut Font, slot: &Slot) -> std::result::Result<Option<(f64,
         return Ok(None);
     }
     let change = plan(font, layer, slot.field, value, actual)?;
+    let both = BothGuides::of(font);
     let mut g = font.glyph_mut(&slot.glyph).map_err(|e| e.to_string())?;
     let layer = g.layers.iter_mut().find(|l| l.id == slot.layer).ok_or_else(|| format!("glyph `{}` has no layer `{}`", slot.glyph, slot.layer))?;
-    apply(layer, &change)?;
+    apply(layer, &change, both)?;
     Ok(Some((actual, value)))
 }
 

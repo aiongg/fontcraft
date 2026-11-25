@@ -13,11 +13,12 @@
 //! take and return places; the files, the native format and the clipboard hold the stored x.
 //!
 //! When a width changes, a right-referenced guide keeps its stored x and so its distance from the
-//! right edge, and a local guide referenced to both keeps its fraction of the width. Every command
-//! that writes a layer's advance width calls [`follow_width`] in the same edit, so the guides move
-//! in the same undo step.
+//! right edge. A local guide referenced to both keeps its fraction of the width in a document of
+//! version 2 ([`BothGuides`]); elsewhere no change of width or sidebearings writes its x, which may
+//! already count from something that moves. Every command that writes a layer's advance width calls
+//! [`follow_width`] in the same edit, so the guides move in the same undo step.
 
-use crate::{Guide, Layer, MAX_COORDINATE};
+use crate::{Font, Guide, Layer, MAX_COORDINATE};
 
 /// The spellings of the references a file writes; an absent one is the left.
 const RIGHT: &str = "right";
@@ -114,6 +115,22 @@ pub fn edit_placed<T, E>(g: &mut Guide, width: f64, f: impl FnOnce(&mut Guide) -
     Ok(out)
 }
 
+/// Whether changes of width and sidebearings write the x of guides referenced to both sidebearings.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BothGuides {
+    /// Their x follows the change.
+    Follow,
+    /// Their x stays as stored.
+    Keep,
+}
+
+impl BothGuides {
+    /// The rule of a document: its both-referenced guides follow when it is of `.glyphs` version 2.
+    pub fn of(font: &Font) -> Self {
+        if font.source.glyphs_version == Some(2) { BothGuides::Follow } else { BothGuides::Keep }
+    }
+}
+
 /// Where a guide at `x` referenced to both sidebearings goes when the width changes from `before`
 /// to `after`; `None` when it stays.
 fn both_x(x: f64, before: f64, after: f64) -> Option<f64> {
@@ -126,12 +143,15 @@ fn both_x(x: f64, before: f64, after: f64) -> Option<f64> {
 }
 
 /// Moves `layer`'s local guides, foreground and background, that are referenced to both
-/// sidebearings for a change of its width from `before` to `layer.width`; the stored x of the
-/// others already says where they go. `before` is the width the layer would have with its contents
+/// sidebearings for a change of its width from `before` to `layer.width`, under
+/// [`BothGuides::Follow`]; the stored x of the others already says where they go. `before` is the width the layer would have with its contents
 /// moved alone: a command that moves the contents sideways by `dx` (which moves the guides with
 /// them) passes the old width plus `dx`. Such a command leaves the stored x of right-referenced
 /// guides alone, since the right edge moves with the contents.
-pub fn follow_width(layer: &mut Layer, before: f64) {
+pub fn follow_width(layer: &mut Layer, before: f64, both: BothGuides) {
+    if both == BothGuides::Keep {
+        return;
+    }
     let after = layer.width;
     let moved = |g: &Guide| (reference(g) == Reference::Both).then(|| both_x(g.x, before, after)).flatten();
     let any = |list: &[Guide]| list.iter().any(|g| moved(g).is_some());
@@ -162,7 +182,9 @@ mod tests {
         }
         assert_eq!(layer.info.guides.iter().map(|g| g.x).collect::<Vec<_>>(), vec![100.0, -50.0, 300.0], "as a file has them");
         layer.width = 700.0;
-        follow_width(&mut layer, 600.0);
+        follow_width(&mut layer, 600.0, BothGuides::Keep);
+        assert_eq!(layer.info.guides[2].x, 300.0);
+        follow_width(&mut layer, 600.0, BothGuides::Follow);
         let xs: Vec<f64> = layer.info.guides.iter().map(|g| placed_x(g, layer.width)).collect();
         assert_eq!(xs, vec![100.0, 650.0, 350.0]);
         assert_eq!(layer.info.guides.iter().map(reference).collect::<Vec<_>>(), vec![Reference::Left, Reference::Right, Reference::Both]);

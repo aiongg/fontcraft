@@ -2,7 +2,7 @@
 //! sideways, the kerning parameter readers, path parameter checks, finding an open document,
 //! aligning an imported font and the clock.
 
-use fontcraft_model::guide_follow::{self, Reference};
+use fontcraft_model::guide_follow::{self, BothGuides, Reference};
 use fontcraft_model::plist::{Num, Number, Str, Value as Plist};
 use fontcraft_model::{Font, Guide, Hint, Layer, LayerSide, MAX_COORDINATE, Shape, Transform};
 use fontcraft_spacing::kerning::Direction;
@@ -188,36 +188,37 @@ fn write_ref(v: &mut Plist, old: &[usize], new: &[usize]) {
 /// Moves everything drawn in a layer sideways by `dx`: outlines, components, images, anchors,
 /// guides, annotations, the placed image and the background. Hints stay as they are. Fails when a
 /// coordinate would leave the model's range or a shape cannot be moved, and then leaves the
-/// layer as it was.
-pub(crate) fn shift_layer(layer: &mut Layer, dx: f64) -> std::result::Result<(), String> {
-    shift(layer, dx, false)
+/// layer as it was. `both` says whether guides referenced to both sidebearings move too.
+pub(crate) fn shift_layer(layer: &mut Layer, dx: f64, both: BothGuides) -> std::result::Result<(), String> {
+    shift(layer, dx, |r| r == Reference::Both && both == BothGuides::Keep)
 }
 
 /// Moves a layer as [`shift_layer`] does for an edit that moves the right edge as well: a guide
 /// referenced to the right sidebearing keeps its distance from that edge, so its stored x stays
 /// (`guide_follow`).
-pub(crate) fn shift_with_right_edge(layer: &mut Layer, dx: f64) -> std::result::Result<(), String> {
-    shift(layer, dx, true)
+pub(crate) fn shift_with_right_edge(layer: &mut Layer, dx: f64, both: BothGuides) -> std::result::Result<(), String> {
+    shift(layer, dx, |r| r == Reference::Right || (r == Reference::Both && both == BothGuides::Keep))
 }
 
-fn shift(layer: &mut Layer, dx: f64, right_edge: bool) -> std::result::Result<(), String> {
+/// `kept` names the references of the guides whose stored x stays.
+fn shift(layer: &mut Layer, dx: f64, kept: impl Fn(Reference) -> bool) -> std::result::Result<(), String> {
     if dx == 0.0 {
         return Ok(());
     }
     let mut moved = layer.clone();
-    shift_in_place(&mut moved, dx, right_edge)?;
+    shift_in_place(&mut moved, dx, &kept)?;
     *layer = moved;
     Ok(())
 }
 
-fn shift_guides(guides: &mut [Guide], dx: f64, right_edge: bool) -> std::result::Result<(), String> {
-    for g in guides.iter_mut().filter(|g| !(right_edge && guide_follow::reference(g) == Reference::Right)) {
+fn shift_guides(guides: &mut [Guide], dx: f64, kept: &impl Fn(Reference) -> bool) -> std::result::Result<(), String> {
+    for g in guides.iter_mut().filter(|g| !kept(guide_follow::reference(g))) {
         shift_x(&mut g.x, dx)?;
     }
     Ok(())
 }
 
-fn shift_in_place(layer: &mut Layer, dx: f64, right_edge: bool) -> std::result::Result<(), String> {
+fn shift_in_place(layer: &mut Layer, dx: f64, kept: &impl Fn(Reference) -> bool) -> std::result::Result<(), String> {
     shift_shapes(&mut layer.shapes, dx)?;
     for a in &mut layer.anchors {
         shift_x(&mut a.x, dx)?;
@@ -226,7 +227,7 @@ fn shift_in_place(layer: &mut Layer, dx: f64, right_edge: bool) -> std::result::
         return Ok(());
     }
     let info = &mut *layer.info;
-    shift_guides(&mut info.guides, dx, right_edge)?;
+    shift_guides(&mut info.guides, dx, kept)?;
     for a in &mut info.annotations {
         shift_x(&mut a.x, dx)?;
     }
@@ -238,7 +239,7 @@ fn shift_in_place(layer: &mut Layer, dx: f64, right_edge: bool) -> std::result::
         for a in &mut b.anchors {
             shift_x(&mut a.x, dx)?;
         }
-        shift_guides(&mut b.guides, dx, right_edge)?;
+        shift_guides(&mut b.guides, dx, kept)?;
         for a in &mut b.annotations {
             shift_x(&mut a.x, dx)?;
         }

@@ -4,7 +4,7 @@
 //! [`set_metric`]. Behaviour notes: `docs/spec/08-spacing-kerning.md`
 //! § 1 and § 2.
 
-use fontcraft_model::guide_follow::follow_width;
+use fontcraft_model::guide_follow::{BothGuides, follow_width};
 use fontcraft_model::{Font, Glyph, Layer, MAX_COORDINATE, MetricsKeys};
 use fontcraft_spacing::{self as spacing, Entry, Field, Scope, WIDTH_RANGE};
 use serde_json::{Map, Value, json};
@@ -200,10 +200,11 @@ pub(crate) fn set_metric(s: &mut Session, v: &Value, id: &'static str, label: &s
                 Field::Left | Field::Right | Field::Width | Field::VertOrigin => None,
             };
             let shown = spacing::effective_key(glyph, l, field).map(|(scope, _)| scope);
+            let both = BothGuides::of(font);
             let mut gm = font.glyph_mut(name)?;
             let g: &mut Glyph = &mut gm;
             let l = g.layers.iter_mut().find(|l| l.id == layer).ok_or_else(|| p.bad(format!("glyph `{name}` has no layer `{layer}`")))?;
-            apply(l, field, target - current, vertical).map_err(|e| p.bad(format!("glyph `{name}`: {e}")))?;
+            apply(l, field, target - current, vertical, both).map_err(|e| p.bad(format!("glyph `{name}`: {e}")))?;
             match key {
                 // A number replaces the key the field shows, wherever it is stored.
                 None => match shown {
@@ -317,20 +318,20 @@ fn vertical_width(font: &Font, layer: &Layer) -> std::result::Result<Option<f64>
 /// with them; a right one moves the width; a top one moves the vertical origin up and lengthens
 /// the vertical width; a bottom one or the vertical width itself lengthens the vertical width;
 /// the vertical origin moves the vertical box and keeps its height. `vertical` is the current
-/// vertical width (needed for top, bottom and the vertical width).
-fn apply(layer: &mut Layer, field: Field, delta: f64, vertical: Option<f64>) -> std::result::Result<(), String> {
+/// vertical width (needed for top, bottom and the vertical width); `both` is the document's rule.
+fn apply(layer: &mut Layer, field: Field, delta: f64, vertical: Option<f64>, both: BothGuides) -> std::result::Result<(), String> {
     if delta == 0.0 {
         return Ok(());
     }
     match field {
         Field::Left => {
-            shift_with_right_edge(layer, delta)?;
+            shift_with_right_edge(layer, delta, both)?;
             set_layer_width(layer, layer.width + delta)
         }
         Field::Right | Field::Width => {
             let before = layer.width;
             set_layer_width(layer, layer.width + delta)?;
-            follow_width(layer, before);
+            follow_width(layer, before, both);
             Ok(())
         }
         Field::VertOrigin => set_vert_origin(layer, layer.info.vert_origin.unwrap_or(0.0) + delta),
@@ -456,6 +457,7 @@ fn nudge(s: &mut Session, v: &Value, id: &'static str, label: &str, edge: Nudge,
     let mut moved_glyphs = Vec::new();
     let mut skipped = Vec::new();
     s.edit(label, |font| {
+        let both = BothGuides::of(font);
         for name in &names {
             if vertical {
                 let (_, l) = find_layer(&p, font, name, &layer)?;
@@ -463,10 +465,10 @@ fn nudge(s: &mut Session, v: &Value, id: &'static str, label: &str, edge: Nudge,
                 let mut g = font.glyph_mut(name)?;
                 let l = g.layers.iter_mut().find(|l| l.id == layer).ok_or_else(|| p.bad(format!("glyph `{name}` has no layer `{layer}`")))?;
                 let moved = match edge {
-                    Nudge::Left => apply(l, Field::Top, d, height),
-                    Nudge::Right => apply(l, Field::Bottom, d, height),
+                    Nudge::Left => apply(l, Field::Top, d, height, both),
+                    Nudge::Right => apply(l, Field::Bottom, d, height, both),
                     // Moving the box up moves the outline down inside it.
-                    Nudge::Shift => apply(l, Field::VertOrigin, -d, height),
+                    Nudge::Shift => apply(l, Field::VertOrigin, -d, height, both),
                 };
                 moved.map_err(|e| p.bad(format!("glyph `{name}`: {e}")))?;
                 widths.insert(name.clone(), json!(l.width));
@@ -482,12 +484,12 @@ fn nudge(s: &mut Session, v: &Value, id: &'static str, label: &str, edge: Nudge,
             let mut g = font.glyph_mut(name)?;
             let l = g.layers.iter_mut().find(|l| l.id == layer).ok_or_else(|| p.bad(format!("glyph `{name}` has no layer `{layer}`")))?;
             let moved = match edge {
-                Nudge::Left => shift_with_right_edge(l, d).and_then(|()| set_layer_width(l, l.width + d)),
+                Nudge::Left => shift_with_right_edge(l, d, both).and_then(|()| set_layer_width(l, l.width + d)),
                 Nudge::Right => {
                     let before = l.width;
-                    set_layer_width(l, l.width + d).map(|()| follow_width(l, before))
+                    set_layer_width(l, l.width + d).map(|()| follow_width(l, before, both))
                 }
-                Nudge::Shift => shift_layer(l, d),
+                Nudge::Shift => shift_layer(l, d, both),
             };
             moved.map_err(|e| p.bad(format!("glyph `{name}`: {e}")))?;
             widths.insert(name.clone(), json!(l.width));

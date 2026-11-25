@@ -9,6 +9,7 @@
 use std::collections::HashMap;
 
 use fontcraft_geom::round_to_grid;
+use fontcraft_model::guide_follow::{BothGuides, follow_width};
 use fontcraft_model::{Font, Layer};
 use fontcraft_spacing::{Field, SIDEBEARING_RANGE, WIDTH_RANGE, metric};
 use serde_json::{Value, json};
@@ -115,12 +116,12 @@ fn plan(p: &Params, font: &Font, glyph: &str, layer: &Layer, mode: Mode, step: f
     Ok(Ok(change))
 }
 
-fn change_layer(layer: &mut Layer, change: Change) -> std::result::Result<(), String> {
+fn change_layer(layer: &mut Layer, change: Change, both: BothGuides) -> std::result::Result<(), String> {
     // The shift moves the guides with the contents; they then follow the rest of the change.
     let before = layer.width + change.dx;
-    shift_with_right_edge(layer, change.dx)?;
+    shift_with_right_edge(layer, change.dx, both)?;
     layer.width = change.width;
-    fontcraft_model::guide_follow::follow_width(layer, before);
+    follow_width(layer, before, both);
     Ok(())
 }
 
@@ -131,8 +132,9 @@ pub(super) fn change_target(p: &Params, font: &mut Font, t: &Targets, mode: Mode
         let r = t.resolve(font)?;
         plan(p, font, &t.glyph, r.layer, mode, step)?
     };
+    let both = BothGuides::of(font);
     match change {
-        Ok(change) => t.edit_layer(font, |l| change_layer(l, change).map_err(|e| p.bad(format!("glyph `{}`: {e}", t.glyph)))),
+        Ok(change) => t.edit_layer(font, |l| change_layer(l, change, both).map_err(|e| p.bad(format!("glyph `{}`: {e}", t.glyph)))),
         Err(_) => Ok(()),
     }
 }
@@ -151,8 +153,9 @@ fn transform_metrics(s: &mut Session, v: &Value) -> Result<Value> {
         }
     }
     let out = s.edit("Transform Metrics", |font| {
+        let both = BothGuides::of(font);
         each_layer(font, &scope, "glyph.transformMetrics", |glyph, layer| match plans.get(&(glyph.to_string(), layer.id.clone())) {
-            Some(Ok(change)) => Ok(change_layer(layer, *change).err()),
+            Some(Ok(change)) => Ok(change_layer(layer, *change, both).err()),
             Some(Err(reason)) => Ok(Some(reason.clone())),
             None => Ok(Some("the layer was not measured".into())),
         })
