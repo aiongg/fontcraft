@@ -40,7 +40,7 @@ use fontcraft_ttasm::{FunctionTable, MAX_GLYPH_PROGRAM_BYTES, MAX_PROGRAM_TEXT, 
 
 use crate::replay::describe;
 use crate::tt_font::{
-    FN_POINT_DELTA, FN_POINT_ROUND, FN_STEM, FN_TRIPLE, FN_ZONE_DISTANCE, FN_ZONE_SNAP, S_GDI, STEM_NO_ROUNDING, STEM_ROUND, stem_mode,
+    FN_AUTO_STEM, FN_POINT_DELTA, FN_POINT_ROUND, FN_STEM, FN_TRIPLE, FN_ZONE_DISTANCE, FN_ZONE_SNAP, S_GDI, STEM_NO_ROUNDING, STEM_ROUND, stem_mode,
 };
 use crate::{
     CvtLayout, DeltaDir, Direction, HintSettings, HintingError, MAX_DELTA_PPM, MAX_LAYER_HINTS, PointMap, Rounding, StemRef, TouchedState,

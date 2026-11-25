@@ -257,7 +257,8 @@ pub fn read_pdf(data: &[u8], placement: Placement) -> Result<PdfOutlines, PdfErr
 /// `max_pixels` pixels (itself capped at the image limit of `fontcraft_imagery`); a page that
 /// would be larger is drawn at a lower resolution.
 pub fn render_pdf(data: &[u8], pixels_per_point: f64, max_pixels: u64) -> Result<PdfRaster, PdfError> {
-    raster_of(&cache::first_page(data)?, pixels_per_point, max_pixels)
+    let page = cache::first_page(data)?;
+    raster_of(&page, pixels_per_point, max_pixels)
 }
 
 /// As [`render_pdf`], for page `index` (from 0); a page the file lacks is [`PdfError::NoPage`]. The
