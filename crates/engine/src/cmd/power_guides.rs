@@ -60,7 +60,8 @@ pub fn specs() -> Vec<CommandSpec> {
             "{glyph: name | glyphs: [names], layer?: id | layers?: [ids] (default: the first master's layer)} add a local power guide along each edge of every horizontal and vertical stem of the layers' closed, unlocked paths, linked to the on-curve nodes lying on it. An existing parallel guide at the same place takes the links instead of a new one. Locked glyphs are skipped → {glyphs, skipped: [{glyph, layer?, reason}], guides: added, links: added}",
             has_doc,
             add_power_guides
-        ),
+        )
+        .targets(&[crate::params::TargetKind::Glyphs]),
         cmd!(
             "guide.unlinkPowerGuides",
             "Unlink Power Guides",

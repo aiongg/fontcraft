@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use super::fields::{self, Field, Kind, format_value, lock_key};
 use super::spec::{Action, DialogSpec, Fields, Mode, Shaped, Tab, Third};
 use crate::app::FontCraftApp;
-use crate::shell::masters::{self, current_master_id};
+use crate::shell::masters;
 use craft::ui::runtime::commands::CommandRef;
 
 /// The dialog state the app keeps: the open dialog and the folder chooser it waits for.
@@ -351,14 +351,14 @@ fn open_one(app: &mut FontCraftApp, spec: &DialogSpec, given: &Map<String, Value
             }
         }
     }
-    // A master field opens on the current master, unless it was given or the tab shown before had one.
+    // A master field opens on the master the window shows, unless it was given or the tab shown before had one.
     let carried = tabs
         .as_ref()
         .is_some_and(|t| t.saved.get(spec.id).or_else(|| t.saved.get(CARRY)).and_then(Value::as_object).is_some_and(|m| m.contains_key("master")));
     if !given.contains_key("master")
         && !carried
         && let Some(field) = fields.iter().find(|f| f.key == "master")
-        && let Some(v) = app.session.font().ok().and_then(|f| current_master_id(f, &app.view.layers)).and_then(|m| field.check(&json!(m)).ok())
+        && let Some(v) = app.session.font().ok().and_then(|f| masters::panel_master(f, &app.view)).and_then(|m| field.check(&json!(m.id)).ok())
     {
         values.insert("master".into(), v);
     }

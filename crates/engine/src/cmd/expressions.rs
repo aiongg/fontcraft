@@ -44,7 +44,8 @@ pub fn specs() -> Vec<CommandSpec> {
             "{glyph?: name, glyphs?: [names] (default: every glyph), layers?: [ids] (default: every layer), anchors?: [names] (default: every anchor)} remove the position expressions of the anchors named; each keeps the position it has. Locked glyphs are skipped and listed (a single locked `glyph` refuses it) → {glyphs: [names changed], removed: count, skipped: [{glyph, reason}]}",
             has_doc,
             remove_expressions
-        ),
+        )
+        .targets(&[crate::params::TargetKind::Glyphs]),
         cmd!(
             "glyph.setAutoLayerRecipe",
             "Set Auto Layer Recipe",
@@ -53,7 +54,8 @@ pub fn specs() -> Vec<CommandSpec> {
             "{glyph?: name, glyphs?: [names] (one of the two), masters?: [ids] (default: every master), recipe?: string, auto?: bool (default true)} make each glyph's master layers automatic, built from the recipe: component names joined by `+` (`a+acutecomb`), optionally `=` and the glyph's own name; on any line `#!` copies the rest of the line into the glyph note, `#?noanchors` stops the glyph from inheriting its components' anchors, and any other `#` starts a comment. Without `recipe`, a glyph keeps the recipe one of its layers has, else takes the components its name decomposes into. An automatic layer holds the recipe's components, aligned automatically, and is rebuilt when they change; while a component glyph is missing it stays empty and fills in once the glyph is added. auto false makes the layers ordinary again, keeping what they hold. A recipe that cannot be read, or whose components contain the glyph, refuses the command; locked glyphs and glyphs without a master's layer are skipped and listed → {glyphs: [names changed], layers: count, pending: [{glyph, missing: [names]}], skipped: [{glyph, layer?, reason}]}",
             has_doc,
             set_auto_layer_recipe
-        ),
+        )
+        .targets(&[crate::params::TargetKind::Glyphs]),
     ]
 }
 
