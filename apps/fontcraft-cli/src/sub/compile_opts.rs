@@ -12,6 +12,7 @@ use serde_json::{Map, Value, json};
 
 use crate::args;
 use crate::io::{Failure, usage};
+use crate::options_file::{self, Shape};
 
 /// What an option does with its value.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -92,6 +93,7 @@ pub const OPTIONS: &[CompileOpt] = &[
     row(&["--output-layout"], "outputLayout", Kind::Choice(&["flat", "by-format"]), "flat|by-format"),
     row(&["--name-by"], "nameBy", Kind::Choice(&["filename", "postscript-name"]), "filename|postscript-name"),
     row(&["--plan"], "cli.plan", Kind::Flag(true), ""),
+    row(&["--json"], "cli.json", Kind::Flag(true), ""),
     row(&["--timestamp"], "timestamp", Kind::Timestamp, "SECS|now"),
     // Outlines.
     row(&["--keep-overlaps"], "outlines.removeOverlaps", Kind::Flag(false), ""),
@@ -238,6 +240,85 @@ const SOURCE_EXTENSIONS: &[&str] =
 pub fn is_folder_value(arg: &str) -> bool {
     let ext = std::path::Path::new(arg).extension().map(|e| e.to_string_lossy().to_ascii_lowercase());
     !arg.starts_with('-') && !ext.is_some_and(|e| SOURCE_EXTENSIONS.contains(&e.as_str()))
+}
+
+/// The spelling among [`OPTIONS`] that `--name` stands for: itself, or the one it begins.
+fn full_flag(name: &str) -> Option<&'static str> {
+    let long: Vec<&'static str> = OPTIONS.iter().flat_map(|o| o.flags.iter().copied()).filter(|f| f.starts_with("--")).collect();
+    args::pick(&long, name).ok().flatten()
+}
+
+/// Whether the option takes no value.
+fn is_switch(kind: Kind) -> bool {
+    matches!(kind, Kind::Flag(_) | Kind::Word | Kind::FlagAndWord(_) | Kind::Item(_))
+}
+
+/// What the option `key` of an options file takes.
+fn shape(key: &str) -> Option<Shape> {
+    let flag = format!("--{key}");
+    let opt = find(&flag)?;
+    let on = opt.flags.iter().find(|f| **f == flag).copied()?.to_string();
+    if is_switch(opt.kind) {
+        let off = format!("--no-{key}");
+        return Some(Shape::Switch { on, off: find(&off).map(|_| off.clone()) });
+    }
+    Some(Shape::Value { name: on, path: options_file::is_path(opt.value) })
+}
+
+/// `args` with its response, options and project files read.
+pub fn expand(args: &[String]) -> Result<Vec<String>, Failure> {
+    let takes_next = |arg: &str| {
+        let name = if arg.starts_with("--") { full_flag(arg).unwrap_or(arg) } else { arg };
+        if matches!(arg, "--log" | "--log-file" | "--color" | "--jobs" | "-j" | "--save-options" | "--trace" | "--layer") {
+            return true;
+        }
+        find(name).is_some_and(|o| !is_switch(o.kind) && !matches!(o.kind, Kind::Instances | Kind::OptionalFolder))
+    };
+    options_file::expand(args, &shape, &takes_next)
+}
+
+/// The options of `args`, as `--save-options` writes them: each under its long name.
+pub fn options_table(args: &[String]) -> toml::Table {
+    let mut table = toml::Table::new();
+    let mut it = args.iter().peekable();
+    while let Some(arg) = it.next() {
+        if arg == "--" {
+            break;
+        }
+        let (name, inline) = match arg.split_once('=') {
+            Some((name, value)) if name.starts_with("--") => (name, Some(value.to_string())),
+            _ => (arg.as_str(), None),
+        };
+        let name = if name.starts_with("--") { full_flag(name).unwrap_or(name) } else { name };
+        let Some(opt) = find(name) else { continue };
+        let key = if name.starts_with("--") { name } else { opt.flags.first().copied().unwrap_or(name) };
+        let key = key.trim_start_matches('-').to_string();
+        let value = match opt.kind {
+            kind if is_switch(kind) => None,
+            Kind::Instances => inline,
+            Kind::OptionalFolder => inline.or_else(|| it.next_if(|next| is_folder_value(next)).cloned()),
+            _ => inline.or_else(|| it.next().cloned()),
+        };
+        let value = value.map(|v| if options_file::is_path(opt.value) { options_file::path_value(&v) } else { v });
+        let repeats = matches!(opt.kind, Kind::List | Kind::IntItem(..));
+        match (value, table.get_mut(&key)) {
+            (Some(v), Some(toml::Value::Array(items))) if repeats => items.push(toml::Value::String(v)),
+            (Some(v), _) if repeats => {
+                table.insert(key, toml::Value::Array(vec![toml::Value::String(v)]));
+            }
+            (Some(v), _) => {
+                table.insert(key, toml::Value::String(v));
+            }
+            (None, _) if is_switch(opt.kind) => {
+                table.insert(key, toml::Value::Boolean(true));
+            }
+            // A bare option whose value may be left out.
+            (None, _) => {
+                table.insert(key, toml::Value::String(String::new()));
+            }
+        }
+    }
+    table
 }
 
 /// Reads `args` into the sources and the `font.compile` parameters, with the subcommand's own

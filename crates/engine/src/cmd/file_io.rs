@@ -9,6 +9,9 @@
 
 use std::path::{Component, Path, PathBuf};
 
+#[cfg(not(target_arch = "wasm32"))]
+use fontcraft_format::output;
+
 use crate::params::Params;
 use crate::{EngineError, Result};
 
@@ -93,6 +96,11 @@ pub fn read_input(path: &Path) -> Result<Input> {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn read_input_up_to(path: &Path, limit: usize) -> Result<Input> {
     use std::io::Read as _;
+    if let Some(mut bytes) = output::held(path) {
+        bytes.truncate(limit.min(MAX_INPUT).saturating_add(1));
+        let kind = detect(&bytes);
+        return Ok(Input { path: path.to_path_buf(), bytes, kind });
+    }
     let meta = std::fs::metadata(path).map_err(|e| EngineError::Io(format!("cannot open {}: {e}", path.display())))?;
     if !meta.is_file() {
         return Err(EngineError::Io(format!("cannot open {}: it is not a regular file", path.display())));
@@ -203,7 +211,7 @@ pub fn create_output_dir(req: &OutputRequest) -> Result<Vec<PathBuf>> {
     }
     check_write(dir)?;
     let missing: Vec<PathBuf> = dir.ancestors().take_while(|a| !a.as_os_str().is_empty() && !a.exists()).map(Path::to_path_buf).collect();
-    if let Err(e) = std::fs::create_dir_all(dir) {
+    if let Err(e) = output::create_dir_all(dir) {
         remove_created(&missing);
         return Err(EngineError::Io(format!("cannot create {}: {e}", dir.display())));
     }
@@ -238,7 +246,7 @@ pub fn resolved(path: &Path) -> PathBuf {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn remove_created(dirs: &[PathBuf]) {
     for dir in dirs {
-        if std::fs::remove_dir(dir).is_err() {
+        if output::remove_dir(dir).is_err() {
             break;
         }
     }
@@ -308,6 +316,10 @@ pub fn stage(out: &Path, bytes: &[u8], n: usize) -> Result<Staged> {
     // `out` was checked by the caller; a link may lead elsewhere, so check where the write lands.
     check_write(&target)?;
     check_write(&temp)?;
+    if output::diverted(&target) {
+        output::plan_write(&target, bytes)?;
+        return Ok(Staged { temp, target, folder: false });
+    }
     let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&temp).map_err(|e| io(&temp, e))?;
     if let Err(e) = file.write_all(bytes).and_then(|()| file.sync_all()) {
         let _ = std::fs::remove_file(&temp);
@@ -346,6 +358,10 @@ pub fn stage_folder(
     let temp = target.with_file_name(format!(".{name}.{}-{n}.tmp", std::process::id()));
     check_write(&target)?;
     check_write(&temp)?;
+    if output::diverted(&target) {
+        output::plan_whole(&target, Some(files.values().map(Vec::len).sum()))?;
+        return Ok(Staged { temp, target, folder: true });
+    }
     std::fs::create_dir(&temp).map_err(|e| io(&temp, e))?;
     let staged = Staged { temp, target, folder: true };
     let written = write_tree(&staged.temp, &staged.target, files);
@@ -369,7 +385,7 @@ fn write_tree(root: &Path, target: &Path, files: &std::collections::BTreeMap<Str
         }
         let path = root.join(rel);
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| io(parent, e))?;
+            output::create_dir_all(parent).map_err(|e| io(parent, e))?;
         }
         std::fs::write(&path, bytes).map_err(|e| io(&path, e))?;
     }
@@ -381,7 +397,14 @@ fn write_tree(root: &Path, target: &Path, files: &std::collections::BTreeMap<Str
 /// and the error says which were written.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn commit(staged: &[Staged]) -> Result<()> {
+    if let Some(e) = staged.iter().find_map(|s| output::check_clobber(&s.target).err()) {
+        discard(staged);
+        return Err(e.into());
+    }
     for (i, s) in staged.iter().enumerate() {
+        if output::diverted(&s.target) {
+            continue;
+        }
         let moved = if s.folder { swap_folder(s) } else { std::fs::rename(&s.temp, &s.target) };
         if let Err(e) = moved {
             discard(staged.get(i..).unwrap_or_default());
@@ -415,7 +438,9 @@ fn swap_folder(s: &Staged) -> std::io::Result<()> {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn discard(staged: &[Staged]) {
     for s in staged {
-        if s.folder {
+        if output::diverted(&s.target) {
+            output::unplan(&s.target);
+        } else if s.folder {
             let _ = std::fs::remove_dir_all(&s.temp);
         } else {
             let _ = std::fs::remove_file(&s.temp);

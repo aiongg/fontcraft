@@ -62,10 +62,12 @@ fn compile_builds_each_format_and_container_and_plans_without_writing() {
         "--timestamp",
         "0",
         "--keep-overlaps",
+        "--json",
     ]);
     assert_eq!(code, 0, "{stderr}");
     let result: Value = serde_json::from_str(stdout.trim()).unwrap();
     assert_eq!(result["source"], src);
+    assert_eq!((&result["ok"], result["outputs"].as_array().unwrap().len()), (&json!(true), 4));
     assert_eq!(result["result"]["fonts"].as_array().unwrap().len(), 2);
     assert_eq!(magic(&out_dir.join("ttf/Untitled-Regular.ttf")), [0, 1, 0, 0]);
     assert_eq!(magic(&out_dir.join("otf/Untitled-Regular.otf")), b"OTTO");

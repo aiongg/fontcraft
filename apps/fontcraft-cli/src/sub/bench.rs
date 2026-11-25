@@ -16,6 +16,7 @@ use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
+use fontcraft_engine::format::write_atomic;
 use serde_json::{Value, json};
 
 use crate::args::{self, Kind, OptSpec};
@@ -512,22 +513,14 @@ fn stage_report(exe: &OsString, command: &[String], shown: &str) -> Result<Optio
     Ok(Some(text))
 }
 
-/// Writes the result to `path` through a temporary file in the same folder, so a reader never
-/// sees half a file.
+/// Writes the result to `path`.
 fn save(path: &str, result: &Value) -> Outcome {
     let text = serde_json::to_string_pretty(result).map_err(|e| Failure::Failed(e.to_string()))?;
     let target = std::path::Path::new(path);
-    let name = target.file_name().ok_or_else(|| usage(format!("--save needs a file name, not {path}")))?;
-    let mut temp_name = OsString::from(".");
-    temp_name.push(name);
-    temp_name.push(format!(".tmp-{}", std::process::id()));
-    let temp = target.with_file_name(temp_name);
-    let written = std::fs::write(&temp, format!("{text}\n")).and_then(|()| std::fs::rename(&temp, target));
-    if let Err(e) = written {
-        let _ = std::fs::remove_file(&temp);
-        return Err(Failure::Failed(format!("cannot write {path}: {e}")));
+    if target.file_name().is_none() {
+        return Err(usage(format!("--save needs a file name, not {path}")));
     }
-    Ok(())
+    write_atomic(target, format!("{text}\n").as_bytes()).map_err(|e| Failure::Failed(e.to_string()))
 }
 
 fn print_text(result: &Value, verdict: Option<&Verdict>) -> Outcome {

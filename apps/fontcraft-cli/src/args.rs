@@ -34,11 +34,20 @@
 //!   first at each step: exact name, then letter case, then prefix. [`parse`] applies the common
 //!   options it reads ([`crate::io::configure`]); `-q`, `-v` and `--log` act in the order given.
 //!   Subcommands that read their own arguments call [`take_globals`].
+//! - The common options `--dry-run`, `--no-clobber`, `--trace`, `--options`, `--save-options` and
+//!   `--layer` are refused where [`behaviours`] says the subcommand does not give them. `-` as an
+//!   input and `-o -` are standard input and output where it says so.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use std::sync::Mutex;
+
+use fontcraft_engine::format::output;
+
+use crate::behaviours;
 use crate::io::{self, Color, Failure, Level, Setup, out, usage};
+use crate::options_file::{self, Shape};
 
 /// Largest response or options file, in bytes.
 pub const MAX_RESPONSE_FILE: usize = 1 << 20;
@@ -56,6 +65,12 @@ pub const GLOBAL: &[OptSpec] = &[
     OptSpec::switch("timing", false, "print the time spent in each stage when the run ends"),
     OptSpec::switch("backtrace", false, "print the stack with an internal error, for bug reports"),
     OptSpec::value("jobs", "N", "", "worker threads where inputs are worked on at once: 0 every core (default), -N all but N").short('j'),
+    OptSpec::switch("dry-run", false, "write nothing; report what would be written"),
+    OptSpec::switch("no-clobber", false, "refuse to replace a file that exists"),
+    OptSpec::value("options", "FILE", "", "read options from FILE: a TOML file (.toml), a makeotf project (.fpr) or more arguments"),
+    OptSpec::value("save-options", "FILE", "", "write the options of this run to FILE as TOML"),
+    OptSpec::value("trace", "FILE", "", "write the stages of the run to FILE as Chrome trace events"),
+    OptSpec::value("layer", "NAME", "", "the glyph layer to read from a UFO: a layer name, default, or processed"),
     OptSpec::switch("version", false, "print the version (with -v also the build target) and stop").short('V'),
 ];
 
@@ -192,6 +207,18 @@ impl Parsed {
     }
 }
 
+/// The subcommand that runs: what [`behaviours`] is asked about.
+static CURRENT: Mutex<Option<&'static str>> = Mutex::new(None);
+
+/// Sets the subcommand that runs; answers the one before.
+pub fn set_current(name: Option<&'static str>) -> Option<&'static str> {
+    CURRENT.lock().map(|mut c| std::mem::replace(&mut *c, name)).unwrap_or(None)
+}
+
+fn current() -> Option<&'static str> {
+    CURRENT.lock().ok().and_then(|c| *c)
+}
+
 /// Reads `args` against `specs`.
 pub fn parse(specs: &[OptSpec], args: &[String]) -> Result<Parsed, Failure> {
     parse_inner(specs, args, false)
@@ -207,8 +234,10 @@ fn parse_inner(specs: &[OptSpec], args: &[String], queries: bool) -> Result<Pars
     let globals = globals_for(specs);
     let tiers: [&[OptSpec]; 2] = [specs, &globals];
     let mut expanded = Vec::with_capacity(args.len());
-    walk(&tiers, args, &mut Walk { spell: false, ..Walk::default() }, &mut expanded)?;
-    let args = expanded;
+    let mut w = Walk { spell: false, ..Walk::default() };
+    walk(&tiers, args, &mut w, &mut expanded)?;
+    let mut args = w.first;
+    args.extend(expanded);
     let mut parsed = Parsed::default();
     for spec in specs {
         let value = match spec.kind {
@@ -312,7 +341,68 @@ fn parse_inner(specs: &[OptSpec], args: &[String], queries: bool) -> Result<Pars
         parsed.positional.push(arg);
     }
     apply_globals(&parsed, &globals, levels)?;
+    io::set_json(parsed.switch("json"));
+    if !parsed.help {
+        if let Some(name) = current() {
+            use_standard_streams(name, &mut parsed)?;
+        }
+        if !specs.is_empty()
+            && let Some(file) = io::take_save_options()
+        {
+            options_file::save(&file, &options_table(&parsed, specs))?;
+        }
+    }
     Ok(parsed)
+}
+
+/// Puts standard input and output in place of `-` for the subcommand `name`.
+fn use_standard_streams(name: &str, parsed: &mut Parsed) -> Result<(), Failure> {
+    if behaviours::reads_stdin(name)
+        && let Some(i) = parsed.positional.iter().position(|p| p == "-")
+        // The second argument of `convert IN OUT` is an output.
+        && (name != "convert" || i == 0)
+    {
+        let place = io::stdin_place()?;
+        if let Some(slot) = parsed.positional.get_mut(i) {
+            *slot = place;
+        }
+        if parsed.positional.iter().any(|p| p == "-") && name != "convert" {
+            return Err(usage("standard input can be read once"));
+        }
+    }
+    if behaviours::writes_stdout(name) && parsed.value("output") == Some("-") {
+        parsed.values.insert("output", OptValue::Value(io::stdout_place("")));
+    }
+    Ok(())
+}
+
+/// The options of `specs` set to something other than their default, for `--save-options`.
+fn options_table(parsed: &Parsed, specs: &[OptSpec]) -> toml::Table {
+    let mut table = toml::Table::new();
+    for spec in specs {
+        let value = match parsed.values.get(spec.name) {
+            Some(OptValue::Switch(on)) if *on != (spec.default == "true") => toml::Value::Boolean(*on),
+            Some(OptValue::Value(v)) if v != spec.default => {
+                toml::Value::String(if options_file::is_path(spec.value_name) { options_file::path_value(v) } else { v.clone() })
+            }
+            Some(OptValue::List(items)) if *items != split_list(spec.default) => {
+                toml::Value::Array(items.iter().cloned().map(toml::Value::String).collect())
+            }
+            _ => continue,
+        };
+        table.insert(spec.name.to_string(), value);
+    }
+    table
+}
+
+/// What the option `key` of an options file takes.
+fn shape_of(tiers: &[&[OptSpec]], key: &str) -> Option<Shape> {
+    let spec = tiers.iter().flat_map(|t| t.iter()).find(|s| s.name == key).filter(|s| !matches!(s.name, "options" | "save-options"))?;
+    let name = format!("--{}", spec.name);
+    Some(match spec.kind {
+        Kind::Switch => Shape::Switch { on: name, off: Some(format!("--no-{}", spec.name)) },
+        _ => Shape::Value { name, path: options_file::is_path(spec.value_name) },
+    })
 }
 
 /// The common options `own` leaves free: those whose long name it does not declare, without
@@ -389,6 +479,29 @@ fn apply_globals(parsed: &Parsed, globals: &[OptSpec], levels: Levels) -> Result
     };
     if let Some(jobs) = value("jobs") {
         io::jobs(Some(jobs))?;
+        io::set_jobs(jobs);
+    }
+    if let Some(name) = current() {
+        for option in ["dry-run", "no-clobber", "options", "save-options", "layer"] {
+            let given = global(option) && (switch(option) || value(option).is_some());
+            if given && behaviours::refuses(name, option) {
+                return Err(usage(format!("--{option} does not apply to `{name}`")));
+            }
+        }
+    }
+    // First, so that a dry run leaves the log file alone too.
+    if parsed.switch("dry-run") {
+        output::set_dry_run(true);
+    }
+    // A subcommand's own option means the same, and says itself what --in-place does to it.
+    if parsed.switch("no-clobber") && !parsed.switch("in-place") {
+        output::set_no_clobber(true);
+    }
+    if let Some(layer) = value("layer") {
+        io::set_layer(Some(layer.to_string()));
+    }
+    if let Some(file) = value("save-options") {
+        io::set_save_options(file);
     }
     let setup = Setup {
         level: levels.level,
@@ -397,9 +510,13 @@ fn apply_globals(parsed: &Parsed, globals: &[OptSpec], levels: Levels) -> Result
         color,
         timing: switch("timing"),
         backtrace: switch("backtrace"),
+        trace: value("trace").map(str::to_string),
     };
     if setup != Setup::default() {
         io::configure(setup)?;
+    }
+    if current().is_some() {
+        io::open_log_file()?;
     }
     if switch("version") {
         out(&version_text(io::level() >= Level::Info))?;
@@ -443,6 +560,9 @@ pub fn take_globals(args: &[String], own: &[&str]) -> Result<Vec<String>, Failur
     }
     if !globals.is_empty() {
         parse(&[], &globals)?;
+    }
+    if current().is_some() {
+        io::open_log_file()?;
     }
     Ok(rest)
 }
@@ -668,8 +788,11 @@ pub fn spell_out(specs: &[OptSpec], args: &[String]) -> Result<Vec<String>, Fail
     let globals = globals_for(specs);
     let tiers: [&[OptSpec]; 2] = [specs, &globals];
     let mut spelled = Vec::with_capacity(args.len());
-    walk(&tiers, args, &mut Walk { spell: true, ..Walk::default() }, &mut spelled)?;
-    Ok(spelled)
+    let mut w = Walk { spell: true, ..Walk::default() };
+    walk(&tiers, args, &mut w, &mut spelled)?;
+    let mut all = w.first;
+    all.extend(spelled);
+    Ok(all)
 }
 
 /// The state of one [`walk`] over a command line.
@@ -679,6 +802,8 @@ struct Walk {
     spell: bool,
     /// The response files being read, outermost first, to refuse one that includes itself.
     stack: Vec<PathBuf>,
+    /// The options of TOML options files, which the line overrides.
+    first: Vec<String>,
 }
 
 /// Copies `args` into `out` with every response file replaced by its arguments, and `true` once
@@ -696,14 +821,25 @@ fn walk(tiers: &[&[OptSpec]], args: &[String], w: &mut Walk, out: &mut Vec<Strin
             out.extend(it.by_ref().cloned());
             return Ok(true);
         }
-        let file = if let Some(path) = arg.strip_prefix('@').filter(|p| !p.is_empty()) {
-            Some(path.to_string())
+        let (file, options) = if let Some(path) = arg.strip_prefix('@').filter(|p| !p.is_empty()) {
+            (Some(path.to_string()), false)
         } else if arg == "--options" {
-            Some(it.next().ok_or_else(|| usage("--options needs a file"))?.clone())
+            (Some(it.next().ok_or_else(|| usage("--options needs a file"))?.clone()), true)
         } else {
-            arg.strip_prefix("--options=").map(str::to_string)
+            (arg.strip_prefix("--options=").map(str::to_string), true)
         };
         if let Some(file) = file {
+            if let Some(name) = current().filter(|name| options && behaviours::refuses(name, "options")) {
+                return Err(usage(format!("--options does not apply to `{name}`")));
+            }
+            if options && options_file::is_toml(&file) {
+                let words = options_file::words(&file, &|key| shape_of(tiers, key))?;
+                w.first.extend(words);
+                continue;
+            }
+            if options && options_file::is_project(&file) {
+                return Err(usage(format!("{file}: only compile reads a makeotf project file")));
+            }
             if w.stack.len() >= MAX_RESPONSE_DEPTH {
                 return Err(usage(format!("response files nest more than {MAX_RESPONSE_DEPTH} deep at {file}")));
             }

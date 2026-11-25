@@ -35,8 +35,10 @@ mod transform;
 mod variations;
 mod woff;
 
+use fontcraft_engine::format::output;
+
 use crate::args::{self, OptSpec};
-use crate::io::{Failure, Outcome, out, usage};
+use crate::io::{self, Failure, Outcome, out, usage};
 
 /// One subcommand.
 pub struct Subcommand {
@@ -124,13 +126,33 @@ fn own_spellings(name: &str) -> Vec<&'static str> {
 
 /// Runs `sub` on its arguments.
 pub fn run(sub: &Subcommand, args: &[String]) -> Outcome {
+    // A line of a script leaves the next one its own switches.
+    let before = (output::dry_run(), output::no_clobber(), io::layer(), args::set_current(Some(sub.name)));
+    let refused = [(before.0, "dry-run"), (before.1, "no-clobber")];
+    let result = match refused.iter().find(|(on, option)| *on && crate::behaviours::refuses(sub.name, option)) {
+        Some((_, option)) => Err(usage(format!("--{option} does not apply to `{}`", sub.name))),
+        None => run_current(sub, args),
+    };
+    let result = result.and_then(|()| io::open_log_file());
+    let (dry_run, no_clobber, layer, current) = before;
+    if current.is_some() {
+        output::set_dry_run(dry_run);
+        output::set_no_clobber(no_clobber);
+        io::set_layer(layer);
+    }
+    args::set_current(current);
+    result
+}
+
+fn run_current(sub: &Subcommand, args: &[String]) -> Outcome {
     if !OWN_PARSERS.contains(&sub.name) {
         return (sub.run)(args);
     }
     if args.iter().take_while(|a| *a != "--").any(|a| a == "-h" || a == "--help") {
         return out(&help(sub));
     }
-    (sub.run)(&args::take_globals(args, &own_spellings(sub.name))?)
+    let args = if sub.name == "compile" { compile_opts::expand(args)? } else { args.to_vec() };
+    (sub.run)(&args::take_globals(&args, &own_spellings(sub.name))?)
 }
 
 /// The help text of a subcommand: its usage and options, the engine command it runs, and a
@@ -147,7 +169,8 @@ pub fn help(sub: &Subcommand) -> String {
     }
     text.push_str(
         "\n\nCOMMON OPTIONS: -q, -v, -vv, --log LEVEL, --log-file FILE, --color auto|always|never, --timing,\n\
-         --backtrace, -j/--jobs N, -V/--version (`fontcraft-cli help` describes them)",
+         --backtrace, -j/--jobs N, --dry-run, --no-clobber, --options FILE, --save-options FILE, --trace FILE,\n\
+         --layer NAME, -V/--version (`fontcraft-cli help` describes them)",
     );
     text
 }

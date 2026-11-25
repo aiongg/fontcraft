@@ -358,7 +358,7 @@ pub(super) fn write_all(files: &[(&Path, &[u8])], req: &OutputRequest) -> Result
             for (done, existed) in written {
                 if existed {
                     kept.push(done.display().to_string());
-                } else if std::fs::remove_file(done).is_ok() {
+                } else if fontcraft_format::output::remove_file(done).is_ok() {
                     removed = removed.saturating_add(1);
                 } else {
                     kept.push(done.display().to_string());

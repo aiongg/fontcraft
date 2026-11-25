@@ -304,7 +304,7 @@ fn write_made(p: &Params<'_>, made: Vec<Made>, req: &OutputRequest) -> Result<Va
         let mut written = Vec::with_capacity(m.files.len());
         for (path, bytes) in &m.files {
             if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty() && !d.exists()) {
-                std::fs::create_dir_all(dir).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", dir.display())))?;
+                fontcraft_format::output::create_dir_all(dir).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", dir.display())))?;
             }
             file_io::write_output(path, bytes, req)?;
             written.push(path.display().to_string());

@@ -241,7 +241,7 @@ fn default_file_name(font: &Font, master: &str) -> String {
 #[cfg(not(target_arch = "wasm32"))]
 fn write_text(path: &std::path::Path, text: &str) -> Result<()> {
     if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
-        std::fs::create_dir_all(dir).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", dir.display())))?;
+        fontcraft_format::output::create_dir_all(dir).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", dir.display())))?;
     }
     fontcraft_format::write_atomic(path, text.as_bytes())?;
     Ok(())

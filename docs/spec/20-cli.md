@@ -124,7 +124,7 @@ root of `ttFont` or `designspace`, a property list that is a `.glyphs` file, a d
 ### Standard input and output (`cli.global.stdinStdout`)
 
 `-` as an input reads one font, XML dump or feature file from standard input. Directory formats cannot
-be piped. A binary result is never written to a terminal: if standard output is a terminal and `-o -`
+be piped. A run with `-o -` prints its messages on standard error. A binary result is never written to a terminal: if standard output is a terminal and `-o -`
 was asked for, the run stops with a usage error. This allows pipelines such as
 
 ```
@@ -146,8 +146,10 @@ exit status is then 5.
 {"input": "Font.ttf", "ok": true, "outputs": ["Font.subset.ttf"], "warnings": [], "errors": [], "result": { ... }}
 ```
 
-`result` is the return value of the engine command and is documented with that command. Warnings and
-errors are objects with `code`, `message` and, where known, `table`, `glyph`, `file`, `line`, `column`.
+`result` is the return value of the engine command and is documented with that command; the subcommands
+that print the command's own object print those keys beside `input`, `ok`, `outputs`, `warnings` and
+`errors`. An input that fails gives an object with `ok` false and the message in `errors`, after the
+others'.
 Nothing else is written to standard output in this mode.
 
 ### Exit status (`cli.global.exitCodes`)
@@ -176,7 +178,9 @@ fontcraft-cli: warning: Font.ttf: no 'GPOS' table
 ```
 
 `--color auto|always|never` colours the level names. `--timing` prints per-stage times at the end;
-`--trace FILE` writes them as trace events. These options, with `-j`/`--jobs`, `--backtrace` and
+`--trace FILE` writes them as Chrome trace events. An error is followed by the causes it does not
+name, one `caused by` line each. These options, with `-j`/`--jobs`, `--dry-run`, `--no-clobber`,
+`--options`, `--save-options`, `--layer`, `--backtrace` and
 `-V`/`--version`, belong to every subcommand and may also come before its name; an option of the
 subcommand's own with the same long name takes precedence (`dump --version`).
 
@@ -193,6 +197,23 @@ when compiling. When an existing font is changed, `created` is kept and `modifie
 `SOURCE_DATE_EPOCH` if that environment variable is set, otherwise from the clock; `--timestamp keep`
 leaves both alone and `--timestamp EPOCH` sets `modified` explicitly. Operations that only repackage
 (`woff`, `collection`, `tables` actions) never touch time stamps.
+
+### Dry run, options files and layers (`cli.global.dryRun`, `.optionsFile`, `.afdkoProcessedLayer`)
+
+`--dry-run` reads, builds and reports as the run would, and writes nothing: no output, no folder, no
+log, trace or options file. What would be written, created or removed is listed on standard error. One
+switch below every writing path gives it, so it holds for every subcommand; `mcp`, `oracle` and `bench`,
+whose work runs in other programs or for a client, refuse it. `--no-clobber` is enforced in the same
+place for the subcommands without an option of their own.
+
+`--options FILE` reads a TOML file (extension `.toml`: keys are long option names, a switch is `true` or
+`false`, a list an array; relative paths are relative to the file), for `compile` also a makeotf project
+(`.fpr`), and any other file as a response file. The options of a TOML or project file come before
+the line's, which override them. `--save-options FILE` writes the options that differ from their
+defaults.
+
+`--layer NAME|default|processed` reads another glyph layer of a UFO, for the subcommands that open one as
+a document. `docs/cli-options.md` › Shared behaviours lists what each subcommand gives.
 
 ### Shared option syntax
 

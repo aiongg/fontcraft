@@ -181,6 +181,9 @@ pub fn stamp(path: &Path) -> Option<Stamp> {
 
 /// A regular file's bytes, at most [`fontcraft_format::MAX_BYTES`].
 pub fn read_file(path: &Path) -> Result<Vec<u8>> {
+    if let Some(bytes) = fontcraft_format::output::held(path) {
+        return Ok(bytes);
+    }
     let meta = std::fs::metadata(path).map_err(|e| io_err("open", path, e))?;
     if !meta.is_file() {
         return Err(EngineError::Io(format!("cannot open {}: it is not a regular file", path.display())));
@@ -248,8 +251,8 @@ pub fn feature_dir(path: &Path) -> Option<std::path::PathBuf> {
 /// Reads the source at `path`, recognising its format by content, with what reading it left out
 /// or read in a plainer form. `face` chooses a member of a font collection.
 pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {
-    let meta = std::fs::metadata(path).map_err(|e| io_err("open", path, e))?;
-    if meta.is_dir() {
+    let held = fontcraft_format::output::held(path).is_some();
+    if !held && std::fs::metadata(path).map_err(|e| io_err("open", path, e))?.is_dir() {
         if path.join("metainfo.plist").is_file() {
             let files = read_folder(path)?;
             return Ok(fontcraft_io_ufo::ufo::read_reporting(&files)?);
@@ -736,6 +739,11 @@ fn loss_report(font: &Font, format: SaveFormat) -> Vec<Value> {
     losses
 }
 
+/// The files already in the folder `path`; none when a dry run has not created it.
+fn folder_files(path: &Path) -> Result<BTreeMap<String, Vec<u8>>> {
+    if path.is_dir() { read_folder(path) } else { Ok(BTreeMap::new()) }
+}
+
 /// Writes `font` to `path` in `format`. A single file is written atomically. A package writes
 /// only the files whose bytes differ from what is on disk, and removes glyph files the document
 /// no longer has. Linked glyphs and masters (Import Font, Import Master) are left out.
@@ -764,8 +772,9 @@ pub fn save(font: &Font, path: &Path, format: SaveFormat) -> Result<Saved> {
                 return Err(EngineError::Io(format!("cannot write a package to {}: it is a file", path.display())));
             }
             write_allowed(path)?;
-            std::fs::create_dir_all(path).map_err(|e| io_err("create", path, e))?;
-            let on_disk = read_folder(path)?;
+            fontcraft_format::output::check_clobber(path)?;
+            fontcraft_format::output::create_dir_all(path).map_err(|e| io_err("create", path, e))?;
+            let on_disk = folder_files(path)?;
             let mut written = 0;
             for (rel, bytes) in &files {
                 if on_disk.get(rel) == Some(bytes) {
@@ -773,7 +782,7 @@ pub fn save(font: &Font, path: &Path, format: SaveFormat) -> Result<Saved> {
                 }
                 let target = safe_join(path, rel)?;
                 if let Some(parent) = target.parent() {
-                    std::fs::create_dir_all(parent).map_err(|e| io_err("create", parent, e))?;
+                    fontcraft_format::output::create_dir_all(parent).map_err(|e| io_err("create", parent, e))?;
                 }
                 fontcraft_format::write_atomic(&target, bytes)?;
                 written += 1;
@@ -781,7 +790,7 @@ pub fn save(font: &Font, path: &Path, format: SaveFormat) -> Result<Saved> {
             let mut removed = 0;
             for rel in on_disk.keys().filter(|r| r.starts_with("glyphs/") && r.ends_with(".glyph") && !files.contains_key(*r)) {
                 let target = safe_join(path, rel)?;
-                std::fs::remove_file(&target).map_err(|e| io_err("remove", &target, e))?;
+                fontcraft_format::output::remove_file(&target).map_err(|e| io_err("remove", &target, e))?;
                 removed += 1;
             }
             Ok(Saved { bytes: files.values().map(Vec::len).sum(), files_written: written, files_removed: removed, losses })
@@ -805,10 +814,12 @@ pub fn save(font: &Font, path: &Path, format: SaveFormat) -> Result<Saved> {
             let dir = path.parent().unwrap_or(Path::new("."));
             let (mut written, mut removed, mut bytes) = (0, 0, out.document.len());
             // Every UFO is checked before any is written, so a refusal writes nothing.
+            fontcraft_format::output::check_clobber(path)?;
             let mut targets = Vec::with_capacity(out.ufos.len());
             for (rel, files) in &out.ufos {
                 let ufo_dir = safe_join_relative(dir, rel)?;
                 write_allowed(&ufo_dir)?;
+                fontcraft_format::output::check_clobber(&ufo_dir)?;
                 targets.push((ufo_dir, files));
             }
             for (ufo_dir, files) in targets {
@@ -893,8 +904,9 @@ fn write_ufo(path: &Path, files: &BTreeMap<String, Vec<u8>>) -> Result<(usize, u
         return Err(EngineError::Io(format!("cannot write a UFO to {}: the folder is not empty and not a UFO", path.display())));
     }
     write_allowed(path)?;
-    std::fs::create_dir_all(path).map_err(|e| io_err("create", path, e))?;
-    let on_disk = read_folder(path)?;
+    fontcraft_format::output::check_clobber(path)?;
+    fontcraft_format::output::create_dir_all(path).map_err(|e| io_err("create", path, e))?;
+    let on_disk = folder_files(path)?;
     let is_index = |rel: &str| rel.ends_with("/contents.plist") || rel == "layercontents.plist" || rel == "metainfo.plist";
     let mut written = 0;
     for index_pass in [false, true] {
@@ -904,7 +916,7 @@ fn write_ufo(path: &Path, files: &BTreeMap<String, Vec<u8>>) -> Result<(usize, u
             }
             let target = safe_join(path, rel)?;
             if let Some(parent) = target.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| io_err("create", parent, e))?;
+                fontcraft_format::output::create_dir_all(parent).map_err(|e| io_err("create", parent, e))?;
             }
             fontcraft_format::write_atomic(&target, bytes)?;
             written += 1;
@@ -919,14 +931,14 @@ fn write_ufo(path: &Path, files: &BTreeMap<String, Vec<u8>>) -> Result<(usize, u
     let mut removed = 0;
     for rel in on_disk.keys().filter(|r| stale(r) && !files.contains_key(*r)) {
         let target = safe_join(path, rel)?;
-        std::fs::remove_file(&target).map_err(|e| io_err("remove", &target, e))?;
+        fontcraft_format::output::remove_file(&target).map_err(|e| io_err("remove", &target, e))?;
         removed += 1;
         // A layer folder left empty goes too.
         if let Some(parent) = target.parent()
             && parent != path
             && std::fs::read_dir(parent).is_ok_and(|mut d| d.next().is_none())
         {
-            std::fs::remove_dir(parent).map_err(|e| io_err("remove", parent, e))?;
+            fontcraft_format::output::remove_dir(parent).map_err(|e| io_err("remove", parent, e))?;
         }
     }
     Ok((written, removed))

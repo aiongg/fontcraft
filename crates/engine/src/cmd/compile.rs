@@ -16,6 +16,8 @@ use serde_json::{Map, Value, json};
 use std::sync::Arc;
 
 use fontcraft_compile::{AssetsRef, DataRef, Flavour, Options};
+#[cfg(not(target_arch = "wasm32"))]
+use fontcraft_format::output;
 use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Font, Resolved, SourceFormat, Target};
 
@@ -1005,13 +1007,16 @@ impl Stage {
         if !self.outside_allowed && self.outside(name) {
             return Err(EngineError::Io(format!("{} is outside the export destination {}", target.display(), self.root.display())));
         }
+        output::check_clobber(&target)?;
         // The names are compared as text above; a folder link on the way can still lead out of
         // the automation write root.
         crate::file_access::check_write(&target).map_err(|e| EngineError::Io(format!("cannot write {}: {e}", target.display())))?;
         let key = output_key(&target);
         let earlier = self.by_output.get(&key).copied();
         if let Some((tmp, _)) = earlier.and_then(|i| self.staged.get(i)) {
-            let _ = std::fs::remove_file(tmp);
+            if !output::diverted(&target) {
+                let _ = std::fs::remove_file(tmp);
+            }
             warnings.push(format!(
                 "two fonts are written to {}: the later one is kept (give instances a fileName parameter to keep both)",
                 target.display()
@@ -1023,16 +1028,22 @@ impl Stage {
         let dir = folder_of(&target);
         self.make_dir(&dir)?;
         let cannot = |e: std::io::Error| EngineError::Io(format!("cannot write {}: {e}", target.display()));
-        let (tmp, mut f) = create_scratch(&dir).map_err(cannot)?;
-        let written = f.write_all(bytes).and_then(|()| f.sync_all());
-        drop(f);
-        if let Err(e) = written {
-            let _ = std::fs::remove_file(&tmp);
-            if let Some(i) = earlier {
-                self.forget(i);
+        let tmp = if output::diverted(&target) {
+            output::plan_write(&target, bytes)?;
+            target.clone()
+        } else {
+            let (tmp, mut f) = create_scratch(&dir).map_err(cannot)?;
+            let written = f.write_all(bytes).and_then(|()| f.sync_all());
+            drop(f);
+            if let Err(e) = written {
+                let _ = std::fs::remove_file(&tmp);
+                if let Some(i) = earlier {
+                    self.forget(i);
+                }
+                return Err(cannot(e));
             }
-            return Err(cannot(e));
-        }
+            tmp
+        };
         match earlier.and_then(|i| self.staged.get_mut(i)) {
             Some(slot) => *slot = (tmp, target.clone()),
             None => {
@@ -1058,15 +1069,15 @@ impl Stage {
 
     /// Creates `dir` and the folders above it that are missing, remembering each.
     fn make_dir(&mut self, dir: &std::path::Path) -> Result<()> {
-        if dir.is_dir() {
+        if output::is_dir(dir) {
             return Ok(());
         }
-        let missing: Vec<&std::path::Path> = dir.ancestors().take_while(|d| !d.as_os_str().is_empty() && !d.exists()).collect();
+        let missing: Vec<&std::path::Path> = dir.ancestors().take_while(|d| !d.as_os_str().is_empty() && !d.exists() && !output::is_dir(d)).collect();
         for d in missing.into_iter().rev() {
-            std::fs::create_dir(d).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", d.display())))?;
+            output::create_dir(d).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", d.display())))?;
             self.made.push(d.to_path_buf());
         }
-        if !dir.is_dir() {
+        if !output::is_dir(dir) {
             return Err(EngineError::Io(format!("{} is not a folder", dir.display())));
         }
         Ok(())
@@ -1086,7 +1097,7 @@ impl Stage {
             if target.is_dir() {
                 return Err(EngineError::Io(format!("cannot write {}: a folder has that name", target.display())));
             }
-            if !tmp.is_file() {
+            if !output::diverted(target) && !tmp.is_file() {
                 return Err(EngineError::Io(format!("cannot write {}: its temporary file is gone", target.display())));
             }
         }
@@ -1100,6 +1111,11 @@ impl Stage {
 /// error names each file it could not restore.
 #[cfg(not(target_arch = "wasm32"))]
 fn swap(stages: &mut [Stage]) -> Result<()> {
+    // Files that stay off the disk were handed over when they were staged.
+    for stage in stages.iter_mut() {
+        stage.staged.retain(|(_, target)| !output::diverted(target));
+        stage.reindex();
+    }
     let mut aside: Vec<(std::path::PathBuf, std::path::PathBuf)> = Vec::new();
     let mut failure = None;
     'aside: for stage in stages.iter() {
@@ -1159,11 +1175,15 @@ fn swap(stages: &mut [Stage]) -> Result<()> {
 #[cfg(not(target_arch = "wasm32"))]
 impl Drop for Stage {
     fn drop(&mut self) {
-        for (tmp, _) in &self.staged {
-            let _ = std::fs::remove_file(tmp);
+        for (tmp, target) in &self.staged {
+            if output::diverted(target) {
+                output::unplan(target);
+            } else {
+                let _ = std::fs::remove_file(tmp);
+            }
         }
         for d in self.made.iter().rev() {
-            let _ = std::fs::remove_dir(d);
+            let _ = output::remove_dir(d);
         }
     }
 }

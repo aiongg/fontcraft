@@ -93,6 +93,11 @@ pub(super) struct Opt {
 }
 
 impl Opt {
+    /// The long name, without dashes.
+    pub(super) fn long_name(&self) -> Option<String> {
+        self.long.clone()
+    }
+
     /// The option as `commands --cli --json` lists it.
     pub(super) fn to_json(&self) -> Value {
         json!({

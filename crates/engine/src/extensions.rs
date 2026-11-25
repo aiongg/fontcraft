@@ -450,7 +450,7 @@ pub fn read_switches(dir: &Path) -> Result<BTreeMap<String, bool>, String> {
 
 /// Writes `switches` to the Modules folder `dir` (creating it when missing).
 pub fn save_switches(dir: &Path, switches: &BTreeMap<String, bool>) -> Result<(), String> {
-    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    fontcraft_format::output::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let text = serde_json::to_string_pretty(&json!({"version": 1, "modules": switches})).map_err(|e| e.to_string())?;
     write_file(&dir.join(SWITCHES_FILE), text.as_bytes())
 }
@@ -470,7 +470,7 @@ pub fn write_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
 pub fn move_out_of_folder(dir: &Path, file: &str) -> Result<PathBuf, String> {
     let from = dir.join(file);
     let removed = dir.parent().unwrap_or(dir).join(REMOVED_FOLDER);
-    std::fs::create_dir_all(&removed).map_err(|e| format!("{}: {e}", removed.display()))?;
+    fontcraft_format::output::create_dir_all(&removed).map_err(|e| format!("{}: {e}", removed.display()))?;
     // A macro in a subfolder lands directly in the Removed folder.
     let name = file.rsplit(['/', '\\']).next().unwrap_or(file);
     let (stem, ext) = match name.rsplit_once('.') {
@@ -486,7 +486,7 @@ pub fn move_out_of_folder(dir: &Path, file: &str) -> Result<PathBuf, String> {
         to = removed.join(format!("{stem} {n}{ext}"));
         n += 1;
     }
-    std::fs::rename(&from, &to).map_err(|e| format!("cannot move {} to {}: {e}", from.display(), to.display()))?;
+    fontcraft_format::output::rename(&from, &to).map_err(|e| format!("cannot move {} to {}: {e}", from.display(), to.display()))?;
     Ok(to)
 }
 

@@ -28,6 +28,8 @@
 
 use std::path::{Component, Path, PathBuf};
 
+#[cfg(not(target_arch = "wasm32"))]
+use fontcraft_format::output;
 use fontcraft_interp::compat::{self, MasterPairs};
 use fontcraft_interp::{Designspace, GlyphSources, UserLocation};
 use fontcraft_model::plist::xml;
@@ -566,7 +568,7 @@ fn make_parent(out: &Path) -> Result<Vec<PathBuf>> {
         return Ok(missing);
     }
     file_io::check_write(dir)?;
-    if let Err(e) = std::fs::create_dir_all(dir) {
+    if let Err(e) = output::create_dir_all(dir) {
         file_io::remove_created(&missing);
         return Err(EngineError::Io(format!("cannot create {}: {e}", dir.display())));
     }
@@ -1117,6 +1119,13 @@ impl Scratch {
         for n in 0..MAX_SCRATCH_NAMES {
             let folder = scratch.base.join(format!(".fontcraft-instances.{}-{n}.tmp", std::process::id()));
             file_io::check_write(&folder)?;
+            if output::dry_run() {
+                // Compiled into memory instead: the layout step reads the fonts from there.
+                output::hold(&folder);
+                let to = name.map_or_else(|| folder.clone(), |name| folder.join(name));
+                scratch.folder = folder;
+                return Ok((scratch, to));
+            }
             match std::fs::create_dir(&folder) {
                 Ok(()) => {
                     let to = name.map_or_else(|| folder.clone(), |name| folder.join(name));
@@ -1147,13 +1156,17 @@ impl Scratch {
 impl Drop for Scratch {
     fn drop(&mut self) {
         if !self.folder.as_os_str().is_empty() {
-            let _ = std::fs::remove_dir_all(&self.folder);
+            if output::dry_run() {
+                output::release(&self.folder);
+            } else {
+                let _ = std::fs::remove_dir_all(&self.folder);
+            }
         }
         if !self.keep_made {
             // Deepest first; a folder that is not empty stays.
             self.made.sort_by_key(|d| std::cmp::Reverse(d.components().count()));
             for dir in &self.made {
-                let _ = std::fs::remove_dir(dir);
+                let _ = output::remove_dir(dir);
             }
         }
     }

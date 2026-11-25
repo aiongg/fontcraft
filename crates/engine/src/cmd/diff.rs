@@ -333,7 +333,7 @@ fn write_texts(dir: &Path, texts: &[(String, String)]) -> Result<Vec<PathBuf>> {
             super::file_io::check_write(&path).and_then(|()| fontcraft_format::write_atomic(&path, text.as_bytes()).map_err(EngineError::from));
         if let Err(e) = result {
             for f in &written {
-                let _ = std::fs::remove_file(f);
+                let _ = fontcraft_format::output::remove_file(f);
             }
             super::file_io::remove_created(&created);
             return Err(e);

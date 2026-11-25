@@ -16,3 +16,4 @@ fontcraft-mcp.workspace = true
 fontcraft-oracle.workspace = true
 log.workspace = true
 serde_json.workspace = true
+toml.workspace = true

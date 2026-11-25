@@ -108,7 +108,6 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::switch("in-place", false, "replace each input"),
     OptSpec::switch("no-clobber", false, "refuse to replace an existing output"),
     OptSpec::value("face", "N", "", "the font of a collection to read"),
-    OptSpec::switch("dry-run", false, "hint and report what would be written, without writing"),
     OptSpec::switch("json", false, "print one JSON result per input"),
 ];
 
@@ -178,7 +177,7 @@ fn run(raw: &[String]) -> Outcome {
     if !outputs.is_empty() && outputs.len() != parsed.positional.len() {
         return Err(usage(format!("{} inputs and {} outputs: give one output per input", parsed.positional.len(), outputs.len())));
     }
-    let write = !parsed.switch("report-only") && !parsed.switch("dry-run");
+    let write = !parsed.switch("report-only");
     let jobs = parsed.jobs()?;
     let as_json = parsed.switch("json");
     let extra = Extra { selection: selection.as_ref(), overlaps: overlaps.as_ref(), fontinfo: (hinter == Hinter::PostScript).then_some(&fontinfo) };
@@ -545,7 +544,8 @@ pub(super) fn save(session: &mut Session, target: &Target) -> Outcome {
         Target::InPlace => execute(session, "file.save", &json!({}))?,
         Target::File(path) => {
             if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty() && !d.exists()) {
-                std::fs::create_dir_all(dir).map_err(|e| Failure::Failed(format!("cannot create {}: {e}", dir.display())))?;
+                fontcraft_engine::format::output::create_dir_all(dir)
+                    .map_err(|e| Failure::Failed(format!("cannot create {}: {e}", dir.display())))?;
             }
             execute(session, "file.saveAs", &json!({"path": path}))?
         }
@@ -559,6 +559,9 @@ pub(super) fn open(session: &mut Session, input: &str, face: Option<&str>) -> Re
     params.insert("path".into(), json!(input));
     // The hinted font keeps the glyph names the input gives (see `io::open`).
     params.insert("keepGlyphNames".into(), json!(true));
+    if let Some(layer) = io::layer() {
+        params.insert("layer".into(), json!(layer));
+    }
     if let Some(face) = face {
         let n: u32 = face.parse().map_err(|_| usage(format!("--face takes a font number, not `{face}`")))?;
         params.insert("face".into(), json!(n));

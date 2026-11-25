@@ -717,6 +717,8 @@ mod staged {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
+    use fontcraft_format::output;
+
     use super::super::file_io::{OutputRequest, check_write, create_output_dir, remove_created};
     use crate::{EngineError, Result};
 
@@ -761,20 +763,30 @@ mod staged {
                 }
             }
         }
+        if failure.is_none() {
+            failure = staged.iter().find_map(|(_, target)| output::check_clobber(target).err()).map(EngineError::from);
+        }
         if failure.is_none()
             && let Some((_, target)) = staged.iter().find(|(_, target)| target.is_dir())
         {
             failure = Some(EngineError::Io(format!("cannot write {}: a folder has that name", target.display())));
         }
         if let Some(e) = failure {
-            for (tmp, _) in &staged {
-                let _ = std::fs::remove_file(tmp);
+            for (tmp, target) in &staged {
+                if output::diverted(target) {
+                    output::unplan(target);
+                } else {
+                    let _ = std::fs::remove_file(tmp);
+                }
             }
             made.reverse();
             remove_created(&made);
             return Err(e);
         }
         for (i, (tmp, target)) in staged.iter().enumerate() {
+            if output::diverted(target) {
+                continue;
+            }
             if let Err(e) = std::fs::rename(tmp, target) {
                 for (rest, _) in staged.iter().skip(i) {
                     let _ = std::fs::remove_file(rest);
@@ -795,8 +807,12 @@ mod staged {
         let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
         let missing: Vec<&Path> = dir.ancestors().take_while(|d| !d.as_os_str().is_empty() && std::fs::symlink_metadata(d).is_err()).collect();
         for d in missing.into_iter().rev() {
-            std::fs::create_dir(d).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", d.display())))?;
+            output::create_dir(d).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", d.display())))?;
             made.push(d.to_path_buf());
+        }
+        if output::diverted(path) {
+            output::plan_write(path, bytes)?;
+            return Ok(path.to_path_buf());
         }
         let cannot = |e: std::io::Error| EngineError::Io(format!("cannot write {}: {e}", path.display()));
         static NEXT: AtomicUsize = AtomicUsize::new(0);

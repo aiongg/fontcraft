@@ -19,6 +19,7 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::time::{Duration, Instant};
 
 use fontcraft_engine::Session;
+use fontcraft_engine::format::{output, write_atomic};
 use serde_json::{Value, json};
 
 /// Largest input read from a file or stdin, in bytes.
@@ -87,6 +88,10 @@ pub fn out(line: &str) -> Outcome {
     if STDOUT_CLOSED.load(Ordering::Relaxed) {
         return Ok(());
     }
+    if STDOUT_TAKEN.load(Ordering::Relaxed) {
+        note(line);
+        return Ok(());
+    }
     match writeln!(std::io::stdout(), "{line}") {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {
@@ -99,12 +104,12 @@ pub fn out(line: &str) -> Outcome {
 
 /// Prints one JSON value on one line (JSON lines).
 pub fn out_json_line(value: &Value) -> Outcome {
-    out(&serde_json::to_string(value).map_err(|e| Failure::Failed(e.to_string()))?)
+    out(&serde_json::to_string(&with_result_keys(value)).map_err(|e| Failure::Failed(e.to_string()))?)
 }
 
 /// Prints one JSON value, indented.
 pub fn out_json(value: &Value) -> Outcome {
-    out(&serde_json::to_string_pretty(value).map_err(|e| Failure::Failed(e.to_string()))?)
+    out(&serde_json::to_string_pretty(&with_result_keys(value)).map_err(|e| Failure::Failed(e.to_string()))?)
 }
 
 /// How much goes to stderr. Each level shows itself and the levels before it.
@@ -206,6 +211,8 @@ pub struct Setup {
     pub color: Option<Color>,
     pub timing: bool,
     pub backtrace: bool,
+    /// The `--trace` file.
+    pub trace: Option<String>,
 }
 
 static LEVEL: AtomicU8 = AtomicU8::new(Level::Note as u8);
@@ -214,24 +221,187 @@ static MODULES: Mutex<Vec<(String, Level)>> = Mutex::new(Vec::new());
 static COLOR: AtomicU8 = AtomicU8::new(0);
 /// The `--log-file` path and the open file.
 static LOG_FILE: Mutex<Option<(String, std::fs::File)>> = Mutex::new(None);
+/// The `--log-file` path asked for and not opened yet.
+static LOG_WANTED: Mutex<Option<String>> = Mutex::new(None);
 static TIMING: AtomicBool = AtomicBool::new(false);
+/// The `--trace` path.
+static TRACE: Mutex<Option<String>> = Mutex::new(None);
+static TRACING: AtomicBool = AtomicBool::new(false);
+/// Each traced stage: name, start and length in microseconds, thread.
+static EVENTS: Mutex<Vec<(String, u64, u64, u64)>> = Mutex::new(Vec::new());
+static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+/// The common `--jobs` value.
+static JOBS: Mutex<Option<String>> = Mutex::new(None);
+/// The UFO layer `--layer` names.
+static LAYER: Mutex<Option<String>> = Mutex::new(None);
+/// The `--save-options` file, for the subcommands with their own parser.
+static SAVE_OPTIONS: Mutex<Option<String>> = Mutex::new(None);
+/// `--json` was given.
+static JSON: AtomicBool = AtomicBool::new(false);
+/// A JSON object was printed for every input already.
+static REPORTED: AtomicBool = AtomicBool::new(false);
+/// Standard output carries a font (`-o -`).
+static STDOUT_TAKEN: AtomicBool = AtomicBool::new(false);
+static STDIN_READ: AtomicBool = AtomicBool::new(false);
+/// The place `-o -` writes to.
+static STDOUT_PLACE: Mutex<Option<String>> = Mutex::new(None);
+/// The inputs of the last [`batch`].
+static INPUTS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+/// Most stages `--trace` keeps.
+pub const MAX_TRACE_EVENTS: usize = 1_000_000;
+
+fn put<T>(slot: &Mutex<Option<T>>, value: Option<T>) {
+    if let Ok(mut s) = slot.lock() {
+        *s = value;
+    }
+}
+
+fn get<T: Clone>(slot: &Mutex<Option<T>>) -> Option<T> {
+    slot.lock().ok().and_then(|s| s.clone())
+}
+
+pub fn set_jobs(value: &str) {
+    put(&JOBS, Some(value.to_string()));
+}
+
+/// The worker threads the common `--jobs` asks for.
+pub fn common_jobs() -> Result<usize, Failure> {
+    jobs(get(&JOBS).as_deref())
+}
+
+pub fn set_layer(name: Option<String>) {
+    put(&LAYER, name);
+}
+
+/// The UFO layer `--layer` names.
+pub fn layer() -> Option<String> {
+    get(&LAYER)
+}
+
+pub fn set_save_options(file: &str) {
+    put(&SAVE_OPTIONS, Some(file.to_string()));
+}
+
+/// The `--save-options` file, once.
+pub fn take_save_options() -> Option<String> {
+    SAVE_OPTIONS.lock().ok().and_then(|mut s| s.take())
+}
+
+pub fn set_json(on: bool) {
+    JSON.store(on, Ordering::Relaxed);
+}
+
+/// Whether `--json` was given.
+pub fn wants_json() -> bool {
+    JSON.load(Ordering::Relaxed)
+}
+
+/// Reads standard input into memory and answers the path that stands for it.
+pub fn stdin_place() -> Result<String, Failure> {
+    const PLACE: &str = "<stdin>";
+    // A subcommand may read its arguments twice.
+    if !STDIN_READ.swap(true, Ordering::Relaxed) {
+        output::put_held(std::path::Path::new(PLACE), read_input("-")?).map_err(|e| Failure::Input(e.to_string()))?;
+    }
+    Ok(PLACE.to_string())
+}
+
+/// The path that stands for standard output, with `extension`: what is written there goes to
+/// standard output when the run ends ([`flush_stdout`]), and messages go to stderr.
+pub fn stdout_place(extension: &str) -> String {
+    let dot = if extension.is_empty() { "" } else { "." };
+    let place = format!("<stdout>{dot}{extension}");
+    output::hold(std::path::Path::new(&place));
+    STDOUT_TAKEN.store(true, Ordering::Relaxed);
+    put(&STDOUT_PLACE, Some(place.clone()));
+    place
+}
+
+/// Writes what the run left at [`stdout_place`] to standard output.
+pub fn flush_stdout() -> Outcome {
+    let Some(place) = get(&STDOUT_PLACE) else { return Ok(()) };
+    let Some(bytes) = output::held(std::path::Path::new(&place)) else { return Ok(()) };
+    if output::dry_run() {
+        note(&format!("would write {} bytes to standard output", bytes.len()));
+        return Ok(());
+    }
+    write_stdout_binary(&bytes)
+}
+
+/// Reports what a dry run left undone, one note per change.
+pub fn report_dry_run() {
+    if !output::dry_run() {
+        return;
+    }
+    let (planned, more) = output::planned();
+    for p in &planned {
+        let path = p.path.display();
+        match (p.action, p.bytes) {
+            (output::Action::Write, Some(n)) => note(&format!("would write {path} ({n} bytes)")),
+            (output::Action::Write, None) => note(&format!("would write {path}")),
+            (output::Action::CreateFolder, _) => note(&format!("would create the folder {path}")),
+            (output::Action::Remove, _) => note(&format!("would remove {path}")),
+        }
+    }
+    if more > 0 {
+        note(&format!("and {more} more changes"));
+    }
+    if planned.is_empty() {
+        note("would write nothing");
+    }
+}
+
+/// `value`, an object, with the keys every `--json` result has (`cli.global.json`): `input`,
+/// `ok`, `outputs`, `warnings` and `errors`. Keys it has stay.
+fn with_result_keys(value: &Value) -> Value {
+    let Value::Object(given) = value else { return value.clone() };
+    let mut map = given.clone();
+    let path = |v: &Value| v.as_str().map(str::to_string).or_else(|| v.get("path").and_then(Value::as_str).map(str::to_string));
+    let listed = |key: &str| -> Vec<String> { given.get(key).and_then(Value::as_array).into_iter().flatten().filter_map(path).collect() };
+    if !map.contains_key("outputs") {
+        let mut outputs = listed("files");
+        outputs.extend(given.get("output").and_then(path));
+        map.insert("outputs".into(), json!(outputs));
+    }
+    if !map.contains_key("input") {
+        let named = ["source", "font"].iter().find_map(|k| given.get(*k).and_then(Value::as_str).map(str::to_string));
+        let input = named.or_else(|| INPUT.with(|i| i.borrow().clone()));
+        map.insert("input".into(), json!(input));
+    }
+    map.entry("ok").or_insert(json!(true));
+    map.entry("warnings").or_insert(json!([]));
+    map.entry("errors").or_insert(json!([]));
+    Value::Object(map)
+}
+
+/// With `--json`, prints the result object of an input that failed.
+pub fn report_failure(input: Option<&str>, failure: &Failure) {
+    let shown = matches!(failure, Failure::Input(_) | Failure::Failed(_));
+    if wants_json() && shown && !REPORTED.load(Ordering::Relaxed) {
+        let value = json!({"input": input, "ok": false, "outputs": [], "warnings": [], "errors": [failure.message()]});
+        let _ = out(&value.to_string());
+    }
+}
 /// Each stage `--timing` saw: its name, the time spent in it and how often it ran.
 static STAGES: Mutex<Vec<(String, Duration, u32)>> = Mutex::new(Vec::new());
 
+/// The number the next traced thread gets.
+static NEXT_THREAD: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
 thread_local! {
+    static THREAD: u64 = NEXT_THREAD.fetch_add(1, Ordering::Relaxed);
     /// The input the current thread works on, named on each message.
     static INPUT: RefCell<Option<String>> = const { RefCell::new(None) };
 }
 
 /// Applies what the common options asked for.
 pub fn configure(setup: Setup) -> Outcome {
-    // A subcommand may read its arguments twice: the file opened the first time is kept.
-    if let Some(path) = setup.log_file.clone()
-        && let Ok(mut slot) = LOG_FILE.lock()
-        && slot.as_ref().is_none_or(|(open, _)| *open != path)
-    {
-        let file = std::fs::File::create(&path).map_err(|e| Failure::Failed(format!("cannot write the log file {path}: {e}")))?;
-        *slot = Some((path, file));
+    if setup.log_file.is_some() {
+        put(&LOG_WANTED, setup.log_file.clone());
+    }
+    if setup.trace.is_some() {
+        put(&TRACE, setup.trace.clone());
+        TRACING.store(true, Ordering::Relaxed);
     }
     if let Some(level) = setup.level {
         LEVEL.store(level as u8, Ordering::Relaxed);
@@ -260,6 +430,24 @@ pub fn configure(setup: Setup) -> Outcome {
             let trace = std::backtrace::Backtrace::force_capture();
             emit("error", Level::Error.style(), &format!("panic: {info}\n{trace}"));
         }));
+    }
+    Ok(())
+}
+
+/// Opens the `--log-file` asked for, once every option that says whether this run writes files
+/// has been read.
+pub fn open_log_file() -> Outcome {
+    let Some(path) = LOG_WANTED.lock().ok().and_then(|mut w| w.take()) else { return Ok(()) };
+    if output::dry_run() {
+        return output::plan_whole(std::path::Path::new(&path), None).map_err(|e| Failure::Failed(e.to_string()));
+    }
+    // A subcommand may read its arguments twice: the file opened the first time is kept.
+    if let Ok(mut slot) = LOG_FILE.lock()
+        && slot.as_ref().is_none_or(|(open, _)| *open != path)
+    {
+        output::check_clobber(std::path::Path::new(&path)).map_err(|e| Failure::Failed(e.to_string()))?;
+        let file = std::fs::File::create(&path).map_err(|e| Failure::Failed(format!("cannot write the log file {path}: {e}")))?;
+        *slot = Some((path, file));
     }
     Ok(())
 }
@@ -359,12 +547,21 @@ fn emit(label: &str, style: &str, message: &str) {
 /// Runs `work` as the stage `name`: with `--timing`, its time is added to the stage's total.
 /// Stages may nest; each counts its own time.
 pub fn stage<T>(name: &str, work: impl FnOnce() -> T) -> T {
-    if !TIMING.load(Ordering::Relaxed) {
+    let tracing = TRACING.load(Ordering::Relaxed);
+    if !TIMING.load(Ordering::Relaxed) && !tracing {
         return work();
     }
     let start = Instant::now();
     let result = work();
     let spent = start.elapsed();
+    if tracing
+        && let Ok(mut events) = EVENTS.lock()
+        && events.len() < MAX_TRACE_EVENTS
+    {
+        let at = start.saturating_duration_since(*START.get_or_init(Instant::now));
+        let micros = |d: Duration| u64::try_from(d.as_micros()).unwrap_or(u64::MAX);
+        events.push((name.to_string(), micros(at), micros(spent), THREAD.with(|t| *t)));
+    }
     if let Ok(mut stages) = STAGES.lock() {
         let len = stages.len();
         match stages.iter_mut().find(|(n, _, _)| n == name) {
@@ -377,6 +574,18 @@ pub fn stage<T>(name: &str, work: impl FnOnce() -> T) -> T {
         }
     }
     result
+}
+
+/// Writes the `--trace` file: one complete event per stage, as Chrome's trace viewer reads them.
+pub fn write_trace() -> Outcome {
+    let Some(path) = get(&TRACE) else { return Ok(()) };
+    let events = EVENTS.lock().map(|e| e.clone()).unwrap_or_default();
+    let events: Vec<Value> = events
+        .iter()
+        .map(|(name, ts, dur, tid)| json!({"name": name, "cat": "stage", "ph": "X", "ts": ts, "dur": dur, "pid": 1, "tid": tid}))
+        .collect();
+    let text = json!({"traceEvents": events, "displayTimeUnit": "ms"}).to_string();
+    write_atomic(std::path::Path::new(&path), text.as_bytes()).map_err(|e| Failure::Failed(e.to_string()))
 }
 
 /// With `--timing`: one line per stage in the order they first ran, then the total since
@@ -437,6 +646,7 @@ fn in_module(target: &str, module: &str) -> bool {
 
 /// Installs the `log` bridge; called once at start.
 pub fn init() {
+    START.get_or_init(Instant::now);
     if log::set_logger(&BRIDGE).is_ok() {
         log::set_max_level(log::LevelFilter::Trace);
     }
@@ -467,15 +677,38 @@ pub fn execute(session: &mut Session, id: &str, params: &Value) -> Result<Value,
         fontcraft_engine::EngineError::UnknownCommand(_) => Failure::Failed(format!(
             "{e} (if it is a window or view command, it needs the running app: drive it over the control channel or `fontcraft-cli mcp --connect`)"
         )),
-        other => Failure::Failed(other.to_string()),
+        other => Failure::Failed(with_causes(&other)),
     })
+}
+
+/// Most causes [`with_causes`] follows.
+const MAX_CAUSES: usize = 16;
+
+/// The message of `error` with the causes under it that it does not already name
+/// (`cli.global.backtrace`).
+fn with_causes(error: &dyn std::error::Error) -> String {
+    let mut text = error.to_string();
+    let mut cause = error.source();
+    for _ in 0..MAX_CAUSES {
+        let Some(e) = cause else { break };
+        let message = e.to_string();
+        if !text.contains(&message) {
+            text.push_str(&format!("\n  caused by: {message}"));
+        }
+        cause = e.source();
+    }
+    text
 }
 
 /// Opens `path` as the session's document. The command line keeps the glyph names the file
 /// gives, as the reference compilers do: what it writes names glyphs as its input did.
 pub fn open(session: &mut Session, path: &str) -> Result<Value, Failure> {
     detail(&format!("opening {path}"));
-    stage("file.open", || session.execute("file.open", &json!({"path": path, "keepGlyphNames": true}))).map_err(|e| Failure::Input(e.to_string()))
+    let mut params = json!({"path": path, "keepGlyphNames": true});
+    if let (Some(layer), Some(p)) = (layer(), params.as_object_mut()) {
+        p.insert("layer".into(), json!(layer));
+    }
+    stage("file.open", || session.execute("file.open", &params)).map_err(|e| Failure::Input(with_causes(&e)))
 }
 
 /// The bytes of an input: a file, or stdin for `-`. At most [`MAX_INPUT`] bytes.
@@ -511,6 +744,9 @@ pub fn batch<T: Send>(inputs: &[String], jobs: usize, work: impl Fn(&str) -> Res
     if inputs.len() > MAX_BATCH_INPUTS {
         return Err(usage(format!("at most {MAX_BATCH_INPUTS} inputs in one run")));
     }
+    if let Ok(mut last) = INPUTS.lock() {
+        *last = inputs.to_vec();
+    }
     let jobs = jobs.clamp(1, MAX_JOBS).min(inputs.len().max(1));
     let next = std::sync::atomic::AtomicUsize::new(0);
     let slots: Vec<std::sync::Mutex<Option<Result<T, Failure>>>> = inputs.iter().map(|_| std::sync::Mutex::new(None)).collect();
@@ -537,6 +773,16 @@ pub fn batch<T: Send>(inputs: &[String], jobs: usize, work: impl Fn(&str) -> Res
 /// The outcome of a batch: success when every input succeeded, [`Failure::Partial`] when some
 /// failed, the failure itself when all failed.
 pub fn batch_outcome<T>(results: &[Result<T, Failure>]) -> Outcome {
+    if let Ok(inputs) = INPUTS.lock()
+        && inputs.len() == results.len()
+    {
+        for (input, result) in inputs.iter().zip(results) {
+            if let Err(e) = result {
+                report_failure(Some(input), e);
+            }
+        }
+        REPORTED.store(results.iter().any(Result::is_err), Ordering::Relaxed);
+    }
     let failed: Vec<&Failure> = results.iter().filter_map(|r| r.as_ref().err()).collect();
     match (failed.len(), results.len()) {
         (0, _) => Ok(()),

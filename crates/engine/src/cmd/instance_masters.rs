@@ -595,7 +595,7 @@ fn save_all(p: &Params, source: &Font, dir: &std::path::Path, made: &[(String, F
         Some(f) => f,
         None => SaveFormat::Native,
     };
-    std::fs::create_dir_all(dir).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", dir.display())))?;
+    fontcraft_format::output::create_dir_all(dir).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", dir.display())))?;
     let mut taken = HashSet::new();
     let mut out = Vec::with_capacity(made.len());
     for (name, f, _) in made {

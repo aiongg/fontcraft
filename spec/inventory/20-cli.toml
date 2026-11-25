@@ -66,6 +66,7 @@ milestone = "M1"
 summary = "An existing output file is replaced by default; --no-clobber turns that into an error. The tool never invents a numbered alternative name."
 ref = "ttx -f and ttx's default unique naming (the latter not carried over)"
 status = "docs"
+notes = "Every subcommand takes --no-clobber (M12.102): its own option, else a check below every writing path that refuses a file or folder the run did not write itself. mcp, oracle and bench refuse it."
 
 [[behavior]]
 id = "cli.global.stdinStdout"
@@ -74,6 +75,7 @@ milestone = "M1"
 summary = "'-' as an input reads one font from standard input (binary fonts, TTX and feature text; not directory formats such as UFO). With no -o, subcommands whose result is text (dump, info, metrics, diff, check, tables list, features decompile) write to standard output; subcommands whose result is a binary font require -o, --output-dir or --in-place and refuse to write binary data to a terminal."
 ref = "tx help (stdin to stdout by default); ttx '-' input and '-o -'"
 status = "docs"
+notes = "M12.102: - reads a font from standard input in info, tables, dump, subset, instance, transform, optimize, woff, outlines, dehint, proof, variations and convert, and -o - writes one to standard output in compile, subset, instance, merge, transform, optimize, woff, outlines, dehint, convert and features; what the run would print goes to standard error then. Sources are not read from standard input."
 
 [[behavior]]
 id = "cli.global.batch"
@@ -98,6 +100,10 @@ milestone = "M2"
 summary = "--options FILE loads option values from a TOML file (keys are the long option names of the subcommand); an AFDKO .fpr project file is also accepted and translated. Options given on the command line override the file. --save-options FILE writes the effective option set of this run. Relative paths inside the file are resolved against the file's own directory."
 ref = "makeotf -fp / -sp project files"
 status = "docs"
+notes = "Built in M12.102: a file with the extension .toml is TOML, .fpr a makeotf project (compile only), anything else a response file. The options of a TOML or project file come before the line. --save-options writes the options that differ from their defaults. Not for mcp, oracle, run, commands and completion."
+guesses = [
+  "The extension decides how an options file is read (.toml, .fpr, else a response file); no source fixes the format of an options file.",
+]
 
 [[behavior]]
 id = "cli.global.optionOrder"
@@ -132,6 +138,10 @@ summary = "--json switches standard output to machine-readable JSON: one object 
 ref = "ttx_diff --json; fontTools varLib.interpolatable --json"
 status = "inferred"
 own = true
+notes = "M12.102: every JSON result carries input, ok, outputs, warnings and errors beside the keys of the engine command; an input that fails gives an object with ok false after the others. compile prints text, one line per file written, unless --json or --plan is given."
+guesses = [
+  "compile prints the files it wrote as text and JSON only with --json or --plan, like the other subcommands; scripts that read its JSON without the option would settle whether to keep it.",
+]
 
 [[behavior]]
 id = "cli.global.exitCodes"
@@ -225,7 +235,7 @@ milestone = "M2"
 summary = "-j/--jobs N sets the number of worker threads; the default is the number of cores, 0 means the same, and a negative N means that many fewer than the core count with a minimum of one. Results never depend on N."
 ref = "otfautohint -p; cu2qu -j"
 status = "docs"
-notes = "M12.67 adds -j/--jobs N to every subcommand and the shared reading of the value (unset or 0 every core, -N all but N, at least 1, at most 256); a value that is not a whole number is a usage error. Subcommands that work on several inputs adopt it in their own packages; the ones that declared --jobs before keep their own option with the default 1."
+notes = "M12.67 adds -j/--jobs N to every subcommand and the shared reading of the value (unset or 0 every core, -N all but N, at least 1, at most 256); a value that is not a whole number is a usage error. Subcommands that work on several inputs adopt it in their own packages; the ones that declared --jobs before keep their own option with the default 1. M12.102: compile builds several sources with -j threads."
 
 [[behavior]]
 id = "cli.global.timing"
@@ -234,7 +244,7 @@ milestone = "M2"
 summary = "--timing prints the time spent in each stage to standard error when the run ends; --trace FILE also writes the stages as a Chrome trace-event JSON file."
 ref = "fontmake --timing; pyftsubset --timing; fontc --emit-timing"
 status = "docs"
-notes = "Built in M12.67: when the run ends, --timing prints one line per stage, as `fontcraft-cli: timing: NAME: 1.2 ms (3 runs)`, then the total wall time. A stage is an engine command a subcommand runs or a file it opens, summed per name. The lines show at every level and go to the log file too. Not built: --trace FILE."
+notes = "Built in M12.67: when the run ends, --timing prints one line per stage, as `fontcraft-cli: timing: NAME: 1.2 ms (3 runs)`, then the total wall time. A stage is an engine command a subcommand runs or a file it opens, summed per name. The lines show at every level and go to the log file too. M12.102 adds --trace FILE, one complete event per stage and run, with its thread."
 guesses = [
   "The stages are the engine commands and file opens, not finer steps inside the compiler; fontmake's and fontc's stage lists would settle a finer split.",
 ]
@@ -246,7 +256,7 @@ milestone = "M0"
 summary = "Errors are printed as one message with its chain of causes and the location in the input (file, table, glyph, line and column for text sources). --backtrace adds the internal stack for bug reports."
 ref = "otfautohint --traceback; feaLib --traceback; ttx -e"
 status = "docs"
-notes = "M12.67 adds --backtrace: a panic prints `panic: …` with the captured stack at the error level. Not built: the chain of causes and the location in the input."
+notes = "M12.67 adds --backtrace: a panic prints `panic: …` with the captured stack at the error level. M12.102: an error is followed by one `caused by` line per cause it does not name. The place (table, glyph, line) is in the message where the engine command names it, not in fields of its own."
 
 [[behavior]]
 id = "cli.global.dryRun"
@@ -255,6 +265,10 @@ milestone = "M12"
 summary = "--dry-run performs all reading, validation and planning and reports what would be written, without creating or changing any file."
 ref = "docs/spec/20-cli.md › Conventions"
 status = "inferred"
+notes = "Built in M12.102 as one process-wide switch (fontcraft_format::output) that every writing path asks: what would be written, created or removed is listed as notes on standard error. mcp, oracle and bench refuse it. A step of a script that reads a file an earlier step would have written fails, since nothing was written; an external autohinter that needs a control file is not run."
+guesses = [
+  "A dry run lists what it left undone on standard error, one note per file or folder, and leaves log, trace and options files alone too; no reference tool has a dry run to compare with.",
+]
 
 [[behavior]]
 id = "cli.global.help"
@@ -302,6 +316,7 @@ milestone = "M12"
 summary = "For UFO input the option --layer NAME|default|processed chooses the glyph layer to read. Without it the default layer is read; 'processed' selects the AFDKO layer com.adobe.type.processedglyphs when present and falls back to the default layer glyph by glyph. Tools that write corrected outlines or hints into a UFO write to the default layer unless --write-layer NAME is given."
 ref = "AFDKO makeotf -f help; tx -ufo -altLayer; checkoutlinesufo -w; otfautohint -w"
 status = "docs"
+notes = "Built in M12.102 for compile, autohint, stems and run, through file.open {layer}: the outlines, anchors and advance of the named layer, glyph by glyph. Not built: --write-layer."
 
 
 # ============================================================ subcommands

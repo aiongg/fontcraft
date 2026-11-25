@@ -8,9 +8,14 @@ use crate::FormatError;
 /// Writes `bytes` to a temporary file next to `path`, flushes it to disk and renames it over
 /// `path`. The old file stays intact until the new one is complete. A symlink is followed, so the
 /// file it points to is replaced and the link stays; the replaced file's permissions are kept. A
-/// file the user cannot write is refused rather than replaced.
+/// file the user cannot write is refused rather than replaced. [`crate::output`] decides whether it
+/// may replace a file, and in a dry run only records the write.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), FormatError> {
+    crate::output::check_clobber(path)?;
+    if crate::output::diverted(path) {
+        return crate::output::plan_write(path, bytes);
+    }
     // craft-atomic's errors already name the file and say whether the original was kept.
     craft_atomic::atomic_write(path, bytes).map_err(|e| FormatError::Io(e.to_string()))?;
     crate::written::record(path);

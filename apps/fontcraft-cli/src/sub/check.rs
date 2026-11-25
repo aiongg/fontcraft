@@ -6,6 +6,9 @@
 //! fail), 1 when one does or a check failed to run, 2 for a usage error, 3 for an input that
 //! cannot be read, 4 when the run itself failed. Ignored and skipped results never count.
 
+use std::path::Path;
+
+use fontcraft_engine::format::{output, write_atomic};
 use fontcraft_engine::{EngineError, Session};
 use serde_json::{Map, Value, json};
 
@@ -318,11 +321,15 @@ fn print_doc(s: &mut Session, doc: &Value, format: &str, log: &mut Option<String
         }
         other => {
             let dir = std::env::temp_dir().join(format!("fontcraft-check-{}", std::process::id()));
-            std::fs::create_dir_all(&dir).map_err(|e| Failure::Failed(format!("cannot create a temporary folder: {e}")))?;
+            // The report goes through memory: nothing is written to the temporary folder.
+            output::hold(&dir);
             let path = dir.join(if other == "html" { "report.html" } else { "report.md" });
             let written = exec(s, "audit.export", &json!({"path": path, "results": doc, "format": other}));
-            let text = written.and_then(|_| std::fs::read_to_string(&path).map_err(|e| Failure::Failed(format!("cannot read the report back: {e}"))));
-            let _ = std::fs::remove_dir_all(&dir);
+            let text = written.and_then(|_| {
+                let bytes = output::held(&path).unwrap_or_default();
+                String::from_utf8(bytes).map_err(|e| Failure::Failed(format!("cannot read the report back: {e}")))
+            });
+            output::release(&dir);
             emit(log, text?.trim_end())
         }
     }
@@ -635,7 +642,9 @@ fn family_run(p: &args::Parsed, o: &mut Output) -> Outcome {
 /// Writes the text kept for `-l` to its file.
 fn write_log(path: Option<&str>, o: &Output) -> Outcome {
     match (path, &o.log) {
-        (Some(path), Some(text)) => std::fs::write(path, text).map_err(|e| Failure::Failed(format!("cannot write the log file {path}: {e}"))),
+        (Some(path), Some(text)) => {
+            write_atomic(Path::new(path), text.as_bytes()).map_err(|e| Failure::Failed(format!("cannot write the log file {path}: {e}")))
+        }
         _ => Ok(()),
     }
 }
