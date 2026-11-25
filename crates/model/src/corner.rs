@@ -227,8 +227,8 @@ pub fn insert_corners(font: &Font, layer: &Layer) -> Result<Option<Vec<Shape>>, 
 }
 
 /// `layer` with the corner hints at `indices` (positions in the layer's hints) fitted into its
-/// paths and removed. The other corner hints on those paths keep pointing at the nodes they sat
-/// on, or at the segments they sat on. Hint node indices count in file order, with a closed
+/// paths and removed. The other corner, cap, segment and brush hints on those paths keep pointing at
+/// the nodes they sat on, or at the segments they sat on. Hint node indices count in file order, with a closed
 /// path's start node last ([`CornerHint::new`]). A corner on an extra node is refused: there is no
 /// node to put it on while the paths overlap.
 pub fn decompose_corners(font: &Font, layer: &Layer, indices: &[usize]) -> Result<Layer, CornerError> {
@@ -256,7 +256,6 @@ pub fn decompose_corners(font: &Font, layer: &Layer, indices: &[usize]) -> Resul
         .enumerate()
         .filter(|(i, _)| !removed.contains(i))
         .map(|(_, h)| {
-            let Ok(Some(corner)) = corner_hint(h) else { return h.clone() };
             // A corner inserted after node `p` moves every later node; one inserted after the
             // last node of a closed contour lands at its front and moves them all.
             let moved = |shape: usize, node: usize| {
@@ -266,11 +265,18 @@ pub fn decompose_corners(font: &Font, layer: &Layer, indices: &[usize]) -> Resul
                     inserted.iter().filter(|ins| ins.shape == shape && (ins.vertex < n || ins.vertex + 1 == len)).map(|ins| ins.added).sum();
                 if shift == 0 { node } else { n.saturating_add(shift) }
             };
-            match corner.target {
-                CornerTarget::Node { shape, node } => with_nodes(h, &[(node, moved(shape, node))]),
-                CornerTarget::Intersection { shape, node, other_shape, other_node } => {
+            match corner_hint(h) {
+                Ok(Some(CornerHint { target: CornerTarget::Node { shape, node }, .. })) => with_nodes(h, &[(node, moved(shape, node))]),
+                Ok(Some(CornerHint { target: CornerTarget::Intersection { shape, node, other_shape, other_node }, .. })) => {
                     with_nodes(h, &[(node, moved(shape, node)), (other_node, moved(other_shape, other_node))])
                 }
+                _ => match crate::attach::attachment(h) {
+                    Ok(Some(a)) => {
+                        let (shape, node) = a.origin();
+                        with_nodes(h, &[(node, moved(shape, node))])
+                    }
+                    _ => h.clone(),
+                },
             }
         })
         .collect();
@@ -379,6 +385,38 @@ fn apply(font: &Font, master: &str, shapes: &mut Vec<Shape>, hints: &[CornerHint
         }
     }
     result
+}
+
+/// For each of `corners`, the path it sits on before and after it is fitted on its own, when it sits on an extra node:
+/// the paths of `shapes` (a layer's shapes in `master`) that cross at the corners' extra nodes are joined first, as
+/// [`insert_corners`] joins them, and the path before is the joined one. `None` for a corner on a node, one whose glyph
+/// does not exist or cannot be fitted, and one whose segments do not cross. Both paths have their start node last.
+pub fn fit_extra_corners(font: &Font, master: &str, shapes: &[Shape], corners: &[CornerHint]) -> Vec<Option<(Path, Path)>> {
+    let extra_of = |c: &CornerHint| match c.target {
+        CornerTarget::Intersection { shape, node, other_shape, other_node } if font.glyph(&c.name).is_some() => {
+            Some([shape, node, other_shape, other_node])
+        }
+        _ => None,
+    };
+    let extras: Vec<[usize; 4]> = corners.iter().filter_map(extra_of).collect();
+    if extras.is_empty() {
+        return vec![None; corners.len()];
+    }
+    let mut shapes = shapes.to_vec();
+    turn_closed_paths(&mut shapes, true);
+    let joined = crate::corner_join::join(&mut shapes, &extras);
+    let path = |shapes: &[Shape], at: usize| match shapes.get(at) {
+        Some(Shape::Path(p)) => Some(p.clone()),
+        _ => None,
+    };
+    let one = |c: &CornerHint| {
+        let (at, _) = joined.extra(extra_of(c)?)?;
+        let before = path(&shapes, at)?;
+        let mut fitted = shapes.clone();
+        apply_in_format_order(font, master, &mut fitted, std::slice::from_ref(c), &joined).ok()?;
+        Some((before, path(&fitted, at)?))
+    };
+    corners.iter().map(one).collect()
 }
 
 /// Moves each closed path's first node to the end (`to_format`), or its last node to the front.

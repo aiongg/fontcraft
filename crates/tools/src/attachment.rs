@@ -13,7 +13,7 @@
 
 use fontcraft_geom::{BezPath, ParamCurve, ParamCurveExtrema, ParamCurveNearest, Point};
 use fontcraft_model::attach::{Attachment, attachment, fit_brush, fit_cap, fit_segment};
-use fontcraft_model::corner::{CornerTarget, corner_hint, insert_corners, is_corner};
+use fontcraft_model::corner::{CornerHint, CornerTarget, corner_hint, fit_extra_corners, insert_corners, is_corner};
 use fontcraft_model::{Font, Hint, Layer, Node, Path, Shape};
 
 use crate::geometry::finite;
@@ -92,20 +92,32 @@ pub struct AttachmentMark {
 }
 
 /// The fitted attachments of `layer` whose kind `wanted` accepts, in hint order, at most
-/// [`MAX_ATTACHMENTS`]. An attachment that does not fit (its glyph is missing, it sits on an
-/// extra node) has no mark.
+/// [`MAX_ATTACHMENTS`]. An attachment that does not fit (its glyph is missing, its extra node is no
+/// longer a crossing) has no mark. A corner on an extra node is marked on the outline of the two
+/// paths with their overlap removed, where it is drawn; its host is the first of the two.
 pub fn marks(font: &Font, layer: &Layer, wanted: impl Fn(AttachmentKind) -> bool) -> Vec<AttachmentMark> {
     let mut out = Vec::new();
+    let extra = if wanted(AttachmentKind::Corner) { extra_corners(font, layer) } else { Vec::new() };
     for (i, hint) in layer.info.hints.iter().enumerate() {
         if out.len() >= MAX_ATTACHMENTS {
             break;
         }
         let Some(k) = kind(hint).filter(|k| wanted(*k)) else { continue };
         let fitted = match k {
-            AttachmentKind::Corner => corner_hint(hint).ok().flatten().and_then(|corner| match corner.target {
-                CornerTarget::Node { shape, .. } => insert_corners(font, &with_one_hint(layer, i)).ok().flatten().map(|shapes| (shape, shapes)),
-                CornerTarget::Intersection { .. } => None,
-            }),
+            AttachmentKind::Corner => match corner_hint(hint) {
+                Ok(Some(CornerHint { target: CornerTarget::Node { shape, .. }, .. })) => {
+                    insert_corners(font, &with_one_hint(layer, i)).ok().flatten().map(|shapes| (shape, shapes))
+                }
+                Ok(Some(CornerHint { target: CornerTarget::Intersection { shape, .. }, .. })) => {
+                    if let Some((_, before, after)) = extra.iter().find(|(at, ..)| *at == i)
+                        && let Some((band, outline)) = inserted(before, after, &[])
+                    {
+                        out.push(AttachmentMark { hint: i, kind: k, shape, band, outline });
+                    }
+                    continue;
+                }
+                _ => None,
+            },
             AttachmentKind::Cap => match attachment(hint) {
                 Ok(Some(Attachment::Cap(cap))) => fit_cap(font, &layer.master, &layer.shapes, &cap).ok().map(|shapes| (cap.shape, shapes)),
                 _ => None,
@@ -152,6 +164,25 @@ pub fn marks(font: &Font, layer: &Layer, wanted: impl Fn(AttachmentKind) -> bool
         }
     }
     out
+}
+
+/// The corners of `layer` on extra nodes that fit, at most [`MAX_ATTACHMENTS`]: the hint's index, and the joined path
+/// before and after the corner is fitted into it.
+fn extra_corners(font: &Font, layer: &Layer) -> Vec<(usize, Path, Path)> {
+    let (at, corners): (Vec<usize>, Vec<CornerHint>) = layer
+        .info
+        .hints
+        .iter()
+        .enumerate()
+        .filter_map(|(i, h)| Some((i, corner_hint(h).ok().flatten()?)))
+        .filter(|(_, c)| matches!(c.target, CornerTarget::Intersection { .. }))
+        .take(MAX_ATTACHMENTS)
+        .unzip();
+    if corners.is_empty() {
+        return Vec::new();
+    }
+    let fitted = fit_extra_corners(font, &layer.master, &layer.shapes, &corners);
+    at.into_iter().zip(fitted).filter_map(|(i, paths)| paths.map(|(before, after)| (i, before, after))).collect()
 }
 
 /// `layer` with only the hint at `index`.
