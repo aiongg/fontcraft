@@ -10,14 +10,16 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use fontcraft_model::{Family, Font, Master, MetricValue};
-use fontcraft_plist::{Num, Value};
+use fontcraft_model::{Family, Font, Master, MetricDef, MetricValue};
+use fontcraft_plist::{Array, Num, Value};
 
 /// 2^63: the largest 64-bit integer plus one, as the format writes a metric without a value.
 const UNSET: f64 = 9_223_372_036_854_775_808.0;
 /// The native entry of a master's extra data that holds its `metricValues` as written, when some
 /// of them have no value.
 pub(crate) const METRIC_VALUES: &str = "com.fontcraft.unsetMetricValues";
+/// The native entry beside it: which metric each of them was read for ([`metric_ids`]).
+const METRIC_IDS: &str = "com.fontcraft.unsetMetricIds";
 /// The id of a master made for a file whose layers name none.
 const MASTER_ID: &str = "m01";
 /// Most warnings about one file's glyphs.
@@ -31,6 +33,42 @@ pub(crate) fn is_unset(v: &Value) -> bool {
 /// Whether an entry of `metricValues` has a number without a value.
 pub(crate) fn has_unset(entry: &Value) -> bool {
     entry.as_dict().is_some_and(|d| d.entries.iter().any(|(_, v)| is_unset(v)))
+}
+
+/// The metrics of a font, each told apart by its type, name and filter, and by its place among equal ones.
+pub(crate) fn metric_ids(metrics: &[MetricDef]) -> Vec<String> {
+    let mut seen: HashMap<String, usize> = HashMap::new();
+    let mut id = |m: &MetricDef| {
+        let id = format!("{}\n{}\n{}", m.kind, m.name.as_deref().unwrap_or_default(), m.filter.as_deref().unwrap_or_default());
+        let n = seen.entry(id.clone()).and_modify(|n| *n = n.saturating_add(1)).or_insert(0);
+        format!("{id}\n{n}")
+    };
+    metrics.iter().map(&mut id).collect()
+}
+
+/// The `metricValues` of `m` as written that have no value, by the metric they were read for.
+pub(crate) fn unset_values<'a>(m: &'a Master, metrics: &'a [String]) -> HashMap<&'a str, &'a Value> {
+    let list = |key: &str| m.extra.get(Family::Native, key).and_then(Value::as_array).map(|a| a.items.as_slice());
+    let items = list(METRIC_VALUES).unwrap_or_default();
+    let ids: Vec<&str> = match list(METRIC_IDS) {
+        Some(ids) => ids.iter().map(|id| id.as_str().unwrap_or_default()).collect(),
+        // A document saved without them: in the metrics' order, while there are as many.
+        None => metrics.iter().map(String::as_str).filter(|_| metrics.len() == items.len()).collect(),
+    };
+    ids.into_iter().zip(items).filter(|(_, item)| has_unset(item)).collect()
+}
+
+/// Notes which metrics the masters' kept values were read for: the font's metrics can change before they are written.
+pub(crate) fn keep_metric_ids(font: &mut Font) {
+    let kept = |m: &Master| m.extra.get(Family::Native, METRIC_VALUES).is_some();
+    if !font.masters.iter().any(kept) {
+        return;
+    }
+    let items: Vec<Value> = metric_ids(&font.metrics).into_iter().map(|id| Value::String(id.as_str().into())).collect();
+    let ids = Value::Array(Array { items, ..Default::default() });
+    for m in Arc::make_mut(&mut font.masters).iter_mut().filter(|m| kept(m)) {
+        m.extra.insert(Family::Native, METRIC_IDS, ids.clone());
+    }
 }
 
 /// Makes a font read from a file that breaks the format's rules one the model takes. The warnings
@@ -158,6 +196,22 @@ mod tests {
         Arc::make_mut(&mut font.masters)[0].metric_values[1].pos = 500.0;
         let out = write(&font).unwrap();
         assert!(out.contains("pos = 500;") && out.contains("pos = 800;") && !out.contains("9223372036854775808"), "{out}");
+    }
+
+    #[test]
+    fn a_metric_that_takes_the_place_of_one_without_a_value_has_its_own() {
+        let text = "{\n.formatVersion = 3;\nfamilyName = Lenient;\nfontMaster = (\n{\nid = m01;\nmetricValues = (\n{\npos = 800;\n},\n{\npos = 9223372036854775808;\n}\n);\nname = Regular;\n}\n);\nglyphs = (\n);\nmetrics = (\n{\ntype = ascender;\n},\n{\ntype = \"x-height\";\n}\n);\nunitsPerEm = 1000;\nversionMajor = 1;\nversionMinor = 0;\n}\n";
+        // Another metric of 0 in its place.
+        let (mut font, _) = read(text);
+        Arc::make_mut(&mut font.metrics)[1].kind = metric::BASELINE.into();
+        assert!(!write(&font).unwrap().contains("9223372036854775808"));
+        // The same metrics in another order.
+        let (mut font, _) = read(text);
+        Arc::make_mut(&mut font.metrics).swap(0, 1);
+        Arc::make_mut(&mut font.masters)[0].metric_values.swap(0, 1);
+        let out = write(&font).unwrap();
+        let (unset, set) = (out.find("pos = 9223372036854775808;"), out.find("pos = 800;"));
+        assert!(unset.is_some() && unset < set, "{out}");
     }
 
     #[test]
