@@ -639,13 +639,15 @@ menu = []
 context = ["layers.row"]
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer: id, coordinates: {tag: number|null}}"
+params = "{glyph?: name, layer?: id | layers?: [ids], allMasters?: bool, glyphs?: [names], coordinates: {tag: number|null}}"
 area = "interpolation"
 milestone = "M9"
 summary = "Context-menu item on a non-master layer in the Layers palette: turns it into an intermediate layer and opens one number field per axis. A null or empty coordinate means the layer takes that axis value from the master it is attached to. Confirmed with Return."
 ref = "Interpolation › Intermediate Layers › Intermediate Layer Setup"
 status = "handbook"
 guesses = [
+  "Choosing Intermediate on one of several selected rows sets all of them that are no master layers, from the values of the first. Settle by selecting three layers in the reference app and choosing Intermediate.",
+  "For All Masters in the editor is ours: it adds one intermediate layer, a copy of the master layer, at every place the coordinates and a master's own give where the glyph has no source.",
   "Coordinates outside the axis range of the masters and virtual masters are refused with a message; settle by typing one in the reference app's popover.",
   "Coordinates that put the layer where another layer of the glyph already interpolates from are refused, including all fields left empty, which puts it on its master's own layer; settle by confirming such coordinates in the reference app's popover.",
 ]
@@ -660,7 +662,7 @@ menu = []
 context = ["layers.row"]
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer: id}"
+params = "{glyph: name, layer: id | layers: [ids]}"
 area = "interpolation"
 milestone = "M9"
 summary = "Turns an intermediate layer back into a plain backup layer by removing its coordinates. Presumably done by unticking Intermediate in the context menu; not stated."
@@ -680,6 +682,7 @@ location = "dialog"
 controls = [
   "one number field per axis, in axis order",
   "the axis range shown beside each field",
+  "For All Masters (ours)",
   "Return confirms",
 ]
 area = "interpolation"
@@ -806,17 +809,20 @@ menu = []
 context = ["layers.row"]
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer: id, ranges: {tag: {min?: number, max?: number}}}"
+params = "{glyph?: name, layer?: id | layers?: [ids], allMasters?: bool, glyphs?: [names], ranges: {tag: {min?: number, max?: number}}}"
 area = "interpolation"
 milestone = "M9"
 summary = "Context-menu item on a layer in the Layers palette, master layers included: marks it as an alternate layer and opens min and max fields per axis that bound the region where this outline replaces the normal one. Either bound may be empty (open-ended); all empty yields the layer named []. Confirmed with Return."
 ref = "Interpolation › Switching Shapes › Alternate Layers"
 status = "handbook"
 guesses = [
+  "Choosing Alternate on one of several selected rows sets all of them, from the ranges of the first. Settle by selecting three layers in the reference app and choosing Alternate.",
+  "For All Masters in the editor is ours: every master without a layer of the range gets one, a copy of its master layer; in Font View it goes for the selected glyphs.",
   "Choosing Alternate on a master layer with no `[]` partner under the same master adds no partner layer; the partner is made by hand as the handbook describes. Settle in the reference app.",
   "Choosing Alternate with every field empty on a master layer is refused, because the handbook describes the `[]` partner only as a separate layer under the master; settle by confirming empty fields on a master layer in the reference app.",
 ]
 observe = [
+  "In F1 (two masters), add two backup layers to a glyph, select both rows and choose Alternate: note how many layers get the range.",
   "In F1 (two masters), choose Alternate on a master layer: note whether a `[]` layer is added by itself.",
 ]
 
@@ -827,7 +833,7 @@ menu = []
 context = ["layers.row"]
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer: id}"
+params = "{glyph: name, layer: id | layers: [ids]}"
 area = "interpolation"
 milestone = "M9"
 summary = "Removes the axis ranges from a layer, making it an ordinary master or backup layer again. Presumably done by unticking Alternate in the context menu; not stated."
@@ -846,14 +852,15 @@ label = "Edit Special Layer Settings"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{glyph?: name, layer?: id, part: intermediate|alternate}"
+params = "{glyph?: name, layer?: id | layers?: [ids], part: intermediate|alternate}"
 area = "interpolation"
 milestone = "M9"
 summary = "Double-clicking the {…} or the […] part of a special layer's label reopens the coordinate editor or the range editor respectively. On a layer that is both, each part is clicked separately."
 ref = "Interpolation › Switching Shapes › Alternate Layers"
 status = "handbook"
-notes = "Documented, not yet observed. The command opens popover.intermediateLayer or popover.alternateLayer on the layer, filled with its present values; double-clicking a part of the label in the Layers palette runs it, and so does choosing Intermediate or Alternate in a row's context menu when the layer does not have that status yet."
+notes = "Documented, not yet observed. The command opens popover.intermediateLayer or popover.alternateLayer on the layers, filled with the first one's present values; double-clicking a part of the label in the Layers palette runs it (a row with both labels has the {…} label as a part of its own, which a single click opens), and so does choosing Intermediate or Alternate in a row's context menu when the layer does not have that status yet."
 guesses = [
+  "A click on the {…} label of a layer with both labels opens its coordinates at once; settle by clicking each part once in the reference app.",
   "Choosing Intermediate or Alternate in a row's context menu opens the same editor as double-clicking that part of the label; settle by choosing Intermediate on a backup layer in the reference app.",
 ]
 
@@ -863,6 +870,7 @@ label = "Alternate layer axis ranges"
 location = "dialog"
 controls = [
   "per axis: a min field and a max field",
+  "For All Masters (ours)",
   "Return confirms",
 ]
 area = "interpolation"
@@ -1050,12 +1058,12 @@ kind = "ui"
 params = "{on?: bool}"
 area = "interpolation"
 milestone = "M9"
-summary = "Toggle. While on, switching to another master keeps the corresponding nodes and shapes selected, matched by index. It has an effect only when the glyph's layers are compatible."
+summary = "Toggle. While on, switching to another layer the edited one interpolates with keeps the corresponding nodes and shapes selected, matched by index. It has an effect only when the glyph's layers are compatible."
 ref = "Interpolation › Editing Multiple Masters › Keep Layer Selection in Sync"
 status = "handbook"
 notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/tools/apply.rs, run before the tools see each frame; crates/ui/src/shell/compatibility.rs (carried), run when the tools' target layer changes."
 guesses = [
-  "The selection is carried only from one master layer to another of the same glyph, when the glyph is compatible; nodes, shapes and anchors that resolve on the new layer are kept, guides and annotations are dropped. Settle by switching from a master to an intermediate layer with the option on.",
+  "The selection is carried between two layers of one glyph that interpolate with each other (the master and intermediate layers, or the layers of one alternate set), when the glyph is compatible; nodes, shapes and anchors that resolve on the new layer are kept, guides and annotations are dropped. Settle by switching from a master to an intermediate layer, and between two alternate layers, with the option on.",
 ]
 
 [[command]]

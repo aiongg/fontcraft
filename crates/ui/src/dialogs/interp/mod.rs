@@ -1,8 +1,9 @@
 //! The masters and interpolation dialogs: the Masters tab's dialogs ([`masters`]), Axis Location and Virtual Master
-//! ([`location`]), and the interpolation commands of the Path, Glyph and Font menus ([`variation`]). All are specs.
+//! ([`location`]), the editors of special layers ([`special`]), and the interpolation commands of the Path, Glyph and Font menus ([`variation`]). All are specs.
 
 pub mod location;
 pub mod masters;
+pub mod special;
 #[cfg(test)]
 mod tests;
 pub mod variation;
@@ -19,6 +20,8 @@ pub const SPECS: &[DialogSpec] = &[
     masters::ADD_METRIC,
     masters::METRIC_EDITOR,
     masters::STEM_SCOPE,
+    special::INTERMEDIATE,
+    special::ALTERNATE,
     variation::INTERPOLATE_WITH_BACKGROUND,
     variation::ADJUST_BY_VARIATION,
     variation::SET_MASTER_LOCATIONS,

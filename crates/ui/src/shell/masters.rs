@@ -1,6 +1,6 @@
 //! The master the edit view draws in, the active layer and the Layers panel's own state: `layers.select` (a click
 //! on a row of the Layers panel), `view.selectMaster` (a master icon), the panel's two filters and
-//! `layers.editSpecialLayerSettings`.
+//! `layers.editSpecialLayerSettings`, which opens the editor of a special layer (`dialogs::interp::special`).
 //!
 //! Every glyph is drawn in the current master; `layers.select` shows single glyphs in another layer (another
 //! master's, or a backup). The shown glyph's layer is the active layer: the canvas draws it and the tools edit it.
@@ -13,11 +13,12 @@ use std::collections::BTreeMap;
 
 use craft::ui::runtime::commands::CommandRef;
 use fontcraft_engine::model::{Font, Glyph, Layer, Master};
-use serde_json::Value;
+use serde_json::{Map, Value, json};
 
 use super::commands::{Module, UiCommand};
 use crate::app::models::layers::{self as model, Part};
 use crate::app::{FontCraftApp, ViewState};
+use crate::dialogs::{self, interp::special};
 
 pub const MODULE: Module = Module { commands: COMMANDS, run };
 
@@ -58,7 +59,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Edit Special Layer Settings",
         menu: &[],
         shortcut: None,
-        params: "{glyph?: name (default: the shown glyph), layer?: id (default: the active layer), part: \"intermediate\" | \"alternate\"} open the coordinate editor or the range editor of a layer, filled with its present values, as double-clicking a special layer's row in the Layers panel does",
+        params: "{glyph?: name (default: the shown glyph), layer?: id | layers?: [ids] (default: the active layer), part: \"intermediate\" | \"alternate\"} open the coordinate editor (popover.intermediateLayer) or the range editor (popover.alternateLayer) of these layers, filled with the first one's present values, as double-clicking a part of a special layer's label in the Layers panel does. Fields are keyed by axis tag (`wght`) or by tag and bound (`wght.min`, `wght.max`) and hold the text of a number; `allMasters` is For All Masters, which in Font View goes for the selected glyphs",
     },
 ];
 
@@ -77,18 +78,8 @@ pub struct LayersView {
     pub current_master_only: bool,
     /// "Hide Backup Layers".
     pub hide_backups: bool,
-    /// The special layer whose editor waits to open.
-    pub special: Option<SpecialEdit>,
     /// The row whose context menu is open.
     pub menu_row: Option<String>,
-}
-
-/// A request to edit a special layer's coordinates or ranges.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SpecialEdit {
-    pub glyph: String,
-    pub layer: String,
-    pub part: Part,
 }
 
 /// The master glyphs are drawn in: the picked one, else the first.
@@ -299,17 +290,29 @@ fn edit_special(app: &mut FontCraftApp, params: &Value) -> Result<(), String> {
         Some(name) => font.glyph(name).ok_or_else(|| format!("there is no glyph `{name}`"))?,
         None => shown_glyph(font, &app.view).ok_or("no glyph is shown: give `glyph`")?,
     };
-    let layer = match string(params, "layer")? {
-        Some(id) => glyph.layers.iter().find(|l| l.id == id).ok_or_else(|| format!("glyph `{}` has no layer `{id}`", glyph.name))?,
-        None => shown_layer(font, &app.view.layers, glyph).ok_or_else(|| format!("glyph `{}` has no layer to edit: give `layer`", glyph.name))?,
+    let layers: Vec<String> = match (string(params, "layer")?, params.get("layers")) {
+        (Some(_), Some(_)) => return Err("give `layer` or `layers`, not both".into()),
+        (Some(id), None) => vec![id.to_string()],
+        (None, Some(Value::Array(list))) => {
+            list.iter().take(MAX_GLYPHS).map(|id| id.as_str().map(str::to_string).ok_or("`layers` holds layer ids")).collect::<Result<_, _>>()?
+        }
+        (None, Some(Value::Null) | None) => {
+            let active = shown_layer(font, &app.view.layers, glyph);
+            vec![active.ok_or_else(|| format!("glyph `{}` has no layer to edit: give `layer`", glyph.name))?.id.clone()]
+        }
+        (None, Some(_)) => return Err("`layers` must be a list of layer ids".into()),
     };
-    if font.axes.is_empty() {
-        return Err("the font has no axes; add one in Font Info › Axes first".into());
+    let mut given = Map::new();
+    given.insert("glyph".into(), json!(glyph.name));
+    given.insert("layers".into(), json!(layers));
+    let selected = &app.view.font_view.selected;
+    if app.view.tabs.font_view_shows() && selected.len() > 1 && selected.len() <= MAX_GLYPHS && selected.contains(&glyph.name) {
+        given.insert("glyphs".into(), json!(selected));
     }
-    if part == Part::Intermediate && layer.is_master_layer() {
-        return Err("a master layer cannot be an intermediate layer: add a layer under the master and make that one intermediate".into());
-    }
-    let edit = SpecialEdit { glyph: glyph.name.clone(), layer: layer.id.clone(), part };
-    app.view.layers.special = Some(edit);
+    let dialog = match part {
+        Part::Intermediate => &special::INTERMEDIATE,
+        Part::Alternate => &special::ALTERNATE,
+    };
+    dialogs::form::open(app, dialog, &given)?;
     Ok(())
 }

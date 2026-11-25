@@ -4,6 +4,7 @@
 //! on every compatible layer ([`with_matching`]).
 
 use craft::ui::runtime::commands::CommandRef;
+use fontcraft_engine::interp::{Designspace, GlyphSources, Source};
 use fontcraft_engine::model::{Layer, Shape};
 use fontcraft_engine::prelude::*;
 use fontcraft_tools::Selection;
@@ -28,7 +29,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Keep Layer Selection in Sync",
         menu: &["Edit"],
         shortcut: None,
-        params: "{on?: bool} while on, editing another master of a compatible glyph keeps the selected nodes, shapes and anchors, matched by index (omitted: toggle)",
+        params: "{on?: bool} while on, editing another master or intermediate layer of a compatible glyph, or another layer of the same alternate set, keeps the selected nodes, shapes and anchors, matched by index (omitted: toggle)",
     },
     UiCommand {
         id: "edit.toggleMatchWhenEditing",
@@ -72,9 +73,10 @@ pub fn with_matching(app: &FontCraftApp, id: &str, mut params: Value) -> Value {
 }
 
 /// The selection the tools keep when the canvas moves from editing `old` to editing `new`, while Keep Layer Selection
-/// in Sync is on: the same glyph and side, both master layers, and a glyph whose layers interpolate. Items the new
-/// layer does not have are dropped; guides, annotations, hints and intersections are not carried. `None`: the
-/// selection starts empty.
+/// in Sync is on: the same glyph and side, two layers that interpolate with each other (both among the master and
+/// intermediate layers, or both of one alternate set), and a glyph whose layers interpolate. Items the new layer does
+/// not have are dropped; guides, annotations, hints and intersections are not carried. `None`: the selection starts
+/// empty.
 pub fn carried(app: &mut FontCraftApp, old: Option<&Target>, new: Option<&Target>) -> Option<Selection> {
     let (old, new) = (old?, new?);
     if !app.view.display.keep_layer_selection_in_sync
@@ -87,9 +89,13 @@ pub fn carried(app: &mut FontCraftApp, old: Option<&Target>, new: Option<&Target
     }
     let font = app.session.font().ok()?;
     let glyph = font.glyph(&new.glyph)?;
-    let master_layer = |id: &str| glyph.layers.iter().find(|l| l.id == id && l.is_master_layer());
-    master_layer(&old.layer)?;
-    let layer = master_layer(&new.layer)?.clone();
+    let layer = glyph.layers.iter().find(|l| l.id == new.layer)?.clone();
+    let designspace = Designspace::new(font).ok()?;
+    let sources = GlyphSources::of(font, &designspace, &new.glyph).ok()?;
+    let together = |group: &[Source]| [&old.layer, &new.layer].iter().all(|id| group.iter().any(|s| s.layer_id == **id));
+    if !together(&sources.main) && !sources.alternates.iter().any(|set| together(&set.sources)) {
+        return None;
+    }
     if !app.session.glyph_compat(&new.glyph).is_some_and(|c| c.ok) {
         return None;
     }
@@ -164,6 +170,31 @@ mod tests {
         assert!(select_then_switch(&mut app, "o").is_empty(), "o cannot interpolate: nothing is carried");
         let checks = crate::app::menu_states::checks(&app);
         assert!(checks.contains(&("edit.keepLayerSelectionInSync", true)), "the Edit menu row is checked");
+    }
+
+    /// The selection also moves to an intermediate layer and between the layers of one alternate set, not from a master
+    /// layer to an alternate one.
+    #[test]
+    fn the_selection_moves_among_the_layers_that_interpolate_with_each_other() {
+        let mut app = two_masters();
+        let ids: Vec<String> = app.session.font().unwrap().masters.iter().map(|m| m.id.clone()).collect();
+        let mut run = |id: &str, params: Value| app.session.execute(id, &params).unwrap_or_else(|e| panic!("{id}: {e}"));
+        let brace = run("layers.addIntermediate", json!({"glyph": "n", "location": {"wght": 70}}))["layer"].as_str().unwrap().to_string();
+        let set = run("layers.setAlternate", json!({"glyphs": ["n"], "allMasters": true, "ranges": {"wght": {"min": 100}}}));
+        let brackets: Vec<String> = set["layers"].as_array().unwrap().iter().map(|r| r["layer"].as_str().unwrap().to_string()).collect();
+        assert_eq!(brackets.len(), 2);
+        app.sent.push(Msg::View(ViewMsg::SelectGlyph("n".into())));
+        shell(&mut app, "edit.keepLayerSelectionInSync", json!({"on": true}));
+        let mut moved = |from: &str, to: &str| -> bool {
+            shell(&mut app, "layers.select", json!({"layer": from}));
+            app.tools.selection = fontcraft_tools::Selection::new();
+            app.tools.selection.points.insert((0, 2));
+            shell(&mut app, "layers.select", json!({"layer": to}));
+            app.tools.selection.points.contains(&(0, 2))
+        };
+        assert!(moved(&ids[0], &brace) && moved(&brace, &ids[1]), "master layers and intermediate layers");
+        assert!(moved(&brackets[0], &brackets[1]), "two layers of one alternate set");
+        assert!(!moved(&ids[0], &brackets[1]), "a master layer and an alternate layer");
     }
 
     /// While Match When Editing is on, an edit in the window changes every compatible master in one undo step; off, and

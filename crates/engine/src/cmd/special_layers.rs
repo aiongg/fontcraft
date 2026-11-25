@@ -9,14 +9,17 @@
 //! would leave a glyph unable to interpolate (two sources at one location, for one) is refused,
 //! unless the glyph could not interpolate before it either.
 
+use std::collections::HashSet;
+
 use fontcraft_hinting::Renumbered;
 use fontcraft_interp::instance::interpolate_layer;
 use fontcraft_interp::labels::{layer_title, special_label};
-use fontcraft_interp::{Designspace, GlyphSources, InterpOptions, Location, ModelKind, Source};
-use fontcraft_model::{AxisRule, Font, Glyph, Layer, LayerSide, Shape};
+use fontcraft_interp::sources::set_inactive;
+use fontcraft_interp::{Designspace, GlyphSources, InterpOptions, Location, ModelKind, RangeSet, Source};
+use fontcraft_model::{AxisRule, Font, Glyph, Layer, LayerAttrs, LayerSide, Shape};
 use serde_json::{Map, Value, json};
 
-use super::common::{Outcome, in_range, scope};
+use super::common::{Outcome, in_range, layer_ids, scope};
 use super::shared::renumber_hints;
 use super::*;
 use crate::EngineError;
@@ -33,7 +36,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Intermediate",
             [],
             None,
-            "{glyph: name, layer: id, coordinates: {tag: number | null}} make a layer that is not a master layer an intermediate layer at the given internal coordinates. An axis left out or set to null takes the coordinate of the layer's master. Each coordinate must lie within the range of the masters and virtual masters on its axis, and the layer must not land where another layer of the glyph already interpolates from. An alternate layer stays alternate as well → {glyph, layer, coordinates: {tag: number | null}, label}",
+            "{glyph?: name, layer?: id | layers?: [ids of the glyph], allMasters?: bool (default false), glyphs?: [names] (default: the glyph), coordinates: {tag: number | null}} make layers that are not master layers intermediate layers at the given internal coordinates. An axis left out or set to null takes the coordinate of the layer's master. Each coordinate must lie within the range of the masters and virtual masters on its axis, and no layer may land where another layer of the glyph already interpolates from. An alternate layer stays alternate as well. With `allMasters`, each master of the `glyphs` whose own coordinates complete the given ones to a place the glyph has no source at also gets an intermediate layer, a copy of its master layer; `glyph` and `layer` can then be left out. One undo step → {glyph, layer, coordinates: {tag: number | null}, label, layers: [{glyph, layer, label, added: bool}]}; `glyph`, `layer` and `label` are the first's",
             has_doc,
             set_intermediate
         )
@@ -53,7 +56,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Remove Intermediate Status",
             [],
             None,
-            "{glyph: name, layer: id} remove an intermediate layer's coordinates, leaving a backup layer (or an alternate layer, when it has ranges too) → {glyph, layer, label}",
+            "{glyph: name, layer: id | layers: [ids]} remove the coordinates of the intermediate layers among these, leaving backup layers (or alternate layers, where they have ranges too); refused when none is one → {glyph, layer, label, layers: [{glyph, layer, label, added: false}]}",
             has_doc,
             clear_intermediate
         )
@@ -64,7 +67,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Alternate",
             [],
             None,
-            "{glyph: name, layer: id, ranges: {tag: {min?: number | null, max?: number | null}}} make a layer an alternate layer that replaces its master's layer where every axis lies within its range, both bounds included. A missing or null bound is open; an axis left out has no bounds; `{}` makes the `[]` partner of a master layer that carries a range. Master layers take a range too, but not `{}`. An intermediate layer keeps its coordinates → {glyph, layer, ranges: {tag: {min, max}}, label}",
+            "{glyph?: name, layer?: id | layers?: [ids of the glyph], allMasters?: bool (default false), glyphs?: [names] (default: the glyph), ranges: {tag: {min?: number | null, max?: number | null}}} make layers alternate layers that replace their masters' layers where every axis lies within its range, both bounds included. A missing or null bound is open; an axis left out has no bounds; `{}` makes the `[]` partner of a master layer that carries a range. Master layers take a range too, but not `{}`. An intermediate layer keeps its coordinates. With `allMasters`, each master of the `glyphs` without a layer of that range at its own place also gets one, a copy of its master layer (with `{}`: each master whose layer carries a range and has no `[]` partner); `glyph` and `layer` can then be left out. One undo step → {glyph, layer, ranges: {tag: {min, max}}, label, layers: [{glyph, layer, label, added: bool}]}; `glyph`, `layer` and `label` are the first's",
             has_doc,
             set_alternate
         )
@@ -75,7 +78,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Remove Alternate Status",
             [],
             None,
-            "{glyph: name, layer: id} remove a layer's alternate ranges, leaving an ordinary master or backup layer (or an intermediate layer, when it has coordinates too) → {glyph, layer, label}",
+            "{glyph: name, layer: id | layers: [ids]} remove the ranges of the alternate layers among these, leaving ordinary master or backup layers (or intermediate layers, where they have coordinates too); refused when none is one → {glyph, layer, label, layers: [{glyph, layer, label, added: false}]}",
             has_doc,
             clear_alternate
         )
@@ -117,6 +120,47 @@ pub fn specs() -> Vec<CommandSpec> {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────────────────────
 
+/// What a command that gives or takes a special status acts on.
+struct SpecialTargets {
+    /// The glyph whose `layers` are named.
+    glyph: Option<String>,
+    layers: Vec<String>,
+    /// The glyphs whose masters get a layer (`allMasters`); empty without it.
+    all_masters_of: Vec<String>,
+}
+
+/// Reads `glyph` with `layer` or `layers` and, where the command `adds` layers, `allMasters` with `glyphs`. Every layer
+/// named is one of the glyph's.
+fn special_targets(p: &Params, font: &Font, adds: bool) -> Result<SpecialTargets> {
+    let glyph = p.opt_str("glyph")?.map(str::to_string);
+    if let Some(name) = &glyph
+        && font.glyph(name).is_none()
+    {
+        return Err(p.bad(format!("there is no glyph `{name}`")));
+    }
+    let named = p.get("layer").is_some() || p.get("layers").is_some();
+    let layers = if named { layer_ids(p, font)? } else { Vec::new() };
+    let all_masters = adds && p.bool_or("allMasters", false)?;
+    if named || !all_masters {
+        let name = glyph.as_deref().ok_or_else(|| p.bad("`glyph` is required"))?;
+        if layers.is_empty() && !all_masters {
+            return Err(p.bad("`layer` or `layers` is required"));
+        }
+        for id in &layers {
+            find_layer(p, font, name, id)?;
+        }
+    }
+    let all_masters_of = if all_masters {
+        match p.opt_glyphs("glyphs", font)? {
+            Some(glyphs) => glyphs,
+            None => vec![glyph.clone().ok_or_else(|| p.bad("`glyph` or `glyphs` is required"))?],
+        }
+    } else {
+        Vec::new()
+    };
+    Ok(SpecialTargets { glyph, layers, all_masters_of })
+}
+
 fn find_layer<'f>(p: &Params, font: &'f Font, glyph: &str, id: &str) -> Result<(&'f Glyph, &'f Layer)> {
     let g = font.glyph(glyph).ok_or_else(|| p.bad(format!("there is no glyph `{glyph}`")))?;
     let layer = g.layers.iter().find(|l| l.id == id).ok_or_else(|| p.bad(format!("glyph `{glyph}` has no layer `{id}`")))?;
@@ -155,41 +199,132 @@ fn opt_coordinate(p: &Params, what: &str, v: Option<&Value>) -> Result<Option<f6
 /// Whether the sources of `glyph` can be read.
 fn sources_ok(font: &Font, glyph: &str) -> std::result::Result<(), String> {
     let designspace = Designspace::new(font).map_err(|e| e.to_string())?;
-    GlyphSources::of(font, &designspace, glyph).map(|_| ()).map_err(|e| e.to_string())
+    sources_in(font, &designspace, glyph)
 }
 
-/// Changes one layer's special attributes as one undo step. The change is refused when the
-/// glyph's sources could be read before it and cannot after it.
-fn edit_attrs(s: &mut Session, p: &Params, label: &str, glyph: &str, id: &str, f: impl FnOnce(&mut Layer)) -> Result<Option<String>> {
-    let readable_before = sources_ok(s.font()?, glyph).is_ok();
+/// [`sources_ok`] in a designspace already read.
+fn sources_in(font: &Font, designspace: &Designspace, glyph: &str) -> std::result::Result<(), String> {
+    GlyphSources::of(font, designspace, glyph).map(|_| ()).map_err(|e| e.to_string())
+}
+
+/// What changes in one glyph: the layers that take the change, and layers added to it.
+struct Change {
+    glyph: String,
+    set: Vec<String>,
+    add: Vec<Layer>,
+}
+
+/// Changes special attributes as one undo step: `f` on each layer of every change, then its new layers after the last
+/// of their master. Refused when the sources of a glyph could be read before it and cannot after it. → a row per layer.
+fn edit_attrs(s: &mut Session, p: &Params, label: &str, changes: Vec<Change>, f: impl Fn(&mut Layer)) -> Result<Vec<Value>> {
+    // Attributes of layers move no axis and no master, so the designspace stays as it is.
+    let designspace = Designspace::new(s.font()?);
+    let readable = |font: &Font, glyph: &str| match &designspace {
+        Ok(d) => sources_in(font, d, glyph),
+        Err(e) => Err(e.to_string()),
+    };
     s.edit(label, |font| {
-        {
-            let mut g = font.glyph_mut(glyph).map_err(|_| p.bad(format!("there is no glyph `{glyph}`")))?;
-            crate::check_unlocked(&g)?;
-            let layer = g.layers.iter_mut().find(|l| l.id == id).ok_or_else(|| p.bad(format!("glyph `{glyph}` has no layer `{id}`")))?;
-            f(layer);
+        let mut rows = Vec::new();
+        for Change { glyph, set, add } in changes {
+            let readable_before = readable(font, &glyph).is_ok();
+            let mut done: Vec<(String, bool)> = Vec::with_capacity(set.len().saturating_add(add.len()));
+            {
+                let mut g = font.glyph_mut(&glyph).map_err(|_| p.bad(format!("there is no glyph `{glyph}`")))?;
+                crate::check_unlocked(&g)?;
+                if !add.is_empty() && g.layers.len().saturating_add(add.len()) > super::layers::MAX_LAYERS {
+                    let most = super::layers::MAX_LAYERS;
+                    return Err(p.bad(format!("glyph `{glyph}` has {} layers; at most {most} are allowed", g.layers.len())));
+                }
+                for id in set {
+                    let layer = g.layers.iter_mut().find(|l| l.id == id).ok_or_else(|| p.bad(format!("glyph `{glyph}` has no layer `{id}`")))?;
+                    f(layer);
+                    done.push((id, false));
+                }
+                for layer in add {
+                    done.push((layer.id.clone(), true));
+                    let at = g.layers.iter().rposition(|l| l.master == layer.master).map_or(g.layers.len(), |i| i.saturating_add(1));
+                    g.layers.insert(at, layer);
+                }
+            }
+            if readable_before && let Err(reason) = readable(font, &glyph) {
+                return Err(p.bad(format!("refused: glyph `{glyph}` could no longer interpolate: {reason}")));
+            }
+            let g = font.glyph(&glyph).ok_or_else(|| p.bad(format!("there is no glyph `{glyph}`")))?;
+            for (id, added) in done {
+                let label = g.layers.iter().find(|l| l.id == id).and_then(|l| special_label(font, l));
+                rows.push(json!({"glyph": glyph, "layer": id, "label": label, "added": added}));
+            }
         }
-        if readable_before && let Err(reason) = sources_ok(font, glyph) {
-            return Err(p.bad(format!("refused: glyph `{glyph}` could no longer interpolate: {reason}")));
-        }
-        let g = font.glyph(glyph).ok_or_else(|| p.bad(format!("there is no glyph `{glyph}`")))?;
-        Ok(g.layers.iter().find(|l| l.id == id).and_then(|l| special_label(font, l)))
+        Ok(rows)
     })
+}
+
+/// The reply of a set or clear command: the first row's keys, `extra`, and every row.
+fn special_reply(rows: Vec<Value>, extra: Option<(&str, Map<String, Value>)>) -> Value {
+    let mut out = Map::new();
+    if let Some(Value::Object(first)) = rows.first() {
+        for key in ["glyph", "layer", "label"] {
+            out.insert(key.into(), first.get(key).cloned().unwrap_or(Value::Null));
+        }
+    }
+    if let Some((key, map)) = extra {
+        out.insert(key.into(), Value::Object(map));
+    }
+    out.insert("layers".into(), Value::Array(rows));
+    Value::Object(out)
+}
+
+/// The change of the layers named by `t` that `wanted` picks, and an empty one for each other glyph `allMasters` names.
+fn named(font: &Font, t: &SpecialTargets, wanted: impl Fn(&Layer) -> bool) -> Vec<Change> {
+    let mut out = Vec::new();
+    if let Some(g) = t.glyph.as_deref().and_then(|name| font.glyph(name)) {
+        let set: Vec<String> = g.layers.iter().filter(|l| t.layers.contains(&l.id) && wanted(l)).map(|l| l.id.clone()).collect();
+        if !set.is_empty() || t.all_masters_of.contains(&g.name) {
+            out.push(Change { glyph: g.name.clone(), set, add: Vec::new() });
+        }
+    }
+    let others = t.all_masters_of.iter().filter(|name| t.glyph.as_ref() != Some(*name));
+    out.extend(others.map(|glyph| Change { glyph: glyph.clone(), set: Vec::new(), add: Vec::new() }));
+    out
+}
+
+/// A copy of `master_layer` under the same master, hidden, without special attributes, to be given some.
+fn copy_of(p: &Params, g: &Glyph, added: &[Layer], master_layer: &Layer, seed: &str) -> Result<Layer> {
+    let count = g.layers.len().saturating_add(added.len());
+    let seed = format!("{}|{seed}|{}|{count}", g.name, master_layer.id);
+    let taken = |id: &str| g.layers.iter().chain(added).any(|l| l.id == id);
+    let id = super::layers::new_layer_id(&seed, taken).ok_or_else(|| p.bad("could not find a free layer id"))?;
+    let mut layer = master_layer.clone();
+    layer.id = id;
+    layer.info.name = None;
+    layer.info.attrs = LayerAttrs::default();
+    layer.info.visible = false;
+    set_inactive(&mut layer, false);
+    Ok(layer)
+}
+
+/// Refuses a change that leaves everything as it is.
+fn something_to_do(p: &Params, changes: Vec<Change>) -> Result<Vec<Change>> {
+    let changes: Vec<Change> = changes.into_iter().filter(|c| !c.set.is_empty() || !c.add.is_empty()).collect();
+    if changes.is_empty() {
+        return Err(p.bad("every master already has such a layer"));
+    }
+    Ok(changes)
 }
 
 // ── Intermediate layers ─────────────────────────────────────────────────────────────────────────
 
 fn set_intermediate(s: &mut Session, value: &Value) -> Result<Value> {
     let p = Params::new("layers.setIntermediate", value)?;
-    let glyph = p.str("glyph")?.to_string();
-    let id = p.str("layer")?.to_string();
     let given = p.opt_object("coordinates")?.ok_or_else(|| p.bad("`coordinates` is required: {tag: number or null}"))?;
     let font = s.font()?;
     if font.axes.is_empty() {
         return Err(p.bad("the font has no axes: an intermediate layer needs at least one"));
     }
-    let (_, layer) = find_layer(&p, font, &glyph, &id)?;
-    if layer.is_master_layer() {
+    let targets = special_targets(&p, font, true)?;
+    let mut changes = named(font, &targets, |_| true);
+    let is_master = |c: &Change| font.glyph(&c.glyph).is_some_and(|g| g.layers.iter().any(|l| l.is_master_layer() && c.set.contains(&l.id)));
+    if changes.iter().any(is_master) {
         return Err(p.bad("a master layer cannot be an intermediate layer: add a layer under the master and make that one intermediate"));
     }
     let designspace = Designspace::new(font).map_err(|e| p.bad(format!("the font's axes and masters cannot interpolate: {e}")))?;
@@ -205,9 +340,61 @@ fn set_intermediate(s: &mut Session, value: &Value) -> Result<Value> {
             *slot = value;
         }
     }
+    if !targets.all_masters_of.is_empty() {
+        let of: HashSet<&str> = targets.all_masters_of.iter().map(String::as_str).collect();
+        for change in changes.iter_mut().filter(|c| of.contains(c.glyph.as_str())) {
+            change.add = intermediates_of_masters(&p, font, &designspace, change, &coords)?;
+        }
+        changes = something_to_do(&p, changes)?;
+    }
     let echo: Map<String, Value> = font.axes.iter().zip(&coords).map(|(a, c)| (a.tag.clone(), json!(c))).collect();
-    let label = edit_attrs(s, &p, "Intermediate", &glyph, &id, |layer| layer.info.attrs.coordinates = coords)?;
-    Ok(json!({"glyph": glyph, "layer": id, "coordinates": echo, "label": label}))
+    let rows = edit_attrs(s, &p, "Intermediate", changes, |layer| layer.info.attrs.coordinates.clone_from(&coords))?;
+    Ok(special_reply(rows, Some(("coordinates", echo))))
+}
+
+/// Whether `a` and `b` are the same place.
+fn same_place(a: &Location, b: &Location) -> bool {
+    a.0.len() == b.0.len() && a.0.iter().zip(&b.0).all(|(a, b)| (a - b).abs() <= RANGE_SLACK * (1.0 + b.abs()))
+}
+
+/// An intermediate layer at `coords` for each master of the glyph of `change` that would put one where the glyph has no
+/// source yet, the layers the change sets counted as already there. Masters whose coordinates complete `coords` to the
+/// same place get one layer, under the first of them.
+fn intermediates_of_masters(p: &Params, font: &Font, designspace: &Designspace, change: &Change, coords: &[Option<f64>]) -> Result<Vec<Layer>> {
+    let glyph = &change.glyph;
+    let g = font.glyph(glyph).ok_or_else(|| p.bad(format!("there is no glyph `{glyph}`")))?;
+    if let Some(l) = g.layers.iter().find(|l| change.set.contains(&l.id) && !l.info.attrs.axis_rules.is_empty()) {
+        return Err(
+            p.bad(format!("`allMasters` adds plain intermediate layers, and {} of glyph `{glyph}` is an alternate layer", layer_title(font, l)))
+        );
+    }
+    let at = |base: &Location| {
+        let mut location = base.clone();
+        for (i, c) in coords.iter().enumerate() {
+            if let (Some(c), Some(slot)) = (c, designspace_axis(designspace, i).and_then(|d| location.0.get_mut(d))) {
+                *slot = *c;
+            }
+        }
+        location
+    };
+    let sources = GlyphSources::of(font, designspace, glyph).map_err(|e| p.bad(format!("glyph `{glyph}` cannot interpolate: {e}")))?;
+    let mut taken: Vec<Location> =
+        sources.main.iter().chain(&sources.inactive).filter(|s| !change.set.contains(&s.layer_id)).map(|s| s.location.clone()).collect();
+    let set = g.layers.iter().filter(|l| change.set.contains(&l.id));
+    taken.extend(set.filter_map(|l| designspace.master(&l.master)).map(|m| at(&m.location)));
+    let mut added: Vec<Layer> = Vec::new();
+    for m in designspace.masters() {
+        let Some(master_layer) = g.layer(&m.id) else { continue };
+        let location = at(&m.location);
+        if taken.iter().any(|l| same_place(l, &location)) {
+            continue;
+        }
+        let mut layer = copy_of(p, g, &added, master_layer, "intermediate")?;
+        layer.info.attrs.coordinates = coords.to_vec();
+        added.push(layer);
+        taken.push(location);
+    }
+    Ok(added)
 }
 
 /// Refuses a coordinate `x` on designspace axis `d` beyond the masters and virtual masters.
@@ -273,9 +460,7 @@ fn add_intermediate(s: &mut Session, value: &Value) -> Result<Value> {
     };
     let location = at(&master.location);
     let sources = GlyphSources::of(font, &designspace, &glyph).map_err(|e| p.bad(format!("glyph `{glyph}` cannot interpolate: {e}")))?;
-    let same =
-        |l: &Location| l.0.len() == location.0.len() && l.0.iter().zip(&location.0).all(|(a, b)| (a - b).abs() <= RANGE_SLACK * (1.0 + b.abs()));
-    if let Some(source) = sources.main.iter().chain(&sources.inactive).find(|s| same(&s.location)) {
+    if let Some(source) = sources.main.iter().chain(&sources.inactive).find(|s| same_place(&s.location, &location)) {
         let title = g.layers.iter().find(|l| l.id == source.layer_id).map_or_else(|| source.layer_id.clone(), |l| layer_title(font, l));
         return Err(p.bad(format!("glyph `{glyph}` already has a source there: {title}")));
     }
@@ -311,28 +496,27 @@ fn add_intermediate(s: &mut Session, value: &Value) -> Result<Value> {
 
 fn clear_intermediate(s: &mut Session, value: &Value) -> Result<Value> {
     let p = Params::new("layers.clearIntermediate", value)?;
-    let glyph = p.str("glyph")?.to_string();
-    let id = p.str("layer")?.to_string();
-    let (_, layer) = find_layer(&p, s.font()?, &glyph, &id)?;
-    if layer.info.attrs.coordinates.is_empty() {
-        return Err(p.bad(format!("layer `{id}` of glyph `{glyph}` is not an intermediate layer")));
+    let font = s.font()?;
+    let targets = special_targets(&p, font, false)?;
+    let changes = named(font, &targets, |l| !l.info.attrs.coordinates.is_empty());
+    if changes.is_empty() {
+        return Err(p.bad(format!("not an intermediate layer: {}", targets.layers.join(", "))));
     }
-    let label = edit_attrs(s, &p, "Remove Intermediate Status", &glyph, &id, |layer| layer.info.attrs.coordinates.clear())?;
-    Ok(json!({"glyph": glyph, "layer": id, "label": label}))
+    let rows = edit_attrs(s, &p, "Remove Intermediate Status", changes, |layer| layer.info.attrs.coordinates.clear())?;
+    Ok(special_reply(rows, None))
 }
 
 // ── Alternate layers ────────────────────────────────────────────────────────────────────────────
 
 fn set_alternate(s: &mut Session, value: &Value) -> Result<Value> {
     let p = Params::new("layers.setAlternate", value)?;
-    let glyph = p.str("glyph")?.to_string();
-    let id = p.str("layer")?.to_string();
     let given = p.opt_object("ranges")?.ok_or_else(|| p.bad("`ranges` is required: {tag: {min?, max?}}, or {} for the `[]` partner"))?;
     let font = s.font()?;
     if font.axes.is_empty() {
         return Err(p.bad("the font has no axes: an alternate layer needs at least one"));
     }
-    let (_, layer) = find_layer(&p, font, &glyph, &id)?;
+    let targets = special_targets(&p, font, true)?;
+    let mut changes = named(font, &targets, |_| true);
     let mut rules = vec![AxisRule::default(); font.axes.len()];
     for (tag, v) in given {
         let i = font_axis(&p, font, "ranges", tag)?;
@@ -354,24 +538,64 @@ fn set_alternate(s: &mut Session, value: &Value) -> Result<Value> {
         }
     }
     let bounded = rules.iter().any(|r| r.min.is_some() || r.max.is_some());
-    if layer.is_master_layer() && !bounded {
+    let is_master = |c: &Change| font.glyph(&c.glyph).is_some_and(|g| g.layers.iter().any(|l| l.is_master_layer() && c.set.contains(&l.id)));
+    if !bounded && changes.iter().any(is_master) {
         return Err(p.bad("a master layer needs a range: the `[]` partner is another layer under the master"));
     }
     let echo: Map<String, Value> = font.axes.iter().zip(&rules).map(|(a, r)| (a.tag.clone(), json!({"min": r.min, "max": r.max}))).collect();
-    let label = edit_attrs(s, &p, "Alternate", &glyph, &id, |layer| layer.info.attrs.axis_rules = rules)?;
-    Ok(json!({"glyph": glyph, "layer": id, "ranges": echo, "label": label}))
+    if !targets.all_masters_of.is_empty() {
+        let designspace = Designspace::new(font).map_err(|e| p.bad(format!("the font's axes and masters cannot interpolate: {e}")))?;
+        let of: HashSet<&str> = targets.all_masters_of.iter().map(String::as_str).collect();
+        for change in changes.iter_mut().filter(|c| of.contains(c.glyph.as_str())) {
+            change.add = alternates_of_masters(&p, font, &designspace, change, &rules)?;
+        }
+        changes = something_to_do(&p, changes)?;
+    }
+    let rows = edit_attrs(s, &p, "Alternate", changes, |layer| layer.info.attrs.axis_rules.clone_from(&rules))?;
+    Ok(special_reply(rows, Some(("ranges", echo))))
+}
+
+/// An alternate layer of `rules` for each master of the glyph of `change` that has none at its own place, the layers
+/// the change sets counted. Without bounds, for each master whose layer carries a range and has no `[]` partner.
+fn alternates_of_masters(p: &Params, font: &Font, designspace: &Designspace, change: &Change, rules: &[AxisRule]) -> Result<Vec<Layer>> {
+    let glyph = &change.glyph;
+    let g = font.glyph(glyph).ok_or_else(|| p.bad(format!("there is no glyph `{glyph}`")))?;
+    let has_bound = |rules: &[AxisRule]| rules.iter().any(|r| r.min.is_some() || r.max.is_some());
+    let wanted = RangeSet::from_rules(designspace, rules).map_err(|e| p.bad(e.to_string()))?;
+    let carries = |l: &Layer| {
+        let a = &l.info.attrs;
+        if !a.coordinates.is_empty() {
+            return false;
+        }
+        if change.set.contains(&l.id) {
+            return true;
+        }
+        !a.axis_rules.is_empty() && RangeSet::from_rules(designspace, &a.axis_rules).is_ok_and(|r| r == wanted)
+    };
+    let mut added: Vec<Layer> = Vec::new();
+    for m in designspace.masters() {
+        let Some(master_layer) = g.layer(&m.id) else { continue };
+        let partner_of_none = !has_bound(rules) && !has_bound(&master_layer.info.attrs.axis_rules);
+        if partner_of_none || g.layers.iter().any(|l| l.master == m.id && carries(l)) {
+            continue;
+        }
+        let mut layer = copy_of(p, g, &added, master_layer, "alternate")?;
+        layer.info.attrs.axis_rules = rules.to_vec();
+        added.push(layer);
+    }
+    Ok(added)
 }
 
 fn clear_alternate(s: &mut Session, value: &Value) -> Result<Value> {
     let p = Params::new("layers.clearAlternate", value)?;
-    let glyph = p.str("glyph")?.to_string();
-    let id = p.str("layer")?.to_string();
-    let (_, layer) = find_layer(&p, s.font()?, &glyph, &id)?;
-    if layer.info.attrs.axis_rules.is_empty() {
-        return Err(p.bad(format!("layer `{id}` of glyph `{glyph}` is not an alternate layer")));
+    let font = s.font()?;
+    let targets = special_targets(&p, font, false)?;
+    let changes = named(font, &targets, |l| !l.info.attrs.axis_rules.is_empty());
+    if changes.is_empty() {
+        return Err(p.bad(format!("not an alternate layer: {}", targets.layers.join(", "))));
     }
-    let label = edit_attrs(s, &p, "Remove Alternate Status", &glyph, &id, |layer| layer.info.attrs.axis_rules.clear())?;
-    Ok(json!({"glyph": glyph, "layer": id, "label": label}))
+    let rows = edit_attrs(s, &p, "Remove Alternate Status", changes, |layer| layer.info.attrs.axis_rules.clear())?;
+    Ok(special_reply(rows, None))
 }
 
 // ── Re-Interpolate ──────────────────────────────────────────────────────────────────────────────

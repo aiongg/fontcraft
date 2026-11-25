@@ -10,7 +10,7 @@ use fontcraft_engine::Session;
 use fontcraft_engine::model::Layer;
 use serde_json::{Value, json};
 
-use super::{DropAction, Props, drop_action, drop_command, show};
+use super::{DropAction, Props, drop_action, drop_command, row_command, show};
 use crate::app::models::layers::{LayerRow, LayersModel};
 use crate::app::{APP, FontCraftApp, Msg, ViewMsg};
 
@@ -145,4 +145,70 @@ fn rows_and_buttons_post_their_commands() {
             Msg::run("layers.addBackupLayer", json!({"glyphs": ["A"], "master": "m01", "from": "m01"})),
         ]
     );
+}
+
+/// Choosing Alternate on one of several selected rows opens the editor on all of them, filled with the first one's
+/// values; what is typed there goes to every layer, For All Masters adds one under the other masters, OK is one undo
+/// step and Cancel changes nothing. Unticking takes the status off the selected rows that have it.
+#[test]
+fn the_special_layer_editors_act_on_the_selected_rows_and_on_all_masters() {
+    let (mut app, [one, two, _, other]) = two_masters();
+    app.session.execute("font.axes.add", &json!({"name": "Weight", "tag": "wght"})).unwrap();
+    app.session.execute("font.master.setAxisLocation", &json!({"masters": [0], "location": [100]})).unwrap();
+    app.session.execute("font.master.setAxisLocation", &json!({"masters": [1], "location": [900]})).unwrap();
+    shell(&mut app, "layers.select", json!({"layer": one}));
+    shell(&mut app, "layers.select", json!({"layer": other, "extend": "toggle"}));
+    let model = (*app.models.layers).clone();
+    assert_eq!(model.selection, [one.clone(), other.clone()]);
+    assert_eq!(
+        row_command(&model, "A", row(&model, &two), "layers.setAlternate"),
+        super::edit_special("A", &[two.as_str()], super::Part::Alternate),
+        "a row outside the selection stands alone"
+    );
+    let call = |app: &mut FontCraftApp, method: &str, params: Value| crate::control::dispatch(app, method, &params).unwrap();
+    let label = |app: &FontCraftApp, id: &str| app.models.layers.row(id).and_then(|r| r.bracket.clone());
+    let steps = |app: &FontCraftApp| app.session.doc().unwrap().history.undo.len();
+
+    app.sent.push(row_command(&model, "A", row(&model, &one), "layers.setAlternate"));
+    app.drain();
+    let opened = call(&mut app, "ui.dialog.inspect", json!({}));
+    assert_eq!((&opened["dialog"], &opened["params"]["layers"]), (&json!("popover.alternateLayer"), &json!([one, other])), "{opened}");
+    let before = app.session.doc().unwrap().font.clone();
+    call(&mut app, "ui.dialog.set", json!({"field": "wght.min", "value": "600"}));
+    call(&mut app, "ui.dialog.cancel", json!({}));
+    assert_eq!(app.session.doc().unwrap().font.glyphs, before.glyphs, "Cancel");
+
+    app.sent.push(row_command(&model, "A", row(&model, &one), "layers.setAlternate"));
+    app.drain();
+    let count = steps(&app);
+    call(&mut app, "ui.dialog.set", json!({"field": "wght.min", "value": "600"}));
+    call(&mut app, "ui.dialog.confirm", json!({}));
+    app.drain();
+    assert_eq!(steps(&app), count + 1, "one undo step");
+    assert_eq!((label(&app, &one).as_deref(), label(&app, &other).as_deref()), (Some("[600‹wg]"), Some("[600‹wg]")));
+
+    // The editor opens on the layer's range. With another range the other master has no layer, so it gets one.
+    let model = (*app.models.layers).clone();
+    app.sent.push(super::edit_special("A", &[one.as_str()], super::Part::Alternate));
+    app.drain();
+    let opened = call(&mut app, "ui.dialog.inspect", json!({}));
+    assert_eq!(opened["params"]["ranges"], json!({"wght": {"min": 600.0}}), "{opened}");
+    call(&mut app, "ui.dialog.set", json!({"field": "wght.min", "value": "700"}));
+    call(&mut app, "ui.dialog.set", json!({"field": "allMasters", "value": true}));
+    let done = call(&mut app, "ui.dialog.confirm", json!({}));
+    app.drain();
+    assert_eq!(done["params"]["allMasters"], true);
+    let of = |master: &str| app.models.layers.all.iter().filter(|r| r.master == master && r.bracket.as_deref() == Some("[700‹wg]")).count();
+    assert_eq!((of("m01"), of("m02")), (1, 1), "a layer under the other master");
+
+    app.sent.push(row_command(&model, "A", row(&model, &one), "layers.setAlternate"));
+    app.drain();
+    assert!(app.status.is_empty(), "{}", app.status);
+    assert_eq!((label(&app, &one), label(&app, &other)), (None, None), "unticked on both");
+
+    // Intermediate leaves the master rows of the selection out.
+    let mut model = (*app.models.layers).clone();
+    model.selection = vec!["m01".into(), one.clone(), other.clone()];
+    let msg = row_command(&model, "A", row(&model, &one), "layers.setIntermediate");
+    assert_eq!(msg, super::edit_special("A", &[one.as_str(), other.as_str()], super::Part::Intermediate));
 }
