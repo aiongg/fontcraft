@@ -6,6 +6,7 @@
 //! addresses, nearest points, splits, extremes, inflections, bounds and grid rounding.
 #![forbid(unsafe_code)]
 
+pub mod crossings;
 pub mod cu2qu_multi;
 pub mod expr;
 pub mod fit;

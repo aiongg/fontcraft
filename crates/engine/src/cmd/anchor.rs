@@ -466,7 +466,8 @@ fn align_component(s: &mut Session, p: &Params, t: &Targets, shape: usize) -> Re
     if t.side == LayerSide::Foreground && fontcraft_components::align::component_alignment(font, r.layer, shape).is_some() {
         return Err(p.bad(format!("component {shape} is placed by automatic alignment: turn alignment off for it to move it")));
     }
-    let master = c.info.master_id.as_deref().unwrap_or(r.layer.master.as_str());
+    let pinned = font.glyph(&c.glyph).and_then(|g| c.pinned_layer(g));
+    let master = pinned.map_or(r.layer.master.as_str(), |l| l.master.as_str());
     let origin = c.affine() * component_origin(font, &c.glyph, master);
     let to = node.point();
     let d: Vec2 = to - origin;

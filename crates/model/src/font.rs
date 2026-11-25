@@ -904,7 +904,10 @@ impl Font {
     /// into the paths they sit on, caps first, and smart
     /// components are drawn interpolated ([`crate::smart`]), after the layer's other shapes, as
     /// the reference compilers order them. A layer whose caps cannot be fitted is drawn with its
-    /// corners only, one whose corners cannot be fitted without them, and a smart component that cannot be interpolated is drawn as a plain component.
+    /// corners only, one whose corners cannot be fitted without them, and a smart component that
+    /// cannot be interpolated is drawn as a plain component. A component pinned to a master or
+    /// layer of its base glyph ([`Component::pinned_layer`]) is drawn from there, and so is what
+    /// its base glyph is made of.
     ///
     /// Bounded work: components nest at most [`MAX_COMPONENT_DEPTH`] deep, the result has at most
     /// [`MAX_OUTLINE_ELEMENTS`] segments, every point is within [`MAX_COORDINATE`], and at most
@@ -921,18 +924,25 @@ impl Font {
     }
 
     fn outline_at(&self, g: &Glyph, master: &str, depth: usize, budget: &mut OutlineBudget) -> Result<BezPath, ModelError> {
-        let glyph = g.name.as_str();
+        match g.layer(master) {
+            Some(layer) => self.layer_outline(g, layer, depth, budget),
+            None if depth > MAX_COMPONENT_DEPTH => Err(ModelError::ComponentCycle(g.name.clone())),
+            None => Ok(BezPath::new()),
+        }
+    }
+
+    /// The outline of one layer of `g`, its components read for the layer's master.
+    fn layer_outline(&self, g: &Glyph, layer: &Layer, depth: usize, budget: &mut OutlineBudget) -> Result<BezPath, ModelError> {
+        let (glyph, master) = (g.name.as_str(), layer.master.as_str());
         if depth > MAX_COMPONENT_DEPTH {
             return Err(ModelError::ComponentCycle(glyph.to_string()));
         }
         let bad = |message: &str| ModelError::BadOutline { glyph: glyph.to_string(), message: message.to_string() };
         let mut out = BezPath::new();
-        let Some(layer) = g.layer(master) else { return Ok(out) };
         // Caps and other attachments go in first, then corners. A layer whose attachments cannot
         // be fitted is drawn with its corners only, and one whose corners cannot be fitted without
         // them, as the compile leaves it.
-        let cornered =
-            crate::attach::insert_attachments(self, layer).ok().flatten().or_else(|| crate::corner::insert_corners(self, layer).ok().flatten());
+        let cornered = crate::pinned::fitted(self, layer);
         let shapes = cornered.as_deref().unwrap_or(&layer.shapes);
         // Smart components come after the layer's other shapes.
         let mut tail = BezPath::new();
@@ -977,7 +987,8 @@ impl Font {
     }
 
     /// The outline the component `c` draws on a layer of `master`, its transform applied: a smart
-    /// component interpolated as [`Font::outline`] draws it, any other its base glyph's outline.
+    /// component interpolated as [`Font::outline`] draws it, any other its base glyph's outline, on
+    /// the master or layer the component is pinned to.
     pub fn component_outline(&self, c: &Component, master: &str) -> Result<BezPath, ModelError> {
         let mut budget = OutlineBudget { elements: MAX_OUTLINE_ELEMENTS, smart_draws: crate::smart::MAX_SMART_DRAWS_PER_LAYER };
         if let Some(drawn) = crate::smart::component_shapes(self, c, master, &mut budget.smart_draws).ok().flatten() {
@@ -1000,7 +1011,10 @@ impl Font {
             return Err(bad("a component transform is not a number".into()));
         }
         let base = self.glyph(&c.glyph).ok_or_else(|| ModelError::NoSuchGlyph(c.glyph.clone()))?;
-        let mut inner = self.outline_at(base, master, depth, budget)?;
+        let mut inner = match c.pinned_layer(base) {
+            Some(layer) => self.layer_outline(base, layer, depth, budget)?,
+            None => self.outline_at(base, master, depth, budget)?,
+        };
         inner.apply_affine(c.affine());
         // A transform can push points anywhere: hold the result to the same limits.
         let far = |p: Point| !(in_range(p.x) && in_range(p.y));

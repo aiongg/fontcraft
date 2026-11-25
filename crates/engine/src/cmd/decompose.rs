@@ -139,6 +139,8 @@ fn take(left: &mut usize, spent: &mut bool, n: usize, what: &str, limit: usize) 
 /// command.
 struct Expander<'f, 'b> {
     font: &'f Font,
+    /// The master of the layer being decomposed.
+    master: &'f str,
     /// Descend through nested components (Decompose Glyph) instead of keeping them (Decompose).
     nested: bool,
     nodes_left: usize,
@@ -150,9 +152,10 @@ struct Expander<'f, 'b> {
 }
 
 impl<'f, 'b> Expander<'f, 'b> {
-    fn new(font: &'f Font, nested: bool, call: &'b mut CallBudget) -> Self {
+    fn new(font: &'f Font, master: &'f str, nested: bool, call: &'b mut CallBudget) -> Self {
         Self {
             font,
+            master,
             nested,
             nodes_left: MAX_OUTLINE_ELEMENTS,
             shapes_left: MAX_LAYER_SHAPES,
@@ -254,6 +257,10 @@ impl<'f, 'b> Expander<'f, 'b> {
                 if self.nested {
                     self.component(&inner, context, depth + 1, out)?;
                 } else {
+                    // What a pinned component is made of keeps the pinned master.
+                    if context.master != self.master && inner.info.master_id.is_none() {
+                        inner.info.master_id = Some(context.master.clone());
+                    }
                     self.charge(0)?;
                     out.push(Shape::Component(inner));
                 }
@@ -284,7 +291,7 @@ fn decompose_shapes(
     nested: bool,
     call: &mut CallBudget,
 ) -> std::result::Result<Decomposed, String> {
-    let mut ex = Expander::new(font, nested, call);
+    let mut ex = Expander::new(font, &layer.master, nested, call);
     let mut shapes = Vec::with_capacity(layer.shapes.len());
     let mut map = Vec::with_capacity(layer.shapes.len());
     let mut added = Vec::new();

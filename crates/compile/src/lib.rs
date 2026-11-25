@@ -400,8 +400,9 @@ pub fn compile(font: &Font, target: &Target, flavour: Flavour, options: &Options
 /// corner components of the other layers ([`fontcraft_model::corner::insert_all_corner_components`]), then every smart component
 /// drawn as outlines ([`fontcraft_model::smart::draw_smart_components`]), the order in which
 /// both reference compilers apply them when they load a source. Corners go first because a
-/// smart glyph's pole layers can hold corners. A layer whose corners cannot be fitted, and a
-/// smart component that cannot be drawn, stay as they are, with a warning. A font with neither
+/// smart glyph's pole layers can hold corners. Last, components pinned to another master or layer
+/// become the paths they draw ([`fontcraft_model::pinned::draw_pinned_components`]). A layer whose corners cannot be fitted, and a
+/// smart component that cannot be drawn, stay as they are, with a warning. A font with none
 /// is borrowed, not copied. Callers of [`compile_resolved_from`] resolve the prepared font and
 /// pass the source as it is stored.
 pub fn prepare_source<'a>(font: &'a Font, warnings: &mut Vec<String>) -> Cow<'a, Font> {
@@ -426,6 +427,14 @@ pub fn prepare_source<'a>(font: &'a Font, warnings: &mut Vec<String>) -> Cow<'a,
     if out.glyphs.iter().any(|g| !g.info.parts.is_empty()) {
         let (drawn, report) = fontcraft_model::smart::draw_smart_components(&out);
         warnings.extend(report.kept.into_iter().map(|e| format!("a smart component was written as a plain component: {e}")));
+        out = Cow::Owned(drawn);
+    }
+    let pinned = |l: &fontcraft_model::Layer| {
+        l.shapes.iter().any(|s| matches!(s, fontcraft_model::Shape::Component(c) if fontcraft_model::pinned::is_redirected(&out, c, l)))
+    };
+    if out.glyphs.iter().any(|g| g.layers.iter().any(pinned)) {
+        let (drawn, report) = fontcraft_model::pinned::draw_pinned_components(&out);
+        warnings.extend(report.kept.into_iter().map(|e| format!("a pinned component was written from its glyph's own layer: {e}")));
         out = Cow::Owned(drawn);
     }
     out

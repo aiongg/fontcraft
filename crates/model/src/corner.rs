@@ -20,12 +20,15 @@
 //! - Intermediate layers of the corner glyph named with a width and height in percent
 //!   (`Width 150 Height 100`) are interpolated for the hint's scale on each axis they vary; an
 //!   axis without such a layer is stretched.
-//! - A corner on an extra node (an intersection of two paths) is left out: fitting it needs the
-//!   overlaps removed first.
+//! - A corner on an extra node (an intersection of two closed paths) is fitted on the outline the
+//!   two paths have with their overlap removed (`corner_join`), which replaces them. Corners on
+//!   the paths' own nodes go with the nodes; one on a node that lies inside the outline is left
+//!   out, and so is a corner on two segments that do not cross or whose outline cannot be told.
 
 use fontcraft_geom::{Affine, CubicBez, Line, ParamCurve, ParamCurveArclen, ParamCurveNearest, PathSeg, Point, QuadBez, Vec2};
 use fontcraft_plist::{Array, Dict, Layout, Num, Number, Str, Value};
 
+use crate::corner_join::Joined;
 use crate::{Family, Font, Glyph, Hint, Layer, MAX_OUTLINE_ELEMENTS, Node, NodeKind, Path, Shape, in_range};
 
 /// The hint type of a corner component.
@@ -201,8 +204,8 @@ fn numbers(v: &Value) -> Option<Vec<f64>> {
 }
 
 /// The shapes of `layer` with every corner component fitted in; `Ok(None)` when the layer has
-/// no corner hint. A corner whose glyph does not exist, or that sits on an extra node, is left
-/// out.
+/// no corner hint. A corner whose glyph does not exist is left out, and so is one on an extra node
+/// that is no longer a crossing.
 pub fn insert_corners(font: &Font, layer: &Layer) -> Result<Option<Vec<Shape>>, CornerError> {
     if !layer.info.hints.iter().any(is_corner) {
         return Ok(None);
@@ -225,14 +228,18 @@ pub fn insert_corners(font: &Font, layer: &Layer) -> Result<Option<Vec<Shape>>, 
 
 /// `layer` with the corner hints at `indices` (positions in the layer's hints) fitted into its
 /// paths and removed. The other corner hints on those paths keep pointing at the nodes they sat
-/// on. Hint node indices count in file order, with a closed path's start node last
-/// ([`CornerHint::new`]).
+/// on, or at the segments they sat on. Hint node indices count in file order, with a closed
+/// path's start node last ([`CornerHint::new`]). A corner on an extra node is refused: there is no
+/// node to put it on while the paths overlap.
 pub fn decompose_corners(font: &Font, layer: &Layer, indices: &[usize]) -> Result<Layer, CornerError> {
     let bad = |corner: &str, message: String| CornerError { corner: corner.to_string(), message };
     let mut chosen = Vec::new();
     for &i in indices {
         let hint = layer.info.hints.get(i).ok_or_else(|| bad("", format!("the layer has no hint {i}")))?;
         let corner = corner_hint(hint).map_err(|m| bad("", m))?.ok_or_else(|| bad("", format!("hint {i} is not a corner component")))?;
+        if matches!(corner.target, CornerTarget::Intersection { .. }) {
+            return Err(bad(&corner.name, format!("corner {i} sits on an extra node: remove the overlap first")));
+        }
         if !chosen.iter().any(|(j, _)| *j == i) {
             chosen.push((i, corner));
         }
@@ -248,37 +255,49 @@ pub fn decompose_corners(font: &Font, layer: &Layer, indices: &[usize]) -> Resul
         .iter()
         .enumerate()
         .filter(|(i, _)| !removed.contains(i))
-        .map(|(_, h)| match corner_hint(h) {
-            Ok(Some(CornerHint { target: CornerTarget::Node { shape, node }, .. })) => {
+        .map(|(_, h)| {
+            let Ok(Some(corner)) = corner_hint(h) else { return h.clone() };
+            // A corner inserted after node `p` moves every later node; one inserted after the
+            // last node of a closed contour lands at its front and moves them all.
+            let moved = |shape: usize, node: usize| {
                 let len = lengths.get(shape).copied().unwrap_or(0);
-                let Some(n) = node.checked_rem(len) else { return h.clone() };
-                // A corner inserted after node `p` moves every later node; one inserted after the
-                // last node of a closed contour lands at its front and moves them all.
+                let Some(n) = node.checked_rem(len) else { return node };
                 let shift: usize =
                     inserted.iter().filter(|ins| ins.shape == shape && (ins.vertex < n || ins.vertex + 1 == len)).map(|ins| ins.added).sum();
-                if shift == 0 { h.clone() } else { with_node(h, n.saturating_add(shift)) }
+                if shift == 0 { node } else { n.saturating_add(shift) }
+            };
+            match corner.target {
+                CornerTarget::Node { shape, node } => with_nodes(h, &[(node, moved(shape, node))]),
+                CornerTarget::Intersection { shape, node, other_shape, other_node } => {
+                    with_nodes(h, &[(node, moved(shape, node)), (other_node, moved(other_shape, other_node))])
+                }
             }
-            _ => h.clone(),
         })
         .collect();
     out.info.hints = kept;
     Ok(out)
 }
 
-/// `hint` pointing at node `node` of the same path.
-fn with_node(hint: &Hint, node: usize) -> Hint {
+/// `hint` with the nodes of its origin, each `(old, new)`, on the same paths.
+fn with_nodes(hint: &Hint, nodes: &[(usize, usize)]) -> Hint {
     let mut out = hint.clone();
+    if nodes.iter().all(|(old, new)| old == new) {
+        return out;
+    }
     let Value::Dict(d) = &mut out.value else { return out };
     let Some(origin) = d.get_mut("origin") else { return out };
     match origin {
         Value::Array(a) => {
-            if let Some(slot) = a.items.get_mut(1) {
-                *slot = Value::Number(Number::int(i64::try_from(node).unwrap_or(i64::MAX)));
+            for (slot, (_, node)) in a.items.iter_mut().skip(1).step_by(2).zip(nodes) {
+                *slot = Value::Number(Number::int(i64::try_from(*node).unwrap_or(i64::MAX)));
             }
         }
         Value::String(s) => {
-            let shape = numbers(&Value::String(s.clone())).and_then(|v| v.first().copied()).unwrap_or(0.0);
-            *s = Str::new(format!("{{{shape}, {node}}}"));
+            let mut parts: Vec<String> = numbers(&Value::String(s.clone())).unwrap_or_default().iter().map(|v| format!("{v}")).collect();
+            for (slot, (_, node)) in parts.iter_mut().skip(1).step_by(2).zip(nodes) {
+                *slot = format!("{node}");
+            }
+            *s = Str::new(format!("{{{}}}", parts.join(", ")));
         }
         _ => {}
     }
@@ -332,17 +351,32 @@ struct Inserted {
     added: usize,
 }
 
-/// Fits `hints` into `shapes`, earlier paths and nodes first, and says where each went.
-/// Fits `hints` into `shapes`. A hint counts a closed path's nodes as the reference's format
+/// Fits `hints` into `shapes`, earlier paths and nodes first, and says where each went; the paths
+/// that cross at a corner's extra node are joined first. A hint counts a closed path's nodes as the reference's format
 /// stores them, with the start node last (glyphsLib keeps that numbering in a UFO's hints), while
 /// the model keeps the start node first; the paths are turned to the format's order for the
 /// fitting, as fontc fits them, and back afterwards.
 fn apply(font: &Font, master: &str, shapes: &mut Vec<Shape>, hints: &[CornerHint]) -> Result<Vec<Inserted>, CornerError> {
-    let own = shapes.len();
     turn_closed_paths(shapes, true);
-    let result = apply_in_format_order(font, master, shapes, hints);
+    let extras: Vec<[usize; 4]> = hints
+        .iter()
+        .filter_map(|h| match h.target {
+            CornerTarget::Intersection { shape, node, other_shape, other_node } if font.glyph(&h.name).is_some() => {
+                Some([shape, node, other_shape, other_node])
+            }
+            _ => None,
+        })
+        .collect();
+    let joined = if extras.is_empty() { Joined::default() } else { crate::corner_join::join(shapes, &extras) };
+    let own = shapes.len();
+    let result = apply_in_format_order(font, master, shapes, hints, &joined);
     if let Some(own_shapes) = shapes.get_mut(..own) {
         turn_closed_paths(own_shapes, false);
+    }
+    for &i in joined.emptied.iter().rev() {
+        if i < shapes.len() {
+            shapes.remove(i);
+        }
     }
     result
 }
@@ -363,12 +397,21 @@ fn turn_closed_paths(shapes: &mut [Shape], to_format: bool) {
     }
 }
 
-fn apply_in_format_order(font: &Font, master: &str, shapes: &mut Vec<Shape>, hints: &[CornerHint]) -> Result<Vec<Inserted>, CornerError> {
+fn apply_in_format_order(
+    font: &Font,
+    master: &str,
+    shapes: &mut Vec<Shape>,
+    hints: &[CornerHint],
+    joined: &Joined,
+) -> Result<Vec<Inserted>, CornerError> {
     let mut targets: Vec<(usize, usize, &CornerHint)> = hints
         .iter()
-        .filter_map(|h| match h.target {
-            CornerTarget::Node { shape, node } => Some((shape, node, h)),
-            CornerTarget::Intersection { .. } => None,
+        .filter_map(|h| {
+            let (shape, node) = match h.target {
+                CornerTarget::Node { shape, node } => joined.node(shape, node)?,
+                CornerTarget::Intersection { shape, node, other_shape, other_node } => joined.extra([shape, node, other_shape, other_node])?,
+            };
+            Some((shape, node, h))
         })
         .collect();
     targets.sort_by_key(|&(shape, node, _)| (shape, node));
