@@ -290,14 +290,68 @@ How FontCraft runs it (our design, unconfirmed):
   `exclude` limit the glyphs; with neither `glyph` nor `glyphs`, every glyph is changed.
 - `LSB`, `RSB` and `Width` belong to Transform Metrics (M5); a string holding them is refused
   until then.
-- Cursivy is refused: with a clear error when the master has no horizontal and vertical stems,
-  and as not supported yet otherwise (the correction is undocumented).
+- Cursivy (`path.transformations.slantVsCursivy`) is refused with a clear error when the layer's
+  master has no horizontal and vertical stem above zero; its construction is below.
 - The dialog (`dialog.transformations`) has Translate X and Y, the Origin pop-up, Scale
   horizontal and vertical with a lock, a Slant Kind pop-up (Slant or Cursivy) and the Slant
   field. The lock keeps the two scale fields equal: typing into either sets both. The dialog
   runs the command with `translate` and `scale` objects and leaves out a translation of 0 and a
   scale of 100 %. The "…" menu copies the values as a Filter or PreFilter custom parameter to
   the system clipboard.
+
+#### Cursivy (our construction)
+
+The sources say only that Cursivy is an optically corrected slant and that it reads the master's
+stems. FontCraft builds it as follows (`crates/pathops/src/cursivy.rs`).
+
+What a plain slant does to a stroke. With `t = tan(slant)`, the shear maps (x, y) to (x + t·y, y).
+Take a stroke whose outline has the normal `n = (cos φ, sin φ)` upright. Its sides stay parallel,
+and its thickness becomes `1 / L` times what it was, with `L² = cos²φ + (sin φ − t·cos φ)²`
+(normals map by the inverse transpose of the shear). Three directions matter:
+
+| Stroke | φ | Thickness at 12° |
+|---|---|---|
+| Horizontal (top and bottom of an O) | 90° | unchanged |
+| Vertical stem or side | 0° | `1 / √(1 + t²) = cos 12°` = 0.978; the width measured horizontally is unchanged |
+| Diagonal, top right and bottom left of an O | 45° | 1.11 |
+| Diagonal, top left and bottom right of an O | 135° | 0.90 |
+
+The correction. A slant of a stroke can be read as a shear of its centre line with the pen only
+turned: the shear is a turn plus a stretch along the diagonals, and the stretch is what must not
+reach the thickness. Each side of a stroke stands half a thickness away from the centre line, so
+each point of a curve moves along the outline's outward normal in the slanted outline by
+
+`½ · d(φ) · (w(φ) − 1 / L(φ))`
+
+- `d(φ) = V·cos²φ + H·sin²φ` is the thickness of a round stroke with the first vertical stem `V`
+  and the first horizontal stem `H`, scaled with the outline.
+- `w(φ) = 1 − (1 − cos(slant))·cos⁴φ` is the thickness wanted: that of a slanted stem at the sides,
+  the upright thickness at the diagonals, the tops and the bottoms.
+
+At the sides, the tops and the bottoms the movement is zero, so heights, widths and the joins to
+straight stems stay where the plain slant puts them.
+
+How it is applied to nodes:
+
+- Straight segments and open paths keep the plain slant. A node that ends a straight segment, or
+  where two curves meet at more than 2°, keeps its place.
+- A node between two curves that meet smoothly moves by the correction for its tangent.
+- Handles keep their directions. The two handle lengths of a segment come from a least-squares fit
+  of the curve's movement to the correction at 15 points. The fit also pulls the lengths towards
+  those of the plain slant (changing a handle by its whole length costs as much as missing by 5%
+  of the thicker stem), because in a bold with small counters the fit alone trades one handle
+  against the other. A length changes by at most half.
+- In a quadratic spline the off-curve points between the first and the last move by the correction
+  for the direction of the control polygon there; a segment with one off-curve point moves with
+  its nodes.
+- A point moves by at most 8% of its segment's chord, so brackets and ink traps keep their shape.
+- Inside and outside follow from the direction of the contour with the largest area.
+- With target lists, a segment is corrected when all its nodes are slanted.
+
+Measured while tuning, unrounded, at 12°: a round O with strokes from 30 to 160 units, and Inter's
+O and o in its six masters, keep the thickness of their diagonal strokes within 2.1% (a plain
+slant changes it by 11%). `crates/engine/tests/engine/corpus_cursivy.rs` is the measure over the
+corpus: 2% for a stem's horizontal width, 3% for an O's diagonal strokes.
 
 ### Interpolate with Background (`path.interpolateWithBackground`, Path menu)
 

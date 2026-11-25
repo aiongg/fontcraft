@@ -16,7 +16,10 @@ use std::sync::Arc;
 
 use fontcraft_geom::{Affine, Point, Rect, Shape as _, Vec2, round_point};
 use fontcraft_model::glyphdata::GlyphData;
-use fontcraft_model::{Font, Guide, Layer, LayerParts, LayerSide, MAX_COORDINATE, MAX_GLYPHS, Master, Metrics, Node, Shape, Transform, metric};
+use fontcraft_model::{
+    Font, Guide, Layer, LayerParts, LayerSide, MAX_COORDINATE, MAX_GLYPHS, Master, Metrics, Node, NodeKind, Shape, Transform, metric,
+};
+use fontcraft_pathops as po;
 use serde_json::{Map, Value, json};
 
 use super::common::{grid, in_range, master_metrics};
@@ -227,7 +230,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Transformations",
             ["Path"],
             None,
-            "{glyph?: name, glyphs?: [names], layer?: id, layers?: [ids] (with glyphs; default the first master's layer), side?, points?: [[shape, node]], segments?, shapes?: [index] (target lists with glyph; without them, whole layers), translate?: {x, y}, scale?: {x: percent, y?: percent (default x)}, slant?: degrees, cursivy?: bool, origin?: \"capHeight\" | \"halfCapHeight\" | \"xHeight\" | \"halfXHeight\" | \"baseline\" (default) or an origin object as for transform.mirrorHorizontal, string?: export-filter string} scales, then slants, about the origin, then translates. `string` takes the place of the other settings, e.g. \"Transformations;ScaleX:90;ScaleY:90;Slant:10;SlantCorrection:0;OffsetX:20;Origin:4;\" (Origin 0 cap height … 4 baseline; include: or exclude: name the glyphs); with `string` and no glyph or glyphs, every glyph is changed. cursivy needs the master's stems and is not supported yet. Points and anchors are rounded to the grid → {glyphs: [names], layers: count, origin?: [x, y]}",
+            "{glyph?: name, glyphs?: [names], layer?: id, layers?: [ids] (with glyphs; default the first master's layer), side?, points?: [[shape, node]], segments?, shapes?: [index] (target lists with glyph; without them, whole layers), translate?: {x, y}, scale?: {x: percent, y?: percent (default x)}, slant?: degrees, cursivy?: bool, origin?: \"capHeight\" | \"halfCapHeight\" | \"xHeight\" | \"halfXHeight\" | \"baseline\" (default) or an origin object as for transform.mirrorHorizontal, string?: export-filter string} scales, then slants, about the origin, then translates. `string` takes the place of the other settings, e.g. \"Transformations;ScaleX:90;ScaleY:90;Slant:10;SlantCorrection:0;OffsetX:20;Origin:4;\" (Origin 0 cap height … 4 baseline; include: or exclude: name the glyphs); with `string` and no glyph or glyphs, every glyph is changed. cursivy needs a horizontal and a vertical stem in the layer's master: the slant is corrected so that round strokes keep their thickness; closed paths' curves move, straight segments stay on the plain slant. Points and anchors are rounded to the grid → {glyphs: [names], layers: count, origin?: [x, y]}",
             has_doc,
             transformations
         )
@@ -699,6 +702,41 @@ pub(crate) fn apply(p: &Params, layer: &mut Layer, side: LayerSide, sel: &Select
     Ok(())
 }
 
+/// Where Cursivy puts the nodes of `sel` that it moves off the place the map `m` gives them,
+/// unrounded.
+fn cursivy_places(p: &Params, parts: LayerParts, sel: &Selection, m: Affine, options: po::CursivyOptions) -> Result<Vec<(usize, usize, Point)>> {
+    let moves = |s: usize, n: usize| sel.shapes.contains(&s) || sel.points.contains(&(s, n));
+    let (mut contours, mut shapes) = (Vec::new(), Vec::new());
+    for (i, shape) in parts.shapes.iter().enumerate() {
+        let Shape::Path(path) = shape else { continue };
+        let nodes = path
+            .nodes
+            .iter()
+            .enumerate()
+            .map(|(k, n)| po::Node {
+                point: if moves(i, k) { m * n.point() } else { n.point() },
+                kind: match n.kind {
+                    NodeKind::Line => po::NodeKind::Line,
+                    NodeKind::Curve => po::NodeKind::Curve,
+                    NodeKind::QCurve => po::NodeKind::QCurve,
+                    NodeKind::OffCurve => po::NodeKind::OffCurve,
+                },
+                smooth: n.smooth,
+                tag: None,
+            })
+            .collect();
+        let contour = po::Contour::new(path.closed, nodes);
+        // A path that makes no outline is slanted only.
+        if contour.to_bez().is_ok() {
+            contours.push(contour);
+            shapes.push(i);
+        }
+    }
+    let shape = |c: usize| shapes.get(c).copied();
+    let places = po::cursivy(&contours, |c, n| shape(c).is_some_and(|s| moves(s, n)), options).map_err(|e| p.bad(e.to_string()))?;
+    Ok(places.into_iter().filter_map(|(c, n, at)| Some((shape(c)?, n, at))).collect())
+}
+
 // ── Running a transformation ───────────────────────────────────────────────────────────────────
 
 /// The layers a transformation changes: one target object (`glyph`, with or without target
@@ -757,7 +795,8 @@ fn jobs(p: &Params, font: &Font, many_layers: bool, all_glyphs: bool) -> Result<
 /// used in each layer.
 ///
 /// `image` is the box of the layer's placed image when the image is transformed too (one job):
-/// see [`image_bounds`].
+/// see [`image_bounds`]. `cursivy` is the transformation when its slant is optically corrected;
+/// every layer's master then needs its stems ([`primary_stems`]).
 #[allow(clippy::too_many_arguments)]
 fn run_jobs(
     s: &mut Session,
@@ -768,6 +807,7 @@ fn run_jobs(
     lin: Affine,
     shift: Vec2,
     image: Option<Rect>,
+    cursivy: Option<&Transformations>,
 ) -> Result<Vec<Point>> {
     let step = grid(s.font()?);
     let data = if matches!(origin, Origin::Metric(_)) { s.glyph_data().ok() } else { None };
@@ -784,17 +824,31 @@ fn run_jobs(
                     o
                 }
             };
-            let (sel, o, master) = {
+            let (sel, o, master, stems) = {
                 let r = t.resolve(font)?;
                 crate::check_unlocked(r.glyph)?;
                 // The image alone, when it is given without target lists.
                 let sel = if image.is_some() && !t.has_lists() { Selection::default() } else { selection(t, r.parts) };
                 let bounds = if matches!(origin, Origin::Box(_)) { union(selection_box(font, r.master, r.parts, &sel), image) } else { None };
-                (sel, origin_point(origin, bounds, font, r.master, r.layer.width), r.master.id.clone())
+                let stems = match cursivy {
+                    Some(c) => Some(c.cursivy_options(font, r.master).ok_or_else(|| no_stems(p, r.master))?),
+                    None => None,
+                };
+                (sel, origin_point(origin, bounds, font, r.master, r.layer.width), r.master.id.clone(), stems)
             };
             let m = Affine::translate(shift) * about(o, lin);
             t.edit_layer(font, |l| {
+                let corrected = match stems {
+                    Some(options) => cursivy_places(p, l.parts(t.side), &sel, m, options)?,
+                    None => Vec::new(),
+                };
                 apply(p, l, t.side, &sel, m, step)?;
+                let mut parts = l.parts_mut(t.side);
+                for (s, n, at) in corrected {
+                    let node = parts.node_mut(s, n).ok_or_else(|| p.bad(format!("point [{s}, {n}] does not resolve")))?;
+                    let q = map_point(p, Affine::IDENTITY, at, step)?;
+                    (node.x, node.y) = (q.x, q.y);
+                }
                 if image.is_some() {
                     let placed = super::image::target_mut(p, t, l)?;
                     placed.transform = compose(p, &placed.transform, m)?;
@@ -855,7 +909,7 @@ fn palette(s: &mut Session, v: &Value, id: &'static str, label: &str, lin: impl 
     // A drag with the Rotate or Scale tool previews from the interaction's start: no memory.
     if s.interaction().is_some() {
         s.slot_mut::<LastPalette>().0 = None;
-        return run_jobs(s, &p, label, &jobs, origin, lin, Vec2::ZERO, image).map(|origins| result(&jobs, &origins));
+        return run_jobs(s, &p, label, &jobs, origin, lin, Vec2::ZERO, image, None).map(|origins| result(&jobs, &origins));
     }
     let (doc, before) = {
         let d = s.doc()?;
@@ -867,7 +921,7 @@ fn palette(s: &mut Session, v: &Value, id: &'static str, label: &str, lin: impl 
             restore(s, &p, label, &step.jobs, layers)?;
             origins
         }
-        None => run_jobs(s, &p, label, &step.jobs, origin, lin, Vec2::ZERO, image)?,
+        None => run_jobs(s, &p, label, &step.jobs, origin, lin, Vec2::ZERO, image, None)?,
     };
     let out = result(&step.jobs, &origins);
     let revision = s.doc()?.revision;
@@ -1381,6 +1435,14 @@ impl Transformations {
         Affine::new([1.0, 0.0, shear, 1.0, 0.0, 0.0]) * Affine::scale_non_uniform(sx, sy)
     }
 
+    /// The correction of this slant in a layer of `master`; `None` without stems. The outline's
+    /// stems are scaled with it.
+    fn cursivy_options(&self, font: &Font, master: &Master) -> Option<po::CursivyOptions> {
+        let (vertical, horizontal) = primary_stems(font, master)?;
+        let (sx, sy) = (self.scale.0 / 100.0, self.scale.1 / 100.0);
+        Some(po::CursivyOptions { shear: self.slant.to_radians().tan(), vertical_stem: vertical * sx.abs(), horizontal_stem: horizontal * sy.abs() })
+    }
+
     /// Whether the export string's glyph scoping lets `glyph` through.
     pub fn includes(&self, glyph: &str) -> bool {
         (self.include.is_empty() || self.include.iter().any(|g| g == glyph)) && !self.exclude.iter().any(|g| g == glyph)
@@ -1527,12 +1589,15 @@ pub fn write_transformations(t: &Transformations) -> std::result::Result<String,
     Ok(out)
 }
 
-/// Whether `master` has a horizontal and a vertical stem value, which Cursivy needs.
-fn has_stems(font: &Font, master: &Master) -> bool {
-    let has = |horizontal: bool| {
-        font.stems.iter().enumerate().any(|(i, s)| s.horizontal == horizontal && master.stem_values.get(i).is_some_and(|v| *v > 0.0))
-    };
-    has(true) && has(false)
+/// The first vertical and the first horizontal stem value of `master` that are above zero, which
+/// Cursivy needs.
+fn primary_stems(font: &Font, master: &Master) -> Option<(f64, f64)> {
+    let first = |horizontal: bool| font.stem_widths(master, horizontal).into_iter().find(|v| v.is_finite() && *v > 0.0);
+    Some((first(false)?, first(true)?))
+}
+
+fn no_stems(p: &Params, master: &Master) -> EngineError {
+    p.bad(format!("Cursivy needs a horizontal and a vertical stem in master `{}` (Font Info › Masters › Stems)", master.name))
 }
 
 fn transformations(s: &mut Session, v: &Value) -> Result<Value> {
@@ -1548,19 +1613,9 @@ fn transformations(s: &mut Session, v: &Value) -> Result<Value> {
         None => (transformations_from_params(&p)?, jobs(&p, s.font()?, true, false)?),
     };
     jobs.retain(|t| args.includes(&t.glyph));
-    if args.cursivy {
-        let font = s.font()?;
-        for t in &jobs {
-            let r = t.resolve(font)?;
-            if !has_stems(font, r.master) {
-                return Err(
-                    p.bad(format!("Cursivy needs a horizontal and a vertical stem in master `{}` (Font Info › Masters › Stems)", r.master.name))
-                );
-            }
-        }
-        return Err(EngineError::Unsupported("Cursivy (a slant with optical correction of the curves)".into()));
-    }
-    let origins = run_jobs(s, &p, "Transformations", &jobs, args.origin, args.linear(), Vec2::new(args.translate.0, args.translate.1), None)?;
+    let cursivy = args.cursivy.then_some(&args);
+    let shift = Vec2::new(args.translate.0, args.translate.1);
+    let origins = run_jobs(s, &p, "Transformations", &jobs, args.origin, args.linear(), shift, None, cursivy)?;
     Ok(result(&jobs, &origins))
 }
 

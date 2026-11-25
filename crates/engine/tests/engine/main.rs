@@ -57,6 +57,7 @@ mod corpus_autokern;
 mod corpus_autospace;
 mod corpus_composition;
 mod corpus_construction;
+mod corpus_cursivy;
 mod corpus_feature_check;
 mod corpus_instance_names;
 mod corpus_propagation;
