@@ -1017,6 +1017,16 @@ fn vertical_metrics_vary_through_vvar_and_the_phantom_points() {
     assert_eq!((phantoms[2].y.to_f64(), phantoms[3].y.to_f64()), (0.0, 0.0));
 }
 
+#[test]
+fn a_vertical_width_of_one_layer_is_enough_for_the_vertical_tables() {
+    let mut f = two_masters();
+    f.glyph_mut("a").unwrap().layers[1].info.vert_width = Some(900.0);
+    for v in [build(&f, None), build_cff2(&f, None)] {
+        let font = FontRef::new(&v.compiled.bytes).unwrap();
+        assert!(font.vhea().is_ok() && font.vmtx().is_ok() && font.vvar().is_ok());
+    }
+}
+
 /// A 700-high rectangle `right` wide whose bottom right node keeps `curve` on the weight axis.
 fn curved(right: f64, curve: Option<HoiCurve>) -> Shape {
     let mut nodes: Vec<Node> =

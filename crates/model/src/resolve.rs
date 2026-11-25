@@ -87,6 +87,8 @@ pub struct Resolved {
     /// The font's enabled parameters, with the master's and then the instance's of the same name
     /// in their place.
     pub params: Params,
+    /// Some layer of the font has a vertical width or origin of its own.
+    pub vertical_layers: bool,
     /// The font's creation date, as the source states it.
     pub date: Option<String>,
     /// Style linking of the instance (none for a master).
@@ -452,6 +454,7 @@ impl Font {
             stems_v: self.stem_widths(master, false),
             properties,
             params,
+            vertical_layers: self.glyphs.iter().flat_map(|g| &g.layers).any(|l| l.info.vert_width.is_some() || l.info.vert_origin.is_some()),
             date: self.info.date.clone(),
             style: instance.map(|i| StyleLinking { is_bold: i.is_bold, is_italic: i.is_italic, link_style: i.link_style.clone() }),
             instance: match target {
