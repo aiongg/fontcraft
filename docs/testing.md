@@ -211,6 +211,9 @@ the fonts can be checked with other readers (fontTools' `TTFont(...).ensureDecom
   how many files come back identical; files saved by the format's reference tool are reported
   apart, since only they are held to byte identity. Accepted differences, each with its reason,
   are in `xtask/roundtrip-allow.toml`.
+  `--mode stable` reads our own output and writes it again: the second output must equal the first.
+  `crates/io-glyphs/crosscheck/semantic_roundtrip.py` (a Python environment with glyphsLib) sorts the
+  differences of `--mode model --out DIR` into cosmetic and data changes.
 - **CFF tables.** `crates/cff/crosscheck/crosscheck.py` (run with the fontmake tool's Python,
   outside the gate) compiles each corpus UFO and a few synthetic fonts with ufo2ft at
   `--optimize-cff 1`, records what its charstring pen receives, has the `cff_from_json` example

@@ -13,6 +13,8 @@
 //!   `spellings` count is not measured in this mode.
 //! - `native`: through the native format as well: read into a `Font`, saved as `.fontcraft`
 //!   bytes, loaded again, written back (`roundtrip.nativeLosslessFromGlyphs`).
+//! - `stable`: what `model` writes, read and written again, gives the same bytes; it compares two
+//!   outputs, not the original, and lives in `stable.rs`.
 
 use std::path::Path;
 
@@ -21,7 +23,7 @@ use fontcraft_plist::{Num, Value};
 
 use crate::roundtrip::{Codec, Coded, Kind, Written, read_tree};
 
-pub const MODES: [&str; 3] = ["plist", "model", "native"];
+pub const MODES: [&str; 4] = ["plist", "model", "native", crate::stable::MODE];
 
 pub fn codec(mode: &str, kind: Kind) -> Option<Codec> {
     match (mode, kind) {

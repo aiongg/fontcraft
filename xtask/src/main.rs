@@ -20,6 +20,7 @@ mod parity;
 mod roundtrip;
 mod sha256;
 mod spec;
+mod stable;
 mod testfonts;
 
 use std::path::{Path, PathBuf};
@@ -62,8 +63,9 @@ commands:
   glyphsets [--fetch] [--generate]
                   --fetch downloads the pinned Unicode CLDR locale files and Google Fonts glyph sets into
                   data-sources/glyphsets/ (git-ignored); --generate rebuilds crates/glyphdata/data/sets.bin
-  roundtrip [--mode plist|model|native] [--kind glyphs|glyphspackage|ufo|ufoz|designspace] [-v]
+  roundtrip [--mode plist|model|native|stable] [--kind glyphs|glyphspackage|ufo|ufoz|designspace] [--out DIR] [-v]
                   read every corpus source and write it back; count byte-identical results
+                  (stable: our own output read and written again; --out keeps what is written)
                   (known differences with a reason: xtask/roundtrip-allow.toml)
   audit [--match TEXT]
                   run the outline audit (`outlines` profile) on every source of the corpus comparison set

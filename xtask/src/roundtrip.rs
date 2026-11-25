@@ -298,10 +298,29 @@ fn allow_list(root: &Path) -> Result<BTreeMap<String, String>, String> {
     Ok(out)
 }
 
+/// Writes what `codec` makes of a sample to `folder`, at the sample's path (`--out`), for other
+/// readers to compare with the original. A sample the codec cannot write is left out.
+fn write_output(folder: &Path, corpus: &Path, sample: &Sample, codec: Codec) -> Result<(), String> {
+    let source = corpus.join(&sample.path);
+    let Ok(Ok(coded)) = catch_unwind(AssertUnwindSafe(|| codec(&source))) else { return Ok(()) };
+    let target = folder.join(&sample.path);
+    let put = |path: &Path, bytes: &[u8]| -> Result<(), String> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+        std::fs::write(path, bytes).map_err(|e| format!("{}: {e}", path.display()))
+    };
+    match coded.written {
+        Written::File(bytes) => put(&target, &bytes),
+        Written::Tree(files) => files.iter().try_for_each(|(name, bytes)| put(&target.join(name), bytes)),
+    }
+}
+
 pub fn run(root: &Path, args: &[&str]) -> Result<(), String> {
     let mut mode = "plist";
     let mut kinds: Vec<Kind> = Kind::ALL.to_vec();
     let mut verbose = false;
+    let mut out: Option<PathBuf> = None;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match *a {
@@ -314,6 +333,7 @@ pub fn run(root: &Path, args: &[&str]) -> Result<(), String> {
                 let kind = Kind::ALL.into_iter().find(|x| x.name() == *k).ok_or_else(|| format!("unknown kind `{k}`"))?;
                 kinds = vec![kind];
             }
+            "--out" => out = Some(PathBuf::from(it.next().ok_or("--out needs a folder")?)),
             "-v" | "--verbose" => verbose = true,
             other => return Err(format!("unknown argument `{other}`")),
         }
@@ -331,6 +351,7 @@ pub fn run(root: &Path, args: &[&str]) -> Result<(), String> {
     let mut details = Vec::new();
     for s in samples.iter().filter(|s| kinds.contains(&s.kind)) {
         let (outcome, spellings) = match codec(mode, s.kind) {
+            _ if mode == crate::stable::MODE => (crate::stable::check(&corpus, s), 0),
             Some(c) => check(&corpus, s, c, &allow),
             None => (Outcome::NoCodec, 0),
         };
@@ -347,6 +368,9 @@ pub fn run(root: &Path, args: &[&str]) -> Result<(), String> {
             *cell += 1;
         }
         row.1 += spellings;
+        if let (Some(folder), Some(c)) = (&out, codec(mode, s.kind)) {
+            write_output(folder, &corpus, s, c)?;
+        }
         if verbose || matches!(outcome, Outcome::Different(_) | Outcome::Failed(_)) {
             details.push(format!("  {}  {outcome}", s.path));
         }
