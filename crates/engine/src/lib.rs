@@ -253,7 +253,43 @@ impl DocState {
     pub fn modified(&self) -> bool {
         !Arc::ptr_eq(&self.font, &self.saved)
     }
+
+    /// The format of the document's file, which Save writes: the one it was last saved in, else
+    /// native for a document opened from a native file, else the one its font was read from. A
+    /// native file can hold a font read from another format (`font.source`), which decides other
+    /// things (the metrics' defaults, what a UFO's components mean) and stays.
+    pub fn file_format(&self) -> fontcraft_model::SourceFormat {
+        self.ext::<SavedAs>().map_or(self.font.source.format, |s| s.0)
+    }
+
+    /// Records the format of the document's file, with what the file looks like now.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn set_file_format(&mut self, format: fontcraft_model::SourceFormat) {
+        self.set_ext(SavedAs(format));
+        self.stamp = self.path.as_deref().and_then(|p| io::document_stamp(p, &self.saved, format));
+    }
+
+    /// Whether Save has no format to write the document back in, so it is view-only until Save As
+    /// gives it a source file (`open.compiledIsViewOnly`): a compiled font, or a source of a
+    /// format that is only read.
+    pub fn view_only(&self) -> bool {
+        self.file_format() == fontcraft_model::SourceFormat::Binary
+    }
+
+    /// The member of a font collection the document was opened from.
+    pub fn collection_face(&self) -> Option<u32> {
+        self.ext::<CollectionFace>().map(|f| f.0)
+    }
 }
+
+/// The format a document was last saved in, and native for one opened from a native file
+/// ([`DocState::file_format`]).
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+pub(crate) struct SavedAs(pub fontcraft_model::SourceFormat);
+
+/// The collection member a document was opened from ([`DocState::collection_face`]).
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+pub(crate) struct CollectionFace(pub u32);
 
 /// The open documents and everything commands act on.
 #[derive(Default)]
@@ -399,7 +435,7 @@ impl Session {
         };
         let font = Arc::new(font);
         #[cfg(not(target_arch = "wasm32"))]
-        let stamp = path.as_deref().and_then(|p| io::document_stamp(p, &font));
+        let stamp = path.as_deref().and_then(|p| io::document_stamp(p, &font, font.source.format));
         self.next_id += 1;
         self.docs.push(DocState {
             id: self.next_id,

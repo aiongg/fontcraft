@@ -298,6 +298,13 @@ milestone = "M1"
 summary = "Lists the member fonts of a collection and opens the chosen ones, each as its own document (or, on request, as masters of one document when they are compatible). The handbook names only the TrueType-flavoured `.ttc`; CFF-flavoured `.otc` files use the same container and are handled the same way."
 ref = "Import & Export › Opening Font Files; OpenType specification › Font Collections; read-fonts FileRef"
 status = "handbook"
+notes = "FontCraft: a person's File › Open… of a collection of several fonts lists them (family, style, PostScript name, glyph count); several can be chosen, and each opens as its own document titled with its family and style. A request names the member with `face` (collection.list gives them) and is refused without one. Opening members as masters of one document is not built."
+guesses = [
+  "The list opens with its first font chosen and offers no Open All button; selecting every row opens all.",
+]
+observe = [
+  "Open a collection of several fonts: note whether a list appears or every member opens, and how the windows are titled.",
+]
 
 [[format]]
 id = "woff.open"
@@ -1051,6 +1058,12 @@ milestone = "M1"
 summary = "Every save or export to a format that cannot hold part of the document returns a structured list of losses (object path, concept, what was done: dropped, decomposed, moved to lib). The UI shows it as a warning before the write is committed and the command line prints it; with `strict` set the write fails instead."
 ref = "Import & Export › Unified Font Object (unsupported features trigger a warning)"
 status = "inferred"
+notes = "FontCraft: file.save, file.saveAs and file.exportUfo return `losses` by kind ({family, entries, what, items?, files?, glyphs?}); file.lossReport gives the same list without writing. In the window a person's Save, Save As or Export UFO asks first when the report has something the document's file, as last saved, does not already leave out: the kinds with their glyphs, Save Anyway, Cancel and, for a UFO, smart components as outlines (window.fileQuestion). A request never asks: `strict: true` refuses the write. Save As leaves a package's other files out of a UFO, and a UFO's out of a .glyphs file or a package, and reports them; the open document keeps them, reports them again for another file that leaves them out, and writes them back in the next save of their own kind (X.fix121, X.fix130). Between a UFO and a designspace they move with the UFO."
+guesses = [
+  "The question is asked for a Save only when it loses something the last save did not, and for a Save As to another format whenever something is lost.",
+  "Save As to a UFO also lists what a UFO holds only in lib keys that other tools ignore (corner components, caps, brushes, segments, smart components).",
+  "The buttons are Save Anyway and Cancel (Export Anyway for a UFO export), with smart components as outlines as a check box in the same question.",
+]
 
 [[behavior]]
 id = "roundtrip.idsStable"

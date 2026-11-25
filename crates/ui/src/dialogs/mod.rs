@@ -14,11 +14,13 @@ pub mod after;
 pub mod audit_profile;
 pub mod axis_mappings;
 pub mod changed_on_disk;
+pub mod collection_members;
 pub mod color_palettes;
 mod component_name;
 pub mod cross_axis;
 pub mod custom_parameter_picker;
 pub mod export;
+pub mod export_results;
 pub mod extension_indexes;
 pub mod extension_manager;
 pub mod external_changes;
@@ -38,7 +40,9 @@ pub mod import;
 pub mod interp;
 pub mod kerning_audit;
 pub mod kerning_questions;
+pub mod loss_question;
 pub mod master_color;
+pub mod open_report;
 pub mod os2_bits;
 pub mod overlay_fonts;
 pub mod panose;
@@ -46,6 +50,7 @@ pub mod path;
 pub mod primitive_measurements;
 pub mod print;
 pub mod rename_by_namelist;
+pub mod report_list;
 pub mod review_hints;
 pub mod rule_tree;
 pub mod sample_strings;
@@ -87,6 +92,10 @@ pub const MODULES: &[Module] = &[
     start_window::run,
     settings::run,
     changed_on_disk::run,
+    loss_question::run,
+    collection_members::run,
+    open_report::run,
+    export_results::run,
     review_hints::run,
     actions::run_dialog,
     audit_profile::run,

@@ -179,7 +179,7 @@ pub(super) fn group_mut(f: &mut Features, kind: EntryKind) -> &mut Vec<Snippet> 
     }
 }
 
-fn snippet_of(f: &Features, entry: EntryRef) -> Option<&Snippet> {
+pub(super) fn snippet_of(f: &Features, entry: EntryRef) -> Option<&Snippet> {
     group(f, entry.kind).get(entry.index)
 }
 
@@ -214,7 +214,7 @@ pub(super) fn entry_param(p: &Params, f: &Features, required: bool) -> Result<Op
     Ok(Some(EntryRef { kind, index }))
 }
 
-fn entry_json(f: &Features, entry: EntryRef) -> Value {
+pub(super) fn entry_json(f: &Features, entry: EntryRef) -> Value {
     let name = snippet_of(f, entry).map(|e| e.name.clone()).unwrap_or_default();
     json!({ "kind": kind_name(entry.kind), "name": name, "index": entry.index })
 }
@@ -671,7 +671,7 @@ pub(super) fn counts(state: &FeatureState) -> (usize, usize) {
 // ── Diagnostics as data ─────────────────────────────────────────────────────────────────────────
 
 /// (line, column) from 1 of each of `offsets` in `code`, columns in characters, in one pass.
-fn positions(code: &str, offsets: &[usize]) -> Vec<(usize, usize)> {
+pub(super) fn positions(code: &str, offsets: &[usize]) -> Vec<(usize, usize)> {
     let mut order: Vec<usize> = (0..offsets.len()).collect();
     order.sort_by_key(|&k| offsets.get(k).copied().unwrap_or(0));
     let mut out = vec![(1usize, 1usize); offsets.len()];

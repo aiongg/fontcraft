@@ -81,7 +81,7 @@ pub fn changed_on_disk(s: &Session) -> Vec<DiskChange> {
         .enumerate()
         .filter_map(|(index, d)| {
             let path = d.path.as_deref()?;
-            let now = crate::io::document_stamp(path, &d.font);
+            let now = crate::io::document_stamp(path, &d.saved, d.file_format());
             (now.is_some() && now != d.stamp).then(|| DiskChange { doc: d.id, index, title: d.title.clone(), modified: d.modified(), stamp: now })
         })
         .collect()
@@ -105,8 +105,8 @@ fn review(s: &mut Session, v: &Value) -> Result<Value> {
     let doc = s.documents().get(i).ok_or(EngineError::NoDocument)?;
     let path = doc.path.clone().ok_or_else(|| p.bad(format!("{} has no file on disk: save it first", doc.title)))?;
     // Taken before the read: a change made while reading shows on the next check.
-    let stamp = crate::io::document_stamp(&path, &doc.font);
-    let disk = read_disk(s, &path)?;
+    let stamp = crate::io::document_stamp(&path, &doc.saved, doc.file_format());
+    let disk = read_disk(s, &path, doc.collection_face())?;
     let doc = s.documents().get(i).ok_or(EngineError::NoDocument)?;
     let (title, was_modified) = (doc.title.clone(), doc.modified());
     let (base, cur) = (doc.saved.clone(), doc.font.clone());
@@ -179,10 +179,14 @@ fn target(s: &Session, p: &Params) -> Result<usize> {
 
 /// The file as `file.open` would give it now.
 #[cfg(not(target_arch = "wasm32"))]
-fn read_disk(s: &Session, path: &std::path::Path) -> Result<Font> {
+fn read_disk(s: &Session, path: &std::path::Path, face: Option<u32>) -> Result<Font> {
     crate::file_access::check_read(path).map_err(EngineError::Io)?;
-    let (font, mut warnings) = crate::io::open(path, None)?;
+    let mut native = false;
+    let (font, mut warnings) = crate::io::open_source(path, face, &mut native)?;
     let font = crate::linked::resolve(&font, Some(path), &mut warnings)?.unwrap_or(font);
+    if native {
+        return Ok(font);
+    }
     let (font, _) = super::shared::align_imported(s, font, &mut warnings);
     Ok(font)
 }

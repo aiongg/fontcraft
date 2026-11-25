@@ -565,19 +565,38 @@ fn run_on_ok(app: &mut FontCraftApp, person: bool) -> Result<Value, String> {
     }
     let (title, command, params) = (d.title.clone(), d.command.clone(), d.params());
     let kept = d.remember.then(|| (d.id.clone(), d.values.clone()));
+    // An export that leaves data out asks first, and its answer runs it.
+    if person
+        && let Some(asked) =
+            crate::app::file_questions::ask(app, &craft::ui::runtime::commands::CommandRef::with_params(command.clone(), params.clone()))
+    {
+        if let Some((id, values)) = kept {
+            app.dialogs.remember(id, values);
+        }
+        app.dialogs.open = None;
+        return Ok(asked);
+    }
     match app.session.execute(&command, &params) {
         Ok(result) => {
             if let Some((id, values)) = kept {
                 app.dialogs.remember(id, values);
             }
             app.dialogs.open = None;
-            app.status = format!("{title}: done");
+            let exported = if person { crate::app::export_results::after_run(app, &command, &result) } else { None };
+            app.status = exported.or_else(|| crate::app::notices::notice(&command, &result)).unwrap_or_else(|| format!("{title}: done"));
             super::after::after_run(app, &command, &params, &result);
             Ok(json!({"confirmed": true, "command": command, "params": params, "result": result}))
         }
         Err(e) => {
+            // What stops an export is listed in its own window, with the glyphs and the code to show.
+            let listed = person && crate::app::export_results::after_error(app, &command, &e);
             let e = e.to_string();
-            if let Some(d) = app.dialogs.open.as_mut() {
+            if listed {
+                if let Some((id, values)) = kept {
+                    app.dialogs.remember(id, values);
+                }
+                app.dialogs.open = None;
+            } else if let Some(d) = app.dialogs.open.as_mut() {
                 d.error = Some(e.clone());
                 d.revision += 1;
             }
@@ -626,9 +645,7 @@ pub fn poll_chooser(app: &mut FontCraftApp) {
     }
     let result = match answer {
         Picked::Paths(paths) => match paths.first() {
-            Some(path) => {
-                set(app, &key, &json!(path.to_string_lossy())).and_then(|_| if then_ok { confirm_by(app, false).map(drop) } else { Ok(()) })
-            }
+            Some(path) => set(app, &key, &json!(path.to_string_lossy())).and_then(|_| if then_ok { confirm_by(app, true).map(drop) } else { Ok(()) }),
             None => Ok(()),
         },
         Picked::Cancelled => Ok(()),

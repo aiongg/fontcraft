@@ -21,6 +21,8 @@ use fontcraft_model::corner::CORNER_HINT;
 use fontcraft_model::{Font, Glyph, GlyphTable, MAX_COMPONENT_DEPTH, Shape, SourceFormat};
 use serde_json::Value;
 
+#[cfg(not(target_arch = "wasm32"))]
+use super::loss_report::Fresh;
 use crate::DocState;
 
 /// Most warnings one command's reply gains.
@@ -52,7 +54,9 @@ pub(crate) fn attach(docs: &[DocState], before: &[DocState], id: &str, value: Va
     let mut warnings = Vec::new();
     for doc in docs {
         let Some(old) = before.iter().find(|d| d.id == doc.id) else { continue };
-        if std::sync::Arc::ptr_eq(&old.font, &doc.font) || !is_ufo(old.font.source.format) || old.font.source.format != doc.font.source.format {
+        // A native file keeps everything, whatever format its font was read from.
+        let same_format = old.file_format() == doc.file_format() && old.font.source.format == doc.font.source.format;
+        if std::sync::Arc::ptr_eq(&old.font, &doc.font) || !is_ufo(old.file_format()) || !is_ufo(old.font.source.format) || !same_format {
             continue;
         }
         warnings.extend(edit_warnings(&old.font, &doc.font));
@@ -214,13 +218,19 @@ struct Features {
 impl Features {
     fn of(font: &Font) -> Self {
         let mut f = Features::default();
-        for l in font.glyphs.iter().flat_map(|g| g.layers.iter()) {
+        font.glyphs.iter().for_each(|g| f.add(font, g));
+        f
+    }
+
+    /// Counts the glyph `g` of `font`.
+    fn add(&mut self, font: &Font, g: &Glyph) {
+        for l in &g.layers {
             for h in &l.info.hints {
                 match h.kind() {
-                    Some(CORNER_HINT) => f.corners += 1,
-                    Some(CAP_HINT) => f.caps += 1,
-                    Some(BRUSH_HINT) => f.brushes += 1,
-                    Some(SEGMENT_HINT) => f.segments += 1,
+                    Some(CORNER_HINT) => self.corners += 1,
+                    Some(CAP_HINT) => self.caps += 1,
+                    Some(BRUSH_HINT) => self.brushes += 1,
+                    Some(SEGMENT_HINT) => self.segments += 1,
                     _ => {}
                 }
             }
@@ -228,11 +238,10 @@ impl Features {
                 if let Shape::Component(c) = s
                     && font.glyphs.get(&c.glyph).is_some_and(|g| !g.info.parts.is_empty())
                 {
-                    f.smart += 1;
+                    self.smart += 1;
                 }
             }
         }
-        f
     }
 
     fn named(&self) -> [(usize, &'static str); 5] {
@@ -244,6 +253,31 @@ impl Features {
             (self.smart, "smart components"),
         ]
     }
+}
+
+/// The editor features of `font` a UFO keeps only in glyph lib keys, as entries of a loss report:
+/// each kind that is there, how often and in which glyphs.
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn private_features(font: &Font) -> Vec<Value> {
+    let mut kinds: Vec<(&'static str, crate::io::Lost)> = Features::default().named().iter().map(|(_, what)| (*what, Default::default())).collect();
+    for g in font.glyphs.iter() {
+        let mut f = Features::default();
+        f.add(font, g);
+        for ((_, lost), (n, _)) in kinds.iter_mut().zip(f.named()) {
+            if n > 0 {
+                lost.add(n, Some(&g.name));
+            }
+        }
+    }
+    let entry =
+        |(what, lost): (&'static str, crate::io::Lost)| lost.entry("glyphs", &format!("{what}, kept in the glyph lib, which other UFO tools ignore"));
+    kinds.into_iter().filter(|(_, lost)| !lost.is_empty()).map(entry).collect()
+}
+
+/// How many smart components `font` places, on the foreground of every layer.
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn smart_components(font: &Font) -> usize {
+    Features::of(font).smart
 }
 
 fn new_features(before: &Font, after: &Font) -> Vec<String> {
@@ -262,37 +296,22 @@ fn new_features(before: &Font, after: &Font) -> Vec<String> {
 /// more `entries`, or items it did not list.
 #[cfg(not(target_arch = "wasm32"))]
 fn new_losses(before: &Font, after: &Font) -> Vec<String> {
-    use std::collections::HashSet;
     let Some(format) = crate::io::SaveFormat::of_source(after.source.format) else { return Vec::new() };
     let (old, new) = (crate::io::save_losses(before, format), crate::io::save_losses(after, format));
-    let text = |v: &Value, key: &str| v.get(key).and_then(Value::as_str).unwrap_or("").to_string();
-    let key = |v: &Value| (text(v, "family"), text(v, "what"));
-    let entries = |v: &Value| v.get("entries").and_then(Value::as_u64).unwrap_or(0);
-    let items = |v: &Value| -> Vec<String> {
-        let list = v.get("items").or_else(|| v.get("files")).and_then(Value::as_array);
-        list.map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect()).unwrap_or_default()
-    };
-    let mut out = Vec::new();
-    for entry in &new {
-        let was = old.iter().find(|b| key(b) == key(entry));
-        let had: HashSet<String> = was.map(items).unwrap_or_default().into_iter().collect();
-        let added: Vec<String> = items(entry).into_iter().filter(|i| !had.contains(i)).collect();
-        let grew = entries(entry).saturating_sub(was.map(entries).unwrap_or(0));
-        if added.is_empty() && grew == 0 {
-            continue;
-        }
-        let what = text(entry, "what");
-        let name = format.name();
-        out.push(if added.is_empty() {
-            format!("the next save as {name} leaves out {what} ({grew} more)")
-        } else {
+    let name = format.name();
+    super::loss_report::fresh(&old, &new, false)
+        .into_iter()
+        .map(|Fresh { entry, added, grew }| {
+            let what = entry.get("what").and_then(Value::as_str).unwrap_or_default();
+            if added.is_empty() {
+                return format!("the next save as {name} leaves out {what} ({grew} more)");
+            }
             let shown: Vec<&str> = added.iter().take(MAX_ITEMS).map(String::as_str).collect();
             let more = added.len().saturating_sub(shown.len());
             let tail = if more > 0 { format!(" and {more} more") } else { String::new() };
             format!("the next save as {name} leaves out {what}: {}{tail}", shown.join("; "))
-        });
-    }
-    out
+        })
+        .collect()
 }
 
 /// Whether the save loss reports of `before` and `after` differ at all.

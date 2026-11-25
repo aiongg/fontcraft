@@ -192,13 +192,13 @@ label = "Save"
 menu = ["File"]
 shortcut = "Cmd+S"
 kind = "engine"
-params = "{path?: string, format?: string, force?: bool, document?: number}"
+params = "{path?: string, force?: bool, document?: number, smartComponents?: components|outlines, strict?: bool}"
 area = "import-export"
 milestone = "M1"
 summary = "Writes the document to disk. The first save asks for a name, a folder and one of three source file formats (the default being the native single-file format)."
 ref = "Create"
 status = "handbook"
-notes = "FontCraft UI: Save from the menu or Cmd+S on a document that has never been saved, or that was opened from a compiled font, asks the system save chooser for the file, offering the document's title with the extension of its format (.fontcraft for a new document); the command then runs with that `path`, and Cancel saves nothing. A window without a chooser (the browser, the control channel, MCP) runs the command as given, which refuses without a `path`."
+notes = "FontCraft UI: Save from the menu or Cmd+S on a document that has never been saved, or that was opened from a compiled font, asks the system save chooser for the file, offering the document's title with the extension of its format (.fontcraft for a new document); the command then runs with that `path`, and Cancel saves nothing. A window without a chooser (the browser, the control channel, MCP) runs the command as given, which refuses without a `path`. A person's Save whose format leaves out data that the document's file does not already leave out asks first (roundtrip.lossReport); `strict` is the answer a request gives: false writes, true refuses."
 guesses = [
   "The save chooser offers one filter with every source extension, and the chosen extension picks the format (no extension: the native format); the reference's format pop-up in its save sheet is documented but its layout is not observed.",
 ]
@@ -209,13 +209,13 @@ label = "Save As…"
 menu = ["File"]
 shortcut = "Cmd+Shift+S"
 kind = "engine"
-params = "{path: string, format?: string, smartComponents?: components|outlines}"
+params = "{path: string, format?: string, smartComponents?: components|outlines, strict?: bool}"
 area = "import-export"
 milestone = "M1"
 summary = "Saves the document under a new name or location, and is the way to switch an existing document to another of the source file formats at any time. FontCraft: smartComponents chooses whether a UFO or designspace holds smart components as components (default) or drawn as outlines (export.ufoSmartComponentsAsOutlines)."
 ref = "Create"
 status = "handbook"
-notes = "FontCraft UI: Save As… from the menu or Cmd+Shift+S asks the system save chooser for the file, offering the document's title with the extension of its current format, and runs the command with the chosen `path`; the format follows the chosen extension, and a name without a source extension is saved in the offered format. Cancel saves nothing. The .glyphs format version is the document's own (pass `version` to change it). A window without a chooser (the browser, the control channel, MCP) runs the command as given, which refuses without a `path`."
+notes = "FontCraft UI: Save As… from the menu or Cmd+Shift+S asks the system save chooser for the file, offering the document's title with the extension of its current format, and runs the command with the chosen `path`; the format follows the chosen extension, and a name without a source extension is saved in the offered format. Cancel saves nothing. The .glyphs format version is the document's own (pass `version` to change it). A window without a chooser (the browser, the control channel, MCP) runs the command as given, which refuses without a `path`. A person's Save As to a format that cannot hold part of the document asks first (roundtrip.lossReport)."
 guesses = [
   "Save As offers one filter with every source extension and no format or version pop-up, so the extension picks the format; the reference's save sheet picks the format from a pop-up, which observing it would let us match.",
 ]

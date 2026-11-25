@@ -40,6 +40,7 @@ use fontcraft_render::color::artwork::{self, Drawable, Item, Leaf, Pattern, Sour
 use serde_json::{Map, Value, json};
 
 use super::compile::{self, Container, Dest, Pick, Report, Request, Sink};
+use super::export_check::{self, Build};
 use super::*;
 use crate::EngineError;
 use crate::params::Params;
@@ -649,7 +650,6 @@ fn export_with_profiles(s: &mut Session, v: &Value) -> Result<Value> {
         if base.is_none() && doc.path.is_none() {
             return Err(p.bad(format!("`{}` has no file yet: bySource exports next to the source file, so save it first", doc.title)));
         }
-        compile::check_glyph_names(&doc.font)?;
         jobs.push(compile::jobs(&doc.font, &Pick::Exportable, false, &p)?);
     }
     let fonts = plans.len().saturating_mul(jobs.iter().map(Vec::len).sum());
@@ -658,6 +658,30 @@ fn export_with_profiles(s: &mut Session, v: &Value) -> Result<Value> {
             "building {fonts} fonts in one command (at most {}); choose fewer profiles or fonts",
             compile::MAX_FONTS
         )));
+    }
+
+    let request = |plan: &Plan, dest: PathBuf| {
+        let hinting = fontcraft_compile::HintingOptions { autohint: plan.autohint, strip: false };
+        Request {
+            flavours: vec![plan.flavour],
+            containers: plan.containers.clone(),
+            options: Options { timestamp, remove_overlap: plan.remove_overlap, cbdt: plan.cbdt, hinting, ..Default::default() },
+            dest: Dest::Folder(dest),
+            first_only: false,
+            autohinter: crate::external_autohint::trusted(s),
+            naming: Default::default(),
+            instance_outputs: true,
+        }
+    };
+    // The glyph names once, with whatever else stops the first profile's fonts.
+    if let Some(plan) = plans.first() {
+        let req = request(plan, base.clone().unwrap_or_default());
+        let mut subjects = Vec::with_capacity(chosen.len());
+        for (&i, jobs) in chosen.iter().zip(&jobs) {
+            let doc = docs.get(i).ok_or(EngineError::NoDocument)?;
+            subjects.push(export_check::subject(s, doc, Build::Static { jobs, req: &req })?);
+        }
+        export_check::refuse_names(&subjects)?;
     }
 
     // Build everything into staged sinks; nothing moves into place until every font is built.
@@ -671,8 +695,6 @@ fn export_with_profiles(s: &mut Session, v: &Value) -> Result<Value> {
     let mut through_compile: Vec<(usize, PathBuf, Vec<usize>)> = Vec::new();
     for (pi, plan) in plans.iter().enumerate() {
         let folder = plan.profile.params.get("folder").and_then(Value::as_str).unwrap_or_default();
-        let hinting = fontcraft_compile::HintingOptions { autohint: plan.autohint, strip: false };
-        let options = Options { timestamp, remove_overlap: plan.remove_overlap, cbdt: plan.cbdt, hinting, ..Default::default() };
         // One sink per destination folder: the profile's, or the profile's beside each source.
         let groups: Vec<(PathBuf, Vec<(usize, usize)>)> = match &base {
             Some(base) => vec![(below(base, folder), chosen.iter().copied().enumerate().collect())],
@@ -689,22 +711,18 @@ fn export_with_profiles(s: &mut Session, v: &Value) -> Result<Value> {
         }
         let mut documents = Vec::new();
         for (dest_path, members) in groups {
-            let req = Request {
-                flavours: vec![plan.flavour],
-                containers: plan.containers.clone(),
-                options: options.clone(),
-                dest: Dest::Folder(dest_path.clone()),
-                first_only: false,
-                autohinter: crate::external_autohint::trusted(s),
-                naming: Default::default(),
-                instance_outputs: true,
-            };
+            let req = request(plan, dest_path.clone());
             let mut sink = Sink::new(&req.dest, false, s.export_outside())?;
             for (k, i) in members {
                 let doc = docs.get(i).ok_or(EngineError::NoDocument)?;
                 let doc_jobs = jobs.get(k).ok_or(EngineError::NoDocument)?;
                 let mut report = Report::default();
-                compile::build(&doc.font, &doc.title, doc.path.as_deref(), s.glyph_data_of(doc)?, doc_jobs, &req, &mut sink, &mut report)?;
+                compile::build(&doc.font, &doc.title, doc.path.as_deref(), s.glyph_data_of(doc)?, doc_jobs, &req, &mut sink, &mut report).map_err(
+                    |e| match export_check::subject(s, doc, Build::Static { jobs: doc_jobs, req: &req }) {
+                        Ok(subject) => export_check::refusal(&[subject], Some(e)),
+                        Err(_) => e,
+                    },
+                )?;
                 for file in report.fonts.iter().flat_map(|f| f.files.iter()) {
                     let Some(path) = &file.path else { continue };
                     let key = path.to_string_lossy().to_lowercase();

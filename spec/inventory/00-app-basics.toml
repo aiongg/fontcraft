@@ -153,7 +153,7 @@ label = "Unsaved Changes"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{answer?: \"save\" | \"dontSave\" | \"cancel\"} → {open, purpose: \"close\" | \"quit\" | null, document, kind: \"font\" | \"project\" | null, remaining: [titles]}"
+params = "{answer?: \"save\" | \"dontSave\" | \"cancel\", strict?: bool} → {open, purpose: \"close\" | \"quit\" | null, document, kind: \"font\" | \"project\" | null, remaining: [titles]}"
 area = "ui-chrome"
 milestone = "M14"
 summary = "The question asked before unsaved work is closed: by the window's close box, by Quit, or by File › Close on a modified document. It asks about one document at a time and shows it, with Save, Don't Save and Cancel. Save writes the document (with the save chooser when it has no file) and Don't Save leaves its changes; both move to the next document with unsaved changes, fonts first, then projects. Once none is left the window closes, or for File › Close the document does. Cancel, a cancelled chooser or a failed save stop closing and keep everything open. Return is Save and Escape is Cancel. While it is open the app takes no other command and nothing behind it sees a key: not the Edit View, its text mode or a selected image, not a dialog behind it, and not `ui.key`. Without answer the command reports the question; the control channel answers it with answer. A save answer from the control channel never opens the save chooser: for a document or project without a file it is an error and the question stays open, so the client gives it a file (file.saveAs, project.save with path) and answers again. A document changed while the question is open, other than one answered Don't Save, is asked about before the window closes. File › Close is refused while the question is open."
@@ -169,6 +169,19 @@ observe = [
   "Change a font, click the window's close box: note the question's text, its buttons and their order.",
   "In the question, choose Save for a font never saved and cancel the file chooser: note whether the window stays open and the question closes.",
 ]
+
+[[command]]
+id = "window.fileQuestion"
+label = "File Question"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{answer?: \"proceed\" | \"cancel\", faces?: [number], smartComponents?: \"components\" | \"outlines\"}"
+area = "import-export"
+milestone = "M1"
+summary = "The question a person's Save, Save As or Export UFO asks before it leaves data out (roundtrip.lossReport), or File › Open… asks about the fonts of a collection (ttc.open). With `answer`, answers it as its buttons do. Nothing is written or opened before the answer, and a request that names the file command never asks."
+ref = "FontCraft addition"
+status = "docs"
 
 [[behavior]]
 id = "window.titleShowsDocument"

@@ -12,6 +12,8 @@ pub mod close;
 pub mod console;
 pub mod context_menu;
 pub mod dropped;
+pub mod export_results;
+pub mod file_questions;
 pub mod files;
 pub mod font_view;
 pub mod menu_alternates;
@@ -19,8 +21,9 @@ pub mod menu_states;
 pub mod menus_dynamic;
 pub mod models;
 mod msg;
-mod notices;
+pub(crate) mod notices;
 pub mod open;
+pub mod open_report;
 pub mod preview_host;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod print_host;
@@ -115,6 +118,12 @@ pub struct ViewState {
     pub settings: crate::shell::settings::SettingsState,
     /// The question asked when a save finds its file changed on disk.
     pub changed_on_disk: Option<crate::dialogs::changed_on_disk::Asked>,
+    /// The questions asked before a save that leaves data out and before opening a font collection.
+    pub file_questions: file_questions::FileQuestions,
+    /// What the person's last export reported, and whether its window shows.
+    pub export_results: export_results::ExportResults,
+    /// What opening the documents reported, and whether the notice and the list show.
+    pub open_report: open_report::OpenReports,
     /// The document the unsaved-changes dialog shows.
     pub unsaved_shown: crate::dialogs::unsaved::Shown,
     /// The Table Viewer's font, table, view, search, tree and what it read.
@@ -184,6 +193,9 @@ impl Default for ViewState {
             start: Default::default(),
             settings: Default::default(),
             changed_on_disk: None,
+            file_questions: Default::default(),
+            export_results: Default::default(),
+            open_report: Default::default(),
             unsaved_shown: Default::default(),
             table_viewer: Default::default(),
             compare_fonts: Default::default(),
@@ -488,6 +500,12 @@ impl FontCraftApp {
                 if ask_files && self.picks.ask(&self.host, &self.session, &command) {
                     return Ok(json!({ "picker": true }));
                 }
+                if ask_files
+                    && origin == Origin::Person
+                    && let Some(asked) = file_questions::ask(self, &command)
+                {
+                    return Ok(asked);
+                }
                 let mut params = if command.params.is_null() { json!({}) } else { command.params.clone() };
                 if origin == Origin::Person {
                     params = crate::shell::compatibility::with_matching(self, &command.id, params);
@@ -504,6 +522,9 @@ impl FontCraftApp {
                 let reply = match result {
                     Ok(reply) => reply,
                     Err(e) => {
+                        if origin == Origin::Person {
+                            export_results::after_error(self, &command.id, &e);
+                        }
                         let error = e.to_string();
                         crate::shell::start::after_error(self, &command.id, &error);
                         crate::dialogs::changed_on_disk::after_error(self, &command.id, &params, &error);
@@ -518,6 +539,7 @@ impl FontCraftApp {
                 } else {
                     Vec::new()
                 };
+                open_report::after_run(self, &command.id, &reply);
                 crate::shell::start::after_run(self, &command.id);
                 crate::canvas::tools::apply::adopt(self, &reply);
                 if origin == Origin::Person {
@@ -531,7 +553,8 @@ impl FontCraftApp {
                 web_store::after_run(self, &command.id, &params, &reply);
                 crate::shell::text_preview::note_export(&mut self.view.text_preview, &reply);
                 let notice = self.after_command(&command, &reply).or_else(|| notices::notice(&command.id, &reply));
-                if let Some(notice) = opened.pop().or(notice) {
+                let exported = if origin == Origin::Person { export_results::after_run(self, &command.id, &reply) } else { None };
+                if let Some(notice) = opened.pop().or(exported).or(notice) {
                     self.status = notice;
                 }
                 self.prune_font_view_selection();

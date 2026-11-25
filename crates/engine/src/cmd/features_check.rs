@@ -119,7 +119,7 @@ const CODE_PARAMS: [(&str, EntryKind); 6] = [
 ];
 
 /// The compiled diagnostics of `features` (the font's entries as one export would hold them) for `master`.
-fn compile_entries(
+pub(super) fn compile_entries(
     font: &Font,
     features: &fontcraft_model::Features,
     master: &str,

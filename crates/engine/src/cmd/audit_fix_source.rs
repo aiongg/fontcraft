@@ -56,7 +56,7 @@ pub(super) fn fix_source(s: &mut Session, p: &Params, target: &str) -> Result<Va
     }
     // Only the document says which UFOs it names, so what is fixed is a second reading, made after their stamp.
     if format == SaveFormat::Designspace {
-        read = crate::io::document_stamp(input, &font);
+        read = crate::io::document_stamp(input, &font, font.source.format);
         (font, problems) = crate::io::open(input, None)?;
     }
 
@@ -79,7 +79,7 @@ pub(super) fn fix_source(s: &mut Session, p: &Params, target: &str) -> Result<Va
         if req.no_clobber && !req.in_place && output.exists() {
             return Err(EngineError::Io(format!("{} exists and noClobber is set", output.display())));
         }
-        if req.in_place && crate::io::document_stamp(input, &doc.font) != read {
+        if req.in_place && crate::io::document_stamp(input, &doc.saved, doc.saved.source.format) != read {
             return Err(EngineError::Io(format!("{target} changed on disk while it was fixed, so nothing was written")));
         }
         let mut font = doc.font.as_ref().clone();

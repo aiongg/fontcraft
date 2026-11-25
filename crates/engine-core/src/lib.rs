@@ -54,8 +54,22 @@ pub enum EngineError {
     Io(String),
     #[error("not supported yet: {0}")]
     Unsupported(String),
+    /// A command stopped by several problems at once. `message` is for a reader; `data` lists
+    /// every problem for a caller that shows them one by one (`file.exportCheck` has the shape).
+    #[error("{message}")]
+    Problems { message: String, data: Box<serde_json::Value> },
     #[error("internal error (please report it): {0}")]
     Internal(String),
+}
+
+impl EngineError {
+    /// What the error lists beside its message, when it lists anything.
+    pub fn data(&self) -> Option<&serde_json::Value> {
+        match self {
+            EngineError::Problems { data, .. } => Some(data),
+            _ => None,
+        }
+    }
 }
 
 impl From<fontcraft_compile::CompileError> for EngineError {

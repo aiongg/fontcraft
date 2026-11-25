@@ -81,6 +81,7 @@ mod kerning_maintain;
 mod kerning_window;
 mod layer;
 mod layers;
+mod loss_report;
 pub mod masters;
 mod match_masters;
 mod measure;
@@ -124,7 +125,7 @@ mod audit_fix_source;
 mod audit_profiles;
 mod audit_reports;
 pub mod audit_services;
-mod collection;
+pub mod collection;
 mod convert_file;
 mod dehint;
 mod diff;
@@ -165,6 +166,7 @@ mod derived_glyphs;
 mod detect;
 mod drag_aids;
 pub mod encodings;
+mod export_check;
 pub mod export_profiles;
 pub mod export_settings;
 mod expressions;
@@ -352,7 +354,9 @@ pub(crate) use cmd;
 /// fontcraft-engine --test engine registry::` and check that its diff only adds your ids.
 pub const COMMAND_TABLES: &[CommandTable] = &[
     file::specs,
+    loss_report::specs,
     compile_export::specs,
+    export_check::specs,
     export_settings::specs,
     edit::specs,
     clipboard::specs,

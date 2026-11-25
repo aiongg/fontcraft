@@ -381,6 +381,7 @@ milestone = "M9"
 summary = "Export of interpolated static instances and of variable fonts fails while any exported glyph has incompatible layers; the error names the glyphs."
 ref = "Interpolation › Outline Compatibility › Identifying Incompatible Outlines"
 status = "handbook"
+notes = "M2.20: a variable export stopped by incompatible layers lists each glyph with the first difference and its layer. A static export skips the instances that cannot be interpolated, naming their glyphs, and writes the others; the reference app may refuse the whole export."
 
 [[command]]
 id = "interpolation.checkCompatibility"

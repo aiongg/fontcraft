@@ -558,6 +558,8 @@ fn generate_instances(s: &mut Session, v: &Value) -> Result<Value> {
         made.push((name, f, notes));
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    let format = destination.as_ref().map(|_| generated_format(&font));
     let paths = match &destination {
         Some(dir) => save_all(&p, &font, dir, &made)?,
         None => vec![None; made.len()],
@@ -571,6 +573,10 @@ fn generate_instances(s: &mut Session, v: &Value) -> Result<Value> {
         }
         if open {
             s.push_document(f, path);
+            #[cfg(not(target_arch = "wasm32"))]
+            if let Some(format) = format {
+                s.doc_mut()?.set_file_format(format.source());
+            }
             let doc = s.doc()?;
             let index = s.documents().len().saturating_sub(1);
             if let Some(o) = entry.as_object_mut() {
@@ -583,18 +589,24 @@ fn generate_instances(s: &mut Session, v: &Value) -> Result<Value> {
     Ok(json!({"documents": documents}))
 }
 
-/// Writes every generated document into `dir`, in the format of `source`.
+/// The format generated documents of `source` are written in.
 #[cfg(not(target_arch = "wasm32"))]
-fn save_all(p: &Params, source: &Font, dir: &std::path::Path, made: &[(String, Font, Vec<String>)]) -> Result<Vec<Option<std::path::PathBuf>>> {
+fn generated_format(source: &Font) -> crate::io::SaveFormat {
     use crate::io::SaveFormat;
-    if dir.exists() && !dir.is_dir() {
-        return Err(p.bad(format!("{} is a file: give a folder", dir.display())));
-    }
-    let format = match SaveFormat::of_source(source.source.format) {
+    match SaveFormat::of_source(source.source.format) {
         Some(SaveFormat::Designspace) => SaveFormat::Ufo,
         Some(f) => f,
         None => SaveFormat::Native,
-    };
+    }
+}
+
+/// Writes every generated document into `dir` ([`generated_format`]).
+#[cfg(not(target_arch = "wasm32"))]
+fn save_all(p: &Params, source: &Font, dir: &std::path::Path, made: &[(String, Font, Vec<String>)]) -> Result<Vec<Option<std::path::PathBuf>>> {
+    if dir.exists() && !dir.is_dir() {
+        return Err(p.bad(format!("{} is a file: give a folder", dir.display())));
+    }
+    let format = generated_format(source);
     std::fs::create_dir_all(dir).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", dir.display())))?;
     let mut taken = HashSet::new();
     let mut out = Vec::with_capacity(made.len());
