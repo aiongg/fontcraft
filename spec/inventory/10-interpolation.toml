@@ -537,7 +537,7 @@ ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
 notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph."
 guesses = [
-  "Indices count from 0, as the Shape Order window numbers shapes. Settle by reading the first shape's label in the reference app.",
+  "Indices count from 1, as the texts that name a difference count shapes. Settle by reading the first shape's label in the reference app.",
 ]
 
 [[behavior]]

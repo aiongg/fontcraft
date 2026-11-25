@@ -10,7 +10,7 @@
 //! | the selected nodes | a line to the same nodes of the group's other layers |
 //! | the ends of shape lines on the layers beside the edited one | dots; a ring around the one under the pointer |
 //! | a component base or anchor name the group disagrees on | written in red at its point |
-//! | the edited layer's shapes | their index beside the start node or centre |
+//! | the edited layer's shapes | their number, counted from 1, beside the start node or centre |
 //!
 //! A line end dragged onto the end of another shape's line on the same layer swaps the two shapes there
 //! (`glyph.swapShapes`); the press goes to the view before the tool ([`pointer`]).
@@ -244,7 +244,8 @@ pub fn shapes(cx: &PaintCx<'_>) -> Vec<Shape> {
             out.extend(contours.into_iter().map(|contour| Shape::line(contour, stroke)));
             if let Some(at) = shape.label.and_then(|p| screen(cx, p)) {
                 let gap = Vec2::new(t.label_gap, -t.label_gap);
-                cx.painter.text(at + gap, Align2::LEFT_BOTTOM, shape.index.to_string(), font.clone(), t.tint(shape.index, true));
+                let number = shape.index.saturating_add(1).to_string();
+                cx.painter.text(at + gap, Align2::LEFT_BOTTOM, number, font.clone(), t.tint(shape.index, true));
             }
         }
         for segment in &layer.segments {
