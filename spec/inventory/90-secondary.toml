@@ -1592,6 +1592,16 @@ guesses = [
   "A side whose field holds a metrics key keeps its value, and a layer with a width key or under automatic alignment is skipped, so keys stay in sync. FontLab's page does not say what auto-spacing does with its own metrics expressions.",
   "`beam` applies to tight and custom: both sidebearings are measured where the outline meets the beam. Optical refuses it, as the profiles cover the whole band.",
 ]
+observe = [
+  "FontLab: set Autospace to Optical, auto-space n, o, v, H, O, period and hyphen of a font of our own and write down the sidebearings; compare with ours.",
+  "FontLab: space a glyph with a short horizontal arm (r, T) and one with a deep bowl (c) both ways: estimate how far into the shape the method looks.",
+  "FontLab: double the spacing of n and o by hand and auto-space H and e again: note whether the result follows the font's own letters.",
+  "FontLab: auto-space A, one and a: note whether capitals and figures come out on one scale.",
+  "FontLab: run Font › Metrics › Auto Space on a selection in a font with two masters, one linked: note which glyphs and masters change.",
+  "FontLab: read the default of the Custom method in Preferences › Spacing, and the sidebearings it gives at 1,000 and 2,048 units per em.",
+  "FontLab: give n the metrics expression =h and a composite, auto-space both and note whether the expression stays and whether the composite changes.",
+  "FontLab: with the Metrics line on, auto-space with the Tight method and note where the sidebearings are measured.",
+]
 
 [[setting]]
 id = "spacing.autoSpaceMethod"
@@ -1620,11 +1630,15 @@ summary = "Shows a draggable horizontal line and reports sidebearings where it c
 ref = "FontLab 8 What's new › Metrics & kerning › Metrics (Metrics line); RoboFont reference › Space Center › Display options"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Edit View (M13.31) draws the line across the canvas and the sidebearings where it meets the outline, set with the `y` parameter. Dragging the line up or down beside the glyphs runs view.showMetricsBeam with the height under the pointer (X.ui3, crates/ui/src/canvas/overlays/mod.rs). Documented, not yet observed in the reference app."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Edit View (M13.31) draws the line across the canvas and the sidebearings where it meets the outline, set with the `y` parameter. Dragging the line up or down beside the glyphs runs view.showMetricsBeam with the height under the pointer (X.ui3, crates/ui/src/canvas/overlays/mod.rs). Documented, not yet observed in the reference app. FontLab's line has one height per master, set by dragging the dotted violet guide in the Glyph window (FontLab 8 What's new › Metrics & kerning, help.fontlab.com/fontlab/8/whats-new/whats-new-06-metrics-kerning/). FontCraft keeps one height per document (`beam_heights` in `crates/ui/src/canvas/overlays/mod.rs`), shared with the Space Center; docs/spec/08-spacing-kerning.md, question 27."
 guesses = [
   "The beam is dragged in whole units, only on the line itself (within half the node hit tolerance) and only outside the advance boxes of the edited glyph and the other glyphs on its line, so nodes and marquees near it stay with the tools; the reference apps' pages do not say where the line can be grabbed.",
-  "The beam is one height per font, shared by Edit View and Space Center, and sidebearing commands take it as an optional `beam` parameter; FontLab's and RoboFont's pages do not say whether it is per font or per window.",
   "The beam starts at half the x-height of the tab's master, like the measurement line, and giving only a height also shows it. The reference app's first use of the metrics line would settle the start height.",
+]
+observe = [
+  "FontLab: press on the Metrics line inside a glyph, beside it and over a node: note where it can be grabbed and whether it moves in whole units.",
+  "FontLab: turn the Metrics line on in a new font and note its height; change it and look at another master and another glyph.",
+  "RoboFont: move the beam in the Space Center and look at the beam of the glyph window.",
 ]
 
 [[command]]
@@ -1645,6 +1659,10 @@ guesses = [
   "`ratio` is left ÷ right as a number, or text `a:b`; 1:2 matches FontForge's Thirds in Width. The new left sidebearing is rounded to the font's grid, and metrics keys stay (possibly out of sync), as with the spacing shortcuts. Running Center in Width in FontForge on an outline with an odd amount of space would show its rounding.",
   "Layers under automatic alignment are skipped, as alignment sets their position; empty layers are skipped.",
 ]
+observe = [
+  "FontForge: run Center in Width, then Thirds in Width, on an outline with an odd amount of space, with the grid off: note the two sidebearings.",
+  "FontForge: run it on a glyph of references only and on an empty glyph: note what changes.",
+]
 
 [[command]]
 id = "kerning.autoKern"
@@ -1659,15 +1677,22 @@ summary = "Proposes kerning values for the given pairs from the optical gap betw
 ref = "FontLab 8 What's new › Metrics & kerning › Kerning (autokerning); FontLab 7 manual › Pairs and Phrases panel; FontForge dialogs › Lookups (pair kerning subtable: Default Separation, Min Kern, Touching, Only kern closer)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.21 on the side profiles of `fontcraft_spacing::profile`, with the bands and clipping of `spacing.autoSpace`. Documented, not yet observed. The corpus measure (docs/plans/M13.md § 5) compares the proposals with Inter's and Oswald's stored kerning."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.21 on the side profiles of `fontcraft_spacing::profile`, with the bands and clipping of `spacing.autoSpace`. Documented, not yet observed. The corpus measure (docs/plans/M13.md § 5) compares the proposals with Inter's and Oswald's stored kerning. FontLab VI's autokerning stores no positive values and leaves out small ones (FontLab VI help › Pairs and Phrases panel, help.fontlab.com/fontlab-vi/Pairs-and-Phrases-panel/), which is our `onlyCloser` with a `minKern`."
 guesses = [
   "The proposed value is the target separation minus the pair's optical gap, rounded to the nearest 5 units by default; the target separation defaults to the optical gap of a reference pair (n n for lowercase, H H for capitals) without kerning. The optical gap is taken between the left glyph's right profile and the right glyph's left profile over auto-spacing's bands, each clipped to `depth`, or to `depthShare` of the x-height (default 0.2), inward from its extreme, as the power mean of order −2 of the row distances (each at least 1 unit), so the rows where the glyphs come closest count most. On the corpus measure (docs/plans/M13.md § \"M13.21c\") 20% is the smallest share (of 10%, 15%, 18%, 20%, 22%, 25%, 30%) that agrees in sign with the sources in at least 80% of the pairs of every master; smaller shares come closer in size and lose the sign, and the power mean of the rows adds one to two points over a plain mean. FontLab documents neither K1 nor K2 (open decision D11).",
   "A pair mixing a capital or figure with any other glyph is measured over the x-height band, and its target is the mean of the two glyphs' reference gaps (n n and H H); comparing proposals for To, Av and the like with a font kerned in the reference app would settle it.",
   "A group side is measured on one member: the glyph named like the group, else the group's first member in glyph order; FontLab's page does not say how class pairs are measured.",
   "With `touching`, the gap and the reference gap are both measured at the outlines' closest approach, as Kern to Distance measures them; FontForge's Lookups page names the Touching option without describing its measure in detail.",
-  "A value of 0, a value smaller in size than `minKern`, or a positive value with `onlyCloser` stores nothing; when `keepExisting` is false such a value also removes the stored pair. `minKern` defaults to 0.",
+  "A value of 0, a value smaller in size than `minKern`, or a positive value with `onlyCloser` stores nothing; when `keepExisting` is false such a value also removes the stored pair. `minKern` defaults to 0. FontLab's older algorithm stores no positive and no small value at all (notes); the limit and what the newer one does are not documented.",
   "`keepExisting` (default true) leaves every pair whose sides are stored already in that master, whatever its value; pairs that apply through groups do not count as stored.",
   "`apply: false` returns the proposals without storing them, for the pair review windows.",
+]
+observe = [
+  "FontLab: auto-kern AV, LT, nn and HH of a font of our own with K2 and with K1 and write down the values; compare with ours.",
+  "FontLab: auto-kern To, Av and 1o the same way.",
+  "FontLab: auto-kern @T–@o where the class has a wide and a narrow member and note which member the value fits.",
+  "FontForge: auto-kern a pair with Touching on and off and write down both values.",
+  "FontLab: auto-kern a pair that has a value already, and one whose result is small or positive: note which are stored and whether a stored value is removed.",
 ]
 
 [[command]]
@@ -1690,6 +1715,12 @@ guesses = [
   "Without `pairs` or glyph lists, every pair stored in the master is set; FontLab applies the command to the pairs selected in its window.",
   "A group side is measured on the member named like the group, else its first member, not on every member; a pair whose value is 0 is stored only where another pair would otherwise apply.",
 ]
+observe = [
+  "FontLab: set To and an AV whose closest points lie at different heights to a distance of 40 and write down the values.",
+  "FontLab: set a pair of curves to a distance and compare the value with ours to the unit.",
+  "FontLab: run Kern to Distance with nothing selected and note which pairs change.",
+  "FontLab: run it on @T–@o with members of different shapes and note which member the distance fits; set a pair to exactly its class value and note whether an exception is stored.",
+]
 
 [[command]]
 id = "kerning.auditExceptions"
@@ -1704,12 +1735,18 @@ summary = "Expands class kerning to glyph pairs and reports the pairs whose outl
 ref = "FontLab 8 What's new › Metrics & kerning › Kerning (Audit Exceptions)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M12 to M13 by the M12 planning pass: a secondary-reference feature goes to M13, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3); docs/plans/M12.md § 7, question 2. Built in M13.21b (`crates/engine/src/cmd/kerning_audit.rs`): the distance is Kern to Distance's closest approach plus the value that applies; the fix is one undo step. Documented, not yet observed."
+notes = "Moved from M12 to M13 by the M12 planning pass: a secondary-reference feature goes to M13, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3); docs/plans/M12.md § 7, question 2. Built in M13.21b (`crates/engine/src/cmd/kerning_audit.rs`): the distance is Kern to Distance's closest approach plus the value that applies; the fix is one undo step. Documented, not yet observed. FontLab checks the glyph combinations of the chosen class pairs in the current master and reports those whose smallest horizontal distance is less than the threshold, so a distance equal to it is not reported; Add exceptions sets the value that makes the distance equal to the threshold (its example: threshold 10, class value -30, overlap 14, exception -6, which is ours too) (FontLab 8 What's new › Metrics & kerning, help.fontlab.com/fontlab/8/whats-new/whats-new-06-metrics-kerning/)."
 guesses = [
   "A class pair is a stored pair with at least one group side; a glyph pair that a glyph–glyph pair covers is not measured, as its value is not the class value.",
   "Without `pairs` or glyph lists, every class pair stored in the master is expanded to its members; FontLab applies the command to the pairs selected in its window.",
-  "The default threshold is 0, so only outlines that overlap are reported; touching outlines (distance 0) are not.",
-  "`fix` adds a glyph–glyph exception set to the threshold minus the distance without kerning, rounded up to a whole unit; it never adds a glyph–group exception.",
+  "The default threshold is 0, so only outlines that overlap are reported; the preference's default in FontLab is not documented.",
+  "`fix` rounds the exception up to a whole unit; it never adds a glyph–group exception. The value itself, the threshold minus the distance without kerning, is FontLab's (notes).",
+]
+observe = [
+  "FontLab: audit @T–@o where T–odieresis has an exception that overlaps: note whether it is listed.",
+  "FontLab: read Minimal distance for Audit kerning exceptions in a fresh Preferences window.",
+  "FontLab: run Font › Kerning › Audit Exceptions with nothing selected and note which pairs it checks.",
+  "FontLab: choose Add exceptions for a distance that is not whole and for a whole group, and read the pairs stored.",
 ]
 
 [[command]]
@@ -1725,10 +1762,7 @@ summary = "The dialog over kerning.auditExceptions: threshold, direction and mas
 ref = "FontLab 8 What's new › Metrics & kerning › Kerning (Audit Exceptions)"
 status = "docs"
 origin = "fontlab"
-notes = "Built in the window (UI.14) as the follow-up of M13.21b. The dialog runs the audit when it opens and again on Audit; Add Exceptions runs it with fix and lists the exception each pair got. Documented, not yet observed."
-guesses = [
-  "The audit runs once with the default settings as the dialog opens; FontLab's page does not say whether its dialog lists pairs before a button is pressed.",
-]
+notes = "Built in the window (UI.14) as the follow-up of M13.21b. The dialog runs the audit when it opens and again on Audit; Add Exceptions runs it with fix and lists the exception each pair got. Documented, not yet observed. FontLab runs the audit first and opens the dialog, with Review and Add exceptions, when it finds combinations under the threshold (FontLab 8 What's new › Metrics & kerning)."
 
 [[command]]
 id = "dialog.matchKerning"
@@ -1745,7 +1779,10 @@ status = "docs"
 origin = "fontlab"
 notes = "Built in the window (UI.14) as the follow-up of M13.21b. Documented, not yet observed."
 guesses = [
-  "The summary gives the pairs filled, the exceptions added and each master's pair count before and after; FontLab's page names no summary.",
+  "The summary gives the pairs filled, the exceptions added and each master's pair count before and after; FontLab's page describes only an explanation shown the first time.",
+]
+observe = [
+  "FontLab: run Match Kerning twice and write down what each dialog says.",
 ]
 
 [[command]]
@@ -1766,6 +1803,11 @@ guesses = [
   "An exception is a stored pair with a glyph side whose glyph has a kerning group on the side facing the pair; its class value is the value that applies once it is removed (glyph–group, then group–glyph, then group–group; 0 when none applies). FontLab does not define either term on its page.",
   "Every pair is judged on the kerning as it stood before the call, so removing a small group pair does not change which exceptions are removed.",
   "`glyphs` keeps the pairs that name one of the glyphs, or a group one of them belongs to on the side facing the pair.",
+]
+observe = [
+  "FontLab: open Font › Kerning › Remove Pairs and write down every criterion; remove exceptions that differ by 5 units or less from a glyph–group, a group–glyph and a group–group pair.",
+  "FontLab: remove pairs of 10 units or less and exceptions together, where removing a group pair would change an exception's class value: note which pairs are left.",
+  "FontLab: with glyphs selected, note whether Remove Pairs limits itself to them.",
 ]
 
 [[command]]
@@ -1789,6 +1831,12 @@ guesses = [
   "Masters that take their kerning from another are skipped; at least two masters with kerning of their own are needed.",
   "Every direction (left to right, right to left, vertical) is matched; FontLab's page does not mention directions.",
 ]
+observe = [
+  "FontLab: match a master with To -60 stored on the classes and one with nothing, then with only an exception: write down both masters' pairs.",
+  "FontLab: count the pairs and classes of each master before and after Match Kerning on a font with exceptions.",
+  "FontLab: give the two masters different classes, make each the main master in turn, and compare the results.",
+  "FontLab: match a font with a linked master and with right-to-left pairs and note what changes.",
+]
 
 [[panel]]
 id = "palette.pairsAndPhrases"
@@ -1801,11 +1849,16 @@ summary = "A work list for kerning and spacing: stepping through the rows puts e
 ref = "FontLab 7 manual › Pairs and Phrases panel; FontLab 8 What's new › Metrics & kerning"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.22 as a Palette section. Documented, not yet observed."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.22 as a Palette section. Documented, not yet observed. Auto shows the pairs or the texts by the active tool, and x resets the panel to its default text (FontLab VI help › Pairs and Phrases panel)."
 guesses = [
   "Automatic mode shows the pairs list while the showing tab is in text mode and the phrases list otherwise; the reference switches by its kerning tool, which FontCraft does not have.",
   "A loaded list lasts for the session and is not stored with the window state.",
   "Pair rows show the value stored for exactly that pair in the showing tab's master, not the value that applies through groups.",
+]
+observe = [
+  "FontLab: set the panel to Auto, switch between the Metrics, Kerning and Contour tools and write down the list shown.",
+  "FontLab: load a list, quit, reopen and note whether it is still there.",
+  "FontLab: select @T–@o's member pair T–odieresis in the list and note which value the row shows.",
 ]
 
 [[command]]
@@ -1821,11 +1874,15 @@ summary = "Loads a plain-text list with one pair or phrase per line (glyph names
 ref = "FontLab 7 manual › Pairs and Phrases panel (Importing lists)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.22 as a shell command; `text`, `reset` and `list` are our additions for agents and the section's Reset button. Without any of them the command opens the Pairs and Phrases section, where the path is typed. Documented, not yet observed."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.22 as a shell command; `text`, `reset` and `list` are our additions for agents and the section's Reset button. Without any of them the command opens the Pairs and Phrases section, where the path is typed. Documented, not yet observed. Sources: one pair per line, its two glyph names separated by a space; a phrase file is glyphtext, one phrase per line, with /name and \\uCODE inserts, and the two kinds share one file (FontLab VI help › Pairs and Phrases panel; FontLab VI release notes). FontLab 7 also reads the KPL:P and KPL:W lists, which start with a header line beginning with #, and marks the kerned pair in a longer text with | (FontLab 7 manual, release notes 6927). FontCraft does not read the | mark."
 guesses = [
   "Lines starting with # or %% are skipped, and the two characters \\n break a phrase into lines; the documentation does not describe comments or multi-line rows, and a sample list exported from the reference app would settle it.",
   "A word that is neither a glyph name nor an @group is read as characters, and a single character in a pair as the glyph that encodes it; loading a list of plain words in the reference app would settle it.",
   "The built-in lists are our own: about thirty Latin pairs and seven spacing strings.",
+]
+observe = [
+  "FontLab: load a list with a line starting with #, one with %% and one holding \\n, and note the rows.",
+  "FontLab: load a list of plain words and of `A V`, `AV` and `/A/V`: note what each row shows.",
 ]
 
 [[command]]
@@ -1841,10 +1898,14 @@ summary = "Moves to the next or previous row of the pair list and shows it in th
 ref = "FontLab 7 manual › Pairs and Phrases panel (Lists and navigation)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.22 as a shell command; `index` and `select` are what a click and a Cmd- or Shift-click in the section run. Documented, not yet observed."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.22 as a shell command; `index` and `select` are what a click and a Cmd- or Shift-click in the section run. Documented, not yet observed. FontLab steps with Up and Down or Cmd+Page Up/Down, through the lines of a text first (FontLab VI help › Pairs and Phrases panel)."
 guesses = [
   "A pair goes in place of the pair at the current glyph and keeps the rest of the tab's text, while a phrase replaces the whole text; watching the reference app step from a pair to a phrase would settle it.",
   "Next on the last row and previous on the first leave the list where it is instead of wrapping round.",
+]
+observe = [
+  "FontLab: step from a pair to a phrase and back and note what happens to the rest of the text.",
+  "FontLab: step past the last and before the first row and note the selection.",
 ]
 
 [[command]]
@@ -1894,6 +1955,9 @@ notes = "The auto-kern button of `palette.pairsAndPhrases` (M13.22), through `ke
 guesses = [
   "The values are proposed for review and stored only on Apply, refused when the font changed in between; the reference applies them at once as far as its documentation says.",
 ]
+observe = [
+  "FontLab: press the Auto button with three pairs selected and note whether the values are stored at once; undo once.",
+]
 
 [[behavior]]
 id = "kerning.representativeGlyph"
@@ -1907,6 +1971,10 @@ notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/pla
 guesses = [
   "Members are stepped in glyph order and wrap round from the last to the first.",
   "The keys work only while the Pairs and Phrases list has the keyboard, so they never clash with the Edit View's own keys; elsewhere the command runs from Font › Kerning or the control channel.",
+]
+observe = [
+  "FontLab: step the left class with Ctrl+Down past its last member and note which comes next; note the order of the members.",
+  "FontLab: press Ctrl+Up outside a class pair and in another tool: note what it does.",
 ]
 
 [[behavior]]
@@ -3248,6 +3316,10 @@ guesses = [
   "FontCraft copies straight from `from` to the glyphs in `to` in one command, layer by layer with the same layer id (the first master by default); without `to` it only returns the values. FontForge copies to a clipboard and pastes later; commands take explicit targets, so the two steps are one.",
   "The values apply in the order width, lsb, rsb, vertical advance, so copying lsb and rsb together decides the width. A copied value removes the metrics key its field showed, as typing a number does.",
 ]
+observe = [
+  "FontForge: copy the width of A and paste it onto two selected glyphs: note which layers change.",
+  "FontForge: copy the width, then LBearing and RBearing, and paste each onto one glyph: note the width after each.",
+]
 
 [[command]]
 id = "edit.copyLayerToLayer"
@@ -4005,6 +4077,14 @@ guesses = [
   "A changed value says what it was in its detail line, and a pair new since the window opened says new.",
   "Sorting by value orders by the size of the value, largest first, ties in stored order; typing a character scrolls to the first pair whose sorted-by glyph encodes it, else whose name starts with it.",
 ]
+observe = [
+  "FontForge: open the Kerning Pairs dialog and note the writing directions it lists and whether pairs are drawn on one row each.",
+  "FontForge: change a value there and note how the change is marked and by which controls it is changed.",
+  "FontForge: close and reopen the dialog: note against which value changes are counted.",
+  "FontForge: double-click a pair there and drag its second glyph: note what opens and what changes.",
+  "FontForge: sort by value there and note the order of positive and negative values.",
+  "FontForge: type a letter there and note which row is shown.",
+]
 
 [[command]]
 id = "kerning.buildGroups"
@@ -4026,6 +4106,13 @@ guesses = [
   "Glyphs are taken in glyph order; each joins the group whose members all lie within maxDifference (the closest such group), else starts one, and lowercase never shares a group with capitals and figures.",
   "A group of two or more glyphs is named after its first member (`.2`, `.3`… when another glyph keeps that name); a glyph left alone gets no group and keeps what it has.",
   "Without `replaceExisting`, glyphs that have a group on a side keep it and are left out of that side; `apply` defaults to false, so the call proposes until told to apply.",
+]
+observe = [
+  "FontForge: run Kern Pairs › build classes on a font of our own with o, c, e, b, p, n and h: write down the classes at two settings of the difference.",
+  "FontForge: do it with glyphs that differ only above the x-height, such as n and h.",
+  "FontForge: do it with capitals and lowercase of one shape (O and o, C and c) selected.",
+  "FontForge: note how the new classes are named and what becomes of a glyph that resembles no other.",
+  "FontForge: do it with classes already there and note which glyphs change.",
 ]
 
 [[command]]
@@ -4061,6 +4148,11 @@ guesses = [
   "The editor and the Kerning Pairs Preview are panels of the window's dock rather than floating windows; a dock panel can be floated.",
   "The stacked view shows the member cells under the stacked drawing, so glyphs can still be dropped onto the group.",
 ]
+observe = [
+  "RoboFont: in the Groups Editor look at a left and a right group in the stacked view: note which edges line up.",
+  "RoboFont: note whether the members are also listed under the stacked drawing and whether glyphs can be dropped there.",
+  "RoboFont: note whether the Groups Editor floats, and whether it has a way to build groups from shapes.",
+]
 
 [[command]]
 id = "kerning.verticalFromHorizontal"
@@ -4080,6 +4172,11 @@ guesses = [
   "A glyph's vertical alternate is the glyph named with the `.vert` suffix, the suffix the primary reference's automatic `vert` feature uses; FontForge takes the `vrt2` substitution, which FontCraft does not read from feature code.",
   "A group side stands for each of its members that has an alternate, and each vertical pair gets the kerning that applies between the two horizontal glyphs; the first glyph's alternate is the top one.",
   "Vertical kerning is cleared only in the masters the call names; masters that take their kerning from another are skipped.",
+]
+observe = [
+  "FontForge: run VKern From HKern in a font with .vert glyphs but no vrt2 lookup, then with one: note the pairs made.",
+  "FontForge: do it with class kerning and read the vertical pairs.",
+  "FontForge: do it with vertical pairs already stored, in a font with two layers, and note which are cleared.",
 ]
 
 [[panel]]
@@ -4280,6 +4377,8 @@ guesses = [
 observe = [
   "In the reference's Space Center, switch to Waterfall with the size at 72: note each line's size.",
   "Choose a sample string from the text field's menu: note whether it replaces the text or is added to it.",
+  "RoboFont: choose a sample string with a placeholder glyph in it and note what is shown for it.",
+  "RoboFont: click a glyph in a waterfall and note which sizes show it selected; look at the matrix's columns.",
 ]
 
 [[panel]]
@@ -4301,6 +4400,13 @@ guesses = [
   "The matrix shows at most eight glyph rows and scrolls the rest, and the preview takes the room above it; the reference's matrix height with a long text would settle it.",
   "The Display menu also offers Color, which draws colour glyphs from their colour layers as Font View does; the reference's Space Center menu has no such item, and the primary reference's preview of a colour font would settle whether it draws in colour unasked.",
 ]
+observe = [
+  "RoboFont: open a Space Center in a new font and write down its text and size.",
+  "RoboFont: with several open fonts of one family, note which font (master) a new Space Center draws.",
+  "RoboFont: turn on control glyphs and look at the matrix columns.",
+  "RoboFont: type 60 glyphs and measure the matrix's height against the preview's.",
+  "RoboFont: open a font with colour layers in the Space Center and note whether it draws in colour.",
+]
 
 [[behavior]]
 id = "spaceCenter.inputSyntax"
@@ -4310,13 +4416,20 @@ summary = "The spacing text accepts plain characters, /name for a glyph by name,
 ref = "RoboFont reference › Space Center › Text input syntax"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5). The M13 planning pass confirmed the tokens on RoboFont's Space Center page; none clashes with the primary reference's text escapes, because `?`, `!` and `:` cannot start a glyph name."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5). The M13 planning pass confirmed the tokens on RoboFont's Space Center page; none clashes with the primary reference's text escapes, because `?`, `!` and `:` cannot start a glyph name. `/?@layer` draws the current glyph from a layer (RoboFont reference › Space Center, edited 2021-09-01)."
 guesses = [
   "Space Center takes the reference spellings /name, /name@layer, /?, /!, /:group and \\n unchanged; Edit View's text mode keeps the primary reference's escapes only.",
   "A glyph name after `/` ends at the next `/`, space, backslash or line break, and one space after any slash token is dropped, as in Edit View text; the reference app would settle whether `/? ` keeps its space.",
   "`/?` in Font View stands for the first selected glyph; the reference app would settle it.",
   "`/:group` takes every glyph whose left or right kerning group has that name, in glyph order; the reference's groups are not split by side, and a font with both kinds would settle it.",
   "A glyph asked for in two layers in one text is drawn from the last layer named, because the layout takes one layer per glyph name; the reference app would settle it.",
+]
+observe = [
+  "RoboFont: type `/ampersand A`, `/?  A` and `/ampersand/A`: note the spaces kept.",
+  "RoboFont: type `/adieresis.alt` and `//` and note how each is read.",
+  "RoboFont: select two glyphs in the Font Overview and type `/?`, then `/!`: note the glyphs.",
+  "RoboFont: make public.kern1.T and public.kern2.T and type `/:T`, then each full name: note the glyphs and their order.",
+  "RoboFont: type `/A@foreground/A@background` and note whether both layers show.",
 ]
 
 [[behavior]]
@@ -4327,10 +4440,14 @@ summary = "A matrix cell accepts a number, a reference that copies another glyph
 ref = "RoboFont reference › Space Center › Numerical fields"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5). Documented in the RoboFont reference, not yet observed. A cell takes a number or `=` and an expression (`fontcraft_geom::expr`) whose names are glyphs standing for their value in the same row; the result runs `spacing.setWidth`, `spacing.setLeftSidebearing` or `spacing.setRightSidebearing` with a number, so no metrics key is stored."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5). Documented in the RoboFont reference, not yet observed. A cell takes a number or `=` and an expression (`fontcraft_geom::expr`) whose names are glyphs standing for their value in the same row; the result runs `spacing.setWidth`, `spacing.setLeftSidebearing` or `spacing.setRightSidebearing` with a number, so no metrics key is stored. RoboFont's page gives Up as -1 and Down as +1 in a numerical field (robofont.com/documentation/reference/workspace/space-center/, edited 2021-09-01), the opposite of the summary; an observation should confirm it before the code follows."
 guesses = [
   "A matrix entry's result rounds halves up, as metrics keys do; entering a fraction in the reference would settle it.",
   "Up and Down in a matrix cell set the cell's value plus or minus the step as one command; the reference's undo history after several steps would settle it.",
+]
+observe = [
+  "RoboFont: enter =a/2 where a is odd and read the value.",
+  "RoboFont: press Up three times in a cell and undo once: note the value.",
 ]
 
 [[behavior]]
@@ -4341,11 +4458,13 @@ summary = "In the preview, dragging a margin changes it (with Alt, in all layers
 ref = "RoboFont reference › Space Center › Editing spacing with the mouse; Arrow key increments"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5). Documented in the RoboFont reference, not yet observed. The keys and drags run the spacing nudges (`spacing.increaseRightSidebearing`, `spacing.increaseLeftSidebearing`, `spacing.shiftOutlineRight`) with a signed amount; a drag runs its command once, when the button is released, and with Alt held the commands for every master layer run as one `command.batch`, so a drag is one undo step."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5). Documented in the RoboFont reference, not yet observed. The keys and drags run the spacing nudges (`spacing.increaseRightSidebearing`, `spacing.increaseLeftSidebearing`, `spacing.shiftOutlineRight`) with a signed amount; a drag runs its command once, when the button is released, and with Alt held the commands for every master layer run as one `command.batch`, so a drag is one undo step. RoboFont's table (reference › Space Center, robofont.com/documentation/reference/workspace/space-center/, edited 2021-09-01): Left takes 1 from and Right adds 1 to the right margin; with Alt the same signs apply to the left margin (Alt+Left shrinks it, Alt+Right grows it); Ctrl+Cmd shifts the outline by 1, Ctrl+Shift by 10 and Ctrl+Shift+Cmd by 100. FontCraft has the Alt keys the other way round and no Ctrl+Shift or 100 step (`key_command` and `step` in `crates/ui/src/shell/space_center/drag.rs`; docs/spec/08-spacing-kerning.md, question 26)."
 guesses = [
-  "Each side's arrow moves its edge that way: Right grows the right margin and Left shrinks it, Alt+Left grows the left margin and Alt+Right shrinks it, as the primary reference's text-mode spacing shortcuts do; the reference app would settle the direction of the Alt keys.",
   "A press within a few points of a glyph's left or right edge (the canvas's node size) drags that margin, anywhere else inside its box drags the outline; the reference's grab distance would settle it.",
-  "Ctrl+Cmd with Shift shifts the outline by 10; the reference gives no 100 step for the outline, and pressing Ctrl+Cmd+Shift there would settle it.",
+]
+observe = [
+  "RoboFont: press Alt+Left and Ctrl+Shift+Right on a selected glyph and read its margins, to confirm the documented keys.",
+  "RoboFont: measure in points how far from a glyph's edge a press still drags the margin.",
 ]
 
 [[command]]
@@ -4361,9 +4480,12 @@ summary = "Inverts foreground and background of the spacing preview between two 
 ref = "RoboFont reference › Space Center › Display options (Cut Off)"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5). Documented in the RoboFont reference, not yet observed. It applies to the Space Center's preview; heights left out keep their value, and null heights mean the baseline and the x-height of the master shown."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5). Documented in the RoboFont reference, not yet observed. It applies to the Space Center's preview; heights left out keep their value, and null heights mean the baseline and the x-height of the master shown. The band's edges are dragged with Cmd held and no glyph selected; the defaults, baseline and x-height, can be changed in the Preferences Editor (RoboFont reference › Space Center, robofont.com/documentation/reference/workspace/space-center/, edited 2021-09-01)."
 guesses = [
   "The band is drawn on every line across the whole preview width; the reference app would settle whether it stops at the text's ends.",
+]
+observe = [
+  "RoboFont: turn on Cut Off with a short centred line and note whether the band ends with the text.",
 ]
 
 [[command]]
@@ -4379,10 +4501,10 @@ summary = "Sets how the Space Center draws its text: right to left, centred or u
 ref = "RoboFont reference › Space Center › Display options"
 status = "docs"
 origin = "robofont"
-notes = "Documented in the RoboFont reference, not yet observed. The window's Display menu runs it with the option changed. Right to left lays the text out with the right-to-left kerning from the window's right edge. Upside down turns the whole preview half a circle; the arrow keys and drags still act on the glyphs' own left and right margins. The beam's height is the one `view.showMetricsBeam` keeps for the document (half the x-height until set), so Edit View and the Space Center measure at the same height; the Space Center's beam is switched on and off on its own. Tracking is added after the lines are broken. Images draws the placed image of each glyph's drawn layer behind the glyphs, at its transform, crop and opacity, whether or not View › Show Image is on; an iColor or svg layer's image is its colour drawing instead. Color draws a glyph with colour layers in the master shown (or every glyph of a layered font, in its Master Colors) through the canvas's colour path, in place of its filled outline; Stroke still outlines it. The cut-off band does not recolour images or colour drawings."
+notes = "Documented in the RoboFont reference, not yet observed. The window's Display menu runs it with the option changed. Right to left lays the text out with the right-to-left kerning from the window's right edge. Upside down turns the whole preview half a circle; the arrow keys and drags still act on the glyphs' own left and right margins. The beam's height is the one `view.showMetricsBeam` keeps for the document (half the x-height until set), so Edit View and the Space Center measure at the same height; the Space Center's beam is switched on and off on its own. Tracking is added after the lines are broken. Images draws the placed image of each glyph's drawn layer behind the glyphs, at its transform, crop and opacity, whether or not View › Show Image is on; an iColor or svg layer's image is its colour drawing instead. Color draws a glyph with colour layers in the master shown (or every glyph of a layered font, in its Master Colors) through the canvas's colour path, in place of its filled outline; Stroke still outlines it. The cut-off band does not recolour images or colour drawings. RoboFont's Space Center page describes Upside Down as flipping the text vertically, Beam as a movable horizontal line that measures margins, and Line Space as adding or taking units between lines, where ours multiplies the line height (robofont.com/documentation/reference/workspace/space-center/, edited 2021-09-01)."
 guesses = [
   "Right to left uses the font's right-to-left kerning, as an Edit View tab set right to left does; the reference's kerning is not split by direction, and a font with right-to-left pairs would settle it.",
-  "Upside down turns the preview half a circle, as Text Preview's Flip does, rather than mirroring it top to bottom; the reference app would settle it.",
+  "Upside down turns the preview half a circle, as Text Preview's Flip does, rather than mirroring it top to bottom. RoboFont's page says only that the text is flipped vertically, which fits a mirrored text better (notes); the reference app would settle it.",
   "With the preview upside down the keys and drags keep their meaning for the glyph (Right still grows the right margin); the reference app would settle whether they follow the screen instead.",
   "The beam shares its height with Edit View's metrics beam and is switched on separately; the reference app would settle whether its Space Center beam has its own height.",
   "The margins on the beam are labelled on rows whose em is at least four label sizes, so small waterfall lines show only the beam; the reference app would settle it.",
@@ -4403,6 +4525,13 @@ observe = [
   "Turn on Guides with a horizontal font guide: note whether it runs across the line or within each glyph.",
   "Place an image in a glyph, open the Space Center with Show Image off and turn on Images: note whether the image shows, at what opacity, and whether a background-layer image shows.",
   "Note whether Images and the other display items are on or off in a new Space Center.",
+  "RoboFont: set Tracking to 100 with a text that fills the line and note whether it wraps earlier.",
+  "RoboFont: choose Overlay Layers and write down the entries.",
+  "RoboFont: note the range and the unit of Line Space.",
+  "RoboFont: draw a multi-line text at small sizes with Beam on and note which sizes show the margins' numbers.",
+  "RoboFont: give a font left-to-right and right-to-left pairs and note which are used with Right to Left on and off.",
+  "RoboFont: place a very large image, set the size to 400 and note whether it is sharp.",
+  "RoboFont: show a colour glyph and note whether its filled outline shows under its colours.",
 ]
 
 [[command]]
@@ -4421,6 +4550,9 @@ origin = "robofont"
 notes = "Documented in the RoboFont reference, not yet observed. The command behind a matrix cell (`spaceCenter.matrixEntry`): the window evaluates the text against the font as it is and runs `spacing.setWidth`, `spacing.setLeftSidebearing` or `spacing.setRightSidebearing` on the column's layer with the number, so agents and the window enter values the same way."
 guesses = [
   "A matrix entry is its own command that evaluates the text and then runs the spacing setter as a second step; the reference's undo history after one entry would settle whether it is one step.",
+]
+observe = [
+  "RoboFont: enter =a+10 in a matrix cell and undo once: note what is left.",
 ]
 
 [[command]]

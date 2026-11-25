@@ -340,6 +340,12 @@ is in `07-import-export.md`, section 4.2).
 
 ## Open questions
 
+M5.19 (2026-11-25) read the reference's tutorials, release notes ("What's new in Glyphs",
+updates.glyphsapp.com), scripting documentation (docu.glyphsapp.com) and forum answers, and the
+RoboFont and FontLab metrics pages. What they settle is in the rows' `notes` with the source;
+questions 20 to 27 list where FontCraft differs. Every guess left that a reference could settle has a
+step in `observe`.
+
 1. Sign of the kerning shortcuts: does "increase" add to the value (more space) or make the
    pair tighter?
    **Answered for M5 (our decision):** increase adds to the value (more space), decrease subtracts.
@@ -364,6 +370,7 @@ is in `07-import-export.md`, section 4.2).
 5. Numeric width edit: which sidebearing absorbs the change?
    **Answered for M5 (our decision):** the right sidebearing absorbs it; the left one stays
    (`spacing.setWidth`). `glyph.transformMetrics` without *on both sides* does the same.
+   **Confirmed (source):** a developer's forum answer (forum.glyphsapp.com/t/838, 2015).
 6. Metrics key grammar: is whitespace allowed? Can `|` and `@` be combined with an operator, and
    in what order (`=|n+10`, `=h+8@200`)? More than one operation? Negative constants (`=-12` on
    a non-aligned glyph)? How are hyphenated glyph names told apart from subtraction?
@@ -402,7 +409,9 @@ is in `07-import-export.md`, section 4.2).
    **Answered for M5 (our decision):** on its layer the local key wins. A plain number typed into a
    field removes the key the field shows: a local key from the layer, a glyph-level key from the
    glyph (`metricsKey.localPrefix`). In the file a local key is the layer's own key, written
-   without `==`.
+   without `==`. **Confirmed (sources):** local
+   keys serve as exceptions (handbook), and emptying a field removes its key and keeps the spacing
+   (forum.glyphsapp.com/t/19855, 2021). What a plain number does stays open.
 11. Kerning lookup: is the precedence in section 3.7 what the reference does, in particular
     glyph–group before group–glyph?
    **Answered for compiled fonts by the oracles:** in a test font with A–@V = −30 and @A–V = −40,
@@ -419,6 +428,10 @@ is in `07-import-export.md`, section 4.2).
    the group value, so the number can change. Ours: opening a lock stores the pair that the open
    lock names at the value that applied; closing deletes that exception in the current master only
    (`kerning.lockStates`, `kerning.closingLockRemovesException`).
+   **Confirmed (developers' forum answers):** the lock follows from the stored pairs; opening one
+   stores a pair at once; closing one deletes the exception whatever its value. Open: the value an
+   opened lock stores when a group pair applied (0 for an unkerned pair), and whether closing
+   reaches other masters.
 13. Are kerning groups per glyph across all masters (assumed) and shared between LTR and RTL?
    **Answered (sources):** per glyph across all masters: the file format stores `kernLeft` and
    `kernRight` on the glyph. Shared with right-to-left kerning: both oracles read right-to-left
@@ -441,6 +454,9 @@ is in `07-import-export.md`, section 4.2).
    as an exception when they differ. So when two pairs would lift to the same group pair, the
    first is lifted and the second meets it. With T–m and T–ň this gives @T–@n and the exception
    @T–ň, which keeps every value the two pairs had.
+   **Narrowed (developers' forum answers):** a pair is not lifted when a group pair with another
+   value exists, and an exception with no group pair beside it becomes the group pair. Which of two
+   clashing pairs is lifted stays open; one user saw the lowest value taken.
 16. Rename with scope "pair": does it create a new group, and what membership does it get?
    **Answered for M5 (our decision):** no new group: only the selected pair's side is renamed and
    the glyphs keep their group (`kerning.renameGroup`).
@@ -449,11 +465,14 @@ is in `07-import-export.md`, section 4.2).
    **Answered for M5 (oracles and our decision):** zero pairs are stored and override group values;
    both oracles keep them in the compiled font. Values read from files keep their fractions; typed
    values are rounded to whole units. Both oracles round compiled kerning half up (−10.5 → −10,
-   10.5 → 11, −10.6 → −11).
+   10.5 → 11, −10.6 → −11). **Confirmed (forum):** 0 is stored and is not the same as no pair; the
+   reference leaves a 0 between two groups out of the exported kerning, which changes nothing since
+   group pairs are looked up last.
 18. Vertical kerning: storage, shortcuts, Kerning window listing, and the feature generated.
    **Partly answered (oracles), the rest our decision (M5):** neither fontc nor fontmake exports
    vertical kerning (no `vkrn` from a `kerningVertical` pair). M5 stores and edits vertical pairs
-   and shows them in top-to-bottom text; there are no vertical kerning shortcuts in M5.
+   and shows them in top-to-bottom text; there are no vertical kerning shortcuts in M5. For the
+   export see question 22.
 19. Implicit `kern` feature: lookup structure, script/language handling, interaction with a
     hand-written `kern` feature, and any value or size limits.
    **Answered for M5 (oracle):** M5.17 builds the lookups as fontc's kern writer does: both
@@ -461,3 +480,35 @@ is in `07-import-export.md`, section 4.2).
    a lookup per script). Guess on `kerning.implicitKernFeature`. **Open for M8:** the interaction
    with a hand-written `kern` feature; the handbook's Layout chapter says a hand-written feature of
    the same name places the generated code where it holds the line `# Automatic Code`.
+20. **A master's name in a metrics key.** Version 4 allows it (release notes, build 3815); no page
+    gives the syntax. Observe it, then extend `parse_stored` in `crates/spacing/src/keys.rs`
+    (`metricsKey.calculationSyntax`).
+21. **Keys on brace layers.** **Answered (forum, release notes):** a key on a brace layer reads the
+    referenced glyph's interpolated value at that place (forum.glyphsapp.com/t/16722, 2020; builds
+    3191 and 3192). Code change: `referenced_layer` in `crates/spacing/src/lib.rs`, which falls back
+    to the master's layer, and its callers in `crates/spacing/src/eval.rs`, which need the
+    interpolated metric (`metricsKey.glyphLevelByDefault`).
+22. **Vertical kerning export.** **Answered (release notes):** the reference exports vertical
+    kerning, static and variable (builds 3117, 3119, 3120). Code change: a vertical pass in
+    `finalize_kerning` (`crates/features/src/kern.rs`) that writes the vertical pairs as a `vkrn`
+    feature; the oracles write none, so a test reads the GPOS itself (`kerning.verticalGroups`).
+23. **Out-of-sync threshold.** **Answered in part (release notes):** the reference allows a
+    difference up to a threshold, a little larger when a layer has a width and a sidebearing key
+    (build 3855), with a parameter for linked masters (build 3822). The numbers are not documented.
+    Code change once observed: `check` in `crates/spacing/src/sync.rs`
+    (`spacing.listOutOfSyncMetrics`).
+24. **Writing direction of the Kerning window.** **Answered in part (release notes, build 3807):**
+    the window has its own control. Code change: `crates/ui/src/app/models/kerning_window.rs` (which asks
+    for `ltr`) and `crates/ui/src/panels/kerning_window/mod.rs` list left-to-right pairs
+    only (`window.kerning`).
+25. **Show All Glyphs.** **Answered in part (release notes, builds 3312 and 3820):** spaces go
+    between Arabic pairs, so that they do not join. Code change: `show_all` in
+    `crates/ui/src/shell/kerning_window.rs` puts one between all pairs (`kerning.showAllGlyphs`).
+26. **Space Center keys** (RoboFont reference, edited 2021-09-01). **Answered (source):** with Alt,
+    Left takes from and Right adds to the left margin; Ctrl+Shift shifts the outline by 10 and
+    Ctrl+Shift+Cmd by 100. Code change: `key_command` and `step` in
+    `crates/ui/src/shell/space_center/drag.rs` and its test (`spaceCenter.pointerAndKeys`). The same
+    page gives Up as -1 and Down as +1 in matrix cells, which an observation should confirm first.
+27. **Metrics beam height** (FontLab 8). **Answered (source):** one height per master. Code change:
+    `beam_heights` in `crates/ui/src/canvas/overlays/mod.rs` is per document; the Space Center's beam
+    reads it too (`view.showMetricsBeam`).
