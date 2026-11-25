@@ -1,19 +1,30 @@
 //! Components that do not follow the layer they are on: pinned to another master or layer of
-//! their base glyph ([`Component::pinned_layer`]), drawn as outlines for export.
+//! their base glyph ([`Component::pinned_layer`]) or to a location on the font's axes
+//! ([`Component::location`]), drawn as outlines for export.
+//!
+//! A location is an amount on each axis it names, in design coordinates; on the other axes the
+//! component stays at its layer's master. The base glyph is interpolated there from its master
+//! layers and intermediate layers, each drawn with its attachments, corners and components. A
+//! component with both a location and a pin is drawn at the location, and a smart component by its
+//! values.
 //!
 //! A compiled composite refers to its base glyph at the same place of the design space, so it
 //! cannot hold such a component. [`draw_pinned_components`] writes it as the paths it draws,
 //! nested components included. The other layers of the glyph get the paths of their components
 //! of the same base glyph, so the glyph still interpolates when only some masters are pinned.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
+use fontcraft_geom::variation::{MAX_AXES, VariationModel, normalize_value};
 use fontcraft_geom::{Affine, Point};
+use fontcraft_plist::{Dict, Num, Value};
 
-use crate::{Component, Font, Layer, MAX_COMPONENT_DEPTH, MAX_OUTLINE_ELEMENTS, Path, Shape, in_range};
+use crate::{Component, Font, Glyph, Layer, MAX_COMPONENT_DEPTH, MAX_OUTLINE_ELEMENTS, Path, Shape, axes, fc_keys, in_range};
 
 /// Most components looked at, nested ones included, while one layer's pinned components are drawn.
-pub const MAX_PINNED_VISITS: usize = 10_000;
+pub const MAX_PINNED_VISITS: usize = 4_096;
+/// Most layers a base glyph is interpolated from.
+pub const MAX_LOCATION_SOURCES: usize = 64;
 /// Most nodes drawing the pinned components of one font may add.
 pub const MAX_PINNED_NODES: usize = 5_000_000;
 
@@ -26,10 +37,42 @@ pub struct PinnedOutlines {
     pub kept: Vec<String>,
 }
 
+impl Component {
+    /// The location the component is drawn at, by axis tag in design coordinates; `None` when it
+    /// has none or when what is stored cannot be read.
+    pub fn location(&self) -> Option<BTreeMap<String, f64>> {
+        let d = self.info.user_data.get(fc_keys::COMPONENT_LOCATION)?.as_dict()?;
+        if d.is_empty() || d.len() > MAX_AXES {
+            return None;
+        }
+        d.entries.iter().map(|(tag, v)| Some((tag.as_str().to_string(), v.as_num().map(Num::as_f64).filter(|v| in_range(*v))?))).collect()
+    }
+
+    /// Sets the location the component is drawn at; an empty one takes it away. Values that are
+    /// not numbers or beyond the coordinate limit are left out.
+    pub fn set_location(&mut self, location: &BTreeMap<String, f64>) {
+        let mut d = Dict::new();
+        for (tag, v) in location.iter().take(MAX_AXES) {
+            if let Some(v) = Some(*v).filter(|v| in_range(*v)).and_then(axes::number_value) {
+                d.insert(tag.as_str(), v);
+            }
+        }
+        let data = &mut self.info.user_data.0;
+        if !d.is_empty() {
+            data.insert(fc_keys::COMPONENT_LOCATION, Value::Dict(d));
+        } else if let Some(i) = data.entries.iter().position(|(k, _)| k.as_str() == fc_keys::COMPONENT_LOCATION) {
+            data.remove_at(i);
+        }
+    }
+}
+
 /// Whether the component `c` of `layer` is drawn from another layer of its base glyph than the one
 /// `layer` would give it.
 pub fn is_redirected(font: &Font, c: &Component, layer: &Layer) -> bool {
     let Some(base) = font.glyph(&c.glyph) else { return false };
+    if c.location().is_some() {
+        return true;
+    }
     let Some(pinned) = c.pinned_layer(base) else { return false };
     // An intermediate layer draws its components at its own place, not at its master's.
     pinned.id != layer.master || !layer.info.attrs.coordinates.is_empty()
@@ -69,7 +112,9 @@ pub fn draw_pinned_components(font: &Font) -> (Font, PinnedOutlines) {
                     && bases.contains(c.glyph.as_str())
                 {
                     let mut paths = Vec::new();
-                    match drawing.component(c, &layer.master, 1, &mut paths) {
+                    // An unpinned component of an intermediate layer is drawn at that layer's place.
+                    let own = (!is_redirected(font, c, layer)).then(|| at_layer(font, c, layer)).flatten();
+                    match drawing.component(own.as_ref().unwrap_or(c), &layer.master, 1, &mut paths) {
                         Ok(()) => {
                             drawn += 1;
                             shapes.extend(paths.into_iter().map(Shape::Path));
@@ -101,6 +146,35 @@ pub fn draw_pinned_components(font: &Font) -> (Font, PinnedOutlines) {
         }
     }
     (out, report)
+}
+
+/// `c` at the location of the intermediate layer `layer`; `None` for any other layer.
+fn at_layer(font: &Font, c: &Component, layer: &Layer) -> Option<Component> {
+    let coordinates = &layer.info.attrs.coordinates;
+    if coordinates.is_empty() {
+        return None;
+    }
+    let location =
+        font.axes.iter().zip(coordinates).filter_map(|(a, v)| v.filter(|v| v.is_finite()).map(|v| (a.tag.clone(), v))).collect::<BTreeMap<_, _>>();
+    let mut c = c.clone();
+    c.set_location(&location);
+    Some(c)
+}
+
+/// The paths of `base` interpolated at `location` for a component on a layer of `master`, in
+/// `base`'s coordinates. Takes one from `visits` for each component looked at.
+pub(crate) fn located_paths(
+    font: &Font,
+    base: &Glyph,
+    location: &BTreeMap<String, f64>,
+    master: &str,
+    depth: usize,
+    visits: &mut usize,
+) -> Result<Vec<Path>, String> {
+    let mut drawing = Drawing { font, nodes_left: MAX_OUTLINE_ELEMENTS, visits_left: *visits };
+    let result = drawing.located(base, location, master, depth);
+    *visits = drawing.visits_left;
+    result
 }
 
 /// The paths the component `c` draws on a layer of `master`, nested components included.
@@ -138,8 +212,41 @@ impl Drawing<'_> {
             }
             return Ok(());
         }
+        if let Some(location) = c.location() {
+            for path in self.located(base, &location, master, depth)? {
+                self.shape(&Shape::Path(path), c.affine(), master, depth, out)?;
+            }
+            return Ok(());
+        }
         let Some(layer) = c.pinned_layer(base).or_else(|| base.layer(master)) else { return Ok(()) };
         self.layer(layer, c.affine(), depth, out)
+    }
+
+    /// The paths of `base` at `location`, interpolated from what its sources draw.
+    fn located(&mut self, base: &Glyph, location: &BTreeMap<String, f64>, master: &str, depth: usize) -> Result<Vec<Path>, String> {
+        self.visits_left = self.visits_left.checked_sub(1).ok_or_else(|| format!("drawing it visits more than {MAX_PINNED_VISITS} components"))?;
+        let sources = Sources::of(self.font, base, location, master)?;
+        let mut drawn: Vec<Vec<Path>> = Vec::with_capacity(sources.layers.len());
+        for layer in &sources.layers {
+            let mut paths = Vec::new();
+            self.layer(layer, Affine::IDENTITY, depth, &mut paths)?;
+            drawn.push(paths);
+        }
+        let shape = |paths: &[Path]| paths.iter().map(|p| (p.closed, p.nodes.iter().map(|n| n.on_curve()).collect::<Vec<_>>())).collect::<Vec<_>>();
+        let mut shapes = drawn.iter().map(|p| shape(p));
+        if let Some(first) = shapes.next()
+            && shapes.any(|s| s != first)
+        {
+            return Err(format!("the masters of `{}` are not compatible", base.name));
+        }
+        let rows: Vec<Vec<f64>> = drawn.iter().map(|paths| paths.iter().flat_map(|p| p.nodes.iter().flat_map(|n| [n.x, n.y])).collect()).collect();
+        let values = sources.model.interpolate(&sources.at, &rows).map_err(|e| format!("`{}` cannot be interpolated: {e}", base.name))?;
+        let mut out = drawn.into_iter().next().unwrap_or_default();
+        let nodes = out.iter_mut().flat_map(|p| p.nodes.iter_mut());
+        for (n, &[x, y]) in nodes.zip(values.as_chunks::<2>().0) {
+            (n.x, n.y) = (x, y);
+        }
+        Ok(out)
     }
 
     /// Appends the paths of `layer`, moved by `affine`.
@@ -178,6 +285,71 @@ impl Drawing<'_> {
             }
             Shape::Image(_) | Shape::Raw(_) => Ok(()),
         }
+    }
+}
+
+/// The layers a glyph is interpolated from, with the variation model over their locations and
+/// the wanted location in it.
+struct Sources<'a> {
+    layers: Vec<&'a Layer>,
+    model: VariationModel,
+    at: Vec<f64>,
+}
+
+impl<'a> Sources<'a> {
+    fn of(font: &Font, base: &'a Glyph, location: &BTreeMap<String, f64>, master: &str) -> Result<Self, String> {
+        let count = font.axes.len();
+        if count > MAX_AXES {
+            return Err(format!("the font has more than {MAX_AXES} axes"));
+        }
+        let place = |m: &crate::Master| (0..count).map(|i| axes::design_value(&m.location, i)).collect::<Vec<f64>>();
+        let origin = axes::origin(font).ok_or("the font has no masters")?;
+        let home = font.master(master).unwrap_or(origin);
+        let masters: Vec<(&str, Vec<f64>)> = font.masters.iter().map(|m| (m.id.as_str(), place(m))).collect();
+        // The origin's layer first: its paths give the result its nodes' kinds.
+        let mut found: Vec<(&'a Layer, Vec<f64>)> = Vec::new();
+        let mut add = |layer: &'a Layer, at: Vec<f64>| {
+            if found.len() < MAX_LOCATION_SOURCES && !found.iter().any(|(_, l)| *l == at) {
+                found.push((layer, at));
+            }
+        };
+        let no_layer = || format!("`{}` has no layer for master `{}`", base.name, origin.name);
+        add(base.layer(&origin.id).ok_or_else(no_layer)?, place(origin));
+        for (id, at) in &masters {
+            if let Some(layer) = base.layer(id) {
+                add(layer, at.clone());
+            }
+        }
+        for layer in base.layers.iter().filter(|l| !l.is_master_layer() && !l.info.attrs.coordinates.is_empty()) {
+            let a = &layer.info.attrs;
+            let outline = a.color_palette.is_none() && !a.full_color && !a.svg && a.sbix_size.is_none() && a.smart_poles.is_empty();
+            let Some((_, at)) = masters.iter().find(|(id, _)| *id == layer.master).filter(|_| outline && a.axis_rules.is_empty()) else { continue };
+            let own = |i: usize, v: f64| a.coordinates.get(i).copied().flatten().filter(|v| v.is_finite()).unwrap_or(v);
+            add(layer, at.iter().enumerate().map(|(i, v)| own(i, *v)).collect());
+        }
+        let default = place(origin);
+        let wanted: Vec<f64> = place(home)
+            .into_iter()
+            .enumerate()
+            .map(|(i, v)| font.axes.get(i).and_then(|a| location.get(&a.tag)).copied().filter(|v| in_range(*v)).unwrap_or(v))
+            .collect();
+        // Each axis runs from −1 at its lowest source to 1 at its highest, 0 at the origin.
+        let range = |i: usize| {
+            let values = || found.iter().filter_map(move |(_, l)| l.get(i).copied());
+            (values().fold(f64::INFINITY, f64::min), values().fold(f64::NEG_INFINITY, f64::max))
+        };
+        let ranges: Vec<(f64, f64)> = (0..count).map(range).collect();
+        let normalized = |at: &[f64]| -> Result<Vec<f64>, String> {
+            at.iter()
+                .zip(&ranges)
+                .zip(&default)
+                .map(|((v, (low, high)), d)| normalize_value(*v, *low, *d, *high, true).filter(|v| v.is_finite()))
+                .collect::<Option<Vec<f64>>>()
+                .ok_or_else(|| "a location is not a usable number".to_string())
+        };
+        let locations = found.iter().map(|(_, l)| normalized(l)).collect::<Result<Vec<_>, _>>()?;
+        let model = VariationModel::new(&locations, true).map_err(|e| format!("`{}` cannot be interpolated: {e}", base.name))?;
+        Ok(Self { at: normalized(&wanted)?, layers: found.into_iter().map(|(l, _)| l).collect(), model })
     }
 }
 

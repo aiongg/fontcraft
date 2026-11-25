@@ -49,6 +49,7 @@ mod compile_extras;
 mod compile_features;
 mod compile_outlines;
 mod compile_project;
+mod component_instance;
 mod construction;
 mod corner;
 mod corner_helpers;

@@ -391,8 +391,10 @@ impl Font {
                             return Err(bad("a component transform is not a number".into()));
                         }
                         // A composite cannot refer to another master's drawing.
-                        if crate::pinned::is_redirected(self, c, layer) {
-                            for p in crate::pinned::component_paths(self, c, &master.id).map_err(bad)? {
+                        if crate::pinned::is_redirected(self, c, layer)
+                            && let Ok(paths) = crate::pinned::component_paths(self, c, &master.id)
+                        {
+                            for p in paths {
                                 let contour = p.to_contour().map_err(bad)?;
                                 if !contour.elements().is_empty() {
                                     out.contours.push(contour);

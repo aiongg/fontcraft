@@ -907,7 +907,8 @@ impl Font {
     /// corners only, one whose corners cannot be fitted without them, and a smart component that
     /// cannot be interpolated is drawn as a plain component. A component pinned to a master or
     /// layer of its base glyph ([`Component::pinned_layer`]) is drawn from there, and so is what
-    /// its base glyph is made of.
+    /// its base glyph is made of; one with a location of its own ([`crate::pinned`]) is drawn
+    /// interpolated there, or without it when its base glyph cannot be interpolated.
     ///
     /// Bounded work: components nest at most [`MAX_COMPONENT_DEPTH`] deep, the result has at most
     /// [`MAX_OUTLINE_ELEMENTS`] segments, every point is within [`MAX_COORDINATE`], and at most
@@ -919,7 +920,7 @@ impl Font {
 
     /// [`Font::outline`] for a glyph already in hand (no lookup by name for the glyph itself).
     pub fn outline_of(&self, glyph: &Glyph, master: &str) -> Result<BezPath, ModelError> {
-        let mut budget = OutlineBudget { elements: MAX_OUTLINE_ELEMENTS, smart_draws: crate::smart::MAX_SMART_DRAWS_PER_LAYER };
+        let mut budget = OutlineBudget::default();
         self.outline_at(glyph, master, 0, &mut budget)
     }
 
@@ -990,7 +991,7 @@ impl Font {
     /// component interpolated as [`Font::outline`] draws it, any other its base glyph's outline, on
     /// the master or layer the component is pinned to.
     pub fn component_outline(&self, c: &Component, master: &str) -> Result<BezPath, ModelError> {
-        let mut budget = OutlineBudget { elements: MAX_OUTLINE_ELEMENTS, smart_draws: crate::smart::MAX_SMART_DRAWS_PER_LAYER };
+        let mut budget = OutlineBudget::default();
         if let Some(drawn) = crate::smart::component_shapes(self, c, master, &mut budget.smart_draws).ok().flatten() {
             return self.shapes_outline(&drawn, master, 1, &mut budget, &c.glyph);
         }
@@ -1011,9 +1012,17 @@ impl Font {
             return Err(bad("a component transform is not a number".into()));
         }
         let base = self.glyph(&c.glyph).ok_or_else(|| ModelError::NoSuchGlyph(c.glyph.clone()))?;
-        let mut inner = match c.pinned_layer(base) {
-            Some(layer) => self.layer_outline(base, layer, depth, budget)?,
-            None => self.outline_at(base, master, depth, budget)?,
+        let located = c.location().and_then(|at| crate::pinned::located_paths(self, base, &at, master, depth, &mut budget.visits).ok());
+        let mut inner = match (located, c.pinned_layer(base)) {
+            (Some(paths), _) => {
+                let mut out = BezPath::new();
+                for p in &paths {
+                    out.extend(p.to_bez().map_err(bad)?);
+                }
+                out
+            }
+            (None, Some(layer)) => self.layer_outline(base, layer, depth, budget)?,
+            (None, None) => self.outline_at(base, master, depth, budget)?,
         };
         inner.apply_affine(c.affine());
         // A transform can push points anywhere: hold the result to the same limits.
@@ -1236,6 +1245,14 @@ struct OutlineBudget {
     elements: usize,
     /// Smart components drawn.
     smart_draws: usize,
+    /// Components looked at while components at a location of their own are drawn.
+    visits: usize,
+}
+
+impl Default for OutlineBudget {
+    fn default() -> Self {
+        Self { elements: MAX_OUTLINE_ELEMENTS, smart_draws: crate::smart::MAX_SMART_DRAWS_PER_LAYER, visits: crate::pinned::MAX_PINNED_VISITS }
+    }
 }
 
 impl OutlineBudget {
