@@ -409,11 +409,13 @@ pub(super) fn refusal(subjects: &[Subject<'_>], cause: Option<EngineError>) -> E
             EngineError::Compile(CompileError::Features(_)) => found.has("features"),
             EngineError::Compile(CompileError::Incompatible(_)) => found.has("incompatible"),
             EngineError::Compile(CompileError::DuplicateCodepoint { .. }) => found.has("codepoint"),
-            _ => false,
+            e => found.list.iter().any(|p| p.get("message").and_then(Value::as_str) == Some(e.to_string().as_str())),
         };
-        // The check may have stopped before the stage the build stopped in.
-        if !listed && !(subjects.len() > 1 && !found.is_empty()) {
-            add_error(&mut found, subject.font, None, e);
+        // The check stops before the stages that draw and write, where the build may have stopped.
+        match subjects.len() {
+            _ if listed => {}
+            1 => add_error(&mut found, subject.font, None, e),
+            _ => found.add("font", e.to_string(), None, Value::Null),
         }
     }
     let message = match cause {
