@@ -25,6 +25,10 @@ pub struct HoiTokens {
     pub curve_width: f32,
     pub line_width: f32,
     pub knob_radius: f32,
+    /// The timing graph's dots: the one at constant speed, the one that follows the graph, and their radius.
+    pub clock_dot: Color32,
+    pub timing_dot: Color32,
+    pub clock_radius: f32,
 }
 
 impl HoiTokens {
@@ -45,6 +49,9 @@ impl HoiTokens {
             curve_width: 1.5,
             line_width: 1.0,
             knob_radius: 4.0,
+            clock_dot: Color32::WHITE,
+            timing_dot: Color32::from_rgb(0x1f, 0x9d, 0x55),
+            clock_radius: 3.5,
         }
     }
 }

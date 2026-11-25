@@ -182,6 +182,17 @@ pub fn interpolate_layer(font: &Font, sources: &GlyphSources, location: &Locatio
     }
 }
 
+/// The weight of each source `sources`' glyph interpolates from at `location`, by layer id. The
+/// weights sum to 1; a source alternate layers replace there, and an empty layer the
+/// interpolation skips, have no entry.
+pub fn source_weights(font: &Font, sources: &GlyphSources, location: &Location, options: &InterpOptions) -> Result<Vec<(String, f64)>, InterpError> {
+    let designspace = Designspace::new(font)?;
+    let glyph = font.glyph(&sources.glyph).ok_or_else(|| InterpError::UnknownGlyph(sources.glyph.clone()))?;
+    let at = At { x: location.clone(), y: None };
+    let (layers, _, weights) = glyph_inputs(&designspace, glyph, sources, &at, None, options, &mut ModelCache::new())?;
+    Ok(layers.iter().map(|l| l.id.clone()).zip(weights.x).collect())
+}
+
 /// `font` reduced to one master at the location of the instance at `instance` (an index into
 /// `Font::instances`), everything master-bound interpolated.
 pub fn instance_font(font: &Font, instance: usize, options: &InterpOptions) -> Result<Font, InterpError> {

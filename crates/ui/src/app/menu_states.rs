@@ -70,6 +70,7 @@ pub const SWITCHES: &[&str] = &[
     "path.togglePowerNudge",
     "window.palette",
     "window.previewPanel",
+    "view.animateAxis",
     "audit.showPanel",
 ];
 
@@ -179,6 +180,7 @@ fn checked(app: &FontCraftApp, display: &mut Display, switches: &mut Switches, i
         "path.togglePowerNudge" => app.session.settings().get_bool(fontcraft_tools::drag_aids::POWER_NUDGE_SETTING).unwrap_or(false),
         "window.palette" => crate::shell::window::palette_shows(app),
         "window.previewPanel" => shows(PanelId::Preview),
+        "view.animateAxis" => app.view.preview.sweep.is_some(),
         "audit.showPanel" => shows(PanelId::FontAudit),
         _ => return None,
     })

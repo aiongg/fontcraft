@@ -57,6 +57,7 @@ mod glyph;
 mod glyph_info;
 mod glyph_search;
 mod glyph_set;
+pub mod glyph_sources;
 mod guide;
 mod hint_import;
 mod hint_points;
@@ -420,6 +421,7 @@ pub const COMMAND_TABLES: &[CommandTable] = &[
     interpolation::specs,
     match_masters::specs,
     hoi::specs,
+    glyph_sources::specs,
     instance_masters::specs,
     variation_tools::specs,
     compare::specs,

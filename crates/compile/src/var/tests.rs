@@ -161,6 +161,24 @@ fn an_intermediate_layer_is_a_source_of_its_own_glyph_only() {
 }
 
 #[test]
+fn inactive_sources_are_left_out_of_their_glyph_and_of_its_composites() {
+    let mut f = two_masters();
+    for (name, id) in [("a", "black"), ("b", "brace")] {
+        let mut g = f.glyph_mut(name).unwrap();
+        let layer = g.layers.iter_mut().find(|l| l.id == id).unwrap();
+        fontcraft_interp::sources::set_inactive(layer, true);
+    }
+    let v = build(&f, None);
+    assert_eq!(at(&v, "a", &[("wght", 900.0)]), ((0.0, 0.0, 100.0, 700.0), 300.0), "only Thin is left");
+    assert_eq!(at(&v, "b", &[("wght", 500.0)]).0.2, 200.0, "halfway between the masters");
+    // The decomposed composite draws `a` as it interpolates, not its inactive Black drawing.
+    assert_eq!(at(&v, "c", &[("wght", 900.0)]).0, (0.0, 0.0, 150.0, 1050.0));
+
+    std::sync::Arc::make_mut(&mut f.instances).push(Instance { name: "Black".into(), location: vec![900.0], ..Instance::default() });
+    assert_eq!(crate::needs_instance_font(&f, &fontcraft_model::Target::Instance(0)), Some(0), "an instance at the master interpolates too");
+}
+
+#[test]
 fn composites_keep_moving_components_and_decompose_scaled_ones() {
     let v = build(&two_masters(), None);
     let font = FontRef::new(&v.compiled.bytes).unwrap();

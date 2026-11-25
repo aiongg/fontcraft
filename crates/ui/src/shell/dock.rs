@@ -41,6 +41,8 @@ pub enum PanelId {
     Attributes,
     AnchorContext,
     Modules,
+    /// The glyph's sources and how much each contributes (`palette.glyphSources`).
+    GlyphSources,
     SelectionInfo,
     CommandConsole,
     HintingWaterfall,
@@ -84,6 +86,7 @@ impl PanelId {
         PanelId::Attributes,
         PanelId::AnchorContext,
         PanelId::Modules,
+        PanelId::GlyphSources,
         PanelId::SelectionInfo,
         PanelId::CommandConsole,
         PanelId::HintingWaterfall,
@@ -126,6 +129,7 @@ impl PanelId {
             PanelId::Attributes => "attributes",
             PanelId::AnchorContext => "anchorContext",
             PanelId::Modules => "modules",
+            PanelId::GlyphSources => "glyphSources",
             PanelId::SelectionInfo => "selectionInfo",
             PanelId::CommandConsole => "commandConsole",
             PanelId::HintingWaterfall => "hintingWaterfall",
@@ -174,6 +178,7 @@ impl PanelId {
             PanelId::Attributes => w.attributes.clone(),
             PanelId::AnchorContext => w.anchor_context.clone(),
             PanelId::Modules => w.modules.clone(),
+            PanelId::GlyphSources => w.glyph_sources.clone(),
             PanelId::SelectionInfo => w.selection_info.clone(),
             PanelId::CommandConsole => w.command_console.clone(),
             PanelId::HintingWaterfall => w.hinting_waterfall.clone(),
@@ -229,6 +234,7 @@ craft::ui::words! {
         attributes: "fontcraftPanel.attributes" = "Attributes";
         anchor_context: "fontcraftPanel.anchorContext" = "Anchor Context";
         modules: "fontcraftPanel.modules" = "Modules";
+        glyph_sources: "fontcraftPanel.glyphSources" = "Glyph Sources";
         selection_info: "fontcraftPanel.selectionInfo" = "Selection Info";
         command_console: "fontcraftPanel.commandConsole" = "Command Console";
         hinting_waterfall: "fontcraftPanel.hintingWaterfall" = "Hinting Preview";
@@ -375,7 +381,10 @@ impl DockPanels<PanelId> for Panels<'_> {
             PanelId::SelectionInfo => {
                 panels::selection_info::show(ui, panels::selection_info::Props { model: &self.models.selection_info, sent: self.sent });
             }
-            PanelId::InfoBox => panels::info_box::show(ui, panels::info_box::Props { model: &self.models.palette.info_box, sent: self.sent }),
+            PanelId::InfoBox => panels::info_box::show(
+                ui,
+                panels::info_box::Props { model: &self.models.palette.info_box, clock: self.models.sweep_position(), sent: self.sent },
+            ),
             PanelId::Transformations => {
                 panels::transformations::show(ui, panels::transformations::Props { model: &self.models.palette.transform, sent: self.sent });
             }
@@ -385,6 +394,9 @@ impl DockPanels<PanelId> for Panels<'_> {
             }
             PanelId::Modules => {
                 panels::palette_modules::show(ui, panels::palette_modules::Props { model: &self.models.modules.model, sent: self.sent })
+            }
+            PanelId::GlyphSources => {
+                panels::glyph_sources::show(ui, panels::glyph_sources::Props { model: &self.models.glyph_sources, sent: self.sent });
             }
             PanelId::Attributes => {
                 panels::attributes::show(ui, panels::attributes::Props { model: &self.models.color.attributes, sent: self.sent });

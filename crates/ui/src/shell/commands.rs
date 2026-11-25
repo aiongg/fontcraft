@@ -84,6 +84,7 @@ pub const MODULES: &[Module] = &[
     super::extension_manager::MODULE,
     super::project::MODULE,
     super::preview::MODULE,
+    super::axis_sweep::MODULE,
     crate::dialogs::overlay_fonts::MODULE,
     super::shape_order::MODULE,
     super::bitmap_editor::MODULE,

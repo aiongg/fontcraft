@@ -71,6 +71,10 @@ pub const AUDIT: &str = "com.fontcraft.audit";
 /// number}, "output": {tag: number}}]}` in design coordinates (M13.48, `font.setCrossAxisMappings`).
 pub const CROSS_AXIS_MAPPINGS: &str = "com.fontcraft.crossAxisMappings";
 
+/// A source layer left out of interpolation: the integer 1 (M9.37, `glyph.setSourceActive`,
+/// `fontcraft_interp::sources`). A layer without the key takes part.
+pub const SOURCE_INACTIVE: &str = "com.fontcraft.sourceInactive";
+
 /// Every key with the object it is stored on.
 pub const ALL: &[(&str, Owner)] = &[
     (ANCHOR_EXPRESSIONS, Owner::Anchor),
@@ -90,6 +94,7 @@ pub const ALL: &[(&str, Owner)] = &[
     (LINKED_SOURCE, Owner::Glyph),
     (AUDIT, Owner::Font),
     (CROSS_AXIS_MAPPINGS, Owner::Font),
+    (SOURCE_INACTIVE, Owner::Layer),
 ];
 
 /// Whether `key` is one of FontCraft's own keys.

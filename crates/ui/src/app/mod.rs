@@ -545,6 +545,7 @@ impl FontCraftApp {
         let stamp = Stamp::of(&self.session, self.view_revision);
         let mut cx = ProjectCx { session: &mut self.session, view: &self.view };
         self.models.project(stamp, &mut cx);
+        self.models.project_sweep(&mut cx);
         models::console::project(&mut self.models.console, &mut cx);
         self.models.project.project(&mut cx);
         models::palette::project(&mut self.models.palette, &mut cx, &self.tools, stamp);
@@ -770,6 +771,7 @@ impl ShellApp for FontCraftApp {
         open::take_dropped(self, ctx);
         crate::canvas::images::drop::take(self, ctx);
         crate::shell::font_audit::logic(self, ctx);
+        crate::shell::axis_sweep::logic(self, ctx);
         startup::poll_folders(self, ctx);
         if clipboard::finish_pdf(self) {
             ctx.request_repaint_after(clipboard::READ_POLL);

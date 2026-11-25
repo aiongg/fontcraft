@@ -9,6 +9,7 @@
 //! | the dash (`master`) | the text in the current master and the picked layers, following every master switch |
 //! | an instance | the text laid out in the document's instance view: the instance's widths and kerning |
 //! | Show All Instances (`all`) | the edited glyph once for each static instance whose eye is on |
+//! | any, while Animate Axis runs (`shell::axis_sweep`) | the text interpolated at the choice's location, its axis where the sweep is |
 //!
 //! Variable font settings are not instances here: the pop-up lists static instances only. The model holds the line in
 //! font units; the view places it in the strip it gets ([`place`]) and fills it.
@@ -29,11 +30,14 @@ use fontcraft_textlayout::{Direction, Item, Layout, Options, Text};
 use super::ProjectCx;
 use crate::app::ViewState;
 use crate::canvas::text::{self, WritingDirection};
+use crate::shell::axis_sweep::location_of;
 use crate::shell::dock::PanelId;
 use crate::shell::preview::{PreviewOptions, Shows, Target};
 
 /// Most glyphs one line draws; a longer text draws its first ones.
 pub const MAX_LINE_GLYPHS: usize = 2000;
+/// Most different glyphs a line draws while an axis is animated: every step interpolates them.
+pub const MAX_SWEEP_GLYPHS: usize = 200;
 
 /// One glyph of the line the double-click can hit: the text item and its advance along the line, in font units.
 #[derive(PlainData, Clone, Debug, PartialEq)]
@@ -122,6 +126,8 @@ pub enum Drawn {
     Instance(usize),
     /// The static instances whose eye is on, in font order.
     All(Vec<usize>),
+    /// A location, by the bits of its internal coordinates (one per font axis).
+    Location(Vec<u64>),
 }
 
 pub fn drawn(font: &Font, shows: &Shows) -> Drawn {
@@ -160,22 +166,27 @@ fn build(session: &mut Session, view: &ViewState, target: Target) -> Option<Prev
     let options = *state.options(target);
     let index = if view.text.kerning.shows_kerning() { session.kern_index().ok() } else { None };
     let doc = session.active().map(|d| (d.id, d.revision))?;
+    let designspace = if state.sweep.is_some() { session.designspace().ok() } else { None };
     let font = session.font().ok()?;
     let master = crate::shell::masters::current_master(font, &view.layers)?;
     let (low, high) = preview_range(font, master);
     let master = master.id.clone();
     let (text, edited, is_text) = line_text(font, view)?;
-    let drawn = drawn(font, &shows);
+    let chosen = drawn(font, &shows);
+    let drawn = match &designspace {
+        Some(ds) => Drawn::Location(location_of(font, ds, view, &shows).into_iter().map(f64::to_bits).collect()),
+        None => chosen.clone(),
+    };
     let instances: Vec<InstanceEntry> = (0..font.instances.len())
         .filter(|i| is_static(font, *i))
         .map(|i| InstanceEntry {
             index: i,
             name: instance_key(font, i),
             visible: font.instances.get(i).is_some_and(|x| x.visible),
-            chosen: drawn == Drawn::Instance(i),
+            chosen: chosen == Drawn::Instance(i),
         })
         .collect();
-    let instance_label = match drawn {
+    let instance_label = match chosen {
         Drawn::Instance(i) => Some(instance_key(font, i)),
         _ => None,
     };
@@ -195,8 +206,8 @@ fn build(session: &mut Session, view: &ViewState, target: Target) -> Option<Prev
         range: [low, high],
         options,
         instances,
-        master_chosen: drawn == Drawn::Master,
-        all_chosen: matches!(drawn, Drawn::All(_)),
+        master_chosen: chosen == Drawn::Master,
+        all_chosen: matches!(chosen, Drawn::All(_)),
         instance_label,
         ..PreviewModel::default()
     };
@@ -216,6 +227,18 @@ fn build(session: &mut Session, view: &ViewState, target: Target) -> Option<Prev
             text.clear_layers();
             let layout = fontcraft_textlayout::layout(&instance_view, &at, &text, &options).ok()?;
             fill_line(&mut model, &text, &layout, edited, is_text, |name, _| instance_view.outline(name, &at).ok());
+        }
+        Drawn::Location(bits) => {
+            let mut glyphs = layout_glyphs(&master_layout);
+            glyphs.truncate(MAX_SWEEP_GLYPHS);
+            let location: Vec<f64> = bits.iter().copied().map(f64::from_bits).collect();
+            let there = session.location_view(&location, &glyphs).ok()?;
+            let at = there.masters.first()?.id.clone();
+            let options = Options { direction: dir, kerning: view.text.kerning, single_line: true, ..Default::default() };
+            let mut text = text;
+            text.clear_layers();
+            let layout = fontcraft_textlayout::layout(&there, &at, &text, &options).ok()?;
+            fill_line(&mut model, &text, &layout, edited, is_text, |name, _| there.outline(name, &at).ok());
         }
         Drawn::All(list) => {
             let glyph = edited_glyph.clone()?;

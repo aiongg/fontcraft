@@ -101,6 +101,7 @@ mod glyph_data;
 mod glyph_info;
 mod glyph_search;
 mod glyph_set;
+mod glyph_sources;
 mod glyphs_kept_extras;
 mod guides;
 mod hint_import;
