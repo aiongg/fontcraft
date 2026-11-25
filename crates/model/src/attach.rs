@@ -29,7 +29,8 @@
 //! The cap glyph is drawn as for the bottom end of a stem whose path runs counter-clockwise, so
 //! on the top end the centre alignment turns it 180 degrees. Alignments: centre (`Both`) lays the
 //! cap's x axis on the line from the first to the second host node; left turns the cap's y axis
-//! onto the side before the first node, right onto the side after the second; none does not turn
+//! onto the side before the first node, right onto the side after the second, with its x axis
+//! always on the second node's side of the first, whichever way the path runs; none does not turn
 //! it. With Fit on, the horizontal scale is the host nodes' distance over the cap's reference
 //! width (the `node1` to `node2` distance, or the advance width for an origin-only cap).
 //!
@@ -648,10 +649,17 @@ fn cap_transform(cap: &CapGlyph, hint: &CapHint, p1: Point, p2: Point, before: O
     check_scale(scale).map_err(|m| format!("{m} (the cap glyph is too narrow for the stem)"))?;
     let along = stem.y.atan2(stem.x);
     let quarter = std::f64::consts::FRAC_PI_2;
+    // The cap's y axis lies along the side. Where the path runs clockwise the side lies on the
+    // other hand of the stem end, so the axis points away from it and x still runs to `p2`.
+    let onto = |side: Vec2| {
+        let turn = side.atan2() - quarter;
+        let toward = turn.cos() * stem.x + turn.sin() * stem.y;
+        if toward < 0.0 { turn + 2.0 * quarter } else { turn }
+    };
     let turn = match hint.alignment {
         CornerAlignment::Both => along,
-        CornerAlignment::Left => before.map_or(along, |b| (b - p1).atan2() - quarter),
-        CornerAlignment::Right => after.map_or(along, |a| (a - p2).atan2() - quarter),
+        CornerAlignment::Left => before.map_or(along, |b| onto(b - p1)),
+        CornerAlignment::Right => after.map_or(along, |a| onto(a - p2)),
         CornerAlignment::Unaligned | CornerAlignment::Unused => 0.0,
     };
     Ok(Affine::translate(p1.to_vec2())

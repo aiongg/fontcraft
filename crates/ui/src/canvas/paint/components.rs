@@ -6,7 +6,7 @@
 //! | component aligned horizontally only | its outline in `component_shiftable` |
 //! | component placed by hand | its outline in `component_manual` |
 //! | empty base layer, missing base glyph, circular reference | a crossed box with a label, `component_placeholder` (`components.placeholder*`) |
-//! | corner or cap component | a wide, faint band along the outline fitting it put in, `attachment_band` (`corner.highlightAndSelection`) |
+//! | corner or cap component | a wide, faint band along the outline fitting it put in, `attachment_band` (`corner.highlightAndSelection`); a cap's band leaves out the stem's two sides |
 //! | selected corner component | the band in `attachment_band_selected` |
 //!
 //! The projection resolves outlines per engine revision, so composites follow a base glyph while it is being
