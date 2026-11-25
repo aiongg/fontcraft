@@ -8,6 +8,10 @@
 //! | `nudge` | move | the handles of each segment with one moved end are scaled per axis between the fixed end and the moved one | move |
 //! | `mirror` | move | move with them | move; the opposite handle of a smooth node takes the same length at the opposite angle (along a straight side, as `normal`) |
 //!
+//! In every mode but `pointsOnly`, the handle of a smooth node with a line on its other side turns
+//! about the node onto that line and keeps its length, when the node, the handle and the line's
+//! other end did not all move by the same offset ([`super::ops::keep_tangents`]).
+//!
 //! Components follow the rule of `component.move`: a locked one stays, one aligned automatically
 //! stays, and one aligned only horizontally moves only up and down. When the targets name nothing
 //! else that moves, the command fails with a message naming the components.
@@ -18,7 +22,7 @@ use std::sync::Arc;
 use fontcraft_geom::{Point, Vec2, round_point, round_to_grid};
 use fontcraft_model::{Component, Font, LayerParts, LayerPartsMut, LayerSide, Node, Path, Shape, Transform};
 
-use super::ops::{EPS, handle_owner, next, on, prev};
+use super::ops::{EPS, handle_owner, keep_tangents, next, on, prev};
 use crate::params::{GuideRef, GuideScope, ResolvedTargets, Targets};
 use crate::{EngineError, Result};
 
@@ -144,6 +148,9 @@ pub(super) fn move_path(path: &mut Path, selected: &BTreeSet<usize>, d: Vec2, mo
             let r = round_point(*p, step);
             (node.x, node.y) = (r.x, r.y);
         }
+    }
+    if mode != Mode::PointsOnly {
+        keep_tangents(path, &old, step, |_| false);
     }
 }
 

@@ -335,6 +335,9 @@ Construction details where the handbook is silent (our design, `inferred`):
   path, a segment with both end nodes selected, a component, an anchor, a guide): a duplicate.
   Lone nodes with nothing to copy: `pointsOnly`. Handles only: `pointsOnly` while `Alt` is held,
   `mirror` while `Ctrl+Alt` is held. A cubic segment pressed on its own: `path.reshapeSegment`.
+- In every mode but `pointsOnly`, a smooth node with a line on one side keeps the handle on the
+  other side in line with it: when the node, the line's far end or (nudging) the handle moved, the
+  handle turns about the node onto the line and keeps its length (`nodes.tangentFollowsLine`).
 - `mirror` puts the opposite handle of a smooth node at the moved handle's mirror image through
   the node. A corner node's other handle stays. When the other side is straight, the handle
   slides along that line as in `normal`.

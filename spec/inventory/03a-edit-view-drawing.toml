@@ -711,6 +711,25 @@ guesses = [
 ]
 
 [[behavior]]
+id = "nodes.tangentFollowsLine"
+area = "drawing"
+milestone = "M3"
+summary = "A smooth node with a line on one side and a handle on the other keeps the handle in line with the line. When the node, or the far end of its line, moves (by a drag, the arrow keys, nudging, a typed position or an alignment), the handle turns about the node onto the line and keeps its length; when both move together nothing turns. Moving only the selected points (Option) leaves the handle where it is. A smooth node that gets a new line because its neighbour was deleted has its handle turned onto that line."
+ref = "Edit View › Draw Tool"
+status = "inferred"
+notes = "Follows from nodes.smoothAndCornerTypes (a smooth node's two sides stay in line at all times) for a side that is a line. `node/ops.rs` keep_tangents serves selection.move, selection.setPosition, Align Selection and the Palette's align buttons; edit.delete uses the same turn. A line or a handle without length has no direction and turns nothing. The only handle of a quadratic segment between two smooth nodes is left alone (M3.54)."
+guesses = [
+  "The handle turns onto the line and the line stays where the move put it; the far end of the line never moves to meet the handle.",
+  "The handle turns also when it is selected together with its node.",
+  "Align Selection and the align buttons leave a handle that is itself among the selected points on the aligned coordinate.",
+  "Deleting a handle, which makes its segment a line, turns the handles on the other side of that line's smooth ends onto it.",
+]
+observe = [
+  "In a straight stem ending in a curve, drag the corner at the far end of the stem's line sideways: note whether the handle beyond the smooth node turns and whether its length changes.",
+  "Drag the smooth node itself sideways, once alone and once with its handle selected: note what the handle does.",
+]
+
+[[behavior]]
 id = "handles.display"
 area = "drawing"
 milestone = "M3"
@@ -1000,6 +1019,7 @@ ref = "Edit View › Moving Selected Nodes and Paths"
 status = "handbook"
 guesses = [
   "Alt with an arrow key moves only the selected points (03a question 1).",
+  "Only the handle of a smooth node next to a line turns when the node moves (nodes.tangentFollowsLine); all other handles keep their offset from their node.",
 ]
 
 [[behavior]]
@@ -1011,6 +1031,7 @@ ref = "Edit View › Moving Selected Nodes and Paths"
 status = "handbook"
 guesses = [
   "Ctrl+Alt with an arrow key nudges, by the arrow increments 1, 10 and 100 (03a question 2).",
+  "After the handles are scaled, the handle of a smooth node next to a line turns onto the line (nodes.tangentFollowsLine); a smooth node between two curves is left as the scaling puts it.",
 ]
 
 [[behavior]]

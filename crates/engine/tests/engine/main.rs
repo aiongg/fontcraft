@@ -63,6 +63,7 @@ mod corpus_cursivy;
 mod corpus_feature_check;
 mod corpus_instance_names;
 mod corpus_propagation;
+mod corpus_tangents;
 mod cross_axis;
 mod cross_format;
 mod custom_params;

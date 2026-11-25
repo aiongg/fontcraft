@@ -281,6 +281,58 @@ pub(super) fn align_handles(path: &mut Path, i: usize, step: f64) {
     }
 }
 
+/// The handle and the line of a tangent: a smooth on-curve node with a line on one side and a
+/// handle on the other. Returns the handle and the line's other end. A handle that is also the
+/// only handle of a smooth node at its segment's other end belongs to no single tangent.
+fn tangent(path: &Path, k: usize) -> Option<(usize, usize)> {
+    path.nodes.get(k).filter(|n| n.on_curve() && n.smooth)?;
+    let (a, b) = (prev(path, k)?, next(path, k)?);
+    let (handle, far, beyond) = match (on(path, a), on(path, b)) {
+        (false, true) => (a, b, prev(path, a)),
+        (true, false) => (b, a, next(path, b)),
+        _ => return None,
+    };
+    let shared = beyond.filter(|&o| o != k).and_then(|o| path.nodes.get(o)).is_some_and(|n| n.on_curve() && n.smooth);
+    (!shared).then_some((handle, far))
+}
+
+/// Turns the handle of the tangent `k` about its node onto the node's line, keeping its length.
+/// A line or a handle without length has no direction: the handle then stays.
+fn straighten_tangent(path: &mut Path, k: usize, step: f64) {
+    let Some((handle, far)) = tangent(path, k) else { return };
+    let (Some(pk), Some(pf), Some(ph)) = (point(path, k), point(path, far), point(path, handle)) else { return };
+    let (line, length) = (pk - pf, (ph - pk).hypot());
+    let span = line.hypot();
+    if !(span > EPS && length > EPS && span.is_finite() && length.is_finite()) {
+        return;
+    }
+    let to = round_point(pk + line * (length / span), step);
+    if let Some(n) = path.nodes.get_mut(handle) {
+        (n.x, n.y) = (to.x, to.y);
+    }
+}
+
+/// After nodes of `path` moved from the places `old`: every tangent whose node, handle and line
+/// end did not all move by the same offset has its handle turned onto its line
+/// ([`straighten_tangent`]). Handles for which `stays` holds are left where they are.
+pub(in crate::cmd) fn keep_tangents(path: &mut Path, old: &[Point], step: f64, stays: impl Fn(usize) -> bool) {
+    const SAME: f64 = 1e-6;
+    if old.len() != path.nodes.len() {
+        return;
+    }
+    for k in 0..old.len() {
+        let Some((handle, far)) = tangent(path, k) else { continue };
+        if stays(handle) {
+            continue;
+        }
+        let offset = |i: usize| Some(point(path, i)? - *old.get(i)?);
+        let (Some(dk), Some(dh), Some(df)) = (offset(k), offset(handle), offset(far)) else { continue };
+        if (dk - dh).hypot() > SAME || (dk - df).hypot() > SAME {
+            straighten_tangent(path, k, step);
+        }
+    }
+}
+
 /// `path.toggleNodeType` on one path: switches each on-curve node of `nodes` to `to` (or to the
 /// other type). A node turning smooth gets handles on straight sides and its handles lined up,
 /// unless `keep_outline`. Returns the new path and the new index of every old node.
@@ -456,8 +508,8 @@ pub(super) fn join(a: &Path, a_end: usize, b: &Path, b_end: usize, step: f64) ->
 
 /// `edit.delete` on one path: removes the on-curve nodes of `selected` and refits the segments
 /// they joined into one; a curve segment that loses a handle (its end nodes kept) becomes a
-/// line. `None` when the path is to be removed: every node selected, or fewer than two
-/// on-curve nodes left.
+/// line. The handle of a smooth node that has a new line on its other side turns onto it. `None`
+/// when the path is to be removed: every node selected, or fewer than two on-curve nodes left.
 pub(super) fn delete_points(path: &Path, selected: &BTreeSet<usize>, step: f64) -> Result<Option<Path>, String> {
     if (0..path.nodes.len()).all(|i| selected.contains(&i)) {
         return Ok(None);
@@ -520,16 +572,29 @@ pub(super) fn delete_points(path: &Path, selected: &BTreeSet<usize>, step: f64) 
     };
     let mut nodes = vec![first_node];
     let count = pairs.len();
-    for (k, (&(_, b), (handles, kind))) in pairs.iter().zip(built).enumerate() {
+    // The ends of the segments that became another one: a tangent there has a new line.
+    let mut rebuilt = BTreeSet::new();
+    for (k, (&(a, b), (handles, kind))) in pairs.iter().zip(built).enumerate() {
+        let start = nodes.len().saturating_sub(1);
+        let same = b == a + 1 && segs.get(a % m).is_some_and(|s| s.handles.len() == handles.len());
         nodes.extend(handles);
         if path.closed && k + 1 == count {
             // The last segment ends at the first node: its handles close the list.
+            if !same {
+                rebuilt.extend([start, 0]);
+            }
             break;
         }
         nodes.push(with_kind(&node_at(b)?, kind));
+        if !same {
+            rebuilt.extend([start, nodes.len().saturating_sub(1)]);
+        }
     }
     let mut out = path.clone();
     out.nodes = nodes;
+    for k in rebuilt {
+        straighten_tangent(&mut out, k, step);
+    }
     Ok(Some(out))
 }
 
