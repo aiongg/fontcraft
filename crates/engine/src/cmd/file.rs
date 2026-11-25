@@ -62,6 +62,15 @@ pub fn specs() -> Vec<CommandSpec> {
             export_ufo
         ).files(const { &[FileParam::write("destination")] }).writes_files(),
         cmd!(
+            "file.openRecovered",
+            "Open Recovered Document",
+            [],
+            None,
+            "{path: string, original?: string, title?: string} open the copy of unsaved work at path as a document with unsaved changes. original is the file it was opened from or last saved to: Save goes there, and is refused until it is forced, since the file may hold something else by now. When original is open already, the copy opens without a file. The copy itself stays until the app removes it → {title, path, glyphs, document}",
+            always,
+            open_recovered
+        ).files(const { &[FileParam::read("path"), FileParam::write("original")] }),
+        cmd!(
             "file.close",
             "Close",
             ["File"],
@@ -353,6 +362,32 @@ fn export_ufo(s: &mut Session, p: &Value) -> Result<Value> {
 #[cfg(target_arch = "wasm32")]
 fn export_ufo(_: &mut Session, _: &Value) -> Result<Value> {
     Err(EngineError::Unsupported("writing UFO folders in the browser".into()))
+}
+
+/// Longest title a recovered document takes, in characters.
+#[cfg(not(target_arch = "wasm32"))]
+const MAX_RECOVERED_TITLE: usize = 256;
+
+#[cfg(not(target_arch = "wasm32"))]
+fn open_recovered(s: &mut Session, p: &Value) -> Result<Value> {
+    let p = Params::new("file.openRecovered", p)?;
+    let copy = std::path::PathBuf::from(p.str("path")?);
+    let original = p.opt_str("original")?.filter(|text| !text.is_empty()).map(std::path::PathBuf::from);
+    let title = p.opt_str("title")?.map(|t| t.chars().filter(|c| !c.is_control()).take(MAX_RECOVERED_TITLE).collect::<String>());
+    // The native reader checks the font it returns; anything else in the recovery folder is refused.
+    let bytes = crate::io::read_file(&copy)?;
+    let font = fontcraft_format::load(&bytes)?;
+    let free = original.filter(|path| super::shared::find_open(s, path).is_none());
+    s.push_recovered(font, free, title.filter(|t| !t.trim().is_empty()));
+    let doc = s.doc()?;
+    Ok(json!({
+        "title": doc.title, "path": doc.path.as_ref().map(|p| p.to_string_lossy()), "glyphs": doc.font.glyphs.len(), "document": doc.id,
+    }))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn open_recovered(_: &mut Session, _: &Value) -> Result<Value> {
+    Err(EngineError::Unsupported("opening a file by path in the browser".into()))
 }
 
 fn close(s: &mut Session, p: &Value) -> Result<Value> {

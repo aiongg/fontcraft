@@ -89,6 +89,7 @@ pub const MODULES: &[Module] = &[
     settings::run,
     settings_shortcuts::run,
     changed_on_disk::run,
+    crate::app::recovery::run_dialog,
     review_hints::run,
     actions::run_dialog,
     audit_profile::run,

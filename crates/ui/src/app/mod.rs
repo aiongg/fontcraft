@@ -25,6 +25,7 @@ pub mod open;
 pub mod preview_host;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod print_host;
+pub mod recovery;
 pub mod shortcuts;
 pub mod sidebar;
 pub mod startup;
@@ -283,6 +284,8 @@ pub struct FontCraftApp {
     /// The graphics adapter the window draws with, for About FontCraft; `None` while the framework does not report it
     /// (and in tests).
     pub graphics: Option<crate::dialogs::about::Graphics>,
+    /// The copies of unsaved work (`recovery`); without a host nothing is copied (tests, the browser).
+    pub(crate) recovery: recovery::Recovery,
     /// The recent files as File › Open Recent lists them (`document_menu`).
     pub(crate) recent_files: document_menu::RecentFiles,
     /// The canvas overlays' switches, data and the text note being typed (`canvas::overlays`).
@@ -341,6 +344,7 @@ impl FontCraftApp {
             context_menus: context_menu::ContextMenus::default(),
             clipboard: clipboard::Clipboard::default(),
             overlays: Default::default(),
+            recovery: Default::default(),
             recent_files: Default::default(),
             picks: Picks::default(),
             frame_hook: None,
@@ -813,6 +817,9 @@ impl ShellApp for FontCraftApp {
             }
             self.frame_hook = Some(hook);
         }
+        if let Some(again) = recovery::tick(self, ctx) {
+            ctx.request_repaint_after(again);
+        }
         if let Some(again) = user_store::save(self) {
             ctx.request_repaint_after(again);
         }
@@ -838,6 +845,7 @@ impl ShellApp for FontCraftApp {
         let decision = close::close_requested(self);
         if decision == CloseDecision::Close {
             user_store::flush(self);
+            recovery::finish(self);
         }
         decision
     }

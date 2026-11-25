@@ -39,6 +39,7 @@ pub(crate) mod linked;
 pub mod log;
 pub mod macros;
 pub mod project;
+pub mod recovery;
 pub mod shortcuts;
 pub mod slots;
 pub mod spacing_state;
@@ -418,6 +419,20 @@ impl Session {
             glyph_data: glyph_data::CustomData::default(),
         });
         self.active = Some(self.docs.len() - 1);
+    }
+
+    /// Opens `font` as unsaved work recovered from a copy: it counts as changed, and it has no stamp of the file
+    /// `path` it came from, so a save over that file is refused until it is forced.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn push_recovered(&mut self, font: Font, path: Option<PathBuf>, title: Option<String>) {
+        self.push_document(font, path);
+        let Some(doc) = self.docs.last_mut() else { return };
+        doc.saved = Arc::new(Font::clone(&doc.font));
+        doc.stamp = None;
+        if let Some(title) = title {
+            doc.title = title;
+        }
+        doc.bump_revision();
     }
 
     /// Closes the active document; the one that followed it (else the one before) becomes active.

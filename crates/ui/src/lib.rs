@@ -45,6 +45,8 @@ pub struct Options {
     pub print_host: Option<std::sync::Arc<dyn app::print_host::PrintHost>>,
     /// Where the user's settings are kept between runs (the settings folder).
     pub user_store: Option<Box<dyn app::user_store::UserStore>>,
+    /// Where copies of unsaved work are kept until they are saved or closed.
+    pub recovery: Option<Box<dyn app::recovery::RecoveryHost>>,
     /// Opens web links and shows files in the file manager (`Opener::system()` on the desktop).
     pub opener: Opener,
     /// Reads the system clipboard's text for Paste outside a text field (`app::clipboard::system_text` on the desktop).
@@ -125,6 +127,7 @@ pub fn open_window(ctx: &egui::Context, options: Options) -> FontCraftApp {
     app.clipboard_flavours = options.clipboard_flavours;
     app.view.extensions.downloads.fetch = options.fetch;
     app::startup::launch(&mut app, options.launch.as_ref());
+    app::recovery::start(&mut app, options.recovery);
     if let Some(listener) = options.control {
         match app.control.listen(listener, ctx) {
             Ok(addr) => {

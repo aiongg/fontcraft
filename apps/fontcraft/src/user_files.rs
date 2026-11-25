@@ -27,7 +27,7 @@ use crate::layout_file::LayoutFile;
 use crate::settings_file::SettingsFile;
 
 /// Replaces the settings folder.
-const DIR_VARIABLE: &str = "FONTCRAFT_SETTINGS_DIR";
+pub const DIR_VARIABLE: &str = "FONTCRAFT_SETTINGS_DIR";
 /// Most files of one kind read from `Info/`.
 const MAX_INFO_FILES: usize = fontcraft_engine::glyph_data::MAX_FILES;
 /// Largest custom glyph data file read (the database's own limit per file).
