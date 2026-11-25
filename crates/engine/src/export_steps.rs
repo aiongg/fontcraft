@@ -162,6 +162,53 @@ pub(crate) fn prepare<'f>(font: &'f Font, job: &Job, ctx: &StepContext, warnings
     Ok(font)
 }
 
+/// The font the variable font of `setting` is built from: `font` with the setting's PreFilter and
+/// Filter parameters, then `extra` (filter strings), run on every master
+/// (`variableFontSetting.wholeFontParameters`). The compile refuses outlines they leave
+/// incompatible.
+pub(crate) fn prepare_variable<'f>(
+    font: &'f Font,
+    setting: Option<usize>,
+    extra: &[String],
+    ctx: &StepContext,
+    warnings: &mut Vec<String>,
+) -> Result<Cow<'f, Font>> {
+    let levels = [None, None, setting.and_then(|i| font.instances.get(i)).map(|inst| &inst.params)];
+    let mut notes = Vec::new();
+    let pre = filter_strings(&levels, PRE_FILTER, &mut notes);
+    let mut post = filter_strings(&levels, FILTER, &mut notes);
+    post.extend(extra.iter().map(|text| (FILTER, text.clone())));
+    if pre.len().saturating_add(post.len()) > fontcraft_fontinfo::MAX_FILTER_STRINGS {
+        return Err(EngineError::Unsupported(format!("more than {} filters for one variable font", fontcraft_fontinfo::MAX_FILTER_STRINGS)));
+    }
+    let (pre, post) = (usable(pre, &mut notes)?, usable(post, &mut notes)?);
+    let mut out = Cow::Borrowed(font);
+    if !pre.is_empty() || !post.is_empty() {
+        let disabled = [setting.and_then(|i| font.instances.get(i)).map(|inst| &inst.params), Some(&font.info.params)]
+            .into_iter()
+            .flatten()
+            .find_map(|p| p.get(DISABLE_AUTOMATIC).and_then(param_flag))
+            .unwrap_or(false);
+        for master in font.masters.iter().map(|m| m.id.as_str()) {
+            crate::work::check()?;
+            if !pre.is_empty() {
+                out = Cow::Owned(run_filters(out.into_owned(), master, &pre, &mut notes)?);
+            }
+            if !post.is_empty() {
+                let decomposed = decompose_master(&out, master, ctx.data, !disabled, &mut notes);
+                out = Cow::Owned(run_filters(decomposed, master, &post, &mut notes)?);
+            }
+        }
+    }
+    // Every master says the same of a filter that could not be used.
+    for note in notes {
+        if !warnings.contains(&note) {
+            warnings.push(note);
+        }
+    }
+    Ok(out)
+}
+
 /// The parameters of the static instance `job` builds.
 fn instance_params<'a>(font: &'a Font, job: &Job) -> Option<&'a Params> {
     let Target::Instance(i) = job.target else { return None };

@@ -78,9 +78,9 @@ const USAGE: &str = "\
       tables a compiled SOURCE kept when it was opened, while its glyph order is unchanged.
       --collection packs the fonts of each format into one collection that stores identical
       tables once (SOURCE.ttc, or .otc for CFF); -o FILE.ttc or FILE.otc does the same.
-      With only variable formats the static options (--instances, --masters-as-instances, --cbdt,
-      --subset, --dsig, --pass-through-tables) are refused; a variable format does not go with
-      --collection, --interpolate-binary-layout or a project compile.
+      With only variable formats the static options (--instances, --masters-as-instances, --cbdt)
+      are refused, and --collection packs the variable fonts; a variable format does not go with
+      --interpolate-binary-layout or a project compile.
       --plan prints what would be built, without building, with the feature code of each static
       font.
       --skip-features leaves out GSUB, GPOS and GDEF. --features FILE replaces the source's
@@ -101,15 +101,18 @@ const USAGE: &str = "\
       only these glyphs, with .notdef and the glyphs their components use; the feature code is
       compiled against them. --notdef replace draws a new .notdef. --glyph-data FILE adds a
       glyph data file. --no-production-names keeps the source names. --bump-version raises the
-      version by 0.005, by N thousandths, or sets it to X.YYY. For static fonts: --post-format 3
+      version by 0.005, by N thousandths, or sets it to X.YYY. --post-format 3
       writes post without glyph names; --exclude-table TAG leaves a table out; --tables TAG,...
       also writes each font's tables as raw files named <stem>.<TAG> into the output folder.
       --autohint and --no-autohint set the export's Autohint option. --optimize-gvar /
       --no-optimize-gvar keep or drop the deltas interpolation gives. --warnings none prints no
-      warnings. --erase-open-corners, --propagate-anchors, --no-prefer-simple-glyphs, --filter,
-      --cid-keyed, --warn-unhinted, --check-compatibility=fix and the options with no counterpart
-      (--master-finder, --sparse-glyphs, --emit-designspace, --ufo-structure, --build-dir,
-      --emit-debug, --validate-sources, --keep-mvar, --designspace) are refused with the reason.
+      warnings. --filter STRING (repeatable) runs a filter (a name and its values joined by
+      semicolons) on the outlines; --propagate-anchors and --no-propagate-anchors decide whether
+      composites get their components' anchors; --validate-sources changes nothing, since every
+      source is checked. --no-prefer-simple-glyphs, --cid-keyed, --warn-unhinted,
+      --check-compatibility=fix and the options with no counterpart (--master-finder,
+      --sparse-glyphs, --emit-designspace, --ufo-structure, --build-dir, --emit-debug,
+      --round-instances, --debug-lookups, --keep-mvar, --designspace) are refused with the reason.
       --interpolate-binary-layout [DIR] gives each instance the GPOS interpolated from the
       compiled masters in DIR (default master_ttf, or master_otf for otf, beside the source),
       named as the source's master UFOs are, and the GDEF and GSUB of the default master; masters

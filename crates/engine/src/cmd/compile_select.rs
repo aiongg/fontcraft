@@ -135,8 +135,10 @@ impl Formats {
     }
 }
 
-/// The parameters that ask for static fonts: given, they keep a font with several masters from
-/// defaulting to a variable font, and with only variable formats they are refused.
+/// The parameters that only static fonts take: refused with only variable formats.
+const STATIC_REFUSED: &[&str] = &["instances", "mastersAsInstances", "interpolateBinaryLayout", "cbdt"];
+
+/// The parameters that keep a font with several masters from defaulting to a variable font.
 const STATIC_ONLY: &[&str] =
     &["instances", "mastersAsInstances", "collection", "interpolateBinaryLayout", "cbdt", "passThroughTables", "stubDsig", "subset"];
 
@@ -222,11 +224,15 @@ pub(super) fn formats(p: &Params, font: &Font, project: bool, dest: &Dest) -> Re
             return Err(p.bad("a project compile builds static fonts: leave the variable and interpolatable formats out of `formats`"));
         }
         if out.statics.is_empty()
-            && let Some(key) = static_only(p)
+            && let Some(key) = STATIC_REFUSED.iter().copied().find(|k| p.get(k).is_some_and(|v| v != &Value::Bool(false)))
         {
             return Err(p.bad(format!("`{key}` applies to static fonts, and `formats` names none")));
         }
         for key in ["collection", "interpolateBinaryLayout"] {
+            // Variable fonts alone can be packed together.
+            if key == "collection" && out.statics.is_empty() && out.masters.is_empty() {
+                continue;
+            }
             if p.get(key).is_some_and(|v| v != &Value::Bool(false)) {
                 return Err(p.bad(format!(
                     "`{key}` cannot go with a variable or interpolatable format in `formats`: build those fonts in a request of their own"
@@ -385,6 +391,9 @@ fn variable_options(req: &Request) -> Options {
         curves: o.curves,
         stub_gsub: o.stub_gsub,
         post_format: o.post_format,
+        subset: o.subset,
+        stub_dsig: o.stub_dsig,
+        pass_through_tables: o.pass_through_tables,
         ..Options::default()
     }
 }
@@ -431,36 +440,58 @@ pub(super) fn plan_path(dest: &Dest, name: &str) -> Option<std::path::PathBuf> {
     }
 }
 
+/// What a variable build takes from the request besides the static one's.
+pub(super) struct VariableBuild<'a> {
+    pub optimize_deltas: Option<bool>,
+    /// The byte rewrite (`postFormat`, `excludeTables`, `tables`) and the filters.
+    pub output: &'a super::compile_outlines::OutputRequest,
+    pub data: &'a std::sync::Arc<fontcraft_model::glyphdata::GlyphData>,
+}
+
 /// Builds the variable fonts `picks` of `font` (its linked sources already read) in each of
-/// `flavours` into `sink`, adding their results to `fonts` and the sink's warnings to `report`.
+/// `flavours` into `sink`, adding their results to `fonts`, the raw tables asked for to `tables`
+/// and the sink's warnings to `report`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn build_variable(
     font: &Font,
     picks: &[VariablePick],
     flavours: &[VarFlavour],
     req: &Request,
-    optimize_deltas: Option<bool>,
+    build: &VariableBuild<'_>,
     sink: &mut Sink,
     report: &mut Report,
     fonts: &mut Vec<Value>,
+    tables: &mut Vec<Value>,
 ) -> Result<()> {
     let options = variable_options(req);
+    let optimize_deltas = build.optimize_deltas;
     for pick in picks {
         let containers = crate::export_steps::setting_containers(font, pick.setting, &req.containers, &mut report.warnings);
+        let ctx = crate::export_steps::StepContext { data: build.data };
+        let filtered = crate::export_steps::prepare_variable(font, pick.setting, build.output.filters(), &ctx, &mut report.warnings)?;
+        let font: &Font = &filtered;
         for &flavour in flavours {
             crate::work::check()?;
             let mut stem = String::new();
             let mut built = ByContainer::new(fontcraft_compile::export_params::may_differ_by_container(font));
             let mut files = Vec::with_capacity(containers.len());
+            let mut raw = Vec::new();
             for &container in &containers {
                 let compiled = built.get(container, |web_container| {
-                    let v = var::compile_variable(
+                    let mut v = var::compile_variable(
                         font,
                         pick.setting,
                         &Options { web_container, ..options.clone() },
                         &VariableOptions { flavour, optimize_deltas },
                     )?;
                     stem = v.file_stem;
+                    let mut notes = Vec::new();
+                    let (bytes, found) = build.output.rewrite(std::mem::take(&mut v.compiled.bytes), &mut notes)?;
+                    v.compiled.bytes = bytes;
+                    v.compiled.warnings.append(&mut notes);
+                    if raw.is_empty() {
+                        raw = found;
+                    }
                     Ok(v.compiled)
                 })?;
                 let data = container.wrap(&compiled.bytes)?;
@@ -473,6 +504,15 @@ pub(super) fn build_variable(
                 files.push(v);
             }
             let Some((compiled, warnings)) = built.finish() else { continue };
+            let first = variable_file_name(req, &stem, flavour, containers.first().copied().unwrap_or(Container::Plain));
+            for (tag, bytes) in raw {
+                let file = sink.put(super::compile_outlines::raw_name(&first, &tag), Container::Plain, bytes, &mut report.warnings)?;
+                let mut v = json!({ "font": first, "table": super::compile_outlines::tag_text(&tag), "name": file.name, "bytes": file.bytes });
+                if let (Some(path), Value::Object(m)) = (&file.path, &mut v) {
+                    m.insert("path".into(), json!(path.to_string_lossy()));
+                }
+                tables.push(v);
+            }
             if report.feature_code.is_none() {
                 report.feature_code = compiled.feature_code;
             }
@@ -484,4 +524,49 @@ pub(super) fn build_variable(
         }
     }
     Ok(())
+}
+
+/// Packs the variable fonts `picks` of `font` into one collection per flavour, stored tables
+/// shared. Each is `(file name stem, flavour, bytes, fonts)`; the fonts' results go to `fonts`.
+pub(super) fn pack_variable(
+    font: &Font,
+    picks: &[VariablePick],
+    flavours: &[VarFlavour],
+    req: &Request,
+    build: &VariableBuild<'_>,
+    report: &mut Report,
+    fonts: &mut Vec<Value>,
+) -> Result<Vec<(VarFlavour, Vec<u8>, usize)>> {
+    let options = variable_options(req);
+    let mut out = Vec::with_capacity(flavours.len());
+    for &flavour in flavours {
+        let mut members = Vec::with_capacity(picks.len());
+        let mut kept = 0usize;
+        for pick in picks {
+            crate::work::check()?;
+            let ctx = crate::export_steps::StepContext { data: build.data };
+            let filtered = crate::export_steps::prepare_variable(font, pick.setting, build.output.filters(), &ctx, &mut report.warnings)?;
+            let var_options = VariableOptions { flavour, optimize_deltas: build.optimize_deltas };
+            let v = var::compile_variable(&filtered, pick.setting, &options, &var_options)?;
+            kept = kept.saturating_add(v.compiled.bytes.len());
+            if kept > super::compile::MAX_COLLECTION_BYTES {
+                return Err(EngineError::Unsupported(format!(
+                    "packing more than {} MB of fonts of one format into a collection; build fewer variable fonts into it",
+                    super::compile::MAX_COLLECTION_BYTES >> 20
+                )));
+            }
+            members.push(fontcraft_tables::read(&v.compiled.bytes, 0)?);
+            fonts.push(json!({
+                "instance": pick.label, "source": "variable", "format": Formats::variable_name(flavour),
+                "outlines": outlines_name(Formats::file_flavour(flavour)), "fileName": v.file_stem,
+                "glyphs": v.compiled.glyph_order.len(), "warnings": v.compiled.warnings, "files": [],
+            }));
+        }
+        if members.is_empty() {
+            continue;
+        }
+        let packed = fontcraft_tables::collection::pack(&members, &fontcraft_tables::collection::PackOptions::default())?;
+        out.push((flavour, packed, members.len()));
+    }
+    Ok(out)
 }

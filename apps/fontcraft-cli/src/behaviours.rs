@@ -27,7 +27,7 @@ const OWN_STDOUT: &[&str] = &["dump", "stems"];
 const JOBS: &[&str] = &["compile", "info", "tables", "subset", "optimize", "woff", "outlines", "autohint", "stems", "dehint", "check", "metrics"];
 
 /// Subcommands that open a UFO as a document, so `--layer` can choose its glyph layer.
-const LAYER: &[&str] = &["compile", "autohint", "stems", "run"];
+const LAYER: &[&str] = &["compile", "convert", "autohint", "stems", "run"];
 
 /// Subcommands without an option table to fill from a file.
 const NO_OPTIONS_FILE: &[&str] = &["mcp", "oracle", "run", "commands", "completion"];

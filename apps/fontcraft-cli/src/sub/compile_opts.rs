@@ -35,6 +35,8 @@ pub enum Kind {
     Int(i64, i64),
     /// One finite number.
     Number,
+    /// One value, as text, appended to the list parameter; the option may be repeated.
+    TextItem,
     /// Comma-separated items, appended to the list parameter; the option may be repeated.
     List,
     /// A whole number from `.0` to `.1`, appended to the list parameter; the option may be
@@ -115,7 +117,7 @@ pub const OPTIONS: &[CompileOpt] = &[
     row(&["--no-propagate-anchors"], "outlines.propagateAnchors", Kind::Flag(false), ""),
     row(&["--auto-use-my-metrics"], "outlines.autoUseMyMetrics", Kind::Flag(true), ""),
     row(&["--no-auto-use-my-metrics"], "outlines.autoUseMyMetrics", Kind::Flag(false), ""),
-    row(&["--filter"], "outlines.filters", Kind::List, "NAME"),
+    row(&["--filter"], "outlines.filters", Kind::TextItem, "NAME;VALUE;..."),
     // CFF.
     row(&["--cff-round-tolerance"], "cff.roundTolerance", Kind::Number, "F"),
     row(&["--optimize-cff"], "cff.optimize", Kind::Int(0, 2), "0|1|2"),
@@ -173,6 +175,8 @@ pub const OPTIONS: &[CompileOpt] = &[
     row(&["--no-check-compatibility"], "checkCompatibility", Kind::Flag(false), ""),
     // Options with no counterpart: font.compile refuses their parameters with the reason.
     row(&["--master-finder"], "masterFinder", Kind::Text, "TEMPLATE"),
+    row(&["--round-instances"], "roundInstances", Kind::Flag(true), ""),
+    row(&["--debug-lookups"], "debugLookups", Kind::Flag(true), ""),
     row(&["--sparse-glyphs"], "sparseGlyphs", Kind::Text, "FILE"),
     row(&["--emit-designspace"], "emitDesignspace", Kind::Text, "PATH"),
     row(&["--ufo-structure"], "ufoStructure", Kind::Text, "package|zip|json"),
@@ -229,6 +233,35 @@ pub const OPTIONS: &[CompileOpt] = &[
 /// The option spelled `name` (without an `=VALUE`).
 pub fn find(name: &str) -> Option<&'static CompileOpt> {
     OPTIONS.iter().find(|o| o.flags.contains(&name))
+}
+
+/// The parameters the engine refuses whatever their value: their options have no counterpart, so
+/// the listing of the options leaves them out.
+const REFUSED: &[&str] = &[
+    "masterFinder",
+    "sparseGlyphs",
+    "emitDesignspace",
+    "ufoStructure",
+    "buildDir",
+    "emitDebug",
+    "roundInstances",
+    "debugLookups",
+    "keepMvar",
+    "designspace",
+    "cff.cidKeyed",
+    "cff.warnUnhinted",
+    "features.expandToInstances",
+    "features.variable",
+];
+
+/// Every option that does something, one entry per spelling.
+pub fn listed() -> impl Iterator<Item = (&'static str, &'static CompileOpt)> {
+    OPTIONS.iter().filter(|o| !REFUSED.contains(&o.path)).flat_map(|o| o.flags.iter().map(move |f| (*f, o)))
+}
+
+/// Whether the option `flag` of `opt` takes a value.
+pub fn takes_value(opt: &CompileOpt) -> bool {
+    !is_switch(opt.kind)
 }
 
 /// The extensions of the files and folders `compile` reads as a SOURCE.
@@ -300,7 +333,7 @@ pub fn options_table(args: &[String]) -> toml::Table {
             _ => inline.or_else(|| it.next().cloned()),
         };
         let value = value.map(|v| if options_file::is_path(opt.value) { options_file::path_value(&v) } else { v });
-        let repeats = matches!(opt.kind, Kind::List | Kind::IntItem(..));
+        let repeats = matches!(opt.kind, Kind::List | Kind::TextItem | Kind::IntItem(..));
         match (value, table.get_mut(&key)) {
             (Some(v), Some(toml::Value::Array(items))) if repeats => items.push(toml::Value::String(v)),
             (Some(v), _) if repeats => {
@@ -443,6 +476,7 @@ fn apply(opt: &CompileOpt, given: &str, value: Option<&str>, params: &mut Map<St
             let n = v.parse::<f64>().ok().filter(|n| n.is_finite()).ok_or_else(|| usage(format!("{given} must be a number, got `{v}`")))?;
             set(params, opt.path, json!(n));
         }
+        Kind::TextItem => push(params, opt.path, json!(v)),
         Kind::List => {
             for item in items(v) {
                 push(params, opt.path, json!(item));

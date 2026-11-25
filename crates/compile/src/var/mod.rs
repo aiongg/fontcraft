@@ -597,6 +597,7 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
         Ok((outlines, extra))
     };
     let mut compiled = crate::compile_stages_with(Some(font), resolved, flavour, &options, Some(&mut stage), Some(&variable_layout))?;
+    crate::extras::finish(Some(font), &mut compiled, &options)?;
     notes.append(&mut compiled.warnings);
     compiled.warnings = notes;
     Ok(VariableFont { compiled, setting, file_stem: vnames.file_stem })
