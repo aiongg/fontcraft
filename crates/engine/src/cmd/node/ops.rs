@@ -186,8 +186,9 @@ pub(super) fn break_path(path: &Path, nodes: &BTreeSet<usize>, segment_ends: &BT
 }
 
 /// Copies of the segments of `path` whose two end nodes are both in `selected`, as open paths
-/// (a closed path with every segment selected is copied whole).
-pub(super) fn selected_segments(path: &Path, selected: &BTreeSet<usize>) -> Vec<Path> {
+/// (a closed path with every segment selected is copied whole). Each comes with the node of
+/// `path` that each of its nodes copies; `None` for a whole copy.
+pub(super) fn selected_segments(path: &Path, selected: &BTreeSet<usize>) -> Vec<(Path, Option<Vec<usize>>)> {
     let segs = path.segments();
     let removed: Vec<bool> = segs.iter().map(|s| !(selected.contains(&s.start) && selected.contains(&s.end))).collect();
     if path.closed && !segs.is_empty() && !removed.iter().any(|r| *r) {
@@ -195,12 +196,16 @@ pub(super) fn selected_segments(path: &Path, selected: &BTreeSet<usize>) -> Vec<
         if whole.info.identifier.is_some() {
             whole.info.identifier = None;
         }
-        return vec![whole];
+        return vec![(whole, None)];
     }
     if !removed.iter().any(|r| !*r) {
         return Vec::new();
     }
-    kept_runs(path, &segs, &removed).iter().filter_map(|run| run_path(path, run)).collect()
+    let sources = |run: &[&Segment]| -> Vec<usize> {
+        let start = run.first().map(|s| s.start);
+        start.into_iter().chain(run.iter().flat_map(|s| s.handles.iter().copied().chain([s.end]))).collect()
+    };
+    kept_runs(path, &segs, &removed).iter().filter_map(|run| Some((run_path(path, run)?, Some(sources(run))))).collect()
 }
 
 /// `path` with each straight segment that ends at a node of `ends` turned into a curve whose

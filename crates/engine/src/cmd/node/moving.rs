@@ -12,6 +12,10 @@
 //! about the node onto that line and keeps its length, when the node, the handle and the line's
 //! other end did not all move by the same offset ([`super::ops::keep_tangents`]).
 //!
+//! `duplicate` copies the corner, cap and segment components and the brushes that sit on what it
+//! copies: on a whole path all of them, on part of one those whose node keeps the segments they
+//! need (a corner both, a cap the one after it, the others the one before it).
+//!
 //! Components follow the rule of `component.move`: a locked one stays, one aligned automatically
 //! stays, and one aligned only horizontally moves only up and down. When the targets name nothing
 //! else that moves, the command fails with a message naming the components.
@@ -20,7 +24,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use fontcraft_geom::{Point, Vec2, round_point, round_to_grid};
-use fontcraft_model::{Component, Font, LayerParts, LayerPartsMut, LayerSide, Node, Path, Shape, Transform};
+use fontcraft_model::attach::{is_attachment, is_cap};
+use fontcraft_model::corner::is_corner;
+use fontcraft_model::{Component, Font, Hint, LayerParts, LayerPartsMut, LayerSide, MAX_LAYER_HINTS, Node, Path, Shape, Transform};
 
 use super::ops::{EPS, handle_owner, keep_tangents, next, on, prev};
 use crate::params::{GuideRef, GuideScope, ResolvedTargets, Targets};
@@ -334,7 +340,11 @@ pub(super) fn apply(font: &mut Font, t: &Targets, d: Vec2, mode: Mode, duplicate
     let layer_part = t.edit_layer(font, |layer| {
         let mut parts = layer.parts_mut(t.side);
         if duplicate {
-            Ok(Some(duplicate_in(&mut parts, t, &points, d, step)))
+            let copies = duplicate_in(&mut parts, t, &points, d, step);
+            if t.side == LayerSide::Foreground {
+                copy_attachments(&mut layer.info.hints, &copies.hosts);
+            }
+            Ok(Some(copies))
         } else {
             move_in(&mut parts, t, &points, &held, d, mode, step).map(|()| None)
         }
@@ -414,10 +424,63 @@ struct Copies {
     anchors: Vec<String>,
     guides: Vec<GuideRef>,
     annotations: Vec<usize>,
+    hosts: Vec<Host>,
+}
+
+/// A copied path, for the hints that sit on it.
+struct Host {
+    /// The shape index of the original and of the copy.
+    from: usize,
+    to: usize,
+    /// For a copy of part of a path: whether the original is closed, its node count, and the
+    /// original node of each copied one.
+    part: Option<(bool, usize, Vec<usize>)>,
+}
+
+impl Host {
+    /// `hint`, an attachment with its node counted in file order, on the copy of part of a path.
+    fn part_hint(&self, hint: &Hint) -> Option<Hint> {
+        let (closed, len, nodes) = self.part.as_ref()?;
+        crate::cmd::shared::move_hint_origin(hint, &|shape, node| {
+            if shape != self.from {
+                return None;
+            }
+            // On a closed path the file's node k is the model's node k + 1, the start node last.
+            let node = if *closed { node.checked_add(1)?.checked_rem(*len)? } else { node };
+            let at = nodes.iter().position(|&n| n == node)?;
+            let (first, last) = (at == 0, at + 1 == nodes.len());
+            let kept = if is_corner(hint) {
+                !first && !last
+            } else if is_cap(hint) {
+                !last
+            } else {
+                !first
+            };
+            kept.then_some((self.to, at))
+        })
+    }
+}
+
+/// Adds copies of the corner, cap and segment components and brushes of `hints` that sit on a
+/// copied path, as far as the layer has room for hints.
+fn copy_attachments(hints: &mut Vec<Hint>, hosts: &[Host]) {
+    let whole: BTreeMap<usize, usize> = hosts.iter().filter(|h| h.part.is_none()).map(|h| (h.from, h.to)).collect();
+    let mut copies = Vec::new();
+    for hint in hints.iter().filter(|h| is_corner(h) || is_attachment(h)) {
+        match crate::cmd::shared::remap_hint(hint, &|shape| whole.get(&shape).copied()) {
+            Some(copy) if copy != *hint => copies.push(copy),
+            Some(_) => {}
+            None => copies.extend(hosts.iter().filter_map(|h| h.part_hint(hint))),
+        }
+    }
+    let room = MAX_LAYER_HINTS.saturating_sub(hints.len());
+    hints.extend(copies.into_iter().take(room));
 }
 
 fn duplicate_in(parts: &mut LayerPartsMut, t: &Targets, points: &BTreeMap<usize, BTreeSet<usize>>, d: Vec2, step: f64) -> Copies {
+    let first = parts.shapes.len();
     let mut new_shapes: Vec<Shape> = Vec::new();
+    let mut hosts: Vec<Host> = Vec::new();
     for &s in &t.shapes {
         if let Some(shape) = parts.shapes.get(s) {
             let mut copy = shape.clone();
@@ -426,6 +489,7 @@ fn duplicate_in(parts: &mut LayerPartsMut, t: &Targets, points: &BTreeMap<usize,
             {
                 p.info.identifier = None;
             }
+            hosts.push(Host { from: s, to: first + new_shapes.len(), part: None });
             new_shapes.push(copy);
         }
     }
@@ -436,13 +500,17 @@ fn duplicate_in(parts: &mut LayerPartsMut, t: &Targets, points: &BTreeMap<usize,
             if whole.info.identifier.is_some() {
                 whole.info.identifier = None;
             }
+            hosts.push(Host { from: s, to: first + new_shapes.len(), part: None });
             new_shapes.push(Shape::Path(whole));
         } else {
-            new_shapes.extend(super::ops::selected_segments(path, set).into_iter().map(Shape::Path));
+            for (copy, nodes) in super::ops::selected_segments(path, set) {
+                let part = nodes.map(|nodes| (path.closed, path.nodes.len(), nodes));
+                hosts.push(Host { from: s, to: first + new_shapes.len(), part });
+                new_shapes.push(Shape::Path(copy));
+            }
         }
     }
-    let first = parts.shapes.len();
-    let mut copies = Copies { points: Vec::new(), shapes: Vec::new(), anchors: Vec::new(), guides: Vec::new(), annotations: Vec::new() };
+    let mut copies = Copies { points: Vec::new(), shapes: Vec::new(), anchors: Vec::new(), guides: Vec::new(), annotations: Vec::new(), hosts };
     for (k, mut shape) in new_shapes.into_iter().enumerate() {
         translate_shape(&mut shape, d, step);
         let index = first + k;

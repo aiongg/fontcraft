@@ -92,6 +92,19 @@ pub(crate) fn remap_hint(hint: &Hint, map: &impl Fn(usize) -> Option<usize>) -> 
     Some(out)
 }
 
+/// `hint` with its `origin`, a path and a node, replaced by what `map` gives; `None` when it has
+/// no such origin, or when `map` drops it.
+pub(crate) fn move_hint_origin(hint: &Hint, map: &impl Fn(usize, usize) -> Option<(usize, usize)>) -> Option<Hint> {
+    let mut out = hint.clone();
+    let Plist::Dict(d) = &mut out.value else { return None };
+    let v = d.get_mut("origin")?;
+    let old = ref_numbers(v)?;
+    let &[shape, node] = old.as_slice() else { return None };
+    let (shape, node) = map(shape, node)?;
+    write_ref(v, &old, &[shape, node]);
+    Some(out)
+}
+
 /// Keeps the hints of `side` of `layer` (glyph `glyph`) on their nodes after an edit that replaced
 /// some shapes of that side by others and kept the rest as they were. `before` is the layer before
 /// the edit; `layer` still holds the side's hints as they were. `map` gives the new index of each

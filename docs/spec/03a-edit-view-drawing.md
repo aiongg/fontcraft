@@ -338,7 +338,8 @@ Construction details where the handbook is silent (our design, `inferred`):
   line instead.
 - Moved points are rounded to the grid; points that do not move keep their coordinates.
 - `duplicate` with part of a path selected copies the segments whose two end nodes are selected,
-  as open paths. A copied anchor gets the first free name of the form `top.1`.
+  as open paths. A copied anchor gets the first free name of the form `top.1`. Corner, cap and
+  segment components and brushes are copied with the nodes they sit on.
 - The Select tool reads `Alt` at mouse-down by what is selected. Something to copy (a whole
   path, a segment with both end nodes selected, a component, an anchor, a guide): a duplicate.
   Lone nodes with nothing to copy: `pointsOnly`. Handles only: `pointsOnly` while `Alt` is held,

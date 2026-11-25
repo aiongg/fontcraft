@@ -1565,16 +1565,18 @@ status = "handbook"
 id = "duplicate.optionDrag"
 area = "drawing"
 milestone = "M3"
-summary = "Dragging a selection with Option held leaves the original in place and drags a copy to the new position. If only part of a path is selected, the selected segments are copied as a new open path (useful for repeating serifs and similar parts). Copy (Cmd+C) and paste (Cmd+V) is the alternative."
+summary = "Dragging a selection with Option held leaves the original in place and drags a copy to the new position. If only part of a path is selected, the selected segments are copied as a new open path (useful for repeating serifs and similar parts). The corner, cap and segment components and the brushes on what is copied come along. Copy (Cmd+C) and paste (Cmd+V) is the alternative."
 ref = "Edit View › Duplicating Paths"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 6:42–6:44 and 18:36–18:38: dragging a selected shape leaves the original and moves a copy, drawn darker during the drag, with a badge showing the offset. The modifier key is not visible. M3.20: a move or an Alt-drag copy shows its offset beside the pointer (`x:30 y:-20`)."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 6:42–6:44 and 18:36–18:38: dragging a selected shape leaves the original and moves a copy, drawn darker during the drag, with a badge showing the offset. The modifier key is not visible. M3.20: a move or an Alt-drag copy shows its offset beside the pointer (`x:30 y:-20`). Release notes (updates.glyphsapp.com/Glyphs4.1-4100.html, build 3810): corner components stay on an Option-dragged copy."
 guesses = [
   "The move badge shows the offset in whole units as `x:… y:…`; the reference app's wording is not visible in the video.",
   "Alt held at mouse-down on a selection drags a copy, and Alt pressed after the drag started switches to nudge (03a question 1).",
   "Alt held at mouse-down on lone nodes, with no whole segment, path or other object to copy, moves only the selected points (selection.move mode pointsOnly), as for nodes moved with Option; observing an Option-drag of one node would settle it.",
+  "A copy of part of a path keeps a corner component when both segments at its node are copied, a cap with the segment after its node, and a segment component or brush with its own segment.",
 ]
 observe = [
+  "Option-drag a stem end with a corner component and a cap, once with all its nodes selected and once with half of them: note which attachments the copy has.",
   "Option-drag one selected node of a path: note whether a copy appears, or the node moves without its handles.",
 ]
 
