@@ -86,14 +86,14 @@ pub fn keeps_alternates(font: &Font) -> bool {
     font.info.settings.keep_alternates_together.unwrap_or(false)
 }
 
-/// A glyph's default sort key: its effective category, its own sort name and the font's
+/// A glyph's default sort key: its effective script and category, its own sort name and the font's
 /// *Keep Alternates Next to Base Glyph* setting decide it (`glyphOrder.default`).
 pub fn sort_key(font: &Font, glyph: &Glyph, data: &GlyphData) -> SortKey {
     let keep = keeps_alternates(font);
     let props = glyph_props(glyph, data, keep);
     let category = props.category.as_deref().and_then(Category::parse);
     let own = if keep { glyph.info.sort_name_keep.as_deref().or(glyph.info.sort_name.as_deref()) } else { glyph.info.sort_name.as_deref() };
-    data.sort_key(&glyph.name, &glyph.unicodes, category, own, keep)
+    data.sort_key(&glyph.name, &glyph.unicodes, category, props.script.as_deref(), own, keep)
 }
 
 /// The sort keys of a font's glyphs in stored order, for placing new glyphs. Build it once for a
