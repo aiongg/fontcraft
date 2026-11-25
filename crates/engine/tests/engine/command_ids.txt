@@ -3,9 +3,12 @@ file.open
 file.save
 file.saveAs
 file.exportUfo
+file.openRecovered
 file.close
+file.lossReport
 file.exportStatic
 file.exportAll
+file.exportCheck
 file.exportSettings
 edit.undo
 edit.redo
@@ -13,6 +16,8 @@ edit.cut
 edit.copy
 edit.paste
 file.importOutlines
+edit.copyAttributes
+edit.pasteAttributes
 cornerComponent.add
 cornerComponent.setGlyph
 cornerComponent.setScale
@@ -86,6 +91,7 @@ kerning.listPairs
 kerning.copyPairs
 kerning.pastePairs
 kerning.deletePairs
+kerning.setPairs
 file.exportMetrics
 file.importMetrics
 font.info.get
@@ -98,6 +104,8 @@ commands.list
 document.inspect
 command.batch
 document.activate
+document.showNext
+document.showPrevious
 font.inspect
 tables.list
 layer.inspect
@@ -175,6 +183,16 @@ path.lockPath
 path.unlockPath
 path.addRectangle
 path.addEllipse
+path.toggleNodeTypeInAllMasters
+path.convertSegmentToCurveInAllMasters
+path.insertNodeInAllMasters
+path.connectNodesInAllMasters
+path.closeOpenPathsInAllMasters
+path.openCornerInAllMasters
+path.reconnectNodesInAllMasters
+path.makeNodeFirstInAllMasters
+path.alignSelectionInAllMasters
+path.cutWithLineInAllMasters
 path.reshapeSegment
 fitCurve.applyStep
 fitCurve.setHandleLength
@@ -227,6 +245,12 @@ audit.cancel
 settings.get
 settings.set
 settings.resetColors
+settings.listShortcuts
+settings.setShortcut
+settings.removeShortcut
+settings.resetShortcut
+settings.importShortcuts
+settings.exportShortcuts
 sharing.status
 sharing.answerDevice
 settings.resetTrustedDevices
@@ -278,6 +302,7 @@ font.info.setLocalizedValue
 font.info.removeLocalizedValue
 font.info.copyRows
 font.info.pasteRows
+font.info.removeRows
 font.info.stepVersion
 font.info.updateDate
 font.settings.get
@@ -313,6 +338,7 @@ font.instance.setActive
 font.instance.setStyleLinking
 font.instance.setWeightClass
 font.instance.setWidthClass
+font.instance.names
 font.expandTextTokens
 file.newProject
 project.linkFont
@@ -395,6 +421,7 @@ font.master.setAxisLocation
 font.instance.setAxisLocation
 font.instance.placement
 layers.setIntermediate
+layers.addIntermediate
 layers.clearIntermediate
 layers.setAlternate
 layers.clearAlternate
@@ -434,6 +461,7 @@ compareFonts.diff
 compareFamily.report
 preview.render
 preview.toggleInstanceVisibility
+preview.compare
 hint.ps.addHorizontalHint
 hint.ps.addVerticalHint
 hint.ps.makeGhostHint
