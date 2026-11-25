@@ -549,7 +549,7 @@ pub fn preview_view(ui: &mut Ui, m: &PrintModel, preview: &mut Preview) {
         Ok(picture) => {
             let (rect, response) = ui.allocate_exact_size(PREVIEW, Sense::hover());
             let name = format!("{}: {} {}", words.preview.as_str(), pages.font, preview.page.saturating_add(1));
-            response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Image, true, name.clone()));
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, name.clone()));
             if ui.is_rect_visible(rect) {
                 let [w, h] = picture.size.map(|s| s as f32);
                 let scale = (rect.width() / w.max(1.0)).min(rect.height() / h.max(1.0));
