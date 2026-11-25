@@ -9,7 +9,7 @@ use fontcraft_engine::prelude::*;
 
 use super::ProjectCx;
 use crate::panels::widgets::format_number;
-use crate::shell::axis_sweep::previewed_location;
+use crate::shell::axis_sweep::{has_range, previewed_location};
 use crate::shell::dock::PanelId;
 use crate::shell::masters;
 
@@ -84,7 +84,7 @@ fn build(cx: &mut ProjectCx<'_>) -> Option<GlyphSourcesModel> {
         .axes()
         .iter()
         .zip(&at.0)
-        .filter(|(a, _)| a.internal.minimum < a.internal.maximum)
+        .filter(|(a, _)| has_range(a))
         .map(|(a, v)| AxisRow { tag: a.tag.clone(), name: a.name.clone(), value: *v, animated: animated == Some(a.tag.as_str()) })
         .collect();
     let found = match influence(font, &designspace, &glyph.name, &at) {

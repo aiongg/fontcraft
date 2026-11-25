@@ -8,7 +8,7 @@
 
 use craft::behavior::dock::PanelState;
 use craft::ui::runtime::commands::CommandRef;
-use fontcraft_engine::interp::Designspace;
+use fontcraft_engine::interp::{AxisInfo, Designspace};
 use fontcraft_engine::model::Font;
 use fontcraft_engine::model::axes::design_value;
 use fontcraft_engine::prelude::*;
@@ -83,6 +83,11 @@ impl AxisSweep {
     pub fn pause(&mut self) {
         self.last = None;
     }
+}
+
+/// Whether the masters give `axis` a range. Its internal values can fall from minimum to maximum.
+pub fn has_range(axis: &AxisInfo) -> bool {
+    (axis.internal.maximum - axis.internal.minimum).abs() > f64::EPSILON
 }
 
 /// The location a preview that shows `shows` is at, one internal coordinate per font axis: its instance's, else the
@@ -166,13 +171,13 @@ fn animate(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
     let axis = match &given {
         Some(tag) => {
             let (_, axis) = designspace.axis(tag).ok_or_else(|| format!("the font has no axis `{tag}`"))?;
-            if axis.internal.minimum >= axis.internal.maximum {
+            if !has_range(axis) {
                 return Err(format!("the masters have no range along axis `{tag}`"));
             }
             axis
         }
         None => {
-            let ranged = designspace.axes().iter().find(|a| a.internal.minimum < a.internal.maximum);
+            let ranged = designspace.axes().iter().find(|a| has_range(a));
             ranged.ok_or("the font's masters have no range along any axis")?
         }
     };
