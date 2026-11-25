@@ -5,7 +5,8 @@
 
 use std::collections::BTreeMap;
 
-use fontcraft_model::Font;
+use fontcraft_geom::Point;
+use fontcraft_model::{Font, Glyph, Layer};
 use serde::Serialize;
 
 use crate::Severity;
@@ -208,6 +209,30 @@ pub struct SourceFileIssue {
     pub message: String,
 }
 
+/// A component attached through its anchors to a glyph before it on the layer.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Attachment {
+    /// Index in the layer's shape list.
+    pub shape: usize,
+    /// Where the component is.
+    pub stored: Point,
+    /// Where its anchor pair puts it.
+    pub wanted: Point,
+    /// The component is aligned horizontally only.
+    pub horizontal: bool,
+}
+
+/// Where automatic alignment puts what is on one layer.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct LayerAlignment {
+    /// The attached components automatic alignment applies to.
+    pub attachments: Vec<Attachment>,
+    /// The components aligned now, in shape order.
+    pub aligned: Vec<usize>,
+    /// The width the aligned components give the layer, when it follows them.
+    pub width: Option<f64>,
+}
+
 /// The L3 services checks may ask for. Every method answers [`Unavailable`] unless the
 /// implementer provides it.
 pub trait AuditServices {
@@ -251,6 +276,26 @@ pub trait AuditServices {
             ExternalTool::Sanitiser => "no table sanitiser is installed or asked for",
             ExternalTool::Validator => "no external validator is installed or asked for",
         }))
+    }
+
+    /// Where automatic alignment puts the components of `layer`, a layer of `glyph`.
+    fn alignment(&self, font: &Font, glyph: &Glyph, layer: &Layer) -> Result<LayerAlignment, Unavailable> {
+        let _ = (font, glyph, layer);
+        Err(Unavailable::new("automatic alignment is not available here"))
+    }
+
+    /// The anchors the glyph data gives `glyph` (those Set Anchors adds): names with a leading
+    /// underscore on a mark that attaches to other glyphs.
+    fn default_anchors(&self, font: &Font, glyph: &str) -> Result<Vec<String>, Unavailable> {
+        let _ = (font, glyph);
+        Err(Unavailable::new("the default anchors are not available here"))
+    }
+
+    /// The names of the anchors `glyph` has on the layer `layer`, with those it takes over from
+    /// its components.
+    fn effective_anchors(&self, font: &Font, glyph: &str, layer: &str) -> Result<Vec<String>, Unavailable> {
+        let _ = (font, glyph, layer);
+        Err(Unavailable::new("the anchors a glyph takes over from its components are not available here"))
     }
 
     /// Reads the files `font` was opened from again, strictly, and lists what is wrong with them

@@ -118,6 +118,7 @@ mod audit_fix_binary;
 mod audit_fix_glyph;
 mod audit_fix_info;
 mod audit_fix_recalc;
+mod audit_fix_source;
 mod audit_profiles;
 mod audit_reports;
 pub mod audit_services;

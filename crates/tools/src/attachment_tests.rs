@@ -187,6 +187,10 @@ fn caps_segments_and_brushes_are_marked_and_selected_by_a_click() {
     let scene = Scene::from_font(&font, "A", None).unwrap();
     let kinds: Vec<(usize, AttachmentKind)> = scene.attachments.iter().map(|m| (m.hint, m.kind)).collect();
     assert_eq!(kinds, vec![(0, AttachmentKind::Cap), (1, AttachmentKind::Segment), (2, AttachmentKind::Brush)]);
+    // The cap's band is its own outline, not the rectangle's two sides below it.
+    let cap = scene.attachments.iter().find(|m| m.kind == AttachmentKind::Cap).unwrap();
+    let ends: Vec<(f64, f64)> = cap.band.elements().iter().filter_map(|e| e.end_point()).map(|p| (p.x, p.y)).collect();
+    assert_eq!(ends, [(400.0, 480.0), (520.0, 530.0), (100.0, 530.0), (100.0, 480.0)]);
     let brush = scene.attachments.iter().find(|m| m.kind == AttachmentKind::Brush).unwrap();
     let ends: Vec<Point> = brush.band.elements().iter().filter_map(|e| e.end_point()).collect();
     assert!(ends.iter().any(|p| (p.x - 420.0).abs() < 1.0) && ends.iter().any(|p| (p.x - 380.0).abs() < 1.0), "{ends:?}");

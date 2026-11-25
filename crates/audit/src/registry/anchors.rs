@@ -1,15 +1,58 @@
-//! Registry entries of the `check.anchors.*` checks (M12.46).
-//!
-//! `check.anchors.missing` and `check.anchors.markWithoutAttachment` are not registered: they
-//! need the default-anchor table of the `components` crate, which the audit does not depend on.
+//! Registry entries of the `check.anchors.*` checks (M12.46, M12.84).
 
 use crate::Profile::{Outlines, Strict, Universal};
 use crate::Severity::{Fail, Info, Warn};
 use crate::checks::anchors as a;
-use crate::{CheckGroup, CheckScope, CheckSpec, FixSpec, Runner};
+use crate::{CheckGroup, CheckScope, CheckSpec, FixSpec, Precondition, Runner};
 
 /// The checks, in the order of the inventory.
 pub(super) const CHECKS: &[CheckSpec] = &[
+    CheckSpec {
+        id: "check.anchors.missing",
+        label: "Missing anchors",
+        description: "A base letter lacks an anchor that its glyph data expects (such as top or bottom) while the font contains marks that attach there.",
+        group: CheckGroup::Anchors,
+        scope: CheckScope::Glyph,
+        family: None,
+        severity: Warn,
+        profile: Outlines,
+        thresholds: &[],
+        fix: Some(FixSpec {
+            id: "addAnchors",
+            command: Some("glyph.setAnchors"),
+            safe: true,
+            description: "Add the default anchors the layer lacks, at their computed positions.",
+        }),
+        skip_variable: false,
+        capped: false,
+        codes: &["missing-anchor"],
+        code_severities: &[],
+        preconditions: &[Precondition::SourceData],
+        run: Runner::Glyph(a::missing),
+    },
+    CheckSpec {
+        id: "check.anchors.markWithoutAttachment",
+        label: "Marks without an attaching anchor",
+        description: "A combining mark has no anchor whose name starts with an underscore, so it cannot be positioned or used to build composites.",
+        group: CheckGroup::Anchors,
+        scope: CheckScope::Glyph,
+        family: None,
+        severity: Warn,
+        profile: Outlines,
+        thresholds: &[],
+        fix: Some(FixSpec {
+            id: "addAnchors",
+            command: Some("glyph.setAnchors"),
+            safe: true,
+            description: "Add the default anchors the mark lacks, at their computed positions.",
+        }),
+        skip_variable: false,
+        capped: false,
+        codes: &["no-attaching-anchor"],
+        code_severities: &[],
+        preconditions: &[Precondition::SourceData],
+        run: Runner::Glyph(a::mark_without_attachment),
+    },
     CheckSpec {
         id: "check.anchors.duplicateName",
         label: "Duplicate anchor names",

@@ -335,6 +335,18 @@ impl Session {
         Self::default()
     }
 
+    /// A session without documents that has this one's settings, glyph data and clock: for work
+    /// on a file that is not open here.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn without_documents(&self) -> Self {
+        let mut s = Self::new();
+        s.settings = self.settings.clone();
+        s.user_glyph_data = self.user_glyph_data.clone();
+        s.user_groups = self.user_groups.clone();
+        s.clock = self.clock.clone();
+        s
+    }
+
     /// A session with one new, untitled font open.
     pub fn with_document() -> Self {
         let mut s = Self::new();

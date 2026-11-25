@@ -392,7 +392,7 @@ milestone = "M6"
 summary = "Context-menu item on a manually placed component that turns automatic alignment back on for it."
 ref = "Reusing Shapes › Components › Automatic Alignment"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. The layer is laid out at once, also when the component was aligned already but stood elsewhere, so audit.fix can put a misaligned component right."
 guesses = [
   "Enable stores 0 (decided by the layer) on a layer of components only and 1 (forced) on a layer that has paths, so the item always aligns the component; enabling alignment on a component next to a path in the reference app settles it.",
 ]
@@ -1750,11 +1750,13 @@ ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
 notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): Fit is bit value 8 of the hint's `options`, added to the alignment value: the scripting API (W2) documents `auto (for caps) = alignment | 8` and a third-party script (W3) names the bit FIT. With Fit on, the horizontal scale comes from the stroke and the stored horizontal scale is ignored; the vertical scale still applies (W3). The Info box then shows the computed horizontal scale greyed out (forum 22406, 2022). A staff answer (forum 30927, 2024) says Fit cannot be combined with a horizontal scale such as -50 %. The 3.0.3 screenshot (W5) shows a `fit` checkbox beside the vertical scale field. Built in M13.40 on the guesses below (no export from the reference app exists yet): `crates/model/src/attach.rs` fits the cap, `crates/engine/src/cmd/attach_cap.rs` holds the commands."
 guesses = [
-  "With Fit on, the horizontal scale is the host nodes' distance over the cap's reference width and replaces the stored horizontal scale, which is kept but not used; the reference width is the node1 to node2 distance, or the cap glyph's advance width when it has only an origin anchor (no source names the latter). Reading the greyed horizontal scale of an origin-only cap in the reference app settles it.",
+  "With Fit on, the horizontal scale is the host nodes' distance over the cap's reference width and replaces the stored horizontal scale, which is kept but not used. The reference width is the node1 to node2 distance; for a cap with only an origin anchor it is the distance between the two ends of its path along x, following the handbook's plain words (Fit matches the size of the cap to the size of the stroke), which do not say how the size is measured: ends 200 apart on a 400-unit stem end are scaled by 400 / 200, and both land on the stem's sides. When the ends lie over each other it is the width of the drawn path, and the advance width when that is 0. Reading the greyed horizontal scale of an origin-only cap in the reference app settles it.",
+  "A cap path without any width is placed as drawn with Fit on, as long as the advance width is not 0; with 0, or with node1 and node2 on one point, it is refused with a message.",
   "With Fit on, the computed horizontal scale is positive whatever the sign of the stored one, and a computed scale beyond ±10,000 % is refused with a message.",
 ]
 observe = [
-  "Add `_cap.flag` (origin anchor only, advance width 100) to the 80-unit stem of `l` with Fit on and read the greyed horizontal scale in its Info box: 80 % means the advance width is the reference width.",
+  "Add `_cap.flag` (origin anchor only, advance width 100) to the 80-unit stem of `l` with Fit on and read the greyed horizontal scale in its Info box: 80 % means the reference width is the advance width or the distance between the path's end nodes, 57 % the width of the drawn path.",
+  "Draw `_cap.wide` (origin anchor at 0, 0, advance width 600, open path 0 40, -80 -60, 200 -60, 200 40), add it to the 400-unit top segment of a square with Fit on and read the greyed horizontal scale in its Info box: 200 % means the reference width is the distance between the path's end nodes, as FontCraft measures it, 143 % the width of the drawn path, 67 % the advance width, 100 % that Fit does nothing without node1 and node2.",
 ]
 
 [[command]]
@@ -1812,11 +1814,13 @@ ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
 notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the scripting API (W2) stores the alignment in the low bits of the hint's `options`: left 0, right 1, centre 2, fixed 4, with Fit added as 8; a third-party script (W3) masks the four alignment bits to keep Fit. The 3.0.3 screenshot (W5) shows four buttons: left arrow, double arrow (centre), right arrow and x. Staff answers say x keeps the cap's drawn orientation (forum 17009) and centre with node1 and node2 follows the line between the two stem nodes (forum 18125); a 2022 staff answer (forum 21665) says caps do not fit slanted stems seamlessly and two corners should be used there. FontCraft calls centre `both` and x `none`, as for corners. Built in M13.40 on the guesses below (no export from the reference app exists yet): `crates/model/src/attach.rs` fits the cap, `crates/engine/src/cmd/attach_cap.rs` holds the commands."
 guesses = [
+  "On a path that runs clockwise, left and right turn the cap so that it still spans the stem end from its first node to its second, as centre does, and point into the filled side of an outer contour; adding a cap to a counter and to a reversed outer contour in the reference app settles it.",
   "For a cap, left turns it to the side before the first node and right to the side after the second, as corners do; centre (both) follows the line between the two nodes and none keeps it unrotated, as staff answers say. Exporting the slanted-stem cap with each mode settles left and right.",
   "A new cap is stored with options 0 (left), as a new corner is; the 3.0.3 screenshot shows four caps in centre alignment, which may have been set by hand. Adding a cap in the reference app and reading its Info box settles it.",
 ]
 observe = [
   "Add `_cap.flag` to the slanted stem of `slash` and export once per alignment mode the Info box offers: note the cap's rotation in each export.",
+  "Reverse the path of `l`, add `_cap.flag` to its top segment and export once per alignment mode: note whether the cap points into or out of the stem and whether it spans the segment.",
 ]
 
 [[panel]]
@@ -1866,7 +1870,7 @@ milestone = "M13"
 summary = "A cap component is tinted with a faint blue background in Edit View. Click selects, Shift-click selects several, Delete removes the selected caps."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the 3.0.3 screenshot (W5) shows each cap's highlight as a wide, faint blue band along the fitted cap outline, and one Info box for several selected caps."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the 3.0.3 screenshot (W5) shows each cap's highlight as a wide, faint blue band along the fitted cap outline, and one Info box for several selected caps. FontCraft's band is the cap's own outline, from its first node to its last, without the two sides it cuts (`crates/tools/src/attachment.rs`)."
 observe = [
   "Screenshot a selected and an unselected cap at 400 % zoom to record how a selected cap differs from the plain highlight.",
 ]

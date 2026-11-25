@@ -46,7 +46,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Clear Audit Cache",
             [],
             None,
-            "{target?: \"document\" (default) | path} discards the results and the per-glyph layer-check results kept from the last audit.run on the open document, so the next run examines every glyph again and audit.results has nothing until then. A file target keeps no cache: nothing is cleared → {cleared: bool}",
+            "{target?: \"document\" (default) | path} discards the results and the per-glyph layer-check results kept from the last audit.run on the open document, so the next run examines every glyph again and audit.results has nothing until then. A path drops the run kept for that file target → {cleared: bool}",
             always,
             clear_cache
         ),
@@ -396,7 +396,7 @@ fn clear_cache(s: &mut Session, v: &Value) -> Result<Value> {
             if path.is_empty() {
                 return Err(p.bad("`target` is \"document\" or a file path"));
             }
-            return Ok(json!({"cleared": false}));
+            return Ok(json!({"cleared": super::audit::clear_file_run(s, path)}));
         }
     }
     let doc = s.doc_mut()?;

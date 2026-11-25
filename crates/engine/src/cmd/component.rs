@@ -130,7 +130,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Enable Automatic Alignment",
             [],
             None,
-            "{glyph: name, layer?: id, components?: [index] (default every component of the layer)} aligns the components again: decided by the layer on a layer of components only, forced on a layer that has paths → {glyph, layer, components: [index]}",
+            "{glyph: name, layer?: id, components?: [index] (default every component of the layer)} aligns the components again and places them: decided by the layer on a layer of components only, forced on a layer that has paths → {glyph, layer, components: [index]}",
             has_doc,
             enable_alignment
         )
@@ -823,7 +823,18 @@ fn set_flags(s: &mut Session, v: &Value, id: &'static str, label: &str, flag: Fl
                 }
             }
             Ok(())
-        })
+        })?;
+        // The positions follow at once, also where a component was aligned already but stands
+        // elsewhere.
+        if let Flag::Align(true) = flag
+            && let Some(aligned) = align::align_layer(f, &t.glyph, &layer_id).map_err(|e| components_error(&p, e))?
+        {
+            t.edit_layer(f, |layer| {
+                *layer = aligned;
+                Ok(())
+            })?;
+        }
+        Ok(())
     })?;
     Ok(json!({ "glyph": t.glyph, "layer": layer_id, "components": list }))
 }
