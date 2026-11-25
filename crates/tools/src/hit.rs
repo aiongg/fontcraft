@@ -4,7 +4,8 @@
 //! guides. Among points the nearest wins; at equal distance a node beats an anchor and an anchor
 //! beats a handle. [`hit_test_with_corners`], for the Select tool and the context menu, also
 //! counts a corner component's fitted outline with the segments: the nearer of the two wins, the
-//! corner at equal distance. Other tools act on the outline under a corner. The tolerance is in screen points, so it feels the same at every zoom.
+//! corner at equal distance, and counts the scene's extra nodes with the points, after handles at
+//! equal distance. Other tools act on the outline under a corner. The tolerance is in screen points, so it feels the same at every zoom.
 
 use fontcraft_geom::Point;
 use serde::Serialize;
@@ -49,6 +50,10 @@ pub enum Hit {
     Guide {
         guide: GuideRef,
     },
+    /// An extra node, as `[shape, node, shape, node]` ([`crate::extra_nodes::ExtraNode::key`]).
+    ExtraNode {
+        key: [usize; 4],
+    },
     /// A corner component (an attachment hint), by its position in the layer's hint list.
     Attachment {
         hint: usize,
@@ -75,6 +80,7 @@ impl HitResult {
             Hit::Anchor { name } => vec![Item::Anchor(name.clone())],
             Hit::Component { shape } => vec![Item::Shape(*shape)],
             Hit::Guide { guide } => vec![Item::Guide(*guide)],
+            Hit::ExtraNode { key } => vec![Item::Intersection(*key)],
             Hit::Attachment { hint } => vec![Item::Hint(*hint)],
         }
     }
@@ -90,7 +96,7 @@ pub fn hit_test(scene: &Scene, view: &View, pos: Point, tolerance: f64) -> Optio
     hit(scene, view, pos, tolerance, false)
 }
 
-/// [`hit_test`] that also finds corner components ([`Hit::Attachment`]).
+/// [`hit_test`] that also finds corner components ([`Hit::Attachment`]) and extra nodes ([`Hit::ExtraNode`]).
 pub fn hit_test_with_corners(scene: &Scene, view: &View, pos: Point, tolerance: f64) -> Option<HitResult> {
     hit(scene, view, pos, tolerance, true)
 }
@@ -133,6 +139,11 @@ fn hit(scene: &Scene, view: &View, pos: Point, tolerance: f64, corners: bool) ->
         if finite(p) {
             let locked = scene.locked || a.info.locked;
             consider(dist(p, pos), 1, HitResult { hit: Hit::Anchor { name: a.name.clone() }, at: p, locked });
+        }
+    }
+    if corners {
+        for e in scene.extra_nodes.iter().filter(|e| finite(e.at) && scene.shape_editable(e.a.0) && scene.shape_editable(e.b.0)) {
+            consider(dist(e.at, pos), 3, HitResult { hit: Hit::ExtraNode { key: e.key() }, at: e.at, locked: scene.locked });
         }
     }
     if let Some((_, _, hit)) = best {

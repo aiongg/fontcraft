@@ -52,6 +52,12 @@ impl ExtraNode {
 /// The extra nodes of `layer`'s paths, ordered by their address. None when the layer has too
 /// many segments or crossings to compare.
 pub fn extra_nodes(layer: &Layer) -> Vec<ExtraNode> {
+    extra_nodes_within(layer, MAX_CROSSING_WORK)
+}
+
+/// [`extra_nodes`] with at most `work` units of comparing, for a layer that is compared again at
+/// every pointer event ([`MAX_CROSSING_POINT_WORK`]).
+pub fn extra_nodes_within(layer: &Layer, work: usize) -> Vec<ExtraNode> {
     let mut segments = Vec::new();
     for (shape, s) in layer.shapes.iter().enumerate() {
         let Shape::Path(path) = s else { continue };
@@ -60,7 +66,7 @@ pub fn extra_nodes(layer: &Layer) -> Vec<ExtraNode> {
             return Vec::new();
         }
     }
-    crossings(&segments)
+    crossings(&segments, work)
 }
 
 /// Every place where `layer`'s paths cross one another or themselves, at least [`NODE_DISTANCE`]
@@ -111,7 +117,7 @@ pub fn extra_node_at(layer: &Layer, a: (usize, usize), b: (usize, usize)) -> Opt
         segment::segments(shape, path).into_iter().find(|s| s.end == node)
     };
     let pair = [find(a)?, find(b)?];
-    crossings(&pair).into_iter().next()
+    crossings(&pair, MAX_CROSSING_WORK).into_iter().next()
 }
 
 /// [`extra_node_at`] for a point as the hinting commands name it, `[path, node, path, node]`
@@ -168,9 +174,8 @@ fn chord_crossing((p1, p2): (Point, Point), (p3, p4): (Point, Point)) -> Point {
     p1.lerp(p2, t)
 }
 
-fn crossings(segments: &[Segment]) -> Vec<ExtraNode> {
+fn crossings(segments: &[Segment], mut work: usize) -> Vec<ExtraNode> {
     let all: Vec<Vec<Piece>> = segments.iter().map(pieces).collect();
-    let mut work = MAX_CROSSING_WORK;
     let Ok(found) = segment_crossing_pairs_within(&all, &mut work) else { return Vec::new() };
     // For each pair of segments, the crossing nearest to their chords' crossing and its distance.
     let mut best: BTreeMap<[usize; 4], (f64, Point)> = BTreeMap::new();

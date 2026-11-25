@@ -59,7 +59,8 @@ pub fn supplies(scene: &Scene, selection: &Selection, spec: &CommandSpec) -> Res
     let Some(what) = objects_wanted(spec) else { return Ok(()) };
     let m = selection_targets(scene, selection, spec);
     // Selected attachments reach Delete as `hints`, Copy and Cut under their kind's key, the mirrors as `corners`.
-    let corners = ["hints", "corners", "caps", "segmentComponents", "brushes"].iter().any(|k| m.contains_key(*k));
+    // Add Corner Component also takes extra nodes.
+    let corners = ["hints", "corners", "caps", "segmentComponents", "brushes", "extraNodes"].iter().any(|k| m.contains_key(*k));
     if !corners && !OBJECT_TARGETS.iter().any(|(kind, key, _)| spec.targets.contains(kind) && m.contains_key(*key)) {
         return Err(format!("select {what} first"));
     }

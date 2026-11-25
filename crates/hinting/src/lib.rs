@@ -62,7 +62,7 @@ pub use fontcraft_ttasm as ttasm;
 pub use noderef::{Edge, NodeOrder, NodeRef, TtPoint};
 pub use point_map::{PointMap, VecPointMap};
 pub use ps::{PsHint, PsHintKind, ps_hints, set_ps_hints};
-pub use remap::{RemapMode, RemapReport, Renumbered, follows_nodes, remap_after_edit, renumber_side};
+pub use remap::{RemapMode, RemapReport, Renumbered, follows_nodes, remap_after_edit, remap_layer, renumber_side};
 pub use replay::{TouchedState, unmet_needs};
 pub use settings::{DeltaDir, Deltas, HintSettings, PsZone, TtStem, TtZone};
 pub use tt::{Direction, Rounding, StemRef, TtInstruction, TtKind, ZoneRef, set_tt_instructions, tt_instructions};

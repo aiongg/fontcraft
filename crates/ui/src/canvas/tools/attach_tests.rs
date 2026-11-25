@@ -149,6 +149,35 @@ fn attachments_are_highlighted_clicked_and_deleted_like_the_command() {
     assert_eq!(layer(&app), layer(&headless), "the key gives the font the command gives");
 }
 
+/// With Show Nodes › Extra Nodes on, a click selects an extra node, Add Corner Component attaches a corner there, the
+/// corner has a mark that can be selected, and Decompose Corner joins the two paths (`corner.extraNodesAcceptCorners`).
+#[test]
+fn an_extra_node_takes_a_corner_from_the_menu() {
+    let mut app = attach_app();
+    add_glyph(&mut app, "_corner.s", false, &[(0.0, 40.0), (0.0, 0.0), (40.0, 0.0)], &[("origin", 0.0, 0.0)]);
+    run(&mut app, "edit.delete", json!({"glyph": "A", "hints": [CAP, SEGMENT, BRUSH]}));
+    run(&mut app, "path.addRectangle", json!({"glyph": "A", "x": 200, "y": 150, "width": 200, "height": 100}));
+    let menu = call(&mut app, "ui.contextMenu.list", json!({"x": 300, "y": 150}));
+    assert!(selection(&app).get("intersections").is_none(), "extra nodes are hidden: {menu}");
+    shell(&mut app, "view.showExtraNodes", json!({}));
+    let menu = call(&mut app, "ui.contextMenu.list", json!({"x": 300, "y": 150}));
+    assert_eq!(selection(&app)["intersections"].as_array().map(Vec::len), Some(1), "{menu}");
+    assert_eq!(menu["sections"][0]["context"], "canvas.node");
+    call(&mut app, "ui.contextMenu.invoke", json!({"command": "cornerComponent.add"}));
+    app.drain();
+    let st = app.view.components.picker.clone().expect("the picker opens");
+    assert_eq!((st.targets.get("extraNodes"), st.targets.get("points")), (Some(&json!([[300.0, 150.0]])), None));
+    shell(&mut app, crate::dialogs::glyph_picker::COMMAND, json!({"select": "_corner.s", "pick": true}));
+    let corner = layer(&app).info.hints.iter().position(fontcraft_engine::model::corner::is_corner).expect("a corner");
+    let font = app.session.font().unwrap();
+    let scene = super::scene(font, app.session.glyph_data().ok().as_deref(), &app.view, None).unwrap();
+    assert!(scene.attachments.iter().any(|m| m.hint == corner), "the corner is marked where it is drawn");
+    shell(&mut app, "selection.set", json!({ "hints": [corner] }));
+    assert!(corner_box(app.session.font().unwrap(), "A", &layer(&app), &app.tools.selection).is_some());
+    run(&mut app, "cornerComponent.decompose", json!({"glyph": "A", "corners": [corner]}));
+    assert_eq!(layer(&app).shapes.len(), 1, "the two paths are one");
+}
+
 /// Four selected corners show the values they share, `None` where they differ, and one edit sets all four in one undo
 /// step (`infoBox.cornerComponent`).
 #[test]

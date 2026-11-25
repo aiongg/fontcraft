@@ -41,7 +41,7 @@ use crate::app::models::Stamp;
 use crate::app::models::components::{caps_on_nodes, corners_on_nodes, segments_on_nodes, selected_components};
 use crate::app::{FontCraftApp, Msg};
 use crate::canvas::tools::scene;
-use crate::canvas::tools::targets::selected_segments;
+use crate::canvas::tools::targets::{selected_extra_nodes, selected_segments};
 use crate::shell::commands::{Module, UiCommand};
 use crate::shell::masters::shown_layer;
 use crate::shell::params::{flag, quoted, string};
@@ -82,7 +82,7 @@ const COMMANDS: &[UiCommand] = &[UiCommand {
     label: "Choose Glyph",
     menu: &[],
     shortcut: None,
-    params: "{purpose?: \"addComponent\" (default) | \"addComponentAllMasters\" | \"baseGlyph\" | \"addCorner\" | \"cornerGlyph\" | \"addCap\" | \"capGlyph\" | \"addSegment\" | \"segmentGlyph\" | \"addBrush\" | \"brushGlyph\", glyph?: name, layer?: id, component?: index, components?: [indices], points?: [[shape, node]], segments?: [[shape, node]], corners?: [indices], caps?: [indices], segmentComponents?: [indices], brushes?: [indices], query?: string, select?: name, pick?: bool, open?: bool (default true)} show the glyph picker of a component command. Component purposes search the font as glyph.search does; the corner, cap, segment and brush purposes list the glyphs named _corner.…, _cap.…, _segment.… or _brush.… whose names hold every word of the query. The purpose and its targets are fixed when the picker opens: glyph and layer default to the edited ones, the components to the selected ones, points to the selected nodes, segments to the selected segments (a brush falls back to the selected nodes), and corners, caps, segment components and brushes to the selected ones or those on the selected nodes. select highlights a result; pick runs the purpose's command with the highlighted glyph and closes the picker",
+    params: "{purpose?: \"addComponent\" (default) | \"addComponentAllMasters\" | \"baseGlyph\" | \"addCorner\" | \"cornerGlyph\" | \"addCap\" | \"capGlyph\" | \"addSegment\" | \"segmentGlyph\" | \"addBrush\" | \"brushGlyph\", glyph?: name, layer?: id, component?: index, components?: [indices], points?: [[shape, node]], extraNodes?: [[x, y]], segments?: [[shape, node]], corners?: [indices], caps?: [indices], segmentComponents?: [indices], brushes?: [indices], query?: string, select?: name, pick?: bool, open?: bool (default true)} show the glyph picker of a component command. Component purposes search the font as glyph.search does; the corner, cap, segment and brush purposes list the glyphs named _corner.…, _cap.…, _segment.… or _brush.… whose names hold every word of the query. The purpose and its targets are fixed when the picker opens: glyph and layer default to the edited ones, the components to the selected ones, points and extraNodes to the selected nodes and extra nodes, segments to the selected segments (a brush falls back to the selected nodes), and corners, caps, segment components and brushes to the selected ones or those on the selected nodes. select highlights a result; pick runs the purpose's command with the highlighted glyph and closes the picker",
 }];
 
 /// What a pick does.
@@ -300,7 +300,29 @@ fn targets(app: &FontCraftApp, p: &Value, purpose: Purpose) -> Result<Map<String
             }
             m.insert("components".into(), json!(picked));
         }
-        Purpose::AddCorner | Purpose::AddCap => {
+        Purpose::AddCorner => {
+            let (given, extra) = (list("points")?, list("extraNodes")?);
+            let (nodes, extra) = if given.is_some() || extra.is_some() {
+                (given, extra)
+            } else {
+                let extra = match (shown.as_ref(), selection) {
+                    (Some(scene), Some(sel)) => selected_extra_nodes(scene, sel),
+                    _ => Vec::new(),
+                };
+                (Some(Value::Array(points.iter().map(|&(a, b)| json!([a, b])).collect())), Some(json!(extra)))
+            };
+            let filled = |v: Option<Value>| v.filter(|v| v.as_array().is_some_and(|a| !a.is_empty()));
+            let (nodes, extra) = (filled(nodes), filled(extra));
+            if nodes.is_none() && extra.is_none() {
+                return Err("select the nodes to attach it to, or give `points` or `extraNodes`".into());
+            }
+            for (key, v) in [("points", nodes), ("extraNodes", extra)] {
+                if let Some(v) = v {
+                    m.insert(key.into(), v);
+                }
+            }
+        }
+        Purpose::AddCap => {
             let given = list("points")?;
             let found = given.unwrap_or_else(|| Value::Array(points.iter().map(|&(a, b)| json!([a, b])).collect()));
             m.insert("points".into(), need(found, "select the nodes to attach it to, or give `points`")?);
@@ -373,7 +395,7 @@ fn purpose_arg(p: &Value) -> Result<Option<Purpose>, String> {
 }
 
 fn has_targets(p: &Value) -> bool {
-    ["glyph", "layer", "component", "components", "points", "segments", "corners", "caps", "segmentComponents", "brushes"]
+    ["glyph", "layer", "component", "components", "points", "extraNodes", "segments", "corners", "caps", "segmentComponents", "brushes"]
         .iter()
         .any(|k| p.get(*k).is_some_and(|v| !v.is_null()))
 }

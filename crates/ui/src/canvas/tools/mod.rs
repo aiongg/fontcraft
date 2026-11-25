@@ -18,6 +18,7 @@ pub mod tokens;
 use fontcraft_engine::Session;
 use fontcraft_engine::model::glyphdata::GlyphData;
 use fontcraft_engine::model::{Font, Layer, LayerSide, Master};
+use fontcraft_tools::extra_nodes::{MAX_CROSSING_POINT_WORK, extra_nodes_within};
 use fontcraft_tools::toolbox::Keyboard;
 use fontcraft_tools::{KeyEvent, Modifiers, Overlay, PointerEvent, Scene, Selection, Toolbox};
 
@@ -248,6 +249,9 @@ pub fn scene<'a>(font: &'a Font, data: Option<&GlyphData>, view: &ViewState, foc
     scene.focus = focus.cloned();
     scene.background_shown = view.display.background;
     scene.guides_shown = view.display.guides;
+    if view.display.extra_nodes {
+        scene.extra_nodes = extra_nodes_within(&scene.layer, MAX_CROSSING_POINT_WORK);
+    }
     Some(scene)
 }
 

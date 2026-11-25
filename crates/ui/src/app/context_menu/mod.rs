@@ -585,10 +585,11 @@ pub fn kinds(scene: &Scene, selection: &Selection, hit: Option<&HitResult>) -> V
         Some(Hit::Anchor { .. }) => Some(ANCHOR),
         Some(Hit::Component { .. }) => Some(COMPONENT),
         Some(Hit::Guide { .. }) => Some(GUIDE),
-        // An attachment's items (Decompose Corner, Decompose Cap…) are in the node menu.
-        Some(Hit::Attachment { .. }) => Some(NODE),
+        // An attachment's items (Decompose Corner, Decompose Cap…) are in the node menu, and so is an extra node's
+        // Add Corner Component.
+        Some(Hit::Attachment { .. } | Hit::ExtraNode { .. }) => Some(NODE),
         None if !whole.is_empty() || selection.shapes.iter().any(|&s| scene.path(s).is_some()) => Some(PATH),
-        None if !selection.on_curve_points(scene).is_empty() => Some(NODE),
+        None if !selection.on_curve_points(scene).is_empty() || !selection.intersections.is_empty() => Some(NODE),
         None if !selection.guides.is_empty() => Some(GUIDE),
         None if !selection.anchors.is_empty() => Some(ANCHOR),
         None if !selection.shapes.is_empty() => Some(COMPONENT),
