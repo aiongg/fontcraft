@@ -7,25 +7,23 @@
 //! Rows: `preview.render`, `preview.toggleInstanceVisibility`, `preview.respectsInstanceData`.
 //!
 //! An instance is drawn from the document's instance view (`crate::interp_cache`), so it shows
-//! what the static instance would hold. The line is laid out left to right with each glyph's
-//! advance and the kerning of the master or instance; feature code is not applied, as in the
-//! Preview Area.
+//! what the static instance would hold. The line itself is `preview_line`'s: shaped with the
+//! features asked for through a preview font of the master or instance, as the Preview Area
+//! shapes with the tab's, with each glyph's advance and the kerning of the master or instance.
 
 use std::sync::Arc;
 
 use base64::Engine as _;
 use fontcraft_fontinfo::target;
-use fontcraft_geom::{Affine, BezPath};
+use fontcraft_geom::Affine;
 use fontcraft_model::plist::Value as Plist;
 use fontcraft_model::{Font, Master, Params as ModelParams, metric};
-use fontcraft_render::{Image, MAX_PIXELS, MAX_SIDE, Style, render_path};
-use fontcraft_spacing::kerning::{Direction, KernIndex};
+use fontcraft_render::{Image, MAX_PIXELS, MAX_SCALE, MAX_SIDE, Style};
+use fontcraft_textlayout::Direction;
 use serde_json::{Value, json};
 
 use super::*;
-use crate::interp_cache::view_master_id;
 use crate::params::{Params, kind};
-use crate::prelude::*;
 
 /// The master parameters that set the strip's upper and lower edge.
 pub const PREVIEW_ASCENDER: &str = "Preview Ascender";
@@ -54,7 +52,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Render Preview",
             [],
             None,
-            "{text?: string (its characters, after `glyphs`), glyphs?: [names] (one of the two is required; at most 1000 glyphs together), instance?: name|index|'master' (a static instance, interpolated as the static instance would be; default 'master'), master?: id or name (with 'master': the master drawn; default the first), features?: [tags] (accepted; feature code is not applied, as in the Preview Area), size?: pixels (the image height, 8 to 2048; default 100), invert?: bool (light on dark), flip?: bool (upside down), blur?: pixels (0 to 10), format?: 'png'|'svg' (default 'png')} draws the preview line as the Preview Area would: the glyphs on one line, left to right, with their advances and the kerning of the master or instance, scaled so the strip from `Preview Descender` to `Preview Ascender` fills the height. A glyph that cannot be interpolated at the instance is left out with a warning → {format, width, height, instance, master, glyphs: [drawn names], png? (base64), svg?, warnings}",
+            "{text?: string (its characters, after `glyphs`), glyphs?: [names] (one of the two is required; at most 1000 glyphs together), instance?: name|index|'master' (a static instance, interpolated as the static instance would be; default 'master'), location?: {axis tag: internal value} (interpolated there; axes not named stand at the origin master), master?: id or name (with neither: the master drawn; default the first), layer?: id or name (that layer of the one glyph), layers?: {glyph: layer id or name} (at a master: the layers those glyphs are drawn in), features?: [tags] (the substitution features the line is shaped with, as Edit View's active features; default none), script?: tag, language?: tag (either one applies localized forms for the pair), direction?: 'ltr'|'rtl' (default: that of the line's first letter), color?: bool (draw colour layers, or a layered font's masters in their Master Colors, as Font View cells do; default false), palette?: index (with `color`; default 0), showNodes?: bool (mark the nodes and handles of each drawn layer's own paths), size?: pixels (the image height, 8 to 2048; default 100), perEm?: pixels per em, or scale?: pixels per font unit (at most 64; instead of `size`: the image then reaches from the master's descender to its ascender with 8 pixels around), invert?: bool (light on dark), flip?: bool (upside down), blur?: pixels (0 to 10), format?: 'png'|'svg' (default 'png')} draws the preview line as the Preview Area would: the glyphs on one line, shaped, with their advances and the kerning of the master or instance, scaled so the strip from `Preview Descender` to `Preview Ascender` fills the height. Feature code that does not compile leaves the line unshaped with a warning. A glyph that cannot be interpolated at the instance is left out with a warning → {format, width, height, instance (null at a location), master, glyphs: [drawn names, as shaped], direction, png? (base64), svg?, warnings}",
             has_doc,
             render
         ),
@@ -174,39 +172,6 @@ enum Format {
     Svg,
 }
 
-/// The glyphs `glyphs` and then `text` name, in order. A character no glyph has is skipped with
-/// a warning.
-fn glyph_names(p: &Params, font: &Font, warnings: &mut Vec<String>) -> Result<Vec<String>> {
-    let mut out: Vec<String> = Vec::new();
-    for name in p.opt_strings("glyphs")?.unwrap_or_default() {
-        if font.glyph(name).is_none() {
-            return Err(p.bad(format!("there is no glyph `{name}`")));
-        }
-        out.push(name.to_string());
-        if out.len() > MAX_RENDER_GLYPHS {
-            return Err(p.bad(format!("at most {MAX_RENDER_GLYPHS} glyphs can be drawn")));
-        }
-    }
-    if let Some(text) = p.opt_str("text")? {
-        let mut map: std::collections::HashMap<u32, &str> = std::collections::HashMap::new();
-        for g in font.glyphs.iter() {
-            for u in &g.unicodes {
-                map.entry(*u).or_insert(g.name.as_str());
-            }
-        }
-        for ch in text.chars().filter(|c| !c.is_control()) {
-            match map.get(&u32::from(ch)) {
-                Some(name) => out.push((*name).to_string()),
-                None => warnings.push(format!("no glyph has the character U+{:04X}", u32::from(ch))),
-            }
-            if out.len() > MAX_RENDER_GLYPHS {
-                return Err(p.bad(format!("at most {MAX_RENDER_GLYPHS} glyphs can be drawn")));
-            }
-        }
-    }
-    Ok(out)
-}
-
 /// The finite number `key` holds, else `default`.
 fn number(p: &Params, key: &str, default: f64) -> Result<f64> {
     match p.opt_f64(key)? {
@@ -216,6 +181,47 @@ fn number(p: &Params, key: &str, default: f64) -> Result<f64> {
     }
 }
 
+/// `perEm` or `scale`, as asked for.
+pub(super) enum Scale {
+    PerEm(f64),
+    Units(f64),
+}
+
+impl Scale {
+    /// Pixels per font unit.
+    pub fn of(&self, p: &Params, units_per_em: f64) -> Result<f64> {
+        let scale = match self {
+            Scale::PerEm(pixels) => pixels / units_per_em.max(1.0),
+            Scale::Units(scale) => *scale,
+        };
+        if scale.is_finite() && scale > 0.0 && scale <= MAX_SCALE {
+            return Ok(scale);
+        }
+        Err(p.bad(format!("`perEm` and `scale` must give more than 0 and at most {MAX_SCALE} pixels per font unit")))
+    }
+}
+
+/// `perEm` or `scale`; `None` without either.
+pub(super) fn scale_param(p: &Params) -> Result<Option<Scale>> {
+    match (p.opt_f64("perEm")?, p.opt_f64("scale")?) {
+        (Some(_), Some(_)) => Err(p.bad("give `perEm` or `scale`, not both")),
+        (Some(v), None) => Ok(Some(Scale::PerEm(v))),
+        (None, Some(v)) => Ok(Some(Scale::Units(v))),
+        (None, None) => Ok(None),
+    }
+}
+
+/// An image's size in whole pixels, refused past the renderer's limits.
+pub(super) fn picture_size(p: &Params, w: f64, h: f64) -> Result<(u32, u32)> {
+    if !(w.is_finite() && h.is_finite() && w.max(h) <= f64::from(MAX_SIDE) && w * h <= MAX_PIXELS as f64) {
+        return Err(p.bad("the line is too long to draw at this size; draw fewer glyphs or a smaller size"));
+    }
+    Ok(((w as u32).max(1), (h as u32).max(1)))
+}
+
+/// Empty pixels around a picture.
+pub(super) const PADDING: f64 = RENDER_PADDING;
+
 fn render(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("preview.render", v)?;
     let format = match p.opt_str("format")? {
@@ -223,6 +229,10 @@ fn render(s: &mut Session, v: &Value) -> Result<Value> {
         Some("svg") => Format::Svg,
         Some(other) => return Err(p.bad(format!("`format` must be 'png' or 'svg', got '{other}'"))),
     };
+    let asked = scale_param(&p)?;
+    if asked.is_some() && p.get("size").is_some() {
+        return Err(p.bad("give one of `size`, `perEm` and `scale`, not several"));
+    }
     let height = number(&p, "size", DEFAULT_RENDER_HEIGHT)?;
     if !(MIN_RENDER_HEIGHT..=MAX_RENDER_HEIGHT).contains(&height) {
         return Err(p.bad(format!("`size` must be from {MIN_RENDER_HEIGHT} to {MAX_RENDER_HEIGHT} pixels")));
@@ -231,96 +241,20 @@ fn render(s: &mut Session, v: &Value) -> Result<Value> {
     let invert = p.bool_or("invert", false)?;
     let flip = p.bool_or("flip", false)?;
     let mut warnings = Vec::new();
-    if p.opt_strings("features")?.is_some_and(|f| !f.is_empty()) {
-        warnings.push("feature code is not applied: the preview line draws the glyphs as given".to_string());
-    }
-    let doc_font: Arc<Font> = Arc::clone(&s.doc()?.font);
-    let names = glyph_names(&p, &doc_font, &mut warnings)?;
-    if names.is_empty() {
-        return Err(p.bad("give `glyphs` or `text` with something to draw"));
-    }
-    let instance = match p.get("instance") {
-        None => None,
-        Some(Value::String(x)) if x == "master" => None,
-        Some(raw) => {
-            let r = target::parse(raw).map_err(|e| p.bad(e.to_string()))?;
-            Some(target::instance(&doc_font, &r).map_err(|e| p.bad(e.to_string()))?)
-        }
+    let line = preview_line::line(s, &p, invert, &mut warnings)?;
+    // The strip fills the height; at a scale the master's metrics frame the line, with room all around.
+    let (low, high) = if asked.is_some() { line.span } else { line.range };
+    let (scale, room) = match &asked {
+        Some(asked) => (asked.of(&p, line.units_per_em)?, RENDER_PADDING),
+        None => (height / (high - low), 0.0),
     };
-    let (font, master_id, label) = match instance {
-        Some(i) => {
-            if p.get("master").is_some() {
-                return Err(p.bad("give `instance` or `master`, not both"));
-            }
-            let view = s.instance_view(i, &names).map_err(|e| p.bad(e))?;
-            let name = doc_font.instances.get(i).map(target::instance_name).unwrap_or_default().to_string();
-            (view, view_master_id(i), json!(name))
-        }
-        None => {
-            let master = match p.opt_str("master")? {
-                Some(m) => doc_font
-                    .masters
-                    .iter()
-                    .find(|x| x.id == m)
-                    .or_else(|| doc_font.masters.iter().find(|x| x.name == m))
-                    .ok_or_else(|| p.bad(format!("no master has the id or name `{m}`")))?,
-                None => doc_font.masters.first().ok_or_else(|| p.bad("the font has no master"))?,
-            };
-            let id = master.id.clone();
-            (Arc::clone(&doc_font), id, json!("master"))
-        }
-    };
-    let index: Arc<KernIndex> = match instance {
-        Some(_) => Arc::new(KernIndex::new(&font)),
-        None => s.kern_index()?,
-    };
-    let master = font.master(&master_id).map_err(|e| p.bad(e.to_string()))?;
-    let (low, high) = preview_range(&font, master);
-    let scale = height / (high - low);
+    let tall = if asked.is_some() { (high - low) * scale + 2.0 * room } else { height };
     if !(scale.is_finite() && scale > 0.0) {
         return Err(p.bad("the master's preview edges enclose nothing"));
     }
-
-    let mut x = 0.0;
-    let mut filled = BezPath::new();
-    let mut drawn: Vec<String> = Vec::new();
-    let mut previous: Option<&str> = None;
-    let corners = stroke::OpenCorners::of(&font);
-    for name in &names {
-        let Some(layer) = font.glyph(name).and_then(|g| g.layer(&master_id)) else {
-            warnings.push(match instance {
-                Some(_) => format!("`{name}` cannot be interpolated at the instance and is left out"),
-                None => format!("`{name}` has no layer in the master and is left out"),
-            });
-            continue;
-        };
-        if let Some(prev) = previous
-            && let Ok(Some(k)) = index.lookup(Direction::Ltr, &master_id, prev, name)
-            && k.value.is_finite()
-        {
-            x += k.value;
-        }
-        let mut outline = match stroke::layer_outline(&font, layer) {
-            Ok(parts) => parts.into_iter().fold(BezPath::new(), |mut all, part| {
-                all.extend(part.elements().iter().copied());
-                all
-            }),
-            Err(_) => font.outline(name, &master_id).unwrap_or_default(),
-        };
-        outline = corners.filled(&master_id, name, &outline).unwrap_or(outline);
-        outline.apply_affine(Affine::translate((x, 0.0)));
-        filled.extend(outline.elements().iter().copied());
-        x += if layer.width.is_finite() { layer.width.max(0.0) } else { 0.0 };
-        previous = Some(name.as_str());
-        drawn.push(name.clone());
-    }
-
-    let (w, h) = ((x.max(0.0) * scale + 2.0 * RENDER_PADDING).ceil(), height.ceil());
-    if !(w.is_finite() && w <= f64::from(MAX_SIDE) && w * h <= MAX_PIXELS as f64) {
-        return Err(p.bad("the line is too long to draw at this size; draw fewer glyphs or a smaller size"));
-    }
-    let (width, height_px) = ((w as u32).max(1), (h as u32).max(1));
-    let mut to_pixels = Affine::translate((RENDER_PADDING, high * scale)) * Affine::scale_non_uniform(scale, -scale);
+    let (w, h) = ((line.length * scale + 2.0 * RENDER_PADDING).ceil(), tall.ceil());
+    let (width, height_px) = picture_size(&p, w, h)?;
+    let mut to_pixels = Affine::translate((RENDER_PADDING, room + high * scale)) * Affine::scale_non_uniform(scale, -scale);
     if flip {
         to_pixels = Affine::translate((f64::from(width), f64::from(height_px))) * Affine::scale(-1.0) * to_pixels;
     }
@@ -329,14 +263,17 @@ fn render(s: &mut Session, v: &Value) -> Result<Value> {
         "format": match format { Format::Png => "png", Format::Svg => "svg" },
         "width": width,
         "height": height_px,
-        "instance": label,
-        "master": master_id,
-        "glyphs": drawn,
+        "instance": line.label,
+        "master": line.master,
+        "glyphs": line.glyphs,
+        "direction": if line.direction == Direction::Rtl { "rtl" } else { "ltr" },
     });
     match format {
         Format::Png => {
-            let image = render_path(&filled, to_pixels, width, height_px, &Style { ink, background: paper, anti_alias: true })
-                .map_err(|e| p.bad(e.to_string()))?;
+            let style = Style { ink, background: paper, anti_alias: true };
+            let mut image =
+                preview_line::line_picture(&line.ink, &line.colors, to_pixels, width, height_px, &style).map_err(|e| p.bad(e.to_string()))?;
+            line.nodes.draw_over(&mut image, to_pixels).map_err(|e| p.bad(e.to_string()))?;
             let mut pixels = image.pixels;
             blur_pixels(&mut pixels, width as usize, height_px as usize, blur_radius(blur));
             let image = Image::from_rgba_premultiplied(width, height_px, pixels).map_err(|e| p.bad(e.to_string()))?;
@@ -344,7 +281,9 @@ fn render(s: &mut Session, v: &Value) -> Result<Value> {
             set(&mut out, "png", json!(base64::engine::general_purpose::STANDARD.encode(png)));
         }
         Format::Svg => {
-            let mut path = filled;
+            let colors = preview_line::svg_colors(&line.colors, to_pixels, width, height_px, ink.map(|c| f32::from(c) / 255.0), &mut warnings);
+            let nodes = line.nodes.svg(to_pixels);
+            let mut path = line.ink;
             path.apply_affine(to_pixels);
             let hex = |c: [u8; 4]| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2]);
             let (filter, use_filter) = if blur > 0.0 {
@@ -359,7 +298,7 @@ fn render(s: &mut Session, v: &Value) -> Result<Value> {
                 &mut out,
                 "svg",
                 json!(format!(
-                    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{width}\" height=\"{height_px}\" viewBox=\"0 0 {width} {height_px}\">{filter}<rect width=\"{width}\" height=\"{height_px}\" fill=\"{}\"/><path d=\"{}\" fill=\"{}\"{use_filter}/></svg>",
+                    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{width}\" height=\"{height_px}\" viewBox=\"0 0 {width} {height_px}\">{filter}<rect width=\"{width}\" height=\"{height_px}\" fill=\"{}\"/><g{use_filter}><path d=\"{}\" fill=\"{}\"/>{colors}{nodes}</g></svg>",
                     hex(paper),
                     path.to_svg(),
                     hex(ink)

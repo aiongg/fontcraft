@@ -633,6 +633,7 @@ impl FontCraftApp {
         let projected = self.models.project(stamp, &mut cx);
         self.models.project_indicators(projected, &mut cx);
         self.models.project_sweep(&mut cx);
+        self.models.step_previews(&mut cx, &self.host);
         models::console::project(&mut self.models.console, &mut cx);
         self.models.project.project(&mut cx);
         models::palette::project(&mut self.models.palette, &mut cx, &self.tools, stamp);
@@ -838,6 +839,7 @@ impl ShellApp for FontCraftApp {
         }
         self.set_system_dark(appearance::system_dark(&self.root, ctx));
         models::text_preview::logic(&mut self.models.text_preview, ctx);
+        models::preview::logic(&self.models.preview_cache, ctx);
         crate::shell::feature_work::logic(self, ctx);
         crate::dialogs::print::logic(self, ctx);
         crate::shell::export_names::logic(self, ctx);

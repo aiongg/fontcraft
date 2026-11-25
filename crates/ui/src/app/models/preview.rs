@@ -14,23 +14,34 @@
 //!
 //! Variable font settings are not instances here: the pop-up lists static instances only. The model holds the line in
 //! font units; the view places it in the strip it gets ([`place`]) and fills it.
+//!
+//! The line is shaped with the tab's features, script and language as Edit View's text is, an instance's line through
+//! the instance's own preview font once it is built (`preview_shaping`). While Edit View draws in colour
+//! (`canvas::color::mode`), so does the line: the colour layers of the master, or interpolated at the instance or the
+//! location; a layered font's shown masters in their Master Colors whatever the line shows. Invert draws colour
+//! glyphs for a dark ground: the text colour is the strip's, and Master Color Dark stands in for Master Color.
 
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 use craft::behavior::dock::PanelState;
 use craft::ui::contract::{PlainData, Tracked};
 use fontcraft_engine::Session;
-use fontcraft_engine::cmd::preview::preview_range;
+use fontcraft_engine::cmd::preview::{MAX_RENDER_GLYPHS, preview_range};
+use fontcraft_engine::cmd::preview_line::MAX_FEATURES;
 use fontcraft_engine::cmd::stroke::OpenCorners;
 use fontcraft_engine::interp_cache::view_master_id;
 use fontcraft_engine::model::Font;
 use fontcraft_engine::prelude::*;
 use fontcraft_geom::{Affine, BezPath};
-use fontcraft_textlayout::{Direction, Item, Layout, Options, Text};
+use fontcraft_textlayout::{Direction, Item, Layout, Options, PreviewShaper, Shaping, Text, tag};
 
 use super::ProjectCx;
+use super::preview_shaping::{InstanceKey, LineColors, PreviewCache};
+use super::text::ShaperSlot;
 use crate::app::ViewState;
+use crate::canvas::color::{self, ColorArt, ColorFiles, MAX_TEXT_COLOR_GLYPHS, Mode, PlacedColor};
 use crate::canvas::text::{self, WritingDirection};
 use crate::shell::axis_sweep::location_of;
 use crate::shell::dock::PanelId;
@@ -72,6 +83,9 @@ pub struct PreviewModel {
     /// Every glyph of the line, placed, in font units on the line (baseline at y = 0).
     #[plain_data(assume = "a kurbo path: owned points")]
     pub outline: BezPath,
+    /// The glyphs drawn in colour, placed on the line; `outline` does not hold them.
+    #[plain_data(assume = "colour drawings shared between the glyphs of one name")]
+    pub colors: Vec<PlacedColor>,
     /// The line's extent along x: from 0 rightwards, or ending at 0 for right-to-left text.
     pub extent: [f64; 2],
     /// The middle of the edited glyph, which Always Center Active Glyph keeps in the middle; `None`: the line's.
@@ -93,13 +107,28 @@ pub struct PreviewModel {
     pub instance_label: Option<String>,
 }
 
+/// What the lines are made with besides the session and the view.
+pub struct LineCx<'a> {
+    pub cache: &'a mut PreviewCache,
+    pub files: &'a mut ColorFiles,
+    /// Edit View's shaper.
+    pub shaper: &'a ShaperSlot,
+}
+
 /// Projects the Preview Area's line while it is open and the Preview Panel's while the panel shows; a hidden preview
 /// holds nothing.
-pub fn project_both(area: &mut Tracked<PreviewModel>, panel: &mut Tracked<PreviewModel>, cx: &mut ProjectCx<'_>) {
+pub fn project_both(area: &mut Tracked<PreviewModel>, panel: &mut Tracked<PreviewModel>, with: &mut LineCx<'_>, cx: &mut ProjectCx<'_>) {
     let panel_shows = cx.view.workspace.layout.panel_state(&PanelId::Preview) != PanelState::Hidden;
     for (model, target, shown) in [(area, Target::Area, cx.view.preview.area_open), (panel, Target::Panel, panel_shows)] {
-        let value = if shown { build(cx.session, cx.view, target).unwrap_or_default() } else { PreviewModel::default() };
+        let value = if shown { build(cx.session, cx.view, target, with).unwrap_or_default() } else { PreviewModel::default() };
         super::set(model, value);
+    }
+}
+
+/// Asks for a frame while a preview font is built or a long text shaped off the frame.
+pub fn logic(cache: &PreviewCache, ctx: &egui::Context) {
+    if let Some(wait) = cache.shaping.wake() {
+        ctx.request_repaint_after(std::time::Duration::from_secs_f64(wait));
     }
 }
 
@@ -166,7 +195,7 @@ fn direction(view: &ViewState) -> Direction {
     }
 }
 
-fn build(session: &mut Session, view: &ViewState, target: Target) -> Option<PreviewModel> {
+fn build(session: &mut Session, view: &ViewState, target: Target, with: &mut LineCx<'_>) -> Option<PreviewModel> {
     let state = &view.preview;
     let shows = state.shows(target).clone();
     let options = *state.options(target);
@@ -198,12 +227,19 @@ fn build(session: &mut Session, view: &ViewState, target: Target) -> Option<Prev
         _ => None,
     };
     let dir = direction(view);
+    let shaper = line_shaper(session, view, &drawn, &text, dir, with);
+    let font = session.font().ok()?;
+    let features = &view.text.features;
+    let active = features.active_tags();
+    let shaping = shaper.as_deref().map(|shaper| Shaping { shaper, active: &active, localized: features.localized_tags() });
     let layout_options = Options {
         direction: dir,
         kerning: view.text.kerning,
         single_line: true,
         index: index.as_deref(),
         layers: Some(&view.layers.layers),
+        shaping,
+        cursive: true,
         ..Default::default()
     };
     let master_layout = fontcraft_textlayout::layout(font, &master, &text, &layout_options).ok()?;
@@ -221,47 +257,67 @@ fn build(session: &mut Session, view: &ViewState, target: Target) -> Option<Prev
         ..PreviewModel::default()
     };
     let edited_glyph = text_glyph(&text, edited);
+    let mode = color_mode(font, view, options.invert);
+    let strip = crate::panels::preview::PreviewTokens::standard();
+    let text_color = if options.invert { strip.paper } else { strip.ink }.to_srgba_unmultiplied().map(|c| f32::from(c) / 255.0);
+    let doc_font = session.doc().ok().map(|d| Arc::clone(&d.font))?;
+    let in_color = matches!(mode, Some(Mode::Layers { .. }));
+    let color = LineMode { mode, font: doc_font, text: text_color };
+    let single = Options { direction: dir, kerning: view.text.kerning, single_line: true, shaping, cursive: true, ..Default::default() };
     match &drawn {
         Drawn::Master => {
+            let shown = crate::shell::masters::shown_glyph(font, view)
+                .and_then(|g| crate::shell::masters::shown_layer(font, &view.layers, g).map(|l| (g.name.clone(), l.id.clone())));
+            let mut colors = color.own(session, &master, with);
+            let art = |item: usize, name: &str, own: Option<&str>| {
+                let exact = shown.as_ref().filter(|(glyph, _)| item == edited && glyph == name).map(|(_, layer)| layer.as_str());
+                colors.as_mut()?.art(name, exact.or(own))
+            };
             let corners = OpenCorners::of(font);
             let outline = |name: &str, own: Option<&str>| {
                 crate::app::models::text::item_outline(font, view, &corners, &master, name, own).map(|(outline, fill)| fill.unwrap_or(outline))
             };
-            fill_line(&mut model, &text, &master_layout, edited, is_text, outline);
+            fill_line(&mut model, &text, &master_layout, edited, is_text, outline, art);
         }
         Drawn::Instance(i) => {
-            let glyphs = layout_glyphs(&master_layout);
-            let instance_view = session.instance_view(*i, &glyphs).ok()?;
+            let glyphs = layout_glyphs(&text, &master_layout);
+            let instance_view = if in_color { session.instance_color_view(*i, &glyphs) } else { session.instance_view(*i, &glyphs) }.ok()?;
             let at = view_master_id(*i);
-            let options = Options { direction: dir, kerning: view.text.kerning, single_line: true, ..Default::default() };
             let mut text = text;
             // An instance has no masters' layers: every item shows the glyph in the instance.
             text.clear_layers();
-            let layout = fontcraft_textlayout::layout(&instance_view, &at, &text, &options).ok()?;
+            let layout = fontcraft_textlayout::layout(&instance_view, &at, &text, &single).ok()?;
             let corners = OpenCorners::of(&instance_view);
             let outline = |name: &str, _: Option<&str>| instance_view.outline(name, &at).ok().map(|o| corners.filled(&at, name, &o).unwrap_or(o));
-            fill_line(&mut model, &text, &layout, edited, is_text, outline);
+            let mut colors = color.view(session, &instance_view, &at, &drawn, with);
+            fill_line(&mut model, &text, &layout, edited, is_text, outline, |_, name, _| colors.as_mut()?.art(name, None));
         }
         Drawn::Location(bits) => {
-            let mut glyphs = layout_glyphs(&master_layout);
+            let mut glyphs = layout_glyphs(&text, &master_layout);
             glyphs.truncate(MAX_SWEEP_GLYPHS);
             let location: Vec<f64> = bits.iter().copied().map(f64::from_bits).collect();
-            let there = session.location_view(&location, &glyphs).ok()?;
+            let there = if in_color { session.location_color_view(&location, &glyphs) } else { session.location_view(&location, &glyphs) }.ok()?;
             let at = there.masters.first()?.id.clone();
-            let options = Options { direction: dir, kerning: view.text.kerning, single_line: true, ..Default::default() };
             let mut text = text;
             text.clear_layers();
-            let layout = fontcraft_textlayout::layout(&there, &at, &text, &options).ok()?;
-            fill_line(&mut model, &text, &layout, edited, is_text, |name, _| there.outline(name, &at).ok());
+            let layout = fontcraft_textlayout::layout(&there, &at, &text, &single).ok()?;
+            let mut colors = color.view(session, &there, &at, &drawn, with);
+            let art = |_: usize, name: &str, _: Option<&str>| colors.as_mut()?.art(name, None);
+            fill_line(&mut model, &text, &layout, edited, is_text, |name, _| there.outline(name, &at).ok(), art);
         }
         Drawn::All(list) => {
             let glyph = edited_glyph.clone()?;
-            all_line(&mut model, session, &glyph, list);
+            let art = |session: &Session, there: &Arc<Font>, at: &str| color.view(session, there, at, &drawn, with)?.art(&glyph, None);
+            all_line(&mut model, session, &glyph, list, in_color, art);
         }
     }
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     (doc, view.text.revision, &shows, &master, &view.layers.layers, view.text.direction.name(), view.text.kerning.name(), &drawn).hash(&mut hasher);
     edited_glyph.hash(&mut hasher);
+    (text::features::compile_stamp(session), format!("{features:?}"), shaper.as_ref().map(|s| Arc::as_ptr(s) as usize)).hash(&mut hasher);
+    for c in &model.colors {
+        (c.art.key, c.at.map(f64::to_bits)).hash(&mut hasher);
+    }
     model.key = hasher.finish();
     Some(model)
 }
@@ -275,15 +331,125 @@ fn text_glyph(text: &Text, index: usize) -> Option<String> {
     }
 }
 
-/// The glyphs a layout draws, each once, in order.
-fn layout_glyphs(layout: &Layout) -> Vec<String> {
+/// How Edit View draws in colour, and so the line; `None` for the ordinary drawing.
+fn color_mode(font: &Font, view: &ViewState, dark: bool) -> Option<Mode> {
+    let glyph = crate::shell::masters::shown_glyph(font, view)?;
+    let layer = crate::shell::masters::shown_layer(font, &view.layers, glyph)?;
+    color::mode(font, glyph, layer, dark)
+}
+
+/// Edit View's line as `preview.render` takes it: what a viewer outside the window draws.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ShownLine {
+    /// The glyphs, at most [`MAX_RENDER_GLYPHS`], in text order; a placeholder's is the current glyph's.
+    pub glyphs: Vec<String>,
+    pub master: Option<String>,
+    pub features: Vec<String>,
+    /// Localized Forms' pair, while it is on.
+    pub script: Option<String>,
+    pub language: Option<String>,
+    pub rtl: bool,
+    /// Edit View draws in colour.
+    pub color: bool,
+}
+
+impl ShownLine {
+    /// Adds the line to the parameters of a `preview.render`.
+    pub fn add_to(&self, params: &mut serde_json::Map<String, serde_json::Value>) {
+        use serde_json::json;
+        params.insert("glyphs".into(), json!(self.glyphs));
+        params.insert("features".into(), json!(self.features));
+        params.insert("direction".into(), json!(if self.rtl { "rtl" } else { "ltr" }));
+        params.insert("color".into(), json!(self.color));
+        for (key, value) in [("master", &self.master), ("script", &self.script), ("language", &self.language)] {
+            if let Some(value) = value {
+                params.insert(key.into(), json!(value));
+            }
+        }
+    }
+}
+
+/// The line Edit View shows: its text, or the one glyph it shows; `None` while it shows no glyph.
+pub fn shown_line(session: &Session, view: &ViewState) -> Option<ShownLine> {
+    let font = session.font().ok()?;
+    let (text, ..) = line_text(font, view)?;
+    let glyphs = (0..text.len()).filter_map(|i| text_glyph(&text, i)).filter(|g| font.glyph(g).is_some()).take(MAX_RENDER_GLYPHS).collect();
+    let features = &view.text.features;
+    let (script, language) = match features.localized {
+        true => {
+            // As Edit View shapes: a tag it cannot take is the default.
+            let known = |t: &Option<String>, default: &str| t.clone().filter(|t| tag(t).is_some()).unwrap_or_else(|| default.into());
+            (Some(known(&features.script, "DFLT")), Some(known(&features.language, "dflt")))
+        }
+        false => (None, None),
+    };
+    Some(ShownLine {
+        glyphs,
+        master: crate::shell::masters::current_master(font, &view.layers).map(|m| m.id.clone()),
+        features: features.active.iter().filter(|t| tag(t).is_some()).take(MAX_FEATURES).cloned().collect(),
+        script,
+        language,
+        rtl: direction(view) == Direction::Rtl,
+        color: color_mode(font, view, false).is_some(),
+    })
+}
+
+/// How a line draws in colour.
+struct LineMode {
+    mode: Option<Mode>,
+    /// The document's font.
+    font: Arc<Font>,
+    /// The text colour, straight RGBA.
+    text: [f32; 4],
+}
+
+impl LineMode {
+    /// The colour drawings of the document's line in `master`.
+    fn own<'a>(&self, session: &Session, master: &str, with: &'a mut LineCx<'_>) -> Option<LineColors<'a>> {
+        let mode = self.mode.clone()?;
+        Some(LineColors::new(session, mode, Arc::clone(&self.font), master, self.text, &mut *with.files, &mut with.cache.arts))
+    }
+
+    /// The colour drawings of a line of `there`, the view of `drawn` with the one master `at`; a layered font draws its
+    /// own masters there.
+    fn view<'a>(&self, session: &Session, there: &Arc<Font>, at: &str, drawn: &Drawn, with: &'a mut LineCx<'_>) -> Option<LineColors<'a>> {
+        let (mode, source) = match self.mode.clone()? {
+            Mode::Layers { kind, .. } => (Mode::Layers { master: at.to_string(), kind }, there),
+            layered @ Mode::Layered { .. } => (layered, &self.font),
+        };
+        Some(LineColors::new(session, mode, Arc::clone(source), (at, drawn), self.text, &mut *with.files, &mut with.cache.arts))
+    }
+}
+
+/// What the line is shaped with: the instance's shaper, else Edit View's. `None` while nothing is on or compiled, and
+/// while a long text is shaped off the frame.
+fn line_shaper(session: &Session, view: &ViewState, drawn: &Drawn, text: &Text, dir: Direction, with: &mut LineCx<'_>) -> Option<Arc<PreviewShaper>> {
+    let features = &view.text.features;
+    let preview = text::features::preview(session, features)?;
+    let font = Arc::clone(&session.doc().ok()?.font);
+    let shaping = &mut with.cache.shaping;
+    if let Drawn::Instance(i) = drawn
+        && let Some(key) = InstanceKey::new(session, &font, *i)
+        && let Some(own) = shaping.instance(&key, &font)
+        && shaping.ready(&own, &font, text, dir, features)
+    {
+        return Some(own);
+    }
+    let shared = with.shaper.ready(&preview)?;
+    shaping.ready(&shared, &font, text, dir, features).then_some(shared)
+}
+
+/// The glyphs a line needs, each once: the text's own and the ones a layout of it draws.
+fn layout_glyphs(text: &Text, layout: &Layout) -> Vec<String> {
     let mut seen = HashSet::new();
-    layout.placed.iter().filter_map(|p| p.glyph.as_deref()).filter(|g| seen.insert(*g)).take(MAX_LINE_GLYPHS).map(str::to_string).collect()
+    let typed = text.items().iter().filter_map(|i| if let Item::Glyph { name, .. } = i { Some(&**name) } else { None });
+    let drawn = layout.placed.iter().flat_map(|p| p.glyph.as_deref().into_iter().chain(p.extra.iter().map(|(g, ..)| &**g)));
+    drawn.chain(typed).chain(text.current_glyph()).filter(|g| seen.insert(*g)).take(MAX_LINE_GLYPHS).map(str::to_string).collect()
 }
 
 /// The line of `layout`, which laid `text` out: the outlines (`outline` finds a glyph's in the own layer of the item
-/// that shows it), the extent, the edited glyph's middle and, for the edit view's text, the glyphs a double-click
-/// edits.
+/// that shows it) or the colour drawings in their place (`art`, by item, glyph and own layer), the extent, the edited
+/// glyph's middle and, for the edit view's text, the glyphs a double-click edits.
 fn fill_line(
     model: &mut PreviewModel,
     text: &Text,
@@ -291,6 +457,7 @@ fn fill_line(
     edited: usize,
     is_text: bool,
     outline: impl Fn(&str, Option<&str>) -> Option<BezPath>,
+    mut art: impl FnMut(usize, &str, Option<&str>) -> Option<Arc<ColorArt>>,
 ) {
     let length = layout.lines.first().map_or(0.0, |l| l.length);
     let length = if length.is_finite() { length.max(0.0) } else { 0.0 };
@@ -302,26 +469,48 @@ fn fill_line(
         if is_text {
             model.hits.push(HitItem { item, x: placed.x, advance: placed.advance });
         }
-        let own = text.layer_of(item, name);
-        if let Some(outline) = outlines.entry((name, own)).or_insert_with(|| outline(name, own)) {
-            let mut moved = outline.clone();
-            moved.apply_affine(Affine::translate((placed.x, placed.y)));
-            model.outline.extend(moved.elements().iter().copied());
+        let first = (name, placed.x, placed.y);
+        for (name, x, y) in std::iter::once(first).chain(placed.extra.iter().map(|(g, x, y)| (&**g, *x, *y))) {
+            let own = text.layer_of(item, name);
+            if model.colors.len() < MAX_TEXT_COLOR_GLYPHS
+                && let Some(art) = art(item, name, own)
+            {
+                model.colors.push(PlacedColor { at: [x, y], art });
+                continue;
+            }
+            if let Some(outline) = outlines.entry((name, own)).or_insert_with(|| outline(name, own)) {
+                let mut moved = outline.clone();
+                moved.apply_affine(Affine::translate((x, y)));
+                model.outline.extend(moved.elements().iter().copied());
+            }
         }
     }
 }
 
-/// The line of all instances: `glyph` once per instance of `instances`, each from the instance's view. An instance
-/// the glyph cannot be interpolated at is left out.
-fn all_line(model: &mut PreviewModel, session: &mut Session, glyph: &str, instances: &[usize]) {
+/// The line of all instances: `glyph` once per instance of `instances`, each from the instance's view (with its colour
+/// layers when `in_color`), in `art`'s colour drawing when it gives one. An instance the glyph cannot be interpolated
+/// at is left out.
+fn all_line(
+    model: &mut PreviewModel,
+    session: &mut Session,
+    glyph: &str,
+    instances: &[usize],
+    in_color: bool,
+    mut art: impl FnMut(&Session, &Arc<Font>, &str) -> Option<Arc<ColorArt>>,
+) {
     let asked = [glyph.to_string()];
     let mut x = 0.0;
     let mut drawn: Option<OpenCorners> = None;
     for &i in instances {
-        let Ok(instance_view) = session.instance_view(i, &asked) else { continue };
+        let instance_view = if in_color { session.instance_color_view(i, &asked) } else { session.instance_view(i, &asked) };
+        let Ok(instance_view) = instance_view else { continue };
         let at = view_master_id(i);
         let Some(width) = instance_view.glyph(glyph).and_then(|g| g.layer(&at)).map(|l| l.width) else { continue };
-        if let Ok(outline) = instance_view.outline(glyph, &at) {
+        if model.colors.len() < MAX_TEXT_COLOR_GLYPHS
+            && let Some(art) = art(session, &instance_view, &at)
+        {
+            model.colors.push(PlacedColor { at: [x, 0.0], art });
+        } else if let Ok(outline) = instance_view.outline(glyph, &at) {
             let corners = drawn.as_ref().map_or_else(|| OpenCorners::of(&instance_view), |c| c.sharing(&instance_view));
             let mut outline = corners.filled(&at, glyph, &outline).unwrap_or(outline);
             drawn = Some(corners);

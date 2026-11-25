@@ -47,12 +47,13 @@ printf '%s\n' \
 
 Attached to the app, `tools/list` also offers tools that show and drive its window. Each calls
 one [control method](control-protocol.md#methods-today) and passes on only the arguments listed
-here. Headless, they are not listed, and a call answers that the tool needs the running app.
+here. Headless, they are not listed, and a call answers that the tool needs the running app; only
+`render` is offered there too, drawn by the same engine commands.
 
 | Tool | Arguments | Control method | Returns |
 |---|---|---|---|
 | `screenshot` | `{}` | `ui.screenshot` | the window as a PNG image, then `{width, height, pixelsPerPoint}` as text |
-| `render` | `{glyphs?, text?, master?, layer?, size?, scale?}` | `ui.render` | the glyphs filled black on white as a PNG image, then `{width, height, glyphs, master?}` as text |
+| `render` | `{glyphs?, text?, master?, layer?, layers?, instance?, location?, features?, script?, language?, direction?, color?, palette?, showNodes?, invert?, compare?, size?, scale?}` | `ui.render` | the glyphs as a PNG image, then the size, the glyphs drawn and warnings as text; with `compare`, the changed glyphs ([below](#render)) |
 | `elements` | `{prefix?, role?, window?, offset?, limit?}` | `ui.elements` | what the windows show: `{elements, total, truncated}` |
 | `pointer` | `{events}` | `ui.pointer` | the active tool's state, selection and errors |
 | `click` | `{id}`; or `{element}` or `{x, y}`, with `button?, count?, mods?, shift?, alt?, cmd?, ctrl?` | `ui.click` | a dialog control's result, or `{queued, window}` for a window click |
@@ -78,6 +79,24 @@ here. Headless, they are not listed, and a call answers that the tool needs the 
   `menu` checks its command, and `dialog_set` and `dialog_confirm` check the open dialog's
   command and parameters, before they act; a dialog that names no command is refused.
   `screenshot`, `render`, `elements`, `dialog_inspect` and `dialog_cancel` always run.
+
+### Render
+
+`render` draws through the query commands `preview.render` and `preview.compare`, attached or
+headless, so both give the same image for the same arguments.
+
+- The place: `master` (default: the window's, headless the first), `instance` (a static instance),
+  `location` (`{"wght": 600}`, internal values) or `layer` of the one glyph named; `layers` picks
+  the layers of single glyphs at a master.
+- `features` (substitution features), `script` and `language` shape the line as Edit View does; a
+  document whose feature code does not compile is drawn unshaped, with a warning.
+- `color` draws colour layers (in `palette`) or a layered font's masters; `showNodes` marks nodes.
+- `compare: {"revision": n}` takes a revision `inspect_document` gave before the edits;
+  `{"steps": 1}` counts undo steps back. Each glyph stands in a slot of its own, the earlier state
+  in red under the current in blue, unchanged drawings in grey; the text lists `changed` (the
+  glyphs whose data differs). Without `glyphs` and `text` the changed glyphs are drawn; when
+  nothing differs the reply is text only.
+- Limits: 1,000 glyphs, 16,384 pixels a side, 16 megapixels, 50,000 shown nodes, 64 pixels per unit.
 
 ## Permissions
 
@@ -372,4 +391,4 @@ Transport: `crates/mcp/src/http.rs`, with the limits as named constants at the t
 
 | What | Milestone |
 |---|---|
-| Task-level tools over common command sequences: `open_font`, `draw_path`, `set_metrics`, `export_font`, `render_glyphs` (returns an image, also headless) | M3 |
+| Task-level tools over common command sequences: `open_font`, `draw_path`, `set_metrics`, `export_font` | M3 |

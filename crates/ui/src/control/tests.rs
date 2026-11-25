@@ -120,6 +120,12 @@ fn ui_render_draws_glyph_pixels_and_a_headless_app_has_no_screenshot() {
     t.app.sent.push(Msg::View(crate::app::ViewMsg::SelectGlyph("A".into())));
     t.frame();
     assert_eq!(t.ok("ui.render", json!({}))["glyphs"], json!(["A"]), "nothing named: the shown glyph");
+    // A headless agent's render of the same request is the same image.
+    t.ok("engine.execute", json!({"command": "font.instance.add", "params": {"styleName": "Bold"}}));
+    let args = json!({"glyphs": ["A"], "instance": 0, "showNodes": true});
+    let (command, params) = fontcraft_engine::cmd::preview_line::request(args.as_object().unwrap());
+    let headless = t.app.session.query(command, &params).unwrap();
+    assert_eq!(t.ok("ui.render", args)["png"], headless["png"]);
     for bad in [
         json!({"glyphs": ["nope"]}),
         json!({"text": "\u{1F600}"}),

@@ -6,7 +6,9 @@
 //! (`fontcraft_compile::preview`), so substitutions reach glyphs typed by name too. Only the
 //! features active in the tab apply: every other feature of the font is turned off, the shaper's
 //! defaults for the script included. Localized Forms turns `locl` on and sets the OpenType script
-//! and language tags.
+//! and language tags. An active positional feature (`init`, `medi`, …) of a joining script is left
+//! to the shaper, which applies it where the joining calls for it: asked for over the whole run, it
+//! would give every letter one form.
 //!
 //! Only the glyphs and their clusters are read back. Advances, kerning and cursive attachment
 //! come from the live model in [`crate::layout()`], so width, kerning and anchor edits show
@@ -16,9 +18,14 @@
 //! does not have (added since the last compile, or not exported); those items keep their own
 //! glyph. Each run is split into script runs, and each script run is shaped once. A shaping error
 //! leaves that script run unshaped, and the first message is kept on the layout.
+//!
+//! What a text shaped to depends on its characters, the direction and the features, not on the
+//! glyphs' outlines or widths, so a [`PreviewShaper`] keeps its last shapings: laying the same text
+//! out again after a node or kerning edit, or for a second view of it, shapes nothing.
+//! [`PreviewShaper::shape_ahead`] fills that store on any thread.
 
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, Mutex};
 
 use fontcraft_model::Font;
 use fontcraft_shaping::{FeatureSetting, MAX_FEATURES, ShapeError, ShapeRequest, ShapingFont, Tag};
@@ -29,6 +36,12 @@ use fontcraft_spacing::kerning::Direction;
 /// The `locl` feature tag, which Localized Forms turns on.
 pub const LOCL: Tag = Tag::new(b"locl");
 
+/// The features a joining letter takes one of by its neighbours.
+const POSITIONAL: &[&[u8; 4]] = &[b"isol", b"init", b"medi", b"fina", b"med2", b"fin2", b"fin3"];
+/// The scripts whose letters join, by Unicode script tag.
+const JOINING_SCRIPTS: &[&[u8; 4]] =
+    &[b"Arab", b"Syrc", b"Adlm", b"Chrs", b"Rohg", b"Mand", b"Mani", b"Mong", b"Nkoo", b"Ougr", b"Phag", b"Phlp", b"Sogd"];
+
 /// A compiled preview font ready for Edit View: the shaping font, the names of its glyphs and its
 /// substitution features. Build it once per preview font and share it.
 pub struct PreviewShaper {
@@ -37,7 +50,25 @@ pub struct PreviewShaper {
     ids: HashMap<Arc<str>, u16>,
     private_use: HashMap<u16, u32>,
     features: Vec<Tag>,
+    /// The last shapings, newest last.
+    shaped: Mutex<VecDeque<(ShapeKey, Arc<Shaped>)>>,
 }
+
+/// Shapings one [`PreviewShaper`] keeps.
+const MAX_KEPT: usize = 4;
+
+/// What a shaping depends on: the characters of the items (`None` ends a run), and how they are
+/// shaped.
+#[derive(PartialEq, Eq)]
+struct ShapeKey {
+    chars: Vec<Option<char>>,
+    direction: Direction,
+    on: Vec<bool>,
+    language: Option<String>,
+}
+
+/// The glyphs of every item and the first shaping error.
+type Shaped = (ShapedItems, Option<String>);
 
 impl std::fmt::Debug for PreviewShaper {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -66,12 +97,41 @@ impl PreviewShaper {
                 tags.push(*tag);
             }
         }
-        Ok(Self { font, names, ids, private_use: reverse, features: tags })
+        Ok(Self { font, names, ids, private_use: reverse, features: tags, shaped: Mutex::default() })
     }
 
     /// The font's feature tags, each once.
     pub fn features(&self) -> &[Tag] {
         &self.features
+    }
+
+    /// Whether a layout of `text` finds its shaping kept.
+    pub fn is_shaped(&self, font: &Font, text: &Text, direction: Direction, active: &[Tag], localized: Option<(Tag, Tag)>) -> bool {
+        let shaping = Shaping { shaper: self, active, localized };
+        self.kept(&shaping.key(font, text, direction)).is_some()
+    }
+
+    /// Shapes `text` for the layouts to come, which find it kept.
+    pub fn shape_ahead(&self, font: &Font, text: &Text, direction: Direction, active: &[Tag], localized: Option<(Tag, Tag)>) {
+        shape_items(font, text, direction, &Shaping { shaper: self, active, localized });
+    }
+
+    fn kept(&self, key: &ShapeKey) -> Option<Arc<Shaped>> {
+        // A poisoned store is only a cache.
+        let mut kept = self.shaped.lock().ok()?;
+        let at = kept.iter().position(|(k, _)| k == key)?;
+        let found = kept.remove(at)?;
+        let shaped = Arc::clone(&found.1);
+        kept.push_back(found);
+        Some(shaped)
+    }
+
+    fn keep(&self, key: ShapeKey, shaped: &Arc<Shaped>) {
+        let Ok(mut kept) = self.shaped.lock() else { return };
+        while kept.len() >= MAX_KEPT {
+            kept.pop_front();
+        }
+        kept.push_back((key, Arc::clone(shaped)));
     }
 
     /// The name of a glyph id of the preview font.
@@ -101,6 +161,20 @@ impl PreviewShaper {
     }
 }
 
+/// A tag from text: one to four printable ASCII characters, not starting with a space, padded with
+/// spaces.
+pub fn tag(text: &str) -> Option<Tag> {
+    let bytes = text.as_bytes();
+    if bytes.is_empty() || bytes.len() > 4 || !bytes.iter().all(|b| (0x20..=0x7e).contains(b)) || bytes.first() == Some(&b' ') {
+        return None;
+    }
+    let mut out = [b' '; 4];
+    for (slot, b) in out.iter_mut().zip(bytes) {
+        *slot = *b;
+    }
+    Some(Tag::new(&out))
+}
+
 /// What Edit View shapes a tab's text with.
 #[derive(Clone, Copy, Debug)]
 pub struct Shaping<'a> {
@@ -113,13 +187,24 @@ pub struct Shaping<'a> {
 }
 
 impl Shaping<'_> {
-    /// Every feature of the font, on when active (and `locl` with Localized Forms), else off.
-    fn settings(&self) -> Vec<FeatureSetting> {
-        self.shaper
-            .features()
+    /// Every feature of the font: whether it is active (and `locl` with Localized Forms).
+    fn on(&self) -> Vec<bool> {
+        self.shaper.features().iter().map(|tag| self.active.contains(tag) || (*tag == LOCL && self.localized.is_some())).collect()
+    }
+
+    /// What the shaping of `text` depends on.
+    fn key(&self, font: &Font, text: &Text, direction: Direction) -> ShapeKey {
+        let current = text.current_glyph();
+        let chars = text
+            .items()
             .iter()
-            .map(|tag| FeatureSetting::global(*tag, self.active.contains(tag) || (*tag == LOCL && self.localized.is_some())))
-            .collect()
+            .map(|item| match item {
+                Item::Glyph { name, typed } => self.shaper.char_of(font, name, *typed),
+                Item::Placeholder => current.and_then(|n| self.shaper.char_of(font, n, None)),
+                Item::Missing(_) | Item::LineBreak => None,
+            })
+            .collect();
+        ShapeKey { chars, direction, on: self.on(), language: self.language() }
     }
 
     /// The language tag that carries Localized Forms' OpenType script and language tags to the
@@ -148,28 +233,26 @@ type ShapedItems = Vec<Option<Vec<Arc<str>>>>;
 /// means the item's glyph merged into an earlier item's (the components of a ligature after the
 /// first); more than one glyph means the item became several. The second value is the first
 /// shaping error.
-pub(crate) fn shape_items(font: &Font, text: &Text, direction: Direction, shaping: &Shaping<'_>) -> (ShapedItems, Option<String>) {
-    let items = text.items();
-    let mut out: ShapedItems = vec![None; items.len()];
+pub(crate) fn shape_items(font: &Font, text: &Text, direction: Direction, shaping: &Shaping<'_>) -> Arc<Shaped> {
+    let key = shaping.key(font, text, direction);
+    if let Some(kept) = shaping.shaper.kept(&key) {
+        return kept;
+    }
+    let mut out: ShapedItems = vec![None; key.chars.len()];
     let mut error = None;
-    let settings = shaping.settings();
-    let language = shaping.language();
-    let request = Request { direction, settings: &settings, language: language.as_deref() };
-    let current = text.current_glyph();
+    let settings: Vec<FeatureSetting> = shaping.shaper.features().iter().zip(&key.on).map(|(tag, on)| FeatureSetting::global(*tag, *on)).collect();
+    let request = Request { direction, settings: &settings, language: key.language.as_deref() };
     let mut run = Run::default();
-    for (i, item) in items.iter().enumerate() {
-        let c = match item {
-            Item::Glyph { name, typed } => shaping.shaper.char_of(font, name, *typed),
-            Item::Placeholder => current.and_then(|n| shaping.shaper.char_of(font, n, None)),
-            Item::Missing(_) | Item::LineBreak => None,
-        };
+    for (i, c) in key.chars.iter().enumerate() {
         match c {
-            Some(c) => run.push(i, c),
+            Some(c) => run.push(i, *c),
             None => run.flush(shaping.shaper, &request, &mut out, &mut error),
         }
     }
     run.flush(shaping.shaper, &request, &mut out, &mut error);
-    (out, error)
+    let shaped = Arc::new((out, error));
+    shaping.shaper.keep(key, &shaped);
+    shaped
 }
 
 struct Request<'a> {
@@ -212,12 +295,20 @@ impl Run {
         };
         for script in fontcraft_shaping::script::itemize(&self.text) {
             let Some(slice) = self.text.get(script.range.clone()) else { continue };
+            let joining: Vec<FeatureSetting>;
+            let features = if JOINING_SCRIPTS.iter().any(|s| script.script == Tag::new(s)) {
+                let left = |f: &FeatureSetting| f.value > 0 && POSITIONAL.iter().any(|t| f.tag == Tag::new(t));
+                joining = request.settings.iter().filter(|f| !left(f)).cloned().collect();
+                joining.as_slice()
+            } else {
+                request.settings
+            };
             let shape_request = ShapeRequest {
                 text: slice,
                 direction,
                 script: Some(script.script),
                 language: request.language,
-                features: request.settings,
+                features,
                 advances: None,
                 vertical: None,
             };

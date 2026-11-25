@@ -41,6 +41,8 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
+use fontcraft_color::export::has_color_layers;
+use fontcraft_compile::color::variable::interpolate_color_layers;
 use fontcraft_interp::compat::{check_glyph, scope};
 use fontcraft_interp::instance::{instance_font_with_notes, options_for};
 use fontcraft_interp::{Compat, Designspace, GlyphSources, InterpError, InterpOptions, MAX_AXES, MAX_COORDINATE, MasterPairs, ModelCache};
@@ -74,6 +76,14 @@ struct InstanceBase {
 /// A location's bits and the glyphs a location view was asked for.
 type LocationKey = (Vec<u64>, Vec<String>);
 
+/// Where a view with colour layers is.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Place {
+    Instance(usize),
+    /// By the bits of the internal coordinates.
+    Location(Vec<u64>),
+}
+
 /// The interpolation cache of one document.
 #[derive(Default)]
 pub struct InterpCache {
@@ -102,6 +112,8 @@ pub struct InterpCache {
     views: HashMap<(usize, Vec<String>), Arc<Font>>,
     /// Location views, oldest first, by the location's bits and the glyphs they were asked for.
     location_views: VecDeque<(LocationKey, Arc<Font>)>,
+    /// The instance and location views with colour layers ([`Place`]), oldest first.
+    color_views: VecDeque<((Place, Vec<String>), Arc<Font>)>,
     models: ModelCache,
 }
 
@@ -126,6 +138,7 @@ impl InterpCache {
                 self.invalidate(&changed.names);
                 self.views.clear();
                 self.location_views.clear();
+                self.color_views.clear();
             } else {
                 self.clear();
             }
@@ -399,14 +412,7 @@ impl InterpCache {
         }
 
         let names = with_components(font, glyphs);
-        let mut probe = Font::clone(font);
-        let instance = probe.instances.len();
-        Arc::make_mut(&mut probe.instances).push(Instance {
-            name: "Preview Location".into(),
-            location: location.to_vec(),
-            exports: false,
-            ..Instance::default()
-        });
+        let (mut probe, instance) = probe_at(font, location);
         let options = options_for(&probe, instance)?;
         probe.kerning = Arc::new(kerning_between(font, &names));
         probe.glyphs = GlyphTable::from_glyphs(names.iter().filter_map(|n| font.glyphs.get(n).cloned()).collect());
@@ -434,6 +440,49 @@ impl InterpCache {
         }
         self.location_views.push_back((key, Arc::clone(&view)));
         Ok(view)
+    }
+
+    /// [`InterpCache::instance_view`] with each glyph's colour layers as the static instance has them
+    /// (`fontcraft_compile::color::variable`), and the glyphs any layer's components use. The plain view
+    /// for a font without colour layers, and when the colour layers cannot be interpolated.
+    pub fn instance_color_view(&mut self, font: &Arc<Font>, revision: u64, instance: usize, glyphs: &[String]) -> Result<Arc<Font>, InterpError> {
+        if !has_color_layers(font) {
+            return self.instance_view(font, revision, instance, glyphs);
+        }
+        let names = with_components(font, glyphs);
+        let view = self.instance_view(font, revision, instance, &names)?;
+        Ok(self.color_view(font, (Place::Instance(instance), names), view, instance))
+    }
+
+    /// [`InterpCache::location_view`] with each glyph's colour layers interpolated there, as
+    /// [`InterpCache::instance_color_view`] has them.
+    pub fn location_color_view(&mut self, font: &Arc<Font>, revision: u64, location: &[f64], glyphs: &[String]) -> Result<Arc<Font>, InterpError> {
+        if !has_color_layers(font) {
+            return self.location_view(font, revision, location, glyphs);
+        }
+        let names = with_components(font, glyphs);
+        let view = self.location_view(font, revision, location, &names)?;
+        let (probe, instance) = probe_at(font, location);
+        let place = Place::Location(location.iter().map(|v| v.to_bits()).collect());
+        Ok(self.color_view(&probe, (place, names), view, instance))
+    }
+
+    /// `view`, of the instance at `instance` of `font`, with its glyphs' colour layers added.
+    fn color_view(&mut self, font: &Font, key: (Place, Vec<String>), view: Arc<Font>, instance: usize) -> Arc<Font> {
+        if let Some((_, kept)) = self.color_views.iter().find(|(k, _)| *k == key) {
+            return Arc::clone(kept);
+        }
+        let mut reduced = Font::clone(font);
+        reduced.glyphs = GlyphTable::from_glyphs(key.1.iter().filter_map(|n| font.glyphs.get(n).cloned()).collect());
+        let mut out = Font::clone(&view);
+        let added = options_for(&reduced, instance)
+            .is_ok_and(|options| interpolate_color_layers(&reduced, instance, &options, &mut out, &mut Vec::new()).is_ok());
+        let out = if added { Arc::new(out) } else { view };
+        while self.color_views.len() >= MAX_VIEWS {
+            self.color_views.pop_front();
+        }
+        self.color_views.push_back((key, Arc::clone(&out)));
+        out
     }
 
     /// Interpolates the glyphs of `names` at `instance` that are neither kept nor known to
@@ -551,6 +600,7 @@ impl InterpCache {
         self.instance_failed.retain(|(name, _)| !names.contains(name.as_str()));
         self.views.clear();
         self.location_views.clear();
+        self.color_views.clear();
     }
 
     /// Drops everything.
@@ -568,6 +618,7 @@ impl InterpCache {
         self.instance_bases.clear();
         self.views.clear();
         self.location_views.clear();
+        self.color_views.clear();
         self.models.clear();
     }
 }
@@ -622,6 +673,19 @@ fn with_components(font: &Font, glyphs: &[String]) -> Vec<String> {
         level = next;
     }
     out
+}
+
+/// A copy of `font` with one more instance, at `location`, and that instance's index.
+fn probe_at(font: &Font, location: &[f64]) -> (Font, usize) {
+    let mut probe = Font::clone(font);
+    let instance = probe.instances.len();
+    Arc::make_mut(&mut probe.instances).push(Instance {
+        name: "Preview Location".into(),
+        location: location.to_vec(),
+        exports: false,
+        ..Instance::default()
+    });
+    (probe, instance)
 }
 
 /// The font's kerning between the glyphs `names` and their kerning groups. A side spelled in a
@@ -767,6 +831,12 @@ pub trait SessionInterpExt {
 
     /// The active document's view of a location holding `glyphs` ([`InterpCache::location_view`]).
     fn location_view(&mut self, location: &[f64], glyphs: &[String]) -> Result<Arc<Font>, String>;
+
+    /// [`SessionInterpExt::instance_view`] with colour layers ([`InterpCache::instance_color_view`]).
+    fn instance_color_view(&mut self, instance: usize, glyphs: &[String]) -> Result<Arc<Font>, String>;
+
+    /// [`SessionInterpExt::location_view`] with colour layers ([`InterpCache::location_color_view`]).
+    fn location_color_view(&mut self, location: &[f64], glyphs: &[String]) -> Result<Arc<Font>, String>;
 }
 
 fn interp_cache(s: &mut crate::Session) -> Option<(&mut InterpCache, Arc<Font>, u64)> {
@@ -848,6 +918,16 @@ impl SessionInterpExt for crate::Session {
     fn location_view(&mut self, location: &[f64], glyphs: &[String]) -> Result<Arc<Font>, String> {
         let (cache, font, revision) = interp_cache(self).ok_or("no document open")?;
         cache.location_view(&font, revision, location, glyphs).map_err(|e| e.to_string())
+    }
+
+    fn instance_color_view(&mut self, instance: usize, glyphs: &[String]) -> Result<Arc<Font>, String> {
+        let (cache, font, revision) = interp_cache(self).ok_or("no document open")?;
+        cache.instance_color_view(&font, revision, instance, glyphs).map_err(|e| e.to_string())
+    }
+
+    fn location_color_view(&mut self, location: &[f64], glyphs: &[String]) -> Result<Arc<Font>, String> {
+        let (cache, font, revision) = interp_cache(self).ok_or("no document open")?;
+        cache.location_color_view(&font, revision, location, glyphs).map_err(|e| e.to_string())
     }
 }
 

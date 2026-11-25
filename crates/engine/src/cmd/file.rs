@@ -279,7 +279,7 @@ fn write_document(s: &mut Session, p: &Params, path: std::path::PathBuf, format:
     // batch or interaction becomes an undo step under the new folder, so it is rewritten here.
     let rebase = |font: &mut Arc<Font>| *font = crate::assets::rebased(Arc::clone(font), old_path.as_deref(), Some(&path));
     if let Some(batch) = s.batch.as_mut() {
-        batch.before.iter_mut().filter(|(d, _)| *d == id).for_each(|(_, before)| rebase(before));
+        batch.before.iter_mut().filter(|(d, ..)| *d == id).for_each(|(_, before, _)| rebase(before));
     }
     if let Some(it) = s.interaction.as_mut().filter(|it| it.doc == id) {
         rebase(&mut it.before);

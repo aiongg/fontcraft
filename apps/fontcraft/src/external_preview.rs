@@ -11,12 +11,12 @@
 //!   wait, and is listed in `sharing.status` until `sharing.answerDevice` answers it. A refused
 //!   device is told so while the preview runs. Trusted devices are kept until
 //!   `settings.resetTrustedDevices`.
-//! - A trusted device gets the tab's glyphs drawn as SVG by `preview.render` in the tab's master,
-//!   inside an HTML page that reloads itself every [`REFRESH_SECONDS`] with a meta refresh. The
+//! - A trusted device gets Edit View's line drawn as SVG by `preview.render`: the text in the tab's
+//!   master, shaped with its features, in colour while Edit View draws in colour, inside an HTML page that reloads itself every [`REFRESH_SECONDS`] with a meta refresh. The
 //!   page has no script; the browser's own zoom and scrolling move around in it.
 //!
-//! The UI's frame hook ([`Hook`]) calls [`ExternalPreview::sync`] once per frame, with the glyph the window shows as
-//! the tab. The server threads never touch the
+//! The UI's frame hook ([`Hook`]) calls [`ExternalPreview::sync`] once per frame, with the line Edit View shows as the
+//! tab. The server threads never touch the
 //! session: they read the device lists and the last drawing the app hands them, and they collect
 //! the devices that asked, which the next frame passes to the session.
 
@@ -26,8 +26,9 @@ use std::time::{Duration, Instant};
 
 use fontcraft_engine::Session;
 use fontcraft_engine::cmd::sharing::{self, MAX_PENDING_DEVICES, SharingState};
+use fontcraft_ui::app::models::preview::{ShownLine, shown_line};
 use fontcraft_ui::app::preview_host::Scope;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use crate::preview_server::{Limits, Pages, Reply, Server};
 
@@ -40,8 +41,6 @@ pub const MIN_DRAW_INTERVAL: Duration = Duration::from_millis(250);
 /// The drawing's heights in pixels, tried in turn until the line fits `preview.render`'s width
 /// limit. The page scales the drawing to the width of the screen.
 const DRAW_HEIGHTS: [f64; 6] = [400.0, 160.0, 64.0, 32.0, 16.0, 8.0];
-/// Most glyphs drawn from one tab (the limit of `preview.render`).
-const MAX_DRAWN_GLYPHS: usize = fontcraft_engine::cmd::preview::MAX_RENDER_GLYPHS;
 
 /// The Edit View tab the page shows, as the app reads it from its window.
 #[derive(Clone, Debug, PartialEq)]
@@ -49,17 +48,8 @@ pub struct Tab {
     /// The id of the document it shows.
     pub document: u64,
     pub title: String,
-    /// The glyphs it shows, in order.
-    pub glyphs: Vec<String>,
-    /// The master it draws in; `None`: the first.
-    pub master: Option<String>,
-}
-
-impl Tab {
-    /// Keeps the first glyphs a drawing can hold.
-    pub fn new(document: u64, title: String, glyphs: impl Iterator<Item = String>, master: Option<String>) -> Tab {
-        Tab { document, title, glyphs: glyphs.take(MAX_DRAWN_GLYPHS).collect(), master }
-    }
+    /// What it shows and how.
+    pub line: ShownLine,
 }
 
 /// What the page of a trusted device shows.
@@ -194,6 +184,11 @@ impl ExternalPreview {
         ExternalPreview { scope, wake, server: None, failed_at: None, devices: Default::default(), drawn: None }
     }
 
+    /// Whether the next [`ExternalPreview::sync`] may draw: the setting is on and a device is trusted.
+    fn draws(&self, session: &Session) -> bool {
+        sharing::enabled(session.settings()) && !sharing::trusted_devices(session.settings()).is_empty()
+    }
+
     /// Once per frame: starts or stops the server with the setting, lists the devices that asked
     /// in the session, hands the server the device lists, and draws the tab `tab` reads when a
     /// trusted device may see it and it changed. Returns how long until the next frame is
@@ -274,13 +269,16 @@ impl ExternalPreview {
     }
 }
 
-/// External Preview as the UI's frame hook: the page shows the active document's shown glyph in its first master.
+/// External Preview as the UI's frame hook: the page shows the active document's Edit View line.
 pub struct Hook(pub ExternalPreview);
 
 impl fontcraft_ui::app::preview_host::FrameHook for Hook {
     fn frame(&mut self, app: &mut fontcraft_ui::FontCraftApp) -> Option<Duration> {
-        let glyph = app.models.glyph_metrics.glyph.clone();
-        let tab = app.session.active().map(|d| Tab::new(d.id, d.title.clone(), glyph.into_iter(), None));
+        if !self.0.draws(&app.session) {
+            return self.0.sync(&mut app.session, || None);
+        }
+        let line = shown_line(&app.session, &app.view).unwrap_or_default();
+        let tab = app.session.active().map(|d| Tab { document: d.id, title: d.title.clone(), line });
         self.0.sync(&mut app.session, || tab)
     }
 }
@@ -292,15 +290,22 @@ fn draw(session: &mut Session, tab: Option<&Tab>) -> View {
     if session.active().map(|d| d.id) != Some(tab.document) {
         return say(&tab.title, "The Edit View's font is not the active document.");
     }
-    if tab.glyphs.is_empty() {
+    if tab.line.glyphs.is_empty() {
         return say(&tab.title, "The Edit View shows no glyphs.");
     }
     // A master the font no longer has is drawn in the first master, as the tab draws it.
-    let masters: Vec<Option<&String>> = if tab.master.is_some() { vec![tab.master.as_ref(), None] } else { vec![None] };
+    let mut lines = vec![tab.line.clone()];
+    if tab.line.master.is_some() {
+        lines.push(ShownLine { master: None, ..tab.line.clone() });
+    }
     let mut problem = String::new();
-    for master in &masters {
+    for line in &lines {
         for size in DRAW_HEIGHTS {
-            let params = json!({"glyphs": tab.glyphs, "master": master, "format": "svg", "size": size});
+            let mut params = Map::new();
+            line.add_to(&mut params);
+            params.insert("format".into(), json!("svg"));
+            params.insert("size".into(), json!(size));
+            let params = Value::Object(params);
             match session.query("preview.render", &params) {
                 Ok(reply) => {
                     return match reply.get("svg").and_then(Value::as_str) {
@@ -341,7 +346,7 @@ mod tests {
 
     fn tab(session: &Session) -> Option<Tab> {
         let document = session.active()?.id;
-        Some(Tab::new(document, "A".into(), ["A".to_string()].into_iter(), None))
+        Some(Tab { document, title: "A".into(), line: ShownLine { glyphs: vec!["A".into()], ..ShownLine::default() } })
     }
 
     #[test]

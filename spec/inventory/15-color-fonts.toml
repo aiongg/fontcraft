@@ -729,7 +729,7 @@ observe = [
   "Palette font: select a palette layer of A and type AB in the Edit View tab; note whether B is drawn in colour and with which palette.",
   "svg layer whose file has an feDropShadow: select the layer and note whether Edit View draws the shadow.",
 ]
-notes = "Documented in the handbook; not yet observed in the reference app. Drawn by `crates/ui/src/canvas/color/paint.rs` from the paint graph the COLR writer reads. svg layers are drawn from their file's paths and strokes; clip paths, masks, filters, patterns, text and embedded images are not drawn, and even-odd fills are filled non-zero. An svg layer whose file has SVG filters is drawn as Text Preview draws an SVG glyph (`fontcraft_render::color::SvgFile`): with its filters, clip paths, masks, patterns and embedded images, rasterised only within the canvas and a margin of 256 pixels around it; a glyph wholly outside that is not rasterised. When that drawing is refused (its part within the canvas past 2,097,152 pixels or 4,096 on a side, or its work budget) the file is drawn from its paths and strokes, and is not tried again until the zoom, the file or the glyph changes; a group whose filters would paint more than 1,048,576 pixels of that part is drawn unfiltered. A line at the canvas's bottom left names the first such glyph, the reason and how many others there are."
+notes = "Documented in the handbook; not yet observed in the reference app. Drawn by `crates/ui/src/canvas/color/paint.rs` from the paint graph the COLR writer reads (`fontcraft_engine::color_drawing`). svg layers are drawn from their file's paths and strokes; clip paths, masks, filters, patterns, text and embedded images are not drawn, and even-odd fills are filled non-zero. An svg layer whose file has SVG filters is drawn as Text Preview draws an SVG glyph (`fontcraft_render::color::SvgFile`): with its filters, clip paths, masks, patterns and embedded images, rasterised only within the canvas and a margin of 256 pixels around it; a glyph wholly outside that is not rasterised. When that drawing is refused (its part within the canvas past 2,097,152 pixels or 4,096 on a side, or its work budget) the file is drawn from its paths and strokes, and is not tried again until the zoom, the file or the glyph changes; a group whose filters would paint more than 1,048,576 pixels of that part is drawn unfiltered. A line at the canvas's bottom left names the first such glyph, the reason and how many others there are."
 
 [[behavior]]
 id = "color.preview.previewArea"
@@ -739,10 +739,11 @@ summary = "Two previews, the strip that the eye button opens below the Edit View
 ref = "Color Fonts › Working with Color Fonts › Previewing Color Fonts"
 status = "handbook"
 guesses = [
-  "The colour glyphs are not inverted by Invert, and the text colour row draws in the preview's text colour. Settled by inverting the Preview Area of a palette font in the reference.",
-  "A preview showing an instance or all instances draws every glyph in its text colour, since the instance has no selected layer. Settled by choosing an instance in the Preview Area of a palette font in the reference.",
+  "The colour glyphs are not inverted by Invert; the text colour row draws in the preview's text colour, and Master Color Dark stands in for Master Color while Invert is on. Settled by inverting the Preview Area of a palette font and of a layered font with Master Color Dark in the reference.",
+  "While a colour layer is the selected one, the line's other glyphs draw in colour too, as Edit View's do. Settled by a tab of several colour glyphs in the reference.",
+  "While a colour layer is the selected one, a preview of an instance, of all instances or of a location draws the colour layers interpolated there, as the exported instance has them; a layered font draws its shown masters. Settled by choosing an instance in the Preview Area of a palette font in the reference.",
 ]
-notes = "Documented in the handbook; not yet observed in the reference app. The colour glyphs are drawn over the strip before Flip and Blur."
+notes = "Documented in the handbook; not yet observed in the reference app. Built in M11.30: the Preview Area, the Preview Panel and the External Preview page draw what Edit View draws (`fontcraft_engine::color_drawing`), colour glyphs laid over the ink before Flip and Blur; the page draws as `preview.render` with `color`."
 
 [[behavior]]
 id = "color.preview.textPreview"

@@ -1,13 +1,15 @@
 //! The window tools: `screenshot`, `render`, `elements`, `pointer`, `click`, `set`, `key`, `text`,
 //! `menu` and `dialog_*`. Each one calls a control method of the running app (`docs/control-protocol.md`),
 //! so they are listed only when the server is attached ([`crate::Backend::has_app`]). Called
-//! without an app, a window tool answers that it needs one.
+//! without an app, a window tool answers that it needs one. `render` is the exception: the engine draws it,
+//! so it is offered headless too, and draws the same.
 //!
 //! The policy decides commands by id, and the mouse and keyboard can reach any command. So under
 //! `--read-only`, `--allow` or `--deny`, the tools that act like the mouse and keyboard
 //! (`pointer`, `click`, `set`, `key`, `text`) are not listed and are refused; `menu` and the dialog tools
 //! check the command they would run before they run it.
 
+use fontcraft_engine::cmd::preview_line::{RENDER_KEYS, request};
 use serde_json::{Map, Value, json};
 
 use crate::backend::NEEDS_APP;
@@ -41,9 +43,9 @@ const TOOLS: &[(&str, Reach)] = &[
     ("dialog_cancel", Reach::Safe),
 ];
 
-/// The arguments each tool passes on to its method; anything else is dropped. `screenshot` and
-/// `render` take no `path`: the image comes back in the reply, and no file is written.
-const RENDER_KEYS: &[&str] = &["glyphs", "text", "master", "layer", "size", "scale"];
+/// The arguments each tool passes on to its method; anything else is dropped. `render` passes on
+/// [`RENDER_KEYS`]. `screenshot` and `render` take no `path`: the image comes back in the reply, and
+/// no file is written.
 const POINTER_KEYS: &[&str] = &["events"];
 const ELEMENTS_KEYS: &[&str] = &["prefix", "role", "window", "offset", "limit"];
 const CLICK_KEYS: &[&str] = &["id", "element", "x", "y", "button", "count", "mods", "shift", "alt", "cmd", "ctrl"];
@@ -54,6 +56,11 @@ const DIALOG_SET_KEYS: &[&str] = &["field", "value"];
 
 fn reach(name: &str) -> Option<Reach> {
     TOOLS.iter().find(|(n, _)| *n == name).map(|(_, r)| *r)
+}
+
+/// What a headless server offers of them: the tool the engine draws.
+pub(crate) fn headless() -> Value {
+    definition("render")
 }
 
 /// The window tools a server offers: all of them, or without the input tools when `restricted`.
@@ -103,7 +110,7 @@ impl From<String> for Failure {
 }
 
 fn run(server: &mut Server, name: &str, reach: Reach, args: &Value) -> Result<Vec<Value>, Failure> {
-    if !server.backend.has_app() {
+    if !server.backend.has_app() && name != "render" {
         return Err(Failure::Failed(format!("`{name}` {NEEDS_APP}")));
     }
     let args = match args {
@@ -111,6 +118,11 @@ fn run(server: &mut Server, name: &str, reach: Reach, args: &Value) -> Result<Ve
         Value::Object(map) => map.clone(),
         _ => return Err(Failure::Failed(format!("`{name}`: the arguments must be a JSON object"))),
     };
+    if !server.backend.has_app() {
+        let (command, params) = request(&args);
+        server.check_command(command, &params, 0).map_err(Failure::Refused)?;
+        return image(command, server.backend.execute(command, &params)?);
+    }
     let restricted = server.policy.is_restricted();
     if restricted && reach == Reach::Input {
         return Err(Failure::Refused(format!(
@@ -187,13 +199,17 @@ fn text(reply: Value) -> Result<Vec<Value>, Failure> {
     Ok(vec![json!({"type": "text", "text": reply.to_string()})])
 }
 
-/// A reply with a base64 `png`: the image, then the other fields as text.
+/// A reply with a base64 `png`: the image, then the other fields as text. A comparison that found nothing to draw is
+/// its fields alone.
 fn image(method: &str, reply: Value) -> Result<Vec<Value>, Failure> {
     let Value::Object(mut fields) = reply else {
-        return Err(Failure::Failed(format!("{method}: the app's reply is not an object")));
+        return Err(Failure::Failed(format!("{method}: the reply is not an object")));
     };
     let Some(Value::String(png)) = fields.remove("png") else {
-        return Err(Failure::Failed(format!("{method}: the app's reply holds no PNG image")));
+        if fields.contains_key("changedCount") {
+            return text(Value::Object(fields));
+        }
+        return Err(Failure::Failed(format!("{method}: the reply holds no PNG image")));
     };
     Ok(vec![json!({"type": "image", "data": png, "mimeType": "image/png"}), json!({"type": "text", "text": Value::Object(fields).to_string()})])
 }
@@ -208,12 +224,24 @@ fn definition(name: &str) -> Value {
             &[],
         ),
         "render" => (
-            "Draw glyphs filled black on white as a PNG image, without the window. Name the glyphs, or give text whose characters map to glyphs; with neither, the line of the showing tab, else the glyphs selected in Font View. The same request gives the same image.",
+            "Draw glyphs as a PNG image, without the window: filled black on white, shaped with features, at a master, an instance or a location, in colour, with their nodes, or compared with an earlier revision. Name the glyphs, or give text whose characters map to glyphs; with neither, the app draws the shown glyph and a comparison what changed. The text part gives the size, the glyphs drawn and warnings. The same request gives the same image.",
             json!({
-                "glyphs": {"type": "array", "items": {"type": "string"}, "description": "Glyph names, drawn in a line."},
+                "glyphs": {"type": "array", "items": {"type": "string"}, "description": "Glyph names, drawn in a line (at most 1,000)."},
                 "text": {"type": "string", "description": "Characters to draw; each maps to its glyph."},
-                "master": {"type": "string", "description": "A master id. Default: the master the showing tab draws in, else the first."},
-                "layer": {"type": "string", "description": "Draw this layer of the one glyph named."},
+                "master": {"type": "string", "description": "A master id or name. Default: the master the window draws in, else the first."},
+                "layer": {"type": "string", "description": "Draw this layer (id or name) of the one glyph named."},
+                "layers": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Glyph names and the layers (id or name) to draw them in."},
+                "instance": {"type": ["string", "integer"], "description": "Draw a static instance, by name or index, interpolated."},
+                "location": {"type": "object", "additionalProperties": {"type": "number"}, "description": "Draw at a location: axis tags and internal values. Axes not named stand at the origin master."},
+                "features": {"type": "array", "items": {"type": "string"}, "description": "OpenType substitution features to shape with (default none)."},
+                "script": {"type": "string", "description": "OpenType script tag for localized forms."},
+                "language": {"type": "string", "description": "OpenType language tag for localized forms."},
+                "direction": {"type": "string", "enum": ["ltr", "rtl"], "description": "Default: the direction of the first letter."},
+                "color": {"type": "boolean", "description": "Draw colour layers, or a layered font's masters in their Master Colors."},
+                "palette": {"type": "integer", "description": "The palette colour layers take their colours from (with color; default 0)."},
+                "showNodes": {"type": "boolean", "description": "Mark nodes and handles."},
+                "invert": {"type": "boolean", "description": "Light on dark."},
+                "compare": {"type": "object", "properties": {"revision": {"type": "integer"}, "steps": {"type": "integer"}}, "description": "Draw each glyph as it was at a revision the document had (or that many undo steps back, default 1) in red under as it is in blue; unchanged drawings in grey. The text part lists the changed glyphs."},
                 "size": {"type": "number", "description": "Pixels per em (default 256)."},
                 "scale": {"type": "number", "description": "Pixels per font unit, instead of size."}
             }),
@@ -396,7 +424,7 @@ mod tests {
     #[test]
     fn the_tool_list_depends_on_the_mode() {
         let mut headless = Server::new(Box::new(Headless::with_document()));
-        assert_eq!(names(&mut headless), ["list_commands", "run_command", "inspect_document"]);
+        assert_eq!(names(&mut headless), ["list_commands", "run_command", "inspect_document", "render"]);
 
         let (mut s, _) = attached(Policy::unrestricted(), None);
         let all = names(&mut s);
@@ -444,6 +472,41 @@ mod tests {
         let calls = calls.borrow();
         assert_eq!(calls[0], ("ui.screenshot".to_string(), json!({})));
         assert_eq!(calls[1], ("ui.render".to_string(), json!({"glyphs": ["A"], "size": 64})));
+    }
+
+    /// An agent without a window opens a font, builds an accented glyph, looks at it, compares it with the state before
+    /// and exports.
+    #[test]
+    fn headless_render_draws_compares_and_follows_an_agents_edits() {
+        let mut s = Server::new(Box::new(Headless::with_document()));
+        let command = |s: &mut Server, id: &str, params: Value| {
+            let r = call(s, "run_command", json!({"command": id, "params": params}));
+            assert_eq!(r["isError"], false, "{id}: {r}");
+        };
+        let rectangle = |glyph: &str, y: i64| json!({"glyph": glyph, "x": 100, "y": y, "width": 200, "height": 100});
+        command(&mut s, "path.addRectangle", rectangle("A", 0));
+        command(&mut s, "glyph.newGlyph", json!({"name": "acute", "width": 400}));
+        command(&mut s, "path.addRectangle", rectangle("acute", 600));
+        command(&mut s, "glyph.newGlyph", json!({"name": "Aacute", "width": 600}));
+        command(&mut s, "glyph.addComponent", json!({"glyph": "Aacute", "component": "A"}));
+        command(&mut s, "glyph.addComponent", json!({"glyph": "Aacute", "component": "acute"}));
+
+        let drawn = call(&mut s, "render", json!({"glyphs": ["Aacute"], "size": 64}));
+        assert_eq!((drawn["isError"].clone(), drawn["content"][0]["type"].clone()), (json!(false), json!("image")), "{drawn}");
+        assert_eq!(drawn["content"][0]["data"], call(&mut s, "render", json!({"glyphs": ["Aacute"], "size": 64}))["content"][0]["data"]);
+
+        command(&mut s, "path.addRectangle", rectangle("A", 300));
+        let compared = call(&mut s, "render", json!({"compare": {"steps": 1}, "size": 64}));
+        assert_eq!(compared["content"][0]["type"], "image", "{compared}");
+        let fields: Value = serde_json::from_str(compared["content"][1]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(fields["changed"], json!(["A"]), "the glyph edited, not the composite that uses it");
+        let same = call(&mut s, "render", json!({"compare": {"steps": 0}}));
+        assert_eq!((same["isError"].clone(), same["content"][0]["type"].clone()), (json!(false), json!("text")), "{same}");
+        assert_eq!(call(&mut s, "render", json!({"compare": {"steps": 10_000}}))["isError"], true);
+
+        let target = std::env::temp_dir().join(format!("fontcraft-render-{}.ttf", std::process::id()));
+        command(&mut s, "file.exportStatic", json!({"destination": target.to_string_lossy()}));
+        assert!(std::fs::remove_file(&target).is_ok());
     }
 
     #[test]

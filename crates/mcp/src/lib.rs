@@ -207,13 +207,15 @@ impl Server {
         self
     }
 
-    /// The tools this server offers: the window tools only when a running app answers them.
+    /// The tools this server offers: the window tools only when a running app answers them, `render` always.
     fn tool_list(&self) -> Value {
         let mut list = tools();
-        if self.backend.has_app()
-            && let Some(all) = list.as_array_mut()
-        {
-            all.extend(ui_tools::list(self.policy.is_restricted()));
+        if let Some(all) = list.as_array_mut() {
+            if self.backend.has_app() {
+                all.extend(ui_tools::list(self.policy.is_restricted()));
+            } else {
+                all.push(ui_tools::headless());
+            }
         }
         list
     }
@@ -589,7 +591,7 @@ mod tests {
         let mut s = server();
         let list = ask(&mut s, json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}));
         let names: Vec<&str> = list["result"]["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
-        assert_eq!(names, ["list_commands", "run_command", "inspect_document"]);
+        assert_eq!(names, ["list_commands", "run_command", "inspect_document", "render"]);
 
         let (is_error, text) = tool(&mut s, "list_commands", json!({"pattern": "glyph"}));
         assert!(!is_error && text.contains("glyph.newGlyph") && !text.contains("file.save"));

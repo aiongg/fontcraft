@@ -677,7 +677,7 @@ fn merge_glyph(mine: &Glyph, theirs: &Glyph, attributes: bool, layers: &BTreeSet
 /// [`Session::edit`] makes (locked glyphs, the model's checks). The glyphs keep the file's
 /// last-change stamps: nothing here was edited in this app.
 fn replace_font(s: &mut Session, i: usize, label: &str, next: Font) -> Result<()> {
-    let (id, before) = {
+    let (id, before, revision) = {
         let doc = s.docs_mut().get_mut(i).ok_or(EngineError::NoDocument)?;
         if next.same_as(&doc.font) {
             return Ok(());
@@ -686,19 +686,19 @@ fn replace_font(s: &mut Session, i: usize, label: &str, next: Font) -> Result<()
             return Err(EngineError::Locked(name));
         }
         next.check_changed(&doc.font)?;
-        let before = std::mem::replace(&mut doc.font, Arc::new(next));
+        let (before, revision) = (std::mem::replace(&mut doc.font, Arc::new(next)), doc.revision);
         doc.bump_revision();
-        (doc.id, before)
+        (doc.id, before, revision)
     };
     match &mut s.batch {
         Some(batch) => {
-            if !batch.before.iter().any(|(d, _)| *d == id) {
-                batch.before.push((id, before));
+            if !batch.before.iter().any(|(d, ..)| *d == id) {
+                batch.before.push((id, before, revision));
             }
         }
         None => {
             if let Some(doc) = s.docs_mut().get_mut(i) {
-                crate::push_undo(doc, label.into(), before);
+                crate::push_undo(doc, label.into(), before, revision);
             }
         }
     }

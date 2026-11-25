@@ -177,6 +177,8 @@ pub struct Sources<'a> {
     pub pattern: &'a mut dyn FnMut(&ShapeAttrs) -> Option<Pattern>,
     /// The text colour (palette index 65,535), straight RGBA.
     pub text: [f32; 4],
+    /// The palette the colours come from, from 0; one the font lacks gives the text colour.
+    pub palette: usize,
 }
 
 // ── the paint graph ─────────────────────────────────────────────────────────────────────────────
@@ -405,9 +407,9 @@ fn invertible(a: Affine) -> bool {
     a.as_coeffs().iter().all(|v| v.is_finite()) && a.determinant().abs() > 1e-12
 }
 
-/// Palette 0 of `master`'s palettes (the font's when the master has none).
-fn palette0(font: &Font, master: &str) -> Vec<Rgba> {
-    palette::read(font, Some(master)).ok().and_then(|p| p.palette(0).map(<[Rgba]>::to_vec)).unwrap_or_default()
+/// Palette `index` of `master`'s palettes (the font's when the master has none).
+fn palette_at(font: &Font, master: &str, index: usize) -> Vec<Rgba> {
+    palette::read(font, Some(master)).ok().and_then(|p| p.palette(index).map(<[Rgba]>::to_vec)).unwrap_or_default()
 }
 
 fn effect(shadow: &Shadow, palette: &[Rgba], text: [f32; 4]) -> Option<Effect> {
@@ -424,7 +426,7 @@ fn effect(shadow: &Shadow, palette: &[Rgba], text: [f32; 4]) -> Option<Effect> {
 /// through the paint graph, with the image-only effects of its full-colour paths. `None` when
 /// the glyph has no vector colour layers in the master.
 pub fn collect(font: &Font, glyph: &Glyph, master: &str, src: &mut Sources) -> Option<Vec<Item>> {
-    let palette = palette0(font, master);
+    let palette = palette_at(font, master, src.palette);
     let mut paints = MasterPaints::new(font, master);
     let graph = paints.paint(glyph, &mut Vec::new()).ok()??;
     let mut c = Collect {

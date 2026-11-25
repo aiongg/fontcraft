@@ -154,7 +154,7 @@ fn icolor_and_svg_layers_draw_their_files() {
         br##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect x="0" y="0" width="50" height="50" fill="#00ff00"/></svg>"##;
     assets.insert("green.svg", svg.to_vec());
     let mut files = ColorFiles::default();
-    let mut src = Sources { assets: &assets, files: &mut files, text: TEXT };
+    let mut src = Sources { assets: &assets, files: &mut files, text: TEXT, palette: 0 };
     let font = Font::new("Test");
     let mut glyph = Glyph::new("x");
     let mut icolor = Layer::new("m01", 600.0);

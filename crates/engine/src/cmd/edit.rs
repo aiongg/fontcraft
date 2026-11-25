@@ -17,7 +17,7 @@ fn undo(s: &mut Session, _: &Value) -> Result<Value> {
     let step = doc.history.undo.pop().ok_or_else(|| EngineError::Disabled("edit.undo".into(), "nothing to undo".into()))?;
     let font = crate::assets::rebased(step.font, step.path.as_deref(), doc.path.as_deref());
     let current = std::mem::replace(&mut doc.font, font);
-    doc.history.redo.push(HistoryEntry { label: step.label.clone(), font: current, path: doc.path.clone() });
+    doc.history.redo.push(HistoryEntry { label: step.label.clone(), font: current, path: doc.path.clone(), revision: doc.revision });
     doc.bump_revision();
     Ok(json!({ "undone": step.label.as_ref(), "revision": doc.revision }))
 }
@@ -27,7 +27,7 @@ fn redo(s: &mut Session, _: &Value) -> Result<Value> {
     let step = doc.history.redo.pop().ok_or_else(|| EngineError::Disabled("edit.redo".into(), "nothing to redo".into()))?;
     let font = crate::assets::rebased(step.font, step.path.as_deref(), doc.path.as_deref());
     let current = std::mem::replace(&mut doc.font, font);
-    doc.history.undo.push(HistoryEntry { label: step.label.clone(), font: current, path: doc.path.clone() });
+    doc.history.undo.push(HistoryEntry { label: step.label.clone(), font: current, path: doc.path.clone(), revision: doc.revision });
     doc.bump_revision();
     Ok(json!({ "redone": step.label.as_ref(), "revision": doc.revision }))
 }

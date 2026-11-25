@@ -78,6 +78,8 @@
 //!               bidi: bool, embeddings: &'a [Embedding], shaping: Option<Shaping<'a>>, cursive: bool }  (Default)
 //! PreviewShaper::new(bytes: Arc<[u8]>, glyph_order: &[String], private_use: &[(u32, u16)], features: &[Tag]) -> Result<PreviewShaper, ShapeError>
 //! PreviewShaper::features(&self) -> &[Tag];  glyph_name(&self, gid: u16) -> Option<&Arc<str>>;  has_glyph(&self, name: &str) -> bool
+//! PreviewShaper::is_shaped(&self, font: &Font, text: &Text, direction: Direction, active: &[Tag], localized: Option<(Tag, Tag)>) -> bool
+//! PreviewShaper::shape_ahead(&self, font: &Font, text: &Text, direction: Direction, active: &[Tag], localized: Option<(Tag, Tag)>)
 //! Shaping<'a> { shaper: &'a PreviewShaper, active: &'a [Tag], localized: Option<(Tag script, Tag language)> }
 //! Embedding { items: Range<usize>, rtl: bool };  bidi::MAX_EMBEDDINGS = 1_000
 //! bidi::is_strong_rtl(c: char) -> bool
@@ -123,7 +125,7 @@ pub use layout::{
 pub use line_shape::{ShapedLine, shape_line, vertical_features};
 pub use linebreak::Break;
 pub use measure::{Measure, WidthCache};
-pub use shape::{PreviewShaper, Shaping};
+pub use shape::{PreviewShaper, Shaping, tag};
 pub use text::{Charmap, Item, PLACEHOLDER, Text, TextError, parse, parse_prefix, parse_with};
 
 /// Items in an Edit View tab.

@@ -234,7 +234,7 @@ impl LineOptions {
 }
 
 /// The vertical span drawn for a master: descender to ascender, in font units.
-fn span(font: &Font, master: &fontcraft_model::Master) -> (f64, f64) {
+pub fn span(font: &Font, master: &fontcraft_model::Master) -> (f64, f64) {
     let upm = f64::from(font.units_per_em);
     let ascender = font.metric_pos(master, metric::ASCENDER, upm * 0.8);
     let descender = font.metric_pos(master, metric::DESCENDER, -upm * 0.2);
