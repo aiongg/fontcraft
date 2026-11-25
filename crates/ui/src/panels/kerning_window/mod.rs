@@ -49,7 +49,7 @@ use egui::Ui;
 use serde_json::{Map, Value, json};
 
 use crate::app::Msg;
-use crate::app::models::kerning_window::{KernRow, KerningWindowModel};
+use crate::app::models::kerning_window::{KernRow, KernRows, KerningWindowModel};
 use crate::shell::kerning_window::{Column, MATCHES};
 
 craft::ui::words! {
@@ -144,12 +144,12 @@ fn scope(model: &KerningWindowModel) -> Map<String, Value> {
     p
 }
 
-fn pair_json(row: &KernRow) -> Value {
+fn pair_json(row: KernRow<'_>) -> Value {
     json!({"left": row.left, "right": row.right})
 }
 
 /// The rows in list order: a row's key is its position.
-struct Rows<'a>(&'a [KernRow]);
+struct Rows<'a>(&'a KernRows);
 
 impl DisplayOrder<usize> for Rows<'_> {
     fn len(&self) -> usize {
@@ -165,7 +165,7 @@ impl DisplayOrder<usize> for Rows<'_> {
     }
 
     fn text(&self, at: usize) -> Option<Cow<'_, str>> {
-        self.0.get(at).map(|r| Cow::Borrowed(r.left.as_str()))
+        self.0.get(at).map(|r| Cow::Borrowed(r.left))
     }
 }
 
@@ -240,7 +240,7 @@ fn search_bar(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowMode
 /// The selection as the table holds it: positions, the current row as lead.
 fn selection(model: &KerningWindowModel) -> Selection<usize> {
     let lead = model.current.filter(|c| model.selected.contains(c)).or_else(|| model.selected.last().copied());
-    Selection::new(model.selected.clone(), lead, lead)
+    Selection::new(model.selected.to_vec(), lead, lead)
 }
 
 fn pair_table(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowModel, sent: &mut Vec<Msg>) {
@@ -267,7 +267,7 @@ fn pair_table(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowMode
     };
     let edited: RefCell<Option<EditResponse<String>>> = RefCell::new(None);
     let out = Table::<usize>::new(words.pairs.clone(), columns)
-        .empty(model.error.clone().map_or_else(|| words.empty.clone(), Into::into))
+        .empty(words.empty.clone())
         .sort(sort)
         .striped(true)
         .deletable(true)
@@ -278,17 +278,17 @@ fn pair_table(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowMode
         .selection(Bind::bound(&mut after))
         .show_items(ui, &source, &mut |at, icx| {
             let Some(row) = rows.get(*at) else { return ListRow::new("") };
-            let mut shown = ListRow::new(row.left.clone())
+            let mut shown = ListRow::new(row.left.to_string())
                 .cells(icx.cells())
                 .state(icx.row.clone())
                 .cell(VALUE, format_value(row.value))
-                .cell(RIGHT, row.right.clone());
+                .cell(RIGHT, row.right.to_string());
             let editing = model.editing.filter(|(edited, _)| edited == at).map(|(_, column)| column);
             // The text cells above size the columns; a field or a coloured name stands in their place.
             if !icx.row.selected && !icx.row.renaming {
-                shown = shown.cell_field(LEFT, entry(&row.left), |_| {});
+                shown = shown.cell_field(LEFT, entry(row.left), |_| {});
                 if editing != Some(Column::Right) {
-                    shown = shown.cell_field(RIGHT, entry(&row.right), |_| {});
+                    shown = shown.cell_field(RIGHT, entry(row.right), |_| {});
                 }
             }
             let edited = &edited;
@@ -321,7 +321,7 @@ fn pair_table(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowMode
             picked.remove(at);
             picked.push(lead);
         }
-        if picked.len() > 1 && picked.len() == rows.len() {
+        if picked.len() > 1 && picked.len() == rows.len() && model.scope.is_some() {
             sent.push(shell("window.kerning", json!({ "select": "all" })));
         } else {
             let select: Vec<Value> = picked.iter().filter_map(|&i| rows.get(i)).map(pair_json).collect();
@@ -367,7 +367,7 @@ fn pair_table(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowMode
             }
             // The menu acts on the row pressed, with the other selected rows when it is one of them.
             CollectionEvent::ContextMenu(request) if model.current != Some(request.key) => {
-                let mut picked = if model.selected.contains(&request.key) { model.selected.clone() } else { Vec::new() };
+                let mut picked = if model.selected.contains(&request.key) { model.selected.to_vec() } else { Vec::new() };
                 picked.retain(|i| *i != request.key);
                 picked.push(request.key);
                 sent.push(shell("window.kerning", json!({ "select": pairs_json(model, &picked) })));
@@ -414,7 +414,7 @@ fn cell_edit(ui: &Ui, model: &KerningWindowModel, out: Option<EditResponse<Strin
     }
 }
 
-fn set_pair(model: &KerningWindowModel, row: &KernRow, value: f64) -> Msg {
+fn set_pair(model: &KerningWindowModel, row: KernRow<'_>, value: f64) -> Msg {
     let mut p = scope(model);
     p.insert("left".into(), json!(row.left));
     p.insert("right".into(), json!(row.right));
@@ -424,7 +424,7 @@ fn set_pair(model: &KerningWindowModel, row: &KernRow, value: f64) -> Msg {
 
 fn copy(model: &KerningWindowModel) -> Msg {
     let mut p = scope(model);
-    p.insert("pairs".into(), pairs_json(model, &model.selected));
+    insert_rows(&mut p, model, &model.selected);
     Msg::run("kerning.copyPairs", Value::Object(p))
 }
 
@@ -474,8 +474,8 @@ fn row_menu(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowModel,
 }
 
 /// Asks the rename question for the group on `column` of `row`; `to` is the new name typed in place.
-fn ask_rename(model: &KerningWindowModel, row: &KernRow, column: Column, to: Option<&str>, sent: &mut Vec<Msg>) {
-    let side = if column == Column::Left { &row.left } else { &row.right };
+fn ask_rename(model: &KerningWindowModel, row: KernRow<'_>, column: Column, to: Option<&str>, sent: &mut Vec<Msg>) {
+    let side = if column == Column::Left { row.left } else { row.right };
     let Some(from) = side.strip_prefix('@') else { return };
     let typed = to.map(|t| t.trim_start_matches('@'));
     if typed.is_some_and(|t| t.is_empty() || t == from) {
@@ -490,6 +490,14 @@ fn ask_rename(model: &KerningWindowModel, row: &KernRow, column: Column, to: Opt
     sent.push(shell("dialog.renameKerningGroup", Value::Object(p)));
 }
 
+/// Adds the rows at `picked` to a command's parameters: the list's `query` when they are all of it, else `pairs`.
+fn insert_rows(p: &mut Map<String, Value>, model: &KerningWindowModel, picked: &[usize]) {
+    match model.scope.as_ref().filter(|_| picked.len() > 1 && picked.len() == model.rows.len()) {
+        Some(all) => p.insert("query".into(), all.query()),
+        None => p.insert("pairs".into(), pairs_json(model, picked)),
+    };
+}
+
 /// The pairs of the rows at `picked`.
 fn pairs_json(model: &KerningWindowModel, picked: &[usize]) -> Value {
     Value::Array(picked.iter().filter_map(|&i| model.rows.get(i)).map(pair_json).collect())
@@ -500,7 +508,7 @@ fn delete(model: &KerningWindowModel, picked: &[usize], all_masters: bool, sent:
         return;
     }
     let mut p = scope(model);
-    p.insert("pairs".into(), pairs_json(model, picked));
+    insert_rows(&mut p, model, picked);
     if all_masters {
         p.insert("allMasters".into(), json!(true));
     }
@@ -544,7 +552,7 @@ fn footer(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowModel, s
                 .show(ui);
             if let Some((key, v)) = field.events.committed().and_then(|text| change_of(text)) {
                 let mut p = scope(model);
-                p.insert("pairs".into(), pairs_json(model, &model.selected));
+                insert_rows(&mut p, model, &model.selected);
                 p.insert(key.into(), json!(v));
                 sent.push(Msg::run("kerning.setPairs", Value::Object(p)));
             }
@@ -554,10 +562,7 @@ fn footer(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowModel, s
                 sent.push(set_pair(model, row, *v));
             }
         }
-        match &model.error {
-            Some(error) => Text::new(error.clone()).show(ui),
-            None => Text::new(counts_text(words, model)).shade(Shade::Muted).show(ui),
-        };
+        Text::new(counts_text(words, model)).shade(Shade::Muted).show(ui);
         let more = IconButton::new(IconId::new("more")).label(words.actions.clone()).tooltip(words.actions.clone()).show(ui);
         let items = [
             Entry::new("showAll", words.show_all.clone()).enabled(current.is_some()),

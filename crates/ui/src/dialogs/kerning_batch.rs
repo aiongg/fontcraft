@@ -303,7 +303,7 @@ pub fn pairs(app: &mut FontCraftApp, kind: Batch, settings: &Settings) -> Result
             if model.direction != settings.direction {
                 return Err("the Kerning window lists another writing direction".into());
             }
-            out.extend(model.selected.iter().filter_map(|&i| model.rows.get(i)).map(|r| (r.left.clone(), r.right.clone())));
+            out.extend(model.selected.iter().filter_map(|&i| model.rows.get(i)).map(|r| (r.left.to_string(), r.right.to_string())));
             if out.is_empty() {
                 return Err("select rows in the Kerning window first".into());
             }

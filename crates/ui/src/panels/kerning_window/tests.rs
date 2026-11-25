@@ -17,7 +17,7 @@ use serde_json::{Map, Value, json};
 
 use super::{Props, show};
 use crate::app::clipboard::{self, PasteKind};
-use crate::app::models::kerning_window::{KernRow, KerningWindowModel};
+use crate::app::models::kerning_window::{KernRows, KerningWindowModel};
 use crate::app::{APP, FontCraftApp, Msg};
 use crate::dialogs::kerning_audit::AuditDialog;
 use crate::dialogs::kerning_questions::{PasteConflict, RenameGroup};
@@ -28,8 +28,8 @@ fn shell(id: &str, params: Value) -> Msg {
     Msg::Shell(CommandRef::with_params(id, params))
 }
 
-fn row(left: &str, right: &str, value: f64) -> KernRow {
-    KernRow { left: left.into(), right: right.into(), value }
+fn rows(listed: &[(&str, &str, f64)]) -> KernRows {
+    KernRows::of(listed.iter().enumerate().map(|(i, (l, r, v))| (l.to_string(), r.to_string(), *v, i)))
 }
 
 /// T and o 600 wide with a 50-unit sidebearing on each side; T in the right group T, o and c in the left group o;
@@ -68,7 +68,7 @@ fn stored(app: &mut FontCraftApp, left: &str, right: &str) -> Option<f64> {
 }
 
 fn listed(app: &FontCraftApp) -> Vec<(String, String, f64)> {
-    app.models.kerning_window.rows.iter().map(|r| (r.left.clone(), r.right.clone(), r.value)).collect()
+    app.models.kerning_window.rows.iter().map(|r| (r.left.to_string(), r.right.to_string(), r.value)).collect()
 }
 
 /// Typing a term, a header press, a row press and Delete post the window's commands.
@@ -78,9 +78,9 @@ fn the_window_posts_search_sort_selection_and_delete() {
         has_doc: true,
         master: Some("m01".into()),
         direction: "ltr".into(),
-        rows: vec![row("@T", "@o", -80.0), row("A", "V", -100.0), row("L", "T", -60.0)],
+        rows: rows(&[("@T", "@o", -80.0), ("A", "V", -100.0), ("L", "T", -60.0)]),
         total: 3,
-        selected: vec![1],
+        selected: vec![1].into(),
         current: Some(1),
         ..Default::default()
     });
@@ -187,7 +187,7 @@ fn an_arabic_pair_is_listed_edited_and_deleted_in_its_direction() {
 
     ran(&mut app, shell("window.kerning", json!({"select": [{"left": "o", "right": "T"}]})));
     let model = app.models.kerning_window.clone();
-    assert_eq!((model.direction.as_str(), model.selected.clone()), ("rtl", vec![0]));
+    assert_eq!((model.direction.as_str(), model.selected.to_vec()), ("rtl", vec![0]));
     let mut p = super::scope(&model);
     for (k, v) in [("left", json!("o")), ("right", json!("T")), ("value", json!(-44))] {
         p.insert(k.into(), v);
@@ -229,7 +229,7 @@ fn copied_pairs_paste_into_the_master_shown() {
     ran(&mut app, shell("window.kerning", json!({})));
     ran(&mut app, shell("window.kerning", json!({"select": "all"})));
     let model = app.models.kerning_window.clone();
-    assert_eq!(model.selected, vec![0, 1]);
+    assert_eq!(*model.selected, vec![0, 1]);
     let mut p = super::scope(&model);
     p.insert("pairs".into(), super::pairs_json(&model, &model.selected));
     ran(&mut app, Msg::run("kerning.copyPairs", Value::Object(p)));
@@ -287,9 +287,9 @@ fn the_minus_button_and_the_edit_commands_act_on_the_list() {
         has_doc: true,
         master: Some("m01".into()),
         direction: "rtl".into(),
-        rows: vec![row("A", "V", -100.0), row("L", "T", -60.0)],
+        rows: rows(&[("A", "V", -100.0), ("L", "T", -60.0)]),
         total: 2,
-        selected: vec![1],
+        selected: vec![1].into(),
         current: Some(1),
         ..Default::default()
     });
@@ -328,9 +328,9 @@ fn editing_fixture(column: Column) -> (Fixture, Rc<RefCell<Vec<Msg>>>) {
         has_doc: true,
         master: Some("m01".into()),
         direction: "ltr".into(),
-        rows: vec![row("@T", "@o", -80.0), row("A", "V", -100.0)],
+        rows: rows(&[("@T", "@o", -80.0), ("A", "V", -100.0)]),
         total: 2,
-        selected: vec![0],
+        selected: vec![0].into(),
         current: Some(0),
         editing: Some((0, column)),
         ..Default::default()
@@ -390,9 +390,9 @@ fn a_text_typed_for_several_rows_sets_or_changes_them_all() {
         has_doc: true,
         master: Some("m01".into()),
         direction: "ltr".into(),
-        rows: vec![row("@T", "@o", -80.0), row("A", "V", -100.0)],
+        rows: rows(&[("@T", "@o", -80.0), ("A", "V", -100.0)]),
         total: 2,
-        selected: vec![0, 1],
+        selected: vec![0, 1].into(),
         current: Some(1),
         ..Default::default()
     });
@@ -426,6 +426,39 @@ fn make_exception_takes_the_pair_edit_view_shows() {
     app.sent.push(shell("kerning.makeException", json!({"left": "A", "right": "V"})));
     app.drain();
     assert!(app.status.contains("two glyphs"), "{}", app.status);
+}
+
+/// An edit of one value patches the list and shares its names; an edit elsewhere keeps the list as it is; a new pair
+/// lists again; Select All is sent as the list's query.
+#[test]
+fn the_list_is_read_again_only_when_its_pairs_move() {
+    let mut app = app_over(kerned_session(-60.0));
+    ran(&mut app, shell("window.kerning", json!({})));
+    let first = app.models.kerning_window.rows.clone();
+    ran(&mut app, Msg::run("spacing.setWidth", json!({"glyphs": ["T"], "value": 700})));
+    assert!(app.models.kerning_window.rows == first, "an outline edit keeps the list");
+    ran(&mut app, Msg::run("kerning.setPair", json!({"left": "A", "right": "V", "value": -90})));
+    let patched = app.models.kerning_window.rows.clone();
+    assert!(patched != first && patched.shares_names(&first));
+    assert_eq!(listed(&app).last().map(|r| r.2), Some(-90.0));
+    ran(&mut app, shell("kerning.sortPairs", json!({"column": "value"})));
+    ran(&mut app, Msg::run("kerning.setPair", json!({"left": "A", "right": "V", "value": 10})));
+    assert_eq!(listed(&app).last().map(|r| r.2), Some(10.0), "a list sorted by value is sorted again");
+    ran(&mut app, Msg::run("kerning.setPair", json!({"left": "L", "right": "T", "value": -5})));
+    assert_eq!(listed(&app).len(), 3);
+
+    ran(&mut app, shell("kerning.filterPairs", json!({"kind": "notGroup", "side": "right"})));
+    ran(&mut app, shell("window.kerning", json!({"select": "all"})));
+    let model = app.models.kerning_window.clone();
+    let mut sent = Vec::new();
+    super::delete(&model, &model.selected, false, &mut sent);
+    let expected = json!({"term": "", "match": "contains", "kind": "notGroup", "side": "right"});
+    assert!(matches!(sent.first(), Some(Msg::Run(c)) if c.params["query"] == expected && c.params.get("pairs").is_none()), "{sent:?}");
+    for msg in sent {
+        ran(&mut app, msg);
+    }
+    ran(&mut app, shell("kerning.resetFilter", json!({})));
+    assert_eq!(listed(&app), vec![("T".into(), "@o".into(), -60.0)]);
 }
 
 /// With Font View in front a chosen row opens a tab for the pair when none is open, else brings the last tab forward;

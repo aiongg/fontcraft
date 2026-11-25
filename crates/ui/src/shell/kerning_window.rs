@@ -20,6 +20,8 @@
 //! in the writing direction of the Edit View tab or the one chosen in the window. The dialogs module (`dialogs::kerning_questions`, `dialogs::kerning_audit`) opens what these
 //! commands ask for on its next pass.
 
+use std::sync::Arc;
+
 use craft::ui::contract::PlainData;
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::WordSet as _;
@@ -334,7 +336,7 @@ pub struct KerningView {
     /// The writing direction chosen in the window; `None`: the Edit View tab's.
     pub direction: Option<Direction>,
     /// Selected rows by [`row_id`], in the order they were picked.
-    pub selected: Vec<String>,
+    pub selected: Arc<Vec<String>>,
     /// Select All: every row of this list is selected, whatever `selected` holds.
     pub all: Option<AllRows>,
     /// The cell edited in place: the row by [`row_id`], and its Value or Right column.
@@ -469,12 +471,14 @@ fn window(app: &mut FontCraftApp, p: &Map<String, Value>) -> Result<(), String> 
     }
     crate::shell::dock::show_window(&mut app.view.workspace, PanelId::KerningWindow, open, app.view.canvas.rect);
     if all {
-        app.view.kerning.all = app.models.kerning_window.scope.clone();
+        let kerning = &mut app.view.kerning;
+        kerning.all = app.models.kerning_window.scope.clone();
+        kerning.selected = Arc::default();
     }
     if let Some(ids) = select {
         let kerning = &mut app.view.kerning;
         kerning.current = ids.last().cloned();
-        kerning.selected = ids;
+        kerning.selected = Arc::new(ids);
         kerning.all = None;
         show_current(app);
     }
@@ -546,9 +550,9 @@ fn step(app: &mut FontCraftApp, forward: bool) -> Result<(), String> {
         None => last,
     };
     let row = model.rows.get(at).ok_or("the Kerning window lists no pairs")?;
-    let id = row_id(&row.left, &row.right);
+    let id = row_id(row.left, row.right);
     let kerning = &mut app.view.kerning;
-    kerning.selected = vec![id.clone()];
+    kerning.selected = Arc::new(vec![id.clone()]);
     kerning.current = Some(id);
     kerning.all = None;
     show_current(app);
@@ -879,9 +883,9 @@ pub fn inspect(app: &FontCraftApp, state: &mut Map<String, Value>) {
                 "selectedGlyphsOnly": search.selected_glyphs_only,
             },
             "sort": kerning.sort.map(|s| json!({"column": s.column.id(), "descending": s.descending})),
-            "selected": model.selected.iter().filter_map(|&i| model.rows.get(i)).map(|r| pair(&row_id(&r.left, &r.right))).collect::<Vec<_>>(),
+            "selectedCount": model.selected.len(),
+            "selected": model.selected.iter().take(MAX_LISTED).filter_map(|&i| model.rows.get(i)).map(|r| pair(&row_id(r.left, r.right))).collect::<Vec<_>>(),
             "current": kerning.current.as_ref().map(pair),
-            "error": model.error,
         }),
     );
 }

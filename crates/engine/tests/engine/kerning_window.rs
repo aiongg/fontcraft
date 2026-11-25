@@ -379,3 +379,17 @@ fn set_pairs_changes_every_pair_in_one_step_or_none() {
     run(&mut s, "kerning.setPairs", json!({"pairs": each}));
     assert_eq!((value(&mut s, "@T", "@o"), value(&mut s, "T", "V")), (Some(-5.0), Some(13.0)));
 }
+
+/// Copy, set and delete take the rows of a query in place of a list of pairs.
+#[test]
+fn rows_are_given_by_query() {
+    let mut s = session();
+    let groups = json!({"kind": "group", "side": "left"});
+    assert_eq!(run(&mut s, "kerning.copyPairs", json!({"query": groups}))["count"], 2);
+    let set = run(&mut s, "kerning.setPairs", json!({"query": groups, "add": -1}));
+    assert_eq!(set["pairs"][0], json!({"left": "@T", "right": "@o", "value": -61.0, "previous": -60.0}));
+    assert!(refused(&mut s, "kerning.deletePairs", json!({"query": groups, "pairs": []})).contains("both"));
+    assert!(refused(&mut s, "kerning.deletePairs", json!({"query": {"term": "nothing"}})).contains("no pairs"));
+    assert_eq!(run(&mut s, "kerning.deletePairs", json!({"query": groups}))["deleted"], 2);
+    assert_eq!(rows(&mut s, "m01").len(), 3);
+}
