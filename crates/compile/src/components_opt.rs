@@ -34,7 +34,9 @@
 //! (`docs/spec/40-compile.md` § 4a). CFF output decomposes every composite already, so nothing
 //! here runs for it.
 
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
 use fontcraft_geom::{Affine, BezPath, PathEl, Point};
 use fontcraft_interp::GlyphSources;
@@ -106,12 +108,25 @@ impl Scope {
 #[derive(Clone, Debug)]
 pub struct OpenCorners {
     by_master: HashMap<String, Vec<Scope>>,
+    /// The work left for [`Self::filled`].
+    work: Rc<Cell<usize>>,
 }
+
+/// Most work [`OpenCorners::filled`] does on one glyph, which is drawn while the window waits. A corner of two curves
+/// takes a few hundred.
+const MAX_GLYPH_FILL_WORK: usize = 50_000;
+/// Most work it does on all the glyphs of one drawing.
+const MAX_FILL_WORK: usize = 500_000;
 
 impl OpenCorners {
     pub fn of(font: &Font) -> Self {
         let by_master = font.masters.iter().map(|m| (m.id.clone(), open_corner_scopes(font, &m.id))).collect();
-        Self { by_master }
+        Self { by_master, work: Rc::new(Cell::new(MAX_FILL_WORK)) }
+    }
+
+    /// Those of `font`, another font of the same drawing, which shares the work that is left.
+    pub fn sharing(&self, font: &Font) -> Self {
+        Self { work: Rc::clone(&self.work), ..Self::of(font) }
     }
 
     /// Whether they are erased in every glyph of every master.
@@ -125,23 +140,31 @@ impl OpenCorners {
     }
 
     /// `outline` (of `glyph`, in `master`) as it is filled, without the invisible open corners a
-    /// build erases; `None` when that is the outline as it is.
+    /// build erases; `None` when that is the outline as it is. Work that takes too long to draw is left out.
     pub fn filled(&self, master: &str, glyph: &str, outline: &BezPath) -> Option<BezPath> {
-        if self.erased(master, glyph) { fontcraft_pathops::erase_invisible_corners(outline) } else { None }
+        if !self.erased(master, glyph) {
+            return None;
+        }
+        let allowed = self.work.get().min(MAX_GLYPH_FILL_WORK);
+        let mut left = allowed;
+        let filled = fontcraft_pathops::erase_invisible_corners_within(outline, &mut left);
+        self.work.set(self.work.get().saturating_sub(allowed.saturating_sub(left)));
+        filled
     }
 }
 
 /// Erases the invisible open corners of `glyphs`, resolved at `master`, as the options and the
 /// source ask.
-pub(crate) fn erase_corners(font: Option<&Font>, master: &str, glyphs: &mut [ResolvedGlyph], options: &ComponentOptions) {
+pub(crate) fn erase_corners(font: Option<&Font>, master: &str, glyphs: &mut [ResolvedGlyph], options: &ComponentOptions) -> Result<(), CompileError> {
     let scopes = match (options.erase_open_corners, font) {
         (Some(true), _) => vec![Scope::All],
         (None, Some(font)) => open_corner_scopes(font, master),
         (Some(false), _) | (None, None) => Vec::new(),
     };
-    if !scopes.is_empty() {
-        erase_open_corners(glyphs, |name| reaches(&scopes, name) && !options.keep_open_corners.contains(name));
+    if scopes.is_empty() {
+        return Ok(());
     }
+    erase_open_corners(glyphs, |name| reaches(&scopes, name) && !options.keep_open_corners.contains(name))
 }
 
 /// The glyphs of a variable font with the default master `origin` that the options and the source
@@ -162,7 +185,8 @@ pub(crate) fn uneven_open_corners<'a>(
         let Some(glyph) = font.glyph(&source.glyph) else { continue };
         let mut first: Option<Vec<Vec<bool>>> = None;
         for layer in source.main.iter().filter_map(|s| glyph.layers.iter().find(|l| l.id == s.layer_id)) {
-            let kept: Vec<Vec<bool>> = layer.shapes.iter().map(kept_points).collect();
+            let mut work = fontcraft_pathops::MAX_CORNER_WORK;
+            let kept: Vec<Vec<bool>> = layer.shapes.iter().map(|shape| kept_points(shape, &mut work)).collect();
             if *first.get_or_insert_with(|| kept.clone()) != kept {
                 out.insert(source.glyph.clone());
                 break;
@@ -174,10 +198,10 @@ pub(crate) fn uneven_open_corners<'a>(
 
 /// Which on-curve points of a path are left when its invisible open corners are erased; empty
 /// when it has none.
-fn kept_points(shape: &Shape) -> Vec<bool> {
+fn kept_points(shape: &Shape, work: &mut usize) -> Vec<bool> {
     let Shape::Path(path) = shape else { return Vec::new() };
     let Ok(contour) = path.to_contour() else { return Vec::new() };
-    let Some(erased) = fontcraft_pathops::erase_invisible_corners(&contour) else { return Vec::new() };
+    let Some(erased) = fontcraft_pathops::erase_invisible_corners_within(&contour, work) else { return Vec::new() };
     let key = |p: Point| (p.x.to_bits(), p.y.to_bits());
     let left: HashSet<(u64, u64)> = erased.elements().iter().filter_map(PathEl::end_point).map(key).collect();
     contour.elements().iter().filter_map(PathEl::end_point).map(|p| left.contains(&key(p))).collect()
@@ -219,7 +243,7 @@ pub(crate) fn apply(
     expansion: &mut Expansion,
     warnings: &mut Vec<String>,
 ) -> Result<Vec<ResolvedGlyph>, CompileError> {
-    erase_corners(font, &resolved.master, &mut glyphs, options);
+    erase_corners(font, &resolved.master, &mut glyphs, options)?;
     if flavour == Flavour::Cff || glyphs.iter().all(|g| g.components.is_empty()) {
         return Ok(glyphs);
     }

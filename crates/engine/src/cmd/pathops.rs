@@ -658,8 +658,9 @@ fn remove_overlap_in(layer: &mut Layer, side: LayerSide, t: Option<&Targets>, op
     let input = Input::new(shapes, |i| chosen.as_ref().is_none_or(|c| c.contains(&i)));
     apply(shapes, input, TIME_LIMIT, move |c| {
         let mut contours = c;
+        let mut work = po::MAX_CORNER_WORK;
         for c in contours.iter_mut().filter(|c| corners && c.closed) {
-            if let Some(erased) = po::erase_invisible_corners_in(c, options.grid)? {
+            if let Some(erased) = po::erase_invisible_corners_in(c, options.grid, &mut work)? {
                 *c = erased;
             }
         }

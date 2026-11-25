@@ -308,12 +308,15 @@ fn fill_line(
 fn all_line(model: &mut PreviewModel, session: &mut Session, glyph: &str, instances: &[usize]) {
     let asked = [glyph.to_string()];
     let mut x = 0.0;
+    let mut drawn: Option<OpenCorners> = None;
     for &i in instances {
         let Ok(instance_view) = session.instance_view(i, &asked) else { continue };
         let at = view_master_id(i);
         let Some(width) = instance_view.glyph(glyph).and_then(|g| g.layer(&at)).map(|l| l.width) else { continue };
         if let Ok(outline) = instance_view.outline(glyph, &at) {
-            let mut outline = OpenCorners::of(&instance_view).filled(&at, glyph, &outline).unwrap_or(outline);
+            let corners = drawn.as_ref().map_or_else(|| OpenCorners::of(&instance_view), |c| c.sharing(&instance_view));
+            let mut outline = corners.filled(&at, glyph, &outline).unwrap_or(outline);
+            drawn = Some(corners);
             outline.apply_affine(Affine::translate((x, 0.0)));
             model.outline.extend(outline.elements().iter().copied());
         }
