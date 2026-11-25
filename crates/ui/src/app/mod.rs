@@ -8,6 +8,7 @@
 pub mod appearance;
 pub mod catalog;
 pub mod clipboard;
+pub mod clock;
 pub mod close;
 pub mod console;
 pub mod context_menu;

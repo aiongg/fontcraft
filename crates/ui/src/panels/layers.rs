@@ -1,11 +1,13 @@
-//! Layers: the layers of the shown glyph in palette order (`layers.list`), master layers in bold, the others indented
+//! Layers: the layers of the panel's glyphs (the glyphs selected in Font View, those of the text selection, else the shown
+//! glyph; with several, the layers all of them have) in palette order (`layers.list`), master layers in bold, the others indented
 //! under their master with their kind, the active layer marked as current. The eye shows or hides a layer
 //! (`layers.toggleVisibility`). A click makes a row the active layer (`layers.select`), Shift+click selects a range
 //! of rows and Cmd+click adds or removes one. Double-clicking a non-master name renames it (`layers.rename`). New
 //! Backup Layer adds a backup of the active layer (`layers.addBackupLayer`), Delete Layer deletes the selected rows
 //! (`layers.delete`), Use as Master restores a selected backup (`layers.useAsMaster`). The filter menu runs
 //! `layers.onlyShowLayersFromCurrentMaster` and `layers.hideBackupLayers`. A right-click on a row opens its context
-//! menu: the commands whose context names `layers.row`, acting on that row.
+//! menu: the commands whose context names `layers.row`, acting on that row, or on every selected row when it is one of
+//! them. With several glyphs each command changes every glyph, as one undo step.
 //!
 //! A non-master row can be dragged. Dropped among the rows of its own master it moves there (`layers.reorder`); a
 //! backup dropped on its master's row takes the master's place (`layers.useAsMaster`); any other row dropped on its
@@ -70,6 +72,10 @@ craft::ui::words! {
         text_color: "fontcraftLayers.textColor" = "Text colour";
         /// An iColor layer's size field.
         icolor_size: "fontcraftLayers.iColorSize" = "Size in pixels per em";
+        /// Why Use as Master cannot act on the selected rows.
+        one_backup: "fontcraftLayers.oneBackup" = "Select one backup layer of each master";
+        /// Why a special layer's editor cannot open.
+        one_glyph: "fontcraftLayers.oneGlyph" = "Select one glyph and one layer";
         /// Why a master layer cannot be deleted or renamed.
         master_stays: "fontcraftLayers.masterStays" = "A master layer goes with its master";
         /// Why only a backup can become the master layer.
@@ -156,10 +162,10 @@ fn done<T>(event: &EditEvent<T>) -> Option<&T> {
 fn view(props: &mut Props<'_>, ui: &mut Ui) {
     let words = Env::of(ui).words::<LayersWords>();
     let model: &LayersModel = props.model;
-    let Some(glyph) = model.glyph.clone() else {
+    if model.glyphs.is_empty() {
         ListRow::new(words.no_glyph.clone()).show(ui);
         return;
-    };
+    }
     let sent = &mut *props.sent;
     let rows = Rows { rows: model.shown.iter().filter_map(|id| model.row(id)).collect(), untitled: words.untitled.as_str() };
     let selection = Selection::new(model.selection.clone(), model.active_layer.clone(), model.active_layer.clone());
@@ -242,28 +248,28 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
                 CollectionEvent::Toggle(edit) => {
                     if let Some(cell) = done(edit)
                         && cell.column == EYE
-                        && model.row(&cell.key).is_some_and(|r| r.visible != cell.on)
+                        && let Some(row) = model.row(&cell.key).filter(|r| r.visible != cell.on)
                     {
-                        sent.push(Msg::run("layers.toggleVisibility", json!({ "glyphs": [glyph], "layer": cell.key })));
+                        sent.extend(on_layers(model, &[row], "layers.toggleVisibility", &json!({ "visible": cell.on })));
                     }
                 }
                 CollectionEvent::Rename(edit) => {
                     if let Some(rename) = done(edit) {
                         let name = rename.name.trim();
-                        if !name.is_empty() && model.row(&rename.key).is_some_and(|r| r.name != name) {
-                            sent.push(Msg::run("layers.rename", json!({ "glyph": glyph, "layer": rename.key, "name": name })));
+                        if let Some(row) = model.row(&rename.key).filter(|r| !name.is_empty() && r.name != name) {
+                            sent.extend(on_layers(model, &[row], "layers.rename", &json!({ "name": name })));
                         }
                     }
                 }
                 CollectionEvent::Activate(id) => {
-                    if let Some(part) = model.row(id).and_then(special_part) {
-                        sent.push(edit_special(&glyph, id, part));
+                    if let ([glyph], Some(part)) = (model.glyphs.as_slice(), model.row(id).and_then(special_part)) {
+                        sent.push(edit_special(glyph, id, part));
                     }
                 }
                 CollectionEvent::Reorder(edit) => {
                     if let Some(moved) = done(edit) {
                         let action = decided.get().unwrap_or_else(|| key_move(model, &rows.rows, moved));
-                        sent.extend(drop_command(&glyph, &moved.key, action));
+                        sent.extend(drop_command(model, &moved.key, action));
                     }
                 }
                 CollectionEvent::ContextMenu(request) => menu_row = Some(request.key.clone()),
@@ -271,15 +277,15 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
             }
         }
         for (id, value) in sizes.take() {
-            if SIZES.contains(&value) && value.fract() == 0.0 {
-                sent.push(Msg::run("layer.setIColorSize", json!({ "glyph": glyph, "layer": id, "size": value as u16 })));
+            if let Some(row) = model.row(&id).filter(|_| SIZES.contains(&value) && value.fract() == 0.0) {
+                sent.extend(on_each(model, &[row], "layer.setIColorSize", &json!({ "size": value as u16 })));
             }
         }
         for (id, opener) in swatches.drain(..) {
             let Some(row) = model.row(&id) else { continue };
             let Some(button) = out.opener(opener) else { continue };
             if let Some(index) = chooser(ui, &words, row, button) {
-                sent.push(Msg::run("layer.setColorPaletteIndex", json!({ "glyph": glyph, "layer": id, "index": index })));
+                sent.extend(on_each(model, &[row], "layer.setColorPaletteIndex", &json!({ "index": index })));
             }
         }
         if let Some(row) = menu_row.as_deref().and_then(|id| model.row(id)) {
@@ -290,7 +296,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
                 if command == "layers.rename" {
                     request_rename(ui.ctx(), out.response.id, &row.id);
                 } else {
-                    sent.push(row_command(&glyph, row, &command));
+                    sent.extend(row_command(model, row, &command));
                 }
             }
             let wanted = open.then(|| row.id.clone());
@@ -300,32 +306,95 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
         } else if model.menu_row.is_some() {
             sent.push(Msg::View(ViewMsg::LayerMenu(None)));
         }
-        buttons(ui, model, &glyph, &words, sent);
+        buttons(ui, model, &words, sent);
     });
 }
 
-/// The buttons under the list and the filter menu.
-fn buttons(ui: &mut Ui, model: &LayersModel, glyph: &str, words: &LayersWords, sent: &mut Vec<Msg>) {
-    let selected: Vec<&LayerRow> = model.all.iter().filter(|r| model.selection.contains(&r.id)).collect();
-    let deletable: Vec<&str> = selected.iter().filter(|r| !r.is_master()).map(|r| r.id.as_str()).collect();
-    let backup = match selected.as_slice() {
-        [one] if one.is_backup() => Some(one.id.clone()),
-        _ => None,
+/// `command` with `fields`, as one undo step: one run, or a batch with a run for each set of `targets`.
+fn run(command: &str, fields: &Value, targets: Vec<Value>) -> Option<Msg> {
+    let mut steps: Vec<Value> = Vec::with_capacity(targets.len());
+    for mut params in targets {
+        if let (Value::Object(params), Value::Object(fields)) = (&mut params, fields) {
+            params.extend(fields.clone());
+        }
+        steps.push(params);
+    }
+    if steps.len() > 1 {
+        let label = fontcraft_engine::find_command(command).map_or(command, |spec| spec.label);
+        let steps: Vec<Value> = steps.into_iter().map(|params| json!({ "command": command, "params": params })).collect();
+        return Some(Msg::run("command.batch", json!({ "label": label, "steps": steps })));
+    }
+    steps.pop().map(|params| Msg::run(command, params))
+}
+
+/// `command`, which takes `glyphs` and `layer`, on the layers the rows stand for in every glyph of the panel.
+fn on_layers(model: &LayersModel, rows: &[&LayerRow], command: &str, fields: &Value) -> Option<Msg> {
+    let targets = rows.iter().flat_map(|row| row.layers(&model.glyphs)).map(|(layer, glyphs)| json!({ "glyphs": glyphs, "layer": layer }));
+    run(command, fields, targets.collect())
+}
+
+/// `command`, which takes `glyph` and `layer`, on the layers the rows stand for in every glyph of the panel.
+fn on_each(model: &LayersModel, rows: &[&LayerRow], command: &str, fields: &Value) -> Option<Msg> {
+    let layers = rows.iter().flat_map(|row| row.layers(&model.glyphs));
+    let targets = layers.flat_map(|(layer, glyphs)| glyphs.into_iter().map(move |glyph| json!({ "glyph": glyph, "layer": layer })));
+    run(command, fields, targets.collect())
+}
+
+/// `layers.delete` on the layers the rows stand for in every glyph of the panel.
+fn delete(model: &LayersModel, rows: &[&LayerRow]) -> Option<Msg> {
+    let same = rows.iter().all(|row| row.others.is_empty());
+    let targets = match rows {
+        [] => Vec::new(),
+        rows if same => vec![json!({ "glyphs": model.glyphs, "layers": rows.iter().map(|r| r.id.as_str()).collect::<Vec<_>>() })],
+        rows => rows.iter().flat_map(|row| row.layers(&model.glyphs)).map(|(layer, glyphs)| json!({ "glyphs": glyphs, "layers": [layer] })).collect(),
     };
+    run("layers.delete", &Value::Null, targets)
+}
+
+/// `fields` with a new backup's name: the person's local date and time, as the engine spells its default in UTC.
+fn with_backup_name(mut fields: Value) -> Value {
+    if let (Some(name), Some(fields)) = (crate::app::clock::local_minute(), fields.as_object_mut()) {
+        fields.insert("name".into(), json!(name));
+    }
+    fields
+}
+
+/// `layers.useAsMaster` on backups ([`usable_as_masters`]) in every glyph of the panel.
+fn use_as_master(model: &LayersModel, rows: &[&LayerRow]) -> Option<Msg> {
+    on_layers(model, rows, "layers.useAsMaster", &with_backup_name(json!({})))
+}
+
+/// Whether Use as Master can act on `rows`: backups, at most one of each master.
+fn usable_as_masters(rows: &[&LayerRow]) -> bool {
+    let mut masters: Vec<&str> = rows.iter().filter(|r| r.is_backup()).map(|r| r.master.as_str()).collect();
+    masters.sort_unstable();
+    masters.dedup();
+    !rows.is_empty() && masters.len() == rows.len()
+}
+
+/// The buttons under the list and the filter menu.
+fn buttons(ui: &mut Ui, model: &LayersModel, words: &LayersWords, sent: &mut Vec<Msg>) {
+    let selected: Vec<&LayerRow> = model.all.iter().filter(|r| model.selection.contains(&r.id)).collect();
+    let deletable: Vec<&LayerRow> = selected.iter().copied().filter(|r| !r.is_master()).collect();
     // The palette is narrower than the four buttons: they wrap rather than cut their captions short.
     Line::new().wrap(true).show(ui, |ui, _| {
         if Button::new(words.new_backup.clone()).show(ui).clicked()
-            && let (Some(master), Some(from)) = (&model.active_master, &model.active_layer)
+            && let Some(master) = &model.active_master
         {
-            sent.push(Msg::run("layers.addBackupLayer", json!({ "glyphs": [glyph], "master": master, "from": from })));
+            let fields = with_backup_name(json!({ "master": master }));
+            let from = model.active_layer.as_deref().and_then(|id| model.row(id));
+            let targets: Vec<Value> = match from {
+                Some(row) => row.layers(&model.glyphs).into_iter().map(|(from, glyphs)| json!({ "glyphs": glyphs, "from": from })).collect(),
+                None => vec![json!({ "glyphs": model.glyphs })],
+            };
+            sent.extend(run("layers.addBackupLayer", &fields, targets));
         }
         if Button::new(words.delete.clone()).enabled(!deletable.is_empty()).show(ui).clicked() {
-            sent.push(Msg::run("layers.delete", json!({ "glyphs": [glyph], "layers": deletable })));
+            sent.extend(delete(model, &deletable));
         }
-        if Button::new(words.use_as_master.clone()).enabled(backup.is_some()).show(ui).clicked()
-            && let Some(layer) = &backup
-        {
-            sent.push(Msg::run("layers.useAsMaster", json!({ "glyphs": [glyph], "layer": layer })));
+        let usable = usable_as_masters(&selected);
+        if Button::new(words.use_as_master.clone()).enabled(usable).show(ui).clicked() && usable {
+            sent.extend(use_as_master(model, &selected));
         }
         let filter = Button::new(words.filter.clone()).show(ui);
         let entries = [
@@ -398,18 +467,33 @@ fn edit_special(glyph: &str, layer: &str, part: Part) -> Msg {
     Msg::Shell(CommandRef::with_params("layers.editSpecialLayerSettings", json!({ "glyph": glyph, "layer": layer, "part": part.name() })))
 }
 
-/// Why command `id` of the row menu cannot act on `row`, if it cannot.
-fn row_refuses(id: &str, row: &LayerRow, words: &LayersWords) -> Option<Label> {
+/// The rows the row menu of `row` acts on: every selected row when it is one of them, else it alone.
+fn menu_rows<'m>(model: &'m LayersModel, row: &'m LayerRow) -> Vec<&'m LayerRow> {
+    if !model.selection.contains(&row.id) {
+        return vec![row];
+    }
+    model.all.iter().filter(|r| model.selection.contains(&r.id)).collect()
+}
+
+/// Why command `id` of the row menu of `row` cannot act on `rows` ([`menu_rows`]), if it cannot.
+fn row_refuses(model: &LayersModel, id: &str, row: &LayerRow, rows: &[&LayerRow], words: &LayersWords) -> Option<Label> {
     match id {
-        "layers.delete" | "layers.rename" if row.is_master() => Some(words.master_stays.clone()),
+        "layers.delete" if rows.iter().all(|r| r.is_master()) => Some(words.master_stays.clone()),
+        "layers.rename" if row.is_master() => Some(words.master_stays.clone()),
         "layers.useAsMaster" if !row.is_backup() => Some(words.only_backups.clone()),
+        "layers.useAsMaster" if !usable_as_masters(rows) => Some(words.one_backup.clone()),
         "layers.setIntermediate" if row.is_master() => Some(words.master_not_intermediate.clone()),
-        _ => None,
+        _ => {
+            // Ticked, the item removes the status; else it opens the editor, which edits one layer.
+            let (_, _, part) = STATUSES.iter().find(|(set, _, _)| *set == id)?;
+            (!row.has(*part) && (model.glyphs.len() > 1 || rows.len() > 1)).then(|| words.one_glyph.clone())
+        }
     }
 }
 
 /// The row menu of `row`: one entry per command, the status commands ticked while the layer has that status.
 fn row_entries(model: &LayersModel, row: &LayerRow, words: &LayersWords) -> Vec<Entry<String>> {
+    let rows = menu_rows(model, row);
     model
         .row_menu
         .iter()
@@ -419,7 +503,7 @@ fn row_entries(model: &LayersModel, row: &LayerRow, words: &LayersWords) -> Vec<
             if let Some((_, _, part)) = STATUSES.iter().find(|(set, _, _)| *set == c.id) {
                 entry = entry.checked(row.has(*part));
             }
-            match c.refused.clone().map(Label::from).or_else(|| row_refuses(&c.id, row, words)) {
+            match c.refused.clone().map(Label::from).or_else(|| row_refuses(model, &c.id, row, &rows, words)) {
                 Some(why) => entry.disabled_reason(why),
                 None => entry,
             }
@@ -428,16 +512,20 @@ fn row_entries(model: &LayersModel, row: &LayerRow, words: &LayersWords) -> Vec<
 }
 
 /// The message the row menu's command `id` sends for `row`.
-fn row_command(glyph: &str, row: &LayerRow, id: &str) -> Msg {
+fn row_command(model: &LayersModel, row: &LayerRow, id: &str) -> Option<Msg> {
+    let rows = menu_rows(model, row);
     if let Some((_, clear, part)) = STATUSES.iter().find(|(set, _, _)| *set == id) {
-        return if row.has(*part) { Msg::run(clear, json!({ "glyph": glyph, "layer": row.id })) } else { edit_special(glyph, &row.id, *part) };
+        if row.has(*part) {
+            let having: Vec<&LayerRow> = rows.into_iter().filter(|r| r.has(*part)).collect();
+            return on_each(model, &having, clear, &json!({}));
+        }
+        return model.glyphs.first().map(|glyph| edit_special(glyph, &row.id, *part));
     }
-    let params = match id {
-        "layers.delete" => json!({ "glyphs": [glyph], "layers": [row.id] }),
-        "layers.useAsMaster" => json!({ "glyphs": [glyph], "layer": row.id }),
-        _ => json!({ "glyph": glyph, "layer": row.id }),
-    };
-    Msg::run(id, params)
+    match id {
+        "layers.delete" => delete(model, &rows.into_iter().filter(|r| !r.is_master()).collect::<Vec<_>>()),
+        "layers.useAsMaster" => use_as_master(model, &rows),
+        _ => on_each(model, &rows, id, &json!({})),
+    }
 }
 
 /// What dropping a dragged row does.
@@ -454,10 +542,11 @@ pub enum DropAction {
 }
 
 /// The command a drop of `layer` that does `action` runs.
-fn drop_command(glyph: &str, layer: &str, action: DropAction) -> Option<Msg> {
+fn drop_command(model: &LayersModel, layer: &str, action: DropAction) -> Option<Msg> {
+    let row = model.row(layer)?;
     match action {
-        DropAction::Reorder(to) => Some(Msg::run("layers.reorder", json!({ "glyph": glyph, "layer": layer, "toIndex": to }))),
-        DropAction::UseAsMaster => Some(Msg::run("layers.useAsMaster", json!({ "glyphs": [glyph], "layer": layer }))),
+        DropAction::Reorder(to) => on_layers(model, &[row], "layers.reorder", &json!({ "toIndex": to })),
+        DropAction::UseAsMaster => use_as_master(model, &[row]),
         DropAction::Refused | DropAction::Nothing => None,
     }
 }

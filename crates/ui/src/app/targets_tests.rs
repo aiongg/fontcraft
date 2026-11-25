@@ -287,10 +287,10 @@ fn the_palette_acts_on_the_font_view_selection() {
     shell(&mut app, "fontView.show", json!({}));
     assert!(app.models.palette.transform.targets.is_none() && app.models.palette.fit_curve.targets.is_none());
     assert!(app.models.palette.info_box.glyph.is_none());
-    assert_eq!((app.models.glyph_metrics.glyph.clone(), app.models.layers.glyph.clone()), (None, None));
+    assert_eq!((app.models.glyph_metrics.glyph.clone(), app.models.layers.glyphs.len()), (None, 0));
 
     shell(&mut app, "fontView.setSelection", json!({"glyphs": ["B", "C"]}));
-    assert_eq!((app.models.glyph_metrics.glyph.clone(), app.models.layers.glyph.clone()), (None, None), "several glyphs");
+    assert_eq!((app.models.glyph_metrics.glyph.clone(), app.models.layers.glyphs.clone()), (None, vec!["B".into(), "C".into()]), "several glyphs");
     let before = layers(&app);
     let slant = app.models.palette.transform.targets.clone().expect("targets").run("transform.slantRight", json!({"angle": 10}));
     app.run_now(slant, false).unwrap();

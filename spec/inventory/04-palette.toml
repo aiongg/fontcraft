@@ -400,7 +400,7 @@ id = "palette.layers"
 label = "Layers"
 location = "palette"
 controls = [
-  "layer list of the current glyph, grouped by master",
+  "layer list of the current glyph, of the glyphs selected in Font View or in the text (the layers all of them have), grouped by master",
   "eye toggle per layer: show the layer as an outline while another layer is active",
   "master layer rows: master name in bold",
   "backup layer rows: indented under their master, regular weight, default name is creation date and time",
@@ -419,8 +419,11 @@ milestone = "M3"
 summary = "Lists every layer of the current glyph: one master layer per font master plus any backup and special layers beneath it. It is where layers are switched, shown, added, renamed, reordered and promoted."
 ref = "Palette › Layers"
 status = "handbook"
-notes = "Built in M3.15, M3.10 and M3.40. In Edit View a click runs `layers.select`; in Font View, where no layer is active, a click picks the row the buttons act on. A non-master row is dragged by its name: dropped on a row of the same master it runs `layers.reorder`, a backup dropped on its master's row runs `layers.useAsMaster`, and a drop under another master is refused (the cursor shows it, nothing runs). The section's resize handle is not built. Documented, not yet observed: the minus button deletes every selected row that is not a master layer."
+notes = "Built in M3.15, M3.10 and M3.40. In Edit View a click runs `layers.select`; in Font View, where no layer is active, a click picks the row the buttons act on. With several glyphs (M3.91) a row stands for the layer each glyph has: the master layer, else the layer with the same id, else the next one under the same master with the same name and special attributes; every command changes all of them in one undo step. The row menu acts on every selected row when the clicked one is selected. A deleted active layer gives way to its master layer. A non-master row is dragged by its name: dropped on a row of the same master it runs `layers.reorder`, a backup dropped on its master's row runs `layers.useAsMaster`, and a drop under another master is refused (the cursor shows it, nothing runs). The section's resize handle is not built. Documented, not yet observed: the minus button deletes every selected row that is not a master layer."
 guesses = [
+  "With several glyphs selected in Font View or in the text the section lists only the layers all of them have, and a layer of one glyph is the other's by its id or by its name under the same master; with Font View in front and nothing selected it is empty. Palette › Layers with one and three glyphs selected settles it.",
+  "The row menu acts on every selected row when the clicked one is selected; Use as Master then needs one backup of each master, and the intermediate and alternate editors need one row and one glyph. A right-click on one of three selected rows settles it.",
+  "The master layer becomes active when the active layer is deleted, also when another master is the current one.",
   "While a row is dragged, an accent-coloured line between rows shows where it will land, and the master row is outlined when a backup dropped there would replace the master layer.",
   "Dropping on a row's upper half puts the dragged row above it, on its lower half below it.",
   "A row that is not a backup, dropped on its own master's row, moves to the top of that master's rows.",
@@ -439,7 +442,7 @@ label = "Select Layer"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{tab?: id, glyphs?: [names], layer: id, extend?: range|toggle}"
+params = "{glyphs?: [names], layer: id, extend?: range|toggle}"
 area = "layers"
 milestone = "M3"
 summary = "Makes a layer of the current glyph the active one, or extends the layer selection as Shift+click and Cmd+click do. Choosing a master layer changes the master shown for the edited or text-selected glyphs only."
@@ -476,7 +479,8 @@ summary = "Plus button: adds a backup layer under the current master of the glyp
 ref = "Palette › Layers › Backup Layers"
 status = "handbook"
 guesses = [
-  "Plus copies the active layer, and the backup is named by the date and time in UTC (Palette question 3).",
+  "Plus copies the active layer (Palette question 3).",
+  "The section names the backup by the local date and time as 2026-10-10 14:05; the command alone, which agents run, by UTC. The name of a new backup in the reference app settles the spelling.",
 ]
 
 [[command]]
@@ -500,7 +504,7 @@ menu = []
 context = ["layers.row"]
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer: id, name: string} → {glyph, layer, name}"
+params = "{glyph: name | glyphs: [names], layer: id, name: string} → {glyph | glyphs, layer, name}"
 area = "layers"
 milestone = "M3"
 summary = "Renames a non-master layer, as double-clicking its name in the list does. Master layers always carry the master's name and cannot be renamed here."
@@ -513,13 +517,13 @@ label = "Reorder Layer"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer: id, toIndex: number} → {glyph, layer, index}"
+params = "{glyph: name | glyphs: [names], layer: id, toIndex: number} → {glyph | glyphs, layer, index}"
 area = "layers"
 milestone = "M3"
 summary = "Moves a layer to another position among the layers of the same master. A move that would take it under a different master is not allowed."
 ref = "Palette › Layers"
 status = "handbook"
-notes = "Dragging a row of the Layers section within its master runs this command (M3.40). `toIndex` counts the master's non-master layers, those the filters hide included, with the moved layer taken out."
+notes = "Dragging a row of the Layers section within its master runs this command (M3.40). `toIndex` counts the master's non-master layers, those the filters hide included, with the moved layer taken out. With several glyphs (M3.91) it moves in each of them; in a glyph with fewer layers under the master it goes last."
 
 [[command]]
 id = "layers.useAsMaster"
@@ -626,7 +630,7 @@ status = "handbook"
 id = "layers.backupDefaultName"
 area = "layers"
 milestone = "M3"
-summary = "A new backup layer is named after the date and time of its creation until the user renames it."
+summary = "A new backup layer is named after the date and time of its creation until the user renames it: the local ones when the Layers section adds it, UTC when an agent runs the command without a name."
 ref = "Palette › Layers › Backup Layers"
 status = "handbook"
 

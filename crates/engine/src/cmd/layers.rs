@@ -67,7 +67,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Rename Layer",
             [],
             None,
-            "{glyph: name, layer: id, name: string (1 to 255 bytes, no control characters)} rename a layer that is not a master layer → {glyph, layer, name}",
+            "{glyph: name | glyphs: [names], layer: id, name: string (1 to 255 bytes, no control characters)} rename a layer that is not a master layer, in one glyph or in several that all have it → {glyph | glyphs, layer, name}",
             has_doc,
             rename
         )
@@ -78,7 +78,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Reorder Layer",
             [],
             None,
-            "{glyph: name, layer: id, toIndex: number} move a layer that is not a master layer to position `toIndex` among its master's other layers (0 is right under the master layer) → {glyph, layer, index}",
+            "{glyph: name | glyphs: [names], layer: id, toIndex: number} move a layer that is not a master layer to position `toIndex` among its master's other layers (0 is right under the master layer). With `glyphs` every glyph must have the layer, and in a glyph with fewer layers under the master it goes last → {glyph | glyphs, layer, index}",
             has_doc,
             reorder
         )
@@ -199,6 +199,32 @@ fn fresh_id(p: &Params, font: &Font, glyphs: &[String], seed: &str) -> Result<St
     let count: usize = targeted.iter().map(|g| g.layers.len()).sum();
     new_layer_id(&format!("{}|{seed}|{count}", glyphs.join("/")), |id| targeted.iter().any(|g| g.layers.iter().any(|l| l.id == id)))
         .ok_or_else(|| p.bad("could not find a free layer id"))
+}
+
+/// The glyphs a command that takes `glyph` or `glyphs` names, all existing.
+fn one_or_more(p: &Params, font: &Font) -> Result<Vec<String>> {
+    match (p.get("glyph"), p.get("glyphs")) {
+        (Some(_), Some(_)) => Err(p.bad("give `glyph` or `glyphs`, not both")),
+        (None, Some(_)) => glyph_list(p, font),
+        _ => {
+            let glyph = p.str("glyph")?;
+            if font.glyph(glyph).is_none() {
+                return Err(p.bad(format!("there is no glyph `{glyph}`")));
+            }
+            Ok(vec![glyph.to_string()])
+        }
+    }
+}
+
+/// `reply` with `glyph`, or `glyphs` when the command was given them.
+fn with_glyphs(p: &Params, glyphs: &[String], mut reply: Value) -> Value {
+    if let Some(o) = reply.as_object_mut() {
+        match (glyphs, p.get("glyphs")) {
+            ([glyph], None) => o.insert("glyph".into(), json!(glyph)),
+            _ => o.insert("glyphs".into(), json!(glyphs)),
+        };
+    }
+    reply
 }
 
 fn no_layer(p: &Params, glyph: &str, id: &str) -> EngineError {
@@ -335,53 +361,58 @@ fn delete(s: &mut Session, p: &Value) -> Result<Value> {
 
 fn rename(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("layers.rename", p)?;
-    let glyph = p.str("glyph")?.to_string();
+    let glyphs = one_or_more(&p, s.font()?)?;
     let id = p.str("layer")?.to_string();
     let name = layer_name(&p, "name")?.ok_or_else(|| p.bad("`name` is required"))?;
     s.edit("Rename Layer", |font| {
-        let mut g = font.glyph_mut(&glyph).map_err(|_| p.bad(format!("there is no glyph `{glyph}`")))?;
-        crate::check_unlocked(&g)?;
-        let layer = g.layers.iter_mut().find(|l| l.id == id).ok_or_else(|| no_layer(&p, &glyph, &id))?;
-        if layer.is_master_layer() {
-            return Err(p.bad("a master layer carries its master's name: rename the master in Font Info"));
+        for glyph in &glyphs {
+            let mut g = font.glyph_mut(glyph)?;
+            crate::check_unlocked(&g)?;
+            let layer = g.layers.iter_mut().find(|l| l.id == id).ok_or_else(|| no_layer(&p, glyph, &id))?;
+            if layer.is_master_layer() {
+                return Err(p.bad("a master layer carries its master's name: rename the master in Font Info"));
+            }
+            layer.info.name = Some(name.clone());
         }
-        layer.info.name = Some(name.clone());
         Ok(())
     })?;
-    Ok(json!({"glyph": glyph, "layer": id, "name": name}))
+    Ok(with_glyphs(&p, &glyphs, json!({"layer": id, "name": name})))
 }
 
 fn reorder(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("layers.reorder", p)?;
-    let glyph = p.str("glyph")?.to_string();
+    let glyphs = one_or_more(&p, s.font()?)?;
+    let several = p.get("glyphs").is_some();
     let id = p.str("layer")?.to_string();
     let to = p.opt_int("toIndex", 0, MAX_LAYERS as i64)?.ok_or_else(|| p.bad("`toIndex` is required"))?;
     let to = usize::try_from(to).map_err(|_| p.bad("`toIndex` is out of range"))?;
     s.edit("Reorder Layer", |font| {
-        let mut g = font.glyph_mut(&glyph).map_err(|_| p.bad(format!("there is no glyph `{glyph}`")))?;
-        crate::check_unlocked(&g)?;
-        let from = g.layers.iter().position(|l| l.id == id).ok_or_else(|| no_layer(&p, &glyph, &id))?;
-        let master = match g.layers.get(from) {
-            Some(l) if l.is_master_layer() => return Err(p.bad("master layers stay at the top of their master's rows")),
-            Some(l) => l.master.clone(),
-            None => return Err(no_layer(&p, &glyph, &id)),
-        };
-        let siblings = g.layers.iter().filter(|l| l.master == master && !l.is_master_layer()).count();
-        if to >= siblings {
-            return Err(p.bad(format!("`toIndex` must be below {siblings}, the number of layers under master `{master}`")));
+        for glyph in &glyphs {
+            let mut g = font.glyph_mut(glyph)?;
+            crate::check_unlocked(&g)?;
+            let from = g.layers.iter().position(|l| l.id == id).ok_or_else(|| no_layer(&p, glyph, &id))?;
+            let master = match g.layers.get(from) {
+                Some(l) if l.is_master_layer() => return Err(p.bad("master layers stay at the top of their master's rows")),
+                Some(l) => l.master.clone(),
+                None => return Err(no_layer(&p, glyph, &id)),
+            };
+            let siblings = g.layers.iter().filter(|l| l.master == master && !l.is_master_layer()).count();
+            if to >= siblings && !several {
+                return Err(p.bad(format!("`toIndex` must be below {siblings}, the number of layers under master `{master}`")));
+            }
+            let layer = g.layers.remove(from);
+            let group: Vec<usize> = g.layers.iter().enumerate().filter(|(_, l)| l.master == master && !l.is_master_layer()).map(|(i, _)| i).collect();
+            let at = match (group.get(to), group.last()) {
+                (Some(&i), _) => i,
+                (None, Some(&last)) => last + 1,
+                (None, None) => from.min(g.layers.len()),
+            };
+            let len = g.layers.len();
+            g.layers.insert(at.min(len), layer);
         }
-        let layer = g.layers.remove(from);
-        let group: Vec<usize> = g.layers.iter().enumerate().filter(|(_, l)| l.master == master && !l.is_master_layer()).map(|(i, _)| i).collect();
-        let at = match (group.get(to), group.last()) {
-            (Some(&i), _) => i,
-            (None, Some(&last)) => last + 1,
-            (None, None) => from.min(g.layers.len()),
-        };
-        let len = g.layers.len();
-        g.layers.insert(at.min(len), layer);
         Ok(())
     })?;
-    Ok(json!({"glyph": glyph, "layer": id, "index": to}))
+    Ok(with_glyphs(&p, &glyphs, json!({"layer": id, "index": to})))
 }
 
 fn use_as_master(s: &mut Session, p: &Value) -> Result<Value> {

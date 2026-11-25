@@ -1,13 +1,13 @@
 //! The Layers panel's and the master switcher's view models.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use craft::ui::contract::{PlainData, Tracked};
 use fontcraft_engine::Session;
 use fontcraft_engine::color::layers::{self as color_layers, ColorLayerKind};
 use fontcraft_engine::color::palette as color_palette;
 use fontcraft_engine::interp::labels::{brace_label, bracket_label};
-use fontcraft_engine::model::{Font, Master, PaletteEntry};
+use fontcraft_engine::model::{Font, Layer, Master, PaletteEntry};
 use fontcraft_geom::{Affine, PathEl, Shape as _};
 use serde_json::{Value, json};
 
@@ -43,17 +43,19 @@ impl Part {
     }
 }
 
-/// The layers of the shown glyph as the Layers panel lists them.
+/// The layers of the panel's glyphs as the Layers panel lists them: the glyphs selected in Font View, those of the text
+/// selection, else the shown glyph. With several glyphs the rows are the layers all of them have ([`shared`]).
 #[derive(PlainData, Clone, Debug, Default, PartialEq)]
 pub struct LayersModel {
-    /// The shown glyph; `None` without an open document or glyph.
-    pub glyph: Option<String>,
-    /// Every layer of the glyph in palette order, filters ignored: `layers.reorder` counts hidden rows too.
+    /// The glyphs the rows belong to and the panel's commands change; empty without an open document or glyph.
+    pub glyphs: Vec<String>,
+    /// Every row in the first glyph's palette order, filters ignored: `layers.reorder` counts hidden rows too.
     pub all: Vec<LayerRow>,
     /// The ids of the rows the filters keep, in order.
     pub shown: Vec<String>,
+    /// The row the glyphs are shown in, when it is one row.
     pub active_layer: Option<String>,
-    /// The active layer's master.
+    /// The active layer's master, else the current master.
     pub active_master: Option<String>,
     /// The selected rows; the active layer's row when nothing else is.
     pub selection: Vec<String>,
@@ -71,10 +73,14 @@ impl LayersModel {
     }
 }
 
-/// One layer of the glyph.
+/// One layer of the first glyph and the layers it stands for in the others.
 #[derive(PlainData, Clone, Debug, Default, PartialEq)]
 pub struct LayerRow {
+    /// The layer's id in the first glyph.
     pub id: String,
+    /// The ids of the layers it stands for in the glyphs where the layer has another id, with the glyph's place in
+    /// [`LayersModel::glyphs`], in that order.
+    pub others: Vec<(usize, String)>,
     /// Its name; the master's name for a master layer.
     pub name: String,
     /// `master`, `backup`, or the kind `layers.list` reports.
@@ -95,6 +101,31 @@ impl LayerRow {
 
     pub fn is_backup(&self) -> bool {
         self.kind == "backup"
+    }
+
+    /// The layer's id in the glyph at `index`.
+    pub fn layer_in(&self, index: usize) -> &str {
+        self.others.binary_search_by_key(&index, |(at, _)| *at).ok().and_then(|at| self.others.get(at)).map_or(&self.id, |(_, id)| id)
+    }
+
+    /// The layers the row stands for in `glyphs` ([`LayersModel::glyphs`]): each id with the glyphs that have it, the
+    /// row's own id first.
+    pub fn layers<'g>(&self, glyphs: &'g [String]) -> Vec<(&str, Vec<&'g str>)> {
+        let mut others = self.others.iter().peekable();
+        let mut out: Vec<(&str, Vec<&'g str>)> = vec![(self.id.as_str(), Vec::new())];
+        let mut at: HashMap<&str, usize> = HashMap::from([(self.id.as_str(), 0)]);
+        for (index, glyph) in glyphs.iter().enumerate() {
+            let id = others.next_if(|(other, _)| *other == index).map_or(self.id.as_str(), |(_, id)| id.as_str());
+            let group = *at.entry(id).or_insert_with(|| {
+                out.push((id, Vec::new()));
+                out.len().saturating_sub(1)
+            });
+            if let Some((_, names)) = out.get_mut(group) {
+                names.push(glyph);
+            }
+        }
+        out.retain(|(_, names)| !names.is_empty());
+        out
     }
 
     /// Whether the layer has the status `part` names.
@@ -178,20 +209,16 @@ pub fn project_masters(model: &mut Tracked<MastersModel>, cx: &mut ProjectCx<'_>
 }
 
 fn layers(session: &mut Session, view: &ViewState) -> Option<LayersModel> {
-    let glyph = masters::shown_glyph(session.font().ok()?, view)?.name.clone();
-    let all = rows(session, &glyph);
+    let (glyphs, all) = panel_rows(session, view)?;
     let font = session.font().ok()?;
-    let g = font.glyph(&glyph)?;
-    let active = masters::panel_layer(font, view);
-    let active_layer = active.map(|l| l.id.clone());
-    let active_master = active.map(|l| l.master.clone());
+    let (active_layer, active_master) = active(font, view, &glyphs, &all);
     let shown = filtered(&all, view, active_master.as_deref()).map(|r| r.id.clone()).collect();
     let mut selection: Vec<String> = view.layers.selection.iter().filter(|id| all.iter().any(|r| r.id == **id)).cloned().collect();
     if selection.is_empty() {
         selection.extend(active_layer.clone());
     }
     Some(LayersModel {
-        glyph: Some(glyph),
+        glyphs,
         all,
         shown,
         active_layer,
@@ -204,16 +231,77 @@ fn layers(session: &mut Session, view: &ViewState) -> Option<LayersModel> {
     })
 }
 
-/// The rows of `glyph` the filters keep.
-pub fn shown_rows(session: &mut Session, view: &ViewState, glyph: &str) -> Vec<LayerRow> {
-    let all = rows(session, glyph);
-    let master = session
-        .font()
-        .ok()
-        .and_then(|font| Some((font, font.glyph(glyph)?)))
-        .and_then(|(font, g)| masters::shown_layer(font, &view.layers, g))
-        .map(|l| l.master.clone());
-    filtered(&all, view, master.as_deref()).cloned().collect()
+/// The panel's glyphs and their rows, filters ignored. `None` without a glyph.
+pub fn panel_rows(session: &mut Session, view: &ViewState) -> Option<(Vec<String>, Vec<LayerRow>)> {
+    let glyphs = masters::panel_glyphs(session.font().ok()?, view);
+    let mut all = rows(session, glyphs.first()?);
+    let font = session.font().ok()?;
+    let layers: Vec<&[Layer]> = glyphs.iter().filter_map(|name| font.glyph(name)).map(|g| g.layers.as_slice()).collect();
+    if let [first, others @ ..] = layers.as_slice() {
+        shared(&mut all, first, others);
+    }
+    Some((glyphs, all))
+}
+
+/// The rows of the panel's glyphs the filters keep, and the active row.
+pub fn shown_rows(session: &mut Session, view: &ViewState) -> Option<(Vec<LayerRow>, Option<String>)> {
+    let (glyphs, all) = panel_rows(session, view)?;
+    let (layer, master) = active(session.font().ok()?, view, &glyphs, &all);
+    Some((filtered(&all, view, master.as_deref()).cloned().collect(), layer))
+}
+
+/// Keeps the rows of the first glyph, which has the layers `first`, that every glyph of `others` has too: the master
+/// layer of the same master, else the layer with the same id, else the next one under the same master with the same
+/// name and the same special attributes. Records the ids that differ.
+fn shared(rows: &mut Vec<LayerRow>, first: &[Layer], others: &[&[Layer]]) {
+    for (at, layers) in others.iter().enumerate() {
+        let mut used: HashSet<&str> = layers.iter().filter(|l| rows.iter().any(|r| r.id == l.id)).map(|l| l.id.as_str()).collect();
+        let mut found: Vec<Option<(usize, String)>> = Vec::with_capacity(rows.len());
+        let mut kept: Vec<bool> = Vec::with_capacity(rows.len());
+        for row in rows.iter() {
+            let here = layers.iter().find(|l| l.id == row.id && l.master == row.master);
+            if here.is_some() {
+                kept.push(true);
+                found.push(None);
+                continue;
+            }
+            let like = first.iter().find(|l| l.id == row.id).filter(|_| !row.is_master());
+            let twin = like.and_then(|like| {
+                layers.iter().find(|l| {
+                    l.master == like.master
+                        && !l.is_master_layer()
+                        && l.info.name == like.info.name
+                        && l.info.attrs == like.info.attrs
+                        && !used.contains(l.id.as_str())
+                })
+            });
+            kept.push(twin.is_some());
+            found.push(twin.map(|l| (at + 1, l.id.clone())));
+            used.extend(twin.map(|l| l.id.as_str()));
+        }
+        for (row, twin) in rows.iter_mut().zip(found) {
+            row.others.extend(twin);
+        }
+        let mut kept = kept.into_iter();
+        rows.retain(|_| kept.next().unwrap_or(false));
+    }
+}
+
+/// The row the panel's glyphs are shown in, when it is one, and its master, else the current master.
+fn active(font: &Font, view: &ViewState, glyphs: &[String], all: &[LayerRow]) -> (Option<String>, Option<String>) {
+    let current = masters::current_master(font, &view.layers).map(|m| m.id.clone());
+    let chosen = crate::app::targets::chosen_glyphs(font, view);
+    let layer = if chosen.is_empty() {
+        masters::panel_layer(font, view).map(|l| l.id.clone())
+    } else {
+        let places: HashMap<&str, usize> = glyphs.iter().enumerate().map(|(at, name)| (name.as_str(), at)).collect();
+        let in_groups = |row: &&LayerRow| {
+            chosen.iter().all(|g| g.glyphs.iter().all(|name| places.get(name.as_str()).is_some_and(|at| row.layer_in(*at) == g.layer)))
+        };
+        all.iter().find(in_groups).map(|r| r.id.clone())
+    };
+    let master = layer.as_ref().and_then(|id| all.iter().find(|r| r.id == *id)).map(|r| r.master.clone());
+    (layer, master.or(current))
 }
 
 fn filtered<'r>(all: &'r [LayerRow], view: &ViewState, master: Option<&str>) -> impl Iterator<Item = &'r LayerRow> {

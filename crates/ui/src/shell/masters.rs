@@ -9,7 +9,7 @@
 //! An item of the edit view's text can have its own layer (`edit.showAllMasters`). While such an item is the edited
 //! one, its layer is the active layer, and the Layers panel and the master icons change that item alone.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use craft::ui::runtime::commands::CommandRef;
 use fontcraft_engine::model::{Font, Glyph, Layer, Master};
@@ -23,6 +23,8 @@ pub const MODULE: Module = Module { commands: COMMANDS, run };
 
 /// Most glyphs one `layers.select` names.
 const MAX_GLYPHS: usize = 4096;
+/// Most picked layers whose master is kept.
+const MAX_HOMES: usize = 100_000;
 
 const COMMANDS: &[UiCommand] = &[
     UiCommand {
@@ -30,7 +32,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Select Layer",
         menu: &[],
         shortcut: None,
-        params: "{glyphs?: [names] (default: the shown glyph), layer: id, extend?: \"range\" | \"toggle\"} show these glyphs in the layer; for the shown glyph it becomes the active layer, which the canvas draws and edits. A master layer switches only these glyphs to that master. `extend` changes the Layers panel's row selection instead, as Shift+click (range from the active layer) and Cmd+click (add or remove one row) do",
+        params: "{glyphs?: [names] (default: the glyphs the Layers panel lists: the text selection's, else the shown glyph), layer: id, extend?: \"range\" | \"toggle\"} show these glyphs in the layer; for the shown glyph it becomes the active layer, which the canvas draws and edits. A master layer switches only these glyphs to that master. Without `glyphs` the layer is a row of the Layers panel, and each further glyph takes the layer that row stands for; with Font View in front it only becomes the selected row. `extend` changes the Layers panel's row selection instead, as Shift+click (range from the active layer) and Cmd+click (add or remove one row) do",
     },
     UiCommand {
         id: "view.selectMaster",
@@ -71,7 +73,10 @@ pub struct LayersView {
     pub layers: BTreeMap<String, String>,
     /// The glyph and the own layer of the edited text item, when it has one; `canvas::text::sync_layer` keeps it.
     pub item: Option<(String, String)>,
-    /// The selected rows of the shown glyph; empty selects the active layer's row.
+    /// The master of each layer that was picked and is no master layer, by layer id: the layer a glyph shows once the
+    /// picked one is deleted.
+    pub homes: BTreeMap<String, String>,
+    /// The selected rows of the Layers panel; empty selects the active layer's row.
     pub selection: Vec<String>,
     /// "Only Show Layers from Current Master".
     pub current_master_only: bool,
@@ -137,6 +142,15 @@ pub fn shown_glyph<'f>(font: &'f Font, view: &ViewState) -> Option<&'f Glyph> {
         return font.glyph(name).map(|g| &**g);
     }
     view.glyph.as_deref().and_then(|name| font.glyph(name)).or_else(|| font.glyphs.first()).map(|g| &**g)
+}
+
+/// The glyphs the Layers panel lists the layers of: the selected ones in Font View, those of the text selection, else
+/// [`shown_glyph`]. None with Font View in front and nothing selected.
+pub fn panel_glyphs(font: &Font, view: &ViewState) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let chosen = crate::app::targets::chosen_glyphs(font, view);
+    let names: Vec<String> = chosen.into_iter().flat_map(|group| group.glyphs).filter(|name| seen.insert(name.clone())).collect();
+    if names.is_empty() { shown_glyph(font, view).map(|g| g.name.clone()).into_iter().collect() } else { names }
 }
 
 /// The layer of [`shown_glyph`] the glyph panels show and their commands act on: the one the canvas shows, or with Font
@@ -210,55 +224,91 @@ fn select_layer(app: &mut FontCraftApp, params: &Value) -> Result<(), String> {
         Some(other) => return Err(format!("`extend` must be \"range\" or \"toggle\", got \"{other}\"")),
     };
     let font = app.session.font().map_err(|e| e.to_string())?;
-    // Empty while several glyphs, or none, are selected in Font View.
-    let edited = shown_glyph(font, &app.view).map(|g| g.name.clone()).unwrap_or_default();
-    let glyphs: Vec<String> = match params.get("glyphs") {
-        None | Some(Value::Null) if edited.is_empty() => return Err("no glyph is shown: give `glyphs`".into()),
-        None | Some(Value::Null) => vec![edited.clone()],
+    let font_view = app.view.tabs.font_view_shows();
+    let panel = panel_glyphs(font, &app.view);
+    let given: Option<Vec<String>> = match params.get("glyphs") {
+        None | Some(Value::Null) => None,
         Some(Value::Array(list)) if list.len() <= MAX_GLYPHS => {
-            list.iter().map(|g| g.as_str().map(str::to_string).ok_or("`glyphs` holds glyph names")).collect::<Result<_, _>>()?
+            Some(list.iter().map(|g| g.as_str().map(str::to_string).ok_or("`glyphs` holds glyph names")).collect::<Result<_, _>>()?)
         }
         Some(Value::Array(_)) => return Err(format!("`glyphs` names more than {MAX_GLYPHS} glyphs")),
         Some(_) => return Err("`glyphs` must be a list of glyph names".into()),
     };
-    if glyphs.is_empty() {
-        return Err("`glyphs` is empty".into());
+    if extend.is_some() && given.as_ref().is_some_and(|g| *g != panel) {
+        return Err("`extend` works on the rows of the glyphs the Layers panel lists only".into());
     }
-    for name in &glyphs {
+    // Each glyph with the layer it is to show.
+    let picks: Vec<(String, String)> = match &given {
+        Some(glyphs) if glyphs.is_empty() => return Err("`glyphs` is empty".into()),
+        Some(glyphs) => glyphs.iter().map(|g| (g.clone(), layer.clone())).collect(),
+        None if panel.len() <= 1 => panel.iter().map(|g| (g.clone(), layer.clone())).collect(),
+        None => {
+            let (glyphs, rows) = model::panel_rows(&mut app.session, &app.view).ok_or("no glyph is shown: give `glyphs`")?;
+            let row = rows.iter().find(|r| r.id == layer).ok_or_else(|| format!("layer `{layer}` is not listed in the Layers panel"))?;
+            glyphs.iter().enumerate().map(|(at, g)| (g.clone(), row.layer_in(at).to_string())).collect()
+        }
+    };
+    if picks.is_empty() {
+        return Err("no glyph is shown: give `glyphs`".into());
+    }
+    let font = app.session.font().map_err(|e| e.to_string())?;
+    for (name, id) in &picks {
         let glyph = font.glyph(name).ok_or_else(|| format!("there is no glyph `{name}`"))?;
-        if !glyph.layers.iter().any(|l| l.id == layer) {
-            return Err(format!("glyph `{name}` has no layer `{layer}`"));
+        if !glyph.layers.iter().any(|l| l.id == *id) {
+            return Err(format!("glyph `{name}` has no layer `{id}`"));
         }
     }
-    if extend.is_some() && glyphs != [edited.as_str()] {
-        return Err("`extend` works on the rows of the shown glyph only".into());
-    }
     let mut next = app.view.layers.clone();
-    let mut own = None;
-    let active = panel_layer(font, &app.view).map(|l| l.id.clone());
-    let font_view = app.view.tabs.font_view_shows();
+    // The layers items of the text with a layer of their own take.
+    let mut own: Vec<(usize, String)> = Vec::new();
     match extend {
+        // In Font View the cells draw the current master: a click picks the row the buttons act on.
+        None if font_view && given.is_none() => next.selection = vec![layer],
         None => {
             let master = current_master(font, &app.view.layers).map(|m| m.id.clone());
-            for name in &glyphs {
-                if *name == edited && next.item.is_some() && !font_view {
-                    own = Some(layer.clone());
-                    continue;
+            let edited = next.item.as_ref().filter(|_| !font_view).map(|(glyph, _)| glyph.clone());
+            let shown = if font_view { None } else { shown_glyph(font, &app.view).map(|g| g.name.clone()) };
+            let text = &app.view.text;
+            // With a text selection, those of its items that have a layer of their own, and the glyphs of the rest.
+            let mut items: HashMap<&str, Vec<usize>> = HashMap::new();
+            let mut free: HashSet<&str> = HashSet::new();
+            if given.is_none() && !crate::app::targets::chosen_glyphs(font, &app.view).is_empty() {
+                for index in text.text.selection() {
+                    match (text.item_glyph(index), text.text.layer(index)) {
+                        (Some(glyph), Some(_)) => items.entry(glyph).or_default().push(index),
+                        (Some(glyph), None) => {
+                            free.insert(glyph);
+                        }
+                        (None, _) => {}
+                    }
                 }
-                let Some(l) = font.glyph(name).and_then(|g| g.layers.iter().find(|l| l.id == layer)) else { continue };
+            } else if let Some((index, glyph)) = text.edited_index().filter(|_| edited.is_some()).and_then(|i| Some((i, text.item_glyph(i)?))) {
+                items.insert(glyph, vec![index]);
+            }
+            for (name, id) in &picks {
+                let Some(l) = font.glyph(name).and_then(|g| g.layers.iter().find(|l| l.id == *id)) else { continue };
+                if !l.is_master_layer() && next.homes.len() < MAX_HOMES {
+                    next.homes.insert(id.clone(), l.master.clone());
+                }
+                if let Some(indexes) = items.get(name.as_str()) {
+                    own.extend(indexes.iter().map(|i| (*i, id.clone())));
+                    if !free.contains(name.as_str()) {
+                        continue;
+                    }
+                }
                 if l.is_master_layer() && master.as_deref() == Some(l.master.as_str()) {
                     next.layers.remove(name);
                 } else {
-                    next.layers.insert(name.clone(), layer.clone());
+                    next.layers.insert(name.clone(), id.clone());
                 }
             }
-            if glyphs.contains(&edited) {
+            if given.is_none() || shown.is_some_and(|shown| picks.iter().any(|(name, _)| *name == shown)) {
                 next.selection = vec![layer];
             }
         }
         Some(Extend::Toggle) => {
             if next.selection.is_empty() {
-                next.selection.extend(active);
+                next.selection.extend(model::shown_rows(&mut app.session, &app.view).and_then(|(_, active)| active));
             }
             match next.selection.iter().position(|l| *l == layer) {
                 Some(at) => {
@@ -268,7 +318,7 @@ fn select_layer(app: &mut FontCraftApp, params: &Value) -> Result<(), String> {
             }
         }
         Some(Extend::Range) => {
-            let rows = model::shown_rows(&mut app.session, &app.view, &edited);
+            let (rows, active) = model::shown_rows(&mut app.session, &app.view).ok_or("no glyph is shown")?;
             let to = rows.iter().position(|r| r.id == layer).ok_or_else(|| format!("layer `{layer}` is not listed in the Layers panel"))?;
             let from = active.and_then(|a| rows.iter().position(|r| r.id == a)).unwrap_or(to);
             let (lo, hi) = (from.min(to), from.max(to));
@@ -276,10 +326,49 @@ fn select_layer(app: &mut FontCraftApp, params: &Value) -> Result<(), String> {
         }
     }
     app.view.layers = next;
-    if let Some(layer) = own {
-        crate::canvas::text::set_item_layer(app, Some(&layer));
-    }
+    crate::canvas::text::set_item_layers(app, &own);
     Ok(())
+}
+
+/// Shows the master layer in place of a picked layer that is gone (`layers.delete`, an undo), for the glyphs and the text
+/// items that showed it.
+pub fn follow_deleted(app: &mut FontCraftApp) {
+    if app.view.layers.homes.is_empty() {
+        return;
+    }
+    let Ok(font) = app.session.font() else { return };
+    let view = &app.view;
+    let current = current_master(font, &view.layers).map(|m| m.id.as_str());
+    // The master layer glyph `name` shows in place of `id`: `None` while it has `id`, else the master, or none when the
+    // glyph has no layer of it.
+    let gone = |name: &str, id: &str| -> Option<Option<String>> {
+        let glyph = font.glyph(name)?;
+        let home = view.layers.homes.get(id).filter(|_| !glyph.layers.iter().any(|l| l.id == id))?;
+        Some(glyph.layer(home).map(|_| home.clone()))
+    };
+    let glyphs: Vec<(String, Option<String>)> = view
+        .layers
+        .layers
+        .iter()
+        .filter_map(|(name, id)| Some((name.clone(), gone(name, id)?.filter(|home| Some(home.as_str()) != current))))
+        .collect();
+    let text = &view.text;
+    let items: Vec<(usize, Option<String>)> =
+        (0..text.text.len()).filter_map(|index| Some((index, gone(text.item_glyph(index)?, text.text.layer(index)?)?))).collect();
+    if glyphs.is_empty() && items.is_empty() {
+        return;
+    }
+    for (name, home) in glyphs {
+        match home {
+            Some(home) => app.view.layers.layers.insert(name, home),
+            None => app.view.layers.layers.remove(&name),
+        };
+    }
+    for (index, home) in items {
+        app.view.text.text.set_layer(index, home.as_deref());
+    }
+    app.view.text.touch();
+    app.view_changed();
 }
 
 fn select_master(app: &mut FontCraftApp, params: &Value) -> Result<(), String> {

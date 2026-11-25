@@ -422,6 +422,7 @@ fn edited_item_layer(font: &Font, view: &ViewState) -> Option<(String, String)> 
 /// Makes the edited text item's own layer the active layer, or the glyph's shown layer again once no edited item has
 /// its own: after the cursor, the text or the shown glyph changed, before the tools read their target.
 pub fn sync_layer(app: &mut FontCraftApp) {
+    masters::follow_deleted(app);
     let item = app.session.font().ok().and_then(|font| edited_item_layer(font, &app.view));
     if app.view.layers.item != item {
         app.view.layers.item = item;
@@ -439,6 +440,20 @@ pub fn set_item_layer(app: &mut FontCraftApp, layer: Option<&str>) {
         app.view.text.touch();
     }
     sync_layer(app);
+}
+
+/// Gives items of the text their own layers (`layers.select` on a text selection).
+pub fn set_item_layers(app: &mut FontCraftApp, layers: &[(usize, String)]) {
+    let mut changed = false;
+    for (index, layer) in layers {
+        changed |= app.view.text.text.set_layer(*index, Some(layer));
+    }
+    if changed {
+        app.view.text.touch();
+    }
+    if !layers.is_empty() {
+        sync_layer(app);
+    }
 }
 
 /// Makes the shown glyph follow the text's current glyph, after a text command.

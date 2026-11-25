@@ -283,6 +283,29 @@ fn reorder_moves_a_layer_among_its_own_masters_layers() {
     assert!(s.execute("layers.reorder", &json!({"glyph": "A", "layer": other, "toIndex": 1})).is_err(), "m02 has one backup");
 }
 
+/// Rename and Reorder take several glyphs: every one changes in one step, and one that lacks the layer refuses all.
+#[test]
+fn rename_and_reorder_change_several_glyphs() {
+    let mut s = session();
+    let add = |s: &mut Session, glyphs: Value, name: &str| {
+        run(s, "layers.addBackupLayer", json!({"glyphs": glyphs, "name": name}))["layer"].as_str().unwrap().to_string()
+    };
+    let old = add(&mut s, json!(["A"]), "old");
+    let shared = add(&mut s, json!(["A", "B"]), "shared");
+    run(&mut s, "layers.rename", json!({"glyphs": ["A", "B"], "layer": shared, "name": "new"}));
+    run(&mut s, "layers.reorder", json!({"glyphs": ["A", "B"], "layer": shared, "toIndex": 1}));
+    run(&mut s, "layers.reorder", json!({"glyphs": ["A", "B"], "layer": shared, "toIndex": 0}));
+    let mut list = |glyph: &str| -> Vec<(String, String)> {
+        let text = |v: &Value| v.as_str().unwrap().to_string();
+        let listed = run(&mut s, "layers.list", json!({"glyph": glyph}));
+        listed["layers"].as_array().unwrap().iter().map(|r| (text(&r["id"]), text(&r["name"]))).skip(1).collect()
+    };
+    assert_eq!(list("A"), [(shared.clone(), "new".to_string()), (old.clone(), "old".to_string())]);
+    assert_eq!(list("B"), [(shared, "new".to_string())]);
+    assert!(s.execute("layers.rename", &json!({"glyphs": ["A", "B"], "layer": old, "name": "x"})).is_err(), "B has no such layer");
+    assert!(s.execute("layers.rename", &json!({"glyph": "A", "glyphs": ["A"], "layer": old, "name": "x"})).is_err());
+}
+
 #[test]
 fn use_as_master_swaps_the_backup_in_and_keeps_the_old_master_content() {
     let mut s = session();
