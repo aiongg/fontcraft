@@ -244,6 +244,7 @@ pub fn project(model: &mut Tracked<FontInfoModel>, cx: &mut ProjectCx<'_>) {
         axes,
         predefined,
     };
+    let map = tab == FontInfoTab::Masters;
     let value = FontInfoModel {
         open: true,
         tab,
@@ -253,7 +254,7 @@ pub fn project(model: &mut Tracked<FontInfoModel>, cx: &mut ProjectCx<'_>) {
         masters: font.masters.iter().take(MAX_SHOWN).map(|m| (m.id.clone(), m.name.clone())).collect(),
         features,
         exports,
-        masters_tab: super::font_masters::project(font, &cx.view.font_info.masters),
+        masters_tab: super::font_masters::project(font, &cx.view.font_info.masters, map.then_some(cx.view.font_info.exports.selected.as_slice())),
     };
     super::set(model, value);
 }

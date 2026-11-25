@@ -37,6 +37,7 @@ pub mod labels;
 pub mod mapping;
 pub mod overlay;
 pub mod params;
+pub mod problems;
 pub mod rules;
 pub mod sources;
 

@@ -45,7 +45,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Describe Designspace",
             [],
             None,
-            "{variableFontSetting?: id|name|index} the designspace of the font, or of one variable font setting (its disabled masters left out) → {setting: {index, name}|null, axes: [{tag, name, hidden, internal: {minimum, default, maximum}, external: {minimum, default, maximum}, mapping: [{external, internal}]}], origin: {id, name}|null, masters: [{id, name, index, location, external}], virtualMasters: [{name, location}], instances: [{index, name, exports, location, external, placement: \"inside\"|\"extrapolated\"}], settings: [{index, name}], intermediateLayers: [glyph], alternateLayers: [glyph], warnings: [string]}",
+            "{variableFontSetting?: id|name|index} the designspace of the font, or of one variable font setting (its disabled masters left out) → {setting: {index, name}|null, axes: [{tag, name, hidden, internal: {minimum, default, maximum}, external: {minimum, default, maximum}, mapping: [{external, internal}]}], origin: {id, name}|null, masters: [{id, name, index, location, external}], virtualMasters: [{name, location}], instances: [{index, name, exports, location, external, placement: \"inside\"|\"extrapolated\"}], settings: [{index, name}], intermediateLayers: [glyph], alternateLayers: [glyph], warnings: [string], problems: [{code, message, masters: [id], instances: [index], axis: tag|null}]}. `problems` are the whole font's, whatever the setting: shared locations, axes without a range, an origin a variable font cannot start from, masters every setting leaves out, extrapolated instances",
             has_doc,
             describe_designspace
         ),
@@ -366,7 +366,20 @@ fn describe_designspace(s: &mut Session, p: &Value) -> Result<Value> {
         "intermediateLayers": intermediate,
         "alternateLayers": alternate,
         "warnings": warnings,
+        "problems": problems_json(font),
     }))
+}
+
+/// The problems of the font's designspace.
+fn problems_json(font: &Font) -> Vec<Value> {
+    fontcraft_interp::problems::problems(font)
+        .into_iter()
+        .map(|p| {
+            let masters: Vec<&str> = p.masters.iter().filter_map(|&i| font.masters.get(i)).map(|m| m.id.as_str()).collect();
+            let axis = p.axis.and_then(|i| font.axes.get(i)).map(|a| a.tag.as_str());
+            json!({"code": p.code, "message": p.message, "masters": masters, "instances": p.instances, "axis": axis})
+        })
+        .collect()
 }
 
 // ── interpolation.checkCompatibility ────────────────────────────────────────────────────────────

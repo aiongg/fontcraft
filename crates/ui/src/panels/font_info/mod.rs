@@ -11,12 +11,14 @@
 //! | [`exports_tab`] | Exports: the export list and the selected entries' fields and parameters |
 //! | [`features_tab`] | Features: the sidebar of prefixes, classes and features, and the shown entry |
 //! | [`code_editor`] | the Features tab's code field and its diagnostics |
+//! | [`designspace`] | the Masters tab's Designspace section: the map, its table and the problems |
 //! | [`masters_tab`] | Masters: the master list and the selected masters' sections |
 //!
 //! A tab click posts `font.info.selectTab`; every edit posts an engine command.
 
 pub mod code_editor;
 pub mod code_find;
+pub mod designspace;
 #[cfg(test)]
 mod dialogs_tests;
 pub mod exports_tab;

@@ -3294,6 +3294,23 @@ guesses = [
   "Our own command for scripts; an empty list selects the first master, since the Masters tab always edits at least one. Clicking in the reference app's list until nothing is selected settles whether it allows an empty selection.",
 ]
 
+[[command]]
+id = "font.info.masters.setMapAxes"
+label = "Designspace Map Axes"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{across?: tag, up?: tag}"
+area = "font-info"
+milestone = "M9"
+summary = "The two axes the designspace map of the Masters tab shows."
+ref = "Font Info › Masters"
+status = "inferred"
+notes = "Our own command. An axis left out stays; picking the axis the other direction shows trades the two."
+guesses = [
+  "The designspace map and its table are a feature of ours: squares for masters (the origin filled), dashed squares for virtual masters, circles for instances; a drag sets whole units and goes at most a quarter of the axis past its ends. Looking at Font Info › Masters of a two-axis font in the reference app settles whether it has a map.",
+]
+
 [[panel]]
 id = "fontInfo.addMetric"
 label = "Add Metric"

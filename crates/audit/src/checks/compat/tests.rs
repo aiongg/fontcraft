@@ -313,6 +313,28 @@ fn an_open_path_is_reported_and_stops_the_other_tests() {
     }
 }
 
+/// The setup check passes on the problems the engine finds, except those that have a check of their own.
+#[test]
+fn the_designspace_setup_check_reports_what_the_engine_finds() {
+    struct Found;
+    impl AuditServices for Found {
+        fn designspace_problems(&self, _: &Font) -> Result<Vec<crate::services::DesignspaceProblem>, Unavailable> {
+            let problem = |code: &'static str, axis: &str| crate::services::DesignspaceProblem {
+                code,
+                message: code.into(),
+                axis: Some(axis.into()),
+                ..Default::default()
+            };
+            Ok(vec![problem("masters-share-location", ""), problem("axis-without-range", "wdth"), problem("instance-extrapolated", "wght")])
+        }
+    }
+    let r = run_source(&font(), "check.variations.designspaceSetup", &Found);
+    let found: Vec<(&str, Option<&str>)> = r.findings.iter().map(|f| (f.code, f.location.axis.as_deref())).collect();
+    assert_eq!(found, [("axis-without-range", Some("wdth"))], "{:#?}", r.findings);
+    let r = run_source(&font(), "check.variations.designspaceSetup", &NoServices);
+    assert!(r.findings.is_empty() && r.skipped.len() == 1, "{r:#?}");
+}
+
 #[test]
 fn designspace_checks_find_shared_locations_and_extrapolated_instances() {
     let mut font = font();

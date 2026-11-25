@@ -2251,6 +2251,18 @@ status = "inferred"
 notes = "Locations are compared in design coordinates; an intermediate layer is compared with the masters its glyph has and with the glyph's other intermediate layers."
 
 [[check]]
+id = "check.variations.designspaceSetup"
+severity = "warn"
+scope = "source"
+fixable = false
+area = "qa"
+milestone = "M12"
+summary = "The axes, masters, virtual masters or variable font settings do not work together: an axis without a range, an origin no variable font can start from, a master every variable font setting leaves out, a virtual master where a master is, or a name the font does not have."
+ref = "Editor audit convention (designspace)"
+status = "inferred"
+notes = "A check of ours over the problems `interpolation.describeDesignspace` lists (`crates/interp/src/problems.rs`). Fonts with one master are left out; shared locations and extrapolated instances have checks of their own."
+
+[[check]]
 id = "check.variations.instanceOutsideAxisRange"
 severity = "warn"
 scope = "source"

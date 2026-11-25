@@ -9,6 +9,7 @@
 //! | Master Name | `font.info.set` through the shared rows |
 //! | Icon | the icon picker dialog (`font.master.setIcon`) |
 //! | Axes Coordinates: one number field per axis | `font.master.setAxisLocation` with a location list that sets that axis alone |
+//! | Designspace | the map, its table and the problems ([`super::designspace`]) |
 //! | a metric's position and zone | `font.master.setMetric` |
 //! | a metric's edit button, the plus beside Metrics | the metric dialogs (`font.metrics.set`, `font.metrics.add`) |
 //! | a metric's minus | `font.metrics.remove` |
@@ -159,6 +160,7 @@ pub fn view(ui: &mut Ui, model: &MastersTabModel, masters: &[(String, String)], 
                     }
                 });
             }
+            super::designspace::view(ui, &model.designspace, &mut posted);
             let plus =
                 rows::section(ui, "mastersMetrics", words.metrics.clone(), words.add_metric.clone(), |ui| metrics(ui, model, &words, &mut posted));
             if plus {

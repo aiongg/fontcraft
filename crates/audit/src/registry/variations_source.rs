@@ -181,6 +181,16 @@ pub(super) const CHECKS: &[CheckSpec] = &[
         ..BASE
     },
     CheckSpec {
+        id: "check.variations.designspaceSetup",
+        label: "Designspace setup",
+        description: "The axes, masters, virtual masters or variable font settings do not work together: an axis without a range, an origin no variable font can start from, a master every setting leaves out, or a name the font does not have.",
+        severity: Warn,
+        profile: Universal,
+        codes: compat::SETUP_CODES,
+        run: Runner::Source(compat::designspace_setup),
+        ..BASE
+    },
+    CheckSpec {
         id: "check.variations.instanceOutsideAxisRange",
         label: "Instance outside the masters' range",
         description: "An exported instance lies beyond the masters on an axis, so it needs extrapolation.",

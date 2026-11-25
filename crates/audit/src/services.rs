@@ -64,6 +64,19 @@ pub struct RoundTrip {
     pub error: Option<String>,
 }
 
+/// One problem of a font's designspace.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DesignspaceProblem {
+    pub code: &'static str,
+    pub message: String,
+    /// The ids of the masters concerned.
+    pub masters: Vec<String>,
+    /// The name of the instance or variable font setting concerned.
+    pub instance: Option<String>,
+    /// The tag of the axis concerned.
+    pub axis: Option<String>,
+}
+
 /// What to shape.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ShapeRequest {
@@ -240,6 +253,12 @@ pub trait AuditServices {
     fn rasterise(&self, bytes: &[u8], request: &RasterRequest) -> Result<Raster, Unavailable> {
         let _ = (bytes, request);
         Err(Unavailable::new("rasterising is not available here"))
+    }
+
+    /// The problems of the axes, masters, variable font settings and instances of `font`.
+    fn designspace_problems(&self, font: &Font) -> Result<Vec<DesignspaceProblem>, Unavailable> {
+        let _ = font;
+        Err(Unavailable::new("the designspace cannot be read here"))
     }
 
     /// Runs an external tool on the compiled font and returns its messages (at most

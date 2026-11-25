@@ -117,6 +117,7 @@ milestone = "M9"
 summary = "Masters should be placed so that the wanted region of the designspace lies between them. One axis needs two masters (e.g. Light 300, Bold 700); a third in between (Regular 400) refines the transition."
 ref = "Interpolation › Setting up Masters › Axes Coordinates"
 status = "handbook"
+notes = "Font Info › Masters names what is missing under its designspace map (an axis without a range, an origin no variable font can start from); the list is ours (crates/interp/src/problems.rs)."
 
 [[behavior]]
 id = "masters.minimalSetup"
@@ -125,6 +126,7 @@ milestone = "M9"
 summary = "The smallest valid setup is one origin master plus one master per axis, where each non-origin master differs from the origin on exactly one axis. Take Weight and Width with three masters, Thin Narrow (200, 60), Thin (200, 100) and Black (900, 100): Thin can serve as origin, whereas Black cannot, since it lies away from Thin Narrow on both axes."
 ref = "Interpolation › Setting up Masters › Minimal Multiple Masters Setup"
 status = "handbook"
+notes = "Font Info › Masters names what is missing under its designspace map (an axis without a range, an origin no variable font can start from); the list is ours (crates/interp/src/problems.rs)."
 
 [[behavior]]
 id = "masters.originAutomaticForStatic"
@@ -218,7 +220,7 @@ kind = "engine"
 params = "{variableFontSetting?: id|name}"
 area = "interpolation"
 milestone = "M9"
-summary = "Query: returns axes with internal and external ranges, masters and virtual masters with locations, the origin master, instances with an inside/extrapolated flag, mappings, and the glyphs carrying intermediate or alternate layers."
+summary = "Query: returns axes with internal and external ranges, masters and virtual masters with locations, the origin master, instances with an inside/extrapolated flag, mappings, the glyphs carrying intermediate or alternate layers, and the problems of the set-up, each with a code."
 ref = "Interpolation › Setting up Axes; Setting up Masters; Setting up Instances"
 status = "inferred"
 guesses = [
