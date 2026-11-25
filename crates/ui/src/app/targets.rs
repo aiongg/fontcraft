@@ -20,8 +20,8 @@ use serde_json::{Map, Value, json};
 use super::font_view::MAX_BATCH_GLYPHS;
 use super::{FontCraftApp, ViewState, select_glyph_first};
 use crate::app::context_menu::item_state;
-use crate::canvas::{hinting, text};
 use crate::canvas::tools::targets::{LayerParam, layer_param, with_targets};
+use crate::canvas::{hinting, text};
 use crate::shell::masters;
 
 /// What runs several commands as one undo step.

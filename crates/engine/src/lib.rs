@@ -483,7 +483,14 @@ impl Session {
     /// changes is told from it. Without one the document has no stamp, and the file is compared with nothing. `native`:
     /// Save writes a native file.
     #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) fn push_recovered(&mut self, font: Font, path: Option<PathBuf>, native: bool, original: Option<(Font, io::Stamp)>, title: Option<String>) {
+    pub(crate) fn push_recovered(
+        &mut self,
+        font: Font,
+        path: Option<PathBuf>,
+        native: bool,
+        original: Option<(Font, io::Stamp)>,
+        title: Option<String>,
+    ) {
         self.push_document(font, path);
         let Some(doc) = self.docs.last_mut() else { return };
         doc.recovered = true;

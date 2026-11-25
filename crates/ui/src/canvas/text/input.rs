@@ -163,13 +163,13 @@ fn key(app: &mut FontCraftApp, ev: KeyEvent) -> Result<(), String> {
             let custom = app.catalog.custom();
             let id = shortcut_key(app.view.text.direction, ev.key).and_then(|key| text_mode_command(custom, key, m));
             match id {
-            Some(id) => shortcut(app, id),
-            None if plain => move_cursor(app, ev.key, m.shift),
-            None if m.alt && !m.cmd && !m.ctrl => move_by_word(app, ev.key, m.shift),
-            None if m.cmd && !m.alt && !m.ctrl && along_line(app.view.text.direction, ev.key).is_none() => {
-                to_text_end(app, next_line(ev.key), m.shift)
-            }
-            None => Ok(()),
+                Some(id) => shortcut(app, id),
+                None if plain => move_cursor(app, ev.key, m.shift),
+                None if m.alt && !m.cmd && !m.ctrl => move_by_word(app, ev.key, m.shift),
+                None if m.cmd && !m.alt && !m.ctrl && along_line(app.view.text.direction, ev.key).is_none() => {
+                    to_text_end(app, next_line(ev.key), m.shift)
+                }
+                None => Ok(()),
             }
         }
         Key::Return | Key::Backspace | Key::Delete | Key::Home | Key::End | Key::Tab | Key::Escape => Ok(()),
