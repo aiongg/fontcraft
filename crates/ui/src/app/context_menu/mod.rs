@@ -1057,7 +1057,7 @@ pub fn steps_for(app: &mut FontCraftApp, menu: &CanvasMenu, id: &str) -> Vec<Msg
         return vec![shell("dialog.open", params)];
     }
     if id == SHOW_IN_FONT_VIEW {
-        return vec![shell("fontView.setSelection", json!({"glyphs": menu.glyphs()})), shell("fontView.show", json!({}))];
+        return vec![shell("fontView.setSelection", json!({"glyphs": menu.glyphs(), "reveal": true})), shell("fontView.show", json!({}))];
     }
     if !menu.glyphs.is_empty() {
         // Selected glyphs shown in several layers: one run per layer, as one step.

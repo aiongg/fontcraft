@@ -869,10 +869,8 @@ milestone = "M3"
 summary = "In edit mode the first use selects all paths of the layer; if all paths are already selected (or there are none left to add) it also selects all anchors and components, so selecting everything can take two presses."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
-notes = "Edit View behaviour as documented, not yet observed."
-guesses = [
-  "In Font View it selects every glyph; the handbook describes edit mode only.",
-]
+notes = "Edit View behaviour as documented, not yet observed. In Font View: `fontView.selectAllScope`."
+
 
 [[command]]
 id = "edit.deselectAll"
@@ -886,6 +884,7 @@ milestone = "M3"
 summary = "Empties the selection."
 ref = "Edit View › Selecting Nodes and Paths"
 status = "handbook"
+notes = "In Font View: `fontView.deselectAll`."
 
 [[command]]
 id = "edit.invertSelection"
@@ -899,6 +898,7 @@ milestone = "M3"
 summary = "Selects every point that is currently unselected and deselects the ones that were selected."
 ref = "Edit View › Selecting Nodes and Paths"
 status = "handbook"
+notes = "In Font View: `fontView.invertSelection`."
 
 [[command]]
 id = "selection.selectNext"

@@ -62,6 +62,8 @@ craft::ui::words! {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LabelTokens {
     pub colors: [[u8; 3]; 12],
+    /// A label with a number past the twelve.
+    pub unknown: [u8; 3],
 }
 
 impl LabelTokens {
@@ -81,6 +83,7 @@ impl LabelTokens {
                 [0xc4, 0xc4, 0xc4],
                 [0x7a, 0x7a, 0x7a],
             ],
+            unknown: [0x8a, 0x8a, 0x8a],
         }
     }
 }

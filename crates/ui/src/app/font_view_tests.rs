@@ -288,3 +288,159 @@ fn a_strike_replaces_the_outlines_in_the_cells() {
     assert!(app.models.font_view.strike.is_none());
     assert!(app.models.font_view.rows.iter().all(|r| r.art.is_some() && r.bitmap.is_none()), "back to the outlines");
 }
+
+/// Each state of a glyph marks its own cell: the colour labels, an annotation, stored properties, an export flag that
+/// is off, a metrics key out of sync, and the code point with Display Unicode Value.
+#[test]
+fn cells_mark_the_state_of_their_glyphs() {
+    use crate::app::models::cell_marks::{CellMarks, UnicodeMark, label_rgb};
+    use fontcraft_engine::model::ColorLabel;
+
+    let mut app = app();
+    let marks = |app: &FontCraftApp, name: &str| -> CellMarks {
+        app.models.font_view.rows.iter().find(|r| r.name == name).map(|r| r.marks.clone()).expect("the row")
+    };
+    let edit = |app: &mut FontCraftApp, id: &str, params: Value| {
+        app.session.execute(id, &params).unwrap();
+        app.drain();
+    };
+    let master = app.models.font_view.master.clone().expect("a master");
+    assert_eq!(marks(&app, "A"), CellMarks { unicode: UnicodeMark::Marker, ..CellMarks::default() });
+    edit(&mut app, "glyph.setColorLabel", json!({"glyphs": ["A"], "color": 3}));
+    edit(&mut app, "glyph.setLayerColorLabel", json!({"glyphs": ["A"], "layer": master, "color": 7}));
+    edit(&mut app, "annotation.add", json!({"glyph": "B", "layer": master, "type": "plus", "position": [10, 20]}));
+    edit(&mut app, "glyph.setCategory", json!({"glyphs": ["C"], "category": "Symbol"}));
+    edit(&mut app, "glyph.setExport", json!({"glyphs": ["D"], "export": false}));
+    edit(&mut app, "glyph.setNote", json!({"glyphs": ["E"], "note": "check the serif"}));
+    let a = marks(&app, "A");
+    assert_eq!((a.color, a.layer_color), (Some(label_rgb(ColorLabel::Index(3))), Some(label_rgb(ColorLabel::Index(7)))));
+    assert!(marks(&app, "B").annotated && marks(&app, "C").custom && marks(&app, "D").not_exported);
+    assert_eq!(marks(&app, "E").note, "check the serif");
+
+    // A key follows the glyph it reads: an edit of that glyph marks the one with the key and no other.
+    for (glyph, x) in [("n", 50), ("o", 40)] {
+        edit(&mut app, "path.addRectangle", json!({"glyph": glyph, "x": x, "y": 0, "width": 300, "height": 500}));
+    }
+    edit(&mut app, "spacing.setLeftSidebearing", json!({"glyphs": ["o"], "layer": master, "value": "=n"}));
+    assert!(!marks(&app, "o").out_of_sync, "the key was just applied");
+    edit(&mut app, "spacing.setLeftSidebearing", json!({"glyphs": ["n"], "layer": master, "value": 80}));
+    let out: Vec<String> = app.models.font_view.rows.iter().filter(|r| r.marks.out_of_sync).map(|r| r.name.clone()).collect();
+    assert_eq!(out, ["o"]);
+
+    edit(&mut app, "settings.set", json!({"id": "appearance.displayUnicodeValue", "value": true}));
+    assert_eq!(marks(&app, "A").unicode, UnicodeMark::Value("0041".into()));
+    shell(&mut app, "fontView.setViewMode", json!({"mode": "list"}));
+    assert_eq!(marks(&app, "A"), CellMarks::default(), "List View projects no marks");
+}
+
+/// Select All, Deselect All and Invert Selection act on the glyphs Font View lists, from the menu, the key and the
+/// control channel alike, and leave the selection of the tab behind it alone; node selection refuses there.
+#[test]
+fn select_all_deselect_and_invert_work_on_the_visible_glyphs() {
+    let mut app = app();
+    app.session.execute("path.addRectangle", &json!({"glyph": "A", "x": 100, "y": 0, "width": 400, "height": 700})).unwrap();
+    app.drain();
+    shell(&mut app, "view.editSelectedGlyphs", json!({"glyphs": ["A"]}));
+    shell(&mut app, "edit.selectAll", json!({}));
+    let nodes = app.tools.selection.clone();
+    assert!(!nodes.is_empty(), "the edit view's own selection");
+
+    shell(&mut app, "fontView.show", json!({}));
+    shell(&mut app, "fontView.setSearch", json!({"query": "e", "fields": ["name"]}));
+    let listed = shown(&app);
+    assert!(listed.contains(&"e".to_string()) && listed.len() > 1 && listed.len() < 54, "{listed:?}");
+    shell(&mut app, "edit.selectAll", json!({}));
+    assert_eq!(selected(&app), listed, "{}", app.status);
+
+    shell(&mut app, "fontView.setSelection", json!({"glyphs": ["e"]}));
+    // Fired as the menu and the key fire it.
+    app.fire(CommandRef::new("edit.invertSelection"));
+    app.drain();
+    assert_eq!(selected(&app), listed.iter().filter(|n| *n != "e").cloned().collect::<Vec<_>>());
+    shell(&mut app, "edit.deselectAll", json!({}));
+    assert!(selected(&app).is_empty());
+
+    for id in ["selection.selectNext", "path.focusOnSelectedPath"] {
+        shell(&mut app, id, json!({}));
+        assert!(app.status.contains("open a glyph first"), "{id}: {}", app.status);
+    }
+    assert_eq!(app.tools.selection, nodes, "the hidden tab's selection stays");
+}
+
+/// What a command adds becomes the selection and is scrolled to; the status counts it, and glyphs the search hides are
+/// counted beside Show All, which lists every glyph again. Undo takes them out of the selection.
+#[test]
+fn added_glyphs_become_the_selection() {
+    let mut app = app();
+    let run = |app: &mut FontCraftApp, id: &str, params: Value| {
+        app.status.clear();
+        app.sent.push(Msg::run(id, params));
+        app.drain();
+    };
+    run(&mut app, "glyph.addGlyphs", json!({"text": "Aacute Agrave A", "onExisting": "keep"}));
+    assert_eq!(selected(&app), ["Aacute", "Agrave"], "{}", app.status);
+    assert!(app.status.contains("2 added") && app.status.contains("1 already in the font"), "{}", app.status);
+    let reveal = app.models.font_view.reveal.and_then(|i| app.models.font_view.name(i)).map(str::to_string);
+    assert_eq!(reveal.as_deref(), Some("Aacute"));
+    app.sent.push(Msg::View(crate::app::ViewMsg::FontViewRevealed));
+    app.drain();
+    assert_eq!(app.models.font_view.reveal, None);
+
+    shell(&mut app, "fontView.setSearch", json!({"query": "zero"}));
+    let copied = app.session.execute("edit.copy", &json!({"glyphs": ["B"]})).unwrap();
+    run(&mut app, "edit.paste", json!({"text": copied["json"]}));
+    assert!(app.status.contains("1 added"), "{}", app.status);
+    assert_eq!(selected(&app), ["B.001"]);
+    assert_eq!(app.models.font_view.hidden, 1);
+    let sent = crate::panels::font_view::status::show_all(&["B.001"]);
+    app.sent.extend(sent);
+    app.drain();
+    assert_eq!((app.models.font_view.hidden, selected(&app), shown(&app).len()), (0, vec!["B.001".to_string()], 57));
+
+    run(&mut app, "glyph.duplicateGlyph", json!({"glyphs": ["C", "D"]}));
+    assert_eq!(selected(&app), ["C.001", "D.001"], "{}", app.status);
+    run(&mut app, "edit.undo", json!({}));
+    assert!(selected(&app).is_empty(), "undo takes the copies out of the selection");
+}
+
+/// What adding glyphs did is said together with what a save in the document's format would lose.
+#[test]
+fn added_glyphs_and_save_losses_share_the_notice() {
+    let mut app = app();
+    let reply = json!({"glyphs": ["A"], "warnings": ["smart settings are not saved"]});
+    let notice = app.after_command(&CommandRef::new("glyph.duplicateGlyph"), &reply).expect("a notice");
+    assert!(notice.contains("1 ") && notice.ends_with("smart settings are not saved"), "{notice}");
+}
+
+/// A value a List View cell was given stays in it with the reason while the command refuses it; a taken one goes on to
+/// the row below, and another selection drops the refused one.
+#[test]
+fn a_refused_list_value_stays_in_its_cell() {
+    use super::CellDraft;
+
+    let mut app = app();
+    shell(&mut app, "fontView.setViewMode", json!({"mode": "list"}));
+    shell(&mut app, "fontView.setSelection", json!({"glyphs": ["A"]}));
+    let edit = |app: &mut FontCraftApp, text: &str| {
+        let draft = CellDraft { glyph: "A".into(), column: Column::Unicode, text: text.into(), error: None };
+        app.sent.push(Msg::View(crate::app::ViewMsg::FontViewCell(Some(draft))));
+        app.sent.push(Msg::run("glyph.setUnicodes", json!({"glyphs": ["A"], "unicodes": [text]})));
+        app.sent.push(Msg::View(crate::app::ViewMsg::FontViewNextCell { glyph: "B".into(), column: Column::Unicode }));
+        app.drain();
+    };
+    edit(&mut app, "nothex");
+    let m = &app.models.font_view;
+    let draft = m.draft.clone().expect("the refused value");
+    assert!(draft.text == "nothex" && draft.error.is_some_and(|e| !e.is_empty()));
+    assert_eq!((selected(&app), m.edit_cell), (vec!["A".to_string()], Some(Column::Unicode)), "the cell keeps the keyboard");
+    edit(&mut app, "0391");
+    assert_eq!((app.models.font_view.draft.clone(), selected(&app)), (None, vec!["B".to_string()]));
+    shell(&mut app, "fontView.setSelection", json!({"glyphs": ["A"]}));
+    edit(&mut app, "nothex");
+    app.sent.push(Msg::run("fontView.queryGlyphs", json!({"entries": []})));
+    app.sent.push(Msg::run("glyph.setNote", json!({"glyphs": ["D"], "note": "other"})));
+    app.drain();
+    assert!(app.models.font_view.draft.is_some(), "another command leaves the refused value");
+    shell(&mut app, "fontView.setSelection", json!({"glyphs": ["C"]}));
+    assert_eq!(app.models.font_view.draft, None);
+}

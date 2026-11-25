@@ -5,7 +5,9 @@
 //! |---|---|
 //! | [`grid`] | Grid View: one tile per shown glyph, its outline, its name from the label size up |
 //! | [`list`] | List View: one row per shown glyph, a column per property, sort and column choice, edits in place |
+//! | [`list_edit`] | List View's fields and the commands its edits run |
 //! | [`cells`] | the outline painter of a grid cell |
+//! | [`marks`] | a grid cell's colour labels, badges and Unicode mark |
 //! | [`keys`] | what the grid's and the list's selection, keys and requests post |
 //! | [`search`] | the search field and the mode buttons |
 //! | [`status`] | the New Glyph and Remove Glyph buttons, the counts and the cell size slider |
@@ -18,6 +20,8 @@ pub mod grid;
 pub mod inspector;
 pub mod keys;
 pub mod list;
+pub mod list_edit;
+pub mod marks;
 pub mod metrics;
 pub mod search;
 pub mod sidebar;
@@ -55,10 +59,18 @@ craft::ui::words! {
         in_font: "fontcraftFontView.inFont" = "in font";
         /// What assistive technology reads after the name of a glyph whose layers cannot interpolate.
         incompatible: "fontcraftFontView.incompatible" = "incompatible layers";
+        /// After how many selected glyphs the search or the sidebar hides, and the button that shows every glyph.
+        hidden: "fontcraftFontView.hidden" = "of the selected hidden";
+        show_all: "fontcraftFontView.showAll" = "Show All";
         /// The grid or list of a font with no glyph shown.
         no_glyphs: "fontcraftFontView.noGlyphs" = "No glyphs";
         /// Without an open font.
         no_font: "fontcraftFontView.noFont" = "File › New to start a font";
+        /// What the badges of a grid cell say.
+        badge_annotation: "fontcraftFontView.badgeAnnotation" = "Annotation on this master's layer";
+        badge_custom: "fontcraftFontView.badgeCustom" = "Custom glyph properties";
+        badge_not_exported: "fontcraftFontView.badgeNotExported" = "Not exported";
+        badge_out_of_sync: "fontcraftFontView.badgeOutOfSync" = "Metrics keys out of sync";
     }
 }
 

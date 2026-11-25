@@ -9,7 +9,7 @@
 //! outline, its references drawn in. Bitmaps are kept per glyph until the font's strikes or the choice change, at most
 //! [`MAX_STRIKE_CACHE_BYTES`] of them; a glyph past that, or without a bitmap in the strike, shows an empty cell.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use craft::behavior::kurbo::{BezPath, PathEl, Point, Shape as _};
@@ -17,12 +17,13 @@ use craft::ui::contract::{PlainData, Tracked};
 use fontcraft_engine::cmd::status;
 use fontcraft_engine::model::glyphdata::GlyphData;
 use fontcraft_engine::model::strike::BitmapStrike;
-use fontcraft_engine::model::{ColorLabel, Font, Glyph, GlyphProps, Prop, Shape, glyph_order, glyph_props, keeps_alternates, metric};
+use fontcraft_engine::model::{ColorLabel, Font, Glyph, GlyphProps, Prop, PropSource, Shape, glyph_order, glyph_props, keeps_alternates, metric};
 use serde_json::Value;
 
 use super::ProjectCx;
+use super::cell_marks::{self, CellMarks};
 use super::incompatibility::{self, CellCompat};
-use crate::app::font_view::{Column, Sort, ViewMode};
+use crate::app::font_view::{CellDraft, Column, Sort, ViewMode};
 use crate::canvas::color;
 
 /// Most points one cell outline keeps; the rest of a larger outline is left out of the cell.
@@ -65,6 +66,14 @@ pub struct FontViewModel {
     pub search: String,
     /// The search field takes the keyboard on this pass.
     pub focus_search: bool,
+    /// The row the grid or the list scrolls to on this pass.
+    pub reveal: Option<usize>,
+    /// The List View column whose cell in the lead row takes the keyboard on this pass.
+    pub edit_cell: Option<Column>,
+    /// A List View value not taken yet, with why.
+    pub draft: Option<CellDraft>,
+    /// How many selected glyphs the search or the sidebar hides.
+    pub hidden: usize,
     /// The master the cells draw and the Components cell edits.
     pub master: Option<String>,
     /// The vertical extent a cell shows, in font units: the master's ascender and descender.
@@ -116,12 +125,15 @@ pub struct StatusChoice {
 #[derive(PlainData, Clone, Debug, Default, PartialEq)]
 pub struct GlyphRow {
     pub name: String,
-    /// Exported; a glyph that is not shows veiled.
     pub export: bool,
     /// The first code point as four to six hexadecimal digits.
     pub unicode: Option<String>,
     /// List View: the text of every column, by [`Column::index`]. Empty in Grid View.
     pub cells: Vec<String>,
+    /// List View: a bit per column, by [`Column::index`], whose value comes from the glyph data, not from the glyph.
+    pub derived: u32,
+    /// List View: the note has several lines, of which the cell shows the first.
+    pub long_note: bool,
     /// Grid View: the outline. `None` in List View.
     pub art: Option<Arc<CellArt>>,
     /// The code of the status the glyph is in (its stored one, else the default; `None` for a stored code the font
@@ -132,6 +144,8 @@ pub struct GlyphRow {
     pub bitmap: Option<Arc<StrikeCell>>,
     /// Whether the glyph's layers can interpolate: the cell's red corner.
     pub compat: CellCompat,
+    /// Grid View: the colour labels, badges, Unicode mark and note of the cell. Empty in List View.
+    pub marks: CellMarks,
 }
 
 /// A cell outline: the closed contours, flattened, in font units.
@@ -149,6 +163,19 @@ impl FontViewModel {
     /// The row of the glyph named `name`.
     pub fn row_of(&self, name: &str) -> Option<usize> {
         self.rows.iter().position(|r| r.name == name)
+    }
+
+    /// Whether the value of `column` in row `at` comes from the glyph data.
+    pub fn is_derived(&self, at: usize, column: Column) -> bool {
+        let bit = 1u32.checked_shl(column.index() as u32).unwrap_or(0);
+        self.rows.get(at).is_some_and(|r| r.derived & bit != 0)
+    }
+
+    /// The glyphs an edit in row `at` changes: the selected ones when the row is among them, else its own.
+    pub fn edited(&self, at: usize) -> Vec<String> {
+        let own = [at];
+        let rows: &[usize] = if self.selected.contains(&at) { &self.selected } else { &own };
+        rows.iter().filter_map(|&i| self.name(i)).map(str::to_string).collect()
     }
 
     /// The name of row `at`.
@@ -236,6 +263,8 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, fil
     }
     // Font View draws the current master (`fontView.cell.followsMaster`), not the layer the Layers panel picked.
     let master = crate::shell::masters::current_master(&font, &cx.view.layers).map(|m| m.id.clone()).unwrap_or_default();
+    let display_value = cx.session.settings().get_bool("appearance.displayUnicodeValue").unwrap_or(false);
+    let out_of_sync = if state.mode == ViewMode::Grid { cell_marks::out_of_sync(cx.session, &font) } else { HashSet::new() };
     let props = Props::of(cx);
     let order = glyph_order(&font);
     let arcs = font.glyphs.as_arcs();
@@ -271,19 +300,28 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, fil
             ..GlyphRow::default()
         };
         match state.mode {
-            ViewMode::Grid => match strike {
-                Some((_, s)) => row.bitmap = cache.strikes.cell(&font.bitmap_strikes, s, &glyph.name),
-                None => row.art = Some(art(&font, glyph, &master, &by_name, cache, &mode, &mut src)),
-            },
+            ViewMode::Grid => {
+                match strike {
+                    Some((_, s)) => row.bitmap = cache.strikes.cell(&font.bitmap_strikes, s, &glyph.name),
+                    None => row.art = Some(art(&font, glyph, &master, &by_name, cache, &mode, &mut src)),
+                }
+                let custom = props.get(glyph).is_some_and(|p| p.has_custom_info);
+                row.marks = CellMarks::of(glyph, &master, custom, out_of_sync.contains(&glyph.name), display_value);
+            }
             ViewMode::List => {
                 let status = in_status.map(|s| s.name.as_str());
                 let cell = Cell { font: &font, glyph, id, master: &master, props: props.get(glyph), status };
                 row.cells = Column::ALL.iter().map(|c| cell.text(*c)).collect();
+                row.derived =
+                    Column::ALL.iter().filter(|c| cell.is_derived(**c)).fold(0, |bits, c| bits | 1u32.checked_shl(c.index() as u32).unwrap_or(0));
+                row.long_note = glyph.info.note.trim_end().lines().nth(1).is_some();
             }
         }
         glyphs.push(glyph);
         rows.push(row);
     }
+    // The query brings the session's cache up to date, which copies it while another holder keeps it.
+    drop(props);
     incompatibility::mark(cx.session, &mut rows);
     let index: HashMap<&str, usize> = rows.iter().enumerate().map(|(i, r)| (r.name.as_str(), i)).collect();
     let mut error = None;
@@ -298,7 +336,7 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, fil
         },
     };
     if let Some(sort) = state.sort {
-        let props = &props;
+        let props = Props::of(cx);
         let key = |i: usize| {
             let glyph = glyphs.get(i).copied()?;
             let status = glyph_status(&font, glyph, &statuses, &defs).map(|s| s.name.as_str());
@@ -306,7 +344,14 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, fil
         };
         sort_rows(&mut visible, sort, key);
     }
-    let selected = state.selected.iter().filter_map(|n| index.get(n.as_str()).copied()).collect();
+    let selected: Vec<usize> = state.selected.iter().filter_map(|n| index.get(n.as_str()).copied()).collect();
+    let hidden = if visible.len() == rows.len() || selected.is_empty() {
+        0
+    } else {
+        let shown: HashSet<usize> = visible.iter().copied().collect();
+        selected.iter().filter(|i| !shown.contains(i)).count()
+    };
+    let reveal = state.reveal.as_deref().and_then(|n| index.get(n).copied());
     let anchor = state.anchor.as_deref().and_then(|n| index.get(n).copied());
     let (ascender, descender) = frame(&font, &master);
     let value = FontViewModel {
@@ -320,6 +365,10 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, fil
         sort: state.sort,
         search: state.search.query.clone(),
         focus_search: state.focus_search,
+        reveal,
+        edit_cell: state.edit_cell,
+        draft: state.draft.clone(),
+        hidden,
         master: Some(master),
         ascender,
         descender,
@@ -348,6 +397,11 @@ fn glyph_status<'s>(font: &Font, glyph: &Glyph, statuses: &'s [StatusChoice], de
 
 /// The rows `fontView.queryGlyphs` gives for `query`, in its order.
 fn run_query(cx: &mut ProjectCx<'_>, query: Value, master: &str, index: &HashMap<&str, usize>) -> Result<Vec<usize>, String> {
+    Ok(query_names(cx, query, master)?.iter().filter_map(|n| index.get(n.as_str()).copied()).collect())
+}
+
+/// The glyphs `fontView.queryGlyphs` gives for `query`, in its order.
+pub fn query_names(cx: &mut ProjectCx<'_>, query: Value, master: &str) -> Result<Vec<String>, String> {
     let Value::Object(mut params) = query else { return Err("the Font View query must be an object".into()) };
     if !master.is_empty() {
         params.entry("master").or_insert_with(|| Value::String(master.to_string()));
@@ -356,7 +410,7 @@ fn run_query(cx: &mut ProjectCx<'_>, query: Value, master: &str, index: &HashMap
     params.entry("knownCompatibility").or_insert(Value::Bool(true));
     let result = cx.session.query("fontView.queryGlyphs", &Value::Object(params)).map_err(|e| e.to_string())?;
     let names = result.get("glyphs").and_then(Value::as_array).ok_or("the query gave no glyph list")?;
-    Ok(names.iter().filter_map(Value::as_str).filter_map(|n| index.get(n).copied()).collect())
+    Ok(names.iter().filter_map(Value::as_str).map(str::to_string).collect())
 }
 
 /// What a column sorts by.
@@ -384,7 +438,8 @@ fn sort_rows(visible: &mut Vec<usize>, sort: Sort, key: impl Fn(usize) -> Option
     *visible = keyed.into_iter().map(|(_, i)| i).collect();
 }
 
-/// The glyph properties the List View columns read: the session's cache, else computed from the glyph data.
+/// The glyph properties the List View columns and the custom info badge read: the session's cache, else computed from
+/// the glyph data.
 struct Props {
     cache: Option<Arc<fontcraft_engine::model::PropsCache>>,
     data: Option<Arc<GlyphData>>,
@@ -393,9 +448,6 @@ struct Props {
 
 impl Props {
     fn of(cx: &mut ProjectCx<'_>) -> Props {
-        if cx.view.font_view.mode == ViewMode::Grid && cx.view.font_view.sort.is_none() {
-            return Props { cache: None, data: None, keep_alternates: false };
-        }
         let keep_alternates = cx.session.font().is_ok_and(keeps_alternates);
         let data = cx.session.glyph_data().ok();
         let cache = cx.session.effective_props().ok().filter(|c| data.as_deref().is_some_and(|d| c.is_for(d, keep_alternates)));
@@ -435,6 +487,11 @@ impl Cell<'_> {
             Column::SortName => &p.sort_name,
             _ => return None,
         })
+    }
+
+    /// Whether the column's value comes from the glyph data rather than from the glyph.
+    fn is_derived(&self, column: Column) -> bool {
+        self.prop(column).is_some_and(|p| !matches!(p.source, PropSource::Stored))
     }
 
     fn text(&self, column: Column) -> String {

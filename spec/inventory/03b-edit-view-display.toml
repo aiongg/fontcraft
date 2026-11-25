@@ -312,7 +312,7 @@ ref = "Edit View › Glyph Display › Glyph & Layer Colors"
 status = "handbook"
 notes = "Documented, not yet observed."
 guesses = [
-  "The split square sits at the left of the Info box and is drawn only when the glyph or the active layer has a colour label; the Info box itself shows only while something is selected. Settled by observation.",
+  "The split square sits before the glyph's name in the Info box and is drawn only when the glyph or the active layer has a colour label; with several glyphs selected it is not drawn. Settled by observation.",
 ]
 
 [[behavior]]

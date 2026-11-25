@@ -24,13 +24,15 @@
 use craft::behavior::IconId;
 use craft::ui::buttons::toggle_button::ToggleButton;
 use craft::ui::contract::{Bind, Props as _, Show as _, ShowContainer as _, Tracked};
-use craft::ui::display::{Shade, Text};
+use craft::ui::display::{Picture, Shade, Text};
 use craft::ui::layout_components::Row;
+use craft::ui::list::ThumbAspect;
+use craft::ui::primitives::{ContentPainterCx, StrokeWidth};
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::{Env, Label};
 use craft::ui::sections::Section;
 use craft::ui::text::TextField;
-use egui::Ui;
+use egui::{Color32, Rect, Stroke, StrokeKind, Ui, pos2};
 use serde_json::{Map, Value, json};
 
 use super::widgets::{self, KeyedNumber};
@@ -82,6 +84,8 @@ craft::ui::words! {
         several: "fontcraftInfoBox.several" = "glyphs selected";
         /// The placeholder of a field whose glyphs differ.
         multiple: "fontcraftInfoBox.multiple" = "Multiple Values";
+        /// The square of the two colour labels.
+        colors: "fontcraftInfoBox.colors" = "Glyph color (left) and layer color (right)";
     }
 }
 
@@ -146,7 +150,16 @@ fn glyph_part(ui: &mut Ui, words: &InfoBoxWords, g: &GlyphBox, sent: &mut Vec<Ms
         None => g.glyph.clone(),
     };
     let targets = g.targets();
-    Text::new(title).show(ui);
+    let colors = g.colors;
+    if colors.iter().any(Option::is_some) {
+        let _ = Row::new().id_salt("title").show(ui, |ui, _| {
+            let strip = Picture::painter(words.colors.clone(), ThumbAspect::SQUARE, move |cx, rect| paint_colors(cx, rect, colors));
+            strip.tooltip(words.colors.clone()).show(ui);
+            Text::new(title.clone()).show(ui);
+        });
+    } else {
+        Text::new(title).show(ui);
+    }
     let fields: Vec<(&Label, &KeyedNumber, &str, &str)> = if g.vertical {
         vec![
             (&words.top, &g.top, "top", "spacing.setTopSidebearing"),
@@ -203,6 +216,20 @@ fn glyph_part(ui: &mut Ui, words: &InfoBoxWords, g: &GlyphBox, sent: &mut Vec<Ms
     if let Some(master) = &g.linked {
         Text::new(format!("{} {master}", words.linked.as_str())).shade(Shade::Muted).show(ui);
     }
+}
+
+/// The colour labels (`infoBox.showsColorLabels`): the glyph's on the left half, the layer's on the right.
+fn paint_colors(cx: &ContentPainterCx<'_>, rect: Rect, [glyph, layer]: [Option<[u8; 3]>; 2]) {
+    let middle = rect.center().x;
+    let halves =
+        [(Rect::from_min_max(rect.min, pos2(middle, rect.bottom())), glyph), (Rect::from_min_max(pos2(middle, rect.top()), rect.max), layer)];
+    for (half, color) in halves {
+        if let Some([r, g, b]) = color {
+            cx.painter.rect_filled(half, 0.0, Color32::from_rgb(r, g, b));
+        }
+    }
+    let edge = Stroke::new(cx.stroke_width(StrokeWidth::Hairline), cx.ink());
+    cx.painter.rect_stroke(rect, 0.0, edge, StrokeKind::Inside);
 }
 
 /// A metric field whose glyphs differ: empty, with the *Multiple Values* placeholder; any value typed goes to every
@@ -399,6 +426,31 @@ mod tests {
             posted_after(model, "Left Group", "round"),
             vec![Msg::run("kerning.setLeftGroup", json!({"glyphs": ["A", "B"], "group": "round"}))]
         );
+    }
+
+    /// The colour labels show as a square, the glyph's on the left half and the layer's on the right; without a label
+    /// there is none.
+    #[test]
+    fn colour_labels_show_as_a_split_square() {
+        let fills = |colors: [Option<[u8; 3]>; 2]| {
+            let model = Tracked::new(InfoBoxModel { glyph: Some(GlyphBox { colors, ..glyph(false) }), ..Default::default() });
+            let mut fixture = Fixture::new(move |ui| show(ui, Props { model: &model, clock: None, sent: &mut Vec::new() }));
+            fixture.settle();
+            let rects: Vec<(egui::Color32, f32)> = fixture
+                .frame_shapes()
+                .iter()
+                .filter_map(|s| match s {
+                    egui::Shape::Rect(r) => Some((r.fill, r.rect.center().x)),
+                    _ => None,
+                })
+                .collect();
+            let x = |c: [u8; 3]| rects.iter().find(|(fill, _)| *fill == egui::Color32::from_rgb(c[0], c[1], c[2])).map(|(_, x)| *x);
+            (x([1, 2, 3]), x([4, 5, 6]))
+        };
+        let (glyph, layer) = fills([Some([1, 2, 3]), Some([4, 5, 6])]);
+        assert!(glyph.expect("the glyph's half") < layer.expect("the layer's half"));
+        assert!(matches!(fills([None, Some([4, 5, 6])]), (None, Some(_))));
+        assert_eq!(fills([None, None]), (None, None));
     }
 
     /// The vertical layout edits the vertical origin and width (M5.20).

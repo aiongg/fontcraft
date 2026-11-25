@@ -10,6 +10,7 @@ use fontcraft_engine::model::{Dimension, Font, Shape};
 use fontcraft_tools::Selection;
 use serde_json::{Map, Value, json};
 
+use super::cell_marks::label_rgb;
 use super::components::{self, CapBox, ComponentBox, CornerBox, SegmentBox, SmartModel};
 use super::{ProjectCx, Stamp};
 use crate::app::Msg;
@@ -93,6 +94,8 @@ pub struct GlyphBox {
     pub mixed: Vec<String>,
     /// The kerning group sides (left, right, top, bottom) whose groups differ between the selected glyphs.
     pub mixed_groups: [bool; 4],
+    /// The colour labels of the glyph and of the edited layer.
+    pub colors: [Option<[u8; 3]>; 2],
 }
 
 impl GlyphBox {
@@ -505,6 +508,8 @@ fn glyph_box(cx: &mut ProjectCx<'_>, edit: &Edit) -> Option<GlyphBox> {
     let groups =
         [&glyph.kern_groups.left, &glyph.kern_groups.right, &glyph.kern_groups.top, &glyph.kern_groups.bottom].map(|g| g.clone().unwrap_or_default());
     let unicode = glyph.unicodes.first().copied();
+    let layer_color = glyph.layers.iter().find(|l| l.id == edit.layer).and_then(|l| l.info.color);
+    let colors = [glyph.info.color, layer_color].map(|c| c.map(label_rgb));
     let reply = cx.session.query("spacing.getMetrics", &json!({"glyph": edit.glyph, "layer": edit.layer})).ok()?;
     let font = cx.session.font().ok()?;
     // A master that takes its metrics from another shows that master's layer, read only.
@@ -532,6 +537,7 @@ fn glyph_box(cx: &mut ProjectCx<'_>, edit: &Edit) -> Option<GlyphBox> {
         vert_width: keyed(&reply, "vertWidth"),
         linked,
         groups,
+        colors,
         ..Default::default()
     };
     mark_derived(cx, &mut b);
@@ -606,6 +612,7 @@ fn shared_glyph_box(cx: &mut ProjectCx<'_>, edit: &Edit, glyphs: Vec<String>) ->
         glyphs: if read.is_empty() { glyphs } else { read },
         mixed,
         mixed_groups: [lm, rm, tm, bm],
+        colors: [None, None],
     })
 }
 

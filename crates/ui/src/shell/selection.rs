@@ -6,6 +6,10 @@
 //! the Select tool current. `FontCraftApp::route` runs it as a tool command whenever `tool` names a tool; only a
 //! `tool` that names none reaches [`run`], which refuses it with the list of tools.
 //!
+//! While Font View shows, Select All, Deselect All and Invert Selection act on its visible glyphs
+//! (`FontCraftApp::select_in_font_view`). The other selection commands refuse there, unless they name the glyph whose
+//! selection they change, so the selection of the tab behind Font View stays as it is.
+//!
 //! The selection belongs to the edited glyph's layer (decision 0004: the engine never stores it), so these are shell
 //! commands. Each takes the edited glyph as given; `glyph` and `layer`, when given, must name it.
 
@@ -47,15 +51,15 @@ const COMMANDS: &[UiCommand] = &[
         "Select All",
         &["Edit"],
         Some("Cmd+A"),
-        "{} every point of the edited layer; when they are all selected already, its anchors and components too",
+        "{} every point of the edited layer; when they are all selected already, its anchors and components too. While Font View shows: every glyph it lists",
     ),
-    command("edit.deselectAll", "Deselect All", &["Edit"], Some("Cmd+Alt+A"), "{} empty the selection"),
+    command("edit.deselectAll", "Deselect All", &["Edit"], Some("Cmd+Alt+A"), "{} empty the selection; while Font View shows, its glyph selection"),
     command(
         "edit.invertSelection",
         "Invert Selection",
         &["Edit"],
         Some("Cmd+Alt+Shift+I"),
-        "{} select the points and anchors of the edited layer that are not selected, and nothing else",
+        "{} select the points and anchors of the edited layer that are not selected, and nothing else. While Font View shows: the glyphs it lists that are not selected",
     ),
     command(
         "selection.selectNext",
@@ -102,6 +106,10 @@ const COMMANDS: &[UiCommand] = &[
     ),
 ];
 
+fn label(id: &str) -> &str {
+    COMMANDS.iter().find(|c| c.id == id).map_or(id, |c| c.label)
+}
+
 /// What a command does to the tools' state.
 enum Change {
     Select(Selection),
@@ -118,6 +126,10 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
         crate::app::catalog::SELECT_TOOL => {
             let tool = crate::app::catalog::chosen_tool("select", command)?;
             app.apply_msg(Msg::View(ViewMsg::SelectTool(tool)))
+        }
+        "edit.selectAll" | "edit.deselectAll" | "edit.invertSelection" if app.font_view_shows() => app.select_in_font_view(&command.id),
+        _ if app.font_view_shows() && params.get("glyph").is_none_or(Value::is_null) => {
+            Err(format!("{}: open a glyph first; Font View is in front", label(&command.id)))
         }
         "path.clearFocusOnPaths" => {
             app.tools.focus = None;

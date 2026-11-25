@@ -75,6 +75,14 @@ pub enum ViewMsg {
     UncheckedCells(Vec<String>),
     /// Font View's search field took the keyboard (`fontView.focusSearch`).
     FontViewSearchFocused,
+    /// Font View scrolled to the glyph asked for (`FontViewState::reveal`).
+    FontViewRevealed,
+    /// A value typed into a List View cell, before the command that sets it; `None` drops a refused one.
+    FontViewCell(Option<super::font_view::CellDraft>),
+    /// The List View column whose cell in the lead row takes the keyboard next; `None` once it did.
+    FontViewEditCell(Option<super::font_view::Column>),
+    /// Return in a List View cell: on to the same cell of the glyph in the next row, unless the value was refused.
+    FontViewNextCell { glyph: String, column: super::font_view::Column },
     /// A press, drag or release on the Bitmap Glyph Editor's pixel canvas (`shell::bitmap_editor::input`).
     Bitmap(crate::shell::bitmap_editor::BitmapInput),
 }

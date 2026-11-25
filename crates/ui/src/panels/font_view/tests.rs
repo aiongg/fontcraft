@@ -5,12 +5,15 @@ use std::rc::Rc;
 
 use craft::ui::contract::Tracked;
 use craft::ui::runtime::commands::CommandRef;
+use craft::ui::runtime::env::WordSet as _;
 use craft::ui::testing::Fixture;
 use egui::{Key, Modifiers};
 use serde_json::json;
 
+use super::marks::{Badge, MarkTokens, badge_rect};
 use super::{Props, show};
 use crate::app::font_view::{Column, ViewMode};
+use crate::app::models::cell_marks::{CellMarks, UnicodeMark};
 use crate::app::models::font_view::{FontViewModel, GlyphRow};
 use crate::app::models::incompatibility::CellCompat;
 use crate::app::{Msg, ViewMsg};
@@ -29,8 +32,10 @@ fn model_of(names: &[&str], mode: ViewMode, selected: Vec<usize>) -> FontViewMod
             if let Some(cell) = cells.get_mut(Column::Name.index()) {
                 *cell = (*name).to_string();
             }
-            if let Some(cell) = cells.get_mut(Column::Unicode.index()) {
-                *cell = unicode(i);
+            for column in [Column::Unicode, Column::Char] {
+                if let Some(cell) = cells.get_mut(column.index()) {
+                    *cell = unicode(i);
+                }
             }
             GlyphRow { name: (*name).to_string(), export: true, cells, ..GlyphRow::default() }
         })
@@ -132,8 +137,10 @@ const TWELVE: [&str; 12] = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K
 /// What one key press posts in a Font View over [`TWELVE`] in `mode` with the glyph `at` selected and the keyboard
 /// (a click on its cell gives it the keyboard and changes nothing).
 fn after_key(mode: ViewMode, at: usize, key: Key, mods: Modifiers) -> Vec<Msg> {
-    let (mut fixture, posted) = open(model_of(&TWELVE, mode, vec![at]));
-    // In the list, a click on the selected row's name could start a rename: the Unicode cell is clicked instead.
+    let mut m = model_of(&TWELVE, mode, vec![at]);
+    // A column no field edits: in the list, a click on the selected row's name could start a rename.
+    m.columns = vec![Column::Name, Column::Char];
+    let (mut fixture, posted) = open(m);
     let label = match mode {
         ViewMode::List => unicode(at),
         _ => TWELVE.get(at).copied().unwrap_or_default().to_string(),
@@ -266,8 +273,8 @@ fn the_status_column_edit_equals_set_status() {
         .collect();
     assert!(texts.iter().any(|t| t == "Draft"), "A's cell shows its status: {texts:?}");
 
-    assert_eq!(super::list::status_request("A", "1"), Msg::run("glyph.setStatus", json!({"glyphs": ["A"], "status": 1})));
-    assert_eq!(super::list::status_request("A", ""), Msg::run("glyph.setStatus", json!({"glyphs": ["A"], "status": null})));
+    assert_eq!(super::list::status_request(&["A".to_string()], "1"), Msg::run("glyph.setStatus", json!({"glyphs": ["A"], "status": 1})));
+    assert_eq!(super::list::status_request(&["A".to_string()], ""), Msg::run("glyph.setStatus", json!({"glyphs": ["A"], "status": null})));
 }
 
 /// With a strike shown, a cell with a bitmap draws it as a texture, and a glyph without one still shows its name even
@@ -303,4 +310,222 @@ fn a_strike_cell_draws_its_bitmap_and_an_empty_cell_its_name() {
         })
         .collect();
     assert!(texts.iter().any(|t| t == "B"), "B has no bitmap and shows its name: {texts:?}");
+}
+
+/// The fills a Grid View of one cell paints, its texts and the cell's picture rect.
+fn painted_cell(marks: CellMarks, cell_size: f64) -> (Vec<(egui::Color32, egui::Rect)>, Vec<String>) {
+    let mut grid = model_of(&["A"], ViewMode::Grid, Vec::new());
+    grid.cell_size = cell_size;
+    if let Some(row) = grid.rows.get_mut(0) {
+        row.marks = marks;
+    }
+    let (mut fixture, _) = open(grid);
+    let (mut fills, mut texts) = (Vec::new(), Vec::new());
+    for shape in fixture.frame_shapes() {
+        match shape {
+            egui::Shape::Rect(r) => fills.push((r.fill, r.rect)),
+            egui::Shape::Path(p) => fills.push((p.fill, egui::Rect::from_points(&p.points))),
+            egui::Shape::Circle(c) => {
+                let shown = if c.fill == egui::Color32::TRANSPARENT { c.stroke.color } else { c.fill };
+                fills.push((shown, egui::Rect::from_center_size(c.center, egui::Vec2::splat(c.radius * 2.0))));
+            }
+            egui::Shape::Text(t) => texts.push(t.galley.job.text.clone()),
+            _ => {}
+        }
+    }
+    (fills, texts)
+}
+
+/// A glyph colour fills the cell, a layer colour alone fills it but for the cut-out, and with both the layer colour
+/// takes the right half.
+#[test]
+fn colour_labels_fill_the_cell() {
+    let t = MarkTokens::standard();
+    let (glyph, layer) = ([200, 10, 20], [20, 10, 200]);
+    let rect_of = |fills: &[(egui::Color32, egui::Rect)], c| fills.iter().find(|(fill, _)| *fill == t.tint(c)).map(|(_, r)| *r);
+
+    let (fills, _) = painted_cell(CellMarks { color: Some(glyph), ..CellMarks::default() }, 64.0);
+    let whole = rect_of(&fills, glyph).expect("the glyph's colour");
+    assert!((whole.width() - whole.height()).abs() < 1.0, "{whole:?}");
+
+    let (fills, _) = painted_cell(CellMarks { layer_color: Some(layer), ..CellMarks::default() }, 64.0);
+    assert_eq!(rect_of(&fills, layer), Some(whole), "the cut-out is inside the cell's bounds");
+
+    let (fills, _) = painted_cell(CellMarks { color: Some(glyph), layer_color: Some(layer), ..CellMarks::default() }, 64.0);
+    let (left, right) = (rect_of(&fills, glyph).expect("the glyph's colour"), rect_of(&fills, layer).expect("the layer's colour"));
+    assert!((left.width() - right.width()).abs() < 0.1 && left.right() <= right.left() && right.right() == whole.right());
+}
+
+/// Each badge paints in its corner and is said beside the glyph's name; a glyph without one has its plain name, and a
+/// glyph that does not export is not veiled.
+#[test]
+fn badges_paint_in_their_corners_and_are_said() {
+    let t = MarkTokens::standard();
+    let cases = [
+        (CellMarks { annotated: true, ..CellMarks::default() }, t.note, "A, Annotation on this master's layer"),
+        (CellMarks { custom: true, ..CellMarks::default() }, t.info, "A, Custom glyph properties"),
+        (CellMarks { not_exported: true, ..CellMarks::default() }, t.not_exported, "A, Not exported"),
+        (CellMarks { out_of_sync: true, ..CellMarks::default() }, t.out_of_sync, "A, Metrics keys out of sync"),
+    ];
+    let (plain, _) = painted_cell(CellMarks::default(), 64.0);
+    for (marks, color, said) in cases {
+        let (fills, _) = painted_cell(marks.clone(), 64.0);
+        assert!(fills.iter().any(|(c, _)| *c == color), "{said}");
+        assert!(plain.iter().all(|(c, _)| *c != color), "{said} without the state");
+        let mut grid = model(ViewMode::Grid, Vec::new());
+        if let Some(row) = grid.rows.get_mut(0) {
+            row.marks = marks;
+        }
+        let (fixture, _) = open(grid);
+        assert!(fixture.by_label(said).is_some(), "{said}");
+        assert!(fixture.by_label("B").is_some(), "a glyph without a badge has its plain name");
+    }
+    let cell = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(64.0));
+    let [note, info, ring, warning] =
+        [Badge::Annotation, Badge::CustomInfo, Badge::NotExported, Badge::OutOfSync].map(|b| badge_rect(cell, b, &t).center());
+    assert!(note.x < ring.x && ring.x < warning.x && note.y < 32.0 && warning.y < 32.0 && info.x < 32.0 && info.y > 32.0);
+}
+
+/// The Unicode mark shows with the name: a marker, or the code point while Display Unicode Value is on; a cell too
+/// small for names has neither.
+#[test]
+fn the_unicode_mark_shows_with_the_name() {
+    let t = MarkTokens::standard();
+    let marked = |unicode: UnicodeMark, size: f64| painted_cell(CellMarks { unicode, ..CellMarks::default() }, size);
+    let has_marker = |fills: &[(egui::Color32, egui::Rect)]| fills.iter().any(|(c, r)| *c == t.marker && r.width() <= t.marker_side + 0.1);
+    let (fills, texts) = marked(UnicodeMark::Marker, 64.0);
+    assert!(has_marker(&fills) && texts.iter().any(|s| s == "A"), "{texts:?}");
+    let (fills, texts) = marked(UnicodeMark::Value("0041".into()), 64.0);
+    assert!(!has_marker(&fills) && texts.iter().any(|s| s == "0041"), "{texts:?}");
+    let (fills, _) = marked(UnicodeMark::None, 64.0);
+    assert!(!has_marker(&fills));
+    let (fills, texts) = marked(UnicodeMark::Marker, 40.0);
+    assert!(!has_marker(&fills) && !texts.iter().any(|s| s == "A"), "{texts:?}");
+}
+
+/// A drag from empty grid space selects the cells it touches; a click there empties the selection.
+#[test]
+fn a_drag_from_empty_space_selects_the_cells_it_touches() {
+    let (mut fixture, posted) = open(model_of(&TWELVE, ViewMode::Grid, vec![4]));
+    fixture.room(egui::vec2(420.0, 900.0)).settle();
+    let (first, last) = (fixture.by_label("A").expect("the first cell"), fixture.by_label("L").expect("the last cell"));
+    let start = last.rect.right_bottom() + egui::vec2(4.0, 40.0);
+    posted.borrow_mut().clear();
+    fixture.drag_at(start, first.center() - start).settle();
+    let swept: Vec<String> = match posted.borrow().last() {
+        Some(Msg::Shell(c)) if c.id.as_str() == "fontView.setSelection" => {
+            let names = c.params["glyphs"].as_array().cloned().unwrap_or_default();
+            names.iter().filter_map(|n| n.as_str().map(str::to_string)).collect()
+        }
+        other => panic!("{other:?}"),
+    };
+    assert!(swept.contains(&"A".to_string()) && swept.contains(&"L".to_string()), "{swept:?}");
+    posted.borrow_mut().clear();
+    fixture.click_at(start).settle();
+    assert_eq!(posted.borrow().last(), Some(&shell("fontView.setSelection", json!({"glyphs": []}))));
+}
+
+/// A row to scroll to is taken once; hidden selected glyphs are counted beside Show All, which clears what hides them.
+#[test]
+fn a_reveal_is_taken_and_show_all_clears_the_filters() {
+    for mode in [ViewMode::Grid, ViewMode::List] {
+        let mut m = model_of(&TWELVE, mode, vec![11]);
+        m.reveal = Some(11);
+        let (_, posted) = open(m);
+        assert!(posted.borrow().contains(&Msg::View(ViewMsg::FontViewRevealed)), "{mode:?}");
+    }
+    let mut m = model(ViewMode::Grid, vec![1]);
+    m.visible = vec![0];
+    m.hidden = 1;
+    let (mut fixture, posted) = open(m);
+    let button = fixture.by_label("Show All").expect("Show All");
+    posted.borrow_mut().clear();
+    fixture.click(&button).settle();
+    assert!(posted.borrow().contains(&shell("fontView.setSearch", json!({"query": ""}))), "{:?}", posted.borrow());
+}
+
+/// A List View over A to C with B selected, showing `column` beside the names, and what typing `text` into B's cell of
+/// it and pressing `key` posts.
+fn typed_into(column: Column, value: &str, text: &str, selected: Vec<usize>) -> Vec<Msg> {
+    let lead = selected.last().copied().unwrap_or_default();
+    let mut m = model(ViewMode::List, selected);
+    m.columns = vec![Column::Name, column];
+    m.master = Some("m01".into());
+    for row in &mut m.rows {
+        if let Some(cell) = row.cells.get_mut(column.index()) {
+            *cell = value.to_string();
+        }
+    }
+    let name = m.name(lead).unwrap_or_default().to_string();
+    let label = format!("{}, {name}", super::list::header(&super::list::ColumnWords::english(), column).as_str());
+    let (mut fixture, posted) = open(m);
+    let field = fixture.by_label(&label).unwrap_or_else(|| panic!("{label}"));
+    posted.borrow_mut().clear();
+    fixture.click(&field).key(Key::A, Modifiers::COMMAND).type_text(text).key(Key::Enter, Modifiers::NONE).settle();
+    posted.take()
+}
+
+/// Each text cell of the lead row runs the command of its property, then Return goes on to the row below; with several
+/// rows selected the edit changes all of them.
+#[test]
+fn list_cells_run_their_commands() {
+    let cases = [
+        (Column::Unicode, "0042", "0042 0062", "glyph.setUnicodes", json!({"glyphs": ["B"], "unicodes": ["0042", "0062"]})),
+        (Column::ProductionName, "", "uni0042", "glyph.setProductionName", json!({"glyphs": ["B"], "productionName": "uni0042"})),
+        (Column::Script, "latin", "greek", "glyph.setScript", json!({"glyphs": ["B"], "script": "greek"})),
+        (Column::SubCategory, "", "Uppercase", "glyph.setCategory", json!({"glyphs": ["B"], "subCategory": "Uppercase"})),
+        (Column::SortName, "B", "Z", "glyph.setSortName", json!({"glyphs": ["B"], "sortName": "Z"})),
+        (Column::Note, "", "check", "glyph.setNote", json!({"glyphs": ["B"], "note": "check"})),
+        (Column::Tags, "", "one, two", "glyph.setTags", json!({"glyphs": ["B"], "tags": ["one", "two"]})),
+        (Column::Components, "", "A", "glyph.setComponents", json!({"glyph": "B", "layer": "m01", "components": "A"})),
+        (Column::Lsb, "40", "55", "spacing.setLeftSidebearing", json!({"glyphs": ["B"], "layer": "m01", "value": 55.0})),
+        (Column::Width, "600", "=A", "spacing.setWidth", json!({"glyphs": ["B"], "layer": "m01", "value": "=A"})),
+        (Column::LeftGroup, "", "H", "kerning.setLeftGroup", json!({"glyphs": ["B"], "group": "H"})),
+    ];
+    for (column, value, text, id, params) in cases {
+        let posted = typed_into(column, value, text, vec![1]);
+        assert!(posted.contains(&Msg::run(id, params)), "{column:?}: {posted:?}");
+        let next = ViewMsg::FontViewNextCell { glyph: "C".into(), column };
+        assert!(posted.contains(&Msg::View(next)), "{column:?}: {posted:?}");
+    }
+    let posted = typed_into(Column::Note, "", "check", vec![0, 2, 1]);
+    assert!(posted.contains(&Msg::run("glyph.setNote", json!({"glyphs": ["A", "C", "B"], "note": "check"}))), "{posted:?}");
+    assert!(!posted.iter().any(|m| matches!(m, Msg::View(ViewMsg::FontViewNextCell { .. }))), "{posted:?}");
+    let posted = typed_into(Column::Note, "same", "same", vec![1]);
+    assert!(!posted.iter().any(|m| matches!(m, Msg::Run(_))), "an unchanged value sets nothing: {posted:?}");
+}
+
+/// Only the lead row holds fields, whatever the length of the list; the Exports check box of any row sets the flag; a
+/// value the glyph data gives is offered as Automatic, and a pick sets the property.
+#[test]
+fn list_fields_are_the_lead_rows() {
+    let names: Vec<String> = (0..10_000).map(|i| format!("g{i}")).collect();
+    let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+    let mut m = model_of(&refs, ViewMode::List, vec![1]);
+    m.columns = vec![Column::Name, Column::Note, Column::Export];
+    let (mut fixture, posted) = open(m);
+    assert!(fixture.by_label("Note, g1").is_some() && fixture.by_label("Note, g2").is_none());
+    let check = fixture.by_label("Exports, g3").expect("the check box");
+    posted.borrow_mut().clear();
+    fixture.click(&check).settle();
+    assert!(posted.borrow().contains(&Msg::run("glyph.setExport", json!({"glyphs": ["g3"], "export": false}))), "{:?}", posted.borrow());
+
+    let mut m = model(ViewMode::List, vec![1]);
+    if let Some(row) = m.rows.get_mut(1) {
+        row.derived = 1 << Column::Category.index();
+        if let Some(cell) = row.cells.get_mut(Column::Category.index()) {
+            *cell = "Letter".into();
+        }
+        if let Some(cell) = row.cells.get_mut(Column::Color.index()) {
+            *cell = "Yellow".into();
+        }
+    }
+    let words = super::list::ColumnWords::english();
+    let (current, entries) = super::list_edit::pop_up(&m, 1, Column::Category, &words);
+    assert_eq!((current.as_str(), entries.len()), ("", 9));
+    assert_eq!(super::list_edit::pop_up(&m, 1, Column::Color, &words).0, "3");
+    let set = |column, value| super::list_edit::command(&m, 1, column, value);
+    assert_eq!(set(Column::Category, "Symbol"), Some(Msg::run("glyph.setCategory", json!({"glyphs": ["B"], "category": "Symbol"}))));
+    assert_eq!(set(Column::Color, ""), Some(Msg::run("glyph.setColorLabel", json!({"glyphs": ["B"], "color": null}))));
+    assert_eq!(set(Column::Case, "noCase"), Some(Msg::run("glyph.setCase", json!({"glyphs": ["B"], "case": "noCase"}))));
 }

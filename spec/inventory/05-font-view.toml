@@ -181,12 +181,13 @@ label = "Set Glyph Selection"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{glyphs: [names], mode?: \"replace\" | \"add\" | \"remove\"}"
+params = "{glyphs: [names], mode?: \"replace\" | \"add\" | \"remove\", reveal?: bool}"
 area = "font-view"
 milestone = "M4"
 summary = "Our headless equivalent of clicking cells: sets the Font View glyph selection by name. Every batch command without explicit targets acts on this selection."
 ref = "Font View › Batch-Processing › Selecting Glyphs"
 status = "inferred"
+notes = "`reveal` scrolls to the first glyph named. The commands that add glyphs select their result and scroll to it the same way."
 own = true
 
 [[command]]
@@ -402,6 +403,7 @@ summary = "Adds the database entries selected in the Glyph Info window to the cu
 ref = "Font View › Adding New Glyphs › Adding From the Glyph Info Database"
 status = "handbook"
 guesses = [
+  "When every name is in the font already, those glyphs become the selection. Settled by observation.",
   "Names the font already has are left as they are and listed in `existing`; no Replace question is asked. Settled by observation.",
 ]
 observe = [
@@ -443,6 +445,7 @@ status = "handbook"
 guesses = [
   "Generated glyphs are empty, as wide as the Default Layer Width parameter or the built-in width makes a new glyph (as New Glyph), take the code point the entry gives or the glyph data gives their name, and are placed by the default sort key; all of them are one undo step. Settled by observing Generate on a list filter.",
 ]
+notes = "The generated glyphs become the selection and the status line counts them."
 observe = [
   "Generate one missing glyph from a list filter and from a language: note its width, Unicode value and place, then undo once and note how many go.",
 ]
@@ -1189,7 +1192,7 @@ ref = "Font View › Grid View"
 status = "handbook"
 guesses = [
   "Shift+click adds every visible glyph from the last clicked glyph to the clicked one; Cmd+click adds or removes one glyph; a click on empty space clears the selection. Settled by observation.",
-  "Dragging across the grid draws a rectangle that selects the cells it touches, added to the selection while Shift or Cmd is held. Settled by observation.",
+  "Dragging from empty space draws a rectangle that selects the cells it touches, added to the selection while Shift or Cmd is held. Settled by observation.",
   "Section headers of the glyphOrder parameter show only while the view lists every glyph in glyph order (no filter, search or sort). Settled by observation.",
 ]
 observe = [
@@ -1197,7 +1200,7 @@ observe = [
   "Drag a rectangle across the grid, then again with Shift and with Cmd held: note how each changes the selection.",
   "In a font with a glyphOrder parameter look for section headers, then choose a filter, search and sort in turn: note when the headers show.",
 ]
-notes = "Cells draw the filled closed contours of Font View's master; open paths are not drawn in cells. Only the lines in view are laid out. Version 4 has a third view, a detail mode between grid and list that shows glyph information beside each glyph image, more of it the larger the cell (4.0 release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs4.0-4000.html), build 3831; news page \"Glyphs 4: Create. Love the process.\"). A glyph's note shows as a tooltip (build 3835)."
+notes = "Cells draw the filled closed contours of Font View's master; open paths are not drawn in cells. Only the lines in view are laid out. A note shows at the start of the cell's tooltip, before what its badges say (at most 400 characters). Version 4 has a third view, a detail mode between grid and list that shows glyph information beside each glyph image, more of it the larger the cell (4.0 release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs4.0-4000.html), build 3831; news page \"Glyphs 4: Create. Love the process.\"). A glyph's note shows as a tooltip (build 3835)."
 
 [[panel]]
 id = "fontView.list"
@@ -1216,9 +1219,12 @@ milestone = "M4"
 summary = "Shows the visible glyphs as a table of glyph properties that can be sorted, rearranged and partly edited in place."
 ref = "Font View › List View; Glyph Properties"
 status = "handbook"
-notes = "Tab and Shift+Tab move between the fields of List View (tutorial \"Kerning\", updated for version 3; fixed in 4.0, build 3812)."
+notes = "Tab and Shift+Tab move between the fields of List View (tutorial \"Kerning\", updated for version 3; fixed in 4.0, build 3812). Built: the fields stand in the lead row only, so a click on a cell of the selected row edits it and a double-click does so in any row. Return commits and goes to the same cell one row down, Tab to the next text cell, Escape cancels. A refused value stays in its cell with the reason as its tooltip and in the status line. With several glyphs selected an edit changes all of them."
 guesses = [
   "A click on an editable cell of the only selected row, or a double-click on it, starts editing; a click on an Exports cell flips the flag; a double-click on a cell that cannot be edited opens the glyph. The reference's list edits like a spreadsheet, with Tab and Shift+Tab moving between fields (tutorial \"Kerning\", glyphsapp.com/learn/kerning); what starts the editing is not documented.",
+  "Category, Case, Direction and Color are pop-ups; the entry Automatic returns to the glyph data's value. Subcategory and Script are text, as any value may be stored. Settled by observation.",
+  "A note of several lines is not edited in its cell, which holds one line. Settled by observation.",
+  "Return goes to the row below only while one glyph is selected. Settled by observation.",
   "Values that come from the glyph data rather than from the glyph are drawn dimmed. Settled by observation.",
 ]
 observe = [
@@ -1789,10 +1795,11 @@ status = "handbook"
 guesses = [
   "CJK glyphs are those whose first code point is in the Han, Hiragana, Katakana, Hangul or Bopomofo script; the character is drawn with the interface font, and the marker is drawn when that font lacks it. Settled by observation.",
   "The marker is a small grey square. Settled by observation.",
+  "The marker sits at the bottom right of the drawing, just above the name line, and shows from the size names show at. Settled by observation.",
 ]
 observe = [
   "Look at the marker of 字, か, ㄅ, 한 and Ω: note which show a character; add a CJK glyph the system fonts lack.",
-  "Zoom into the marker of A and note its shape and colour.",
+  "Zoom into the marker of A and note its shape and colour, and whether it stands in the name line or above it.",
 ]
 
 [[behavior]]
@@ -1802,6 +1809,7 @@ milestone = "M4"
 summary = "With the application setting Display Unicode Value on, cells print the full hexadecimal code point instead of the small marker."
 ref = "Font View › Grid View"
 status = "handbook"
+notes = "Drawn where the marker is (fontView.cell.unicodeIndicator), in grey."
 
 [[behavior]]
 id = "fontView.cell.badgeMetricsOutOfSync"
@@ -1826,7 +1834,8 @@ summary = "A yellow note badge marks a glyph that has an annotation on the layer
 ref = "Font View › Grid View"
 status = "handbook"
 guesses = [
-  "Drawn in the top-left corner; the handbook gives no position. Settled by observation (05 question 15).",
+  "Drawn at the top left, beside the corner of a glyph whose layers cannot interpolate; the handbook gives no position. Settled by observation (05 question 15).",
+  "Every badge is 16% of the cell's side, 5 to 12 points, and shows at every cell size. Settled by observation.",
 ]
 observe = [
   "Add an annotation to a glyph and note the corner its badge is drawn in.",
@@ -1868,6 +1877,7 @@ summary = "A glyph whose export flag is off is marked by a struck-through red ri
 ref = "Font View › Grid View"
 status = "handbook"
 guesses = [
+  "The cell is not dimmed otherwise. Settled by observation.",
   "Drawn at the top centre of the cell; the handbook gives no position. Settled by observation (05 question 15).",
 ]
 observe = [
@@ -1881,6 +1891,12 @@ milestone = "M4"
 summary = "A glyph colour label tints the whole cell."
 ref = "Font View › Glyph Properties › Color Label"
 status = "handbook"
+guesses = [
+  "The tint covers the drawing, not the name line under it, and is see-through enough for the outline to stay readable. Settled by observation.",
+]
+observe = [
+  "Give a glyph a colour label and note whether the name line is tinted too, and the tint of a selected cell.",
+]
 
 [[behavior]]
 id = "fontView.cell.colorLayerOnly"
@@ -1938,6 +1954,7 @@ milestone = "M4"
 summary = "The Char column renders the glyph's character in the system font. A glyph with several code points shows only the first; a glyph with none shows nothing."
 ref = "Font View › Glyph Properties › Char"
 status = "handbook"
+notes = "The interface font draws the character; the outline of a glyph whose character it lacks is not built."
 guesses = ["A character the interface font lacks is drawn with the glyph's own outline from the document, at row height in the text colour, instead of a system font's. Settled by observing the reference with a code point that the system fonts lack."]
 observe = [
   "Give a glyph the value U+E000 and an unassigned CJK code point: note what the Char column draws.",
@@ -1998,7 +2015,7 @@ milestone = "M4"
 summary = "List View has a column for every property the Glyph Properties section describes: besides ID, Char, Name, Unicode, Note, Components and Last Changed, these are the metrics (LSB, RSB, width), kerning groups, Exports, colour label, tags, production name, script, category, subcategory, case, writing direction and sort name."
 ref = "Font View › List View"
 status = "handbook"
-notes = "The handbook says each column is a glyph property and points at Glyph Properties for the list (05 question 14, checked in the M4 planning pass). Metric and kerning-group cells are read-only until M5. Documented, not yet observed."
+notes = "The handbook says each column is a glyph property and points at Glyph Properties for the list (05 question 14, checked in the M4 planning pass). Every cell with a setter is edited in place (M4.32): metric cells take a number or a key and set the layer of the master Font View shows. Documented, not yet observed."
 guesses = [
   "Every column is shown by default, in this order: ID, Char, Name, Unicode, Production Name, Script, Category, Subcategory, Case, Direction, Exports, Color, Tags, Sort Name, Note, Components, Last Changed, LSB, RSB, Width, Left Group, Right Group. Settled by observation (05 question 14).",
   "Besides the four cells the handbook calls editable (Name, Unicode, Note, Components), cells of properties that have a set command (Exports, colour, tags, production name, script, category, subcategory, case, direction, sort name) are editable too. Settled by observation.",
@@ -2348,7 +2365,7 @@ milestone = "M4"
 summary = "In Font View, edit.paste (Cmd+V) adds the copied glyphs to the target font as new glyphs."
 ref = "Font View › Copying Glyphs Between Files"
 status = "handbook"
-notes = "edit.paste recognises the copied-glyphs text in `json` or `text`. Documented, not yet observed."
+notes = "edit.paste recognises the copied-glyphs text in `json` or `text`. The pasted glyphs become the selection and are scrolled to; when the search or the sidebar hides them, the status row counts them beside Show All. Documented, not yet observed."
 guesses = [
   "Pasted glyphs take their place in the default sort order, like added glyphs. Settled by observation.",
 ]
@@ -2962,6 +2979,7 @@ milestone = "M4"
 summary = "In Font View, edit.selectAll (Cmd+A) selects every glyph currently visible, not every glyph of the font, so the sidebar and search decide the scope."
 ref = "Font View › Batch-Processing › Selecting Glyphs"
 status = "handbook"
+notes = "While Font View shows, whatever has the keyboard; a focused text field or list that takes Select All keeps it. Selecting nodes (selection.set and its relatives) refuses there unless the command names the glyph, so the tab behind Font View keeps its selection."
 
 [[behavior]]
 id = "fontView.deselectAll"

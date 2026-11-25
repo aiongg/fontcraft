@@ -1,14 +1,19 @@
 //! Font View's view state and List View's columns, and what the app layer does for Font View: what
-//! follows a command it ran (the new glyph selected, the compatibility notice of Tidy up and Round Coordinates).
+//! follows a command it ran (the glyphs it added selected and scrolled to, how many it added, renamed and skipped, the
+//! compatibility notice of Tidy up and Round Coordinates). Edit › Select All, Deselect All and Invert Selection act on
+//! the visible glyphs while Font View shows ([`FontCraftApp::select_in_font_view`]).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use craft::ui::contract::PlainData;
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::WordSet as _;
+use fontcraft_engine::model::glyph_order;
 use serde_json::{Map, Value, json};
 
 use super::FontCraftApp;
+use super::models::ProjectCx;
+use super::notices;
 
 /// Smallest and largest grid cell, in points (`fontView.setCellSize`).
 pub const MIN_CELL_SIZE: f64 = 16.0;
@@ -80,6 +85,17 @@ impl Search {
     }
 }
 
+/// A value typed into a List View cell: kept while the command it ran has not succeeded, so a refused value stays in
+/// its cell with the reason.
+#[derive(PlainData, Clone, Debug, PartialEq)]
+pub struct CellDraft {
+    pub glyph: String,
+    pub column: Column,
+    pub text: String,
+    /// Why the command refused it; `None` until it ran.
+    pub error: Option<String>,
+}
+
 /// Font View's view state: no engine command changes it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct FontViewState {
@@ -98,6 +114,12 @@ pub struct FontViewState {
     pub anchor: Option<String>,
     /// The search field takes the keyboard on the next pass (`fontView.focusSearch`).
     pub focus_search: bool,
+    /// The glyph the grid or the list scrolls to on the next pass.
+    pub reveal: Option<String>,
+    /// The List View column whose cell in the lead row takes the keyboard on the next pass.
+    pub edit_cell: Option<Column>,
+    /// The List View value not yet taken.
+    pub draft: Option<CellDraft>,
     /// The strike the grid draws; `None` draws the outlines.
     pub strike: Option<StrikeView>,
 }
@@ -115,6 +137,9 @@ impl Default for FontViewState {
             selected: Vec::new(),
             anchor: None,
             focus_search: false,
+            reveal: None,
+            edit_cell: None,
+            draft: None,
             strike: None,
         }
     }
@@ -254,6 +279,12 @@ craft::ui::words! {
         incompatible: "fontcraftNotice.incompatible" = "No longer compatible across masters";
         /// Before the locked glyphs a command on several glyphs left out.
         locked: "fontcraftNotice.locked" = "Locked, left as they were";
+        /// After a command that added glyphs, each after a count.
+        added: "fontcraftNotice.added" = "added";
+        replaced: "fontcraftNotice.replaced" = "replaced";
+        existing: "fontcraftNotice.existing" = "already in the font";
+        renamed: "fontcraftNotice.renamed" = "renamed";
+        left_out: "fontcraftNotice.leftOut" = "skipped";
     }
 }
 
@@ -318,6 +349,81 @@ pub(super) fn locked_notice(font: &fontcraft_engine::model::Font, reply: &Value)
     (!names.is_empty()).then(|| listed(NoticeWords::english().locked.as_str(), &names))
 }
 
+/// The glyphs engine command `id` added or made, from its reply: they become the Font View selection. Empty for a
+/// command that adds none.
+pub fn results(id: &str, reply: &Value) -> Vec<String> {
+    let names = |key: &str| -> Vec<String> {
+        let list = reply.get(key).and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
+        list.iter().filter_map(Value::as_str).take(MAX_BATCH_GLYPHS).map(str::to_string).collect()
+    };
+    let mut out = match id {
+        "glyph.newGlyph" => reply.get("name").and_then(Value::as_str).map(str::to_string).into_iter().collect(),
+        "glyph.addGlyphs" => [names("added"), names("replaced")].concat(),
+        "fontView.generateMissingGlyphs" => names("added"),
+        "glyphInfo.addToFont" => {
+            let added = names("added");
+            // Nothing new: the glyphs asked for are shown where they are.
+            if added.is_empty() { names("existing") } else { added }
+        }
+        "glyph.duplicateGlyph" => names("glyphs"),
+        "edit.paste" if reply.get("flavour").and_then(Value::as_str) == Some("glyphs") => names("glyphs"),
+        "edit.pasteSpecial" => [names("glyphs"), names("added")].concat(),
+        _ => Vec::new(),
+    };
+    let mut seen = HashSet::new();
+    out.retain(|n| seen.insert(n.clone()));
+    out.truncate(MAX_BATCH_GLYPHS);
+    out
+}
+
+/// `Add Glyphs: 3 added, 1 renamed, 2 skipped (reason)`: what a command that adds glyphs did; `None` for another
+/// command, for New Glyph (its one glyph shows selected) and when nothing happened.
+pub fn added_notice(id: &str, reply: &Value) -> Option<String> {
+    if !matches!(
+        id,
+        "glyph.addGlyphs" | "fontView.generateMissingGlyphs" | "glyphInfo.addToFont" | "glyph.duplicateGlyph" | "edit.paste" | "edit.pasteSpecial"
+    ) || (id == "edit.paste" && reply.get("flavour").and_then(Value::as_str) != Some("glyphs"))
+    {
+        return None;
+    }
+    let words = NoticeWords::english();
+    let count = |key: &str| reply.get(key).and_then(Value::as_array).map_or(0, Vec::len);
+    let added = match id {
+        "glyph.duplicateGlyph" | "edit.paste" => count("glyphs"),
+        _ => count("added"),
+    };
+    let changed = if id == "edit.pasteSpecial" { count("glyphs") } else { count("replaced") };
+    let parts = [
+        (added, words.added.as_str()),
+        (changed, words.replaced.as_str()),
+        (count("renamed"), words.renamed.as_str()),
+        (count("existing"), words.existing.as_str()),
+        (count("skipped"), words.left_out.as_str()),
+    ];
+    let mut said: Vec<String> = parts.iter().filter(|(n, _)| *n > 0).map(|(n, word)| format!("{n} {word}")).collect();
+    let reason = reply.get("skipped").and_then(Value::as_array).and_then(|l| l.first()).and_then(|s| s.get("reason")).and_then(Value::as_str);
+    if let (Some(last), Some(reason)) = (said.last_mut(), reason) {
+        last.push_str(&format!(" ({reason})"));
+    }
+    if said.is_empty() {
+        return None;
+    }
+    let label = fontcraft_engine::find_command(id).map_or(id, |spec| spec.label);
+    Some(format!("{label}: {}", said.join(", ")))
+}
+
+/// What `edit.selectAll`, `edit.deselectAll` and `edit.invertSelection` make of `selected` among the `visible` glyphs.
+fn selection_after(id: &str, visible: Vec<String>, selected: &[String]) -> Vec<String> {
+    match id {
+        "edit.selectAll" => visible,
+        "edit.invertSelection" => {
+            let selected: HashSet<&str> = selected.iter().map(String::as_str).collect();
+            visible.into_iter().filter(|n| !selected.contains(n.as_str())).collect()
+        }
+        _ => Vec::new(),
+    }
+}
+
 impl FontCraftApp {
     /// Whether Font View is the document area's showing tab.
     pub fn font_view_shows(&self) -> bool {
@@ -327,14 +433,84 @@ impl FontCraftApp {
     /// What follows engine command `command` that returned `reply`: a new glyph becomes the Font View selection;
     /// returns the status notice the reply calls for.
     pub(super) fn after_command(&mut self, command: &CommandRef, reply: &Value) -> Option<String> {
-        if command.id == "glyph.newGlyph"
-            && let Some(name) = reply.get("name").and_then(Value::as_str)
-        {
-            self.view.font_view.selected = vec![name.to_string()];
-            self.view.font_view.anchor = Some(name.to_string());
+        // A refused value waits for a new one, Escape or another selection.
+        if self.view.font_view.draft.take_if(|d| d.error.is_none()).is_some() {
             self.view_revision += 1;
         }
-        incompatible_after(command, reply)
+        let made = results(&command.id, reply);
+        if !made.is_empty() {
+            self.select_and_reveal(made);
+        }
+        let added = || {
+            let added = added_notice(&command.id, reply)?;
+            // What a save in the document's format would lose is said too.
+            Some(match notices::notice(&command.id, reply) {
+                Some(warning) => format!("{added} · {warning}"),
+                None => added,
+            })
+        };
+        incompatible_after(command, reply).or_else(added)
+    }
+
+    /// What follows an engine command that failed: the List View value it was to set stays in its cell with `error`.
+    pub(super) fn refuse_draft(&mut self, error: &str) {
+        if let Some(draft) = self.view.font_view.draft.as_mut().filter(|d| d.error.is_none()) {
+            draft.error = Some(error.to_string());
+            self.view_revision += 1;
+        }
+    }
+
+    /// After Return in a List View cell: the same cell of `glyph`, the next row, takes the keyboard; a refused value
+    /// keeps it.
+    pub(super) fn next_cell(&mut self, glyph: String, column: Column) {
+        if self.view.font_view.draft.is_none() {
+            self.select_and_reveal(vec![glyph]);
+        }
+        self.view.font_view.edit_cell = Some(column);
+    }
+
+    /// Selects `glyphs` in Font View, which scrolls to the first of them when it next shows.
+    pub(crate) fn select_and_reveal(&mut self, glyphs: Vec<String>) {
+        let fv = &mut self.view.font_view;
+        fv.reveal = glyphs.first().cloned();
+        fv.anchor = glyphs.last().cloned();
+        fv.selected = glyphs;
+        fv.draft = None;
+        self.view_revision += 1;
+    }
+
+    /// The glyphs Font View lists, in the order it shows them.
+    pub fn visible_glyphs(&mut self) -> Result<Vec<String>, String> {
+        let master = self.session.font().ok().and_then(|f| crate::shell::masters::current_master_id(f, &self.view.layers)).unwrap_or_default();
+        let query = self.view.font_view.query();
+        let mut names: Vec<String> = match query {
+            Some(query) => super::models::font_view::query_names(&mut ProjectCx { session: &mut self.session, view: &self.view }, query, &master)?,
+            None => {
+                let font = self.session.font().map_err(|e| e.to_string())?;
+                let arcs = font.glyphs.as_arcs();
+                glyph_order(font).into_iter().filter_map(|i| arcs.get(i)).map(|g| g.name.clone()).collect()
+            }
+        };
+        // A List View sort is in the model; a name the model has not listed yet stays last.
+        if self.view.font_view.sort.is_some() {
+            let m = &self.models.font_view;
+            let at: HashMap<&str, usize> = m.visible.iter().enumerate().filter_map(|(at, &row)| m.name(row).map(|n| (n, at))).collect();
+            names.sort_by_key(|n| at.get(n.as_str()).copied().unwrap_or(usize::MAX));
+        }
+        Ok(names)
+    }
+
+    /// Edit › Select All, Deselect All or Invert Selection while Font View shows: the visible glyphs, none of them, or
+    /// those that were not selected (`fontView.selectAllScope`, `fontView.deselectAll`, `fontView.invertSelection`).
+    pub(crate) fn select_in_font_view(&mut self, id: &str) -> Result<(), String> {
+        let visible = if id == "edit.deselectAll" { Vec::new() } else { self.visible_glyphs()? };
+        let selected = selection_after(id, visible, &self.view.font_view.selected);
+        let fv = &mut self.view.font_view;
+        fv.anchor = selected.last().cloned();
+        fv.selected = selected;
+        fv.draft = None;
+        self.view_revision += 1;
+        Ok(())
     }
 
     /// Drops the selected glyphs the font no longer has.
@@ -346,6 +522,10 @@ impl FontCraftApp {
         let known: HashSet<&str> = font.glyphs.iter().map(|g| g.name.as_str()).collect();
         let before = self.view.font_view.selected.len();
         let kept: Vec<String> = self.view.font_view.selected.iter().filter(|n| known.contains(n.as_str())).cloned().collect();
+        let gone = self.view.font_view.reveal.as_deref().is_some_and(|n| !known.contains(n));
+        if gone {
+            self.view.font_view.reveal = None;
+        }
         if kept.len() != before {
             self.view.font_view.selected = kept;
             self.view_revision += 1;

@@ -5,6 +5,7 @@
 
 pub mod bitmap_editor;
 pub mod canvas;
+pub mod cell_marks;
 pub mod color;
 pub mod compare;
 pub mod compare_list;

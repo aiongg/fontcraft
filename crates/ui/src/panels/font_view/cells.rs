@@ -160,6 +160,11 @@ pub fn status_bar(rect: Rect) -> Rect {
     Rect::from_min_max(pos2(rect.left(), rect.bottom() - height), rect.max)
 }
 
+/// What the status bar of a cell drawn in `rect` leaves of it.
+pub fn above_status(rect: Rect) -> Rect {
+    Rect::from_min_max(rect.min, pos2(rect.right(), status_bar(rect).top()))
+}
+
 /// Draws the status bar in the status colour `[r, g, b, a]`.
 pub fn paint_status(cx: &ContentPainterCx<'_>, rect: Rect, [r, g, b, a]: [u8; 4]) {
     cx.painter.rect_filled(status_bar(rect), 0.0, egui::Color32::from_rgba_unmultiplied(r, g, b, a));
