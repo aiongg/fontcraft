@@ -79,6 +79,11 @@ struct Made {
 }
 
 fn proof(s: &mut Session, p: &Value) -> Result<Value> {
+    proof_with(p, &mut |p, shaped| build_document(s, p, shaped))
+}
+
+/// `font.proof` with the parameters `p`; `build` compiles the document it shows, with layout tables or without.
+fn proof_with(p: &Value, build: &mut dyn FnMut(&Params<'_>, bool) -> Result<Built>) -> Result<Value> {
     let p = Params::new("font.proof", p)?;
     if p.bool_or("listSettings", false)? {
         let settings: Vec<Value> =
@@ -240,7 +245,7 @@ fn proof(s: &mut Session, p: &Value) -> Result<Value> {
         if format == ProofFormat::Svg && req.output.is_none() && req.output_dir.is_none() {
             return Err(p.bad("an SVG proof is one file per page: give `output` or `outputDir`"));
         }
-        let built = build_document(s, &p, SHAPED_LAYOUTS.contains(&layout) || format == ProofFormat::Html)?;
+        let built = build(&p, SHAPED_LAYOUTS.contains(&layout) || format == ProofFormat::Html)?;
         let selection = built.selection(selection);
         let glyphs = if select { fontcraft_proof::select_glyphs(&built.bytes, 0, &selection)? } else { Vec::new() };
         let bytes = if format == ProofFormat::Html { woff2(&built.bytes, 0, &built.label)? } else { built.bytes.to_vec() };
@@ -315,7 +320,7 @@ fn write_made(p: &Params<'_>, made: Vec<Made>, req: &OutputRequest) -> Result<Va
 }
 
 /// The active document compiled for a proof.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Built {
     /// The family and the master or instance.
     label: String,
@@ -337,8 +342,8 @@ impl Built {
 type BuildKey = (u64, u64, Target, bool);
 
 /// The last build of a document's proof.
-#[derive(Default)]
-struct KeptBuild(Option<(BuildKey, Built)>);
+#[derive(Clone, Debug, Default)]
+pub struct KeptBuild(Option<(BuildKey, Built)>);
 
 /// The master or instance the parameters name, with its label; the default master by default.
 fn document_target(font: &Font, p: &Params<'_>) -> Result<(String, Target)> {
@@ -363,27 +368,90 @@ fn document_target(font: &Font, p: &Params<'_>) -> Result<(String, Target)> {
 }
 
 /// The active document's master or instance compiled in memory, `shaped` with its layout tables.
-/// A document that did not change since the last build is not compiled again.
 fn build_document(s: &mut Session, p: &Params<'_>, shaped: bool) -> Result<Built> {
-    let doc = s.doc()?;
-    let (id, revision, path, font) = (doc.id, doc.revision, doc.path.clone(), doc.font.clone());
-    let (name, target) = document_target(&font, p)?;
-    let key = (id, revision, target, shaped);
-    if let Some((kept, built)) = &s.slot_mut::<KeptBuild>().0
-        && *kept == key
-    {
-        return Ok(built.clone());
+    let source = Source::of(s)?;
+    source.build(s.slot_mut::<KeptBuild>(), p, shaped)
+}
+
+/// What a document's proof is compiled from.
+struct Source {
+    id: u64,
+    revision: u64,
+    path: Option<PathBuf>,
+    font: Arc<Font>,
+    glyph_data: Arc<fontcraft_model::glyphdata::GlyphData>,
+    assets: Arc<dyn fontcraft_color::AssetStore>,
+}
+
+impl Source {
+    fn of(s: &Session) -> Result<Source> {
+        let doc = s.doc()?;
+        let (id, revision, path, font) = (doc.id, doc.revision, doc.path.clone(), doc.font.clone());
+        Ok(Source { id, revision, path, font, glyph_data: s.glyph_data()?, assets: s.assets() })
     }
-    let mut options =
-        Options { glyph_data: DataRef(Some(s.glyph_data()?)), assets: AssetsRef(Some(s.assets())), skip_features: !shaped, ..Options::default() };
-    super::compile::source_includes(&mut options, path.as_deref());
-    let compiled = fontcraft_compile::compile(&font, &key.2, Flavour::TrueType, &options)?;
-    let named = fontcraft_proof::select_glyphs(&compiled.bytes, 0, &Selection::default())?;
-    let names = compiled.glyph_order.into_iter().zip(named).collect();
-    let label = format!("{} {name}", font.family_name).trim().to_string();
-    let built = Built { label, bytes: Arc::new(compiled.bytes), names: Arc::new(names) };
-    s.slot_mut::<KeptBuild>().0 = Some((key, built.clone()));
-    Ok(built)
+
+    /// A document that did not change since the build `kept` is not compiled again.
+    fn build(&self, kept: &mut KeptBuild, p: &Params<'_>, shaped: bool) -> Result<Built> {
+        let (name, target) = document_target(&self.font, p)?;
+        let key = (self.id, self.revision, target, shaped);
+        if let Some((of, built)) = &kept.0
+            && *of == key
+        {
+            return Ok(built.clone());
+        }
+        let mut options = Options {
+            glyph_data: DataRef(Some(Arc::clone(&self.glyph_data))),
+            assets: AssetsRef(Some(Arc::clone(&self.assets))),
+            skip_features: !shaped,
+            ..Options::default()
+        };
+        super::compile::source_includes(&mut options, self.path.as_deref());
+        let compiled = fontcraft_compile::compile(&self.font, &key.2, Flavour::TrueType, &options)?;
+        let named = fontcraft_proof::select_glyphs(&compiled.bytes, 0, &Selection::default())?;
+        let names = compiled.glyph_order.into_iter().zip(named).collect();
+        let label = format!("{} {name}", self.font.family_name).trim().to_string();
+        let built = Built { label, bytes: Arc::new(compiled.bytes), names: Arc::new(names) };
+        kept.0 = Some((key, built.clone()));
+        Ok(built)
+    }
+}
+
+/// A `font.proof` of the active document that another thread can make, as the document is now.
+pub struct DocumentProof {
+    source: Source,
+    kept: KeptBuild,
+    params: Value,
+    roots: Option<Arc<crate::file_access::AutomationRoots>>,
+}
+
+/// The proof `font.proof` makes with `params`, which have `document` and no output. A master or instance the
+/// document does not have is refused here.
+pub fn document_proof(s: &mut Session, params: Value) -> Result<DocumentProof> {
+    let source = Source::of(s)?;
+    let p = Params::new("font.proof", &params)?;
+    if !p.bool_or("document", false)? || p.get("output").is_some() || p.get("outputDir").is_some() {
+        return Err(p.bad("only a proof of the document without an output is made apart"));
+    }
+    document_target(&source.font, &p)?;
+    let kept = s.slot_mut::<KeptBuild>().clone();
+    Ok(DocumentProof { source, kept, params, roots: crate::file_access::current() })
+}
+
+impl DocumentProof {
+    /// What `font.proof` answers, and the build for [`keep_build`].
+    pub fn run(mut self) -> (Result<Value>, KeptBuild) {
+        let (source, kept) = (&self.source, &mut self.kept);
+        let made = crate::file_access::confine(self.roots.as_ref(), || {
+            crate::guard::catch_panic(|| proof_with(&self.params, &mut |p, shaped| source.build(kept, p, shaped)))
+        });
+        let made = made.unwrap_or_else(|panic| Err(EngineError::Internal(format!("the proof failed unexpectedly: {panic}"))));
+        (made, self.kept)
+    }
+}
+
+/// Keeps the build a [`DocumentProof`] made, so the next proof of the unchanged document does not compile it again.
+pub fn keep_build(s: &mut Session, build: KeptBuild) {
+    *s.slot_mut::<KeptBuild>() = build;
 }
 
 /// A file name made of `label`, without the characters file systems refuse.

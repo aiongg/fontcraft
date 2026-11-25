@@ -138,7 +138,7 @@ mod merge_file;
 mod metrics_report;
 mod optimize;
 mod outlines_file;
-mod proof;
+pub mod proof;
 mod sources;
 mod subset;
 #[cfg(not(target_arch = "wasm32"))]

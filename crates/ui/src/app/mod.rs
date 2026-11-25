@@ -785,6 +785,7 @@ impl ShellApp for FontCraftApp {
         self.set_system_dark(appearance::system_dark(&self.root, ctx));
         models::text_preview::logic(&mut self.models.text_preview, ctx);
         crate::shell::feature_work::logic(self, ctx);
+        crate::dialogs::print::logic(self, ctx);
         dropped::take(self, ctx);
         crate::shell::external_changes::on_focus(self, ctx);
         crate::canvas::images::logic(self, ctx);
