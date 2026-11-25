@@ -1320,7 +1320,8 @@ fn the_filter_hides_rows_and_changes_no_data() {
         ss01.filtered = true;
     }
     let (fixture, posted) = panel(model);
-    assert!(fixture.by_label("liga").is_some() && fixture.by_label("ss01").is_none(), "the row is hidden, its entry stays shown");
+    let (liga, ss01) = (fixture.by_label("liga").expect("the row"), fixture.by_label("ss01").expect("the entry shown"));
+    assert!(ss01.rect.min.x > liga.rect.max.x, "the row is hidden, its entry stays shown");
     let selects = |m: &Msg| matches!(m, Msg::Shell(c) if c.id == "font.info.features.select");
     assert!(!posted.borrow().iter().any(selects), "{:?}", posted.borrow());
 }

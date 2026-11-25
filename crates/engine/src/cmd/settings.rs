@@ -92,7 +92,7 @@ mod tests {
         s.execute("settings.set", &json!({"id": "appearance.color.canvas.dark", "value": "#000000"})).unwrap();
         s.execute("settings.set", &json!({"id": "appearance.handleSize", "value": "large"})).unwrap();
         let out = s.execute("settings.resetColors", &json!({})).unwrap();
-        assert_eq!(out["reset"].as_array().unwrap().len(), 18, "nine items, light and dark");
+        assert_eq!(out["reset"].as_array().unwrap().len(), 22, "eleven items, light and dark");
         assert_eq!(s.settings().get("appearance.color.cornerNodes.dark").unwrap(), standard);
         assert_eq!(s.settings().get("appearance.color.cornerNodes.light").unwrap(), json!("#2d6cdf"));
         assert_eq!(s.settings().get("appearance.color.canvas.dark").unwrap(), json!("#1e1e1e"));

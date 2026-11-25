@@ -225,7 +225,7 @@ fn every_menu_command_on_a_layer_is_told_which() {
     let without = |app: &mut FontCraftApp| -> Vec<&'static str> {
         specs.iter().filter(|s| !names_layer(&app.with_targets(CommandRef::new(s.id)))).map(|s| s.id).collect()
     };
-    const EVERY_MASTER: [&str; 1] = ["font.detectComposites"];
+    const EVERY_MASTER: [&str; 2] = ["font.detectComposites", "path.findOutlinePattern"];
     assert_eq!(without(&mut app), EVERY_MASTER, "the edit view");
     select_text(&mut app);
     assert_eq!(without(&mut app), EVERY_MASTER, "a text selection");
@@ -250,7 +250,9 @@ fn a_picked_component_goes_into_the_font_view_selection() {
 
     shell(&mut app, "fontView.setSelection", json!({"glyphs": ["B", "C"]}));
     app.fire(CommandRef::new("glyph.addComponent"));
-    let Msg::Run(pick) = app.view.components.picker.clone().expect("the picker").pick().unwrap() else { panic!("an engine command") };
+    let mut picker = app.view.components.picker.clone().expect("the picker");
+    picker.selected = Some("A".into());
+    let Msg::Run(pick) = picker.pick().unwrap() else { panic!("an engine command") };
     let steps = pick.params["steps"].as_array().unwrap();
     let into: Vec<(&Value, &Value)> = steps.iter().map(|s| (&s["params"]["glyph"], &s["params"]["layer"])).collect();
     assert_eq!(into, [(&json!("B"), &json!("m02")), (&json!("C"), &json!("m02"))]);

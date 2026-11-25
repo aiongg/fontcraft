@@ -51,10 +51,13 @@ fn add_glyphs_takes_every_item_kind() {
     assert_eq!(glyph(&s, "Ccedilla").unicodes, [0xC7]);
     assert_eq!(glyph(&s, "idotless").unicodes, [0x131]);
     assert!(glyph(&s, "myGlyph").unicodes.is_empty());
-    // New glyphs follow the letters in sort order; the glyphs already there keep theirs.
+    // Letters go among those of their script in sort order, a name the data does not know to the end.
     let order = names(&s);
-    let z = order.iter().position(|n| n == "z").unwrap();
-    assert_eq!(order[z + 1..], added.map(String::from));
+    let at = |name: &str| order.iter().position(|n| n == name).unwrap();
+    for (before, new, after) in [("C", "Ccedilla", "D"), ("a", "adieresis", "b"), ("S", "Scommaaccent", "T"), ("t", "tcommaaccent", "u")] {
+        assert!(at(before) < at(new) && at(new) < at(after), "{new}: {order:?}");
+    }
+    assert_eq!(order.last().map(String::as_str), Some("myGlyph"));
     // One undo step for the lot.
     run(&mut s, "edit.undo", json!({}));
     assert!(s.font().unwrap().glyph("Ccedilla").is_none() && s.font().unwrap().glyph("myGlyph").is_none());

@@ -256,7 +256,7 @@ mod tests {
     fn appearance_controls_write_their_settings() {
         let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
         let model = AppearanceModel::of(&app);
-        assert_eq!(model.colors.len(), 9);
+        assert_eq!(model.colors.len(), 11);
         assert_eq!(model.handle_size, "regular");
         assert_eq!(model.text_view_width, 10_000.0);
         assert_eq!(model.colors.iter().find(|r| r.item == "canvas").and_then(|r| r.dark), Some([0x1e, 0x1e, 0x1e, 0xff]));

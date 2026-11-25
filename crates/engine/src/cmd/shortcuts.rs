@@ -442,7 +442,7 @@ mod tests {
             json!({"shortcuts": [{"command": "edit.redo", "shortcut": blocked}, {"command": "edit.undo", "shortcut": "Cmd+Z"}]}),
         );
         assert_eq!((&r["imported"], r["problems"].as_array().unwrap().len()), (&json!(0), 1), "a built-in shortcut is no override: {r}");
-        let set = json!([{"command": "edit.redo", "shortcut": "Cmd+Alt+Shift+Y"}, {"command": "edit.undo", "shortcut": "Cmd+Alt+Shift+Y"}]);
+        let set = json!([{"command": "edit.redo", "shortcut": "Cmd+Alt+Shift+E"}, {"command": "edit.undo", "shortcut": "Cmd+Alt+Shift+E"}]);
         let r = run(&mut s, "settings.importShortcuts", json!({ "shortcuts": set }));
         assert_eq!((&r["imported"], r["problems"].as_array().unwrap().len()), (&json!(2), 1), "a shared shortcut is named once: {r}");
     }

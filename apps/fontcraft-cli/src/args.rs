@@ -67,7 +67,7 @@ pub const GLOBAL: &[OptSpec] = &[
     OptSpec::value("jobs", "N", "", "worker threads where inputs are worked on at once: 0 every core (default), -N all but N").short('j'),
     OptSpec::switch("dry-run", false, "write nothing; report what would be written"),
     OptSpec::switch("no-clobber", false, "refuse to replace a file that exists"),
-    OptSpec::value("options", "FILE", "", "read options from FILE: a TOML file (.toml), a makeotf project (.fpr) or more arguments"),
+    OptSpec::value("options", "FILE", "", "read options from FILE: a TOML file (.toml), a compile project (.fpr) or more arguments"),
     OptSpec::value("save-options", "FILE", "", "write the options of this run to FILE as TOML"),
     OptSpec::value("trace", "FILE", "", "write the stages of the run to FILE as Chrome trace events"),
     OptSpec::value("layer", "NAME", "", "the glyph layer to read from a UFO: a layer name, default, or processed"),
@@ -838,7 +838,7 @@ fn walk(tiers: &[&[OptSpec]], args: &[String], w: &mut Walk, out: &mut Vec<Strin
                 continue;
             }
             if options && options_file::is_project(&file) {
-                return Err(usage(format!("{file}: only compile reads a makeotf project file")));
+                return Err(usage(format!("{file}: only compile reads a project file (.fpr)")));
             }
             if w.stack.len() >= MAX_RESPONSE_DEPTH {
                 return Err(usage(format!("response files nest more than {MAX_RESPONSE_DEPTH} deep at {file}")));

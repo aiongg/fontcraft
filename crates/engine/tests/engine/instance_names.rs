@@ -144,7 +144,7 @@ fn two_exports_of_one_name_are_marked() {
     twin.exports = false;
     Arc::make_mut(&mut font.instances).push(twin);
     s.add_document(font, None).unwrap();
-    let first = run(&mut s, "font.instance.names", json!({"instances": ["Regular"]}));
+    let first = run(&mut s, "font.instance.names", json!({"instances": [0]}));
     assert_eq!(first["instances"][0]["conflicts"], json!([]), "an inactive entry takes nothing");
     run(&mut s, "font.instance.setActive", json!({"instances": [4], "active": true}));
     let both = run(&mut s, "font.instance.names", json!({"instances": [0, 4]}));

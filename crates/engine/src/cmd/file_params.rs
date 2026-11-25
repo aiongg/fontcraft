@@ -118,6 +118,7 @@ mod tests {
             "inside a `fonts` item: the `fonts` parameter is checked, and an item given as an object is refused under automation roots",
         ),
         ("audit.export", &["target"], "only \"document\": files are not audited, so no file is read"),
+        ("file.exportCheck", &["document"], "an open document's title or path; no file is read"),
         ("audit.clearCache", &["target"], "names a kept run; no file is read"),
         ("fontView.*", &["entries", "entry", "folder", "parent", "filter"], "a sidebar entry's path, not a file"),
         ("compareFonts.*", &["left", "right", "document"], "an open document's position, title or path; no file is opened"),

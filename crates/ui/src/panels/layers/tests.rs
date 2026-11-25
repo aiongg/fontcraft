@@ -267,11 +267,11 @@ fn the_special_layer_editors_act_on_the_selected_rows_and_on_all_masters() {
     let label = |app: &FontCraftApp, id: &str| app.models.layers.row(id).and_then(|r| r.bracket.clone());
     let steps = |app: &FontCraftApp| app.session.doc().unwrap().history.undo.len();
 
+    let before = app.session.doc().unwrap().font.clone();
     app.sent.extend(row_command(&model, row(&model, &one), "layers.setAlternate"));
     app.drain();
     let opened = call(&mut app, "ui.dialog.inspect", json!({}));
     assert_eq!((&opened["dialog"], &opened["params"]["layers"]), (&json!("popover.alternateLayer"), &json!([one, other])), "{opened}");
-    let before = app.session.doc().unwrap().font.clone();
     call(&mut app, "ui.dialog.set", json!({"field": "wght.min", "value": "600"}));
     call(&mut app, "ui.dialog.cancel", json!({}));
     assert_eq!(app.session.doc().unwrap().font.glyphs, before.glyphs, "Cancel");
@@ -299,6 +299,7 @@ fn the_special_layer_editors_act_on_the_selected_rows_and_on_all_masters() {
     let of = |master: &str| app.models.layers.all.iter().filter(|r| r.master == master && r.bracket.as_deref() == Some("[700‹wg]")).count();
     assert_eq!((of("m01"), of("m02")), (1, 1), "a layer under the other master");
 
+    app.status.clear();
     app.sent.extend(row_command(&model, row(&model, &one), "layers.setAlternate"));
     app.drain();
     assert!(app.status.is_empty(), "{}", app.status);

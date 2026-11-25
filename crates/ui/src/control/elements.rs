@@ -824,7 +824,6 @@ mod tests {
 
     /// Tab after typing takes no suggestion of the command line.
     #[test]
-    #[ignore = "X.fix113: docked short, the Command Console opens scrolled past its input line, which ui.set then refuses"]
     fn a_field_with_suggestions_keeps_the_text_it_was_given() {
         let mut t = TestApp::new();
         let one = |t: &mut TestApp, prefix: &str, role: &str| {
@@ -836,6 +835,8 @@ mod tests {
         let line = one(&mut t, "command", "textInput");
         t.ok("ui.set", json!({"element": line["id"], "value": "glyph.new"}));
         t.frames(3);
-        assert_eq!(one(&mut t, "command", "textInput")["value"], "glyph.new", "the Tab took no suggestion");
+        // The Tab that ends the typing goes to the macro editor, which a short dock scrolls into view.
+        let line = named(&mut t, "command").into_iter().find(|e| e["role"] == "textInput").expect("the line");
+        assert_eq!(line["value"], "glyph.new", "the Tab took no suggestion");
     }
 }

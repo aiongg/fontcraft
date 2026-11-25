@@ -996,7 +996,7 @@ pub fn params_for(app: &mut FontCraftApp, menu: &CanvasMenu, id: &str) -> Value 
                 }
             }
         }
-        "guide.addGlobal" => {
+        "guide.addGlobal" | "anchor.add" => {
             m.insert("x".into(), json!(place.x));
             m.insert("y".into(), json!(place.y));
         }

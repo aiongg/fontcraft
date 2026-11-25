@@ -74,7 +74,7 @@ fn with_cmap(values: &Map<String, Value>, mut m: Map<String, Value>) -> Map<Stri
 fn convert_fields(_: &Session) -> Vec<Field> {
     let word = |key: &str, label: &str, default: &str, doc: &str| Field { default: json!(default), ..Field::text(key, label, MAX_NAME_LEN, doc) };
     vec![
-        word("registry", "Registry", "Adobe", "The character collection's registry: letters, digits and _"),
+        word("registry", "Registry", "Adobe", "The character collection's registry: letters, digits and _"), // brand-ok: the registry of Identity
         word("ordering", "Ordering", "Identity", "The collection's ordering: letters, digits and _; Identity without a CMap file"),
         Field::integer("supplement", "Supplement", 0, MAX_SUPPLEMENT, 0, "The collection's supplement number"),
         cmap_field("A Unicode CMap file of the same registry and ordering to take the CIDs from; empty numbers the glyphs in glyph order"),

@@ -917,7 +917,7 @@ mod tests {
         assert_ne!(BatchDialog::new(Batch::AutoKern, &mut app).settings.source, Source::Window);
         assert_eq!(crate::shell::kerning_window::listed_master(&app), app.session.font().unwrap().masters.first().map(|m| m.id.clone()));
         shell(&mut app, "kerning.makeException", json!({"left": "T", "right": "@o"}));
-        assert!(stored(&mut app).iter().any(|(l, r, _)| l == "T" && r == "o"), "into the master shown: {:?}", stored(&mut app));
+        assert!(stored(&mut app).iter().any(|(l, r, _)| l == "T" && r == "c"), "into the master shown: {:?}", stored(&mut app));
 
         shell(&mut app, "dialog.autoKern", json!({}));
         app.sent.push(Msg::Shell(CommandRef::with_params("dialog.kernToDistance", json!({}))));

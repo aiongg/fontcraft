@@ -150,7 +150,9 @@ pub struct RecentFiles {
 /// The rows of File › Open Recent.
 fn recent_rows(files: &[(String, bool)]) -> Vec<Row> {
     if files.is_empty() {
-        return vec![Row::new(RECENT_MENU, CommandRef::new(OPEN_RECENT), "No Recent Files").enabled(false)];
+        return vec![
+            Row::new(RECENT_MENU, CommandRef::new(OPEN_RECENT), "No Recent Files").enabled(false).tooltip("no document has been opened or saved yet"),
+        ];
     }
     let names: Vec<(String, Option<&Path>)> = files
         .iter()

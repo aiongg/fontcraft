@@ -211,6 +211,13 @@ fn saved_variable_font(dir: &Path) -> PathBuf {
     for (id, right) in masters.iter().zip([400.0, 560.0]) {
         run(&mut s, "path.addPath", json!({"glyph": "A", "layer": id, "nodes": rect(60.0, 0.0, right, 700.0)}));
     }
+    s.edit("Notdef", |font| {
+        let mut notdef = font.glyph_mut(".notdef")?;
+        let shapes = notdef.layers[0].shapes.clone();
+        notdef.layers.iter_mut().for_each(|layer| layer.shapes = shapes.clone());
+        Ok(())
+    })
+    .unwrap();
     let path = dir.join("Axis.fontcraft");
     run(&mut s, "file.saveAs", json!({"path": path.to_string_lossy()}));
     path

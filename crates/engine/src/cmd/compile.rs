@@ -1085,8 +1085,12 @@ impl Stage {
         }
         let missing: Vec<&std::path::Path> = dir.ancestors().take_while(|d| !d.as_os_str().is_empty() && !d.exists() && !output::is_dir(d)).collect();
         for d in missing.into_iter().rev() {
-            output::create_dir(d).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", d.display())))?;
-            self.made.push(d.to_path_buf());
+            match output::create_dir(d) {
+                Ok(()) => self.made.push(d.to_path_buf()),
+                // Another build into the same folder made it meanwhile.
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && output::is_dir(d) => {}
+                Err(e) => return Err(EngineError::Io(format!("cannot create {}: {e}", d.display()))),
+            }
         }
         if !output::is_dir(dir) {
             return Err(EngineError::Io(format!("{} is not a folder", dir.display())));

@@ -317,14 +317,14 @@ mod tests {
         t.ok("engine.execute", json!({"command": EDIT, "params": {}}));
         t.frames(3);
         assert!(t.frames.texts().iter().any(|x| x.text == "Keyboard Shortcuts"), "the dialog shows");
-        t.ok("engine.execute", json!({"command": "settings.setShortcut", "params": {"command": "view.newTab", "shortcut": "Cmd+Alt+Shift+Y"}}));
+        t.ok("engine.execute", json!({"command": "settings.setShortcut", "params": {"command": "view.newTab", "shortcut": "Cmd+Alt+Shift+E"}}));
         t.frames(3);
         t.ok("engine.execute", json!({"command": EDIT, "params": {"open": false}}));
         t.frames(3);
         assert!(!t.frames.texts().iter().any(|x| x.text == "Keyboard Shortcuts"));
         assert!(!t.app.view.settings.shortcuts.open);
         let custom = t.app.catalog.custom();
-        assert_eq!(custom.shortcut("view.newTab", None).as_deref(), Some("Cmd+Alt+Shift+Y"), "closing it from outside undoes nothing");
+        assert_eq!(custom.shortcut("view.newTab", None).as_deref(), Some("Cmd+Alt+Shift+E"), "closing it from outside undoes nothing");
         assert!(t.error("engine.execute", json!({"command": EDIT, "params": {"command": "no.such"}})).contains("no.such"));
     }
 
@@ -336,10 +336,10 @@ mod tests {
         t.ok("engine.execute", json!({"command": EDIT, "params": {}}));
         t.frames(3);
         // The dialog takes over what the settings hold, as it does for an edit of its own.
-        t.ok("engine.execute", json!({"command": "settings.setShortcut", "params": {"command": "view.newTab", "shortcut": "Cmd+Alt+Shift+Y"}}));
+        t.ok("engine.execute", json!({"command": "settings.setShortcut", "params": {"command": "view.newTab", "shortcut": "Cmd+Alt+Shift+E"}}));
         t.frames(3);
         let shortcut = |t: &TestApp| t.app.catalog.custom().shortcut("view.newTab", None);
-        assert_eq!(shortcut(&t).as_deref(), Some("Cmd+Alt+Shift+Y"));
+        assert_eq!(shortcut(&t).as_deref(), Some("Cmd+Alt+Shift+E"));
         // The search field may take the first Escape.
         for _ in 0..3 {
             if t.app.view.settings.shortcuts.open {

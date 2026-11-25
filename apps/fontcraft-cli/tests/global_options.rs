@@ -170,8 +170,8 @@ fn options_files_traces_and_jobs() {
         assert_eq!(ran.code, 5, "one input is missing: {}", ran.stderr);
         ran.text().replace(out, "DIR")
     };
-    let one = build("1", "one");
-    assert_eq!(one, build("8", "two"), "the results do not depend on the threads");
+    let one = build("1", "jobs-1");
+    assert_eq!(one, build("8", "jobs-8"), "the results do not depend on the threads");
     let last: Value = serde_json::from_str(one.lines().last().unwrap()).unwrap();
     assert_eq!((&last["input"], &last["ok"]), (&json!("missing.fontcraft"), &json!(false)));
     let _ = std::fs::remove_dir_all(&dir);

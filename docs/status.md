@@ -2,9 +2,23 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-25: batch 27 (20 branches: M2.9, M2.10, M3.25, M3.30, M4.20, M6.23, M8.33, M8.34, M9.28, M9.37, M9.38, M10.38, M12.71, M12.84, M13.20b, M13.67, M13.79, M13.79b, X.fix104, X.suite3) built, with integration fixes X.integ183 to X.integ197. Gate: the 11 steps of `cargo xtask ci` passed one at a time on 221babe (5,193 tests passed, 50 skipped)_
+_Updated: 2026-11-25: round C (the packages of the third planning pass and the fixes of their reviews) built, with integration fixes X.integ199 on. The gate has not run yet_
 
 ## State of the tree
+
+- **Round C (25 branches merged): where it stands.** What each package does is in `ROADMAP.md`, Shipped so far, third planning pass.
+  - No measure is run and nothing has been looked at in the running app. Look first at: the Features tab's two scrolling
+    panes; Font Info rows (a click on the canvas must take the keyboard, or Cmd+C there copies rows); the anchor name field;
+    recovery after a killed process; the Keyboard Shortcuts dialog over Settings; Export Results.
+  - Where the branches met: hint commands on several glyphs take the main master's layers (`app/targets.rs::hint_command`),
+    other glyph commands each item's own; `layers.editSpecialLayerSettings` keeps `_corner.` glyphs apart; a recovered
+    document keeps its file's format (`push_recovered`); a project's variable settings refuse as file.exportVariable does;
+    a removed package file is recorded as written only outside a dry run.
+  - Known gaps: module commands inside a cancelled batch keep their change; corners beyond the drawing budget stay visible on
+    the canvas; `assets::rebase_image_paths` runs for UFOs too (looks like image loss on Save As into another folder);
+    `audit.fix` in place and `sources.merge` pick the format by `font.source.format`; instance coordinates of a project are
+    stored by position; the Shape Order window counts from 0 where the rest counts from 1; `font.instance.names` leaves out
+    names that feature code and palettes add.
 
 - **Batch 27 (20 branches merged): where it stands.** What each package does is in `ROADMAP.md`, Shipped so far, batch 27.
   - Measures are not run: each package's plan section has the commands. First the oracle runs of M2.10 and M3.31
@@ -13,8 +27,6 @@ _Updated: 2026-11-25: batch 27 (20 branches: M2.9, M2.10, M3.25, M3.30, M4.20, M
   - Check on a desktop: the window's move, resize and maximise come back; an unplugged monitor; an empty
     `FONTCRAFT_SETTINGS_DIR` writes nothing; Print to a printer; Show All Masters and the Higher-Order Interpolation tool
     (nothing of either has been seen); the timing graph's dots run while Animate Axis does.
-  - X.fix113 (open): docked short, the Command Console opens with its body scrolled past the input line, so `ui.set` refuses that field;
-    the ignored test `a_field_with_suggestions_keeps_the_text_it_was_given` shows it.
   - Known gaps: interpolatable masters of a font with inactive sources (M2.9 with M9.37) are untested; previews close
     open corners on the resolved outline, so a mirrored component's ears show; window tools cannot be stopped by a cancel;
     a batch cancelled after a step wrote files keeps them; `path.correctPathDirection` would reverse overlapping
@@ -374,10 +386,10 @@ _Updated: 2026-11-25: batch 27 (20 branches: M2.9, M2.10, M3.25, M3.30, M4.20, M
     test, one more assertion in the engine's `display_lines_follow_font_info_and_parameters`, a canvas test
     `a_greek_ascender_replaces_the_masters_line_in_a_greek_glyph` (lines, zones, scene, snap), a tools test
     `a_drag_near_a_component_shows_its_nodes_as_markers`.
-  - M3.42: `fontcraft_model::guide_follow` (`reference`, `set_reference`, `moved_x`, `follow_width`) holds the
-    sidebearing reference (the `.glyphs` `alignment` key) that `guide.*` and `tools::guide_drag` read. `follow_width`
-    moves a layer's local guides, foreground and background, after a width change with the contents in place: right
-    by the change, both by the fraction (half the change from a width of 0). Called from the spacing right
+  - M3.42, M3.45: `fontcraft_model::guide_follow` (`reference`, `set_reference`, `placed_x`, `place_x`, `follow_width`) holds the
+    sidebearing reference (the `.glyphs` key `orientation`, `alignment` in version 2) that `guide.*` and `tools::guide_drag` read. `follow_width`
+    moves a version 2 document's local guides set to both, foreground and background, after a width change with the contents in
+    place, by the fraction (half the change from a width of 0). Called from the spacing right
     sidebearing, width and nudge paths, metrics keys (`Change::Width`), Auto Space (plan and value setters), Transform
     Metrics, automatic alignment (`fontcraft_components::align::align_layer_cached`), the metrics import, copying
     metrics from a glyph set, the stem filters, derived glyphs and colour layers following the master width. A left
@@ -495,7 +507,7 @@ _Updated: 2026-11-25: batch 27 (20 branches: M2.9, M2.10, M3.25, M3.30, M4.20, M
     `Param::enabled_when`, `params()` leaves the lock out, `inspect` reports `enabled`. Hatch Outline copies the
     layer to its background before writing (`filter.rs`, `BACK_UP_FIRST`, through `background::copy_side`). Repeat
     Last Filter drops `points`/`segments` for a filter without a node selection. In text mode
-    `FontCraftApp::with_targets` gives a filter the selected glyphs as `glyphs` (`canvas::text::filter_glyphs`).
+    `FontCraftApp::with_targets` gives a filter the selected glyphs as `glyphs` (`app::targets::text_selection`).
 
 - **Where M14.2, M14.6, M6.20 and M3.20 stand.** Merged on `master` from `w-M6.20` (which held `w-M14.2`), built,
   gate green with 4,854 tests, pushed. Fixes: X.integ126 (compile), X.integ127 (corner hits only for the Select tool
@@ -1266,7 +1278,7 @@ recorded):
   `InstancePostscript` metric 2^63 fails the instance build. Mac name records drop unsupported
   encodings with a warning; Prevent Name ID adds up across levels (a guess).
 - M6.10: corner components cannot be selected or deleted in Edit View (needs a hint selection
-  kind); clicking a missing-base placeholder does nothing.
+  kind).
 - M13: `Session::commit` does not record interaction commits in the macro recorder. Command Console lines from filters wait for
   M13.3. A URL tab shows one layer per glyph. SFD sources are read by `crates/io-sfd` but not
   yet opened by File › Open or the CLI. Contour names persist only in the native format. The

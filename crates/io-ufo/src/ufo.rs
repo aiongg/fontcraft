@@ -2633,7 +2633,7 @@ mod tests {
         };
         let (font, warnings) = unchanged(&with(30_000));
         one(&warnings, "and 29990 more");
-        assert_eq!(font.glyphs.len(), 3);
+        assert_eq!(font.glyphs.len(), unchanged(&lenient_ufo()).0.glyphs.len());
         let refused = read_reporting(&with(MAX_SKIPPED + 1)).unwrap_err().to_string();
         assert!(refused.contains("missing or empty"), "{refused}");
     }

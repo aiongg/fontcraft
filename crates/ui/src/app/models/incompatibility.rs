@@ -405,7 +405,9 @@ mod tests {
         assert_eq!(unchecked(&app), 0);
         let filter = app.models.sidebar.rows.iter().find(|r| r.path.last().is_some_and(|p| p == "Incompatible masters"));
         if let Some(filter) = filter {
-            assert_eq!(filter.count, 1, "the sidebar counts the answers once they are in");
+            let differ = app.models.font_view.rows.iter().filter(|r| matches!(r.compat, CellCompat::Differs(_))).count();
+            assert!(differ > 0);
+            assert_eq!(filter.count, differ, "the sidebar counts the answers once they are in");
         }
 
         app.session

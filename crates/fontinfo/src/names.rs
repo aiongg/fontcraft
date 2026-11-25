@@ -133,7 +133,7 @@ mod tests {
         let text = |s: &str| Value::String(Str::new(s));
         let of = |param: &str, s: &str| unknown(&font, param, &text(s)).0;
         assert_eq!(of("Remove Glyphs", "e\nq.sc\n*.sc\ncategory=Mark"), ["q.sc"]);
-        assert_eq!(of("Rename Glyphs", "g.alt=g, zz=e\nq=new"), ["zz", "q"], "the new name may be new");
+        assert_eq!(of("Rename Glyphs", "g.alt=g, zz=e\nyy=new"), ["zz", "yy"], "the new name may be new");
         assert_eq!(of("Reencode Glyphs", "space.x=0020,00A0\ne="), ["space.x"]);
         assert_eq!(of("Local Interpolation", "95; include: e, o.x, g"), ["o.x"]);
         assert_eq!(of("Style Name as STAT entry", "wgth"), ["wgth"]);

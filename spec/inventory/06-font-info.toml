@@ -3391,6 +3391,76 @@ guesses = [
   "The designspace map and its table are a feature of ours: squares for masters (the origin filled), dashed squares for virtual masters, circles for instances; a drag sets whole units and goes at most a quarter of the axis past its ends. Looking at Font Info › Masters of a two-axis font in the reference app settles whether it has a map.",
 ]
 
+[[command]]
+id = "font.info.rows.select"
+label = "Select Font Info Rows"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{scope: 'font'|'master'|'instance', rows: [{kind: 'field'|'param', key: string, index?: integer}], mode?: 'set'|'toggle'|'add'}"
+area = "font-info"
+milestone = "M7"
+summary = "Selects rows of the Font Info tab of a scope, as clicks on their labels do."
+ref = "Font Info"
+status = "inferred"
+notes = "Our own command, so a script or agent can do what clicks and the Edit commands do on rows (`fontInfo.rows.selection`). M7.31."
+
+[[command]]
+id = "font.info.rows.copy"
+label = "Copy Font Info Rows"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "font-info"
+milestone = "M7"
+summary = "Copies the selected rows of the shown Font Info tab to the clipboard."
+ref = "Font Info"
+status = "inferred"
+notes = "Our own command, so a script or agent can do what clicks and the Edit commands do on rows (`fontInfo.rows.selection`). M7.31."
+
+[[command]]
+id = "font.info.rows.cut"
+label = "Cut Font Info Rows"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "font-info"
+milestone = "M7"
+summary = "Copies the selected rows of the shown tab and removes them from every master or export it shows, as one undo step; nothing is removed when they cannot be copied."
+ref = "Font Info"
+status = "inferred"
+notes = "Our own command, so a script or agent can do what clicks and the Edit commands do on rows (`fontInfo.rows.selection`). M7.31."
+
+[[command]]
+id = "font.info.rows.paste"
+label = "Paste Font Info Rows"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "font-info"
+milestone = "M7"
+summary = "Pastes the rows on the clipboard into the font, masters or exports the shown tab shows, as one undo step."
+ref = "Font Info"
+status = "inferred"
+notes = "Our own command, so a script or agent can do what clicks and the Edit commands do on rows (`fontInfo.rows.selection`). M7.31."
+
+[[command]]
+id = "font.info.rows.delete"
+label = "Delete Font Info Rows"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "font-info"
+milestone = "M7"
+summary = "Removes the selected rows of the shown tab from every master or export it shows, as one undo step."
+ref = "Font Info"
+status = "inferred"
+notes = "Our own command, so a script or agent can do what clicks and the Edit commands do on rows (`fontInfo.rows.selection`). M7.31."
+
 [[panel]]
 id = "fontInfo.addMetric"
 label = "Add Metric"

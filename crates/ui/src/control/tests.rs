@@ -31,7 +31,8 @@ fn the_control_protocol_drives_the_app() {
     assert_eq!(menus[0]["title"], "File");
     let items: Vec<&Value> = menus.iter().flat_map(|m| m["items"].as_array().into_iter().flatten()).collect();
     assert!(items.iter().any(|i| i["command"] == "edit.undo"), "Undo is in a menu");
-    assert!(items.iter().all(|i| i["enabled"] == true || i["disabled_reason"].is_string()), "a greyed item says why");
+    let silent: Vec<&&Value> = items.iter().filter(|i| i["enabled"] != true && !i["disabled_reason"].is_string()).collect();
+    assert!(silent.is_empty(), "a greyed item says why: {silent:?}");
 
     t.ok("ui.menu.invoke", json!({"command": "edit.undo"}));
     assert!(t.ok("document.inspect", json!({}))["documents"][0]["undo"].as_array().is_some_and(Vec::is_empty), "the menu undid New Glyph");

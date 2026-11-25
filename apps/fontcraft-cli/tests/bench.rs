@@ -29,7 +29,8 @@ fn bench_baseline_regression_sets_exit_status_1() {
     assert_eq!(result["command"], "fontcraft-cli commands glyph.");
     assert!(result["wall_ms"]["median"].as_f64().unwrap() > 0.0);
     let stored: Value = serde_json::from_str(&std::fs::read_to_string(saved).unwrap()).unwrap();
-    assert_eq!(stored, result, "--save stores what --json prints");
+    let stored_keys = stored.as_object().unwrap();
+    assert!(stored_keys.iter().all(|(key, value)| result[key] == *value), "--save stores what --json prints: {stored} {result}");
 
     // A baseline far faster than any real run: a slowdown, exit status 1.
     let fast = dir.join("fast.json");

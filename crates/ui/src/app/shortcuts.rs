@@ -114,15 +114,15 @@ mod tests {
         assert_eq!(menu_shortcut(&mut t, "view.newTab"), "Cmd+T");
         let tabs = t.app.view.tabs.tabs.len();
         let reply =
-            t.ok("engine.execute", json!({"command": "settings.setShortcut", "params": {"command": "view.newTab", "shortcut": "Cmd+Alt+Shift+Y"}}));
+            t.ok("engine.execute", json!({"command": "settings.setShortcut", "params": {"command": "view.newTab", "shortcut": "Cmd+Alt+Shift+E"}}));
         assert_eq!(reply["set"], true, "{reply}");
         t.frame();
-        assert_eq!(menu_shortcut(&mut t, "view.newTab"), "Cmd+Alt+Shift+Y");
+        assert_eq!(menu_shortcut(&mut t, "view.newTab"), "Cmd+Alt+Shift+E");
         press(&mut t, Key::T, Modifiers::COMMAND);
         assert_eq!(t.app.view.tabs.tabs.len(), tabs, "the built-in key no longer runs it");
-        press(&mut t, Key::Y, Modifiers::COMMAND | Modifiers::ALT | Modifiers::SHIFT);
+        press(&mut t, Key::E, Modifiers::COMMAND | Modifiers::ALT | Modifiers::SHIFT);
         assert_eq!(t.app.view.tabs.tabs.len(), tabs + 1, "the new key does");
-        let reply = t.ok("ui.key", json!({"key": "Y", "cmd": true, "alt": true, "shift": true}));
+        let reply = t.ok("ui.key", json!({"key": "E", "cmd": true, "alt": true, "shift": true}));
         assert_eq!(reply["command"], "view.newTab");
         t.ok("engine.execute", json!({"command": "settings.resetShortcut", "params": {"command": "view.newTab"}}));
         t.frame();

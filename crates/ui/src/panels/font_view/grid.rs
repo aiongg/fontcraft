@@ -13,7 +13,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use craft::behavior::{DisplayOrder, ItemSource};
+use craft::behavior::{ColumnKey, DisplayOrder, ItemSource};
 use craft::ui::contract::{Bind, CollectionEvent, DropAt, DropKind, DropPlace, OsFiles, Props as _, ShowCollection as _};
 use craft::ui::list::ThumbAspect;
 use craft::ui::runtime::env::Env;
@@ -66,7 +66,12 @@ impl DisplayOrder<usize> for Shown<'_> {
     }
 }
 
-impl ItemSource<usize> for Shown<'_> {}
+impl ItemSource<usize> for Shown<'_> {
+    /// List View's one column of check boxes is Exports.
+    fn toggled(&self, at: usize, _: &ColumnKey) -> bool {
+        self.model.rows.get(self.key(at)).is_some_and(|row| row.export)
+    }
+}
 
 pub fn show(ui: &mut Ui, model: &FontViewModel, images: &CellImages, sent: &mut Vec<Msg>) {
     let env = Env::of(ui);
