@@ -456,6 +456,8 @@ pub struct PrintModel {
     pub setup: Setup,
     /// Every master and static instance, by its place in the pop-up.
     pub styles: Vec<(Style, String)>,
+    /// The default master's place among them.
+    pub default_style: usize,
     /// How many glyphs the Font View has selected.
     pub selected: usize,
     pub pages: Option<Pages>,
@@ -475,6 +477,7 @@ impl PrintModel {
         Some(PrintModel {
             setup: st.setup.clone(),
             styles: masters.chain(instances).collect(),
+            default_style: font.default_master().ok().and_then(|d| font.masters.iter().position(|m| m.id == d.id)).unwrap_or(0),
             selected: app.view.font_view.selected.len(),
             pages: st.pages.clone(),
             error: st.error.clone(),
@@ -482,11 +485,10 @@ impl PrintModel {
         })
     }
 
-    /// The place of the shown style in the pop-up. A master may be named by its name as well as its id; the default
-    /// master is the first.
+    /// The place of the shown style in the pop-up. A master may be named by its name as well as its id.
     fn style(&self) -> Option<usize> {
         match &self.setup.style {
-            Style::Default => Some(0),
+            Style::Default => Some(self.default_style),
             Style::Master(m) => self.styles.iter().position(|(s, label)| matches!(s, Style::Master(id) if id == m || label == m)),
             Style::Instance(_) => self.styles.iter().position(|(s, _)| *s == self.setup.style),
         }
@@ -861,7 +863,7 @@ mod tests {
     }
 
     fn execute(app: &mut FontCraftApp, params: Value) -> Result<Value, String> {
-        control::dispatch(app, "engine.execute", &json!({"command": ID, "params": params})).map_err(|e| e.to_string())
+        control::dispatch(app, "engine.execute", &json!({"command": ID, "params": params}))
     }
 
     /// The command opens the dialog on the font's pages, changes them, and writes them as a PDF file.
