@@ -588,7 +588,7 @@ impl Lifter<'_> {
         }
         let files = self.files;
         let (used, next) = self.placeholders.get_or_insert_with(|| (files.values().flat_map(|t| negative_numbers(t)).collect(), i16::MIN));
-        while used.contains(next) {
+        while used.contains(&*next) {
             *next = next.checked_add(1)?;
         }
         let found = *next;
