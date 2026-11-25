@@ -59,6 +59,7 @@ pub const MODULES: &[Module] = &[
     crate::app::open::MODULE,
     crate::app::file_questions::MODULE,
     crate::app::open_report::MODULE,
+    crate::app::export_results::MODULE,
     super::start::MODULE,
     super::images::MODULE,
     super::settings::MODULE,

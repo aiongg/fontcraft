@@ -496,6 +496,7 @@ fn set_destination(s: &mut Session, v: &Value) -> Result<Value> {
 #[cfg(not(target_arch = "wasm32"))]
 fn export(s: &mut Session, v: &Value) -> Result<Value> {
     use super::compile::{self, Dest, Pick, Report, Request, Sink};
+    use super::export_check::{Build, Subject};
     use fontcraft_compile::{Flavour, Options};
 
     let p = Params::new("project.export", v)?;
@@ -545,7 +546,6 @@ fn export(s: &mut Session, v: &Value) -> Result<Value> {
 
     let (mut font, mut warnings) = crate::project::read_font(&font_path)?;
     font.instances = instances;
-    compile::check_glyph_names(&font)?;
     // Only the project's own instances: a project without one exports nothing, not a master.
     let jobs: Vec<compile::Job> = compile::jobs(&font, &Pick::Exportable, false, &p)?.into_iter().filter(|j| j.source == "instance").collect();
     if jobs.is_empty() {
@@ -556,7 +556,17 @@ fn export(s: &mut Session, v: &Value) -> Result<Value> {
     let title = font_path.file_stem().map(|t| t.to_string_lossy().into_owned()).unwrap_or_default();
     let mut report = Report { warnings, ..Report::default() };
     let mut sink = Sink::new(&req.dest, false, s.export_outside())?;
-    compile::build(&font, &title, Some(&font_path), data, &jobs, &req, &mut sink, &mut report)?;
+    let subjects = [Subject {
+        title: &title,
+        path: Some(&font_path),
+        font: &font,
+        data: data.clone(),
+        build: Build::Static { jobs: &jobs, req: &req },
+        outside: s.export_outside(),
+    }];
+    super::export_check::refuse_names(&subjects)?;
+    compile::build(&font, &title, Some(&font_path), data, &jobs, &req, &mut sink, &mut report)
+        .map_err(|e| super::export_check::refusal(&subjects, Some(e)))?;
     if report.fonts.is_empty() {
         return Err(compile::nothing_built(&report));
     }

@@ -605,14 +605,7 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
 /// Preflight (`compatibility.exportBlocked`): every exported glyph is compatible in every master
 /// of `designspace`, or the compile is refused, naming the glyphs.
 fn refuse_incompatible(font: &Font, designspace: &fontcraft_interp::Designspace) -> Result<(), CompileError> {
-    let scope = fontcraft_interp::MasterPairs { masters: designspace.masters().iter().map(|m| m.id.clone()).collect(), indicators: true };
-    let mut incompatible: Vec<String> = Vec::new();
-    for g in font.glyphs.iter().filter(|g| g.export) {
-        let sources = fontcraft_interp::GlyphSources::of(font, designspace, &g.name)?;
-        if !fontcraft_interp::compat::check_glyph(font, &sources, &scope).ok {
-            incompatible.push(g.name.clone());
-        }
-    }
+    let mut incompatible: Vec<String> = incompatible(font, designspace)?.into_iter().map(|(glyph, _)| glyph).collect();
     if incompatible.is_empty() {
         return Ok(());
     }
@@ -620,6 +613,37 @@ fn refuse_incompatible(font: &Font, designspace: &fontcraft_interp::Designspace)
     incompatible.truncate(MAX_NAMED_GLYPHS);
     let more = if count > MAX_NAMED_GLYPHS { format!(" and {} more", count - MAX_NAMED_GLYPHS) } else { String::new() };
     Err(CompileError::Incompatible(format!("{}{more}", incompatible.join(", "))))
+}
+
+/// The exported glyphs that are not compatible in every master of `designspace`, each with the
+/// differences found first.
+fn incompatible(font: &Font, designspace: &fontcraft_interp::Designspace) -> Result<Vec<(String, Vec<fontcraft_interp::Mismatch>)>, CompileError> {
+    let scope = fontcraft_interp::MasterPairs { masters: designspace.masters().iter().map(|m| m.id.clone()).collect(), indicators: true };
+    let mut out = Vec::new();
+    for g in font.glyphs.iter().filter(|g| g.export) {
+        let sources = fontcraft_interp::GlyphSources::of(font, designspace, &g.name)?;
+        let checked = fontcraft_interp::compat::check_glyph(font, &sources, &scope);
+        if !checked.ok {
+            out.push((g.name.clone(), checked.first_mismatch));
+        }
+    }
+    Ok(out)
+}
+
+/// The exported glyphs whose layers keep the variable font of `setting` (an index into
+/// `Font::instances`; `None` for the whole designspace) from being made, each with the differences
+/// found first: what [`compile_variable`] refuses the font for.
+pub fn incompatible_glyphs(font: &Font, setting: Option<usize>) -> Result<Vec<(String, Vec<fontcraft_interp::Mismatch>)>, CompileError> {
+    font.check()?;
+    let font = setting_font(font, setting);
+    let font: &Font = &font;
+    let designspace = match setting {
+        Some(s) => fontcraft_interp::Designspace::for_setting(font, s)?,
+        None => fontcraft_interp::Designspace::new(font)?,
+    };
+    let linear = fontcraft_interp::InterpOptions { hoi: false, ..fontcraft_interp::InterpOptions::default() };
+    let drawn = fontcraft_interp::sources::with_inactive_interpolated(font, &designspace, &linear);
+    incompatible(drawn.as_ref().unwrap_or(font), &designspace)
 }
 
 /// Optimize Variable Deltas, or its second name; on unless one is off.

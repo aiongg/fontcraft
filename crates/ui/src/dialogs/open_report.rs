@@ -1,17 +1,14 @@
 //! The list of what opening a document left out or could not read (`app/open_report.rs`).
 
-use std::borrow::Cow;
-
-use craft::behavior::{ColumnKey, ColumnWidth, keyed};
-use craft::ui::contract::{Bind, ColumnSpec, Show as _, ShowCollection as _};
+use craft::behavior::{ColumnKey, ColumnWidth};
+use craft::ui::contract::{Bind, ColumnSpec, Show as _};
 use craft::ui::dialog::{DialogHost, DialogId, DialogResult, DialogStack, StackDialog, dialog_id};
 use craft::ui::display::Text;
-use craft::ui::list::ListRow;
 use craft::ui::patterns::form_dialogs::FormDialog;
 use craft::ui::runtime::env::Env;
-use craft::ui::table::Table;
 use egui::Ui;
 
+use super::report_list::{self, Line};
 use crate::app::{FontCraftApp, open_report};
 
 craft::ui::words! {
@@ -24,9 +21,6 @@ craft::ui::words! {
         close: "fontcraftOpenReport.close" = "Close";
     }
 }
-
-/// Rows the list shows before it scrolls.
-const LIST_ROWS: u16 = 12;
 
 /// The list, with the document it is about.
 pub struct OpenReportDialog {
@@ -65,11 +59,8 @@ impl StackDialog for OpenReportDialog {
             FormDialog::new(words.title.clone(), Bind::bound(seen)).opened(Bind::bound(open)).ok_label(words.close.clone()).show(ui, |ui, _, _| {
                 Text::new(format!("{title} {}", words.message.as_str())).show(ui);
                 let columns = vec![ColumnSpec::new(WARNING, words.warning.clone(), ColumnWidth::Content)];
-                let positions: Vec<usize> = (0..warnings.len()).collect();
-                let source = keyed(&positions, |at| *at).with_text(|at| Cow::Owned(warnings.get(*at).cloned().unwrap_or_default()));
-                let _ = Table::<usize>::new(words.warnings.clone(), columns)
-                    .max_rows(LIST_ROWS)
-                    .show_items(ui, &source, &mut |at, icx| ListRow::new(warnings.get(*at).cloned().unwrap_or_default()).cells(icx.cells()));
+                let lines: Vec<Line> = warnings.iter().map(|w| Line::new(w.clone())).collect();
+                let _ = report_list::show(ui, words.warnings.clone(), columns, &lines, None);
                 true
             });
         (shown.accepted.is_some() || shown.closed.is_some()).then_some(DialogResult::Cancel)

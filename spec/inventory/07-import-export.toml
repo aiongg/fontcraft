@@ -35,7 +35,7 @@ milestone = "M2"
 summary = "Exports every open document in one go without showing the export dialog; the menu item replaces Export… while Option is held. Each document is exported with its last-used export settings: every exportable instance of each chosen document, in each outline flavour and container, into its folder, reporting what it wrote and what it skipped."
 ref = "Import & Export › Exporting Font Files"
 status = "handbook"
-notes = "A designspace without axes is refused when it states a location, or when it has two or more sources and instances to build, as fontmake refuses it (docs/spec/40-compile.md). M3.39: what the parameters leave out comes from each document's kept OTF-tab settings (file.exportSettings), else from the command's defaults (TrueType, plain, Remove Overlap on). The kept folder counts only while its Export Destination box was ticked. A document with no folder is refused headless, naming it; fired from the menu with no parameters while some document has none, the desktop asks for one folder once (export.promptWhenNoDestination) and passes it as fallbackDestination, which only those documents use. Documents that share a folder are staged together, and all folders move into place as one step."
+notes = "A designspace without axes is refused when it states a location, or when it has two or more sources and instances to build, as fontmake refuses it (docs/spec/40-compile.md). M3.39: what the parameters leave out comes from each document's kept OTF-tab settings (file.exportSettings), else from the command's defaults (TrueType, plain, Remove Overlap on). The kept folder counts only while its Export Destination box was ticked. A document with no folder is refused headless, naming it; fired from the menu with no parameters while some document has none, the desktop asks for one folder once (export.promptWhenNoDestination) and passes it as fallbackDestination, which only those documents use. Documents that share a folder are staged together, and all folders move into place as one step. M2.20: the glyph names of every document are checked first; a refused export lists the problems of every document, each with its document."
 guesses = [
   "The reference's settings for Export All are not documented; using each document's last-used settings of the OTF tab is our assumption.",
   "A document never exported uses the command's defaults (TrueType, plain), not the OTF tab's opening flavour (PostScript/CFF), so calls that name only a destination write what they wrote before.",
@@ -78,7 +78,7 @@ milestone = "M2"
 summary = "Compiles one static font per export instance (or one default instance derived from the first master when the font defines none) in the chosen outline flavour, writing each requested container format. Existing files with the same name are replaced. This is the headless form of the dialog's OTF tab."
 ref = "Import & Export › Exporting Font Files › OpenType Export"
 status = "handbook"
-notes = "A designspace without axes is refused when it states a location, or when it has two or more sources and instances to build, as fontmake refuses it (docs/spec/40-compile.md)."
+notes = "A designspace without axes is refused when it states a location, or when it has two or more sources and instances to build, as fontmake refuses it (docs/spec/40-compile.md). M2.20: a font refused by the compiler fails with every problem file.exportCheck finds; a skipped instance that cannot be interpolated lists its glyphs."
 
 [[command]]
 id = "file.exportVariable"
@@ -92,7 +92,7 @@ milestone = "M9"
 summary = "Compiles one variable font per variable font setting, or one from a default setting when the font defines none. Output is TrueType-flavoured unless `outlines: cff2` asks for CFF2 (an addition of ours; the dialog offers TrueType only); container formats and destination work as for static export. Headless form of the dialog's Variable Fonts tab."
 ref = "Import & Export › Exporting Font Files › Exporting Variable Fonts"
 status = "handbook"
-notes = "Documented, not yet observed. Built in M9.5 (`fontcraft_compile::var::compile_variable`); the command line runs it as `compile --variable`. CFF2 (`outlines: cff2`, M9.13) writes an .otf file; the command line runs it as `compile --variable --format otf`. The dialog's test-install option is the app's (M9.23), not this command's. Alternate layers (M9.8) and variable kerning and marks (M9.9) are not in the font yet; `GPOS` comes from the origin master."
+notes = "Documented, not yet observed. Built in M9.5 (`fontcraft_compile::var::compile_variable`); the command line runs it as `compile --variable`. CFF2 (`outlines: cff2`, M9.13) writes an .otf file; the command line runs it as `compile --variable --format otf`. The dialog's test-install option is the app's (M9.23), not this command's. Alternate layers (M9.8) and variable kerning and marks (M9.9) are not in the font yet; `GPOS` comes from the origin master. M2.20: a refused font fails with every problem file.exportCheck finds."
 guesses = [
   "A glyph that has no layer for the origin master does not vary and keeps the origin's empty outline, with a warning; exporting such a font from the reference app would settle it.",
   "An intermediate layer that lies outside the axes of a variable font setting (one that disables masters) is left out of that font, with a note; exporting such a setting from the reference app would settle it.",
@@ -111,6 +111,35 @@ summary = "Writes each chosen master as its own UFO 3 package into the destinati
 ref = "Import & Export › Exporting Font Files › Exporting UFO"
 status = "handbook"
 notes = "productionNames renames a copy of the font before writing it (export.ufoProductionNames, M1.9)."
+
+[[command]]
+id = "file.exportCheck"
+label = "Check Export"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{document?: title or path, tab?: "otf"|"variable", params?: {…}} → {tab, document, ok, errors: [{kind, message, glyph?, layer?, character?, position?, codepoint?, glyphs?, entry?, line?, column?, instances?}], more?, skipped, warnings, files}'
+area = "compile"
+milestone = "M2"
+summary = "What would stop an export of a document, or keep one of its fonts from being written, all at once and without writing anything: glyph names, code points on two glyphs, incompatible layers, feature code, and whatever else decides a font's glyphs and tables. The export commands list the same problems when they fail."
+ref = "FontCraft addition"
+status = "docs"
+guesses = [
+  "Feature code is compiled per exported font for the OTF tab; for the Variable Fonts tab it is compiled for the first master, and not at all when it uses the variable syntax.",
+]
+
+[[command]]
+id = "file.exportResults"
+label = "Export Results…"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{show?: bool (default true), reveal?: row index}"
+area = "compile"
+milestone = "M2"
+summary = "Opens or closes the window that lists what the person's last export reported (dialog.exportResults), or shows what one of its rows is about."
+ref = "FontCraft addition"
+status = "docs"
 
 [[command]]
 id = "file.lossReport"
@@ -160,7 +189,36 @@ milestone = "M3"
 summary = "The export dialog attached to the current document. Each tab is an output kind with its own options; Next… either exports straight away or first asks where to write."
 ref = "Import & Export › Exporting Font Files"
 status = "handbook"
-notes = "Built: the tab switcher with the OTF tab (dialog.exportOtf) and the UFO tab (dialog.exportUfo). Each tab is a dialog of its own command. Switching tabs keeps each tab's values; a tab shown for the first time takes the values of the fields it shares with the tab shown before (the export folder). The Variable Fonts and Metrics tabs wait for their commands (M9, M5). Whether the reference keeps values across tabs is not observed."
+notes = "Built: the tab switcher with the OTF tab (dialog.exportOtf) and the UFO tab (dialog.exportUfo). Each tab is a dialog of its own command. Switching tabs keeps each tab's values; a tab shown for the first time takes the values of the fields it shares with the tab shown before (the export folder). The Variable Fonts and Metrics tabs wait for their commands (M9, M5). Whether the reference keeps values across tabs is not observed. M2.20: an export the person runs ends in the Export Results window when there is anything but files to report (dialog.exportResults); an export stopped by the font closes the dialog, so the glyphs and the code can be reached."
+
+[[panel]]
+id = "dialog.exportResults"
+label = "Export Results"
+location = "dialog"
+controls = [
+  "list of the export's errors, skipped fonts, warnings and files, in that order, with what each row is about",
+  "Show button: the glyph of the selected row in a new tab (in the layer the row names), or its feature code in Font Info",
+  "Reveal button: the file of the selected row in the system's file manager",
+  "Copy All button: the list as text",
+]
+area = "compile"
+milestone = "M2"
+summary = "After an export that reported anything but files, a window lists it: the errors that stopped it, the instances that were skipped and why, the warnings and the files written. A row naming a glyph can open it in a new tab."
+ref = "Font View › Names & Unicode › Glyph Naming Rules"
+status = "handbook"
+notes = "The handbook shows the window with one illegal-name error and its Show button; the groups are ours. It stays open beside the document, which can be edited meanwhile. An export named by a request opens nothing: its reply or its error lists the same."
+guesses = [
+  "The groups are Errors, Skipped, Warnings and Files, in that order, and one Show button acts on the selected row.",
+  "An export that only wrote files opens no window; the status line says how many files it wrote.",
+  "A skipped instance does not stop the other instances from being written.",
+  "The window does not block the rest of the app.",
+]
+observe = [
+  "Export a font with three illegal glyph names: note whether all three are listed at once, the text, and what Show does to the window.",
+  "Export instances of a font with one incompatible glyph: note whether the instances at the masters are written, and whether the window lists them.",
+  "Export a font whose overlap removal or hinting warns: note whether the window opens for a warning.",
+  "Export a font with an error in its feature code: note whether Show opens Font Info at the line.",
+]
 
 [[panel]]
 id = "dialog.exportOtf"
@@ -1366,7 +1424,7 @@ milestone = "M7"
 summary = "Compiles every instance configured in the project from the linked font into the project's export destination. Requires a saved project and a resolvable font link; the linked font need not be open."
 ref = "Import & Export › Projects › Exporting a Project"
 status = "handbook"
-notes = "Documented, not yet observed. Export reads the linked font from disk and builds the project's instances in place of the font's, through the same build as File › Export. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14."
+notes = "Documented, not yet observed. Export reads the linked font from disk and builds the project's instances in place of the font's, through the same build as File › Export. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14. M2.20: a refused font lists every problem; the window cannot show its glyphs, since the linked font need not be open."
 guesses = [
   "Export refuses a project with unsaved changes as well as one never saved; exporting in the reference app with an unsaved change settles it.",
   "Export reads the font file on disk even when the font is open with unsaved changes; exporting with the font open and edited settles it.",

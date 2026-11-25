@@ -9,6 +9,7 @@ use fontcraft_compile::{Flavour, Options};
 use serde_json::{Value, json};
 
 use super::compile::{self, Dest, Pick, Report, Request, Sink};
+use super::export_check::{self, Build};
 use super::export_settings::{self, Tab};
 use super::*;
 use crate::EngineError;
@@ -59,22 +60,25 @@ fn export_options(p: &Params) -> Result<Options> {
     })
 }
 
-fn export_static(s: &mut Session, p: &Value) -> Result<Value> {
-    let p = Params::new("file.exportStatic", p)?;
-    let font = s.font()?;
-    let dest = Dest::read(&p)?;
+/// What `file.exportStatic` builds with the parameters `p` from `font`.
+pub(super) struct StaticPlan {
+    pub flavour: Flavour,
+    pub jobs: Vec<compile::Job>,
+    pub req: Request,
+}
+
+pub(super) fn static_plan(s: &Session, p: &Params, font: &fontcraft_model::Font) -> Result<StaticPlan> {
+    let dest = Dest::read(p)?;
     let flavour = match p.opt_str("outlines")? {
-        Some(name) => flavour(&p, name)?,
+        Some(name) => flavour(p, name)?,
         None if dest.extension() == Some("otf") => Flavour::Cff,
         None => Flavour::TrueType,
     };
-    let containers = compile::containers(&p, "containers", &dest)?;
-    compile::check_file_destination(&p, &dest, &[flavour], &containers)?;
-    let options = export_options(&p)?;
-    let switches = [("removeOverlap", options.remove_overlap), ("autohint", options.hinting.autohint), ("cbdt", options.cbdt)];
-    let kept = export_settings::ran_with(&p, Tab::Otf, compile::outlines_name(flavour), &containers, &switches, &dest)?;
-    let pick = Pick::read(&p, "instances")?;
-    let jobs = compile::jobs(font, &pick, false, &p)?;
+    let containers = compile::containers(p, "containers", &dest)?;
+    compile::check_file_destination(p, &dest, &[flavour], &containers)?;
+    let options = export_options(p)?;
+    let pick = Pick::read(p, "instances")?;
+    let jobs = compile::jobs(font, &pick, false, p)?;
     if jobs.is_empty() {
         return Err(p.bad("`instances` names no instance"));
     }
@@ -94,10 +98,22 @@ fn export_static(s: &mut Session, p: &Value) -> Result<Value> {
         instance_outputs: true,
     };
     compile::check_size(&req, jobs.len())?;
+    Ok(StaticPlan { flavour, jobs, req })
+}
+
+fn export_static(s: &mut Session, p: &Value) -> Result<Value> {
+    let p = Params::new("file.exportStatic", p)?;
+    let doc = s.doc()?;
+    let StaticPlan { flavour, jobs, req } = static_plan(s, &p, &doc.font)?;
+    let options = &req.options;
+    let switches = [("removeOverlap", options.remove_overlap), ("autohint", options.hinting.autohint), ("cbdt", options.cbdt)];
+    let kept = export_settings::ran_with(&p, Tab::Otf, compile::outlines_name(flavour), &req.containers, &switches, &req.dest)?;
     let mut report = Report::default();
-    compile::check_glyph_names(font)?;
+    let subjects = [export_check::subject(s, doc, Build::Static { jobs: &jobs, req: &req })?];
+    export_check::refuse_names(&subjects)?;
     let mut sink = Sink::new(&req.dest, true, s.export_outside())?;
-    compile::build(font, &s.doc()?.title, s.doc()?.path.as_deref(), s.glyph_data()?, &jobs, &req, &mut sink, &mut report)?;
+    compile::build(&doc.font, &doc.title, doc.path.as_deref(), s.glyph_data_of(doc)?, &jobs, &req, &mut sink, &mut report)
+        .map_err(|e| export_check::refusal(&subjects, Some(e)))?;
     if report.fonts.is_empty() {
         return Err(compile::nothing_built(&report));
     }
@@ -223,7 +239,6 @@ fn export_all(s: &mut Session, v: &Value) -> Result<Value> {
         let merged = document_params(&given, &export_settings::kept_otf(s, doc));
         let dp = Params::new("file.exportAll", &merged)?;
         let req = document_request(&dp, &doc.title, timestamp, autohinter.clone())?;
-        compile::check_glyph_names(&doc.font)?;
         let jobs = compile::jobs(&doc.font, &Pick::Exportable, false, &p)?;
         compile::check_size(&req, jobs.len())?;
         fonts = fonts.saturating_add(jobs.len().saturating_mul(req.flavours.len()));
@@ -235,6 +250,12 @@ fn export_all(s: &mut Session, v: &Value) -> Result<Value> {
             compile::MAX_FONTS
         )));
     }
+    let mut subjects = Vec::with_capacity(plans.len());
+    for (i, req, jobs) in &plans {
+        let doc = docs.get(*i).ok_or(EngineError::NoDocument)?;
+        subjects.push(export_check::subject(s, doc, Build::Static { jobs, req })?);
+    }
+    export_check::refuse_names(&subjects)?;
     // Documents that share a folder share a sink, so their files are checked against each other.
     let outside = s.export_outside();
     let mut sinks: Vec<(std::path::PathBuf, Sink)> = Vec::new();
@@ -253,7 +274,8 @@ fn export_all(s: &mut Session, v: &Value) -> Result<Value> {
         };
         let (_, sink) = sinks.get_mut(at).ok_or_else(|| EngineError::Internal("Export All lost a sink".into()))?;
         let mut report = Report::default();
-        compile::build(&doc.font, &doc.title, doc.path.as_deref(), s.glyph_data_of(doc)?, jobs, req, sink, &mut report)?;
+        compile::build(&doc.font, &doc.title, doc.path.as_deref(), s.glyph_data_of(doc)?, jobs, req, sink, &mut report)
+            .map_err(|e| export_check::refusal(&subjects, Some(e)))?;
         warnings.append(&mut report.warnings);
         reports.push((doc.title.clone(), folder, report));
     }

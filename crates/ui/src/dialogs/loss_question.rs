@@ -2,21 +2,18 @@
 //! Anyway (Export Anyway), Cancel and, for a UFO, whether smart components are drawn as outlines. An answer posts
 //! `window.fileQuestion`.
 
-use std::borrow::Cow;
-
-use craft::behavior::{ColumnKey, ColumnWidth, keyed};
+use craft::behavior::{ColumnKey, ColumnWidth};
 use craft::ui::choice::Checkbox;
-use craft::ui::contract::{Bind, ColumnSpec, Props as _, Show as _, ShowCollection as _};
+use craft::ui::contract::{Bind, ColumnSpec, Props as _, Show as _};
 use craft::ui::dialog::{DialogHost, DialogId, DialogResult, DialogStack, StackDialog, dialog_id};
 use craft::ui::display::{Shade, Text};
-use craft::ui::list::ListRow;
 use craft::ui::patterns::form_dialogs::FormDialog;
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::Env;
-use craft::ui::table::Table;
 use egui::Ui;
 use serde_json::{Value, json};
 
+use super::report_list::{self, Line};
 use crate::app::file_questions::{LossQuestion, Question};
 use crate::app::{FontCraftApp, Msg};
 
@@ -36,9 +33,6 @@ craft::ui::words! {
         export: "fontcraftLossQuestion.export" = "Export Anyway";
     }
 }
-
-/// Rows the list shows before it scrolls.
-const LIST_ROWS: u16 = 12;
 
 /// The question, with the number `app/file_questions.rs` gave it.
 pub struct LossDialog {
@@ -92,13 +86,9 @@ impl StackDialog for LossDialog {
                 ColumnSpec::new(COUNT, words.count.clone(), ColumnWidth::Content).numeric(),
                 ColumnSpec::new(PLACE, words.place.clone(), ColumnWidth::Content),
             ];
-            let list = &question.losses;
-            let positions: Vec<usize> = (0..list.len()).collect();
-            let source = keyed(&positions, |at| *at).with_text(|at| Cow::Owned(list.get(*at).map_or_else(String::new, |l| l.what.clone())));
-            let _ = Table::<usize>::new(words.list.clone(), columns).max_rows(LIST_ROWS).show_items(ui, &source, &mut |at, icx| {
-                let Some(l) = list.get(*at) else { return ListRow::new("") };
-                ListRow::new(l.what.clone()).cells(icx.cells()).cell(COUNT, l.entries.to_string()).cell(PLACE, l.details.clone())
-            });
+            let lines: Vec<Line> =
+                question.losses.iter().map(|l| Line::new(l.what.clone()).cell(COUNT, l.entries.to_string()).cell(PLACE, l.details.clone())).collect();
+            let _ = report_list::show(ui, words.list.clone(), columns, &lines, None);
             if question.smart > 0 {
                 let label = format!("{} ({})", words.outlines.as_str(), question.smart);
                 let _ = Checkbox::new(Bind::bound(outlines)).label(label).show(ui);

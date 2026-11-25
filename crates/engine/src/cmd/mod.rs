@@ -166,6 +166,7 @@ mod derived_glyphs;
 mod detect;
 mod drag_aids;
 pub mod encodings;
+mod export_check;
 pub mod export_profiles;
 pub mod export_settings;
 mod expressions;
@@ -355,6 +356,7 @@ pub const COMMAND_TABLES: &[CommandTable] = &[
     file::specs,
     loss_report::specs,
     compile_export::specs,
+    export_check::specs,
     export_settings::specs,
     edit::specs,
     clipboard::specs,

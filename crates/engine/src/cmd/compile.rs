@@ -456,6 +456,8 @@ pub(super) struct Report {
     pub warnings: Vec<String>,
     /// The feature code the first font built with code compiled (`features.debugFile`).
     pub feature_code: Option<String>,
+    /// How many files [`check`] found the build would write.
+    pub planned: usize,
 }
 
 impl Report {
@@ -470,6 +472,20 @@ impl Report {
 
 fn skip(job: &Job, reason: &str) -> Value {
     json!({ "instance": job.label, "source": job.source, "reason": reason })
+}
+
+/// [`skip`] of a job whose font could not be interpolated: with the glyphs that keep it from being,
+/// when that is why.
+fn skip_interpolated(job: &Job, e: &fontcraft_compile::CompileError, font: &Font) -> Value {
+    use fontcraft_compile::CompileError;
+    let mut skipped = skip(job, &format!("it cannot be interpolated: {e}"));
+    if let (CompileError::Interp(fontcraft_interp::InterpError::Incompatible { .. }), Some(entry)) = (e, skipped.as_object_mut()) {
+        let glyphs = super::export_check::skipped_glyphs(font);
+        if !glyphs.is_empty() {
+            entry.insert("glyphs".into(), json!(glyphs));
+        }
+    }
+    skipped
 }
 
 fn font_json(f: &FontOut, with_data: bool) -> Value {
@@ -620,13 +636,40 @@ pub(super) fn build(
     sink: &mut Sink,
     report: &mut Report,
 ) -> Result<()> {
-    build_with(font, source, path, data, jobs, req, sink, report, None)
+    build_with(font, source, path, data, jobs, req, sink, report, None, None)
+}
+
+/// What [`build`] would do, without drawing or writing anything: the fonts it would skip go to
+/// `report`, with the count of the files it would write, and what it would refuse to `found`. One
+/// job refused does not keep the others from being checked.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn check(
+    font: &Font,
+    source: &str,
+    path: Option<&std::path::Path>,
+    data: &Arc<GlyphData>,
+    jobs: &[Job],
+    req: &Request,
+    mut sink: Sink,
+    report: &mut Report,
+    found: &mut super::export_check::Problems,
+) -> Result<()> {
+    for job in jobs {
+        let one = std::slice::from_ref(job);
+        match build_with(font, source, path, data.clone(), one, req, &mut sink, report, None, Some(&mut *found)) {
+            Ok(()) => {}
+            Err(EngineError::Cancelled) => return Err(EngineError::Cancelled),
+            Err(e) => super::export_check::add_error(found, font, Some(job), &e),
+        }
+    }
+    Ok(())
 }
 
 /// A step that rewrites each compiled font of a job and format before it is written.
 pub(super) type Rewrite<'a> = &'a dyn Fn(&Job, Flavour, Vec<u8>) -> Result<Vec<u8>>;
 
-/// [`build`], with `rewrite` run on each compiled font.
+/// [`build`], with `rewrite` run on each compiled font. With `found` it checks the jobs instead of
+/// building them ([`check`]).
 #[allow(clippy::too_many_arguments)]
 fn build_with(
     font: &Font,
@@ -638,6 +681,7 @@ fn build_with(
     sink: &mut Sink,
     report: &mut Report,
     rewrite: Option<Rewrite<'_>>,
+    mut found: Option<&mut super::export_check::Problems>,
 ) -> Result<()> {
     font.check()?;
     let linked = crate::export_steps::linked(font, path, &mut report.warnings)?;
@@ -650,10 +694,13 @@ fn build_with(
         source_includes(&mut options, path);
     }
     let prepared = fontcraft_compile::prepare_source(font, &mut report.warnings);
-    work::plan(jobs.len().saturating_mul(req.flavours.len()));
+    if found.is_none() {
+        work::plan(jobs.len().saturating_mul(req.flavours.len()));
+    }
+    let whole = font;
     for job in jobs {
         work::check()?;
-        if req.first_only && !report.fonts.is_empty() {
+        if req.first_only && (!report.fonts.is_empty() || report.planned > 0) {
             report.skipped.push(skip(job, "the destination is one file: give a folder to export every instance"));
             continue;
         }
@@ -664,7 +711,7 @@ fn build_with(
             Some(_) => match fontcraft_compile::sources_at(&source_job, &job.target, &mut report.warnings) {
                 Ok((s, p)) => Some((s.into_owned(), p.into_owned())),
                 Err(e) => {
-                    report.skipped.push(skip(job, &format!("it cannot be interpolated: {e}")));
+                    report.skipped.push(skip_interpolated(job, &e, whole));
                     continue;
                 }
             },
@@ -705,6 +752,20 @@ fn build_with(
                 names(f, c)
             );
             report.skipped.push(skip(job, &reason));
+            continue;
+        }
+        if let Some(found) = found.as_deref_mut() {
+            for &flavour in &flavours {
+                work::check()?;
+                match fontcraft_compile::plan::plan_resolved_from(font, resolved.clone(), flavour, job_options.as_ref()) {
+                    Ok(mut plan) => report.warnings.append(&mut plan.warnings),
+                    Err(e) => match EngineError::from(e) {
+                        EngineError::Cancelled => return Err(EngineError::Cancelled),
+                        e => super::export_check::add_error(found, whole, Some(job), &e),
+                    },
+                }
+            }
+            report.planned = report.planned.saturating_add(flavours.len().saturating_mul(containers.len()));
             continue;
         }
         let build_one = |flavour: Flavour, web_container: bool| -> Result<fontcraft_compile::Compiled> {
@@ -802,18 +863,6 @@ impl ByContainer {
         }
         Some((first, warnings))
     }
-}
-
-/// Refuses a font with an exported glyph whose name breaks the naming rules, naming the glyph and
-/// the position of the bad character (`glyphName.invalidBlocksExport`). File › Export refuses
-/// such a font; `font.compile` writes a valid name with a warning instead.
-pub(super) fn check_glyph_names(font: &Font) -> Result<()> {
-    for g in font.glyphs.iter().filter(|g| g.export) {
-        if let Err(e) = fontcraft_model::glyphdata::validate(&g.name, true) {
-            return Err(fontcraft_compile::CompileError::Glyph { glyph: g.name.clone(), message: format!("illegal glyph name: {e}") }.into());
-        }
-    }
-    Ok(())
 }
 
 /// Refuses a request that would build more than [`MAX_FONTS`] fonts.
@@ -1460,7 +1509,7 @@ pub(super) fn compile_into(s: &mut Session, p: &Value, staged: Option<&mut Sink>
     };
     let rewrite: Option<Rewrite<'_>> = if layouts.is_some() || sel.formats.cff2 || sel.output.rewrites() { Some(&relayout) } else { None };
     if !jobs.is_empty() {
-        build_with(font, &doc.title, doc.path.as_deref(), data, &jobs, &req, sink, &mut report, rewrite)?;
+        build_with(font, &doc.title, doc.path.as_deref(), data, &jobs, &req, sink, &mut report, rewrite, None)?;
     }
     let (raw_tables, mut rewrite_notes) = raw.take();
     report.warnings.append(&mut rewrite_notes);
@@ -1651,6 +1700,26 @@ fn compile_collection(
     Ok(json!({ "fonts": report.fonts_json(false), "collections": collections, "skipped": report.skipped, "warnings": report.warnings }))
 }
 
+/// The variable fonts an export of `font` builds: `settings`, or all of them.
+pub(super) fn picked_settings(p: &Params, font: &Font) -> Result<Vec<Option<usize>>> {
+    let targets = fontcraft_compile::var::variable_targets(font);
+    let picked: Vec<Option<usize>> = match p.opt_strings("settings")? {
+        None => targets,
+        Some(names) => {
+            let mut out = Vec::with_capacity(names.len());
+            for name in names {
+                let found = targets.iter().copied().find(|t| t.and_then(|i| font.instances.get(i)).is_some_and(|i| i.name == name));
+                out.push(found.ok_or_else(|| p.bad(format!("`settings` names \"{name}\", which is not a variable font setting of the font")))?);
+            }
+            out
+        }
+    };
+    if picked.is_empty() {
+        return Err(p.bad("`settings` names no variable font setting"));
+    }
+    Ok(picked)
+}
+
 fn export_variable(s: &mut Session, p: &Value) -> Result<Value> {
     use fontcraft_compile::var::{self, VarFlavour, VariableOptions};
     let p = Params::new("file.exportVariable", p)?;
@@ -1681,22 +1750,9 @@ fn export_variable(s: &mut Session, p: &Value) -> Result<Value> {
     let doc = s.doc()?;
     source_includes(&mut options, doc.path.as_deref());
     let font = &doc.font;
-    check_glyph_names(font)?;
-    let targets = var::variable_targets(font);
-    let picked: Vec<Option<usize>> = match p.opt_strings("settings")? {
-        None => targets,
-        Some(names) => {
-            let mut out = Vec::with_capacity(names.len());
-            for name in names {
-                let found = targets.iter().copied().find(|t| t.and_then(|i| font.instances.get(i)).is_some_and(|i| i.name == name));
-                out.push(found.ok_or_else(|| p.bad(format!("`settings` names \"{name}\", which is not a variable font setting of the font")))?);
-            }
-            out
-        }
-    };
-    if picked.is_empty() {
-        return Err(p.bad("`settings` names no variable font setting"));
-    }
+    let picked = picked_settings(&p, font)?;
+    let subjects = [super::export_check::subject(s, doc, super::export_check::Build::Variable { settings: &picked })?];
+    super::export_check::refuse_names(&subjects)?;
     if matches!(dest, Dest::File(_)) && picked.len() > 1 {
         return Err(
             p.bad(format!("`destination` is one file, but the font has {} variable font settings: give a folder or name one setting", picked.len()))
@@ -1710,7 +1766,7 @@ fn export_variable(s: &mut Session, p: &Value) -> Result<Value> {
     let mut sink = Sink::new(&dest, true, outside)?;
     let mut fonts = Vec::with_capacity(picked.len());
     work::plan(picked.len());
-    for setting in picked {
+    for &setting in &picked {
         work::check()?;
         let containers = crate::export_steps::setting_containers(&linked, setting, &containers, &mut warnings);
         if matches!(dest, Dest::File(_)) && containers.len() > 1 {
@@ -1721,7 +1777,8 @@ fn export_variable(s: &mut Session, p: &Value) -> Result<Value> {
         let mut files = Vec::with_capacity(containers.len());
         for &container in &containers {
             let font = built.get(container, |web_container| {
-                let v = var::compile_variable(&linked, setting, &Options { web_container, ..options.clone() }, &var_options)?;
+                let v = var::compile_variable(&linked, setting, &Options { web_container, ..options.clone() }, &var_options)
+                    .map_err(|e| super::export_check::refusal(&subjects, Some(e.into())))?;
                 stem = v.file_stem;
                 Ok(v.compiled)
             })?;
@@ -1761,12 +1818,7 @@ fn export_variable(s: &mut Session, p: &Value) -> Result<Value> {
 
 /// The error of a command that built nothing: why each font was skipped.
 pub(super) fn nothing_built(report: &Report) -> EngineError {
-    let reasons: Vec<String> = report
-        .skipped
-        .iter()
-        .map(|v| format!("{}: {}", v.get("instance").and_then(Value::as_str).unwrap_or("?"), v.get("reason").and_then(Value::as_str).unwrap_or("?")))
-        .collect();
-    EngineError::Unsupported(format!("nothing could be built ({})", reasons.join("; ")))
+    super::export_check::nothing_built(&report.skipped)
 }
 
 fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
