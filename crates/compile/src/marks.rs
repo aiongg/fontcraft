@@ -7,7 +7,8 @@
 //!   with categories from the compile's glyph data, for the reference's format; for a UFO or
 //!   designspace source only when its ufo2ft filter list has a `propagateAnchors` entry, and then
 //!   only for the glyphs the entry reaches, as both reference compilers decide. Every other glyph
-//!   gives its own anchors.
+//!   gives its own anchors. With DisableAllAutomaticBehaviour on, every glyph of the reference's
+//!   format gives its own anchors.
 //! - Classes: worked out from the categories and anchors for the reference's format; for a UFO,
 //!   the stated `public.openTypeCategories` (`fontcraft_model::ufo_classes::stated`), those the
 //!   reader left off the glyphs included.
@@ -44,6 +45,7 @@ pub(crate) fn input(
     let ufo = is_ufo_family(resolved.format);
     let scopes = match font {
         Some(font) if ufo => listed_filter(font, &resolved.master, PROPAGATE_FILTER),
+        _ if crate::export_params::automatic_disabled(&resolved.params) => Vec::new(),
         _ => vec![Scope::All],
     };
     let first = propagated(font, data, &resolved.master, &scopes, warnings);

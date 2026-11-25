@@ -142,7 +142,7 @@ impl Stages {
         crate::info::expand_tokens(Some(&*source), &mut resolved, &mut warnings);
         let edits = crate::export_params::apply(Some(&*source), &mut resolved, &mut warnings)?;
         let glyphs = crate::preflight::run(std::mem::take(&mut resolved.glyphs), &mut warnings)?;
-        let glyphs = crate::order::final_order(glyphs, &resolved, &mut warnings)?;
+        let glyphs = crate::order::final_order(glyphs, &resolved, crate::Flavour::TrueType, &mut warnings)?;
         crate::preflight::check_cmap(&glyphs)?;
         let data = crate::compile_glyph_data(&options);
         let input = LayoutInput {

@@ -87,6 +87,8 @@ pub(super) fn build(s: &Session, p: &Params, flavour: Flavour) -> Result<Built> 
         first_only: false,
         autohinter: crate::external_autohint::trusted(s),
         naming: Default::default(),
+        // The preview shows the outlines it was asked for.
+        instance_outputs: false,
     };
     let mut sink = Sink::new(&req.dest, true, s.export_outside())?;
     let mut report = Report::default();

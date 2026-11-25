@@ -27,7 +27,7 @@ use read_fonts::tables::glyf::CurvePoint;
 use write_fonts::tables::glyf::{Contour, SimpleGlyph};
 
 use crate::outline::{self, Flavour, Prepared};
-use crate::{CompileError, DEFAULT_CONVERSION_ERROR, MAX_EXPANDED_ELEMENTS, MAX_TT_POINTS, Options};
+use crate::{CompileError, MAX_EXPANDED_ELEMENTS, MAX_TT_POINTS, Options};
 
 /// How far, in font units, an exported point may lie from a source node and still be that
 /// node: overlap removal computes the outline again in floating point.
@@ -537,11 +537,9 @@ pub fn point_indexes(font: &Font, target: &Target, glyph: &str, options: &Option
     }
     let mut subset: Vec<ResolvedGlyph> = wanted.into_iter().cloned().collect();
     crate::components_opt::erase_corners(Some(&*source), &resolved.master, &mut subset, &options.components);
-    let error =
-        if options.conversion_error.is_finite() && options.conversion_error > 0.0 { options.conversion_error } else { DEFAULT_CONVERSION_ERROR };
     let settings = outline::Settings {
         flavour: Flavour::TrueType,
-        tolerance: f64::from(resolved.units_per_em) * error,
+        tolerance: options.conversion_tolerance(&resolved),
         keep_direction: options.keep_direction,
         curves: options.curves,
         drop_implied: options.drop_implied_on_curves,

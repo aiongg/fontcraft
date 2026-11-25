@@ -73,7 +73,7 @@ pub fn specs() -> Vec<CommandSpec> {
 
 /// What a container wraps the compiled font in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Container {
+pub(crate) enum Container {
     Plain,
     Woff,
     Woff2,
@@ -331,6 +331,9 @@ pub(super) struct Request {
     pub autohinter: Option<String>,
     /// The folders and names of the files (`outputLayout`, `nameBy`).
     pub naming: super::compile_select::Naming,
+    /// Save as TrueType and Webfont Formats choose the files of their instance. Off for the fonts
+    /// of a collection, which all have its format, and for a preview.
+    pub instance_outputs: bool,
 }
 
 impl Request {
@@ -349,6 +352,23 @@ impl Request {
             OutputLayout::Flat if self.flavours.len() > 1 || self.naming.split_outlines => format!("{}/{stem}.{ext}", format_name(flavour)),
             OutputLayout::Flat => format!("{stem}.{ext}"),
         }
+    }
+
+    /// The outline formats and containers of `job`'s files: the request's, or what its Save as
+    /// TrueType and Webfont Formats parameters say ([`crate::export_steps::instance_outputs`]).
+    /// The error says why the one file asked for cannot be written.
+    fn outputs(&self, font: &Font, job: &Job, warnings: &mut Vec<String>) -> std::result::Result<(Vec<Flavour>, Vec<Container>), String> {
+        if !self.instance_outputs {
+            return Ok((self.flavours.clone(), self.containers.clone()));
+        }
+        let (flavours, containers) = crate::export_steps::instance_outputs(font, job, &self.flavours, &self.containers, warnings);
+        if matches!(self.dest, Dest::File(_)) && (flavours != self.flavours || containers != self.containers) {
+            return Err(
+                "its Save as TrueType or Webfont Formats parameter asks for other files than the one to write: give a folder as the destination"
+                    .into(),
+            );
+        }
+        Ok((flavours, containers))
     }
 
     /// `name` inside the job's Export Folder; a one-file destination is written where it says.
@@ -653,8 +673,15 @@ fn build_with(
                 continue;
             }
         };
+        let (flavours, containers) = match req.outputs(&source_job, job, &mut report.warnings) {
+            Ok(outputs) => outputs,
+            Err(reason) => {
+                report.skipped.push(skip(job, &reason));
+                continue;
+            }
+        };
         let names = |flavour: Flavour, container: Container| req.placed(folder.as_deref(), req.file_name(job, &stem, flavour, container));
-        let refused = req.flavours.iter().flat_map(|&f| req.containers.iter().map(move |&c| (f, c))).find(|&(f, c)| sink.outside(&names(f, c)).1);
+        let refused = flavours.iter().flat_map(|&f| containers.iter().map(move |&c| (f, c))).find(|&(f, c)| sink.outside(&names(f, c)).1);
         if let Some((f, c)) = refused {
             let reason = format!(
                 "the Export Folder parameter puts {} outside the export destination; only an export run in the app may write there",
@@ -663,9 +690,15 @@ fn build_with(
             report.skipped.push(skip(job, &reason));
             continue;
         }
-        for &flavour in &req.flavours {
-            work::check()?;
-            let mut compiled = fontcraft_compile::compile_resolved_from(font, resolved.clone(), flavour, &job_options)?;
+        let build_one = |flavour: Flavour, web_container: bool| -> Result<fontcraft_compile::Compiled> {
+            let web_options;
+            let options = if web_container {
+                web_options = Options { web_container, ..job_options.as_ref().clone() };
+                &web_options
+            } else {
+                job_options.as_ref()
+            };
+            let mut compiled = fontcraft_compile::compile_resolved_from(font, resolved.clone(), flavour, options)?;
             if flavour == Flavour::TrueType
                 && let Some(external) =
                     crate::external_autohint::External::wanted(font, &resolved, job_options.hinting.autohint, req.autohinter.as_deref())
@@ -680,9 +713,14 @@ fn build_with(
             if let Some(rewrite) = rewrite {
                 compiled.bytes = rewrite(job, flavour, std::mem::take(&mut compiled.bytes))?;
             }
-            let mut files = Vec::with_capacity(req.containers.len());
-            for &container in &req.containers {
-                let data = container.wrap(&compiled.bytes)?;
+            Ok(compiled)
+        };
+        for &flavour in &flavours {
+            work::check()?;
+            let mut built = ByContainer::new(fontcraft_compile::export_params::differs_by_container(&resolved.params));
+            let mut files = Vec::with_capacity(containers.len());
+            for &container in &containers {
+                let data = container.wrap(&built.get(container, |web| build_one(flavour, web))?.bytes)?;
                 let name = names(flavour, container);
                 let outside = sink.outside(&name).0;
                 let file = sink.put(name, container, data, &mut report.warnings)?;
@@ -692,14 +730,61 @@ fn build_with(
                 }
                 files.push(file);
             }
+            let Some((mut compiled, warnings)) = built.finish() else { continue };
             if report.feature_code.is_none() {
                 report.feature_code = compiled.feature_code.take();
             }
-            report.fonts.push(FontOut { job: job.clone(), flavour, glyph_order: compiled.glyph_order, warnings: compiled.warnings, files });
+            report.fonts.push(FontOut { job: job.clone(), flavour, glyph_order: compiled.glyph_order, warnings, files });
             work::advance(1, &job.label);
         }
     }
     Ok(())
+}
+
+/// The compiles of one font: one for all its containers, or, when its parameters tell web
+/// containers from plain files ([`fontcraft_compile::export_params::differs_by_container`]), one
+/// for each kind asked for.
+pub(super) struct ByContainer {
+    split: bool,
+    /// What was compiled, the plain files' first.
+    built: [Option<fontcraft_compile::Compiled>; 2],
+}
+
+impl ByContainer {
+    pub(super) fn new(split: bool) -> Self {
+        Self { split, built: [None, None] }
+    }
+
+    /// The font for `container`, made by `make` (told whether it is for a web container) the
+    /// first time.
+    pub(super) fn get(
+        &mut self,
+        container: Container,
+        make: impl FnOnce(bool) -> Result<fontcraft_compile::Compiled>,
+    ) -> Result<&fontcraft_compile::Compiled> {
+        let web = self.split && container != Container::Plain;
+        let [plain, web_font] = &mut self.built;
+        let slot = if web { web_font } else { plain };
+        match slot {
+            Some(built) => Ok(built),
+            None => Ok(slot.insert(make(web)?)),
+        }
+    }
+
+    /// The first compile and the warnings of all, each once; `None` when nothing was compiled.
+    pub(super) fn finish(self) -> Option<(fontcraft_compile::Compiled, Vec<String>)> {
+        let mut built = self.built.into_iter().flatten();
+        let mut first = built.next()?;
+        let mut warnings = std::mem::take(&mut first.warnings);
+        for other in built {
+            for w in other.warnings {
+                if !warnings.contains(&w) {
+                    warnings.push(w);
+                }
+            }
+        }
+        Some((first, warnings))
+    }
 }
 
 /// Refuses a font with an exported glyph whose name breaks the naming rules, naming the glyph and
@@ -1123,7 +1208,7 @@ fn outline_options(p: &Params, options: &mut Options) -> Result<()> {
     options.keep_direction = flag("keepDirection")?.unwrap_or(false);
     if let Some(v) = group.get("conversionError").filter(|v| !v.is_null()) {
         let e = v.as_f64().filter(|e| e.is_finite() && *e > 0.0 && *e <= 1.0);
-        options.conversion_error = e.ok_or_else(|| p.bad("`outlines.conversionError` must be a number above 0 and at most 1 (em)"))?;
+        options.conversion_error = Some(e.ok_or_else(|| p.bad("`outlines.conversionError` must be a number above 0 and at most 1 (em)"))?);
     }
     if let Some(key) = group.keys().find(|k| {
         !matches!(
@@ -1219,7 +1304,16 @@ fn compile_request(s: &Session, p: &Params) -> Result<(Vec<Job>, Request, Select
         check_file_destination(p, &dest, &formats.file_flavours(), &containers)?;
     }
     let naming = select::naming(p, &formats)?;
-    let req = Request { flavours, containers, options, dest, first_only: false, autohinter: crate::external_autohint::trusted(s), naming };
+    let req = Request {
+        flavours,
+        containers,
+        options,
+        dest,
+        first_only: false,
+        autohinter: crate::external_autohint::trusted(s),
+        naming,
+        instance_outputs: true,
+    };
     check_size(&req, picked.len())?;
     Ok((picked, req, Selection { formats, family, skipped, features, output }))
 }
@@ -1299,7 +1393,11 @@ pub(super) fn compile_into(s: &mut Session, p: &Value, staged: Option<&mut Sink>
             return Err(p.bad("`interpolateBinaryLayout` writes each instance as its own font file: leave out `collection`"));
         }
     }
-    let layouts = super::compile_layout::Layouts::read(&p, doc.path.as_deref(), &doc.font, &jobs, &req.flavours)?;
+    let mut layout_flavours = req.flavours.clone();
+    if !layout_flavours.contains(&Flavour::TrueType) && jobs.iter().any(|j| crate::export_steps::saves_as_truetype(font, j)) {
+        layout_flavours.push(Flavour::TrueType);
+    }
+    let layouts = super::compile_layout::Layouts::read(&p, doc.path.as_deref(), &doc.font, &jobs, &layout_flavours)?;
     if layouts.as_ref().is_some_and(|l| l.unused) {
         report.warnings.push("`interpolateBinaryLayout` changes nothing: no instance is built, and masters keep their own layout".into());
     }
@@ -1332,8 +1430,10 @@ pub(super) fn compile_into(s: &mut Session, p: &Value, staged: Option<&mut Sink>
         let mut notes = Vec::new();
         let (bytes, tables) = sel.output.rewrite(bytes, &mut notes)?;
         let mut kept = raw.borrow_mut();
+        // A font compiled for plain and for web containers comes here twice.
+        notes.retain(|n| !kept.1.contains(n));
         kept.1.append(&mut notes);
-        if !tables.is_empty() {
+        if !tables.is_empty() && !kept.0.iter().any(|(label, f, _)| *label == job.label && *f == flavour) {
             kept.0.push((job.label.clone(), flavour, tables));
         }
         Ok(bytes)
@@ -1470,6 +1570,7 @@ fn compile_collection(
             first_only: false,
             autohinter: req.autohinter.clone(),
             naming: req.naming,
+            instance_outputs: false,
         };
         let mut memory = Sink::Memory { bytes: 0, keep: true, limit: MAX_COLLECTION_BYTES };
         let mut part = Report::default();
@@ -1583,13 +1684,24 @@ fn export_variable(s: &mut Session, p: &Value) -> Result<Value> {
     let mut sink = Sink::new(&dest, true, outside)?;
     let mut fonts = Vec::with_capacity(picked.len());
     for setting in picked {
-        let built = var::compile_variable(&linked, setting, &options, &var_options)?;
+        let containers = crate::export_steps::setting_containers(&linked, setting, &containers, &mut warnings);
+        if matches!(dest, Dest::File(_)) && containers.len() > 1 {
+            return Err(p.bad("`destination` is one file, but the setting's Webfont Formats parameter asks for several: give a folder"));
+        }
+        let mut stem = String::new();
+        let mut built = ByContainer::new(fontcraft_compile::export_params::may_differ_by_container(&linked));
         let mut files = Vec::with_capacity(containers.len());
         for &container in &containers {
-            let data = container.wrap(&built.compiled.bytes)?;
-            let name = format!("{}.{}", built.file_stem, container.extension(file_flavour));
+            let font = built.get(container, |web_container| {
+                let v = var::compile_variable(&linked, setting, &Options { web_container, ..options.clone() }, &var_options)?;
+                stem = v.file_stem;
+                Ok(v.compiled)
+            })?;
+            let data = container.wrap(&font.bytes)?;
+            let name = format!("{stem}.{}", container.extension(file_flavour));
             files.push(sink.put(name, container, data, &mut warnings)?);
         }
+        let Some((compiled, notes)) = built.finish() else { continue };
         let label = setting.and_then(|i| font.instances.get(i)).map_or_else(|| "default".to_string(), |i| i.name.clone());
         let files: Vec<Value> = files
             .iter()
@@ -1606,8 +1718,8 @@ fn export_variable(s: &mut Session, p: &Value) -> Result<Value> {
             })
             .collect();
         fonts.push(json!({
-            "setting": label, "fileName": built.file_stem, "glyphs": built.compiled.glyph_order.len(),
-            "warnings": built.compiled.warnings, "files": files,
+            "setting": label, "fileName": stem, "glyphs": compiled.glyph_order.len(),
+            "warnings": notes, "files": files,
         }));
     }
     sink.commit()?;
@@ -1709,12 +1821,18 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
                 continue;
             }
         };
+        let (flavours, containers) = match req.outputs(&source_job, job, &mut warnings) {
+            Ok(outputs) => outputs,
+            Err(reason) => {
+                skipped.push(skip(job, &reason));
+                continue;
+            }
+        };
         instances.push(json!({ "instance": job.label, "source": job.source, "master": resolved.master, "location": resolved.location }));
-        for &flavour in &req.flavours {
+        for &flavour in &flavours {
             let plan_options = fontcraft_compile::with_instance_feature_axes(&req.options, &source_job, &job.target);
             let plan = fontcraft_compile::plan::plan_resolved_from(font, resolved.clone(), flavour, &plan_options)?;
-            let files: Vec<Value> = req
-                .containers
+            let files: Vec<Value> = containers
                 .iter()
                 .map(|&c| {
                     let name = req.placed(folder.as_deref(), req.file_name(job, &stem, flavour, c));
@@ -1753,7 +1871,7 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
     }
     if !sel.formats.variable.is_empty() {
         let picks = super::compile_select::variable_picks(&p, font, &mut warnings)?;
-        outputs.extend(super::compile_select::plan_variable(font, &picks, &sel.formats.variable, &req)?);
+        outputs.extend(super::compile_select::plan_variable(font, &picks, &sel.formats.variable, &req, &mut warnings)?);
     }
     if outputs.is_empty() {
         warnings.push("nothing would be built".into());

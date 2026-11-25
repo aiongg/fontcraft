@@ -902,9 +902,9 @@ fn quadratic_curves_stay_within_the_tolerance() {
     // The option is in em: a 2048-unit font gets about 2 units.
     let mut f = sample();
     f.units_per_em = 2048;
-    let fine = compile_ttf(&f, &Options { conversion_error: 0.0001, ..Default::default() }).unwrap();
+    let fine = compile_ttf(&f, &Options { conversion_error: Some(0.0001), ..Default::default() }).unwrap();
     let coarse = compile_ttf(&f, &Options::default()).unwrap();
-    let bad = compile_ttf(&f, &Options { conversion_error: f64::NAN, ..Default::default() }).unwrap();
+    let bad = compile_ttf(&f, &Options { conversion_error: Some(f64::NAN), ..Default::default() }).unwrap();
     let points = |out: &Compiled| {
         let font = FontRef::new(&out.bytes).unwrap();
         drawn(&font, font.charmap().map('O').unwrap()).iter().map(Vec::len).sum::<usize>()

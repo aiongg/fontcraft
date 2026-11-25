@@ -7,16 +7,24 @@
 //! stroke 5% of the em, from the descender to the ascender, with the ascender to the descender
 //! as its vertical advance.
 //!
+//! TrueType Keep GlyphOrder puts `space` second in a TrueType font, the only other slot the
+//! handbook fixes then. Without it the order stays the source's, as both reference compilers write
+//! it: the handbook's move of `NULL`, `CR` and `space` to the front is not made
+//! (`docs/spec/40-compile.md` § 1.4).
+//!
 //! Glyphs the compiler makes ([`MadeGlyph`]: colour layer glyphs) follow the source glyphs
 //! ([`append_made`]).
 
 use fontcraft_geom::BezPath;
 use fontcraft_model::{Resolved, ResolvedGlyph};
 
-use crate::{CompileError, MAX_FONT_GLYPHS, ot_round};
+use crate::outline::Flavour;
+use crate::{CompileError, MAX_FONT_GLYPHS, export_params, ot_round};
 
 /// The name of glyph 0.
 pub const NOTDEF: &str = ".notdef";
+
+const SPACE: &str = "space";
 
 /// A glyph the compiler makes that the source does not have, appended after the source glyphs
 /// in the order the list gives: a colour layer glyph (`docs/plans/M11.md` § 3 › Layer glyphs) or
@@ -55,8 +63,14 @@ pub fn append_made(
     Ok((glyphs, described))
 }
 
-/// `glyphs` in their final order: `.notdef` first, drawn when absent.
-pub fn final_order(mut glyphs: Vec<ResolvedGlyph>, font: &Resolved, warnings: &mut Vec<String>) -> Result<Vec<ResolvedGlyph>, CompileError> {
+/// `glyphs` in their final order: `.notdef` first, drawn when absent; `space` second in a
+/// TrueType font with TrueType Keep GlyphOrder on.
+pub fn final_order(
+    mut glyphs: Vec<ResolvedGlyph>,
+    font: &Resolved,
+    flavour: Flavour,
+    warnings: &mut Vec<String>,
+) -> Result<Vec<ResolvedGlyph>, CompileError> {
     match glyphs.iter().position(|g| g.name == NOTDEF) {
         Some(0) => {}
         Some(i) => {
@@ -67,6 +81,13 @@ pub fn final_order(mut glyphs: Vec<ResolvedGlyph>, font: &Resolved, warnings: &m
             warnings.push("the font has no `.notdef` glyph; glyph 0 was drawn as a hollow box".to_string());
             glyphs.insert(0, notdef(font));
         }
+    }
+    if flavour == Flavour::TrueType
+        && export_params::keeps_glyph_order(&font.params)
+        && let Some(i) = glyphs.iter().position(|g| g.name == SPACE)
+    {
+        let space = glyphs.remove(i);
+        glyphs.insert(1, space);
     }
     if glyphs.len() > MAX_FONT_GLYPHS {
         return Err(CompileError::TooManyGlyphs(glyphs.len()));

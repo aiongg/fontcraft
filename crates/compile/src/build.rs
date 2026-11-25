@@ -38,6 +38,7 @@ use write_fonts::tables::vmtx::Vmtx;
 use write_fonts::types::{F2Dot14, FWord, Fixed, GlyphId, GlyphId16, LongDateTime, NameId, Tag, UfWord, Version16Dot16};
 
 use crate::cff;
+use crate::export_params::Web;
 use crate::info::{self, Info};
 use crate::outline::{Flavour, Prepared};
 use crate::{CompileError, MAX_POST_NAMES, MAX_TT_POINTS, Options, i16_of, ot_round, ranges, u16_of};
@@ -329,6 +330,7 @@ fn postscript(input: &CffInput, builder: &mut FontBuilder, warnings: &mut Vec<St
             input.outlines,
             input.synthesised_notdef,
             input.hinting,
+            input.rounding,
             warnings,
         )?,
         None => cff::build(
@@ -341,6 +343,7 @@ fn postscript(input: &CffInput, builder: &mut FontBuilder, warnings: &mut Vec<St
             input.synthesised_notdef,
             input.hinting,
             input.two_decimals,
+            input.rounding,
             input.cff,
             warnings,
         )?,
@@ -478,6 +481,8 @@ struct CffInput<'a> {
     /// Coordinates to two decimals and the reference's glyph boxes
     /// ([`crate::makeotf::Finish::two_decimals`]).
     two_decimals: bool,
+    /// How coordinates are rounded otherwise.
+    rounding: cff::Rounding,
     cff: &'a crate::CffOptions,
 }
 
@@ -616,6 +621,7 @@ pub fn assemble(
                     subroutinize,
                     cid: extra.cid.as_ref(),
                     two_decimals: options.project.as_ref().is_some_and(|p| p.two_decimals),
+                    rounding: cff::Rounding::new(options.cff.round_tolerance, source, font),
                     cff: &options.cff,
                 };
                 postscript(&input, &mut builder, warnings)?
@@ -706,14 +712,24 @@ pub fn assemble(
     let max_context = crate::layout_tables::os2_max_context(blocks)?;
     let mut os2 = os2(&info, &horizontal.metrics, &code_points, max_context);
     crate::layout_tables::apply_os2(&blocks.os2, &mut os2);
+    let web = Web::read(&font.params, options.web_container, warnings);
+    if let Some(fs_type) = web.fs_type() {
+        os2.fs_type = fs_type;
+    }
     if let Some(source) = options.project.as_ref().and_then(|p| p.metrics.as_ref()) {
         crate::makeotf::metrics::after_overrides(&mut os2, &mut hhea, source, &blocks.os2, &blocks.hhea);
     }
 
-    // Glyph names: in `post` 2.0 for TrueType when there are few enough; CFF keeps them in its
-    // charset and has `post` 3.0 (`compile.postFormat`).
-    // A CFF2 table stores no names, so a CFF2 font keeps them in `post` 2.0 as fontmake does.
-    let mut post = if flavour == Flavour::Cff && extra.cff2.is_none() {
+    // Glyph names (`compile.postVersion`): in `post` 2.0 for TrueType when there are few enough;
+    // CFF keeps them in its charset and has `post` 3.0. A CFF2 table stores no names, so a CFF2
+    // font keeps them in `post` 2.0 as fontmake does. Post Table Type chooses otherwise.
+    let stated_post = crate::export_params::post_type(&font.params, warnings);
+    let post_format = match flavour {
+        _ if web.no_post_names => 3,
+        Flavour::TrueType => options.post_format.or(stated_post).unwrap_or(2),
+        Flavour::Cff => stated_post.unwrap_or(if extra.cff2.is_some() { 2 } else { 3 }),
+    };
+    let mut post = if post_format == 3 {
         Post { version: Version16Dot16::VERSION_3_0, ..Default::default() }
     } else if order.len() > MAX_POST_NAMES {
         warnings.push(format!("the font has more than {MAX_POST_NAMES} glyphs, so glyph names were left out of it"));
@@ -726,8 +742,13 @@ pub fn assemble(
     post.underline_thickness = FWord::new(i16_of(m.underline_thickness));
     post.is_fixed_pitch = u32::from(info.fixed_pitch);
 
-    let name =
-        Name::new(info.names.iter().map(|r| NameRecord::new(r.platform, r.encoding, r.language, NameId::new(r.id), r.text.clone().into())).collect());
+    let name = Name::new(
+        info.names
+            .iter()
+            .filter(|r| web.keeps_name(r.id))
+            .map(|r| NameRecord::new(r.platform, r.encoding, r.language, NameId::new(r.id), r.text.clone().into()))
+            .collect(),
+    );
 
     if let Some(h) = &tt_hinting {
         set_program_limits(&mut maxp, h, outlines);

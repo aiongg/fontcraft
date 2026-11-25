@@ -42,7 +42,7 @@ use write_fonts::types::Tag;
 
 pub use cmap::{CMap, CodeKind, MAX_CMAP_BYTES, MAX_CMAP_CODES, parse_cmap};
 
-use crate::cff::{ROUND_TOLERANCE, hint_settings, numbers, path_ops, table_error};
+use crate::cff::{Rounding, hint_settings, numbers, path_ops, table_error};
 use crate::info::{Info, boolean, float};
 use crate::outline::Prepared;
 use crate::{CompileError, Compiled, HintingOptions, cff_hints, ot_round};
@@ -396,6 +396,7 @@ pub(crate) fn build(
     outlines: &[Prepared],
     synthesised_notdef: bool,
     hinting: &HintingOptions,
+    rounding: Rounding,
     warnings: &mut Vec<String>,
 ) -> Result<cff::Built, CompileError> {
     let settings = source.and_then(|s| hint_settings(s, font, warnings));
@@ -432,7 +433,7 @@ pub(crate) fn build(
     for (gid, ((g, prepared), cid)) in order.iter().zip(outlines).zip(&cids).enumerate() {
         let mut path = match prepared {
             Prepared::Empty => Vec::new(),
-            Prepared::Simple(path) => path_ops(path, !(gid == 0 && synthesised_notdef)),
+            Prepared::Simple(path) => rounding.apply(path_ops(path, !(gid == 0 && synthesised_notdef))),
             Prepared::Composite(_) | Prepared::Points(_) => {
                 return Err(CompileError::Glyph { glyph: g.name.clone(), message: "a CFF outline cannot hold components or TrueType points".into() });
             }
@@ -454,7 +455,7 @@ pub(crate) fn build(
         cid_count: None,
         font_dicts,
         glyphs,
-        round_tolerance: ROUND_TOLERANCE,
+        round_tolerance: rounding.tolerance(),
         specialise: true,
     };
     let built = cff::cid::build(&cid_font).map_err(table_error)?;

@@ -148,6 +148,7 @@ impl OutputRequest {
             None => None,
             Some(n) => u8::try_from(n).ok(),
         };
+        options.post_format = out.post_format;
         out.bump = bump(p)?;
         out.exclude = tags(p, "excludeTables")?;
         if let Some(tag) = out.exclude.iter().find(|t| REQUIRED_TABLES.contains(t)) {
@@ -368,7 +369,7 @@ fn read_cff(p: &Params, options: &mut Options) -> Result<()> {
     }
     if let Some(v) = group.get("roundTolerance").filter(|v| !v.is_null()) {
         let t = v.as_f64().filter(|t| t.is_finite() && (0.0..=0.5).contains(t));
-        options.cff.round_tolerance = t.ok_or_else(|| p.bad("`cff.roundTolerance` must be a number from 0 to 0.5"))?;
+        options.cff.round_tolerance = Some(t.ok_or_else(|| p.bad("`cff.roundTolerance` must be a number from 0 to 0.5"))?);
     }
     if let Some(v) = group.get("optimize").filter(|v| !v.is_null()) {
         let level = v.as_u64().filter(|n| *n <= 2).ok_or_else(|| p.bad("`cff.optimize` is 0, 1 or 2"))?;

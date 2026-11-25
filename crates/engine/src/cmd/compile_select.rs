@@ -14,7 +14,7 @@ use fontcraft_glyphquery::Pattern;
 use fontcraft_model::{Font, Instance};
 use serde_json::{Value, json};
 
-use super::compile::{Container, Dest, Job, Pick, Report, Request, Sink, format_name, outlines_name};
+use super::compile::{ByContainer, Container, Dest, Job, Pick, Report, Request, Sink, format_name, outlines_name};
 use crate::params::Params;
 use crate::{EngineError, Result};
 
@@ -360,19 +360,26 @@ fn variable_options(req: &Request) -> Options {
         version_stamp: o.version_stamp,
         curves: o.curves,
         stub_gsub: o.stub_gsub,
+        post_format: o.post_format,
         ..Options::default()
     }
 }
 
 /// The plan's description of the variable fonts a request builds, with the files they would be
 /// written to.
-pub(super) fn plan_variable(font: &Font, picks: &[VariablePick], flavours: &[VarFlavour], req: &Request) -> Result<Vec<Value>> {
+pub(super) fn plan_variable(
+    font: &Font,
+    picks: &[VariablePick],
+    flavours: &[VarFlavour],
+    req: &Request,
+    warnings: &mut Vec<String>,
+) -> Result<Vec<Value>> {
     let mut out = Vec::new();
     for pick in picks {
         let names = var::names::variable_names(font, pick.setting)?;
+        let containers = crate::export_steps::setting_containers(font, pick.setting, &req.containers, warnings);
         for &flavour in flavours {
-            let files: Vec<Value> = req
-                .containers
+            let files: Vec<Value> = containers
                 .iter()
                 .map(|&c| {
                     let name = variable_file_name(req, &pick.stem, flavour, c);
@@ -415,15 +422,24 @@ pub(super) fn build_variable(
 ) -> Result<()> {
     let options = variable_options(req);
     for pick in picks {
+        let containers = crate::export_steps::setting_containers(font, pick.setting, &req.containers, &mut report.warnings);
         for &flavour in flavours {
-            let built = var::compile_variable(font, pick.setting, &options, &VariableOptions { flavour, optimize_deltas })?;
-            if report.feature_code.is_none() {
-                report.feature_code.clone_from(&built.compiled.feature_code);
-            }
-            let mut files = Vec::with_capacity(req.containers.len());
-            for &container in &req.containers {
-                let data = container.wrap(&built.compiled.bytes)?;
-                let name = variable_file_name(req, &built.file_stem, flavour, container);
+            let mut stem = String::new();
+            let mut built = ByContainer::new(fontcraft_compile::export_params::may_differ_by_container(font));
+            let mut files = Vec::with_capacity(containers.len());
+            for &container in &containers {
+                let compiled = built.get(container, |web_container| {
+                    let v = var::compile_variable(
+                        font,
+                        pick.setting,
+                        &Options { web_container, ..options.clone() },
+                        &VariableOptions { flavour, optimize_deltas },
+                    )?;
+                    stem = v.file_stem;
+                    Ok(v.compiled)
+                })?;
+                let data = container.wrap(&compiled.bytes)?;
+                let name = variable_file_name(req, &stem, flavour, container);
                 let file = sink.put(name, container, data, &mut report.warnings)?;
                 let mut v = json!({ "name": file.name, "container": container.name(), "bytes": file.bytes });
                 if let (Some(path), Value::Object(m)) = (&file.path, &mut v) {
@@ -431,10 +447,14 @@ pub(super) fn build_variable(
                 }
                 files.push(v);
             }
+            let Some((compiled, warnings)) = built.finish() else { continue };
+            if report.feature_code.is_none() {
+                report.feature_code = compiled.feature_code;
+            }
             fonts.push(json!({
                 "instance": pick.label, "source": "variable", "format": Formats::variable_name(flavour),
-                "outlines": outlines_name(Formats::file_flavour(flavour)), "fileName": built.file_stem,
-                "glyphs": built.compiled.glyph_order.len(), "warnings": built.compiled.warnings, "files": files,
+                "outlines": outlines_name(Formats::file_flavour(flavour)), "fileName": stem,
+                "glyphs": compiled.glyph_order.len(), "warnings": warnings, "files": files,
             }));
         }
     }

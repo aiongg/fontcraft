@@ -1154,7 +1154,7 @@ impl Project {
         let target = font.default_target().map_err(|e| ProjectError(e.to_string()))?;
         let resolved = crate::drawing::resolve(&font, &target).map_err(|e| ProjectError(e.to_string()))?;
         let full_name = property_text(&resolved, "postscriptFullNames", &["postscriptFullName"]);
-        let postscript = crate::plan::postscript_name(&resolved, &Options::default()).unwrap_or_default();
+        let postscript = crate::plan::postscript_name_from(Some(&font), &resolved, &Options::default()).unwrap_or_default();
         let made;
         let entry = match self.menu_db.as_ref().and_then(|db| db.entry(&postscript)) {
             Some(e) => e,

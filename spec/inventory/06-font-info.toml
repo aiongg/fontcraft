@@ -3119,6 +3119,7 @@ milestone = "M2"
 summary = "Fractional coordinates produced by a zero or subdivided grid may be written as they are into CFF-flavoured fonts; the compiler must not round them."
 ref = "Font Info › Other Settings › Grid Spacing & Subdivision"
 status = "handbook"
+notes = "Built for static CFF fonts, name-keyed and CID-keyed (M2.10): when the Grid Spacing parameter, else spacing over subdivision, is below 1, coordinates keep hundredths of a unit; otherwise they are whole. font.compile's cff.roundTolerance goes before it and a project compile keeps its own two decimals. Both oracles always write whole units (fontmake unless told otherwise); variable CFF2 masters are rounded as before (40-compile.md § 4a)."
 
 [[behavior]]
 id = "fontInfo.keyboardIncrements"
