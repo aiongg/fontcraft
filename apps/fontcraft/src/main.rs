@@ -29,6 +29,8 @@ mod net;
 #[cfg(not(target_arch = "wasm32"))]
 mod preview_server;
 #[cfg(not(target_arch = "wasm32"))]
+mod recovery;
+#[cfg(not(target_arch = "wasm32"))]
 mod settings_file;
 #[cfg(not(target_arch = "wasm32"))]
 mod spooler;
@@ -178,7 +180,7 @@ fn control(port: u16, read_root: Option<&std::path::Path>, write_root: Option<&s
 }
 
 /// `options` with what only the desktop app supplies: the system clock, External Preview's frame hook, the preview web
-/// server, the settings folder (settings, snippets and extension folders), the system browser and file manager, the
+/// server, the folder of copies of unsaved work ([`recovery`]), the settings folder (settings, snippets and extension folders), the system browser and file manager, the
 /// system clipboard's text and PDF ([`clipboard`]), and the HTTPS downloads of the Extension Manager.
 #[cfg(not(target_arch = "wasm32"))]
 fn desktop(options: fontcraft_ui::Options) -> fontcraft_ui::Options {
@@ -191,6 +193,8 @@ fn desktop(options: fontcraft_ui::Options) -> fontcraft_ui::Options {
         frame_hook: Some(frame_hook),
         preview_host: Some(Box::new(preview_server::Host::default())),
         print_host: Some(std::sync::Arc::new(spooler::Spooler)),
+        recovery: recovery::Copies::open(user_files::settings_dir().as_deref())
+            .map(|copies| Box::new(copies) as Box<dyn fontcraft_ui::app::recovery::RecoveryHost>),
         user_store: Some(Box::new(user_files::UserFiles::in_settings_folder())),
         opener: fontcraft_ui::Opener::system(),
         clipboard_reader: Some(fontcraft_ui::app::clipboard::system_text),

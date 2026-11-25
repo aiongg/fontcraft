@@ -5,7 +5,9 @@
 use std::sync::Arc;
 
 use craft::ui::runtime::commands::CommandRef;
+use fontcraft_engine::cmd::CommandSpec;
 use fontcraft_engine::command_specs;
+use fontcraft_engine::shortcuts::Custom;
 use fontcraft_textlayout::{Item, KerningMode, Layout};
 use fontcraft_tools::{Key, KeyEvent, Modifiers, PointerEvent, PointerKind};
 use serde_json::{Value, json};
@@ -157,8 +159,10 @@ fn key(app: &mut FontCraftApp, ev: KeyEvent) -> Result<(), String> {
             };
             shell(app, id, json!({}))
         }
-        Key::Left | Key::Right | Key::Up | Key::Down => match shortcut_key(app.view.text.direction, ev.key).and_then(|key| text_mode_command(key, m))
-        {
+        Key::Left | Key::Right | Key::Up | Key::Down => {
+            let custom = app.catalog.custom();
+            let id = shortcut_key(app.view.text.direction, ev.key).and_then(|key| text_mode_command(custom, key, m));
+            match id {
             Some(id) => shortcut(app, id),
             None if plain => move_cursor(app, ev.key, m.shift),
             None if m.alt && !m.cmd && !m.ctrl => move_by_word(app, ev.key, m.shift),
@@ -166,7 +170,8 @@ fn key(app: &mut FontCraftApp, ev: KeyEvent) -> Result<(), String> {
                 to_text_end(app, next_line(ev.key), m.shift)
             }
             None => Ok(()),
-        },
+            }
+        }
         Key::Return | Key::Backspace | Key::Delete | Key::Home | Key::End | Key::Tab | Key::Escape => Ok(()),
     }
 }
@@ -183,9 +188,10 @@ fn shortcut_key(direction: WritingDirection, key: Key) -> Option<Key> {
     }
 }
 
-/// The engine command whose text-mode shortcut is `key` with `mods`.
-pub fn text_mode_command(key: Key, mods: Modifiers) -> Option<&'static str> {
-    command_specs().iter().filter(|c| c.when == Some(TEXT_MODE)).find(|c| c.shortcut.and_then(parse_shortcut) == Some((key, mods))).map(|c| c.id)
+/// The engine command whose text-mode shortcut (the user's own, else its built-in one) is `key` with `mods`.
+pub fn text_mode_command(custom: &Custom, key: Key, mods: Modifiers) -> Option<&'static str> {
+    let shortcut = |c: &CommandSpec| custom.shortcut(c.id, c.shortcut).as_deref().and_then(parse_shortcut);
+    command_specs().iter().filter(|c| c.when == Some(TEXT_MODE)).find(|c| shortcut(c) == Some((key, mods))).map(|c| c.id)
 }
 
 /// A shortcut such as `Cmd+Ctrl+Shift+Left` as a key of the tools and its modifiers.

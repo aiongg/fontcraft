@@ -25,6 +25,7 @@ pub const INSPECT: &[Inspect] = &[
     crate::app::open_report::inspect,
     crate::app::export_results::inspect,
     crate::shell::start::inspect,
+    crate::app::recovery::inspect,
     crate::shell::settings::inspect,
     crate::shell::table_viewer::inspect,
     crate::shell::compare_fonts::inspect,

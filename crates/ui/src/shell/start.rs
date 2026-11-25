@@ -1,6 +1,6 @@
 //! The Start Window's commands and state (`window.startWindow`): recent documents, and the script and glyph-set
 //! chooser that creates a document (`file.newFromGlyphSets`). Also the recent-documents list (`file.openRecent`, kept
-//! in the user settings under `file.recentDocuments`) and Show in Finder (`file.showInFinder`). The window itself is
+//! in the user settings under `file.recentDocuments`; `app::document_menu` lists it in File › Open Recent) and Show in Finder (`file.showInFinder`). The window itself is
 //! `dialogs/start_window.rs`.
 //!
 //! The chooser shows when there are no recent documents. Opening the window restores the last picks, which
@@ -45,7 +45,7 @@ pub const COMMANDS: &[UiCommand] = &[
         label: "Open Recent",
         menu: &["File"],
         shortcut: None,
-        params: "{index?: number, path?: string, clear?: bool} open a recent document by its place in the list (0: the newest) or by its path in the list; clear: empty the list. With none of them, the Start Window shows the list. The list holds the last 10 documents opened or saved, newest first; files that no longer exist are left out",
+        params: "{index?: number, path?: string, clear?: bool} open a recent document by its place in the list (0: the newest) or by its path in the list; clear: empty the list. With none of them, the Start Window shows the list. The list holds the last 10 documents opened or saved, newest first; files that no longer exist are left out of `index` and of the Start Window, and greyed out in the menu",
     },
     UiCommand {
         id: "file.showInFinder",
@@ -327,7 +327,13 @@ fn open_recent(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
             .and_then(|i| list.get(i))
             .cloned()
             .ok_or_else(|| format!("`index` must be below {}, the number of recent documents", list.len()))?,
-        (None, Some(p)) => list.iter().find(|l| *l == p).cloned().ok_or_else(|| format!("`{}` is not a recent document", params::quoted(p)))?,
+        (None, Some(p)) => match list.iter().find(|l| *l == p) {
+            Some(path) => path.clone(),
+            None if app.session.settings().stored_recent_documents().iter().any(|l| l == p) => {
+                return Err(format!("`{}` no longer exists", params::quoted(p)));
+            }
+            None => return Err(format!("`{}` is not a recent document", params::quoted(p))),
+        },
         (None, None) => {
             open_window(app, true, Some(false));
             return Ok(());

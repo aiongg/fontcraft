@@ -8,10 +8,14 @@
 //! A menu row is greyed out when its engine command's `enabled` refuses or the selection gives it nothing to act on,
 //! and an on/off switch's row shows a check mark while the switch is on (`menu_states`).
 
+use std::sync::Arc;
+
+use craft::keymap::keymap::Overrides;
 use craft::menu::{ItemKind, MenuBar, Row};
 use craft::ui::runtime::commands::{AppCatalog, Binding, CommandDef, CommandInput, CommandKind, CommandRef, CommandState, Scope};
 use fontcraft_engine::Session;
 use fontcraft_engine::cmd::CommandSpec;
+use fontcraft_engine::shortcuts::Custom;
 use serde_json::Value;
 
 use crate::shell::commands::{self as shell_commands, UiCommand};
@@ -55,6 +59,11 @@ pub struct Catalog {
     app: Option<AppCatalog>,
     /// The catalog with each command's enabled state, rebuilt when the engine moves.
     input: CommandInput,
+    /// The user's own shortcuts, as the settings had them last, and as the keymap takes them.
+    custom: Custom,
+    overrides: Arc<Overrides>,
+    /// The settings revision they were read at.
+    shortcuts_at: Option<u64>,
     /// The menu bar with each row's enabled state.
     pub menu: MenuBar,
     /// Why the catalog could not be built.
@@ -68,6 +77,12 @@ pub struct Catalog {
     /// The Window menu's panel rows (`shell::window::refresh_menu`), after the dynamic rows, and what they were made for.
     panels: Vec<Row>,
     panels_key: Option<u64>,
+    /// The Window menu's document rows (`document_menu`), after the panel rows, and what they were made for.
+    documents: Vec<Row>,
+    documents_key: Option<u64>,
+    /// The rows of File › Open Recent (`document_menu`), after File › Open…, and what they were made for.
+    recent: Vec<Row>,
+    recent_key: Option<u64>,
     /// Each switch row's state (`menu_states::SWITCHES`), as last read.
     checks: Vec<(&'static str, bool)>,
     /// The engine rows the selection greys out, with why, and what they were worked out for.
@@ -89,7 +104,10 @@ impl Catalog {
         Catalog {
             app,
             input,
-            menu: menu(|_| true, &MenuStates::default(), &[]),
+            custom: Custom::default(),
+            overrides: Arc::default(),
+            shortcuts_at: None,
+            menu: menu(|_| true, &MenuStates::default(), &[], &[]),
             error,
             generation,
             enabled: Vec::new(),
@@ -97,6 +115,10 @@ impl Catalog {
             dynamic_key: None,
             panels: Vec::new(),
             panels_key: None,
+            documents: Vec::new(),
+            documents_key: None,
+            recent: Vec::new(),
+            recent_key: None,
             checks: Vec::new(),
             greyed: Vec::new(),
             greyed_key: None,
@@ -114,12 +136,52 @@ impl Catalog {
         let specs = fontcraft_engine::cmd::command_specs();
         let enabled: Vec<bool> = specs.iter().map(|spec| (spec.enabled)(session).is_ok()).collect();
         let mut input = self.app.clone().map_or_else(CommandInput::new, |app| CommandInput::new().catalog(app));
+        input = input.overrides(Arc::clone(&self.overrides));
         for (spec, on) in specs.iter().zip(&enabled) {
             input = input.state(CommandRef::new(spec.id), CommandState::new().enabled(*on));
         }
         self.input = input;
         self.enabled = enabled;
         self.rebuild_menu();
+    }
+
+    /// The commands the open document and the selection allow now.
+    pub fn allowed(&self) -> std::collections::BTreeSet<String> {
+        let specs = fontcraft_engine::cmd::command_specs().iter().enumerate();
+        let engine = specs.filter(|(at, spec)| self.enabled.get(*at).copied().unwrap_or(true) && !self.greyed.iter().any(|(id, _)| *id == spec.id));
+        let shell = shell_commands::MODULES.iter().flat_map(|m| m.commands.iter()).map(|c| c.id.to_string());
+        engine.map(|(_, spec)| spec.id.to_string()).chain(shell).collect()
+    }
+
+    /// The user's own shortcuts.
+    pub fn custom(&self) -> &Custom {
+        &self.custom
+    }
+
+    /// The settings revision the shortcuts were read at.
+    pub fn shortcuts_at(&self) -> Option<u64> {
+        self.shortcuts_at
+    }
+
+    /// Has the shortcuts read again: the settings were replaced and may carry the revision of the ones before.
+    pub fn reread_shortcuts(&mut self) {
+        self.shortcuts_at = None;
+    }
+
+    /// Takes the user's own shortcuts, read at the settings revision `at`; the keymap changes only when they did.
+    pub fn set_custom(&mut self, at: u64, custom: Custom) {
+        self.shortcuts_at = Some(at);
+        if self.custom == custom {
+            return;
+        }
+        self.overrides = Arc::new(super::shortcuts::overrides(&custom));
+        self.custom = custom;
+        self.input = self.input.clone().overrides(Arc::clone(&self.overrides));
+    }
+
+    /// The shortcut of the command `id` now, its own or the user's; `default` is the built-in one.
+    pub fn shortcut(&self, id: &str, default: Option<&str>) -> Option<String> {
+        self.custom.shortcut(id, default)
     }
 
     /// Puts the extensions' rows at the end of their menus. `key` names what they show; the rows are made and the
@@ -140,6 +202,26 @@ impl Catalog {
         }
         self.panels_key = Some(key);
         self.panels = rows();
+        self.rebuild_menu();
+    }
+
+    /// Puts the open documents' rows at the end of the Window menu; rebuilt only when `key` changed.
+    pub fn set_document_rows(&mut self, key: u64, rows: impl FnOnce() -> Vec<Row>) {
+        if self.documents_key == Some(key) {
+            return;
+        }
+        self.documents_key = Some(key);
+        self.documents = rows();
+        self.rebuild_menu();
+    }
+
+    /// Sets the rows of File › Open Recent; rebuilt only when `key` changed.
+    pub fn set_recent_rows(&mut self, key: u64, rows: impl FnOnce() -> Vec<Row>) {
+        if self.recent_key == Some(key) {
+            return;
+        }
+        self.recent_key = Some(key);
+        self.recent = rows();
         self.rebuild_menu();
     }
 
@@ -175,9 +257,9 @@ impl Catalog {
 
     fn rebuild_menu(&mut self) {
         let enabled = &self.enabled;
-        let extra: Vec<Row> = self.dynamic.iter().chain(&self.panels).cloned().collect();
+        let extra: Vec<Row> = self.dynamic.iter().chain(&self.panels).chain(&self.documents).cloned().collect();
         let states = MenuStates { checks: &self.checks, greyed: &self.greyed };
-        self.menu = menu(|at| enabled.get(at).copied().unwrap_or(true), &states, &extra);
+        self.menu = menu(|at| enabled.get(at).copied().unwrap_or(true), &states, &self.recent, &extra);
     }
 
     /// The catalog's generation: it changes only when the definitions do.
@@ -210,7 +292,8 @@ pub fn chosen_tool(own: &'static str, command: &CommandRef) -> Result<&'static s
     }
 }
 
-fn definitions() -> Vec<CommandDef> {
+/// The definitions the keymap knows: commands, numbered keys and tools.
+pub(crate) fn definitions() -> Vec<CommandDef> {
     let mut defs = Vec::new();
     for spec in fontcraft_engine::cmd::command_specs() {
         defs.push(engine_def(spec));
@@ -283,9 +366,10 @@ impl MenuStates<'_> {
     }
 }
 
-/// The menu bar: one row per engine and shell command with a menu path, then the `extra` rows. `enabled(at)` answers
+/// The menu bar: one row per engine and shell command with a menu path, the `recent` rows after File › Open…, then the
+/// `extra` rows. `enabled(at)` answers
 /// for the engine command at index `at` of `command_specs()`; a row the selection greys out carries why as its tooltip.
-fn menu(enabled: impl Fn(usize) -> bool, states: &MenuStates<'_>, extra: &[Row]) -> MenuBar {
+fn menu(enabled: impl Fn(usize) -> bool, states: &MenuStates<'_>, recent: &[Row], extra: &[Row]) -> MenuBar {
     let mut rows = Vec::new();
     for (at, spec) in fontcraft_engine::cmd::command_specs().iter().enumerate() {
         if spec.menu.is_empty() || super::menu_alternates::alternate_of(spec.id).is_some() || super::menu_alternates::row_taken_by_dialog(spec.id) {
@@ -301,9 +385,15 @@ fn menu(enabled: impl Fn(usize) -> bool, states: &MenuStates<'_>, extra: &[Row])
         }
         row.alternate = super::menu_alternates::menu_alternate(spec.id);
         rows.push(row);
+        if spec.id == "file.open" {
+            rows.extend(recent.iter().cloned());
+        }
     }
     for module in shell_commands::MODULES {
-        for command in module.commands.iter().filter(|c| !c.menu.is_empty() && super::menu_alternates::alternate_of(c.id).is_none()) {
+        // The recent files' submenu stands for `file.openRecent`.
+        let shown =
+            |c: &&UiCommand| !c.menu.is_empty() && c.id != super::document_menu::OPEN_RECENT && super::menu_alternates::alternate_of(c.id).is_none();
+        for command in module.commands.iter().filter(shown) {
             let mut row = states.checked(Row::new(command.menu, CommandRef::new(command.id), command.label), command.id);
             row.alternate = super::menu_alternates::menu_alternate(command.id);
             rows.push(row);

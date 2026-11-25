@@ -136,14 +136,27 @@ fn title_bar(ui: &mut Ui, _: &mut BodyCx<'_>, app: &mut FontCraftApp) {
     let menu = craft_ext::menu::held_alternate_labels(ui, &app.catalog.menu, |command| {
         crate::app::menu_alternates::alternate_label(&command.id).map(str::to_string)
     });
+    let documents = crate::app::document_menu::open_documents(&app.session);
+    let several = documents.len() > 1;
+    let mut button = None;
+    let opener = &mut button;
     let _ = TitleBar::new().show_titled(
         ui,
         title,
         |ui, _| {
             MenuBarUi::new(&menu).show(ui);
         },
-        |_, _| {},
+        move |ui, _| {
+            if several {
+                *opener = Some(crate::app::document_menu::button(ui));
+            }
+        },
     );
+    // Outside the bar's own layout passes, where a popup would show in a pass that is thrown away.
+    let picked = button.and_then(|button| crate::app::document_menu::show_menu(ui, &button, &documents));
+    if let Some(command) = picked {
+        app.fire(command);
+    }
 }
 
 fn body(ui: &mut Ui, cx: &mut BodyCx<'_>, app: &mut FontCraftApp) {

@@ -70,10 +70,11 @@ fn flatten(app: &FontCraftApp, nodes: &[Node], path: &mut Vec<String>, out: &mut
 /// greyed item says why (the engine's reason, else the row's `tooltip`).
 fn menu_entry(app: &FontCraftApp, id: &str, label: &str, path: &[String], enabled: bool, tooltip: Option<&str>) -> Value {
     let spec = fontcraft_engine::find_command(id);
-    let shortcut = spec.and_then(|s| s.shortcut).or_else(|| crate::shell::commands::find(id).and_then(|(_, c)| c.shortcut));
+    let built_in = spec.and_then(|s| s.shortcut).or_else(|| crate::shell::commands::find(id).and_then(|(_, c)| c.shortcut));
+    let shortcut = app.catalog.shortcut(id, built_in);
     let check = spec.map(|s| (s.enabled)(&app.session));
     let enabled = enabled && !matches!(check, Some(Err(_)));
-    let mut entry = json!({"command": id, "label": label, "path": path, "shortcut": shortcut.unwrap_or(""), "enabled": enabled});
+    let mut entry = json!({"command": id, "label": label, "path": path, "shortcut": shortcut.unwrap_or_default(), "enabled": enabled});
     if !enabled {
         // A row the engine allows is greyed out by the selection, which put why in its tooltip.
         let reason = match check {

@@ -116,13 +116,17 @@ kind = "ui"
 params = "{index?: number, path?: string, clear?: bool} → {title, path} | {cleared}"
 area = "ui-chrome"
 milestone = "M4"
-summary = "Reopens one of the recently used documents; the list is kept with the preferences and can be cleared."
+summary = "Reopens one of the recently used documents; the list is kept with the preferences and can be cleared. In the window File › Open Recent is a submenu: the files newest first, each with its folder where two names are the same and its path as tooltip, a file that is gone greyed out, then Clear Menu. With no recent files it holds No Recent Files, greyed out."
 ref = "Create (the Start Window's recent documents); platform convention"
 status = "inferred"
+observe = [
+  "Open the File menu: note whether it has Open Recent, how many files it lists, what it shows for two files of one name, and its last item.",
+]
 notes = "Checked in the M4 planning pass (it was a `memory` row): the handbook documents the Start Window's list of recent documents, not an Open Recent menu item; the menu item is a platform convention we add. Moved from M14 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): the Start Window (M4) needs the list. The list lives in the user settings, the owner's decision (docs/plans/M4.md § 7 question 4): file.open, file.save and file.saveAs write it in the engine, so documents opened or saved over the control channel, MCP or the command line are listed too."
 guesses = [
-  "The list holds the last ten documents opened or saved, newest first; a file that no longer exists is dropped when the list is shown. Settled by observing the Start Window.",
-  "File › Open Recent without an index or a path shows the Start Window's list of recent documents, since the menu bar has no submenu of files. Settled when the menu bar can list them.",
+  "The list holds the last ten documents opened or saved, newest first; a file that no longer exists is left out of the Start Window's list and greyed out in the submenu. Settled by observing the Start Window and the menu.",
+  "The command without an index or a path shows the Start Window's list of recent documents.",
+  "The submenu sits after File › Open…, looks for the files again when the window gets the focus, and ends with Clear Menu, which is macOS's name for it.",
   "A path is kept once, as an absolute path; opening or saving it again moves it to the top. Settled by observing the Start Window.",
 ]
 
@@ -269,10 +273,97 @@ kind = "engine"
 params = "{index?: number, path?: string} make an open document the active one, by its index in the session or the path it was opened from → {title, index}"
 area = "ui-chrome"
 milestone = "M1"
-summary = "Makes another open document the one commands act on, chosen by its position among the open documents or by its file. The window's tab or document list calls it; agents call it to switch between fonts."
+summary = "Makes another open document the one commands act on, chosen by its position among the open documents or by its file. The Window menu's rows and the document pop-up run it (window.documentsMenu); agents call it to switch between fonts. The window shows the document with the tabs, the tab in front and the Font View selection it had when it was last shown."
 ref = "FontCraft design, following the sibling apps"
 status = "inferred"
 own = true
+
+[[command]]
+id = "document.showNext"
+label = "Show Next Document"
+menu = ["Window"]
+shortcut = "Cmd+`"
+kind = "engine"
+params = "{} → {title, index}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Makes the open document after the active one, in the order they were opened, the active one; after the last comes the first. With one document open it stays active."
+ref = "FontCraft design; macOS's key for the next window of an app"
+status = "inferred"
+own = true
+guesses = [
+  "FontCraft shows every document in one window, so the key that steps through an app's windows on macOS steps through the documents. Off macOS Cmd is Ctrl. macOS itself may take the key before an app with one window sees it; the menu row works there.",
+  "The key steps through fonts; projects are reached from the Window menu and the document pop-up.",
+]
+observe = [
+  "With three fonts open, press Cmd+` several times: note the order the windows come forward in.",
+]
+
+[[command]]
+id = "document.showPrevious"
+label = "Show Previous Document"
+menu = ["Window"]
+shortcut = "Cmd+Shift+`"
+kind = "engine"
+params = "{} → {title, index}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Makes the open document before the active one the active one; before the first comes the last."
+ref = "FontCraft design; macOS's key for the previous window of an app"
+status = "inferred"
+own = true
+
+[[command]]
+id = "app.recoverDocuments"
+label = "Recover Unsaved Work"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{key?: string, answer?: \"recover\" | \"discard\" | \"later\"} → {pending: [{key, title, original, ageSeconds}]}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Copies of documents with unsaved changes are kept in a recovery folder of the app's own while they are open: at most every 30 seconds, and when the window loses the focus. Saving or closing a document, or closing the window after answering for it, removes its copy. After a run that ended any other way, the next start asks about each copy it left, with the time it was written: Recover opens it as a document with unsaved changes, Discard removes it, Escape keeps it for the next start. No copy is ever written into the user's own file, and a recovered document's Save asks before it replaces that file. A copy that cannot be written is reported once, tried again every 30 seconds and stops nothing."
+ref = "FontCraft design, following the sibling apps"
+status = "inferred"
+own = true
+notes = "FontCraft (M14.24): crates/ui/src/app/recovery.rs decides, apps/fontcraft/src/recovery.rs writes on a thread of its own, through the framework's recovery store, whose lock per run keeps two windows apart. At most 32 documents and 2 GB; a copy first asked about more than 14 days ago and not written since is removed, one never asked about is kept. Only plain files of the app's own names are offered, removed or written. Projects have no copies, and the browser build keeps none."
+guesses = [
+  "The interval of 30 seconds, the limits and the folder (the platform's state folder) are ours; the reference leaves recovery to the system's versioned documents.",
+  "Each copy is asked about in a question of its own with its age, rather than in one list.",
+]
+observe = [
+  "Change a font, kill the reference app, start it again: note whether and how it offers the changes.",
+]
+
+[[command]]
+id = "file.openRecovered"
+label = "Open Recovered Document"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{path: string, original?: string, title?: string} → {title, path, glyphs, document, warnings}"
+area = "import-export"
+milestone = "M14"
+summary = "Opens a copy of unsaved work as a document with unsaved changes. Save goes to the file the work came from, and is refused until it is forced, since that file may hold something else by now. The file as it is when the work is recovered is what later changes on disk are told from; one that cannot be read then is compared with nothing. Glyph data beside it is read, as when it is opened. When that file is open already, the copy opens without a file."
+ref = "FontCraft design"
+status = "inferred"
+own = true
+
+[[behavior]]
+id = "window.documentsMenu"
+area = "ui-chrome"
+milestone = "M14"
+summary = "The Window menu ends with the open documents: the fonts in the order they were opened, then the projects. The active font is checked, a document with unsaved changes says Edited after its name, and names that repeat show their folder. Choosing a font shows it; choosing a project shows it in the Project panel. While two or more documents are open, a button at the title bar's end opens the same list."
+ref = "FontCraft design; platform convention"
+status = "inferred"
+own = true
+guesses = [
+  "The menu lists 32 documents itself and the rest in a More Documents submenu; no source says how long the reference's Window menu grows.",
+  "The document pop-up is ours: the reference shows a window per document, FontCraft one window.",
+]
+observe = [
+  "Open the Window menu with three fonts open, one of them changed: note their order, the check mark and how the changed one is marked.",
+]
 
 [[behavior]]
 id = "file.openTwiceActivates"

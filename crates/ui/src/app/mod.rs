@@ -12,6 +12,7 @@ pub mod clock;
 pub mod close;
 pub mod console;
 pub mod context_menu;
+pub mod document_menu;
 pub mod dropped;
 pub mod export_results;
 pub mod file_questions;
@@ -28,6 +29,8 @@ pub mod open_report;
 pub mod preview_host;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod print_host;
+pub mod recovery;
+pub mod shortcuts;
 pub mod sidebar;
 pub mod startup;
 pub(crate) mod targets;
@@ -304,6 +307,10 @@ pub struct FontCraftApp {
     /// The graphics adapter the window draws with, for About FontCraft; `None` while the framework does not report it
     /// (and in tests).
     pub graphics: Option<crate::dialogs::about::Graphics>,
+    /// The copies of unsaved work (`recovery`); without a host nothing is copied (tests, the browser).
+    pub(crate) recovery: recovery::Recovery,
+    /// The recent files as File › Open Recent lists them (`document_menu`).
+    pub(crate) recent_files: document_menu::RecentFiles,
     /// The canvas overlays' switches, data and the text note being typed (`canvas::overlays`).
     pub overlays: crate::canvas::overlays::Overlays,
     /// The control channel: its listener, the window its input goes to, the replies waiting on frames.
@@ -337,6 +344,7 @@ impl FontCraftApp {
     /// control channel turns that off for its requests.
     pub fn new(mut session: Session, host: Arc<Host>) -> FontCraftApp {
         session.set_export_outside(true);
+        session.set_window_commands(shortcuts::window_commands());
         let mut app = FontCraftApp {
             session,
             host,
@@ -365,6 +373,8 @@ impl FontCraftApp {
             context_menus: context_menu::ContextMenus::default(),
             clipboard: clipboard::Clipboard::default(),
             overlays: Default::default(),
+            recovery: Default::default(),
+            recent_files: Default::default(),
             picks: Picks::default(),
             frame_hook: None,
             preview_host: None,
@@ -644,12 +654,14 @@ impl FontCraftApp {
         crate::canvas::reference_font::refresh(self);
         crate::canvas::images::cells::refresh(self);
         crate::canvas::images::cells::space_center(self);
+        shortcuts::refresh(self);
         let engine = Stamp::of(&self.session, 0);
         if self.enabled_at != Some(engine) {
             self.enabled_at = Some(engine);
             self.catalog.refresh(&self.session);
         }
         menus_dynamic::refresh(self);
+        document_menu::refresh(self);
         crate::shell::window::refresh_menu(self);
         menu_states::refresh(self);
     }
@@ -831,6 +843,7 @@ impl ShellApp for FontCraftApp {
         crate::shell::export_names::logic(self, ctx);
         dropped::take(self, ctx);
         crate::shell::external_changes::on_focus(self, ctx);
+        document_menu::on_focus(self, ctx);
         crate::canvas::images::logic(self, ctx);
         crate::control::logic(self, ctx);
         open::take_dropped(self, ctx);
@@ -847,6 +860,9 @@ impl ShellApp for FontCraftApp {
                 ctx.request_repaint_after(after);
             }
             self.frame_hook = Some(hook);
+        }
+        if let Some(again) = recovery::tick(self, ctx) {
+            ctx.request_repaint_after(again);
         }
         if let Some(again) = user_store::save(self) {
             ctx.request_repaint_after(again);
@@ -873,6 +889,7 @@ impl ShellApp for FontCraftApp {
         let decision = close::close_requested(self);
         if decision == CloseDecision::Close {
             user_store::flush(self);
+            recovery::finish(self);
         }
         decision
     }

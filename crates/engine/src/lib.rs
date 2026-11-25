@@ -39,6 +39,8 @@ pub(crate) mod linked;
 pub mod log;
 pub mod macros;
 pub mod project;
+pub mod recovery;
+pub mod shortcuts;
 pub mod slots;
 pub mod spacing_state;
 
@@ -241,6 +243,9 @@ pub struct DocState {
     /// change made by something else in between.
     #[cfg(not(target_arch = "wasm32"))]
     pub stamp: Option<io::Stamp>,
+    /// Recovered from a copy and not saved yet: its file may hold work the copy does not, so a save over it asks.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) recovered: bool,
     /// The command areas' state for this document ([`slots`]).
     pub(crate) exts: slots::DocExts,
     /// The glyph data files beside the source, merged with the user's.
@@ -344,6 +349,8 @@ pub struct Session {
     projects: project::Projects,
     /// External Preview while the app serves it (`cmd::sharing`).
     sharing: cmd::sharing::SharingState,
+    /// The window's commands that can have a keyboard shortcut ([`shortcuts`]).
+    window_commands: Vec<shortcuts::WindowCommand>,
     /// Creating a session installs the command tables.
     _tables: TablesInstalled,
 }
@@ -457,10 +464,30 @@ impl Session {
             revision: 0,
             #[cfg(not(target_arch = "wasm32"))]
             stamp,
+            #[cfg(not(target_arch = "wasm32"))]
+            recovered: false,
             exts: slots::DocExts::default(),
             glyph_data: glyph_data::CustomData::default(),
         });
         self.active = Some(self.docs.len() - 1);
+    }
+
+    /// Opens `font` as unsaved work recovered from a copy: it counts as changed, and a save over the file `path` it came
+    /// from is refused until it is forced. `original` is that file as it is now, with its stamp: what another program
+    /// changes is told from it. Without one the document has no stamp, and the file is compared with nothing.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn push_recovered(&mut self, font: Font, path: Option<PathBuf>, original: Option<(Font, io::Stamp)>, title: Option<String>) {
+        self.push_document(font, path);
+        let Some(doc) = self.docs.last_mut() else { return };
+        doc.recovered = true;
+        (doc.saved, doc.stamp) = match original {
+            Some((font, stamp)) => (Arc::new(font), Some(stamp)),
+            None => (Arc::new(Font::clone(&doc.font)), None),
+        };
+        if let Some(title) = title {
+            doc.title = title;
+        }
+        doc.bump_revision();
     }
 
     /// Closes the active document; the one that followed it (else the one before) becomes active.
@@ -605,6 +632,16 @@ impl Session {
     /// For the app that serves External Preview, and for the sharing commands.
     pub fn sharing_mut(&mut self) -> &mut cmd::sharing::SharingState {
         &mut self.sharing
+    }
+
+    /// The window's commands and fixed keys, which the shortcut commands list with the engine's.
+    pub fn window_commands(&self) -> &[shortcuts::WindowCommand] {
+        &self.window_commands
+    }
+
+    /// Hands over the window's commands and fixed keys; a window calls this once, when it starts.
+    pub fn set_window_commands(&mut self, commands: Vec<shortcuts::WindowCommand>) {
+        self.window_commands = commands;
     }
 
     /// The user's settings, for the app (loading) and for the commands that own reserved ids.

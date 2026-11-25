@@ -31,7 +31,7 @@ pub const COMMANDS: &[UiCommand] = &[
         label: "Settings…",
         menu: &["Edit"],
         shortcut: Some("Cmd+Comma"),
-        params: "{section?: \"updates\" | \"appearance\" | \"userSettings\" | \"sampleStrings\" | \"sharing\" | \"addons\" | \"shortcuts\", open?: bool, group?: number} open the Settings window (open: false closes it), on a section or else on the section last shown; a section that is not available yet is refused. group marks a group of the Sample Strings section. ui.inspect reports the window as settings: {open, section, sections: [{id, label, available, reason?}]}",
+        params: "{section?: \"updates\" | \"appearance\" | \"userSettings\" | \"sampleStrings\" | \"sharing\" | \"addons\" | \"shortcuts\", open?: bool, group?: number} open the Settings window (open: false closes it), on a section or else on the section last shown; a section that is not available yet is refused. group marks a group of the Sample Strings section. ui.inspect reports the window as settings: {open, section, sections: [{id, label, available, reason?}], group, shortcutsOpen}",
     },
     UiCommand {
         id: "settings.addSampleStringGroup",
@@ -77,7 +77,6 @@ pub struct Section {
     pub unavailable: &'static str,
 }
 
-const NOT_YET: &str = "Not available yet.";
 /// The section the window shows when none was chosen.
 pub const USER_SETTINGS: &str = "userSettings";
 
@@ -89,7 +88,7 @@ pub const SECTIONS: &[Section] = &[
     Section { id: "sampleStrings", label: "Sample Strings", available: true, unavailable: "" },
     Section { id: "sharing", label: "Sharing", available: true, unavailable: "" },
     Section { id: "addons", label: "Extensions", available: true, unavailable: "" },
-    Section { id: "shortcuts", label: "Shortcuts", available: false, unavailable: NOT_YET },
+    Section { id: "shortcuts", label: "Shortcuts", available: true, unavailable: "" },
 ];
 
 /// The window's state.
@@ -102,6 +101,8 @@ pub struct SettingsState {
     pub group: usize,
     /// The External Preview devices already asked about with the notice.
     pub noticed: Vec<String>,
+    /// The Keyboard Shortcuts dialog.
+    pub shortcuts: crate::dialogs::settings_shortcuts::ShortcutsState,
 }
 
 /// The section the window shows: the one last chosen while it is available, else User Settings.
@@ -122,7 +123,10 @@ pub fn inspect(app: &FontCraftApp, out: &mut Map<String, Value>) {
             }
         })
         .collect();
-    out.insert("settings".into(), json!({"open": st.open, "section": current(st), "sections": sections, "group": st.group}));
+    out.insert(
+        "settings".into(),
+        json!({"open": st.open, "section": current(st), "sections": sections, "group": st.group, "shortcutsOpen": st.shortcuts.open}),
+    );
 }
 
 fn store(session: &mut Session, groups: &[Group]) -> Result<(), String> {
@@ -307,7 +311,7 @@ mod tests {
         shell(&mut app, "app.settings", json!({"section": "sharing"})).unwrap();
         assert!(app.view.settings.open);
         assert_eq!(super::current(&app.view.settings), "sharing");
-        let err = shell(&mut app, "app.settings", json!({"section": "shortcuts"})).unwrap_err();
+        let err = shell(&mut app, "app.settings", json!({"section": "updates"})).unwrap_err();
         assert!(err.contains("not available"), "{err}");
         assert_eq!(super::current(&app.view.settings), "sharing");
         shell(&mut app, "app.settings", json!({"open": false})).unwrap();

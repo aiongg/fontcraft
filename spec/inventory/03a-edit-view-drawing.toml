@@ -30,6 +30,7 @@ milestone = "M14"
 summary = "After a crash, the next launch shows a dialog offering to send a crash report to the developers."
 ref = "Glyphs › Issues"
 status = "handbook"
+notes = "The local part is app.recoverDocuments (M14.24): the next start offers the unsaved work. No report is kept or sent."
 
 # ───────────────────────────── Document creation ("Create") ─────────────────────────────
 

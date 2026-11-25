@@ -107,6 +107,7 @@ mod session;
 mod settings;
 mod shared;
 pub mod sharing;
+mod shortcuts;
 pub mod smart;
 mod snippets;
 mod spacing;
@@ -401,6 +402,7 @@ pub const COMMAND_TABLES: &[CommandTable] = &[
     pathops::specs,
     audit::specs,
     settings::specs,
+    shortcuts::specs,
     sharing::specs,
     glyph_info::specs,
     font_view::specs,

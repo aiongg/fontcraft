@@ -60,6 +60,7 @@ pub mod rule_tree;
 pub mod sample_strings;
 pub mod settings;
 pub mod settings_appearance;
+pub mod settings_shortcuts;
 pub mod shape_order;
 pub mod sidebar_filters;
 pub mod smart_settings;
@@ -95,11 +96,13 @@ pub const MODULES: &[Module] = &[
     overlay_fonts::run,
     start_window::run,
     settings::run,
+    settings_shortcuts::run,
     changed_on_disk::run,
     loss_question::run,
     collection_members::run,
     open_report::run,
     export_results::run,
+    crate::app::recovery::run_dialog,
     review_hints::run,
     actions::run_dialog,
     audit_profile::run,

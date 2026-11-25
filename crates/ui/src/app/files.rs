@@ -18,6 +18,7 @@
 //! | `tableViewer.openFont`, `tableViewer.compareWithFile` | a compiled font for the Table Viewer ([`COMPILED_EXTENSIONS`]) |
 //! | `plugin.installFromFile` | a `.wasm` module or `.fcmacro` macro, unless `dataBase64` or `name` names the file |
 //! | `view.filterByEncodingFile` | an encoding file, unless `name` names a built-in encoding |
+//! | `settings.importShortcuts`, `settings.exportShortcuts` | a JSON file of keyboard shortcuts to read, unless `shortcuts` gives them, or to write |
 //! | `macroPanel.open`, `macroPanel.save` | a `.fcmacro` file to read into the Macro Panel's editor, or to write it to |
 //!
 //! Engine and shell commands alike: a shell command of the table asks before it runs, as an engine command does.
@@ -45,6 +46,8 @@ pub const PICKED: &[(&str, &str)] = &[
     ("tableViewer.compareWithFile", "path"),
     ("plugin.installFromFile", "path"),
     ("view.filterByEncodingFile", "path"),
+    ("settings.importShortcuts", "path"),
+    ("settings.exportShortcuts", "path"),
     ("macroPanel.open", "path"),
     ("macroPanel.save", "path"),
 ];
@@ -174,6 +177,20 @@ fn request(session: &Session, command: &CommandRef) -> Option<(PickRequest, &'st
                 return None;
             }
             (PickRequest::open("encoding").title("Filter by Encoding File"), Fill::One)
+        }
+        "settings.importShortcuts" => {
+            if command.params.get("shortcuts").is_some_and(|v| !v.is_null()) {
+                return None;
+            }
+            (PickRequest::open("shortcuts").title("Import Shortcuts").filter("Shortcuts", &["json"]), Fill::One)
+        }
+        "settings.exportShortcuts" => {
+            let request = PickRequest::save("shortcuts")
+                .title("Export Shortcuts")
+                .filter("Shortcuts", &["json"])
+                .file_name("Shortcuts.json")
+                .suggested_extension("json");
+            (request, Fill::One)
         }
         "macroPanel.open" => {
             let filter = [crate::shell::macro_editor::EXTENSION];

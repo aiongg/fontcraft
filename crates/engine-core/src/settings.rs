@@ -175,10 +175,12 @@ pub enum Reserved {
     /// The Export dialog's settings of each saved document's last successful export,
     /// `[{path, otf?, variable?}]`, newest first (`file.exportSettings`).
     ExportSettings,
+    /// The user's keyboard shortcuts, `[{command, shortcut}]` (`settings.setShortcut`).
+    Shortcuts,
 }
 
 impl Reserved {
-    pub const ALL: [Reserved; 10] = [
+    pub const ALL: [Reserved; 11] = [
         Reserved::Filters,
         Reserved::VisibleScripts,
         Reserved::RecentDocuments,
@@ -189,6 +191,7 @@ impl Reserved {
         Reserved::TrustedDevices,
         Reserved::ShownReporters,
         Reserved::ExportSettings,
+        Reserved::Shortcuts,
     ];
 
     pub fn id(self) -> &'static str {
@@ -203,6 +206,7 @@ impl Reserved {
             Reserved::TrustedDevices => "sharing.trustedDevices",
             Reserved::ShownReporters => "view.shownReporters",
             Reserved::ExportSettings => "export.keptSettings",
+            Reserved::Shortcuts => "shortcuts.custom",
         }
     }
 
@@ -219,6 +223,7 @@ impl Reserved {
             Reserved::TrustedDevices => "sharing.answerDevice and settings.resetTrustedDevices",
             Reserved::ShownReporters => "view.showReporter",
             Reserved::ExportSettings => "file.exportStatic and file.exportVariable when they succeed",
+            Reserved::Shortcuts => "settings.setShortcut, settings.removeShortcut and settings.resetShortcut",
         }
     }
 

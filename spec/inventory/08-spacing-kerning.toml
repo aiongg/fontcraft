@@ -529,6 +529,7 @@ milestone = "M14"
 summary = "On macOS, Ctrl+Left and Ctrl+Right are taken by the system's Mission Control shortcuts by default, so the left-sidebearing shortcuts do not reach the application until the user changes those system shortcuts. The UI should say so; other platforms need their own conflict check."
 ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
 status = "handbook"
+notes = "settings.listShortcuts and settings.setShortcut say it for the Control and arrow combinations on macOS (M14.22)."
 
 # ───────────────────────────── Metrics keys ─────────────────────────────
 
