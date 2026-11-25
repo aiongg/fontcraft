@@ -1670,7 +1670,7 @@ label = "Auto Kern"
 menu = ["Font", "Kerning"]
 shortcut = ""
 kind = "engine"
-params = "{pairs?: [[left, right]], glyphsLeft?: [names], glyphsRight?: [names], masters?: [id], direction?: 'ltr' | 'rtl', separation?: number, minKern?: number, onlyCloser?: bool, touching?: bool, keepExisting?: bool, round?: number, step?: number, depth?: number, depthShare?: number, apply?: bool}"
+params = "{pairs?: [[left, right]], glyphsLeft?: [names], glyphsRight?: [names], masters?: [id], direction?: 'ltr' | 'rtl', separation?: number, minKern?: number, onlyCloser?: bool, touching?: bool, keepExisting?: bool, round?: number, step?: number, depth?: number, depthShare?: number, skip?: [{left, right, master}], apply?: bool}"
 area = "spacing-kerning"
 milestone = "M13"
 summary = "Proposes kerning values for the given pairs from the optical gap between the two glyph profiles, aiming at a target separation. Options drop values too small to matter, restrict results to tightening, or let glyphs touch; existing pairs are kept unless told otherwise (FontLab key in kerning mode: semicolon)."
@@ -1701,7 +1701,7 @@ label = "Kern to Distance"
 menu = ["Font", "Kerning"]
 shortcut = ""
 kind = "engine"
-params = "{distance: number, pairs?: [[left, right]], glyphsLeft?: [names], glyphsRight?: [names], masters?: [id], direction?: 'ltr' | 'rtl', apply?: bool}"
+params = "{distance: number, pairs?: [[left, right]], glyphsLeft?: [names], glyphsRight?: [names], masters?: [id], direction?: 'ltr' | 'rtl', skip?: [{left, right, master}], apply?: bool}"
 area = "spacing-kerning"
 milestone = "M13"
 summary = "Sets each given pair so that the smallest gap between the two outlines equals the target distance."
@@ -1765,6 +1765,79 @@ origin = "fontlab"
 notes = "Built in the window (UI.14) as the follow-up of M13.21b. The dialog runs the audit when it opens and again on Audit; Add Exceptions runs it with fix and lists the exception each pair got. Documented, not yet observed. FontLab runs the audit first and opens the dialog, with Review and Add exceptions, when it finds combinations under the threshold (FontLab 8 What's new › Metrics & kerning)."
 
 [[command]]
+id = "dialog.autoKern"
+label = "Auto Kern…"
+menu = ["Font", "Kerning"]
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "spacing-kerning"
+milestone = "M13"
+summary = "The dialog over kerning.autoKern: asks where the pairs come from and the options, lists what would be stored and stores the ticked rows."
+ref = "Our design (M5.55)"
+status = "inferred"
+own = true
+notes = "`crates/ui/src/dialogs/kerning_batch.rs`. Its menu row takes the place of kerning.autoKern's. Apply does what the preview showed: it is off until a preview ran with the settings as they are, and refused when the font changed since."
+guesses = [
+  "The pairs come from the Kerning window's selected rows, the Font View selection with itself or with a typed list, the Pairs & Phrases list, or every stored pair; the defaults are the command's, for the master shown.",
+  "At most 20,000 pairs at once, since they are measured on the window's thread. One kerning dialog is open at a time: asking for another is refused.",
+]
+
+[[command]]
+id = "dialog.kernToDistance"
+label = "Kern to Distance…"
+menu = ["Font", "Kerning"]
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "spacing-kerning"
+milestone = "M13"
+summary = "The dialog over kerning.kernToDistance: asks for the pairs and the distance, lists what would be stored and stores the ticked rows."
+ref = "Our design (M5.55)"
+status = "inferred"
+own = true
+notes = "`crates/ui/src/dialogs/kerning_batch.rs`. Its menu row takes the place of kerning.kernToDistance's. Apply does what the preview showed: it is off until a preview ran with the settings as they are, and refused when the font changed since."
+guesses = [
+  "It offers the same sources of pairs as dialog.autoKern.",
+]
+
+[[command]]
+id = "dialog.removeKerningPairs"
+label = "Remove Pairs…"
+menu = ["Font", "Kerning"]
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "spacing-kerning"
+milestone = "M13"
+summary = "The dialog over kerning.removePairsByRule: asks for the rules, counts and lists the pairs, and deletes them."
+ref = "Our design (M5.55)"
+status = "inferred"
+own = true
+notes = "`crates/ui/src/dialogs/kerning_batch.rs`. Its menu row takes the place of kerning.removePairsByRule's. Apply does what the preview showed: it is off until a preview ran with the settings as they are, and refused when the font changed since."
+guesses = [
+  "The preview is ours.",
+]
+
+[[command]]
+id = "dialog.verticalKerning"
+label = "Vertical Kerning from Horizontal…"
+menu = ["Font", "Kerning"]
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "spacing-kerning"
+milestone = "M13"
+summary = "The confirmation of kerning.verticalFromHorizontal: says how many vertical pairs it deletes before it runs."
+ref = "Our design (M5.55)"
+status = "inferred"
+own = true
+notes = "`crates/ui/src/dialogs/kerning_batch.rs`. Its menu row takes the place of kerning.verticalFromHorizontal's. Apply does what the preview showed: it is off until a preview ran with the settings as they are, and refused when the font changed since."
+guesses = [
+  "The confirmation is ours.",
+]
+
+[[command]]
 id = "dialog.matchKerning"
 label = "Match Kerning…"
 menu = ["Font", "Kerning"]
@@ -1791,7 +1864,7 @@ label = "Remove Pairs…"
 menu = ["Font", "Kerning"]
 shortcut = ""
 kind = "engine"
-params = "{masters?: [id], direction?: 'ltr' | 'rtl' | 'vertical', smallerThan?: number, exceptionsWithin?: number, glyphs?: [names]}"
+params = "{masters?: [id], direction?: 'ltr' | 'rtl' | 'vertical', smallerThan?: number, exceptionsWithin?: number, glyphs?: [names], apply?: bool}"
 area = "spacing-kerning"
 milestone = "M13"
 summary = "Deletes kerning pairs by rule: values whose magnitude is below a limit, and exceptions that differ from their class value by no more than a given number of units."
@@ -1874,7 +1947,7 @@ summary = "Loads a plain-text list with one pair or phrase per line (glyph names
 ref = "FontLab 7 manual › Pairs and Phrases panel (Importing lists)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.22 as a shell command; `text`, `reset` and `list` are our additions for agents and the section's Reset button. Without any of them the command opens the Pairs and Phrases section, where the path is typed. Documented, not yet observed. Sources: one pair per line, its two glyph names separated by a space; a phrase file is glyphtext, one phrase per line, with /name and \\uCODE inserts, and the two kinds share one file (FontLab VI help › Pairs and Phrases panel; FontLab VI release notes). FontLab 7 also reads the KPL:P and KPL:W lists, which start with a header line beginning with #, and marks the kerned pair in a longer text with | (FontLab 7 manual, release notes 6927). FontCraft does not read the | mark."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.22 as a shell command; `text`, `reset` and `list` are our additions for agents and the section's Reset button. Without any of them the menu row and the panel's Choose… ask for the file (M5.55), and a request opens the panel. Documented, not yet observed. Sources: one pair per line, its two glyph names separated by a space; a phrase file is glyphtext, one phrase per line, with /name and \\uCODE inserts, and the two kinds share one file (FontLab VI help › Pairs and Phrases panel; FontLab VI release notes). FontLab 7 also reads the KPL:P and KPL:W lists, which start with a header line beginning with #, and marks the kerned pair in a longer text with | (FontLab 7 manual, release notes 6927). FontCraft does not read the | mark."
 guesses = [
   "Lines starting with # or %% are skipped, and the two characters \\n break a phrase into lines; the documentation does not describe comments or multi-line rows, and a sample list exported from the reference app would settle it.",
   "A word that is neither a glyph name nor an @group is read as characters, and a single character in a pair as the glyph that encodes it; loading a list of plain words in the reference app would settle it.",

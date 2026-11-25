@@ -293,6 +293,14 @@ pub fn display(view: &ViewState) -> crate::canvas::Display {
     display
 }
 
+/// Lays the text out in `direction`: a tab opened for a kerning pair takes the direction of the pair.
+pub(crate) fn set_direction(app: &mut FontCraftApp, direction: Direction) {
+    if let Some(writing) = WritingDirection::ALL.into_iter().find(|w| w.layout() == direction) {
+        app.view.text.direction = writing;
+        app.view.text.touch();
+    }
+}
+
 /// Makes the text show the shown glyph: an empty text, or one whose current glyph is another, becomes that glyph
 /// alone, the cursor before it. Entering text mode does this.
 pub fn hold_shown_glyph(app: &mut FontCraftApp) {

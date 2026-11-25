@@ -347,6 +347,18 @@ pub(crate) fn show_glyph(app: &mut FontCraftApp, glyph: String) -> Result<(), St
     }
 }
 
+/// Brings an Edit View tab to the front: the showing one, while Font View shows the tab shown last, else the last of
+/// the strip. `false` when no tab is open.
+pub(crate) fn bring_edit_view(app: &mut FontCraftApp) -> bool {
+    let tabs = &app.view.tabs;
+    if tabs.active.is_some() {
+        return true;
+    }
+    let Some(id) = tabs.live.or_else(|| tabs.tabs.last().map(|t| t.id)) else { return false };
+    show(app, Some(id));
+    app.view.tabs.active.is_some()
+}
+
 /// Whether `text` is exactly `glyphs`, with nothing else.
 fn holds(text: &Text, glyphs: &[String]) -> bool {
     text.len() == glyphs.len() && text.items().iter().zip(glyphs).all(|(item, g)| matches!(item, Item::Glyph { name, .. } if **name == **g))

@@ -1496,18 +1496,21 @@ label = "Kerning"
 menu = ["Window"]
 shortcut = "Cmd+Alt+K"
 kind = "ui"
-params = '{open?: bool, select?: [{left: name|"@group", right: name|"@group"}]}'
+params = '{open?: bool, select?: [{left: name|"@group", right: name|"@group"}]|"all", current?: {left, right}, direction?: "ltr"|"rtl"|"vertical"|null, edit?: {left, right, column: "value"|"right"}|null}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Opens the Kerning window, a table of every stored kerning pair of the current master in the currently selected writing direction."
 ref = "Spacing & Kerning › Kerning › Kerning Window"
 status = "handbook"
-notes = "`select` is our addition for agents: it selects rows as clicks do and shows the last one in Edit View. Release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs4.0-4000.html): the window has a writing direction control (4.0, build 3807). FontCraft's window lists left-to-right pairs only (`crates/ui/src/app/models/kerning_window.rs`; 08 question 24)."
+notes = "`select` is our addition for agents: it selects rows as clicks do and shows the last one in Edit View; `\"all\"` selects every listed row of the window that shows, with `current` as the row the steps go from. Release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs4.0-4000.html): the window has a writing direction control (4.0, build 3807). `direction` is that control; null follows the Edit View tab."
 guesses = [
-  "While Font View shows, the window keeps Font View's master. From version 4 the reference's window has a writing direction control of its own (notes); whether it follows the tab's direction too is not documented.",
+  "While Font View shows, the window keeps Font View's master, and the direction of the tab shown last.",
+  "The direction control has an entry that follows the Edit View tab, which is the default; choosing a direction lists its pairs and leaves the tab's direction alone.",
+  "The window shows vertical pairs for top-to-bottom tabs.",
 ]
 observe = [
   "Open the window from Font View and from a right-to-left tab: note its master, its direction control and whether the control follows the tab.",
+  "Choose another direction in the window and click a row: note whether the tab's direction changes.",
 ]
 
 [[panel]]
@@ -1520,6 +1523,7 @@ controls = [
   "group entries in blue with a leading @, glyph entries in gold",
   "double-click a cell to edit a value or a group name",
   "minus button (bottom left): delete the selected pairs; with Option, from all masters",
+  "Delete key: delete the selected pairs; with Option on a Mac, from all masters (elsewhere the key with Alt does nothing: use the button or the row's menu)",
   "actions menu: Show All Glyphs, Clean Up, Compress",
 ]
 area = "spacing-kerning"
@@ -1626,18 +1630,19 @@ label = "Show Pair in Edit View"
 menu = []
 shortcut = ""
 kind = "ui"
-params = '{left: name|"@group", right: name|"@group", tab?: id}'
+params = '{left: name|"@group", right: name|"@group"}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Puts a kerning pair into Edit View text, replacing the pair currently shown there if there is one; this is what selecting a row in the Kerning window does. A group side is represented by a single member glyph."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
 status = "handbook"
-notes = "Documented, not yet observed. A group side is the group on the side facing the pair in the tab's writing direction. While Font View shows, the pair opens in a new tab."
+notes = "Documented, not yet observed. A group side is the group on the side facing the pair in the tab's writing direction. While Font View shows, the tab shown last comes to the front; with none open the pair opens in a new tab, in the direction of the pair."
 guesses = [
   "The pair at the cursor is the current glyph and the glyph before it; with no glyph before the current one the pair is inserted at the cursor, as the tutorial \"Kerning\" has it (glyphsapp.com/learn/kerning), and the cursor ends between the two glyphs. Selecting rows in the reference with the cursor at the start of a text settles the cursor.",
 ]
 observe = [
   "Select a row with the cursor at the start of a text, after one glyph, and in an empty tab: note the text and the cursor each time.",
+  "Select a row while Font View shows, with and without an Edit View tab open: note which tab shows the pair.",
 ]
 
 [[command]]
@@ -1765,7 +1770,7 @@ label = "Copy Kerning Pairs"
 menu = []
 shortcut = ""
 kind = "engine"
-params = '{pairs?: [{left, right}], master?: id, direction?: "ltr"|"rtl"|"vertical"}'
+params = '{pairs?: [{left, right}], query?: {term?, match?, kind?, side?, glyphs?}, master?: id, direction?: "ltr"|"rtl"|"vertical"}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Copies kerning pairs with their values to the clipboard. In the UI this is Edit › Copy (Cmd+C) while rows are selected in the Kerning window; Edit › Select All (Cmd+A) selects every listed pair first."
@@ -1839,7 +1844,46 @@ milestone = "M5"
 summary = "Pastes kerning pairs as kerning.pastePairs does and, when pasted pairs already exist with other values, pastes nothing and asks whether to overwrite them or keep the existing ones."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs"
 status = "handbook"
-notes = "Opens the warning (`dialog.pasteKerningConflict` panel) listing the conflicting pairs; Overwrite and Keep Existing paste again with that answer, Cancel pastes nothing. Documented, not yet observed."
+notes = "With neither text nor pairs it pastes the clipboard's text into the master and direction the Kerning window lists. Opens the warning (`dialog.pasteKerningConflict` panel) listing the conflicting pairs; Overwrite and Keep Existing paste again with that answer, Cancel pastes nothing. Documented, not yet observed."
+
+[[command]]
+id = "kerning.setPairs"
+label = "Set Kerning Pairs"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{pairs?: [{left, right, value?}], query?: {term?, match?, kind?, side?, glyphs?}, value?: number, add?: units, factor?: number, master?: id, direction?: "ltr"|"rtl"|"vertical"}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Sets, shifts or scales several pairs of one master in one undo step. In the UI it is what a value typed for several rows of the Kerning window runs."
+ref = "Our design (M5.52); Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs"
+status = "inferred"
+own = true
+notes = "The reference's chapter describes editing one entry at a time. One of `value`, `add` and `factor`, or a value in every pair. A pair that cannot take its value refuses the whole command; a stored pair may be obsolete, a new one must name glyphs and groups the font has."
+guesses = [
+  "With several rows selected a typed number sets them all, `+10`, `-10` and `*0.9` change each, and `=-10` sets a negative value.",
+]
+observe = [
+  "Select three rows and edit the value of one: note which rows change.",
+]
+
+[[command]]
+id = "kerning.makeException"
+label = "Make Kerning Exception"
+menu = []
+shortcut = ""
+kind = "ui"
+params = '{left?: name|"@group", right?: name|"@group"}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Stores the kerning of one glyph pair a Kerning window row covers as an exception to the row's groups."
+ref = "Our design (M5.52); Spacing & Kerning › Kerning › Kerning Group Exceptions"
+status = "inferred"
+own = true
+notes = "Runs kerning.addException on the group sides of the row. An entry of the row's menu."
+guesses = [
+  "The pair is the one at the cursor of Edit View when the row covers it, else the first member of each group.",
+]
 
 [[command]]
 id = "kerning.deletePairs"
@@ -1847,7 +1891,7 @@ label = "Delete Kerning Pairs"
 menu = []
 shortcut = ""
 kind = "engine"
-params = '{pairs: [{left, right}], master?: id, allMasters?: bool, direction?: "ltr"|"rtl"|"vertical"}'
+params = '{pairs?: [{left, right}], query?: {term?, match?, kind?, side?, glyphs?}, master?: id, allMasters?: bool, direction?: "ltr"|"rtl"|"vertical"}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Deletes the selected kerning pairs from the current master (the minus button at the bottom left of the Kerning window). With Option held, the same pairs are deleted from every master."
@@ -1939,7 +1983,7 @@ milestone = "M5"
 summary = "In the pair list a group is written with a leading '@' and coloured blue, a single glyph is coloured gold. The '@' cannot be part of the group name, since it is outside the allowed character set."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
 status = "handbook"
-notes = "Documented, not yet observed. The two colours are the theme tokens kerning_group_text and kerning_glyph_text."
+notes = "Documented, not yet observed. The two colours are the tokens kerning_group_text and kerning_glyph_text (`crates/ui/src/canvas/tokens.rs`), which four appearance.color.kerning…Text settings feed."
 guesses = [
   "A selected row draws its entries in the selection's text colour instead of blue and gold; a screenshot of a selected row in the reference settles it.",
 ]
@@ -1971,7 +2015,7 @@ milestone = "M5"
 summary = "Selecting a row, by click or by Up/Down, displays that pair in Edit View and replaces the pair previously at the cursor if there was one. For a row with one or two groups just one representative glyph pair is shown."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
 status = "handbook"
-notes = "Documented, not yet observed. Up and Down work while the list has the keyboard (after a click on a row); a Shift or Cmd click shows the clicked row."
+notes = "Documented, not yet observed. Up and Down work while the list has the keyboard (after a click on a row); a Shift or Cmd click shows the clicked row. A row whose pair names a glyph or group the font lacks stays selected, and the status line says why it is not shown."
 guesses = [
   "A group side is shown by its first member in glyph order.",
 ]
@@ -1986,12 +2030,30 @@ milestone = "M5"
 summary = "Double-clicking a cell makes it editable. Editing the Value cell changes the pair's kerning; editing a group name in the Left or Right cell starts a rename and triggers the scope question."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs"
 status = "handbook"
-notes = "Documented, not yet observed. A value runs kerning.setPair in the master and direction shown; a group name opens dialog.renameKerningGroup with side, from, to and the pair."
+notes = "Documented, not yet observed. A value runs kerning.setPair in the master and direction shown; a group name opens dialog.renameKerningGroup with side, from, to and the pair. Return on a row edits its value; in the field Up and Down step it by 1, 10 with Shift and 100 with Cmd+Shift."
 guesses = [
   "Return or leaving the cell confirms and Escape cancels, as in the Info box fields; a glyph name cell is not editable. Editing cells in the reference settles both.",
 ]
 observe = [
   "Double-click a value, type and click another row, then Escape in another: note which is kept. Double-click a glyph's name.",
+]
+
+[[panel]]
+id = "kerningWindow.rowMenu"
+label = "Kerning pair menu"
+location = "window"
+controls = ["Show All Glyphs", "Rename Left Group…", "Rename Right Group…", "Make Exception", "Copy", "Delete", "Delete from All Masters"]
+area = "spacing-kerning"
+milestone = "M5"
+summary = "The menu of a secondary press on a row of the Kerning window; it acts on the row, and Copy and Delete on the selected rows."
+ref = "Our design (M5.52)"
+status = "inferred"
+own = true
+guesses = [
+  "The menu and its entries are ours; the handbook names only the actions menu's three.",
+]
+observe = [
+  "Right-click a row of the Kerning window and write down the menu.",
 ]
 
 [[behavior]]
@@ -2010,10 +2072,10 @@ milestone = "M5"
 summary = "Kerning is transferred between masters, and between font files, by selecting pairs in the Kerning window, copying, switching to the other master and pasting. This is also the route for kerning values that metrics import cannot take from a Glyphs file."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs; Import & Export › Importing Metrics"
 status = "handbook"
-notes = "Documented, not yet observed. Copy, Paste and Select All act on the window while its list has the keyboard, and Edit › Copy and Edit › Paste do too while the list had the keyboard last: kerning.copyPairs puts kerning-text on the clipboard and kerning.pastePairs asks first (dialog.pasteKerningConflict) when a pasted pair clashes. Copied pairs also paste into another font (tutorial \"Kerning\", glyphsapp.com/learn/kerning)."
+notes = "Documented, not yet observed. Copy, Paste and Select All act on the window while its list has the keyboard, and the Edit menu's commands do too, since a menu gives the keyboard back to the list: kerning.copyPairs puts kerning-text on the clipboard and kerning.pastePairs asks first (dialog.pasteKerningConflict) when a pasted pair clashes. Copied pairs also paste into another font (tutorial \"Kerning\", glyphsapp.com/learn/kerning)."
 guesses = [
   "A paste goes into the writing direction the window shows, whatever direction the copied text names; copying from a left-to-right list and pasting into a right-to-left one in the reference settles it.",
-  "The list keeps Copy and Paste from the Edit menu until another field takes the keyboard or a click lands outside the window and the menus; choosing Edit › Copy in the reference after clicking the list, then after clicking the canvas, settles it.",
+  "The list keeps Copy, Paste and Select All from the Edit menu until another field, list or the canvas takes the keyboard; choosing Edit › Copy in the reference after clicking the list, then after clicking the canvas, settles it.",
 ]
 observe = [
   "Copy left-to-right pairs, switch the window to right to left and paste: note where they go.",

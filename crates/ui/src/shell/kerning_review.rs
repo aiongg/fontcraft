@@ -31,7 +31,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Load Pair List…",
         menu: &["Font", "Kerning"],
         shortcut: None,
-        params: "{path?: path, text?: string, reset?: bool, list?: \"pairs\"|\"phrases\" (default: the list the Pairs & Phrases panel shows)} load a work list of the Pairs & Phrases panel: one pair or phrase per line, words separated by spaces (glyph names, @groups, or characters), `\\n` breaking a phrase into lines shown one at a time, blank lines and lines starting with # or %% skipped; from a file (at most 4 MiB, 100,000 lines) or from text. reset restores the built-in list. Nothing is shown or selected until stepped to. Given none of them, the command shows the panel so a path can be typed there",
+        params: "{path?: path, text?: string, reset?: bool, list?: \"pairs\"|\"phrases\" (default: the list the Pairs & Phrases panel shows)} load a work list of the Pairs & Phrases panel: one pair or phrase per line, words separated by spaces (glyph names, @groups, or characters), `\\n` breaking a phrase into lines shown one at a time, blank lines and lines starting with # or %% skipped; from a file (at most 4 MiB, 100,000 lines) or from text. reset restores the built-in list. Nothing is shown or selected until stepped to. Given none of them, the menu row and the panel's Choose… ask for the file, and a request shows the panel so a path can be typed there",
     },
     UiCommand {
         id: "kerning.stepPairList",
@@ -383,6 +383,31 @@ fn step_member(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
 const AUTO_KERN_OPTIONS: &[&str] =
     &["masters", "direction", "separation", "minKern", "onlyCloser", "touching", "keepExisting", "round", "step", "depth"];
 
+/// The pairs of the rows `wanted`, with each row's index; rows that are phrases are left out.
+fn row_pairs(font: &Font, all: &[PairListRow], wanted: Vec<usize>) -> Result<Vec<(usize, String, String)>, String> {
+    let mut out = Vec::new();
+    for i in wanted {
+        let Some(row) = all.get(i).filter(|r| r.is_pair()) else { continue };
+        let Some([left, right]) = row.lines.first().map(Vec::as_slice) else { continue };
+        let l = side_text(font, left).map_err(|e| format!("row {i}: {e}"))?;
+        let r = side_text(font, right).map_err(|e| format!("row {i}: {e}"))?;
+        out.push((i, l, r));
+    }
+    if out.is_empty() {
+        return Err("none of the rows is a pair".into());
+    }
+    Ok(out)
+}
+
+/// The pairs of the Pairs & Phrases panel's pair list: its selected rows, else every row.
+pub fn listed_pairs(app: &FontCraftApp) -> Result<Vec<(String, String)>, String> {
+    let font = app.session.font().map_err(|e| e.to_string())?;
+    let wl = app.view.kerning_review.list(true);
+    let all = wl.rows(true);
+    let wanted = if wl.selected.is_empty() { (0..all.len()).collect() } else { wl.selected.clone() };
+    Ok(row_pairs(font, &all, wanted)?.into_iter().map(|(_, l, r)| (l, r)).collect())
+}
+
 fn auto_kern(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
     let apply = flag(p, "apply")?.unwrap_or(false);
     if flag(p, "discard")?.unwrap_or(false) {
@@ -423,19 +448,7 @@ fn auto_kern(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
         None => (0..all.len()).collect(),
     };
     let font = app.session.font().map_err(|e| e.to_string())?;
-    let mut used = Vec::new();
-    let mut list = Vec::new();
-    for i in wanted {
-        let Some(row) = all.get(i).filter(|r| r.is_pair()) else { continue };
-        let Some([left, right]) = row.lines.first().map(Vec::as_slice) else { continue };
-        let l = side_text(font, left).map_err(|e| format!("row {i}: {e}"))?;
-        let r = side_text(font, right).map_err(|e| format!("row {i}: {e}"))?;
-        list.push(json!([l, r]));
-        used.push(i);
-    }
-    if list.is_empty() {
-        return Err("none of the rows is a pair".into());
-    }
+    let (used, list): (Vec<usize>, Vec<Value>) = row_pairs(font, &all, wanted)?.into_iter().map(|(i, l, r)| (i, json!([l, r]))).unzip();
     let mut params = options;
     params.insert("pairs".into(), Value::Array(list));
     params.insert("apply".into(), json!(false));

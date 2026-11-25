@@ -547,6 +547,70 @@ guesses = [
 ]
 
 [[setting]]
+id = "appearance.color.kerningGroupText.light"
+label = "Kerning Window: Groups (Light)"
+kind = "color"
+section = "Appearance"
+values = ""
+area = "spacing-kerning"
+milestone = "M5"
+summary = "The colour of group names in the Kerning window in the light appearance. Reset by the Standard button."
+ref = "Our design (M5.52); Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
+status = "inferred"
+own = true
+guesses = [
+  "The handbook gives the colours as blue for groups and gold for glyphs and no setting; the values and the setting are ours.",
+]
+
+[[setting]]
+id = "appearance.color.kerningGroupText.dark"
+label = "Kerning Window: Groups (Dark)"
+kind = "color"
+section = "Appearance"
+values = ""
+area = "spacing-kerning"
+milestone = "M5"
+summary = "The colour of group names in the Kerning window in the dark appearance. Reset by the Standard button."
+ref = "Our design (M5.52); Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
+status = "inferred"
+own = true
+guesses = [
+  "The handbook gives the colours as blue for groups and gold for glyphs and no setting; the values and the setting are ours.",
+]
+
+[[setting]]
+id = "appearance.color.kerningGlyphText.light"
+label = "Kerning Window: Glyphs (Light)"
+kind = "color"
+section = "Appearance"
+values = ""
+area = "spacing-kerning"
+milestone = "M5"
+summary = "The colour of glyph names in the Kerning window in the light appearance. Reset by the Standard button."
+ref = "Our design (M5.52); Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
+status = "inferred"
+own = true
+guesses = [
+  "The handbook gives the colours as blue for groups and gold for glyphs and no setting; the values and the setting are ours.",
+]
+
+[[setting]]
+id = "appearance.color.kerningGlyphText.dark"
+label = "Kerning Window: Glyphs (Dark)"
+kind = "color"
+section = "Appearance"
+values = ""
+area = "spacing-kerning"
+milestone = "M5"
+summary = "The colour of glyph names in the Kerning window in the dark appearance. Reset by the Standard button."
+ref = "Our design (M5.52); Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
+status = "inferred"
+own = true
+guesses = [
+  "The handbook gives the colours as blue for groups and gold for glyphs and no setting; the values and the setting are ours.",
+]
+
+[[setting]]
 id = "appearance.color.kerningPositive.light"
 label = "Positive Kerning (Light)"
 kind = "color"

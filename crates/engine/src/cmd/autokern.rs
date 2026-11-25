@@ -89,7 +89,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Auto Kern",
             ["Font", "Kerning"],
             None,
-            "{pairs?: [[left, right]] (glyph names or \"@group\", logical order), glyphsLeft?: [names], glyphsRight?: [names] (every pair of a first glyph from glyphsLeft and a second from glyphsRight; give pairs, both lists, or both), masters?: [master ids] (default: every master), direction?: \"ltr\" | \"rtl\" (default ltr), separation?: target gap in units (default: the gap of n n for lowercase and H H for capitals and figures, averaged over the pair's two glyphs), minKern?: values smaller than this in size are dropped (default 0), onlyCloser?: bool, drop values that would loosen a pair (default false), touching?: bool, measure gaps at the outlines' closest approach instead of optically (default false), keepExisting?: bool, leave pairs that are stored already (default true), round?: units the values are rounded to (default 5), step?: units between profile samples (default 5), depth?: units each profile is clipped to inward from its extreme, depthShare?: the same as a share of each master's x-height (give one of the two, default 0.2), apply?: bool, store the values (default true; false only proposes)} propose and store kerning for each pair from the optical gap between the two glyphs: target minus the distance between the left glyph's right profile and the right glyph's left profile, averaged over the rows so the closest rows count most, over the band from the baseline to the x-height (cap height when both are capitals or figures), overshoots included. A group side is measured on the member named like the group, else its first member. A value of 0, below minKern, or positive with onlyCloser stores nothing, and removes the stored pair when keepExisting is false. Masters that take their kerning from another are skipped → {pairs: [{left, right, master, value, gap, target, previous, result: \"set\" | \"kept\" | \"dropped\" | \"removed\"}], targets: {master id: {lowercase, capitals}}, skipped: [{left?, right?, master, reason}]}",
+            "{pairs?: [[left, right]] (glyph names or \"@group\", logical order), glyphsLeft?: [names], glyphsRight?: [names] (every pair of a first glyph from glyphsLeft and a second from glyphsRight; give pairs, both lists, or both), masters?: [master ids] (default: every master), direction?: \"ltr\" | \"rtl\" (default ltr), separation?: target gap in units (default: the gap of n n for lowercase and H H for capitals and figures, averaged over the pair's two glyphs), minKern?: values smaller than this in size are dropped (default 0), onlyCloser?: bool, drop values that would loosen a pair (default false), touching?: bool, measure gaps at the outlines' closest approach instead of optically (default false), keepExisting?: bool, leave pairs that are stored already (default true), round?: units the values are rounded to (default 5), step?: units between profile samples (default 5), depth?: units each profile is clipped to inward from its extreme, depthShare?: the same as a share of each master's x-height (give one of the two, default 0.2), skip?: [{left, right, master: id}] (pairs that stay as they are), apply?: bool, store the values (default true; false only proposes)} propose and store kerning for each pair from the optical gap between the two glyphs: target minus the distance between the left glyph's right profile and the right glyph's left profile, averaged over the rows so the closest rows count most, over the band from the baseline to the x-height (cap height when both are capitals or figures), overshoots included. A group side is measured on the member named like the group, else its first member. A value of 0, below minKern, or positive with onlyCloser stores nothing, and removes the stored pair when keepExisting is false. Masters that take their kerning from another are skipped → {pairs: [{left, right, master, value, gap, target, previous, result: \"set\" | \"kept\" | \"dropped\" | \"removed\" | \"skipped\"}], targets: {master id: {lowercase, capitals}}, skipped: [{left?, right?, master, reason}]}",
             has_doc,
             auto_kern
         ),
@@ -98,7 +98,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Kern to Distance",
             ["Font", "Kerning"],
             None,
-            "{distance: units between the outlines at their closest, pairs?: [[left, right]] (glyph names or \"@group\", logical order), glyphsLeft?: [names], glyphsRight?: [names] (every pair of the two lists; default without pairs or lists: every pair stored in the master), masters?: [master ids] (default: every master), direction?: \"ltr\" | \"rtl\" (default ltr), apply?: bool (default true; false only proposes)} set each pair so the smallest horizontal distance between the two outlines, at any height both reach, equals the distance: the value is the distance minus that gap without kerning, rounded to a whole unit. A group side is measured on the member named like the group, else its first member. A value of 0 is stored only where another pair would otherwise apply. Masters that take their kerning from another are skipped → {pairs: [{left, right, master, value, gap, previous}], skipped: [{left?, right?, master, reason}]}",
+            "{distance: units between the outlines at their closest, pairs?: [[left, right]] (glyph names or \"@group\", logical order), glyphsLeft?: [names], glyphsRight?: [names] (every pair of the two lists; default without pairs or lists: every pair stored in the master), masters?: [master ids] (default: every master), direction?: \"ltr\" | \"rtl\" (default ltr), skip?: [{left, right, master: id}] (pairs that stay as they are), apply?: bool (default true; false only proposes)} set each pair so the smallest horizontal distance between the two outlines, at any height both reach, equals the distance: the value is the distance minus that gap without kerning, rounded to a whole unit. A group side is measured on the member named like the group, else its first member. A value of 0 is stored only where another pair would otherwise apply. Masters that take their kerning from another are skipped → {pairs: [{left, right, master, value, gap, previous, changed: bool}], skipped: [{left?, right?, master, reason}]}",
             has_doc,
             kern_to_distance
         ),
@@ -117,7 +117,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Remove Pairs…",
             ["Font", "Kerning"],
             None,
-            "{smallerThan?: units, exceptionsWithin?: units (give one or both), glyphs?: [names] (only pairs naming one of them, or a group one of them belongs to on the side facing the pair), masters?: [master ids] (default: every master), direction?: \"ltr\" | \"rtl\" | \"vertical\" (default ltr)} delete stored pairs whose value is smaller in size than smallerThan, and exceptions whose value differs from their class value by at most exceptionsWithin. An exception names a glyph that has a group on the side facing the pair; its class value is what applies once it is gone (0 when nothing does). Every pair is judged on the kerning as it was before the call. Masters that take their kerning from another are skipped → {removed: [{master, left, right, value, rule: \"smallerThan\" | \"exceptionsWithin\", classValue?}], skipped: [{master, reason}]}",
+            "{smallerThan?: units, exceptionsWithin?: units (give one or both), glyphs?: [names] (only pairs naming one of them, or a group one of them belongs to on the side facing the pair), masters?: [master ids] (default: every master), direction?: \"ltr\" | \"rtl\" | \"vertical\" (default ltr), apply?: bool (default true; false only lists)} delete stored pairs whose value is smaller in size than smallerThan, and exceptions whose value differs from their class value by at most exceptionsWithin. An exception names a glyph that has a group on the side facing the pair; its class value is what applies once it is gone (0 when nothing does). Every pair is judged on the kerning as it was before the call. Masters that take their kerning from another are skipped → {removed: [{master, left, right, value, rule: \"smallerThan\" | \"exceptionsWithin\", classValue?}], skipped: [{master, reason}]}",
             has_doc,
             remove_pairs_by_rule
         ),
@@ -577,6 +577,24 @@ fn needs_of(font: &Font, data: &GlyphData, jobs: &[Job]) -> (Vec<(String, usize)
     (needs, bands)
 }
 
+/// `skip: [{left, right, master}]`: the pairs a call leaves as they are, by master, at most [`MAX_PAIRS`].
+fn skips(p: &Params) -> Result<HashSet<(String, Side, Side)>> {
+    let Some(list) = p.opt_array("skip")? else { return Ok(HashSet::new()) };
+    if list.len() > MAX_PAIRS {
+        return Err(p.bad(format!("`skip` holds more than {MAX_PAIRS} pairs")));
+    }
+    let mut out = HashSet::with_capacity(list.len());
+    for (i, item) in list.iter().enumerate() {
+        let text = |key: &str| {
+            let found = item.get(key).and_then(Value::as_str);
+            found.ok_or_else(|| p.bad(format!("`skip[{i}]` must be an object with left, right and master")))
+        };
+        let side = |key: &str| Side::parse(text(key)?).map_err(|e| p.bad(format!("`skip[{i}].{key}`: {e}")));
+        out.insert((text("master")?.to_string(), side("left")?, side("right")?));
+    }
+    Ok(out)
+}
+
 // ── Auto Kern ──────────────────────────────────────────────────────────────────────────────────
 
 fn auto_kern(s: &mut Session, v: &Value) -> Result<Value> {
@@ -591,6 +609,7 @@ fn auto_kern(s: &mut Session, v: &Value) -> Result<Value> {
     let touching = p.bool_or("touching", false)?;
     let keep_existing = p.bool_or("keepExisting", true)?;
     let apply = p.bool_or("apply", true)?;
+    let skip = skips(&p)?;
     let data = s.glyph_data()?;
     let font = s.font()?;
     let index = KernIndex::new(font);
@@ -653,6 +672,7 @@ fn auto_kern(s: &mut Session, v: &Value) -> Result<Value> {
             let previous = stored.get(&(j.first.clone(), j.second.clone()));
             let dropped = value == 0.0 || value.abs() < min_kern || (only_closer && value > 0.0);
             let result = match (previous, keep_existing, dropped) {
+                _ if skip.contains(&(id.clone(), j.first.clone(), j.second.clone())) => "skipped",
                 (Some(_), true, _) => "kept",
                 (_, _, false) => {
                     changes.push(Change::set(&stored, direction, id, &j.first, &j.second, value));
@@ -686,6 +706,7 @@ fn kern_to_distance(s: &mut Session, v: &Value) -> Result<Value> {
     let direction = horizontal(&p)?;
     let distance = opt_in(&p, "distance", SIDEBEARING_RANGE)?.ok_or_else(|| p.bad("`distance` is required"))?;
     let apply = p.bool_or("apply", true)?;
+    let skip = skips(&p)?;
     let data = s.glyph_data()?;
     let font = s.font()?;
     let index = KernIndex::new(font);
@@ -748,10 +769,15 @@ fn kern_to_distance(s: &mut Session, v: &Value) -> Result<Value> {
                 (Some(f), Some(s)) => table.lookup(f, s).is_some(),
                 _ => false,
             };
-            if (value != 0.0 || previous.is_some() || other_applies()) && previous != Some(value) {
+            let skipped_pair = skip.contains(&(id.clone(), j.first.clone(), j.second.clone()));
+            let changed = !skipped_pair && (value != 0.0 || previous.is_some() || other_applies()) && previous != Some(value);
+            if changed {
                 changes.push(Change::set(&stored, direction, id, &j.first, &j.second, value));
             }
-            out.push(json!({"left": j.first.command(), "right": j.second.command(), "master": id, "value": value, "gap": gap, "previous": previous}));
+            out.push(json!({
+                "left": j.first.command(), "right": j.second.command(), "master": id, "value": value,
+                "gap": gap, "previous": previous, "changed": changed,
+            }));
         }
     }
     if apply && !changes.is_empty() {
@@ -1007,6 +1033,7 @@ fn remove_pairs_by_rule(s: &mut Session, v: &Value) -> Result<Value> {
     let direction = any_direction(&p)?;
     let smaller = opt_in(&p, "smallerThan", 0.0..=MAX_KERN_VALUE + 1.0)?;
     let within = opt_in(&p, "exceptionsWithin", 0.0..=2.0 * MAX_KERN_VALUE)?;
+    let apply = p.bool_or("apply", true)?;
     if smaller.is_none() && within.is_none() {
         return Err(p.bad("give `smallerThan`, `exceptionsWithin` or both"));
     }
@@ -1071,7 +1098,7 @@ fn remove_pairs_by_rule(s: &mut Session, v: &Value) -> Result<Value> {
             }
         }
     }
-    if !changes.is_empty() {
+    if apply && !changes.is_empty() {
         s.edit("Remove Pairs", |font| {
             apply_changes(font, direction, &changes);
             Ok(())

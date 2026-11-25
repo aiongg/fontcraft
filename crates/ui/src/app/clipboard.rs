@@ -40,6 +40,11 @@
 //!   lists take Copy and Paste for the rows too, so rows copied from one entry paste on others after a click on them.
 //!   Edit › Paste of copied rows while the panel shows pastes them into the shown tab (`font.info.pasteRows`).
 //!
+//! - In the Kerning window, Copy runs `kerning.copyPairs` on the selected rows and puts its `text` on the clipboard;
+//!   Paste (`dialog.pasteKerningConflict` without pairs) asks for the clipboard's text and pastes it into the master and
+//!   direction listed; Select All selects every listed row. A menu gives the keyboard focus back to the list before its
+//!   command runs, so the Edit menu reaches the list as the keys do.
+//!
 //! The text goes out through [`Clipboard::out`], which the shell hands to the window's clipboard.
 //!
 //! Why paste reads the clipboard itself: craft hands the platform's paste event only to a focused component that lists
@@ -130,6 +135,8 @@ pub enum PasteKind {
     FeatureEntries,
     /// Font Info rows into what the shown tab shows (`font.info.rows.paste`).
     InfoRows,
+    /// Kerning pairs into the master and direction the Kerning window lists (`dialog.pasteKerningConflict`).
+    KerningPairs,
     /// Instances copied in the Project panel, into the project with this id (`window.project.paste`).
     ProjectInstances(u64),
 }
@@ -147,11 +154,12 @@ pub struct Clipboard {
     pub pending: Option<PendingPdf>,
 }
 
-/// After a run of `id`: Copy and Cut put their `json` text on the clipboard, Copy Glyph Names its `text`.
+/// After a run of `id`: Copy and Cut put their `json` text on the clipboard, Copy Glyph Names, Copy Feature Entries and
+/// Copy Kerning Pairs their `text`.
 pub fn after_run(app: &mut FontCraftApp, id: &str, result: &Value) {
     let key = match id {
         COPY | CUT => "json",
-        COPY_ATTRIBUTES | "glyph.copyGlyphNames" | "font.features.copyEntries" | "font.info.copyRows" => "text",
+        COPY_ATTRIBUTES | "glyph.copyGlyphNames" | "font.features.copyEntries" | "font.info.copyRows" | "kerning.copyPairs" => "text",
         _ => return,
     };
     if let Some(text) = result.get(key).and_then(Value::as_str) {
@@ -203,8 +211,9 @@ fn edit_command(id: &str, by_key: bool) -> Option<EditCommand> {
 
 /// Hands an Edit command the person fired with no parameters to the list that holds the keyboard focus and takes it
 /// (the Features sidebar and the Project panel's instance list take Copy and Paste, the Masters and Exports lists of
-/// Font Info take all but Select All), else to the selected Font Info rows while nothing has the keyboard; `true` when the list took it, and the document is left alone. `by_key`: a key fired it,
-/// so a click on Glyph › Remove Glyph never reaches a list.
+/// Font Info take all but Select All, the Kerning window's list takes Copy, Paste and Select All), else to the selected
+/// Font Info rows while nothing has the keyboard; `true` when the list took it, and the document is left alone.
+/// `by_key`: a key fired it, so a click on Glyph › Remove Glyph never reaches a list.
 pub fn to_focused_list(app: &mut FontCraftApp, command: &CommandRef, by_key: bool) -> bool {
     let Some(edit) = edit_command(&command.id, by_key) else { return false };
     let Some(ctx) = app.window.as_ref().filter(|_| is_empty(&command.params)) else { return false };
@@ -294,6 +303,15 @@ pub fn paste_msg(app: &mut FontCraftApp, text: &str, kind: PasteKind) -> Result<
         params.insert("text".into(), json!(text));
         command.params = Value::Object(params);
         return Ok(Msg::Run(command));
+    }
+    if kind == PasteKind::KerningPairs {
+        let mut params = Map::new();
+        params.insert("text".into(), json!(text));
+        params.insert("direction".into(), json!(crate::app::models::kerning_window::direction(&app.view).name()));
+        if let Some(master) = crate::shell::kerning_window::listed_master(app) {
+            params.insert("master".into(), json!(master));
+        }
+        return Ok(Msg::Shell(CommandRef::with_params("dialog.pasteKerningConflict", Value::Object(params))));
     }
     let glyphs = holds_glyphs(text);
     if kind == PasteKind::Special {

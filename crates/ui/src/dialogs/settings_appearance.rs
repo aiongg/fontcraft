@@ -63,6 +63,8 @@ craft::ui::words! {
         canvas: "fontcraftAppearance.canvas" = "Canvas";
         kerning_negative: "fontcraftAppearance.kerningNegative" = "Negative Kerning";
         kerning_positive: "fontcraftAppearance.kerningPositive" = "Positive Kerning";
+        kerning_group_text: "fontcraftAppearance.kerningGroupText" = "Kerning Window: Groups";
+        kerning_glyph_text: "fontcraftAppearance.kerningGlyphText" = "Kerning Window: Glyphs";
         standard: "fontcraftAppearance.standard" = "Standard";
         standard_note: "fontcraftAppearance.standardNote" = "Standard returns every colour, light and dark, to its default.";
     }
@@ -75,7 +77,7 @@ const MARK_CLOUD: &str = "appearance.displayMarkCloud";
 type ItemWords = fn(&AppearanceWords) -> &Label;
 
 /// The colour items, in the handbook's order: the part of `appearance.color.<item>.<set>` and the row's label.
-const ITEMS: [(&str, ItemWords); 9] = [
+const ITEMS: [(&str, ItemWords); 11] = [
     ("cornerNodes", |w| &w.corner_nodes),
     ("smoothNodes", |w| &w.smooth_nodes),
     ("alignmentZones", |w| &w.alignment_zones),
@@ -85,6 +87,8 @@ const ITEMS: [(&str, ItemWords); 9] = [
     ("canvas", |w| &w.canvas),
     ("kerningNegative", |w| &w.kerning_negative),
     ("kerningPositive", |w| &w.kerning_positive),
+    ("kerningGroupText", |w| &w.kerning_group_text),
+    ("kerningGlyphText", |w| &w.kerning_glyph_text),
 ];
 
 /// The handle-size steps and their labels.

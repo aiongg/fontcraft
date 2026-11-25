@@ -192,3 +192,20 @@ fn pairs_panel_ctrl_and_alt_arrows_step_a_group_member() {
         "the claimed arrows do not move the list"
     );
 }
+
+/// Choose… asks for the list file, whose rows fill the panel; a list given as text or Reset asks for nothing.
+#[test]
+fn a_chosen_list_file_fills_the_panel() {
+    let mut app = kern_app();
+    let asked = app.run_now(shell("kerning.loadPairList", json!({"list": "pairs"})), true);
+    assert_eq!(asked, Ok(json!({"picker": true})));
+    assert_eq!(app.run_now(shell("kerning.loadPairList", json!({"reset": true, "list": "pairs"})), true), Ok(Value::Null));
+
+    let path = std::env::temp_dir().join(format!("fontcraft-ui-pairs-{}.txt", std::process::id()));
+    std::fs::write(&path, "A V\nL T\n").unwrap();
+    run(&mut app, "kerning.loadPairList", json!({"path": path.to_string_lossy(), "list": "pairs"})).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    run(&mut app, "kerning.setPairListMode", json!({"mode": "pairs"})).unwrap();
+    let labels: Vec<String> = app.models.pairs_phrases.rows.iter().map(|r| r.label.clone()).collect();
+    assert_eq!(labels, ["A V", "L T"]);
+}

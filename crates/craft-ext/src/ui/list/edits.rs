@@ -49,11 +49,16 @@ fn queue_key(id: Id) -> Id {
     id.with("craft_ext.list.editQueue")
 }
 
-/// Records that the collection of `response` takes `edits` while it has the keyboard focus. Nothing is recorded
-/// without the focus.
+/// Records that the collection of `response` takes `edits` while it has the keyboard focus. Without the focus only the
+/// collection's own claim is kept up while it shows: an open menu holds the focus, and gives it back to the collection
+/// before the picked command runs.
 pub fn claim_edits(ui: &Ui, response: &Response, edits: &[EditCommand]) {
     let ctx = ui.ctx();
-    if edits.is_empty() || !ctx.memory(|m| m.has_focus(response.id)) {
+    if edits.is_empty() {
+        return;
+    }
+    let held = || ctx.data(|d| d.get_temp::<EditClaim>(claim_key())).is_some_and(|claim| claim.id == response.id);
+    if !ctx.memory(|m| m.has_focus(response.id)) && !held() {
         return;
     }
     let claim = EditClaim { id: response.id, edits: edits.to_vec(), pass: ctx.cumulative_pass_nr() };
@@ -145,5 +150,8 @@ mod tests {
         fixture.ctx().memory_mut(|m| m.surrender_focus(list));
         fixture.settle();
         assert!(!deliver(&ctx, EditCommand::Copy));
+        // A menu that gives the focus back before its command runs.
+        fixture.ctx().memory_mut(|m| m.request_focus(list));
+        assert!(deliver(&ctx, EditCommand::Copy));
     }
 }

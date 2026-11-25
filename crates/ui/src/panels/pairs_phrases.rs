@@ -3,7 +3,7 @@
 //! | Input | Does |
 //! |---|---|
 //! | Pairs, Phrases, Auto | `kerning.setPairListMode` |
-//! | path field (Enter); Reset | `kerning.loadPairList {path}`, `{reset}` |
+//! | path field (Enter); Choose…; Reset | `kerning.loadPairList {path}`, without one (it asks for the file), `{reset}` |
 //! | a click on a row, Up, Down | `kerning.stepPairList {index}`: shows it in the edit view |
 //! | Cmd-click, Shift-click | add a row to the selection, or the rows up to it (`{select}`) |
 //! | Ctrl+Up, Ctrl+Down; Alt+Up, Alt+Down (list focused) | `kerning.stepGroupMember` on the left side; on the right side |
@@ -41,6 +41,8 @@ craft::ui::words! {
         auto: "fontcraftPairs.auto" = "Auto";
         /// The field a list file's path is typed into.
         list_file: "fontcraftPairs.listFile" = "List file";
+        choose: "fontcraftPairs.choose" = "Choose…";
+        choose_tip: "fontcraftPairs.chooseTip" = "Choose a list file";
         reset: "fontcraftPairs.reset" = "Reset";
         reset_tip: "fontcraftPairs.resetTip" = "Go back to the built-in list";
         /// Between the row count and where the rows came from.
@@ -124,6 +126,9 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
             && !path.is_empty()
         {
             sent.push(shell("kerning.loadPairList", json!({ "path": path, "list": list })));
+        }
+        if Button::new(words.choose.clone()).tooltip(words.choose_tip.clone()).show(ui).clicked() {
+            sent.push(shell("kerning.loadPairList", json!({ "list": list })));
         }
         if Button::new(words.reset.clone()).tooltip(words.reset_tip.clone()).show(ui).clicked() {
             sent.push(shell("kerning.loadPairList", json!({ "reset": true, "list": list })));

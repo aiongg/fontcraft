@@ -12,7 +12,7 @@ use fontcraft_spacing::kerning_text::{self, KerningText, MAX_PAIRS, MAX_TEXT_BYT
 use fontcraft_spacing::{metrics_source, round_half_up};
 use serde_json::{Value, json};
 
-use super::shared::MAX_KERN_VALUE;
+use super::shared::{MAX_KERN_VALUE, editable_master};
 use super::*;
 use crate::params::Params;
 
@@ -36,7 +36,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Copy Kerning Pairs",
             [],
             None,
-            "{pairs?: [{left: name|\"@group\", right: name|\"@group\"}] (default: every pair), master?: id (default: the first master), direction?: \"ltr\"|\"rtl\"|\"vertical\" (default ltr)} the pairs with their values as kerning-text (tab-separated `left right value` lines after a header, master and direction line), for the clipboard. Every named pair must exist → {text, count, master, direction}",
+            "{pairs?: [{left: name|\"@group\", right: name|\"@group\"}] (default: every pair), query?: {term?, match?, kind?, side?, glyphs?} (the pairs kerning.listPairs lists for it, in place of pairs), master?: id (default: the first master), direction?: \"ltr\"|\"rtl\"|\"vertical\" (default ltr)} the pairs with their values as kerning-text (tab-separated `left right value` lines after a header, master and direction line), for the clipboard. Every named pair must exist → {text, count, master, direction}",
             has_doc,
             copy_pairs
         ),
@@ -54,9 +54,18 @@ pub fn specs() -> Vec<CommandSpec> {
             "Delete Kerning Pairs",
             [],
             None,
-            "{pairs: [{left: name|\"@group\", right: name|\"@group\"}], master?: id (default: the first master), allMasters?: bool (default false), direction?: \"ltr\"|\"rtl\"|\"vertical\" (default ltr)} deletes the pairs from the master, or from every master that has them. Each pair must exist in the master (with allMasters: in some master) → {deleted, masters}",
+            "{pairs?: [{left: name|\"@group\", right: name|\"@group\"}], query?: {term?, match?, kind?, side?, glyphs?} (the pairs kerning.listPairs lists for it; give one of the two), master?: id (default: the first master), allMasters?: bool (default false), direction?: \"ltr\"|\"rtl\"|\"vertical\" (default ltr)} deletes the pairs from the master, or from every master that has them. Each pair must exist in the master (with allMasters: in some master) → {deleted, masters}",
             has_doc,
             delete_pairs
+        ),
+        cmd!(
+            "kerning.setPairs",
+            "Set Kerning Pairs",
+            [],
+            None,
+            "{pairs?: [{left: name|\"@group\", right: name|\"@group\", value?: number}], query?: {term?, match?, kind?, side?, glyphs?} (the pairs kerning.listPairs lists for it; give one of the two), value?: number, add?: units, factor?: number (one of the three, or a value in every pair), master?: id (default: the first master), direction?: \"ltr\"|\"rtl\"|\"vertical\" (default ltr)} sets the pairs of one master in one undo step: to `value` (or each to its own), each stored value plus `add`, or each stored value times `factor`. Results are rounded half up to whole units and must be from -32767 to 32767. `add` and `factor` need stored pairs; a new pair's glyphs and groups must exist. A refused pair leaves every pair as it was. At most 500000 pairs → {master, direction, count, pairs: [{left, right, value, previous: number|null}]}",
+            has_doc,
+            set_pairs
         ),
     ]
 }
@@ -128,6 +137,22 @@ fn list_pairs(s: &mut Session, p: &Value) -> Result<Value> {
     let font = s.font()?;
     let master = super::shared::master(&p, font)?;
     let direction = direction_param(&p)?.unwrap_or(Direction::Ltr);
+    let filter = filter_param(&p, font)?;
+    let order = match p.opt_str("sort")? {
+        None => None,
+        Some(c) => Some(Column::from_name(c).ok_or_else(|| p.bad(format!("`sort` must be left, value or right, got `{}`", clip(c))))?),
+    };
+    let descending = p.bool_or("descending", false)?;
+    let source = source_of(font, &master);
+    let total = pairs::stored_pairs(font, direction, &source).len();
+    let listed = pairs::list(font, direction, &source, &filter, order.map(|c| (c, descending)));
+    let rows: Vec<Value> =
+        listed.iter().map(|r| json!({ "left": r.left().command(), "right": r.right().command(), "value": r.value, "index": r.index })).collect();
+    Ok(json!({ "master": master, "source": source, "direction": direction.name(), "total": total, "count": rows.len(), "pairs": rows }))
+}
+
+/// The search options of `kerning.listPairs`.
+fn filter_param(p: &Params, font: &Font) -> Result<Filter> {
     let term = p.opt_str("term")?.unwrap_or_default();
     if term.len() > MAX_NAME_LEN + 1 {
         return Err(p.bad(format!("`term` may be at most {} bytes long", MAX_NAME_LEN + 1)));
@@ -146,18 +171,21 @@ fn list_pairs(s: &mut Session, p: &Value) -> Result<Value> {
         Some(k) => Some(SearchSide::from_name(k).ok_or_else(|| p.bad(format!("`side` must be left or right, got `{}`", clip(k))))?),
     };
     let glyphs = p.opt_glyphs("glyphs", font)?;
-    let order = match p.opt_str("sort")? {
-        None => None,
-        Some(c) => Some(Column::from_name(c).ok_or_else(|| p.bad(format!("`sort` must be left, value or right, got `{}`", clip(c))))?),
-    };
-    let descending = p.bool_or("descending", false)?;
-    let filter = Filter { term: term.to_string(), matching, kind, side, glyphs };
-    let source = source_of(font, &master);
-    let total = pairs::stored_pairs(font, direction, &source).len();
-    let listed = pairs::list(font, direction, &source, &filter, order.map(|c| (c, descending)));
-    let rows: Vec<Value> =
-        listed.iter().map(|r| json!({ "left": r.left().command(), "right": r.right().command(), "value": r.value, "index": r.index })).collect();
-    Ok(json!({ "master": master, "source": source, "direction": direction.name(), "total": total, "count": rows.len(), "pairs": rows }))
+    Ok(Filter { term: term.to_string(), matching, kind, side, glyphs })
+}
+
+/// The pairs `pairs` names, or those `query` lists from `source`'s table; `None` when neither is given.
+fn rows_param(p: &Params, font: &Font, direction: Direction, source: &str, with_value: bool) -> Result<Option<Vec<NewPair>>> {
+    let Some(query) = p.get("query") else { return pairs_param(p, "pairs", with_value) };
+    if p.get("pairs").is_some() {
+        return Err(p.bad("give `pairs` or `query`, not both"));
+    }
+    let filter = filter_param(&Params::new(p.command(), query)?, font)?;
+    let listed = pairs::list(font, direction, source, &filter, None);
+    let mut seen: HashSet<Key> = HashSet::with_capacity(listed.len());
+    Ok(Some(
+        listed.iter().map(|r| NewPair { left: r.left(), right: r.right(), value: r.value }).filter(|n| seen.insert(key(&n.left, &n.right))).collect(),
+    ))
 }
 
 // ---------- kerning.copyPairs ----------
@@ -177,7 +205,7 @@ fn copy_pairs(s: &mut Session, p: &Value) -> Result<Value> {
     let source = source_of(font, &master);
     let stored: Vec<NewPair> =
         pairs::stored_pairs(font, direction, &source).iter().map(|r| NewPair { left: r.left(), right: r.right(), value: r.value }).collect();
-    let chosen = match pairs_param(&p, "pairs", false)? {
+    let chosen = match rows_param(&p, font, direction, &source, false)? {
         None => stored,
         Some(wanted) => {
             let mut values: HashMap<Key, f64> = HashMap::new();
@@ -284,6 +312,119 @@ fn paste_pairs(s: &mut Session, p: &Value) -> Result<Value> {
     }))
 }
 
+// ---------- kerning.setPairs ----------
+
+/// What `kerning.setPairs` does to each pair.
+enum Change {
+    /// Each pair gets the value it names.
+    Each,
+    To(f64),
+    Add(f64),
+    Times(f64),
+}
+
+fn change_param(p: &Params, list: &[Value]) -> Result<Change> {
+    let given: Vec<Change> = [
+        p.opt_f64("value")?.map(Change::To),
+        p.opt_f64("add")?.map(Change::Add),
+        p.opt_f64("factor")?.map(Change::Times),
+        list.iter().any(|pair| pair.get("value").is_some()).then_some(Change::Each),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    match <[Change; 1]>::try_from(given) {
+        Ok([one]) => Ok(one),
+        Err(_) => Err(p.bad("give one of `value`, `add` and `factor`, or a value in every pair")),
+    }
+}
+
+fn set_pairs(s: &mut Session, p: &Value) -> Result<Value> {
+    let p = Params::new("kerning.setPairs", p)?;
+    let font = s.font()?;
+    let master = editable_master(&p, font)?;
+    let direction = direction_param(&p)?.unwrap_or(Direction::Ltr);
+    let change = change_param(&p, p.opt_array("pairs")?.map(Vec::as_slice).unwrap_or_default())?;
+    let wanted = rows_param(&p, font, direction, &master, matches!(change, Change::Each))?.ok_or_else(|| p.bad("`pairs` or `query` is required"))?;
+    if wanted.is_empty() {
+        return Err(p.bad("there are no pairs to set"));
+    }
+    if wanted.len() > MAX_PAIRS {
+        return Err(p.bad(format!("the query lists {} pairs; at most {MAX_PAIRS} are allowed", wanted.len())));
+    }
+    let mut at: HashMap<Key, usize> = HashMap::with_capacity(wanted.len());
+    for (i, w) in wanted.iter().enumerate() {
+        if at.insert(key(&w.left, &w.right), i).is_some() {
+            return Err(p.bad(format!("`pairs[{i}]`: the pair {} {} is given twice", w.left.command(), w.right.command())));
+        }
+    }
+    // The stored pairs among them, the first spelling of each; a stored pair may be obsolete.
+    let mut previous: Vec<Option<f64>> = vec![None; wanted.len()];
+    for row in pairs::stored_pairs(font, direction, &master) {
+        if let Some(slot) = at.get(&key(&row.left(), &row.right())).and_then(|i| previous.get_mut(*i))
+            && slot.is_none()
+        {
+            *slot = Some(row.value);
+        }
+    }
+    let mut values = Vec::with_capacity(wanted.len());
+    let mut new = Vec::new();
+    for (i, (w, before)) in wanted.iter().zip(&previous).enumerate() {
+        let value = match (&change, before) {
+            (Change::Each, _) => w.value,
+            (Change::To(v), _) => *v,
+            (Change::Add(by), Some(v)) => v + by,
+            (Change::Times(by), Some(v)) => v * by,
+            (Change::Add(_) | Change::Times(_), None) => {
+                return Err(p.bad(format!("`pairs[{i}]`: master `{master}` has no pair {} {}", w.left.command(), w.right.command())));
+            }
+        };
+        let value = pasted_value(value).ok_or_else(|| {
+            let pair = format!("{} {}", w.left.command(), w.right.command());
+            p.bad(format!("`pairs[{i}]`: {pair} would be {value}; values must be from -{MAX_KERN_VALUE} to {MAX_KERN_VALUE}"))
+        })?;
+        values.push(value);
+        if before.is_none() {
+            new.push(NewPair { left: w.left.clone(), right: w.right.clone(), value });
+        }
+    }
+    let (glyphs, groups) = unknown_sides(font, direction, &new);
+    if let Some(missing) = glyphs.first() {
+        return Err(p.bad(format!("the font has no glyph `{missing}`")));
+    }
+    if let Some(missing) = groups.first() {
+        return Err(p.bad(format!("no glyph is in the kerning group `{missing}` on that side")));
+    }
+    s.edit("Set Kerning Pairs", |font| {
+        let table = direction.table_mut(Arc::make_mut(&mut font.kerning));
+        let mut open: HashMap<Key, f64> = HashMap::with_capacity(values.len());
+        for (w, value) in wanted.iter().zip(&values) {
+            open.insert(key(&w.left, &w.right), *value);
+        }
+        for m in table.0.iter_mut().filter(|m| m.master == master) {
+            for first in &mut m.firsts {
+                let left = Side::from_stored(&first.first);
+                for (second, slot) in &mut first.seconds {
+                    if let Some(value) = open.remove(&key(&left, &Side::from_stored(second))) {
+                        *slot = value;
+                    }
+                }
+            }
+        }
+        for pair in &new {
+            table.set(&master, &pair.left.stored(direction, Position::First), &pair.right.stored(direction, Position::Second), pair.value);
+        }
+        Ok(())
+    })?;
+    let rows: Vec<Value> = wanted
+        .iter()
+        .zip(&values)
+        .zip(&previous)
+        .map(|((w, value), before)| json!({ "left": w.left.command(), "right": w.right.command(), "value": value, "previous": before }))
+        .collect();
+    Ok(json!({ "master": master, "direction": direction.name(), "count": rows.len(), "pairs": rows }))
+}
+
 /// The glyph sides the font has no glyph for, and the group sides no glyph of the font belongs
 /// to on the side facing the pair (`@name`), each at most [`MAX_REPORTED`], in paste order.
 fn unknown_sides(font: &Font, direction: Direction, pasted: &[NewPair]) -> (Vec<String>, Vec<String>) {
@@ -323,9 +464,9 @@ fn delete_pairs(s: &mut Session, p: &Value) -> Result<Value> {
     let master = super::shared::master(&p, font)?;
     let direction = direction_param(&p)?.unwrap_or(Direction::Ltr);
     let all = p.bool_or("allMasters", false)?;
-    let wanted = pairs_param(&p, "pairs", false)?.ok_or_else(|| p.bad("`pairs` is required"))?;
+    let wanted = rows_param(&p, font, direction, &source_of(font, &master), false)?.ok_or_else(|| p.bad("`pairs` or `query` is required"))?;
     if wanted.is_empty() {
-        return Err(p.bad("`pairs` is empty"));
+        return Err(p.bad("there are no pairs to delete"));
     }
     let sides: Vec<(Side, Side)> = wanted.into_iter().map(|w| (w.left, w.right)).collect();
     let masters: Vec<String> = if all {
