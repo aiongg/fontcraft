@@ -41,19 +41,28 @@ fn batch(s: &mut Session, p: &Value) -> Result<Value> {
     }
     // A batch inside a batch is part of the outer one.
     let mut results = Vec::with_capacity(steps.len());
-    let (outcome, written) = fontcraft_format::written::collect(|| s.one_step(label, |s| run_steps(s, &p, steps, &mut results)));
-    // Documents are put back, files are not; a cancel after the last step is either noticed here or too late.
-    match outcome.and_then(|()| if written.count > 0 { crate::work::seal() } else { Ok(()) }) {
-        Ok(()) => Ok(json!({ "results": results })),
-        Err(e) if written.count > 0 => {
-            let why = match e {
-                crate::EngineError::BadParams { message, .. } => message,
-                e => e.to_string(),
-            };
-            Err(p.bad(format!("{why}; the files its steps wrote stay: {}", files_named(&written))))
-        }
-        Err(e) => Err(e),
+    one_step_naming_files(s, label, "command.batch", |s| run_steps(s, &p, steps, &mut results))?;
+    Ok(json!({ "results": results }))
+}
+
+/// Runs the steps `f` as one undo step of `command` ([`Session::one_step`]). When they fail or are cancelled, the
+/// documents are put back but files are not: the error names the files the steps wrote. Inside a running batch the
+/// batch names them.
+pub(super) fn one_step_naming_files<T>(s: &mut Session, label: &str, command: &str, f: impl FnOnce(&mut Session) -> Result<T>) -> Result<T> {
+    let outermost = s.batch_is_idle();
+    let (outcome, written) = fontcraft_format::written::collect(|| s.one_step(label, f));
+    if !outermost || written.count == 0 {
+        return outcome;
     }
+    // A cancel after the last step is either noticed here or too late.
+    outcome.and_then(|out| crate::work::seal().map(|()| out)).map_err(|e| {
+        let why = match e {
+            crate::EngineError::BadParams { message, .. } => message,
+            e => e.to_string(),
+        };
+        let message = format!("{why}; the files its steps wrote stay: {}", files_named(&written));
+        crate::EngineError::BadParams { command: command.into(), message }
+    })
 }
 
 /// The names of the files written, and how many more there are.

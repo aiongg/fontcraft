@@ -85,6 +85,7 @@ fn reload_indexes(s: &mut Session, v: &Value) -> Result<Value> {
             Err(error) => report.push(json!({"source": shown, "automaticUpdates": source.automatic_updates, "error": error})),
         }
     }
+    crate::work::seal()?;
     s.extensions_mut().indexes = loaded.iter().map(|(_, l)| l.clone()).collect();
 
     let mut updates = offered_updates(s, &loaded);
@@ -206,6 +207,7 @@ fn set_enabled(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("plugin.setEnabled", v)?;
     let id = p.str("id")?;
     let enabled = p.get("enabled").and_then(Value::as_bool).ok_or_else(|| p.bad("`enabled` must be true or false"))?;
+    crate::work::seal()?;
     s.extensions_mut().set_module_enabled(id, enabled).map_err(|e| p.bad(e))?;
     let mut out = json!({"id": id, "enabled": enabled, "runs": enabled && s.extensions().modules_run()});
     if let (Some(w), Some(o)) = (save_switches(s), out.as_object_mut()) {

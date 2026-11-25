@@ -208,6 +208,7 @@ fn install_module(s: &mut Session, p: &Params, bytes: &[u8], name: Option<&str>,
         && name.is_none_or(|n| folder_file_name(p, n, MODULE_EXTENSION).is_ok_and(|n| n == *file))
     {
         let file = file.clone();
+        crate::work::seal()?;
         s.extensions_mut().set_module_enabled(&id, true).map_err(|e| p.bad(e))?;
         let warning = save_switches(s);
         return Ok(installed_json(plugin.manifest(), Some(&file), None, false, warning));
@@ -224,6 +225,7 @@ fn install_module(s: &mut Session, p: &Params, bytes: &[u8], name: Option<&str>,
         // No Modules folder: installed for this session.
         let replaced = existing.is_some();
         let manifest = plugin.manifest().clone();
+        crate::work::seal()?;
         let ext = s.extensions_mut();
         ext.registry.install(plugin, None).map_err(|e| p.bad(e.to_string()))?;
         ext.registry.set_file(&id, None, hash).map_err(|e| p.bad(e.to_string()))?;
@@ -255,6 +257,7 @@ fn install_module(s: &mut Session, p: &Params, bytes: &[u8], name: Option<&str>,
     }
     registry.install(plugin, Some(file.clone())).map_err(|e| p.bad(e.to_string()))?;
     registry.set_file(&id, Some(file.clone()), hash).map_err(|e| p.bad(e.to_string()))?;
+    crate::work::seal()?;
     std::fs::create_dir_all(&dir).map_err(|e| EngineError::Io(format!("{}: {e}", dir.display())))?;
     let target = dir.join(&file);
     extensions::write_file(&target, bytes).map_err(EngineError::Io)?;
@@ -286,6 +289,7 @@ fn turn_on_folder_file(s: &mut Session, p: &Params, name: &str) -> Result<Value>
     let file = folder_file_name(p, name, MODULE_EXTENSION)?;
     if let Some(m) = s.extensions().registry.by_file(&file) {
         let (id, manifest) = (m.plugin.id().to_string(), m.plugin.manifest().clone());
+        crate::work::seal()?;
         s.extensions_mut().set_module_enabled(&id, true).map_err(|e| p.bad(e))?;
         let warning = save_switches(s);
         return Ok(installed_json(&manifest, Some(&file), Some(&dir.join(&file)), false, warning));
@@ -308,6 +312,7 @@ fn install_macro(s: &mut Session, p: &Params, bytes: &[u8], name: Option<&str>, 
             return Err(p.bad(format!("a macro named {file:?} is installed already: pass replace: true to replace it")));
         }
         let title = m.title.clone();
+        crate::work::seal()?;
         s.extensions_mut().put_macro(file.clone(), m);
         return Ok(json!({"kind": "macro", "id": file, "name": title, "file": file, "path": null, "enabled": true, "replaced": replaced}));
     };
@@ -316,6 +321,7 @@ fn install_macro(s: &mut Session, p: &Params, bytes: &[u8], name: Option<&str>, 
     if replaced && !replace {
         return Err(p.bad(format!("{} exists: pass replace: true to overwrite it", target.display())));
     }
+    crate::work::seal()?;
     std::fs::create_dir_all(&dir).map_err(|e| EngineError::Io(format!("{}: {e}", dir.display())))?;
     extensions::write_file(&target, bytes).map_err(EngineError::Io)?;
     let title = m.title.clone();
@@ -440,6 +446,7 @@ fn remove(s: &mut Session, v: &Value) -> Result<Value> {
     let ext = s.extensions();
     if let Some(m) = ext.registry.get(id) {
         let kind = m.plugin.kind().name();
+        crate::work::seal()?;
         let moved = match (&m.file, &ext.modules_dir) {
             (Some(file), Some(dir)) if dir.join(file).exists() => Some(extensions::move_out_of_folder(dir, file).map_err(EngineError::Io)?),
             _ => None,
@@ -454,6 +461,7 @@ fn remove(s: &mut Session, v: &Value) -> Result<Value> {
     let Some(path) = ext.find_macro(id).map(|(path, _)| path.to_string()) else {
         return Err(p.bad(format!("no module or macro {id:?} is installed")));
     };
+    crate::work::seal()?;
     let moved = match &ext.macros_dir {
         Some(dir) if dir.join(&path).exists() => Some(extensions::move_out_of_folder(dir, &path).map_err(EngineError::Io)?),
         _ => None,
@@ -596,6 +604,7 @@ fn app_info(s: &mut Session, v: &Value) -> Result<Value> {
 
 fn load_extensions(s: &mut Session, v: &Value) -> Result<Value> {
     Params::new("app.loadExtensions", v)?;
+    crate::work::seal()?;
     let ext = s.extensions_mut();
     ext.leave_safe_mode();
     let enabled = ext.registry.list().iter().filter(|m| m.enabled).count();

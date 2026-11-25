@@ -104,7 +104,7 @@ pub(super) fn run_steps(
         let ids: Vec<&str> = allowed.iter().map(|c| c.id).collect();
         let found: Vec<Finding> = {
             let scope = Run { glyphs: glyphs.cloned(), layers: None, ..run.clone() };
-            outside_findings(s.doc()?, &scope, allowed)
+            outside_findings(s.doc()?, &scope, allowed)?
                 .into_iter()
                 .filter(|f| f.fix.is_some_and(|x| x.id == fix))
                 .filter(|f| glyphs.is_none_or(|set| set.contains(&f.location.glyph)))
@@ -135,6 +135,7 @@ pub(super) fn run_steps(
             }
         }
         match failed {
+            Some(EngineError::Cancelled) => return Err(EngineError::Cancelled),
             Some(e) => {
                 s.doc_mut()?.font = before;
                 report.skip(None, None, None, Some(fix), format!("the fix failed and changed nothing: {e}"));

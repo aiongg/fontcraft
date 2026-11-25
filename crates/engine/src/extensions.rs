@@ -487,6 +487,7 @@ pub fn move_out_of_folder(dir: &Path, file: &str) -> Result<PathBuf, String> {
         n += 1;
     }
     std::fs::rename(&from, &to).map_err(|e| format!("cannot move {} to {}: {e}", from.display(), to.display()))?;
+    fontcraft_format::written::record(&to);
     Ok(to)
 }
 

@@ -29,7 +29,7 @@ thread_local! {
     static WRITTEN: RefCell<Option<Written>> = const { RefCell::new(None) };
 }
 
-/// Notes that `path` was put in place, while something collects ([`collect`]).
+/// Notes that `path` (a file, or a folder that lost files) was changed, while something collects ([`collect`]).
 pub fn record(path: &Path) {
     WRITTEN.with(|written| {
         if let Ok(mut written) = written.try_borrow_mut()

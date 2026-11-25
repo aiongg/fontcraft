@@ -744,7 +744,7 @@ fn is_ignored(ignore: &prof::IgnoreIndex<'_>, f: &Finding, master: &str) -> bool
 }
 
 /// Runs the layer checks of `run` on the open document only: what `audit.fix` repairs and
-/// re-checks.
+/// re-checks. It stops early when the work is cancelled: the caller asks and drops the result.
 fn examine(font: &Font, run: &Run, cap: bool) -> Examined {
     let mut ex = Examined::default();
     let (mut raw, mut places) = (Raw::new(), HashMap::new());
@@ -1651,10 +1651,11 @@ fn add_outside(font: &Font, findings: Vec<Finding>, run: &Run, create: bool, gro
 }
 
 /// The findings of `checks` on the open document, compiling it when they read compiled fonts.
-fn outside_findings(doc: &DocState, run: &Run, checks: Vec<&'static CheckSpec>) -> Vec<Finding> {
+fn outside_findings(doc: &DocState, run: &Run, checks: Vec<&'static CheckSpec>) -> Result<Vec<Finding>> {
     let run = Run { checks, modules: crate::extensions::ModuleChecks::default(), ..run.clone() };
     let ex = examine_target(&mut document_target_of(doc), &run);
-    ex.hits.into_iter().filter(|h| !h.ignored).map(|h| h.finding).collect()
+    work::check()?;
+    Ok(ex.hits.into_iter().filter(|h| !h.ignored).map(|h| h.finding).collect())
 }
 
 /// The Font Info fixes a call selected, by fix id, with the checks that asked for each.
@@ -1748,10 +1749,11 @@ fn fix(s: &mut Session, v: &Value) -> Result<Value> {
             let run = read_run(&p, s, &doc.font, &settings)?;
             // Every finding counts here: a check over the result cap is still fixed.
             let ex = examine(&doc.font, &run, false);
+            work::check()?;
             let mut groups = groups_from_hits(&doc.font, &ex.hits);
             let outside: Vec<&'static CheckSpec> = run.checks.iter().copied().filter(|c| outside_step(c)).collect();
             if !outside.is_empty() {
-                add_outside(&doc.font, outside_findings(doc, &run, outside), &run, true, &mut groups);
+                add_outside(&doc.font, outside_findings(doc, &run, outside)?, &run, true, &mut groups);
             }
             // The Font Info fixes answer findings of every scope, so those checks run in full,
             // compiling the source when they read compiled fonts.
@@ -1761,6 +1763,7 @@ fn fix(s: &mut Session, v: &Value) -> Result<Value> {
             if !whole.is_empty() {
                 let whole_run = Run { checks: whole, modules: crate::extensions::ModuleChecks::default(), ..run.clone() };
                 let ex = examine_target(&mut document_target_of(doc), &whole_run);
+                work::check()?;
                 for h in ex.hits.iter().filter(|h| !h.ignored) {
                     if let (Some(fx), Some(spec)) = (h.finding.fix, audit::find(h.finding.check)) {
                         if is_info_fix(fx.id) {
@@ -1782,7 +1785,7 @@ fn fix(s: &mut Session, v: &Value) -> Result<Value> {
     };
     let how = How { safe_only, dry, backup, facts };
     s.one_step(FIX_LABEL, |s| {
-        fix_info(s, &info, &how, &mut report);
+        fix_info(s, &info, &how, &mut report)?;
         font_steps::run_steps(s, &run, &steps.fixes, steps.glyphs.as_ref(), &font_steps::DATA_STEPS, &how, &mut report)?;
         for group in &groups {
             fix_layer(s, &run, group, &how, &mut report)?;
@@ -1814,6 +1817,7 @@ fn fix(s: &mut Session, v: &Value) -> Result<Value> {
         run.checks = CHECKS.iter().filter(|c| checks.iter().any(|k| k.id == c.id)).collect();
         examine_target(&mut target, &run)
     };
+    work::check()?;
     let remaining = document(&target, &run, &ex, FixParams::BySelection, false)?;
     let mut out = json!({
         "applied": report.applied,
@@ -1899,7 +1903,7 @@ fn groups_from_ids(
     run.layers = Some(groups.values().map(|g| g.layer.clone()).collect());
     let outside: Vec<&'static CheckSpec> = run.checks.iter().copied().filter(|c| outside_step(c)).collect();
     if !outside.is_empty() {
-        add_outside(&doc.font, outside_findings(doc, run, outside), run, false, &mut groups);
+        add_outside(&doc.font, outside_findings(doc, run, outside)?, run, false, &mut groups);
     }
     Ok(groups.into_values().collect())
 }
@@ -1941,7 +1945,7 @@ fn add_info(info: &mut InfoFixes, fix: &'static str, spec: &'static CheckSpec) {
 /// command with that command's defaults. With `dryRun` the command runs as a dry run too and its
 /// planned edits are listed. Each command is one edit, so one that fails changes nothing and is
 /// listed in `skipped`.
-fn fix_info(s: &mut Session, info: &InfoFixes, how: &How, report: &mut FixReport) {
+fn fix_info(s: &mut Session, info: &InfoFixes, how: &How, report: &mut FixReport) -> Result<()> {
     for (fix, command) in super::audit_fix_info::SOURCE_FIXES {
         let Some(checks) = info.get(fix) else { continue };
         let mut allowed = Vec::new();
@@ -1970,9 +1974,11 @@ fn fix_info(s: &mut Session, info: &InfoFixes, how: &How, report: &mut FixReport
                     report.applied.push(json!({"fix": fix, "command": command, "params": params, "checks": allowed, "changed": changed}));
                 }
             }
+            Err(EngineError::Cancelled) => return Err(EngineError::Cancelled),
             Err(e) => report.skip(None, None, None, Some(fix), format!("the fix failed and changed nothing: {e}")),
         }
     }
+    Ok(())
 }
 
 /// The layer `id` of `glyph`.
@@ -2197,6 +2203,9 @@ fn fix_layer(s: &mut Session, run: &Run, group: &Group, how: &How, report: &mut 
     })();
     if let Err(e) = outcome {
         s.doc_mut()?.font = before;
+        if matches!(e, EngineError::Cancelled) {
+            return Err(e);
+        }
         report.skip(Some(g), Some(l), None, None, format!("the fix failed and the layer was left as it was: {e}"));
         return Ok(());
     }

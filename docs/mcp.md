@@ -285,8 +285,8 @@ commands report:
   work through glyphs (overlap removal and the other path filters, autohinting, auto-spacing,
   auto-kerning, detecting composites, tracing, the audit's fixes) stop between two glyphs or pairs.
   One glyph's overlap removal runs to its end or its time limit.
-- A `command.batch` that fails or is cancelled after a step wrote files undoes the documents; the
-  files stay, and the error names them. A client that cancelled reads it in the
+- A `command.batch` or a macro that fails or is cancelled after a step wrote files undoes the
+  documents; the files stay, and the error names them. A client that cancelled reads it in the
   [logging](#logging) message, as its request gets no reply of its own.
 - Exported files are written under temporary names and moved into place at the end. A cancel
   before that removes them. Once files are written the request stands.
