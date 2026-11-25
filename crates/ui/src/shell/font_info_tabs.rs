@@ -42,7 +42,17 @@ const COMMANDS: &[UiCommand] = &[
         shortcut: None,
         params: "{} paste the clipboard's text into the Features tab's sidebar: the entries it holds go after the font's, as one undo step",
     },
+    UiCommand {
+        id: COMPILE,
+        label: "Compile Features in Background",
+        menu: &[],
+        shortcut: None,
+        params: "{} compile the active document's feature code for the master the window shows without holding up the window, as the Features tab's Compile button does; the result is kept as font.features.compile keeps it",
+    },
 ];
+
+/// The shell command the Compile button posts.
+pub const COMPILE: &str = "font.info.features.compile";
 
 /// The shell command the sidebar's Paste posts: the clipboard's text, once the window hands it over, goes to
 /// `font.features.pasteEntries`.
@@ -153,6 +163,8 @@ pub struct FeaturesView {
     /// The code as typed in the code editor, while it differs from the entry's stored code; checked after a pause
     /// (`crate::shell::feature_work`).
     pub draft: Option<FeatureDraft>,
+    /// The compile the Compile button asked for is under way.
+    pub compiling: bool,
     /// The check of the last draft: its diagnostics, placed in the draft.
     pub checked: Option<CheckedDraft>,
     /// The name Alt-clicked in the code editor, which the projection previews with `font.features.previewName`.
@@ -239,6 +251,28 @@ pub struct CompletionAsk {
 pub struct ExportsView {
     /// Selected entries, by index into the font's instances.
     pub selected: Vec<usize>,
+    /// What the last instance compile found (`crate::shell::feature_work`).
+    pub problems: Option<InstanceProblems>,
+}
+
+/// What the compile of one instance's code found in its feature-code parameters.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct InstanceProblems {
+    /// The document, its revision and the instance's index the compile read.
+    pub doc: u64,
+    pub revision: u64,
+    pub instance: usize,
+    pub params: Vec<ParamProblem>,
+}
+
+/// One feature-code parameter of an instance as compiled: its name, its place among the parameters of that name, its
+/// code, and the line and message of the first problem in it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ParamProblem {
+    pub key: String,
+    pub occurrence: usize,
+    pub text: String,
+    pub problem: Option<(u64, String)>,
 }
 
 /// The `font.info.features.select` message that selects `entries`.
@@ -284,6 +318,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
             app.clipboard.request = Some(PasteKind::FeatureEntries);
             Ok(())
         }
+        COMPILE => crate::shell::feature_work::ask(app),
         other => Err(format!("no Font Info command `{other}`")),
     }
 }

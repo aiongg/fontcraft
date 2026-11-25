@@ -33,8 +33,8 @@ pub struct FeaturesModel {
     /// The selected entries, resolved against the font; the last shows in the editor.
     pub selected: Vec<EntryKey>,
     pub entry: Option<EntryPane>,
-    /// The master Compile previews for: the current master.
-    pub master: Option<String>,
+    /// The compile the Compile button asked for is under way.
+    pub compiling: bool,
     pub snippets: SnippetsModel,
 }
 
@@ -221,7 +221,7 @@ pub fn project(cx: &mut ProjectCx<'_>) -> FeaturesModel {
         let check = view.checked.as_ref().filter(|c| c.draft.key == e.key).map(|c| (c.draft.code.clone(), c.diagnostics.clone()));
         EntryPane { spec_url, completion, caret, compiled, draft, check, preview, find, ..e }
     });
-    FeaturesModel { groups, selected, entry, master, snippets }
+    FeaturesModel { groups, selected, entry, compiling: view.compiling, snippets }
 }
 
 /// The selection resolved against the font, without repeats; the first entry when nothing is selected.

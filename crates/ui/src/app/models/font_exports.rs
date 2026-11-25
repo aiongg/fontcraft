@@ -12,6 +12,7 @@ use serde_json::{Value, json};
 use super::ProjectCx;
 use super::font_info::{Editor, FieldWarning, MAX_SHOWN, MAX_WARNINGS, RowModel, field_warnings, rows};
 use crate::shell::font_info::Target;
+use crate::shell::font_info_tabs::ParamProblem;
 
 /// Most axes the Axes Coordinates rows list.
 const MAX_AXES_SHOWN: usize = 64;
@@ -148,41 +149,56 @@ pub fn project(cx: &mut ProjectCx<'_>) -> ExportsModel {
 /// Most diagnostics of an instance compile read for the parameters' problems.
 const MAX_CODE_DIAGNOSTICS: usize = 1_000;
 
-/// `params`, the rows of the one selected instance `instance`, with the first problem the instance compile
-/// (`font.features.compile` with `instance`) finds in each enabled feature-code parameter. The compile runs only when
-/// such a parameter is there.
-fn code_problems(cx: &mut ProjectCx<'_>, instance: usize, mut params: Vec<RowModel>) -> Vec<RowModel> {
-    if !params.iter().any(|r| r.enabled && matches!(r.editor, Editor::Code { .. })) {
+/// `params`, the rows of the one selected instance `instance`, with the first problem the last instance compile
+/// (`font.features.compile` with `instance`, run by `crate::shell::feature_work`) found in each parameter whose code is
+/// the one it compiled.
+fn code_problems(cx: &ProjectCx<'_>, instance: usize, mut params: Vec<RowModel>) -> Vec<RowModel> {
+    let Some(found) = &cx.view.font_info.exports.problems else { return params };
+    if cx.session.active().map(|d| d.id) != Some(found.doc) || found.instance != instance {
         return params;
-    }
-    let Ok(check) = fontcraft_engine::cmd::features_check::check_context(cx.session) else { return params };
-    let Ok(font) = cx.session.font() else { return params };
-    let raw = json!({ "instance": instance });
-    let Ok(Ok(r)) = fontcraft_engine::guard::catch_panic(|| fontcraft_engine::cmd::features_check::compile_instance(font, &check, &raw)) else {
-        return params;
-    };
-    let mut found: Vec<(String, usize, u64, String)> = Vec::new();
-    let mut read = |d: &Value, line: u64| {
-        let param = d.get("param")?;
-        let name = param.get("name")?.as_str()?.to_string();
-        let index = usize::try_from(param.get("index")?.as_u64()?).ok()?;
-        found.push((name, index, line, d.get("message").and_then(Value::as_str).unwrap_or_default().to_string()));
-        Some(())
-    };
-    for d in r.get("refused").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default().iter().take(MAX_CODE_DIAGNOSTICS) {
-        let _ = read(d, 0);
-    }
-    for d in r.get("diagnostics").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default().iter().take(MAX_CODE_DIAGNOSTICS) {
-        if d.get("severity").and_then(Value::as_str) == Some("error") {
-            let _ = read(d, d.get("line").and_then(Value::as_u64).unwrap_or(0));
-        }
     }
     for row in &mut params {
-        if let Editor::Code { problem, .. } = &mut row.editor {
-            *problem = found.iter().find(|f| f.0 == row.key && f.1 == row.occurrence).map(|f| (f.2, f.3.clone()));
+        if let Editor::Code { text, problem } = &mut row.editor
+            && row.enabled
+        {
+            let param = found.params.iter().find(|p| p.key == row.key && p.occurrence == row.occurrence && p.text == *text);
+            *problem = param.and_then(|p| p.problem.clone());
         }
     }
     params
+}
+
+/// The feature-code parameters of `instance` that are switched on.
+pub fn code_params(font: &Font, instance: usize) -> Vec<ParamProblem> {
+    let target = Target { scope: Scope::Instance, indices: vec![instance] };
+    rows(font, &target, RowKind::Param)
+        .into_iter()
+        .filter(|r| r.enabled)
+        .filter_map(|r| match r.editor {
+            Editor::Code { text, .. } => Some(ParamProblem { key: r.key, occurrence: r.occurrence, text, problem: None }),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Puts the first problem `reply` (`font.features.compile` with `instance`) has for each of `params` on it.
+pub fn place_problems(params: &mut [ParamProblem], reply: &Value) {
+    let list = |key: &str| reply.get(key).and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default().iter().take(MAX_CODE_DIAGNOSTICS);
+    let refused = list("refused").map(|d| (d, 0));
+    let errors = list("diagnostics")
+        .filter(|d| d.get("severity").and_then(Value::as_str) == Some("error"))
+        .map(|d| (d, d.get("line").and_then(Value::as_u64).unwrap_or(0)));
+    for (d, line) in refused.chain(errors) {
+        let at = d.get("param").and_then(|p| {
+            let index = usize::try_from(p.get("index")?.as_u64()?).ok()?;
+            Some((p.get("name")?.as_str()?, index))
+        });
+        let Some((name, index)) = at else { continue };
+        let Some(param) = params.iter_mut().find(|p| p.key == name && p.occurrence == index) else { continue };
+        if param.problem.is_none() {
+            param.problem = Some((line, d.get("message").and_then(Value::as_str).unwrap_or_default().to_string()));
+        }
+    }
 }
 
 /// The entries the tab acts on: the selected ones the font has, else the first.

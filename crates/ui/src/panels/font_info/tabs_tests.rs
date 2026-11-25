@@ -20,7 +20,7 @@ use crate::app::models::font_info::FontInfoModel;
 use crate::app::{APP, FontCraftApp, Msg, ViewMsg};
 use crate::dialogs::feature_picker::FeaturePicker;
 use crate::shell::font_info::FontInfoTab;
-use crate::shell::font_info_tabs::{CompletionAsk, EntryKey, EntryKind, FeatureDraft, PreviewAsk};
+use crate::shell::font_info_tabs::{COMPILE, CompletionAsk, EntryKey, EntryKind, FeatureDraft, PreviewAsk};
 
 const ROOM: egui::Vec2 = egui::vec2(1280.0, 900.0);
 
@@ -75,7 +75,6 @@ fn features_model() -> FontInfoModel {
             compiled: true,
             ..EntryPane::default()
         }),
-        master: Some("m01".into()),
         ..FeaturesModel::default()
     };
     FontInfoModel { open: true, tab: FontInfoTab::Features, features, ..FontInfoModel::default() }
@@ -100,7 +99,7 @@ fn features_sidebar_and_buttons_post_their_commands() {
             shell("font.info.openDialog", json!({ "dialog": "featurePicker" })),
             Msg::run("font.features.remove", json!({ "entries": [ss01] })),
             Msg::run("font.features.update", json!({})),
-            Msg::run("font.features.compile", json!({ "master": "m01" })),
+            Msg::Shell(CommandRef::new(COMPILE)),
             shell("font.info.features.select", json!({ "entries": [{ "kind": "feature", "name": "liga", "index": 0 }] })),
         ]
     );
@@ -193,6 +192,83 @@ fn a_draft_is_checked_after_the_pause_and_stored_code_compiles_in_the_background
     let state = app.session.feature_state().expect("compiled in the background");
     assert!(state.has_errors());
     assert!(state.is_current(&app.session, app.session.doc().expect("a document")));
+}
+
+/// The Compile button's compile runs as a job with the button busy until it lands; an edit while it runs drops the
+/// result and the code is compiled again once the document stands still.
+#[test]
+fn the_compile_button_is_busy_until_the_compile_of_the_font_as_it_is_lands() {
+    use crate::shell::feature_work::step;
+    use fontcraft_engine::feature_state::SessionFeaturesExt as _;
+    let host = Host::builder(APP).jobs(Arc::new(craft::host::InlineJobs)).build();
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(host));
+    app.sent.push(Msg::run("font.features.addFeature", json!({ "tag": "liga", "automatic": false, "code": "sub a by qq;" })));
+    app.sent.push(shell("font.info", json!({ "tab": "features" })));
+    app.drain();
+    app.sent.push(Msg::Shell(CommandRef::new(COMPILE)));
+    app.drain();
+    assert!(app.models.font_info.features.compiling, "busy");
+    assert!(app.session.feature_state().is_none(), "nothing has landed");
+    app.sent.push(Msg::run("font.features.setNotes", json!({ "kind": "feature", "name": "liga", "notes": "x" })));
+    app.drain();
+    step(&mut app, 10.0);
+    assert!(app.session.feature_state().is_none(), "the result of the revision before is dropped");
+    assert!(app.view.font_info.features.compiling, "still busy");
+    step(&mut app, 10.6);
+    step(&mut app, 10.7);
+    app.drain();
+    let state = app.session.feature_state().expect("the compile landed");
+    assert!(state.has_errors());
+    assert!(!app.models.font_info.features.compiling);
+    assert!(app.models.font_info.features.groups.iter().any(|g| g.entries.iter().any(|e| e.error)), "its errors show");
+}
+
+/// The Exports tab compiles the shown instance's feature parameters as a job: the problem shows once it landed, goes
+/// with the code it was found in, and a result for a revision before is dropped.
+#[test]
+fn the_exports_tab_shows_a_parameters_problem_once_its_compile_lands() {
+    use crate::app::models::font_info::Editor;
+    use crate::shell::feature_work::step;
+    let host = Host::builder(APP).jobs(Arc::new(craft::host::InlineJobs)).build();
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(host));
+    let param = |value: &str| json!({ "scope": "instance", "targets": ["Bold"], "name": "Replace Feature", "value": value });
+    app.sent.push(Msg::run("font.features.addFeature", json!({ "tag": "liga", "automatic": false, "code": "sub a by b;" })));
+    app.sent.push(Msg::run("font.instance.add", json!({ "styleName": "Bold" })));
+    app.sent.push(Msg::run("font.customParameters.add", param("liga; sub a by b;\nsub c by zzz;")));
+    app.drain();
+    let bold = app.session.font().expect("a font").instances.iter().position(|i| i.name == "Bold").expect("the instance");
+    app.sent.push(shell("font.info", json!({ "tab": "exports" })));
+    app.sent.push(shell("font.info.exports.select", json!({ "instances": [bold] })));
+    app.drain();
+    let problem = |app: &FontCraftApp| {
+        app.models.font_info.exports.params.iter().find_map(|r| match &r.editor {
+            Editor::Code { problem, .. } => problem.clone(),
+            _ => None,
+        })
+    };
+    step(&mut app, 10.0);
+    app.drain();
+    assert_eq!(problem(&app), None, "under way");
+    step(&mut app, 10.1);
+    app.drain();
+    assert_eq!(problem(&app).map(|p| p.0), Some(2), "the line in the parameter's code");
+    // The code changes while a compile of it runs: that compile is dropped, and the new code has no problem.
+    app.sent.push(Msg::run("font.customParameters.set", param("liga; sub a by b;\nsub c by yyy;")));
+    app.drain();
+    assert_eq!(problem(&app), None, "the problem goes with its code");
+    step(&mut app, 20.0);
+    step(&mut app, 20.6);
+    app.sent.push(Msg::run("font.customParameters.set", param("liga; sub a by b;")));
+    app.drain();
+    step(&mut app, 20.7);
+    app.drain();
+    assert_eq!(problem(&app), None);
+    step(&mut app, 21.3);
+    step(&mut app, 21.4);
+    app.drain();
+    assert_eq!(problem(&app), None);
+    let known = app.view.font_info.exports.problems.clone().expect("the last compile landed");
+    assert_eq!(known.revision, app.session.doc().expect("a document").revision);
 }
 
 /// Typing a name in the code asks for the names that fit at the caret.
