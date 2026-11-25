@@ -20,6 +20,7 @@ use craft::behavior::dock::PanelState;
 use craft::ui::contract::{PlainData, Tracked};
 use fontcraft_engine::Session;
 use fontcraft_engine::cmd::preview::preview_range;
+use fontcraft_engine::cmd::stroke::OpenCorners;
 use fontcraft_engine::interp_cache::view_master_id;
 use fontcraft_engine::model::Font;
 use fontcraft_engine::prelude::*;
@@ -246,12 +247,14 @@ fn fill_line(model: &mut PreviewModel, font: &Font, master: &str, layout: &Layou
     model.extent = if layout.direction == Direction::Rtl { [-length, 0.0] } else { [0.0, length] };
     model.focus = layout.placed.get(edited).map(|p| p.x + p.advance / 2.0).filter(|f| f.is_finite());
     let mut outlines: std::collections::HashMap<&str, Option<BezPath>> = std::collections::HashMap::new();
+    let corners = OpenCorners::of(font);
     for (item, placed) in layout.placed.iter().enumerate().take(MAX_LINE_GLYPHS) {
         let Some(name) = placed.glyph.as_deref() else { continue };
         if is_text {
             model.hits.push(HitItem { item, x: placed.x, advance: placed.advance });
         }
-        if let Some(outline) = outlines.entry(name).or_insert_with(|| font.outline(name, master).ok()) {
+        let drawn = || font.outline(name, master).ok().map(|o| corners.filled(master, name, &o).unwrap_or(o));
+        if let Some(outline) = outlines.entry(name).or_insert_with(drawn) {
             let mut moved = outline.clone();
             moved.apply_affine(Affine::translate((placed.x, placed.y)));
             model.outline.extend(moved.elements().iter().copied());
@@ -268,7 +271,8 @@ fn all_line(model: &mut PreviewModel, session: &mut Session, glyph: &str, instan
         let Ok(instance_view) = session.instance_view(i, &asked) else { continue };
         let at = view_master_id(i);
         let Some(width) = instance_view.glyph(glyph).and_then(|g| g.layer(&at)).map(|l| l.width) else { continue };
-        if let Ok(mut outline) = instance_view.outline(glyph, &at) {
+        if let Ok(outline) = instance_view.outline(glyph, &at) {
+            let mut outline = OpenCorners::of(&instance_view).filled(&at, glyph, &outline).unwrap_or(outline);
             outline.apply_affine(Affine::translate((x, 0.0)));
             model.outline.extend(outline.elements().iter().copied());
         }

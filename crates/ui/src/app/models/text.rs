@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use craft::ui::contract::{PlainData, Tracked};
 use fontcraft_engine::Session;
+use fontcraft_engine::cmd::stroke::OpenCorners;
 use fontcraft_engine::compile::preview::PreviewFont;
 use fontcraft_engine::model::Font;
 use fontcraft_engine::prelude::*;
@@ -191,6 +192,9 @@ pub struct TextGlyph {
     pub name: String,
     #[plain_data(assume = "a kurbo path: owned points")]
     pub outline: BezPath,
+    /// The outline as Fill Preview fills it, when it has open corners that an export erases.
+    #[plain_data(assume = "a kurbo path: owned points")]
+    pub fill: Option<BezPath>,
     /// Where the glyph's origin lies, in the edited glyph's font units.
     pub at: [f64; 2],
 }
@@ -298,7 +302,8 @@ fn build(session: &mut Session, view: &ViewState, shaper: &ShaperSlot) -> Option
     let heights = (descender.min(layout.ascender), layout.ascender);
     let move_box = |[x0, y0, x1, y1]: [f64; 4]| [x0 - origin[0], y0 - origin[1], x1 - origin[0], y1 - origin[1]];
 
-    let mut outlines: HashMap<&str, Option<BezPath>> = HashMap::new();
+    let corners = OpenCorners::of(font);
+    let mut outlines: HashMap<&str, Option<(BezPath, Option<BezPath>)>> = HashMap::new();
     let mut glyphs = Vec::new();
     for (item, placed) in layout.placed.iter().enumerate() {
         if item == edited {
@@ -308,11 +313,20 @@ fn build(session: &mut Session, view: &ViewState, shaper: &ShaperSlot) -> Option
         if glyphs.len() >= MAX_DRAWN_GLYPHS {
             break;
         }
-        let outline = outlines.entry(name).or_insert_with(|| font.outline(name, master).ok());
-        if let Some(outline) = outline {
-            let mut placed_outline = outline.clone();
-            placed_outline.apply_affine(shift * Affine::translate((placed.x, placed.y)));
-            glyphs.push(TextGlyph { item, name: name.to_string(), outline: placed_outline, at: [placed.x - origin[0], placed.y - origin[1]] });
+        let outline = outlines.entry(name).or_insert_with(|| {
+            let outline = font.outline(name, master).ok()?;
+            let fill = corners.filled(master, name, &outline);
+            Some((outline, fill))
+        });
+        if let Some((outline, fill)) = outline {
+            let place = |path: &BezPath| (shift * Affine::translate((placed.x, placed.y))) * path;
+            glyphs.push(TextGlyph {
+                item,
+                name: name.to_string(),
+                outline: place(outline),
+                fill: fill.as_ref().map(place),
+                at: [placed.x - origin[0], placed.y - origin[1]],
+            });
         }
     }
 

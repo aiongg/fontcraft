@@ -1,5 +1,7 @@
 //! Outline preparation (`docs/spec/40-compile.md` § 1.3), in the reference compilers' filter
 //! order (`compile.filterOrder`): decompose, remove overlaps, convert curves, fix the direction.
+//! Invisible open corners are erased before all of these ([`erase_open_corners`],
+//! `compile.glyphsOutlinePreSteps`), so a component draws its base without them.
 //!
 //! 1. **Decompose** (`compile.mixedGlyphsBecomeSimple`,
 //!    `compile.overflowingComponentTransformDecompose`, `compile.otfDecomposesAllComponents`): a
@@ -121,6 +123,21 @@ pub enum Prepared {
     /// Rounded quadratic points made with the other sources of a variable font, so every source
     /// keeps the same points; written as they are (TrueType only).
     Points(write_fonts::tables::glyf::SimpleGlyph),
+}
+
+/// Erases the invisible open corners ([`fontcraft_pathops::erase_invisible_corners`]) of the
+/// contours of the glyphs `erased` names.
+pub(crate) fn erase_open_corners(glyphs: &mut [ResolvedGlyph], erased: impl Fn(&str) -> bool) {
+    for g in glyphs {
+        if g.contours.is_empty() || !erased(&g.name) {
+            continue;
+        }
+        for contour in &mut g.contours {
+            if let Some(closed) = fontcraft_pathops::erase_invisible_corners(contour) {
+                *contour = closed;
+            }
+        }
+    }
 }
 
 /// Does a component's 2×2 transform hold a value that `glyf` cannot store?

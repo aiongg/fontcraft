@@ -143,7 +143,6 @@ fn tables_writes_raw_table_files_and_bump_version_raises_the_revision() {
 fn options_without_a_counterpart_are_refused_with_a_reason() {
     let mut s = composites();
     for (params, word) in [
-        (json!({ "outlines": { "eraseOpenCorners": true } }), "M3.31"),
         (json!({ "outlines": { "propagateAnchors": false } }), "propagated"),
         (json!({ "masterFinder": "{stem}.ttf" }), "compiled master"),
         (json!({ "emitDebug": true }), "intermediate"),
@@ -153,6 +152,8 @@ fn options_without_a_counterpart_are_refused_with_a_reason() {
         let e = s.execute("font.compile", &params).unwrap_err().to_string();
         assert!(e.contains(word), "{params}: {e}");
     }
-    // Turning a refused step off asks for nothing.
-    run(&mut s, "font.compile", json!({ "formats": ["ttf"], "outlines": { "eraseOpenCorners": false } }));
+    // Open corners are erased as asked or not at all.
+    for erase in [json!(true), json!(false), json!(null)] {
+        run(&mut s, "font.compile", json!({ "formats": ["ttf"], "outlines": { "eraseOpenCorners": erase } }));
+    }
 }

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use fontcraft_model::plist::{Dict, Number, Str, Value, openstep::parse_value};
-use fontcraft_model::{Component, Font, Param, Path, Shape, Transform, UserData};
+use fontcraft_model::{Component, Font, Node, NodeKind, Param, Path, Shape, Transform, UserData};
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::raw::TableProvider;
@@ -261,4 +261,47 @@ fn malformed_filter_lists_warn_and_change_nothing() {
     master_filters(&mut elsewhere, "({name = decomposeComponents; namespace = my.filters;}, {name = propagateAnchors;})");
     let out = build(&elsewhere, ComponentOptions::default());
     assert_eq!(out.bytes, default.bytes, "another namespace's filter and other filters are not component options");
+}
+
+/// A 100 × 100 square whose top right corner is open by `ear` units on both sides.
+fn eared(ear: f64) -> Shape {
+    let n = |x, y| Node::new(x, y, NodeKind::Line);
+    Shape::Path(Path::new(true, vec![n(0.0, 0.0), n(100.0, 0.0), n(100.0, 100.0 + ear), n(100.0 + ear, 100.0), n(0.0, 100.0)]))
+}
+
+/// Whether the ear's tip is left in `A`, and in `B`, a composite of it 10 units to the right.
+fn ears(f: &Font, options: ComponentOptions) -> (bool, bool) {
+    let out = build(f, options.clone());
+    let target = f.default_target().unwrap();
+    let cff = crate::compile(f, &target, crate::Flavour::Cff, &Options { remove_overlap: false, components: options, ..Default::default() }).unwrap();
+    let found = |out: &Compiled, name: &str, tip: (f32, f32)| drawn(out, name).contains(&tip);
+    let ears = (found(&out, "A", (140.0, 100.0)), found(&out, "B", (150.0, 100.0)));
+    assert_eq!(ears, (found(&cff, "A", (140.0, 100.0)), found(&cff, "B", (150.0, 100.0))), "CFF is built from the same outlines");
+    ears
+}
+
+#[test]
+fn invisible_open_corners_are_erased_where_the_source_asks() {
+    let mut f = font();
+    f.glyph_mut("A").unwrap().layers[0].shapes = vec![eared(40.0)];
+    assert_eq!(ears(&f, ComponentOptions::default()), (false, false));
+    assert!(drawn(&build(&f, ComponentOptions::default()), "A").contains(&(100.0, 100.0)), "the corner is one point at the crossing");
+    assert_eq!(ears(&f, ComponentOptions { erase_open_corners: Some(false), ..Default::default() }), (true, true));
+    // An ear larger than what stays visible next to it is part of the shape.
+    let mut large = f.clone();
+    large.glyph_mut("A").unwrap().layers[0].shapes = vec![eared(150.0)];
+    assert!(drawn(&build(&large, ComponentOptions::default()), "A").contains(&(250.0, 100.0)));
+
+    // A UFO keeps them unless its filter list names the filter, for the glyphs it names.
+    f.source.format = fontcraft_model::SourceFormat::Ufo;
+    assert_eq!(ears(&f, ComponentOptions::default()), (true, true));
+    assert_eq!(ears(&f, ComponentOptions { erase_open_corners: Some(true), ..Default::default() }), (false, false));
+    master_filters(&mut f, "({name = eraseOpenCorners; namespace = \"glyphsLib.filters\"; pre = 1;})");
+    assert_eq!(ears(&f, ComponentOptions::default()), (false, false));
+    master_filters(&mut f, "({name = eraseOpenCorners; namespace = \"glyphsLib.filters\"; pre = 1; exclude = (A);})");
+    assert_eq!(ears(&f, ComponentOptions::default()), (true, true));
+    // In a .glyphs source a filter list without the filter turns it off.
+    f.source.format = fontcraft_model::SourceFormat::Glyphs;
+    master_filters(&mut f, "({name = flattenComponents;})");
+    assert!(ears(&f, ComponentOptions::default()).0);
 }

@@ -4,7 +4,7 @@
 //! `post` format, tables to leave out and raw table files.
 //!
 //! Three kinds of step, in build order:
-//! - Compile options ([`OutputRequest::read`] sets them): the CFF rounding tolerance, operators,
+//! - Compile options ([`OutputRequest::read`] sets them): open corners, the CFF rounding tolerance, operators,
 //!   subroutine cap and widths, `USE_MY_METRICS`, the autohint switch.
 //! - A copy of the font before the build ([`OutputRequest::font`]): the glyph subset (every other
 //!   glyph stops exporting, so the feature code is compiled against the reduced set, as the
@@ -343,11 +343,7 @@ fn read_outlines(p: &Params, options: &mut Options) -> Result<()> {
             "`outlines.preferSimpleGlyphs: false` (a glyph's contours moved into a new glyph used as a component): a glyph with contours and components is always written as contours".into(),
         ));
     }
-    if group_flag(p, group, "outlines", "eraseOpenCorners")? == Some(true) {
-        return Err(EngineError::Unsupported(
-            "`outlines.eraseOpenCorners`: it runs the export step that erases open corners, which is not built yet (M3.31)".into(),
-        ));
-    }
+    options.components.erase_open_corners = group_flag(p, group, "outlines", "eraseOpenCorners")?;
     if group_flag(p, group, "outlines", "propagateAnchors")?.is_some() {
         return Err(EngineError::Unsupported(
             "`outlines.propagateAnchors`: anchors are propagated as the source asks (always for the reference's format, by the filter list for a UFO), and the compile has no switch that overrides it yet".into(),

@@ -535,7 +535,8 @@ pub fn point_indexes(font: &Font, target: &Target, glyph: &str, options: &Option
     if wanted.first().is_none_or(|g| g.name != glyph) {
         return Err(CompileError::Glyph { glyph: glyph.to_string(), message: "the glyph is not in the font".to_string() });
     }
-    let subset: Vec<ResolvedGlyph> = wanted.into_iter().cloned().collect();
+    let mut subset: Vec<ResolvedGlyph> = wanted.into_iter().cloned().collect();
+    crate::components_opt::erase_corners(Some(&*source), &resolved.master, &mut subset, &options.components);
     let error =
         if options.conversion_error.is_finite() && options.conversion_error > 0.0 { options.conversion_error } else { DEFAULT_CONVERSION_ERROR };
     let settings = outline::Settings {

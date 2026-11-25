@@ -1,9 +1,10 @@
-//! Component export options (`docs/spec/40-compile.md` § 1.3, step 1): what a source or the
-//! compile options ask of components beyond the decomposition every build does
-//! ([`crate::outline`]).
+//! Outline steps before the decomposition every build does ([`crate::outline`],
+//! `docs/spec/40-compile.md` § 1.3): the erasing of invisible open corners, then the component
+//! export options, what a source or the compile options ask of components beyond it.
 //!
 //! | Asked by | Effect |
 //! |---|---|
+//! | [`ComponentOptions::erase_open_corners`], else the source ([`OpenCorners`]) | small open corners are erased ([`crate::outline::erase_open_corners`]) |
 //! | [`ComponentOptions::decompose_all`], the *Decompose Components* parameter | every composite becomes contours |
 //! | the *Decompose Glyphs* parameter | the composites it lists become contours |
 //! | a `decomposeComponents` entry in the source's filter list | the composites it names become contours |
@@ -24,7 +25,8 @@
 //! when the master has none, from the font's (a designspace's lib). An entry names its filter
 //! (`name`, spelled as ufo2ft looks it up: spaces dropped, the first letter in either case) and
 //! may limit it with an `include` or an `exclude` list of glyph names. Entries of other filters,
-//! or of another `namespace`, are skipped; the overlap, anchor and corner filters are read where
+//! or of another `namespace`, are skipped; `eraseOpenCorners` is read whatever its namespace
+//! (glyphsLib's own, in the sources it writes), and the overlap and anchor filters are read where
 //! those steps run.
 //!
 //! *Keep Overlapping Components* and *Keep Transformed Components* are not read: overlapping and
@@ -34,15 +36,20 @@
 
 use std::collections::{HashMap, HashSet};
 
-use fontcraft_geom::{Affine, BezPath};
+use fontcraft_geom::{Affine, BezPath, PathEl, Point};
+use fontcraft_interp::GlyphSources;
 use fontcraft_model::plist::Value;
-use fontcraft_model::{Font, MAX_COMPONENT_DEPTH, ModelError, Resolved, ResolvedComponent, ResolvedGlyph, param_flag};
+use fontcraft_model::{
+    Font, MAX_COMPONENT_DEPTH, ModelError, Resolved, ResolvedComponent, ResolvedGlyph, Shape, SourceFormat, is_ufo_family, param_flag,
+};
 
-use crate::outline::{Flavour, decomposed, must_decompose};
+use crate::outline::{Flavour, decomposed, erase_open_corners, must_decompose};
 use crate::{CompileError, Expansion, MAX_COMPONENTS, MAX_FONT_GLYPHS};
 
 /// The user-data key of ufo2ft's filter list.
 pub const FILTERS_KEY: &str = "com.github.googlei18n.ufo2ft.filters";
+/// The filter that erases invisible open corners, spelled as [`filter_key`] gives it.
+const ERASE_OPEN_CORNERS: &str = "eraseOpenCorners";
 /// The yes-or-no parameter that decomposes every composite.
 pub const DECOMPOSE_COMPONENTS: &str = "Decompose Components";
 /// The parameter that lists composites to decompose.
@@ -55,7 +62,7 @@ pub const MAX_LISTED_NAMES: usize = MAX_FONT_GLYPHS;
 
 /// Component options of a compile ([`crate::Options::components`]). The default does what the
 /// source asks and nothing more.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ComponentOptions {
     /// Decompose every composite (`compile.decomposeAllComponents`).
     pub decompose_all: bool,
@@ -65,6 +72,12 @@ pub struct ComponentOptions {
     /// Flatten nested composites (`compile.flattenNestedComponents`). `None`: as the source's
     /// filter list says.
     pub flatten: Option<bool>,
+    /// Erase invisible open corners (`compile.glyphsOutlinePreSteps`). `None`: as the source asks
+    /// ([`OpenCorners`]).
+    pub erase_open_corners: Option<bool>,
+    /// Glyphs whose open corners stay whatever the settings say: in a variable font, those whose
+    /// masters do not all have the same ones, which would no longer be compatible.
+    pub keep_open_corners: HashSet<String>,
 }
 
 /// The glyphs one filter entry applies to.
@@ -82,6 +95,102 @@ impl Scope {
             Scope::Only(names) => names.contains(name),
             Scope::Except(names) => !names.contains(name),
         }
+    }
+}
+
+/// The glyphs of a font whose invisible open corners a build erases when the options do not say:
+/// those an `eraseOpenCorners` entry of the filter list reaches; without a filter list, every
+/// glyph of a `.glyphs` or native source and none of a UFO, a designspace or a compiled font.
+/// This is what glyphsLib and fontc do: glyphsLib lists the filter in every UFO it writes, and a
+/// list in a master's user data stands in its place.
+#[derive(Clone, Debug)]
+pub struct OpenCorners {
+    by_master: HashMap<String, Vec<Scope>>,
+}
+
+impl OpenCorners {
+    pub fn of(font: &Font) -> Self {
+        let by_master = font.masters.iter().map(|m| (m.id.clone(), open_corner_scopes(font, &m.id))).collect();
+        Self { by_master }
+    }
+
+    /// Whether they are erased in every glyph of every master.
+    pub fn all(&self) -> bool {
+        self.by_master.values().all(|scopes| scopes.contains(&Scope::All))
+    }
+
+    /// Whether the open corners of `glyph` in `master` are erased.
+    pub fn erased(&self, master: &str, glyph: &str) -> bool {
+        self.by_master.get(master).is_some_and(|scopes| reaches(scopes, glyph))
+    }
+
+    /// `outline` (of `glyph`, in `master`) as it is filled, without the invisible open corners a
+    /// build erases; `None` when that is the outline as it is.
+    pub fn filled(&self, master: &str, glyph: &str, outline: &BezPath) -> Option<BezPath> {
+        if self.erased(master, glyph) { fontcraft_pathops::erase_invisible_corners(outline) } else { None }
+    }
+}
+
+/// Erases the invisible open corners of `glyphs`, resolved at `master`, as the options and the
+/// source ask.
+pub(crate) fn erase_corners(font: Option<&Font>, master: &str, glyphs: &mut [ResolvedGlyph], options: &ComponentOptions) {
+    let scopes = match (options.erase_open_corners, font) {
+        (Some(true), _) => vec![Scope::All],
+        (None, Some(font)) => open_corner_scopes(font, master),
+        (Some(false), _) | (None, None) => Vec::new(),
+    };
+    if !scopes.is_empty() {
+        erase_open_corners(glyphs, |name| reaches(&scopes, name) && !options.keep_open_corners.contains(name));
+    }
+}
+
+/// The glyphs of a variable font with the default master `origin` that the options and the source
+/// erase open corners in, and whose masters and intermediate layers do not all lose the same ones
+/// ([`ComponentOptions::keep_open_corners`]).
+pub(crate) fn uneven_open_corners<'a>(
+    font: &Font,
+    origin: &str,
+    sources: impl Iterator<Item = &'a GlyphSources>,
+    options: &ComponentOptions,
+) -> HashSet<String> {
+    let mut out = HashSet::new();
+    let corners = OpenCorners::of(font);
+    for source in sources {
+        if !options.erase_open_corners.unwrap_or_else(|| corners.erased(origin, &source.glyph)) {
+            continue;
+        }
+        let Some(glyph) = font.glyph(&source.glyph) else { continue };
+        let mut first: Option<Vec<Vec<bool>>> = None;
+        for layer in source.main.iter().filter_map(|s| glyph.layers.iter().find(|l| l.id == s.layer_id)) {
+            let kept: Vec<Vec<bool>> = layer.shapes.iter().map(kept_points).collect();
+            if *first.get_or_insert_with(|| kept.clone()) != kept {
+                out.insert(source.glyph.clone());
+                break;
+            }
+        }
+    }
+    out
+}
+
+/// Which on-curve points of a path are left when its invisible open corners are erased; empty
+/// when it has none.
+fn kept_points(shape: &Shape) -> Vec<bool> {
+    let Shape::Path(path) = shape else { return Vec::new() };
+    let Ok(contour) = path.to_contour() else { return Vec::new() };
+    let Some(erased) = fontcraft_pathops::erase_invisible_corners(&contour) else { return Vec::new() };
+    let key = |p: Point| (p.x.to_bits(), p.y.to_bits());
+    let left: HashSet<(u64, u64)> = erased.elements().iter().filter_map(PathEl::end_point).map(key).collect();
+    contour.elements().iter().filter_map(PathEl::end_point).map(|p| left.contains(&key(p))).collect()
+}
+
+fn open_corner_scopes(font: &Font, master: &str) -> Vec<Scope> {
+    match filter_setting(font, master) {
+        Some(setting) => {
+            let entries = filter_entries(setting, &|name, _| name == ERASE_OPEN_CORNERS, &mut Vec::new());
+            entries.into_iter().map(|(_, scope)| scope).collect()
+        }
+        None if is_ufo_family(font.source.format) || font.source.format == SourceFormat::Binary => Vec::new(),
+        None => vec![Scope::All],
     }
 }
 
@@ -110,6 +219,7 @@ pub(crate) fn apply(
     expansion: &mut Expansion,
     warnings: &mut Vec<String>,
 ) -> Result<Vec<ResolvedGlyph>, CompileError> {
+    erase_corners(font, &resolved.master, &mut glyphs, options);
     if flavour == Flavour::Cff || glyphs.iter().all(|g| g.components.is_empty()) {
         return Ok(glyphs);
     }
@@ -153,7 +263,7 @@ fn source_filters(font: &Font, master: &str, warnings: &mut Vec<String>) -> Sour
 
 fn read_filters(setting: &Value, warnings: &mut Vec<String>) -> SourceFilters {
     let mut out = SourceFilters::default();
-    for (key, scope) in filter_entries(setting, warnings) {
+    for (key, scope) in filter_entries(setting, &in_ufo2ft, warnings) {
         match key.as_str() {
             "decomposeComponents" => out.decompose.push(scope),
             "decomposeTransformedComponents" => out.decompose_transformed.push(scope),
@@ -169,12 +279,17 @@ fn read_filters(setting: &Value, warnings: &mut Vec<String>) -> SourceFilters {
 /// list are left to [`apply`] to report.
 pub(crate) fn listed_filter(font: &Font, master: &str, key: &str) -> Vec<Scope> {
     let Some(setting) = filter_setting(font, master) else { return Vec::new() };
-    filter_entries(setting, &mut Vec::new()).into_iter().filter(|(k, _)| k == key).map(|(_, scope)| scope).collect()
+    filter_entries(setting, &in_ufo2ft, &mut Vec::new()).into_iter().filter(|(k, _)| k == key).map(|(_, scope)| scope).collect()
 }
 
-/// The entries of a filter list in the ufo2ft namespace, in list order: each filter's key and the
-/// glyphs it reaches.
-fn filter_entries(setting: &Value, warnings: &mut Vec<String>) -> Vec<(String, Scope)> {
+/// Entries of ufo2ft's own filters: its namespace, or none.
+fn in_ufo2ft(_: &str, namespace: Option<&Value>) -> bool {
+    namespace.is_none_or(|n| n.as_str() == Some("ufo2ft.filters"))
+}
+
+/// The entries of a filter list that `wanted` takes (by the filter's key and the entry's
+/// namespace), in list order: each filter's key and the glyphs it reaches.
+fn filter_entries(setting: &Value, wanted: &dyn Fn(&str, Option<&Value>) -> bool, warnings: &mut Vec<String>) -> Vec<(String, Scope)> {
     let mut out = Vec::new();
     let Some(entries) = setting.as_array() else {
         warnings.push(format!("the filter list ({FILTERS_KEY}) is not a list, so its component filters were not applied"));
@@ -186,11 +301,12 @@ fn filter_entries(setting: &Value, warnings: &mut Vec<String>) -> Vec<(String, S
     for entry in entries.items.iter().take(MAX_FILTERS) {
         let Some(dict) = entry.as_dict() else { continue };
         let Some(name) = dict.get("name").and_then(Value::as_str) else { continue };
-        if dict.get("namespace").is_some_and(|n| n.as_str() != Some("ufo2ft.filters")) {
+        let key = filter_key(name);
+        if !wanted(&key, dict.get("namespace")) {
             continue;
         }
         match scope(dict.get("include"), dict.get("exclude")) {
-            Ok(s) => out.push((filter_key(name), s)),
+            Ok(s) => out.push((key, s)),
             Err(why) => warnings.push(format!("the {name} filter was not applied: {why}")),
         }
     }

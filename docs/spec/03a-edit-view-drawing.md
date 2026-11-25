@@ -483,7 +483,11 @@ segments. What is left becomes open paths, in the place of the original.
   uses 4% of the em (our choice); `path.openCorner`'s `overlap` parameter overrides both.
 - An opened corner whose triangle is small relative to the adjacent visible segments is treated
   as invisible in the result, so it may also sit on the outside of a shape; above the threshold
-  it shows (`openCorner.invisibleWhenSmall`).
+  it shows (`openCorner.invisibleWhenSmall`). The size test is glyphsLib's, and only a corner whose
+  loop lies on the outside and is closed by a straight segment counts (`40-compile.md` § 1.2). An
+  export erases such corners where the source asks; Fill Preview, the Preview panel and the preview
+  command fill the outline without them; and Remove Overlap erases them first in a font whose
+  export erases them in every glyph.
 - `path.sharpenCorner` (context menu, below Open Corner): seen in tutorial videos with nodes, a
   segment or a path selected; what it does is unknown (question 31).
 

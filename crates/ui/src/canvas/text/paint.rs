@@ -61,7 +61,7 @@ pub fn glyph_shapes(cx: &PaintCx<'_>) -> Vec<Shape> {
     }
     for glyph in &model.glyphs {
         if cx.display.fill_preview {
-            out.extend(fill_shapes(cx, &glyph.outline, cx.tokens.outline));
+            out.extend(fill_shapes(cx, glyph.fill.as_ref().unwrap_or(&glyph.outline), cx.tokens.outline));
         } else {
             out.extend(outline_shapes(cx, &glyph.outline, Stroke::new(t.glyph_width, t.glyph)));
         }

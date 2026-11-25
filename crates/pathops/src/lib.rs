@@ -12,7 +12,8 @@
 //! | Add Extremes, Force Extremes | [`add_extremes`] |
 //! | Add Inflections | [`add_inflections`] |
 //! | Tidy up Paths | [`tidy_up`] |
-//! | Open Corner, Reconnect Nodes | [`open_corners`], [`reconnect_nodes`] |
+//! | Open Corner, Reconnect Nodes | [`open_corners()`], [`reconnect_nodes`] |
+//! | Invisible open corners erased, open corners found | [`erase_invisible_corners`], [`erase_invisible_corners_in`], [`find_open_corners`] |
 //! | Cut with Line (the Knife) | [`cut_with_line`] |
 //! | Cursivy: the optical correction of a slanted outline | [`cursivy`] |
 //! | Coverage comparison | [`coverage_difference`] |
@@ -40,6 +41,7 @@ mod inflections;
 mod limit;
 mod mask;
 pub mod matcher;
+mod open_corners;
 pub mod stem_filters;
 pub mod stems;
 mod stroke;
@@ -64,6 +66,7 @@ pub use graph::Rewired;
 pub use inflections::{MIN_INFLECTION_DISTANCE, add_inflections};
 pub use limit::{TIME_LIMIT, Unfinished, catch_panic, run_with_time_limit};
 pub use mask::{LayerShape, MAX_MASKS, MaskMode, composite};
+pub use open_corners::{OpenCorner, erase_invisible_corners, erase_invisible_corners_in, find_open_corners};
 pub use stroke::{
     Cap, CapAxis, Join, MAX_PEN_RATIO, MAX_STROKE_SEGMENTS, MAX_STROKE_WIDTH, MITER_LIMIT, STROKE_TOLERANCE, StrokeStyle, position_from_stored,
     position_to_stored, stroke_outline,

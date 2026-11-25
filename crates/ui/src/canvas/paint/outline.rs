@@ -1,6 +1,7 @@
 //! The edited side's outline: the composite (`compositing.shapesCombineInOrder`) in the foreground stroke colour and,
 //! under it, when strokes or masks make it differ, the paths as drawn in light grey (`stroke.display`,
-//! `mask.display`). Fill Preview fills its closed contours while the Text, Hand or Zoom tool is active.
+//! `mask.display`). Fill Preview fills its closed contours, without the open corners an export erases, while the Text,
+//! Hand or Zoom tool is active.
 
 use egui::{Shape, Stroke};
 
@@ -19,7 +20,7 @@ pub fn shapes(cx: &PaintCx<'_>) -> Vec<Shape> {
         out.extend(outline_shapes(cx, source, Stroke::new(t.source_outline_width, t.source_outline)));
     }
     if cx.display.fill_preview && cx.tools.fills {
-        out.extend(fill_shapes(cx, &glyph.outline, t.outline));
+        out.extend(fill_shapes(cx, glyph.fill.as_ref().unwrap_or(&glyph.outline), t.outline));
     }
     out.extend(outline_shapes(cx, &glyph.outline, Stroke::new(t.outline_width, t.outline)));
     out
