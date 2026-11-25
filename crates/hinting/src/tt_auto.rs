@@ -424,9 +424,15 @@ pub fn snapping_exceptions(text: &str) -> Result<Vec<(u16, u16)>, String> {
 /// distance to it; zones in an alignment cycle, and those aligned to one, stay as our program
 /// placed them.
 ///
-/// Returns the `cvt ` entries to append after `layout`'s (the top of the `xHeight` zone, so the
-/// rasterizer scales it as it scales the zones) and the program to append to `prep`. Storage:
-/// [`S_X_SCALED`] and [`S_X_FITTED`], after the font programs' own.
+/// Overshoots: a round extreme past half of a zone's size ([`crate::glyph_program`]) lies beyond
+/// the zone's row by the zone's whole size at this size, scaled by the x-height factor and
+/// replaced ([`autohint_fpgm`]): nothing under half a pixel, half a pixel up to three quarters,
+/// from there whole pixels. `prep` leaves that row in the zone's overshoot entry.
+///
+/// Returns the `cvt ` entries to append after `layout`'s (each zone's overshoot edge, its position
+/// plus its size, so the rasterizer scales it as it scales the zones; none when `cvt ` has no
+/// room, which leaves out the x-height scaling and the overshoots) and the program to append to
+/// `prep`. Storage: [`S_X_SCALED`] and [`S_X_FITTED`], after the font programs' own.
 pub fn autohint_prep(
     options: &TtAutohintOptions,
     settings: &HintSettings,
@@ -435,12 +441,14 @@ pub fn autohint_prep(
 ) -> Result<(Vec<i16>, Vec<u8>), HintingError> {
     use std::fmt::Write;
     let mut t = stem_mode_program(options);
-    let mut cvt = Vec::new();
+    let cvt = match layout.overshoot(0) {
+        Some(_) => settings.tt_zones.iter().map(|z| (z.position + z.size).round().clamp(f64::from(i16::MIN), f64::from(i16::MAX)) as i16).collect(),
+        None => Vec::new(),
+    };
     let exceptions = snapping_exceptions(&options.x_height_snapping_exceptions)
         .map_err(|message| HintingError::BadParameter { name: "TTFAutohint options".into(), message })?;
-    let (top, scaling) = x_height_scaling(options, settings, layout, &exceptions, scale_x_height);
-    cvt.extend(top);
-    t.push_str(&scaling);
+    t.push_str(&x_height_scaling(options, settings, layout, &exceptions, scale_x_height));
+    t.push_str(&overshoot_rows(settings, layout));
     if options.hinting_limit > 0 {
         let _ = writeln!(t, "MPPEM[ ]\nPUSH {}\nGT[ ]\nIF[ ]\nPUSH 1 1\nINSTCTRL[ ]\nEIF[ ]", options.hinting_limit.min(MAX_OPTION_PPM));
     }
@@ -458,8 +466,9 @@ fn stem_mode_program(options: &TtAutohintOptions) -> String {
 }
 
 /// What an autohinted build adds to `fpgm` after our own functions: [`FN_AUTO_STEM`], which puts a
-/// stem's target at its distance from the origin by the stem width mode. The distance and the
-/// standard width (the TT stem the instruction uses) are first scaled by the x-height factor.
+/// stem's target at its distance from the origin by the stem width mode, and
+/// [`FN_AUTO_OVERSHOOT`]. The distance and the standard width (the TT stem the instruction uses)
+/// and the overshoot are first scaled by the x-height factor.
 ///
 /// The rules are fitted to the bar heights ttfautohint 1.8.4 gives synthetic fonts of one standard
 /// width, at 9 to 100 PPM and widths of 0.1 to 15 pixels; its manual describes the modes only in
@@ -470,8 +479,12 @@ fn stem_mode_program(options: &TtAutohintOptions) -> String {
 ///   5/8 of it; else, under 3 pixels, the whole part of `d` plus 5/32 (a fraction from 5/32 to
 ///   1/2) or 27/32 (from 1/2 to 27/32), other fractions kept; from 3 pixels up `d` rounded.
 /// * strong: the rounded `s` when `d` lies within 3/4 of it, else `d` rounded; at least 1.
+///
+/// The overshoots follow the rows ttfautohint gives synthetic fonts with overshoots of 0.5% to 3%
+/// of the em at 8 to 200 PPM: an overshoot under 1/2 pixel does not show, one under 3/4 shows as
+/// 1/2, and one from 3/4 up as the nearest whole number of pixels.
 pub fn autohint_fpgm() -> Result<Vec<u8>, HintingError> {
-    use crate::tt_font::{FN_AUTO_STEM, S_NEGATIVE};
+    use crate::tt_font::{FN_AUTO_OVERSHOOT, FN_AUTO_STEM, S_NEGATIVE};
     let scale = format!(
         "PUSH {S_X_FITTED}\nRS[ ]\nPUSH {S_X_SCALED}\nRS[ ]\nNEQ[ ]\nIF[ ]\nPUSH {S_X_FITTED}\nRS[ ]\nMUL[ ]\nPUSH {S_X_SCALED}\nRS[ ]\nDIV[ ]\nEIF[ ]"
     );
@@ -619,6 +632,43 @@ ROLL[ ]
 SRP0[ ]
 MSIRP[0]
 ENDF[ ]
+
+; {FN_AUTO_OVERSHOOT}: overshoot -> overshoot shown
+PUSH {FN_AUTO_OVERSHOOT}
+FDEF[ ]
+DUP[ ]
+PUSH 0
+LT[ ]
+PUSH {S_NEGATIVE}
+SWAP[ ]
+WS[ ]
+ABS[ ]
+{scale}
+DUP[ ]
+PUSH 32
+LT[ ]
+IF[ ]
+POP[ ]
+PUSH 0
+ELSE[ ]
+DUP[ ]
+PUSH 48
+LT[ ]
+IF[ ]
+POP[ ]
+PUSH 32
+ELSE[ ]
+PUSH 32
+ADD[ ]
+FLOOR[ ]
+EIF[ ]
+EIF[ ]
+PUSH {S_NEGATIVE}
+RS[ ]
+IF[ ]
+NEG[ ]
+EIF[ ]
+ENDF[ ]
 "
     ))?)
 }
@@ -637,29 +687,48 @@ const S_STEM_STANDARD: u8 = 14;
 const X_HEIGHT_ROUND_UP: i32 = 40;
 const X_HEIGHT_INCREASE_ROUND_UP: i32 = 52;
 
-/// The `cvt ` entry and the `prep` text of the x-height scaling ([`autohint_prep`]). With
-/// `scale_x_height` off, and without a usable `xHeight` zone or room in `cvt ` for the entry, the
-/// factor is 1: the zones are only rounded to the nearest row.
+/// The `prep` text that turns each zone's overshoot entry into the row of its round extremes
+/// ([`autohint_prep`]).
+fn overshoot_rows(settings: &HintSettings, layout: &crate::CvtLayout) -> String {
+    use crate::tt_font::FN_AUTO_OVERSHOOT;
+    use std::fmt::Write;
+    let mut t = String::new();
+    if settings.tt_overshoot_suppression_below_ppm.is_some() {
+        return t;
+    }
+    for (k, z) in settings.tt_zones.iter().enumerate().filter(|(_, z)| z.size != 0.0) {
+        let (Some((pos, fit)), Some(end)) = (layout.zones.get(k).copied(), layout.overshoot(k)) else { continue };
+        let _ = writeln!(
+            t,
+            "; overshoot of zone {}\nPUSH {end} {fit}\nRCVT[ ]\nPUSH {end}\nRCVT[ ]\nPUSH {pos}\nRCVT[ ]\nSUB[ ]\nPUSH {FN_AUTO_OVERSHOOT}\nCALL[ ]\nADD[ ]\nWCVTP[ ]",
+            z.name.chars().filter(char::is_ascii_alphanumeric).collect::<String>()
+        );
+    }
+    t
+}
+
+/// The `prep` text of the x-height scaling ([`autohint_prep`]). With `scale_x_height` off, and
+/// without a usable `xHeight` zone or room in `cvt ` for its overshoot entry, the factor is 1: the
+/// zones are only rounded to the nearest row.
 fn x_height_scaling(
     options: &TtAutohintOptions,
     settings: &HintSettings,
     layout: &crate::CvtLayout,
     exceptions: &[(u16, u16)],
     scale_x_height: bool,
-) -> (Option<i16>, String) {
+) -> String {
     use crate::tt_font::{FN_ROUND, MAX_ZONE_THRESHOLD_PX};
     use std::fmt::Write;
     let zones = &settings.tt_zones;
     let word = |v: f64| -> Option<i32> { (v.is_finite() && (1.0..=32_767.0).contains(&v.round())).then(|| v.round() as i32) };
-    let entry = layout.len;
-    // A zone at or below the baseline cannot scale the others.
+    // The overshoot entry of the x-height zone. A zone at or below the baseline cannot scale the
+    // others.
     let top = zones
         .iter()
-        .find(|z| scale_x_height && z.name == "xHeight" && z.align.is_none() && z.size >= 0.0)
-        .filter(|x| word(x.position).is_some())
-        .and_then(|x| word(x.position + x.size))
-        .and_then(|v| i16::try_from(v).ok())
-        .filter(|_| usize::from(entry) < crate::MAX_CVT_ENTRIES);
+        .enumerate()
+        .find(|(_, z)| scale_x_height && z.name == "xHeight" && z.align.is_none() && z.size >= 0.0)
+        .filter(|(_, x)| word(x.position).is_some() && word(x.position + x.size).is_some())
+        .and_then(|(k, _)| layout.overshoot(k));
     let in_range = |lo: u16, hi: u16| format!("MPPEM[ ]\nPUSH {lo}\nGTEQ[ ]\nMPPEM[ ]\nPUSH {hi}\nLTEQ[ ]\nAND[ ]\nIF[ ]");
     // The cvt entry our program rounded zone `k` from: the family zone up to the family
     // threshold, else the zone's own position.
@@ -677,7 +746,7 @@ fn x_height_scaling(
     );
 
     let mut t = String::new();
-    if top.is_some() {
+    if let Some(entry) = top {
         let _ = writeln!(t, "; x-height scaling\nPUSH {S_X_SCALED} {entry}\nRCVT[ ]\nWS[ ]");
         let _ = writeln!(t, "PUSH {S_X_FITTED} {S_X_SCALED}\nRS[ ]\nPUSH {X_HEIGHT_ROUND_UP}\nADD[ ]");
     } else {
@@ -762,7 +831,7 @@ fn x_height_scaling(
         }
     }
     t.push_str("EIF[ ]\n");
-    (top, t)
+    t
 }
 
 /// The letters the ttfautohint manual lists for its Latin x-height zone and cap-height zone.
@@ -1639,13 +1708,16 @@ mod tests {
         let (font, settings) = slab_and_wedge();
         let layout = crate::CvtLayout::new(&settings, &[]).unwrap();
         let (cvt, prep) = autohint_prep(&TtAutohintOptions::default(), &settings, &layout, true).unwrap();
-        assert_eq!(cvt, [516], "the new font's x-height 500 with its overshoot of 16");
-        assert!(!prep.is_empty());
+        assert_eq!(cvt.len(), settings.tt_zones.len());
+        let x = settings.tt_zones.iter().position(|z| z.name == "xHeight").unwrap();
+        assert_eq!(cvt[x], 516, "the new font's x-height 500 with its overshoot of 16");
+        let (_, unscaled) = autohint_prep(&TtAutohintOptions::default(), &settings, &layout, false).unwrap();
+        assert!(unscaled.len() < prep.len());
         let mut flat = settings.clone();
         flat.tt_zones.retain(|z| z.name != "xHeight");
         let layout = crate::CvtLayout::new(&flat, &[]).unwrap();
-        let (cvt, _) = autohint_prep(&TtAutohintOptions::default(), &flat, &layout, true).unwrap();
-        assert!(cvt.is_empty());
+        let [with, without] = [true, false].map(|on| autohint_prep(&TtAutohintOptions::default(), &flat, &layout, on).unwrap().1);
+        assert_eq!(with, without, "no x-height zone, no scaling");
         let _ = font;
     }
 
@@ -1692,6 +1764,41 @@ mod tests {
         }
         assert_eq!(top("C", 520.0, 12), 6.0);
         assert_eq!(top("x", 520.0, 12), 7.0);
+    }
+
+    /// A closed contour of quadratic curves through the four extremes of a box.
+    fn ring(x0: f64, y0: f64, x1: f64, y1: f64) -> fontcraft_model::Path {
+        use fontcraft_model::{Node, NodeKind, Path};
+        let (cx, cy) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0);
+        let corners = [(x1, y0), (x1, y1), (x0, y1), (x0, y0)];
+        let extremes = [(x1, cy), (cx, y1), (x0, cy), (cx, y0)];
+        let nodes =
+            corners.iter().zip(extremes).flat_map(|(&(a, b), (x, y))| [Node::new(a, b, NodeKind::OffCurve), Node::new(x, y, NodeKind::QCurve)]);
+        Path::new(true, nodes.collect())
+    }
+
+    #[test]
+    fn overshoots_show_from_half_a_pixel_on_round_extremes() {
+        // ttfautohint 1.8.4's rows for an x-height of 500 and an o from -16 to 516.
+        let mut font = one_letter("x", 500.0);
+        font.glyph_mut("o").unwrap().layer_mut("m01").unwrap().shapes.push(Shape::Path(ring(50.0, -16.0, 550.0, 516.0)));
+        let options = TtAutohintOptions::default();
+        let (round, flat) = (tt::autohinted(&font, "o", &options), tt::autohinted(&font, "x", &options));
+        let ends = |f: &[u8], ppem| {
+            let y = tt::hinted_y(f, ppem, tt::grayscale());
+            (y.iter().copied().fold(f32::MAX, f32::min), y.iter().copied().fold(f32::MIN, f32::max))
+        };
+        for (ppem, bottom, top, x) in [
+            (12, 0.0, 7.0, 7.0),
+            (28, 0.0, 15.0, 15.0),
+            (32, -0.5, 16.5, 16.0),
+            (40, -0.5, 20.5, 20.0),
+            (60, -1.0, 31.0, 30.0),
+            (100, -2.0, 52.0, 50.0),
+        ] {
+            assert_eq!(ends(&round, ppem), (bottom, top), "o at {ppem} PPM");
+            assert_eq!(ends(&flat, ppem), (0.0, x), "x at {ppem} PPM");
+        }
     }
 
     /// The height in pixels of an E's bar on the baseline, `width` units thick, with a standard

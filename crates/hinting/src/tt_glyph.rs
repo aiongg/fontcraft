@@ -54,6 +54,11 @@ const FLAT_SLOPE: f64 = 0.02;
 /// fraction of its length), which bounds the sideways move to four times the hinted one.
 const MIN_DIAGONAL_RISE: f64 = 0.25;
 
+/// Points at one height on either side of an extreme looked at for a curve.
+const MAX_FLAT_RUN: usize = 64;
+/// How far apart the heights of two points may be and still count as one, in font units.
+const FLAT_RUN_TOLERANCE: f64 = 0.5;
+
 /// One point of the compiled outline, in font units.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct OutlinePoint {
@@ -93,9 +98,9 @@ pub struct GlyphContext<'a> {
     /// The Delta column of the build, as the instructions store it (the instance's
     /// [`crate::tt::delta_column_key`], or the master's); `None`: no Delta applies.
     pub delta_column: Option<&'a str>,
-    /// The instructions are the autohinter's and `fpgm` holds its stem function
-    /// ([`crate::autohint_fpgm`]): Stem instructions with stem Auto take their width by the stem
-    /// width mode.
+    /// The instructions are the autohinter's and the font programs hold its part
+    /// ([`crate::autohint_fpgm`], [`crate::autohint_prep`]): Stem instructions with stem Auto take
+    /// their width by the stem width mode, and round extremes past a zone take its overshoot.
     pub auto_stems: bool,
 }
 
@@ -401,7 +406,10 @@ impl Compiler<'_, '_> {
                 c.point_round(p, STEM_NO_ROUNDING);
                 c.line(format_args!("EIF[ ]"));
             }),
-            (Some((z, call)), _) => self.moved(p, d, |c| c.zone_call(p, z, call)),
+            (Some((z, call)), _) => match (call == FN_ZONE_SNAP).then(|| self.overshoot_entry(p, z)).flatten() {
+                Some((pos, end)) => self.moved(p, d, |c| c.line(format_args!("PUSH {} {pos} {end} {FN_ZONE_SNAP}\nCALL[ ]", p.index))),
+                None => self.moved(p, d, |c| c.zone_call(p, z, call)),
+            },
         }
     }
 
@@ -409,6 +417,39 @@ impl Compiler<'_, '_> {
         if let Some((pos, fit)) = self.cx.layout.zone(z) {
             self.line(format_args!("PUSH {} {pos} {fit} {call}\nCALL[ ]", p.index));
         }
+    }
+
+    /// The entries an autohinted build snaps `p` with when it overshoots zone `z`: the zone's
+    /// position and the row of its overshoot edge. A point overshoots when it lies beyond half
+    /// the zone's size and on a round extreme, as ttfautohint's output shows; flat extremes stay
+    /// on the zone's row. With TTFOvershootSuppressionBelowPPM the zone's own call shows overshoots.
+    fn overshoot_entry(&self, p: Pt, z: usize) -> Option<(u16, u16)> {
+        if !self.cx.auto_stems || self.cx.settings.tt_overshoot_suppression_below_ppm.is_some() {
+            return None;
+        }
+        let zone = self.cx.settings.tt_zones.get(z)?;
+        let past = (p.y - zone.position) * zone.size.signum();
+        let overshoots = zone.size != 0.0 && past > zone.size.abs() / 2.0 && self.is_round(p);
+        if !overshoots {
+            return None;
+        }
+        Some((self.cx.layout.zone(z)?.0, self.cx.layout.overshoot(z)?))
+    }
+
+    /// Whether an off-curve point lies in the stretch of the contour at the height of `p` that
+    /// holds `p`, looking at most [`MAX_FLAT_RUN`] points either way.
+    fn is_round(&self, p: Pt) -> bool {
+        let index = usize::from(p.index);
+        let ends = self.cx.outline.contour_ends;
+        let at = ends.partition_point(|e| usize::from(*e) < index);
+        let Some(last) = ends.get(at).map(|e| usize::from(*e)) else { return false };
+        let first = at.checked_sub(1).and_then(|i| ends.get(i)).map_or(0, |e| usize::from(*e).saturating_add(1));
+        let n = last.saturating_sub(first).saturating_add(1);
+        let here = index.saturating_sub(first);
+        let at_height = |k: usize| self.cx.outline.points.get(first.saturating_add(k % n)).filter(|q| (q.y - p.y).abs() <= FLAT_RUN_TOLERANCE);
+        let steps = n.saturating_sub(1).min(MAX_FLAT_RUN);
+        let round = |step: &dyn Fn(usize) -> usize| (1..=steps).map_while(|k| at_height(step(k))).any(|q| !q.on_curve);
+        round(&|k| here.saturating_add(k)) || round(&|k| here.saturating_add(n).saturating_sub(k))
     }
 
     fn point_round(&mut self, p: Pt, mode: u8) {

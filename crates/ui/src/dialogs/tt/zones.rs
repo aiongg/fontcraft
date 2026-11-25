@@ -1,5 +1,5 @@
-//! The TTFZones and TTFStems editors: a master's TT zones (or TT stems), or the font's family TT zones, as rows, each control running one of the TT
-//! definition commands (`hint.tt.*`, `fontcraft_engine::cmd::hint_tt_defs`).
+//! The TTFZones and TTFStems editors: a master's TT zones (or TT stems), or the font's family TT zones, as rows, each
+//! control running one of the TT definition commands (`hint.tt.*`, `fontcraft_engine::cmd::hint_tt_defs`).
 //!
 //! | Control | Command |
 //! |---|---|

@@ -31,11 +31,18 @@ pub fn gdi() -> Target {
     Target::Smooth { mode: SmoothMode::Lcd, symmetric_rendering: false, preserve_linear_metrics: false }
 }
 
-/// A font whose glyph 1 is one contour through `points` (font units) with `glyph_program`.
-/// `maxp` holds `programs.limits` merged with the glyph program's, less the 32 stack slots
-/// skrifa adds of its own, so a stack the analysis under-counts overflows.
+/// A font whose glyph 1 is one contour of straight lines through `points` (font units) with
+/// `glyph_program`.
 pub fn font(programs: &FontPrograms, points: &[(i16, i16)], glyph_program: &[u8]) -> Vec<u8> {
-    let contour: Vec<_> = points.iter().map(|&(x, y)| skrifa::raw::tables::glyf::CurvePoint::on_curve(x, y)).collect();
+    font_of(programs, &points.iter().map(|&(x, y)| (x, y, true)).collect::<Vec<_>>(), glyph_program)
+}
+
+/// A font whose glyph 1 is one contour through `points` (font units, whether on the curve) with
+/// `glyph_program`. `maxp` holds `programs.limits` merged with the glyph program's, less the 32 stack slots
+/// skrifa adds of its own, so a stack the analysis under-counts overflows.
+fn font_of(programs: &FontPrograms, points: &[(i16, i16, bool)], glyph_program: &[u8]) -> Vec<u8> {
+    use skrifa::raw::tables::glyf::CurvePoint;
+    let contour: Vec<_> = points.iter().map(|&(x, y, on)| if on { CurvePoint::on_curve(x, y) } else { CurvePoint::off_curve(x, y) }).collect();
     let bbox = Bbox {
         x_min: points.iter().map(|p| p.0).min().unwrap_or(0),
         y_min: points.iter().map(|p| p.1).min().unwrap_or(0),
@@ -101,7 +108,7 @@ pub fn font(programs: &FontPrograms, points: &[(i16, i16)], glyph_program: &[u8]
     b.build()
 }
 
-/// A font whose glyph 1 is the one contour of straight lines `glyph` has on master `m01` of
+/// A font whose glyph 1 is the one contour of lines and quadratic curves `glyph` has on master `m01` of
 /// `model`, hinted as an autohinted export hints it.
 pub fn autohinted(model: &fontcraft_model::Font, glyph: &str, options: &TtAutohintOptions) -> Vec<u8> {
     use fontcraft_model::Shape;
@@ -109,8 +116,8 @@ pub fn autohinted(model: &fontcraft_model::Font, glyph: &str, options: &TtAutohi
     let measured = crate::prepare_settings(model, &mut settings, options);
     let layer = model.glyph(glyph).unwrap().layer("m01").unwrap();
     let Some(Shape::Path(path)) = layer.shapes.first() else { panic!("`{glyph}` has no path") };
-    let points: Vec<(i16, i16)> = path.nodes.iter().map(|n| (n.x as i16, n.y as i16)).collect();
-    let outline: Vec<_> = path.nodes.iter().map(|n| crate::OutlinePoint { x: n.x, y: n.y, on_curve: true }).collect();
+    let points: Vec<(i16, i16, bool)> = path.nodes.iter().map(|n| (n.x as i16, n.y as i16, n.on_curve())).collect();
+    let outline: Vec<_> = path.nodes.iter().map(|n| crate::OutlinePoint { x: n.x, y: n.y, on_curve: n.on_curve() }).collect();
     let n = u16::try_from(points.len()).unwrap();
     let map = crate::VecPointMap { paths: vec![(0..n).map(Some).collect()], count: n };
     let control = crate::control::ControlInstructions::default();
@@ -149,7 +156,7 @@ pub fn autohinted(model: &fontcraft_model::Font, glyph: &str, options: &TtAutohi
         auto_stems: true,
     })
     .unwrap();
-    font(&programs, &points, &program.bytes)
+    font_of(&programs, &points, &program.bytes)
 }
 
 #[derive(Default)]
